@@ -117,12 +117,6 @@ impl Cli {
             ));
         }
         if self.link == LinkKind::Twincat {
-            if self.devices.is_none() {
-                return Err(
-                    "--devices is required for --link twincat (TwinCAT has no bus scan)"
-                        .to_string(),
-                );
-            }
             if self.twincat_remote.is_some() && self.ams_net_id.is_none() {
                 return Err("--ams-net-id is required when --twincat-remote is set".to_string());
             }

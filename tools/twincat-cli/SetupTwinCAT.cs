@@ -445,7 +445,45 @@ namespace TwincatCli
 
             Console.WriteLine($"{autds.Count} AUTD device{(autds.Count == 1 ? " is" : "s are")} found and added.");
 
+            EnableMasterCfgSlaveCount(device);
+
             return autds;
+        }
+
+        private void EnableMasterCfgSlaveCount(ITcSmTreeItem master)
+        {
+            var doc = new XmlDocument();
+            var xml = master.ProduceXml(false);
+            doc.LoadXml(xml);
+
+            if (_debug)
+            {
+                Console.WriteLine("EtherCAT Master XML (InfoData schema inspection):");
+                Console.WriteLine(xml);
+            }
+
+            {
+                var ecat = doc.SelectSingleNode("TreeItem/EtherCAT/Master")
+                           ?? doc.SelectSingleNode("TreeItem/EtherCAT");
+                if (ecat == null)
+                    throw new Exception("master EtherCAT node not found");
+
+                void SetFlag(string name)
+                {
+                    var node = ecat.SelectSingleNode(name);
+                    if (node == null)
+                    {
+                        node = doc.CreateElement(name);
+                        ecat.AppendChild(node);
+                    }
+                    node.InnerText = "true";
+                }
+
+                SetFlag("InfoData");
+                SetFlag("CfgSlaveCount");
+
+                master.ConsumeXml(doc.OuterXml);
+            }
         }
 
         private void SetupTask(ITcSysManager sysManager, IReadOnlyCollection<ITcSmTreeItem> autds)
@@ -474,6 +512,7 @@ namespace TwincatCli
                 }
             }
             var task1In = sysManager.LookupTreeItem("TIRT^Task 1^Inputs");
+            task1In.CreateChild("cfg_slave_count", -1, null, "WORD");
             for (var id = 0; id < autds.Count; id++)
             {
                 var name = $"input[{id}]";
@@ -515,6 +554,10 @@ namespace TwincatCli
                     sysManager.LinkVariables(stateSource, stateDestination);
                 }
             }
+
+            sysManager.LinkVariables(
+                "TIRT^Task 1^Inputs^cfg_slave_count",
+                "TIID^EtherCAT Master^InfoData^CfgSlaveCount");
         }
 
         [Flags]
