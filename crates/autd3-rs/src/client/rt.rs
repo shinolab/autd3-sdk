@@ -17,6 +17,7 @@ use super::pool::{Slot, SlotPool};
 pub(super) struct CmdMessage {
     pub(super) frame: Slot,
     pub(super) response_tx: oneshot::Sender<Result<Response, Error>>,
+    pub(super) exclusive: bool,
 }
 
 struct InFlight {
@@ -24,6 +25,7 @@ struct InFlight {
     frame: Slot,
     acked: u128,
     age: u32,
+    exclusive: bool,
     response_tx: oneshot::Sender<Result<Response, Error>>,
 }
 
@@ -147,6 +149,7 @@ struct RtThread<L: Link> {
 
     next_seq: Seq,
     pending: VecDeque<InFlight>,
+    held_exclusive: Option<CmdMessage>,
     cycle_idx: u64,
     next_pickup_at: u64,
     send_interval: u64,
@@ -184,6 +187,7 @@ impl<L: Link> RtThread<L> {
             pool,
             send_interval: u64::from(config.send_interval_cycles.get()),
             pending: VecDeque::with_capacity(config.max_inflight.get()),
+            held_exclusive: None,
             config,
             closed,
             all_acked,
@@ -270,27 +274,31 @@ impl<L: Link> RtThread<L> {
             for buf in &mut self.tx_bufs {
                 TxFrame::new(Seq::ZERO, Cmd::Reset).write_to(buf);
             }
-        } else if self.resync.active {
+            return StageOutcome::Staged;
+        }
+        if self.resync.active {
             if let Some(front) = self.pending.front() {
                 stage_frame(front.seq, &front.frame, &mut self.tx_bufs);
             }
-        } else if self.cycle_idx >= self.next_pickup_at
+            return StageOutcome::Staged;
+        }
+        if self.held_exclusive.is_some() {
+            if self.pending.is_empty() {
+                let msg = self.held_exclusive.take().expect("just checked is_some");
+                self.stage_new(msg);
+            }
+            return StageOutcome::Staged;
+        }
+        let exclusive_inflight = self.pending.front().is_some_and(|entry| entry.exclusive);
+        if !exclusive_inflight
+            && self.cycle_idx >= self.next_pickup_at
             && self.pending.len() < self.config.max_inflight.get()
         {
             match self.cmd_rx.try_recv() {
-                Ok(msg) => {
-                    let seq = self.next_seq;
-                    self.next_seq = self.next_seq.next();
-                    stage_frame(seq, &msg.frame, &mut self.tx_bufs);
-                    self.pending.push_back(InFlight {
-                        seq,
-                        frame: msg.frame,
-                        acked: 0,
-                        age: 0,
-                        response_tx: msg.response_tx,
-                    });
-                    self.next_pickup_at = self.cycle_idx + self.send_interval;
+                Ok(msg) if msg.exclusive && !self.pending.is_empty() => {
+                    self.held_exclusive = Some(msg);
                 }
+                Ok(msg) => self.stage_new(msg),
                 Err(mpsc::error::TryRecvError::Empty) => {}
                 Err(mpsc::error::TryRecvError::Disconnected) => return StageOutcome::Disconnected,
             }
@@ -298,11 +306,30 @@ impl<L: Link> RtThread<L> {
         StageOutcome::Staged
     }
 
+    fn stage_new(&mut self, msg: CmdMessage) {
+        let seq = self.next_seq;
+        self.next_seq = self.next_seq.next();
+        stage_frame(seq, &msg.frame, &mut self.tx_bufs);
+        self.pending.push_back(InFlight {
+            seq,
+            frame: msg.frame,
+            acked: 0,
+            age: 0,
+            exclusive: msg.exclusive,
+            response_tx: msg.response_tx,
+        });
+        self.next_pickup_at = self.cycle_idx + self.send_interval;
+    }
+
     fn cycle_once(&mut self) -> Result<bool, ()> {
         match self.link.cycle(&self.tx_bufs, &mut self.rx_bufs) {
             Ok(CycleOutcome { rx_valid }) => Ok(rx_valid),
             Err(e) => {
                 let msg = format!("link cycle failed: {e}");
+                if let Some(held) = self.held_exclusive.take() {
+                    let _ = held.response_tx.send(Err(Error::Link(msg.clone())));
+                    self.pool.release(held.frame);
+                }
                 for entry in self.pending.drain(..) {
                     let _ = entry.response_tx.send(Err(Error::Link(msg.clone())));
                     self.pool.release(entry.frame);
@@ -399,6 +426,10 @@ impl<L: Link> RtThread<L> {
     }
 
     fn teardown(&mut self) {
+        if let Some(msg) = self.held_exclusive.take() {
+            let _ = msg.response_tx.send(Err(Error::RtClosed));
+            self.pool.release(msg.frame);
+        }
         for entry in self.pending.drain(..) {
             let _ = entry.response_tx.send(Err(Error::RtClosed));
             self.pool.release(entry.frame);

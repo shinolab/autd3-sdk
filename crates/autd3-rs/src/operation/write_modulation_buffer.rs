@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::ModulationBank;
@@ -39,22 +39,24 @@ impl Operation for WriteModulationBuffer<'_> {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         if self.data.is_empty() {
-            return Err(Error::InvalidPayload(
-                "modulation data must not be empty".into(),
-            ));
+            return Err(Error::InvalidPayload(PayloadError::ModulationDataEmpty));
         }
         if !self.offset.is_multiple_of(2) {
-            return Err(Error::InvalidPayload(format!(
-                "modulation offset {} must be even (word-write-only RAM)",
-                self.offset
-            )));
+            return Err(Error::InvalidPayload(
+                PayloadError::ModulationOffsetNotEven {
+                    offset: self.offset,
+                },
+            ));
         }
         let end = self.offset as usize + self.data.len();
         if end > MOD_BUFFER_SAMPLES {
-            return Err(Error::InvalidPayload(format!(
-                "modulation write [{}, {end}) exceeds buffer capacity {MOD_BUFFER_SAMPLES}",
-                self.offset
-            )));
+            return Err(Error::InvalidPayload(
+                PayloadError::ModulationWriteExceedsCapacity {
+                    offset: self.offset as usize,
+                    end,
+                    capacity: MOD_BUFFER_SAMPLES,
+                },
+            ));
         }
 
         let start = frame * WRITE_MAX_DATA_LEN;

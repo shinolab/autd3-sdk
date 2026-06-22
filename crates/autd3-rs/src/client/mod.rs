@@ -9,15 +9,15 @@ mod tests;
 pub use config::{ClientConfig, MAX_DEVICES};
 pub use response_future::ResponseFuture;
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, PoisonError};
 use std::thread::JoinHandle;
 
 use tokio::sync::{mpsc, oneshot};
 
 use crate::command::Pattern;
 use crate::datagram::{Datagram, DatagramBuilder, Frame};
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
 use crate::geometry::Geometry;
 use crate::link::{IntoLink, Link};
@@ -67,15 +67,18 @@ impl Client {
         let link = link.into_link().await?;
         let num_devices = link.num_devices();
         if num_devices == 0 || num_devices > MAX_DEVICES {
-            return Err(Error::InvalidPayload(format!(
-                "link must expose 1..={MAX_DEVICES} devices, got {num_devices}"
-            )));
+            return Err(Error::InvalidPayload(PayloadError::DeviceCountOutOfRange {
+                got: num_devices,
+                max: MAX_DEVICES,
+            }));
         }
         if geometry.len() != num_devices {
-            return Err(Error::InvalidPayload(format!(
-                "geometry has {} device(s) but link exposes {num_devices}",
-                geometry.len()
-            )));
+            return Err(Error::InvalidPayload(
+                PayloadError::GeometryDeviceMismatch {
+                    geometry: geometry.len(),
+                    link: num_devices,
+                },
+            ));
         }
 
         let checker = link.state_checker();
@@ -142,11 +145,10 @@ impl Client {
 
     async fn send_datagrams(&self, datagrams: &[Datagram]) -> Result<ResponseFuture, Error> {
         if datagrams.len() != self.num_devices {
-            return Err(Error::InvalidPayload(format!(
-                "expected {} datagram(s) (one per device), got {}",
-                self.num_devices,
-                datagrams.len()
-            )));
+            return Err(Error::InvalidPayload(PayloadError::DatagramCountMismatch {
+                expected: self.num_devices,
+                got: datagrams.len(),
+            }));
         }
         let mut slot = self.pool.acquire().await;
         slot.reset(Distribution::PerDevice);
@@ -154,7 +156,7 @@ impl Client {
             slot.payload_mut(device).copy_from_slice(&datagram.payload);
             slot.set_cmd(device, datagram.cmd);
         }
-        self.dispatch(slot).await
+        self.dispatch(slot, false).await
     }
 
     async fn send_broadcast(&self, datagram: &Datagram) -> Result<ResponseFuture, Error> {
@@ -162,7 +164,15 @@ impl Client {
         slot.reset(Distribution::Broadcast);
         slot.payload_mut(0).copy_from_slice(&datagram.payload);
         slot.set_cmd(0, datagram.cmd);
-        self.dispatch(slot).await
+        self.dispatch(slot, false).await
+    }
+
+    async fn send_broadcast_exclusive(&self, datagram: &Datagram) -> Result<ResponseFuture, Error> {
+        let mut slot = self.pool.acquire().await;
+        slot.reset(Distribution::Broadcast);
+        slot.payload_mut(0).copy_from_slice(&datagram.payload);
+        slot.set_cmd(0, datagram.cmd);
+        self.dispatch(slot, true).await
     }
 
     pub async fn send(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {
@@ -176,13 +186,14 @@ impl Client {
         self.send(frame).await?.await?.check()
     }
 
-    async fn dispatch(&self, slot: pool::Slot) -> Result<ResponseFuture, Error> {
+    async fn dispatch(&self, slot: pool::Slot, exclusive: bool) -> Result<ResponseFuture, Error> {
         let (response_tx, response_rx) = oneshot::channel();
         if let Err(e) = self
             .cmd_tx
             .send(CmdMessage {
                 frame: slot,
                 response_tx,
+                exclusive,
             })
             .await
         {
@@ -214,17 +225,17 @@ impl Client {
 
     pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
         let major = self
-            .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
             .await?
             .await?
             .data;
         let minor = self
-            .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMinor))
+            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadCpuFwVersionMinor))
             .await?
             .await?
             .data;
         let patch = self
-            .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionPatch))
+            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadCpuFwVersionPatch))
             .await?
             .await?
             .data;
@@ -242,7 +253,7 @@ impl Client {
 
     pub async fn read_error_detail(&self) -> Result<Vec<u8>, Error> {
         Ok(self
-            .send_broadcast(&Datagram::no_payload(Cmd::ReadErrorDetail))
+            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadErrorDetail))
             .await?
             .await?
             .data)
@@ -250,11 +261,15 @@ impl Client {
 
     pub async fn close(&self) -> Result<(), Error> {
         self.closed.store(true, Ordering::Release);
-        let join = self.join.lock().unwrap().take();
+        let join = self
+            .join
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
         if let Some(join) = join {
             wait_thread(join).await
         } else {
-            Err(Error::RtClosed)
+            Ok(())
         }
     }
 }
@@ -262,8 +277,13 @@ impl Client {
 impl Drop for Client {
     fn drop(&mut self) {
         self.closed.store(true, Ordering::Release);
-        if let Some(join) = self.join.lock().unwrap().take() {
-            drop(join);
+        let join = self
+            .join
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(join) = join {
+            let _ = join.join();
         }
     }
 }

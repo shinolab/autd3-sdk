@@ -5,15 +5,9 @@
 )]
 
 use autd3_rs_core::common::{Freq, ULTRASOUND_FREQ};
-use autd3_rs_core::error::Error;
+use autd3_rs_core::error::{Error, PayloadError};
 use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
-use autd3_rs_core::value::SamplingConfig;
-
-const IS_INTEGER_EPSILON: f64 = 1e-6;
-
-fn is_integer(a: f64) -> bool {
-    0.5 - (a.fract() - 0.5).abs() < IS_INTEGER_EPSILON
-}
+use autd3_rs_core::value::{Nearest, SamplingConfig, is_integer};
 
 fn gcd(mut a: u64, mut b: u64) -> u64 {
     while b != 0 {
@@ -25,11 +19,8 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
 }
 
 fn cfg_err(e: autd3_rs_core::value::SamplingConfigError) -> Error {
-    Error::InvalidPayload(e.to_string())
+    Error::InvalidPayload(PayloadError::SamplingConfig(e))
 }
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Nearest(pub Freq<f32>);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SamplingMode {
@@ -50,8 +41,8 @@ impl From<Freq<f32>> for SamplingMode {
     }
 }
 
-impl From<Nearest> for SamplingMode {
-    fn from(v: Nearest) -> Self {
+impl From<Nearest<Freq<f32>>> for SamplingMode {
+    fn from(v: Nearest<Freq<f32>>) -> Self {
         SamplingMode::NearestFreq(v.0)
     }
 }
@@ -69,14 +60,13 @@ impl SamplingMode {
     fn validate_exact(freq: Freq<u32>, config: SamplingConfig) -> Result<(u64, u64), Error> {
         let nyquist = config.freq().map_err(cfg_err)?.hz() / 2.;
         if freq.hz() as f32 >= nyquist {
-            return Err(Error::InvalidPayload(format!(
-                "frequency ({freq:?}) is equal to or greater than the Nyquist frequency ({nyquist} Hz)"
-            )));
+            return Err(Error::InvalidPayload(PayloadError::FrequencyAboveNyquist {
+                hz: f64::from(freq.hz()),
+                nyquist,
+            }));
         }
         if freq.hz() == 0 {
-            return Err(Error::InvalidPayload(
-                "modulation frequency must not be zero".into(),
-            ));
+            return Err(Error::InvalidPayload(PayloadError::FrequencyZero));
         }
         let fd = u64::from(freq.hz()) * u64::from(config.divide().map_err(cfg_err)?);
         let fs = u64::from(ULTRASOUND_FREQ.hz());
@@ -86,20 +76,19 @@ impl SamplingMode {
 
     fn validate_exact_f(freq: Freq<f32>, config: SamplingConfig) -> Result<(u64, u64), Error> {
         if freq.hz() < 0. || freq.hz().is_nan() {
-            return Err(Error::InvalidPayload(format!(
-                "frequency ({freq:?}) must be a valid positive value"
-            )));
+            return Err(Error::InvalidPayload(PayloadError::FrequencyNotPositive {
+                hz: freq.hz(),
+            }));
         }
         if freq.hz() == 0. {
-            return Err(Error::InvalidPayload(
-                "modulation frequency must not be zero".into(),
-            ));
+            return Err(Error::InvalidPayload(PayloadError::FrequencyZero));
         }
         let nyquist = config.freq().map_err(cfg_err)?.hz() / 2.;
         if freq.hz() >= nyquist {
-            return Err(Error::InvalidPayload(format!(
-                "frequency ({freq:?}) is equal to or greater than the Nyquist frequency ({nyquist} Hz)"
-            )));
+            return Err(Error::InvalidPayload(PayloadError::FrequencyAboveNyquist {
+                hz: f64::from(freq.hz()),
+                nyquist,
+            }));
         }
         let fd = f64::from(freq.hz()) * f64::from(config.divide().map_err(cfg_err)?);
         let fs = u64::from(ULTRASOUND_FREQ.hz());
@@ -115,9 +104,7 @@ impl SamplingMode {
                 Some((u64::from(n), fnd / fs))
             })
             .ok_or_else(|| {
-                Error::InvalidPayload(format!(
-                    "frequency ({freq:?}) cannot be output with the sampling config ({config:?})"
-                ))
+                Error::InvalidPayload(PayloadError::FrequencyNotRepresentable { hz: freq.hz() })
             })
     }
 
@@ -127,9 +114,7 @@ impl SamplingMode {
         let freq_max = cfg_freq / 2.;
         let freq = freq.hz().clamp(freq_min, freq_max);
         if freq.is_nan() {
-            return Err(Error::InvalidPayload(
-                "modulation frequency must be a valid value".into(),
-            ));
+            return Err(Error::InvalidPayload(PayloadError::FrequencyNaN));
         }
         Ok(((cfg_freq / freq).round() as u64, 1))
     }

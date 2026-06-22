@@ -3,7 +3,7 @@ use std::num::{NonZeroU32, NonZeroUsize};
 use core_affinity::CoreId;
 use thread_priority::ThreadPriority;
 
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::protocol::MAX_IN_FLIGHT;
 
 pub const MAX_DEVICES: usize = 128;
@@ -38,9 +38,9 @@ impl Default for ClientConfig {
 impl ClientConfig {
     pub(super) fn validate(self) -> Result<Self, Error> {
         if self.max_inflight.get() > MAX_IN_FLIGHT {
-            return Err(Error::InvalidPayload(format!(
-                "max_inflight must be <= {MAX_IN_FLIGHT}"
-            )));
+            return Err(Error::InvalidPayload(PayloadError::MaxInFlightTooLarge {
+                max: MAX_IN_FLIGHT,
+            }));
         }
         Ok(self)
     }

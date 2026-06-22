@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::params::{
     FOCUS_COORD_MAX_X, FOCUS_COORD_MAX_Y, FOCUS_COORD_MAX_Z, FOCUS_COORD_MIN_X, FOCUS_COORD_MIN_Y,
     FOCUS_COORD_MIN_Z,
@@ -20,9 +20,12 @@ impl Focus {
             ("z", self.z, FOCUS_COORD_MIN_Z, FOCUS_COORD_MAX_Z),
         ] {
             if !(min..=max).contains(&v) {
-                return Err(Error::InvalidPayload(format!(
-                    "focus {name} = {v} out of range {min}..={max}"
-                )));
+                return Err(Error::InvalidPayload(PayloadError::FocusOutOfRange {
+                    axis: name,
+                    value: v,
+                    min,
+                    max,
+                }));
             }
         }
         let mask = |v: i32| u64::from(u32::from_le_bytes(v.to_le_bytes())) & 0x3_FFFF;

@@ -7,7 +7,7 @@
 use core::f32::consts::PI;
 
 use autd3_rs_core::common::Angle;
-use autd3_rs_core::error::Error;
+use autd3_rs_core::error::{Error, PayloadError};
 use autd3_rs_core::value::{Intensity, SamplingConfig};
 
 use crate::sampling_mode::SamplingMode;
@@ -40,8 +40,8 @@ pub fn sine<S: Into<SamplingMode>>(
 ) -> Result<(), Error> {
     let mode: SamplingMode = freq.into();
     let (n, rep) = mode.validate(option.sampling_config)?;
-    let n = usize::try_from(n)
-        .map_err(|_| Error::InvalidPayload("modulation sample count exceeds usize".into()))?;
+    let n =
+        usize::try_from(n).map_err(|_| Error::InvalidPayload(PayloadError::SampleCountOverflow))?;
 
     let intensity = f32::from(option.intensity.0);
     let offset = f32::from(option.offset);
@@ -64,9 +64,7 @@ pub fn sine<S: Into<SamplingMode>>(
         });
     }
     if out_of_range {
-        return Err(Error::InvalidPayload(
-            "sine modulation value is out of range [0, 255]".into(),
-        ));
+        return Err(Error::InvalidPayload(PayloadError::SineValueOutOfRange));
     }
     Ok(())
 }

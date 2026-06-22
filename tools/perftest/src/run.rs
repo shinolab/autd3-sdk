@@ -230,8 +230,8 @@ async fn run_stop_and_wait(
                 eprintln!("link error: {msg}");
                 SampleStatus::LinkError
             }
-            Err(ClientError::InvalidPayload(msg)) => {
-                anyhow::bail!("payload rejected by the local encoder: {msg}");
+            Err(ClientError::InvalidPayload(e)) => {
+                anyhow::bail!("payload rejected by the local encoder: {e}");
             }
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
@@ -311,8 +311,8 @@ async fn run_streaming(
                 SampleStatus::LinkError
             }
             Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),
-            Err(ClientError::InvalidPayload(msg)) => {
-                anyhow::bail!("payload rejected by the local encoder: {msg}");
+            Err(ClientError::InvalidPayload(e)) => {
+                anyhow::bail!("payload rejected by the local encoder: {e}");
             }
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");

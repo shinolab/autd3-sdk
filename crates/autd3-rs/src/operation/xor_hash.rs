@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 use super::{Distribution, Operation};
@@ -46,10 +46,10 @@ impl Operation for XorHashCmd {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         if self.data.len() > XOR_HASH_MAX_DATA_LEN {
-            return Err(Error::InvalidPayload(format!(
-                "xor_hash data too large: max {XOR_HASH_MAX_DATA_LEN} bytes, got {}",
-                self.data.len()
-            )));
+            return Err(Error::InvalidPayload(PayloadError::XorHashDataTooLarge {
+                len: self.data.len(),
+                max: XOR_HASH_MAX_DATA_LEN,
+            }));
         }
         let data_len = u16::try_from(self.data.len()).expect("bounded by XOR_HASH_MAX_DATA_LEN");
 
