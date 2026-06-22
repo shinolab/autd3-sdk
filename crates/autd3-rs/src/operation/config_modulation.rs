@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::ModulationBank;
@@ -28,15 +28,15 @@ impl Operation for ConfigModulation {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         if self.divider == 0 {
-            return Err(Error::InvalidPayload(
-                "modulation divider must be >= 1".into(),
-            ));
+            return Err(Error::InvalidPayload(PayloadError::ModulationDividerZero));
         }
         if self.size == 0 || self.size as usize > MOD_BUFFER_SAMPLES {
-            return Err(Error::InvalidPayload(format!(
-                "modulation size {} out of range 1..={MOD_BUFFER_SAMPLES}",
-                self.size
-            )));
+            return Err(Error::InvalidPayload(
+                PayloadError::ModulationSizeOutOfRange {
+                    size: self.size,
+                    max: MOD_BUFFER_SAMPLES,
+                },
+            ));
         }
         out[0] = self.bank.as_u8();
         out[2..4].copy_from_slice(&self.divider.to_le_bytes());

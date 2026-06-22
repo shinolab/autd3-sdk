@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::params::{EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PatternBank, PatternDataType};
@@ -29,10 +29,10 @@ impl Operation for ConfigPattern {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         if self.divider == 0 {
-            return Err(Error::InvalidPayload("pattern divider must be >= 1".into()));
+            return Err(Error::InvalidPayload(PayloadError::PatternDividerZero));
         }
         if self.size == 0 {
-            return Err(Error::InvalidPayload("pattern size must be >= 1".into()));
+            return Err(Error::InvalidPayload(PayloadError::PatternSizeZero));
         }
         let (type_byte, num_foci, sound_speed) = match self.data_type {
             PatternDataType::Foci {
@@ -40,27 +40,29 @@ impl Operation for ConfigPattern {
                 sound_speed,
             } => {
                 if num_foci == 0 || num_foci > NUM_FOCI_MAX {
-                    return Err(Error::InvalidPayload(format!(
-                        "num_foci {num_foci} out of range 1..={NUM_FOCI_MAX}"
-                    )));
+                    return Err(Error::InvalidPayload(PayloadError::NumFociOutOfRange {
+                        num_foci,
+                        max: NUM_FOCI_MAX,
+                    }));
                 }
                 if self.size as usize > MAX_FOCI_TOTAL / usize::from(num_foci) {
-                    return Err(Error::InvalidPayload(format!(
-                        "STM size {} x num_foci {num_foci} exceeds capacity {MAX_FOCI_TOTAL}",
-                        self.size
-                    )));
+                    return Err(Error::InvalidPayload(PayloadError::StmFociExceedCapacity {
+                        size: self.size,
+                        num_foci,
+                        capacity: MAX_FOCI_TOTAL,
+                    }));
                 }
                 if sound_speed == 0 {
-                    return Err(Error::InvalidPayload("sound_speed must be >= 1".into()));
+                    return Err(Error::InvalidPayload(PayloadError::SoundSpeedZero));
                 }
                 (0u8, num_foci, sound_speed)
             }
             PatternDataType::Raw => {
                 if self.size as usize > EMISSION_MAX_INDICES {
-                    return Err(Error::InvalidPayload(format!(
-                        "STM size {} out of range 1..={EMISSION_MAX_INDICES}",
-                        self.size
-                    )));
+                    return Err(Error::InvalidPayload(PayloadError::StmSizeOutOfRange {
+                        size: self.size,
+                        max: EMISSION_MAX_INDICES,
+                    }));
                 }
                 (1u8, 0, 0)
             }

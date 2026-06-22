@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::params::{EMISSION_MAX_INDICES, EMISSION_SLOT_WORDS, NUM_TRANSDUCERS};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Emission, PatternBank};
@@ -40,16 +40,20 @@ impl Operation for WritePatternBuffer<'_> {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         if device >= self.emissions.len() {
-            return Err(Error::InvalidPayload(format!(
-                "emissions has {} entr(ies) but device {device} was requested",
-                self.emissions.len(),
-            )));
+            return Err(Error::InvalidPayload(
+                PayloadError::EmissionsDeviceOutOfRange {
+                    device,
+                    len: self.emissions.len(),
+                },
+            ));
         }
         if usize::from(self.index) >= EMISSION_MAX_INDICES {
-            return Err(Error::InvalidPayload(format!(
-                "pattern STM index {} out of range 0..{EMISSION_MAX_INDICES}",
-                self.index
-            )));
+            return Err(Error::InvalidPayload(
+                PayloadError::PatternIndexOutOfRange {
+                    index: self.index,
+                    max: EMISSION_MAX_INDICES,
+                },
+            ));
         }
         let offset = u32::try_from(usize::from(self.index) * EMISSION_SLOT_WORDS)
             .expect("bounded by EMISSION_RAM_WORDS");

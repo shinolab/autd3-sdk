@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::params::{FOCUS_WORDS, MAX_FOCI_TOTAL};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Focus, PatternBank};
@@ -39,14 +39,17 @@ impl Operation for WriteFociBuffer {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         if self.foci.is_empty() {
-            return Err(Error::InvalidPayload("foci must not be empty".into()));
+            return Err(Error::InvalidPayload(PayloadError::FociEmpty));
         }
         let end = self.offset as usize + self.foci.len();
         if end > MAX_FOCI_TOTAL {
-            return Err(Error::InvalidPayload(format!(
-                "foci write [{}, {end}) exceeds capacity {MAX_FOCI_TOTAL}",
-                self.offset
-            )));
+            return Err(Error::InvalidPayload(
+                PayloadError::FociWriteExceedsCapacity {
+                    offset: self.offset as usize,
+                    end,
+                    capacity: MAX_FOCI_TOTAL,
+                },
+            ));
         }
 
         let start = frame * MAX_FOCI_PER_FRAME;

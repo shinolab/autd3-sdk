@@ -284,6 +284,54 @@ async fn xor_hash_error_is_observable_via_read_error_detail() {
 }
 
 #[tokio::test]
+async fn read_is_exclusive_and_correct_under_concurrent_writes() {
+    let (link, slaves) = slaves_pair(2);
+    {
+        let mut s0 = slaves[0].lock().unwrap();
+        s0.fw_version_major = 0xA0;
+        s0.fw_version_minor = 0xA1;
+        s0.fw_version_patch = 0xA2;
+        let mut s1 = slaves[1].lock().unwrap();
+        s1.fw_version_major = 0xB0;
+        s1.fw_version_minor = 0xB1;
+        s1.fw_version_patch = 0xB2;
+    }
+    let client = Arc::new(
+        Client::open(&geometry(2), link, ClientConfig::default())
+            .await
+            .unwrap(),
+    );
+
+    let writer = {
+        let client = Arc::clone(&client);
+        tokio::spawn(async move {
+            for _ in 0..50 {
+                xor_hash(&client, &XorHashCmd::with_checksum(0, vec![0x01, 0x02]))
+                    .await
+                    .unwrap();
+            }
+        })
+    };
+
+    let expected = vec![
+        FirmwareVersion {
+            major: 0xA0,
+            minor: 0xA1,
+            patch: 0xA2,
+        },
+        FirmwareVersion {
+            major: 0xB0,
+            minor: 0xB1,
+            patch: 0xB2,
+        },
+    ];
+    for _ in 0..10 {
+        assert_eq!(client.read_firmware_version().await.unwrap(), expected);
+    }
+    writer.await.unwrap();
+}
+
+#[tokio::test]
 async fn multi_device_per_device_payloads_yield_per_device_results() {
     let (link, _slaves) = slaves_pair(2);
     let client = Client::open(&geometry(2), link, ClientConfig::default())

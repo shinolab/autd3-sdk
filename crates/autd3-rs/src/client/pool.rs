@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use tokio::sync::Semaphore;
 
@@ -96,13 +96,16 @@ impl SlotPool {
             .forget();
         self.free
             .lock()
-            .expect("pool mutex poisoned")
+            .unwrap_or_else(PoisonError::into_inner)
             .pop()
             .expect("a permit guarantees a free slot")
     }
 
     pub(super) fn release(&self, slot: Slot) {
-        self.free.lock().expect("pool mutex poisoned").push(slot);
+        self.free
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(slot);
         self.permits.add_permits(1);
     }
 }

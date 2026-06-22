@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::geometry::{Device, Geometry};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
@@ -37,14 +37,18 @@ where
     }
 
     fn route(&self, device: usize) -> Result<&dyn Operation, Error> {
-        let key = self
-            .keys
-            .get(device)
-            .ok_or_else(|| Error::InvalidPayload(format!("device {device} has no group key")))?;
+        let key =
+            self.keys
+                .get(device)
+                .ok_or(Error::InvalidPayload(PayloadError::GroupKeyMissing {
+                    device,
+                }))?;
         self.map
             .get(key)
             .map(AsRef::as_ref)
-            .ok_or_else(|| Error::InvalidPayload(format!("device {device} maps to an unknown key")))
+            .ok_or(Error::InvalidPayload(PayloadError::GroupKeyUnknown {
+                device,
+            }))
     }
 }
 
