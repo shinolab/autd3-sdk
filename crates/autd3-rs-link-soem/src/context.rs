@@ -41,8 +41,13 @@ pub(crate) struct Context {
 // the fields read directly from Rust (slavelist, grouplist, DCtime) are
 // plain data updated by those same serialized calls.
 unsafe impl Send for Context {}
-// SAFETY: see `Send`; concurrent `&self` FFI calls are serialized by SOEM's
-// port mutexes.
+// SAFETY: see `Send`. SOEM's port mutexes serialize the wire/index state
+// touched inside its FFI calls, but they do NOT guard the plain `ecx_contextt`
+// fields read/written from Rust (`slavelist`, `grouplist`, `DCtime`, ...).
+// Avoiding a data race on those is the caller's contract: the RT `cycle()` and
+// the state-check path (`read_state`/`request_state`) must not run
+// concurrently. The link drives both from one place (the RT thread / a
+// user-driven checker) and never overlaps them.
 unsafe impl Sync for Context {}
 
 impl Context {
