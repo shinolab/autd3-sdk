@@ -16,7 +16,7 @@ use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
 
 use crate::cli::{Common, LinkKind, Mode};
 use crate::grid::Candidate;
-use crate::monitor::{CandidateResult, CandidateStatus, OpAccumulator};
+use crate::monitor::{CandidateResult, CandidateStatus, LoadStats, OpAccumulator};
 
 pub async fn measure_candidate(
     common: &Common,
@@ -139,9 +139,10 @@ async fn measure_with_link<L: Link>(
     let _ = client.close().await;
 
     let mut result = acc.into_result(CandidateResult::new(period, shift, cand.shift_percent));
-    let (send_success, send_errors) = load?;
-    result.send_success = send_success;
-    result.send_errors = send_errors;
+    let load = load?;
+    result.send_success = load.send_success;
+    result.send_errors = load.send_errors;
+    result.load = load;
     Ok(result)
 }
 
@@ -169,7 +170,7 @@ async fn run_load(
     start: Instant,
     total: Duration,
     shutdown: &Arc<AtomicBool>,
-) -> Result<(u64, u64)> {
+) -> Result<LoadStats> {
     let xor_cmd = XorHashCmd {
         sleep_ms: common.sleep_ms,
         data: build_zero_xor_data(common.data_len),
@@ -180,11 +181,53 @@ async fn run_load(
         .build()
         .context("building XorHash frame")?;
 
+    let warmup = common.warmup;
     match common.mode {
-        Mode::StopAndWait => load_stop_and_wait(client, &datagrams, start, total, shutdown).await,
-        Mode::Streaming => {
-            load_streaming(client, &datagrams, start, total, shutdown, max_inflight).await
+        Mode::StopAndWait => {
+            load_stop_and_wait(client, &datagrams, start, total, warmup, shutdown).await
         }
+        Mode::Streaming => {
+            load_streaming(
+                client,
+                &datagrams,
+                start,
+                total,
+                warmup,
+                shutdown,
+                max_inflight,
+            )
+            .await
+        }
+    }
+}
+
+struct LoadAcc {
+    warmup: Duration,
+    stats: LoadStats,
+}
+
+impl LoadAcc {
+    fn new(warmup: Duration) -> Self {
+        Self {
+            warmup,
+            stats: LoadStats::default(),
+        }
+    }
+
+    fn record(&mut self, ok: bool, completed_at: Duration) {
+        if ok {
+            self.stats.send_success += 1;
+            if completed_at >= self.warmup {
+                self.stats.success_in_window += 1;
+            }
+        } else {
+            self.stats.send_errors += 1;
+        }
+    }
+
+    fn finish(mut self, total_elapsed: Duration) -> LoadStats {
+        self.stats.window = total_elapsed.saturating_sub(self.warmup);
+        self.stats
     }
 }
 
@@ -193,10 +236,10 @@ async fn load_stop_and_wait(
     datagrams: &Datagrams,
     start: Instant,
     total: Duration,
+    warmup: Duration,
     shutdown: &Arc<AtomicBool>,
-) -> Result<(u64, u64)> {
-    let mut ok = 0u64;
-    let mut err = 0u64;
+) -> Result<LoadStats> {
+    let mut acc = LoadAcc::new(warmup);
     loop {
         if shutdown.load(Ordering::Relaxed) || start.elapsed() >= total {
             break;
@@ -205,14 +248,14 @@ async fn load_stop_and_wait(
             .send_checked(datagrams.frame(0).expect("one frame"))
             .await
         {
-            Ok(()) => ok += 1,
+            Ok(()) => acc.record(true, start.elapsed()),
             Err(ClientError::InvalidPayload(msg)) => {
                 anyhow::bail!("payload rejected by the local encoder: {msg}")
             }
-            Err(_) => err += 1,
+            Err(_) => acc.record(false, start.elapsed()),
         }
     }
-    Ok((ok, err))
+    Ok(acc.finish(start.elapsed()))
 }
 
 async fn load_streaming(
@@ -220,11 +263,11 @@ async fn load_streaming(
     datagrams: &Datagrams,
     start: Instant,
     total: Duration,
+    warmup: Duration,
     shutdown: &Arc<AtomicBool>,
     max_inflight: usize,
-) -> Result<(u64, u64)> {
-    let mut ok = 0u64;
-    let mut err = 0u64;
+) -> Result<LoadStats> {
+    let mut acc = LoadAcc::new(warmup);
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(max_inflight);
     loop {
         let stop = shutdown.load(Ordering::Relaxed) || start.elapsed() >= total;
@@ -234,7 +277,7 @@ async fn load_streaming(
                 Err(ClientError::InvalidPayload(msg)) => {
                     anyhow::bail!("payload rejected by the local encoder: {msg}")
                 }
-                Err(_) => err += 1,
+                Err(_) => acc.record(false, start.elapsed()),
             }
             continue;
         }
@@ -242,14 +285,14 @@ async fn load_streaming(
             break;
         };
         match fut.await {
-            Ok(_) => ok += 1,
+            Ok(_) => acc.record(true, start.elapsed()),
             Err(ClientError::InvalidPayload(msg)) => {
                 anyhow::bail!("payload rejected by the local encoder: {msg}")
             }
-            Err(_) => err += 1,
+            Err(_) => acc.record(false, start.elapsed()),
         }
     }
-    Ok((ok, err))
+    Ok(acc.finish(start.elapsed()))
 }
 
 fn build_zero_xor_data(len: usize) -> Vec<u8> {
