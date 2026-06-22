@@ -99,7 +99,9 @@ impl SoemLink {
 
         tracing::info!(sync0_period = ?option.sync0_period, "configuring DC");
         ctx.set_po2so_hooks();
-        ctx.configdc();
+        if !ctx.configdc() {
+            return Err(SoemLinkError::DcConfigFailed);
+        }
 
         sync::wait_for_align(&ctx, option.sync_tolerance, option.sync_timeout)?;
 

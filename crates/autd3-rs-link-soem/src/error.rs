@@ -21,6 +21,9 @@ pub enum SoemLinkError {
     #[error("devices did not reach {expected} (actual: {actual})")]
     StateTransitionFailed { expected: AlState, actual: AlState },
 
+    #[error("failed to configure distributed clock")]
+    DcConfigFailed,
+
     #[error("timed out waiting for subdevices to reach OP")]
     OpTimeout,
 
