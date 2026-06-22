@@ -12,6 +12,7 @@ description = "EtherCrab-backed Link implementation for autd3-rs."
 autd3-rs-core.workspace = true
 thiserror.workspace = true
 ethercrab.workspace = true
+futures-util.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "macros", "rt"] }
 pcap = { version = "2.3.0", default-features = false }
 tracing = { workspace = true, features = ["log"] }

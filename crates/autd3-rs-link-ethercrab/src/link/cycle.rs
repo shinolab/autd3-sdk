@@ -51,7 +51,7 @@ impl Link for EtherCrabLink {
             Duration::ZERO
         };
 
-        for (subdevice, frame) in group.iter(maindevice).zip(tx) {
+        for (subdevice, frame) in group.groups.iter().flat_map(|g| g.iter(maindevice)).zip(tx) {
             let mut outputs = subdevice.outputs_raw_mut();
             let len = outputs.len().min(frame.len());
             outputs[..len].copy_from_slice(&frame[..len]);
@@ -82,9 +82,9 @@ impl Link for EtherCrabLink {
             Err(e) => return Err(e.into()),
         };
         let tx_rx_duration = cycle_start.elapsed();
-        self.next_at = Some(cycle_start + resp.extra.next_cycle_wait);
+        self.next_at = Some(cycle_start + resp.next_cycle_wait);
 
-        let all_op = resp.all_op();
+        let all_op = resp.all_op;
         let rx_valid = resp.working_counter == self.expected_wkc && all_op;
         self.store_cycle_diagnostics(
             deadline_overrun,
@@ -92,9 +92,9 @@ impl Link for EtherCrabLink {
             resp.working_counter,
             all_op,
             rx_valid,
-            resp.extra.dc_system_time,
-            resp.extra.next_cycle_wait,
-            resp.extra.cycle_start_offset,
+            resp.dc_system_time,
+            resp.next_cycle_wait,
+            resp.cycle_start_offset,
         );
         if !rx_valid {
             self.stats.record_stale_cycle();
@@ -109,16 +109,21 @@ impl Link for EtherCrabLink {
                     all_op,
                     ?deadline_overrun,
                     ?tx_rx_duration,
-                    dc_system_time_ns = resp.extra.dc_system_time,
-                    next_cycle_wait = ?resp.extra.next_cycle_wait,
-                    cycle_start_offset = ?resp.extra.cycle_start_offset,
+                    dc_system_time_ns = resp.dc_system_time,
+                    next_cycle_wait = ?resp.next_cycle_wait,
+                    cycle_start_offset = ?resp.cycle_start_offset,
                     "stale cycle: slaves did not process this cycle",
                 );
             }
             self.rx_was_valid = rx_valid;
         }
 
-        for (subdevice, frame) in group.iter(maindevice).zip(rx.iter_mut()) {
+        for (subdevice, frame) in group
+            .groups
+            .iter()
+            .flat_map(|g| g.iter(maindevice))
+            .zip(rx.iter_mut())
+        {
             let inputs = subdevice.inputs_raw();
             let len = frame.len().min(inputs.len());
             frame[..len].copy_from_slice(&inputs[..len]);

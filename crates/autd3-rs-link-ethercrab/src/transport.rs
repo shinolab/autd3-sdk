@@ -7,7 +7,7 @@ use crate::error::EtherCrabLinkError;
 
 const ETHERNET_PDU_CAPACITY: usize = 1486;
 const MAX_PDU_DATA: usize = PduStorage::element_size(ETHERNET_PDU_CAPACITY);
-const MAX_FRAMES: usize = 16;
+const MAX_FRAMES: usize = 32;
 
 const TX_RX_EXIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 

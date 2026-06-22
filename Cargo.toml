@@ -36,6 +36,7 @@ tokio = { version = "1", default-features = false, features = [
     "rt",
 ] }
 ethercrab = { version = "0.7", default-features = false, features = ["std"] }
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 thread-priority = { version = "3.1.0", default-features = false }
 core_affinity = { version = "0.8", default-features = false }
 clap = { version = "4", default-features = false, features = [

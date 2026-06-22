@@ -1,9 +1,11 @@
 use std::time::Duration;
 
+use ethercrab::subdevice_group::{NoDc, PreOpPdi};
 use ethercrab::{MainDevice, RegisterAddress};
+use futures_util::future::join_all;
 
 use crate::error::EtherCrabLinkError;
-use crate::link::PreOpPdiGroup;
+use crate::link::Groups;
 use crate::timer;
 
 const CHECK_INTERVAL: Duration = Duration::from_millis(10);
@@ -40,7 +42,7 @@ fn system_time_difference_ns(raw: u32) -> f64 {
 }
 
 pub(crate) async fn wait_for_align(
-    group: &PreOpPdiGroup,
+    group: &Groups<PreOpPdi, NoDc>,
     maindevice: &MainDevice<'_>,
     sync_tolerance: Duration,
     sync_timeout: Duration,
@@ -51,17 +53,31 @@ pub(crate) async fn wait_for_align(
         "waiting for DC clocks to align"
     );
 
-    let mut averages = vec![Ema::new(); group.len()];
+    let mut averages = vec![Ema::new(); group.num_devices()];
     let start = std::time::Instant::now();
     let mut last_check = start;
     loop {
-        group.tx_rx_sync_system_time(maindevice).await?;
+        for result in join_all(
+            group
+                .groups
+                .iter()
+                .map(|g| g.tx_rx_sync_system_time(maindevice)),
+        )
+        .await
+        {
+            result?;
+        }
 
         if last_check.elapsed() >= CHECK_INTERVAL {
             last_check = std::time::Instant::now();
 
             let mut max_deviation = Duration::ZERO;
-            for (subdevice, ema) in group.iter(maindevice).zip(averages.iter_mut()) {
+            for (subdevice, ema) in group
+                .groups
+                .iter()
+                .flat_map(|g| g.iter(maindevice))
+                .zip(averages.iter_mut())
+            {
                 let diff_ns = match subdevice
                     .register_read::<u32>(RegisterAddress::DcSystemTimeDifference)
                     .await
