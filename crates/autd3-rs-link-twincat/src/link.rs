@@ -193,17 +193,9 @@ impl Link for TwinCATLink {
     ) -> Result<CycleOutcome, Self::Error> {
         let device = self.client.device(self.ams_addr);
 
-        // SAFETY: [[u8; TX_FRAME_BYTES]] is a contiguous, fully-initialized
-        // array of bytes with no padding; casting to &[u8] is always valid.
-        let tx_bytes = unsafe {
-            std::slice::from_raw_parts(tx.as_ptr().cast::<u8>(), tx.len() * TX_FRAME_BYTES)
-        };
-        device.write(AUTD_INDEX_GROUP, AUTD_INDEX_OFFSET_TX, tx_bytes)?;
+        device.write(AUTD_INDEX_GROUP, AUTD_INDEX_OFFSET_TX, tx.as_flattened())?;
 
-        // SAFETY: same layout guarantee as above.
-        let rx_bytes = unsafe {
-            std::slice::from_raw_parts_mut(rx.as_mut_ptr().cast::<u8>(), rx.len() * RX_FRAME_BYTES)
-        };
+        let rx_bytes = rx.as_flattened_mut();
         match &mut self.rx {
             RxSource::Ads => {
                 device.read_exact(AUTD_INDEX_GROUP, AUTD_INDEX_OFFSET_RX, rx_bytes)?;
