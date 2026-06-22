@@ -11,8 +11,12 @@ use crate::state_check::TwinCATStateChecker;
 
 pub(crate) const AUTD_INDEX_GROUP: u32 = 0x0304_0030;
 const AUTD_INDEX_OFFSET_TX: u32 = 0x8100_0000;
-pub(crate) const AUTD_INDEX_OFFSET_RX: u32 = 0x8000_0000;
+const AUTD_INDEX_OFFSET_INPUT_BASE: u32 = 0x8000_0000;
+const CFG_SLAVE_COUNT_BYTES: u32 = 2;
+const AUTD_INDEX_OFFSET_COUNT: u32 = AUTD_INDEX_OFFSET_INPUT_BASE;
+pub(crate) const AUTD_INDEX_OFFSET_RX: u32 = AUTD_INDEX_OFFSET_INPUT_BASE + CFG_SLAVE_COUNT_BYTES;
 const AUTD_AMS_PORT: u16 = 301;
+const MAX_DEVICES: usize = 128;
 
 pub enum TwinCATServer {
     Local,
@@ -29,27 +33,24 @@ pub enum TwinCATRoute {
 
 pub struct TwinCATLinkOption {
     pub server: TwinCATServer,
-    pub num_devices: usize,
     pub timeouts: Timeouts,
     pub route: TwinCATRoute,
 }
 
 impl TwinCATLinkOption {
     #[must_use]
-    pub fn local(num_devices: usize) -> Self {
+    pub fn local() -> Self {
         Self {
             server: TwinCATServer::Local,
-            num_devices,
             timeouts: Timeouts::none(),
             route: TwinCATRoute::default(),
         }
     }
 
     #[must_use]
-    pub fn remote(addr: IpAddr, ams_net_id: AmsNetId, num_devices: usize) -> Self {
+    pub fn remote(addr: IpAddr, ams_net_id: AmsNetId) -> Self {
         Self {
             server: TwinCATServer::Remote { addr, ams_net_id },
-            num_devices,
             timeouts: Timeouts::none(),
             route: TwinCATRoute::default(),
         }
@@ -93,7 +94,6 @@ impl TwinCATLink {
     pub fn open(option: TwinCATLinkOption) -> Result<Self, TwinCATLinkError> {
         let TwinCATLinkOption {
             server,
-            num_devices,
             timeouts,
             route,
         } = option;
@@ -124,6 +124,8 @@ impl TwinCATLink {
             }
         };
 
+        let num_devices = Self::read_device_count(&client, ams_addr)?;
+
         let rx = match route {
             TwinCATRoute::Ads => RxSource::Ads,
             TwinCATRoute::Notify => Self::register_notification(&client, ams_addr, num_devices)?,
@@ -141,6 +143,18 @@ impl TwinCATLink {
             source,
             timeouts,
         })
+    }
+
+    fn read_device_count(client: &Client, ams_addr: AmsAddr) -> Result<usize, TwinCATLinkError> {
+        let mut buf = [0u8; CFG_SLAVE_COUNT_BYTES as usize];
+        client
+            .device(ams_addr)
+            .read_exact(AUTD_INDEX_GROUP, AUTD_INDEX_OFFSET_COUNT, &mut buf)?;
+        let num_devices = usize::from(u16::from_le_bytes(buf));
+        if num_devices == 0 || num_devices > MAX_DEVICES {
+            return Err(TwinCATLinkError::InvalidDeviceCount { found: num_devices });
+        }
+        Ok(num_devices)
     }
 
     fn register_notification(
