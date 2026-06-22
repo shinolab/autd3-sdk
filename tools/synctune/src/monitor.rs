@@ -45,6 +45,26 @@ pub struct CandidateResult {
     pub time_to_first_drop: Option<Duration>,
     pub send_success: u64,
     pub send_errors: u64,
+    pub load: LoadStats,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LoadStats {
+    pub send_success: u64,
+    pub send_errors: u64,
+    pub window: Duration,
+    pub success_in_window: u64,
+}
+
+impl LoadStats {
+    #[must_use]
+    pub fn throughput_fps(&self) -> f64 {
+        if self.window.is_zero() {
+            0.0
+        } else {
+            self.success_in_window as f64 / self.window.as_secs_f64()
+        }
+    }
 }
 
 impl CandidateResult {
@@ -68,6 +88,7 @@ impl CandidateResult {
             time_to_first_drop: None,
             send_success: 0,
             send_errors: 0,
+            load: LoadStats::default(),
         }
     }
 

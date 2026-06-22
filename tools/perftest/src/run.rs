@@ -67,6 +67,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             let link_cfg = EtherCrabLinkOption {
                 interface: cli.interface.clone().into(),
                 sync0_period: Duration::from_micros(cli.cycle_us),
+                sync0_shift: sync0_shift(cli.cycle_us, cli.shift_percent),
                 ..Default::default()
             };
             let link = Box::pin(EtherCrabLink::open(link_cfg))
@@ -81,6 +82,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             let link_cfg = SoemLinkOption {
                 interface: cli.interface.clone().into(),
                 sync0_period: Duration::from_micros(cli.cycle_us),
+                sync0_shift: sync0_shift(cli.cycle_us, cli.shift_percent),
                 ..Default::default()
             };
             let link = tokio::task::spawn_blocking(move || SoemLink::open(link_cfg))
@@ -425,6 +427,11 @@ impl Progress {
             eprintln!();
         }
     }
+}
+
+fn sync0_shift(cycle_us: u64, shift_percent: u8) -> Duration {
+    let nanos = u128::from(cycle_us) * 1000 * u128::from(shift_percent) / 100;
+    Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
 }
 
 fn build_zero_xor_data(len: usize) -> Vec<u8> {

@@ -60,6 +60,8 @@ pub struct Cli {
     pub sleep_ms: u16,
     #[arg(long, default_value_t = 1000)]
     pub cycle_us: u64,
+    #[arg(long, default_value_t = 0)]
+    pub shift_percent: u8,
     #[arg(long)]
     pub count: Option<u64>,
     #[arg(long, value_parser = humantime::parse_duration)]
@@ -106,6 +108,12 @@ impl Cli {
             return Err(format!(
                 "--inflight {} must be in 1..={MAX_IN_FLIGHT}",
                 self.inflight,
+            ));
+        }
+        if self.shift_percent > 100 {
+            return Err(format!(
+                "--shift-percent {} must be in 0..=100",
+                self.shift_percent
             ));
         }
         if self.link == LinkKind::Twincat {

@@ -51,13 +51,13 @@ pub struct TuneArgs {
     #[command(flatten)]
     pub common: Common,
 
-    #[arg(long, default_value_t = 500)]
+    #[arg(long, default_value_t = 1000)]
     pub period_min: u64,
 
     #[arg(long, default_value_t = 2000)]
     pub period_max: u64,
 
-    #[arg(long, default_value_t = 500)]
+    #[arg(long, default_value_t = 1000)]
     pub period_step: u64,
 
     #[arg(long, default_value_t = 0)]
@@ -66,7 +66,7 @@ pub struct TuneArgs {
     #[arg(long, default_value_t = 100)]
     pub shift_max: u8,
 
-    #[arg(long, default_value_t = 25)]
+    #[arg(long, default_value_t = 50)]
     pub shift_step: u8,
 }
 
@@ -103,10 +103,10 @@ pub struct Common {
     #[arg(long)]
     pub rt_core: Option<usize>,
 
-    #[arg(long, value_parser = humantime::parse_duration, default_value = "10s")]
+    #[arg(long, value_parser = humantime::parse_duration, default_value = "30s")]
     pub dwell: Duration,
 
-    #[arg(long, value_parser = humantime::parse_duration, default_value = "2s")]
+    #[arg(long, value_parser = humantime::parse_duration, default_value = "5s")]
     pub warmup: Duration,
 
     #[arg(long, value_parser = humantime::parse_duration, default_value = "100ms")]
