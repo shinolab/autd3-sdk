@@ -2,6 +2,7 @@ use std::future::Future;
 use std::time::{Duration, Instant};
 
 use ethercrab::std::ethercat_now;
+use ethercrab::subdevice_group::{HasDc, NoDc, Op, PreOp, SafeOp};
 use ethercrab::{Command, DcSync, MainDevice, RegisterAddress};
 use tokio::runtime::Handle;
 
@@ -13,12 +14,12 @@ use crate::transport::Transport;
 use crate::{sync, utils};
 
 use super::{
-    EtherCrabLink, GRACEFUL_SHUTDOWN_TIMEOUT, MAX_SUBDEVICES, OP_WAIT_TIMEOUT, OP_WARMUP_CYCLES,
-    OP_WKC_STABLE_CYCLES, OpGroup, PDI_LEN, SUBDEVICE_NAME, SafeOpGroup,
+    EtherCrabLink, GRACEFUL_SHUTDOWN_TIMEOUT, GROUP_SUBDEVICES, Groups, MAX_GROUPS, MAX_SUBDEVICES,
+    OP_WAIT_TIMEOUT, OP_WARMUP_CYCLES, OP_WKC_STABLE_CYCLES, SUBDEVICE_NAME, SubGroup,
 };
 
 pub(super) struct Reached {
-    pub(super) group: OpGroup,
+    pub(super) group: Groups<Op, HasDc>,
     pub(super) addresses: Vec<u16>,
     pub(super) expected_wkc: u16,
     pub(super) num_devices: usize,
@@ -113,13 +114,13 @@ impl Drop for EtherCrabLink {
 }
 
 async fn shutdown(
-    group: OpGroup,
+    group: Groups<Op, HasDc>,
     maindevice: &MainDevice<'static>,
 ) -> Result<(), EtherCrabLinkError> {
     tracing::info!("transitioning devices to INIT");
-    let group = Box::pin(group.into_safe_op(maindevice)).await?;
-    let group = Box::pin(group.into_pre_op(maindevice)).await?;
-    let _ = Box::pin(group.into_init(maindevice)).await?;
+    let group = Box::pin(group.transform(|g| g.into_safe_op(maindevice))).await?;
+    let group = Box::pin(group.transform(|g| g.into_pre_op(maindevice))).await?;
+    let _ = Box::pin(group.transform(|g| g.into_init(maindevice))).await?;
     tracing::info!("all devices are in INIT");
     Ok(())
 }
@@ -139,12 +140,37 @@ async fn try_reach_op(
     option: &EtherCrabLinkOptionFull,
     interface: &str,
 ) -> Result<Reached, EtherCrabLinkError> {
-    let mut group =
-        Box::pin(maindevice.init_single_group::<MAX_SUBDEVICES, PDI_LEN>(ethercat_now)).await?;
-    if group.is_empty() {
+    #[derive(Default)]
+    struct GroupsArray {
+        groups: [SubGroup<PreOp, NoDc>; MAX_GROUPS],
+    }
+    let mut idx = 0usize;
+    let groups = Box::pin(maindevice.init::<MAX_SUBDEVICES, _>(
+        ethercat_now,
+        GroupsArray::default(),
+        |array: &GroupsArray, _subdevice| {
+            let group = &array.groups[idx / GROUP_SUBDEVICES];
+            idx += 1;
+            Ok(group)
+        },
+    ))
+    .await?;
+    let groups = Groups {
+        groups: groups
+            .groups
+            .into_iter()
+            .filter(|g| !g.is_empty())
+            .collect::<Vec<_>>(),
+    };
+    if groups.groups.is_empty() {
         return Err(EtherCrabLinkError::DeviceNotFound);
     }
-    for (index, subdevice) in group.iter(maindevice).enumerate() {
+    for (index, subdevice) in groups
+        .groups
+        .iter()
+        .flat_map(|g| g.iter(maindevice))
+        .enumerate()
+    {
         if subdevice.name() != SUBDEVICE_NAME {
             return Err(EtherCrabLinkError::NotAutdDevice {
                 index,
@@ -152,15 +178,20 @@ async fn try_reach_op(
             });
         }
     }
-    let num_devices = group.len();
+    let num_devices = groups.num_devices();
     tracing::info!("found {num_devices} AUTD device(s) on {interface}");
 
-    for mut subdevice in group.iter_mut(maindevice) {
+    let mut groups = groups;
+    for mut subdevice in groups
+        .groups
+        .iter_mut()
+        .flat_map(|g| g.iter_mut(maindevice))
+    {
         subdevice.set_dc_sync(DcSync::Sync0);
     }
 
     tracing::info!("moving into PRE-OP with PDI");
-    let group = Box::pin(group.into_pre_op_pdi(maindevice)).await?;
+    let group = Box::pin(groups.transform(|g| g.into_pre_op_pdi(maindevice))).await?;
 
     sync::wait_for_align(
         &group,
@@ -171,9 +202,11 @@ async fn try_reach_op(
     .await?;
 
     tracing::info!(sync0_period = ?option.dc_configuration.sync0_period, "configuring Sync0");
-    let group = Box::pin(group.configure_dc_sync(maindevice, option.dc_configuration)).await?;
+    let group =
+        Box::pin(group.transform(|g| g.configure_dc_sync(maindevice, option.dc_configuration)))
+            .await?;
 
-    let group = Box::pin(group.into_safe_op(maindevice)).await?;
+    let group = Box::pin(group.transform(|g| g.into_safe_op(maindevice))).await?;
     tracing::info!("all devices are in SAFE-OP");
 
     tracing::info!(
@@ -182,12 +215,14 @@ async fn try_reach_op(
     );
     Box::pin(warmup_dc(&group, maindevice)).await?;
 
-    let group = Box::pin(group.request_into_op(maindevice)).await?;
+    let group = Box::pin(group.transform(|g| g.request_into_op(maindevice))).await?;
     tracing::info!("requested OP, waiting for all devices");
 
     let expected_wkc = wait_for_op(&group, maindevice).await?;
     let addresses: Vec<u16> = group
-        .iter(maindevice)
+        .groups
+        .iter()
+        .flat_map(|g| g.iter(maindevice))
         .map(|subdevice| subdevice.configured_address())
         .collect();
 
@@ -200,19 +235,19 @@ async fn try_reach_op(
 }
 
 async fn warmup_dc(
-    group: &SafeOpGroup,
+    group: &Groups<SafeOp, HasDc>,
     maindevice: &MainDevice<'_>,
 ) -> Result<(), EtherCrabLinkError> {
     for _ in 0..OP_WARMUP_CYCLES {
         let cycle_start = Instant::now();
         let resp = group.tx_rx_dc(maindevice).await?;
-        timer::async_sleep_until(cycle_start + resp.extra.next_cycle_wait).await;
+        timer::async_sleep_until(cycle_start + resp.next_cycle_wait).await;
     }
     Ok(())
 }
 
 async fn wait_for_op(
-    group: &OpGroup,
+    group: &Groups<Op, HasDc>,
     maindevice: &MainDevice<'_>,
 ) -> Result<u16, EtherCrabLinkError> {
     let op_requested = Instant::now();
@@ -226,12 +261,12 @@ async fn wait_for_op(
         if last_log.elapsed() >= Duration::from_secs(1) {
             last_log = cycle_start;
             tracing::info!(
-                all_op = resp.all_op(),
+                all_op = resp.all_op,
                 working_counter = resp.working_counter,
                 "waiting for OP",
             );
         }
-        if resp.all_op() && baseline_wkc == Some(resp.working_counter) {
+        if resp.all_op && baseline_wkc == Some(resp.working_counter) {
             stable_cycles += 1;
             if stable_cycles >= OP_WKC_STABLE_CYCLES {
                 let expected_wkc = resp.working_counter;
@@ -242,7 +277,7 @@ async fn wait_for_op(
                 );
                 return Ok(expected_wkc);
             }
-        } else if resp.all_op() {
+        } else if resp.all_op {
             tracing::debug!(
                 working_counter = resp.working_counter,
                 "devices are in OP but wkc is not stable yet",
@@ -265,13 +300,15 @@ async fn wait_for_op(
             log_al_status(group, maindevice).await;
             return Err(EtherCrabLinkError::OpTimeout);
         }
-        timer::async_sleep_until(cycle_start + resp.extra.next_cycle_wait).await;
+        timer::async_sleep_until(cycle_start + resp.next_cycle_wait).await;
     }
 }
 
-async fn log_al_status(group: &OpGroup, maindevice: &MainDevice<'_>) {
+async fn log_al_status(group: &Groups<Op, HasDc>, maindevice: &MainDevice<'_>) {
     let addresses: Vec<u16> = group
-        .iter(maindevice)
+        .groups
+        .iter()
+        .flat_map(|g| g.iter(maindevice))
         .map(|subdevice| subdevice.configured_address())
         .collect();
     for (index, address) in addresses.into_iter().enumerate() {

@@ -2,7 +2,7 @@ use ethercrab::{MainDeviceConfig, Timeouts, std::ethercat_now};
 use tokio::runtime::Handle;
 
 use crate::error::EtherCrabLinkError;
-use crate::link::{MAX_SUBDEVICES, PDI_LEN, SUBDEVICE_NAME};
+use crate::link::{DETECT_PDI_LEN, MAX_SUBDEVICES, SUBDEVICE_NAME};
 use crate::transport::Transport;
 
 pub async fn lookup_autd() -> Result<String, EtherCrabLinkError> {
@@ -39,7 +39,7 @@ pub async fn lookup_autd() -> Result<String, EtherCrabLinkError> {
         let found = match Box::pin(
             transport
                 .maindevice()
-                .init_single_group::<MAX_SUBDEVICES, PDI_LEN>(ethercat_now),
+                .init_single_group::<MAX_SUBDEVICES, DETECT_PDI_LEN>(ethercat_now),
         )
         .await
         {

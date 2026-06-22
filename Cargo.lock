@@ -130,6 +130,7 @@ dependencies = [
  "autd3-rs-core",
  "cc",
  "ethercrab",
+ "futures-util",
  "pcap",
  "thiserror 2.0.18",
  "thread-priority",
@@ -702,6 +703,7 @@ dependencies = [
  "futures-core",
  "futures-task",
  "pin-project-lite",
+ "slab",
 ]
 
 [[package]]
