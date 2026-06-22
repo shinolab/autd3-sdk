@@ -1,0 +1,872 @@
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <cstring>
+#include <vector>
+
+extern "C" {
+#include "app.h"
+#include "proto.h"
+
+extern tx_frame_t _sTx;
+uint32_t port_test_total_sleep_ms();
+void port_test_reset_sleep();
+void port_test_fpga_reset();
+void port_test_set_next_sync0(uint64_t t);
+uint16_t port_test_fpga_ctl(uint16_t addr);
+uint16_t port_test_fpga_phase_corr(uint16_t idx);
+uint16_t port_test_fpga_output_mask(uint16_t idx);
+uint16_t port_test_fpga_pwe_word(uint16_t idx);
+uint32_t port_test_fpga_latch_count(uint16_t flag);
+uint16_t port_test_fpga_mod_word(uint8_t bank, uint32_t word_idx);
+uint16_t port_test_fpga_emission_word(uint8_t bank, uint32_t word_idx);
+}
+
+namespace {
+
+class Frame {
+ public:
+  Frame(uint8_t seq, uint8_t cmd) {
+    std::memset(&rx_, 0, sizeof(rx_));
+    rx_.seq = seq;
+    rx_.cmd = cmd;
+  }
+
+  uint8_t* payload() { return rx_.payload; }
+
+  void deliver() const {
+    deliver_no_drain();
+    app_process_pending();
+  }
+
+  void deliver_no_drain() const {
+    uint8_t wire[WIRE_RX_FRAME_BYTES];
+    const uint8_t* logical = reinterpret_cast<const uint8_t*>(&rx_);
+    std::memcpy(wire, logical, WIRE_RX_GAP_START);
+    std::memset(wire + WIRE_RX_GAP_START, 0, WIRE_RX_GAP_END - WIRE_RX_GAP_START);
+    std::memcpy(wire + WIRE_RX_GAP_END, logical + WIRE_RX_GAP_START, RX_FRAME_BYTES - WIRE_RX_GAP_START);
+    recv_ethercat(wire);
+  }
+
+ private:
+  rx_frame_t rx_{};
+};
+
+Frame make_xor_hash_ok(uint8_t seq, uint16_t sleep_ms, const std::vector<uint8_t>& data) {
+  Frame f(seq, CMD_XOR_HASH);
+  uint8_t* p = f.payload();
+  p[XOR_HASH_OFFSET_SLEEP_MS] = static_cast<uint8_t>(sleep_ms & 0xFF);
+  p[XOR_HASH_OFFSET_SLEEP_MS + 1] = static_cast<uint8_t>((sleep_ms >> 8) & 0xFF);
+
+  uint8_t checksum = 0;
+  for (auto b : data) checksum ^= b;
+
+  uint16_t len = static_cast<uint16_t>(data.size() + 1);
+  p[XOR_HASH_OFFSET_DATA_LEN] = static_cast<uint8_t>(len & 0xFF);
+  p[XOR_HASH_OFFSET_DATA_LEN + 1] = static_cast<uint8_t>((len >> 8) & 0xFF);
+  std::memcpy(p + XOR_HASH_OFFSET_DATA, data.data(), data.size());
+  p[XOR_HASH_OFFSET_DATA + data.size()] = checksum;
+  return f;
+}
+
+Frame make_xor_hash_bad(uint8_t seq, const std::vector<uint8_t>& data) {
+  Frame f(seq, CMD_XOR_HASH);
+  uint8_t* p = f.payload();
+  p[XOR_HASH_OFFSET_SLEEP_MS] = 0;
+  p[XOR_HASH_OFFSET_SLEEP_MS + 1] = 0;
+  uint16_t len = static_cast<uint16_t>(data.size());
+  p[XOR_HASH_OFFSET_DATA_LEN] = static_cast<uint8_t>(len & 0xFF);
+  p[XOR_HASH_OFFSET_DATA_LEN + 1] = static_cast<uint8_t>((len >> 8) & 0xFF);
+  std::memcpy(p + XOR_HASH_OFFSET_DATA, data.data(), data.size());
+  return f;
+}
+
+void put_u16_le(uint8_t* p, uint16_t v) {
+  p[0] = static_cast<uint8_t>(v & 0xFF);
+  p[1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+}
+
+void put_u32_le(uint8_t* p, uint32_t v) {
+  p[0] = static_cast<uint8_t>(v & 0xFF);
+  p[1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+  p[2] = static_cast<uint8_t>((v >> 16) & 0xFF);
+  p[3] = static_cast<uint8_t>((v >> 24) & 0xFF);
+}
+
+void put_u64_le(uint8_t* p, uint64_t v) {
+  for (int i = 0; i < 8; ++i) {
+    p[i] = static_cast<uint8_t>((v >> (8 * i)) & 0xFF);
+  }
+}
+
+void reset_all() {
+  port_test_fpga_reset();
+  init_app();
+}
+
+Frame make_write_pattern_buffer(uint8_t seq, uint8_t bank, uint32_t offset_words, const std::vector<uint16_t>& words) {
+  Frame f(seq, CMD_WRITE_PATTERN_BUFFER);
+  uint8_t* p = f.payload();
+  p[EM_WRITE_OFFSET_BANK] = bank;
+  put_u32_le(p + EM_WRITE_OFFSET_OFFSET, offset_words);
+  put_u16_le(p + EM_WRITE_OFFSET_DATA_LEN, static_cast<uint16_t>(words.size() * 2));
+  for (size_t i = 0; i < words.size(); ++i) {
+    put_u16_le(p + EM_WRITE_OFFSET_DATA + 2 * i, words[i]);
+  }
+  return f;
+}
+
+Frame make_write_mod_buffer(uint8_t seq, uint8_t bank, uint32_t offset, const std::vector<uint8_t>& data) {
+  Frame f(seq, CMD_WRITE_MOD_BUFFER);
+  uint8_t* p = f.payload();
+  p[MOD_WRITE_OFFSET_BANK] = bank;
+  put_u32_le(p + MOD_WRITE_OFFSET_OFFSET, offset);
+  put_u16_le(p + MOD_WRITE_OFFSET_DATA_LEN, static_cast<uint16_t>(data.size()));
+  std::memcpy(p + MOD_WRITE_OFFSET_DATA, data.data(), data.size());
+  return f;
+}
+
+Frame make_config_mod(uint8_t seq, uint8_t bank, uint16_t divider, uint32_t size) {
+  Frame f(seq, CMD_CONFIG_MOD);
+  uint8_t* p = f.payload();
+  p[MOD_CONFIG_OFFSET_BANK] = bank;
+  put_u16_le(p + MOD_CONFIG_OFFSET_DIVIDER, divider);
+  put_u32_le(p + MOD_CONFIG_OFFSET_SIZE, size);
+  return f;
+}
+
+Frame make_config_pattern(uint8_t seq, uint8_t bank, uint8_t type, uint16_t divider, uint32_t size, uint8_t num_foci,
+                          uint16_t sound_speed) {
+  Frame f(seq, CMD_CONFIG_PATTERN);
+  uint8_t* p = f.payload();
+  p[EM_CONFIG_OFFSET_BANK] = bank;
+  p[EM_CONFIG_OFFSET_TYPE] = type;
+  put_u16_le(p + EM_CONFIG_OFFSET_DIVIDER, divider);
+  put_u32_le(p + EM_CONFIG_OFFSET_SIZE, size);
+  p[EM_CONFIG_OFFSET_NUM_FOCI] = num_foci;
+  put_u16_le(p + EM_CONFIG_OFFSET_SOUND_SPEED, sound_speed);
+  return f;
+}
+
+Frame make_change_pattern_bank(uint8_t seq, uint8_t bank, uint8_t transition_mode, uint64_t transition_value) {
+  Frame f(seq, CMD_CHANGE_PATTERN_BANK);
+  uint8_t* p = f.payload();
+  p[CHANGE_BANK_OFFSET_BANK] = bank;
+  p[CHANGE_BANK_OFFSET_TRANSITION_MODE] = transition_mode;
+  put_u64_le(p + CHANGE_BANK_OFFSET_TRANSITION_VALUE, transition_value);
+  return f;
+}
+
+Frame make_change_mod_bank(uint8_t seq, uint8_t bank, uint8_t transition_mode, uint64_t transition_value) {
+  Frame f(seq, CMD_CHANGE_MOD_BANK);
+  uint8_t* p = f.payload();
+  p[CHANGE_BANK_OFFSET_BANK] = bank;
+  p[CHANGE_BANK_OFFSET_TRANSITION_MODE] = transition_mode;
+  put_u64_le(p + CHANGE_BANK_OFFSET_TRANSITION_VALUE, transition_value);
+  return f;
+}
+
+}
+
+TEST(Proto, InitialAckIsSentinelByte) {
+  init_app();
+  EXPECT_EQ(_sTx.ack, 0xFF);
+  EXPECT_EQ(proto_expected_seq(), 0);
+}
+
+TEST(Proto, MatchingSeqAdvancesAckAndExpectedSeqForAllNonResetCmds) {
+  init_app();
+  proto_set_fw_version(0xAB, 0x12, 0x34);
+  proto_set_error_detail(0xCD);
+
+  make_xor_hash_ok(0, 0, {0x01, 0x02, 0x04}).deliver();
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(proto_expected_seq(), 1);
+  EXPECT_EQ(_sTx.data, 0);
+
+  Frame(1, CMD_READ_CPU_FW_VERSION_MAJOR).deliver();
+  EXPECT_EQ(_sTx.ack, 1);
+  EXPECT_EQ(proto_expected_seq(), 2);
+  EXPECT_EQ(_sTx.data, 0xAB);
+
+  Frame(2, CMD_READ_CPU_FW_VERSION_MINOR).deliver();
+  EXPECT_EQ(_sTx.ack, 2);
+  EXPECT_EQ(proto_expected_seq(), 3);
+  EXPECT_EQ(_sTx.data, 0x12);
+
+  Frame(3, CMD_READ_CPU_FW_VERSION_PATCH).deliver();
+  EXPECT_EQ(_sTx.ack, 3);
+  EXPECT_EQ(proto_expected_seq(), 4);
+  EXPECT_EQ(_sTx.data, 0x34);
+
+  Frame(4, CMD_READ_ERROR_DETAIL).deliver();
+  EXPECT_EQ(_sTx.ack, 4);
+  EXPECT_EQ(proto_expected_seq(), 5);
+  EXPECT_EQ(_sTx.data, 0xCD);
+}
+
+TEST(Proto, MismatchedSeqIsDropped) {
+  init_app();
+
+  make_xor_hash_ok(5, 0, {0xAA}).deliver();
+
+  EXPECT_EQ(_sTx.ack, 0xFF) << "ack must not advance on dropped frame";
+  EXPECT_EQ(proto_expected_seq(), 0);
+}
+
+TEST(Proto, SeqWraparoundBoundary) {
+  init_app();
+  for (uint16_t i = 0; i < 257; ++i) {
+    make_xor_hash_ok(static_cast<uint8_t>(i & 0xFF), 0, {}).deliver();
+  }
+  EXPECT_EQ(proto_expected_seq(), 1) << "257 mod 256 = 1";
+  EXPECT_EQ(_sTx.ack, 0) << "last accepted SEQ before wrap was 0";
+}
+
+TEST(Proto, UnknownStreamingCmdSetsErrorDetailAndReturnsErrorInData) {
+  init_app();
+  Frame(0, 0x42 ).deliver();
+  EXPECT_EQ(_sTx.data, ERR_UNKNOWN_CMD);
+  Frame(1, CMD_READ_ERROR_DETAIL).deliver();
+  EXPECT_EQ(_sTx.data, ERR_UNKNOWN_CMD);
+}
+
+TEST(Proto, UnknownNonStreamingCmdSetsErrorDetail) {
+  init_app();
+  Frame(0, 0xEE ).deliver();
+  EXPECT_EQ(_sTx.data, ERR_UNKNOWN_CMD);
+}
+
+
+TEST(Proto, XorHashWithXorZeroReturnsSuccess) {
+  init_app();
+  port_test_reset_sleep();
+  make_xor_hash_ok(0, 0, {0x11, 0x22, 0x33}).deliver();
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(proto_expected_seq(), 1);
+}
+
+TEST(Proto, XorHashWithNonZeroXorReturnsErrInvalidData) {
+  init_app();
+  make_xor_hash_bad(0, {0xAA}).deliver();
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(_sTx.data, ERR_INVALID_DATA);
+  Frame(1, CMD_READ_ERROR_DETAIL).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_DATA);
+}
+
+TEST(Proto, XorHashSleepIsForwardedToPortHook) {
+  init_app();
+  port_test_reset_sleep();
+  make_xor_hash_ok(0, 7, {0x01}).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_total_sleep_ms(), 7u);
+}
+
+TEST(Proto, XorHashTooLargeDataLenReturnsErrInvalidPayload) {
+  init_app();
+
+  Frame f(0, CMD_XOR_HASH);
+  uint8_t* p = f.payload();
+  p[XOR_HASH_OFFSET_SLEEP_MS] = 0;
+  p[XOR_HASH_OFFSET_SLEEP_MS + 1] = 0;
+  uint16_t bad_len = XOR_HASH_MAX_DATA_LEN + 1;
+  p[XOR_HASH_OFFSET_DATA_LEN] = static_cast<uint8_t>(bad_len & 0xFF);
+  p[XOR_HASH_OFFSET_DATA_LEN + 1] = static_cast<uint8_t>((bad_len >> 8) & 0xFF);
+  f.deliver();
+
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+}
+
+TEST(Proto, XorHashEmptyDataReturnsSuccess) {
+  init_app();
+  make_xor_hash_ok(0, 0, {}).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+}
+
+
+TEST(Proto, ConsecutiveFramesEachProcessImmediately) {
+  init_app();
+
+  make_xor_hash_ok(0, 0, {}).deliver();
+  EXPECT_EQ(_sTx.ack, 0);
+  make_xor_hash_ok(1, 0, {}).deliver();
+  EXPECT_EQ(_sTx.ack, 1);
+  make_xor_hash_ok(2, 0, {}).deliver();
+  EXPECT_EQ(_sTx.ack, 2);
+  EXPECT_EQ(proto_expected_seq(), 3);
+}
+
+TEST(Proto, DuplicateFrameIsSuppressedAtIsrBoundary) {
+  init_app();
+  Frame f = make_xor_hash_ok(0, 0, {0x42});
+  f.deliver();
+  f.deliver(); 
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(proto_expected_seq(), 1) << "would be 2 if duplicate slipped through";
+}
+
+TEST(Proto, SameSeqDifferentCmdIsNotSuppressedAtIsrBoundary) {
+  init_app();
+  Frame(0, CMD_RESET).deliver();
+  ASSERT_EQ(proto_expected_seq(), 0);
+
+  make_xor_hash_ok(0, 0, {0xCD}).deliver();
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(proto_expected_seq(), 1);
+}
+
+TEST(Proto, DedupStateResetsOnInitApp) {
+  init_app();
+  make_xor_hash_ok(0, 0, {}).deliver();
+  ASSERT_EQ(proto_expected_seq(), 1);
+
+  init_app();
+  make_xor_hash_ok(0, 0, {}).deliver();
+  EXPECT_EQ(proto_expected_seq(), 1) << "first frame after re-init must not be deduped";
+}
+
+TEST(Proto, ResetReturnsProtoStateToPostBootBaseline) {
+  init_app();
+  proto_set_fw_version(0x42, 0x05, 0x99);
+  proto_set_error_detail(0x33);
+
+  make_xor_hash_ok(0, 0, {}).deliver();
+  make_xor_hash_ok(1, 0, {}).deliver();
+  ASSERT_EQ(_sTx.ack, 1);
+  ASSERT_EQ(proto_expected_seq(), 2);
+
+  Frame(99 , CMD_RESET).deliver();
+  EXPECT_EQ(_sTx.ack, 0xFF);
+  EXPECT_EQ(proto_expected_seq(), 0);
+
+  Frame(0, CMD_READ_CPU_FW_VERSION_MAJOR).deliver();
+  EXPECT_EQ(_sTx.data, 0x42);
+  Frame(1, CMD_READ_CPU_FW_VERSION_MINOR).deliver();
+  EXPECT_EQ(_sTx.data, 0x05);
+  Frame(2, CMD_READ_CPU_FW_VERSION_PATCH).deliver();
+  EXPECT_EQ(_sTx.data, 0x99);
+  Frame(3, CMD_READ_ERROR_DETAIL).deliver();
+  EXPECT_EQ(_sTx.data, 0x33);
+}
+
+TEST(Proto, HandshakeSurvivesWorstCaseDedupCollisionAfterCrashedClient) {
+  init_app();
+  Frame(0, CMD_RESET).deliver();
+
+  make_xor_hash_ok(0, 0, {}).deliver();
+  ASSERT_EQ(proto_expected_seq(), 1);
+
+  Frame(0, CMD_RESET).deliver();
+  Frame(1, CMD_RESET).deliver();
+
+  EXPECT_EQ(_sTx.ack, 0xFF);
+  EXPECT_EQ(proto_expected_seq(), 0);
+
+  make_xor_hash_ok(0, 0, {0x11, 0x22}).deliver();
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(proto_expected_seq(), 1);
+}
+
+TEST(Proto, DefaultModeIsFifo) {
+  init_app();
+  EXPECT_EQ(app_mode(), MODE_FIFO);
+}
+
+TEST(Proto, FifoModeDefersProcessingUntilDrained) {
+  init_app();
+
+  make_xor_hash_ok(0, 0, {}).deliver_no_drain();
+  EXPECT_EQ(_sTx.ack, 0xFF) << "frame must not be processed before drain in FIFO mode";
+  EXPECT_EQ(proto_expected_seq(), 0);
+
+  app_process_pending();
+  EXPECT_EQ(_sTx.ack, 0) << "drain processes the queued frame";
+  EXPECT_EQ(proto_expected_seq(), 1);
+}
+
+TEST(Proto, FifoModeDrainsInOrder) {
+  init_app();
+
+  make_xor_hash_ok(0, 0, {}).deliver_no_drain();
+  make_xor_hash_ok(1, 0, {}).deliver_no_drain();
+  make_xor_hash_ok(2, 0, {}).deliver_no_drain();
+  EXPECT_EQ(proto_expected_seq(), 0) << "nothing processed yet";
+
+  app_process_pending();
+  EXPECT_EQ(_sTx.ack, 2) << "all three drained in SEQ order";
+  EXPECT_EQ(proto_expected_seq(), 3);
+}
+
+Frame make_set_mode(uint8_t seq, uint8_t mode) {
+  Frame f(seq, CMD_SET_MODE);
+  f.payload()[SET_MODE_OFFSET_MODE] = mode;
+  return f;
+}
+
+TEST(Proto, SetModeLowLatencyProcessesFramesInline) {
+  init_app();
+
+  make_set_mode(0, MODE_LOW_LATENCY).deliver();
+  EXPECT_EQ(app_mode(), MODE_LOW_LATENCY);
+  EXPECT_EQ(_sTx.ack, 0);
+
+  make_xor_hash_ok(1, 0, {}).deliver_no_drain();
+  EXPECT_EQ(_sTx.ack, 1) << "low-latency mode processes inline";
+  EXPECT_EQ(proto_expected_seq(), 2);
+}
+
+TEST(Proto, SetModeRejectsUnknownMode) {
+  init_app();
+
+  make_set_mode(0, 0x02).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  EXPECT_EQ(app_mode(), MODE_FIFO) << "mode must stay at default on invalid payload";
+}
+
+TEST(Proto, ResetIsProcessedInlineAndFlushesQueueInFifoMode) {
+  init_app();
+
+  make_xor_hash_ok(0, 0, {}).deliver_no_drain();
+  EXPECT_EQ(proto_expected_seq(), 0);
+
+  Frame(0, CMD_RESET).deliver_no_drain();
+  EXPECT_EQ(_sTx.ack, 0xFF);
+  EXPECT_EQ(proto_expected_seq(), 0);
+
+  app_process_pending();
+  EXPECT_EQ(_sTx.ack, 0xFF) << "flushed frame must not surface after Reset";
+  EXPECT_EQ(proto_expected_seq(), 0);
+}
+
+TEST(Proto, WritePatternBufferWritesWordsAtOffsetPerBank) {
+  reset_all();
+
+  make_write_pattern_buffer(0, 0, 0, {0x1234, 0x5678}).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  make_write_pattern_buffer(1, 1, 300, {0xAABB}).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(proto_expected_seq(), 2);
+
+  EXPECT_EQ(port_test_fpga_emission_word(0, 0), 0x1234);
+  EXPECT_EQ(port_test_fpga_emission_word(0, 1), 0x5678);
+  EXPECT_EQ(port_test_fpga_emission_word(1, 300), 0xAABB);
+  EXPECT_EQ(port_test_fpga_emission_word(0, 300), 0) << "banks must be independent";
+}
+
+TEST(Proto, WritePatternBufferCrossesPageBoundary) {
+  reset_all();
+
+  make_write_pattern_buffer(0, 0, FPGA_PAGE_WORDS - 2, {0x0001, 0x0002, 0x0003, 0x0004}).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+
+  EXPECT_EQ(port_test_fpga_emission_word(0, FPGA_PAGE_WORDS - 2), 0x0001);
+  EXPECT_EQ(port_test_fpga_emission_word(0, FPGA_PAGE_WORDS - 1), 0x0002);
+  EXPECT_EQ(port_test_fpga_emission_word(0, FPGA_PAGE_WORDS), 0x0003);
+  EXPECT_EQ(port_test_fpga_emission_word(0, FPGA_PAGE_WORDS + 1), 0x0004);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_MEM_WR_PAGE), 1) << "page register must have advanced";
+}
+
+TEST(Proto, WritePatternBufferRawSlotLayout) {
+  reset_all();
+
+  std::vector<uint16_t> pattern(NUM_TRANSDUCERS);
+  for (uint16_t i = 0; i < NUM_TRANSDUCERS; ++i) {
+    pattern[i] = static_cast<uint16_t>((i << 8) | (0xFF - (i & 0xFF)));
+  }
+  uint32_t slot = 3 * EMISSION_SLOT_WORDS;
+  make_write_pattern_buffer(0, 0, slot, pattern).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+
+  for (uint16_t i = 0; i < NUM_TRANSDUCERS; ++i) {
+    ASSERT_EQ(port_test_fpga_emission_word(0, slot + i), pattern[i]) << "transducer " << i;
+  }
+}
+
+TEST(Proto, WritePatternBufferEmptyDataIsNoOpSuccess) {
+  reset_all();
+  make_write_pattern_buffer(0, 0, 0, {}).deliver();
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(_sTx.data, 0);
+}
+
+TEST(Proto, WritePatternBufferRejectsInvalidPayloads) {
+  reset_all();
+
+  make_write_pattern_buffer(0, NUM_BANKS, 0, {0x0001}).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  Frame f(1, CMD_WRITE_PATTERN_BUFFER);
+  uint8_t* p = f.payload();
+  p[EM_WRITE_OFFSET_BANK] = 0;
+  put_u32_le(p + EM_WRITE_OFFSET_OFFSET, 0);
+  put_u16_le(p + EM_WRITE_OFFSET_DATA_LEN, 3);
+  f.deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  Frame g(2, CMD_WRITE_PATTERN_BUFFER);
+  p = g.payload();
+  p[EM_WRITE_OFFSET_BANK] = 0;
+  put_u32_le(p + EM_WRITE_OFFSET_OFFSET, 0);
+  put_u16_le(p + EM_WRITE_OFFSET_DATA_LEN, EM_WRITE_MAX_DATA_LEN + 2);
+  g.deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  make_write_pattern_buffer(3, 0, EMISSION_RAM_WORDS - 1, {0x0001, 0x0002}).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  EXPECT_EQ(port_test_fpga_emission_word(0, EMISSION_RAM_WORDS - 1), 0);
+}
+
+
+TEST(Proto, WriteModBufferPacksSamplesIntoWordsPerBank) {
+  reset_all();
+
+  make_write_mod_buffer(0, 0, 0, {0x10, 0x20, 0x30, 0x40}).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  make_write_mod_buffer(1, 1, 100, {0xAA, 0xBB}).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+
+  EXPECT_EQ(port_test_fpga_mod_word(0, 0), 0x2010) << "LE sample pair packing";
+  EXPECT_EQ(port_test_fpga_mod_word(0, 1), 0x4030);
+  EXPECT_EQ(port_test_fpga_mod_word(1, 50), 0xBBAA) << "sample offset 100 = word 50";
+  EXPECT_EQ(port_test_fpga_mod_word(0, 50), 0) << "banks must be independent";
+}
+
+TEST(Proto, WriteModBufferOddLengthPadsHighByte) {
+  reset_all();
+  make_write_mod_buffer(0, 0, 0, {0xAA}).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_mod_word(0, 0), 0x00AA);
+}
+
+TEST(Proto, WriteModBufferCrossesPageBoundary) {
+  reset_all();
+
+  
+  uint32_t offset = 2 * FPGA_PAGE_WORDS - 2;
+  make_write_mod_buffer(0, 0, offset, {0x01, 0x02, 0x03, 0x04}).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+
+  EXPECT_EQ(port_test_fpga_mod_word(0, FPGA_PAGE_WORDS - 1), 0x0201);
+  EXPECT_EQ(port_test_fpga_mod_word(0, FPGA_PAGE_WORDS), 0x0403);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_MEM_WR_PAGE), 1) << "page register must have advanced";
+}
+
+TEST(Proto, WriteModBufferAcceptsChunkedWritesUpToCapacity) {
+  reset_all();
+
+  
+  
+  uint8_t seq = 0;
+  uint32_t written = 0;
+  while (written < MOD_BUFFER_SAMPLES) {
+    uint16_t len = static_cast<uint16_t>(std::min<uint32_t>(MOD_WRITE_MAX_DATA_LEN, MOD_BUFFER_SAMPLES - written));
+    std::vector<uint8_t> chunk(len, static_cast<uint8_t>(written >> 8));
+    make_write_mod_buffer(seq++, 0, written, chunk).deliver();
+    ASSERT_EQ(_sTx.data, 0) << "chunk at offset " << written;
+    written += len;
+  }
+  uint16_t expected = static_cast<uint16_t>((MOD_BUFFER_SAMPLES - 1) >> 8);
+  expected = static_cast<uint16_t>(expected | (expected << 8));
+  EXPECT_EQ(port_test_fpga_mod_word(0, MOD_BUFFER_SAMPLES / 2 - 1), expected);
+}
+
+TEST(Proto, WriteModBufferEmptyDataIsNoOpSuccess) {
+  reset_all();
+  make_write_mod_buffer(0, 0, 0, {}).deliver();
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(_sTx.data, 0);
+}
+
+TEST(Proto, WriteModBufferRejectsInvalidPayloads) {
+  reset_all();
+
+  
+  make_write_mod_buffer(0, NUM_BANKS, 0, {0x01}).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  Frame(1, CMD_READ_ERROR_DETAIL).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  
+  make_write_mod_buffer(2, 0, 1, {0x01, 0x02}).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  
+  Frame f(3, CMD_WRITE_MOD_BUFFER);
+  uint8_t* p = f.payload();
+  p[MOD_WRITE_OFFSET_BANK] = 0;
+  put_u32_le(p + MOD_WRITE_OFFSET_OFFSET, 0);
+  put_u16_le(p + MOD_WRITE_OFFSET_DATA_LEN, MOD_WRITE_MAX_DATA_LEN + 1);
+  f.deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  
+  make_write_mod_buffer(4, 0, MOD_BUFFER_SAMPLES - 2, {0x01, 0x02, 0x03}).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  EXPECT_EQ(port_test_fpga_mod_word(0, MOD_BUFFER_SAMPLES / 2 - 1), 0);
+}
+
+
+
+TEST(Proto, ConfigModWritesPlaybackRegistersAndLatches) {
+  reset_all();
+  const uint32_t latches_at_boot = port_test_fpga_latch_count(CTL_FLAG_MOD_SET);
+
+  make_config_mod(0, 1, 10, 4000).deliver();
+
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_CYCLE0 + 1), 3999) << "CYCLE = size - 1";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_FREQ_DIV0 + 1), 10);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REP0 + 1), REP_INFINITE);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_TRANSITION_MODE), TRANSITION_MODE_SYNC_IDX)
+      << "config must not touch transition mode (kept at boot default)";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 0) << "config must not switch the playback bank";
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_MOD_SET), latches_at_boot + 1);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_MOD_SET, 0) << "the FPGA clears the latch bit";
+}
+
+TEST(Proto, ConfigModRejectsInvalidFieldsAndLeavesRegistersUntouched) {
+  reset_all();
+  make_config_mod(0, 1, 2, 100).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_config_mod(1, NUM_BANKS, 1, 1).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  make_config_mod(2, 0, 0, 1).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  make_config_mod(3, 0, 1, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  make_config_mod(4, 0, 1, MOD_BUFFER_SAMPLES + 1).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_CYCLE0 + 1), 99);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_FREQ_DIV0 + 1), 2);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 0) << "config never writes the playback bank";
+}
+
+TEST(Proto, ConfigModAcceptsFullBufferSize) {
+  reset_all();
+  make_config_mod(0, 0, 1, MOD_BUFFER_SAMPLES).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_CYCLE0), 0xFFFF) << "65536 - 1";
+}
+
+
+
+TEST(Proto, ConfigPatternRawWritesRegistersAndLatches) {
+  reset_all();
+
+  make_config_pattern(0, 0, EMISSION_TYPE_RAW, 2, EMISSION_MAX_INDICES, 0, 0).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_MODE0), EMISSION_TYPE_RAW);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_CYCLE0), EMISSION_MAX_INDICES - 1);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_FREQ_DIV0), 2);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REP0), REP_INFINITE);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_TRANSITION_MODE), TRANSITION_MODE_SYNC_IDX)
+      << "config must not touch transition mode (kept at boot default)";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_PATTERN_SET, 0);
+}
+
+TEST(Proto, ConfigPatternFociWritesRegistersAndLatches) {
+  reset_all();
+
+  make_config_pattern(0, 1, EMISSION_TYPE_FOCI, 1, 8192, 8, 340).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_MODE0 + 1), EMISSION_TYPE_FOCI);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_CYCLE0 + 1), 8191);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_SOUND_SPEED0 + 1), 340);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_NUM_FOCI0 + 1), 8);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REP0 + 1), REP_INFINITE);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 0) << "config must not switch the playback bank";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_PATTERN_SET, 0);
+}
+
+TEST(Proto, ConfigPatternRejectsInvalidRawFields) {
+  reset_all();
+
+  make_config_pattern(0, 0, EMISSION_TYPE_RAW, 1, EMISSION_MAX_INDICES + 1, 0, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  make_config_pattern(1, 0, 2, 1, 1, 0, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_CYCLE0), 0) << "registers must stay untouched";
+}
+
+TEST(Proto, ConfigPatternRejectsInvalidFociFields) {
+  reset_all();
+
+  
+  make_config_pattern(0, 0, EMISSION_TYPE_FOCI, 1, 1, 0, 340).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  make_config_pattern(1, 0, EMISSION_TYPE_FOCI, 1, 1, NUM_FOCI_MAX + 1, 340).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  make_config_pattern(2, 0, EMISSION_TYPE_FOCI, 1, MAX_FOCI_TOTAL / 8 + 1, 8, 340).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  make_config_pattern(3, 0, EMISSION_TYPE_FOCI, 1, 1, 1, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  make_config_pattern(4, 0, EMISSION_TYPE_FOCI, 1, MAX_FOCI_TOTAL / 8, 8, 340).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+}
+
+
+
+TEST(Proto, ChangePatternBankWritesTransitionAndReqBankAndLatches) {
+  reset_all();
+  const uint32_t latches_at_boot = port_test_fpga_latch_count(CTL_FLAG_PATTERN_SET);
+
+  make_change_pattern_bank(0, 1, TRANSITION_MODE_IMMEDIATE, 0).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_TRANSITION_MODE), TRANSITION_MODE_IMMEDIATE);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_PATTERN_SET), latches_at_boot + 1);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_PATTERN_SET, 0) << "the FPGA clears the latch bit";
+}
+
+TEST(Proto, ChangePatternBankWritesTransitionValue) {
+  reset_all();
+
+  make_change_pattern_bank(0, 0, TRANSITION_MODE_SYS_TIME, 0x0123456789ABCDEFull).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_TRANSITION_MODE), TRANSITION_MODE_SYS_TIME);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_TRANSITION_VALUE_0), 0xCDEF);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_TRANSITION_VALUE_0 + 1), 0x89AB);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_TRANSITION_VALUE_0 + 2), 0x4567);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_TRANSITION_VALUE_0 + 3), 0x0123);
+}
+
+TEST(Proto, ChangePatternBankRejectsInvalidBank) {
+  reset_all();
+  make_change_pattern_bank(0, NUM_BANKS, TRANSITION_MODE_IMMEDIATE, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 0) << "rejected change must not switch the bank";
+}
+
+TEST(Proto, ChangeModBankWritesTransitionAndReqBankAndLatches) {
+  reset_all();
+  const uint32_t latches_at_boot = port_test_fpga_latch_count(CTL_FLAG_MOD_SET);
+
+  make_change_mod_bank(0, 1, TRANSITION_MODE_IMMEDIATE, 0).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_TRANSITION_MODE), TRANSITION_MODE_IMMEDIATE);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 1);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_MOD_SET), latches_at_boot + 1);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_MOD_SET, 0) << "the FPGA clears the latch bit";
+}
+
+TEST(Proto, ChangeModBankRejectsInvalidBank) {
+  reset_all();
+  make_change_mod_bank(0, NUM_BANKS, TRANSITION_MODE_IMMEDIATE, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 0) << "rejected change must not switch the bank";
+}
+
+
+
+TEST(Proto, BootBringsFpgaToLegacyClearBaseline) {
+  reset_all();
+
+  
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_FLAG), 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 256);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_UPDATE_RATE_PHASE), 256);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_PHASE), 40);
+
+  
+  for (uint8_t bank = 0; bank < NUM_BANKS; ++bank) {
+    EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_CYCLE0 + bank), 1);
+    EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_FREQ_DIV0 + bank), 0xFFFF);
+    EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REP0 + bank), REP_INFINITE);
+    EXPECT_EQ(port_test_fpga_mod_word(bank, 0), 0xFFFF);
+  }
+
+  
+  for (uint8_t bank = 0; bank < NUM_BANKS; ++bank) {
+    EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_MODE0 + bank), EMISSION_TYPE_RAW);
+    EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_CYCLE0 + bank), 0);
+    EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REP0 + bank), REP_INFINITE);
+    EXPECT_EQ(port_test_fpga_emission_word(bank, 0), 0);
+    EXPECT_EQ(port_test_fpga_emission_word(bank, NUM_TRANSDUCERS - 1), 0);
+  }
+
+  
+  EXPECT_EQ(port_test_fpga_phase_corr(0), 0);
+  EXPECT_EQ(port_test_fpga_phase_corr(PHASE_CORR_WORDS - 1), 0);
+  EXPECT_EQ(port_test_fpga_output_mask(0), 0xFFFF);
+  EXPECT_EQ(port_test_fpga_output_mask(OUTPUT_MASK_WORDS - 1), 0xFFFF);
+
+  
+  EXPECT_EQ(port_test_fpga_pwe_word(0), 0x00);
+  EXPECT_EQ(port_test_fpga_pwe_word(1), 0x01);
+  EXPECT_EQ(port_test_fpga_pwe_word(128), 0x56);
+  EXPECT_EQ(port_test_fpga_pwe_word(PWE_TABLE_SIZE - 1), 0x100);
+
+  
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_MOD_SET), 1u);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_PATTERN_SET), 1u);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_SILENCER_SET), 1u);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_DEBUG_SET), 1u);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_SYNC_SET), 0u);
+}
+
+
+
+TEST(Proto, SynchronizeWritesNextSync0AndLatches) {
+  reset_all();
+  port_test_set_next_sync0(0x1122334455667788ULL);
+
+  Frame(0, CMD_SYNCHRONIZE).deliver();
+
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_TIME_0), 0x7788);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_TIME_0 + 1), 0x5566);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_TIME_0 + 2), 0x3344);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_TIME_0 + 3), 0x1122);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_SYNC_SET), 1u);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_SYNC_SET, 0);
+}
+
+
+
+TEST(Proto, FpgaStateSurvivesReset) {
+  reset_all();
+
+  make_write_pattern_buffer(0, 0, 0, {0x5A5A}).deliver();
+  make_write_mod_buffer(1, 1, 8, {0x77}).deliver();
+  make_config_mod(2, 1, 5, 256).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  Frame(99 , CMD_RESET).deliver();
+  ASSERT_EQ(proto_expected_seq(), 0);
+
+  
+  EXPECT_EQ(port_test_fpga_emission_word(0, 0), 0x5A5A);
+  EXPECT_EQ(port_test_fpga_mod_word(1, 4), 0x0077);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_CYCLE0 + 1), 255);
+}
+
+
+
+TEST(Proto, StructSizesMatchSpec) {
+  EXPECT_EQ(sizeof(rx_frame_t), 626u);
+  
+  
+  
+  EXPECT_EQ(sizeof(tx_frame_t), 4u);
+  EXPECT_EQ(WIRE_RX_FRAME_BYTES, 628u);
+}

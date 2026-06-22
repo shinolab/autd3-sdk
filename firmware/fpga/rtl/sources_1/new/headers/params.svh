@@ -1,0 +1,153 @@
+package params;
+
+  localparam int NumTransducers = 249;
+  localparam int NumBanks = 2;
+
+  localparam int EmissionMaxIndices = 1024;
+  localparam int EmissionWrAddrWidth = $clog2(EmissionMaxIndices * 256);
+  localparam int EmissionRdAddrWidth = $clog2(EmissionMaxIndices * 64);
+  localparam int NumFociMax = 8;
+
+  localparam int FuncDynamicFreqBit = 1;
+  localparam int FuncEmulatorBit = 7;  // reserved
+
+  localparam bit [7:0] VersionNumMajor = 8'd0;
+  localparam bit [7:0] VersionNumMinor = 8'd1;
+  localparam bit [7:0] VersionNumPatch = 8'd0;
+
+  typedef enum int {
+    CTL_FLAG_BIT_MOD_SET = 0,
+    CTL_FLAG_BIT_PATTERN_SET = 1,
+    CTL_FLAG_BIT_SILENCER_SET = 2,
+    //
+    CTL_FLAG_BIT_DEBUG_SET = 4,
+    CTL_FLAG_BIT_SYNC_SET = 5,
+    CTL_FLAG_BIT_GPIO_IN_0 = 8,
+    CTL_FLAG_BIT_GPIO_IN_1 = 9,
+    CTL_FLAG_BIT_GPIO_IN_2 = 10,
+    CTL_FLAG_BIT_GPIO_IN_3 = 11,
+    CTL_FLAG_BIT_FORCE_FAN = 13
+  } ctl_flag_bit_t;
+
+  typedef enum int {
+    //
+    FPGA_STATE_BIT_READS_FPGA_STATE_ENABLED = 7
+  } fpga_state_bit_t;
+
+  typedef enum logic [1:0] {
+    BRAM_SELECT_CONTROLLER = 2'h0,
+    BRAM_SELECT_MOD = 2'h1,
+    BRAM_SELECT_PWE_TABLE = 2'h2,
+    BRAM_SELECT_EMISSION = 2'h3
+  } bram_select_t;
+
+  typedef enum logic [5:0] {
+    BRAM_CNT_SELECT_MAIN = 6'h00,
+    BRAM_CNT_SELECT_PHASE_CORR = 6'h01,
+    BRAM_CNT_SELECT_OUTPUT_MASK = 6'h02
+  } bram_cnt_select_t;
+
+  typedef enum logic [7:0] {
+    TRANSITION_MODE_SYNC_IDX = 8'h00,
+    TRANSITION_MODE_SYS_TIME = 8'h01,
+    TRANSITION_MODE_GPIO = 8'h02,
+    TRANSITION_MODE_EXT = 8'hF0
+  } transition_mode_t;
+
+  typedef enum logic {
+    EMISSION_TYPE_FOCI = 1'b0,
+    EMISSION_TYPE_RAW  = 1'b1
+  } emission_type_t;
+
+  typedef enum int {SILENCER_FLAG_BIT_FIXED_UPDATE_RATE_MODE = 0} silencer_mode_bit_t;
+
+  typedef enum logic [7:0] {
+    GPIO_O_TYPE_NONE = 8'h00,
+    GPIO_O_TYPE_BASE_SIG = 8'h01,
+    GPIO_O_TYPE_THERMO = 8'h02,
+    GPIO_O_TYPE_FORCE_FAN = 8'h03,
+    GPIO_O_TYPE_SYNC = 8'h10,
+    GPIO_O_TYPE_MOD_BANK = 8'h20,
+    GPIO_O_TYPE_MOD_IDX = 8'h21,
+    GPIO_O_TYPE_PATTERN_BANK = 8'h50,
+    GPIO_O_TYPE_PATTERN_IDX = 8'h51,
+    GPIO_O_TYPE_IS_PATTERN_MODE = 8'h52,
+    GPIO_O_TYPE_SYS_TIME_EQ = 8'h60,
+    GPIO_O_TYPE_SYNC_DIFF = 8'h70,
+    GPIO_O_TYPE_PWM_OUT = 8'hE0,
+    GPIO_O_TYPE_DIRECT = 8'hF0
+  } debug_type_t;
+
+  typedef enum logic [7:0] {
+    ADDR_CTL_FLAG          = 8'h00,
+    ADDR_FPGA_STATE        = 8'h01,
+    ADDR_VERSION_NUM_MAJOR = 8'h02,
+    ADDR_VERSION_NUM_MINOR = 8'h03,
+    ADDR_VERSION_NUM_PATCH = 8'h04,
+
+    ADDR_ECAT_SYNC_TIME_0 = 8'h10,
+    ADDR_ECAT_SYNC_TIME_1 = 8'h11,
+    ADDR_ECAT_SYNC_TIME_2 = 8'h12,
+    ADDR_ECAT_SYNC_TIME_3 = 8'h13,
+
+    ADDR_MOD_MEM_WR_BANK     = 8'h20,
+    ADDR_MOD_MEM_WR_PAGE        = 8'h21,
+    ADDR_MOD_REQ_RD_BANK     = 8'h22,
+    ADDR_MOD_CYCLE0             = 8'h23,
+    ADDR_MOD_CYCLE1             = 8'h24,
+    ADDR_MOD_FREQ_DIV0          = 8'h25,
+    ADDR_MOD_FREQ_DIV1          = 8'h26,
+    ADDR_MOD_REP0               = 8'h27,
+    ADDR_MOD_REP1               = 8'h28,
+    ADDR_MOD_TRANSITION_MODE    = 8'h29,
+    ADDR_MOD_TRANSITION_VALUE_0 = 8'h2A,
+    ADDR_MOD_TRANSITION_VALUE_1 = 8'h2B,
+    ADDR_MOD_TRANSITION_VALUE_2 = 8'h2C,
+    ADDR_MOD_TRANSITION_VALUE_3 = 8'h2D,
+
+    ADDR_SILENCER_FLAG                       = 8'h40,
+    ADDR_SILENCER_UPDATE_RATE_INTENSITY      = 8'h41,
+    ADDR_SILENCER_UPDATE_RATE_PHASE          = 8'h42,
+    ADDR_SILENCER_COMPLETION_STEPS_INTENSITY = 8'h43,
+    ADDR_SILENCER_COMPLETION_STEPS_PHASE     = 8'h44,
+
+    ADDR_PATTERN_MEM_WR_BANK     = 8'h50,
+    ADDR_PATTERN_MEM_WR_PAGE        = 8'h51,
+    ADDR_PATTERN_REQ_RD_BANK     = 8'h52,
+    ADDR_PATTERN_CYCLE0             = 8'h53,
+    ADDR_PATTERN_CYCLE1             = 8'h54,
+    ADDR_PATTERN_FREQ_DIV0          = 8'h55,
+    ADDR_PATTERN_FREQ_DIV1          = 8'h56,
+    ADDR_PATTERN_REP0               = 8'h57,
+    ADDR_PATTERN_REP1               = 8'h58,
+    ADDR_PATTERN_MODE0              = 8'h59,
+    ADDR_PATTERN_MODE1              = 8'h5A,
+    ADDR_PATTERN_SOUND_SPEED0       = 8'h5B,
+    ADDR_PATTERN_SOUND_SPEED1       = 8'h5C,
+    ADDR_PATTERN_NUM_FOCI0          = 8'h5D,
+    ADDR_PATTERN_NUM_FOCI1          = 8'h5E,
+    ADDR_PATTERN_TRANSITION_MODE    = 8'h5F,
+    ADDR_PATTERN_TRANSITION_VALUE_0 = 8'h60,
+    ADDR_PATTERN_TRANSITION_VALUE_1 = 8'h61,
+    ADDR_PATTERN_TRANSITION_VALUE_2 = 8'h62,
+    ADDR_PATTERN_TRANSITION_VALUE_3 = 8'h63,
+
+    ADDR_DEBUG_VALUE0_0 = 8'hF0,
+    ADDR_DEBUG_VALUE0_1 = 8'hF1,
+    ADDR_DEBUG_VALUE0_2 = 8'hF2,
+    ADDR_DEBUG_VALUE0_3 = 8'hF3,
+    ADDR_DEBUG_VALUE1_0 = 8'hF4,
+    ADDR_DEBUG_VALUE1_1 = 8'hF5,
+    ADDR_DEBUG_VALUE1_2 = 8'hF6,
+    ADDR_DEBUG_VALUE1_3 = 8'hF7,
+    ADDR_DEBUG_VALUE2_0 = 8'hF8,
+    ADDR_DEBUG_VALUE2_1 = 8'hF9,
+    ADDR_DEBUG_VALUE2_2 = 8'hFA,
+    ADDR_DEBUG_VALUE2_3 = 8'hFB,
+    ADDR_DEBUG_VALUE3_0 = 8'hFC,
+    ADDR_DEBUG_VALUE3_1 = 8'hFD,
+    ADDR_DEBUG_VALUE3_2 = 8'hFE,
+    ADDR_DEBUG_VALUE3_3 = 8'hFF
+  } bram_addr_t;
+
+endpackage

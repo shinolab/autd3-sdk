@@ -1,0 +1,15 @@
+[package]
+name = "autd3-rs-modulation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Amplitude-modulation waveform utilities for autd3-rs (sine, etc.)."
+
+[dependencies]
+autd3-rs-core.workspace = true
+
+[lints]
+workspace = true

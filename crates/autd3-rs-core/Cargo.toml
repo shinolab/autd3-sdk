@@ -1,0 +1,28 @@
+[package]
+name = "autd3-rs-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Core types and link abstraction shared across the AUTD3 phased-array sdk crates."
+
+[dependencies]
+nalgebra.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+zerocopy.workspace = true
+
+[dev-dependencies]
+approx.workspace = true
+tokio = { workspace = true, features = [
+    "sync",
+    "time",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+] }
+
+[lints]
+workspace = true

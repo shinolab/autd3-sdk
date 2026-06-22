@@ -1,0 +1,117 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  changes:
+    name: detect-changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      cpu: ${{ steps.filter.outputs.cpu }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared: &shared
+              - '.github/workflows/ci.yml'
+              - '.github/actions/setup-rust/**'
+            rust:
+              - *shared
+              - 'crates/**'
+              - 'tools/**'
+              - 'examples/**'
+              - 'xtask/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.cargo/**'
+              - '.github/workflows/ci-rust.yml'
+            cpu:
+              - *shared
+              - 'firmware/cpu/**'
+              - '.github/workflows/ci-cpu.yml'
+
+  rust:
+    name: rust
+    needs: changes
+    if: ${{ needs.changes.outputs.rust == 'true' }}
+    uses: ./.github/workflows/ci-rust.yml
+
+  cpu:
+    name: cpu
+    needs: changes
+    if: ${{ needs.changes.outputs.cpu == 'true' }}
+    uses: ./.github/workflows/ci-cpu.yml
+
+  guard:
+    name: guard-main-source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch
+        id: chk
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$BASE_REF" != "main" ]; then
+            echo "PR does not target main; nothing to enforce."
+            echo "lineage=skip" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$HEAD_REF" in
+            release/*)
+              echo "Source '$HEAD_REF' allowed; will verify develop lineage."
+              echo "lineage=check" >> "$GITHUB_OUTPUT" ;;
+            hotfix/*)
+              echo "Source '$HEAD_REF' allowed (hotfix; no develop lineage required)."
+              echo "lineage=skip" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::PRs into main must come from release/* or hotfix/* (got '$HEAD_REF')."
+              exit 1 ;;
+          esac
+      - name: Checkout release head
+        if: ${{ steps.chk.outputs.lineage == 'check' }}
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Verify release is derived from develop
+        if: ${{ steps.chk.outputs.lineage == 'check' }}
+        run: |
+          git fetch --no-tags origin +refs/heads/develop:refs/remotes/origin/develop
+          if git merge-base --is-ancestor origin/develop HEAD; then
+            echo "release branch contains develop's tip; lineage OK."
+          else
+            echo "::error::release/* must be cut from develop and contain its tip before merging into main. Merge develop into the release branch."
+            exit 1
+          fi
+
+  ci-passed:
+    name: ci-passed
+    if: ${{ always() }}
+    needs: [rust, cpu, guard]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify no job failed
+        run: |
+          if [ "${{ needs.rust.result }}" = "failure" ] \
+            || [ "${{ needs.cpu.result }}" = "failure" ] \
+            || [ "${{ needs.guard.result }}" != "success" ]; then
+            echo "A required job failed."
+            exit 1
+          fi
+          echo "All required jobs passed or were skipped."

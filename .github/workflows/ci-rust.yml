@@ -1,0 +1,25 @@
+name: ci-rust
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rust:
+    name: rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt, clippy
+      - name: Install pcap
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+      - run: cargo xtask rust format
+      - run: cargo xtask rust lint
+      - run: cargo xtask rust test

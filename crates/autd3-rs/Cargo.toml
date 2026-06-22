@@ -1,0 +1,30 @@
+[package]
+name = "autd3-rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Core async client library for the AUTD3 phased-array kit."
+
+[dependencies]
+autd3-rs-core.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+zerocopy.workspace = true
+thread-priority.workspace = true
+core_affinity.workspace = true
+tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Media",
+    "Win32_System_Threading",
+    "Win32_Foundation",
+] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["sync", "time", "macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

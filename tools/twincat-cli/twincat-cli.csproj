@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>TwincatCli</RootNamespace>
+    <AssemblyName>twincat-cli</AssemblyName>
+    <StartupObject>TwincatCli.Program</StartupObject>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>latest</LangVersion>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.45" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.9" />
+    <PackageReference Include="Microsoft.VisualStudio.Interop" Version="17.14.40260" />
+    <PackageReference Include="Microsoft.VisualStudio.Imaging.Interop.14.0.DesignTime" Version="17.14.40254" />
+    <PackageReference Include="Beckhoff.TwinCAT.Ads" Version="7.0.172" />
+    <PackageReference Include="Beckhoff.TwinCAT.Ads.Abstractions" Version="7.0.172" />
+    <PackageReference Include="Beckhoff.TwinCAT.Ads.ConfigurationProviders" Version="7.0.172" />
+    <PackageReference Include="Beckhoff.TwinCAT.Ads.Server" Version="7.0.172" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Primitives" Version="10.0.9" />
+    <PackageReference Include="System.Buffers" Version="4.6.1" />
+    <PackageReference Include="System.ComponentModel.Composition" Version="10.0.9" />
+    <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="10.0.9" />
+    <PackageReference Include="System.Diagnostics.EventLog" Version="10.0.9" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="System.Numerics.Vectors" Version="4.6.1" />
+    <PackageReference Include="System.Reactive" Version="7.0.0-preview.1" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
+    <PackageReference Include="System.Security.Principal.Windows" Version="5.0.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.9" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.9" />
+    <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
+    <PackageReference Include="System.ValueTuple" Version="4.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <COMReference Include="TCatSysManagerLib">
+      <Guid>{3C49D6C3-93DC-11D0-B162-00A0248C244B}</Guid>
+      <VersionMajor>3</VersionMajor>
+      <VersionMinor>3</VersionMinor>
+      <Lcid>0</Lcid>
+      <WrapperTool>tlbimp</WrapperTool>
+      <Isolated>False</Isolated>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </COMReference>
+  </ItemGroup>
+
+  <Target Name="ILRepackMerge" AfterTargets="Build">
+    <ItemGroup>
+      <ILRepackInput Include="$(OutDir)$(AssemblyName).exe" />
+      <ILRepackInput Include="$(OutDir)*.dll" />
+    </ItemGroup>
+    <MakeDir Directories="$(OutDir)dist" />
+    <ILRepack Parallel="true" Internalize="false" InputAssemblies="@(ILRepackInput)" TargetKind="Exe" LibraryPath="$(OutDir)" OutputFile="$(OutDir)dist\$(AssemblyName).exe" />
+  </Target>
+
+</Project>

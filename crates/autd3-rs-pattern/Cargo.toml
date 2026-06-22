@@ -1,0 +1,15 @@
+[package]
+name = "autd3-rs-pattern"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Emission-pattern computation utilities for autd3-rs (focus, bessel beam, etc.)."
+
+[dependencies]
+autd3-rs-core.workspace = true
+
+[lints]
+workspace = true

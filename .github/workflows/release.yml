@@ -1,0 +1,35 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '*-v*'
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-rust
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Generate release notes
+        run: cargo xtask changelog --tag "${GITHUB_REF_NAME}" --release-notes --output RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES.md

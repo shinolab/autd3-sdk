@@ -1,0 +1,21 @@
+name: ci-cpu
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  cpu:
+    name: cpu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-rust
+      - name: Install C toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy clang-format cmake
+      - run: cargo xtask cpu format
+      - run: cargo xtask cpu lint
+      - run: cargo xtask cpu test

@@ -1,0 +1,26 @@
+mod cli;
+mod run;
+
+use anyhow::Result;
+use clap::Parser;
+
+use crate::cli::Cli;
+use crate::run::run;
+
+#[tokio::main(flavor = "multi_thread")]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .with_writer(std::io::stderr)
+        .init();
+
+    let cli = Cli::parse();
+    if let Err(msg) = cli.validate() {
+        anyhow::bail!(msg);
+    }
+
+    Box::pin(run(&cli)).await
+}

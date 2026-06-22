@@ -1,0 +1,75 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/autd3-rs",
+    "crates/autd3-rs-core",
+    "crates/autd3-rs-pattern",
+    "crates/autd3-rs-link-ethercrab",
+    "crates/autd3-rs-link-soem",
+    "crates/autd3-rs-link-twincat",
+    "crates/autd3-rs-modulation",
+    "tools/perftest",
+    "tools/patternsoak",
+    "tools/synctune",
+    "examples",
+]
+exclude = ["xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "MIT"
+authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
+repository = "https://github.com/shinolab/autd3-sdk"
+
+[workspace.dependencies]
+approx = { version = "0.5", default-features = false, features = ["std"] }
+nalgebra = { version = "0.35", default-features = false, features = ["std"] }
+thiserror = { version = "2", default-features = false, features = ["std"] }
+async-trait = { version = "0.1", default-features = false }
+zerocopy = { version = "0.8", default-features = false, features = ["derive"] }
+tokio = { version = "1", default-features = false, features = [
+    "sync",
+    "time",
+    "macros",
+    "rt",
+] }
+ethercrab = { version = "0.7", default-features = false, features = ["std"] }
+thread-priority = { version = "3.1.0", default-features = false }
+core_affinity = { version = "0.8", default-features = false }
+clap = { version = "4", default-features = false, features = [
+    "std",
+    "derive",
+    "help",
+    "usage",
+    "error-context",
+] }
+humantime = { version = "2", default-features = false }
+anyhow = { version = "1", default-features = false, features = ["std"] }
+tracing = { version = "0.1.44", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "std",
+    "fmt",
+    "ansi",
+    "env-filter",
+] }
+
+autd3-rs = { version = "0.1.0", path = "crates/autd3-rs" }
+autd3-rs-core = { version = "0.1.0", path = "crates/autd3-rs-core" }
+autd3-rs-pattern = { version = "0.1.0", path = "crates/autd3-rs-pattern" }
+autd3-rs-link-ethercrab = { version = "0.1.0", path = "crates/autd3-rs-link-ethercrab" }
+autd3-rs-link-soem = { version = "0.1.0", path = "crates/autd3-rs-link-soem" }
+autd3-rs-link-twincat = { version = "0.1.0", path = "crates/autd3-rs-link-twincat" }
+autd3-rs-modulation = { version = "0.1.0", path = "crates/autd3-rs-modulation" }
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_precision_loss = "allow"

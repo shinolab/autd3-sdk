@@ -1,0 +1,22 @@
+[package]
+name = "autd3-rs-link-soem"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0-only"
+authors.workspace = true
+repository.workspace = true
+description = "SOEM-backed Link implementation for autd3-rs (GPL-3.0)."
+
+[dependencies]
+autd3-rs-core.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "rt"] }
+tracing = { workspace = true, features = ["log"] }
+
+[build-dependencies]
+bindgen = "0.72"
+cmake = { version = "0.1", default-features = false }
+
+[lints]
+workspace = true

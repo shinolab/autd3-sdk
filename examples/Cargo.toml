@@ -1,0 +1,49 @@
+[package]
+name = "autd3-rs-examples"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "examples for autd3-rs."
+publish = false
+
+[[bin]]
+name = "focus_sine"
+path = "src/bin/focus_sine.rs"
+
+[[bin]]
+name = "multi_device"
+path = "src/bin/multi_device.rs"
+
+[[bin]]
+name = "status_check"
+path = "src/bin/status_check.rs"
+
+[[bin]]
+name = "send_modes"
+path = "src/bin/send_modes.rs"
+
+[[bin]]
+name = "low_latency"
+path = "src/bin/low_latency.rs"
+
+[dependencies]
+autd3-rs.workspace = true
+autd3-rs-pattern.workspace = true
+autd3-rs-link-ethercrab.workspace = true
+autd3-rs-modulation.workspace = true
+anyhow.workspace = true
+tracing-subscriber.workspace = true
+tokio = { workspace = true, features = [
+    "sync",
+    "time",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "signal",
+] }
+
+[lints]
+workspace = true

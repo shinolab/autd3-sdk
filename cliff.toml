@@ -1,0 +1,46 @@
+[changelog]
+header = """
+# Changelog
+
+"""
+body = """
+{% if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
+{% if commit.breaking %}[**breaking**] {% endif %}\
+{{ commit.message | upper_first }}\
+{% endfor %}
+{% endfor %}\n
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+commit_parsers = [
+    { message = "^feat", group = "<!-- 0 -->🚀 Features" },
+    { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
+    { message = "^perf", group = "<!-- 2 -->⚡ Performance" },
+    { message = "^revert", group = "<!-- 3 -->◀️ Revert" },
+    { message = "^docs", skip = true },
+    { message = "^refactor", skip = true },
+    { message = "^test", skip = true },
+    { message = "^chore", skip = true },
+    { message = "^build", skip = true },
+    { message = "^ci", skip = true },
+    { message = ".*", skip = true },
+]
+filter_commits = true
+topo_order = false
+sort_commits = "oldest"
+# Default for standalone `git-cliff` runs. xtask overrides this per release
+# component via `--tag-pattern` (see xtask `component.rs`).
+tag_pattern = "v[0-9]*"

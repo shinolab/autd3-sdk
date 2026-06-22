@@ -1,0 +1,31 @@
+[package]
+name = "autd3-rs-perftest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "CLI tool for measuring EtherCAT-link performance using the XorHash command."
+
+[[bin]]
+name = "autd3-rs-perftest"
+path = "src/main.rs"
+
+[features]
+mem-profile = ["dep:stats_alloc"]
+
+[dependencies]
+autd3-rs.workspace = true
+autd3-rs-link-ethercrab.workspace = true
+autd3-rs-link-soem.workspace = true
+autd3-rs-link-twincat.workspace = true
+clap.workspace = true
+humantime.workspace = true
+anyhow.workspace = true
+tracing-subscriber.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "macros", "rt", "rt-multi-thread", "signal"] }
+stats_alloc = { version = "0.1", optional = true }
+
+[lints]
+workspace = true

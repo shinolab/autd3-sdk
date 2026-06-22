@@ -1,0 +1,9 @@
+# clang-tidy ≥ 22 errors out with "no checks enabled" unless a check set is
+# configured explicitly. This restores the historical default set
+# (clang-diagnostic-* + clang-analyzer-*). The DeprecatedOrUnsafeBufferHandling
+# checker is excluded: it bans memcpy/memset wholesale in favor of the C11
+# Annex K *_s functions, which our embedded libc does not provide.
+Checks: >
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling

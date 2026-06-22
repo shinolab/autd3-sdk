@@ -1,0 +1,20 @@
+[package]
+name = "autd3-rs-link-twincat"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "TwinCAT3-backed Link implementation for autd3-rs via ADS protocol."
+
+[dependencies]
+autd3-rs-core.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+ads = { version = "0.4.4", default-features = false }
+crossbeam-channel = "0.5"
+tokio = { workspace = true, features = ["sync"] }
+
+[lints]
+workspace = true
