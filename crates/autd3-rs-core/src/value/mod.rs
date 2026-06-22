@@ -13,5 +13,7 @@ pub use focus::Focus;
 pub use intensity::Intensity;
 pub use pattern_data_type::PatternDataType;
 pub use phase::Phase;
-pub use sampling_config::{Nearest, SamplingConfig, SamplingConfigError};
+pub use sampling_config::{
+    IS_INTEGER_EPSILON, Nearest, SamplingConfig, SamplingConfigError, is_integer,
+};
 pub use transition_mode::TransitionMode;

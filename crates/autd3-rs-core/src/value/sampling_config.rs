@@ -8,10 +8,12 @@ use core::{fmt::Debug, num::NonZeroU16, time::Duration};
 
 use crate::common::{Freq, ULTRASOUND_FREQ, ULTRASOUND_PERIOD, units::Hz};
 
-const IS_INTEGER_EPSILON: f64 = 1e-6;
+pub const IS_INTEGER_EPSILON: f64 = 1e-6;
 
-const fn is_integer(a: f64) -> bool {
-    0.5 - (a.fract() - 0.5).abs() < IS_INTEGER_EPSILON
+#[must_use]
+pub const fn is_integer(a: f64) -> bool {
+    let dist = 0.5 - (a.fract() - 0.5).abs();
+    dist < IS_INTEGER_EPSILON + a.abs() * (f64::EPSILON * 16.0)
 }
 
 #[derive(Debug, PartialEq, Copy, Clone, thiserror::Error)]
@@ -159,6 +161,16 @@ impl SamplingConfig {
 mod tests {
     use super::*;
     use crate::common::units::kHz;
+
+    #[test]
+    fn is_integer_uses_relative_tolerance() {
+        assert!(is_integer(0.0));
+        assert!(is_integer(42.0));
+        assert!(is_integer(1e12));
+        assert!(!is_integer(2.5));
+        assert!(!is_integer(1e12 + 0.5));
+        assert!(is_integer(1e12 + 1e-4));
+    }
 
     #[test]
     fn divide() {
