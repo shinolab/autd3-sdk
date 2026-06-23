@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>AUTD3</AssemblyName>
+    <RootNamespace>AUTD3</RootNamespace>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../AUTD3.Core/AUTD3.Core.csproj" />
+    <ProjectReference Include="../AUTD3.Pattern/AUTD3.Pattern.csproj" />
+    <ProjectReference Include="../AUTD3.Modulation/AUTD3.Modulation.csproj" />
+  </ItemGroup>
+
+</Project>
