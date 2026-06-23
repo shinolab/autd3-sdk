@@ -13,6 +13,7 @@ const FW_SOURCES: &[&str] = &[
     "cmd/change_pattern_bank.c",
     "cmd/sync.c",
     "cmd/set_mode.c",
+    "cmd/silencer.c",
 ];
 
 fn main() {

@@ -6,6 +6,7 @@ extern "C" {
 
 #include <stdint.h>
 
+#include "cmd/silencer.h"
 #include "proto.h"
 
 extern tx_frame_t _sTx;
@@ -20,6 +21,7 @@ void app_set_state(app_state_t* state) { s_app = state; }
 void init_app(void) {
   proto_init();
   fpga_init();
+  silencer_guard_init();
   _sTx.ack = 0xFF;
   _sTx.data = 0;
   s_app->last_seq = 0xFF;

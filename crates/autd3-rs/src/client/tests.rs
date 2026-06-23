@@ -137,6 +137,7 @@ fn slave_cycle(
         | Cmd::ConfigPattern
         | Cmd::ChangePatternBank
         | Cmd::ChangeModulationBank
+        | Cmd::SetSilencer
         | Cmd::Synchronize => 0,
         Cmd::SetMode => {
             slave.mode = parsed.payload[0];
