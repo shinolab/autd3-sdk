@@ -67,6 +67,18 @@ pub enum PayloadError {
     #[error("sine modulation value is out of range [0, 255]")]
     SineValueOutOfRange,
 
+    #[error("square duty {duty} must be in range 0..=1")]
+    DutyOutOfRange { duty: f32 },
+
+    #[error("fourier components must not be empty")]
+    FourierComponentsEmpty,
+
+    #[error("all fourier components must have the same sampling config")]
+    FourierSamplingConfigMismatch,
+
+    #[error("fourier modulation value is out of range [0, 255]")]
+    FourierValueOutOfRange,
+
     #[error("foci must not be empty")]
     FociEmpty,
 

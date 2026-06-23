@@ -33,11 +33,10 @@ impl Default for SineOption {
     }
 }
 
-pub fn sine<S: Into<SamplingMode>>(
+pub(crate) fn sine_raw<S: Into<SamplingMode>>(
     freq: S,
     option: &SineOption,
-    out: &mut Vec<u8>,
-) -> Result<(), Error> {
+) -> Result<Vec<f32>, Error> {
     let mode: SamplingMode = freq.into();
     let (n, rep) = mode.validate(option.sampling_config)?;
     let n =
@@ -47,12 +46,25 @@ pub fn sine<S: Into<SamplingMode>>(
     let offset = f32::from(option.offset);
     let phase = option.phase.radian();
 
+    Ok((0..n)
+        .map(|i| {
+            let t = (rep * i as u64) as f32 / n as f32;
+            (intensity / 2.0 * (2.0 * PI * t + phase).sin()) + offset
+        })
+        .collect())
+}
+
+pub fn sine<S: Into<SamplingMode>>(
+    freq: S,
+    option: &SineOption,
+    out: &mut Vec<u8>,
+) -> Result<(), Error> {
+    let raw = sine_raw(freq, option)?;
+
     out.clear();
-    out.reserve(n);
+    out.reserve(raw.len());
     let mut out_of_range = false;
-    for i in 0..n {
-        let t = (rep * i as u64) as f32 / n as f32;
-        let v = (intensity / 2.0 * (2.0 * PI * t + phase).sin()) + offset;
+    for v in raw {
         let v = v.floor() as i16;
         out.push(if (0..=255).contains(&v) {
             v as u8
