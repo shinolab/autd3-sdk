@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/autd3-rs",
     "crates/autd3-rs-core",
+    "crates/autd3-rs-firmware-emulator",
     "crates/autd3-rs-pattern",
     "crates/autd3-rs-link-ethercrab",
     "crates/autd3-rs-link-soem",

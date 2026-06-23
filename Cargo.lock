@@ -124,6 +124,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-rs-firmware-emulator"
+version = "0.1.0"
+dependencies = [
+ "autd3-rs-core",
+ "bindgen",
+ "cc",
+]
+
+[[package]]
 name = "autd3-rs-link-ethercrab"
 version = "0.1.0"
 dependencies = [
