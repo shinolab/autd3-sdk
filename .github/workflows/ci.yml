@@ -58,14 +58,12 @@ jobs:
               - *xtask-core
               - 'xtask/src/py.rs'
               - 'bindings/python/**'
-              - 'crates/**'
               - '.github/workflows/ci-py.yml'
             ffi:
               - *shared
               - *xtask-core
               - 'xtask/src/ffi.rs'
               - 'bindings/ffi/**'
-              - 'crates/**'
               - '.github/workflows/ci-ffi.yml'
             cs:
               - *shared
@@ -73,7 +71,6 @@ jobs:
               - 'xtask/src/cs.rs'
               - 'bindings/csharp/**'
               - 'bindings/ffi/**'
-              - 'crates/**'
               - '.github/workflows/ci-cs.yml'
 
   rust:
