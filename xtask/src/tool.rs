@@ -58,9 +58,19 @@ pub enum TwincatCmd {
         args: Vec<String>,
     },
 
-    Doctor,
+    Doctor {
+        #[arg(long)]
+        debug: bool,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 
-    InstallEsi,
+    InstallEsi {
+        #[arg(long)]
+        debug: bool,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 }
 
 pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
@@ -98,22 +108,15 @@ fn run_twincat(root: &Path, cmd: TwincatCmd) -> Result<()> {
 
     let dir = root.join("tools").join("twincat-cli");
 
-    match cmd {
-        TwincatCmd::InstallEsi => install_autd_xml(&dir, true),
-        TwincatCmd::Doctor => diagnose_vbs(),
-        TwincatCmd::Run { debug, args } => {
-            let exe = ensure_built(&dir, debug)?;
+    let (sub, debug, args) = match cmd {
+        TwincatCmd::Run { debug, args } => ("run", debug, args),
+        TwincatCmd::Open { debug, args } => ("open", debug, args),
+        TwincatCmd::Doctor { debug, args } => ("doctor", debug, args),
+        TwincatCmd::InstallEsi { debug, args } => ("install-esi", debug, args),
+    };
 
-            if let Err(e) = install_autd_xml(&dir, false) {
-                eprintln!("warning: {e:#}");
-            }
-            run_cli(&exe, &dir, "run", &args)
-        }
-        TwincatCmd::Open { debug, args } => {
-            let exe = ensure_built(&dir, debug)?;
-            run_cli(&exe, &dir, "open", &args)
-        }
-    }
+    let exe = ensure_built(&dir, debug)?;
+    run_cli(&exe, &dir, sub, &args)
 }
 
 fn run_cli(exe: &Path, dir: &Path, sub: &str, args: &[String]) -> Result<()> {
@@ -177,157 +180,6 @@ fn newest_source_mtime(dir: &Path) -> Result<Option<std::time::SystemTime>> {
         }
     }
     Ok(newest)
-}
-
-fn diagnose_vbs() -> Result<()> {
-    const SCRIPT: &str = "\
-try { $vbs = (Get-CimInstance -Namespace root\\Microsoft\\Windows\\DeviceGuard -ClassName Win32_DeviceGuard -ErrorAction Stop).VirtualizationBasedSecurityStatus } catch { $vbs = '' }; \
-'VBS=' + $vbs; \
-try { $mi = (Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\HypervisorEnforcedCodeIntegrity' -Name Enabled -ErrorAction Stop).Enabled } catch { $mi = '' }; \
-'MemIntegrity=' + $mi; \
-try { $hv = (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Hypervisor -ErrorAction Stop).State } catch { $hv = '' }; \
-'HyperV=' + $hv; \
-try { $vmp = (Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction Stop).State } catch { $vmp = '' }; \
-'VMP=' + $vmp";
-
-    let powershell = find_powershell();
-
-    let output = Command::new(&powershell)
-        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-        .output()
-        .with_context(|| format!("failed to spawn `{powershell}` (is PowerShell installed?)"))?;
-    let out = String::from_utf8_lossy(&output.stdout);
-
-    let mut values = std::collections::HashMap::new();
-    for line in out.lines() {
-        if let Some((k, v)) = line.split_once('=') {
-            values.insert(k.trim(), v.trim().to_string());
-        }
-    }
-    let get = |key: &str| values.get(key).map_or("", String::as_str);
-
-    println!(
-        "Virtualization-based security diagnosis (all should be OFF for TwinCAT real-time):\n"
-    );
-
-    report(
-        "Virtualization-based security (VBS)",
-        &match get("VBS") {
-            "0" => Status::Off,
-            "1" | "2" => Status::On,
-            _ => Status::Unknown,
-        },
-    );
-
-    report(
-        "Core isolation / memory integrity (HVCI)",
-        &match get("MemIntegrity") {
-            "" | "0" => Status::Off,
-            _ => Status::On,
-        },
-    );
-    report("Hyper-V hypervisor", &feature_status(get("HyperV")));
-    report("Virtual Machine Platform", &feature_status(get("VMP")));
-
-    Ok(())
-}
-
-enum Status {
-    Off,
-    On,
-    Unknown,
-}
-
-fn feature_status(state: &str) -> Status {
-    match state {
-        "Disabled" | "DisabledWithPayloadRemoved" => Status::Off,
-        "" => Status::Unknown,
-        _ => Status::On,
-    }
-}
-
-fn report(label: &str, status: &Status) {
-    let line = match status {
-        Status::Off => format!("  OK       {label}: off"),
-        Status::On => format!("  WARNING  {label}: enabled (disable it)"),
-        Status::Unknown => format!("  ?        {label}: unknown (please run as admin)"),
-    };
-    println!("{line}");
-}
-
-fn install_autd_xml(dir: &Path, announce_noop: bool) -> Result<()> {
-    let src = dir.join("AUTD.xml");
-    if !src.is_file() {
-        bail!("AUTD.xml not found next to twincat-cli: {}", src.display());
-    }
-
-    let mut roots: Vec<PathBuf> = Vec::new();
-    if let Ok(env_root) = std::env::var("TWINCAT3DIR")
-        && !env_root.trim().is_empty()
-    {
-        roots.push(PathBuf::from(env_root));
-    }
-    roots.push(PathBuf::from(r"C:\TwinCAT\3.1"));
-    roots.push(PathBuf::from(
-        r"C:\Program Files (x86)\Beckhoff\TwinCAT\3.1",
-    ));
-
-    let mut dsts: Vec<PathBuf> = Vec::new();
-    for root in roots {
-        let dst = root.join(r"Config\Io\EtherCAT\AUTD.xml");
-        if !dst.exists() && dst.parent().is_some_and(Path::exists) && !dsts.contains(&dst) {
-            dsts.push(dst);
-        }
-    }
-
-    if dsts.is_empty() {
-        if announce_noop {
-            println!("AUTD.xml already installed (or no TwinCAT EtherCAT config dir found)");
-        }
-        return Ok(());
-    }
-
-    let mut failed = false;
-    for dst in &dsts {
-        match std::fs::copy(&src, dst) {
-            Ok(_) => println!("installed AUTD.xml -> {}", dst.display()),
-            Err(e) => {
-                failed = true;
-                eprintln!("failed to copy AUTD.xml to {}: {e}", dst.display());
-            }
-        }
-    }
-
-    if failed {
-        eprintln!(
-            "\nre-run as Administrator, or manually copy AUTD.xml ({}) into:",
-            src.display()
-        );
-        for dst in &dsts {
-            if let Some(parent) = dst.parent() {
-                eprintln!("    {}", parent.display());
-            }
-        }
-        bail!("could not install AUTD.xml automatically (see manual steps above)");
-    }
-    Ok(())
-}
-
-fn find_powershell() -> String {
-    if let Some(root) = std::env::var_os("SystemRoot") {
-        let abs = Path::new(&root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
-        if abs.is_file() {
-            return abs.to_string_lossy().into_owned();
-        }
-    }
-    if on_path("powershell") {
-        return "powershell".to_string();
-    }
-    if on_path("pwsh") {
-        return "pwsh".to_string();
-    }
-
-    "powershell".to_string()
 }
 
 fn find_msbuild() -> Option<PathBuf> {

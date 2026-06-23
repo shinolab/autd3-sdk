@@ -145,9 +145,17 @@ namespace TwincatCli
                 (new SetupTwinCAT(version, dteProgId, tcRoot, debugMode)).Open();
             });
 
+            var doctorCommand = new Command("doctor", "Diagnose virtualization-based security (must be OFF for TwinCAT real-time).");
+            doctorCommand.SetAction(_ => Doctor.Run());
+
+            var installEsiCommand = new Command("install-esi", "Install the bundled AUTD ESI (AUTD.xml) into the TwinCAT config directory.");
+            installEsiCommand.SetAction(_ => { EsiInstaller.Install(true); });
+
             var rootCommand = new RootCommand("TwinCAT AUTD3 server");
             rootCommand.Subcommands.Add(runCommand);
             rootCommand.Subcommands.Add(openCommand);
+            rootCommand.Subcommands.Add(doctorCommand);
+            rootCommand.Subcommands.Add(installEsiCommand);
 
             return rootCommand.Parse(args).Invoke();
         }
@@ -155,6 +163,15 @@ namespace TwincatCli
         [STAThread]
         private static void Setup(TwinCATVersion version, string clientIpAddr, string deviceName, int sync0CycleTime, int taskCycleTime, CpuBaseTime cpuBaseTime, bool keep, int delayTime, bool debugMode, string twinCatRoot, string progId)
         {
+            try
+            {
+                EsiInstaller.Install(false);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"warning: {e.Message}");
+            }
+
             var baseTime = CpuBaseTimeParser.ToValueUnitsOf100ns(cpuBaseTime);
             var sync0CycleTimeInNs = 500000 * sync0CycleTime;
             (new SetupTwinCAT(version, clientIpAddr, deviceName, baseTime * taskCycleTime, baseTime, sync0CycleTimeInNs, keep, delayTime, debugMode, twinCatRoot, progId)).Run();
