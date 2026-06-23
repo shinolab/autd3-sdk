@@ -33,38 +33,47 @@ jobs:
             shared: &shared
               - '.github/workflows/ci.yml'
               - '.github/actions/setup-rust/**'
+            xtask-core: &xtask-core
+              - 'xtask/src/util.rs'
+              - 'xtask/Cargo.toml'
+              - 'xtask/Cargo.lock'
             rust:
               - *shared
+              - 'xtask/**'
               - 'crates/**'
               - 'tools/**'
               - 'examples/**'
-              - 'xtask/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - '.cargo/**'
               - '.github/workflows/ci-rust.yml'
             cpu:
               - *shared
+              - *xtask-core
+              - 'xtask/src/cpu.rs'
               - 'firmware/cpu/**'
               - '.github/workflows/ci-cpu.yml'
             py:
               - *shared
+              - *xtask-core
+              - 'xtask/src/py.rs'
               - 'bindings/python/**'
               - 'crates/**'
-              - 'xtask/**'
               - '.github/workflows/ci-py.yml'
             ffi:
               - *shared
+              - *xtask-core
+              - 'xtask/src/ffi.rs'
               - 'bindings/ffi/**'
               - 'crates/**'
-              - 'xtask/**'
               - '.github/workflows/ci-ffi.yml'
             cs:
               - *shared
+              - *xtask-core
+              - 'xtask/src/cs.rs'
               - 'bindings/csharp/**'
               - 'bindings/ffi/**'
               - 'crates/**'
-              - 'xtask/**'
               - '.github/workflows/ci-cs.yml'
 
   rust:
