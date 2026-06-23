@@ -166,6 +166,18 @@ Frame make_change_mod_bank(uint8_t seq, uint8_t bank, uint8_t transition_mode, u
   return f;
 }
 
+Frame make_set_silencer(uint8_t seq, uint8_t flag, uint16_t update_rate_intensity, uint16_t update_rate_phase,
+                        uint16_t completion_steps_intensity, uint16_t completion_steps_phase) {
+  Frame f(seq, CMD_SET_SILENCER);
+  uint8_t* p = f.payload();
+  p[SILENCER_OFFSET_FLAG] = flag;
+  put_u16_le(p + SILENCER_OFFSET_UPDATE_RATE_INTENSITY, update_rate_intensity);
+  put_u16_le(p + SILENCER_OFFSET_UPDATE_RATE_PHASE, update_rate_phase);
+  put_u16_le(p + SILENCER_OFFSET_COMPLETION_STEPS_INTENSITY, completion_steps_intensity);
+  put_u16_le(p + SILENCER_OFFSET_COMPLETION_STEPS_PHASE, completion_steps_phase);
+  return f;
+}
+
 }
 
 TEST(Proto, InitialAckIsSentinelByte) {
@@ -772,6 +784,147 @@ TEST(Proto, ChangeModBankRejectsInvalidBank) {
   make_change_mod_bank(0, NUM_BANKS, TRANSITION_MODE_IMMEDIATE, 0).deliver();
   EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
   EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 0) << "rejected change must not switch the bank";
+}
+
+
+
+TEST(Proto, SetSilencerFixedCompletionStepsWritesRegistersAndLatches) {
+  reset_all();
+  const uint32_t latches_at_boot = port_test_fpga_latch_count(CTL_FLAG_SILENCER_SET);
+
+  make_set_silencer(0, SILENCER_FLAG_STRICT_MODE, 256, 256, 5, 7).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_FLAG), SILENCER_FLAG_STRICT_MODE) << "strict mode flag passed through";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 256);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_UPDATE_RATE_PHASE), 256);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 5);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_PHASE), 7);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_SILENCER_SET), latches_at_boot + 1);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_SILENCER_SET, 0) << "the FPGA clears the latch bit";
+}
+
+TEST(Proto, SetSilencerFixedUpdateRateWritesRegistersAndLatches) {
+  reset_all();
+  const uint32_t latches_at_boot = port_test_fpga_latch_count(CTL_FLAG_SILENCER_SET);
+
+  make_set_silencer(0, SILENCER_FLAG_FIXED_UPDATE_RATE_MODE, 8, 16, 10, 40).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_FLAG), SILENCER_FLAG_FIXED_UPDATE_RATE_MODE);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 8);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_UPDATE_RATE_PHASE), 16);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_PHASE), 40);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_SILENCER_SET), latches_at_boot + 1);
+}
+
+TEST(Proto, SetSilencerRejectsZeroCompletionStepsInStepsMode) {
+  reset_all();
+
+  make_set_silencer(0, 0, 256, 256, 0, 7).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  make_set_silencer(1, 0, 256, 256, 5, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10) << "registers must stay at boot default";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_PHASE), 40);
+}
+
+TEST(Proto, SetSilencerRejectsZeroUpdateRateInRateMode) {
+  reset_all();
+
+  make_set_silencer(0, SILENCER_FLAG_FIXED_UPDATE_RATE_MODE, 0, 16, 10, 40).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+  make_set_silencer(1, SILENCER_FLAG_FIXED_UPDATE_RATE_MODE, 8, 0, 10, 40).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 256) << "registers must stay at boot default";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_UPDATE_RATE_PHASE), 256);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_FLAG), 0) << "rejected set must not flip the mode flag";
+}
+
+TEST(Proto, SetSilencerStepsModeIgnoresZeroUpdateRate) {
+  reset_all();
+
+  make_set_silencer(0, 0, 0, 0, 5, 7).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "completion-steps mode does not validate update_rate";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 5);
+}
+
+TEST(Proto, StrictSilencerRejectsTooFastModConfig) {
+  reset_all();
+  make_set_silencer(0, SILENCER_FLAG_STRICT_MODE, 256, 256, 10, 40).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_config_mod(1, 0, 9, 100).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_SILENCER_SETTING) << "mod sampling faster than intensity completion is rejected";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_FREQ_DIV0), 0xFFFF) << "rejected config must not write the divider";
+
+  make_config_mod(2, 0, 10, 100).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "sampling period equal to completion is allowed";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_FREQ_DIV0), 10);
+}
+
+TEST(Proto, StrictSilencerRejectsTooFastPatternConfig) {
+  reset_all();
+  make_set_silencer(0, SILENCER_FLAG_STRICT_MODE, 256, 256, 10, 40).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_config_pattern(1, 0, EMISSION_TYPE_RAW, 20, 1, 0, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_SILENCER_SETTING) << "pattern drives phase: divider below phase completion rejected";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_FREQ_DIV0), 0xFFFF);
+
+  make_config_pattern(2, 0, EMISSION_TYPE_RAW, 40, 1, 0, 0).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_FREQ_DIV0), 40);
+}
+
+TEST(Proto, NonStrictSilencerDoesNotGuardSampling) {
+  reset_all();
+  make_set_silencer(0, 0, 256, 256, 10, 40).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_config_mod(1, 0, 1, 100).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "non-strict silencer does not guard the sampling rate";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_FREQ_DIV0), 1);
+}
+
+TEST(Proto, StrictSilencerRejectedWhenActiveSamplingTooFast) {
+  reset_all();
+  make_config_mod(0, 0, 5, 100).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_set_silencer(1, SILENCER_FLAG_STRICT_MODE, 256, 256, 8, 40).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_SILENCER_SETTING) << "completion longer than active mod sampling is rejected";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10) << "boot default must stay unchanged";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_FLAG), 0) << "rejected silencer must not change the flag";
+}
+
+TEST(Proto, FixedUpdateRateModeReleasesGuard) {
+  reset_all();
+  make_set_silencer(0, SILENCER_FLAG_STRICT_MODE, 256, 256, 10, 40).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_set_silencer(1, SILENCER_FLAG_FIXED_UPDATE_RATE_MODE, 8, 16, 10, 40).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_config_mod(2, 0, 1, 100).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "fixed-update-rate mode releases the strict guard";
+}
+
+TEST(Proto, StrictSilencerRejectsSwitchToTooFastBank) {
+  reset_all();
+  make_config_mod(0, 1, 5, 100).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_set_silencer(1, SILENCER_FLAG_STRICT_MODE, 256, 256, 10, 40).deliver();
+  ASSERT_EQ(_sTx.data, 0) << "active bank 0 sampling is still default, so strict silencer is accepted";
+
+  make_change_mod_bank(2, 1, TRANSITION_MODE_IMMEDIATE, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_SILENCER_SETTING) << "switching to a bank whose sampling is too fast is rejected";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 0) << "rejected switch must not change the bank";
 }
 
 

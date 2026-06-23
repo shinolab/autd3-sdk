@@ -13,6 +13,8 @@ pub enum Cmd {
     ConfigModulation = 0x21,
     ChangeModulationBank = 0x22,
 
+    SetSilencer = 0x30,
+
     ReadErrorDetail = 0xE0,
     ReadCpuFwVersionMajor = 0xE1,
     ReadCpuFwVersionMinor = 0xE2,
@@ -42,6 +44,7 @@ impl TryFrom<u8> for Cmd {
             0x20 => Ok(Self::WriteModulationBuffer),
             0x21 => Ok(Self::ConfigModulation),
             0x22 => Ok(Self::ChangeModulationBank),
+            0x30 => Ok(Self::SetSilencer),
             0xE0 => Ok(Self::ReadErrorDetail),
             0xE1 => Ok(Self::ReadCpuFwVersionMajor),
             0xE2 => Ok(Self::ReadCpuFwVersionMinor),
@@ -68,6 +71,7 @@ mod tests {
             Cmd::WriteModulationBuffer,
             Cmd::ConfigModulation,
             Cmd::ChangeModulationBank,
+            Cmd::SetSilencer,
             Cmd::ReadErrorDetail,
             Cmd::ReadCpuFwVersionMajor,
             Cmd::ReadCpuFwVersionMinor,

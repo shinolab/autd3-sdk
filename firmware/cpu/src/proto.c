@@ -12,6 +12,7 @@ extern "C" {
 #include "cmd/config_mod.h"
 #include "cmd/config_pattern.h"
 #include "cmd/set_mode.h"
+#include "cmd/silencer.h"
 #include "cmd/sync.h"
 #include "cmd/write_mod.h"
 #include "cmd/write_pattern.h"
@@ -69,6 +70,8 @@ static uint8_t dispatch(const rx_frame_t* in) {
       return latch_error(change_mod_bank_handle(in->payload));
     case CMD_CHANGE_PATTERN_BANK:
       return latch_error(change_pattern_bank_handle(in->payload));
+    case CMD_SET_SILENCER:
+      return latch_error(silencer_handle(in->payload));
     case CMD_SYNCHRONIZE:
       return latch_error(sync_handle());
     case CMD_SET_MODE:

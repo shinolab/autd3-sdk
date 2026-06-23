@@ -21,8 +21,9 @@ pub use core_affinity::CoreId;
 pub use datagram::{Datagram, DatagramBuilder, Datagrams, Frame};
 pub use firmware_version::FirmwareVersion;
 pub use operation::{
-    ChangeModulationBank, ChangePatternBank, ConfigModulation, ConfigPattern, Distribution, Group,
-    Operation, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, XorHashCmd,
+    ChangeModulationBank, ChangePatternBank, ConfigModulation, ConfigPattern, Distribution,
+    FixedCompletionTime, FixedUpdateRate, Group, Operation, Silencer, SilencerConfig,
+    WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, XorHashCmd,
 };
 pub use response::Response;
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};

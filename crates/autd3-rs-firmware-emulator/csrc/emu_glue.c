@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "app.h"
+#include "cmd/silencer.h"
 #include "proto.h"
 
 tx_frame_t _sTx = {0};
@@ -10,6 +11,7 @@ tx_frame_t _sTx = {0};
 typedef struct {
   app_state_t app;
   proto_state_t proto;
+  silencer_guard_t silencer;
 } emu_device_t;
 
 void* emu_device_new(void) { return calloc(1u, sizeof(emu_device_t)); }
@@ -20,6 +22,7 @@ void emu_device_select(void* handle) {
   emu_device_t* dev = (emu_device_t*)handle;
   app_set_state(&dev->app);
   proto_set_state(&dev->proto);
+  silencer_set_state(&dev->silencer);
 }
 
 uint8_t emu_tx_ack(void) { return _sTx.ack; }
