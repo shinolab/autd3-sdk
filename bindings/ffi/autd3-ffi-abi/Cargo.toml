@@ -1,0 +1,19 @@
+[package]
+name = "autd3-ffi-abi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Internal cross-cdylib C ABI contracts shared by autd3 FFI crates."
+
+[dependencies]
+autd3-rs-core.workspace = true
+autd3-rs = { workspace = true, optional = true }
+
+[features]
+client = ["dep:autd3-rs"]
+
+[lints]
+workspace = true

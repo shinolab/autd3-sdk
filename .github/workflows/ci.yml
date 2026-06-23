@@ -22,6 +22,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       cpu: ${{ steps.filter.outputs.cpu }}
       py: ${{ steps.filter.outputs.py }}
+      ffi: ${{ steps.filter.outputs.ffi }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
@@ -51,6 +52,12 @@ jobs:
               - 'crates/**'
               - 'xtask/**'
               - '.github/workflows/ci-py.yml'
+            ffi:
+              - *shared
+              - 'bindings/ffi/**'
+              - 'crates/**'
+              - 'xtask/**'
+              - '.github/workflows/ci-ffi.yml'
 
   rust:
     name: rust
@@ -69,6 +76,12 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.py == 'true' }}
     uses: ./.github/workflows/ci-py.yml
+
+  ffi:
+    name: ffi
+    needs: changes
+    if: ${{ needs.changes.outputs.ffi == 'true' }}
+    uses: ./.github/workflows/ci-ffi.yml
 
   guard:
     name: guard-main-source
@@ -116,7 +129,7 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [rust, cpu, py, guard]
+    needs: [rust, cpu, py, ffi, guard]
     runs-on: ubuntu-latest
     steps:
       - name: Verify no job failed
@@ -124,6 +137,7 @@ jobs:
           if [ "${{ needs.rust.result }}" = "failure" ] \
             || [ "${{ needs.cpu.result }}" = "failure" ] \
             || [ "${{ needs.py.result }}" = "failure" ] \
+            || [ "${{ needs.ffi.result }}" = "failure" ] \
             || [ "${{ needs.guard.result }}" != "success" ]; then
             echo "A required job failed."
             exit 1

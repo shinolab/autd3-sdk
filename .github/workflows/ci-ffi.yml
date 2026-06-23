@@ -1,0 +1,25 @@
+name: ci-ffi
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ffi:
+    name: ffi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt, clippy
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
+      - run: cargo xtask ffi format
+      - run: cargo xtask ffi lint
+      - run: cargo xtask ffi build --soem

@@ -3,6 +3,7 @@ mod changelog;
 mod component;
 mod cpu;
 mod example;
+mod ffi;
 mod firmware;
 mod fpga;
 mod py;
@@ -17,6 +18,7 @@ use bump::{BumpVersionCmd, run_bump_version};
 use changelog::{ChangelogCmd, run_changelog};
 use cpu::{CpuCmd, run_cpu};
 use example::{ExampleCmd, run_example};
+use ffi::{FfiCmd, run_ffi};
 use firmware::{FirmwareCmd, run_firmware};
 use fpga::{FpgaCmd, run_fpga};
 use py::{PyCmd, run_py};
@@ -57,6 +59,10 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: PyCmd,
     },
+    Ffi {
+        #[command(subcommand)]
+        cmd: FfiCmd,
+    },
     Example(ExampleCmd),
     Changelog(ChangelogCmd),
     BumpVersion(BumpVersionCmd),
@@ -72,6 +78,7 @@ fn main() -> Result<()> {
         TopCmd::Fpga { cmd } => run_fpga(&root, &cmd),
         TopCmd::Firmware { cmd } => run_firmware(&root, cmd),
         TopCmd::Py { cmd } => run_py(&root, cmd),
+        TopCmd::Ffi { cmd } => run_ffi(&root, cmd),
         TopCmd::Example(cmd) => run_example(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),
