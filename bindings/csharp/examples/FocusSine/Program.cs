@@ -1,0 +1,53 @@
+// Single focus with a 200 Hz sine AM. Run with: cargo xtask cs example FocusSine
+
+using System;
+using System.Collections.Generic;
+using System.Numerics;
+using System.Threading.Tasks;
+using AUTD3;
+using AUTD3.Link;
+
+internal static class Program
+{
+    private static async Task Main()
+    {
+        using var geometry = new Geometry(new List<Device> { new Device(Vector3.Zero) });
+
+        using var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+
+        Console.WriteLine($"devices: {client.NumDevices}");
+
+        // length in mm, speed in mm/s, frequency in Hz
+        var target = geometry.Center + new Vector3(0f, 0f, 150f);
+        var wavelength = Pattern.Wavelength(340f * 1000f);
+        using var patterns = client.PatternBuffer();
+        Pattern.Focus(geometry, target, wavelength, Intensity.Max, patterns);
+
+        using var modulation = client.ModulationBuffer();
+        Modulation.Sine(200f, new SineOption(), modulation);
+
+        using var builder = client.DatagramBuilder();
+        builder
+            .Push(new Pattern(patterns))
+            .Push(new Modulation(SamplingConfig.Freq4k, modulation));
+        using var datagrams = builder.Build();
+        foreach (var frame in datagrams)
+        {
+            await client.SendCheckedAsync(frame);
+        }
+
+        Console.WriteLine(
+            $"emitting a 200 Hz AM focus at ({target.X:F2}, {target.Y:F2}, {target.Z:F2}) mm — press Ctrl+C to stop");
+
+        var stop = new TaskCompletionSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            stop.TrySetResult();
+        };
+        await stop.Task;
+
+        await client.StopAsync();
+        await client.CloseAsync();
+    }
+}

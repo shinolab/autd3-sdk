@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>AUTD3.Core</AssemblyName>
+    <RootNamespace>AUTD3</RootNamespace>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AUTD3" />
+    <InternalsVisibleTo Include="AUTD3.Pattern" />
+    <InternalsVisibleTo Include="AUTD3.Modulation" />
+    <InternalsVisibleTo Include="AUTD3.Link.Ethercrab" />
+    <InternalsVisibleTo Include="AUTD3.Link.Soem" />
+  </ItemGroup>
+
+</Project>

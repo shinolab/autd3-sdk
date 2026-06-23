@@ -1,0 +1,26 @@
+name: ci-cs
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  cs:
+    name: cs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+      - run: cargo xtask cs format
+      - run: cargo xtask cs build
+      - run: cargo xtask cs test

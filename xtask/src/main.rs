@@ -2,6 +2,7 @@ mod bump;
 mod changelog;
 mod component;
 mod cpu;
+mod cs;
 mod example;
 mod ffi;
 mod firmware;
@@ -17,6 +18,7 @@ use clap::{Parser, Subcommand};
 use bump::{BumpVersionCmd, run_bump_version};
 use changelog::{ChangelogCmd, run_changelog};
 use cpu::{CpuCmd, run_cpu};
+use cs::{CsCmd, run_cs};
 use example::{ExampleCmd, run_example};
 use ffi::{FfiCmd, run_ffi};
 use firmware::{FirmwareCmd, run_firmware};
@@ -63,6 +65,10 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: FfiCmd,
     },
+    Cs {
+        #[command(subcommand)]
+        cmd: CsCmd,
+    },
     Example(ExampleCmd),
     Changelog(ChangelogCmd),
     BumpVersion(BumpVersionCmd),
@@ -79,6 +85,7 @@ fn main() -> Result<()> {
         TopCmd::Firmware { cmd } => run_firmware(&root, cmd),
         TopCmd::Py { cmd } => run_py(&root, cmd),
         TopCmd::Ffi { cmd } => run_ffi(&root, cmd),
+        TopCmd::Cs { cmd } => run_cs(&root, cmd),
         TopCmd::Example(cmd) => run_example(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),

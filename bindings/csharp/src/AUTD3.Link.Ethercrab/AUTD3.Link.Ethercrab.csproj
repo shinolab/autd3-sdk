@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>AUTD3.Link.Ethercrab</AssemblyName>
+    <RootNamespace>AUTD3.Link</RootNamespace>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../AUTD3/AUTD3.csproj" />
+  </ItemGroup>
+
+</Project>
