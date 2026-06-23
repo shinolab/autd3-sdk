@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Subcommand;
 
-use crate::util::run;
+use crate::util::{cargo_fmt_packages, run};
 
 const SOEM_CRATE: &str = "autd3-ffi-link-soem";
 
@@ -48,13 +48,6 @@ pub fn run_ffi(root: &Path, cmd: FfiCmd) -> Result<()> {
             ],
             &dir,
         ),
-        FfiCmd::Format { fix } => {
-            let mut args = vec!["fmt", "--all"];
-            if !fix {
-                args.push("--");
-                args.push("--check");
-            }
-            run("cargo", args, &dir)
-        }
+        FfiCmd::Format { fix } => cargo_fmt_packages(&dir, fix),
     }
 }

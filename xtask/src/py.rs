@@ -4,7 +4,7 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 
-use crate::util::{on_path, run};
+use crate::util::{cargo_fmt_packages, on_path, run};
 
 const MIT_WHEELS: &[&str] = &[
     "autd3-core",
@@ -82,14 +82,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             ],
             &dir,
         ),
-        PyCmd::Format { fix } => {
-            let mut args = vec!["fmt", "--all"];
-            if !fix {
-                args.push("--");
-                args.push("--check");
-            }
-            run("cargo", args, &dir)
-        }
+        PyCmd::Format { fix } => cargo_fmt_packages(&dir, fix),
         PyCmd::Test { soem } => {
             let venv = ensure_venv(&dir)?;
             develop(&dir, &venv, wheels(soem), false)?;
