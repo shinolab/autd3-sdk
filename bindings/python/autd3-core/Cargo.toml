@@ -1,0 +1,21 @@
+[package]
+name = "autd3-python-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Python bindings for autd3-rs-core (geometry, value types, error)."
+
+[lib]
+name = "autd3_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+autd3-rs-core.workspace = true
+autd3-python-capsule.workspace = true
+pyo3.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,52 @@
+[workspace]
+resolver = "3"
+members = [
+    "autd3-python-capsule",
+    "autd3-core",
+    "autd3",
+    "autd3-pattern",
+    "autd3-modulation",
+    "autd3-link-ethercrab",
+    "autd3-link-soem",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "MIT"
+authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
+repository = "https://github.com/shinolab/autd3-sdk"
+
+[workspace.dependencies]
+pyo3 = { version = "0.29", features = ["extension-module"] }
+pyo3-async-runtimes = { version = "0.29", features = ["tokio-runtime"] }
+tokio = { version = "1", default-features = false, features = [
+    "rt-multi-thread",
+    "time",
+] }
+autd3-rs = { path = "../../crates/autd3-rs" }
+autd3-rs-core = { path = "../../crates/autd3-rs-core" }
+autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
+autd3-rs-modulation = { path = "../../crates/autd3-rs-modulation" }
+autd3-rs-link-ethercrab = { path = "../../crates/autd3-rs-link-ethercrab" }
+autd3-rs-link-soem = { path = "../../crates/autd3-rs-link-soem" }
+autd3-python-capsule = { path = "autd3-python-capsule" }
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_precision_loss = "allow"
+# pyo3 #[pymethods] take `&self` and extract pyclass args by value/ref following
+# Python calling conventions; these pedantic lints fight that pervasively.
+needless_pass_by_value = "allow"
+trivially_copy_pass_by_ref = "allow"
+# pyo3 mandates `PyResult` return types for #[pymodule]/#[pyfunction] even when a
+# particular one is infallible.
+unnecessary_wraps = "allow"
