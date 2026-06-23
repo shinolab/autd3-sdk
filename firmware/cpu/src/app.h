@@ -22,6 +22,20 @@ typedef int bool_t;
 #define FW_VERSION_MINOR (1)
 #define FW_VERSION_PATCH (0)
 
+#define FIFO_DEPTH (8u)
+
+typedef struct {
+  volatile uint8_t last_seq;
+  volatile uint8_t last_cmd;
+  volatile uint8_t mode;
+  rx_frame_t fifo[FIFO_DEPTH];
+  volatile uint16_t fifo_head;
+  volatile uint16_t fifo_tail;
+} app_state_t;
+
+void app_set_state(app_state_t* state);
+void proto_set_state(proto_state_t* state);
+
 void init_app(void);
 
 void recv_ethercat(const uint8_t* frame);

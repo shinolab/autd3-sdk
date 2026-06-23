@@ -98,6 +98,16 @@ typedef struct {
   uint8_t data;
 } tx_frame_t;
 
+typedef struct {
+  uint8_t expected_seq;
+  uint8_t ack;
+  uint8_t data;
+  uint8_t fw_version_major;
+  uint8_t fw_version_minor;
+  uint8_t fw_version_patch;
+  uint8_t error_detail;
+} proto_state_t;
+
 static_assert(sizeof(rx_frame_t) == RX_FRAME_BYTES, "rx_frame_t size mismatch");
 static_assert(sizeof(tx_frame_t) == 2 + TX_FRAME_BYTES, "tx_frame_t size mismatch");
 static_assert(NUM_TRANSDUCERS <= EMISSION_SLOT_WORDS, "raw pattern must fit one STM slot");

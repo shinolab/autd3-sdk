@@ -11,6 +11,7 @@ mod py;
 mod rust;
 mod tool;
 mod util;
+mod vendor;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -27,6 +28,7 @@ use py::{PyCmd, run_py};
 use rust::{RustCmd, run_rust};
 use tool::{ToolCmd, run_tool};
 use util::workspace_root;
+use vendor::{VendorFwCmd, run_vendor_fw};
 
 #[derive(Parser)]
 #[command(name = "xtask", about = "autd3-rs dev task runner")]
@@ -72,6 +74,7 @@ enum TopCmd {
     Example(ExampleCmd),
     Changelog(ChangelogCmd),
     BumpVersion(BumpVersionCmd),
+    VendorFw(VendorFwCmd),
 }
 
 fn main() -> Result<()> {
@@ -89,5 +92,6 @@ fn main() -> Result<()> {
         TopCmd::Example(cmd) => run_example(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),
+        TopCmd::VendorFw(cmd) => run_vendor_fw(&root, &cmd),
     }
 }
