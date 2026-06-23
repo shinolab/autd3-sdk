@@ -5,6 +5,7 @@ mod cpu;
 mod example;
 mod firmware;
 mod fpga;
+mod py;
 mod rust;
 mod tool;
 mod util;
@@ -18,6 +19,7 @@ use cpu::{CpuCmd, run_cpu};
 use example::{ExampleCmd, run_example};
 use firmware::{FirmwareCmd, run_firmware};
 use fpga::{FpgaCmd, run_fpga};
+use py::{PyCmd, run_py};
 use rust::{RustCmd, run_rust};
 use tool::{ToolCmd, run_tool};
 use util::workspace_root;
@@ -51,6 +53,10 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: FirmwareCmd,
     },
+    Py {
+        #[command(subcommand)]
+        cmd: PyCmd,
+    },
     Example(ExampleCmd),
     Changelog(ChangelogCmd),
     BumpVersion(BumpVersionCmd),
@@ -65,6 +71,7 @@ fn main() -> Result<()> {
         TopCmd::Tool { cmd } => run_tool(&root, cmd),
         TopCmd::Fpga { cmd } => run_fpga(&root, &cmd),
         TopCmd::Firmware { cmd } => run_firmware(&root, cmd),
+        TopCmd::Py { cmd } => run_py(&root, cmd),
         TopCmd::Example(cmd) => run_example(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),

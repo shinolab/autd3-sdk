@@ -1,0 +1,22 @@
+[package]
+name = "autd3-python-pattern"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Python bindings for autd3-rs-pattern (focus, etc.)."
+
+[lib]
+name = "autd3_pattern"
+crate-type = ["cdylib"]
+
+[dependencies]
+autd3-rs-pattern.workspace = true
+autd3-rs-core.workspace = true
+autd3-python-capsule.workspace = true
+pyo3.workspace = true
+
+[lints]
+workspace = true

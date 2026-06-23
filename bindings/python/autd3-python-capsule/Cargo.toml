@@ -1,0 +1,20 @@
+[package]
+name = "autd3-python-capsule"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Internal cross-wheel PyCapsule contracts shared by autd3 python binding crates."
+
+[dependencies]
+autd3-rs-core.workspace = true
+autd3-rs = { workspace = true, optional = true }
+pyo3.workspace = true
+
+[features]
+client = ["dep:autd3-rs"]
+
+[lints]
+workspace = true

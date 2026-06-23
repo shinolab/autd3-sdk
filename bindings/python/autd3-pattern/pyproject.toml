@@ -1,0 +1,15 @@
+[build-system]
+requires = ["maturin>=1.14,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "autd3-pattern"
+description = "Python bindings for autd3-rs-pattern (focus, etc.)."
+requires-python = ">=3.10"
+license = "MIT"
+dynamic = ["version"]
+dependencies = ["autd3-core"]
+
+[tool.maturin]
+module-name = "autd3_pattern"
+manifest-path = "Cargo.toml"
