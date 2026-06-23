@@ -71,6 +71,53 @@ pub fn capture_lenient(program: &str, args: &[&str], cwd: &Path) -> Result<Strin
     Ok(stdout.trim().to_string())
 }
 
+pub fn workspace_member_packages(workspace_dir: &Path) -> Result<Vec<String>> {
+    let manifest = workspace_dir.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest)
+        .with_context(|| format!("failed to read {}", manifest.display()))?;
+    let doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("failed to parse {}", manifest.display()))?;
+    let members = doc
+        .get("workspace")
+        .and_then(|w| w.get("members"))
+        .and_then(toml_edit::Item::as_array)
+        .with_context(|| format!("no [workspace] members in {}", manifest.display()))?;
+    let mut names = Vec::new();
+    for member in members {
+        let member = member
+            .as_str()
+            .with_context(|| format!("non-string member in {}", manifest.display()))?;
+        let member_manifest = workspace_dir.join(member).join("Cargo.toml");
+        let member_text = std::fs::read_to_string(&member_manifest)
+            .with_context(|| format!("failed to read {}", member_manifest.display()))?;
+        let member_doc = member_text
+            .parse::<toml_edit::DocumentMut>()
+            .with_context(|| format!("failed to parse {}", member_manifest.display()))?;
+        let name = member_doc
+            .get("package")
+            .and_then(|p| p.get("name"))
+            .and_then(toml_edit::Item::as_str)
+            .with_context(|| format!("no [package] name in {}", member_manifest.display()))?;
+        names.push(name.to_string());
+    }
+    Ok(names)
+}
+
+pub fn cargo_fmt_packages(workspace_dir: &Path, fix: bool) -> Result<()> {
+    let packages = workspace_member_packages(workspace_dir)?;
+    let mut args = vec!["fmt".to_string()];
+    for package in &packages {
+        args.push("-p".to_string());
+        args.push(package.clone());
+    }
+    if !fix {
+        args.push("--".to_string());
+        args.push("--check".to_string());
+    }
+    run("cargo", args, workspace_dir)
+}
+
 pub fn run<I, S>(program: &str, args: I, cwd: &Path) -> Result<()>
 where
     I: IntoIterator<Item = S>,
