@@ -18,7 +18,7 @@ From `autd3-sdk/`, drive everything via xtask.
 cargo xtask tool twincat run -- [options]   # scan + set up a TwinCAT project
 cargo xtask tool twincat open -- [options]  # reopen the saved project
 cargo xtask tool twincat doctor             # diagnose virtualization-based security
-cargo xtask tool twincat install-esi        # install AUTD.xml only
+cargo xtask tool twincat install-esi        # install the bundled AUTD.xml only
 ```
 
 Writing under `Program Files (x86)` needs an **Administrator** terminal.
