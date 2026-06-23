@@ -13,7 +13,7 @@ members = [
     "tools/synctune",
     "examples",
 ]
-exclude = ["xtask", "bindings/python"]
+exclude = ["xtask", "bindings/python", "bindings/ffi"]
 
 [workspace.package]
 version = "0.1.0"

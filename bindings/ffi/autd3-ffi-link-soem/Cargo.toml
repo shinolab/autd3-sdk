@@ -1,0 +1,23 @@
+[package]
+name = "autd3-ffi-link-soem"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0-only"
+authors.workspace = true
+repository.workspace = true
+description = "C ABI bindings for autd3-rs-link-soem (EtherCAT link via SOEM, GPL-3.0)."
+
+[lib]
+name = "autd3_link_soem"
+crate-type = ["cdylib"]
+
+[dependencies]
+autd3-rs.workspace = true
+autd3-rs-link-soem.workspace = true
+autd3-rs-core.workspace = true
+autd3-ffi-abi = { workspace = true, features = ["client"] }
+tokio.workspace = true
+
+[lints]
+workspace = true

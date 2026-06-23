@@ -1,0 +1,20 @@
+[package]
+name = "autd3-ffi-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "C ABI bindings for autd3-rs-core (geometry, value types)."
+
+[lib]
+name = "autd3_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+autd3-rs-core.workspace = true
+autd3-ffi-abi.workspace = true
+
+[lints]
+workspace = true
