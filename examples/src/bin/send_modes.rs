@@ -10,7 +10,7 @@ use anyhow::Result;
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::{Emission, Intensity, PatternBank, PatternDataType};
+use autd3_rs::value::{Emission, PatternBank, PatternDataType};
 use autd3_rs::{
     Client, ClientConfig, ConfigPattern, Datagrams, Length, MAX_IN_FLIGHT, ResponseFuture,
     WritePatternBuffer,
@@ -75,7 +75,13 @@ async fn run_stop_and_wait(
 
     let start = Instant::now();
     for &target in targets {
-        autd3_rs_pattern::focus(geometry, target, wavelength, Intensity::MAX, &mut patterns);
+        autd3_rs_pattern::focus(
+            geometry,
+            target,
+            wavelength,
+            &autd3_rs_pattern::FocusOption::default(),
+            &mut patterns,
+        );
         write_focus(client, &patterns, &mut buf)?;
         for frame in &buf {
             client.send_checked(frame).await?;
@@ -98,7 +104,13 @@ async fn run_streaming(
 
     let start = Instant::now();
     for &target in targets {
-        autd3_rs_pattern::focus(geometry, target, wavelength, Intensity::MAX, &mut patterns);
+        autd3_rs_pattern::focus(
+            geometry,
+            target,
+            wavelength,
+            &autd3_rs_pattern::FocusOption::default(),
+            &mut patterns,
+        );
         write_focus(client, &patterns, &mut buf)?;
         for frame in &buf {
             if pending.len() >= max_inflight {
