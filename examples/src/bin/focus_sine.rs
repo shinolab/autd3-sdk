@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{Intensity, SamplingConfig};
+use autd3_rs::value::SamplingConfig;
 use autd3_rs::{Client, ClientConfig, Modulation, Pattern};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 
@@ -34,7 +34,13 @@ async fn main() -> Result<()> {
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
     let mut patterns = client.pattern_buffer();
-    autd3_rs_pattern::focus(&geometry, target, wavelength, Intensity::MAX, &mut patterns);
+    autd3_rs_pattern::focus(
+        &geometry,
+        target,
+        wavelength,
+        &autd3_rs_pattern::FocusOption::default(),
+        &mut patterns,
+    );
 
     let mut modulation = client.modulation_buffer();
     autd3_rs_modulation::sine(
