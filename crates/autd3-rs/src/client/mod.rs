@@ -19,6 +19,7 @@ use crate::command::Pattern;
 use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
+use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
 use crate::link::{IntoLink, Link};
 use crate::mirror::FirmwareState;
@@ -296,6 +297,17 @@ impl Client {
             .await?
             .await?
             .data)
+    }
+
+    pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, Error> {
+        Ok(self
+            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadFpgaState))
+            .await?
+            .await?
+            .data
+            .into_iter()
+            .map(FpgaState)
+            .collect())
     }
 
     pub async fn close(&self) -> Result<(), Error> {

@@ -12,6 +12,12 @@ extern "C" {
 #include "cmd/clear.h"
 #include "cmd/config_mod.h"
 #include "cmd/config_pattern.h"
+#include "cmd/force_fan.h"
+#include "cmd/gpio_in.h"
+#include "cmd/gpio_out.h"
+#include "cmd/output_mask.h"
+#include "cmd/phase_corr.h"
+#include "cmd/pwe.h"
 #include "cmd/set_mode.h"
 #include "cmd/silencer.h"
 #include "cmd/sync.h"
@@ -19,6 +25,7 @@ extern "C" {
 #include "cmd/write_pattern.h"
 #include "cmd/write_pattern_compressed.h"
 #include "cmd/xor_hash.h"
+#include "fpga.h"
 
 static proto_state_t s_default_proto;
 static proto_state_t* s_proto = &s_default_proto;
@@ -60,6 +67,8 @@ static uint8_t dispatch(const rx_frame_t* in) {
       return s_proto->fw_version_patch;
     case CMD_READ_ERROR_DETAIL:
       return s_proto->error_detail;
+    case CMD_READ_FPGA_STATE:
+      return (uint8_t)fpga_read(BRAM_SELECT_CONTROLLER, ADDR_FPGA_STATE);
     case CMD_WRITE_PATTERN_BUFFER:
       return latch_error(write_pattern_handle(in->payload));
     case CMD_WRITE_PATTERN_COMPRESSED:
@@ -76,6 +85,18 @@ static uint8_t dispatch(const rx_frame_t* in) {
       return latch_error(change_pattern_bank_handle(in->payload));
     case CMD_SET_SILENCER:
       return latch_error(silencer_handle(in->payload));
+    case CMD_SET_PHASE_CORR:
+      return latch_error(phase_corr_handle(in->payload));
+    case CMD_SET_OUTPUT_MASK:
+      return latch_error(output_mask_handle(in->payload));
+    case CMD_SET_PWE:
+      return latch_error(pwe_handle(in->payload));
+    case CMD_EMULATE_GPIO_IN:
+      return latch_error(gpio_in_handle(in->payload));
+    case CMD_SET_GPIO_OUT:
+      return latch_error(gpio_out_handle(in->payload));
+    case CMD_FORCE_FAN:
+      return latch_error(force_fan_handle(in->payload));
     case CMD_SYNCHRONIZE:
       return latch_error(sync_handle());
     case CMD_SET_MODE:

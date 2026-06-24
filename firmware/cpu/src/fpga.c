@@ -18,7 +18,8 @@ uint16_t fpga_read(uint8_t select, uint16_t addr) {
 }
 
 void set_and_wait_update(uint16_t flag) {
-  fpga_write(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG, flag);
+  uint16_t persistent = fpga_read(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG);
+  fpga_write(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG, (uint16_t)(persistent | flag));
   while ((fpga_read(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG) & flag) != 0u) {
   }
 }
@@ -74,6 +75,8 @@ static const uint8_t ASIN_TABLE[PWE_TABLE_SIZE] = {
 void fpga_init(void) {
   uint16_t i;
   uint8_t bank;
+
+  fpga_write(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG, 0u);
 
   fpga_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_UPDATE_RATE_INTENSITY, SILENCER_DEFAULT_UPDATE_RATE);
   fpga_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_UPDATE_RATE_PHASE, SILENCER_DEFAULT_UPDATE_RATE);

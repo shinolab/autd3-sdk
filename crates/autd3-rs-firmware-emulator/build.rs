@@ -16,6 +16,12 @@ const FW_SOURCES: &[&str] = &[
     "cmd/sync.c",
     "cmd/set_mode.c",
     "cmd/silencer.c",
+    "cmd/force_fan.c",
+    "cmd/gpio_in.c",
+    "cmd/phase_corr.c",
+    "cmd/output_mask.c",
+    "cmd/pwe.c",
+    "cmd/gpio_out.c",
 ];
 
 fn main() {

@@ -18,10 +18,20 @@ pub enum Cmd {
 
     SetSilencer = 0x30,
 
+    SetPhaseCorrection = 0x40,
+    SetOutputMask = 0x41,
+    SetPulseWidthTable = 0x42,
+
+    EmulateGpioIn = 0x50,
+    SetGpioOut = 0x52,
+
+    ForceFan = 0x60,
+
     ReadErrorDetail = 0xE0,
     ReadCpuFwVersionMajor = 0xE1,
     ReadCpuFwVersionMinor = 0xE2,
     ReadCpuFwVersionPatch = 0xE3,
+    ReadFpgaState = 0xE7,
 
     XorHash = 0xF0,
 }
@@ -51,10 +61,17 @@ impl TryFrom<u8> for Cmd {
             0x21 => Ok(Self::ConfigModulation),
             0x22 => Ok(Self::ChangeModulationBank),
             0x30 => Ok(Self::SetSilencer),
+            0x40 => Ok(Self::SetPhaseCorrection),
+            0x41 => Ok(Self::SetOutputMask),
+            0x42 => Ok(Self::SetPulseWidthTable),
+            0x50 => Ok(Self::EmulateGpioIn),
+            0x52 => Ok(Self::SetGpioOut),
+            0x60 => Ok(Self::ForceFan),
             0xE0 => Ok(Self::ReadErrorDetail),
             0xE1 => Ok(Self::ReadCpuFwVersionMajor),
             0xE2 => Ok(Self::ReadCpuFwVersionMinor),
             0xE3 => Ok(Self::ReadCpuFwVersionPatch),
+            0xE7 => Ok(Self::ReadFpgaState),
             0xF0 => Ok(Self::XorHash),
             other => Err(other),
         }
@@ -81,10 +98,17 @@ mod tests {
             Cmd::ConfigModulation,
             Cmd::ChangeModulationBank,
             Cmd::SetSilencer,
+            Cmd::SetPhaseCorrection,
+            Cmd::SetOutputMask,
+            Cmd::SetPulseWidthTable,
+            Cmd::EmulateGpioIn,
+            Cmd::SetGpioOut,
+            Cmd::ForceFan,
             Cmd::ReadErrorDetail,
             Cmd::ReadCpuFwVersionMajor,
             Cmd::ReadCpuFwVersionMinor,
             Cmd::ReadCpuFwVersionPatch,
+            Cmd::ReadFpgaState,
             Cmd::XorHash,
         ] {
             assert_eq!(Cmd::try_from(c.as_u8()), Ok(c));

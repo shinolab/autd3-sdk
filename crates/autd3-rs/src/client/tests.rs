@@ -40,6 +40,7 @@ struct Slave {
     fw_version_minor: u8,
     fw_version_patch: u8,
     error_detail: u8,
+    fpga_state: u8,
     drop_next: u32,
     stale_for_next: u32,
     sent_log: Vec<(u8, Cmd)>,
@@ -57,6 +58,7 @@ impl Slave {
             fw_version_minor: 0,
             fw_version_patch: 0,
             error_detail: 0,
+            fpga_state: 0,
             drop_next: 0,
             stale_for_next: 0,
             sent_log: Vec::new(),
@@ -131,6 +133,7 @@ fn slave_cycle(
         Cmd::ReadCpuFwVersionMinor => slave.fw_version_minor,
         Cmd::ReadCpuFwVersionPatch => slave.fw_version_patch,
         Cmd::ReadErrorDetail => slave.error_detail,
+        Cmd::ReadFpgaState => slave.fpga_state,
         Cmd::WritePatternBuffer
         | Cmd::WritePatternCompressed
         | Cmd::WriteModulationBuffer
@@ -139,6 +142,12 @@ fn slave_cycle(
         | Cmd::ChangePatternBank
         | Cmd::ChangeModulationBank
         | Cmd::SetSilencer
+        | Cmd::SetPhaseCorrection
+        | Cmd::SetOutputMask
+        | Cmd::SetPulseWidthTable
+        | Cmd::EmulateGpioIn
+        | Cmd::SetGpioOut
+        | Cmd::ForceFan
         | Cmd::Synchronize
         | Cmd::Clear
         | Cmd::Nop => 0,
@@ -870,12 +879,12 @@ async fn commands_still_succeed_with_send_interval_above_one() {
 
 #[tokio::test]
 async fn build_rejects_too_fast_pattern_under_strict_silencer() {
-    use crate::operation::{ConfigPattern, Silencer};
+    use crate::operation::{ConfigPattern, SetSilencer};
     use crate::value::{PatternBank, PatternDataType};
 
     let (client, _slave) = open_client().await;
     let mut builder = client.datagram_builder();
-    builder.push(Silencer::default()).push(ConfigPattern {
+    builder.push(SetSilencer::default()).push(ConfigPattern {
         bank: PatternBank::B0,
         divider: 1,
         size: 1,
@@ -900,7 +909,7 @@ async fn build_rejects_too_fast_pattern_under_strict_silencer() {
 #[tokio::test]
 async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
     use crate::common::ULTRASOUND_PERIOD;
-    use crate::operation::{ConfigModulation, FixedCompletionTime, Silencer};
+    use crate::operation::{ConfigModulation, FixedCompletionTime, SetSilencer};
     use crate::value::ModulationBank;
 
     let (client, _slave) = open_client().await;
@@ -911,7 +920,7 @@ async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
             divider: 5,
             size: 1,
         })
-        .push(Silencer::new(FixedCompletionTime {
+        .push(SetSilencer::new(FixedCompletionTime {
             intensity: ULTRASOUND_PERIOD * 8,
             phase: ULTRASOUND_PERIOD * 40,
             strict_mode: true,
@@ -929,7 +938,7 @@ async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
 
 #[tokio::test]
 async fn opt_out_disables_precheck() {
-    use crate::operation::{ConfigPattern, Silencer};
+    use crate::operation::{ConfigPattern, SetSilencer};
     use crate::value::{PatternBank, PatternDataType};
 
     let (link, _slave) = slave_pair();
@@ -939,7 +948,7 @@ async fn opt_out_disables_precheck() {
     };
     let client = Client::open(&geometry(1), link, config).await.unwrap();
     let mut builder = client.datagram_builder();
-    builder.push(Silencer::default()).push(ConfigPattern {
+    builder.push(SetSilencer::default()).push(ConfigPattern {
         bank: PatternBank::B0,
         divider: 1,
         size: 1,
@@ -953,7 +962,7 @@ async fn opt_out_disables_precheck() {
 
 #[tokio::test]
 async fn desync_after_send_failure_stops_precheck() {
-    use crate::operation::{ConfigPattern, Silencer};
+    use crate::operation::{ConfigPattern, SetSilencer};
     use crate::value::{PatternBank, PatternDataType};
 
     let too_fast = |client: &Client| {
@@ -971,7 +980,7 @@ async fn desync_after_send_failure_stops_precheck() {
 
     let datagrams = client
         .datagram_builder()
-        .push(Silencer::default())
+        .push(SetSilencer::default())
         .build()
         .unwrap();
     for frame in &datagrams {
@@ -999,7 +1008,7 @@ async fn desync_after_send_failure_stops_precheck() {
 
 #[tokio::test]
 async fn build_rejects_per_device_group_under_strict_silencer() {
-    use crate::operation::{ConfigModulation, Silencer};
+    use crate::operation::{ConfigModulation, SetSilencer};
     use crate::value::ModulationBank;
 
     let (link, _slaves) = slaves_pair(2);
@@ -1009,7 +1018,7 @@ async fn build_rejects_per_device_group_under_strict_silencer() {
 
     let datagrams = client
         .datagram_builder()
-        .push(Silencer::default())
+        .push(SetSilencer::default())
         .build()
         .unwrap();
     for frame in &datagrams {
@@ -1032,13 +1041,13 @@ async fn build_rejects_per_device_group_under_strict_silencer() {
 
 #[tokio::test]
 async fn separate_builders_share_committed_mirror_state() {
-    use crate::operation::{ConfigPattern, Silencer};
+    use crate::operation::{ConfigPattern, SetSilencer};
     use crate::value::{PatternBank, PatternDataType};
 
     let (client, _slave) = open_client().await;
     client
         .datagram_builder()
-        .push(Silencer::default())
+        .push(SetSilencer::default())
         .build()
         .unwrap();
     let mut b2 = client.datagram_builder();

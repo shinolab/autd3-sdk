@@ -5,7 +5,7 @@ use anyhow::Result;
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig, FociStm, FociStmOption, Silencer, circle};
+use autd3_rs::{Client, ClientConfig, FociStm, FociStmOption, SetSilencer, circle};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
     let points = circle(center, 30.0 * mm, 200, Vector3::z_axis(), Intensity::MAX);
 
     let mut builder = client.datagram_builder();
-    builder.push(Silencer::default()).push(FociStm::new(
+    builder.push(SetSilencer::default()).push(FociStm::new(
         1.0 * Hz,
         &points,
         FociStmOption::default(),

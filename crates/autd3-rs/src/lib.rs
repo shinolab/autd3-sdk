@@ -1,5 +1,6 @@
 pub mod command;
 pub mod firmware_version;
+pub mod fpga_state;
 pub mod operation;
 pub mod stm;
 pub mod tuning;
@@ -22,11 +23,13 @@ pub use command::{BoxedCommand, Command, Modulation, Pattern};
 pub use core_affinity::CoreId;
 pub use datagram::{Datagram, DatagramBuilder, Datagrams, Frame};
 pub use firmware_version::FirmwareVersion;
+pub use fpga_state::FpgaState;
 pub use operation::{
     ChangeModulationBank, ChangePatternBank, Clear, ConfigModulation, ConfigPattern, Distribution,
-    FixedCompletionTime, FixedUpdateRate, Nop, Operation, PatternCompression, Silencer,
-    SilencerConfig, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
-    WritePatternCompressed, XorHashCmd,
+    EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, ForceFan, GpioOut, Nop, Operation,
+    PWE_TABLE_SIZE, PatternCompression, SetGpioOut, SetOutputMask, SetPhaseCorrection,
+    SetPulseWidthTable, SetSilencer, SilencerConfig, WriteFociBuffer, WriteModulationBuffer,
+    WritePatternBuffer, WritePatternCompressed, XorHashCmd,
 };
 pub use response::Response;
 pub use stm::{
