@@ -116,6 +116,20 @@ Frame make_write_pattern_buffer(uint8_t seq, uint8_t bank, uint32_t offset_words
   return f;
 }
 
+Frame make_write_pattern_compressed(uint8_t seq, uint8_t bank, uint32_t offset_words, uint8_t format, uint8_t count,
+                                    const std::vector<uint16_t>& words) {
+  Frame f(seq, CMD_WRITE_PATTERN_COMPRESSED);
+  uint8_t* p = f.payload();
+  p[EM_COMPRESSED_OFFSET_BANK] = bank;
+  p[EM_COMPRESSED_OFFSET_FORMAT] = format;
+  p[EM_COMPRESSED_OFFSET_COUNT] = count;
+  put_u32_le(p + EM_COMPRESSED_OFFSET_OFFSET, offset_words);
+  for (size_t i = 0; i < words.size(); ++i) {
+    put_u16_le(p + EM_COMPRESSED_OFFSET_DATA + 2 * i, words[i]);
+  }
+  return f;
+}
+
 Frame make_write_mod_buffer(uint8_t seq, uint8_t bank, uint32_t offset, const std::vector<uint8_t>& data) {
   Frame f(seq, CMD_WRITE_MOD_BUFFER);
   uint8_t* p = f.payload();
@@ -543,6 +557,89 @@ TEST(Proto, WritePatternBufferRejectsInvalidPayloads) {
   make_write_pattern_buffer(3, 0, EMISSION_RAM_WORDS - 1, {0x0001, 0x0002}).deliver();
   EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
   EXPECT_EQ(port_test_fpga_emission_word(0, EMISSION_RAM_WORDS - 1), 0);
+}
+
+TEST(Proto, WritePatternCompressedPhaseFullDecompressesTwoIndices) {
+  reset_all();
+
+  std::vector<uint16_t> words(NUM_TRANSDUCERS);
+  for (uint16_t t = 0; t < NUM_TRANSDUCERS; ++t) {
+    const uint8_t p0 = static_cast<uint8_t>(t & 0xFF);
+    const uint8_t p1 = static_cast<uint8_t>(0xFF - (t & 0xFF));
+    words[t] = static_cast<uint16_t>(p0 | (p1 << 8));
+  }
+  const uint32_t slot = 5 * EMISSION_SLOT_WORDS;
+  make_write_pattern_compressed(0, 1, slot, WRITE_PATTERN_FORMAT_PHASE_FULL, 2, words).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+
+  for (uint16_t t = 0; t < NUM_TRANSDUCERS; ++t) {
+    const uint8_t p0 = static_cast<uint8_t>(t & 0xFF);
+    const uint8_t p1 = static_cast<uint8_t>(0xFF - (t & 0xFF));
+    ASSERT_EQ(port_test_fpga_emission_word(1, slot + t), static_cast<uint16_t>(0xFF00 | p0)) << "g0 t=" << t;
+    ASSERT_EQ(port_test_fpga_emission_word(1, slot + EMISSION_SLOT_WORDS + t), static_cast<uint16_t>(0xFF00 | p1))
+        << "g1 t=" << t;
+  }
+}
+
+TEST(Proto, WritePatternCompressedPhaseFullPartialCountWritesSingleSlot) {
+  reset_all();
+
+  std::vector<uint16_t> words(NUM_TRANSDUCERS, 0x00AB);
+  const uint32_t slot = 2 * EMISSION_SLOT_WORDS;
+  make_write_pattern_compressed(0, 0, slot, WRITE_PATTERN_FORMAT_PHASE_FULL, 1, words).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+
+  EXPECT_EQ(port_test_fpga_emission_word(0, slot), static_cast<uint16_t>(0xFF00 | 0xAB));
+  EXPECT_EQ(port_test_fpga_emission_word(0, slot + EMISSION_SLOT_WORDS), 0) << "second slot untouched";
+}
+
+TEST(Proto, WritePatternCompressedPhaseHalfDecompressesFourIndices) {
+  reset_all();
+
+  std::vector<uint16_t> words(NUM_TRANSDUCERS);
+  for (uint16_t t = 0; t < NUM_TRANSDUCERS; ++t) {
+    const uint8_t n0 = static_cast<uint8_t>(t & 0x0F);
+    const uint8_t n1 = static_cast<uint8_t>((t + 1) & 0x0F);
+    const uint8_t n2 = static_cast<uint8_t>((t + 2) & 0x0F);
+    const uint8_t n3 = static_cast<uint8_t>((t + 3) & 0x0F);
+    words[t] = static_cast<uint16_t>(n0 | (n1 << 4) | (n2 << 8) | (n3 << 12));
+  }
+  const uint32_t slot = 7 * EMISSION_SLOT_WORDS;
+  make_write_pattern_compressed(0, 0, slot, WRITE_PATTERN_FORMAT_PHASE_HALF, 4, words).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+
+  for (uint16_t t = 0; t < NUM_TRANSDUCERS; ++t) {
+    for (uint8_t g = 0; g < 4; ++g) {
+      const uint8_t p4 = static_cast<uint8_t>((t + g) & 0x0F);
+      const uint16_t expected = static_cast<uint16_t>(0xFF00 | (p4 << 4) | p4);
+      ASSERT_EQ(port_test_fpga_emission_word(0, slot + g * EMISSION_SLOT_WORDS + t), expected) << "g=" << g << " t=" << t;
+    }
+  }
+}
+
+TEST(Proto, WritePatternCompressedRejectsInvalidPayloads) {
+  reset_all();
+
+  const std::vector<uint16_t> full(NUM_TRANSDUCERS, 0x1234);
+
+  make_write_pattern_compressed(0, 0, 0, 0, 1, full).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  make_write_pattern_compressed(1, 0, 0, 3, 1, full).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  make_write_pattern_compressed(2, 0, 0, WRITE_PATTERN_FORMAT_PHASE_FULL, 0, full).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  make_write_pattern_compressed(3, 0, 0, WRITE_PATTERN_FORMAT_PHASE_FULL, 3, full).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  make_write_pattern_compressed(4, 0, 0, WRITE_PATTERN_FORMAT_PHASE_HALF, 5, full).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+
+  make_write_pattern_compressed(5, 0, EMISSION_RAM_WORDS - EMISSION_SLOT_WORDS, WRITE_PATTERN_FORMAT_PHASE_FULL, 2, full)
+      .deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
 }
 
 
