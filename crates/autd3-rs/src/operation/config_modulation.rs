@@ -1,9 +1,10 @@
 use crate::error::{Error, PayloadError};
+use crate::mirror::FirmwareState;
 use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::ModulationBank;
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, silencer_constraint};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigModulation {
@@ -42,6 +43,14 @@ impl Operation for ConfigModulation {
         out[2..4].copy_from_slice(&self.divider.to_le_bytes());
         out[4..8].copy_from_slice(&self.size.to_le_bytes());
         Ok(Cmd::ConfigModulation)
+    }
+
+    fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
+        if let Err(v) = state.silencer.check_mod_div(self.divider) {
+            return Err(silencer_constraint(device, v));
+        }
+        state.silencer.note_mod_div(self.bank.as_u8(), self.divider);
+        Ok(())
     }
 }
 

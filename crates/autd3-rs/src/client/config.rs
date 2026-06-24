@@ -18,6 +18,7 @@ pub struct ClientConfig {
     pub reset_resend_cycles: u32,
     pub rt_priority: Option<ThreadPriority>,
     pub rt_affinity: Option<CoreId>,
+    pub validate_state: bool,
 }
 
 impl Default for ClientConfig {
@@ -31,6 +32,7 @@ impl Default for ClientConfig {
             reset_resend_cycles: 2,
             rt_priority: None,
             rt_affinity: None,
+            validate_state: true,
         }
     }
 }

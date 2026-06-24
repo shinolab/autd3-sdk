@@ -4,6 +4,7 @@ pub enum Cmd {
     Reset = 0x00,
     Synchronize = 0x01,
     SetMode = 0x02,
+    Clear = 0x03,
 
     WritePatternBuffer = 0x10,
     ConfigPattern = 0x11,
@@ -38,6 +39,7 @@ impl TryFrom<u8> for Cmd {
             0x00 => Ok(Self::Reset),
             0x01 => Ok(Self::Synchronize),
             0x02 => Ok(Self::SetMode),
+            0x03 => Ok(Self::Clear),
             0x10 => Ok(Self::WritePatternBuffer),
             0x11 => Ok(Self::ConfigPattern),
             0x12 => Ok(Self::ChangePatternBank),
@@ -65,6 +67,7 @@ mod tests {
             Cmd::Reset,
             Cmd::Synchronize,
             Cmd::SetMode,
+            Cmd::Clear,
             Cmd::WritePatternBuffer,
             Cmd::ConfigPattern,
             Cmd::ChangePatternBank,

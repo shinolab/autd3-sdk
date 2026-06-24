@@ -160,6 +160,7 @@ fn client_config(common: &Common, max_inflight: usize) -> ClientConfig {
             )
         }),
         rt_affinity: common.rt_core.map(|id| CoreId { id }),
+        validate_state: false,
     }
 }
 

@@ -1,7 +1,22 @@
+use std::sync::{Arc, Mutex, PoisonError};
+
 use crate::command::Command;
 use crate::error::Error;
+use crate::mirror::FirmwareState;
 use crate::operation::{Distribution, Operation};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
+
+#[derive(Clone, Debug)]
+pub(crate) enum Mirror {
+    Synced(Vec<FirmwareState>),
+    Desynced,
+}
+
+#[derive(Clone)]
+pub(crate) struct MirrorHandle {
+    pub(crate) state: Arc<Mutex<Mirror>>,
+    pub(crate) enabled: bool,
+}
 
 #[derive(Clone, Debug)]
 pub struct Datagram {
@@ -37,13 +52,14 @@ impl<'a> Frame<'a> {
     }
 }
 
+#[derive(Debug)]
 struct FrameDesc {
     dist: Distribution,
     start: usize,
     len: usize,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Datagrams {
     payloads: Vec<Datagram>,
     frames: Vec<FrameDesc>,
@@ -135,6 +151,7 @@ impl<'a> IntoIterator for &'a Datagrams {
 pub struct DatagramBuilder<'a> {
     num_devices: usize,
     ops: Vec<Box<dyn Operation + 'a>>,
+    mirror: Option<MirrorHandle>,
 }
 
 impl<'a> DatagramBuilder<'a> {
@@ -143,6 +160,16 @@ impl<'a> DatagramBuilder<'a> {
         Self {
             num_devices,
             ops: Vec::new(),
+            mirror: None,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn with_mirror(num_devices: usize, mirror: MirrorHandle) -> Self {
+        Self {
+            num_devices,
+            ops: Vec::new(),
+            mirror: Some(mirror),
         }
     }
 
@@ -164,8 +191,29 @@ impl<'a> DatagramBuilder<'a> {
 
     pub fn build_into(&self, out: &mut Datagrams) -> Result<(), Error> {
         out.clear();
+
+        let mut guard = self
+            .mirror
+            .as_ref()
+            .filter(|handle| handle.enabled)
+            .map(|handle| handle.state.lock().unwrap_or_else(PoisonError::into_inner));
+
+        let mut work = match guard.as_deref() {
+            Some(Mirror::Synced(states)) => Some(states.clone()),
+            _ => None,
+        };
+
         for op in &self.ops {
             out.push_op(op.as_ref(), self.num_devices)?;
+            if let Some(work) = work.as_mut() {
+                for (device, state) in work.iter_mut().enumerate() {
+                    op.reflect(device, state)?;
+                }
+            }
+        }
+
+        if let (Some(guard), Some(work)) = (guard.as_mut(), work) {
+            **guard = Mirror::Synced(work);
         }
         Ok(())
     }

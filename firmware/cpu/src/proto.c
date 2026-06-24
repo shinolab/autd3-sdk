@@ -9,6 +9,7 @@ extern "C" {
 #include "app.h"
 #include "cmd/change_mod_bank.h"
 #include "cmd/change_pattern_bank.h"
+#include "cmd/clear.h"
 #include "cmd/config_mod.h"
 #include "cmd/config_pattern.h"
 #include "cmd/set_mode.h"
@@ -76,6 +77,8 @@ static uint8_t dispatch(const rx_frame_t* in) {
       return latch_error(sync_handle());
     case CMD_SET_MODE:
       return latch_error(set_mode_handle(in->payload));
+    case CMD_CLEAR:
+      return latch_error(clear_handle());
     default:
       return latch_error(ERR_UNKNOWN_CMD);
   }
