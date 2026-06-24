@@ -929,6 +929,44 @@ TEST(Proto, StrictSilencerRejectsSwitchToTooFastBank) {
 
 
 
+TEST(Proto, ClearReleasesStrictSilencerGuard) {
+  reset_all();
+  make_set_silencer(0, SILENCER_FLAG_STRICT_MODE, 256, 256, 10, 40).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_config_mod(1, 0, 5, 100).deliver();
+  ASSERT_EQ(_sTx.data, ERR_INVALID_SILENCER_SETTING) << "strict guard rejects too-fast sampling";
+
+  Frame(2, CMD_CLEAR).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "Clear is accepted";
+
+  make_config_mod(3, 0, 5, 100).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "Clear releases the strict guard";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_FREQ_DIV0), 5);
+}
+
+TEST(Proto, ClearRestoresSilencerAndBankBaseline) {
+  reset_all();
+  make_set_silencer(0, SILENCER_FLAG_STRICT_MODE, 256, 256, 20, 30).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+  make_config_mod(1, 1, 50, 100).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+  make_change_mod_bank(2, 1, TRANSITION_MODE_IMMEDIATE, 0).deliver();
+  ASSERT_EQ(_sTx.data, 0) << "bank 1 sampling (50) satisfies completion 20, so the switch is accepted";
+
+  Frame(3, CMD_CLEAR).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_FLAG), 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_SILENCER_COMPLETION_STEPS_PHASE), 40);
+  for (uint8_t bank = 0; bank < NUM_BANKS; ++bank) {
+    EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_FREQ_DIV0 + bank), 0xFFFF);
+    EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_FREQ_DIV0 + bank), 0xFFFF);
+  }
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 0) << "active modulation bank back to 0";
+}
+
 TEST(Proto, BootBringsFpgaToLegacyClearBaseline) {
   reset_all();
 

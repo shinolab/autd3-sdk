@@ -138,7 +138,8 @@ fn slave_cycle(
         | Cmd::ChangePatternBank
         | Cmd::ChangeModulationBank
         | Cmd::SetSilencer
-        | Cmd::Synchronize => 0,
+        | Cmd::Synchronize
+        | Cmd::Clear => 0,
         Cmd::SetMode => {
             slave.mode = parsed.payload[0];
             0
@@ -209,8 +210,8 @@ async fn xor_hash_with_checksum_returns_ok() {
     xor_hash(&client, &cmd).await.unwrap();
 
     let s = slave.lock().unwrap();
-    assert_eq!(s.ack, 1);
-    assert_eq!(s.expected_seq, 2);
+    assert_eq!(s.ack, 2);
+    assert_eq!(s.expected_seq, 3);
     assert_eq!(s.xor_hash_total_sleep_ms, 3);
     assert_eq!(s.error_detail, 0);
 }
@@ -406,6 +407,7 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
             reset_resend_cycles: 2,
             rt_priority: None,
             rt_affinity: None,
+            validate_state: true,
         },
     )
     .await
@@ -428,8 +430,8 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
             "resync must recover as success with per-device data"
         );
     }
-    assert_eq!(slaves[0].lock().unwrap().expected_seq, 9);
-    assert_eq!(slaves[1].lock().unwrap().expected_seq, 9);
+    assert_eq!(slaves[0].lock().unwrap().expected_seq, 10);
+    assert_eq!(slaves[1].lock().unwrap().expected_seq, 10);
 }
 
 #[tokio::test]
@@ -454,7 +456,8 @@ async fn handshake_sends_two_resets_with_seqs_zero_then_one() {
     assert!(s.sent_log.len() >= 2);
     assert_eq!(s.sent_log[0], (0, Cmd::Reset));
     assert_eq!(s.sent_log[1], (1, Cmd::Reset));
-    assert!(s.sent_log.contains(&(0, Cmd::Synchronize)));
+    assert!(s.sent_log.contains(&(0, Cmd::Clear)));
+    assert!(s.sent_log.contains(&(1, Cmd::Synchronize)));
 }
 
 #[tokio::test]
@@ -469,12 +472,12 @@ async fn low_latency_handshake_switches_slave_mode_and_continues_traffic() {
         let s = slave.lock().unwrap();
         assert_eq!(s.mode, MODE_LOW_LATENCY, "slave must switch to low-latency");
         assert!(s.sent_log.contains(&(0, Cmd::SetMode)));
-        assert_eq!(s.expected_seq, 2);
+        assert_eq!(s.expected_seq, 3);
     }
     xor_hash(&client, &XorHashCmd::with_checksum(0, vec![]))
         .await
         .unwrap();
-    assert_eq!(slave.lock().unwrap().expected_seq, 3);
+    assert_eq!(slave.lock().unwrap().expected_seq, 4);
 }
 
 #[tokio::test]
@@ -499,13 +502,13 @@ async fn handshake_resets_slave_proto_state() {
         .unwrap();
     {
         let s = slave.lock().unwrap();
-        assert_eq!(s.expected_seq, 1);
-        assert_eq!(s.ack, 0);
+        assert_eq!(s.expected_seq, 2);
+        assert_eq!(s.ack, 1);
     }
     xor_hash(&client, &XorHashCmd::with_checksum(0, vec![]))
         .await
         .unwrap();
-    assert_eq!(slave.lock().unwrap().expected_seq, 2);
+    assert_eq!(slave.lock().unwrap().expected_seq, 3);
 }
 
 #[tokio::test]
@@ -577,6 +580,7 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
             reset_resend_cycles: 2,
             rt_priority: None,
             rt_affinity: None,
+            validate_state: true,
         },
     )
     .await
@@ -599,7 +603,7 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
             "resync must recover as success"
         );
     }
-    assert_eq!(slave.lock().unwrap().expected_seq, 9);
+    assert_eq!(slave.lock().unwrap().expected_seq, 10);
 }
 
 #[tokio::test]
@@ -617,6 +621,7 @@ async fn dead_link_gives_up_whole_window_in_bounded_time() {
             reset_resend_cycles: 2,
             rt_priority: None,
             rt_affinity: None,
+            validate_state: true,
         },
     )
     .await
@@ -666,8 +671,8 @@ async fn recovers_after_transient_stale_cycles() {
         .await
         .expect("xor_hash should recover after the stale burst");
     let s = slave.lock().unwrap();
-    assert_eq!(s.expected_seq, 2);
-    assert_eq!(s.ack, 1);
+    assert_eq!(s.expected_seq, 3);
+    assert_eq!(s.ack, 2);
 }
 
 fn seq0_reset_count(slave: &Arc<StdMutex<Slave>>) -> usize {
@@ -700,10 +705,10 @@ async fn inflight_held_across_stale_recovers_without_reset() {
     );
     let s = slave.lock().unwrap();
     assert_eq!(
-        s.expected_seq, 2,
-        "Synchronize(seq0) + one command, each once"
+        s.expected_seq, 3,
+        "Clear(seq0) + Synchronize(seq1) + one command, each once"
     );
-    assert_eq!(s.ack, 1);
+    assert_eq!(s.ack, 2);
     drop(s);
     assert_eq!(
         seq0_reset_count(&slave),
@@ -728,6 +733,7 @@ async fn streaming_holds_window_across_stale_and_recovers() {
             reset_resend_cycles: 2,
             rt_priority: None,
             rt_affinity: None,
+            validate_state: true,
         },
     )
     .await
@@ -750,7 +756,7 @@ async fn streaming_holds_window_across_stale_and_recovers() {
             "every held in-flight must recover after the stale burst"
         );
     }
-    assert_eq!(slave.lock().unwrap().expected_seq, 9);
+    assert_eq!(slave.lock().unwrap().expected_seq, 10);
     assert_eq!(seq0_reset_count(&slave), 1, "no Reset escalation needed");
 }
 
@@ -809,6 +815,7 @@ async fn open_rejects_oversize_max_inflight() {
             reset_resend_cycles: 2,
             rt_priority: None,
             rt_affinity: None,
+            validate_state: true,
         },
     )
     .await;
@@ -843,6 +850,7 @@ async fn commands_still_succeed_with_send_interval_above_one() {
             reset_resend_cycles: 2,
             rt_priority: None,
             rt_affinity: None,
+            validate_state: true,
         },
     )
     .await
@@ -856,4 +864,204 @@ async fn commands_still_succeed_with_send_interval_above_one() {
             patch: 0x33,
         }]
     );
+}
+
+#[tokio::test]
+async fn build_rejects_too_fast_pattern_under_strict_silencer() {
+    use crate::operation::{ConfigPattern, Silencer};
+    use crate::value::{PatternBank, PatternDataType};
+
+    let (client, _slave) = open_client().await;
+    let mut builder = client.datagram_builder();
+    builder.push(Silencer::default()).push(ConfigPattern {
+        bank: PatternBank::B0,
+        divider: 1,
+        size: 1,
+        data_type: PatternDataType::Raw,
+    });
+    match builder.build().unwrap_err() {
+        Error::SilencerConstraint {
+            device,
+            axis,
+            completion_steps,
+            sampling_div,
+        } => {
+            assert_eq!(device, 0);
+            assert_eq!(axis, crate::SilencerAxis::Intensity);
+            assert_eq!(completion_steps, 10);
+            assert_eq!(sampling_div, 1);
+        }
+        other => panic!("expected SilencerConstraint, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
+    use crate::common::ULTRASOUND_PERIOD;
+    use crate::operation::{ConfigModulation, FixedCompletionTime, Silencer};
+    use crate::value::ModulationBank;
+
+    let (client, _slave) = open_client().await;
+    let mut builder = client.datagram_builder();
+    builder
+        .push(ConfigModulation {
+            bank: ModulationBank::B0,
+            divider: 5,
+            size: 1,
+        })
+        .push(Silencer::new(FixedCompletionTime {
+            intensity: ULTRASOUND_PERIOD * 8,
+            phase: ULTRASOUND_PERIOD * 40,
+            strict_mode: true,
+        }));
+    assert!(matches!(
+        builder.build().unwrap_err(),
+        Error::SilencerConstraint {
+            axis: crate::SilencerAxis::Intensity,
+            completion_steps: 8,
+            sampling_div: 5,
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+async fn opt_out_disables_precheck() {
+    use crate::operation::{ConfigPattern, Silencer};
+    use crate::value::{PatternBank, PatternDataType};
+
+    let (link, _slave) = slave_pair();
+    let config = ClientConfig {
+        validate_state: false,
+        ..ClientConfig::default()
+    };
+    let client = Client::open(&geometry(1), link, config).await.unwrap();
+    let mut builder = client.datagram_builder();
+    builder.push(Silencer::default()).push(ConfigPattern {
+        bank: PatternBank::B0,
+        divider: 1,
+        size: 1,
+        data_type: PatternDataType::Raw,
+    });
+    assert!(
+        builder.build().is_ok(),
+        "opt-out must skip the local pre-check and defer to the CPU guard"
+    );
+}
+
+#[tokio::test]
+async fn desync_after_send_failure_stops_precheck() {
+    use crate::operation::{ConfigPattern, Silencer};
+    use crate::value::{PatternBank, PatternDataType};
+
+    let too_fast = |client: &Client| {
+        let mut builder = client.datagram_builder();
+        builder.push(ConfigPattern {
+            bank: PatternBank::B0,
+            divider: 1,
+            size: 1,
+            data_type: PatternDataType::Raw,
+        });
+        builder.build()
+    };
+
+    let (client, slave) = open_client().await;
+
+    let datagrams = client
+        .datagram_builder()
+        .push(Silencer::default())
+        .build()
+        .unwrap();
+    for frame in &datagrams {
+        client.send_checked(frame).await.unwrap();
+    }
+
+    assert!(matches!(
+        too_fast(&client),
+        Err(Error::SilencerConstraint { .. })
+    ));
+
+    slave.lock().unwrap().stale_for_next = u32::MAX;
+    assert!(matches!(
+        xor_hash(&client, &XorHashCmd::with_checksum(0, vec![]))
+            .await
+            .unwrap_err(),
+        Error::Timeout { .. }
+    ));
+
+    assert!(
+        too_fast(&client).is_ok(),
+        "desynced mirror must stop pre-checking until the next Clear/reopen"
+    );
+}
+
+#[tokio::test]
+async fn build_rejects_per_device_group_under_strict_silencer() {
+    use std::collections::HashMap;
+
+    use crate::operation::{ConfigModulation, Group, Operation, Silencer};
+    use crate::value::ModulationBank;
+
+    let (link, _slaves) = slaves_pair(2);
+    let client = Client::open(&geometry(2), link, ClientConfig::default())
+        .await
+        .unwrap();
+
+    let datagrams = client
+        .datagram_builder()
+        .push(Silencer::default())
+        .build()
+        .unwrap();
+    for frame in &datagrams {
+        client.send_checked(frame).await.unwrap();
+    }
+
+    let group = Group::new(
+        vec![0usize, 1usize],
+        HashMap::from([
+            (
+                0usize,
+                Box::new(ConfigModulation {
+                    bank: ModulationBank::B0,
+                    divider: 5,
+                    size: 1,
+                }) as Box<dyn Operation>,
+            ),
+            (
+                1usize,
+                Box::new(ConfigModulation {
+                    bank: ModulationBank::B0,
+                    divider: 20,
+                    size: 1,
+                }) as Box<dyn Operation>,
+            ),
+        ]),
+    );
+    let mut builder = client.datagram_builder();
+    builder.push(group);
+    match builder.build().unwrap_err() {
+        Error::SilencerConstraint { device, .. } => assert_eq!(device, 0),
+        other => panic!("expected SilencerConstraint on device 0, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn separate_builders_share_committed_mirror_state() {
+    use crate::operation::{ConfigPattern, Silencer};
+    use crate::value::{PatternBank, PatternDataType};
+
+    let (client, _slave) = open_client().await;
+    client
+        .datagram_builder()
+        .push(Silencer::default())
+        .build()
+        .unwrap();
+    let mut b2 = client.datagram_builder();
+    b2.push(ConfigPattern {
+        bank: PatternBank::B0,
+        divider: 1,
+        size: 1,
+        data_type: PatternDataType::Raw,
+    });
+    assert!(matches!(b2.build(), Err(Error::SilencerConstraint { .. })));
 }

@@ -1,9 +1,10 @@
 use crate::error::{Error, PayloadError};
+use crate::mirror::FirmwareState;
 use crate::params::{EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PatternBank, PatternDataType};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, silencer_constraint};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigPattern {
@@ -74,6 +75,16 @@ impl Operation for ConfigPattern {
         out[8] = num_foci;
         out[10..12].copy_from_slice(&sound_speed.to_le_bytes());
         Ok(Cmd::ConfigPattern)
+    }
+
+    fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
+        if let Err(v) = state.silencer.check_pattern_div(self.divider) {
+            return Err(silencer_constraint(device, v));
+        }
+        state
+            .silencer
+            .note_pattern_div(self.bank.as_u8(), self.divider);
+        Ok(())
     }
 }
 

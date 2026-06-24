@@ -16,12 +16,13 @@ use std::thread::JoinHandle;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::command::Pattern;
-use crate::datagram::{Datagram, DatagramBuilder, Frame};
+use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
 use crate::geometry::Geometry;
 use crate::link::{IntoLink, Link};
-use crate::operation::{Distribution, Synchronize};
+use crate::mirror::FirmwareState;
+use crate::operation::{Clear, Distribution, Synchronize};
 use crate::params::{MOD_BUFFER_SAMPLES, NUM_TRANSDUCERS};
 use crate::protocol::Cmd;
 use crate::value::Emission;
@@ -35,6 +36,8 @@ pub struct Client {
     pool: Arc<SlotPool>,
     join: std::sync::Mutex<Option<JoinHandle<()>>>,
     closed: Arc<AtomicBool>,
+    mirror: Arc<std::sync::Mutex<Mirror>>,
+    validate_state: bool,
 }
 
 impl Client {
@@ -105,7 +108,13 @@ impl Client {
                     pool,
                     join: std::sync::Mutex::new(Some(join)),
                     closed,
+                    mirror: Arc::new(std::sync::Mutex::new(Mirror::Desynced)),
+                    validate_state: config.validate_state,
                 };
+                if let Err(e) = client.clear().await {
+                    let _ = client.close().await;
+                    return Err(e);
+                }
                 if let Err(e) = client.synchronize().await {
                     let _ = client.close().await;
                     return Err(e);
@@ -130,7 +139,27 @@ impl Client {
 
     #[must_use]
     pub fn datagram_builder<'a>(&self) -> DatagramBuilder<'a> {
-        DatagramBuilder::new(self.num_devices)
+        DatagramBuilder::with_mirror(
+            self.num_devices,
+            MirrorHandle {
+                state: Arc::clone(&self.mirror),
+                enabled: self.validate_state,
+            },
+        )
+    }
+
+    fn mark_desynced(&self) {
+        *self.mirror.lock().unwrap_or_else(PoisonError::into_inner) = Mirror::Desynced;
+    }
+
+    async fn clear(&self) -> Result<(), Error> {
+        let datagrams = self.datagram_builder().push(Clear).build()?;
+        for frame in &datagrams {
+            self.send_checked(frame).await?;
+        }
+        *self.mirror.lock().unwrap_or_else(PoisonError::into_inner) =
+            Mirror::Synced(vec![FirmwareState::boot_default(); self.num_devices]);
+        Ok(())
     }
 
     #[must_use]
@@ -183,7 +212,17 @@ impl Client {
     }
 
     pub async fn send_checked(&self, frame: Frame<'_>) -> Result<(), Error> {
-        self.send(frame).await?.await?.check()
+        let result = match self.send(frame).await {
+            Ok(future) => match future.await {
+                Ok(response) => response.check(),
+                Err(e) => Err(e),
+            },
+            Err(e) => Err(e),
+        };
+        if result.is_err() {
+            self.mark_desynced();
+        }
+        result
     }
 
     async fn dispatch(&self, slot: pool::Slot, exclusive: bool) -> Result<ResponseFuture, Error> {

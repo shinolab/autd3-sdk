@@ -11,6 +11,7 @@ const FW_SOURCES: &[&str] = &[
     "cmd/config_pattern.c",
     "cmd/change_mod_bank.c",
     "cmd/change_pattern_bank.c",
+    "cmd/clear.c",
     "cmd/sync.c",
     "cmd/set_mode.c",
     "cmd/silencer.c",

@@ -143,6 +143,7 @@ async fn run_with_link<L: Link>(link: L, cli: &Cli) -> Result<RunOutput> {
                 )
             }),
             rt_affinity: cli.rt_core.map(|id| CoreId { id }),
+            validate_state: false,
         },
     ))
     .await
@@ -230,6 +231,9 @@ async fn run_stop_and_wait(
             Err(ClientError::InvalidPayload(e)) => {
                 anyhow::bail!("payload rejected by the local encoder: {e}");
             }
+            Err(e @ ClientError::SilencerConstraint { .. }) => {
+                anyhow::bail!("rejected by the local silencer precheck: {e}");
+            }
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
                 SampleStatus::LinkError
@@ -310,6 +314,9 @@ async fn run_streaming(
             Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),
             Err(ClientError::InvalidPayload(e)) => {
                 anyhow::bail!("payload rejected by the local encoder: {e}");
+            }
+            Err(e @ ClientError::SilencerConstraint { .. }) => {
+                anyhow::bail!("rejected by the local silencer precheck: {e}");
             }
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");

@@ -1,8 +1,9 @@
 use crate::error::Error;
+use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PatternBank, TransitionMode};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, silencer_constraint};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ChangePatternBank {
@@ -30,6 +31,15 @@ impl Operation for ChangePatternBank {
         out[1] = self.transition_mode.as_u8();
         out[2..10].copy_from_slice(&self.transition_value.to_le_bytes());
         Ok(Cmd::ChangePatternBank)
+    }
+
+    fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
+        let bank = self.bank.as_u8();
+        if let Err(v) = state.silencer.check_pattern_bank(bank) {
+            return Err(silencer_constraint(device, v));
+        }
+        state.silencer.note_pattern_bank(bank);
+        Ok(())
     }
 }
 

@@ -3,6 +3,7 @@ use std::hash::Hash;
 
 use crate::error::{Error, PayloadError};
 use crate::geometry::{Device, Geometry};
+use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 use super::{Distribution, Operation};
@@ -71,6 +72,10 @@ where
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         self.route(device)?.encode(device, frame, out)
+    }
+
+    fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
+        self.route(device)?.reflect(device, state)
     }
 }
 

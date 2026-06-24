@@ -1,11 +1,22 @@
 use thiserror::Error;
 
+use crate::mirror::SilencerAxis;
 use crate::value::SamplingConfigError;
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("device {device} reported error flag ({code:#04x})")]
     DeviceError { device: usize, code: u8 },
+
+    #[error(
+        "device {device}: strict silencer {axis:?} completion {completion_steps} steps exceeds sampling divider {sampling_div}"
+    )]
+    SilencerConstraint {
+        device: usize,
+        axis: SilencerAxis,
+        completion_steps: u16,
+        sampling_div: u16,
+    },
 
     #[error("ack timeout after {cycles} cycles")]
     Timeout { cycles: u32 },

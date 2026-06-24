@@ -108,6 +108,7 @@ async fn run_with_link<L: Link>(link: L, cli: &Cli) -> Result<()> {
             reset_resend_cycles: 2,
             rt_priority: None,
             rt_affinity: None,
+            validate_state: false,
         },
     ))
     .await

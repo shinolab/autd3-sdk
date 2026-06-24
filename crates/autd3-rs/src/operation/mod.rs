@@ -1,5 +1,6 @@
 mod change_mod_bank;
 mod change_pattern_bank;
+mod clear;
 mod config_modulation;
 mod config_pattern;
 mod group;
@@ -12,6 +13,7 @@ mod xor_hash;
 
 pub use change_mod_bank::ChangeModulationBank;
 pub use change_pattern_bank::ChangePatternBank;
+pub use clear::Clear;
 pub use config_modulation::ConfigModulation;
 pub use config_pattern::ConfigPattern;
 pub use group::Group;
@@ -23,8 +25,21 @@ pub use write_pattern_buffer::WritePatternBuffer;
 pub use xor_hash::{XOR_HASH_HEADER_BYTES, XOR_HASH_MAX_DATA_LEN, XorHashCmd};
 
 use crate::error::Error;
+use crate::mirror::FirmwareState;
 use crate::params::FOCUS_WORDS;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
+
+pub(crate) fn silencer_constraint(
+    device: usize,
+    violation: autd3_rs_core::SilencerViolation,
+) -> Error {
+    Error::SilencerConstraint {
+        device,
+        axis: violation.axis,
+        completion_steps: violation.completion_steps,
+        sampling_div: violation.sampling_div,
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Distribution {
@@ -43,6 +58,11 @@ pub trait Operation {
         frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error>;
+
+    fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
+        let _ = (device, state);
+        Ok(())
+    }
 }
 
 impl<T: Operation + ?Sized> Operation for &T {
@@ -61,6 +81,10 @@ impl<T: Operation + ?Sized> Operation for &T {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         (**self).encode(device, frame, out)
+    }
+
+    fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
+        (**self).reflect(device, state)
     }
 }
 

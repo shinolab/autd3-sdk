@@ -2,6 +2,7 @@ pub mod common;
 pub mod error;
 pub mod geometry;
 pub mod link;
+pub mod mirror;
 pub mod params;
 pub mod protocol;
 pub mod value;
@@ -17,6 +18,7 @@ pub use link::{
     ConstStateChecker, CycleOutcome, DeviceState, Interface, IntoLink, Link, LinkStats, LinkStatus,
     StateCheck,
 };
+pub use mirror::{FirmwareState, SilencerAxis, SilencerGuardState, SilencerViolation};
 pub use protocol::{
     Cmd, MAX_IN_FLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame,
 };

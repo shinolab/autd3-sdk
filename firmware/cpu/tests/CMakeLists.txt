@@ -39,6 +39,7 @@ add_executable(test_autd3-rs-cpu
   ${FW_SRC}/cmd/config_pattern.c
   ${FW_SRC}/cmd/change_mod_bank.c
   ${FW_SRC}/cmd/change_pattern_bank.c
+  ${FW_SRC}/cmd/clear.c
   ${FW_SRC}/cmd/sync.c
   ${FW_SRC}/cmd/set_mode.c
   ${FW_SRC}/cmd/silencer.c
