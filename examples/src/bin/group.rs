@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitQuaternion, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::{Client, ClientConfig, Pattern, Silencer};
+use autd3_rs::{Client, ClientConfig, Pattern, SetSilencer};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
     );
 
     let mut builder = client.datagram_builder();
-    builder.push(Silencer::default()).push_each(|device| {
+    builder.push(SetSilencer::default()).push_each(|device| {
         Some(if device % 2 == 0 {
             Pattern::new(&left)
         } else {

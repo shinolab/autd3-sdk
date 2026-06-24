@@ -193,6 +193,25 @@ impl FpgaEmulator {
     }
 
     #[must_use]
+    pub fn force_fan(&self) -> bool {
+        self.controller[reg(ffi::ADDR_CTL_FLAG)] & ffi::CTL_FLAG_FORCE_FAN as u16 != 0
+    }
+
+    #[must_use]
+    pub fn gpio_out(&self, i: usize) -> u64 {
+        self.reg_u64(reg(ffi::ADDR_DEBUG_VALUE0_0) + i * 4)
+    }
+
+    #[must_use]
+    pub fn pulse_width_table(&self, key: usize) -> u16 {
+        self.pwe[key & (PWE_TABLE_SIZE - 1)]
+    }
+
+    pub fn set_fpga_state(&mut self, state: u8) {
+        self.controller[reg(ffi::ADDR_FPGA_STATE)] = u16::from(state);
+    }
+
+    #[must_use]
     pub fn current_mod_bank(&self) -> usize {
         self.mod_swapchain.cur_bank()
     }

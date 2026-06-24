@@ -140,24 +140,24 @@ impl SilencerConfig for FixedUpdateRate {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Silencer<T: SilencerConfig> {
+pub struct SetSilencer<T: SilencerConfig> {
     pub config: T,
 }
 
-impl<T: SilencerConfig> Silencer<T> {
+impl<T: SilencerConfig> SetSilencer<T> {
     #[must_use]
     pub const fn new(config: T) -> Self {
         Self { config }
     }
 }
 
-impl Default for Silencer<FixedCompletionTime> {
+impl Default for SetSilencer<FixedCompletionTime> {
     fn default() -> Self {
         Self::new(FixedCompletionTime::default())
     }
 }
 
-impl<T: SilencerConfig> Operation for Silencer<T> {
+impl<T: SilencerConfig> Operation for SetSilencer<T> {
     fn frames(&self) -> usize {
         1
     }
@@ -186,7 +186,7 @@ mod tests {
 
     fn encode<T: SilencerConfig>(config: T) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = Silencer::new(config).encode(0, 0, &mut out)?;
+        let cmd = SetSilencer::new(config).encode(0, 0, &mut out)?;
         Ok((cmd, out))
     }
 
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn silencer_default_is_fixed_completion_time_default() {
         let mut out = [0u8; PAYLOAD_BYTES];
-        Silencer::default().encode(0, 0, &mut out).unwrap();
+        SetSilencer::default().encode(0, 0, &mut out).unwrap();
         assert_eq!(out[0], FLAG_STRICT_MODE);
         assert_eq!(&out[6..8], &10u16.to_le_bytes());
         assert_eq!(&out[8..10], &40u16.to_le_bytes());

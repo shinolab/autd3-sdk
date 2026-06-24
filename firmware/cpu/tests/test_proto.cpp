@@ -20,6 +20,7 @@ uint16_t port_test_fpga_pwe_word(uint16_t idx);
 uint32_t port_test_fpga_latch_count(uint16_t flag);
 uint16_t port_test_fpga_mod_word(uint8_t bank, uint32_t word_idx);
 uint16_t port_test_fpga_emission_word(uint8_t bank, uint32_t word_idx);
+void port_test_fpga_set_controller(uint16_t addr, uint16_t value);
 }
 
 namespace {
@@ -192,6 +193,48 @@ Frame make_set_silencer(uint8_t seq, uint8_t flag, uint16_t update_rate_intensit
   return f;
 }
 
+Frame make_force_fan(uint8_t seq, uint8_t value) {
+  Frame f(seq, CMD_FORCE_FAN);
+  f.payload()[FORCE_FAN_OFFSET_VALUE] = value;
+  return f;
+}
+
+Frame make_gpio_in(uint8_t seq, uint8_t flag) {
+  Frame f(seq, CMD_EMULATE_GPIO_IN);
+  f.payload()[GPIO_IN_OFFSET_FLAG] = flag;
+  return f;
+}
+
+Frame make_phase_corr(uint8_t seq, const std::vector<uint8_t>& phases) {
+  Frame f(seq, CMD_SET_PHASE_CORR);
+  std::memcpy(f.payload() + PHASE_CORR_OFFSET_DATA, phases.data(), phases.size());
+  return f;
+}
+
+Frame make_output_mask(uint8_t seq, const std::vector<uint16_t>& words) {
+  Frame f(seq, CMD_SET_OUTPUT_MASK);
+  for (size_t i = 0; i < words.size(); ++i) {
+    put_u16_le(f.payload() + OUTPUT_MASK_OFFSET_DATA + 2 * i, words[i]);
+  }
+  return f;
+}
+
+Frame make_pwe(uint8_t seq, const std::vector<uint16_t>& table) {
+  Frame f(seq, CMD_SET_PWE);
+  for (size_t i = 0; i < table.size(); ++i) {
+    put_u16_le(f.payload() + PWE_OFFSET_DATA + 2 * i, table[i]);
+  }
+  return f;
+}
+
+Frame make_gpio_out(uint8_t seq, const std::vector<uint64_t>& values) {
+  Frame f(seq, CMD_SET_GPIO_OUT);
+  for (size_t i = 0; i < values.size(); ++i) {
+    put_u64_le(f.payload() + GPIO_OUT_OFFSET_DATA + 8 * i, values[i]);
+  }
+  return f;
+}
+
 }
 
 TEST(Proto, InitialAckIsSentinelByte) {
@@ -264,7 +307,7 @@ TEST(Proto, SeqWraparoundBoundary) {
 
 TEST(Proto, UnknownStreamingCmdSetsErrorDetailAndReturnsErrorInData) {
   init_app();
-  Frame(0, 0x42 ).deliver();
+  Frame(0, 0x7F ).deliver();
   EXPECT_EQ(_sTx.data, ERR_UNKNOWN_CMD);
   Frame(1, CMD_READ_ERROR_DETAIL).deliver();
   EXPECT_EQ(_sTx.data, ERR_UNKNOWN_CMD);
@@ -1170,4 +1213,110 @@ TEST(Proto, StructSizesMatchSpec) {
   
   EXPECT_EQ(sizeof(tx_frame_t), 4u);
   EXPECT_EQ(WIRE_RX_FRAME_BYTES, 628u);
+}
+
+TEST(Proto, ForceFanSetsAndClearsPersistentBit) {
+  reset_all();
+
+  make_force_fan(0, 1).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_FORCE_FAN, CTL_FLAG_FORCE_FAN);
+
+  make_force_fan(1, 0).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_FORCE_FAN, 0);
+}
+
+TEST(Proto, ForceFanRejectsOutOfRange) {
+  reset_all();
+  make_force_fan(0, 2).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+}
+
+TEST(Proto, ForceFanSurvivesSubsequentLatch) {
+  reset_all();
+  make_force_fan(0, 1).deliver();
+  make_set_silencer(1, SILENCER_FLAG_STRICT_MODE, 256, 256, 5, 7).deliver();
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_FORCE_FAN, CTL_FLAG_FORCE_FAN);
+}
+
+TEST(Proto, EmulateGpioInMapsBits) {
+  reset_all();
+  make_gpio_in(0, 0b1010).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  const uint16_t ctl = port_test_fpga_ctl(ADDR_CTL_FLAG);
+  EXPECT_EQ(ctl & CTL_FLAG_GPIO_IN_0, 0);
+  EXPECT_EQ(ctl & CTL_FLAG_GPIO_IN_1, CTL_FLAG_GPIO_IN_1);
+  EXPECT_EQ(ctl & CTL_FLAG_GPIO_IN_2, 0);
+  EXPECT_EQ(ctl & CTL_FLAG_GPIO_IN_3, CTL_FLAG_GPIO_IN_3);
+}
+
+TEST(Proto, EmulateGpioInRejectsOutOfRange) {
+  reset_all();
+  make_gpio_in(0, 0x10).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
+}
+
+TEST(Proto, PhaseCorrPacksBytesIntoWords) {
+  reset_all();
+  std::vector<uint8_t> phases(NUM_TRANSDUCERS);
+  for (uint16_t i = 0; i < NUM_TRANSDUCERS; ++i) phases[i] = static_cast<uint8_t>(i & 0xFF);
+  make_phase_corr(0, phases).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_phase_corr(0), static_cast<uint16_t>(phases[0] | (phases[1] << 8)));
+  EXPECT_EQ(port_test_fpga_phase_corr(1), static_cast<uint16_t>(phases[2] | (phases[3] << 8)));
+  // Last (odd) transducer high byte is zero-padded.
+  EXPECT_EQ(port_test_fpga_phase_corr(124), static_cast<uint16_t>(phases[248]));
+}
+
+TEST(Proto, OutputMaskWritesWords) {
+  reset_all();
+  std::vector<uint16_t> words(OUTPUT_MASK_USED_WORDS);
+  for (size_t i = 0; i < words.size(); ++i) words[i] = static_cast<uint16_t>(0x1000 + i);
+  make_output_mask(0, words).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  for (size_t i = 0; i < words.size(); ++i) {
+    EXPECT_EQ(port_test_fpga_output_mask(static_cast<uint16_t>(i)), words[i]);
+  }
+}
+
+TEST(Proto, PweWritesTable) {
+  reset_all();
+  std::vector<uint16_t> table(PWE_TABLE_SIZE);
+  for (size_t i = 0; i < table.size(); ++i) table[i] = static_cast<uint16_t>(i);
+  make_pwe(0, table).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_pwe_word(0), 0);
+  EXPECT_EQ(port_test_fpga_pwe_word(1), 1);
+  EXPECT_EQ(port_test_fpga_pwe_word(255), 255);
+}
+
+TEST(Proto, GpioOutWritesDebugValuesAndLatches) {
+  reset_all();
+  const uint32_t latches_at_boot = port_test_fpga_latch_count(CTL_FLAG_DEBUG_SET);
+  const std::vector<uint64_t> values = {0x0102030405060708ull, 0x1112131415161718ull,
+                                        0x2122232425262728ull, 0x3132333435363738ull};
+  make_gpio_out(0, values).deliver();
+  EXPECT_EQ(_sTx.data, 0);
+  for (int v = 0; v < 4; ++v) {
+    for (int w = 0; w < 4; ++w) {
+      const uint16_t expect = static_cast<uint16_t>((values[v] >> (16 * w)) & 0xFFFF);
+      EXPECT_EQ(port_test_fpga_ctl(ADDR_DEBUG_VALUE0_0 + v * 4 + w), expect);
+    }
+  }
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_DEBUG_SET), latches_at_boot + 1);
+}
+
+TEST(Proto, ReadFpgaStateReturnsRegisterByte) {
+  reset_all();
+  port_test_fpga_set_controller(ADDR_FPGA_STATE, 0x83);
+  Frame(0, CMD_READ_FPGA_STATE).deliver();
+  EXPECT_EQ(_sTx.data, 0x83);
+}
+
+TEST(Proto, ClearResetsForceFan) {
+  reset_all();
+  make_force_fan(0, 1).deliver();
+  Frame(1, CMD_CLEAR).deliver();
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_FORCE_FAN, 0);
 }

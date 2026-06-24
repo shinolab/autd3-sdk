@@ -92,6 +92,8 @@ extern "C" uint16_t port_fpga_read(uint16_t addr) {
 
 extern "C" uint64_t port_next_sync0() { return g_next_sync0; }
 
+extern "C" void port_test_fpga_set_controller(uint16_t addr, uint16_t value) { g_ctl[addr & 0xFF] = value; }
+
 extern "C" void port_test_set_next_sync0(uint64_t t) { g_next_sync0 = t; }
 
 extern "C" void port_test_fpga_reset() {

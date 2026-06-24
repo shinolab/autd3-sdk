@@ -44,6 +44,12 @@ add_executable(test_autd3-rs-cpu
   ${FW_SRC}/cmd/sync.c
   ${FW_SRC}/cmd/set_mode.c
   ${FW_SRC}/cmd/silencer.c
+  ${FW_SRC}/cmd/force_fan.c
+  ${FW_SRC}/cmd/gpio_in.c
+  ${FW_SRC}/cmd/phase_corr.c
+  ${FW_SRC}/cmd/output_mask.c
+  ${FW_SRC}/cmd/pwe.c
+  ${FW_SRC}/cmd/gpio_out.c
 )
 
 target_include_directories(test_autd3-rs-cpu PRIVATE
