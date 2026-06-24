@@ -61,6 +61,28 @@ pub fn pattern_from_capsule<'a>(
     Ok(unsafe { ptr.cast::<Vec<DevicePattern>>().as_ref() })
 }
 
+/// # Safety
+// `ptr` must point to a `Vec<DevicePattern>` that stays alive and uniquely borrowed
+/// for as long as the returned capsule (and any reference derived from it) is used.
+pub unsafe fn pattern_capsule_mut(
+    py: Python<'_>,
+    ptr: NonNull<Vec<DevicePattern>>,
+) -> PyResult<Bound<'_, PyCapsule>> {
+    // SAFETY: caller upholds the pointer-validity contract above; no destructor is
+    // attached, so the capsule never frees the borrowed `Vec`.
+    unsafe { PyCapsule::new_with_pointer(py, ptr.cast::<c_void>(), PATTERN_CAPSULE_NAME) }
+}
+
+#[allow(clippy::mut_from_ref)]
+pub fn pattern_from_capsule_mut<'a>(
+    capsule: &'a Bound<'_, PyCapsule>,
+) -> PyResult<&'a mut Vec<DevicePattern>> {
+    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(PATTERN_CAPSULE_NAME))?;
+    // SAFETY: name-checked above; produced by `pattern_capsule_mut` pointing at a live,
+    // uniquely-borrowed `Vec<DevicePattern>` whose owner outlives the returned borrow.
+    Ok(unsafe { ptr.cast::<Vec<DevicePattern>>().as_mut() })
+}
+
 pub fn modulation_into_capsule(py: Python<'_>, data: Vec<u8>) -> PyResult<Bound<'_, PyCapsule>> {
     PyCapsule::new_with_value(py, data, MODULATION_CAPSULE_NAME)
 }
@@ -99,6 +121,8 @@ mod link {
     pub trait ClientBackend: Send + Sync {
         fn num_devices(&self) -> usize;
         fn read_firmware_version(&self) -> BoxFuture<Vec<String>>;
+        fn read_fpga_state(&self) -> BoxFuture<Vec<u8>>;
+        fn read_error_detail(&self) -> BoxFuture<Vec<u8>>;
         fn send_checked(&self, datagrams: Arc<Datagrams>, frame: Option<usize>) -> BoxFuture<()>;
         fn check_status(&self) -> BoxFuture<LinkStatusData>;
         fn stop(&self) -> BoxFuture<()>;

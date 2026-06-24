@@ -9,8 +9,11 @@ use crate::util::{cargo_fmt_packages, on_path, run};
 const MIT_WHEELS: &[&str] = &[
     "autd3-core",
     "autd3-pattern",
+    "autd3-pattern-holo",
     "autd3-modulation",
     "autd3-link-ethercrab",
+    "autd3-link-remote",
+    "autd3-link-twincat",
     "autd3",
 ];
 const SOEM_WHEEL: &str = "autd3-link-soem";
@@ -88,6 +91,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             develop(&dir, &venv, wheels(soem), false)?;
             let python = venv_python(&venv);
             if dir.join("tests").is_dir() {
+                pip_install(&dir, &venv, &["pytest", "numpy"])?;
                 run(&python.to_string_lossy(), ["-m", "pytest", "tests"], &dir)
             } else {
                 let imports = wheels(soem)
@@ -121,8 +125,11 @@ fn wheels(soem: bool) -> &'static [&'static str] {
         const ALL: &[&str] = &[
             "autd3-core",
             "autd3-pattern",
+            "autd3-pattern-holo",
             "autd3-modulation",
             "autd3-link-ethercrab",
+            "autd3-link-remote",
+            "autd3-link-twincat",
             "autd3",
             SOEM_WHEEL,
         ];

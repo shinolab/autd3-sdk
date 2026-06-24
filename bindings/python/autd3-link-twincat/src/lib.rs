@@ -1,11 +1,15 @@
+use std::net::IpAddr;
 use std::sync::{Arc, OnceLock};
 
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, client_opener, link_into_capsule,
 };
-use autd3_rs::{Client, Datagrams};
-use autd3_rs_core::{Error, Interface};
-use autd3_rs_link_soem::{SoemLinkOption as CoreOption, StateChecker};
+use autd3_rs::{Client, Datagrams, StateCheck};
+use autd3_rs_core::Error;
+use autd3_rs_link_twincat::{
+    AmsNetId, TwinCATLinkOption as CoreOption, TwinCATRoute as CoreRoute, TwinCATStateChecker,
+};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 use tokio::sync::Mutex;
@@ -16,7 +20,7 @@ fn link_runtime() -> &'static tokio::runtime::Runtime {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .expect("failed to build soem tokio runtime")
+            .expect("failed to build twincat tokio runtime")
     })
 }
 
@@ -24,12 +28,12 @@ fn join_err(e: tokio::task::JoinError) -> Error {
     Error::Link(e.to_string())
 }
 
-struct SoemBackend {
+struct TwinCATBackend {
     client: Arc<Client>,
-    checker: Arc<Mutex<StateChecker>>,
+    checker: Arc<Mutex<TwinCATStateChecker>>,
 }
 
-impl ClientBackend for SoemBackend {
+impl ClientBackend for TwinCATBackend {
     fn num_devices(&self) -> usize {
         self.client.num_devices()
     }
@@ -104,6 +108,7 @@ impl ClientBackend for SoemBackend {
                         .lock()
                         .await
                         .check()
+                        .await
                         .map_err(|e| Error::Link(e.to_string()))?;
                     Ok::<LinkStatusData, Error>(LinkStatusData {
                         device_states: status.devices.iter().map(ToString::to_string).collect(),
@@ -138,32 +143,83 @@ impl ClientBackend for SoemBackend {
     }
 }
 
-#[pyclass(name = "SoemLinkOption", module = "autd3_link_soem")]
-pub struct SoemLinkOption {
-    inner: CoreOption,
+#[pyclass(name = "TwinCATRoute", module = "autd3_link_twincat", from_py_object)]
+#[derive(Clone, Copy)]
+pub struct TwinCATRoute(pub(crate) CoreRoute);
+
+#[pymethods]
+impl TwinCATRoute {
+    #[classattr]
+    #[pyo3(name = "Auto")]
+    fn auto() -> Self {
+        Self(CoreRoute::Auto)
+    }
+
+    #[classattr]
+    #[pyo3(name = "Notify")]
+    fn notify() -> Self {
+        Self(CoreRoute::Notify)
+    }
+
+    #[classattr]
+    #[pyo3(name = "Ads")]
+    fn ads() -> Self {
+        Self(CoreRoute::Ads)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ServerSpec {
+    Local,
+    Remote { addr: IpAddr, ams_net_id: AmsNetId },
+}
+
+#[pyclass(name = "TwinCATLinkOption", module = "autd3_link_twincat")]
+pub struct TwinCATLinkOption {
+    server: ServerSpec,
+    route: CoreRoute,
 }
 
 #[pymethods]
-impl SoemLinkOption {
-    #[new]
-    #[pyo3(signature = (interface = None))]
-    fn new(interface: Option<String>) -> Self {
+impl TwinCATLinkOption {
+    #[staticmethod]
+    #[pyo3(signature = (route = None))]
+    fn local(route: Option<TwinCATRoute>) -> Self {
         Self {
-            inner: CoreOption {
-                interface: Interface::from(interface),
-                ..CoreOption::default()
-            },
+            server: ServerSpec::Local,
+            route: route.map_or(CoreRoute::Auto, |r| r.0),
         }
     }
 
+    #[staticmethod]
+    #[pyo3(signature = (addr, ams_net_id, route = None))]
+    fn remote(addr: &str, ams_net_id: &str, route: Option<TwinCATRoute>) -> PyResult<Self> {
+        let addr = addr
+            .parse::<IpAddr>()
+            .map_err(|e| PyValueError::new_err(format!("invalid IP address `{addr}`: {e}")))?;
+        let ams_net_id = ams_net_id.parse::<AmsNetId>().map_err(|e| {
+            PyValueError::new_err(format!("invalid AMS Net Id `{ams_net_id}`: {e}"))
+        })?;
+        Ok(Self {
+            server: ServerSpec::Remote { addr, ams_net_id },
+            route: route.map_or(CoreRoute::Auto, |r| r.0),
+        })
+    }
+
     fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
-        let option = self.inner.clone();
+        let server = self.server;
+        let route = self.route;
         let opener = client_opener(move |geometry, config| async move {
+            let option = match server {
+                ServerSpec::Local => CoreOption::local(),
+                ServerSpec::Remote { addr, ams_net_id } => CoreOption::remote(addr, ams_net_id),
+            }
+            .with_route(route);
             let (client, checker) = link_runtime()
                 .spawn(async move { Client::open_with_checker(&geometry, option, config).await })
                 .await
                 .map_err(join_err)??;
-            let backend: Box<dyn ClientBackend> = Box::new(SoemBackend {
+            let backend: Box<dyn ClientBackend> = Box::new(TwinCATBackend {
                 client: Arc::new(client),
                 checker: Arc::new(Mutex::new(checker)),
             });
@@ -174,7 +230,8 @@ impl SoemLinkOption {
 }
 
 #[pymodule]
-fn autd3_link_soem(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<SoemLinkOption>()?;
+fn autd3_link_twincat(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<TwinCATRoute>()?;
+    m.add_class::<TwinCATLinkOption>()?;
     Ok(())
 }

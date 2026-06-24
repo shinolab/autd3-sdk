@@ -31,6 +31,33 @@ impl LinkStatus {
     }
 }
 
+#[pyclass(name = "FpgaState", module = "autd3")]
+pub struct FpgaState(autd3_rs::FpgaState);
+
+#[pymethods]
+impl FpgaState {
+    fn raw(&self) -> u8 {
+        self.0.raw()
+    }
+
+    fn is_thermal_asserted(&self) -> bool {
+        self.0.is_thermal_asserted()
+    }
+
+    fn reads_enabled(&self) -> bool {
+        self.0.reads_enabled()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "FpgaState(raw=0x{:02X}, thermal_asserted={}, reads_enabled={})",
+            self.0.raw(),
+            self.0.is_thermal_asserted(),
+            self.0.reads_enabled()
+        )
+    }
+}
+
 #[pyclass(name = "Client", module = "autd3")]
 pub struct Client {
     backend: Arc<dyn ClientBackend>,
@@ -82,6 +109,24 @@ impl Client {
         let backend = Arc::clone(&self.backend);
         future_into_py(py, async move {
             backend.read_firmware_version().await.map_err(to_pyerr_gil)
+        })
+    }
+
+    fn read_fpga_state<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let backend = Arc::clone(&self.backend);
+        future_into_py(py, async move {
+            let states = backend.read_fpga_state().await.map_err(to_pyerr_gil)?;
+            Ok(states
+                .into_iter()
+                .map(|s| FpgaState(autd3_rs::FpgaState(s)))
+                .collect::<Vec<_>>())
+        })
+    }
+
+    fn read_error_detail<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let backend = Arc::clone(&self.backend);
+        future_into_py(py, async move {
+            backend.read_error_detail().await.map_err(to_pyerr_gil)
         })
     }
 
