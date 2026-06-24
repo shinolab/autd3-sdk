@@ -41,11 +41,20 @@ path = "src/bin/low_latency.rs"
 name = "holo"
 path = "src/bin/holo.rs"
 
+[[bin]]
+name = "remote_server"
+path = "src/bin/remote_server.rs"
+
+[[bin]]
+name = "remote_client"
+path = "src/bin/remote_client.rs"
+
 [dependencies]
 autd3-rs.workspace = true
 autd3-rs-pattern.workspace = true
 autd3-rs-gain-holo.workspace = true
 autd3-rs-link-ethercrab.workspace = true
+autd3-rs-link-remote.workspace = true
 autd3-rs-modulation.workspace = true
 anyhow.workspace = true
 tracing-subscriber.workspace = true

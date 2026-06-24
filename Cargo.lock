@@ -118,6 +118,7 @@ dependencies = [
  "autd3-rs",
  "autd3-rs-gain-holo",
  "autd3-rs-link-ethercrab",
+ "autd3-rs-link-remote",
  "autd3-rs-modulation",
  "autd3-rs-pattern",
  "tokio",
@@ -156,6 +157,18 @@ dependencies = [
  "pcap",
  "thiserror 2.0.18",
  "thread-priority",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "autd3-rs-link-remote"
+version = "0.1.0"
+dependencies = [
+ "autd3-rs",
+ "autd3-rs-core",
+ "autd3-rs-firmware-emulator",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
 ]
