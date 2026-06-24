@@ -1,5 +1,6 @@
 use super::Command;
 use crate::datagram::DatagramBuilder;
+use crate::mirror::FREQ_DIV_NO_LIMIT;
 use crate::operation::{ChangePatternBank, ConfigPattern, WritePatternBuffer};
 use crate::params::NUM_TRANSDUCERS;
 use crate::value::{Emission, PatternBank, TransitionMode};
@@ -32,7 +33,7 @@ impl<'a> Command<'a> for Pattern<'a> {
             })
             .push(ConfigPattern {
                 bank: self.bank,
-                divider: 1,
+                divider: FREQ_DIV_NO_LIMIT,
                 size: 1,
                 data_type: crate::value::PatternDataType::Raw,
             })
@@ -63,7 +64,10 @@ mod tests {
         );
         let cfg = datagrams.frame(1).unwrap();
         assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
-        assert_eq!(&cfg.datagrams()[0].payload[2..4], &1u16.to_le_bytes());
+        assert_eq!(
+            &cfg.datagrams()[0].payload[2..4],
+            &FREQ_DIV_NO_LIMIT.to_le_bytes()
+        );
 
         let chg = datagrams.frame(2).unwrap();
         assert_eq!(chg.datagrams()[0].cmd, Cmd::ChangePatternBank);
