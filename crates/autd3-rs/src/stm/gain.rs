@@ -6,7 +6,7 @@ use crate::operation::{
     WritePatternBuffer, WritePatternCompressed,
 };
 use crate::params::NUM_TRANSDUCERS;
-use crate::value::{Emission, PatternBank, PatternDataType, TransitionMode};
+use crate::value::{Emission, LoopBehavior, PatternBank, PatternDataType, TransitionMode};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GainStmMode {
@@ -30,6 +30,8 @@ impl GainStmMode {
 pub struct GainStmOption {
     pub bank: PatternBank,
     pub mode: GainStmMode,
+    pub loop_behavior: LoopBehavior,
+    pub transition_mode: TransitionMode,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -99,11 +101,11 @@ impl<'a> Command<'a> for GainStm<'a> {
                 divider,
                 size,
                 data_type: PatternDataType::Raw,
+                rep: self.option.loop_behavior.rep(),
             })
             .push(ChangePatternBank {
                 bank,
-                transition_mode: TransitionMode::Immediate,
-                transition_value: 0,
+                transition_mode: self.option.transition_mode,
             });
     }
 }
@@ -210,6 +212,34 @@ mod tests {
             &cfg.datagrams()[0].payload[4..8],
             &5u32.to_le_bytes(),
             "size = total index count"
+        );
+    }
+
+    #[test]
+    fn gain_stm_loop_behavior_encodes_rep() {
+        use crate::value::LoopBehavior;
+        use core::num::NonZeroU16;
+
+        let patterns = make_patterns(3);
+        let stm = GainStm::new(
+            SamplingConfig::FREQ_4K,
+            &patterns,
+            GainStmOption {
+                loop_behavior: LoopBehavior::Finite(NonZeroU16::new(5).unwrap()),
+                ..Default::default()
+            },
+        );
+
+        let mut b = DatagramBuilder::new(1);
+        b.push(stm);
+        let datagrams = b.build().unwrap();
+
+        let cfg = datagrams.frame(3).unwrap();
+        assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
+        assert_eq!(
+            &cfg.datagrams()[0].payload[12..14],
+            &4u16.to_le_bytes(),
+            "rep = loop_count - 1"
         );
     }
 

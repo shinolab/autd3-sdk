@@ -3,12 +3,14 @@ use crate::datagram::DatagramBuilder;
 use crate::mirror::FREQ_DIV_NO_LIMIT;
 use crate::operation::{ChangePatternBank, ConfigPattern, WritePatternBuffer};
 use crate::params::NUM_TRANSDUCERS;
-use crate::value::{Emission, PatternBank, TransitionMode};
+use crate::value::{Emission, LoopBehavior, PatternBank, TransitionMode};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Pattern<'a> {
     pub bank: PatternBank,
     pub emissions: &'a [[Emission; NUM_TRANSDUCERS]],
+    pub loop_behavior: LoopBehavior,
+    pub transition_mode: TransitionMode,
 }
 
 impl<'a> Pattern<'a> {
@@ -19,7 +21,12 @@ impl<'a> Pattern<'a> {
 
     #[must_use]
     pub fn with_bank(bank: PatternBank, emissions: &'a [[Emission; NUM_TRANSDUCERS]]) -> Self {
-        Self { bank, emissions }
+        Self {
+            bank,
+            emissions,
+            loop_behavior: LoopBehavior::Infinite,
+            transition_mode: TransitionMode::Immediate,
+        }
     }
 }
 
@@ -36,11 +43,11 @@ impl<'a> Command<'a> for Pattern<'a> {
                 divider: FREQ_DIV_NO_LIMIT,
                 size: 1,
                 data_type: crate::value::PatternDataType::Raw,
+                rep: self.loop_behavior.rep(),
             })
             .push(ChangePatternBank {
                 bank: self.bank,
-                transition_mode: TransitionMode::Immediate,
-                transition_value: 0,
+                transition_mode: self.transition_mode,
             });
     }
 }

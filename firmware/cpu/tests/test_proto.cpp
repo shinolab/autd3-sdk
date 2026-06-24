@@ -141,17 +141,18 @@ Frame make_write_mod_buffer(uint8_t seq, uint8_t bank, uint32_t offset, const st
   return f;
 }
 
-Frame make_config_mod(uint8_t seq, uint8_t bank, uint16_t divider, uint32_t size) {
+Frame make_config_mod(uint8_t seq, uint8_t bank, uint16_t divider, uint32_t size, uint16_t rep = REP_INFINITE) {
   Frame f(seq, CMD_CONFIG_MOD);
   uint8_t* p = f.payload();
   p[MOD_CONFIG_OFFSET_BANK] = bank;
   put_u16_le(p + MOD_CONFIG_OFFSET_DIVIDER, divider);
   put_u32_le(p + MOD_CONFIG_OFFSET_SIZE, size);
+  put_u16_le(p + MOD_CONFIG_OFFSET_REP, rep);
   return f;
 }
 
 Frame make_config_pattern(uint8_t seq, uint8_t bank, uint8_t type, uint16_t divider, uint32_t size, uint8_t num_foci,
-                          uint16_t sound_speed) {
+                          uint16_t sound_speed, uint16_t rep = REP_INFINITE) {
   Frame f(seq, CMD_CONFIG_PATTERN);
   uint8_t* p = f.payload();
   p[EM_CONFIG_OFFSET_BANK] = bank;
@@ -160,6 +161,7 @@ Frame make_config_pattern(uint8_t seq, uint8_t bank, uint8_t type, uint16_t divi
   put_u32_le(p + EM_CONFIG_OFFSET_SIZE, size);
   p[EM_CONFIG_OFFSET_NUM_FOCI] = num_foci;
   put_u16_le(p + EM_CONFIG_OFFSET_SOUND_SPEED, sound_speed);
+  put_u16_le(p + EM_CONFIG_OFFSET_REP, rep);
   return f;
 }
 
@@ -794,6 +796,15 @@ TEST(Proto, ConfigModWritesPlaybackRegistersAndLatches) {
   EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_MOD_SET, 0) << "the FPGA clears the latch bit";
 }
 
+TEST(Proto, ConfigModWritesFiniteLoopRep) {
+  reset_all();
+
+  make_config_mod(0, 0, 10, 4000, 9).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REP0), 9) << "REP = loop_count - 1";
+}
+
 TEST(Proto, ConfigModRejectsInvalidFieldsAndLeavesRegistersUntouched) {
   reset_all();
   make_config_mod(0, 1, 2, 100).deliver();
@@ -851,6 +862,15 @@ TEST(Proto, ConfigPatternFociWritesRegistersAndLatches) {
   EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REP0 + 1), REP_INFINITE);
   EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 0) << "config must not switch the playback bank";
   EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_PATTERN_SET, 0);
+}
+
+TEST(Proto, ConfigPatternWritesFiniteLoopRep) {
+  reset_all();
+
+  make_config_pattern(0, 0, EMISSION_TYPE_RAW, 2, EMISSION_MAX_INDICES, 0, 0, 4).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REP0), 4) << "REP = loop_count - 1";
 }
 
 TEST(Proto, ConfigPatternRejectsInvalidRawFields) {

@@ -443,6 +443,7 @@ mod tests {
                 },
                 divider: 1,
                 size: 1,
+                rep: 0xFFFF,
             })
         });
         let datagrams = b.build().unwrap();
@@ -462,6 +463,7 @@ mod tests {
                 bank: ModulationBank::B0,
                 divider: 1,
                 size: 1,
+                rep: 0xFFFF,
             })
         });
         let datagrams = b.build().unwrap();
@@ -501,6 +503,7 @@ mod tests {
                     bank: ModulationBank::B0,
                     divider: 1,
                     size: 1,
+                    rep: 0xFFFF,
                 }
                 .boxed()
             })
@@ -522,6 +525,7 @@ mod tests {
                 bank: ModulationBank::B0,
                 divider: 1,
                 size: 1,
+                rep: 0xFFFF,
             })
         });
         b.push_each(|device| {
@@ -529,6 +533,7 @@ mod tests {
                 bank: ModulationBank::B1,
                 divider: 1,
                 size: 1,
+                rep: 0xFFFF,
             })
         });
         let datagrams = b.build().unwrap();
@@ -547,6 +552,7 @@ mod tests {
                 bank: ModulationBank::B0,
                 divider: 1,
                 size: 1,
+                rep: 0xFFFF,
             })
         });
         b.push_each(|_| {
@@ -554,6 +560,7 @@ mod tests {
                 bank: ModulationBank::B1,
                 divider: 1,
                 size: 1,
+                rep: 0xFFFF,
             })
         });
         let datagrams = b.build().unwrap();
@@ -571,6 +578,7 @@ mod tests {
                 bank: ModulationBank::B0,
                 divider: 1,
                 size: 1,
+                rep: 0xFFFF,
             })
         });
         b.push(ConfigPattern {
@@ -578,12 +586,14 @@ mod tests {
             divider: 1,
             size: 1,
             data_type: PatternDataType::Raw,
+            rep: 0xFFFF,
         });
         b.push_each(|device| {
             (device == 1).then_some(ConfigModulation {
                 bank: ModulationBank::B1,
                 divider: 1,
                 size: 1,
+                rep: 0xFFFF,
             })
         });
         let datagrams = b.build().unwrap();
@@ -608,6 +618,7 @@ mod tests {
             divider: 1,
             size: 1,
             data_type: PatternDataType::Raw,
+            rep: 0xFFFF,
         };
         let mut b = DatagramBuilder::new(4);
         b.push(op);
@@ -651,6 +662,7 @@ mod tests {
             divider: 1,
             size: 1,
             data_type: PatternDataType::Raw,
+            rep: 0xFFFF,
         };
         let mut b = DatagramBuilder::new(2);
         b.push(we).push(ce);
@@ -679,6 +691,7 @@ mod tests {
             divider: 1,
             size: 1,
             data_type: PatternDataType::Raw,
+            rep: 0xFFFF,
         };
         let mut b = DatagramBuilder::new(1);
         b.push(op);

@@ -28,6 +28,7 @@ fn modulation_buffer_and_index_follow_time() {
     let mut config = vec![bank, 0];
     config.extend_from_slice(&divider.to_le_bytes());
     config.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+    config.extend_from_slice(&0xFFFFu16.to_le_bytes());
 
     let mut change = vec![bank, 0x00];
     change.extend_from_slice(&0u64.to_le_bytes());
@@ -64,4 +65,45 @@ fn modulation_buffer_and_index_follow_time() {
         assert_eq!(i % 4, device.fpga().current_mod_idx());
         assert_eq!(expected, device.fpga().modulation());
     }
+}
+
+#[test]
+fn modulation_finite_loop_stops_after_rep() {
+    let samples: [u8; 4] = [10, 20, 30, 40];
+    let bank = 1u8;
+    let divider = 1u16;
+    let rep = 1u16; 
+
+    let mut write = vec![bank, 0];
+    write.extend_from_slice(&0u32.to_le_bytes());
+    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
+    write.extend_from_slice(&samples);
+
+    let mut config = vec![bank, 0];
+    config.extend_from_slice(&divider.to_le_bytes());
+    config.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+    config.extend_from_slice(&rep.to_le_bytes());
+
+    let mut change = vec![bank, 0x00];
+    change.extend_from_slice(&0u64.to_le_bytes());
+
+    let mut device = Device::new(NUM_TRANSDUCERS);
+    device.send(&frame(0, Cmd::Reset, &[]));
+    device.send(&frame(0, Cmd::WriteModulationBuffer, &write));
+    device.send(&frame(1, Cmd::ConfigModulation, &config));
+    device.send(&frame(2, Cmd::ChangeModulationBank, &change));
+
+    let mut indices = Vec::new();
+    for i in 0..24u64 {
+        device
+            .fpga_mut()
+            .update_with_sys_time(i * ULTRASOUND_PERIOD_NS);
+        indices.push(device.fpga().current_mod_idx());
+    }
+
+    assert_eq!(*indices.last().unwrap(), samples.len() - 1, "{indices:?}");
+    assert!(
+        indices.windows(2).rev().take(4).all(|w| w[0] == w[1]),
+        "playback must be stopped (index frozen): {indices:?}"
+    );
 }

@@ -5,7 +5,7 @@ use crate::Velocity;
 use crate::command::Command;
 use crate::datagram::DatagramBuilder;
 use crate::operation::{ChangePatternBank, ConfigPattern, WriteFociBuffer};
-use crate::value::{Focus, PatternBank, PatternDataType, TransitionMode};
+use crate::value::{Focus, LoopBehavior, PatternBank, PatternDataType, TransitionMode};
 
 const FOCUS_UNIT_MM: f32 = 0.025;
 
@@ -13,6 +13,8 @@ const FOCUS_UNIT_MM: f32 = 0.025;
 pub struct FociStmOption {
     pub bank: PatternBank,
     pub sound_speed: Velocity,
+    pub loop_behavior: LoopBehavior,
+    pub transition_mode: TransitionMode,
 }
 
 impl Default for FociStmOption {
@@ -20,6 +22,8 @@ impl Default for FociStmOption {
         Self {
             bank: PatternBank::B0,
             sound_speed: Velocity::from_m_s(340.0),
+            loop_behavior: LoopBehavior::Infinite,
+            transition_mode: TransitionMode::Immediate,
         }
     }
 }
@@ -95,11 +99,11 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
                     num_foci,
                     sound_speed: self.option.sound_speed_value(),
                 },
+                rep: self.option.loop_behavior.rep(),
             })
             .push(ChangePatternBank {
                 bank,
-                transition_mode: TransitionMode::Immediate,
-                transition_value: 0,
+                transition_mode: self.option.transition_mode,
             });
     }
 }
@@ -253,6 +257,63 @@ mod tests {
                 "bank B1"
             );
         }
+    }
+
+    #[test]
+    fn foci_stm_loop_behavior_encodes_rep() {
+        use crate::value::LoopBehavior;
+
+        let points = [ControlPoints::from(Point3::new(0.0, 0.0, 1.0))];
+
+        let stm = FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default());
+        let mut b = DatagramBuilder::new(1);
+        b.push(stm);
+        let cfg = b.build().unwrap();
+        assert_eq!(
+            &cfg.frame(1).unwrap().datagrams()[0].payload[12..14],
+            &0xFFFFu16.to_le_bytes(),
+            "default = infinite"
+        );
+
+        let stm = FociStm::new(
+            SamplingConfig::FREQ_4K,
+            &points,
+            FociStmOption {
+                loop_behavior: LoopBehavior::ONCE,
+                ..Default::default()
+            },
+        );
+        let mut b = DatagramBuilder::new(1);
+        b.push(stm);
+        let cfg = b.build().unwrap();
+        assert_eq!(
+            &cfg.frame(1).unwrap().datagrams()[0].payload[12..14],
+            &0u16.to_le_bytes(),
+            "ONCE = rep 0"
+        );
+    }
+
+    #[test]
+    fn foci_stm_transition_mode_encodes_into_change_bank() {
+        use crate::value::{GpioIn, TransitionMode};
+
+        let points = [ControlPoints::from(Point3::new(0.0, 0.0, 1.0))];
+        let stm = FociStm::new(
+            SamplingConfig::FREQ_4K,
+            &points,
+            FociStmOption {
+                transition_mode: TransitionMode::Gpio(GpioIn::I1),
+                ..Default::default()
+            },
+        );
+        let mut b = DatagramBuilder::new(1);
+        b.push(stm);
+        let datagrams = b.build().unwrap();
+
+        let chg = datagrams.frame(2).unwrap();
+        assert_eq!(chg.datagrams()[0].cmd, Cmd::ChangePatternBank);
+        assert_eq!(chg.datagrams()[0].payload[1], 0x02, "GPIO");
+        assert_eq!(&chg.datagrams()[0].payload[2..10], &1u64.to_le_bytes());
     }
 
     #[test]

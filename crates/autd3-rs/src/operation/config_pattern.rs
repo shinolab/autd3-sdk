@@ -12,6 +12,7 @@ pub struct ConfigPattern {
     pub divider: u16,
     pub size: u32,
     pub data_type: PatternDataType,
+    pub rep: u16,
 }
 
 impl Operation for ConfigPattern {
@@ -74,6 +75,7 @@ impl Operation for ConfigPattern {
         out[4..8].copy_from_slice(&self.size.to_le_bytes());
         out[8] = num_foci;
         out[10..12].copy_from_slice(&sound_speed.to_le_bytes());
+        out[12..14].copy_from_slice(&self.rep.to_le_bytes());
         Ok(Cmd::ConfigPattern)
     }
 
@@ -105,6 +107,7 @@ mod tests {
             divider: 2,
             size: 1024,
             data_type: PatternDataType::Raw,
+            rep: 7,
         })
         .unwrap();
 
@@ -115,6 +118,7 @@ mod tests {
         assert_eq!(&payload[4..8], &1024u32.to_le_bytes());
         assert_eq!(payload[8], 0);
         assert_eq!(&payload[10..12], &0u16.to_le_bytes());
+        assert_eq!(&payload[12..14], &7u16.to_le_bytes());
     }
 
     #[test]
@@ -127,6 +131,7 @@ mod tests {
                 num_foci: 8,
                 sound_speed: 340,
             },
+            rep: 0xFFFF,
         })
         .unwrap();
 
@@ -135,6 +140,7 @@ mod tests {
         assert_eq!(&payload[4..8], &8192u32.to_le_bytes());
         assert_eq!(payload[8], 8);
         assert_eq!(&payload[10..12], &340u16.to_le_bytes());
+        assert_eq!(&payload[12..14], &0xFFFFu16.to_le_bytes(), "infinite rep");
     }
 
     #[test]
@@ -144,6 +150,7 @@ mod tests {
             divider: 1,
             size,
             data_type: PatternDataType::Raw,
+            rep: 0xFFFF,
         };
         assert!(matches!(encode(raw(0)), Err(Error::InvalidPayload(_))));
         assert!(matches!(
@@ -159,6 +166,7 @@ mod tests {
                 num_foci,
                 sound_speed,
             },
+            rep: 0xFFFF,
         };
         assert!(matches!(
             encode(foci(1, 0, 340)),

@@ -8,7 +8,9 @@ use anyhow::{Context, Result};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::operation::{ConfigPattern, WritePatternBuffer};
 use autd3_rs::params::NUM_TRANSDUCERS;
-use autd3_rs::value::{Emission, Intensity, PatternBank, PatternDataType, Phase, SamplingConfig};
+use autd3_rs::value::{
+    Emission, Intensity, LoopBehavior, PatternBank, PatternDataType, Phase, SamplingConfig,
+};
 use autd3_rs::{
     Client, ClientConfig, Datagrams, Error as ClientError, Link, ResponseFuture, StateCheck,
 };
@@ -146,6 +148,7 @@ async fn send_config_pattern_once(client: &Client) -> Result<()> {
         divider: SamplingConfig::FREQ_4K.divide().unwrap_or(1),
         size: 1,
         data_type: PatternDataType::Raw,
+        rep: LoopBehavior::Infinite.rep(),
     });
     let datagrams = builder.build()?;
     for frame in &datagrams {
