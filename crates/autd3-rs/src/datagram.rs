@@ -122,6 +122,29 @@ impl Datagrams {
         }
         Ok(())
     }
+
+    fn push_each_step(
+        &mut self,
+        devices: &[Vec<Box<dyn Operation + '_>>],
+        num_devices: usize,
+    ) -> Result<(), Error> {
+        let slot_frames = each_slot_frames(devices);
+        let total: usize = slot_frames.iter().sum();
+        for frame in 0..total {
+            let start = self.payloads.len();
+            for device in 0..num_devices {
+                let mut payload = [0u8; PAYLOAD_BYTES];
+                let cmd = each_encode(devices, &slot_frames, device, frame, &mut payload)?;
+                self.payloads.push(Datagram { cmd, payload });
+            }
+            self.frames.push(FrameDesc {
+                dist: Distribution::PerDevice,
+                start,
+                len: num_devices,
+            });
+        }
+        Ok(())
+    }
 }
 
 pub struct FrameIter<'a> {
@@ -148,9 +171,16 @@ impl<'a> IntoIterator for &'a Datagrams {
     }
 }
 
+enum Step<'a> {
+    Op(Box<dyn Operation + 'a>),
+    Each {
+        devices: Vec<Vec<Box<dyn Operation + 'a>>>,
+    },
+}
+
 pub struct DatagramBuilder<'a> {
     num_devices: usize,
-    ops: Vec<Box<dyn Operation + 'a>>,
+    ops: Vec<Step<'a>>,
     mirror: Option<MirrorHandle>,
 }
 
@@ -184,40 +214,58 @@ impl<'a> DatagramBuilder<'a> {
         F: FnMut(usize) -> Option<C>,
     {
         let num_devices = self.num_devices;
-        let mut devices: Vec<Vec<Box<dyn Operation + 'a>>> = Vec::with_capacity(num_devices);
+        let mut new_devices: Vec<Vec<Box<dyn Operation + 'a>>> = Vec::with_capacity(num_devices);
         for device in 0..num_devices {
             match assign(device) {
                 Some(cmd) => {
                     let mut sub = DatagramBuilder::new(num_devices);
                     cmd.expand(&mut sub);
-                    devices.push(sub.take_ops());
+                    new_devices.push(sub.take_ops());
                 }
-                None => devices.push(Vec::new()),
+                None => new_devices.push(Vec::new()),
             }
         }
 
-        let num_slots = devices.iter().map(Vec::len).max().unwrap_or(0);
-        let mut slot_frames = vec![0usize; num_slots];
-        for ops in &devices {
-            for (slot, op) in ops.iter().enumerate() {
-                slot_frames[slot] = slot_frames[slot].max(op.frames());
+        let fuse = matches!(
+            self.ops.last(),
+            Some(Step::Each { devices }) if (0..num_devices)
+                .all(|d| devices[d].is_empty() || new_devices[d].is_empty())
+        );
+        if fuse {
+            if let Some(Step::Each { devices }) = self.ops.last_mut() {
+                for (device, ops) in new_devices.into_iter().enumerate() {
+                    if !ops.is_empty() {
+                        devices[device] = ops;
+                    }
+                }
             }
+        } else {
+            self.ops.push(Step::Each {
+                devices: new_devices,
+            });
         }
-
-        self.push_op(Each {
-            devices,
-            slot_frames,
-        });
         self
     }
 
     pub(crate) fn push_op<O: Operation + 'a>(&mut self, op: O) -> &mut Self {
-        self.ops.push(Box::new(op));
+        self.ops.push(Step::Op(Box::new(op)));
         self
     }
 
     pub(crate) fn take_ops(self) -> Vec<Box<dyn Operation + 'a>> {
         self.ops
+            .into_iter()
+            .map(|step| match step {
+                Step::Op(op) => op,
+                Step::Each { devices } => {
+                    let slot_frames = each_slot_frames(&devices);
+                    Box::new(EachOwned {
+                        devices,
+                        slot_frames,
+                    }) as Box<dyn Operation + 'a>
+                }
+            })
+            .collect()
     }
 
     pub fn build(&self) -> Result<Datagrams, Error> {
@@ -240,11 +288,23 @@ impl<'a> DatagramBuilder<'a> {
             _ => None,
         };
 
-        for op in &self.ops {
-            out.push_op(op.as_ref(), self.num_devices)?;
-            if let Some(work) = work.as_mut() {
-                for (device, state) in work.iter_mut().enumerate() {
-                    op.reflect(device, state)?;
+        for step in &self.ops {
+            match step {
+                Step::Op(op) => {
+                    out.push_op(op.as_ref(), self.num_devices)?;
+                    if let Some(work) = work.as_mut() {
+                        for (device, state) in work.iter_mut().enumerate() {
+                            op.reflect(device, state)?;
+                        }
+                    }
+                }
+                Step::Each { devices } => {
+                    out.push_each_step(devices, self.num_devices)?;
+                    if let Some(work) = work.as_mut() {
+                        for (device, state) in work.iter_mut().enumerate() {
+                            each_reflect(devices, device, state)?;
+                        }
+                    }
                 }
             }
         }
@@ -256,30 +316,65 @@ impl<'a> DatagramBuilder<'a> {
     }
 }
 
-struct Each<'a> {
+fn each_slot_frames(devices: &[Vec<Box<dyn Operation + '_>>]) -> Vec<usize> {
+    let num_slots = devices.iter().map(Vec::len).max().unwrap_or(0);
+    let mut slot_frames = vec![0usize; num_slots];
+    for ops in devices {
+        for (slot, op) in ops.iter().enumerate() {
+            slot_frames[slot] = slot_frames[slot].max(op.frames());
+        }
+    }
+    slot_frames
+}
+
+fn each_locate(slot_frames: &[usize], frame: usize) -> Option<(usize, usize)> {
+    let mut remaining = frame;
+    for (slot, &frames) in slot_frames.iter().enumerate() {
+        if remaining < frames {
+            return Some((slot, remaining));
+        }
+        remaining -= frames;
+    }
+    None
+}
+
+fn each_encode(
+    devices: &[Vec<Box<dyn Operation + '_>>],
+    slot_frames: &[usize],
+    device: usize,
+    frame: usize,
+    out: &mut [u8; PAYLOAD_BYTES],
+) -> Result<Cmd, Error> {
+    if let Some((slot, subframe)) = each_locate(slot_frames, frame) {
+        if let Some(op) = devices.get(device).and_then(|ops| ops.get(slot))
+            && subframe < op.frames()
+        {
+            return op.encode(device, subframe, out);
+        }
+        return Nop.encode(device, subframe, out);
+    }
+    Nop.encode(device, frame, out)
+}
+
+fn each_reflect(
+    devices: &[Vec<Box<dyn Operation + '_>>],
+    device: usize,
+    state: &mut FirmwareState,
+) -> Result<(), Error> {
+    if let Some(ops) = devices.get(device) {
+        for op in ops {
+            op.reflect(device, state)?;
+        }
+    }
+    Ok(())
+}
+
+struct EachOwned<'a> {
     devices: Vec<Vec<Box<dyn Operation + 'a>>>,
     slot_frames: Vec<usize>,
 }
 
-impl<'a> Each<'a> {
-    fn locate(&self, frame: usize) -> Option<(usize, usize)> {
-        let mut remaining = frame;
-        for (slot, &frames) in self.slot_frames.iter().enumerate() {
-            if remaining < frames {
-                return Some((slot, remaining));
-            }
-            remaining -= frames;
-        }
-        None
-    }
-
-    fn op_at(&self, device: usize, slot: usize, subframe: usize) -> Option<&(dyn Operation + 'a)> {
-        let op = self.devices.get(device)?.get(slot)?;
-        (subframe < op.frames()).then(|| op.as_ref())
-    }
-}
-
-impl Operation for Each<'_> {
+impl Operation for EachOwned<'_> {
     fn frames(&self) -> usize {
         self.slot_frames.iter().sum()
     }
@@ -294,22 +389,11 @@ impl Operation for Each<'_> {
         frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        match self.locate(frame) {
-            Some((slot, subframe)) => match self.op_at(device, slot, subframe) {
-                Some(op) => op.encode(device, subframe, out),
-                None => Nop.encode(device, subframe, out),
-            },
-            None => Nop.encode(device, frame, out),
-        }
+        each_encode(&self.devices, &self.slot_frames, device, frame, out)
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        if let Some(ops) = self.devices.get(device) {
-            for op in ops {
-                op.reflect(device, state)?;
-            }
-        }
-        Ok(())
+        each_reflect(&self.devices, device, state)
     }
 }
 
@@ -428,6 +512,91 @@ mod tests {
         assert_eq!(cmd_at(&datagrams, 0, 1), Cmd::ConfigModulation);
         assert_eq!(cmd_at(&datagrams, 1, 1), Cmd::Nop);
         assert_eq!(cmd_at(&datagrams, 2, 1), Cmd::Nop);
+    }
+
+    #[test]
+    fn adjacent_disjoint_push_each_fuse_into_shared_frames() {
+        let mut b = DatagramBuilder::new(2);
+        b.push_each(|device| {
+            (device == 0).then_some(ConfigModulation {
+                bank: ModulationBank::B0,
+                divider: 1,
+                size: 1,
+            })
+        });
+        b.push_each(|device| {
+            (device == 1).then_some(ConfigModulation {
+                bank: ModulationBank::B1,
+                divider: 1,
+                size: 1,
+            })
+        });
+        let datagrams = b.build().unwrap();
+
+        assert_eq!(datagrams.len(), 1, "disjoint groups fuse into one frame");
+        let frame = datagrams.frame(0).unwrap();
+        assert_eq!(frame.datagrams()[0].payload[0], 0, "device 0 -> B0");
+        assert_eq!(frame.datagrams()[1].payload[0], 1, "device 1 -> B1");
+    }
+
+    #[test]
+    fn adjacent_overlapping_push_each_stay_sequential() {
+        let mut b = DatagramBuilder::new(2);
+        b.push_each(|_| {
+            Some(ConfigModulation {
+                bank: ModulationBank::B0,
+                divider: 1,
+                size: 1,
+            })
+        });
+        b.push_each(|_| {
+            Some(ConfigModulation {
+                bank: ModulationBank::B1,
+                divider: 1,
+                size: 1,
+            })
+        });
+        let datagrams = b.build().unwrap();
+
+        assert_eq!(datagrams.len(), 2, "overlapping coverage stays sequential");
+        assert_eq!(datagrams.frame(0).unwrap().datagrams()[0].payload[0], 0);
+        assert_eq!(datagrams.frame(1).unwrap().datagrams()[0].payload[0], 1);
+    }
+
+    #[test]
+    fn broadcast_push_is_a_fuse_barrier() {
+        let mut b = DatagramBuilder::new(2);
+        b.push_each(|device| {
+            (device == 0).then_some(ConfigModulation {
+                bank: ModulationBank::B0,
+                divider: 1,
+                size: 1,
+            })
+        });
+        b.push(ConfigPattern {
+            bank: PatternBank::B0,
+            divider: 1,
+            size: 1,
+            data_type: PatternDataType::Raw,
+        });
+        b.push_each(|device| {
+            (device == 1).then_some(ConfigModulation {
+                bank: ModulationBank::B1,
+                divider: 1,
+                size: 1,
+            })
+        });
+        let datagrams = b.build().unwrap();
+
+        assert_eq!(
+            datagrams.len(),
+            3,
+            "broadcast between steps prevents fusion"
+        );
+        assert_eq!(
+            datagrams.frame(1).unwrap().distribution(),
+            Distribution::Broadcast
+        );
     }
     use crate::params::NUM_TRANSDUCERS;
     use crate::value::{Emission, PatternBank, PatternDataType};
