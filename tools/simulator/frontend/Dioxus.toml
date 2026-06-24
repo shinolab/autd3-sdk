@@ -1,0 +1,8 @@
+[application]
+name = "autd3-simulator"
+
+[web.app]
+title = "AUTD3 Simulator"
+
+[web.watcher]
+watch_path = ["src", "assets"]
