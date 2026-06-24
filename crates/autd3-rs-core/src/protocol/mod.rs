@@ -1,9 +1,11 @@
 mod cmd;
+mod error_detail;
 mod rx_frame;
 mod seq;
 mod tx_frame;
 
 pub use cmd::Cmd;
+pub use error_detail::{DeviceErrorCode, describe_device_error};
 pub use rx_frame::RxFrame;
 pub use seq::Seq;
 pub use tx_frame::TxFrame;

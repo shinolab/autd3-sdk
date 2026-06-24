@@ -20,5 +20,6 @@ pub use link::{
 };
 pub use mirror::{FirmwareState, SilencerAxis, SilencerGuardState, SilencerViolation};
 pub use protocol::{
-    Cmd, MAX_IN_FLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame,
+    Cmd, DeviceErrorCode, MAX_IN_FLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, RxFrame, Seq,
+    TX_FRAME_BYTES, TxFrame, describe_device_error,
 };
