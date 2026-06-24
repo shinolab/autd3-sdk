@@ -47,6 +47,29 @@ impl ClientBackend for EtherCrabBackend {
         })
     }
 
+    fn read_fpga_state(&self) -> BoxFuture<Vec<u8>> {
+        let client = Arc::clone(&self.client);
+        Box::pin(async move {
+            link_runtime()
+                .spawn(async move {
+                    let states = client.read_fpga_state().await?;
+                    Ok::<Vec<u8>, Error>(states.into_iter().map(autd3_rs::FpgaState::raw).collect())
+                })
+                .await
+                .map_err(join_err)?
+        })
+    }
+
+    fn read_error_detail(&self) -> BoxFuture<Vec<u8>> {
+        let client = Arc::clone(&self.client);
+        Box::pin(async move {
+            link_runtime()
+                .spawn(async move { client.read_error_detail().await })
+                .await
+                .map_err(join_err)?
+        })
+    }
+
     fn send_checked(&self, datagrams: Arc<Datagrams>, frame: Option<usize>) -> BoxFuture<()> {
         let client = Arc::clone(&self.client);
         Box::pin(async move {

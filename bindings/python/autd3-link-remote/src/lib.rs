@@ -1,11 +1,13 @@
+use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, client_opener, link_into_capsule,
 };
-use autd3_rs::{Client, Datagrams};
-use autd3_rs_core::{Error, Interface};
-use autd3_rs_link_soem::{SoemLinkOption as CoreOption, StateChecker};
+use autd3_rs::{Client, ConstStateChecker, Datagrams, StateCheck};
+use autd3_rs_core::Error;
+use autd3_rs_link_remote::RemoteLinkOption as CoreOption;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 use tokio::sync::Mutex;
@@ -16,7 +18,7 @@ fn link_runtime() -> &'static tokio::runtime::Runtime {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .expect("failed to build soem tokio runtime")
+            .expect("failed to build remote tokio runtime")
     })
 }
 
@@ -24,12 +26,12 @@ fn join_err(e: tokio::task::JoinError) -> Error {
     Error::Link(e.to_string())
 }
 
-struct SoemBackend {
+struct RemoteBackend {
     client: Arc<Client>,
-    checker: Arc<Mutex<StateChecker>>,
+    checker: Arc<Mutex<ConstStateChecker>>,
 }
 
-impl ClientBackend for SoemBackend {
+impl ClientBackend for RemoteBackend {
     fn num_devices(&self) -> usize {
         self.client.num_devices()
     }
@@ -104,6 +106,7 @@ impl ClientBackend for SoemBackend {
                         .lock()
                         .await
                         .check()
+                        .await
                         .map_err(|e| Error::Link(e.to_string()))?;
                     Ok::<LinkStatusData, Error>(LinkStatusData {
                         device_states: status.devices.iter().map(ToString::to_string).collect(),
@@ -138,32 +141,29 @@ impl ClientBackend for SoemBackend {
     }
 }
 
-#[pyclass(name = "SoemLinkOption", module = "autd3_link_soem")]
-pub struct SoemLinkOption {
-    inner: CoreOption,
+#[pyclass(name = "RemoteLinkOption", module = "autd3_link_remote")]
+pub struct RemoteLinkOption {
+    addr: SocketAddr,
 }
 
 #[pymethods]
-impl SoemLinkOption {
+impl RemoteLinkOption {
     #[new]
-    #[pyo3(signature = (interface = None))]
-    fn new(interface: Option<String>) -> Self {
-        Self {
-            inner: CoreOption {
-                interface: Interface::from(interface),
-                ..CoreOption::default()
-            },
-        }
+    fn new(addr: &str) -> PyResult<Self> {
+        let addr = addr
+            .parse::<SocketAddr>()
+            .map_err(|e| PyValueError::new_err(format!("invalid socket address `{addr}`: {e}")))?;
+        Ok(Self { addr })
     }
 
     fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
-        let option = self.inner.clone();
+        let option = CoreOption::new(self.addr);
         let opener = client_opener(move |geometry, config| async move {
             let (client, checker) = link_runtime()
                 .spawn(async move { Client::open_with_checker(&geometry, option, config).await })
                 .await
                 .map_err(join_err)??;
-            let backend: Box<dyn ClientBackend> = Box::new(SoemBackend {
+            let backend: Box<dyn ClientBackend> = Box::new(RemoteBackend {
                 client: Arc::new(client),
                 checker: Arc::new(Mutex::new(checker)),
             });
@@ -174,7 +174,7 @@ impl SoemLinkOption {
 }
 
 #[pymodule]
-fn autd3_link_soem(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<SoemLinkOption>()?;
+fn autd3_link_remote(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<RemoteLinkOption>()?;
     Ok(())
 }

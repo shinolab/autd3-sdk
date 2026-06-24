@@ -58,7 +58,7 @@ async def main() -> None:
     for i in range(TOTAL_POINTS):
         theta = 2.0 * math.pi * i / TOTAL_POINTS
         target = center + np.array([radius * math.cos(theta), radius * math.sin(theta), 150.0])
-        pattern.focus(geometry, target, wavelength, autd3.Intensity.MAX, patterns)
+        pattern.focus(geometry, target, wavelength, pattern.FocusOption(), patterns)
         datagrams.append(write_focus(client, patterns))
 
     print(f"sweeping a focus through {TOTAL_POINTS} positions, twice")

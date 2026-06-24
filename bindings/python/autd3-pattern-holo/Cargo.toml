@@ -1,0 +1,22 @@
+[package]
+name = "autd3-python-pattern-holo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Python bindings for autd3-rs-pattern-holo (naive, gs, gspat, greedy)."
+
+[lib]
+name = "autd3_pattern_holo"
+crate-type = ["cdylib"]
+
+[dependencies]
+autd3-rs-pattern-holo.workspace = true
+autd3-rs-core.workspace = true
+autd3-python-capsule.workspace = true
+pyo3.workspace = true
+
+[lints]
+workspace = true
