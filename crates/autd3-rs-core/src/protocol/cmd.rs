@@ -10,6 +10,7 @@ pub enum Cmd {
     WritePatternBuffer = 0x10,
     ConfigPattern = 0x11,
     ChangePatternBank = 0x12,
+    WritePatternCompressed = 0x13,
 
     WriteModulationBuffer = 0x20,
     ConfigModulation = 0x21,
@@ -45,6 +46,7 @@ impl TryFrom<u8> for Cmd {
             0x10 => Ok(Self::WritePatternBuffer),
             0x11 => Ok(Self::ConfigPattern),
             0x12 => Ok(Self::ChangePatternBank),
+            0x13 => Ok(Self::WritePatternCompressed),
             0x20 => Ok(Self::WriteModulationBuffer),
             0x21 => Ok(Self::ConfigModulation),
             0x22 => Ok(Self::ChangeModulationBank),
@@ -74,6 +76,7 @@ mod tests {
             Cmd::WritePatternBuffer,
             Cmd::ConfigPattern,
             Cmd::ChangePatternBank,
+            Cmd::WritePatternCompressed,
             Cmd::WriteModulationBuffer,
             Cmd::ConfigModulation,
             Cmd::ChangeModulationBank,

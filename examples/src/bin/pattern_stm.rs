@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::{Client, ClientConfig, GainStm, GainStmOption, Silencer};
+use autd3_rs::{Client, ClientConfig, GainStm, GainStmMode, GainStmOption, Silencer};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 
 const NUM_POINTS: usize = 200;
@@ -58,7 +58,10 @@ async fn main() -> Result<()> {
     builder.push(Silencer::default()).push(GainStm::new(
         1.0 * Hz,
         &patterns,
-        GainStmOption::default(),
+        GainStmOption {
+            mode: GainStmMode::PhaseFull,
+            ..Default::default()
+        },
     ));
     let datagrams = builder.build()?;
     let mut pending = Vec::with_capacity(datagrams.len());

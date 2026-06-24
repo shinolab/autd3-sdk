@@ -132,6 +132,7 @@ fn slave_cycle(
         Cmd::ReadCpuFwVersionPatch => slave.fw_version_patch,
         Cmd::ReadErrorDetail => slave.error_detail,
         Cmd::WritePatternBuffer
+        | Cmd::WritePatternCompressed
         | Cmd::WriteModulationBuffer
         | Cmd::ConfigModulation
         | Cmd::ConfigPattern

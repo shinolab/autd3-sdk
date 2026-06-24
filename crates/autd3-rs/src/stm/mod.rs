@@ -7,5 +7,5 @@ mod generators;
 pub use config::StmConfig;
 pub use control_point::{ControlPoint, ControlPoints};
 pub use foci::{FociStm, FociStmOption};
-pub use gain::{GainStm, GainStmOption};
+pub use gain::{GainStm, GainStmMode, GainStmOption};
 pub use generators::{circle, line};

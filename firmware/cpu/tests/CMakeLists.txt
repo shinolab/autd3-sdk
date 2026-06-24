@@ -34,6 +34,7 @@ add_executable(test_autd3-rs-cpu
   ${FW_SRC}/fpga.c
   ${FW_SRC}/cmd/xor_hash.c
   ${FW_SRC}/cmd/write_pattern.c
+  ${FW_SRC}/cmd/write_pattern_compressed.c
   ${FW_SRC}/cmd/write_mod.c
   ${FW_SRC}/cmd/config_mod.c
   ${FW_SRC}/cmd/config_pattern.c

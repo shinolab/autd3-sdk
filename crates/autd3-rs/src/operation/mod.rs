@@ -9,6 +9,7 @@ mod synchronize;
 mod write_foci_buffer;
 mod write_modulation_buffer;
 mod write_pattern_buffer;
+mod write_pattern_compressed;
 mod xor_hash;
 
 pub use change_mod_bank::ChangeModulationBank;
@@ -22,6 +23,9 @@ pub use synchronize::Synchronize;
 pub use write_foci_buffer::WriteFociBuffer;
 pub use write_modulation_buffer::WriteModulationBuffer;
 pub use write_pattern_buffer::WritePatternBuffer;
+pub use write_pattern_compressed::{
+    PATTERN_MAX_GAINS_PER_FRAME, PatternCompression, WritePatternCompressed,
+};
 pub use xor_hash::{XOR_HASH_HEADER_BYTES, XOR_HASH_MAX_DATA_LEN, XorHashCmd};
 
 use crate::error::Error;

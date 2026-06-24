@@ -6,6 +6,7 @@ const FW_SOURCES: &[&str] = &[
     "fpga.c",
     "cmd/xor_hash.c",
     "cmd/write_pattern.c",
+    "cmd/write_pattern_compressed.c",
     "cmd/write_mod.c",
     "cmd/config_mod.c",
     "cmd/config_pattern.c",

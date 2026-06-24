@@ -17,6 +17,7 @@ extern "C" {
 #include "cmd/sync.h"
 #include "cmd/write_mod.h"
 #include "cmd/write_pattern.h"
+#include "cmd/write_pattern_compressed.h"
 #include "cmd/xor_hash.h"
 
 static proto_state_t s_default_proto;
@@ -61,6 +62,8 @@ static uint8_t dispatch(const rx_frame_t* in) {
       return s_proto->error_detail;
     case CMD_WRITE_PATTERN_BUFFER:
       return latch_error(write_pattern_handle(in->payload));
+    case CMD_WRITE_PATTERN_COMPRESSED:
+      return latch_error(write_pattern_compressed_handle(in->payload));
     case CMD_WRITE_MOD_BUFFER:
       return latch_error(write_mod_handle(in->payload));
     case CMD_CONFIG_MOD:

@@ -24,13 +24,14 @@ pub use datagram::{Datagram, DatagramBuilder, Datagrams, Frame};
 pub use firmware_version::FirmwareVersion;
 pub use operation::{
     ChangeModulationBank, ChangePatternBank, Clear, ConfigModulation, ConfigPattern, Distribution,
-    FixedCompletionTime, FixedUpdateRate, Nop, Operation, Silencer, SilencerConfig,
-    WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, XorHashCmd,
+    FixedCompletionTime, FixedUpdateRate, Nop, Operation, PatternCompression, Silencer,
+    SilencerConfig, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
+    WritePatternCompressed, XorHashCmd,
 };
 pub use response::Response;
 pub use stm::{
-    ControlPoint, ControlPoints, FociStm, FociStmOption, GainStm, GainStmOption, StmConfig, circle,
-    line,
+    ControlPoint, ControlPoints, FociStm, FociStmOption, GainStm, GainStmMode, GainStmOption,
+    StmConfig, circle, line,
 };
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
 pub use tuning::PerfTuning;
