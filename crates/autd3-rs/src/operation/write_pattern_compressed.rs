@@ -7,7 +7,7 @@ use super::{Distribution, Operation};
 
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian};
 
-pub const PATTERN_MAX_GAINS_PER_FRAME: usize = 4;
+pub const PATTERN_MAX_PER_FRAME: usize = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PatternCompression {
@@ -49,7 +49,7 @@ pub struct WritePatternCompressed<'a> {
     pub index: u16,
     pub format: PatternCompression,
     pub count: u8,
-    pub gains: [&'a [[Emission; NUM_TRANSDUCERS]]; PATTERN_MAX_GAINS_PER_FRAME],
+    pub patterns: [&'a [[Emission; NUM_TRANSDUCERS]]; PATTERN_MAX_PER_FRAME],
 }
 
 impl Operation for WritePatternCompressed<'_> {
@@ -67,11 +67,11 @@ impl Operation for WritePatternCompressed<'_> {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        if device >= self.gains[0].len() {
+        if device >= self.patterns[0].len() {
             return Err(Error::InvalidPayload(
                 PayloadError::EmissionsDeviceOutOfRange {
                     device,
-                    len: self.gains[0].len(),
+                    len: self.patterns[0].len(),
                 },
             ));
         }
@@ -104,10 +104,10 @@ impl WritePatternCompressed<'_> {
         let count = usize::from(self.count.max(1));
         match self.format {
             PatternCompression::PhaseFull => (0..count).fold(0u16, |acc, g| {
-                acc | (u16::from(self.gains[g][device][t].phase.0) << (8 * g))
+                acc | (u16::from(self.patterns[g][device][t].phase.0) << (8 * g))
             }),
             PatternCompression::PhaseHalf => (0..count).fold(0u16, |acc, g| {
-                acc | (u16::from(self.gains[g][device][t].phase.0 >> 4) << (4 * g))
+                acc | (u16::from(self.patterns[g][device][t].phase.0 >> 4) << (4 * g))
             }),
         }
     }
@@ -136,7 +136,7 @@ mod tests {
             index: 4,
             format: PatternCompression::PhaseFull,
             count: 2,
-            gains: [&p0, &p1, &[], &[]],
+            patterns: [&p0, &p1, &[], &[]],
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
@@ -174,7 +174,7 @@ mod tests {
             index: 8,
             format: PatternCompression::PhaseHalf,
             count: 4,
-            gains: [&p0, &p1, &p2, &p3],
+            patterns: [&p0, &p1, &p2, &p3],
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
@@ -203,7 +203,7 @@ mod tests {
             index: u16::try_from(EMISSION_MAX_INDICES - 1).unwrap(),
             format: PatternCompression::PhaseFull,
             count: 2,
-            gains: [&patterns, &patterns, &[], &[]],
+            patterns: [&patterns, &patterns, &[], &[]],
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
@@ -220,7 +220,7 @@ mod tests {
             index: 0,
             format: PatternCompression::PhaseFull,
             count: 1,
-            gains: [&patterns, &[], &[], &[]],
+            patterns: [&patterns, &[], &[], &[]],
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(op.encode(0, 0, &mut out).is_ok());

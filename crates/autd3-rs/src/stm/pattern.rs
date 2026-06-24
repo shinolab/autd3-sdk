@@ -2,51 +2,51 @@ use super::StmConfig;
 use crate::command::Command;
 use crate::datagram::DatagramBuilder;
 use crate::operation::{
-    ChangePatternBank, ConfigPattern, PATTERN_MAX_GAINS_PER_FRAME, PatternCompression,
+    ChangePatternBank, ConfigPattern, PATTERN_MAX_PER_FRAME, PatternCompression,
     WritePatternBuffer, WritePatternCompressed,
 };
 use crate::params::NUM_TRANSDUCERS;
 use crate::value::{Emission, LoopBehavior, PatternBank, PatternDataType, TransitionMode};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum GainStmMode {
+pub enum PatternStmMode {
     #[default]
     PhaseIntensityFull,
     PhaseFull,
     PhaseHalf,
 }
 
-impl GainStmMode {
+impl PatternStmMode {
     const fn compression(self) -> Option<PatternCompression> {
         match self {
-            GainStmMode::PhaseIntensityFull => None,
-            GainStmMode::PhaseFull => Some(PatternCompression::PhaseFull),
-            GainStmMode::PhaseHalf => Some(PatternCompression::PhaseHalf),
+            PatternStmMode::PhaseIntensityFull => None,
+            PatternStmMode::PhaseFull => Some(PatternCompression::PhaseFull),
+            PatternStmMode::PhaseHalf => Some(PatternCompression::PhaseHalf),
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct GainStmOption {
+pub struct PatternStmOption {
     pub bank: PatternBank,
-    pub mode: GainStmMode,
+    pub mode: PatternStmMode,
     pub loop_behavior: LoopBehavior,
     pub transition_mode: TransitionMode,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct GainStm<'a> {
+pub struct PatternStm<'a> {
     pub config: StmConfig,
     pub patterns: &'a [Vec<[Emission; NUM_TRANSDUCERS]>],
-    pub option: GainStmOption,
+    pub option: PatternStmOption,
 }
 
-impl<'a> GainStm<'a> {
+impl<'a> PatternStm<'a> {
     #[must_use]
     pub fn new(
         config: impl Into<StmConfig>,
         patterns: &'a [Vec<[Emission; NUM_TRANSDUCERS]>],
-        option: GainStmOption,
+        option: PatternStmOption,
     ) -> Self {
         Self {
             config: config.into(),
@@ -56,7 +56,7 @@ impl<'a> GainStm<'a> {
     }
 }
 
-impl<'a> Command<'a> for GainStm<'a> {
+impl<'a> Command<'a> for PatternStm<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
         let n = self.patterns.len();
         let divider = self.config.into_sampling_config(n).divide().unwrap_or(0);
@@ -78,9 +78,9 @@ impl<'a> Command<'a> for GainStm<'a> {
                 let mut base = 0;
                 while base < n {
                     let count = per_frame.min(n - base);
-                    let mut gains: [&'a [[Emission; NUM_TRANSDUCERS]];
-                        PATTERN_MAX_GAINS_PER_FRAME] = [&[]; PATTERN_MAX_GAINS_PER_FRAME];
-                    for (g, slot) in gains.iter_mut().take(count).enumerate() {
+                    let mut patterns: [&'a [[Emission; NUM_TRANSDUCERS]]; PATTERN_MAX_PER_FRAME] =
+                        [&[]; PATTERN_MAX_PER_FRAME];
+                    for (g, slot) in patterns.iter_mut().take(count).enumerate() {
                         *slot = self.patterns[base + g].as_slice();
                     }
                     builder.push(WritePatternCompressed {
@@ -88,7 +88,7 @@ impl<'a> Command<'a> for GainStm<'a> {
                         index: u16::try_from(base).unwrap_or(u16::MAX),
                         format,
                         count: u8::try_from(count).unwrap_or(1),
-                        gains,
+                        patterns,
                     });
                     base += count;
                 }
@@ -118,11 +118,15 @@ mod tests {
     use crate::value::SamplingConfig;
 
     #[test]
-    fn gain_stm_expands_per_index_then_config_change() {
+    fn pattern_stm_expands_per_index_then_config_change() {
         let patterns: Vec<Vec<[Emission; NUM_TRANSDUCERS]>> = (0..3)
             .map(|_| vec![[Emission::default(); NUM_TRANSDUCERS]])
             .collect();
-        let stm = GainStm::new(SamplingConfig::FREQ_4K, &patterns, GainStmOption::default());
+        let stm = PatternStm::new(
+            SamplingConfig::FREQ_4K,
+            &patterns,
+            PatternStmOption::default(),
+        );
 
         let mut b = DatagramBuilder::new(1);
         b.push(stm);
@@ -170,13 +174,13 @@ mod tests {
     }
 
     #[test]
-    fn gain_stm_phase_full_packs_two_indices_per_frame() {
+    fn pattern_stm_phase_full_packs_two_indices_per_frame() {
         let patterns = make_patterns(5);
-        let stm = GainStm::new(
+        let stm = PatternStm::new(
             SamplingConfig::FREQ_4K,
             &patterns,
-            GainStmOption {
-                mode: GainStmMode::PhaseFull,
+            PatternStmOption {
+                mode: PatternStmMode::PhaseFull,
                 ..Default::default()
             },
         );
@@ -216,15 +220,15 @@ mod tests {
     }
 
     #[test]
-    fn gain_stm_loop_behavior_encodes_rep() {
+    fn pattern_stm_loop_behavior_encodes_rep() {
         use crate::value::LoopBehavior;
         use core::num::NonZeroU16;
 
         let patterns = make_patterns(3);
-        let stm = GainStm::new(
+        let stm = PatternStm::new(
             SamplingConfig::FREQ_4K,
             &patterns,
-            GainStmOption {
+            PatternStmOption {
                 loop_behavior: LoopBehavior::Finite(NonZeroU16::new(5).unwrap()),
                 ..Default::default()
             },
@@ -244,13 +248,13 @@ mod tests {
     }
 
     #[test]
-    fn gain_stm_phase_half_packs_four_indices_per_frame() {
+    fn pattern_stm_phase_half_packs_four_indices_per_frame() {
         let patterns = make_patterns(4);
-        let stm = GainStm::new(
+        let stm = PatternStm::new(
             SamplingConfig::FREQ_4K,
             &patterns,
-            GainStmOption {
-                mode: GainStmMode::PhaseHalf,
+            PatternStmOption {
+                mode: PatternStmMode::PhaseHalf,
                 ..Default::default()
             },
         );

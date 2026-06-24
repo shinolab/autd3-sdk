@@ -52,7 +52,7 @@ path = "src/bin/remote_client.rs"
 [dependencies]
 autd3-rs.workspace = true
 autd3-rs-pattern.workspace = true
-autd3-rs-gain-holo.workspace = true
+autd3-rs-pattern-holo.workspace = true
 autd3-rs-link-ethercrab.workspace = true
 autd3-rs-link-remote.workspace = true
 autd3-rs-modulation.workspace = true
