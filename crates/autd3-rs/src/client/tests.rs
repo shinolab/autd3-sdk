@@ -139,7 +139,8 @@ fn slave_cycle(
         | Cmd::ChangeModulationBank
         | Cmd::SetSilencer
         | Cmd::Synchronize
-        | Cmd::Clear => 0,
+        | Cmd::Clear
+        | Cmd::Nop => 0,
         Cmd::SetMode => {
             slave.mode = parsed.payload[0];
             0
@@ -997,9 +998,7 @@ async fn desync_after_send_failure_stops_precheck() {
 
 #[tokio::test]
 async fn build_rejects_per_device_group_under_strict_silencer() {
-    use std::collections::HashMap;
-
-    use crate::operation::{ConfigModulation, Group, Operation, Silencer};
+    use crate::operation::{ConfigModulation, Silencer};
     use crate::value::ModulationBank;
 
     let (link, _slaves) = slaves_pair(2);
@@ -1016,29 +1015,14 @@ async fn build_rejects_per_device_group_under_strict_silencer() {
         client.send_checked(frame).await.unwrap();
     }
 
-    let group = Group::new(
-        vec![0usize, 1usize],
-        HashMap::from([
-            (
-                0usize,
-                Box::new(ConfigModulation {
-                    bank: ModulationBank::B0,
-                    divider: 5,
-                    size: 1,
-                }) as Box<dyn Operation>,
-            ),
-            (
-                1usize,
-                Box::new(ConfigModulation {
-                    bank: ModulationBank::B0,
-                    divider: 20,
-                    size: 1,
-                }) as Box<dyn Operation>,
-            ),
-        ]),
-    );
     let mut builder = client.datagram_builder();
-    builder.push(group);
+    builder.push_each(|device| {
+        Some(ConfigModulation {
+            bank: ModulationBank::B0,
+            divider: if device == 0 { 5 } else { 20 },
+            size: 1,
+        })
+    });
     match builder.build().unwrap_err() {
         Error::SilencerConstraint { device, .. } => assert_eq!(device, 0),
         other => panic!("expected SilencerConstraint on device 0, got {other:?}"),

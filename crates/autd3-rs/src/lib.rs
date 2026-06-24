@@ -17,13 +17,13 @@ pub use autd3_rs_core::{
     UnitVector3, Vector3, Velocity, offset, point,
 };
 pub use client::{Client, ClientConfig, MAX_DEVICES, ResponseFuture};
-pub use command::{Command, Modulation, Pattern};
+pub use command::{BoxedCommand, Command, Modulation, Pattern};
 pub use core_affinity::CoreId;
 pub use datagram::{Datagram, DatagramBuilder, Datagrams, Frame};
 pub use firmware_version::FirmwareVersion;
 pub use operation::{
     ChangeModulationBank, ChangePatternBank, Clear, ConfigModulation, ConfigPattern, Distribution,
-    FixedCompletionTime, FixedUpdateRate, Group, Operation, Silencer, SilencerConfig,
+    FixedCompletionTime, FixedUpdateRate, Nop, Operation, Silencer, SilencerConfig,
     WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, XorHashCmd,
 };
 pub use response::Response;
