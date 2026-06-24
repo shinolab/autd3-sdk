@@ -11,6 +11,7 @@ pub struct ConfigModulation {
     pub bank: ModulationBank,
     pub divider: u16,
     pub size: u32,
+    pub rep: u16,
 }
 
 impl Operation for ConfigModulation {
@@ -42,6 +43,7 @@ impl Operation for ConfigModulation {
         out[0] = self.bank.as_u8();
         out[2..4].copy_from_slice(&self.divider.to_le_bytes());
         out[4..8].copy_from_slice(&self.size.to_le_bytes());
+        out[8..10].copy_from_slice(&self.rep.to_le_bytes());
         Ok(Cmd::ConfigModulation)
     }
 
@@ -70,6 +72,7 @@ mod tests {
             bank: ModulationBank::B1,
             divider: 10,
             size: 4000,
+            rep: 9,
         })
         .unwrap();
 
@@ -78,7 +81,8 @@ mod tests {
         assert_eq!(payload[1], 0);
         assert_eq!(&payload[2..4], &10u16.to_le_bytes());
         assert_eq!(&payload[4..8], &4000u32.to_le_bytes());
-        assert!(payload[8..].iter().all(|&b| b == 0));
+        assert_eq!(&payload[8..10], &9u16.to_le_bytes());
+        assert!(payload[10..].iter().all(|&b| b == 0));
     }
 
     #[test]
@@ -87,6 +91,7 @@ mod tests {
             bank: ModulationBank::B0,
             divider: 1,
             size: 1,
+            rep: 0xFFFF,
         };
         assert!(matches!(
             encode(ConfigModulation { divider: 0, ..base }),

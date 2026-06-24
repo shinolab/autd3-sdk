@@ -9,7 +9,6 @@ use super::{Distribution, Operation, silencer_constraint};
 pub struct ChangePatternBank {
     pub bank: PatternBank,
     pub transition_mode: TransitionMode,
-    pub transition_value: u64,
 }
 
 impl Operation for ChangePatternBank {
@@ -29,7 +28,7 @@ impl Operation for ChangePatternBank {
     ) -> Result<Cmd, Error> {
         out[0] = self.bank.as_u8();
         out[1] = self.transition_mode.as_u8();
-        out[2..10].copy_from_slice(&self.transition_value.to_le_bytes());
+        out[2..10].copy_from_slice(&self.transition_mode.value().to_le_bytes());
         Ok(Cmd::ChangePatternBank)
     }
 
@@ -58,7 +57,6 @@ mod tests {
         let (cmd, payload) = encode(ChangePatternBank {
             bank: PatternBank::B1,
             transition_mode: TransitionMode::Immediate,
-            transition_value: 0,
         });
 
         assert_eq!(cmd, Cmd::ChangePatternBank);
@@ -69,14 +67,28 @@ mod tests {
 
     #[test]
     fn change_pattern_bank_encodes_transition_value() {
+        use crate::value::DcSysTime;
+
         let (_cmd, payload) = encode(ChangePatternBank {
             bank: PatternBank::B0,
-            transition_mode: TransitionMode::SysTime,
-            transition_value: 0x0123_4567_89AB_CDEF,
+            transition_mode: TransitionMode::SysTime(DcSysTime::from_nanos(0x0123_4567_89AB_CDEF)),
         });
 
         assert_eq!(payload[0], 0);
         assert_eq!(payload[1], 0x01);
         assert_eq!(&payload[2..10], &0x0123_4567_89AB_CDEFu64.to_le_bytes());
+    }
+
+    #[test]
+    fn change_pattern_bank_encodes_gpio_pin() {
+        use crate::value::GpioIn;
+
+        let (_cmd, payload) = encode(ChangePatternBank {
+            bank: PatternBank::B0,
+            transition_mode: TransitionMode::Gpio(GpioIn::I2),
+        });
+
+        assert_eq!(payload[1], 0x02);
+        assert_eq!(&payload[2..10], &2u64.to_le_bytes());
     }
 }
