@@ -5,9 +5,6 @@ use clap::Args;
 
 const EMULATOR_CRATE: &str = "crates/autd3-rs-firmware-emulator";
 
-/// Copy the CPU firmware sources into the firmware-emulator crate so that a
-/// published package is self-contained (the canonical source stays in
-/// `firmware/cpu`). `build.rs` prefers this vendored copy when present.
 #[derive(Args)]
 pub struct VendorFwCmd {}
 
@@ -28,7 +25,8 @@ pub fn run_vendor_fw(root: &Path, _cmd: &VendorFwCmd) -> Result<()> {
 
 fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
     std::fs::create_dir_all(dst).with_context(|| format!("failed to create {}", dst.display()))?;
-    for entry in std::fs::read_dir(src).with_context(|| format!("failed to read {}", src.display()))?
+    for entry in
+        std::fs::read_dir(src).with_context(|| format!("failed to read {}", src.display()))?
     {
         let entry = entry?;
         let path = entry.path();
@@ -36,8 +34,9 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
         if path.is_dir() {
             copy_dir(&path, &to)?;
         } else {
-            std::fs::copy(&path, &to)
-                .with_context(|| format!("failed to copy {} -> {}", path.display(), to.display()))?;
+            std::fs::copy(&path, &to).with_context(|| {
+                format!("failed to copy {} -> {}", path.display(), to.display())
+            })?;
         }
     }
     Ok(())
