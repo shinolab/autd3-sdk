@@ -1,0 +1,22 @@
+[package]
+name = "autd3-rs-link-remote"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "TCP transport Link for autd3-rs: relays tx/rx frames to a remote server driving a real Link."
+
+[dependencies]
+autd3-rs-core.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+autd3-rs.workspace = true
+autd3-rs-firmware-emulator.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true
