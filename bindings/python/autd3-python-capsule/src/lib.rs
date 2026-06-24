@@ -99,7 +99,6 @@ mod link {
     pub trait ClientBackend: Send + Sync {
         fn num_devices(&self) -> usize;
         fn read_firmware_version(&self) -> BoxFuture<Vec<String>>;
-        // `frame == None` sends every frame; `Some(i)` sends only frame `i`.
         fn send_checked(&self, datagrams: Arc<Datagrams>, frame: Option<usize>) -> BoxFuture<()>;
         fn check_status(&self) -> BoxFuture<LinkStatusData>;
         fn stop(&self) -> BoxFuture<()>;

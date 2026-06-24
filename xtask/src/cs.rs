@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 
 use crate::util::run;
@@ -63,7 +63,6 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             if !project.is_file() {
                 bail!("example not found: {}", project.display());
             }
-            // Build without sudo so build artifacts are not root-owned.
             run(
                 "dotnet",
                 ["build", &project.to_string_lossy(), "-c", config],
@@ -75,19 +74,11 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
     }
 }
 
-/// Build the FFI cdylibs (MIT subset) the managed code P/Invokes, and return
-/// their output directory for `LD_LIBRARY_PATH`.
 fn build_ffi(root: &Path) -> Result<PathBuf> {
     let ffi = root.join("bindings").join("ffi");
     run(
         "cargo",
-        [
-            "build",
-            "--workspace",
-            "--exclude",
-            SOEM_CRATE,
-            "--release",
-        ],
+        ["build", "--workspace", "--exclude", SOEM_CRATE, "--release"],
         &ffi,
     )?;
     Ok(ffi.join("target").join("release"))
@@ -106,8 +97,6 @@ fn find_example_exe(project_dir: &Path, config: &str, name: &str) -> Result<Path
     bail!("built example executable not found under {}", bin.display());
 }
 
-/// EtherCAT raw sockets need root, but `sudo` resets the environment, so the
-/// native library path is passed as a `VAR=value` argument to `sudo`.
 fn run_example(exe: &Path, native: &Path, no_sudo: bool, cwd: &Path) -> Result<()> {
     let exe = exe.to_string_lossy().into_owned();
     let native = native.to_string_lossy().into_owned();

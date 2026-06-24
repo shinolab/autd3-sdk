@@ -66,8 +66,6 @@ pub(crate) struct AggregatedResponse {
 }
 
 impl<S: HasPdi> Groups<S, HasDc> {
-    // Send each group's frame concurrently and aggregate the per-group cycle
-    // responses into a single bus-wide response.
     pub(crate) async fn tx_rx_dc(
         &self,
         maindevice: &MainDevice<'_>,
