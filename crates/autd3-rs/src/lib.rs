@@ -1,6 +1,7 @@
 pub mod command;
 pub mod firmware_version;
 pub mod operation;
+pub mod stm;
 pub mod tuning;
 
 mod client;
@@ -27,5 +28,9 @@ pub use operation::{
     WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, XorHashCmd,
 };
 pub use response::Response;
+pub use stm::{
+    ControlPoint, ControlPoints, FociStm, FociStmOption, GainStm, GainStmOption, StmConfig, circle,
+    line,
+};
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
 pub use tuning::PerfTuning;

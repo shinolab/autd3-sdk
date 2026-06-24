@@ -14,6 +14,14 @@ name = "focus_sine"
 path = "src/bin/focus_sine.rs"
 
 [[bin]]
+name = "foci_stm"
+path = "src/bin/foci_stm.rs"
+
+[[bin]]
+name = "pattern_stm"
+path = "src/bin/pattern_stm.rs"
+
+[[bin]]
 name = "multi_device"
 path = "src/bin/multi_device.rs"
 
