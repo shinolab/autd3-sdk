@@ -1,5 +1,5 @@
 [package]
-name = "autd3-rs-gain-holo"
+name = "autd3-rs-pattern-holo"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

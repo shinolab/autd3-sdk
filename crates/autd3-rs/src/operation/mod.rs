@@ -36,7 +36,7 @@ pub use write_foci_buffer::WriteFociBuffer;
 pub use write_modulation_buffer::WriteModulationBuffer;
 pub use write_pattern_buffer::WritePatternBuffer;
 pub use write_pattern_compressed::{
-    PATTERN_MAX_GAINS_PER_FRAME, PatternCompression, WritePatternCompressed,
+    PATTERN_MAX_PER_FRAME, PatternCompression, WritePatternCompressed,
 };
 pub use xor_hash::{XOR_HASH_HEADER_BYTES, XOR_HASH_MAX_DATA_LEN, XorHashCmd};
 

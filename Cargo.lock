@@ -116,11 +116,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
- "autd3-rs-gain-holo",
  "autd3-rs-link-ethercrab",
  "autd3-rs-link-remote",
  "autd3-rs-modulation",
  "autd3-rs-pattern",
+ "autd3-rs-pattern-holo",
  "tokio",
  "tracing-subscriber",
 ]
@@ -132,18 +132,6 @@ dependencies = [
  "autd3-rs-core",
  "bindgen",
  "cc",
-]
-
-[[package]]
-name = "autd3-rs-gain-holo"
-version = "0.1.0"
-dependencies = [
- "approx",
- "autd3-rs-core",
- "autd3-rs-pattern",
- "nalgebra",
- "rand",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -209,6 +197,18 @@ name = "autd3-rs-pattern"
 version = "0.1.0"
 dependencies = [
  "autd3-rs-core",
+]
+
+[[package]]
+name = "autd3-rs-pattern-holo"
+version = "0.1.0"
+dependencies = [
+ "approx",
+ "autd3-rs-core",
+ "autd3-rs-pattern",
+ "nalgebra",
+ "rand",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

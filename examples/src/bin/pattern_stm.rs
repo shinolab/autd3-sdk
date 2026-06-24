@@ -1,11 +1,11 @@
-// Gain (pattern) STM: a circle of host-computed focus patterns played back at 1 Hz.
+// Pattern STM: a circle of host-computed focus patterns played back at 1 Hz.
 // Run with: cargo xtask example pattern_stm
 
 use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::{Client, ClientConfig, GainStm, GainStmMode, GainStmOption, SetSilencer};
+use autd3_rs::{Client, ClientConfig, PatternStm, PatternStmMode, PatternStmOption, SetSilencer};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 
 const NUM_POINTS: usize = 200;
@@ -55,11 +55,11 @@ async fn main() -> Result<()> {
         .collect::<Vec<_>>();
 
     let mut builder = client.datagram_builder();
-    builder.push(SetSilencer::default()).push(GainStm::new(
+    builder.push(SetSilencer::default()).push(PatternStm::new(
         1.0 * Hz,
         &patterns,
-        GainStmOption {
-            mode: GainStmMode::PhaseFull,
+        PatternStmOption {
+            mode: PatternStmMode::PhaseFull,
             ..Default::default()
         },
     ));
@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
         response.await?.check()?;
     }
 
-    println!("running a 1 Hz circular pattern (gain) STM — press Ctrl+C to stop");
+    println!("running a 1 Hz circular pattern STM — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
     client.stop().await?;

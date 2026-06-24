@@ -5,7 +5,7 @@ members = [
     "crates/autd3-rs-core",
     "crates/autd3-rs-firmware-emulator",
     "crates/autd3-rs-pattern",
-    "crates/autd3-rs-gain-holo",
+    "crates/autd3-rs-pattern-holo",
     "crates/autd3-rs-link-ethercrab",
     "crates/autd3-rs-link-remote",
     "crates/autd3-rs-link-soem",
@@ -64,7 +64,7 @@ autd3-rs = { version = "0.1.0", path = "crates/autd3-rs" }
 autd3-rs-core = { version = "0.1.0", path = "crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { version = "0.1.0", path = "crates/autd3-rs-firmware-emulator" }
 autd3-rs-pattern = { version = "0.1.0", path = "crates/autd3-rs-pattern" }
-autd3-rs-gain-holo = { version = "0.1.0", path = "crates/autd3-rs-gain-holo" }
+autd3-rs-pattern-holo = { version = "0.1.0", path = "crates/autd3-rs-pattern-holo" }
 autd3-rs-link-ethercrab = { version = "0.1.0", path = "crates/autd3-rs-link-ethercrab" }
 autd3-rs-link-remote = { version = "0.1.0", path = "crates/autd3-rs-link-remote" }
 autd3-rs-link-soem = { version = "0.1.0", path = "crates/autd3-rs-link-soem" }

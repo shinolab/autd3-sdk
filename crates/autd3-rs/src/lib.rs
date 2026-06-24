@@ -33,8 +33,8 @@ pub use operation::{
 };
 pub use response::Response;
 pub use stm::{
-    ControlPoint, ControlPoints, FociStm, FociStmOption, GainStm, GainStmMode, GainStmOption,
-    StmConfig, circle, line,
+    ControlPoint, ControlPoints, FociStm, FociStmOption, PatternStm, PatternStmMode,
+    PatternStmOption, StmConfig, circle, line,
 };
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
 pub use tuning::PerfTuning;
