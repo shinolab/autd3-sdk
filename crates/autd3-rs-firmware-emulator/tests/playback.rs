@@ -72,7 +72,7 @@ fn modulation_finite_loop_stops_after_rep() {
     let samples: [u8; 4] = [10, 20, 30, 40];
     let bank = 1u8;
     let divider = 1u16;
-    let rep = 1u16; 
+    let rep = 1u16;
 
     let mut write = vec![bank, 0];
     write.extend_from_slice(&0u32.to_le_bytes());
