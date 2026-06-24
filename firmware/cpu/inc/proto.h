@@ -27,6 +27,7 @@
 #define CMD_SYNCHRONIZE (0x01)
 #define CMD_SET_MODE (0x02)
 #define CMD_CLEAR (0x03)
+#define CMD_NOP (0x04)
 #define CMD_WRITE_PATTERN_BUFFER (0x10)
 #define CMD_CONFIG_PATTERN (0x11)
 #define CMD_CHANGE_PATTERN_BANK (0x12)

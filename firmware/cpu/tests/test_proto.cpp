@@ -217,6 +217,19 @@ TEST(Proto, MatchingSeqAdvancesAckAndExpectedSeqForAllNonResetCmds) {
   EXPECT_EQ(_sTx.data, 0xCD);
 }
 
+TEST(Proto, NopAcksWithoutChangingState) {
+  init_app();
+  proto_set_error_detail(0xCD);
+
+  Frame(0, CMD_NOP).deliver();
+  EXPECT_EQ(_sTx.ack, 0);
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(proto_expected_seq(), 1);
+
+  Frame(1, CMD_READ_ERROR_DETAIL).deliver();
+  EXPECT_EQ(_sTx.data, 0xCD) << "Nop must not touch error_detail";
+}
+
 TEST(Proto, MismatchedSeqIsDropped) {
   init_app();
 

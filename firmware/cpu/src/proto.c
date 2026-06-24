@@ -79,6 +79,8 @@ static uint8_t dispatch(const rx_frame_t* in) {
       return latch_error(set_mode_handle(in->payload));
     case CMD_CLEAR:
       return latch_error(clear_handle());
+    case CMD_NOP:
+      return ERR_NONE;
     default:
       return latch_error(ERR_UNKNOWN_CMD);
   }
