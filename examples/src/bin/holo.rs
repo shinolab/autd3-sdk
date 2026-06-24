@@ -6,8 +6,10 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::SamplingConfig;
 use autd3_rs::{Client, ClientConfig, Modulation, Pattern, SetSilencer};
-use autd3_rs_pattern_holo::{ControlPoint, GspatOption, NalgebraBackend, Pa, TransducerMask, gspat};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
+use autd3_rs_pattern_holo::{
+    ControlPoint, GspatOption, NalgebraBackend, Pa, TransducerMask, gspat,
+};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
