@@ -889,6 +889,7 @@ async fn build_rejects_too_fast_pattern_under_strict_silencer() {
         divider: 1,
         size: 1,
         data_type: PatternDataType::Raw,
+        rep: 0xFFFF,
     });
     match builder.build().unwrap_err() {
         Error::SilencerConstraint {
@@ -919,6 +920,7 @@ async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
             bank: ModulationBank::B0,
             divider: 5,
             size: 1,
+            rep: 0xFFFF,
         })
         .push(SetSilencer::new(FixedCompletionTime {
             intensity: ULTRASOUND_PERIOD * 8,
@@ -953,6 +955,7 @@ async fn opt_out_disables_precheck() {
         divider: 1,
         size: 1,
         data_type: PatternDataType::Raw,
+        rep: 0xFFFF,
     });
     assert!(
         builder.build().is_ok(),
@@ -972,6 +975,7 @@ async fn desync_after_send_failure_stops_precheck() {
             divider: 1,
             size: 1,
             data_type: PatternDataType::Raw,
+            rep: 0xFFFF,
         });
         builder.build()
     };
@@ -1031,6 +1035,7 @@ async fn build_rejects_per_device_group_under_strict_silencer() {
             bank: ModulationBank::B0,
             divider: if device == 0 { 5 } else { 20 },
             size: 1,
+            rep: 0xFFFF,
         })
     });
     match builder.build().unwrap_err() {
@@ -1056,6 +1061,7 @@ async fn separate_builders_share_committed_mirror_state() {
         divider: 1,
         size: 1,
         data_type: PatternDataType::Raw,
+        rep: 0xFFFF,
     });
     assert!(matches!(b2.build(), Err(Error::SilencerConstraint { .. })));
 }

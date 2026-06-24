@@ -18,6 +18,7 @@ typedef struct PROTO_PACKED {
   uint8_t num_foci;
   uint8_t _reserved;
   uint16_t sound_speed;
+  uint16_t rep;
 } config_pattern_payload_t;
 
 static_assert(offsetof(config_pattern_payload_t, bank) == EM_CONFIG_OFFSET_BANK, "config_pattern layout");
@@ -26,6 +27,7 @@ static_assert(offsetof(config_pattern_payload_t, divider) == EM_CONFIG_OFFSET_DI
 static_assert(offsetof(config_pattern_payload_t, size) == EM_CONFIG_OFFSET_SIZE, "config_pattern layout");
 static_assert(offsetof(config_pattern_payload_t, num_foci) == EM_CONFIG_OFFSET_NUM_FOCI, "config_pattern layout");
 static_assert(offsetof(config_pattern_payload_t, sound_speed) == EM_CONFIG_OFFSET_SOUND_SPEED, "config_pattern layout");
+static_assert(offsetof(config_pattern_payload_t, rep) == EM_CONFIG_OFFSET_REP, "config_pattern layout");
 
 uint8_t config_pattern_handle(const uint8_t* payload);
 

@@ -9,7 +9,6 @@ use super::{Distribution, Operation, silencer_constraint};
 pub struct ChangeModulationBank {
     pub bank: ModulationBank,
     pub transition_mode: TransitionMode,
-    pub transition_value: u64,
 }
 
 impl Operation for ChangeModulationBank {
@@ -29,7 +28,7 @@ impl Operation for ChangeModulationBank {
     ) -> Result<Cmd, Error> {
         out[0] = self.bank.as_u8();
         out[1] = self.transition_mode.as_u8();
-        out[2..10].copy_from_slice(&self.transition_value.to_le_bytes());
+        out[2..10].copy_from_slice(&self.transition_mode.value().to_le_bytes());
         Ok(Cmd::ChangeModulationBank)
     }
 
@@ -58,12 +57,24 @@ mod tests {
         let (cmd, payload) = encode(ChangeModulationBank {
             bank: ModulationBank::B1,
             transition_mode: TransitionMode::Immediate,
-            transition_value: 0,
         });
 
         assert_eq!(cmd, Cmd::ChangeModulationBank);
         assert_eq!(payload[0], 1);
         assert_eq!(payload[1], 0xFF);
         assert_eq!(&payload[2..10], &0u64.to_le_bytes());
+    }
+
+    #[test]
+    fn change_mod_bank_sys_time_encodes_value() {
+        use crate::value::DcSysTime;
+
+        let (_cmd, payload) = encode(ChangeModulationBank {
+            bank: ModulationBank::B0,
+            transition_mode: TransitionMode::SysTime(DcSysTime::from_nanos(0x0123_4567_89AB_CDEF)),
+        });
+
+        assert_eq!(payload[1], 0x01);
+        assert_eq!(&payload[2..10], &0x0123_4567_89AB_CDEFu64.to_le_bytes());
     }
 }
