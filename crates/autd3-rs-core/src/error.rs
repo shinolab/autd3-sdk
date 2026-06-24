@@ -5,7 +5,7 @@ use crate::value::SamplingConfigError;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("device {device} reported error flag ({code:#04x})")]
+    #[error("device {device} firmware error {code:#04x}: {}", crate::protocol::describe_device_error(*code))]
     DeviceError { device: usize, code: u8 },
 
     #[error(
