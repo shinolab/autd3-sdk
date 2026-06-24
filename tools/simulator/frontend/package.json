@@ -1,0 +1,12 @@
+{
+  "name": "autd3-rs-simulator-frontend",
+  "private": true,
+  "scripts": {
+    "css": "tailwindcss -i ./input.css -o ./assets/tailwind.css",
+    "css:watch": "tailwindcss -i ./input.css -o ./assets/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "daisyui": "^4.12.0",
+    "tailwindcss": "^3.4.0"
+  }
+}

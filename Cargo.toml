@@ -14,9 +14,16 @@ members = [
     "tools/perftest",
     "tools/patternsoak",
     "tools/synctune",
+    "tools/simulator",
+    "tools/simulator/protocol",
     "examples",
 ]
-exclude = ["xtask", "bindings/python", "bindings/ffi"]
+exclude = [
+    "xtask",
+    "bindings/python",
+    "bindings/ffi",
+    "tools/simulator/frontend",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -52,6 +59,14 @@ clap = { version = "4", default-features = false, features = [
 ] }
 humantime = { version = "2", default-features = false }
 anyhow = { version = "1", default-features = false, features = ["std"] }
+serde = { version = "1", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+axum = { version = "0.8", default-features = false, features = [
+    "http1",
+    "tokio",
+    "ws",
+] }
+tower-http = { version = "0.6", default-features = false, features = ["fs"] }
 tracing = { version = "0.1.44", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false, features = [
     "std",
@@ -63,6 +78,7 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 autd3-rs = { version = "0.1.0", path = "crates/autd3-rs" }
 autd3-rs-core = { version = "0.1.0", path = "crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { version = "0.1.0", path = "crates/autd3-rs-firmware-emulator" }
+autd3-rs-simulator-protocol = { version = "0.1.0", path = "tools/simulator/protocol" }
 autd3-rs-pattern = { version = "0.1.0", path = "crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { version = "0.1.0", path = "crates/autd3-rs-pattern-holo" }
 autd3-rs-link-ethercrab = { version = "0.1.0", path = "crates/autd3-rs-link-ethercrab" }

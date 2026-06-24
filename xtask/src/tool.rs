@@ -36,6 +36,21 @@ pub enum ToolCmd {
         args: Vec<String>,
     },
 
+    Simulator {
+        #[arg(long)]
+        debug: bool,
+        #[arg(long)]
+        open: bool,
+        #[arg(long)]
+        skip_web_build: bool,
+        #[arg(long, default_value_t = 8081)]
+        port: u16,
+        #[arg(long, default_value_t = 8080)]
+        link_port: u16,
+        #[arg(long, default_value_t = 1)]
+        devices: usize,
+    },
+
     Twincat {
         #[command(subcommand)]
         cmd: TwincatCmd,
@@ -94,8 +109,109 @@ pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
             no_sudo,
             args,
         } => run_bin(root, "autd3-rs-synctune", debug, no_sudo, &[], &args),
+        ToolCmd::Simulator {
+            debug,
+            open,
+            skip_web_build,
+            port,
+            link_port,
+            devices,
+        } => run_simulator(root, debug, open, skip_web_build, port, link_port, devices),
         ToolCmd::Twincat { cmd } => run_twincat(root, cmd),
     }
+}
+
+fn run_simulator(
+    root: &Path,
+    debug: bool,
+    open: bool,
+    skip_web_build: bool,
+    port: u16,
+    link_port: u16,
+    devices: usize,
+) -> Result<()> {
+    let frontend = root.join("tools").join("simulator").join("frontend");
+    let profile = if debug { "debug" } else { "release" };
+
+    if !skip_web_build {
+        if !on_path("dx") {
+            bail!(
+                "`dx` (dioxus-cli) not found on PATH. Install it with \
+                 `cargo install dioxus-cli@^0.7`, or pass --skip-web-build to reuse an \
+                 existing bundle."
+            );
+        }
+        if !on_path("npm") {
+            bail!("`npm` not found on PATH (needed to build Tailwind/daisyUI CSS).");
+        }
+        if !frontend.join("node_modules").is_dir() {
+            run("npm", ["install"], &frontend)?;
+        }
+        run("npm", ["run", "css"], &frontend)?;
+        let mut dx_args = vec!["build", "--platform", "web"];
+        if !debug {
+            dx_args.extend(["--release", "--debug-symbols", "false"]);
+        }
+        run("dx", dx_args, &frontend)?;
+    }
+
+    let public = frontend
+        .join("target")
+        .join("dx")
+        .join("autd3-rs-simulator-frontend")
+        .join(profile)
+        .join("web")
+        .join("public");
+    if !public.join("index.html").is_file() {
+        bail!(
+            "frontend bundle not found at {}. Run without --skip-web-build first.",
+            public.display()
+        );
+    }
+
+    let mut build_args: Vec<&str> = vec!["build", "-p", "autd3-rs-simulator"];
+    if !debug {
+        build_args.push("--release");
+    }
+    run("cargo", build_args, root)?;
+    let bin = root.join("target").join(profile).join("autd3-rs-simulator");
+
+    let url = format!("http://127.0.0.1:{port}");
+    println!("simulator UI at {url} (remote link on port {link_port}, {devices} device(s))");
+    if open {
+        let url = url.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            let _ = open_browser(&url);
+        });
+    }
+
+    let args = vec![
+        "--http-port".to_string(),
+        port.to_string(),
+        "--link-port".to_string(),
+        link_port.to_string(),
+        "--devices".to_string(),
+        devices.to_string(),
+        "--web-dir".to_string(),
+        public.to_string_lossy().into_owned(),
+    ];
+    run_built_bin(&bin, &args, true, root)
+}
+
+fn open_browser(url: &str) -> Result<()> {
+    let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
+        ("open", vec![url])
+    } else if cfg!(target_os = "windows") {
+        ("cmd", vec!["/C", "start", "", url])
+    } else {
+        ("xdg-open", vec![url])
+    };
+    Command::new(program)
+        .args(args)
+        .spawn()
+        .with_context(|| format!("failed to open browser via `{program}`"))?;
+    Ok(())
 }
 
 fn run_twincat(root: &Path, cmd: TwincatCmd) -> Result<()> {
