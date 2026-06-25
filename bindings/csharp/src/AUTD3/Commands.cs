@@ -12,7 +12,7 @@ namespace AUTD3
 
     internal static class NativeCommand
     {
-        private const string Lib = "autd3";
+        private const string Lib = "autd3capi";
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_op_clear();

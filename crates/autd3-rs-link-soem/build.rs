@@ -18,12 +18,13 @@ fn main() {
         println!("cargo:rustc-link-lib=winmm");
         println!("cargo:rustc-link-lib=ws2_32");
         println!(
-            "cargo:rustc-link-search={}",
+            "cargo:rustc-link-search=native={}",
             manifest_dir
                 .join("3rdparty/SOEM/oshw/win32/wpcap/Lib/x64")
                 .display()
         );
         println!("cargo:rustc-link-lib=wpcap");
+        println!("cargo:rustc-link-lib=Packet");
     }
     #[cfg(target_os = "linux")]
     {

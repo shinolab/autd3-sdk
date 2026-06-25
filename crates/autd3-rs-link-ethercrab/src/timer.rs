@@ -53,7 +53,7 @@ mod imp {
             }
             let remaining = deadline - now;
             if remaining > Duration::from_micros(50) {
-                std::thread::sleep(remaining - Duration::from_micros(50));
+                std::thread::sleep(remaining.saturating_sub(Duration::from_micros(50)));
             } else {
                 std::hint::spin_loop();
             }

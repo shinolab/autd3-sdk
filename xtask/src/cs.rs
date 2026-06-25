@@ -38,11 +38,21 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
         }
         CsCmd::Test => {
             let native = build_ffi(root)?;
-            let mut cmd = Command::new("dotnet");
-            cmd.args(["test", SOLUTION, "-c", "Debug"])
-                .current_dir(&dir);
-            set_native_lib_path(&mut cmd, &native);
-            spawn(cmd, "dotnet")
+            if cfg!(target_os = "windows") {
+                run("dotnet", ["build", SOLUTION, "-c", "Debug"], &dir)?;
+                stage_native_libs(&native, &dir)?;
+                run(
+                    "dotnet",
+                    ["test", SOLUTION, "-c", "Debug", "--no-build"],
+                    &dir,
+                )
+            } else {
+                let mut cmd = Command::new("dotnet");
+                cmd.args(["test", SOLUTION, "-c", "Debug"])
+                    .current_dir(&dir);
+                set_native_lib_path(&mut cmd, &native);
+                spawn(cmd, "dotnet")
+            }
         }
         CsCmd::Format { fix } => {
             let mut args = vec!["format", SOLUTION];
@@ -119,6 +129,41 @@ fn set_native_lib_path(cmd: &mut Command, native: &Path) {
     } else {
         cmd.env("LD_LIBRARY_PATH", native);
     }
+}
+
+fn stage_native_libs(native: &Path, csharp_dir: &Path) -> Result<()> {
+    let test_bin = csharp_dir.join("tests/AUTD3.Tests/bin/Debug");
+    let ext = if cfg!(target_os = "windows") {
+        "dll"
+    } else if cfg!(target_os = "macos") {
+        "dylib"
+    } else {
+        "so"
+    };
+    let mut staged = 0;
+    for tfm in std::fs::read_dir(&test_bin)
+        .with_context(|| format!("reading test output dir {}", test_bin.display()))?
+    {
+        let tfm = tfm?.path();
+        if !tfm.is_dir() {
+            continue;
+        }
+        for lib in std::fs::read_dir(native)? {
+            let lib = lib?.path();
+            if lib.extension().and_then(|e| e.to_str()) == Some(ext) {
+                std::fs::copy(&lib, tfm.join(lib.file_name().unwrap()))?;
+                staged += 1;
+            }
+        }
+    }
+    if staged == 0 {
+        bail!(
+            "no native libraries staged from {} into {}",
+            native.display(),
+            test_bin.display()
+        );
+    }
+    Ok(())
 }
 
 fn spawn(mut cmd: Command, program: &str) -> Result<()> {

@@ -11,13 +11,13 @@ namespace AUTD3
 
     internal static class NativeModulationOp
     {
-        [DllImport("autd3")]
+        [DllImport("autd3capi")]
         internal static extern IntPtr autd3_op_write_modulation_buffer(byte bank, uint offset, IntPtr modulationBuffer);
 
-        [DllImport("autd3")]
+        [DllImport("autd3capi")]
         internal static extern IntPtr autd3_op_config_modulation(byte bank, ushort divider, uint size, ushort rep);
 
-        [DllImport("autd3")]
+        [DllImport("autd3capi")]
         internal static extern IntPtr autd3_op_change_modulation_bank(byte bank, byte transitionMode, ulong transitionValue);
     }
 
