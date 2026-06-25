@@ -3,9 +3,12 @@
     <Project Path="src/AUTD3.Core/AUTD3.Core.csproj" />
     <Project Path="src/AUTD3/AUTD3.csproj" />
     <Project Path="src/AUTD3.Pattern/AUTD3.Pattern.csproj" />
+    <Project Path="src/AUTD3.Pattern.Holo/AUTD3.Pattern.Holo.csproj" />
     <Project Path="src/AUTD3.Modulation/AUTD3.Modulation.csproj" />
     <Project Path="src/AUTD3.Link.Ethercrab/AUTD3.Link.Ethercrab.csproj" />
     <Project Path="src/AUTD3.Link.Soem/AUTD3.Link.Soem.csproj" />
+    <Project Path="src/AUTD3.Link.Remote/AUTD3.Link.Remote.csproj" />
+    <Project Path="src/AUTD3.Link.Twincat/AUTD3.Link.Twincat.csproj" />
   </Folder>
   <Folder Name="/examples/">
     <Project Path="examples/FocusSine/FocusSine.csproj" />
@@ -13,6 +16,8 @@
     <Project Path="examples/LowLatency/LowLatency.csproj" />
     <Project Path="examples/SendModes/SendModes.csproj" />
     <Project Path="examples/MultiDevice/MultiDevice.csproj" />
+    <Project Path="examples/Holo/Holo.csproj" />
+    <Project Path="examples/StmCircle/StmCircle.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AUTD3.Tests/AUTD3.Tests.csproj" />

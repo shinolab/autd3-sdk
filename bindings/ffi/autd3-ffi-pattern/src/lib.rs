@@ -1,12 +1,39 @@
 use autd3_ffi_abi::{PatternBuffer, drop_handle, into_handle};
 use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
-use autd3_rs_core::{Geometry, Length, Point3, Velocity};
+use autd3_rs_core::{Angle, Geometry, Length, Point3, UnitVector3, Vector3, Velocity};
+use autd3_rs_pattern::{BesselOption, FocusOption, PlaneOption};
 
 #[repr(C)]
 pub struct Autd3Emission {
     pub phase: u8,
     pub intensity: u8,
+}
+
+#[repr(C)]
+pub struct Autd3PatternOption {
+    pub intensity: u8,
+    pub phase_offset: u8,
+}
+
+impl Autd3PatternOption {
+    fn intensity(&self) -> Intensity {
+        Intensity(self.intensity)
+    }
+
+    fn phase_offset(&self) -> Phase {
+        Phase(self.phase_offset)
+    }
+}
+
+unsafe fn point(p: *const f32) -> Point3<f32> {
+    let p = unsafe { std::slice::from_raw_parts(p, 3) };
+    Point3::new(p[0], p[1], p[2])
+}
+
+unsafe fn unit_vector(p: *const f32) -> UnitVector3<f32> {
+    let p = unsafe { std::slice::from_raw_parts(p, 3) };
+    UnitVector3::new_normalize(Vector3::new(p[0], p[1], p[2]))
 }
 
 #[unsafe(no_mangle)]
@@ -67,24 +94,119 @@ pub unsafe extern "C" fn autd3_pattern_focus(
     geometry: *const Geometry,
     target: *const f32,
     wavelength_mm: f32,
-    intensity: u8,
+    option: *const Autd3PatternOption,
     buffer: *mut PatternBuffer,
 ) -> i32 {
-    if geometry.is_null() || target.is_null() || buffer.is_null() {
+    if geometry.is_null() || target.is_null() || option.is_null() || buffer.is_null() {
         return -1;
     }
 
     let geometry = unsafe { &*geometry };
-    let target = unsafe { std::slice::from_raw_parts(target, 3) };
+    let target = unsafe { point(target) };
+    let option = unsafe { &*option };
     let buffer = unsafe { &mut *buffer };
     if buffer.0.len() != geometry.len() {
         return -1;
     }
     autd3_rs_pattern::focus(
         geometry,
-        Point3::new(target[0], target[1], target[2]),
+        target,
         Length::millimeters(wavelength_mm),
-        Intensity(intensity),
+        &FocusOption {
+            intensity: option.intensity(),
+            phase_offset: option.phase_offset(),
+        },
+        &mut buffer.0,
+    );
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_plane(
+    geometry: *const Geometry,
+    dir: *const f32,
+    wavelength_mm: f32,
+    option: *const Autd3PatternOption,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    if geometry.is_null() || dir.is_null() || option.is_null() || buffer.is_null() {
+        return -1;
+    }
+
+    let geometry = unsafe { &*geometry };
+    let dir = unsafe { unit_vector(dir) };
+    let option = unsafe { &*option };
+    let buffer = unsafe { &mut *buffer };
+    if buffer.0.len() != geometry.len() {
+        return -1;
+    }
+    autd3_rs_pattern::plane(
+        geometry,
+        dir,
+        Length::millimeters(wavelength_mm),
+        &PlaneOption {
+            intensity: option.intensity(),
+            phase_offset: option.phase_offset(),
+        },
+        &mut buffer.0,
+    );
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_bessel(
+    geometry: *const Geometry,
+    apex: *const f32,
+    dir: *const f32,
+    theta_rad: f32,
+    wavelength_mm: f32,
+    option: *const Autd3PatternOption,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    if geometry.is_null() || apex.is_null() || dir.is_null() || option.is_null() || buffer.is_null()
+    {
+        return -1;
+    }
+
+    let geometry = unsafe { &*geometry };
+    let apex = unsafe { point(apex) };
+    let dir = unsafe { unit_vector(dir) };
+    let option = unsafe { &*option };
+    let buffer = unsafe { &mut *buffer };
+    if buffer.0.len() != geometry.len() {
+        return -1;
+    }
+    autd3_rs_pattern::bessel(
+        geometry,
+        apex,
+        dir,
+        Angle::from_radian(theta_rad),
+        Length::millimeters(wavelength_mm),
+        &BesselOption {
+            intensity: option.intensity(),
+            phase_offset: option.phase_offset(),
+        },
+        &mut buffer.0,
+    );
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_uniform(
+    phase: u8,
+    intensity: u8,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    if buffer.is_null() {
+        return -1;
+    }
+
+    let buffer = unsafe { &mut *buffer };
+    autd3_rs_pattern::uniform(
+        Emission {
+            phase: Phase(phase),
+            intensity: Intensity(intensity),
+        },
         &mut buffer.0,
     );
     0

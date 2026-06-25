@@ -2,18 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <AssemblyName>AUTD3.Pattern</AssemblyName>
+    <AssemblyName>AUTD3.Pattern.Holo</AssemblyName>
     <RootNamespace>AUTD3</RootNamespace>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../AUTD3.Core/AUTD3.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <InternalsVisibleTo Include="AUTD3" />
-    <InternalsVisibleTo Include="AUTD3.Pattern.Holo" />
+    <ProjectReference Include="../AUTD3.Pattern/AUTD3.Pattern.csproj" />
   </ItemGroup>
 
 </Project>

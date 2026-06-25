@@ -82,6 +82,8 @@ mod client {
     pub trait ClientBackend: Send + Sync {
         fn num_devices(&self) -> usize;
         fn read_firmware_version(&self) -> BoxFuture<Vec<String>>;
+        fn read_fpga_state(&self) -> BoxFuture<Vec<u8>>;
+        fn read_error_detail(&self) -> BoxFuture<Vec<u8>>;
 
         fn send_checked(&self, datagrams: Arc<Datagrams>, frame: Option<usize>) -> BoxFuture<()>;
         fn check_status(&self) -> BoxFuture<LinkStatusData>;

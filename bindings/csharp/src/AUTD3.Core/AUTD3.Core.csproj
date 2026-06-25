@@ -10,9 +10,12 @@
   <ItemGroup>
     <InternalsVisibleTo Include="AUTD3" />
     <InternalsVisibleTo Include="AUTD3.Pattern" />
+    <InternalsVisibleTo Include="AUTD3.Pattern.Holo" />
     <InternalsVisibleTo Include="AUTD3.Modulation" />
     <InternalsVisibleTo Include="AUTD3.Link.Ethercrab" />
     <InternalsVisibleTo Include="AUTD3.Link.Soem" />
+    <InternalsVisibleTo Include="AUTD3.Link.Remote" />
+    <InternalsVisibleTo Include="AUTD3.Link.Twincat" />
   </ItemGroup>
 
 </Project>

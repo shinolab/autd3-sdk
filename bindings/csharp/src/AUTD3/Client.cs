@@ -1,9 +1,23 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace AUTD3
 {
+    public readonly struct FpgaState
+    {
+        public byte Raw { get; }
+
+        public FpgaState(byte raw)
+        {
+            Raw = raw;
+        }
+
+        public bool IsThermalAsserted => (Raw & (1 << 0)) != 0;
+        public bool ReadsEnabled => (Raw & (1 << 7)) != 0;
+    }
+
     public sealed class LinkStatus
     {
         public IReadOnlyList<string> DeviceStates { get; }
@@ -83,6 +97,40 @@ namespace AUTD3
             finally
             {
                 NativeClient.autd3_string_array_free(array);
+            }
+        }
+
+        public async Task<IReadOnlyList<FpgaState>> ReadFpgaStateAsync()
+        {
+            var bytes = await ReadByteArrayAsync((cb, ud) =>
+                NativeClient.autd3_client_read_fpga_state(Handle, cb, ud)).ConfigureAwait(false);
+            var states = new FpgaState[bytes.Length];
+            for (var i = 0; i < bytes.Length; i++)
+            {
+                states[i] = new FpgaState(bytes[i]);
+            }
+            return states;
+        }
+
+        public Task<byte[]> ReadErrorDetailAsync() =>
+            ReadByteArrayAsync((cb, ud) => NativeClient.autd3_client_read_error_detail(Handle, cb, ud));
+
+        private static async Task<byte[]> ReadByteArrayAsync(Action<CompletionCallback, IntPtr> invoke)
+        {
+            var array = await AsyncOps.InvokeAsync(invoke).ConfigureAwait(false);
+            try
+            {
+                var len = (int)NativeClient.autd3_byte_array_len(array);
+                var bytes = new byte[len];
+                if (len > 0)
+                {
+                    Marshal.Copy(NativeClient.autd3_byte_array_data(array), bytes, 0, len);
+                }
+                return bytes;
+            }
+            finally
+            {
+                NativeClient.autd3_byte_array_free(array);
             }
         }
 
