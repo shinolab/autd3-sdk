@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Subcommand;
 
-use crate::util::{macos_soem_excludes, run};
+use crate::util::run;
 
 #[derive(Subcommand)]
 pub enum RustCmd {
@@ -19,19 +19,16 @@ pub enum RustCmd {
 pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
     match cmd {
         RustCmd::Build => {
-            let mut args = vec!["build", "--workspace", "--all-targets"];
-            args.extend(rust_macos_excludes());
+            let args = vec!["build", "--workspace", "--all-targets"];
             run("cargo", args, root)
         }
         RustCmd::Test => {
             let mut args = vec!["test", "--workspace", "--all-targets"];
-            args.extend(rust_macos_excludes());
             args.extend(windows_test_excludes());
             run("cargo", args, root)
         }
         RustCmd::Lint => {
             let mut args = vec!["clippy", "--workspace", "--all-targets"];
-            args.extend(rust_macos_excludes());
             args.extend(["--", "-D", "warnings"]);
             run("cargo", args, root)
         }
@@ -44,15 +41,6 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             run("cargo", args, root)
         }
     }
-}
-
-fn rust_macos_excludes() -> Vec<&'static str> {
-    macos_soem_excludes(&[
-        "autd3-rs-link-soem",
-        "autd3-rs-perftest",
-        "autd3-rs-patternsoak",
-        "autd3-rs-synctune",
-    ])
 }
 
 fn windows_test_excludes() -> Vec<&'static str> {

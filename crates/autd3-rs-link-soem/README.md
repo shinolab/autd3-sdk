@@ -13,6 +13,12 @@ Consequently:
 
 The full license text is in [COPYING](./COPYING).
 
+### Modified SOEM sources (macOS)
+
+SOEM 2.x has no macOS port in its core (only an unmaintained one under `contrib/`, written against an older API). To build on macOS this crate carries a small, **modified** macOS platform layer under [`macos/`](./macos) — `osal.c` (derived from SOEM's `osal/linux/osal.c`), `nicdrv.c` / `nicdrv.h` (derived from SOEM's `contrib/oshw/macosx`), and `Darwin.cmake` (derived from SOEM's `cmake/Linux.cmake`). `build.rs` injects them into a private copy of the SOEM tree at build time; the `3rdparty/SOEM` submodule is never modified.
+
+These files remain under SOEM's GPL-3.0 terms and carry per-file modification notices. The canonical SOEM source and license live upstream at <https://github.com/OpenEtherCATsociety/SOEM> (see its `LICENSE.md`).
+
 ## Building
 
 The SOEM sources live in the `3rdparty/SOEM` submodule and are built with CMake by `build.rs`, which also generates the FFI bindings with `bindgen`:

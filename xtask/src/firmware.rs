@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf as WinPathBuf;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Subcommand, ValueEnum};
 
 use crate::fpga::resolve_vivado;
@@ -289,8 +289,8 @@ fn resolve_jlink() -> Result<String> {
 
 #[cfg(windows)]
 fn find_jlink_windows() -> Option<String> {
-    use winreg::enums::HKEY_LOCAL_MACHINE;
     use winreg::RegKey;
+    use winreg::enums::HKEY_LOCAL_MACHINE;
 
     let uninstall = RegKey::predef(HKEY_LOCAL_MACHINE)
         .open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
