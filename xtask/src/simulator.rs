@@ -53,7 +53,14 @@ pub fn run_simulator(root: &Path, cmd: SimulatorCmd) -> Result<()> {
         SimulatorCmd::Lint => {
             run(
                 "cargo",
-                ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"],
+                [
+                    "clippy",
+                    "--workspace",
+                    "--all-targets",
+                    "--",
+                    "-D",
+                    "warnings",
+                ],
                 &sim,
             )?;
             run(
