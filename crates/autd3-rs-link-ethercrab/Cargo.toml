@@ -14,14 +14,14 @@ thiserror.workspace = true
 ethercrab.workspace = true
 futures-util.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "macros", "rt"] }
-pcap = { version = "2.3.0", default-features = false }
+pcap = { version = "2.4.0", default-features = false }
 tracing = { workspace = true, features = ["log"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 thread-priority.workspace = true
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
-cc = "1"
+cc = "1.2.65"
 
 [dev-dependencies]
 tokio = { workspace = true, features = [

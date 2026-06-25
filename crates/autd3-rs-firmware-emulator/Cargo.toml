@@ -16,8 +16,8 @@ include = ["src/**", "csrc/**", "vendor/**", "build.rs", "Cargo.toml"]
 autd3-rs-core.workspace = true
 
 [build-dependencies]
-cc = "1"
-bindgen = "0.72"
+cc = "1.2.65"
+bindgen = "0.72.1"
 
 [lints]
 workspace = true

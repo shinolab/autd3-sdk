@@ -40,8 +40,8 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             let native = build_ffi(root)?;
             let mut cmd = Command::new("dotnet");
             cmd.args(["test", SOLUTION, "-c", "Debug"])
-                .current_dir(&dir)
-                .env("LD_LIBRARY_PATH", native);
+                .current_dir(&dir);
+            set_native_lib_path(&mut cmd, &native);
             spawn(cmd, "dotnet")
         }
         CsCmd::Format { fix } => {
@@ -107,6 +107,17 @@ fn run_example(exe: &Path, native: &Path, no_sudo: bool, cwd: &Path) -> Result<(
         let mut cmd = Command::new(&exe);
         cmd.current_dir(cwd).env("LD_LIBRARY_PATH", &native);
         spawn(cmd, "example")
+    }
+}
+
+fn set_native_lib_path(cmd: &mut Command, native: &Path) {
+    if cfg!(target_os = "windows") {
+        let existing = std::env::var("PATH").unwrap_or_default();
+        cmd.env("PATH", format!("{};{existing}", native.display()));
+    } else if cfg!(target_os = "macos") {
+        cmd.env("DYLD_LIBRARY_PATH", native);
+    } else {
+        cmd.env("LD_LIBRARY_PATH", native);
     }
 }
 

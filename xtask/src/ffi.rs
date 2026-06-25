@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Subcommand;
 
-use crate::util::{cargo_fmt_packages, run};
+use crate::util::{cargo_fmt_packages, macos_soem_excludes, run};
 
 const SOEM_CRATE: &str = "autd3-ffi-link-soem";
 
@@ -26,6 +26,7 @@ pub fn run_ffi(root: &Path, cmd: FfiCmd) -> Result<()> {
     let dir = root.join("bindings").join("ffi");
     match cmd {
         FfiCmd::Build { debug, soem } => {
+            let soem = soem && !cfg!(target_os = "macos");
             let mut args = vec!["build", "--workspace"];
             if !soem {
                 args.push("--exclude");
@@ -36,18 +37,12 @@ pub fn run_ffi(root: &Path, cmd: FfiCmd) -> Result<()> {
             }
             run("cargo", args, &dir)
         }
-        FfiCmd::Lint => run(
-            "cargo",
-            [
-                "clippy",
-                "--workspace",
-                "--all-targets",
-                "--",
-                "-D",
-                "warnings",
-            ],
-            &dir,
-        ),
+        FfiCmd::Lint => {
+            let mut args = vec!["clippy", "--workspace", "--all-targets"];
+            args.extend(macos_soem_excludes(&[SOEM_CRATE]));
+            args.extend(["--", "-D", "warnings"]);
+            run("cargo", args, &dir)
+        }
         FfiCmd::Format { fix } => cargo_fmt_packages(&dir, fix),
     }
 }

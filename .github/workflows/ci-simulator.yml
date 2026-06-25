@@ -9,8 +9,12 @@ defaults:
 
 jobs:
   simulator:
-    name: simulator
-    runs-on: ubuntu-latest
+    name: simulator (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -23,5 +27,7 @@ jobs:
             simulator
             simulator/frontend
             xtask
-      - run: cargo xtask simulator format
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo xtask simulator format
       - run: cargo xtask simulator lint

@@ -11,30 +11,30 @@ description = "Browser frontend for the AUTD3 simulator"
 
 [dependencies]
 autd3-rs-simulator-protocol = { path = "../protocol" }
-dioxus = { version = "0.7", features = ["web"] }
-gloo-net = { version = "0.6", default-features = false, features = ["websocket"] }
-futures-util = { version = "0.3", default-features = false, features = [
+dioxus = { version = "0.7.9", features = ["web"] }
+gloo-net = { version = "0.7.0", default-features = false, features = ["websocket"] }
+futures-util = { version = "0.3.32", default-features = false, features = [
     "sink",
     "std",
 ] }
-futures-channel = { version = "0.3", default-features = false, features = [
+futures-channel = { version = "0.3.32", default-features = false, features = [
     "std",
 ] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tracing = "0.1"
-console_error_panic_hook = "0.1"
-wgpu = { version = "29", default-features = false, features = [
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+tracing = "0.1.44"
+console_error_panic_hook = "0.1.7"
+wgpu = { version = "29.0.3", default-features = false, features = [
     "webgpu",
     "wgsl",
     "fragile-send-sync-non-atomic-wasm",
 ] }
-bytemuck = { version = "1", features = ["derive"] }
-glam = { version = "0.33", features = ["bytemuck"] }
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-gloo-timers = { version = "0.3", features = ["futures"] }
-web-sys = { version = "0.3", features = [
+bytemuck = { version = "1.25.0", features = ["derive"] }
+glam = { version = "0.33.1", features = ["bytemuck"] }
+wasm-bindgen = "0.2.126"
+wasm-bindgen-futures = "0.4.76"
+gloo-timers = { version = "0.4.0", features = ["futures"] }
+web-sys = { version = "0.3.103", features = [
     "Window",
     "Location",
     "Document",

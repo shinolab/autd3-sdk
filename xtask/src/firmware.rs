@@ -93,7 +93,8 @@ fn download_and_extract(version: &str, force: bool) -> Result<PathBuf> {
         .call()
         .with_context(|| format!("downloading {url}"))?;
     let mut bytes = Vec::new();
-    resp.into_reader()
+    resp.into_body()
+        .into_reader()
         .read_to_end(&mut bytes)
         .context("reading firmware bundle")?;
 

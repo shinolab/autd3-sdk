@@ -22,7 +22,7 @@ authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"
 
 [workspace.dependencies]
-tokio = { version = "1", default-features = false, features = [
+tokio = { version = "1.52.3", default-features = false, features = [
     "rt-multi-thread",
     "time",
 ] }

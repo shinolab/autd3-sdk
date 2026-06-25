@@ -15,8 +15,8 @@ tokio = { workspace = true, features = ["sync", "rt"] }
 tracing = { workspace = true, features = ["log"] }
 
 [build-dependencies]
-bindgen = "0.72"
-cmake = { version = "0.1", default-features = false }
+bindgen = "0.72.1"
+cmake = { version = "0.1.58", default-features = false }
 
 [lints]
 workspace = true
