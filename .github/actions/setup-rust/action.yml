@@ -6,6 +6,16 @@ inputs:
     description: Comma-separated list of rustup components to install (e.g. "rustfmt, clippy").
     required: false
     default: ""
+  targets:
+    description: Comma-separated list of rustup targets to install (e.g. "wasm32-unknown-unknown").
+    required: false
+    default: ""
+  workspaces:
+    description: Newline-separated rust-cache workspaces.
+    required: false
+    default: |
+      .
+      xtask
 
 runs:
   using: composite
@@ -13,8 +23,7 @@ runs:
     - uses: dtolnay/rust-toolchain@stable
       with:
         components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
     - uses: Swatinem/rust-cache@v2
       with:
-        workspaces: |
-          .
-          xtask
+        workspaces: ${{ inputs.workspaces }}

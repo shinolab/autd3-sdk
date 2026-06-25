@@ -13,7 +13,14 @@ description = "Browser frontend for the AUTD3 simulator"
 autd3-rs-simulator-protocol = { path = "../protocol" }
 dioxus = { version = "0.7", features = ["web"] }
 gloo-net = { version = "0.6", default-features = false, features = ["websocket"] }
-futures-util = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = [
+    "sink",
+    "std",
+] }
+futures-channel = { version = "0.3", default-features = false, features = [
+    "std",
+] }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
 console_error_panic_hook = "0.1"
@@ -33,6 +40,7 @@ web-sys = { version = "0.3", features = [
     "Document",
     "Element",
     "HtmlCanvasElement",
+    "Storage",
 ] }
 
 [lints.clippy]
@@ -43,3 +51,5 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 cast_precision_loss = "allow"
 cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+struct_excessive_bools = "allow"

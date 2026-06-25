@@ -1,28 +1,38 @@
 use core::convert::Infallible;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use autd3_rs_core::link::{ConstStateChecker, CycleOutcome, Link};
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES};
 use autd3_rs_firmware_emulator::Device as EmuDevice;
-use autd3_rs_simulator_protocol::TransState;
+use autd3_rs_simulator_protocol::{DeviceState, TransState};
 
-use crate::emulator::extract_states_into;
+use crate::control::ControlState;
+use crate::emulator::{extract_device_states, extract_states_into};
 
 pub type SharedStates = Arc<Mutex<Vec<TransState>>>;
+pub type SharedDeviceStates = Arc<Mutex<Vec<DeviceState>>>;
 
 pub struct EmulatorLink {
     devices: Vec<EmuDevice>,
     states: SharedStates,
+    device_states: SharedDeviceStates,
+    control: Arc<ControlState>,
     start: Instant,
 }
 
 impl EmulatorLink {
     #[must_use]
-    pub fn new(transducer_counts: impl IntoIterator<Item = usize>) -> Self {
+    pub fn new(
+        transducer_counts: impl IntoIterator<Item = usize>,
+        control: Arc<ControlState>,
+    ) -> Self {
         Self {
             devices: transducer_counts.into_iter().map(EmuDevice::new).collect(),
             states: Arc::new(Mutex::new(Vec::new())),
+            device_states: Arc::new(Mutex::new(Vec::new())),
+            control,
             start: Instant::now(),
         }
     }
@@ -30,6 +40,11 @@ impl EmulatorLink {
     #[must_use]
     pub fn states(&self) -> SharedStates {
         self.states.clone()
+    }
+
+    #[must_use]
+    pub fn device_states(&self) -> SharedDeviceStates {
+        self.device_states.clone()
     }
 }
 
@@ -56,7 +71,11 @@ impl Link for EmulatorLink {
             device.send(t).write_to(r);
         }
         if let Ok(mut guard) = self.states.lock() {
-            extract_states_into(&self.devices, &mut guard);
+            let mod_enabled = self.control.mod_enabled.load(Ordering::Relaxed);
+            extract_states_into(&self.devices, &mut guard, mod_enabled);
+        }
+        if let Ok(mut guard) = self.device_states.lock() {
+            *guard = extract_device_states(&self.devices);
         }
         Ok(CycleOutcome { rx_valid: true })
     }

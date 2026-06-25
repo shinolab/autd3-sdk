@@ -68,7 +68,7 @@ impl Client {
         config: ClientConfig,
     ) -> Result<(Self, <T::Link as Link>::Checker), Error> {
         let config = config.validate()?;
-        let link = link.into_link().await?;
+        let link = link.into_link(geometry).await?;
         let num_devices = link.num_devices();
         if num_devices == 0 || num_devices > MAX_DEVICES {
             return Err(Error::InvalidPayload(PayloadError::DeviceCountOutOfRange {

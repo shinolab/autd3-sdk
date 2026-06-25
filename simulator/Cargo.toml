@@ -1,0 +1,59 @@
+[workspace]
+resolver = "3"
+members = ["backend", "protocol"]
+exclude = ["frontend"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "MIT"
+authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
+repository = "https://github.com/shinolab/autd3-sdk"
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_precision_loss = "allow"
+
+[workspace.dependencies]
+autd3-rs-core = { path = "../crates/autd3-rs-core" }
+autd3-rs-firmware-emulator = { path = "../crates/autd3-rs-firmware-emulator" }
+autd3-rs-link-remote = { path = "../crates/autd3-rs-link-remote" }
+autd3-rs-simulator-protocol = { path = "protocol" }
+tokio = { version = "1", default-features = false, features = [
+    "sync",
+    "time",
+    "macros",
+    "rt",
+] }
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+clap = { version = "4", default-features = false, features = [
+    "std",
+    "derive",
+    "help",
+    "usage",
+    "error-context",
+] }
+anyhow = { version = "1", default-features = false, features = ["std"] }
+serde = { version = "1", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+axum = { version = "0.8", default-features = false, features = [
+    "http1",
+    "tokio",
+    "ws",
+] }
+tower-http = { version = "0.6", default-features = false, features = ["fs"] }
+tracing = { version = "0.1.44", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "std",
+    "fmt",
+    "ansi",
+    "env-filter",
+] }

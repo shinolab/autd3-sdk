@@ -22,15 +22,21 @@ const TIMER_RESOLUTION_MS: u32 = 1;
 impl autd3_rs_core::IntoLink for crate::option::SoemLinkOption {
     type Link = SoemLink;
 
-    async fn into_link(self) -> Result<SoemLink, autd3_rs_core::Error> {
-        SoemLinkOptionFull::from(self).into_link().await
+    async fn into_link(
+        self,
+        geometry: &autd3_rs_core::Geometry,
+    ) -> Result<SoemLink, autd3_rs_core::Error> {
+        SoemLinkOptionFull::from(self).into_link(geometry).await
     }
 }
 
 impl autd3_rs_core::IntoLink for SoemLinkOptionFull {
     type Link = SoemLink;
 
-    async fn into_link(self) -> Result<SoemLink, autd3_rs_core::Error> {
+    async fn into_link(
+        self,
+        _geometry: &autd3_rs_core::Geometry,
+    ) -> Result<SoemLink, autd3_rs_core::Error> {
         tokio::task::spawn_blocking(move || SoemLink::open(self))
             .await
             .map_err(|e| autd3_rs_core::Error::Link(format!("link open task panicked: {e}")))?

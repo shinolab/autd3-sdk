@@ -1,0 +1,27 @@
+name: ci-simulator
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  simulator:
+    name: simulator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+          workspaces: |
+            simulator
+            simulator/frontend
+            xtask
+      - run: cargo xtask simulator format
+      - run: cargo xtask simulator lint

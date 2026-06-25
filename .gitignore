@@ -1,3 +1,4 @@
 /target
 /xtask/target
+/simulator/target
 /firmware/cpu/tests/build

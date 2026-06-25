@@ -21,8 +21,11 @@ impl RemoteLinkOption {
 impl IntoLink for RemoteLinkOption {
     type Link = RemoteLink;
 
-    async fn into_link(self) -> Result<RemoteLink, autd3_rs_core::Error> {
-        RemoteLink::open(self.addr).map_err(|e| autd3_rs_core::Error::Link(e.to_string()))
+    async fn into_link(
+        self,
+        geometry: &autd3_rs_core::Geometry,
+    ) -> Result<RemoteLink, autd3_rs_core::Error> {
+        RemoteLink::open(self.addr, geometry).map_err(|e| autd3_rs_core::Error::Link(e.to_string()))
     }
 }
 
@@ -33,7 +36,10 @@ pub struct RemoteLink {
 }
 
 impl RemoteLink {
-    pub fn open(addr: SocketAddr) -> Result<Self, RemoteLinkError> {
+    pub fn open(
+        addr: SocketAddr,
+        geometry: &autd3_rs_core::Geometry,
+    ) -> Result<Self, RemoteLinkError> {
         let mut stream = TcpStream::connect(addr)?;
         stream.set_nodelay(true)?;
 
@@ -47,6 +53,21 @@ impl RemoteLink {
         if num_devices == 0 {
             return Err(RemoteLinkError::InvalidDeviceCount { found: num_devices });
         }
+
+        let layout: Vec<crate::TransducerLayout> = geometry
+            .iter()
+            .flat_map(|dev| {
+                dev.positions()
+                    .iter()
+                    .zip(dev.directions())
+                    .map(|(p, d)| crate::TransducerLayout {
+                        pos: [p.x, p.y, p.z],
+                        dir: [d.x, d.y, d.z],
+                    })
+            })
+            .collect();
+        stream.write_all(&wire::encode_geometry(&layout))?;
+        stream.flush()?;
 
         Ok(Self {
             stream,

@@ -10,7 +10,7 @@ the sound field. The browser UI is on a separate port (default **8081**).
 
 ```bash
 # 1) Start the simulator (in autd3-sdk/)
-cargo xtask tool simulator --open          # UI=8081, Remote Link=8080
+cargo xtask simulator run --open          # UI=8081, Remote Link=8080
 
 # 2) Connect a client (in another terminal; example that sends a focus)
 cargo xtask example remote_client          # connects to 127.0.0.1:8080 and sends a focus
@@ -29,9 +29,9 @@ npm install
 In `autd3-sdk/`:
 
 ```bash
-cargo xtask tool simulator
-cargo xtask tool simulator --open          # open the browser automatically after start
-cargo xtask tool simulator --port 9000
+cargo xtask simulator run
+cargo xtask simulator run --open          # open the browser automatically after start
+cargo xtask simulator run --port 9000
 ```
 
 > If you see the `Browserslist: caniuse-lite is outdated` warning, update it with

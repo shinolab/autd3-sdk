@@ -8,7 +8,9 @@ use autd3_rs_core::link::Link;
 use autd3_rs_core::{IntoLink, RX_FRAME_BYTES, TX_FRAME_BYTES};
 
 use crate::error::RemoteLinkError;
-use crate::wire;
+use crate::{TransducerLayout, wire};
+
+type GeometryHandler = Arc<dyn Fn(Vec<TransducerLayout>) + Send + Sync>;
 
 const DEFAULT_CYCLE_PERIOD: Duration = Duration::from_micros(250);
 
@@ -107,11 +109,32 @@ pub struct RemoteServer {
     listener: TcpListener,
     shared: Arc<Shared>,
     num_devices: usize,
+    on_geometry: Option<GeometryHandler>,
     rt: Option<JoinHandle<()>>,
 }
 
 impl RemoteServer {
     pub fn with_link<L: Link>(bind: SocketAddr, link: L) -> Result<Self, RemoteLinkError> {
+        Self::with_link_inner(bind, link, None)
+    }
+
+    pub fn with_link_and_geometry<L, F>(
+        bind: SocketAddr,
+        link: L,
+        on_geometry: F,
+    ) -> Result<Self, RemoteLinkError>
+    where
+        L: Link,
+        F: Fn(Vec<TransducerLayout>) + Send + Sync + 'static,
+    {
+        Self::with_link_inner(bind, link, Some(Arc::new(on_geometry)))
+    }
+
+    fn with_link_inner<L: Link>(
+        bind: SocketAddr,
+        link: L,
+        on_geometry: Option<GeometryHandler>,
+    ) -> Result<Self, RemoteLinkError> {
         let num_devices = link.num_devices();
         if num_devices == 0 {
             return Err(RemoteLinkError::InvalidDeviceCount { found: num_devices });
@@ -139,13 +162,15 @@ impl RemoteServer {
             listener,
             shared,
             num_devices,
+            on_geometry,
             rt: Some(rt),
         })
     }
 
     pub async fn open<T: IntoLink>(bind: SocketAddr, link: T) -> Result<Self, RemoteLinkError> {
+        let geometry = autd3_rs_core::Geometry::new(Vec::<autd3_rs_core::Device>::new());
         let link = link
-            .into_link()
+            .into_link(&geometry)
             .await
             .map_err(|e| RemoteLinkError::Link(e.to_string()))?;
         Self::with_link(bind, link)
@@ -210,6 +235,12 @@ impl RemoteServer {
                     stream.write_all(&[u8::from(rx_valid)])?;
                     stream.write_all(&rx_buf)?;
                     stream.flush()?;
+                }
+                wire::TAG_GEOMETRY => {
+                    let layout = wire::read_geometry(&mut stream)?;
+                    if let Some(cb) = &self.on_geometry {
+                        cb(layout);
+                    }
                 }
                 wire::TAG_CLOSE => return Ok(()),
                 other => return Err(RemoteLinkError::UnexpectedTag(other)),
