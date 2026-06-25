@@ -95,6 +95,7 @@ def test_commands_build() -> None:
     builder.push(autd3.ForceFan(True))
     builder.push(autd3.SetSilencer(autd3.FixedCompletionTime()))
     builder.push(autd3.SetSilencer(autd3.FixedUpdateRate(intensity=256, phase=256)))
+    builder.push(autd3.SetSilencer.disable())
     builder.push(autd3.SetGpioOut([autd3.GpioOut.Off, autd3.GpioOut.BaseSignal,
                                    autd3.GpioOut.PwmOut(0), autd3.GpioOut.Direct(True)]))
     builder.push(autd3.EmulateGpioIn([True, False, True, False]))

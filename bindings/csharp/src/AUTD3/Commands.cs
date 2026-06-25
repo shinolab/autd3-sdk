@@ -33,6 +33,9 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_set_silencer_update_rate(ushort intensity, ushort phase);
 
         [DllImport(Lib)]
+        internal static extern IntPtr autd3_op_set_silencer_disable();
+
+        [DllImport(Lib)]
         internal static extern IntPtr autd3_op_set_gpio_out(GpioOutNative[] outputs);
 
         [DllImport(Lib)]
@@ -124,6 +127,9 @@ namespace AUTD3
                 }
                 return op;
             });
+
+        public static SetSilencer Disable() =>
+            new SetSilencer(NativeCommand.autd3_op_set_silencer_disable);
 
         IntPtr ICommand.CreateOp() => _create();
     }

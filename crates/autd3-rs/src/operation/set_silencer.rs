@@ -151,6 +151,17 @@ impl<T: SilencerConfig> SetSilencer<T> {
     }
 }
 
+impl SetSilencer<FixedCompletionTime> {
+    #[must_use]
+    pub const fn disable() -> Self {
+        Self::new(FixedCompletionTime {
+            intensity: ULTRASOUND_PERIOD,
+            phase: ULTRASOUND_PERIOD,
+            strict_mode: false,
+        })
+    }
+}
+
 impl Default for SetSilencer<FixedCompletionTime> {
     fn default() -> Self {
         Self::new(FixedCompletionTime::default())
@@ -228,6 +239,16 @@ mod tests {
         assert_eq!(out[0], FLAG_STRICT_MODE);
         assert_eq!(&out[6..8], &10u16.to_le_bytes());
         assert_eq!(&out[8..10], &40u16.to_le_bytes());
+    }
+
+    #[test]
+    fn disable_is_one_step_non_strict() {
+        let mut out = [0u8; PAYLOAD_BYTES];
+        let cmd = SetSilencer::disable().encode(0, 0, &mut out).unwrap();
+        assert_eq!(cmd, Cmd::SetSilencer);
+        assert_eq!(out[0], 0);
+        assert_eq!(&out[6..8], &1u16.to_le_bytes());
+        assert_eq!(&out[8..10], &1u16.to_le_bytes());
     }
 
     #[test]

@@ -194,6 +194,13 @@ impl SetSilencerPy {
         };
         Ok(Self { config })
     }
+
+    #[staticmethod]
+    fn disable() -> Self {
+        Self {
+            config: SilencerConfigKind::Completion(SetSilencer::disable().config),
+        }
+    }
 }
 
 impl SetSilencerPy {
