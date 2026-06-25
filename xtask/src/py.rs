@@ -4,7 +4,7 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 
-use crate::util::{cargo_fmt_packages, on_path, run};
+use crate::util::{cargo_fmt_packages, macos_soem_excludes, on_path, run};
 
 const MIT_WHEELS: &[&str] = &[
     "autd3-core",
@@ -17,6 +17,7 @@ const MIT_WHEELS: &[&str] = &[
     "autd3",
 ];
 const SOEM_WHEEL: &str = "autd3-link-soem";
+const SOEM_CRATE: &str = "autd3-python-link-soem";
 
 #[derive(Subcommand)]
 pub enum PyCmd {
@@ -73,18 +74,12 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             let venv = ensure_venv(&dir)?;
             develop(&dir, &venv, wheels(soem), release)
         }
-        PyCmd::Lint => run(
-            "cargo",
-            [
-                "clippy",
-                "--workspace",
-                "--all-targets",
-                "--",
-                "-D",
-                "warnings",
-            ],
-            &dir,
-        ),
+        PyCmd::Lint => {
+            let mut args = vec!["clippy", "--workspace", "--all-targets"];
+            args.extend(macos_soem_excludes(&[SOEM_CRATE]));
+            args.extend(["--", "-D", "warnings"]);
+            run("cargo", args, &dir)
+        }
         PyCmd::Format { fix } => cargo_fmt_packages(&dir, fix),
         PyCmd::Test { soem } => {
             let venv = ensure_venv(&dir)?;
@@ -121,7 +116,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
 }
 
 fn wheels(soem: bool) -> &'static [&'static str] {
-    if soem {
+    if soem && !cfg!(target_os = "macos") {
         const ALL: &[&str] = &[
             "autd3-core",
             "autd3-pattern",

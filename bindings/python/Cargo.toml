@@ -22,9 +22,9 @@ authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"
 
 [workspace.dependencies]
-pyo3 = { version = "0.29", features = ["extension-module"] }
-pyo3-async-runtimes = { version = "0.29", features = ["tokio-runtime"] }
-tokio = { version = "1", default-features = false, features = [
+pyo3 = { version = "0.29.0", features = ["extension-module"] }
+pyo3-async-runtimes = { version = "0.29.0", features = ["tokio-runtime"] }
+tokio = { version = "1.52.3", default-features = false, features = [
     "rt-multi-thread",
     "time",
 ] }

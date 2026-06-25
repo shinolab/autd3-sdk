@@ -9,8 +9,12 @@ defaults:
 
 jobs:
   py:
-    name: py
-    runs-on: ubuntu-latest
+    name: py (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -19,8 +23,11 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Install system deps
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
       - uses: astral-sh/setup-uv@v6
-      - run: cargo xtask py format
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo xtask py format
       - run: cargo xtask py lint
       - run: cargo xtask py test --soem

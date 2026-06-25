@@ -25,7 +25,7 @@ humantime.workspace = true
 anyhow.workspace = true
 tracing-subscriber.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "macros", "rt", "rt-multi-thread", "signal"] }
-stats_alloc = { version = "0.1", optional = true }
+stats_alloc = { version = "0.1.10", optional = true }
 
 [lints]
 workspace = true

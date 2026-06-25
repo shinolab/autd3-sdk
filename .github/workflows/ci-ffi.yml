@@ -9,8 +9,12 @@ defaults:
 
 jobs:
   ffi:
-    name: ffi
-    runs-on: ubuntu-latest
+    name: ffi (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -19,7 +23,10 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Install system deps
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
-      - run: cargo xtask ffi format
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo xtask ffi format
       - run: cargo xtask ffi lint
       - run: cargo xtask ffi build --soem

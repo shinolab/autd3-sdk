@@ -133,3 +133,11 @@ where
     }
     Ok(())
 }
+
+pub fn macos_soem_excludes(crates: &[&'static str]) -> Vec<&'static str> {
+    if cfg!(target_os = "macos") {
+        crates.iter().flat_map(|c| ["--exclude", *c]).collect()
+    } else {
+        Vec::new()
+    }
+}

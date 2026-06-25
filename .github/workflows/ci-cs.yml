@@ -9,8 +9,12 @@ defaults:
 
 jobs:
   cs:
-    name: cs
-    runs-on: ubuntu-latest
+    name: cs (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -20,7 +24,10 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Install system deps
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev
-      - run: cargo xtask cs format
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo xtask cs format
       - run: cargo xtask cs build
       - run: cargo xtask cs test
