@@ -314,6 +314,7 @@ pub enum Pending {
         intensity: NonZeroU16,
         phase: NonZeroU16,
     },
+    SetSilencerDisable,
     SetGpioOut([GpioOut; 4]),
     EmulateGpioIn([bool; 4]),
     SetOutputMask(Vec<[bool; NUM_TRANSDUCERS]>),
@@ -496,6 +497,11 @@ pub extern "C" fn autd3_op_set_silencer_update_rate(intensity: u16, phase: u16) 
         return std::ptr::null_mut();
     };
     into_handle(Pending::SetSilencerUpdateRate { intensity, phase })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_set_silencer_disable() -> *mut Pending {
+    into_handle(Pending::SetSilencerDisable)
 }
 
 #[unsafe(no_mangle)]
@@ -806,6 +812,9 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                     intensity: *intensity,
                     phase: *phase,
                 }));
+            }
+            Pending::SetSilencerDisable => {
+                core.push(SetSilencer::disable());
             }
             Pending::SetGpioOut(outputs) => {
                 core.push(SetGpioOut { outputs: *outputs });

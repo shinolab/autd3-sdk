@@ -105,7 +105,8 @@ namespace AUTD3.Tests
                 .Push(new Clear())
                 .Push(new Synchronize())
                 .Push(new ForceFan(true))
-                .Push(SetSilencer.FromUpdateRate(256, 256));
+                .Push(SetSilencer.FromUpdateRate(256, 256))
+                .Push(SetSilencer.Disable());
             using var datagrams = builder.Build();
             Assert.True(datagrams.NumFrames > 0);
         }
