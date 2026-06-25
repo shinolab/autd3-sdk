@@ -47,7 +47,12 @@ fn loopback_relays_frames() {
     let addr = server.local_addr().unwrap();
     let handle = std::thread::spawn(move || server.serve_once());
 
-    let mut link = RemoteLink::open(addr).unwrap();
+    let geometry = autd3_rs_core::Geometry::new(
+        (0..num_devices)
+            .map(|_| autd3_rs_core::Autd3::default())
+            .collect::<Vec<_>>(),
+    );
+    let mut link = RemoteLink::open(addr, &geometry).unwrap();
     assert_eq!(link.num_devices(), num_devices);
 
     let mut tx = vec![[0u8; TX_FRAME_BYTES]; num_devices];

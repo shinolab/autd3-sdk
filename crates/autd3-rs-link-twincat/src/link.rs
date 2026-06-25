@@ -66,7 +66,10 @@ impl TwinCATLinkOption {
 impl IntoLink for TwinCATLinkOption {
     type Link = TwinCATLink;
 
-    async fn into_link(self) -> Result<TwinCATLink, autd3_rs_core::Error> {
+    async fn into_link(
+        self,
+        _geometry: &autd3_rs_core::Geometry,
+    ) -> Result<TwinCATLink, autd3_rs_core::Error> {
         TwinCATLink::open(self).map_err(|e| autd3_rs_core::Error::Link(e.to_string()))
     }
 }

@@ -97,15 +97,23 @@ impl<S: HasPdi> Groups<S, HasDc> {
 impl autd3_rs_core::IntoLink for EtherCrabLinkOption {
     type Link = EtherCrabLink;
 
-    async fn into_link(self) -> Result<EtherCrabLink, autd3_rs_core::Error> {
-        EtherCrabLinkOptionFull::from(self).into_link().await
+    async fn into_link(
+        self,
+        geometry: &autd3_rs_core::Geometry,
+    ) -> Result<EtherCrabLink, autd3_rs_core::Error> {
+        EtherCrabLinkOptionFull::from(self)
+            .into_link(geometry)
+            .await
     }
 }
 
 impl autd3_rs_core::IntoLink for EtherCrabLinkOptionFull {
     type Link = EtherCrabLink;
 
-    async fn into_link(self) -> Result<EtherCrabLink, autd3_rs_core::Error> {
+    async fn into_link(
+        self,
+        _geometry: &autd3_rs_core::Geometry,
+    ) -> Result<EtherCrabLink, autd3_rs_core::Error> {
         Box::pin(EtherCrabLink::open(self))
             .await
             .map_err(|e| autd3_rs_core::Error::Link(e.to_string()))

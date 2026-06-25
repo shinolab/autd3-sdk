@@ -14,15 +14,13 @@ members = [
     "tools/perftest",
     "tools/patternsoak",
     "tools/synctune",
-    "tools/simulator",
-    "tools/simulator/protocol",
     "examples",
 ]
 exclude = [
     "xtask",
     "bindings/python",
     "bindings/ffi",
-    "tools/simulator/frontend",
+    "simulator",
 ]
 
 [workspace.package]
@@ -78,7 +76,6 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 autd3-rs = { version = "0.1.0", path = "crates/autd3-rs" }
 autd3-rs-core = { version = "0.1.0", path = "crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { version = "0.1.0", path = "crates/autd3-rs-firmware-emulator" }
-autd3-rs-simulator-protocol = { version = "0.1.0", path = "tools/simulator/protocol" }
 autd3-rs-pattern = { version = "0.1.0", path = "crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { version = "0.1.0", path = "crates/autd3-rs-pattern-holo" }
 autd3-rs-link-ethercrab = { version = "0.1.0", path = "crates/autd3-rs-link-ethercrab" }

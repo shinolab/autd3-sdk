@@ -9,6 +9,7 @@ mod firmware;
 mod fpga;
 mod py;
 mod rust;
+mod simulator;
 mod tool;
 mod util;
 mod vendor;
@@ -26,6 +27,7 @@ use firmware::{FirmwareCmd, run_firmware};
 use fpga::{FpgaCmd, run_fpga};
 use py::{PyCmd, run_py};
 use rust::{RustCmd, run_rust};
+use simulator::{SimulatorCmd, run_simulator};
 use tool::{ToolCmd, run_tool};
 use util::workspace_root;
 use vendor::{VendorFwCmd, run_vendor_fw};
@@ -50,6 +52,10 @@ enum TopCmd {
     Tool {
         #[command(subcommand)]
         cmd: ToolCmd,
+    },
+    Simulator {
+        #[command(subcommand)]
+        cmd: SimulatorCmd,
     },
     Fpga {
         #[command(subcommand)]
@@ -84,6 +90,7 @@ fn main() -> Result<()> {
         TopCmd::Rust { cmd } => run_rust(&root, &cmd),
         TopCmd::Cpu { cmd } => run_cpu(&root, &cmd),
         TopCmd::Tool { cmd } => run_tool(&root, cmd),
+        TopCmd::Simulator { cmd } => run_simulator(&root, cmd),
         TopCmd::Fpga { cmd } => run_fpga(&root, &cmd),
         TopCmd::Firmware { cmd } => run_firmware(&root, cmd),
         TopCmd::Py { cmd } => run_py(&root, cmd),
