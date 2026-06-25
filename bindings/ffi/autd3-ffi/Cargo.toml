@@ -9,7 +9,7 @@ repository.workspace = true
 description = "C ABI bindings for autd3-rs (client, datagram builder)."
 
 [lib]
-name = "autd3"
+name = "autd3capi"
 crate-type = ["cdylib"]
 
 [dependencies]

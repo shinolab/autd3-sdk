@@ -22,7 +22,7 @@ namespace AUTD3
 
     internal static class NativeStm
     {
-        private const string Lib = "autd3";
+        private const string Lib = "autd3capi";
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_stm_config_freq(float hz);

@@ -57,7 +57,7 @@ namespace AUTD3
         [DllImport(Lib)]
         internal static extern int autd3_modulation_radiation_pressure(IntPtr buffer);
 
-        [DllImport("autd3")]
+        [DllImport("autd3capi")]
         internal static extern IntPtr autd3_op_modulation(IntPtr samplingConfig, IntPtr modulationBuffer);
     }
 

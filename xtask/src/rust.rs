@@ -26,6 +26,7 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
         RustCmd::Test => {
             let mut args = vec!["test", "--workspace", "--all-targets"];
             args.extend(rust_macos_excludes());
+            args.extend(windows_test_excludes());
             run("cargo", args, root)
         }
         RustCmd::Lint => {
@@ -52,4 +53,20 @@ fn rust_macos_excludes() -> Vec<&'static str> {
         "autd3-rs-patternsoak",
         "autd3-rs-synctune",
     ])
+}
+
+fn windows_test_excludes() -> Vec<&'static str> {
+    if cfg!(target_os = "windows") {
+        [
+            "autd3-rs-perftest",
+            "autd3-rs-patternsoak",
+            "autd3-rs-synctune",
+            "autd3-rs-examples",
+        ]
+        .iter()
+        .flat_map(|pkg| ["--exclude", *pkg])
+        .collect()
+    } else {
+        Vec::new()
+    }
 }

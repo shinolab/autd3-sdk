@@ -47,6 +47,9 @@ fn main() {
     let csrc = manifest.join("csrc");
 
     let mut build = cc::Build::new();
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        build.compiler("clang");
+    }
     build
         .std("c11")
         .include(&fw_inc)
