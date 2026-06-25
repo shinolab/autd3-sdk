@@ -1,18 +1,26 @@
 use std::ffi::{CString, c_char, c_void};
 use std::num::NonZeroU16;
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use autd3_ffi_abi::{
     ClientBackend, ClientOpener, CompletionCallback, CompletionCtx, DevicePattern,
     ModulationBuffer, PatternBuffer, drop_handle, into_handle,
 };
+use autd3_rs::operation::Synchronize;
+use autd3_rs::params::NUM_TRANSDUCERS;
+use autd3_rs::units::Hz;
 use autd3_rs::value::{
-    ModulationBank, PatternBank, PatternDataType, SamplingConfig, TransitionMode,
+    DcSysTime, Focus, GpioIn, Intensity, LoopBehavior, ModulationBank, PatternBank,
+    PatternDataType, Phase, SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
-    ChangeModulationBank, ChangePatternBank, ClientConfig, ConfigModulation, ConfigPattern,
-    DatagramBuilder as CoreDatagramBuilder, Datagrams, Geometry, Modulation, Pattern,
-    WriteModulationBuffer, WritePatternBuffer,
+    ChangeModulationBank, ChangePatternBank, Clear, ClientConfig, ConfigModulation, ConfigPattern,
+    ControlPoint, ControlPoints, DatagramBuilder as CoreDatagramBuilder, Datagrams, EmulateGpioIn,
+    FixedCompletionTime, FixedUpdateRate, ForceFan, Geometry, GpioOut, Length, Modulation, Nop,
+    Pattern, PatternStm, PatternStmMode, PatternStmOption, Point3, SetGpioOut, SetOutputMask,
+    SetPhaseCorrection, SetSilencer, StmConfig, UnitVector3, Vector3, WriteFociBuffer,
+    WriteModulationBuffer, WritePatternBuffer, circle, line,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -55,13 +63,49 @@ fn to_modulation_bank(v: u8) -> ModulationBank {
     }
 }
 
-fn to_transition_mode(v: u8) -> TransitionMode {
+fn to_gpio_in(v: u8) -> GpioIn {
     match v {
-        1 => TransitionMode::SysTime,
-        2 => TransitionMode::Gpio,
-        3 => TransitionMode::Ext,
-        4 => TransitionMode::Immediate,
+        1 => GpioIn::I1,
+        2 => GpioIn::I2,
+        3 => GpioIn::I3,
+        _ => GpioIn::I0,
+    }
+}
+
+fn to_transition_mode(mode: u8, value: u64) -> TransitionMode {
+    match mode {
+        0x01 => TransitionMode::SysTime(DcSysTime::from_nanos(value)),
+        #[allow(clippy::cast_possible_truncation)]
+        0x02 => TransitionMode::Gpio(to_gpio_in(value as u8)),
+        0xF0 => TransitionMode::Ext,
+        0xFF => TransitionMode::Immediate,
         _ => TransitionMode::SyncIdx,
+    }
+}
+
+#[repr(C)]
+pub struct Autd3GpioOut {
+    pub kind: u8,
+    pub value: u64,
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn to_gpio_out(g: &Autd3GpioOut) -> GpioOut {
+    match g.kind {
+        1 => GpioOut::BaseSignal,
+        2 => GpioOut::Thermo,
+        3 => GpioOut::ForceFan,
+        4 => GpioOut::Sync,
+        5 => GpioOut::ModBank,
+        6 => GpioOut::ModIdx(g.value as u16),
+        7 => GpioOut::PatternBank,
+        8 => GpioOut::PatternIdx(g.value as u16),
+        9 => GpioOut::IsPatternMode,
+        10 => GpioOut::SysTimeEq(g.value),
+        11 => GpioOut::SyncDiff,
+        12 => GpioOut::PwmOut(g.value as u8),
+        13 => GpioOut::Direct(g.value != 0),
+        _ => GpioOut::None,
     }
 }
 
@@ -74,6 +118,140 @@ fn to_pattern_data_type(kind: u8, num_foci: u8, sound_speed: u16) -> PatternData
     } else {
         PatternDataType::Raw
     }
+}
+
+fn rep_to_loop_behavior(rep: u16) -> LoopBehavior {
+    if rep == 0xFFFF {
+        LoopBehavior::Infinite
+    } else {
+        NonZeroU16::new(rep + 1).map_or(LoopBehavior::Infinite, LoopBehavior::Finite)
+    }
+}
+
+fn to_pattern_stm_mode(mode: u8) -> PatternStmMode {
+    match mode {
+        1 => PatternStmMode::PhaseFull,
+        2 => PatternStmMode::PhaseHalf,
+        _ => PatternStmMode::PhaseIntensityFull,
+    }
+}
+
+#[repr(C)]
+pub struct Autd3StmControlPoint {
+    pub point: [f32; 3],
+    pub phase_offset: u8,
+}
+
+pub struct FociSample {
+    intensity: Intensity,
+    points: Vec<ControlPoint>,
+}
+
+const FOCUS_UNIT_MM: f32 = 0.025;
+
+#[allow(clippy::cast_possible_truncation)]
+fn to_fixed(mm: f32) -> i32 {
+    (mm / FOCUS_UNIT_MM).round() as i32
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_stm_config_freq(hz: f32) -> *mut StmConfig {
+    into_handle(StmConfig::Freq(hz * Hz))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_stm_config_freq_nearest(hz: f32) -> *mut StmConfig {
+    into_handle(StmConfig::FreqNearest(hz * Hz))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_stm_config_period(secs: f32) -> *mut StmConfig {
+    into_handle(StmConfig::Period(Duration::from_secs_f32(secs)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_stm_config_period_nearest(secs: f32) -> *mut StmConfig {
+    into_handle(StmConfig::PeriodNearest(Duration::from_secs_f32(secs)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_stm_config_sampling(divide: u16) -> *mut StmConfig {
+    match NonZeroU16::new(divide) {
+        Some(divide) => into_handle(StmConfig::Sampling(SamplingConfig::Divide(divide))),
+        None => std::ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_stm_config_free(config: *mut StmConfig) {
+    unsafe { drop_handle(config) }
+}
+
+unsafe fn write_control_points(
+    points: &[ControlPoints<1>],
+    out_points: *mut Autd3StmControlPoint,
+    out_intensities: *mut u8,
+) {
+    for (i, cp) in points.iter().enumerate() {
+        let p = cp.points[0];
+        unsafe {
+            *out_points.add(i) = Autd3StmControlPoint {
+                point: [p.point.x, p.point.y, p.point.z],
+                phase_offset: p.phase_offset.0,
+            };
+            *out_intensities.add(i) = cp.intensity.0;
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_stm_circle(
+    center: *const f32,
+    radius_mm: f32,
+    num_points: usize,
+    normal: *const f32,
+    intensity: u8,
+    out_points: *mut Autd3StmControlPoint,
+    out_intensities: *mut u8,
+) -> i32 {
+    if center.is_null() || normal.is_null() || out_points.is_null() || out_intensities.is_null() {
+        return -1;
+    }
+    let center = unsafe { std::slice::from_raw_parts(center, 3) };
+    let normal = unsafe { std::slice::from_raw_parts(normal, 3) };
+    let points = circle(
+        Point3::new(center[0], center[1], center[2]),
+        Length::millimeters(radius_mm),
+        num_points,
+        UnitVector3::new_normalize(Vector3::new(normal[0], normal[1], normal[2])),
+        Intensity(intensity),
+    );
+    unsafe { write_control_points(&points, out_points, out_intensities) };
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_stm_line(
+    start: *const f32,
+    end: *const f32,
+    num_points: usize,
+    intensity: u8,
+    out_points: *mut Autd3StmControlPoint,
+    out_intensities: *mut u8,
+) -> i32 {
+    if start.is_null() || end.is_null() || out_points.is_null() || out_intensities.is_null() {
+        return -1;
+    }
+    let start = unsafe { std::slice::from_raw_parts(start, 3) };
+    let end = unsafe { std::slice::from_raw_parts(end, 3) };
+    let points = line(
+        Point3::new(start[0], start[1], start[2]),
+        Point3::new(end[0], end[1], end[2]),
+        num_points,
+        Intensity(intensity),
+    );
+    unsafe { write_control_points(&points, out_points, out_intensities) };
+    0
 }
 
 #[unsafe(no_mangle)]
@@ -102,11 +280,11 @@ pub enum Pending {
         divider: u16,
         size: u32,
         data_type: PatternDataType,
+        rep: u16,
     },
     ChangePatternBank {
         bank: PatternBank,
         transition_mode: TransitionMode,
-        transition_value: u64,
     },
     WriteModulationBuffer {
         bank: ModulationBank,
@@ -117,11 +295,45 @@ pub enum Pending {
         bank: ModulationBank,
         divider: u16,
         size: u32,
+        rep: u16,
     },
     ChangeModulationBank {
         bank: ModulationBank,
         transition_mode: TransitionMode,
-        transition_value: u64,
+    },
+    Clear,
+    Synchronize,
+    Nop,
+    ForceFan(bool),
+    SetSilencerCompletion {
+        intensity: Duration,
+        phase: Duration,
+        strict: bool,
+    },
+    SetSilencerUpdateRate {
+        intensity: NonZeroU16,
+        phase: NonZeroU16,
+    },
+    SetGpioOut([GpioOut; 4]),
+    EmulateGpioIn([bool; 4]),
+    SetOutputMask(Vec<[bool; NUM_TRANSDUCERS]>),
+    SetPhaseCorrection(Vec<[Phase; NUM_TRANSDUCERS]>),
+    FociStm {
+        config: StmConfig,
+        samples: Vec<FociSample>,
+        num_foci: u8,
+        bank: PatternBank,
+        sound_speed: f32,
+        loop_behavior: LoopBehavior,
+        transition_mode: TransitionMode,
+    },
+    PatternStm {
+        config: StmConfig,
+        patterns: Vec<Vec<DevicePattern>>,
+        bank: PatternBank,
+        mode: PatternStmMode,
+        loop_behavior: LoopBehavior,
+        transition_mode: TransitionMode,
     },
 }
 
@@ -176,12 +388,14 @@ pub extern "C" fn autd3_op_config_pattern(
     data_type_kind: u8,
     num_foci: u8,
     sound_speed: u16,
+    rep: u16,
 ) -> *mut Pending {
     into_handle(Pending::ConfigPattern {
         bank: to_pattern_bank(bank),
         divider,
         size,
         data_type: to_pattern_data_type(data_type_kind, num_foci, sound_speed),
+        rep,
     })
 }
 
@@ -193,8 +407,7 @@ pub extern "C" fn autd3_op_change_pattern_bank(
 ) -> *mut Pending {
     into_handle(Pending::ChangePatternBank {
         bank: to_pattern_bank(bank),
-        transition_mode: to_transition_mode(transition_mode),
-        transition_value,
+        transition_mode: to_transition_mode(transition_mode, transition_value),
     })
 }
 
@@ -217,11 +430,17 @@ pub unsafe extern "C" fn autd3_op_write_modulation_buffer(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_config_modulation(bank: u8, divider: u16, size: u32) -> *mut Pending {
+pub extern "C" fn autd3_op_config_modulation(
+    bank: u8,
+    divider: u16,
+    size: u32,
+    rep: u16,
+) -> *mut Pending {
     into_handle(Pending::ConfigModulation {
         bank: to_modulation_bank(bank),
         divider,
         size,
+        rep,
     })
 }
 
@@ -233,8 +452,202 @@ pub extern "C" fn autd3_op_change_modulation_bank(
 ) -> *mut Pending {
     into_handle(Pending::ChangeModulationBank {
         bank: to_modulation_bank(bank),
-        transition_mode: to_transition_mode(transition_mode),
-        transition_value,
+        transition_mode: to_transition_mode(transition_mode, transition_value),
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_clear() -> *mut Pending {
+    into_handle(Pending::Clear)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_synchronize() -> *mut Pending {
+    into_handle(Pending::Synchronize)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_nop() -> *mut Pending {
+    into_handle(Pending::Nop)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_force_fan(value: bool) -> *mut Pending {
+    into_handle(Pending::ForceFan(value))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_set_silencer_completion_time(
+    intensity_ns: u64,
+    phase_ns: u64,
+    strict: bool,
+) -> *mut Pending {
+    into_handle(Pending::SetSilencerCompletion {
+        intensity: Duration::from_nanos(intensity_ns),
+        phase: Duration::from_nanos(phase_ns),
+        strict,
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_set_silencer_update_rate(intensity: u16, phase: u16) -> *mut Pending {
+    let (Some(intensity), Some(phase)) = (NonZeroU16::new(intensity), NonZeroU16::new(phase))
+    else {
+        return std::ptr::null_mut();
+    };
+    into_handle(Pending::SetSilencerUpdateRate { intensity, phase })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_op_set_gpio_out(outputs: *const Autd3GpioOut) -> *mut Pending {
+    if outputs.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let outputs = unsafe { std::slice::from_raw_parts(outputs, 4) };
+    into_handle(Pending::SetGpioOut([
+        to_gpio_out(&outputs[0]),
+        to_gpio_out(&outputs[1]),
+        to_gpio_out(&outputs[2]),
+        to_gpio_out(&outputs[3]),
+    ]))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut Pending {
+    if values.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let values = unsafe { std::slice::from_raw_parts(values, 4) };
+    into_handle(Pending::EmulateGpioIn([
+        values[0] != 0,
+        values[1] != 0,
+        values[2] != 0,
+        values[3] != 0,
+    ]))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_op_set_output_mask(
+    masks: *const u8,
+    num_devices: usize,
+) -> *mut Pending {
+    if masks.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let slice = unsafe { std::slice::from_raw_parts(masks, num_devices * NUM_TRANSDUCERS) };
+    let masks = slice
+        .chunks_exact(NUM_TRANSDUCERS)
+        .map(|device| {
+            let mut slot = [false; NUM_TRANSDUCERS];
+            for (m, src) in slot.iter_mut().zip(device) {
+                *m = *src != 0;
+            }
+            slot
+        })
+        .collect();
+    into_handle(Pending::SetOutputMask(masks))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_op_set_phase_correction(
+    phases: *const u8,
+    num_devices: usize,
+) -> *mut Pending {
+    if phases.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let slice = unsafe { std::slice::from_raw_parts(phases, num_devices * NUM_TRANSDUCERS) };
+    let phases = slice
+        .chunks_exact(NUM_TRANSDUCERS)
+        .map(|device| {
+            let mut slot = [Phase::ZERO; NUM_TRANSDUCERS];
+            for (p, src) in slot.iter_mut().zip(device) {
+                *p = Phase(*src);
+            }
+            slot
+        })
+        .collect();
+    into_handle(Pending::SetPhaseCorrection(phases))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_op_foci_stm(
+    config: *const StmConfig,
+    points: *const Autd3StmControlPoint,
+    num_samples: usize,
+    num_foci: u8,
+    intensities: *const u8,
+    bank: u8,
+    sound_speed_m_s: f32,
+    loop_rep: u16,
+    transition_mode: u8,
+    transition_value: u64,
+) -> *mut Pending {
+    if config.is_null() || points.is_null() || intensities.is_null() || num_foci == 0 {
+        return std::ptr::null_mut();
+    }
+
+    let n = usize::from(num_foci);
+    let points = unsafe { std::slice::from_raw_parts(points, num_samples * n) };
+    let intensities = unsafe { std::slice::from_raw_parts(intensities, num_samples) };
+    let samples = points
+        .chunks_exact(n)
+        .zip(intensities)
+        .map(|(chunk, intensity)| FociSample {
+            intensity: Intensity(*intensity),
+            points: chunk
+                .iter()
+                .map(|p| {
+                    ControlPoint::new(
+                        Point3::new(p.point[0], p.point[1], p.point[2]),
+                        Phase(p.phase_offset),
+                    )
+                })
+                .collect(),
+        })
+        .collect();
+    into_handle(Pending::FociStm {
+        config: *unsafe { &*config },
+        samples,
+        num_foci,
+        bank: to_pattern_bank(bank),
+        sound_speed: sound_speed_m_s,
+        loop_behavior: rep_to_loop_behavior(loop_rep),
+        transition_mode: to_transition_mode(transition_mode, transition_value),
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_op_pattern_stm(
+    config: *const StmConfig,
+    patterns: *const *const PatternBuffer,
+    num_patterns: usize,
+    bank: u8,
+    mode: u8,
+    loop_rep: u16,
+    transition_mode: u8,
+    transition_value: u64,
+) -> *mut Pending {
+    if config.is_null() || patterns.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let slice = unsafe { std::slice::from_raw_parts(patterns, num_patterns) };
+    if slice.iter().any(|p| p.is_null()) {
+        return std::ptr::null_mut();
+    }
+    let patterns = slice.iter().map(|p| unsafe { &**p }.0.clone()).collect();
+    into_handle(Pending::PatternStm {
+        config: *unsafe { &*config },
+        patterns,
+        bank: to_pattern_bank(bank),
+        mode: to_pattern_stm_mode(mode),
+        loop_behavior: rep_to_loop_behavior(loop_rep),
+        transition_mode: to_transition_mode(transition_mode, transition_value),
     })
 }
 
@@ -276,6 +689,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_free(builder: *mut DatagramBuild
 }
 
 #[unsafe(no_mangle)]
+#[allow(clippy::too_many_lines)]
 pub unsafe extern "C" fn autd3_datagram_builder_build(
     builder: *const DatagramBuilder,
     out_err: *mut c_char,
@@ -316,23 +730,23 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 divider,
                 size,
                 data_type,
+                rep,
             } => {
                 core.push(ConfigPattern {
                     bank: *bank,
                     divider: *divider,
                     size: *size,
                     data_type: *data_type,
+                    rep: *rep,
                 });
             }
             Pending::ChangePatternBank {
                 bank,
                 transition_mode,
-                transition_value,
             } => {
                 core.push(ChangePatternBank {
                     bank: *bank,
                     transition_mode: *transition_mode,
-                    transition_value: *transition_value,
                 });
             }
             Pending::WriteModulationBuffer { bank, offset, data } => {
@@ -346,23 +760,133 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 bank,
                 divider,
                 size,
+                rep,
             } => {
                 core.push(ConfigModulation {
                     bank: *bank,
                     divider: *divider,
                     size: *size,
+                    rep: *rep,
                 });
             }
             Pending::ChangeModulationBank {
                 bank,
                 transition_mode,
-                transition_value,
             } => {
                 core.push(ChangeModulationBank {
                     bank: *bank,
                     transition_mode: *transition_mode,
-                    transition_value: *transition_value,
                 });
+            }
+            Pending::Clear => {
+                core.push(Clear);
+            }
+            Pending::Synchronize => {
+                core.push(Synchronize);
+            }
+            Pending::Nop => {
+                core.push(Nop);
+            }
+            Pending::ForceFan(value) => {
+                core.push(ForceFan { value: *value });
+            }
+            Pending::SetSilencerCompletion {
+                intensity,
+                phase,
+                strict,
+            } => {
+                core.push(SetSilencer::new(FixedCompletionTime {
+                    intensity: *intensity,
+                    phase: *phase,
+                    strict_mode: *strict,
+                }));
+            }
+            Pending::SetSilencerUpdateRate { intensity, phase } => {
+                core.push(SetSilencer::new(FixedUpdateRate {
+                    intensity: *intensity,
+                    phase: *phase,
+                }));
+            }
+            Pending::SetGpioOut(outputs) => {
+                core.push(SetGpioOut { outputs: *outputs });
+            }
+            Pending::EmulateGpioIn(values) => {
+                core.push(EmulateGpioIn { values: *values });
+            }
+            Pending::SetOutputMask(masks) => {
+                core.push(SetOutputMask { masks });
+            }
+            Pending::SetPhaseCorrection(phases) => {
+                core.push(SetPhaseCorrection { phases });
+            }
+            Pending::FociStm {
+                config,
+                samples,
+                num_foci,
+                bank,
+                sound_speed,
+                loop_behavior,
+                transition_mode,
+            } => {
+                let n = samples.len();
+                let divider = config.into_sampling_config(n).divide().unwrap_or(0);
+                let size = u32::try_from(n).unwrap_or(u32::MAX);
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                let sound_speed_value = (*sound_speed * 64.0).round() as u16;
+                let mut foci = Vec::with_capacity(n * usize::from(*num_foci));
+                for s in samples {
+                    for (j, point) in s.points.iter().enumerate() {
+                        let intensity_or_offset = if j == 0 {
+                            s.intensity.0
+                        } else {
+                            point.phase_offset.0
+                        };
+                        foci.push(Focus {
+                            x: to_fixed(point.point.x),
+                            y: to_fixed(point.point.y),
+                            z: to_fixed(point.point.z),
+                            intensity_or_offset,
+                        });
+                    }
+                }
+                core.push(WriteFociBuffer {
+                    bank: *bank,
+                    offset: 0,
+                    foci,
+                })
+                .push(ConfigPattern {
+                    bank: *bank,
+                    divider,
+                    size,
+                    data_type: PatternDataType::Foci {
+                        num_foci: *num_foci,
+                        sound_speed: sound_speed_value,
+                    },
+                    rep: loop_behavior.rep(),
+                })
+                .push(ChangePatternBank {
+                    bank: *bank,
+                    transition_mode: *transition_mode,
+                });
+            }
+            Pending::PatternStm {
+                config,
+                patterns,
+                bank,
+                mode,
+                loop_behavior,
+                transition_mode,
+            } => {
+                core.push(PatternStm::new(
+                    *config,
+                    patterns,
+                    PatternStmOption {
+                        bank: *bank,
+                        mode: *mode,
+                        loop_behavior: *loop_behavior,
+                        transition_mode: *transition_mode,
+                    },
+                ));
             }
         }
     }
@@ -392,6 +916,8 @@ pub unsafe extern "C" fn autd3_datagrams_free(datagrams: *mut Arc<Datagrams>) {
 pub struct ClientHandle(Box<dyn ClientBackend>);
 
 pub struct StringArray(Vec<CString>);
+
+pub struct ByteArray(Vec<u8>);
 
 pub struct LinkStatus {
     device_states: Vec<CString>,
@@ -487,6 +1013,71 @@ pub unsafe extern "C" fn autd3_client_read_firmware_version(
             Err(e) => ctx.err(&e.to_string()),
         }
     });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_read_fpga_state(
+    client: *const ClientHandle,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) {
+    let ctx = CompletionCtx::new(cb, user_data);
+    if client.is_null() {
+        ctx.err("null client");
+        return;
+    }
+
+    let fut = unsafe { &*client }.0.read_fpga_state();
+    runtime().spawn(async move {
+        match fut.await {
+            Ok(states) => ctx.ok(into_handle(ByteArray(states)).cast()),
+            Err(e) => ctx.err(&e.to_string()),
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_read_error_detail(
+    client: *const ClientHandle,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) {
+    let ctx = CompletionCtx::new(cb, user_data);
+    if client.is_null() {
+        ctx.err("null client");
+        return;
+    }
+
+    let fut = unsafe { &*client }.0.read_error_detail();
+    runtime().spawn(async move {
+        match fut.await {
+            Ok(detail) => ctx.ok(into_handle(ByteArray(detail)).cast()),
+            Err(e) => ctx.err(&e.to_string()),
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_byte_array_len(array: *const ByteArray) -> usize {
+    if array.is_null() {
+        return 0;
+    }
+
+    unsafe { &*array }.0.len()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_byte_array_data(array: *const ByteArray) -> *const u8 {
+    if array.is_null() {
+        return std::ptr::null();
+    }
+
+    unsafe { &*array }.0.as_ptr()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_byte_array_free(array: *mut ByteArray) {
+    unsafe { drop_handle(array) }
 }
 
 #[unsafe(no_mangle)]

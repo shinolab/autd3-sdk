@@ -5,9 +5,12 @@ members = [
     "autd3-ffi-core",
     "autd3-ffi",
     "autd3-ffi-pattern",
+    "autd3-ffi-pattern-holo",
     "autd3-ffi-modulation",
     "autd3-ffi-link-ethercrab",
     "autd3-ffi-link-soem",
+    "autd3-ffi-link-remote",
+    "autd3-ffi-link-twincat",
 ]
 
 [workspace.package]
@@ -26,9 +29,12 @@ tokio = { version = "1", default-features = false, features = [
 autd3-rs = { path = "../../crates/autd3-rs" }
 autd3-rs-core = { path = "../../crates/autd3-rs-core" }
 autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
+autd3-rs-pattern-holo = { path = "../../crates/autd3-rs-pattern-holo" }
 autd3-rs-modulation = { path = "../../crates/autd3-rs-modulation" }
 autd3-rs-link-ethercrab = { path = "../../crates/autd3-rs-link-ethercrab" }
 autd3-rs-link-soem = { path = "../../crates/autd3-rs-link-soem" }
+autd3-rs-link-remote = { path = "../../crates/autd3-rs-link-remote" }
+autd3-rs-link-twincat = { path = "../../crates/autd3-rs-link-twincat" }
 autd3-ffi-abi = { path = "autd3-ffi-abi" }
 
 [workspace.lints.rust]

@@ -1,12 +1,13 @@
 use std::ffi::{CStr, c_char};
+use std::net::IpAddr;
 use std::sync::{Arc, OnceLock};
 
 use autd3_ffi_abi::{
     BoxFuture, ClientBackend, ClientOpener, LinkStatusData, client_opener, into_handle,
 };
 use autd3_rs::{Client, Datagrams};
-use autd3_rs_core::{Error, Interface};
-use autd3_rs_link_soem::{SoemLinkOption as CoreOption, StateChecker};
+use autd3_rs_core::{Error, StateCheck};
+use autd3_rs_link_twincat::{AmsNetId, TwinCATLinkOption, TwinCATRoute, TwinCATStateChecker};
 use tokio::sync::Mutex;
 
 fn link_runtime() -> &'static tokio::runtime::Runtime {
@@ -15,7 +16,7 @@ fn link_runtime() -> &'static tokio::runtime::Runtime {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .expect("failed to build soem tokio runtime")
+            .expect("failed to build twincat tokio runtime")
     })
 }
 
@@ -24,12 +25,20 @@ fn join_err(e: tokio::task::JoinError) -> Error {
     Error::Link(e.to_string())
 }
 
-struct SoemBackend {
-    client: Arc<Client>,
-    checker: Arc<Mutex<StateChecker>>,
+fn to_route(route: u8) -> TwinCATRoute {
+    match route {
+        1 => TwinCATRoute::Notify,
+        2 => TwinCATRoute::Ads,
+        _ => TwinCATRoute::Auto,
+    }
 }
 
-impl ClientBackend for SoemBackend {
+struct TwinCATBackend {
+    client: Arc<Client>,
+    checker: Arc<Mutex<TwinCATStateChecker>>,
+}
+
+impl ClientBackend for TwinCATBackend {
     fn num_devices(&self) -> usize {
         self.client.num_devices()
     }
@@ -104,6 +113,7 @@ impl ClientBackend for SoemBackend {
                         .lock()
                         .await
                         .check()
+                        .await
                         .map_err(|e| Error::Link(e.to_string()))?;
                     Ok::<LinkStatusData, Error>(LinkStatusData {
                         device_states: status.devices.iter().map(ToString::to_string).collect(),
@@ -138,31 +148,44 @@ impl ClientBackend for SoemBackend {
     }
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_soem(interface: *const c_char) -> *mut ClientOpener {
-    let interface = if interface.is_null() {
-        None
-    } else {
-        Some(
-            unsafe { CStr::from_ptr(interface) }
-                .to_string_lossy()
-                .into_owned(),
-        )
-    };
-    let option = CoreOption {
-        interface: Interface::from(interface),
-        ..CoreOption::default()
-    };
+fn into_opener(option: TwinCATLinkOption) -> *mut ClientOpener {
     let opener = client_opener(move |geometry, config| async move {
         let (client, checker) = link_runtime()
             .spawn(async move { Client::open_with_checker(&geometry, option, config).await })
             .await
             .map_err(join_err)??;
-        let backend: Box<dyn ClientBackend> = Box::new(SoemBackend {
+        let backend: Box<dyn ClientBackend> = Box::new(TwinCATBackend {
             client: Arc::new(client),
             checker: Arc::new(Mutex::new(checker)),
         });
         Ok(backend)
     });
     into_handle(opener)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_link_twincat_local(route: u8) -> *mut ClientOpener {
+    into_opener(TwinCATLinkOption::local().with_route(to_route(route)))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_twincat_remote(
+    addr: *const c_char,
+    ams_net_id: *const c_char,
+    route: u8,
+) -> *mut ClientOpener {
+    if addr.is_null() || ams_net_id.is_null() {
+        return std::ptr::null_mut();
+    }
+    let addr = unsafe { CStr::from_ptr(addr) }
+        .to_string_lossy()
+        .into_owned();
+    let ams_net_id = unsafe { CStr::from_ptr(ams_net_id) }
+        .to_string_lossy()
+        .into_owned();
+    let (Ok(addr), Ok(ams_net_id)) = (addr.parse::<IpAddr>(), ams_net_id.parse::<AmsNetId>())
+    else {
+        return std::ptr::null_mut();
+    };
+    into_opener(TwinCATLinkOption::remote(addr, ams_net_id).with_route(to_route(route)))
 }

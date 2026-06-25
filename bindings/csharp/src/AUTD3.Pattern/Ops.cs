@@ -50,16 +50,33 @@ namespace AUTD3
         private readonly ushort _divider;
         private readonly uint _size;
         private readonly PatternDataType _dataType;
+        private readonly LoopBehavior _loopBehavior;
 
-        public ConfigPattern(PatternBank bank, ushort divider, uint size, PatternDataType dataType)
+        public ConfigPattern(PatternBank bank, ushort divider, uint size, PatternDataType dataType, LoopBehavior? loopBehavior = null)
         {
             _bank = bank;
             _divider = divider;
             _size = size;
             _dataType = dataType;
+            _loopBehavior = loopBehavior ?? LoopBehavior.Infinite;
         }
 
         IntPtr ICommand.CreateOp() =>
-            NativePattern.autd3_op_config_pattern((byte)_bank, _divider, _size, _dataType.Kind, _dataType.NumFoci, _dataType.SoundSpeed);
+            NativePattern.autd3_op_config_pattern((byte)_bank, _divider, _size, _dataType.Kind, _dataType.NumFoci, _dataType.SoundSpeed, _loopBehavior.Rep);
+    }
+
+    public sealed class ChangePatternBank : ICommand
+    {
+        private readonly PatternBank _bank;
+        private readonly TransitionMode _transitionMode;
+
+        public ChangePatternBank(PatternBank bank, TransitionMode? transitionMode = null)
+        {
+            _bank = bank;
+            _transitionMode = transitionMode ?? TransitionMode.Immediate;
+        }
+
+        IntPtr ICommand.CreateOp() =>
+            NativePattern.autd3_op_change_pattern_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value);
     }
 }

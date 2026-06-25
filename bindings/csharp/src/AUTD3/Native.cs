@@ -58,6 +58,21 @@ namespace AUTD3
         internal static extern void autd3_client_read_firmware_version(IntPtr client, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib)]
+        internal static extern void autd3_client_read_fpga_state(IntPtr client, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_client_read_error_detail(IntPtr client, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern UIntPtr autd3_byte_array_len(IntPtr array);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_byte_array_data(IntPtr array);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_byte_array_free(IntPtr array);
+
+        [DllImport(Lib)]
         internal static extern UIntPtr autd3_string_array_len(IntPtr array);
 
         [DllImport(Lib)]

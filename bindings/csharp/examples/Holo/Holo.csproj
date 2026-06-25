@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/AUTD3/AUTD3.csproj" />
+    <ProjectReference Include="../../src/AUTD3.Pattern.Holo/AUTD3.Pattern.Holo.csproj" />
+    <ProjectReference Include="../../src/AUTD3.Link.Ethercrab/AUTD3.Link.Ethercrab.csproj" />
+  </ItemGroup>
+
+</Project>

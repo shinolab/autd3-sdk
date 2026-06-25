@@ -19,6 +19,7 @@
     <ProjectReference Include="../../src/AUTD3/AUTD3.csproj" />
     <ProjectReference Include="../../src/AUTD3.Core/AUTD3.Core.csproj" />
     <ProjectReference Include="../../src/AUTD3.Pattern/AUTD3.Pattern.csproj" />
+    <ProjectReference Include="../../src/AUTD3.Pattern.Holo/AUTD3.Pattern.Holo.csproj" />
     <ProjectReference Include="../../src/AUTD3.Modulation/AUTD3.Modulation.csproj" />
   </ItemGroup>
 

@@ -56,4 +56,31 @@ namespace AUTD3
         public static Intensity Max => new Intensity(0xFF);
         public static Intensity Min => new Intensity(0x00);
     }
+
+    public readonly struct Phase
+    {
+        public byte Value { get; }
+
+        public Phase(byte value)
+        {
+            Value = value;
+        }
+
+        public static Phase Zero => new Phase(0x00);
+        public static Phase Pi => new Phase(0x80);
+
+        public float Radian() => NativeCore.autd3_core_phase_radian(Value);
+    }
+
+    public readonly struct Emission
+    {
+        public Phase Phase { get; }
+        public Intensity Intensity { get; }
+
+        public Emission(Phase phase, Intensity intensity)
+        {
+            Phase = phase;
+            Intensity = intensity;
+        }
+    }
 }
