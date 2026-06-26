@@ -13,6 +13,7 @@ fn autd3_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<value::SamplingConfig>()?;
     m.add_class::<geometry::Autd3>()?;
     m.add_class::<geometry::Geometry>()?;
+    m.add_class::<geometry::Device>()?;
     m.add_function(wrap_pyfunction!(geometry::_read_geometry_capsule, m)?)?;
     Ok(())
 }

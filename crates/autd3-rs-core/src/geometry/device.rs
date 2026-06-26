@@ -1,18 +1,55 @@
-use nalgebra::{Point3, UnitVector3, Vector3};
+use nalgebra::{Point3, UnitQuaternion, UnitVector3, Vector3};
 
 #[derive(Clone, Debug)]
 pub struct Device {
+    idx: usize,
+    rotation: UnitQuaternion<f32>,
     positions: Vec<Point3<f32>>,
     directions: Vec<UnitVector3<f32>>,
 }
 
 impl Device {
-    pub(super) fn new(positions: Vec<Point3<f32>>, directions: Vec<UnitVector3<f32>>) -> Self {
+    pub(super) fn new(
+        rotation: UnitQuaternion<f32>,
+        positions: Vec<Point3<f32>>,
+        directions: Vec<UnitVector3<f32>>,
+    ) -> Self {
         debug_assert_eq!(positions.len(), directions.len());
         Self {
+            idx: 0,
+            rotation,
             positions,
             directions,
         }
+    }
+
+    pub(super) fn set_idx(&mut self, idx: usize) {
+        self.idx = idx;
+    }
+
+    #[must_use]
+    pub const fn idx(&self) -> usize {
+        self.idx
+    }
+
+    #[must_use]
+    pub const fn rotation(&self) -> UnitQuaternion<f32> {
+        self.rotation
+    }
+
+    #[must_use]
+    pub fn x_direction(&self) -> UnitVector3<f32> {
+        self.rotation * Vector3::x_axis()
+    }
+
+    #[must_use]
+    pub fn y_direction(&self) -> UnitVector3<f32> {
+        self.rotation * Vector3::y_axis()
+    }
+
+    #[must_use]
+    pub fn axial_direction(&self) -> UnitVector3<f32> {
+        self.rotation * Vector3::z_axis()
     }
 
     #[must_use]

@@ -54,7 +54,7 @@ impl From<Autd3> for Device {
             }
         }
         debug_assert_eq!(positions.len(), NUM_TRANSDUCERS);
-        Device::new(positions, directions)
+        Device::new(a.rotation, positions, directions)
     }
 }
 
