@@ -11,6 +11,8 @@ mod response;
 
 pub use autd3_rs_core::{common, error, geometry, link, mirror, params, protocol, units, value};
 
+pub use autd3_rs_core::value::{PULSE_WIDTH_PERIOD, PulseWidth, PulseWidthError};
+
 pub use autd3_rs_core::{
     Angle, Autd3, Autd3Unity, Cmd, ConstStateChecker, CycleOutcome, Device, DeviceState, Error,
     FirmwareState, Freq, Geometry, Interface, IntoLink, Length, Link, LinkStats, LinkStatus,

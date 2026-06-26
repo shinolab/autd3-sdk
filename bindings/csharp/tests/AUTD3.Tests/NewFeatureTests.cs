@@ -112,6 +112,26 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void SetPulseWidthTableBuildsDatagram()
+        {
+            using var geometry = SingleDevice();
+            var table = PulseWidth.DefaultTable();
+            Assert.Equal(PulseWidth.TableSize, table.Length);
+            using var builder = new DatagramBuilder(geometry);
+            builder.Push(new SetPulseWidthTable(table));
+            using var datagrams = builder.Build();
+            Assert.True(datagrams.NumFrames > 0);
+        }
+
+        [Fact]
+        public void PulseWidthFromDuty()
+        {
+            Assert.Equal(0, PulseWidth.FromDuty(0f));
+            Assert.True(PulseWidth.FromDuty(0.5f) > 0);
+            Assert.Throws<Autd3Exception>(() => PulseWidth.FromDuty(1f));
+        }
+
+        [Fact]
         public void DeviceAccessors()
         {
             using var geometry = SingleDevice();

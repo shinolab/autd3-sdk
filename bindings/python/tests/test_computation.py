@@ -1,6 +1,7 @@
 """Hardware-free tests: pattern/modulation/holo computation and datagram building."""
 
 import numpy as np
+import pytest
 
 import autd3
 import autd3_modulation as modulation
@@ -100,6 +101,24 @@ def test_commands_build() -> None:
                                    autd3.GpioOut.PwmOut(0), autd3.GpioOut.Direct(True)]))
     builder.push(autd3.EmulateGpioIn([True, False, True, False]))
     assert len(builder.build()) > 0
+
+
+def test_pulse_width_table_and_pulse_width() -> None:
+    geo = geometry()
+    builder = autd3.DatagramBuilder(geo.num_devices())
+
+    table = autd3.PulseWidth.default_table()
+    assert len(table) == 256
+    assert autd3.SetPulseWidthTable.default_table() == table
+    builder.push(autd3.SetPulseWidthTable(table))
+    assert len(builder.build()) > 0
+
+    assert autd3.PulseWidth.from_duty(0.5) == 256
+    assert autd3.PulseWidth.from_duty(0.0) == 0
+    with pytest.raises(ValueError):
+        autd3.PulseWidth.from_duty(1.0)
+    with pytest.raises(ValueError):
+        autd3.PulseWidth.from_duty(-0.5)
 
 
 def test_device_accessors() -> None:
