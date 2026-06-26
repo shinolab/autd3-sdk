@@ -38,7 +38,7 @@ fn bessel_phase(
     wavelength: Length,
 ) -> Phase {
     let r = rot * (position - apex);
-    let dist = theta.radian().sin() * r.xy().norm() - theta.radian().cos() * r.z;
+    let dist = theta.radian().cos() * r.xy().norm() - theta.radian().sin() * r.z;
     Phase::from(-dist / wavelength.mm() * 2.0 * PI * rad)
 }
 
@@ -104,7 +104,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bessel_phase_matches_legacy_formula() {
+    fn bessel_phase_matches_formula() {
         let dev: Device = Autd3::default().into();
         let lambda = 8.5 * mm;
         let apex = Point3::new(10.0, 20.0, 150.0);
@@ -124,7 +124,7 @@ mod tests {
             let e = bessel_transducer(pos, apex, dir, theta, lambda, &BesselOption::default());
             let r = rot * (pos - apex);
             let dist =
-                theta.radian().sin() * (r.x * r.x + r.y * r.y).sqrt() - theta.radian().cos() * r.z;
+                theta.radian().cos() * (r.x * r.x + r.y * r.y).sqrt() - theta.radian().sin() * r.z;
             let expected = Phase::from(-dist / lambda.mm() * 2.0 * PI * rad) + Phase::ZERO;
             assert_eq!(e.phase, expected);
             assert_eq!(e.intensity, Intensity::MAX);
@@ -132,17 +132,19 @@ mod tests {
     }
 
     #[test]
-    fn bessel_axis_along_z_is_focus_like() {
+    fn bessel_zero_half_cone_angle_is_radial() {
         let dev: Device = Autd3::default().into();
         let lambda = 8.5 * mm;
         let apex = Point3::new(0.0, 0.0, 200.0);
         let dir = UnitVector3::new_normalize(Vector3::new(0.0, 0.0, 1.0));
         let theta = Angle::ZERO;
 
-        let pos = dev.position(0);
+        let pos = dev.position(1);
         let e = bessel_transducer(pos, apex, dir, theta, lambda, &BesselOption::default());
         let r = pos - apex;
-        let expected = Phase::from(r.z / lambda.mm() * 2.0 * PI * rad);
+        let rho = (r.x * r.x + r.y * r.y).sqrt();
+        assert!(rho > 0.0);
+        let expected = Phase::from(-rho / lambda.mm() * 2.0 * PI * rad);
         assert_eq!(e.phase, expected);
     }
 
