@@ -1,6 +1,6 @@
 use autd3_ffi_abi::{ModulationBuffer, drop_handle, into_handle};
 use autd3_rs_core::units::Hz;
-use autd3_rs_core::value::{Intensity, SamplingConfig};
+use autd3_rs_core::value::SamplingConfig;
 use autd3_rs_core::{Angle, Freq};
 use autd3_rs_modulation::{FourierOption, SineComponent, SineOption, SquareOption};
 
@@ -38,7 +38,7 @@ pub unsafe extern "C" fn autd3_modulation_buffer_free(buffer: *mut ModulationBuf
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_sine_option_new(
-    intensity: u8,
+    amplitude: u8,
     offset: u8,
     phase: f32,
     clamp: bool,
@@ -50,7 +50,7 @@ pub unsafe extern "C" fn autd3_modulation_sine_option_new(
         *unsafe { &*sampling_config }
     };
     into_handle(SineOption {
-        intensity: Intensity(intensity),
+        amplitude,
         offset,
         phase: Angle::from_radian(phase),
         clamp,

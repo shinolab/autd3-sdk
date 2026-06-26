@@ -3,7 +3,7 @@ use core::num::NonZeroU16;
 use autd3_python_capsule::{modulation_from_capsule, modulation_into_capsule, to_pyerr};
 use autd3_rs_core::common::Freq;
 use autd3_rs_core::units::{Hz, rad};
-use autd3_rs_core::value::{Intensity, SamplingConfig};
+use autd3_rs_core::value::SamplingConfig;
 use autd3_rs_modulation::{
     FourierOption as CoreFourierOption, SineComponent as CoreSineComponent,
     SineOption as CoreSineOption, SquareOption as CoreSquareOption,
@@ -20,9 +20,9 @@ pub struct SineOption {
 #[pymethods]
 impl SineOption {
     #[new]
-    #[pyo3(signature = (intensity = 0xFF, offset = 0x80, phase = 0.0, clamp = false, sampling_divide = None))]
+    #[pyo3(signature = (amplitude = 0xFF, offset = 0x80, phase = 0.0, clamp = false, sampling_divide = None))]
     fn new(
-        intensity: u8,
+        amplitude: u8,
         offset: u8,
         phase: f32,
         clamp: bool,
@@ -37,7 +37,7 @@ impl SineOption {
         };
         Ok(Self {
             inner: CoreSineOption {
-                intensity: Intensity(intensity),
+                amplitude,
                 offset,
                 phase: phase * rad,
                 clamp,
