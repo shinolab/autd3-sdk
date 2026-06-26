@@ -46,6 +46,16 @@ namespace AUTD3
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_op_set_phase_correction(byte[] phases, UIntPtr numDevices);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_op_set_pulse_width_table(ushort[] table);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_pulse_width_default_table([Out] ushort[] outTable);
+
+        [DllImport(Lib)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        internal static extern bool autd3_pulse_width_from_duty(float duty, [Out] ushort[] outValue);
     }
 
     public readonly struct GpioOut
@@ -209,6 +219,44 @@ namespace AUTD3
             }
             return NativeCommand.autd3_op_set_output_mask(flat, (UIntPtr)_masks.Length);
         }
+    }
+
+    public static class PulseWidth
+    {
+        public const int TableSize = 256;
+
+        public static ushort[] DefaultTable()
+        {
+            var table = new ushort[TableSize];
+            NativeCommand.autd3_pulse_width_default_table(table);
+            return table;
+        }
+
+        public static ushort FromDuty(float duty)
+        {
+            var outValue = new ushort[1];
+            if (!NativeCommand.autd3_pulse_width_from_duty(duty, outValue))
+            {
+                throw new Autd3Exception("duty must be in [0, 1)");
+            }
+            return outValue[0];
+        }
+    }
+
+    public sealed class SetPulseWidthTable : ICommand
+    {
+        private readonly ushort[] _table;
+
+        public SetPulseWidthTable(ushort[] table)
+        {
+            if (table.Length != PulseWidth.TableSize)
+            {
+                throw new Autd3Exception($"pulse width table requires {PulseWidth.TableSize} values");
+            }
+            _table = table;
+        }
+
+        IntPtr ICommand.CreateOp() => NativeCommand.autd3_op_set_pulse_width_table(_table);
     }
 
     public sealed class SetPhaseCorrection : ICommand

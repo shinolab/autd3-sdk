@@ -18,9 +18,9 @@ use autd3_rs::{
     ChangeModulationBank, ChangePatternBank, Clear, ClientConfig, ConfigModulation, ConfigPattern,
     ControlPoint, ControlPoints, DatagramBuilder as CoreDatagramBuilder, Datagrams, EmulateGpioIn,
     FixedCompletionTime, FixedUpdateRate, ForceFan, Geometry, GpioOut, Length, Modulation, Nop,
-    Pattern, PatternStm, PatternStmMode, PatternStmOption, Point3, SetGpioOut, SetOutputMask,
-    SetPhaseCorrection, SetSilencer, StmConfig, UnitVector3, Vector3, WriteFociBuffer,
-    WriteModulationBuffer, WritePatternBuffer, circle, line,
+    PWE_TABLE_SIZE, Pattern, PatternStm, PatternStmMode, PatternStmOption, Point3, PulseWidth,
+    SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig,
+    UnitVector3, Vector3, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, circle, line,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -319,6 +319,7 @@ pub enum Pending {
     EmulateGpioIn([bool; 4]),
     SetOutputMask(Vec<[bool; NUM_TRANSDUCERS]>),
     SetPhaseCorrection(Vec<[Phase; NUM_TRANSDUCERS]>),
+    SetPulseWidthTable(Box<[u16; PWE_TABLE_SIZE]>),
     FociStm {
         config: StmConfig,
         samples: Vec<FociSample>,
@@ -581,6 +582,42 @@ pub unsafe extern "C" fn autd3_op_set_phase_correction(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_op_set_pulse_width_table(table: *const u16) -> *mut Pending {
+    if table.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let slice = unsafe { std::slice::from_raw_parts(table, PWE_TABLE_SIZE) };
+    let mut t = Box::new([0u16; PWE_TABLE_SIZE]);
+    t.copy_from_slice(slice);
+    into_handle(Pending::SetPulseWidthTable(t))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pulse_width_default_table(out: *mut u16) {
+    if out.is_null() {
+        return;
+    }
+
+    let table = SetPulseWidthTable::default_table();
+    unsafe { std::ptr::copy_nonoverlapping(table.as_ptr(), out, PWE_TABLE_SIZE) };
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pulse_width_from_duty(duty: f32, out: *mut u16) -> bool {
+    if out.is_null() {
+        return false;
+    }
+
+    let Ok(value) = PulseWidth::from_duty(duty).pulse_width() else {
+        return false;
+    };
+
+    unsafe { *out = value };
+    true
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_foci_stm(
     config: *const StmConfig,
     points: *const Autd3StmControlPoint,
@@ -827,6 +864,9 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             }
             Pending::SetPhaseCorrection(phases) => {
                 core.push(SetPhaseCorrection { phases });
+            }
+            Pending::SetPulseWidthTable(t) => {
+                core.push(SetPulseWidthTable { table: t });
             }
             Pending::FociStm {
                 config,

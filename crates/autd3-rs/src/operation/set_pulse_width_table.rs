@@ -1,5 +1,6 @@
 use crate::error::Error;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::value::PULSE_WIDTH_PERIOD;
 
 use super::{Distribution, Operation};
 
@@ -8,6 +9,17 @@ pub const PWE_TABLE_SIZE: usize = 256;
 #[derive(Clone, Copy, Debug)]
 pub struct SetPulseWidthTable<'a> {
     pub table: &'a [u16; PWE_TABLE_SIZE],
+}
+
+impl SetPulseWidthTable<'_> {
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    pub fn default_table() -> [u16; PWE_TABLE_SIZE] {
+        core::array::from_fn(|i| {
+            ((i as f32 / 255.0).asin() / core::f32::consts::PI * f32::from(PULSE_WIDTH_PERIOD))
+                .round() as u16
+        })
+    }
 }
 
 impl Operation for SetPulseWidthTable<'_> {
@@ -50,5 +62,14 @@ mod tests {
         assert_eq!(&out[0..2], &0u16.to_le_bytes());
         assert_eq!(&out[2..4], &1u16.to_le_bytes());
         assert_eq!(&out[510..512], &255u16.to_le_bytes());
+    }
+
+    #[test]
+    fn default_table_is_arcsin_shaped() {
+        let table = SetPulseWidthTable::default_table();
+        assert_eq!(table[0], 0);
+        assert_eq!(table[255], 256);
+        assert!(table.windows(2).all(|w| w[0] <= w[1]));
+        assert!(table.iter().all(|&v| v < PULSE_WIDTH_PERIOD));
     }
 }

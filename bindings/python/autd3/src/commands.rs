@@ -4,11 +4,12 @@ use core::time::Duration;
 use autd3_rs::DatagramBuilder as CoreDatagramBuilder;
 use autd3_rs::operation::{
     Clear as CoreClear, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
-    ForceFan as CoreForceFan, GpioOut as CoreGpioOut, Nop as CoreNop, SetGpioOut, SetOutputMask,
-    SetPhaseCorrection, SetSilencer, Synchronize as CoreSynchronize,
+    ForceFan as CoreForceFan, GpioOut as CoreGpioOut, Nop as CoreNop, PWE_TABLE_SIZE, SetGpioOut,
+    SetOutputMask, SetPhaseCorrection, SetPulseWidthTable as CoreSetPulseWidthTable, SetSilencer,
+    Synchronize as CoreSynchronize,
 };
 use autd3_rs::params::NUM_TRANSDUCERS;
-use autd3_rs::value::Phase;
+use autd3_rs::value::{Phase, PulseWidth as CorePulseWidth};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -469,6 +470,72 @@ impl SetPhaseCorrectionPy {
     }
 }
 
+#[derive(Clone)]
+struct SetPulseWidthTableCmd {
+    table: [u16; PWE_TABLE_SIZE],
+}
+
+impl PushCommand for SetPulseWidthTableCmd {
+    fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
+        builder.push(CoreSetPulseWidthTable { table: &self.table });
+    }
+}
+
+#[pyclass(name = "SetPulseWidthTable", module = "autd3")]
+pub struct SetPulseWidthTablePy {
+    table: [u16; PWE_TABLE_SIZE],
+}
+
+#[pymethods]
+impl SetPulseWidthTablePy {
+    #[new]
+    fn new(table: Vec<u16>) -> PyResult<Self> {
+        let table: [u16; PWE_TABLE_SIZE] = table.try_into().map_err(|v: Vec<u16>| {
+            PyValueError::new_err(format!(
+                "SetPulseWidthTable needs exactly {PWE_TABLE_SIZE} entries, got {}",
+                v.len()
+            ))
+        })?;
+        Ok(Self { table })
+    }
+
+    #[staticmethod]
+    fn default_table() -> Vec<u16> {
+        CoreSetPulseWidthTable::default_table().to_vec()
+    }
+}
+
+impl SetPulseWidthTablePy {
+    pub(crate) fn boxed(&self) -> Box<dyn PushCommand> {
+        Box::new(SetPulseWidthTableCmd { table: self.table })
+    }
+}
+
+#[pyclass(name = "PulseWidth", module = "autd3")]
+pub struct PulseWidth;
+
+#[pymethods]
+impl PulseWidth {
+    #[staticmethod]
+    fn from_duty(duty: f32) -> PyResult<u16> {
+        CorePulseWidth::from_duty(duty)
+            .pulse_width()
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[staticmethod]
+    fn from_raw(pulse_width: u16) -> PyResult<u16> {
+        CorePulseWidth::new(pulse_width)
+            .pulse_width()
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[staticmethod]
+    fn default_table() -> Vec<u16> {
+        CoreSetPulseWidthTable::default_table().to_vec()
+    }
+}
+
 pub(crate) fn boxed_command(obj: &Bound<'_, PyAny>) -> Option<Box<dyn PushCommand>> {
     if let Ok(c) = obj.cast::<Clear>() {
         return Some(c.borrow().boxed());
@@ -497,6 +564,9 @@ pub(crate) fn boxed_command(obj: &Bound<'_, PyAny>) -> Option<Box<dyn PushComman
     if let Ok(c) = obj.cast::<SetPhaseCorrectionPy>() {
         return Some(c.borrow().boxed());
     }
+    if let Ok(c) = obj.cast::<SetPulseWidthTablePy>() {
+        return Some(c.borrow().boxed());
+    }
     None
 }
 
@@ -513,5 +583,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<EmulateGpioInPy>()?;
     m.add_class::<SetOutputMaskPy>()?;
     m.add_class::<SetPhaseCorrectionPy>()?;
+    m.add_class::<SetPulseWidthTablePy>()?;
+    m.add_class::<PulseWidth>()?;
     Ok(())
 }
