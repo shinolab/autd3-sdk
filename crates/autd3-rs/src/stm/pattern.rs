@@ -54,6 +54,12 @@ impl<'a> PatternStm<'a> {
             option,
         }
     }
+
+    #[must_use]
+    pub fn into_nearest(mut self) -> Self {
+        self.config = self.config.into_nearest();
+        self
+    }
 }
 
 impl<'a> Command<'a> for PatternStm<'a> {

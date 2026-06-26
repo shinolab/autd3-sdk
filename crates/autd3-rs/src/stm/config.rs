@@ -16,6 +16,16 @@ pub enum StmConfig {
 
 impl StmConfig {
     #[must_use]
+    pub fn into_nearest(self) -> Self {
+        match self {
+            StmConfig::Freq(freq) => StmConfig::FreqNearest(freq),
+            StmConfig::Period(period) => StmConfig::PeriodNearest(period),
+            StmConfig::Sampling(config) => StmConfig::Sampling(config.into_nearest()),
+            other @ (StmConfig::FreqNearest(_) | StmConfig::PeriodNearest(_)) => other,
+        }
+    }
+
+    #[must_use]
     pub fn into_sampling_config(self, size: usize) -> SamplingConfig {
         let size = size.max(1);
         match self {
@@ -91,6 +101,20 @@ mod tests {
                 .divide(),
             Ok(10)
         );
+    }
+
+    #[test]
+    fn into_nearest_maps_to_nearest_variants() {
+        assert_eq!(
+            StmConfig::from(100.0 * Hz).into_nearest(),
+            StmConfig::FreqNearest(100.0 * Hz)
+        );
+        assert_eq!(
+            StmConfig::from(Duration::from_millis(1)).into_nearest(),
+            StmConfig::PeriodNearest(Duration::from_millis(1))
+        );
+        let nearest = StmConfig::from(Nearest(4001.0 * Hz));
+        assert_eq!(nearest.into_nearest(), nearest);
     }
 
     #[test]
