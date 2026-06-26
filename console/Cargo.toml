@@ -1,0 +1,39 @@
+[package]
+name = "autd3-console"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "MIT"
+authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
+repository = "https://github.com/shinolab/autd3-sdk"
+description = "GUI console that launches AUTD3 tools (simulator / TwinCAT setup)"
+
+[[bin]]
+name = "autd3-console"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.35.0", default-features = false, features = [
+    "glow",
+    "default_fonts",
+    "persistence",
+    "wayland",
+    "x11",
+] }
+serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
+
+[lints]
+workspace = true
+
+[workspace]
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_precision_loss = "allow"

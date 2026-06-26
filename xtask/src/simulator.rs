@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
@@ -6,6 +6,34 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::util::{on_path, run, run_built_bin};
+
+pub fn build_backend_and_frontend(root: &Path, debug: bool) -> Result<(PathBuf, PathBuf)> {
+    let sim = root.join("simulator");
+    let frontend = sim.join("frontend");
+    let profile = if debug { "debug" } else { "release" };
+
+    build_frontend(&frontend, debug)?;
+    let public = frontend
+        .join("target")
+        .join("dx")
+        .join("autd3-rs-simulator-frontend")
+        .join(profile)
+        .join("web")
+        .join("public");
+
+    let mut build_args: Vec<&str> = vec!["build", "-p", "autd3-rs-simulator"];
+    if !debug {
+        build_args.push("--release");
+    }
+    run("cargo", build_args, &sim)?;
+    let bin_name = if cfg!(windows) {
+        "autd3-rs-simulator.exe"
+    } else {
+        "autd3-rs-simulator"
+    };
+    let bin = sim.join("target").join(profile).join(bin_name);
+    Ok((bin, public))
+}
 
 #[derive(Subcommand)]
 pub enum SimulatorCmd {

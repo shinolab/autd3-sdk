@@ -7,6 +7,7 @@ updates:
       - "/xtask"
       - "/simulator"
       - "/simulator/frontend"
+      - "/console"
       - "/bindings/ffi"
       - "/bindings/python"
     schedule:

@@ -5,6 +5,7 @@ on:
     tags:
       - 'v*'
       - '*-v*'
+      - '!console-v*'
 
 defaults:
   run:
