@@ -8,13 +8,13 @@ use core::f32::consts::PI;
 
 use autd3_rs_core::common::Angle;
 use autd3_rs_core::error::{Error, PayloadError};
-use autd3_rs_core::value::{Intensity, SamplingConfig};
+use autd3_rs_core::value::SamplingConfig;
 
 use crate::sampling_mode::SamplingMode;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SineOption {
-    pub intensity: Intensity,
+    pub amplitude: u8,
     pub offset: u8,
     pub phase: Angle,
     pub clamp: bool,
@@ -24,7 +24,7 @@ pub struct SineOption {
 impl Default for SineOption {
     fn default() -> Self {
         Self {
-            intensity: Intensity::MAX,
+            amplitude: 0xFF,
             offset: 0x80,
             phase: Angle::ZERO,
             clamp: false,
@@ -42,14 +42,14 @@ pub(crate) fn sine_raw<S: Into<SamplingMode>>(
     let n =
         usize::try_from(n).map_err(|_| Error::InvalidPayload(PayloadError::SampleCountOverflow))?;
 
-    let intensity = f32::from(option.intensity.0);
+    let amplitude = f32::from(option.amplitude);
     let offset = f32::from(option.offset);
     let phase = option.phase.radian();
 
     Ok((0..n)
         .map(|i| {
             let t = (rep * i as u64) as f32 / n as f32;
-            (intensity / 2.0 * (2.0 * PI * t + phase).sin()) + offset
+            (amplitude / 2.0 * (2.0 * PI * t + phase).sin()) + offset
         })
         .collect())
 }
