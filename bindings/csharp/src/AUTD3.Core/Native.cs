@@ -25,6 +25,27 @@ namespace AUTD3
         internal static extern void autd3_core_geometry_center(IntPtr geometry, [Out] float[] outXyz);
 
         [DllImport(Lib)]
+        internal static extern UIntPtr autd3_core_geometry_num_transducers(IntPtr geometry);
+
+        [DllImport(Lib)]
+        internal static extern UIntPtr autd3_core_device_num_transducers(IntPtr geometry, UIntPtr dev);
+
+        [DllImport(Lib)]
+        internal static extern UIntPtr autd3_core_device_idx(IntPtr geometry, UIntPtr dev);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_core_device_rotation(IntPtr geometry, UIntPtr dev, [Out] float[] outWijk);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_core_device_direction_x(IntPtr geometry, UIntPtr dev, [Out] float[] outXyz);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_core_device_direction_y(IntPtr geometry, UIntPtr dev, [Out] float[] outXyz);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_core_device_direction_axial(IntPtr geometry, UIntPtr dev, [Out] float[] outXyz);
+
+        [DllImport(Lib)]
         internal static extern void autd3_core_geometry_free(IntPtr geometry);
 
         [DllImport(Lib)]

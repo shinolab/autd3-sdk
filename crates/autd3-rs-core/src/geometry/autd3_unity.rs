@@ -19,8 +19,15 @@ impl From<Autd3Unity> for Device {
             -u.origin.z * 1000.0,
         );
 
-        let unity_z = (rot * Vector3::z_axis()).into_inner();
-        let dir_rh = UnitVector3::new_normalize(Vector3::new(unity_z.x, unity_z.y, -unity_z.z));
+        let flip_z = |v: Vector3<f32>| Vector3::new(v.x, v.y, -v.z);
+        let x_rh = UnitVector3::new_normalize(flip_z((rot * Vector3::x_axis()).into_inner()));
+        let y_rh = UnitVector3::new_normalize(flip_z((rot * Vector3::y_axis()).into_inner()));
+        let dir_rh = UnitVector3::new_normalize(flip_z((rot * Vector3::z_axis()).into_inner()));
+        let rotation = UnitQuaternion::from_basis_unchecked(&[
+            x_rh.into_inner(),
+            y_rh.into_inner(),
+            dir_rh.into_inner(),
+        ]);
 
         let mut positions = Vec::with_capacity(NUM_TRANSDUCERS);
         let mut directions = Vec::with_capacity(NUM_TRANSDUCERS);
@@ -38,7 +45,7 @@ impl From<Autd3Unity> for Device {
             }
         }
         debug_assert_eq!(positions.len(), NUM_TRANSDUCERS);
-        Device::new(positions, directions)
+        Device::new(rotation, positions, directions)
     }
 }
 

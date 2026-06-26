@@ -62,6 +62,131 @@ pub unsafe extern "C" fn autd3_core_geometry_center(geometry: *const Geometry, o
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_geometry_num_transducers(geometry: *const Geometry) -> usize {
+    if geometry.is_null() {
+        return 0;
+    }
+
+    unsafe { &*geometry }.num_transducers()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_device_num_transducers(
+    geometry: *const Geometry,
+    dev: usize,
+) -> usize {
+    if geometry.is_null() {
+        return 0;
+    }
+
+    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+        return 0;
+    };
+    device.len()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_device_idx(geometry: *const Geometry, dev: usize) -> usize {
+    if geometry.is_null() {
+        return 0;
+    }
+
+    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+        return 0;
+    };
+    device.idx()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_device_rotation(
+    geometry: *const Geometry,
+    dev: usize,
+    out: *mut f32,
+) {
+    if geometry.is_null() || out.is_null() {
+        return;
+    }
+
+    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+        return;
+    };
+    let rotation = device.rotation();
+
+    unsafe {
+        *out = rotation.w;
+        *out.add(1) = rotation.i;
+        *out.add(2) = rotation.j;
+        *out.add(3) = rotation.k;
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_device_direction_x(
+    geometry: *const Geometry,
+    dev: usize,
+    out: *mut f32,
+) {
+    if geometry.is_null() || out.is_null() {
+        return;
+    }
+
+    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+        return;
+    };
+    let direction = device.x_direction();
+
+    unsafe {
+        *out = direction.x;
+        *out.add(1) = direction.y;
+        *out.add(2) = direction.z;
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_device_direction_y(
+    geometry: *const Geometry,
+    dev: usize,
+    out: *mut f32,
+) {
+    if geometry.is_null() || out.is_null() {
+        return;
+    }
+
+    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+        return;
+    };
+    let direction = device.y_direction();
+
+    unsafe {
+        *out = direction.x;
+        *out.add(1) = direction.y;
+        *out.add(2) = direction.z;
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_device_direction_axial(
+    geometry: *const Geometry,
+    dev: usize,
+    out: *mut f32,
+) {
+    if geometry.is_null() || out.is_null() {
+        return;
+    }
+
+    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+        return;
+    };
+    let direction = device.axial_direction();
+
+    unsafe {
+        *out = direction.x;
+        *out.add(1) = direction.y;
+        *out.add(2) = direction.z;
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_core_geometry_free(geometry: *mut Geometry) {
     unsafe { drop_handle(geometry) }
 }

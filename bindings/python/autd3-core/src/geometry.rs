@@ -1,6 +1,8 @@
 use autd3_rs_core::{
-    Autd3 as CoreAutd3, Geometry as CoreGeometry, Point3, Quaternion, UnitQuaternion,
+    Autd3 as CoreAutd3, Device as CoreDevice, Geometry as CoreGeometry, Point3, Quaternion,
+    UnitQuaternion,
 };
+use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 
@@ -57,12 +59,74 @@ impl Geometry {
         self.inner.len()
     }
 
+    fn num_transducers(&self) -> usize {
+        self.inner.num_transducers()
+    }
+
+    fn device(&self, index: usize) -> PyResult<Device> {
+        if index >= self.inner.len() {
+            return Err(PyIndexError::new_err("device index out of range"));
+        }
+        Ok(Device {
+            inner: self.inner[index].clone(),
+        })
+    }
+
+    fn __getitem__(&self, index: usize) -> PyResult<Device> {
+        self.device(index)
+    }
+
     fn __len__(&self) -> usize {
         self.inner.len()
     }
 
     fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
         autd3_python_capsule::geometry_into_capsule(py, self.inner.clone())
+    }
+}
+
+#[pyclass(name = "Device", module = "autd3_core")]
+pub struct Device {
+    inner: CoreDevice,
+}
+
+#[pymethods]
+impl Device {
+    fn idx(&self) -> usize {
+        self.inner.idx()
+    }
+
+    fn num_transducers(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn center(&self) -> (f32, f32, f32) {
+        let c = self.inner.center();
+        (c.x, c.y, c.z)
+    }
+
+    fn rotation(&self) -> (f32, f32, f32, f32) {
+        let q = self.inner.rotation();
+        (q.w, q.i, q.j, q.k)
+    }
+
+    fn x_direction(&self) -> (f32, f32, f32) {
+        let d = self.inner.x_direction().into_inner();
+        (d.x, d.y, d.z)
+    }
+
+    fn y_direction(&self) -> (f32, f32, f32) {
+        let d = self.inner.y_direction().into_inner();
+        (d.x, d.y, d.z)
+    }
+
+    fn axial_direction(&self) -> (f32, f32, f32) {
+        let d = self.inner.axial_direction().into_inner();
+        (d.x, d.y, d.z)
     }
 }
 

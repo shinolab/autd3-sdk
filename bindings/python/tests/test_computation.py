@@ -102,6 +102,18 @@ def test_commands_build() -> None:
     assert len(builder.build()) > 0
 
 
+def test_device_accessors() -> None:
+    geo = geometry()
+    assert geo.num_transducers() == geo[0].num_transducers()
+    dev = geo[0]
+    assert dev.idx() == 0
+    assert len(dev.rotation()) == 4
+    assert len(dev.x_direction()) == 3
+    assert len(dev.y_direction()) == 3
+    assert len(dev.axial_direction()) == 3
+    assert len(dev.center()) == 3
+
+
 def test_link_options_construct() -> None:
     import autd3_link_remote as remote
     import autd3_link_twincat as twincat

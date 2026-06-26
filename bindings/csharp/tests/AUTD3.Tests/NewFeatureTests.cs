@@ -110,5 +110,21 @@ namespace AUTD3.Tests
             using var datagrams = builder.Build();
             Assert.True(datagrams.NumFrames > 0);
         }
+
+        [Fact]
+        public void DeviceAccessors()
+        {
+            using var geometry = SingleDevice();
+            Assert.True(geometry.NumTransducers > 0);
+            var device = geometry[0];
+            Assert.Equal(0, device.Idx);
+            Assert.True(device.NumTransducers > 0);
+            Assert.Equal(geometry.NumTransducers, device.NumTransducers);
+            var rotation = device.Rotation;
+            Assert.Equal(Quaternion.Identity, rotation);
+            Assert.Equal(1f, device.XDirection.Length(), 3);
+            Assert.Equal(1f, device.YDirection.Length(), 3);
+            Assert.Equal(1f, device.AxialDirection.Length(), 3);
+        }
     }
 }
