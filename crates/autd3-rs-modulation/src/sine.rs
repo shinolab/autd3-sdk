@@ -84,20 +84,34 @@ pub fn sine<S: Into<SamplingMode>>(
 #[cfg(test)]
 mod tests {
     use autd3_rs_core::units::Hz;
+    use autd3_rs_core::value::Nearest;
 
     use super::*;
 
+    const SINE_200HZ_DEFAULT: &[u8] = &[
+        128, 167, 202, 231, 249, 255, 249, 231, 202, 167, 127, 88, 53, 24, 6, 0, 6, 24, 53, 88,
+    ];
+
     #[test]
-    fn sine_matches_legacy_vectors() {
+    fn sine_200hz_default_matches_reference() {
         let mut buf = Vec::new();
         sine(200 * Hz, &SineOption::default(), &mut buf).unwrap();
-        assert_eq!(
-            buf.as_slice(),
-            &[
-                128, 167, 202, 231, 249, 255, 249, 231, 202, 167, 127, 88, 53, 24, 6, 0, 6, 24, 53,
-                88
-            ]
-        );
+        assert_eq!(buf.as_slice(), SINE_200HZ_DEFAULT);
+    }
+
+    #[test]
+    fn sine_nearest_frequency_matches_exact() {
+        let mut buf = Vec::new();
+        sine(Nearest(200.0 * Hz), &SineOption::default(), &mut buf).unwrap();
+        assert_eq!(buf.as_slice(), SINE_200HZ_DEFAULT);
+    }
+
+    #[test]
+    fn sine_nearest_rounds_to_integer_sample_count() {
+        let mut buf = Vec::new();
+        sine(Nearest(190.0 * Hz), &SineOption::default(), &mut buf).unwrap();
+        assert_eq!(buf.len(), 21);
+        assert_eq!(buf[0], 0x80);
     }
 
     #[test]
