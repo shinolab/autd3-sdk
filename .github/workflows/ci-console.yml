@@ -1,0 +1,31 @@
+name: ci-console
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  console:
+    name: console (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt, clippy
+          workspaces: |
+            console
+            xtask
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo xtask console format
+      - run: cargo xtask console lint

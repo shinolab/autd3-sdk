@@ -21,6 +21,7 @@ jobs:
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       simulator: ${{ steps.filter.outputs.simulator }}
+      console: ${{ steps.filter.outputs.console }}
       cpu: ${{ steps.filter.outputs.cpu }}
       py: ${{ steps.filter.outputs.py }}
       ffi: ${{ steps.filter.outputs.ffi }}
@@ -58,6 +59,14 @@ jobs:
               - 'crates/autd3-rs-link-remote/**'
               - '.cargo/**'
               - '.github/workflows/ci-simulator.yml'
+            console:
+              - *shared
+              - *xtask-core
+              - 'xtask/src/console.rs'
+              - 'xtask/src/simulator.rs'
+              - 'console/**'
+              - '.cargo/**'
+              - '.github/workflows/ci-console.yml'
             cpu:
               - *shared
               - *xtask-core
@@ -95,6 +104,12 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.simulator == 'true' }}
     uses: ./.github/workflows/ci-simulator.yml
+
+  console:
+    name: console
+    needs: changes
+    if: ${{ needs.changes.outputs.console == 'true' }}
+    uses: ./.github/workflows/ci-console.yml
 
   cpu:
     name: cpu
@@ -166,13 +181,14 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [rust, simulator, cpu, py, ffi, cs, guard]
+    needs: [rust, simulator, console, cpu, py, ffi, cs, guard]
     runs-on: ubuntu-latest
     steps:
       - name: Verify no job failed
         run: |
           if [ "${{ needs.rust.result }}" = "failure" ] \
             || [ "${{ needs.simulator.result }}" = "failure" ] \
+            || [ "${{ needs.console.result }}" = "failure" ] \
             || [ "${{ needs.cpu.result }}" = "failure" ] \
             || [ "${{ needs.py.result }}" = "failure" ] \
             || [ "${{ needs.ffi.result }}" = "failure" ] \

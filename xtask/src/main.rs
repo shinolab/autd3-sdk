@@ -1,6 +1,7 @@
 mod bump;
 mod changelog;
 mod component;
+mod console;
 mod cpu;
 mod cs;
 mod example;
@@ -19,6 +20,7 @@ use clap::{Parser, Subcommand};
 
 use bump::{BumpVersionCmd, run_bump_version};
 use changelog::{ChangelogCmd, run_changelog};
+use console::{ConsoleCmd, run_console};
 use cpu::{CpuCmd, run_cpu};
 use cs::{CsCmd, run_cs};
 use example::{ExampleCmd, run_example};
@@ -57,6 +59,10 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: SimulatorCmd,
     },
+    Console {
+        #[command(subcommand)]
+        cmd: ConsoleCmd,
+    },
     Fpga {
         #[command(subcommand)]
         cmd: FpgaCmd,
@@ -91,6 +97,7 @@ fn main() -> Result<()> {
         TopCmd::Cpu { cmd } => run_cpu(&root, &cmd),
         TopCmd::Tool { cmd } => run_tool(&root, cmd),
         TopCmd::Simulator { cmd } => run_simulator(&root, cmd),
+        TopCmd::Console { cmd } => run_console(&root, cmd),
         TopCmd::Fpga { cmd } => run_fpga(&root, &cmd),
         TopCmd::Firmware { cmd } => run_firmware(&root, cmd),
         TopCmd::Py { cmd } => run_py(&root, cmd),
