@@ -12,9 +12,10 @@ namespace AUTD3.Link
             _opener = opener;
         }
 
-        public static RemoteLink Create(string addr)
+        public static RemoteLink Create(string addr, TimeSpan? timeout = null)
         {
-            var opener = NativeRemote.autd3_link_remote(addr);
+            var timeoutNs = (ulong)(timeout?.Ticks * 100 ?? 0);
+            var opener = NativeRemote.autd3_link_remote(addr, timeoutNs);
             if (opener == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create remote link (invalid address?)");
@@ -35,6 +36,6 @@ namespace AUTD3.Link
         private const string Lib = "autd3_link_remote";
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_remote([MarshalAs(UnmanagedType.LPUTF8Str)] string addr);
+        internal static extern IntPtr autd3_link_remote([MarshalAs(UnmanagedType.LPUTF8Str)] string addr, ulong timeoutNs);
     }
 }

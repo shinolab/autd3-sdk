@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
+use std::time::Duration;
 
 use autd3_rs_core::link::{ConstStateChecker, CycleOutcome, Link};
 use autd3_rs_core::{IntoLink, RX_FRAME_BYTES, TX_FRAME_BYTES};
@@ -9,12 +10,16 @@ use crate::wire;
 
 pub struct RemoteLinkOption {
     pub addr: SocketAddr,
+    pub timeout: Option<Duration>,
 }
 
 impl RemoteLinkOption {
     #[must_use]
     pub fn new(addr: SocketAddr) -> Self {
-        Self { addr }
+        Self {
+            addr,
+            timeout: None,
+        }
     }
 }
 
@@ -25,7 +30,8 @@ impl IntoLink for RemoteLinkOption {
         self,
         geometry: &autd3_rs_core::Geometry,
     ) -> Result<RemoteLink, autd3_rs_core::Error> {
-        RemoteLink::open(self.addr, geometry).map_err(|e| autd3_rs_core::Error::Link(e.to_string()))
+        RemoteLink::open(self.addr, self.timeout, geometry)
+            .map_err(|e| autd3_rs_core::Error::Link(e.to_string()))
     }
 }
 
@@ -38,10 +44,16 @@ pub struct RemoteLink {
 impl RemoteLink {
     pub fn open(
         addr: SocketAddr,
+        timeout: Option<Duration>,
         geometry: &autd3_rs_core::Geometry,
     ) -> Result<Self, RemoteLinkError> {
-        let mut stream = TcpStream::connect(addr)?;
+        let mut stream = match timeout {
+            Some(timeout) => TcpStream::connect_timeout(&addr, timeout)?,
+            None => TcpStream::connect(addr)?,
+        };
         stream.set_nodelay(true)?;
+        stream.set_read_timeout(timeout)?;
+        stream.set_write_timeout(timeout)?;
 
         stream.write_all(&wire::MAGIC)?;
         stream.write_all(&[wire::VERSION])?;

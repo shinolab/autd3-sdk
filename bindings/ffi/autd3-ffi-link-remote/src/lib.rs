@@ -141,7 +141,10 @@ impl ClientBackend for RemoteBackend {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_remote(addr: *const c_char) -> *mut ClientOpener {
+pub unsafe extern "C" fn autd3_link_remote(
+    addr: *const c_char,
+    timeout_ns: u64,
+) -> *mut ClientOpener {
     if addr.is_null() {
         return std::ptr::null_mut();
     }
@@ -154,7 +157,11 @@ pub unsafe extern "C" fn autd3_link_remote(addr: *const c_char) -> *mut ClientOp
     let opener = client_opener(move |geometry, config| async move {
         let (client, checker) = link_runtime()
             .spawn(async move {
-                Client::open_with_checker(&geometry, RemoteLinkOption::new(addr), config).await
+                let option = RemoteLinkOption {
+                    addr,
+                    timeout: (timeout_ns != 0).then(|| std::time::Duration::from_nanos(timeout_ns)),
+                };
+                Client::open_with_checker(&geometry, option, config).await
             })
             .await
             .map_err(join_err)??;
