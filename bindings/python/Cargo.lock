@@ -123,6 +123,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-python-link-nop"
+version = "0.1.0"
+dependencies = [
+ "autd3-python-capsule",
+ "autd3-rs",
+ "autd3-rs-core",
+ "autd3-rs-firmware-emulator",
+ "pyo3",
+ "tokio",
+]
+
+[[package]]
 name = "autd3-python-link-remote"
 version = "0.1.0"
 dependencies = [
@@ -197,7 +209,7 @@ dependencies = [
  "thread-priority",
  "tokio",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
  "zerocopy 0.8.52",
 ]
 
@@ -209,6 +221,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "zerocopy 0.8.52",
+]
+
+[[package]]
+name = "autd3-rs-firmware-emulator"
+version = "0.1.0"
+dependencies = [
+ "autd3-rs-core",
+ "bindgen",
+ "cc",
 ]
 
 [[package]]

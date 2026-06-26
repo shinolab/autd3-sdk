@@ -1,0 +1,15 @@
+[build-system]
+requires = ["maturin>=1.14,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "autd3-link-nop"
+description = "Python bindings for the no-op (hardware-free) link."
+requires-python = ">=3.10"
+license = "MIT"
+dynamic = ["version"]
+dependencies = ["autd3-core"]
+
+[tool.maturin]
+module-name = "autd3_link_nop"
+manifest-path = "Cargo.toml"
