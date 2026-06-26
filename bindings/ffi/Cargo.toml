@@ -11,6 +11,7 @@ members = [
     "autd3-ffi-link-soem",
     "autd3-ffi-link-remote",
     "autd3-ffi-link-twincat",
+    "autd3-ffi-link-nop",
 ]
 
 [workspace.package]

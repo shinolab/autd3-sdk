@@ -8,6 +8,7 @@
     <Project Path="src/AUTD3.Link.Ethercrab/AUTD3.Link.Ethercrab.csproj" />
     <Project Path="src/AUTD3.Link.Soem/AUTD3.Link.Soem.csproj" />
     <Project Path="src/AUTD3.Link.Remote/AUTD3.Link.Remote.csproj" />
+    <Project Path="src/AUTD3.Link.Nop/AUTD3.Link.Nop.csproj" />
     <Project Path="src/AUTD3.Link.Twincat/AUTD3.Link.Twincat.csproj" />
   </Folder>
   <Folder Name="/examples/">

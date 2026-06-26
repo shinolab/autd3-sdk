@@ -134,6 +134,7 @@ def test_device_accessors() -> None:
 
 
 def test_link_options_construct() -> None:
+    import autd3_link_nop as nop
     import autd3_link_remote as remote
     import autd3_link_twincat as twincat
 
@@ -141,6 +142,7 @@ def test_link_options_construct() -> None:
     remote.RemoteLinkOption("127.0.0.1:8080", timeout=0.5)
     twincat.TwinCATLinkOption.local()
     twincat.TwinCATLinkOption.remote("169.254.1.1", "1.2.3.4.1.1", twincat.TwinCATRoute.Ads)
+    nop.Nop()
 
 
 def test_loop_behavior_and_transition_mode() -> None:

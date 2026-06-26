@@ -14,6 +14,7 @@ const MIT_WHEELS: &[&str] = &[
     "autd3-link-ethercrab",
     "autd3-link-remote",
     "autd3-link-twincat",
+    "autd3-link-nop",
     "autd3",
 ];
 const SOEM_WHEEL: &str = "autd3-link-soem";
@@ -123,6 +124,7 @@ fn wheels(soem: bool) -> &'static [&'static str] {
             "autd3-link-ethercrab",
             "autd3-link-remote",
             "autd3-link-twincat",
+            "autd3-link-nop",
             "autd3",
             SOEM_WHEEL,
         ];

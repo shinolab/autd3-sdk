@@ -11,6 +11,7 @@ members = [
     "autd3-link-soem",
     "autd3-link-remote",
     "autd3-link-twincat",
+    "autd3-link-nop",
 ]
 
 [workspace.package]
@@ -37,6 +38,7 @@ autd3-rs-link-ethercrab = { path = "../../crates/autd3-rs-link-ethercrab" }
 autd3-rs-link-soem = { path = "../../crates/autd3-rs-link-soem" }
 autd3-rs-link-remote = { path = "../../crates/autd3-rs-link-remote" }
 autd3-rs-link-twincat = { path = "../../crates/autd3-rs-link-twincat" }
+autd3-rs-firmware-emulator = { path = "../../crates/autd3-rs-firmware-emulator" }
 autd3-python-capsule = { path = "autd3-python-capsule" }
 
 [workspace.lints.rust]
