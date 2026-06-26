@@ -52,7 +52,7 @@ fn loopback_relays_frames() {
             .map(|_| autd3_rs_core::Autd3::default())
             .collect::<Vec<_>>(),
     );
-    let mut link = RemoteLink::open(addr, &geometry).unwrap();
+    let mut link = RemoteLink::open(addr, None, &geometry).unwrap();
     assert_eq!(link.num_devices(), num_devices);
 
     let mut tx = vec![[0u8; TX_FRAME_BYTES]; num_devices];

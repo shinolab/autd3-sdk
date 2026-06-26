@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, client_opener, link_into_capsule,
@@ -144,20 +145,32 @@ impl ClientBackend for RemoteBackend {
 #[pyclass(name = "RemoteLinkOption", module = "autd3_link_remote")]
 pub struct RemoteLinkOption {
     addr: SocketAddr,
+    timeout: Option<Duration>,
 }
 
 #[pymethods]
 impl RemoteLinkOption {
     #[new]
-    fn new(addr: &str) -> PyResult<Self> {
+    #[pyo3(signature = (addr, timeout = None))]
+    fn new(addr: &str, timeout: Option<f64>) -> PyResult<Self> {
         let addr = addr
             .parse::<SocketAddr>()
             .map_err(|e| PyValueError::new_err(format!("invalid socket address `{addr}`: {e}")))?;
-        Ok(Self { addr })
+        let timeout = match timeout {
+            Some(t) if t < 0.0 => {
+                return Err(PyValueError::new_err("timeout must be non-negative"));
+            }
+            Some(t) => Some(Duration::from_secs_f64(t)),
+            None => None,
+        };
+        Ok(Self { addr, timeout })
     }
 
     fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
-        let option = CoreOption::new(self.addr);
+        let option = CoreOption {
+            addr: self.addr,
+            timeout: self.timeout,
+        };
         let opener = client_opener(move |geometry, config| async move {
             let (client, checker) = link_runtime()
                 .spawn(async move { Client::open_with_checker(&geometry, option, config).await })
