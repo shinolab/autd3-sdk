@@ -1,0 +1,38 @@
+[package]
+name = "autd3-rs-emulator-examples"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "examples for autd3-rs-emulator."
+publish = false
+
+[[bin]]
+name = "record_drive"
+path = "src/bin/record_drive.rs"
+
+[[bin]]
+name = "output_ultrasound"
+path = "src/bin/output_ultrasound.rs"
+
+[[bin]]
+name = "rms"
+path = "src/bin/rms.rs"
+
+[[bin]]
+name = "sound_field"
+path = "src/bin/sound_field.rs"
+
+[dependencies]
+autd3-rs.workspace = true
+autd3-rs-emulator.workspace = true
+autd3-rs-pattern.workspace = true
+autd3-rs-modulation.workspace = true
+anyhow.workspace = true
+textplots.workspace = true
+polars = { workspace = true, features = ["fmt", "csv"] }
+
+[lints]
+workspace = true

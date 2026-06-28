@@ -1,0 +1,38 @@
+[workspace]
+resolver = "3"
+members = ["autd3-rs-emulator", "examples"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "MIT"
+authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
+repository = "https://github.com/shinolab/autd3-sdk"
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_precision_loss = "allow"
+
+[workspace.dependencies]
+autd3-rs = { path = "../crates/autd3-rs" }
+autd3-rs-core = { path = "../crates/autd3-rs-core" }
+autd3-rs-firmware-emulator = { path = "../crates/autd3-rs-firmware-emulator" }
+autd3-rs-emulator = { path = "autd3-rs-emulator" }
+autd3-rs-pattern = { path = "../crates/autd3-rs-pattern" }
+autd3-rs-modulation = { path = "../crates/autd3-rs-modulation" }
+anyhow = { version = "1.0.102", default-features = false, features = ["std"] }
+textplots = { version = "0.8.7" }
+thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
+nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
+pollster = { version = "0.4.0" }
+polars = { version = "0.54.4", default-features = false, features = ["dtype-u8", "dtype-u16"] }
+rayon = { version = "1.10.0" }
+approx = { version = "0.5.1", default-features = false, features = ["std"] }
