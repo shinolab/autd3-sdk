@@ -31,7 +31,8 @@ autd3-rs-emulator.workspace = true
 autd3-rs-pattern.workspace = true
 autd3-rs-modulation.workspace = true
 anyhow.workspace = true
-polars = { workspace = true, features = ["fmt"] }
+textplots.workspace = true
+polars = { workspace = true, features = ["fmt", "csv"] }
 
 [lints]
 workspace = true

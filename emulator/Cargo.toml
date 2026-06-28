@@ -29,6 +29,7 @@ autd3-rs-emulator = { path = "autd3-rs-emulator" }
 autd3-rs-pattern = { path = "../crates/autd3-rs-pattern" }
 autd3-rs-modulation = { path = "../crates/autd3-rs-modulation" }
 anyhow = { version = "1.0.102", default-features = false, features = ["std"] }
+textplots = { version = "0.8.7" }
 thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
 pollster = { version = "0.4.0" }

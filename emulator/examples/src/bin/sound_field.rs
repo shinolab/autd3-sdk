@@ -1,20 +1,28 @@
 // Computes the instantaneous (time-domain) sound field on a plane through a
-// focus with the hardware-free emulator. The recording must be long enough for
-// the sound to reach the observation plane; we then skip the propagation delay
-// and snapshot one ultrasound period. Run with:
-//   cargo run -p autd3-rs-emulator-examples --bin sound_field
+// focus (silencer disabled), saves it as CSV, and animates it with matplotlib
+// (plot_field.py) so the ultrasound oscillation is visible. The recording must
+// be long enough for the sound to reach the observation plane; we skip the
+// propagation delay and capture one ultrasound period (25 time steps).
+// Pass `--no-plot` to skip the Python step. Run with:
+//   cargo xtask emulator example sound_field
+//   cargo xtask emulator example sound_field --no-plot
 
+use std::fs::File;
 use std::time::Duration;
 
 use anyhow::Result;
+use polars::prelude::{CsvWriter, SerWriter};
 
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::params::NUM_TRANSDUCERS;
-use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{Emission, SamplingConfig};
-use autd3_rs::{Modulation, Pattern, SetSilencer};
+use autd3_rs::units::{m, mm, s};
+use autd3_rs::value::Emission;
+use autd3_rs::{Pattern, SetSilencer};
 
 use autd3_rs_emulator::{ClientApi, Emulator, InstantRecordOption, RangeXY};
+
+#[path = "../plot.rs"]
+mod plot;
 
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
@@ -30,21 +38,13 @@ fn main() -> Result<()> {
         &mut patterns,
     );
 
-    let mut modulation = Vec::new();
-    autd3_rs_modulation::sine(
-        200 * Hz,
-        &autd3_rs_modulation::SineOption::default(),
-        &mut modulation,
-    )?;
-
     let center = geometry.center();
     let emulator = Emulator::new(geometry);
     let record = emulator.record(async move |r| {
         let mut builder = r.datagram_builder();
         builder
-            .push(SetSilencer::default())
-            .push(Pattern::new(&patterns))
-            .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation));
+            .push(SetSilencer::disable())
+            .push(Pattern::new(&patterns));
         let datagrams = builder.build()?;
         for frame in &datagrams {
             r.send_checked(frame).await?;
@@ -53,22 +53,31 @@ fn main() -> Result<()> {
         Ok(())
     })?;
 
-    let range = RangeXY {
-        x: (center.x - 10.0)..=(center.x + 10.0),
-        y: (center.y - 10.0)..=(center.y + 10.0),
-        z: 150.0,
-        resolution: 5.0,
-    };
-    let option = InstantRecordOption {
-        time_step: Duration::from_micros(5),
-        ..Default::default()
-    };
-    let mut instant = record.sound_field(range, option)?;
+    println!("calculating instantaneous sound field around the focus...");
+    let mut instant = record.sound_field(
+        RangeXY {
+            x: (center.x - 20.0)..=(center.x + 20.0),
+            y: (center.y - 20.0)..=(center.y + 20.0),
+            z: 150.0,
+            resolution: 1.0,
+        },
+        InstantRecordOption {
+            time_step: Duration::from_micros(1),
+            ..Default::default()
+        },
+    )?;
+
     instant.skip(Duration::from_micros(500))?;
-    println!("--- observe points ---\n{}", instant.observe_points());
-    println!(
-        "--- instant pressure [Pa] ---\n{}",
-        instant.next(Duration::from_micros(25))?
-    );
+    let points = instant.observe_points();
+    let field = instant.next(Duration::from_micros(25))?;
+    let mut df = points.hstack(field.columns())?;
+
+    let csv = std::env::temp_dir().join("autd3_emulator_sound_field.csv");
+    CsvWriter::new(File::create(&csv)?)
+        .include_header(true)
+        .finish(&mut df)?;
+    println!("saved: {}", csv.display());
+
+    plot::visualize(&csv);
     Ok(())
 }

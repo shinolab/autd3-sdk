@@ -7,6 +7,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use textplots::{Chart, Plot, Shape};
 
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::params::NUM_TRANSDUCERS;
@@ -59,5 +60,16 @@ fn main() -> Result<()> {
     );
     println!("--- phase ---\n{}", record.phase());
     println!("--- pulse width ---\n{}", record.pulse_width());
+
+    let pulse_width: Vec<(f32, f32)> = record
+        .pulse_width_of(0)
+        .iter()
+        .enumerate()
+        .map(|(i, &w)| (i as f32, f32::from(w)))
+        .collect();
+    println!("pulse width over time (transducer 0, 1 sample = 25 us)");
+    Chart::new(220, 50, 0.0, record.num_samples() as f32)
+        .lineplot(&Shape::Lines(&pulse_width))
+        .display();
     Ok(())
 }

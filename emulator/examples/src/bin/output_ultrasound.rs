@@ -1,30 +1,45 @@
-// Records a focus for one ultrasound period and computes the per-transducer
-// output voltage waveform and the emitted ultrasound (T4010A1BVD model) with
-// the hardware-free emulator. Run with:
-//   cargo run -p autd3-rs-emulator-examples --bin output_ultrasound
+// Records a uniform full-intensity drive (silencer disabled) and plots the
+// output voltage waveform and the emitted ultrasound (T4010A1BVD model) of
+// transducer 0 as terminal line charts. With Intensity::MAX and the silencer
+// disabled the duty ratio is 50% (pulse width 256 / 512).
+// Run with: cargo xtask emulator example output_ultrasound
 
 use anyhow::Result;
-
 use autd3_rs::common::ULTRASOUND_PERIOD;
-use autd3_rs::geometry::{Autd3, Geometry, offset};
+use textplots::{Chart, Plot, Shape};
+
+use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::params::NUM_TRANSDUCERS;
-use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::Emission;
+use autd3_rs::units::rad;
+use autd3_rs::value::{Emission, Intensity, Phase};
 use autd3_rs::{Pattern, SetSilencer};
 
 use autd3_rs_emulator::{ClientApi, Emulator};
 
+const PLOT_SAMPLES: usize = 512 * 30;
+
+fn lineplot(title: &str, samples: &[f32]) {
+    let points: Vec<(f32, f32)> = samples
+        .iter()
+        .take(PLOT_SAMPLES)
+        .enumerate()
+        .map(|(i, &v)| (i as f32, v))
+        .collect();
+    println!("{title}");
+    Chart::new(220, 50, 0.0, PLOT_SAMPLES as f32)
+        .lineplot(&Shape::Lines(&points))
+        .display();
+}
+
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
     let mut patterns = vec![[Emission::default(); NUM_TRANSDUCERS]; geometry.len()];
-    autd3_rs_pattern::focus(
-        &geometry,
-        target,
-        wavelength,
-        &autd3_rs_pattern::FocusOption::default(),
+    autd3_rs_pattern::uniform(
+        Emission {
+            phase: Phase::from(std::f32::consts::PI / 2.0 * rad),
+            intensity: Intensity::MAX,
+        },
         &mut patterns,
     );
 
@@ -32,20 +47,23 @@ fn main() -> Result<()> {
     let record = emulator.record(async move |r| {
         let mut builder = r.datagram_builder();
         builder
-            .push(SetSilencer::default())
+            .push(SetSilencer::disable())
             .push(Pattern::new(&patterns));
         let datagrams = builder.build()?;
         for frame in &datagrams {
             r.send_checked(frame).await?;
         }
-        r.tick(ULTRASOUND_PERIOD)?;
+        r.tick(ULTRASOUND_PERIOD * 30)?;
         Ok(())
     })?;
 
-    println!("--- output voltage [V] ---\n{}", record.output_voltage());
-    println!(
-        "--- emitted ultrasound [a.u.] ---\n{}",
-        record.output_ultrasound()
+    lineplot(
+        "output voltage [V] (transducer 0)",
+        &record.output_voltage_of(0),
+    );
+    lineplot(
+        "emitted ultrasound [a.u.] (transducer 0)",
+        &record.output_ultrasound_of(0),
     );
     Ok(())
 }
