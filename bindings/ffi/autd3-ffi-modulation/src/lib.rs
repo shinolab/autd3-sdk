@@ -180,12 +180,29 @@ pub unsafe extern "C" fn autd3_modulation_fourier(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_modulation_radiation_pressure(buffer: *mut ModulationBuffer) -> i32 {
+pub unsafe extern "C" fn autd3_modulation_radiation_pressure(
+    src: *const ModulationBuffer,
+    out: *mut ModulationBuffer,
+) -> i32 {
+    if src.is_null() || out.is_null() {
+        return -1;
+    }
+
+    let src = unsafe { &*src };
+    let out = unsafe { &mut *out };
+    autd3_rs_modulation::radiation_pressure(&src.0, &mut out.0);
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_modulation_radiation_pressure_inplace(
+    buffer: *mut ModulationBuffer,
+) -> i32 {
     if buffer.is_null() {
         return -1;
     }
 
     let buffer = unsafe { &mut *buffer };
-    autd3_rs_modulation::radiation_pressure(&mut buffer.0);
+    autd3_rs_modulation::radiation_pressure_inplace(&mut buffer.0);
     0
 }

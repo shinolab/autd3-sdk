@@ -192,8 +192,16 @@ fn fourier(
 }
 
 #[pyfunction]
-fn radiation_pressure(mut buffer: PyRefMut<'_, ModulationBuffer>) {
-    autd3_rs_modulation::radiation_pressure(&mut buffer.data);
+fn radiation_pressure(
+    src: PyRef<'_, ModulationBuffer>,
+    mut out: PyRefMut<'_, ModulationBuffer>,
+) {
+    autd3_rs_modulation::radiation_pressure(&src.data, &mut out.data);
+}
+
+#[pyfunction]
+fn radiation_pressure_inplace(mut buffer: PyRefMut<'_, ModulationBuffer>) {
+    autd3_rs_modulation::radiation_pressure_inplace(&mut buffer.data);
 }
 
 #[pyfunction]
@@ -213,6 +221,7 @@ fn autd3_modulation(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(square, m)?)?;
     m.add_function(wrap_pyfunction!(fourier, m)?)?;
     m.add_function(wrap_pyfunction!(radiation_pressure, m)?)?;
+    m.add_function(wrap_pyfunction!(radiation_pressure_inplace, m)?)?;
     m.add_function(wrap_pyfunction!(_read_modulation_capsule, m)?)?;
     Ok(())
 }
