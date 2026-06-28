@@ -1,0 +1,28 @@
+[package]
+name = "autd3-rs-emulator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Hardware-free emulator for AUTD3: records device drive data and computes the ultrasound sound field offline."
+
+[features]
+default = ["polars"]
+polars = ["dep:polars"]
+
+[dependencies]
+autd3-rs.workspace = true
+autd3-rs-core.workspace = true
+autd3-rs-firmware-emulator.workspace = true
+thiserror.workspace = true
+pollster.workspace = true
+rayon.workspace = true
+polars = { workspace = true, optional = true }
+
+[dev-dependencies]
+approx.workspace = true
+
+[lints]
+workspace = true

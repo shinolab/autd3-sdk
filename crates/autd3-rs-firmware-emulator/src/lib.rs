@@ -7,5 +7,5 @@ mod port;
 
 pub use audit::Audit;
 pub use device::Device;
-pub use fpga::FpgaEmulator;
+pub use fpga::{FpgaEmulator, SilencerEmulator};
 pub use nop::Nop;

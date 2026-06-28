@@ -1,0 +1,27 @@
+name: ci-emulator
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  emulator:
+    name: emulator (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt, clippy
+          workspaces: |
+            emulator
+            xtask
+      - name: Format
+        run: cargo xtask emulator format
+      - run: cargo xtask emulator lint
+      - run: cargo xtask emulator test

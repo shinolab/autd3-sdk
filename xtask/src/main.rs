@@ -4,6 +4,7 @@ mod component;
 mod console;
 mod cpu;
 mod cs;
+mod emulator;
 mod example;
 mod ffi;
 mod firmware;
@@ -23,6 +24,7 @@ use changelog::{ChangelogCmd, run_changelog};
 use console::{ConsoleCmd, run_console};
 use cpu::{CpuCmd, run_cpu};
 use cs::{CsCmd, run_cs};
+use emulator::{EmulatorCmd, run_emulator};
 use example::{ExampleCmd, run_example};
 use ffi::{FfiCmd, run_ffi};
 use firmware::{FirmwareCmd, run_firmware};
@@ -63,6 +65,10 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: ConsoleCmd,
     },
+    Emulator {
+        #[command(subcommand)]
+        cmd: EmulatorCmd,
+    },
     Fpga {
         #[command(subcommand)]
         cmd: FpgaCmd,
@@ -98,6 +104,7 @@ fn main() -> Result<()> {
         TopCmd::Tool { cmd } => run_tool(&root, cmd),
         TopCmd::Simulator { cmd } => run_simulator(&root, cmd),
         TopCmd::Console { cmd } => run_console(&root, cmd),
+        TopCmd::Emulator { cmd } => run_emulator(&root, &cmd),
         TopCmd::Fpga { cmd } => run_fpga(&root, &cmd),
         TopCmd::Firmware { cmd } => run_firmware(&root, cmd),
         TopCmd::Py { cmd } => run_py(&root, cmd),
