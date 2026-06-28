@@ -26,25 +26,17 @@ impl EmulatorLink {
     #[must_use]
     pub fn new(
         transducer_counts: impl IntoIterator<Item = usize>,
+        states: SharedStates,
+        device_states: SharedDeviceStates,
         control: Arc<ControlState>,
     ) -> Self {
         Self {
             devices: transducer_counts.into_iter().map(EmuDevice::new).collect(),
-            states: Arc::new(Mutex::new(Vec::new())),
-            device_states: Arc::new(Mutex::new(Vec::new())),
+            states,
+            device_states,
             control,
             start: Instant::now(),
         }
-    }
-
-    #[must_use]
-    pub fn states(&self) -> SharedStates {
-        self.states.clone()
-    }
-
-    #[must_use]
-    pub fn device_states(&self) -> SharedDeviceStates {
-        self.device_states.clone()
     }
 }
 

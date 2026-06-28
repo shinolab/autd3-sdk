@@ -61,8 +61,6 @@ pub enum SimulatorCmd {
         port: u16,
         #[arg(long, default_value_t = 8080)]
         link_port: u16,
-        #[arg(long, default_value_t = 1)]
-        devices: usize,
     },
 }
 
@@ -120,17 +118,7 @@ pub fn run_simulator(root: &Path, cmd: SimulatorCmd) -> Result<()> {
             skip_web_build,
             port,
             link_port,
-            devices,
-        } => run_serve(
-            &sim,
-            &frontend,
-            debug,
-            open,
-            skip_web_build,
-            port,
-            link_port,
-            devices,
-        ),
+        } => run_serve(&sim, &frontend, debug, open, skip_web_build, port, link_port),
     }
 }
 
@@ -164,7 +152,6 @@ fn run_serve(
     skip_web_build: bool,
     port: u16,
     link_port: u16,
-    devices: usize,
 ) -> Result<()> {
     let profile = if debug { "debug" } else { "release" };
 
@@ -194,7 +181,7 @@ fn run_serve(
     let bin = sim.join("target").join(profile).join("autd3-rs-simulator");
 
     let url = format!("http://127.0.0.1:{port}");
-    println!("simulator UI at {url} (remote link on port {link_port}, {devices} device(s))");
+    println!("simulator UI at {url} (remote link on port {link_port})");
     if open {
         let url = url.clone();
         std::thread::spawn(move || {
@@ -208,8 +195,6 @@ fn run_serve(
         port.to_string(),
         "--link-port".to_string(),
         link_port.to_string(),
-        "--devices".to_string(),
-        devices.to_string(),
         "--web-dir".to_string(),
         public.to_string_lossy().into_owned(),
     ];

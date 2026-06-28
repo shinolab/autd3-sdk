@@ -11,7 +11,6 @@ const BIN: &str = "autd3-rs-simulator";
 pub struct SimulatorConfig {
     pub http_port: u16,
     pub link_port: u16,
-    pub devices: usize,
 }
 
 impl Default for SimulatorConfig {
@@ -19,7 +18,6 @@ impl Default for SimulatorConfig {
         Self {
             http_port: 8081,
             link_port: 8080,
-            devices: 1,
         }
     }
 }
@@ -60,13 +58,6 @@ impl SimulatorPanel {
                 ui.add_enabled(
                     !running,
                     egui::DragValue::new(&mut self.config.link_port).range(1..=65535),
-                );
-                ui.end_row();
-
-                ui.label("Devices");
-                ui.add_enabled(
-                    !running,
-                    egui::DragValue::new(&mut self.config.devices).range(1..=256),
                 );
                 ui.end_row();
             });
@@ -112,8 +103,6 @@ impl SimulatorPanel {
             self.config.http_port.to_string(),
             "--link-port".to_string(),
             self.config.link_port.to_string(),
-            "--devices".to_string(),
-            self.config.devices.to_string(),
             "--web-dir".to_string(),
             web.to_string_lossy().into_owned(),
         ];
