@@ -1,12 +1,13 @@
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 
 pub struct ManagedProcess {
     child: Child,
     rx: Receiver<String>,
     logs: Vec<String>,
+    exited: bool,
 }
 
 impl ManagedProcess {
@@ -27,17 +28,33 @@ impl ManagedProcess {
             child,
             rx,
             logs: Vec::new(),
+            exited: false,
         })
     }
 
     pub fn pump(&mut self) {
-        while let Ok(line) = self.rx.try_recv() {
-            self.logs.push(line);
+        if self.exited {
+            return;
+        }
+        let mut disconnected = false;
+        loop {
+            match self.rx.try_recv() {
+                Ok(line) => self.logs.push(line),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    disconnected = true;
+                    break;
+                }
+            }
+        }
+        if disconnected && let Ok(Some(status)) = self.child.try_wait() {
+            self.logs.push(exit_marker(status));
+            self.exited = true;
         }
     }
 
-    pub fn is_running(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(None))
+    pub fn is_running(&self) -> bool {
+        !self.exited
     }
 
     pub fn kill(&mut self) {
@@ -52,7 +69,16 @@ impl ManagedProcess {
 
 impl Drop for ManagedProcess {
     fn drop(&mut self) {
-        self.kill();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn exit_marker(status: ExitStatus) -> String {
+    match status.code() {
+        Some(0) => "[process finished]".to_string(),
+        Some(code) => format!("[process exited with code {code}]"),
+        None => "[process terminated]".to_string(),
     }
 }
 

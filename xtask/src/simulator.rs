@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use crate::util::{on_path, run, run_built_bin};
+use crate::util::{on_path, run, run_built_bin, run_tool};
 
 pub fn build_backend_and_frontend(root: &Path, debug: bool) -> Result<(PathBuf, PathBuf)> {
     let sim = root.join("simulator");
@@ -145,9 +145,9 @@ fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
         bail!("`npm` not found on PATH (needed to build Tailwind/daisyUI CSS).");
     }
     if !frontend.join("node_modules").is_dir() {
-        run("npm", ["install"], frontend)?;
+        run_tool("npm", ["install"], frontend)?;
     }
-    run("npm", ["run", "css"], frontend)?;
+    run_tool("npm", ["run", "css"], frontend)?;
     let mut dx_args = vec!["build", "--platform", "web"];
     if !debug {
         dx_args.extend(["--release", "--debug-symbols", "false"]);

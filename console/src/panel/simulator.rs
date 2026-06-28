@@ -35,14 +35,11 @@ impl SimulatorPanel {
     pub fn pump(&mut self) {
         if let Some(proc) = &mut self.proc {
             proc.pump();
-            if !proc.is_running() {
-                self.proc = None;
-            }
         }
     }
 
     pub fn is_running(&self) -> bool {
-        self.proc.is_some()
+        self.proc.as_ref().is_some_and(ManagedProcess::is_running)
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
@@ -122,7 +119,7 @@ impl SimulatorPanel {
         ];
         match ManagedProcess::spawn(&bin, &args) {
             Ok(proc) => self.proc = Some(proc),
-            Err(e) => self.error = Some(format!("failed to start {BIN}: {e}")),
+            Err(e) => self.error = Some(super::spawn_error(&bin, &e)),
         }
     }
 
