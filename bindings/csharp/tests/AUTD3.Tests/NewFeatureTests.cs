@@ -74,7 +74,13 @@ namespace AUTD3.Tests
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200f, new SineOption(), modulation);
             var before = modulation.Length;
-            Modulation.RadiationPressure(modulation);
+
+            using var pressure = Modulation.ModulationBuffer();
+            Modulation.RadiationPressure(modulation, pressure);
+            Assert.Equal(before, pressure.Length);
+            Assert.Equal(before, modulation.Length);
+
+            Modulation.RadiationPressureInplace(modulation);
             Assert.Equal(before, modulation.Length);
         }
 

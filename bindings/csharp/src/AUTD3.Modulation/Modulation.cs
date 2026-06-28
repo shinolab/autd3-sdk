@@ -55,7 +55,10 @@ namespace AUTD3
         internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, IntPtr option, IntPtr buffer);
 
         [DllImport(Lib)]
-        internal static extern int autd3_modulation_radiation_pressure(IntPtr buffer);
+        internal static extern int autd3_modulation_radiation_pressure(IntPtr src, IntPtr dst);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_modulation_radiation_pressure_inplace(IntPtr buffer);
 
         [DllImport("autd3capi")]
         internal static extern IntPtr autd3_op_modulation(IntPtr samplingConfig, IntPtr modulationBuffer);
@@ -283,9 +286,17 @@ namespace AUTD3
             }
         }
 
-        public static void RadiationPressure(ModulationBuffer buffer)
+        public static void RadiationPressure(ModulationBuffer src, ModulationBuffer dst)
         {
-            if (NativeModulation.autd3_modulation_radiation_pressure(buffer.Handle) != 0)
+            if (NativeModulation.autd3_modulation_radiation_pressure(src.Handle, dst.Handle) != 0)
+            {
+                throw new Autd3Exception("radiation pressure failed");
+            }
+        }
+
+        public static void RadiationPressureInplace(ModulationBuffer buffer)
+        {
+            if (NativeModulation.autd3_modulation_radiation_pressure_inplace(buffer.Handle) != 0)
             {
                 throw new Autd3Exception("radiation pressure failed");
             }
