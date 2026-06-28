@@ -12,3 +12,8 @@ pub struct TransducerLayout {
     pub pos: [f32; 3],
     pub dir: [f32; 3],
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeviceLayout {
+    pub transducers: Vec<TransducerLayout>,
+}

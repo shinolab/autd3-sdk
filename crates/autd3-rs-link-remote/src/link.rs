@@ -55,8 +55,24 @@ impl RemoteLink {
         stream.set_read_timeout(timeout)?;
         stream.set_write_timeout(timeout)?;
 
+        let layout: Vec<crate::DeviceLayout> = geometry
+            .iter()
+            .map(|dev| crate::DeviceLayout {
+                transducers: dev
+                    .positions()
+                    .iter()
+                    .zip(dev.directions())
+                    .map(|(p, d)| crate::TransducerLayout {
+                        pos: [p.x, p.y, p.z],
+                        dir: [d.x, d.y, d.z],
+                    })
+                    .collect(),
+            })
+            .collect();
+
         stream.write_all(&wire::MAGIC)?;
         stream.write_all(&[wire::VERSION])?;
+        stream.write_all(&wire::encode_geometry(&layout))?;
         stream.flush()?;
 
         let mut buf = [0u8; 2];
@@ -65,21 +81,6 @@ impl RemoteLink {
         if num_devices == 0 {
             return Err(RemoteLinkError::InvalidDeviceCount { found: num_devices });
         }
-
-        let layout: Vec<crate::TransducerLayout> = geometry
-            .iter()
-            .flat_map(|dev| {
-                dev.positions()
-                    .iter()
-                    .zip(dev.directions())
-                    .map(|(p, d)| crate::TransducerLayout {
-                        pos: [p.x, p.y, p.z],
-                        dir: [d.x, d.y, d.z],
-                    })
-            })
-            .collect();
-        stream.write_all(&wire::encode_geometry(&layout))?;
-        stream.flush()?;
 
         Ok(Self {
             stream,

@@ -1,36 +1,20 @@
 use core::f32::consts::PI;
 
-use autd3_rs_core::{Autd3, Geometry, Point3, UnitQuaternion};
 use autd3_rs_firmware_emulator::Device as EmuDevice;
+use autd3_rs_link_remote::DeviceLayout;
 use autd3_rs_simulator_protocol::{DeviceState, ServerMsg, TransState, TransducerInfo};
 
 const ULTRASOUND_PERIOD_COUNT: f32 = 512.0;
 
 #[must_use]
-pub fn build_geometry(num_devices: usize) -> Geometry {
-    let devices: Vec<Autd3> = (0..num_devices)
-        .map(|i| {
-            Autd3::new(
-                Point3::new(i as f32 * Autd3::DEVICE_WIDTH, 0.0, 0.0),
-                UnitQuaternion::identity(),
-            )
-        })
-        .collect();
-    Geometry::new(devices)
-}
-
-#[must_use]
-pub fn geometry_msg(geometry: &Geometry) -> ServerMsg {
-    let transducers = geometry
+pub fn geometry_msg_from_layout(layout: &[DeviceLayout]) -> ServerMsg {
+    let transducers = layout
         .iter()
         .flat_map(|dev| {
-            dev.positions()
-                .iter()
-                .zip(dev.directions())
-                .map(|(p, d)| TransducerInfo {
-                    pos: [p.x, p.y, p.z],
-                    dir: [d.x, d.y, d.z],
-                })
+            dev.transducers.iter().map(|t| TransducerInfo {
+                pos: t.pos,
+                dir: t.dir,
+            })
         })
         .collect();
     ServerMsg::Geometry { transducers }

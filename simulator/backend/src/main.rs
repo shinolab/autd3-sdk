@@ -5,18 +5,18 @@ mod server;
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::Result;
-use autd3_rs_link_remote::RemoteServer;
-use autd3_rs_simulator_protocol::{ServerMsg, TransducerInfo};
+use autd3_rs_link_remote::{DeviceLayout, RemoteLinkError, RemoteServer};
+use autd3_rs_simulator_protocol::ServerMsg;
 use clap::Parser;
 use tokio::sync::watch;
 
 use crate::control::ControlState;
-use crate::emulator::{build_geometry, geometry_msg};
-use crate::link::EmulatorLink;
+use crate::emulator::geometry_msg_from_layout;
+use crate::link::{EmulatorLink, SharedDeviceStates, SharedStates};
 use crate::server::{AppState, router};
 
 #[derive(Parser)]
@@ -25,8 +25,6 @@ struct Args {
     http_port: u16,
     #[arg(long, default_value_t = 8080)]
     link_port: u16,
-    #[arg(long, default_value_t = 1)]
-    devices: usize,
     #[arg(long)]
     web_dir: Option<PathBuf>,
 }
@@ -36,44 +34,43 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let args = Args::parse();
 
-    let geometry = build_geometry(args.devices);
-    let geometry_json: Arc<str> = serde_json::to_string(&geometry_msg(&geometry))?.into();
-    let transducer_counts: Vec<usize> = geometry.iter().map(|d| d.positions().len()).collect();
-
     let control = Arc::new(ControlState::default());
-    let link = EmulatorLink::new(transducer_counts, Arc::clone(&control));
-    let states = link.states();
-    let device_states = link.device_states();
+    let states: SharedStates = Arc::new(Mutex::new(Vec::new()));
+    let device_states: SharedDeviceStates = Arc::new(Mutex::new(Vec::new()));
 
-    let (geometry_tx, geometry_rx) = watch::channel(geometry_json);
+    let empty_geometry: Arc<str> = serde_json::to_string(&ServerMsg::Geometry {
+        transducers: Vec::new(),
+    })?
+    .into();
+    let (geometry_tx, geometry_rx) = watch::channel(empty_geometry);
 
     let link_addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, args.link_port));
-    std::thread::spawn(move || {
-        let on_geometry = move |layout: Vec<autd3_rs_link_remote::TransducerLayout>| {
-            let transducers = layout
-                .iter()
-                .map(|t| TransducerInfo {
-                    pos: t.pos,
-                    dir: t.dir,
-                })
-                .collect();
-            match serde_json::to_string(&ServerMsg::Geometry { transducers }) {
-                Ok(json) => {
-                    let _ = geometry_tx.send(json.into());
+    {
+        let states = Arc::clone(&states);
+        let device_states = Arc::clone(&device_states);
+        let control = Arc::clone(&control);
+        std::thread::spawn(move || {
+            let factory = move |layout: &[DeviceLayout]| -> Result<EmulatorLink, RemoteLinkError> {
+                match serde_json::to_string(&geometry_msg_from_layout(layout)) {
+                    Ok(json) => {
+                        let _ = geometry_tx.send(json.into());
+                    }
+                    Err(e) => tracing::error!("failed to serialize client geometry: {e}"),
                 }
-                Err(e) => tracing::error!("failed to serialize client geometry: {e}"),
+                let counts: Vec<usize> = layout.iter().map(|d| d.transducers.len()).collect();
+                Ok(EmulatorLink::new(
+                    counts,
+                    Arc::clone(&states),
+                    Arc::clone(&device_states),
+                    Arc::clone(&control),
+                ))
+            };
+            tracing::info!("remote link server listening on {link_addr}");
+            if let Err(e) = RemoteServer::serve_with_factory(link_addr, factory) {
+                tracing::error!("remote link server stopped: {e}");
             }
-        };
-        match RemoteServer::with_link_and_geometry(link_addr, link, on_geometry) {
-            Ok(mut server) => {
-                tracing::info!("remote link server listening on {link_addr}");
-                if let Err(e) = server.serve() {
-                    tracing::error!("remote link server stopped: {e}");
-                }
-            }
-            Err(e) => tracing::error!("failed to start remote link server: {e}"),
-        }
-    });
+        });
+    }
 
     let state_rx = spawn_json_broadcaster(states, Duration::from_millis(33), |states| {
         ServerMsg::State { states }
