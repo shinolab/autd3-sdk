@@ -4,9 +4,19 @@ mod twincat;
 pub use simulator::SimulatorPanel;
 pub use twincat::TwinCatPanel;
 
+use std::io;
+use std::path::Path;
+
 use eframe::egui;
 
 use crate::process::ManagedProcess;
+
+fn spawn_error(bin: &Path, e: &io::Error) -> String {
+    let os = e
+        .raw_os_error()
+        .map_or_else(String::new, |code| format!(" (os error {code})"));
+    format!("failed to start {}: {}{os}", bin.display(), e.kind())
+}
 
 fn log_view(ui: &mut egui::Ui, proc: Option<&ManagedProcess>) {
     egui::ScrollArea::vertical()
@@ -19,7 +29,7 @@ fn log_view(ui: &mut egui::Ui, proc: Option<&ManagedProcess>) {
                 }
             }
             None => {
-                ui.weak("not running");
+                ui.weak("no output yet");
             }
         });
 }

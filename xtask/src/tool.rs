@@ -124,6 +124,19 @@ fn run_cli(exe: &Path, dir: &Path, sub: &str, args: &[String]) -> Result<()> {
     run(&exe.to_string_lossy(), cli_args, dir)
 }
 
+pub fn build_twincat_cli(root: &Path, debug: bool) -> Result<PathBuf> {
+    let exe = ensure_built(&root.join("tools").join("twincat-cli"), debug)?;
+    if !exe.is_file() {
+        bail!(
+            "twincat-cli build did not produce {} (MSBuild ran but the merged exe is missing; \
+             check the ILRepack step and that TwinCAT XAE is installed for the TCatSysManagerLib \
+             COM reference)",
+            exe.display()
+        );
+    }
+    Ok(exe)
+}
+
 fn ensure_built(dir: &Path, debug: bool) -> Result<PathBuf> {
     let config = if debug { "Debug" } else { "Release" };
     let exe = dir

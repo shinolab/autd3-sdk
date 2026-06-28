@@ -1,9 +1,10 @@
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::Subcommand;
 
 use crate::simulator::build_backend_and_frontend;
+use crate::tool::build_twincat_cli;
 use crate::util::run;
 
 #[derive(Subcommand)]
@@ -95,21 +96,11 @@ fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     copy_dir(&sim_web, &sim_dir.join("web"))?;
 
     if cfg!(target_os = "windows") {
-        let config = if debug { "Debug" } else { "Release" };
-        let dist = root
-            .join("tools")
-            .join("twincat-cli")
-            .join("bin")
-            .join(config)
-            .join("net48")
-            .join("dist");
-        if !dist.is_dir() {
-            bail!(
-                "twincat-cli is not built ({} missing). Build it first via `cargo xtask tool twincat`.",
-                dist.display()
-            );
-        }
-        copy_dir(&dist, &staging.join("twincat"))?;
+        let exe = build_twincat_cli(root, debug)?;
+        let dist = exe
+            .parent()
+            .context("twincat-cli.exe has no parent directory")?;
+        copy_dir(dist, &staging.join("twincat"))?;
     }
 
     let archive = if cfg!(target_os = "windows") {

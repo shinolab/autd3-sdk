@@ -133,3 +133,17 @@ where
     }
     Ok(())
 }
+
+pub fn run_tool<I, S>(program: &str, args: I, cwd: &Path) -> Result<()>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    if cfg!(windows) {
+        let mut full: Vec<std::ffi::OsString> = vec!["/C".into(), program.into()];
+        full.extend(args.into_iter().map(|a| a.as_ref().to_os_string()));
+        run("cmd", full, cwd)
+    } else {
+        run(program, args, cwd)
+    }
+}

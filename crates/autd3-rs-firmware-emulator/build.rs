@@ -48,7 +48,10 @@ fn main() {
 
     let mut build = cc::Build::new();
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        build.compiler("clang");
+        match find_windows_clang() {
+            Some(clang) => build.compiler(clang),
+            None => build.compiler("clang"),
+        };
     }
     build
         .std("c11")
@@ -78,6 +81,36 @@ fn main() {
     rerun_if_changed(&csrc);
     rerun_if_changed(&fw_inc);
     rerun_if_changed(&fw_src);
+}
+
+fn find_windows_clang() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("CLANG_PATH") {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            return Some(path);
+        }
+        let candidate = path.join("clang.exe");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    if let Some(dir) = std::env::var_os("LIBCLANG_PATH") {
+        let dir = PathBuf::from(dir);
+        for candidate in [dir.join("clang.exe"), dir.join("../bin/clang.exe")] {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    for var in ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"] {
+        if let Some(program_files) = std::env::var_os(var) {
+            let candidate = PathBuf::from(program_files).join("LLVM/bin/clang.exe");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 fn rerun_if_changed(dir: &Path) {
