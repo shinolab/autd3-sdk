@@ -192,10 +192,7 @@ fn fourier(
 }
 
 #[pyfunction]
-fn radiation_pressure(
-    src: PyRef<'_, ModulationBuffer>,
-    mut out: PyRefMut<'_, ModulationBuffer>,
-) {
+fn radiation_pressure(src: PyRef<'_, ModulationBuffer>, mut out: PyRefMut<'_, ModulationBuffer>) {
     autd3_rs_modulation::radiation_pressure(&src.data, &mut out.data);
 }
 
