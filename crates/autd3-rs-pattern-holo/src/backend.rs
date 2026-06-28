@@ -16,7 +16,7 @@ pub trait LinAlgBackend {
     fn amplitude_correct(&self, x: &mut Self::Vector, r: &Self::Vector);
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct NalgebraBackend;
 
 impl LinAlgBackend for NalgebraBackend {

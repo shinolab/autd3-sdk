@@ -8,8 +8,8 @@ use autd3_rs_core::value::Intensity;
 use autd3_rs_pattern_holo::{
     Amplitude as CoreAmplitude, ControlPoint as CoreControlPoint, Directivity as CoreDirectivity,
     EmissionConstraint as CoreEmissionConstraint, GreedyOption as CoreGreedyOption,
-    GsOption as CoreGsOption, GspatOption as CoreGspatOption, NaiveOption as CoreNaiveOption,
-    NalgebraBackend, Pa, TransducerMask, dB, kPa,
+    GsOption as CoreGsOption, GspatOption as CoreGspatOption, NaiveOption as CoreNaiveOption, Pa,
+    TransducerMask, dB, kPa,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -177,14 +177,19 @@ impl PyNalgebraBackend {
     skip_from_py_object
 )]
 pub struct NaiveOption {
-    inner: CoreNaiveOption,
+    inner: CoreNaiveOption<'static>,
+    mask: Option<Vec<[bool; NUM_TRANSDUCERS]>>,
 }
 
 #[pymethods]
 impl NaiveOption {
     #[new]
-    #[pyo3(signature = (constraint = None, directivity = None))]
-    fn new(constraint: Option<EmissionConstraint>, directivity: Option<Directivity>) -> Self {
+    #[pyo3(signature = (constraint = None, directivity = None, mask = None))]
+    fn new(
+        constraint: Option<EmissionConstraint>,
+        directivity: Option<Directivity>,
+        mask: Option<PyRef<'_, PyTransducerMask>>,
+    ) -> Self {
         let mut inner = CoreNaiveOption::default();
         if let Some(c) = constraint {
             inner.constraint = c.0;
@@ -192,23 +197,28 @@ impl NaiveOption {
         if let Some(d) = directivity {
             inner.directivity = d.0;
         }
-        Self { inner }
+        Self {
+            inner,
+            mask: mask.and_then(|m| m.mask.clone()),
+        }
     }
 }
 
 #[pyclass(name = "GsOption", module = "autd3_pattern_holo", skip_from_py_object)]
 pub struct GsOption {
-    inner: CoreGsOption,
+    inner: CoreGsOption<'static>,
+    mask: Option<Vec<[bool; NUM_TRANSDUCERS]>>,
 }
 
 #[pymethods]
 impl GsOption {
     #[new]
-    #[pyo3(signature = (repeat = 100, constraint = None, directivity = None))]
+    #[pyo3(signature = (repeat = 100, constraint = None, directivity = None, mask = None))]
     fn new(
         repeat: usize,
         constraint: Option<EmissionConstraint>,
         directivity: Option<Directivity>,
+        mask: Option<PyRef<'_, PyTransducerMask>>,
     ) -> PyResult<Self> {
         let mut inner = CoreGsOption {
             repeat: NonZeroUsize::new(repeat)
@@ -221,7 +231,10 @@ impl GsOption {
         if let Some(d) = directivity {
             inner.directivity = d.0;
         }
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            mask: mask.and_then(|m| m.mask.clone()),
+        })
     }
 }
 
@@ -231,17 +244,19 @@ impl GsOption {
     skip_from_py_object
 )]
 pub struct GspatOption {
-    inner: CoreGspatOption,
+    inner: CoreGspatOption<'static>,
+    mask: Option<Vec<[bool; NUM_TRANSDUCERS]>>,
 }
 
 #[pymethods]
 impl GspatOption {
     #[new]
-    #[pyo3(signature = (repeat = 100, constraint = None, directivity = None))]
+    #[pyo3(signature = (repeat = 100, constraint = None, directivity = None, mask = None))]
     fn new(
         repeat: usize,
         constraint: Option<EmissionConstraint>,
         directivity: Option<Directivity>,
+        mask: Option<PyRef<'_, PyTransducerMask>>,
     ) -> PyResult<Self> {
         let mut inner = CoreGspatOption {
             repeat: NonZeroUsize::new(repeat)
@@ -254,7 +269,10 @@ impl GspatOption {
         if let Some(d) = directivity {
             inner.directivity = d.0;
         }
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            mask: mask.and_then(|m| m.mask.clone()),
+        })
     }
 }
 
@@ -264,17 +282,19 @@ impl GspatOption {
     skip_from_py_object
 )]
 pub struct GreedyOption {
-    inner: CoreGreedyOption,
+    inner: CoreGreedyOption<'static>,
+    mask: Option<Vec<[bool; NUM_TRANSDUCERS]>>,
 }
 
 #[pymethods]
 impl GreedyOption {
     #[new]
-    #[pyo3(signature = (phase_quantization_levels = 16, constraint = None, directivity = None))]
+    #[pyo3(signature = (phase_quantization_levels = 16, constraint = None, directivity = None, mask = None))]
     fn new(
         phase_quantization_levels: u8,
         constraint: Option<EmissionConstraint>,
         directivity: Option<Directivity>,
+        mask: Option<PyRef<'_, PyTransducerMask>>,
     ) -> PyResult<Self> {
         let mut inner = CoreGreedyOption {
             phase_quantization_levels: NonZeroU8::new(phase_quantization_levels)
@@ -287,7 +307,10 @@ impl GreedyOption {
         if let Some(d) = directivity {
             inner.directivity = d.0;
         }
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            mask: mask.and_then(|m| m.mask.clone()),
+        })
     }
 }
 
@@ -295,8 +318,8 @@ fn collect_foci(foci: &[PyRef<'_, ControlPoint>]) -> Vec<CoreControlPoint> {
     foci.iter().map(|f| f.inner).collect()
 }
 
-fn mask_ref(mask: Option<&PyTransducerMask>) -> TransducerMask<'_> {
-    match mask.and_then(|m| m.mask.as_deref()) {
+fn mask_ref(mask: Option<&[[bool; NUM_TRANSDUCERS]]>) -> TransducerMask<'_> {
+    match mask {
         Some(m) => TransducerMask::Masked(m),
         None => TransducerMask::AllEnabled,
     }
@@ -314,7 +337,7 @@ where
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, buffer, mask = None))]
+#[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
 fn naive(
     py: Python<'_>,
     geometry: &Bound<'_, PyAny>,
@@ -322,20 +345,20 @@ fn naive(
     wavelength: f32,
     option: &NaiveOption,
     buffer: &Bound<'_, PyAny>,
-    mask: Option<PyRef<'_, PyTransducerMask>>,
 ) -> PyResult<()> {
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
     let foci = collect_foci(&foci);
-    let mask = mask_ref(mask.as_deref());
+    let option = CoreNaiveOption {
+        mask: mask_ref(option.mask.as_deref()),
+        ..option.inner
+    };
     with_out_buffer(buffer, |out| {
         autd3_rs_pattern_holo::naive(
             geometry,
             &foci,
             Length::millimeters(wavelength),
-            &option.inner,
-            &NalgebraBackend,
-            mask,
+            &option,
             out,
         )
         .map_err(|e| to_pyerr(py, e))
@@ -343,7 +366,7 @@ fn naive(
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, buffer, mask = None))]
+#[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
 fn gs(
     py: Python<'_>,
     geometry: &Bound<'_, PyAny>,
@@ -351,20 +374,20 @@ fn gs(
     wavelength: f32,
     option: &GsOption,
     buffer: &Bound<'_, PyAny>,
-    mask: Option<PyRef<'_, PyTransducerMask>>,
 ) -> PyResult<()> {
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
     let foci = collect_foci(&foci);
-    let mask = mask_ref(mask.as_deref());
+    let option = CoreGsOption {
+        mask: mask_ref(option.mask.as_deref()),
+        ..option.inner
+    };
     with_out_buffer(buffer, |out| {
         autd3_rs_pattern_holo::gs(
             geometry,
             &foci,
             Length::millimeters(wavelength),
-            &option.inner,
-            &NalgebraBackend,
-            mask,
+            &option,
             out,
         )
         .map_err(|e| to_pyerr(py, e))
@@ -372,7 +395,7 @@ fn gs(
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, buffer, mask = None))]
+#[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
 fn gspat(
     py: Python<'_>,
     geometry: &Bound<'_, PyAny>,
@@ -380,20 +403,20 @@ fn gspat(
     wavelength: f32,
     option: &GspatOption,
     buffer: &Bound<'_, PyAny>,
-    mask: Option<PyRef<'_, PyTransducerMask>>,
 ) -> PyResult<()> {
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
     let foci = collect_foci(&foci);
-    let mask = mask_ref(mask.as_deref());
+    let option = CoreGspatOption {
+        mask: mask_ref(option.mask.as_deref()),
+        ..option.inner
+    };
     with_out_buffer(buffer, |out| {
         autd3_rs_pattern_holo::gspat(
             geometry,
             &foci,
             Length::millimeters(wavelength),
-            &option.inner,
-            &NalgebraBackend,
-            mask,
+            &option,
             out,
         )
         .map_err(|e| to_pyerr(py, e))
@@ -401,7 +424,7 @@ fn gspat(
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, buffer, mask = None))]
+#[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
 fn greedy(
     py: Python<'_>,
     geometry: &Bound<'_, PyAny>,
@@ -409,19 +432,20 @@ fn greedy(
     wavelength: f32,
     option: &GreedyOption,
     buffer: &Bound<'_, PyAny>,
-    mask: Option<PyRef<'_, PyTransducerMask>>,
 ) -> PyResult<()> {
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
     let foci = collect_foci(&foci);
-    let mask = mask_ref(mask.as_deref());
+    let option = CoreGreedyOption {
+        mask: mask_ref(option.mask.as_deref()),
+        ..option.inner
+    };
     with_out_buffer(buffer, |out| {
         autd3_rs_pattern_holo::greedy(
             geometry,
             &foci,
             Length::millimeters(wavelength),
-            &option.inner,
-            mask,
+            &option,
             out,
         )
         .map_err(|e| to_pyerr(py, e))

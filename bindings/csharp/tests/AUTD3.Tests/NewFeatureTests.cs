@@ -44,7 +44,7 @@ namespace AUTD3.Tests
             {
                 new HoloControlPoint(geometry.Center + new Vector3(0f, 0f, 150f), Amplitude.FromSpl(150f)),
             };
-            Holo.Naive(geometry, foci, Pattern.Wavelength(340f * 1000f), EmissionConstraint.Clamp(Intensity.Min, Intensity.Max), Directivity.Sphere, buffer);
+            Holo.Naive(geometry, foci, Pattern.Wavelength(340f * 1000f), new NaiveOption(EmissionConstraint.Clamp(Intensity.Min, Intensity.Max)), buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
 

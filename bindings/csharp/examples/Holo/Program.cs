@@ -27,7 +27,7 @@ internal static class Program
         };
 
         using var patterns = geometry.PatternBuffer();
-        Holo.Gspat(geometry, foci, wavelength, EmissionConstraint.Uniform(Intensity.Max), Directivity.Sphere, patterns);
+        Holo.Gspat(geometry, foci, wavelength, new GspatOption(constraint: EmissionConstraint.Uniform(Intensity.Max)), patterns);
 
         using var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(200f, new SineOption(), modulation);
