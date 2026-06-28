@@ -47,7 +47,6 @@ mod tests {
     #[test]
     fn empty_foci_is_error() {
         let geometry = single_device();
-        let backend = NalgebraBackend;
         let mut out = buffer(&geometry);
         assert_eq!(
             naive(
@@ -55,8 +54,6 @@ mod tests {
                 &[],
                 wavelength(),
                 &NaiveOption::default(),
-                &backend,
-                TransducerMask::AllEnabled,
                 &mut out,
             ),
             Err(HoloError::NoFoci)
@@ -69,7 +66,6 @@ mod tests {
             Autd3::default(),
             Autd3::new(Point3::new(200.0, 0.0, 0.0), UnitQuaternion::identity()),
         ]);
-        let backend = NalgebraBackend;
         let foci = [ControlPoint {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
@@ -80,8 +76,6 @@ mod tests {
             &foci,
             wavelength(),
             &NaiveOption::default(),
-            &backend,
-            TransducerMask::AllEnabled,
             &mut out,
         )
         .unwrap();
@@ -95,7 +89,6 @@ mod tests {
     #[test]
     fn uniform_constraint_sets_all_intensities() {
         let geometry = single_device();
-        let backend = NalgebraBackend;
         let foci = [ControlPoint {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
@@ -109,8 +102,6 @@ mod tests {
                 constraint: EmissionConstraint::Uniform(Intensity(0x80)),
                 ..Default::default()
             },
-            &backend,
-            TransducerMask::AllEnabled,
             &mut out,
         )
         .unwrap();
@@ -120,7 +111,6 @@ mod tests {
     #[test]
     fn naive_single_focus_phases_match_focus_pattern() {
         let geometry = single_device();
-        let backend = NalgebraBackend;
         let target = focus_target(&geometry);
         let foci = [ControlPoint {
             point: target,
@@ -135,9 +125,8 @@ mod tests {
             &NaiveOption {
                 constraint: EmissionConstraint::Uniform(Intensity::MAX),
                 directivity: Directivity::Sphere,
+                ..Default::default()
             },
-            &backend,
-            TransducerMask::AllEnabled,
             &mut out,
         )
         .unwrap();
@@ -161,7 +150,6 @@ mod tests {
     #[test]
     fn gspat_single_focus_phases_match_focus_pattern() {
         let geometry = single_device();
-        let backend = NalgebraBackend;
         let target = focus_target(&geometry);
         let foci = [ControlPoint {
             point: target,
@@ -177,8 +165,6 @@ mod tests {
                 constraint: EmissionConstraint::Uniform(Intensity::MAX),
                 ..Default::default()
             },
-            &backend,
-            TransducerMask::AllEnabled,
             &mut out,
         )
         .unwrap();
@@ -202,7 +188,6 @@ mod tests {
     #[test]
     fn all_algorithms_focus_on_target() {
         let geometry = single_device();
-        let backend = NalgebraBackend;
         let target = focus_target(&geometry);
         let foci = [ControlPoint {
             point: target,
@@ -213,36 +198,9 @@ mod tests {
         let mut n = buffer(&geometry);
         let mut g = buffer(&geometry);
         let mut gp = buffer(&geometry);
-        naive(
-            &geometry,
-            &foci,
-            lambda,
-            &NaiveOption::default(),
-            &backend,
-            TransducerMask::AllEnabled,
-            &mut n,
-        )
-        .unwrap();
-        gs(
-            &geometry,
-            &foci,
-            lambda,
-            &GsOption::default(),
-            &backend,
-            TransducerMask::AllEnabled,
-            &mut g,
-        )
-        .unwrap();
-        gspat(
-            &geometry,
-            &foci,
-            lambda,
-            &GspatOption::default(),
-            &backend,
-            TransducerMask::AllEnabled,
-            &mut gp,
-        )
-        .unwrap();
+        naive(&geometry, &foci, lambda, &NaiveOption::default(), &mut n).unwrap();
+        gs(&geometry, &foci, lambda, &GsOption::default(), &mut g).unwrap();
+        gspat(&geometry, &foci, lambda, &GspatOption::default(), &mut gp).unwrap();
 
         for out in [&n, &g, &gp] {
             assert!(out[0].iter().any(|e| e.intensity != Intensity::MIN));
@@ -253,7 +211,6 @@ mod tests {
     #[test]
     fn masked_transducers_are_null() {
         let geometry = single_device();
-        let backend = NalgebraBackend;
         let foci = [ControlPoint {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
@@ -273,9 +230,9 @@ mod tests {
             &NaiveOption {
                 constraint: EmissionConstraint::Uniform(Intensity::MAX),
                 directivity: Directivity::Sphere,
+                mask,
+                ..Default::default()
             },
-            &backend,
-            mask,
             &mut out,
         )
         .unwrap();

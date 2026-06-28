@@ -117,14 +117,14 @@ pub unsafe extern "C" fn autd3_holo_naive(
     let option = NaiveOption {
         constraint: to_constraint(unsafe { &*constraint }),
         directivity: to_directivity(directivity),
+        backend: NalgebraBackend,
+        mask: mask_ref(mask.as_deref()),
     };
     match naive(
         geometry,
         &foci,
         Length::millimeters(wavelength_mm),
         &option,
-        &NalgebraBackend,
-        mask_ref(mask.as_deref()),
         &mut buffer.0,
     ) {
         Ok(()) => 0,
@@ -158,14 +158,14 @@ pub unsafe extern "C" fn autd3_holo_gs(
         repeat: NonZeroUsize::new(repeat).unwrap_or(NonZeroUsize::new(100).unwrap()),
         constraint: to_constraint(unsafe { &*constraint }),
         directivity: to_directivity(directivity),
+        backend: NalgebraBackend,
+        mask: mask_ref(mask.as_deref()),
     };
     match gs(
         geometry,
         &foci,
         Length::millimeters(wavelength_mm),
         &option,
-        &NalgebraBackend,
-        mask_ref(mask.as_deref()),
         &mut buffer.0,
     ) {
         Ok(()) => 0,
@@ -199,14 +199,14 @@ pub unsafe extern "C" fn autd3_holo_gspat(
         repeat: NonZeroUsize::new(repeat).unwrap_or(NonZeroUsize::new(100).unwrap()),
         constraint: to_constraint(unsafe { &*constraint }),
         directivity: to_directivity(directivity),
+        backend: NalgebraBackend,
+        mask: mask_ref(mask.as_deref()),
     };
     match gspat(
         geometry,
         &foci,
         Length::millimeters(wavelength_mm),
         &option,
-        &NalgebraBackend,
-        mask_ref(mask.as_deref()),
         &mut buffer.0,
     ) {
         Ok(()) => 0,
@@ -242,13 +242,13 @@ pub unsafe extern "C" fn autd3_holo_greedy(
         constraint: to_constraint(unsafe { &*constraint }),
         directivity: to_directivity(directivity),
         objective_func: abs_objective_func,
+        mask: mask_ref(mask.as_deref()),
     };
     match greedy(
         geometry,
         &foci,
         Length::millimeters(wavelength_mm),
         &option,
-        mask_ref(mask.as_deref()),
         &mut buffer.0,
     ) {
         Ok(()) => 0,

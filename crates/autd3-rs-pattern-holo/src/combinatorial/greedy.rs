@@ -23,20 +23,22 @@ pub fn abs_objective_func(c: Complex<f32>, a: Amplitude) -> f32 {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct GreedyOption {
+pub struct GreedyOption<'a> {
     pub phase_quantization_levels: NonZeroU8,
     pub constraint: EmissionConstraint,
     pub directivity: Directivity,
     pub objective_func: fn(Complex<f32>, Amplitude) -> f32,
+    pub mask: TransducerMask<'a>,
 }
 
-impl Default for GreedyOption {
+impl Default for GreedyOption<'_> {
     fn default() -> Self {
         Self {
             phase_quantization_levels: NonZeroU8::new(16).unwrap(),
             constraint: EmissionConstraint::Uniform(Intensity::MAX),
             directivity: Directivity::Sphere,
             objective_func: abs_objective_func,
+            mask: TransducerMask::AllEnabled,
         }
     }
 }
@@ -46,8 +48,7 @@ pub fn greedy(
     geometry: &Geometry,
     foci: &[ControlPoint],
     wavelength: Length,
-    option: &GreedyOption,
-    mask: TransducerMask<'_>,
+    option: &GreedyOption<'_>,
     out: &mut [[Emission; NUM_TRANSDUCERS]],
 ) -> Result<(), HoloError> {
     if foci.is_empty() {
@@ -58,6 +59,7 @@ pub fn greedy(
         geometry.len(),
         "out must have one slot per device"
     );
+    let mask = option.mask;
     mask.validate(geometry);
 
     let wavenumber = 2.0 * PI / wavelength.mm();
@@ -159,7 +161,6 @@ mod tests {
                 &[],
                 wavelength(),
                 &GreedyOption::default(),
-                TransducerMask::AllEnabled,
                 &mut out
             ),
             Err(HoloError::NoFoci)
@@ -175,7 +176,6 @@ mod tests {
             &single_focus(),
             wavelength(),
             &GreedyOption::default(),
-            TransducerMask::AllEnabled,
             &mut out,
         )
         .unwrap();

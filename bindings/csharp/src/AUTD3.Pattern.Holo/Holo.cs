@@ -74,6 +74,82 @@ namespace AUTD3
         public float Multiply;
     }
 
+    public readonly struct TransducerMask
+    {
+        internal bool[][]? Mask { get; }
+
+        private TransducerMask(bool[][]? mask)
+        {
+            Mask = mask;
+        }
+
+        public static TransducerMask AllEnabled => new TransducerMask(null);
+
+        public static TransducerMask Masked(bool[][] mask) => new TransducerMask(mask);
+    }
+
+    public readonly struct NaiveOption
+    {
+        public EmissionConstraint Constraint { get; }
+        public Directivity Directivity { get; }
+        public TransducerMask Mask { get; }
+
+        public NaiveOption(EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
+        {
+            Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
+            Directivity = directivity;
+            Mask = mask;
+        }
+    }
+
+    public readonly struct GsOption
+    {
+        public uint Repeat { get; }
+        public EmissionConstraint Constraint { get; }
+        public Directivity Directivity { get; }
+        public TransducerMask Mask { get; }
+
+        public GsOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
+        {
+            Repeat = repeat;
+            Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
+            Directivity = directivity;
+            Mask = mask;
+        }
+    }
+
+    public readonly struct GspatOption
+    {
+        public uint Repeat { get; }
+        public EmissionConstraint Constraint { get; }
+        public Directivity Directivity { get; }
+        public TransducerMask Mask { get; }
+
+        public GspatOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
+        {
+            Repeat = repeat;
+            Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
+            Directivity = directivity;
+            Mask = mask;
+        }
+    }
+
+    public readonly struct GreedyOption
+    {
+        public byte PhaseQuantizationLevels { get; }
+        public EmissionConstraint Constraint { get; }
+        public Directivity Directivity { get; }
+        public TransducerMask Mask { get; }
+
+        public GreedyOption(byte phaseQuantizationLevels = 16, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
+        {
+            PhaseQuantizationLevels = phaseQuantizationLevels;
+            Constraint = constraint ?? EmissionConstraint.Uniform(Intensity.Max);
+            Directivity = directivity;
+            Mask = mask;
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct HoloControlPointNative
     {
@@ -150,37 +226,37 @@ namespace AUTD3
             return flat;
         }
 
-        public static void Naive(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, EmissionConstraint constraint, Directivity directivity, PatternBuffer buffer, bool[][]? mask = null)
+        public static void Naive(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, NaiveOption option, PatternBuffer buffer)
         {
-            var c = constraint.ToNative();
-            if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, in c, (byte)directivity, FlattenMask(mask, buffer.NumDevices), buffer.Handle) != 0)
+            var c = option.Constraint.ToNative();
+            if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
             {
                 throw new Autd3Exception("naive failed");
             }
         }
 
-        public static void Gs(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, EmissionConstraint constraint, Directivity directivity, PatternBuffer buffer, uint repeat = 100, bool[][]? mask = null)
+        public static void Gs(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, GsOption option, PatternBuffer buffer)
         {
-            var c = constraint.ToNative();
-            if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, (UIntPtr)repeat, in c, (byte)directivity, FlattenMask(mask, buffer.NumDevices), buffer.Handle) != 0)
+            var c = option.Constraint.ToNative();
+            if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
             {
                 throw new Autd3Exception("gs failed");
             }
         }
 
-        public static void Gspat(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, EmissionConstraint constraint, Directivity directivity, PatternBuffer buffer, uint repeat = 100, bool[][]? mask = null)
+        public static void Gspat(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, GspatOption option, PatternBuffer buffer)
         {
-            var c = constraint.ToNative();
-            if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, (UIntPtr)repeat, in c, (byte)directivity, FlattenMask(mask, buffer.NumDevices), buffer.Handle) != 0)
+            var c = option.Constraint.ToNative();
+            if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
             {
                 throw new Autd3Exception("gspat failed");
             }
         }
 
-        public static void Greedy(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, EmissionConstraint constraint, Directivity directivity, PatternBuffer buffer, byte phaseQuantizationLevels = 16, bool[][]? mask = null)
+        public static void Greedy(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, GreedyOption option, PatternBuffer buffer)
         {
-            var c = constraint.ToNative();
-            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, phaseQuantizationLevels, in c, (byte)directivity, FlattenMask(mask, buffer.NumDevices), buffer.Handle) != 0)
+            var c = option.Constraint.ToNative();
+            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
             {
                 throw new Autd3Exception("greedy failed");
             }
