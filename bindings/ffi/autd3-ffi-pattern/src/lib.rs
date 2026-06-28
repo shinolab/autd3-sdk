@@ -42,11 +42,14 @@ pub extern "C" fn autd3_pattern_wavelength(sound_speed_mm_per_s: f32) -> f32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_pattern_buffer_new(num_devices: usize) -> *mut PatternBuffer {
-    into_handle(PatternBuffer(vec![
-        [Emission::default(); NUM_TRANSDUCERS];
-        num_devices
-    ]))
+pub unsafe extern "C" fn autd3_core_geometry_pattern_buffer(
+    geometry: *const Geometry,
+) -> *mut PatternBuffer {
+    if geometry.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    into_handle(PatternBuffer(unsafe { &*geometry }.pattern_buffer()))
 }
 
 #[unsafe(no_mangle)]

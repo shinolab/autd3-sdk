@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
     ];
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
-    let mut patterns = client.pattern_buffer();
+    let mut patterns = geometry.pattern_buffer();
     gspat(
         &geometry,
         &foci,
@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
         &mut patterns,
     )?;
 
-    let mut modulation = client.modulation_buffer();
+    let mut modulation = autd3_rs_modulation::modulation_buffer();
     autd3_rs_modulation::sine(
         200 * Hz,
         &autd3_rs_modulation::SineOption::default(),

@@ -8,6 +8,8 @@ pub use device::Device;
 pub use nalgebra::{Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3};
 
 use crate::common::Length;
+use crate::params::NUM_TRANSDUCERS;
+use crate::value::Emission;
 
 #[must_use]
 pub fn point(x: Length, y: Length, z: Length) -> Point3<f32> {
@@ -43,6 +45,11 @@ impl Geometry {
     #[must_use]
     pub const fn len(&self) -> usize {
         self.devices.len()
+    }
+
+    #[must_use]
+    pub fn pattern_buffer(&self) -> Vec<[Emission; NUM_TRANSDUCERS]> {
+        vec![[Emission::default(); NUM_TRANSDUCERS]; self.len()]
     }
 
     #[must_use]

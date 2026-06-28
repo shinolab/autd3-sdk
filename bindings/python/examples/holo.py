@@ -28,10 +28,10 @@ async def main() -> None:
         holo.ControlPoint(center + np.array([20.0, 0.0, 150.0]), holo.Amplitude.spl(150.0)),
     ]
 
-    patterns = client.pattern_buffer()
+    patterns = geometry.pattern_buffer()
     holo.gspat(geometry, foci, wavelength, holo.GspatOption(repeat=100), patterns)
 
-    mod_buf = client.modulation_buffer()
+    mod_buf = modulation.modulation_buffer()
     modulation.sine(200.0, modulation.SineOption(), mod_buf)
 
     builder = client.datagram_builder()

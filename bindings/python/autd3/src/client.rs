@@ -91,20 +91,6 @@ impl Client {
         DatagramBuilder::with_devices(self.backend.num_devices())
     }
 
-    fn pattern_buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let num_devices = self.backend.num_devices();
-        py.import("autd3_pattern")?
-            .getattr("PatternBuffer")?
-            .call1((num_devices,))
-    }
-
-    #[allow(clippy::unused_self)]
-    fn modulation_buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        py.import("autd3_modulation")?
-            .getattr("ModulationBuffer")?
-            .call0()
-    }
-
     fn read_firmware_version<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let backend = Arc::clone(&self.backend);
         future_into_py(py, async move {

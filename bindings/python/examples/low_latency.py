@@ -28,7 +28,7 @@ async def main() -> None:
 
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
     wavelength = pattern.wavelength(340_000.0)
-    patterns = client.pattern_buffer()
+    patterns = geometry.pattern_buffer()
     pattern.focus(geometry, target, wavelength, pattern.FocusOption(intensity=0), patterns)
     builder = client.datagram_builder()
     builder.push(autd3.Pattern(patterns))

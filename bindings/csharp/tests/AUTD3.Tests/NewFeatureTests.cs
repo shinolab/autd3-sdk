@@ -12,7 +12,7 @@ namespace AUTD3.Tests
         public void PlaneFillsBuffer()
         {
             using var geometry = SingleDevice();
-            using var buffer = new PatternBuffer(geometry);
+            using var buffer = geometry.PatternBuffer();
             Pattern.Plane(geometry, new Vector3(0f, 0f, 1f), Pattern.Wavelength(340f * 1000f), new PlaneOption(), buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
@@ -21,7 +21,7 @@ namespace AUTD3.Tests
         public void BesselFillsBuffer()
         {
             using var geometry = SingleDevice();
-            using var buffer = new PatternBuffer(geometry);
+            using var buffer = geometry.PatternBuffer();
             Pattern.Bessel(geometry, geometry.Center, new Vector3(0f, 0f, 1f), 0.3f, Pattern.Wavelength(340f * 1000f), new BesselOption(), buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
@@ -30,7 +30,7 @@ namespace AUTD3.Tests
         public void UniformFillsBuffer()
         {
             using var geometry = SingleDevice();
-            using var buffer = new PatternBuffer(geometry);
+            using var buffer = geometry.PatternBuffer();
             Pattern.Uniform(Phase.Pi, Intensity.Max, buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
@@ -39,7 +39,7 @@ namespace AUTD3.Tests
         public void HoloNaiveFillsBuffer()
         {
             using var geometry = SingleDevice();
-            using var buffer = new PatternBuffer(geometry);
+            using var buffer = geometry.PatternBuffer();
             var foci = new[]
             {
                 new HoloControlPoint(geometry.Center + new Vector3(0f, 0f, 150f), Amplitude.FromSpl(150f)),
@@ -51,7 +51,7 @@ namespace AUTD3.Tests
         [Fact]
         public void SquareProducesSamples()
         {
-            using var modulation = new ModulationBuffer();
+            using var modulation = Modulation.ModulationBuffer();
             Modulation.Square(200f, new SquareOption(), modulation);
             Assert.True(modulation.Length > 0);
         }
@@ -59,7 +59,7 @@ namespace AUTD3.Tests
         [Fact]
         public void FourierProducesSamples()
         {
-            using var modulation = new ModulationBuffer();
+            using var modulation = Modulation.ModulationBuffer();
             Modulation.Fourier(new[]
             {
                 new SineComponent(100f, new SineOption()),
@@ -71,7 +71,7 @@ namespace AUTD3.Tests
         [Fact]
         public void RadiationPressureKeepsLength()
         {
-            using var modulation = new ModulationBuffer();
+            using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200f, new SineOption(), modulation);
             var before = modulation.Length;
             Modulation.RadiationPressure(modulation);

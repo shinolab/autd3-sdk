@@ -64,7 +64,7 @@ namespace AUTD3
         internal static extern float autd3_pattern_wavelength(float soundSpeedMmPerS);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_pattern_buffer_new(UIntPtr numDevices);
+        internal static extern IntPtr autd3_core_geometry_pattern_buffer(IntPtr geometry);
 
         [DllImport(Lib)]
         internal static extern UIntPtr autd3_pattern_buffer_num_devices(IntPtr buffer);
@@ -105,20 +105,13 @@ namespace AUTD3
     {
         internal IntPtr Handle { get; private set; }
 
-        internal PatternBuffer(int numDevices)
+        internal PatternBuffer(IntPtr handle)
         {
-            var handle = NativePattern.autd3_pattern_buffer_new((UIntPtr)numDevices);
             if (handle == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create pattern buffer");
             }
             Handle = handle;
-        }
-
-
-
-        public PatternBuffer(Geometry geometry) : this(geometry.NumDevices)
-        {
         }
 
         public int NumDevices => (int)NativePattern.autd3_pattern_buffer_num_devices(Handle);
@@ -140,6 +133,12 @@ namespace AUTD3
                 NativePattern.autd3_pattern_buffer_free(Handle);
             }
         }
+    }
+
+    public static class GeometryPatternBufferExtensions
+    {
+        public static PatternBuffer PatternBuffer(this Geometry geometry) =>
+            new PatternBuffer(NativePattern.autd3_core_geometry_pattern_buffer(geometry.Handle));
     }
 
 

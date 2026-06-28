@@ -51,7 +51,7 @@ async def main() -> None:
     radius = 30.0
     wavelength = pattern.wavelength(340_000.0)
 
-    patterns = client.pattern_buffer()
+    patterns = geometry.pattern_buffer()
     await configure(client, patterns)
 
     datagrams = []

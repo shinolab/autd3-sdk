@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
                     RADIUS_MM * theta.sin() * mm,
                     0.0 * mm,
                 );
-            let mut buffer = client.pattern_buffer();
+            let mut buffer = geometry.pattern_buffer();
             autd3_rs_pattern::focus(
                 &geometry,
                 target,

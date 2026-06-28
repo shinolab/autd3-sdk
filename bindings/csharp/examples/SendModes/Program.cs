@@ -53,7 +53,7 @@ internal static class Program
         const float radius = 30f;
         var wavelength = Pattern.Wavelength(340f * 1000f);
 
-        using var patterns = client.PatternBuffer();
+        using var patterns = geometry.PatternBuffer();
         await Configure(client, patterns);
 
         var datagrams = new List<Datagrams>(TotalPoints);

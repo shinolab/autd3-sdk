@@ -24,7 +24,7 @@ use crate::geometry::Geometry;
 use crate::link::{IntoLink, Link};
 use crate::mirror::FirmwareState;
 use crate::operation::{Clear, Distribution, Synchronize};
-use crate::params::{MOD_BUFFER_SAMPLES, NUM_TRANSDUCERS};
+use crate::params::NUM_TRANSDUCERS;
 use crate::protocol::Cmd;
 use crate::value::Emission;
 
@@ -163,16 +163,6 @@ impl Client {
         Ok(())
     }
 
-    #[must_use]
-    pub fn pattern_buffer(&self) -> Vec<[Emission; NUM_TRANSDUCERS]> {
-        vec![[Emission::default(); NUM_TRANSDUCERS]; self.num_devices]
-    }
-
-    #[must_use]
-    pub fn modulation_buffer(&self) -> Vec<u8> {
-        Vec::with_capacity(MOD_BUFFER_SAMPLES)
-    }
-
     async fn send_datagrams(&self, datagrams: &[Datagram]) -> Result<ResponseFuture, Error> {
         if datagrams.len() != self.num_devices {
             return Err(Error::InvalidPayload(PayloadError::DatagramCountMismatch {
@@ -252,7 +242,7 @@ impl Client {
     }
 
     pub async fn stop(&self) -> Result<(), Error> {
-        let patterns = self.pattern_buffer();
+        let patterns = vec![[Emission::default(); NUM_TRANSDUCERS]; self.num_devices];
         let datagrams = self
             .datagram_builder()
             .push(Pattern::new(&patterns))
