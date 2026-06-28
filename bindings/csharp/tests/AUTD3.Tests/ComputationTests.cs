@@ -29,7 +29,7 @@ namespace AUTD3.Tests
         public void FocusFillsBufferForEveryDevice()
         {
             using var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
-            using var buffer = new PatternBuffer(geometry);
+            using var buffer = geometry.PatternBuffer();
             var wavelength = Pattern.Wavelength(340f * 1000f);
             Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), wavelength, Intensity.Max, buffer);
             Assert.Equal(1, buffer.NumDevices);
@@ -38,7 +38,7 @@ namespace AUTD3.Tests
         [Fact]
         public void SineProducesSamples()
         {
-            using var modulation = new ModulationBuffer();
+            using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200f, new SineOption(samplingConfig: SamplingConfig.Freq4k), modulation);
             Assert.True(modulation.Length > 0);
         }
@@ -53,9 +53,9 @@ namespace AUTD3.Tests
         public void BuildDatagramsFromCommands()
         {
             using var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
-            using var patterns = new PatternBuffer(geometry);
+            using var patterns = geometry.PatternBuffer();
             Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340f * 1000f), Intensity.Max, patterns);
-            using var modulation = new ModulationBuffer();
+            using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200f, new SineOption(), modulation);
 
             using var builder = new DatagramBuilder(geometry);
@@ -79,7 +79,7 @@ namespace AUTD3.Tests
         public void BuildDatagramsFromLowLevelOps()
         {
             using var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
-            using var patterns = new PatternBuffer(geometry);
+            using var patterns = geometry.PatternBuffer();
             Pattern.Null(patterns);
 
             using var builder = new DatagramBuilder(geometry);

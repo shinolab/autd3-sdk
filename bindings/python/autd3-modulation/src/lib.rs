@@ -2,6 +2,7 @@ use core::num::NonZeroU16;
 
 use autd3_python_capsule::{modulation_from_capsule, modulation_into_capsule, to_pyerr};
 use autd3_rs_core::common::Freq;
+use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
 use autd3_rs_core::units::{Hz, rad};
 use autd3_rs_core::value::SamplingConfig;
 use autd3_rs_modulation::{
@@ -54,11 +55,6 @@ pub struct ModulationBuffer {
 
 #[pymethods]
 impl ModulationBuffer {
-    #[new]
-    fn new() -> Self {
-        Self { data: Vec::new() }
-    }
-
     #[staticmethod]
     fn from_bytes(data: Vec<u8>) -> Self {
         Self { data }
@@ -70,6 +66,13 @@ impl ModulationBuffer {
 
     fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
         modulation_into_capsule(py, self.data.clone())
+    }
+}
+
+#[pyfunction]
+fn modulation_buffer() -> ModulationBuffer {
+    ModulationBuffer {
+        data: Vec::with_capacity(MOD_BUFFER_SAMPLES),
     }
 }
 
@@ -205,6 +208,7 @@ fn autd3_modulation(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FourierOption>()?;
     m.add_class::<SineComponent>()?;
     m.add_class::<ModulationBuffer>()?;
+    m.add_function(wrap_pyfunction!(modulation_buffer, m)?)?;
     m.add_function(wrap_pyfunction!(sine, m)?)?;
     m.add_function(wrap_pyfunction!(square, m)?)?;
     m.add_function(wrap_pyfunction!(fourier, m)?)?;

@@ -5,6 +5,13 @@ mod sampling_mode;
 mod sine;
 mod square;
 
+use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
+
+#[must_use]
+pub fn modulation_buffer() -> Vec<u8> {
+    Vec::with_capacity(MOD_BUFFER_SAMPLES)
+}
+
 pub use autd3_rs_core::value::Nearest;
 pub use fourier::{FourierOption, SineComponent, fourier};
 pub use radiation_pressure::radiation_pressure;

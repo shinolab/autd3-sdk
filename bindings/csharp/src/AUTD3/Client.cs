@@ -66,12 +66,6 @@ namespace AUTD3
         public int NumDevices => (int)NativeClient.autd3_client_num_devices(Handle);
 
 
-        public PatternBuffer PatternBuffer() => new PatternBuffer(NumDevices);
-
-
-        public ModulationBuffer ModulationBuffer() => new ModulationBuffer();
-
-
         public DatagramBuilder DatagramBuilder() => new DatagramBuilder(NumDevices);
 
 

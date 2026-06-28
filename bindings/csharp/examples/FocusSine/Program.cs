@@ -20,10 +20,10 @@ internal static class Program
         // length in mm, speed in mm/s, frequency in Hz
         var target = geometry.Center + new Vector3(0f, 0f, 150f);
         var wavelength = Pattern.Wavelength(340f * 1000f);
-        using var patterns = client.PatternBuffer();
+        using var patterns = geometry.PatternBuffer();
         Pattern.Focus(geometry, target, wavelength, Intensity.Max, patterns);
 
-        using var modulation = client.ModulationBuffer();
+        using var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(200f, new SineOption(), modulation);
 
         using var builder = client.DatagramBuilder();

@@ -38,11 +38,11 @@ async fn main() -> Result<()> {
     let focus_option = autd3_rs_pattern::FocusOption::default();
 
     let left_target = geometry.center() + offset(-40.0 * mm, 0.0 * mm, 150.0 * mm);
-    let mut left = client.pattern_buffer();
+    let mut left = geometry.pattern_buffer();
     autd3_rs_pattern::focus(&geometry, left_target, wavelength, &focus_option, &mut left);
 
     let right_target = geometry.center() + offset(40.0 * mm, 0.0 * mm, 150.0 * mm);
-    let mut right = client.pattern_buffer();
+    let mut right = geometry.pattern_buffer();
     autd3_rs_pattern::focus(
         &geometry,
         right_target,

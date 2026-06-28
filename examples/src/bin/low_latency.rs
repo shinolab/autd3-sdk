@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
 
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
-    let mut patterns = client.pattern_buffer();
+    let mut patterns = geometry.pattern_buffer();
     autd3_rs_pattern::focus(
         &geometry,
         target,

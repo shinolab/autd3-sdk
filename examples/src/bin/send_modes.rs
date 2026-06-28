@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
     )
     .await?;
 
-    configure(&client).await?;
+    configure(&client, &geometry).await?;
 
     let center = geometry.center();
     let radius = 30.0 * mm;
@@ -70,7 +70,7 @@ async fn run_stop_and_wait(
     targets: &[Point3<f32>],
     wavelength: Length,
 ) -> Result<Duration> {
-    let mut patterns = client.pattern_buffer();
+    let mut patterns = geometry.pattern_buffer();
     let mut buf = Datagrams::default();
 
     let start = Instant::now();
@@ -98,7 +98,7 @@ async fn run_streaming(
     wavelength: Length,
     max_inflight: usize,
 ) -> Result<Duration> {
-    let mut patterns = client.pattern_buffer();
+    let mut patterns = geometry.pattern_buffer();
     let mut buf = Datagrams::default();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(max_inflight);
 
@@ -125,8 +125,8 @@ async fn run_streaming(
     Ok(start.elapsed())
 }
 
-async fn configure(client: &Client) -> Result<()> {
-    let mut patterns = client.pattern_buffer();
+async fn configure(client: &Client, geometry: &Geometry) -> Result<()> {
+    let mut patterns = geometry.pattern_buffer();
     autd3_rs_pattern::null(&mut patterns);
     let mut builder = client.datagram_builder();
     builder

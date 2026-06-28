@@ -27,10 +27,10 @@ async def main() -> None:
     # length in mm; sound speed in mm/s (340 m/s)
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
     wavelength = pattern.wavelength(340_000.0)
-    patterns = client.pattern_buffer()
+    patterns = geometry.pattern_buffer()
     pattern.focus(geometry, target, wavelength, pattern.FocusOption(), patterns)
 
-    mod_buf = client.modulation_buffer()
+    mod_buf = modulation.modulation_buffer()
     modulation.sine(200.0, modulation.SineOption(), mod_buf)
 
     builder = client.datagram_builder()

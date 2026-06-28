@@ -133,8 +133,8 @@ async fn run_with_link<L: Link>(link: L, cli: &Cli) -> Result<()> {
 
     eprintln!("sending WritePatternBuffer continuously — press Ctrl+C to stop");
     let result = match cli.mode {
-        Mode::StopAndWait => soak_stop_and_wait(&client, cli, shutdown).await,
-        Mode::Streaming => soak_streaming(&client, cli, shutdown, max_inflight).await,
+        Mode::StopAndWait => soak_stop_and_wait(&client, &geometry, cli, shutdown).await,
+        Mode::Streaming => soak_streaming(&client, &geometry, cli, shutdown, max_inflight).await,
     };
 
     let _ = client.close().await;
@@ -157,8 +157,13 @@ async fn send_config_pattern_once(client: &Client) -> Result<()> {
     Ok(())
 }
 
-async fn soak_stop_and_wait(client: &Client, cli: &Cli, shutdown: Arc<AtomicBool>) -> Result<()> {
-    let mut emissions = client.pattern_buffer();
+async fn soak_stop_and_wait(
+    client: &Client,
+    geometry: &Geometry,
+    cli: &Cli,
+    shutdown: Arc<AtomicBool>,
+) -> Result<()> {
+    let mut emissions = geometry.pattern_buffer();
     let mut datagrams = Datagrams::default();
     let mut progress = Progress::new(cli);
 
@@ -200,11 +205,12 @@ async fn soak_stop_and_wait(client: &Client, cli: &Cli, shutdown: Arc<AtomicBool
 
 async fn soak_streaming(
     client: &Client,
+    geometry: &Geometry,
     cli: &Cli,
     shutdown: Arc<AtomicBool>,
     max_inflight: usize,
 ) -> Result<()> {
-    let mut emissions = client.pattern_buffer();
+    let mut emissions = geometry.pattern_buffer();
     let mut datagrams = Datagrams::default();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(max_inflight);
     let mut progress = Progress::new(cli);

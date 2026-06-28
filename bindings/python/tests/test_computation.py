@@ -17,7 +17,7 @@ def test_pattern_focus_plane_bessel_uniform_null() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340_000.0)
     center = geo.center()
-    buf = pattern.PatternBuffer(geo.num_devices())
+    buf = geo.pattern_buffer()
 
     pattern.focus(geo, center + np.array([0.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), buf)
     pattern.plane(geo, [0.0, 0.0, 1.0], wavelength, pattern.PlaneOption(), buf)
@@ -28,15 +28,15 @@ def test_pattern_focus_plane_bessel_uniform_null() -> None:
 
 
 def test_modulation_sine_square_fourier_radiation() -> None:
-    buf = modulation.ModulationBuffer()
+    buf = modulation.modulation_buffer()
     modulation.sine(200.0, modulation.SineOption(), buf)
     assert len(buf) > 0
 
-    sq = modulation.ModulationBuffer()
+    sq = modulation.modulation_buffer()
     modulation.square(150.0, modulation.SquareOption(), sq)
     assert len(sq) > 0
 
-    fo = modulation.ModulationBuffer()
+    fo = modulation.modulation_buffer()
     modulation.fourier(
         [modulation.SineComponent(100.0, modulation.SineOption()),
          modulation.SineComponent(200.0, modulation.SineOption())],
@@ -45,7 +45,7 @@ def test_modulation_sine_square_fourier_radiation() -> None:
     )
     assert len(fo) > 0
 
-    rp = modulation.ModulationBuffer()
+    rp = modulation.modulation_buffer()
     modulation.sine(200.0, modulation.SineOption(), rp)
     before = len(rp)
     modulation.radiation_pressure(rp)
@@ -60,7 +60,7 @@ def test_holo_algorithms() -> None:
         holo.ControlPoint(center + np.array([-20.0, 0.0, 150.0]), holo.Amplitude.pascal(5e3)),
         holo.ControlPoint(center + np.array([20.0, 0.0, 150.0]), holo.Amplitude.spl(150.0)),
     ]
-    buf = pattern.PatternBuffer(geo.num_devices())
+    buf = geo.pattern_buffer()
     holo.naive(geo, foci, wavelength, holo.NaiveOption(), buf)
     holo.gs(geo, foci, wavelength, holo.GsOption(repeat=10), buf)
     holo.gspat(geo, foci, wavelength, holo.GspatOption(repeat=10), buf)
@@ -78,7 +78,7 @@ def test_stm_foci_and_pattern() -> None:
     wavelength = pattern.wavelength(340_000.0)
     frames = []
     for x in (-20.0, 20.0):
-        buf = pattern.PatternBuffer(geo.num_devices())
+        buf = geo.pattern_buffer()
         pattern.focus(geo, geo.center() + np.array([x, 0.0, 150.0]), wavelength, pattern.FocusOption(), buf)
         frames.append(buf)
     builder.push(autd3.PatternStm(autd3.StmConfig.Freq(1.0), frames, autd3.PatternStmOption()))
@@ -148,7 +148,7 @@ def test_link_options_construct() -> None:
 def test_loop_behavior_and_transition_mode() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340_000.0)
-    buf = pattern.PatternBuffer(geo.num_devices())
+    buf = geo.pattern_buffer()
     pattern.focus(geo, geo.center() + np.array([0.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), buf)
 
     builder = autd3.DatagramBuilder(geo.num_devices())

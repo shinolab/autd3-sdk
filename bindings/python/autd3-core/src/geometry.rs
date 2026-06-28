@@ -63,6 +63,12 @@ impl Geometry {
         self.inner.num_transducers()
     }
 
+    fn pattern_buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        py.import("autd3_pattern")?
+            .getattr("PatternBuffer")?
+            .call1((self.inner.len(),))
+    }
+
     fn device(&self, index: usize) -> PyResult<Device> {
         if index >= self.inner.len() {
             return Err(PyIndexError::new_err("device index out of range"));

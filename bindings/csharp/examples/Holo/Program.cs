@@ -26,10 +26,10 @@ internal static class Program
             new HoloControlPoint(center + new Vector3(20f, 0f, 0f), Amplitude.FromSpl(150f)),
         };
 
-        using var patterns = client.PatternBuffer();
+        using var patterns = geometry.PatternBuffer();
         Holo.Gspat(geometry, foci, wavelength, EmissionConstraint.Uniform(Intensity.Max), Directivity.Sphere, patterns);
 
-        using var modulation = client.ModulationBuffer();
+        using var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(200f, new SineOption(), modulation);
 
         using var builder = client.DatagramBuilder();

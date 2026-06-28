@@ -74,7 +74,7 @@ namespace AUTD3
             Handle = handle;
         }
 
-        public ModulationBuffer() : this(NativeModulation.autd3_modulation_buffer_new())
+        internal ModulationBuffer() : this(NativeModulation.autd3_modulation_buffer_new())
         {
         }
 
@@ -172,6 +172,8 @@ namespace AUTD3
             _samplingConfig = samplingConfig;
             _buffer = buffer;
         }
+
+        public static ModulationBuffer ModulationBuffer() => new ModulationBuffer();
 
         IntPtr ICommand.CreateOp()
         {
