@@ -277,7 +277,7 @@ pub enum Pending {
     },
     ConfigPattern {
         bank: PatternBank,
-        divider: u16,
+        config: SamplingConfig,
         size: u32,
         data_type: PatternDataType,
         loop_behavior: LoopBehavior,
@@ -293,7 +293,7 @@ pub enum Pending {
     },
     ConfigModulation {
         bank: ModulationBank,
-        divider: u16,
+        config: SamplingConfig,
         size: u32,
         loop_behavior: LoopBehavior,
     },
@@ -383,18 +383,21 @@ pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_config_pattern(
+pub unsafe extern "C" fn autd3_op_config_pattern(
     bank: u8,
-    divider: u16,
+    sampling_config: *const SamplingConfig,
     size: u32,
     data_type_kind: u8,
     num_foci: u8,
     sound_speed: u16,
     rep: u16,
 ) -> *mut Pending {
+    if sampling_config.is_null() {
+        return std::ptr::null_mut();
+    }
     into_handle(Pending::ConfigPattern {
         bank: to_pattern_bank(bank),
-        divider,
+        config: *unsafe { &*sampling_config },
         size,
         data_type: to_pattern_data_type(data_type_kind, num_foci, sound_speed),
         loop_behavior: rep_to_loop_behavior(rep),
@@ -432,15 +435,18 @@ pub unsafe extern "C" fn autd3_op_write_modulation_buffer(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_config_modulation(
+pub unsafe extern "C" fn autd3_op_config_modulation(
     bank: u8,
-    divider: u16,
+    sampling_config: *const SamplingConfig,
     size: u32,
     rep: u16,
 ) -> *mut Pending {
+    if sampling_config.is_null() {
+        return std::ptr::null_mut();
+    }
     into_handle(Pending::ConfigModulation {
         bank: to_modulation_bank(bank),
-        divider,
+        config: *unsafe { &*sampling_config },
         size,
         loop_behavior: rep_to_loop_behavior(rep),
     })
@@ -770,14 +776,14 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             }
             Pending::ConfigPattern {
                 bank,
-                divider,
+                config,
                 size,
                 data_type,
                 loop_behavior,
             } => {
                 core.push(ConfigPattern {
                     bank: *bank,
-                    divider: *divider,
+                    config: *config,
                     size: *size,
                     data_type: *data_type,
                     loop_behavior: *loop_behavior,
@@ -801,13 +807,13 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             }
             Pending::ConfigModulation {
                 bank,
-                divider,
+                config,
                 size,
                 loop_behavior,
             } => {
                 core.push(ConfigModulation {
                     bank: *bank,
-                    divider: *divider,
+                    config: *config,
                     size: *size,
                     loop_behavior: *loop_behavior,
                 });
@@ -878,7 +884,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 transition_mode,
             } => {
                 let n = samples.len();
-                let divider = config.into_sampling_config(n).divide().unwrap_or(0);
+                let sampling_config = config.into_sampling_config(n);
                 let size = u32::try_from(n).unwrap_or(u32::MAX);
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 let sound_speed_value = (*sound_speed * 64.0).round() as u16;
@@ -905,7 +911,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 })
                 .push(ConfigPattern {
                     bank: *bank,
-                    divider,
+                    config: sampling_config,
                     size,
                     data_type: PatternDataType::Foci {
                         num_foci: *num_foci,

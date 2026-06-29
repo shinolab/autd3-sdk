@@ -145,7 +145,7 @@ async fn send_config_pattern_once(client: &Client) -> Result<()> {
     let mut builder = client.datagram_builder();
     builder.push(ConfigPattern {
         bank: PatternBank::B0,
-        divider: SamplingConfig::FREQ_4K.divide().unwrap_or(1),
+        config: SamplingConfig::FREQ_4K,
         size: 1,
         data_type: PatternDataType::Raw,
         loop_behavior: LoopBehavior::Infinite,

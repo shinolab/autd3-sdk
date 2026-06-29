@@ -65,7 +65,7 @@ impl<'a> PatternStm<'a> {
 impl<'a> Command<'a> for PatternStm<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
         let n = self.patterns.len();
-        let divider = self.config.into_sampling_config(n).divide().unwrap_or(0);
+        let config = self.config.into_sampling_config(n);
         let size = u32::try_from(n).unwrap_or(u32::MAX);
         let bank = self.option.bank;
 
@@ -104,7 +104,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
         builder
             .push(ConfigPattern {
                 bank,
-                divider,
+                config,
                 size,
                 data_type: PatternDataType::Raw,
                 loop_behavior: self.option.loop_behavior,

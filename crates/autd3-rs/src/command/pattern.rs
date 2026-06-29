@@ -1,9 +1,9 @@
 use super::Command;
 use crate::datagram::DatagramBuilder;
-use crate::mirror::FREQ_DIV_NO_LIMIT;
 use crate::operation::{ChangePatternBank, ConfigPattern, WritePatternBuffer};
 use crate::params::NUM_TRANSDUCERS;
-use crate::value::{Emission, LoopBehavior, PatternBank, TransitionMode};
+use crate::value::{Emission, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
+use core::num::NonZeroU16;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Pattern<'a> {
@@ -33,7 +33,7 @@ impl<'a> Command<'a> for Pattern<'a> {
             })
             .push(ConfigPattern {
                 bank: self.bank,
-                divider: FREQ_DIV_NO_LIMIT,
+                config: SamplingConfig::Divide(NonZeroU16::MAX),
                 size: 1,
                 data_type: crate::value::PatternDataType::Raw,
                 loop_behavior: LoopBehavior::Infinite,
@@ -48,6 +48,7 @@ impl<'a> Command<'a> for Pattern<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mirror::FREQ_DIV_NO_LIMIT;
     use crate::protocol::Cmd;
 
     #[test]

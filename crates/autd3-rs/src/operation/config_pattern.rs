@@ -2,14 +2,14 @@ use crate::error::{Error, PayloadError};
 use crate::mirror::FirmwareState;
 use crate::params::{EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
-use crate::value::{LoopBehavior, PatternBank, PatternDataType};
+use crate::value::{LoopBehavior, PatternBank, PatternDataType, SamplingConfig};
 
 use super::{Distribution, Operation, silencer_constraint};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigPattern {
     pub bank: PatternBank,
-    pub divider: u16,
+    pub config: SamplingConfig,
     pub size: u32,
     pub data_type: PatternDataType,
     pub loop_behavior: LoopBehavior,
@@ -30,9 +30,10 @@ impl Operation for ConfigPattern {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        if self.divider == 0 {
-            return Err(Error::InvalidPayload(PayloadError::PatternDividerZero));
-        }
+        let divider = self
+            .config
+            .divide()
+            .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))?;
         if self.size == 0 {
             return Err(Error::InvalidPayload(PayloadError::PatternSizeZero));
         }
@@ -71,7 +72,7 @@ impl Operation for ConfigPattern {
         };
         out[0] = self.bank.as_u8();
         out[1] = type_byte;
-        out[2..4].copy_from_slice(&self.divider.to_le_bytes());
+        out[2..4].copy_from_slice(&divider.to_le_bytes());
         out[4..8].copy_from_slice(&self.size.to_le_bytes());
         out[8] = num_foci;
         out[10..12].copy_from_slice(&sound_speed.to_le_bytes());
@@ -80,12 +81,14 @@ impl Operation for ConfigPattern {
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        if let Err(v) = state.silencer.check_pattern_div(self.divider) {
+        let divider = self
+            .config
+            .divide()
+            .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))?;
+        if let Err(v) = state.silencer.check_pattern_div(divider) {
             return Err(silencer_constraint(device, v));
         }
-        state
-            .silencer
-            .note_pattern_div(self.bank.as_u8(), self.divider);
+        state.silencer.note_pattern_div(self.bank.as_u8(), divider);
         Ok(())
     }
 }
@@ -105,7 +108,7 @@ mod tests {
     fn config_pattern_lays_out_raw_fields() {
         let (cmd, payload) = encode(ConfigPattern {
             bank: PatternBank::B0,
-            divider: 2,
+            config: SamplingConfig::Divide(NonZeroU16::new(2).unwrap()),
             size: 1024,
             data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Finite(NonZeroU16::new(8).unwrap()),
@@ -126,7 +129,7 @@ mod tests {
     fn config_pattern_lays_out_foci_fields() {
         let (_cmd, payload) = encode(ConfigPattern {
             bank: PatternBank::B1,
-            divider: 1,
+            config: SamplingConfig::Divide(NonZeroU16::MIN),
             size: 8192,
             data_type: PatternDataType::Foci {
                 num_foci: 8,
@@ -148,12 +151,22 @@ mod tests {
     fn config_pattern_rejects_invalid_fields() {
         let raw = |size: u32| ConfigPattern {
             bank: PatternBank::B0,
-            divider: 1,
+            config: SamplingConfig::Divide(NonZeroU16::MIN),
             size,
             data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,
         };
         assert!(matches!(encode(raw(0)), Err(Error::InvalidPayload(_))));
+        assert!(
+            matches!(
+                encode(ConfigPattern {
+                    config: SamplingConfig::Period(core::time::Duration::from_nanos(1)),
+                    ..raw(1)
+                }),
+                Err(Error::InvalidPayload(_))
+            ),
+            "an unrepresentable sampling config is rejected"
+        );
         assert!(matches!(
             encode(raw(u32::try_from(EMISSION_MAX_INDICES + 1).unwrap())),
             Err(Error::InvalidPayload(_))
@@ -161,7 +174,7 @@ mod tests {
 
         let foci = |size: u32, num_foci: u8, sound_speed: u16| ConfigPattern {
             bank: PatternBank::B0,
-            divider: 1,
+            config: SamplingConfig::Divide(NonZeroU16::MIN),
             size,
             data_type: PatternDataType::Foci {
                 num_foci,

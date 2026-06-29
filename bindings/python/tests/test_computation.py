@@ -162,7 +162,7 @@ def test_loop_behavior_and_transition_mode() -> None:
     builder.push(
         autd3.ConfigPattern(
             autd3.PatternBank.B1,
-            1,
+            autd3.SamplingConfig.FREQ_4K,
             1,
             autd3.PatternDataType.Raw,
             loop_behavior=autd3.LoopBehavior.Finite(5),

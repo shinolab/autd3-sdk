@@ -294,9 +294,11 @@ impl DatagramBuilder {
                     data_type,
                     loop_behavior,
                 } => {
+                    let divider = NonZeroU16::new(*divider)
+                        .ok_or_else(|| PyValueError::new_err("divider must be >= 1"))?;
                     builder.push(CoreConfigPattern {
                         bank: *bank,
-                        divider: *divider,
+                        config: SamplingConfig::Divide(divider),
                         size: *size,
                         data_type: *data_type,
                         loop_behavior: *loop_behavior,
@@ -324,9 +326,11 @@ impl DatagramBuilder {
                     size,
                     loop_behavior,
                 } => {
+                    let divider = NonZeroU16::new(*divider)
+                        .ok_or_else(|| PyValueError::new_err("divider must be >= 1"))?;
                     builder.push(CoreConfigModulation {
                         bank: *bank,
-                        divider: *divider,
+                        config: SamplingConfig::Divide(divider),
                         size: *size,
                         loop_behavior: *loop_behavior,
                     });

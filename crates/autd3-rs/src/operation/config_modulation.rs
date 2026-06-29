@@ -2,14 +2,14 @@ use crate::error::{Error, PayloadError};
 use crate::mirror::FirmwareState;
 use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
-use crate::value::{LoopBehavior, ModulationBank};
+use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
 
 use super::{Distribution, Operation, silencer_constraint};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigModulation {
     pub bank: ModulationBank,
-    pub divider: u16,
+    pub config: SamplingConfig,
     pub size: u32,
     pub loop_behavior: LoopBehavior,
 }
@@ -29,9 +29,10 @@ impl Operation for ConfigModulation {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        if self.divider == 0 {
-            return Err(Error::InvalidPayload(PayloadError::ModulationDividerZero));
-        }
+        let divider = self
+            .config
+            .divide()
+            .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))?;
         if self.size == 0 || self.size as usize > MOD_BUFFER_SAMPLES {
             return Err(Error::InvalidPayload(
                 PayloadError::ModulationSizeOutOfRange {
@@ -41,17 +42,21 @@ impl Operation for ConfigModulation {
             ));
         }
         out[0] = self.bank.as_u8();
-        out[2..4].copy_from_slice(&self.divider.to_le_bytes());
+        out[2..4].copy_from_slice(&divider.to_le_bytes());
         out[4..8].copy_from_slice(&self.size.to_le_bytes());
         out[8..10].copy_from_slice(&self.loop_behavior.rep().to_le_bytes());
         Ok(Cmd::ConfigModulation)
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        if let Err(v) = state.silencer.check_mod_div(self.divider) {
+        let divider = self
+            .config
+            .divide()
+            .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))?;
+        if let Err(v) = state.silencer.check_mod_div(divider) {
             return Err(silencer_constraint(device, v));
         }
-        state.silencer.note_mod_div(self.bank.as_u8(), self.divider);
+        state.silencer.note_mod_div(self.bank.as_u8(), divider);
         Ok(())
     }
 }
@@ -71,7 +76,7 @@ mod tests {
     fn config_modulation_lays_out_fields() {
         let (cmd, payload) = encode(ConfigModulation {
             bank: ModulationBank::B1,
-            divider: 10,
+            config: SamplingConfig::Divide(NonZeroU16::new(10).unwrap()),
             size: 4000,
             loop_behavior: LoopBehavior::Finite(NonZeroU16::new(10).unwrap()),
         })
@@ -90,12 +95,15 @@ mod tests {
     fn config_modulation_rejects_invalid_fields() {
         let base = ConfigModulation {
             bank: ModulationBank::B0,
-            divider: 1,
+            config: SamplingConfig::Divide(NonZeroU16::MIN),
             size: 1,
             loop_behavior: LoopBehavior::Infinite,
         };
         assert!(matches!(
-            encode(ConfigModulation { divider: 0, ..base }),
+            encode(ConfigModulation {
+                config: SamplingConfig::Period(core::time::Duration::from_nanos(1)),
+                ..base
+            }),
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(

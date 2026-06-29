@@ -95,7 +95,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_write_pattern_buffer(byte bank, ushort index, IntPtr patternBuffer);
 
         [DllImport("autd3capi")]
-        internal static extern IntPtr autd3_op_config_pattern(byte bank, ushort divider, uint size, byte dataTypeKind, byte numFoci, ushort soundSpeed, ushort rep);
+        internal static extern IntPtr autd3_op_config_pattern(byte bank, IntPtr samplingConfig, uint size, byte dataTypeKind, byte numFoci, ushort soundSpeed, ushort rep);
 
         [DllImport("autd3capi")]
         internal static extern IntPtr autd3_op_change_pattern_bank(byte bank, byte transitionMode, ulong transitionValue);

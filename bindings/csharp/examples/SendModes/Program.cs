@@ -29,7 +29,7 @@ internal static class Program
         using var builder = client.DatagramBuilder();
         builder
             .Push(new WritePatternBuffer(PatternBank.B0, 0, patterns))
-            .Push(new ConfigPattern(PatternBank.B0, 1, 1, PatternDataType.Raw));
+            .Push(new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1, PatternDataType.Raw));
         using var datagrams = builder.Build();
         foreach (var frame in datagrams)
         {

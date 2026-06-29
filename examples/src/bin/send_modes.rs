@@ -10,7 +10,7 @@ use anyhow::Result;
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::{Emission, LoopBehavior, PatternBank, PatternDataType};
+use autd3_rs::value::{Emission, LoopBehavior, PatternBank, PatternDataType, SamplingConfig};
 use autd3_rs::{
     Client, ClientConfig, ConfigPattern, Datagrams, Length, MAX_IN_FLIGHT, ResponseFuture,
     WritePatternBuffer,
@@ -137,7 +137,7 @@ async fn configure(client: &Client, geometry: &Geometry) -> Result<()> {
         })
         .push(ConfigPattern {
             bank: PatternBank::B0,
-            divider: 1,
+            config: SamplingConfig::FREQ_4K,
             size: 1,
             data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,
