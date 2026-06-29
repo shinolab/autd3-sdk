@@ -84,8 +84,8 @@ impl Operation for WritePatternCompressed<'_> {
                 },
             ));
         }
-        let offset = u32::try_from(self.index * EMISSION_SLOT_WORDS)
-            .expect("bounded by EMISSION_RAM_WORDS");
+        let offset =
+            u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");
         let (frame, _) = CompressedPayload::mut_from_prefix(&mut out[..])
             .expect("CompressedPayload fits the payload");
         frame.bank = self.bank.as_u8();

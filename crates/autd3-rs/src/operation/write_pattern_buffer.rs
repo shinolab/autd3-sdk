@@ -55,8 +55,8 @@ impl Operation for WritePatternBuffer<'_> {
                 },
             ));
         }
-        let offset = u32::try_from(self.index * EMISSION_SLOT_WORDS)
-            .expect("bounded by EMISSION_RAM_WORDS");
+        let offset =
+            u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");
         let len = u16::try_from(NUM_TRANSDUCERS * 2).expect("fits one frame");
         let (frame, _) =
             PatternPayload::mut_from_prefix(&mut out[..]).expect("PatternPayload fits the payload");

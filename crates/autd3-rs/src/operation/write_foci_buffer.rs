@@ -143,13 +143,7 @@ mod tests {
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
-            encode(
-                &base(
-                    vec![Focus::default(); 2],
-                    MAX_FOCI_TOTAL - 1
-                ),
-                0
-            ),
+            encode(&base(vec![Focus::default(); 2], MAX_FOCI_TOTAL - 1), 0),
             Err(Error::InvalidPayload(_))
         ));
     }
