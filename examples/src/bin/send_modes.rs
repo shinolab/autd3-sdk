@@ -140,7 +140,7 @@ async fn configure(client: &Client, geometry: &Geometry) -> Result<()> {
             divider: 1,
             size: 1,
             data_type: PatternDataType::Raw,
-            rep: LoopBehavior::Infinite.rep(),
+            loop_behavior: LoopBehavior::Infinite,
         });
     let datagrams = builder.build()?;
     for frame in &datagrams {

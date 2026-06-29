@@ -280,7 +280,7 @@ pub enum Pending {
         divider: u16,
         size: u32,
         data_type: PatternDataType,
-        rep: u16,
+        loop_behavior: LoopBehavior,
     },
     ChangePatternBank {
         bank: PatternBank,
@@ -295,7 +295,7 @@ pub enum Pending {
         bank: ModulationBank,
         divider: u16,
         size: u32,
-        rep: u16,
+        loop_behavior: LoopBehavior,
     },
     ChangeModulationBank {
         bank: ModulationBank,
@@ -397,7 +397,7 @@ pub extern "C" fn autd3_op_config_pattern(
         divider,
         size,
         data_type: to_pattern_data_type(data_type_kind, num_foci, sound_speed),
-        rep,
+        loop_behavior: rep_to_loop_behavior(rep),
     })
 }
 
@@ -442,7 +442,7 @@ pub extern "C" fn autd3_op_config_modulation(
         bank: to_modulation_bank(bank),
         divider,
         size,
-        rep,
+        loop_behavior: rep_to_loop_behavior(rep),
     })
 }
 
@@ -773,14 +773,14 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 divider,
                 size,
                 data_type,
-                rep,
+                loop_behavior,
             } => {
                 core.push(ConfigPattern {
                     bank: *bank,
                     divider: *divider,
                     size: *size,
                     data_type: *data_type,
-                    rep: *rep,
+                    loop_behavior: *loop_behavior,
                 });
             }
             Pending::ChangePatternBank {
@@ -803,13 +803,13 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 bank,
                 divider,
                 size,
-                rep,
+                loop_behavior,
             } => {
                 core.push(ConfigModulation {
                     bank: *bank,
                     divider: *divider,
                     size: *size,
-                    rep: *rep,
+                    loop_behavior: *loop_behavior,
                 });
             }
             Pending::ChangeModulationBank {
@@ -911,7 +911,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                         num_foci: *num_foci,
                         sound_speed: sound_speed_value,
                     },
-                    rep: loop_behavior.rep(),
+                    loop_behavior: *loop_behavior,
                 })
                 .push(ChangePatternBank {
                     bank: *bank,

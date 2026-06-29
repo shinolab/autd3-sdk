@@ -402,7 +402,7 @@ mod tests {
     use super::*;
     use crate::command::Pattern;
     use crate::operation::{ConfigModulation, ConfigPattern, WritePatternBuffer};
-    use crate::value::ModulationBank;
+    use crate::value::{LoopBehavior, ModulationBank};
 
     #[derive(Clone, Copy)]
     struct Multi(usize);
@@ -443,7 +443,7 @@ mod tests {
                 },
                 divider: 1,
                 size: 1,
-                rep: 0xFFFF,
+                loop_behavior: LoopBehavior::Infinite,
             })
         });
         let datagrams = b.build().unwrap();
@@ -463,7 +463,7 @@ mod tests {
                 bank: ModulationBank::B0,
                 divider: 1,
                 size: 1,
-                rep: 0xFFFF,
+                loop_behavior: LoopBehavior::Infinite,
             })
         });
         let datagrams = b.build().unwrap();
@@ -503,7 +503,7 @@ mod tests {
                     bank: ModulationBank::B0,
                     divider: 1,
                     size: 1,
-                    rep: 0xFFFF,
+                    loop_behavior: LoopBehavior::Infinite,
                 }
                 .boxed()
             })
@@ -525,7 +525,7 @@ mod tests {
                 bank: ModulationBank::B0,
                 divider: 1,
                 size: 1,
-                rep: 0xFFFF,
+                loop_behavior: LoopBehavior::Infinite,
             })
         });
         b.push_each(|device| {
@@ -533,7 +533,7 @@ mod tests {
                 bank: ModulationBank::B1,
                 divider: 1,
                 size: 1,
-                rep: 0xFFFF,
+                loop_behavior: LoopBehavior::Infinite,
             })
         });
         let datagrams = b.build().unwrap();
@@ -552,7 +552,7 @@ mod tests {
                 bank: ModulationBank::B0,
                 divider: 1,
                 size: 1,
-                rep: 0xFFFF,
+                loop_behavior: LoopBehavior::Infinite,
             })
         });
         b.push_each(|_| {
@@ -560,7 +560,7 @@ mod tests {
                 bank: ModulationBank::B1,
                 divider: 1,
                 size: 1,
-                rep: 0xFFFF,
+                loop_behavior: LoopBehavior::Infinite,
             })
         });
         let datagrams = b.build().unwrap();
@@ -578,7 +578,7 @@ mod tests {
                 bank: ModulationBank::B0,
                 divider: 1,
                 size: 1,
-                rep: 0xFFFF,
+                loop_behavior: LoopBehavior::Infinite,
             })
         });
         b.push(ConfigPattern {
@@ -586,14 +586,14 @@ mod tests {
             divider: 1,
             size: 1,
             data_type: PatternDataType::Raw,
-            rep: 0xFFFF,
+            loop_behavior: LoopBehavior::Infinite,
         });
         b.push_each(|device| {
             (device == 1).then_some(ConfigModulation {
                 bank: ModulationBank::B1,
                 divider: 1,
                 size: 1,
-                rep: 0xFFFF,
+                loop_behavior: LoopBehavior::Infinite,
             })
         });
         let datagrams = b.build().unwrap();
@@ -618,7 +618,7 @@ mod tests {
             divider: 1,
             size: 1,
             data_type: PatternDataType::Raw,
-            rep: 0xFFFF,
+            loop_behavior: LoopBehavior::Infinite,
         };
         let mut b = DatagramBuilder::new(4);
         b.push(op);
@@ -662,7 +662,7 @@ mod tests {
             divider: 1,
             size: 1,
             data_type: PatternDataType::Raw,
-            rep: 0xFFFF,
+            loop_behavior: LoopBehavior::Infinite,
         };
         let mut b = DatagramBuilder::new(2);
         b.push(we).push(ce);
@@ -691,7 +691,7 @@ mod tests {
             divider: 1,
             size: 1,
             data_type: PatternDataType::Raw,
-            rep: 0xFFFF,
+            loop_behavior: LoopBehavior::Infinite,
         };
         let mut b = DatagramBuilder::new(1);
         b.push(op);

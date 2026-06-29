@@ -108,7 +108,7 @@ enum Pending {
         divider: u16,
         size: u32,
         data_type: CorePatternDataType,
-        rep: u16,
+        loop_behavior: CoreLoopBehavior,
     },
     ChangePatternBank {
         bank: CorePatternBank,
@@ -123,7 +123,7 @@ enum Pending {
         bank: CoreModulationBank,
         divider: u16,
         size: u32,
-        rep: u16,
+        loop_behavior: CoreLoopBehavior,
     },
     ChangeModulationBank {
         bank: CoreModulationBank,
@@ -202,7 +202,7 @@ impl DatagramBuilder {
                 divider: op.divider,
                 size: op.size,
                 data_type: op.data_type,
-                rep: op.rep,
+                loop_behavior: op.loop_behavior,
             });
             return Ok(());
         }
@@ -229,7 +229,7 @@ impl DatagramBuilder {
                 bank: op.bank,
                 divider: op.divider,
                 size: op.size,
-                rep: op.rep,
+                loop_behavior: op.loop_behavior,
             });
             return Ok(());
         }
@@ -313,14 +313,14 @@ impl DatagramBuilder {
                     divider,
                     size,
                     data_type,
-                    rep,
+                    loop_behavior,
                 } => {
                     builder.push(CoreConfigPattern {
                         bank: *bank,
                         divider: *divider,
                         size: *size,
                         data_type: *data_type,
-                        rep: *rep,
+                        loop_behavior: *loop_behavior,
                     });
                 }
                 Pending::ChangePatternBank {
@@ -343,13 +343,13 @@ impl DatagramBuilder {
                     bank,
                     divider,
                     size,
-                    rep,
+                    loop_behavior,
                 } => {
                     builder.push(CoreConfigModulation {
                         bank: *bank,
                         divider: *divider,
                         size: *size,
-                        rep: *rep,
+                        loop_behavior: *loop_behavior,
                     });
                 }
                 Pending::ChangeModulationBank {

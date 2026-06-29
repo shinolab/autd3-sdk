@@ -222,7 +222,7 @@ pub struct ConfigPattern {
     pub(crate) divider: u16,
     pub(crate) size: u32,
     pub(crate) data_type: CorePatternDataType,
-    pub(crate) rep: u16,
+    pub(crate) loop_behavior: CoreLoopBehavior,
 }
 
 #[pymethods]
@@ -241,9 +241,7 @@ impl ConfigPattern {
             divider,
             size,
             data_type: data_type.0,
-            rep: loop_behavior
-                .map_or(CoreLoopBehavior::Infinite, |l| l.0)
-                .rep(),
+            loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
         }
     }
 }
@@ -292,7 +290,7 @@ pub struct ConfigModulation {
     pub(crate) bank: CoreModulationBank,
     pub(crate) divider: u16,
     pub(crate) size: u32,
-    pub(crate) rep: u16,
+    pub(crate) loop_behavior: CoreLoopBehavior,
 }
 
 #[pymethods]
@@ -309,9 +307,7 @@ impl ConfigModulation {
             bank: bank.0,
             divider,
             size,
-            rep: loop_behavior
-                .map_or(CoreLoopBehavior::Infinite, |l| l.0)
-                .rep(),
+            loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
         }
     }
 }

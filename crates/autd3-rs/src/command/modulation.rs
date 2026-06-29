@@ -44,7 +44,7 @@ impl<'a> Command<'a> for Modulation<'a> {
                 bank: self.bank,
                 divider,
                 size,
-                rep: self.loop_behavior.rep(),
+                loop_behavior: self.loop_behavior,
             })
             .push(ChangeModulationBank {
                 bank: self.bank,

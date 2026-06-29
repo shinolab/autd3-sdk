@@ -2,7 +2,7 @@ use crate::error::{Error, PayloadError};
 use crate::mirror::FirmwareState;
 use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
-use crate::value::ModulationBank;
+use crate::value::{LoopBehavior, ModulationBank};
 
 use super::{Distribution, Operation, silencer_constraint};
 
@@ -11,7 +11,7 @@ pub struct ConfigModulation {
     pub bank: ModulationBank,
     pub divider: u16,
     pub size: u32,
-    pub rep: u16,
+    pub loop_behavior: LoopBehavior,
 }
 
 impl Operation for ConfigModulation {
@@ -43,7 +43,7 @@ impl Operation for ConfigModulation {
         out[0] = self.bank.as_u8();
         out[2..4].copy_from_slice(&self.divider.to_le_bytes());
         out[4..8].copy_from_slice(&self.size.to_le_bytes());
-        out[8..10].copy_from_slice(&self.rep.to_le_bytes());
+        out[8..10].copy_from_slice(&self.loop_behavior.rep().to_le_bytes());
         Ok(Cmd::ConfigModulation)
     }
 
@@ -59,6 +59,7 @@ impl Operation for ConfigModulation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::num::NonZeroU16;
 
     fn encode(op: ConfigModulation) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
@@ -72,7 +73,7 @@ mod tests {
             bank: ModulationBank::B1,
             divider: 10,
             size: 4000,
-            rep: 9,
+            loop_behavior: LoopBehavior::Finite(NonZeroU16::new(10).unwrap()),
         })
         .unwrap();
 
@@ -91,7 +92,7 @@ mod tests {
             bank: ModulationBank::B0,
             divider: 1,
             size: 1,
-            rep: 0xFFFF,
+            loop_behavior: LoopBehavior::Infinite,
         };
         assert!(matches!(
             encode(ConfigModulation { divider: 0, ..base }),
