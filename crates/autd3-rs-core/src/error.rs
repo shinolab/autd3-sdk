@@ -54,13 +54,13 @@ pub enum PayloadError {
     },
 
     #[error("modulation size {size} out of range 1..={max}")]
-    ModulationSizeOutOfRange { size: u32, max: usize },
+    ModulationSizeOutOfRange { size: usize, max: usize },
 
     #[error("modulation data must not be empty")]
     ModulationDataEmpty,
 
     #[error("modulation offset {offset} must be even (word-write-only RAM)")]
-    ModulationOffsetNotEven { offset: u32 },
+    ModulationOffsetNotEven { offset: usize },
 
     #[error("modulation write [{offset}, {end}) exceeds buffer capacity {capacity}")]
     ModulationWriteExceedsCapacity {
@@ -114,7 +114,7 @@ pub enum PayloadError {
 
     #[error("STM size {size} x num_foci {num_foci} exceeds capacity {capacity}")]
     StmFociExceedCapacity {
-        size: u32,
+        size: usize,
         num_foci: u8,
         capacity: usize,
     },
@@ -123,13 +123,13 @@ pub enum PayloadError {
     SoundSpeedZero,
 
     #[error("STM size {size} out of range 1..={max}")]
-    StmSizeOutOfRange { size: u32, max: usize },
+    StmSizeOutOfRange { size: usize, max: usize },
 
     #[error("emissions has {len} entr(ies) but device {device} was requested")]
     EmissionsDeviceOutOfRange { device: usize, len: usize },
 
     #[error("pattern STM index {index} out of range 0..{max}")]
-    PatternIndexOutOfRange { index: u16, max: usize },
+    PatternIndexOutOfRange { index: usize, max: usize },
 
     #[error("device {device} has no group key")]
     GroupKeyMissing { device: usize },

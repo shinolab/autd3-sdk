@@ -19,7 +19,7 @@ struct WriteHeader {
 #[derive(Clone, Copy, Debug)]
 pub struct WriteModulationBuffer<'a> {
     pub bank: ModulationBank,
-    pub offset: u32,
+    pub offset: usize,
     pub data: &'a [u8],
 }
 
@@ -48,11 +48,11 @@ impl Operation for WriteModulationBuffer<'_> {
                 },
             ));
         }
-        let end = self.offset as usize + self.data.len();
+        let end = self.offset + self.data.len();
         if end > MOD_BUFFER_SAMPLES {
             return Err(Error::InvalidPayload(
                 PayloadError::ModulationWriteExceedsCapacity {
-                    offset: self.offset as usize,
+                    offset: self.offset,
                     end,
                     capacity: MOD_BUFFER_SAMPLES,
                 },
@@ -61,7 +61,7 @@ impl Operation for WriteModulationBuffer<'_> {
 
         let start = frame * WRITE_MAX_DATA_LEN;
         let chunk = &self.data[start..(start + WRITE_MAX_DATA_LEN).min(self.data.len())];
-        let offset = self.offset + u32::try_from(start).expect("bounded by MOD_BUFFER_SAMPLES");
+        let offset = u32::try_from(self.offset + start).expect("bounded by MOD_BUFFER_SAMPLES");
         let len = u16::try_from(chunk.len()).expect("bounded by WRITE_MAX_DATA_LEN");
 
         let (header, _) =
@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn write_modulation_buffer_rejects_invalid_inputs() {
-        let op = |offset: u32, data: &[u8]| -> Result<[u8; PAYLOAD_BYTES], Error> {
+        let op = |offset: usize, data: &[u8]| -> Result<[u8; PAYLOAD_BYTES], Error> {
             encode(
                 &WriteModulationBuffer {
                     bank: ModulationBank::B0,
@@ -157,7 +157,7 @@ mod tests {
         assert!(matches!(op(0, &[]), Err(Error::InvalidPayload(_))));
         assert!(matches!(op(1, &[0; 2]), Err(Error::InvalidPayload(_))));
         assert!(matches!(
-            op(u32::try_from(MOD_BUFFER_SAMPLES - 2).unwrap(), &[0; 3]),
+            op(MOD_BUFFER_SAMPLES - 2, &[0; 3]),
             Err(Error::InvalidPayload(_))
         ));
     }

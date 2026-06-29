@@ -20,7 +20,7 @@ struct PatternPayload {
 #[derive(Clone, Copy, Debug)]
 pub struct WritePatternBuffer<'a> {
     pub bank: PatternBank,
-    pub index: u16,
+    pub index: usize,
     pub emissions: &'a [[Emission; NUM_TRANSDUCERS]],
 }
 
@@ -47,7 +47,7 @@ impl Operation for WritePatternBuffer<'_> {
                 },
             ));
         }
-        if usize::from(self.index) >= EMISSION_MAX_INDICES {
+        if self.index >= EMISSION_MAX_INDICES {
             return Err(Error::InvalidPayload(
                 PayloadError::PatternIndexOutOfRange {
                     index: self.index,
@@ -55,8 +55,8 @@ impl Operation for WritePatternBuffer<'_> {
                 },
             ));
         }
-        let offset = u32::try_from(usize::from(self.index) * EMISSION_SLOT_WORDS)
-            .expect("bounded by EMISSION_RAM_WORDS");
+        let offset =
+            u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");
         let len = u16::try_from(NUM_TRANSDUCERS * 2).expect("fits one frame");
         let (frame, _) =
             PatternPayload::mut_from_prefix(&mut out[..]).expect("PatternPayload fits the payload");
@@ -107,7 +107,7 @@ mod tests {
         let patterns = [[Emission::default(); NUM_TRANSDUCERS]];
         let op = WritePatternBuffer {
             bank: PatternBank::B0,
-            index: u16::try_from(EMISSION_MAX_INDICES).unwrap(),
+            index: EMISSION_MAX_INDICES,
             emissions: &patterns,
         };
         let mut out = [0u8; PAYLOAD_BYTES];

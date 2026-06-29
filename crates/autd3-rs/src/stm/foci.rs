@@ -70,7 +70,7 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
         let n = self.points.len();
         let config = self.config.into_sampling_config(n);
-        let size = u32::try_from(n).unwrap_or(u32::MAX);
+        let size = n;
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
 
         let mut foci = Vec::with_capacity(self.points.len() * N);

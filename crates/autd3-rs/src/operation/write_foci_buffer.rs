@@ -19,7 +19,7 @@ struct WriteHeader {
 #[derive(Clone, Debug)]
 pub struct WriteFociBuffer {
     pub bank: PatternBank,
-    pub offset: u32,
+    pub offset: usize,
     pub foci: Vec<Focus>,
 }
 
@@ -41,11 +41,11 @@ impl Operation for WriteFociBuffer {
         if self.foci.is_empty() {
             return Err(Error::InvalidPayload(PayloadError::FociEmpty));
         }
-        let end = self.offset as usize + self.foci.len();
+        let end = self.offset + self.foci.len();
         if end > MAX_FOCI_TOTAL {
             return Err(Error::InvalidPayload(
                 PayloadError::FociWriteExceedsCapacity {
-                    offset: self.offset as usize,
+                    offset: self.offset,
                     end,
                     capacity: MAX_FOCI_TOTAL,
                 },
@@ -54,8 +54,8 @@ impl Operation for WriteFociBuffer {
 
         let start = frame * MAX_FOCI_PER_FRAME;
         let chunk = &self.foci[start..(start + MAX_FOCI_PER_FRAME).min(self.foci.len())];
-        let word_offset = u32::try_from((self.offset as usize + start) * FOCUS_WORDS)
-            .expect("bounded by capacity");
+        let word_offset =
+            u32::try_from((self.offset + start) * FOCUS_WORDS).expect("bounded by capacity");
         let len = u16::try_from(chunk.len() * FOCUS_WORDS * 2).expect("bounded by frame");
 
         let (header, _) =
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn write_foci_buffer_rejects_invalid_inputs() {
-        let base = |foci: Vec<Focus>, offset: u32| WriteFociBuffer {
+        let base = |foci: Vec<Focus>, offset: usize| WriteFociBuffer {
             bank: PatternBank::B0,
             offset,
             foci,
@@ -143,13 +143,7 @@ mod tests {
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
-            encode(
-                &base(
-                    vec![Focus::default(); 2],
-                    u32::try_from(MAX_FOCI_TOTAL - 1).unwrap()
-                ),
-                0
-            ),
+            encode(&base(vec![Focus::default(); 2], MAX_FOCI_TOTAL - 1), 0),
             Err(Error::InvalidPayload(_))
         ));
     }

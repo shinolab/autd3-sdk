@@ -10,7 +10,7 @@ use super::{Distribution, Operation, silencer_constraint};
 pub struct ConfigModulation {
     pub bank: ModulationBank,
     pub config: SamplingConfig,
-    pub size: u32,
+    pub size: usize,
     pub loop_behavior: LoopBehavior,
 }
 
@@ -33,7 +33,7 @@ impl Operation for ConfigModulation {
             .config
             .divide()
             .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))?;
-        if self.size == 0 || self.size as usize > MOD_BUFFER_SAMPLES {
+        if self.size == 0 || self.size > MOD_BUFFER_SAMPLES {
             return Err(Error::InvalidPayload(
                 PayloadError::ModulationSizeOutOfRange {
                     size: self.size,
@@ -43,7 +43,11 @@ impl Operation for ConfigModulation {
         }
         out[0] = self.bank.as_u8();
         out[2..4].copy_from_slice(&divider.to_le_bytes());
-        out[4..8].copy_from_slice(&self.size.to_le_bytes());
+        out[4..8].copy_from_slice(
+            &u32::try_from(self.size)
+                .expect("bounded by MOD_BUFFER_SAMPLES")
+                .to_le_bytes(),
+        );
         out[8..10].copy_from_slice(&self.loop_behavior.rep().to_le_bytes());
         Ok(Cmd::ConfigModulation)
     }
@@ -112,14 +116,14 @@ mod tests {
         ));
         assert!(matches!(
             encode(ConfigModulation {
-                size: u32::try_from(MOD_BUFFER_SAMPLES + 1).unwrap(),
+                size: MOD_BUFFER_SAMPLES + 1,
                 ..base
             }),
             Err(Error::InvalidPayload(_))
         ));
         assert!(
             encode(ConfigModulation {
-                size: u32::try_from(MOD_BUFFER_SAMPLES).unwrap(),
+                size: MOD_BUFFER_SAMPLES,
                 ..base
             })
             .is_ok()
