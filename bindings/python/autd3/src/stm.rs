@@ -7,8 +7,8 @@ use autd3_rs::stm::{
     StmConfig as CoreStmConfig, circle as core_circle, line as core_line,
 };
 use autd3_rs::value::{
-    ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity, Phase,
-    SamplingConfig,
+    ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity, Nearest,
+    Phase, SamplingConfig,
 };
 use autd3_rs::{Point3, Vector3, Velocity};
 use autd3_rs_core::geometry::UnitVector3;
@@ -43,25 +43,25 @@ impl StmConfig {
     #[staticmethod]
     #[pyo3(name = "Freq")]
     fn freq(hz: f32) -> Self {
-        Self(CoreStmConfig::Freq(hz * Hz))
+        Self(CoreStmConfig::from(hz * Hz))
     }
 
     #[staticmethod]
     #[pyo3(name = "FreqNearest")]
     fn freq_nearest(hz: f32) -> Self {
-        Self(CoreStmConfig::FreqNearest(hz * Hz))
+        Self(CoreStmConfig::from(Nearest(hz * Hz)))
     }
 
     #[staticmethod]
     #[pyo3(name = "Period")]
     fn period(secs: f32) -> Self {
-        Self(CoreStmConfig::Period(Duration::from_secs_f32(secs)))
+        Self(CoreStmConfig::from(Duration::from_secs_f32(secs)))
     }
 
     #[staticmethod]
     #[pyo3(name = "PeriodNearest")]
     fn period_nearest(secs: f32) -> Self {
-        Self(CoreStmConfig::PeriodNearest(Duration::from_secs_f32(secs)))
+        Self(CoreStmConfig::from(Nearest(Duration::from_secs_f32(secs))))
     }
 
     #[staticmethod]
@@ -69,9 +69,7 @@ impl StmConfig {
     fn sampling(divide: u16) -> PyResult<Self> {
         let divide = core::num::NonZeroU16::new(divide)
             .ok_or_else(|| PyValueError::new_err("divide must be >= 1"))?;
-        Ok(Self(CoreStmConfig::Sampling(SamplingConfig::Divide(
-            divide,
-        ))))
+        Ok(Self(CoreStmConfig::from(SamplingConfig::new(divide))))
     }
 }
 

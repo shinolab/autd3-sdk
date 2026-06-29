@@ -209,7 +209,7 @@ pub extern "C" fn autd3_core_sampling_config_freq_40k() -> *mut SamplingConfig {
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_core_sampling_config_divide(divide: u16) -> *mut SamplingConfig {
     match NonZeroU16::new(divide) {
-        Some(divide) => into_handle(SamplingConfig::Divide(divide)),
+        Some(divide) => into_handle(SamplingConfig::new(divide)),
         None => std::ptr::null_mut(),
     }
 }

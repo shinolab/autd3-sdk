@@ -80,7 +80,7 @@ mod tests {
     fn config_modulation_lays_out_fields() {
         let (cmd, payload) = encode(ConfigModulation {
             bank: ModulationBank::B1,
-            config: SamplingConfig::Divide(NonZeroU16::new(10).unwrap()),
+            config: SamplingConfig::new(NonZeroU16::new(10).unwrap()),
             size: 4000,
             loop_behavior: LoopBehavior::Finite(NonZeroU16::new(10).unwrap()),
         })
@@ -99,13 +99,13 @@ mod tests {
     fn config_modulation_rejects_invalid_fields() {
         let base = ConfigModulation {
             bank: ModulationBank::B0,
-            config: SamplingConfig::Divide(NonZeroU16::MIN),
+            config: SamplingConfig::new(NonZeroU16::MIN),
             size: 1,
             loop_behavior: LoopBehavior::Infinite,
         };
         assert!(matches!(
             encode(ConfigModulation {
-                config: SamplingConfig::Period(core::time::Duration::from_nanos(1)),
+                config: SamplingConfig::new(core::time::Duration::from_nanos(1)),
                 ..base
             }),
             Err(Error::InvalidPayload(_))

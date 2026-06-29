@@ -33,7 +33,7 @@ impl<'a> Command<'a> for Pattern<'a> {
             })
             .push(ConfigPattern {
                 bank: self.bank,
-                config: SamplingConfig::Divide(NonZeroU16::MAX),
+                config: SamplingConfig::new(NonZeroU16::MAX),
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
             })

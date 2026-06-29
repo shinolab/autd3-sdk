@@ -11,8 +11,8 @@ use autd3_rs::operation::Synchronize;
 use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
-    DcSysTime, GpioIn, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
-    TransitionMode,
+    DcSysTime, GpioIn, Intensity, LoopBehavior, ModulationBank, Nearest, PatternBank, Phase,
+    SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
     ChangeModulationBank, ChangePatternBank, Clear, ClientConfig, ConfigFociStm, ConfigModulation,
@@ -178,28 +178,28 @@ foci_points!(1 => N1, 2 => N2, 3 => N3, 4 => N4, 5 => N5, 6 => N6, 7 => N7, 8 =>
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_freq(hz: f32) -> *mut StmConfig {
-    into_handle(StmConfig::Freq(hz * Hz))
+    into_handle(StmConfig::from(hz * Hz))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_freq_nearest(hz: f32) -> *mut StmConfig {
-    into_handle(StmConfig::FreqNearest(hz * Hz))
+    into_handle(StmConfig::from(Nearest(hz * Hz)))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_period(secs: f32) -> *mut StmConfig {
-    into_handle(StmConfig::Period(Duration::from_secs_f32(secs)))
+    into_handle(StmConfig::from(Duration::from_secs_f32(secs)))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_period_nearest(secs: f32) -> *mut StmConfig {
-    into_handle(StmConfig::PeriodNearest(Duration::from_secs_f32(secs)))
+    into_handle(StmConfig::from(Nearest(Duration::from_secs_f32(secs))))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_sampling(divide: u16) -> *mut StmConfig {
     match NonZeroU16::new(divide) {
-        Some(divide) => into_handle(StmConfig::Sampling(SamplingConfig::Divide(divide))),
+        Some(divide) => into_handle(StmConfig::from(SamplingConfig::new(divide))),
         None => std::ptr::null_mut(),
     }
 }
@@ -788,7 +788,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                     unsafe { write_cstr(out_err, out_err_len, "divider must be >= 1") };
                     return std::ptr::null_mut();
                 };
-                core.push(Modulation::new(SamplingConfig::Divide(divider), data));
+                core.push(Modulation::new(SamplingConfig::new(divider), data));
             }
             Pending::WritePatternBuffer {
                 bank,
