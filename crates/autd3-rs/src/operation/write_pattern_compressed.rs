@@ -48,8 +48,7 @@ pub struct WritePatternCompressed<'a> {
     pub bank: PatternBank,
     pub index: usize,
     pub format: PatternCompression,
-    pub count: u8,
-    pub patterns: [&'a [[Emission; NUM_TRANSDUCERS]]; PATTERN_MAX_PER_FRAME],
+    pub patterns: [Option<&'a [[Emission; NUM_TRANSDUCERS]]>; PATTERN_MAX_PER_FRAME],
 }
 
 impl Operation for WritePatternCompressed<'_> {
@@ -67,15 +66,17 @@ impl Operation for WritePatternCompressed<'_> {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        if device >= self.patterns[0].len() {
+        let count = self.count();
+        let dev_len = self.patterns[0].map_or(0, <[_]>::len);
+        if device >= dev_len {
             return Err(Error::InvalidPayload(
                 PayloadError::EmissionsDeviceOutOfRange {
                     device,
-                    len: self.patterns[0].len(),
+                    len: dev_len,
                 },
             ));
         }
-        let last_index = self.index + usize::from(self.count.max(1)) - 1;
+        let last_index = self.index + count.max(1) - 1;
         if last_index >= EMISSION_MAX_INDICES {
             return Err(Error::InvalidPayload(
                 PayloadError::PatternIndexOutOfRange {
@@ -90,7 +91,7 @@ impl Operation for WritePatternCompressed<'_> {
             .expect("CompressedPayload fits the payload");
         frame.bank = self.bank.as_u8();
         frame.format = self.format.as_u8();
-        frame.count = self.count;
+        frame.count = u8::try_from(count).expect("count <= PATTERN_MAX_PER_FRAME");
         frame.offset = offset.into();
         for (t, word) in frame.words.iter_mut().enumerate() {
             *word = self.pack_word(device, t).into();
@@ -100,16 +101,25 @@ impl Operation for WritePatternCompressed<'_> {
 }
 
 impl WritePatternCompressed<'_> {
+    fn count(&self) -> usize {
+        self.patterns
+            .iter()
+            .position(Option::is_none)
+            .unwrap_or(PATTERN_MAX_PER_FRAME)
+    }
+
     fn pack_word(&self, device: usize, t: usize) -> u16 {
-        let count = usize::from(self.count.max(1));
-        match self.format {
-            PatternCompression::PhaseFull => (0..count).fold(0u16, |acc, g| {
-                acc | (u16::from(self.patterns[g][device][t].phase.0) << (8 * g))
-            }),
-            PatternCompression::PhaseHalf => (0..count).fold(0u16, |acc, g| {
-                acc | (u16::from(self.patterns[g][device][t].phase.0 >> 4) << (4 * g))
-            }),
-        }
+        let (shift, hi) = match self.format {
+            PatternCompression::PhaseFull => (8usize, 0u8),
+            PatternCompression::PhaseHalf => (4usize, 4u8),
+        };
+        self.patterns
+            .iter()
+            .enumerate()
+            .filter_map(|(g, &p)| p.map(|s| (g, s[device][t].phase.0)))
+            .fold(0u16, |acc, (g, phase)| {
+                acc | (u16::from(phase >> hi) << (shift * g))
+            })
     }
 }
 
@@ -135,8 +145,7 @@ mod tests {
             bank: PatternBank::B0,
             index: 4,
             format: PatternCompression::PhaseFull,
-            count: 2,
-            patterns: [&p0, &p1, &[], &[]],
+            patterns: [Some(&p0[..]), Some(&p1[..]), None, None],
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
@@ -173,8 +182,7 @@ mod tests {
             bank: PatternBank::B0,
             index: 8,
             format: PatternCompression::PhaseHalf,
-            count: 4,
-            patterns: [&p0, &p1, &p2, &p3],
+            patterns: [Some(&p0[..]), Some(&p1[..]), Some(&p2[..]), Some(&p3[..])],
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
@@ -202,8 +210,7 @@ mod tests {
             bank: PatternBank::B0,
             index: EMISSION_MAX_INDICES - 1,
             format: PatternCompression::PhaseFull,
-            count: 2,
-            patterns: [&patterns, &patterns, &[], &[]],
+            patterns: [Some(&patterns[..]), Some(&patterns[..]), None, None],
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
@@ -219,8 +226,7 @@ mod tests {
             bank: PatternBank::B0,
             index: 0,
             format: PatternCompression::PhaseFull,
-            count: 1,
-            patterns: [&patterns, &[], &[], &[]],
+            patterns: [Some(&patterns[..]), None, None, None],
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(op.encode(0, 0, &mut out).is_ok());
