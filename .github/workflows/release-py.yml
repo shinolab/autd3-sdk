@@ -1,0 +1,81 @@
+name: release-py
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'py-v*'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: wheels (${{ matrix.os }}, ${{ matrix.package }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        package:
+          - autd3-core
+          - autd3
+          - autd3-pattern
+          - autd3-pattern-holo
+          - autd3-modulation
+          - autd3-link-ethercrab
+          - autd3-link-remote
+          - autd3-link-twincat
+          - autd3-link-nop
+          - autd3-link-soem
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+      - uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.10
+            3.11
+            3.12
+            3.13
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+      - name: Generate third-party licenses
+        run: cargo xtask license generate python
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: bindings/python
+          manylinux: auto
+          before-script-linux: |
+            if command -v dnf >/dev/null; then
+              dnf install -y libpcap-devel cmake
+            elif command -v yum >/dev/null; then
+              yum install -y libpcap-devel cmake
+            elif command -v apt-get >/dev/null; then
+              apt-get update && apt-get install -y libpcap-dev cmake
+            fi
+          args: --release -m ${{ matrix.package }}/Cargo.toml --find-interpreter -o dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}-${{ matrix.package }}
+          path: bindings/python/dist/*.whl
+
+  publish:
+    name: release-py
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
