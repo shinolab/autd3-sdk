@@ -283,7 +283,7 @@ impl DatagramBuilder {
                 } => {
                     builder.push(CoreWritePatternBuffer {
                         bank: *bank,
-                        index: *index,
+                        index: usize::from(*index),
                         emissions,
                     });
                 }
@@ -299,7 +299,7 @@ impl DatagramBuilder {
                     builder.push(CoreConfigPattern {
                         bank: *bank,
                         config: SamplingConfig::Divide(divider),
-                        size: *size,
+                        size: usize::try_from(*size).unwrap_or(usize::MAX),
                         data_type: *data_type,
                         loop_behavior: *loop_behavior,
                     });
@@ -316,7 +316,7 @@ impl DatagramBuilder {
                 Pending::WriteModulationBuffer { bank, offset, data } => {
                     builder.push(CoreWriteModulationBuffer {
                         bank: *bank,
-                        offset: *offset,
+                        offset: usize::try_from(*offset).unwrap_or(usize::MAX),
                         data,
                     });
                 }
@@ -331,7 +331,7 @@ impl DatagramBuilder {
                     builder.push(CoreConfigModulation {
                         bank: *bank,
                         config: SamplingConfig::Divide(divider),
-                        size: *size,
+                        size: usize::try_from(*size).unwrap_or(usize::MAX),
                         loop_behavior: *loop_behavior,
                     });
                 }
