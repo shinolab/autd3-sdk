@@ -1,9 +1,9 @@
 use core::f32::consts::PI;
 
-use super::{ControlPoint, ControlPoints};
 use crate::Length;
 use crate::geometry::{Point3, UnitVector3, Vector3};
 use crate::value::Intensity;
+use crate::value::{ControlPoint, ControlPoints};
 
 #[must_use]
 pub fn circle(

@@ -22,7 +22,7 @@ pub use change_mod_bank::ChangeModulationBank;
 pub use change_pattern_bank::ChangePatternBank;
 pub use clear::Clear;
 pub use config_modulation::ConfigModulation;
-pub use config_pattern::ConfigPattern;
+pub use config_pattern::{ConfigFociStm, ConfigPattern};
 pub use emulate_gpio_in::EmulateGpioIn;
 pub use force_fan::ForceFan;
 pub use nop::Nop;

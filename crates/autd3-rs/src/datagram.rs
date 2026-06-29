@@ -585,7 +585,6 @@ mod tests {
             bank: PatternBank::B0,
             config: SamplingConfig::FREQ_40K,
             size: 1,
-            data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,
         });
         b.push_each(|device| {
@@ -609,7 +608,7 @@ mod tests {
         );
     }
     use crate::params::NUM_TRANSDUCERS;
-    use crate::value::{Emission, PatternBank, PatternDataType};
+    use crate::value::{Emission, PatternBank};
 
     #[test]
     fn broadcast_op_yields_one_frame_of_one_datagram() {
@@ -617,7 +616,6 @@ mod tests {
             bank: PatternBank::B0,
             config: SamplingConfig::FREQ_40K,
             size: 1,
-            data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,
         };
         let mut b = DatagramBuilder::new(4);
@@ -661,7 +659,6 @@ mod tests {
             bank: PatternBank::B0,
             config: SamplingConfig::FREQ_40K,
             size: 1,
-            data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,
         };
         let mut b = DatagramBuilder::new(2);
@@ -690,7 +687,6 @@ mod tests {
             bank: PatternBank::B0,
             config: SamplingConfig::FREQ_40K,
             size: 1,
-            data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,
         };
         let mut b = DatagramBuilder::new(1);

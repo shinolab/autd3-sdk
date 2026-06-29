@@ -35,7 +35,6 @@ impl<'a> Command<'a> for Pattern<'a> {
                 bank: self.bank,
                 config: SamplingConfig::Divide(NonZeroU16::MAX),
                 size: 1,
-                data_type: crate::value::PatternDataType::Raw,
                 loop_behavior: LoopBehavior::Infinite,
             })
             .push(ChangePatternBank {
