@@ -1,3 +1,4 @@
+mod about;
 mod camera;
 mod common;
 mod environment;
@@ -5,6 +6,7 @@ mod settings;
 mod slice;
 mod state;
 
+pub use about::AboutPanel;
 pub use camera::CameraPanel;
 pub use environment::EnvironmentPanel;
 pub use settings::SettingsPanel;

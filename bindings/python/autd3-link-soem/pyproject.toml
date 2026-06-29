@@ -13,3 +13,4 @@ dependencies = ["autd3-core"]
 [tool.maturin]
 module-name = "autd3_link_soem"
 manifest-path = "Cargo.toml"
+include = ["THIRD-PARTY-LICENSES.md", "LICENSE", "NOTICE"]

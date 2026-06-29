@@ -11,4 +11,9 @@
     <ProjectReference Include="../AUTD3/AUTD3.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="COPYING" Pack="true" PackagePath="" />
+    <None Include="NOTICE" Pack="true" PackagePath="" />
+  </ItemGroup>
+
 </Project>

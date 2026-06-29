@@ -9,6 +9,7 @@ enum Tab {
     #[default]
     Simulator,
     TwinCat,
+    About,
 }
 
 #[derive(Default)]
@@ -52,11 +53,13 @@ impl eframe::App for ConsoleApp {
                 if cfg!(target_os = "windows") {
                     ui.selectable_value(&mut self.tab, Tab::TwinCat, "TwinCAT");
                 }
+                ui.selectable_value(&mut self.tab, Tab::About, "About");
             });
         });
         egui::CentralPanel::default().show(ui, |ui| match self.tab {
             Tab::Simulator => self.simulator.ui(ui),
             Tab::TwinCat => self.twincat.ui(ui),
+            Tab::About => crate::about::ui(ui),
         });
     }
 

@@ -151,11 +151,15 @@ namespace TwincatCli
             var installEsiCommand = new Command("install-esi", "Install the bundled AUTD ESI (AUTD.xml) into the TwinCAT config directory.");
             installEsiCommand.SetAction(_ => { EsiInstaller.Install(true); });
 
+            var licenseCommand = new Command("license", "Print this tool's license and bundled third-party (NuGet) license notices.");
+            licenseCommand.SetAction(_ => { License.Print(); });
+
             var rootCommand = new RootCommand("TwinCAT AUTD3 server");
             rootCommand.Subcommands.Add(runCommand);
             rootCommand.Subcommands.Add(openCommand);
             rootCommand.Subcommands.Add(doctorCommand);
             rootCommand.Subcommands.Add(installEsiCommand);
+            rootCommand.Subcommands.Add(licenseCommand);
 
             return rootCommand.Parse(args).Invoke();
         }

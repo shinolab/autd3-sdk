@@ -12,6 +12,7 @@ pub fn build_backend_and_frontend(root: &Path, debug: bool) -> Result<(PathBuf, 
     let frontend = sim.join("frontend");
     let profile = if debug { "debug" } else { "release" };
 
+    crate::license::generate_simulator(root)?;
     build_frontend(&frontend, debug)?;
     let public = frontend
         .join("target")
@@ -69,6 +70,7 @@ pub fn run_simulator(root: &Path, cmd: SimulatorCmd) -> Result<()> {
     let frontend = sim.join("frontend");
     match cmd {
         SimulatorCmd::Build { debug } => {
+            crate::license::generate_simulator(root)?;
             let mut args = vec!["build"];
             if !debug {
                 args.push("--release");

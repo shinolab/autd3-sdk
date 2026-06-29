@@ -13,3 +13,4 @@ dependencies = ["autd3-core", "autd3-pattern"]
 [tool.maturin]
 module-name = "autd3_pattern_holo"
 manifest-path = "Cargo.toml"
+include = ["THIRD-PARTY-LICENSES.md", "LICENSE"]

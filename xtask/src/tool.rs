@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -156,6 +157,8 @@ fn ensure_built(dir: &Path, debug: bool) -> Result<PathBuf> {
     )?;
     let msbuild = msbuild.to_string_lossy().into_owned();
 
+    generate_twincat_licenses(dir);
+
     let config_arg = format!("-p:Configuration={config}");
     run(
         &msbuild,
@@ -163,6 +166,77 @@ fn ensure_built(dir: &Path, debug: bool) -> Result<PathBuf> {
         dir,
     )?;
     Ok(exe)
+}
+
+fn generate_twincat_licenses(dir: &Path) {
+    if !on_path("dotnet") {
+        eprintln!(
+            "warning: `dotnet` not found; skipping twincat-cli third-party license generation"
+        );
+        return;
+    }
+    if run("dotnet", ["tool", "restore"], dir).is_err() {
+        eprintln!(
+            "warning: `dotnet tool restore` failed; skipping twincat-cli third-party license generation"
+        );
+        return;
+    }
+    // Export per-package license texts into a scratch dir, then assemble one file.
+    let export = dir.join("obj").join("license-texts");
+    let _ = std::fs::remove_dir_all(&export);
+    if std::fs::create_dir_all(&export).is_err() {
+        return;
+    }
+    let export_arg = export.to_string_lossy().into_owned();
+    let ran = run(
+        "dotnet",
+        [
+            "tool",
+            "run",
+            "dotnet-project-licenses",
+            "-i",
+            "twincat-cli.csproj",
+            "-t",
+            "-e",
+            "-f",
+            &export_arg,
+        ],
+        dir,
+    );
+    if ran.is_err() {
+        eprintln!(
+            "warning: dotnet-project-licenses failed; twincat-cli will show a fallback license \
+             notice. Verify the tool/flags on Windows."
+        );
+        return;
+    }
+    if let Err(e) = assemble_twincat_licenses(&export, &dir.join("THIRD-PARTY-LICENSES.md")) {
+        eprintln!("warning: failed to assemble twincat-cli THIRD-PARTY-LICENSES.md: {e}");
+    }
+}
+
+fn assemble_twincat_licenses(export: &Path, out: &Path) -> Result<()> {
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(export)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.is_file())
+        .collect();
+    entries.sort();
+    let mut body = String::from(
+        "# Third-Party Licenses (NuGet)\n\nThis tool bundles the following NuGet packages \
+         (merged via ILRepack). Their license texts follow.\n\nTwinCAT / Beckhoff.TwinCAT.Ads \
+         packages are licensed by Beckhoff Automation under their own terms; see \
+         https://www.beckhoff.com/.\n",
+    );
+    for path in entries {
+        let name = path.file_stem().map_or_else(
+            || "package".to_string(),
+            |s| s.to_string_lossy().into_owned(),
+        );
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        let _ = write!(body, "\n## {name}\n\n```\n{}\n```\n", text.trim_end());
+    }
+    std::fs::write(out, body).with_context(|| format!("writing {}", out.display()))?;
+    Ok(())
 }
 
 fn is_stale(dir: &Path, exe: &Path) -> Result<bool> {

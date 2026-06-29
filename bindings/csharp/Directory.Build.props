@@ -10,4 +10,8 @@
     <Company>shinolab</Company>
     <Version>0.1.0</Version>
   </PropertyGroup>
+
+  <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)/THIRD-PARTY-LICENSES.md')">
+    <None Include="THIRD-PARTY-LICENSES.md" Pack="true" PackagePath="" />
+  </ItemGroup>
 </Project>

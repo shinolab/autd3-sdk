@@ -57,6 +57,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
     let dir = root.join("bindings").join("python");
     match cmd {
         PyCmd::Build { debug, soem } => {
+            crate::license::generate_python(root)?;
             let out = dir.join("target").join("wheels");
             for wheel in wheels(soem) {
                 let manifest = manifest(wheel);
