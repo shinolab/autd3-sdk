@@ -6,9 +6,7 @@ use autd3_python_capsule::{
 };
 use autd3_rs::{Client, Datagrams, StateCheck};
 use autd3_rs_core::Error;
-use autd3_rs_link_twincat::{
-    AmsNetId, TwinCATLinkOption as CoreOption, TwinCATRoute as CoreRoute, TwinCATStateChecker,
-};
+use autd3_rs_link_twincat::{AmsNetId, TwinCATLinkOption as CoreOption, TwinCATStateChecker};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
@@ -143,31 +141,6 @@ impl ClientBackend for TwinCATBackend {
     }
 }
 
-#[pyclass(name = "TwinCATRoute", module = "autd3_link_twincat", from_py_object)]
-#[derive(Clone, Copy)]
-pub struct TwinCATRoute(pub(crate) CoreRoute);
-
-#[pymethods]
-impl TwinCATRoute {
-    #[classattr]
-    #[pyo3(name = "Auto")]
-    fn auto() -> Self {
-        Self(CoreRoute::Auto)
-    }
-
-    #[classattr]
-    #[pyo3(name = "Notify")]
-    fn notify() -> Self {
-        Self(CoreRoute::Notify)
-    }
-
-    #[classattr]
-    #[pyo3(name = "Ads")]
-    fn ads() -> Self {
-        Self(CoreRoute::Ads)
-    }
-}
-
 #[derive(Clone, Copy)]
 enum ServerSpec {
     Local,
@@ -177,23 +150,21 @@ enum ServerSpec {
 #[pyclass(name = "TwinCATLinkOption", module = "autd3_link_twincat")]
 pub struct TwinCATLinkOption {
     server: ServerSpec,
-    route: CoreRoute,
 }
 
 #[pymethods]
 impl TwinCATLinkOption {
     #[staticmethod]
-    #[pyo3(signature = (route = None))]
-    fn local(route: Option<TwinCATRoute>) -> Self {
+    #[pyo3(signature = ())]
+    fn local() -> Self {
         Self {
             server: ServerSpec::Local,
-            route: route.map_or(CoreRoute::Auto, |r| r.0),
         }
     }
 
     #[staticmethod]
-    #[pyo3(signature = (addr, ams_net_id, route = None))]
-    fn remote(addr: &str, ams_net_id: &str, route: Option<TwinCATRoute>) -> PyResult<Self> {
+    #[pyo3(signature = (addr, ams_net_id))]
+    fn remote(addr: &str, ams_net_id: &str) -> PyResult<Self> {
         let addr = addr
             .parse::<IpAddr>()
             .map_err(|e| PyValueError::new_err(format!("invalid IP address `{addr}`: {e}")))?;
@@ -202,19 +173,16 @@ impl TwinCATLinkOption {
         })?;
         Ok(Self {
             server: ServerSpec::Remote { addr, ams_net_id },
-            route: route.map_or(CoreRoute::Auto, |r| r.0),
         })
     }
 
     fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
         let server = self.server;
-        let route = self.route;
         let opener = client_opener(move |geometry, config| async move {
             let option = match server {
                 ServerSpec::Local => CoreOption::local(),
                 ServerSpec::Remote { addr, ams_net_id } => CoreOption::remote(addr, ams_net_id),
-            }
-            .with_route(route);
+            };
             let (client, checker) = link_runtime()
                 .spawn(async move { Client::open_with_checker(&geometry, option, config).await })
                 .await
@@ -231,7 +199,6 @@ impl TwinCATLinkOption {
 
 #[pymodule]
 fn autd3_link_twincat(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<TwinCATRoute>()?;
     m.add_class::<TwinCATLinkOption>()?;
     Ok(())
 }

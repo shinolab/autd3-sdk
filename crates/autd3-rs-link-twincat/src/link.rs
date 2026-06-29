@@ -23,43 +23,36 @@ pub enum TwinCATServer {
     Remote { addr: IpAddr, ams_net_id: AmsNetId },
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum TwinCATRoute {
-    #[default]
-    Auto,
-    Notify,
-    Ads,
-}
-
 pub struct TwinCATLinkOption {
     pub server: TwinCATServer,
     pub timeouts: Timeouts,
-    pub route: TwinCATRoute,
 }
 
 impl TwinCATLinkOption {
     #[must_use]
     pub fn local() -> Self {
+        Self::local_with_timeouts(Timeouts::none())
+    }
+
+    #[must_use]
+    pub fn local_with_timeouts(timeouts: Timeouts) -> Self {
         Self {
             server: TwinCATServer::Local,
-            timeouts: Timeouts::none(),
-            route: TwinCATRoute::default(),
+            timeouts,
         }
     }
 
     #[must_use]
     pub fn remote(addr: IpAddr, ams_net_id: AmsNetId) -> Self {
-        Self {
-            server: TwinCATServer::Remote { addr, ams_net_id },
-            timeouts: Timeouts::none(),
-            route: TwinCATRoute::default(),
-        }
+        Self::remote_with_timeouts(addr, ams_net_id, Timeouts::none())
     }
 
     #[must_use]
-    pub fn with_route(mut self, route: TwinCATRoute) -> Self {
-        self.route = route;
-        self
+    pub fn remote_with_timeouts(addr: IpAddr, ams_net_id: AmsNetId, timeouts: Timeouts) -> Self {
+        Self {
+            server: TwinCATServer::Remote { addr, ams_net_id },
+            timeouts,
+        }
     }
 }
 
@@ -95,11 +88,7 @@ pub struct TwinCATLink {
 
 impl TwinCATLink {
     pub fn open(option: TwinCATLinkOption) -> Result<Self, TwinCATLinkError> {
-        let TwinCATLinkOption {
-            server,
-            timeouts,
-            route,
-        } = option;
+        let TwinCATLinkOption { server, timeouts } = option;
 
         let (client, ams_addr, conn_addr, source) = match server {
             TwinCATServer::Local => {
@@ -129,11 +118,14 @@ impl TwinCATLink {
 
         let num_devices = Self::read_device_count(&client, ams_addr)?;
 
-        let rx = match route {
-            TwinCATRoute::Ads => RxSource::Ads,
-            TwinCATRoute::Notify => Self::register_notification(&client, ams_addr, num_devices)?,
-            TwinCATRoute::Auto => {
-                Self::register_notification(&client, ams_addr, num_devices).unwrap_or(RxSource::Ads)
+        let rx = match Self::register_notification(&client, ams_addr, num_devices) {
+            Ok(rx) => rx,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "failed to register ADS notification; falling back to synchronous ADS read"
+                );
+                RxSource::Ads
             }
         };
 

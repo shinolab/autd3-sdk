@@ -7,7 +7,7 @@ use autd3_ffi_abi::{
 };
 use autd3_rs::{Client, Datagrams};
 use autd3_rs_core::{Error, StateCheck};
-use autd3_rs_link_twincat::{AmsNetId, TwinCATLinkOption, TwinCATRoute, TwinCATStateChecker};
+use autd3_rs_link_twincat::{AmsNetId, TwinCATLinkOption, TwinCATStateChecker};
 use tokio::sync::Mutex;
 
 fn link_runtime() -> &'static tokio::runtime::Runtime {
@@ -23,14 +23,6 @@ fn link_runtime() -> &'static tokio::runtime::Runtime {
 #[allow(clippy::needless_pass_by_value)]
 fn join_err(e: tokio::task::JoinError) -> Error {
     Error::Link(e.to_string())
-}
-
-fn to_route(route: u8) -> TwinCATRoute {
-    match route {
-        1 => TwinCATRoute::Notify,
-        2 => TwinCATRoute::Ads,
-        _ => TwinCATRoute::Auto,
-    }
 }
 
 struct TwinCATBackend {
@@ -164,15 +156,14 @@ fn into_opener(option: TwinCATLinkOption) -> *mut ClientOpener {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_link_twincat_local(route: u8) -> *mut ClientOpener {
-    into_opener(TwinCATLinkOption::local().with_route(to_route(route)))
+pub extern "C" fn autd3_link_twincat_local() -> *mut ClientOpener {
+    into_opener(TwinCATLinkOption::local())
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_twincat_remote(
     addr: *const c_char,
     ams_net_id: *const c_char,
-    route: u8,
 ) -> *mut ClientOpener {
     if addr.is_null() || ams_net_id.is_null() {
         return std::ptr::null_mut();
@@ -187,5 +178,5 @@ pub unsafe extern "C" fn autd3_link_twincat_remote(
     else {
         return std::ptr::null_mut();
     };
-    into_opener(TwinCATLinkOption::remote(addr, ams_net_id).with_route(to_route(route)))
+    into_opener(TwinCATLinkOption::remote(addr, ams_net_id))
 }

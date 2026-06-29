@@ -98,8 +98,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             let opt = match (cli.twincat_remote, cli.ams_net_id) {
                 (Some(addr), Some(ams_net_id)) => TwinCATLinkOption::remote(addr, ams_net_id),
                 _ => TwinCATLinkOption::local(),
-            }
-            .with_route(cli.twincat_route.into());
+            };
             let link = tokio::task::spawn_blocking(move || TwinCATLink::open(opt))
                 .await
                 .expect("open task panicked")

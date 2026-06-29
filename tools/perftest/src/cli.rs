@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use autd3_rs::MAX_IN_FLIGHT;
 use autd3_rs::operation::XOR_HASH_MAX_DATA_LEN;
-use autd3_rs_link_twincat::{AmsNetId, TwinCATRoute};
+use autd3_rs_link_twincat::AmsNetId;
 use clap::{ArgGroup, Parser, ValueEnum};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -21,24 +21,6 @@ pub enum LinkKind {
     Ethercrab,
     Soem,
     Twincat,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum TwincatRoute {
-    #[default]
-    Auto,
-    Notify,
-    Ads,
-}
-
-impl From<TwincatRoute> for TwinCATRoute {
-    fn from(route: TwincatRoute) -> Self {
-        match route {
-            TwincatRoute::Auto => TwinCATRoute::Auto,
-            TwincatRoute::Notify => TwinCATRoute::Notify,
-            TwincatRoute::Ads => TwinCATRoute::Ads,
-        }
-    }
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -86,8 +68,6 @@ pub struct Cli {
     pub twincat_remote: Option<IpAddr>,
     #[arg(long)]
     pub ams_net_id: Option<AmsNetId>,
-    #[arg(long, value_enum, default_value_t = TwincatRoute::default())]
-    pub twincat_route: TwincatRoute,
     #[arg(long, default_value_t = false)]
     pub no_win_perf_tune: bool,
     #[arg(long)]

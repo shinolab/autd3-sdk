@@ -147,7 +147,7 @@ def test_link_options_construct() -> None:
     remote.RemoteLinkOption("127.0.0.1:8080")
     remote.RemoteLinkOption("127.0.0.1:8080", timeout=0.5)
     twincat.TwinCATLinkOption.local()
-    twincat.TwinCATLinkOption.remote("169.254.1.1", "1.2.3.4.1.1", twincat.TwinCATRoute.Ads)
+    twincat.TwinCATLinkOption.remote("169.254.1.1", "1.2.3.4.1.1")
     nop.Nop()
 
 
