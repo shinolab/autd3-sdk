@@ -32,7 +32,7 @@ impl<'a> Modulation<'a> {
 
 impl<'a> Command<'a> for Modulation<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
-        let size = u32::try_from(self.data.len()).unwrap_or(u32::MAX);
+        let size = self.data.len();
         builder
             .push(WriteModulationBuffer {
                 bank: self.bank,

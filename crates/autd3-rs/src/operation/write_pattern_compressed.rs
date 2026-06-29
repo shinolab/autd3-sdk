@@ -46,7 +46,7 @@ struct CompressedPayload {
 #[derive(Clone, Copy, Debug)]
 pub struct WritePatternCompressed<'a> {
     pub bank: PatternBank,
-    pub index: u16,
+    pub index: usize,
     pub format: PatternCompression,
     pub count: u8,
     pub patterns: [&'a [[Emission; NUM_TRANSDUCERS]]; PATTERN_MAX_PER_FRAME],
@@ -75,16 +75,16 @@ impl Operation for WritePatternCompressed<'_> {
                 },
             ));
         }
-        let last_index = usize::from(self.index) + usize::from(self.count.max(1)) - 1;
+        let last_index = self.index + usize::from(self.count.max(1)) - 1;
         if last_index >= EMISSION_MAX_INDICES {
             return Err(Error::InvalidPayload(
                 PayloadError::PatternIndexOutOfRange {
-                    index: u16::try_from(last_index).unwrap_or(u16::MAX),
+                    index: last_index,
                     max: EMISSION_MAX_INDICES,
                 },
             ));
         }
-        let offset = u32::try_from(usize::from(self.index) * EMISSION_SLOT_WORDS)
+        let offset = u32::try_from(self.index * EMISSION_SLOT_WORDS)
             .expect("bounded by EMISSION_RAM_WORDS");
         let (frame, _) = CompressedPayload::mut_from_prefix(&mut out[..])
             .expect("CompressedPayload fits the payload");
@@ -200,7 +200,7 @@ mod tests {
         let patterns = [[Emission::default(); NUM_TRANSDUCERS]];
         let op = WritePatternCompressed {
             bank: PatternBank::B0,
-            index: u16::try_from(EMISSION_MAX_INDICES - 1).unwrap(),
+            index: EMISSION_MAX_INDICES - 1,
             format: PatternCompression::PhaseFull,
             count: 2,
             patterns: [&patterns, &patterns, &[], &[]],

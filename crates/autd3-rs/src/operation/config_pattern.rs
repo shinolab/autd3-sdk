@@ -10,7 +10,7 @@ use super::{Distribution, Operation, silencer_constraint};
 pub struct ConfigPattern {
     pub bank: PatternBank,
     pub config: SamplingConfig,
-    pub size: u32,
+    pub size: usize,
     pub data_type: PatternDataType,
     pub loop_behavior: LoopBehavior,
 }
@@ -48,7 +48,7 @@ impl Operation for ConfigPattern {
                         max: NUM_FOCI_MAX,
                     }));
                 }
-                if self.size as usize > MAX_FOCI_TOTAL / usize::from(num_foci) {
+                if self.size > MAX_FOCI_TOTAL / usize::from(num_foci) {
                     return Err(Error::InvalidPayload(PayloadError::StmFociExceedCapacity {
                         size: self.size,
                         num_foci,
@@ -61,7 +61,7 @@ impl Operation for ConfigPattern {
                 (0u8, num_foci, sound_speed)
             }
             PatternDataType::Raw => {
-                if self.size as usize > EMISSION_MAX_INDICES {
+                if self.size > EMISSION_MAX_INDICES {
                     return Err(Error::InvalidPayload(PayloadError::StmSizeOutOfRange {
                         size: self.size,
                         max: EMISSION_MAX_INDICES,
@@ -73,7 +73,11 @@ impl Operation for ConfigPattern {
         out[0] = self.bank.as_u8();
         out[1] = type_byte;
         out[2..4].copy_from_slice(&divider.to_le_bytes());
-        out[4..8].copy_from_slice(&self.size.to_le_bytes());
+        out[4..8].copy_from_slice(
+            &u32::try_from(self.size)
+                .expect("bounded by capacity checks")
+                .to_le_bytes(),
+        );
         out[8] = num_foci;
         out[10..12].copy_from_slice(&sound_speed.to_le_bytes());
         out[12..14].copy_from_slice(&self.loop_behavior.rep().to_le_bytes());
@@ -149,7 +153,7 @@ mod tests {
 
     #[test]
     fn config_pattern_rejects_invalid_fields() {
-        let raw = |size: u32| ConfigPattern {
+        let raw = |size: usize| ConfigPattern {
             bank: PatternBank::B0,
             config: SamplingConfig::Divide(NonZeroU16::MIN),
             size,
@@ -168,11 +172,11 @@ mod tests {
             "an unrepresentable sampling config is rejected"
         );
         assert!(matches!(
-            encode(raw(u32::try_from(EMISSION_MAX_INDICES + 1).unwrap())),
+            encode(raw(EMISSION_MAX_INDICES + 1)),
             Err(Error::InvalidPayload(_))
         ));
 
-        let foci = |size: u32, num_foci: u8, sound_speed: u16| ConfigPattern {
+        let foci = |size: usize, num_foci: u8, sound_speed: u16| ConfigPattern {
             bank: PatternBank::B0,
             config: SamplingConfig::Divide(NonZeroU16::MIN),
             size,
@@ -191,13 +195,13 @@ mod tests {
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
-            encode(foci(u32::try_from(MAX_FOCI_TOTAL / 8 + 1).unwrap(), 8, 340)),
+            encode(foci(MAX_FOCI_TOTAL / 8 + 1, 8, 340)),
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
             encode(foci(1, 1, 0)),
             Err(Error::InvalidPayload(_))
         ));
-        assert!(encode(foci(u32::try_from(MAX_FOCI_TOTAL / 8).unwrap(), 8, 340)).is_ok());
+        assert!(encode(foci(MAX_FOCI_TOTAL / 8, 8, 340)).is_ok());
     }
 }

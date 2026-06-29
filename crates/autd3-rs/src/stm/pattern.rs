@@ -66,7 +66,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
         let n = self.patterns.len();
         let config = self.config.into_sampling_config(n);
-        let size = u32::try_from(n).unwrap_or(u32::MAX);
+        let size = n;
         let bank = self.option.bank;
 
         match self.option.mode.compression() {
@@ -74,7 +74,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
                 for (i, pattern) in self.patterns.iter().enumerate() {
                     builder.push(WritePatternBuffer {
                         bank,
-                        index: u16::try_from(i).unwrap_or(u16::MAX),
+                        index: i,
                         emissions: pattern.as_slice(),
                     });
                 }
@@ -91,7 +91,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
                     }
                     builder.push(WritePatternCompressed {
                         bank,
-                        index: u16::try_from(base).unwrap_or(u16::MAX),
+                        index: base,
                         format,
                         count: u8::try_from(count).unwrap_or(1),
                         patterns,
