@@ -4,8 +4,7 @@ on:
   push:
     tags:
       - 'v*'
-      - '*-v*'
-      - '!console-v*'
+      - 'firmware-v*'
 
 defaults:
   run:
