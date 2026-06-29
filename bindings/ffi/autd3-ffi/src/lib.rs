@@ -770,7 +770,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             } => {
                 core.push(WritePatternBuffer {
                     bank: *bank,
-                    index: *index,
+                    index: usize::from(*index),
                     emissions,
                 });
             }
@@ -784,7 +784,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 core.push(ConfigPattern {
                     bank: *bank,
                     config: *config,
-                    size: *size,
+                    size: usize::try_from(*size).unwrap_or(usize::MAX),
                     data_type: *data_type,
                     loop_behavior: *loop_behavior,
                 });
@@ -801,7 +801,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             Pending::WriteModulationBuffer { bank, offset, data } => {
                 core.push(WriteModulationBuffer {
                     bank: *bank,
-                    offset: *offset,
+                    offset: usize::try_from(*offset).unwrap_or(usize::MAX),
                     data,
                 });
             }
@@ -814,7 +814,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 core.push(ConfigModulation {
                     bank: *bank,
                     config: *config,
-                    size: *size,
+                    size: usize::try_from(*size).unwrap_or(usize::MAX),
                     loop_behavior: *loop_behavior,
                 });
             }
@@ -885,7 +885,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             } => {
                 let n = samples.len();
                 let sampling_config = config.into_sampling_config(n);
-                let size = u32::try_from(n).unwrap_or(u32::MAX);
+                let size = n;
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 let sound_speed_value = (*sound_speed * 64.0).round() as u16;
                 let mut foci = Vec::with_capacity(n * usize::from(*num_foci));
