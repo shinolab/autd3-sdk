@@ -1,0 +1,77 @@
+name: release-cs
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'cs-v*'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  native:
+    name: native (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+          - os: macos-latest
+            rid: osx-arm64
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+      - name: Install system deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
+      - name: Build native cdylibs
+        working-directory: bindings/ffi
+        run: cargo build --workspace --release
+      - name: Collect native libs
+        run: |
+          mkdir -p native
+          cp bindings/ffi/target/release/*autd3*.dll native/ 2>/dev/null || true
+          cp bindings/ffi/target/release/libautd3*.so native/ 2>/dev/null || true
+          cp bindings/ffi/target/release/libautd3*.dylib native/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: native/*
+
+  publish:
+    name: release-cs
+    needs: native
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+      - name: Download native libs
+        uses: actions/download-artifact@v4
+        with:
+          path: bindings/ffi/target/native
+      - name: Generate third-party licenses
+        run: cargo xtask license generate csharp
+      - name: Pack
+        run: cargo xtask cs pack
+      - name: Push to NuGet
+        run: >-
+          dotnet nuget push "bindings/csharp/dist/*.nupkg"
+          --api-key "${{ secrets.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
 
 use crate::util::{on_path, run};
 
@@ -46,26 +46,42 @@ const THIRD_PARTY: &str = "THIRD-PARTY-LICENSES.md";
 
 #[derive(Subcommand)]
 pub enum LicenseCmd {
-    /// Generate THIRD-PARTY-LICENSES.md for every distributable (via cargo-about)
-    /// and place the matching LICENSE / NOTICE files next to each artifact.
-    Generate,
-    /// Verify dependency licenses with cargo-deny: copyleft is denied everywhere
-    /// except the autd3-rs-link-soem exception declared in deny.toml.
+    Generate {
+        #[arg(value_enum, default_value_t = GenTarget::All)]
+        target: GenTarget,
+    },
     Check,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum GenTarget {
+    All,
+    Python,
+    Csharp,
+    Console,
+    Simulator,
 }
 
 pub fn run_license(root: &Path, cmd: &LicenseCmd) -> Result<()> {
     match cmd {
-        LicenseCmd::Generate => generate(root),
+        LicenseCmd::Generate { target } => generate(root, *target),
         LicenseCmd::Check => check(root),
     }
 }
 
-fn generate(root: &Path) -> Result<()> {
-    generate_python(root)?;
-    generate_csharp(root)?;
-    generate_console(root)?;
-    generate_simulator(root)?;
+fn generate(root: &Path, target: GenTarget) -> Result<()> {
+    match target {
+        GenTarget::All => {
+            generate_python(root)?;
+            generate_csharp(root)?;
+            generate_console(root)?;
+            generate_simulator(root)?;
+        }
+        GenTarget::Python => generate_python(root)?,
+        GenTarget::Csharp => generate_csharp(root)?,
+        GenTarget::Console => generate_console(root)?,
+        GenTarget::Simulator => generate_simulator(root)?,
+    }
     println!("license generate: done");
     Ok(())
 }

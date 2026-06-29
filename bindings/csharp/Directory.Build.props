@@ -9,9 +9,17 @@
     <Authors>Shun Suzuki</Authors>
     <Company>shinolab</Company>
     <Version>0.1.0</Version>
+    <Description>AUTD3 .NET binding ($(AssemblyName)).</Description>
+    <PackageProjectUrl>https://github.com/shinolab/autd3-sdk</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/shinolab/autd3-sdk</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)/THIRD-PARTY-LICENSES.md')">
     <None Include="THIRD-PARTY-LICENSES.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildProjectDirectory)/runtimes/**" Pack="true" PackagePath="runtimes/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

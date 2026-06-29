@@ -9,11 +9,32 @@ use crate::util::run;
 const SOLUTION: &str = "AUTD3.slnx";
 const SOEM_CRATE: &str = "autd3-ffi-link-soem";
 
+const CS_NATIVE: &[(&str, &str)] = &[
+    ("AUTD3.Core", "autd3_core"),
+    ("AUTD3", "autd3capi"),
+    ("AUTD3.Pattern", "autd3_pattern"),
+    ("AUTD3.Pattern.Holo", "autd3_pattern_holo"),
+    ("AUTD3.Modulation", "autd3_modulation"),
+    ("AUTD3.Link.Ethercrab", "autd3_link_ethercrab"),
+    ("AUTD3.Link.Remote", "autd3_link_remote"),
+    ("AUTD3.Link.Twincat", "autd3_link_twincat"),
+    ("AUTD3.Link.Nop", "autd3_link_nop"),
+    ("AUTD3.Link.Soem", "autd3_link_soem"),
+];
+
+const RIDS: &[&str] = &["win-x64", "linux-x64", "osx-arm64"];
+
 #[derive(Subcommand)]
 pub enum CsCmd {
     Build {
         #[arg(long)]
         debug: bool,
+    },
+    Pack {
+        #[arg(long)]
+        native_dir: Option<PathBuf>,
+        #[arg(short, long)]
+        out: Option<PathBuf>,
     },
     Test,
     Format {
@@ -36,6 +57,7 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             let config = if debug { "Debug" } else { "Release" };
             run("dotnet", ["build", SOLUTION, "-c", config], &dir)
         }
+        CsCmd::Pack { native_dir, out } => pack(root, native_dir, out),
         CsCmd::Test => {
             let native = build_ffi(root)?;
             if cfg!(target_os = "windows") {
@@ -82,6 +104,94 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             run_example(&exe, &native, no_sudo, &dir)
         }
     }
+}
+
+fn pack(root: &Path, native_dir: Option<PathBuf>, out: Option<PathBuf>) -> Result<()> {
+    let dir = root.join("bindings").join("csharp");
+    let ffi = root.join("bindings").join("ffi");
+    let native_root = native_dir.unwrap_or_else(|| ffi.join("target").join("native"));
+
+    let present: Vec<&str> = RIDS
+        .iter()
+        .copied()
+        .filter(|rid| native_root.join(rid).is_dir())
+        .collect();
+    let host = if present.is_empty() {
+        run("cargo", ["build", "--workspace", "--release"], &ffi)?;
+        Some((host_rid()?, ffi.join("target").join("release")))
+    } else {
+        None
+    };
+
+    let out = out.unwrap_or_else(|| dir.join("dist"));
+    std::fs::create_dir_all(&out)?;
+    let src = dir.join("src");
+
+    for (pkg, lib) in CS_NATIVE {
+        let pkg_dir = src.join(pkg);
+        let runtimes = pkg_dir.join("runtimes");
+        if runtimes.exists() {
+            std::fs::remove_dir_all(&runtimes)
+                .with_context(|| format!("clearing {}", runtimes.display()))?;
+        }
+        match &host {
+            Some((rid, from)) => stage_native(from, rid, lib, &runtimes)?,
+            None => {
+                for rid in &present {
+                    stage_native(&native_root.join(rid), rid, lib, &runtimes)?;
+                }
+            }
+        }
+        let proj = pkg_dir.join(format!("{pkg}.csproj"));
+        run(
+            "dotnet",
+            [
+                "pack",
+                &proj.to_string_lossy(),
+                "-c",
+                "Release",
+                "-o",
+                &out.to_string_lossy(),
+            ],
+            &dir,
+        )?;
+    }
+    println!("cs pack: nupkg written to {}", out.display());
+    Ok(())
+}
+
+fn stage_native(from: &Path, rid: &str, lib: &str, runtimes: &Path) -> Result<()> {
+    let (prefix, ext) = rid_affix(rid);
+    let file = format!("{prefix}{lib}.{ext}");
+    let src = from.join(&file);
+    if !src.is_file() {
+        bail!("native lib not found: {}", src.display());
+    }
+    let dst_dir = runtimes.join(rid).join("native");
+    std::fs::create_dir_all(&dst_dir)?;
+    std::fs::copy(&src, dst_dir.join(&file))
+        .with_context(|| format!("staging {} -> {}", src.display(), dst_dir.display()))?;
+    Ok(())
+}
+
+fn rid_affix(rid: &str) -> (&'static str, &'static str) {
+    if rid.starts_with("win") {
+        ("", "dll")
+    } else if rid.starts_with("osx") {
+        ("lib", "dylib")
+    } else {
+        ("lib", "so")
+    }
+}
+
+fn host_rid() -> Result<&'static str> {
+    Ok(match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => "linux-x64",
+        ("windows", "x86_64") => "win-x64",
+        ("macos", "aarch64") => "osx-arm64",
+        ("macos", "x86_64") => "osx-x64",
+        (os, arch) => bail!("unsupported host {os}/{arch} for `cs pack`"),
+    })
 }
 
 fn build_ffi(root: &Path) -> Result<PathBuf> {
