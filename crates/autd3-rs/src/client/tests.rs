@@ -918,7 +918,7 @@ async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
     builder
         .push(ConfigModulation {
             bank: ModulationBank::B0,
-            config: SamplingConfig::Divide(NonZeroU16::new(5).unwrap()),
+            config: SamplingConfig::new(NonZeroU16::new(5).unwrap()),
             size: 1,
             loop_behavior: LoopBehavior::Infinite,
         })
@@ -1032,9 +1032,7 @@ async fn build_rejects_per_device_group_under_strict_silencer() {
     builder.push_each(|device| {
         Some(ConfigModulation {
             bank: ModulationBank::B0,
-            config: SamplingConfig::Divide(
-                NonZeroU16::new(if device == 0 { 5 } else { 20 }).unwrap(),
-            ),
+            config: SamplingConfig::new(NonZeroU16::new(if device == 0 { 5 } else { 20 }).unwrap()),
             size: 1,
             loop_behavior: LoopBehavior::Infinite,
         })

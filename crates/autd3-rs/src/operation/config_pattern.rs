@@ -154,7 +154,7 @@ mod tests {
     fn config_pattern_lays_out_raw_fields() {
         let (cmd, payload) = encode(ConfigPattern {
             bank: PatternBank::B0,
-            config: SamplingConfig::Divide(NonZeroU16::new(2).unwrap()),
+            config: SamplingConfig::new(NonZeroU16::new(2).unwrap()),
             size: 1024,
             loop_behavior: LoopBehavior::Finite(NonZeroU16::new(8).unwrap()),
         })
@@ -174,7 +174,7 @@ mod tests {
     fn config_foci_stm_lays_out_foci_fields() {
         let (cmd, payload) = encode(ConfigFociStm {
             bank: PatternBank::B1,
-            config: SamplingConfig::Divide(NonZeroU16::MIN),
+            config: SamplingConfig::new(NonZeroU16::MIN),
             size: 8192,
             num_foci: 8,
             sound_speed: Velocity::from_m_s(340.0),
@@ -195,7 +195,7 @@ mod tests {
     fn config_pattern_rejects_invalid_raw_fields() {
         let raw = |size: usize| ConfigPattern {
             bank: PatternBank::B0,
-            config: SamplingConfig::Divide(NonZeroU16::MIN),
+            config: SamplingConfig::new(NonZeroU16::MIN),
             size,
             loop_behavior: LoopBehavior::Infinite,
         };
@@ -203,7 +203,7 @@ mod tests {
         assert!(
             matches!(
                 encode(ConfigPattern {
-                    config: SamplingConfig::Period(core::time::Duration::from_nanos(1)),
+                    config: SamplingConfig::new(core::time::Duration::from_nanos(1)),
                     ..raw(1)
                 }),
                 Err(Error::InvalidPayload(_))
@@ -220,7 +220,7 @@ mod tests {
     fn config_foci_stm_rejects_invalid_fields() {
         let foci = |size: usize, num_foci: u8, sound_speed: Velocity| ConfigFociStm {
             bank: PatternBank::B0,
-            config: SamplingConfig::Divide(NonZeroU16::MIN),
+            config: SamplingConfig::new(NonZeroU16::MIN),
             size,
             num_foci,
             sound_speed,

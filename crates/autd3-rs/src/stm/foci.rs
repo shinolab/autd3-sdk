@@ -44,12 +44,6 @@ impl<'a, const N: usize> FociStm<'a, N> {
             option,
         }
     }
-
-    #[must_use]
-    pub fn into_nearest(mut self) -> Self {
-        self.config = self.config.into_nearest();
-        self
-    }
 }
 
 impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
@@ -143,7 +137,7 @@ mod tests {
             Intensity(0x80),
         )];
         let stm = FociStm::new(
-            SamplingConfig::Divide(NonZeroU16::MIN),
+            SamplingConfig::new(NonZeroU16::MIN),
             &points,
             FociStmOption::default(),
         );

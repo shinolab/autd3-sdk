@@ -270,7 +270,7 @@ impl DatagramBuilder {
                     let divider = NonZeroU16::new(*divider)
                         .ok_or_else(|| PyValueError::new_err("divider must be >= 1"))?;
                     let mut cmd =
-                        CoreModulation::with_bank(*bank, SamplingConfig::Divide(divider), data);
+                        CoreModulation::with_bank(*bank, SamplingConfig::new(divider), data);
                     cmd.loop_behavior = *loop_behavior;
                     cmd.transition_mode = *transition_mode;
                     builder.push(cmd);
@@ -303,7 +303,7 @@ impl DatagramBuilder {
                         } => {
                             builder.push(CoreConfigFociStm {
                                 bank: *bank,
-                                config: SamplingConfig::Divide(divider),
+                                config: SamplingConfig::new(divider),
                                 size,
                                 num_foci,
                                 sound_speed: Velocity::from_m_s(f32::from(sound_speed) / 64.0),
@@ -313,7 +313,7 @@ impl DatagramBuilder {
                         ops::PatternData::Raw => {
                             builder.push(CoreConfigPattern {
                                 bank: *bank,
-                                config: SamplingConfig::Divide(divider),
+                                config: SamplingConfig::new(divider),
                                 size,
                                 loop_behavior: *loop_behavior,
                             });
@@ -346,7 +346,7 @@ impl DatagramBuilder {
                         .ok_or_else(|| PyValueError::new_err("divider must be >= 1"))?;
                     builder.push(CoreConfigModulation {
                         bank: *bank,
-                        config: SamplingConfig::Divide(divider),
+                        config: SamplingConfig::new(divider),
                         size: usize::try_from(*size).unwrap_or(usize::MAX),
                         loop_behavior: *loop_behavior,
                     });

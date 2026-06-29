@@ -36,13 +36,16 @@ pub enum SamplingConfigError {
 pub struct Nearest<T: Copy + Clone + Debug + PartialEq>(pub T);
 
 #[derive(Clone, Copy)]
-pub enum SamplingConfig {
+enum SamplingConfigInner {
     Divide(NonZeroU16),
     Freq(Freq<f32>),
     Period(Duration),
-    FreqNearest(Nearest<Freq<f32>>),
-    PeriodNearest(Nearest<Duration>),
+    FreqNearest(Freq<f32>),
+    PeriodNearest(Duration),
 }
+
+#[derive(Clone, Copy)]
+pub struct SamplingConfig(SamplingConfigInner);
 
 impl PartialEq for SamplingConfig {
     fn eq(&self, other: &Self) -> bool {
@@ -55,15 +58,15 @@ impl PartialEq for SamplingConfig {
 
 impl Debug for SamplingConfig {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            SamplingConfig::Divide(div) => write!(f, "SamplingConfig::Divide({div})"),
-            SamplingConfig::Freq(freq) => write!(f, "SamplingConfig::Freq({freq:?})"),
-            SamplingConfig::Period(period) => write!(f, "SamplingConfig::Period({period:?})"),
-            SamplingConfig::FreqNearest(nearest) => {
-                write!(f, "SamplingConfig::FreqNearest({nearest:?})")
+        match self.0 {
+            SamplingConfigInner::Divide(div) => write!(f, "SamplingConfig::Divide({div})"),
+            SamplingConfigInner::Freq(freq) => write!(f, "SamplingConfig::Freq({freq:?})"),
+            SamplingConfigInner::Period(period) => write!(f, "SamplingConfig::Period({period:?})"),
+            SamplingConfigInner::FreqNearest(freq) => {
+                write!(f, "SamplingConfig::FreqNearest({:?})", Nearest(freq))
             }
-            SamplingConfig::PeriodNearest(nearest) => {
-                write!(f, "SamplingConfig::PeriodNearest({nearest:?})")
+            SamplingConfigInner::PeriodNearest(period) => {
+                write!(f, "SamplingConfig::PeriodNearest({:?})", Nearest(period))
             }
         }
     }
@@ -71,25 +74,37 @@ impl Debug for SamplingConfig {
 
 impl From<NonZeroU16> for SamplingConfig {
     fn from(value: NonZeroU16) -> Self {
-        Self::Divide(value)
+        Self(SamplingConfigInner::Divide(value))
     }
 }
 
 impl From<Freq<f32>> for SamplingConfig {
     fn from(value: Freq<f32>) -> Self {
-        Self::Freq(value)
+        Self(SamplingConfigInner::Freq(value))
     }
 }
 
 impl From<Duration> for SamplingConfig {
     fn from(value: Duration) -> Self {
-        Self::Period(value)
+        Self(SamplingConfigInner::Period(value))
+    }
+}
+
+impl From<Nearest<Freq<f32>>> for SamplingConfig {
+    fn from(value: Nearest<Freq<f32>>) -> Self {
+        Self(SamplingConfigInner::FreqNearest(value.0))
+    }
+}
+
+impl From<Nearest<Duration>> for SamplingConfig {
+    fn from(value: Nearest<Duration>) -> Self {
+        Self(SamplingConfigInner::PeriodNearest(value.0))
     }
 }
 
 impl SamplingConfig {
-    pub const FREQ_40K: Self = SamplingConfig::Freq(Freq { freq: 40000. });
-    pub const FREQ_4K: Self = SamplingConfig::Freq(Freq { freq: 4000. });
+    pub const FREQ_40K: Self = SamplingConfig(SamplingConfigInner::Freq(Freq { freq: 40000. }));
+    pub const FREQ_4K: Self = SamplingConfig(SamplingConfigInner::Freq(Freq { freq: 4000. }));
 
     #[must_use]
     pub fn new(value: impl Into<SamplingConfig>) -> Self {
@@ -97,9 +112,9 @@ impl SamplingConfig {
     }
 
     pub fn divide(&self) -> Result<u16, SamplingConfigError> {
-        match *self {
-            SamplingConfig::Divide(div) => Ok(div.get()),
-            SamplingConfig::Freq(freq) => {
+        match self.0 {
+            SamplingConfigInner::Divide(div) => Ok(div.get()),
+            SamplingConfigInner::Freq(freq) => {
                 let freq_max = ULTRASOUND_FREQ.hz() as f32 * Hz;
                 let freq_min = freq_max / u16::MAX as f32;
                 if !(freq_min..=freq_max).contains(&freq) {
@@ -113,7 +128,7 @@ impl SamplingConfig {
                 }
                 Ok(divide as u16)
             }
-            SamplingConfig::Period(duration) => {
+            SamplingConfigInner::Period(duration) => {
                 let period_min = ULTRASOUND_PERIOD;
                 let period_max =
                     Duration::from_micros(u16::MAX as u64 * ULTRASOUND_PERIOD.as_micros() as u64);
@@ -127,12 +142,12 @@ impl SamplingConfig {
                 }
                 Ok((duration.as_nanos() / ULTRASOUND_PERIOD.as_nanos()) as u16)
             }
-            SamplingConfig::FreqNearest(nearest) => Ok(((ULTRASOUND_FREQ.hz() as f32
-                / nearest.0.hz())
-            .clamp(1.0, u16::MAX as f32))
-            .round() as u16),
-            SamplingConfig::PeriodNearest(nearest) => {
-                Ok(((nearest.0.as_nanos() + ULTRASOUND_PERIOD.as_nanos() / 2)
+            SamplingConfigInner::FreqNearest(freq) => Ok(
+                ((ULTRASOUND_FREQ.hz() as f32 / freq.hz()).clamp(1.0, u16::MAX as f32)).round()
+                    as u16,
+            ),
+            SamplingConfigInner::PeriodNearest(period) => {
+                Ok(((period.as_nanos() + ULTRASOUND_PERIOD.as_nanos() / 2)
                     / ULTRASOUND_PERIOD.as_nanos())
                 .clamp(1, u16::MAX as u128) as u16)
             }
@@ -145,15 +160,6 @@ impl SamplingConfig {
 
     pub fn period(&self) -> Result<Duration, SamplingConfigError> {
         Ok(ULTRASOUND_PERIOD * u32::from(self.divide()?))
-    }
-
-    #[must_use]
-    pub const fn into_nearest(self) -> SamplingConfig {
-        match self {
-            SamplingConfig::Freq(freq) => SamplingConfig::FreqNearest(Nearest(freq)),
-            SamplingConfig::Period(period) => SamplingConfig::PeriodNearest(Nearest(period)),
-            _ => self,
-        }
     }
 }
 
@@ -177,8 +183,8 @@ mod tests {
         let max_period =
             Duration::from_micros(u16::MAX as u64 * ULTRASOUND_PERIOD.as_micros() as u64);
         let cases: [(Result<u16, SamplingConfigError>, SamplingConfig); 8] = [
-            (Ok(1), SamplingConfig::Divide(NonZeroU16::MIN)),
-            (Ok(u16::MAX), SamplingConfig::Divide(NonZeroU16::MAX)),
+            (Ok(1), SamplingConfig::new(NonZeroU16::MIN)),
+            (Ok(u16::MAX), SamplingConfig::new(NonZeroU16::MAX)),
             (Ok(1), SamplingConfig::new(40000. * Hz)),
             (Ok(10), SamplingConfig::new(4000. * Hz)),
             (
@@ -205,14 +211,11 @@ mod tests {
 
     #[test]
     fn freq_and_period() {
-        assert_eq!(
-            Ok(40000. * Hz),
-            SamplingConfig::Divide(NonZeroU16::MIN).freq()
-        );
+        assert_eq!(Ok(40000. * Hz), SamplingConfig::new(NonZeroU16::MIN).freq());
         assert_eq!(Ok(4000. * Hz), SamplingConfig::new(4000. * Hz).freq());
         assert_eq!(
             Ok(Duration::from_micros(25)),
-            SamplingConfig::Divide(NonZeroU16::MIN).period()
+            SamplingConfig::new(NonZeroU16::MIN).period()
         );
         assert_eq!(
             Ok(Duration::from_micros(250)),
@@ -221,20 +224,12 @@ mod tests {
     }
 
     #[test]
-    fn into_nearest_divide() {
+    fn nearest_divide() {
+        assert_eq!(Ok(1), SamplingConfig::new(Nearest(40000. * Hz)).divide());
+        assert_eq!(Ok(u16::MAX), SamplingConfig::new(Nearest(0. * Hz)).divide());
         assert_eq!(
             Ok(1),
-            SamplingConfig::new(40000. * Hz).into_nearest().divide()
-        );
-        assert_eq!(
-            Ok(u16::MAX),
-            SamplingConfig::new(0. * Hz).into_nearest().divide()
-        );
-        assert_eq!(
-            Ok(1),
-            SamplingConfig::new(ULTRASOUND_PERIOD / 2)
-                .into_nearest()
-                .divide()
+            SamplingConfig::new(Nearest(ULTRASOUND_PERIOD / 2)).divide()
         );
     }
 
@@ -250,11 +245,15 @@ mod tests {
     fn debug() {
         assert_eq!(
             "SamplingConfig::Divide(1)",
-            format!("{:?}", SamplingConfig::Divide(NonZeroU16::MIN))
+            format!("{:?}", SamplingConfig::new(NonZeroU16::MIN))
         );
         assert_eq!(
             "SamplingConfig::Freq(1 Hz)",
-            format!("{:?}", SamplingConfig::Freq(1. * Hz))
+            format!("{:?}", SamplingConfig::new(1. * Hz))
+        );
+        assert_eq!(
+            "SamplingConfig::FreqNearest(Nearest(1 Hz))",
+            format!("{:?}", SamplingConfig::new(Nearest(1. * Hz)))
         );
     }
 

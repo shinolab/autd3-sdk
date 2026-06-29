@@ -30,7 +30,7 @@ impl SineOption {
         sampling_divide: Option<u16>,
     ) -> PyResult<Self> {
         let sampling_config = match sampling_divide {
-            Some(d) => SamplingConfig::Divide(
+            Some(d) => SamplingConfig::new(
                 NonZeroU16::new(d)
                     .ok_or_else(|| PyValueError::new_err("sampling_divide must be >= 1"))?,
             ),
@@ -91,7 +91,7 @@ impl SquareOption {
     #[pyo3(signature = (low = 0x00, high = 0xFF, duty = 0.5, sampling_divide = None))]
     fn new(low: u8, high: u8, duty: f32, sampling_divide: Option<u16>) -> PyResult<Self> {
         let sampling_config = match sampling_divide {
-            Some(d) => SamplingConfig::Divide(
+            Some(d) => SamplingConfig::new(
                 NonZeroU16::new(d)
                     .ok_or_else(|| PyValueError::new_err("sampling_divide must be >= 1"))?,
             ),
