@@ -7,7 +7,7 @@ name = "autd3-modulation"
 description = "Python bindings for autd3-rs-modulation (sine, etc.)."
 requires-python = ">=3.10"
 license = "MIT"
-dynamic = ["version"]
+version = "0.1.0"
 dependencies = ["autd3-core"]
 
 [tool.maturin]

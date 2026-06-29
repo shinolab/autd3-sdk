@@ -7,7 +7,7 @@ name = "autd3-link-remote"
 description = "Python bindings for autd3-rs-link-remote (TCP transport link)."
 requires-python = ">=3.10"
 license = "MIT"
-dynamic = ["version"]
+version = "0.1.0"
 dependencies = ["autd3-core"]
 
 [tool.maturin]

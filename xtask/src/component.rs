@@ -16,6 +16,30 @@ pub const COMPONENTS: &[Component] = &[
         include_paths: &["crates/**", "tools/**", "examples/**", "bindings/**"],
     },
     Component {
+        name: "python",
+        section: "Python",
+        tag_prefix: "py-v",
+        include_paths: &["bindings/python/**"],
+    },
+    Component {
+        name: "cs",
+        section: "C#",
+        tag_prefix: "cs-v",
+        include_paths: &["bindings/csharp/**"],
+    },
+    Component {
+        name: "simulator",
+        section: "Simulator",
+        tag_prefix: "simulator-v",
+        include_paths: &["simulator/**"],
+    },
+    Component {
+        name: "console",
+        section: "Console",
+        tag_prefix: "console-v",
+        include_paths: &["console/**"],
+    },
+    Component {
         name: "firmware",
         section: "Firmware",
         tag_prefix: "firmware-v",
