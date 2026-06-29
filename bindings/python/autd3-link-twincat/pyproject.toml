@@ -7,7 +7,7 @@ name = "autd3-link-twincat"
 description = "Python bindings for autd3-rs-link-twincat (TwinCAT/ADS link)."
 requires-python = ">=3.10"
 license = "MIT"
-dynamic = ["version"]
+version = "0.1.0"
 dependencies = ["autd3-core"]
 
 [tool.maturin]
