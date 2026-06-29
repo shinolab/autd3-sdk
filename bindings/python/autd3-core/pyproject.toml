@@ -12,3 +12,4 @@ dynamic = ["version"]
 [tool.maturin]
 module-name = "autd3_core"
 manifest-path = "Cargo.toml"
+include = ["THIRD-PARTY-LICENSES.md", "LICENSE"]

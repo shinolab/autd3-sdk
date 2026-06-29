@@ -26,6 +26,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Remove="LICENSE" />
+    <EmbeddedResource Include="LICENSE">
+      <LogicalName>LICENSE</LogicalName>
+    </EmbeddedResource>
+    <None Remove="THIRD-PARTY-LICENSES.md" />
+    <EmbeddedResource Include="THIRD-PARTY-LICENSES.md" Condition="Exists('THIRD-PARTY-LICENSES.md')">
+      <LogicalName>THIRD-PARTY-LICENSES.md</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.9" />
     <PackageReference Include="Microsoft.VisualStudio.Interop" Version="17.14.40260" />
     <PackageReference Include="Microsoft.VisualStudio.Imaging.Interop.14.0.DesignTime" Version="17.14.40254" />

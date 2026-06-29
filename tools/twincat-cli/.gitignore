@@ -356,3 +356,5 @@ target/
 *.zip
 *.tar.gz
 *.exe
+
+THIRD-PARTY-LICENSES.md

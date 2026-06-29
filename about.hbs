@@ -1,0 +1,25 @@
+# Third-Party Licenses
+
+This distribution bundles third-party software compiled into its binaries.
+The following is a list of those components and the full text of their licenses.
+
+## Overview
+
+{{#each overview}}
+- {{name}} ({{count}})
+{{/each}}
+
+{{#each licenses}}
+## {{name}}
+
+Used by:
+
+{{#each used_by}}
+- {{crate.name}} {{crate.version}}{{#if crate.repository}} — {{crate.repository}}{{/if}}
+{{/each}}
+
+```
+{{{text}}}
+```
+
+{{/each}}

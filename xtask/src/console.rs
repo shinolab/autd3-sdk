@@ -70,6 +70,8 @@ pub fn run_console(root: &Path, cmd: ConsoleCmd) -> Result<()> {
 fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     let profile = if debug { "debug" } else { "release" };
 
+    crate::license::generate_console(root)?;
+
     let mut args = vec!["build"];
     if !debug {
         args.push("--release");
@@ -90,6 +92,12 @@ fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     std::fs::create_dir_all(&staging)?;
 
     copy_file(&console_bin, &staging.join(exe_name("autd3-console")))?;
+
+    copy_file(&root.join("LICENSE"), &staging.join("LICENSE"))?;
+    copy_file(
+        &console_dir.join("THIRD-PARTY-LICENSES.md"),
+        &staging.join("THIRD-PARTY-LICENSES.md"),
+    )?;
 
     let sim_dir = staging.join("simulator");
     copy_file(&sim_bin, &sim_dir.join(exe_name("autd3-rs-simulator")))?;
@@ -172,8 +180,8 @@ fn zip_dir(src: &Path, archive: &Path) -> Result<()> {
     let file = std::fs::File::create(archive)
         .with_context(|| format!("creating {}", archive.display()))?;
     let mut zip = zip::ZipWriter::new(file);
-    let options =
-        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
     let root_name = src
         .file_name()
         .context("staging dir has no name")?

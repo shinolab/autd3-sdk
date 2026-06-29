@@ -3,3 +3,7 @@ target
 __pycache__/
 *.pyc
 *.so
+
+*/THIRD-PARTY-LICENSES.md
+*/LICENSE
+autd3-link-soem/NOTICE

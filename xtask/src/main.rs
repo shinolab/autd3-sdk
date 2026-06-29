@@ -9,6 +9,7 @@ mod example;
 mod ffi;
 mod firmware;
 mod fpga;
+mod license;
 mod py;
 mod rust;
 mod simulator;
@@ -29,6 +30,7 @@ use example::{ExampleCmd, run_example};
 use ffi::{FfiCmd, run_ffi};
 use firmware::{FirmwareCmd, run_firmware};
 use fpga::{FpgaCmd, run_fpga};
+use license::{LicenseCmd, run_license};
 use py::{PyCmd, run_py};
 use rust::{RustCmd, run_rust};
 use simulator::{SimulatorCmd, run_simulator};
@@ -89,6 +91,10 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: CsCmd,
     },
+    License {
+        #[command(subcommand)]
+        cmd: LicenseCmd,
+    },
     Example(ExampleCmd),
     Changelog(ChangelogCmd),
     BumpVersion(BumpVersionCmd),
@@ -110,6 +116,7 @@ fn main() -> Result<()> {
         TopCmd::Py { cmd } => run_py(&root, cmd),
         TopCmd::Ffi { cmd } => run_ffi(&root, cmd),
         TopCmd::Cs { cmd } => run_cs(&root, cmd),
+        TopCmd::License { cmd } => run_license(&root, &cmd),
         TopCmd::Example(cmd) => run_example(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),

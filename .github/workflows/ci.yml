@@ -27,6 +27,7 @@ jobs:
       py: ${{ steps.filter.outputs.py }}
       ffi: ${{ steps.filter.outputs.ffi }}
       cs: ${{ steps.filter.outputs.cs }}
+      license: ${{ steps.filter.outputs.license }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
@@ -103,6 +104,26 @@ jobs:
               - 'bindings/csharp/**'
               - 'bindings/ffi/**'
               - '.github/workflows/ci-cs.yml'
+            license:
+              - *shared
+              - *xtask-core
+              - 'xtask/src/license.rs'
+              - 'deny.toml'
+              - 'about.toml'
+              - 'about.hbs'
+              - 'extra-licenses/**'
+              - 'Cargo.lock'
+              - 'crates/**/Cargo.toml'
+              - 'console/Cargo.toml'
+              - 'console/Cargo.lock'
+              - 'simulator/**/Cargo.toml'
+              - 'simulator/Cargo.lock'
+              - 'simulator/frontend/Cargo.lock'
+              - 'bindings/ffi/**/Cargo.toml'
+              - 'bindings/ffi/Cargo.lock'
+              - 'bindings/python/**/Cargo.toml'
+              - 'bindings/python/Cargo.lock'
+              - '.github/workflows/ci-license.yml'
 
   rust:
     name: rust
@@ -152,6 +173,12 @@ jobs:
     if: ${{ needs.changes.outputs.cs == 'true' }}
     uses: ./.github/workflows/ci-cs.yml
 
+  license:
+    name: license
+    needs: changes
+    if: ${{ needs.changes.outputs.license == 'true' }}
+    uses: ./.github/workflows/ci-license.yml
+
   guard:
     name: guard-main-source
     runs-on: ubuntu-latest
@@ -198,7 +225,7 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [rust, simulator, console, emulator, cpu, py, ffi, cs, guard]
+    needs: [rust, simulator, console, emulator, cpu, py, ffi, cs, license, guard]
     runs-on: ubuntu-latest
     steps:
       - name: Verify no job failed
@@ -211,6 +238,7 @@ jobs:
             || [ "${{ needs.py.result }}" = "failure" ] \
             || [ "${{ needs.ffi.result }}" = "failure" ] \
             || [ "${{ needs.cs.result }}" = "failure" ] \
+            || [ "${{ needs.license.result }}" = "failure" ] \
             || [ "${{ needs.guard.result }}" != "success" ]; then
             echo "A required job failed."
             exit 1

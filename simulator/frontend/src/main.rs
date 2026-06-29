@@ -13,7 +13,9 @@ use wasm_bindgen::JsCast;
 use autd3_rs_simulator_protocol::{ClientMsg, ServerMsg};
 
 use crate::context::use_app_ctx;
-use crate::panels::{CameraPanel, EnvironmentPanel, SettingsPanel, SlicePanel, StatePanel};
+use crate::panels::{
+    AboutPanel, CameraPanel, EnvironmentPanel, SettingsPanel, SlicePanel, StatePanel,
+};
 use crate::render::{DragUpdate, GizmoMode, Renderer};
 use crate::settings::Settings;
 use crate::tabs::Tab;
@@ -378,6 +380,7 @@ fn App() -> Element {
                 Tab::Field => rsx! { EnvironmentPanel {} },
                 Tab::State => rsx! { StatePanel {} },
                 Tab::Settings => rsx! { SettingsPanel {} },
+                Tab::About => rsx! { AboutPanel {} },
                 Tab::Home => rsx! {},
             }
             div { class: "px-6 py-6",

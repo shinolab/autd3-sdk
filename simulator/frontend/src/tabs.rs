@@ -6,16 +6,18 @@ pub enum Tab {
     Field,
     State,
     Settings,
+    About,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 6] = [
+    pub const ALL: [Tab; 7] = [
         Tab::Home,
         Tab::Slice,
         Tab::Camera,
         Tab::Field,
         Tab::State,
         Tab::Settings,
+        Tab::About,
     ];
 
     pub fn label(self) -> &'static str {
@@ -26,6 +28,7 @@ impl Tab {
             Tab::State => "State",
             Tab::Camera => "Camera",
             Tab::Settings => "Settings",
+            Tab::About => "About",
         }
     }
 }
