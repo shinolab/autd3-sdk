@@ -69,7 +69,7 @@ fn to_fixed(mm: f32) -> i32 {
 impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
         let n = self.points.len();
-        let divider = self.config.into_sampling_config(n).divide().unwrap_or(0);
+        let config = self.config.into_sampling_config(n);
         let size = u32::try_from(n).unwrap_or(u32::MAX);
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
 
@@ -99,7 +99,7 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
             })
             .push(ConfigPattern {
                 bank,
-                divider,
+                config,
                 size,
                 data_type: PatternDataType::Foci {
                     num_foci,

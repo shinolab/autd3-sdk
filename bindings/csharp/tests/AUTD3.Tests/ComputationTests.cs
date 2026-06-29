@@ -85,7 +85,7 @@ namespace AUTD3.Tests
             using var builder = new DatagramBuilder(geometry);
             builder
                 .Push(new WritePatternBuffer(PatternBank.B0, 0, patterns))
-                .Push(new ConfigPattern(PatternBank.B0, 1, 1, PatternDataType.Raw));
+                .Push(new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1, PatternDataType.Raw));
             using var datagrams = builder.Build();
 
             Assert.Equal(2, datagrams.NumFrames);

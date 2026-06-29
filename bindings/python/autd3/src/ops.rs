@@ -228,21 +228,22 @@ pub struct ConfigPattern {
 #[pymethods]
 impl ConfigPattern {
     #[new]
-    #[pyo3(signature = (bank, divider, size, data_type, loop_behavior = None))]
+    #[pyo3(signature = (bank, sampling_config, size, data_type, loop_behavior = None))]
     fn new(
         bank: PatternBank,
-        divider: u16,
+        sampling_config: &Bound<'_, PyAny>,
         size: u32,
         data_type: PatternDataType,
         loop_behavior: Option<LoopBehavior>,
-    ) -> Self {
-        Self {
+    ) -> PyResult<Self> {
+        let divider = sampling_config.call_method0("divide")?.extract::<u16>()?;
+        Ok(Self {
             bank: bank.0,
             divider,
             size,
             data_type: data_type.0,
             loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
-        }
+        })
     }
 }
 
@@ -296,19 +297,20 @@ pub struct ConfigModulation {
 #[pymethods]
 impl ConfigModulation {
     #[new]
-    #[pyo3(signature = (bank, divider, size, loop_behavior = None))]
+    #[pyo3(signature = (bank, sampling_config, size, loop_behavior = None))]
     fn new(
         bank: ModulationBank,
-        divider: u16,
+        sampling_config: &Bound<'_, PyAny>,
         size: u32,
         loop_behavior: Option<LoopBehavior>,
-    ) -> Self {
-        Self {
+    ) -> PyResult<Self> {
+        let divider = sampling_config.call_method0("divide")?.extract::<u16>()?;
+        Ok(Self {
             bank: bank.0,
             divider,
             size,
             loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
-        }
+        })
     }
 }
 

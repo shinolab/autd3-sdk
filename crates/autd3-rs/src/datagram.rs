@@ -402,7 +402,7 @@ mod tests {
     use super::*;
     use crate::command::Pattern;
     use crate::operation::{ConfigModulation, ConfigPattern, WritePatternBuffer};
-    use crate::value::{LoopBehavior, ModulationBank};
+    use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
 
     #[derive(Clone, Copy)]
     struct Multi(usize);
@@ -441,7 +441,7 @@ mod tests {
                 } else {
                     ModulationBank::B1
                 },
-                divider: 1,
+                config: SamplingConfig::FREQ_40K,
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
             })
@@ -461,7 +461,7 @@ mod tests {
         b.push_each(|device| {
             (device == 0).then_some(ConfigModulation {
                 bank: ModulationBank::B0,
-                divider: 1,
+                config: SamplingConfig::FREQ_40K,
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
             })
@@ -501,7 +501,7 @@ mod tests {
             } else {
                 ConfigModulation {
                     bank: ModulationBank::B0,
-                    divider: 1,
+                    config: SamplingConfig::FREQ_40K,
                     size: 1,
                     loop_behavior: LoopBehavior::Infinite,
                 }
@@ -523,7 +523,7 @@ mod tests {
         b.push_each(|device| {
             (device == 0).then_some(ConfigModulation {
                 bank: ModulationBank::B0,
-                divider: 1,
+                config: SamplingConfig::FREQ_40K,
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
             })
@@ -531,7 +531,7 @@ mod tests {
         b.push_each(|device| {
             (device == 1).then_some(ConfigModulation {
                 bank: ModulationBank::B1,
-                divider: 1,
+                config: SamplingConfig::FREQ_40K,
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
             })
@@ -550,7 +550,7 @@ mod tests {
         b.push_each(|_| {
             Some(ConfigModulation {
                 bank: ModulationBank::B0,
-                divider: 1,
+                config: SamplingConfig::FREQ_40K,
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
             })
@@ -558,7 +558,7 @@ mod tests {
         b.push_each(|_| {
             Some(ConfigModulation {
                 bank: ModulationBank::B1,
-                divider: 1,
+                config: SamplingConfig::FREQ_40K,
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
             })
@@ -576,14 +576,14 @@ mod tests {
         b.push_each(|device| {
             (device == 0).then_some(ConfigModulation {
                 bank: ModulationBank::B0,
-                divider: 1,
+                config: SamplingConfig::FREQ_40K,
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
             })
         });
         b.push(ConfigPattern {
             bank: PatternBank::B0,
-            divider: 1,
+            config: SamplingConfig::FREQ_40K,
             size: 1,
             data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,
@@ -591,7 +591,7 @@ mod tests {
         b.push_each(|device| {
             (device == 1).then_some(ConfigModulation {
                 bank: ModulationBank::B1,
-                divider: 1,
+                config: SamplingConfig::FREQ_40K,
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
             })
@@ -615,7 +615,7 @@ mod tests {
     fn broadcast_op_yields_one_frame_of_one_datagram() {
         let op = ConfigPattern {
             bank: PatternBank::B0,
-            divider: 1,
+            config: SamplingConfig::FREQ_40K,
             size: 1,
             data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,
@@ -659,7 +659,7 @@ mod tests {
         };
         let ce = ConfigPattern {
             bank: PatternBank::B0,
-            divider: 1,
+            config: SamplingConfig::FREQ_40K,
             size: 1,
             data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,
@@ -688,7 +688,7 @@ mod tests {
     fn build_into_reuses_buffer_without_growing() {
         let op = ConfigPattern {
             bank: PatternBank::B0,
-            divider: 1,
+            config: SamplingConfig::FREQ_40K,
             size: 1,
             data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,

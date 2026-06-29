@@ -47,22 +47,32 @@ namespace AUTD3
     public sealed class ConfigPattern : ICommand
     {
         private readonly PatternBank _bank;
-        private readonly ushort _divider;
+        private readonly SamplingConfig _config;
         private readonly uint _size;
         private readonly PatternDataType _dataType;
         private readonly LoopBehavior _loopBehavior;
 
-        public ConfigPattern(PatternBank bank, ushort divider, uint size, PatternDataType dataType, LoopBehavior? loopBehavior = null)
+        public ConfigPattern(PatternBank bank, SamplingConfig config, uint size, PatternDataType dataType, LoopBehavior? loopBehavior = null)
         {
             _bank = bank;
-            _divider = divider;
+            _config = config;
             _size = size;
             _dataType = dataType;
             _loopBehavior = loopBehavior ?? LoopBehavior.Infinite;
         }
 
-        IntPtr ICommand.CreateOp() =>
-            NativePattern.autd3_op_config_pattern((byte)_bank, _divider, _size, _dataType.Kind, _dataType.NumFoci, _dataType.SoundSpeed, _loopBehavior.Rep);
+        IntPtr ICommand.CreateOp()
+        {
+            var sampling = _config.CreateHandle();
+            try
+            {
+                return NativePattern.autd3_op_config_pattern((byte)_bank, sampling, _size, _dataType.Kind, _dataType.NumFoci, _dataType.SoundSpeed, _loopBehavior.Rep);
+            }
+            finally
+            {
+                NativeCore.autd3_core_sampling_config_free(sampling);
+            }
+        }
     }
 
     public sealed class ChangePatternBank : ICommand

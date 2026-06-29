@@ -27,7 +27,7 @@ async def configure(client: autd3.Client, patterns: object) -> None:
     pattern.null(patterns)
     builder = client.datagram_builder()
     builder.push(autd3.WritePatternBuffer(autd3.PatternBank.B0, 0, patterns))
-    builder.push(autd3.ConfigPattern(autd3.PatternBank.B0, 1, 1, autd3.PatternDataType.Raw))
+    builder.push(autd3.ConfigPattern(autd3.PatternBank.B0, autd3.SamplingConfig.FREQ_4K, 1, autd3.PatternDataType.Raw))
     for frame in builder.build():
         await client.send_checked(frame)
 

@@ -53,9 +53,6 @@ pub enum PayloadError {
         max: i32,
     },
 
-    #[error("modulation divider must be >= 1")]
-    ModulationDividerZero,
-
     #[error("modulation size {size} out of range 1..={max}")]
     ModulationSizeOutOfRange { size: u32, max: usize },
 
@@ -108,9 +105,6 @@ pub enum PayloadError {
 
     #[error("silencer completion time {0:?} is out of range (1..=65535 ultrasound periods)")]
     SilencerCompletionTimeOutOfRange(core::time::Duration),
-
-    #[error("pattern divider must be >= 1")]
-    PatternDividerZero,
 
     #[error("pattern size must be >= 1")]
     PatternSizeZero,

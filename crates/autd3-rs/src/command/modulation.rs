@@ -32,7 +32,6 @@ impl<'a> Modulation<'a> {
 
 impl<'a> Command<'a> for Modulation<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
-        let divider = self.config.divide().unwrap_or(0);
         let size = u32::try_from(self.data.len()).unwrap_or(u32::MAX);
         builder
             .push(WriteModulationBuffer {
@@ -42,7 +41,7 @@ impl<'a> Command<'a> for Modulation<'a> {
             })
             .push(ConfigModulation {
                 bank: self.bank,
-                divider,
+                config: self.config,
                 size,
                 loop_behavior: self.loop_behavior,
             })
