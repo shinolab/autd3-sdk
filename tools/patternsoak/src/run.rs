@@ -148,7 +148,7 @@ async fn send_config_pattern_once(client: &Client) -> Result<()> {
         divider: SamplingConfig::FREQ_4K.divide().unwrap_or(1),
         size: 1,
         data_type: PatternDataType::Raw,
-        rep: LoopBehavior::Infinite.rep(),
+        loop_behavior: LoopBehavior::Infinite,
     });
     let datagrams = builder.build()?;
     for frame in &datagrams {

@@ -105,7 +105,7 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
                     num_foci,
                     sound_speed: self.option.sound_speed_value(),
                 },
-                rep: self.option.loop_behavior.rep(),
+                loop_behavior: self.option.loop_behavior,
             })
             .push(ChangePatternBank {
                 bank,

@@ -107,7 +107,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
                 divider,
                 size,
                 data_type: PatternDataType::Raw,
-                rep: self.option.loop_behavior.rep(),
+                loop_behavior: self.option.loop_behavior,
             })
             .push(ChangePatternBank {
                 bank,

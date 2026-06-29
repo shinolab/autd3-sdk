@@ -43,7 +43,7 @@ impl<'a> Command<'a> for Pattern<'a> {
                 divider: FREQ_DIV_NO_LIMIT,
                 size: 1,
                 data_type: crate::value::PatternDataType::Raw,
-                rep: self.loop_behavior.rep(),
+                loop_behavior: self.loop_behavior,
             })
             .push(ChangePatternBank {
                 bank: self.bank,

@@ -2,7 +2,7 @@ use crate::error::{Error, PayloadError};
 use crate::mirror::FirmwareState;
 use crate::params::{EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
-use crate::value::{PatternBank, PatternDataType};
+use crate::value::{LoopBehavior, PatternBank, PatternDataType};
 
 use super::{Distribution, Operation, silencer_constraint};
 
@@ -12,7 +12,7 @@ pub struct ConfigPattern {
     pub divider: u16,
     pub size: u32,
     pub data_type: PatternDataType,
-    pub rep: u16,
+    pub loop_behavior: LoopBehavior,
 }
 
 impl Operation for ConfigPattern {
@@ -75,7 +75,7 @@ impl Operation for ConfigPattern {
         out[4..8].copy_from_slice(&self.size.to_le_bytes());
         out[8] = num_foci;
         out[10..12].copy_from_slice(&sound_speed.to_le_bytes());
-        out[12..14].copy_from_slice(&self.rep.to_le_bytes());
+        out[12..14].copy_from_slice(&self.loop_behavior.rep().to_le_bytes());
         Ok(Cmd::ConfigPattern)
     }
 
@@ -93,6 +93,7 @@ impl Operation for ConfigPattern {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::num::NonZeroU16;
 
     fn encode(op: ConfigPattern) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
@@ -107,7 +108,7 @@ mod tests {
             divider: 2,
             size: 1024,
             data_type: PatternDataType::Raw,
-            rep: 7,
+            loop_behavior: LoopBehavior::Finite(NonZeroU16::new(8).unwrap()),
         })
         .unwrap();
 
@@ -131,7 +132,7 @@ mod tests {
                 num_foci: 8,
                 sound_speed: 340,
             },
-            rep: 0xFFFF,
+            loop_behavior: LoopBehavior::Infinite,
         })
         .unwrap();
 
@@ -150,7 +151,7 @@ mod tests {
             divider: 1,
             size,
             data_type: PatternDataType::Raw,
-            rep: 0xFFFF,
+            loop_behavior: LoopBehavior::Infinite,
         };
         assert!(matches!(encode(raw(0)), Err(Error::InvalidPayload(_))));
         assert!(matches!(
@@ -166,7 +167,7 @@ mod tests {
                 num_foci,
                 sound_speed,
             },
-            rep: 0xFFFF,
+            loop_behavior: LoopBehavior::Infinite,
         };
         assert!(matches!(
             encode(foci(1, 0, 340)),
