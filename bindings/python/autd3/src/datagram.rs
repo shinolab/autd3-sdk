@@ -26,27 +26,18 @@ use crate::ops;
 pub struct Pattern {
     bank: CorePatternBank,
     emissions: Vec<DevicePattern>,
-    loop_behavior: CoreLoopBehavior,
-    transition_mode: CoreTransitionMode,
 }
 
 #[pymethods]
 impl Pattern {
     #[new]
-    #[pyo3(signature = (buffer, bank = None, loop_behavior = None, transition_mode = None))]
-    fn new(
-        buffer: &Bound<'_, PyAny>,
-        bank: Option<ops::PatternBank>,
-        loop_behavior: Option<ops::LoopBehavior>,
-        transition_mode: Option<ops::TransitionMode>,
-    ) -> PyResult<Self> {
+    #[pyo3(signature = (buffer, bank = None))]
+    fn new(buffer: &Bound<'_, PyAny>, bank: Option<ops::PatternBank>) -> PyResult<Self> {
         let capsule = capsule_of(buffer)?;
         let emissions = pattern_from_capsule(&capsule)?;
         Ok(Self {
             bank: bank.map_or(CorePatternBank::B0, |b| b.0),
             emissions: emissions.to_vec(),
-            loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
-            transition_mode: transition_mode.map_or(CoreTransitionMode::Immediate, |t| t.0),
         })
     }
 }
@@ -88,8 +79,6 @@ enum Pending {
     Pattern {
         bank: CorePatternBank,
         emissions: Vec<DevicePattern>,
-        loop_behavior: CoreLoopBehavior,
-        transition_mode: CoreTransitionMode,
     },
     Modulation {
         bank: CoreModulationBank,
@@ -170,8 +159,6 @@ impl DatagramBuilder {
             self.pending.push(Pending::Pattern {
                 bank: pattern.bank,
                 emissions: pattern.emissions.clone(),
-                loop_behavior: pattern.loop_behavior,
-                transition_mode: pattern.transition_mode,
             });
             return Ok(());
         }
@@ -271,16 +258,8 @@ impl DatagramBuilder {
         let mut builder = CoreDatagramBuilder::new(self.num_devices);
         for pending in &self.pending {
             match pending {
-                Pending::Pattern {
-                    bank,
-                    emissions,
-                    loop_behavior,
-                    transition_mode,
-                } => {
-                    let mut cmd = CorePattern::with_bank(*bank, emissions);
-                    cmd.loop_behavior = *loop_behavior;
-                    cmd.transition_mode = *transition_mode;
-                    builder.push(cmd);
+                Pending::Pattern { bank, emissions } => {
+                    builder.push(CorePattern::with_bank(*bank, emissions));
                 }
                 Pending::Modulation {
                     bank,

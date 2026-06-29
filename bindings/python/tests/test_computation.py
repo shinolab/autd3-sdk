@@ -158,10 +158,19 @@ def test_loop_behavior_and_transition_mode() -> None:
     pattern.focus(geo, geo.center() + np.array([0.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), buf)
 
     builder = autd3.DatagramBuilder(geo.num_devices())
+    builder.push(autd3.WritePatternBuffer(autd3.PatternBank.B1, 0, buf))
     builder.push(
-        autd3.Pattern(
-            buf,
+        autd3.ConfigPattern(
+            autd3.PatternBank.B1,
+            1,
+            1,
+            autd3.PatternDataType.Raw,
             loop_behavior=autd3.LoopBehavior.Finite(5),
+        )
+    )
+    builder.push(
+        autd3.ChangePatternBank(
+            autd3.PatternBank.B1,
             transition_mode=autd3.TransitionMode.Gpio(autd3.GpioIn.I1),
         )
     )

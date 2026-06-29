@@ -9,8 +9,6 @@ use crate::value::{Emission, LoopBehavior, PatternBank, TransitionMode};
 pub struct Pattern<'a> {
     pub bank: PatternBank,
     pub emissions: &'a [[Emission; NUM_TRANSDUCERS]],
-    pub loop_behavior: LoopBehavior,
-    pub transition_mode: TransitionMode,
 }
 
 impl<'a> Pattern<'a> {
@@ -21,12 +19,7 @@ impl<'a> Pattern<'a> {
 
     #[must_use]
     pub fn with_bank(bank: PatternBank, emissions: &'a [[Emission; NUM_TRANSDUCERS]]) -> Self {
-        Self {
-            bank,
-            emissions,
-            loop_behavior: LoopBehavior::Infinite,
-            transition_mode: TransitionMode::Immediate,
-        }
+        Self { bank, emissions }
     }
 }
 
@@ -43,11 +36,11 @@ impl<'a> Command<'a> for Pattern<'a> {
                 divider: FREQ_DIV_NO_LIMIT,
                 size: 1,
                 data_type: crate::value::PatternDataType::Raw,
-                loop_behavior: self.loop_behavior,
+                loop_behavior: LoopBehavior::Infinite,
             })
             .push(ChangePatternBank {
                 bank: self.bank,
-                transition_mode: self.transition_mode,
+                transition_mode: TransitionMode::Immediate,
             });
     }
 }
