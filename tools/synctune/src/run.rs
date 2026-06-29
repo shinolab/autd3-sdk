@@ -8,8 +8,8 @@ use anyhow::{Context, Result};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::operation::XorHashCmd;
 use autd3_rs::{
-    Client, ClientConfig, CoreId, Datagrams, Error as ClientError, Link, ResponseFuture,
-    StateCheck, ThreadPriority, ThreadPriorityValue,
+    Client, ClientConfig, CoreId, Error as ClientError, Frames, Link, ResponseFuture, StateCheck,
+    ThreadPriority, ThreadPriorityValue,
 };
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
@@ -176,7 +176,7 @@ async fn run_load(
         sleep_ms: common.sleep_ms,
         data: build_zero_xor_data(common.data_len),
     };
-    let datagrams = client
+    let frames = client
         .datagram_builder()
         .push(&xor_cmd)
         .build()
@@ -185,12 +185,12 @@ async fn run_load(
     let warmup = common.warmup;
     match common.mode {
         Mode::StopAndWait => {
-            load_stop_and_wait(client, &datagrams, start, total, warmup, shutdown).await
+            load_stop_and_wait(client, &frames, start, total, warmup, shutdown).await
         }
         Mode::Streaming => {
             load_streaming(
                 client,
-                &datagrams,
+                &frames,
                 start,
                 total,
                 warmup,
@@ -234,7 +234,7 @@ impl LoadAcc {
 
 async fn load_stop_and_wait(
     client: &Client,
-    datagrams: &Datagrams,
+    frames: &Frames,
     start: Instant,
     total: Duration,
     warmup: Duration,
@@ -246,7 +246,7 @@ async fn load_stop_and_wait(
             break;
         }
         match client
-            .send_checked(datagrams.frame(0).expect("one frame"))
+            .send_checked(frames.frame(0).expect("one frame"))
             .await
         {
             Ok(()) => acc.record(true, start.elapsed()),
@@ -261,7 +261,7 @@ async fn load_stop_and_wait(
 
 async fn load_streaming(
     client: &Client,
-    datagrams: &Datagrams,
+    frames: &Frames,
     start: Instant,
     total: Duration,
     warmup: Duration,
@@ -273,7 +273,7 @@ async fn load_streaming(
     loop {
         let stop = shutdown.load(Ordering::Relaxed) || start.elapsed() >= total;
         if !stop && pending.len() < max_inflight {
-            match client.send(datagrams.frame(0).expect("one frame")).await {
+            match client.send(frames.frame(0).expect("one frame")).await {
                 Ok(fut) => pending.push_back(fut),
                 Err(ClientError::InvalidPayload(msg)) => {
                     anyhow::bail!("payload rejected by the local encoder: {msg}")

@@ -12,7 +12,7 @@ use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Emission, LoopBehavior, PatternBank, SamplingConfig};
 use autd3_rs::{
-    Client, ClientConfig, ConfigPattern, Datagrams, Length, MAX_IN_FLIGHT, ResponseFuture,
+    Client, ClientConfig, ConfigPattern, Frames, Length, MAX_IN_FLIGHT, ResponseFuture,
     WritePatternBuffer,
 };
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
@@ -71,7 +71,7 @@ async fn run_stop_and_wait(
     wavelength: Length,
 ) -> Result<Duration> {
     let mut patterns = geometry.pattern_buffer();
-    let mut buf = Datagrams::default();
+    let mut buf = Frames::default();
 
     let start = Instant::now();
     for &target in targets {
@@ -99,7 +99,7 @@ async fn run_streaming(
     max_inflight: usize,
 ) -> Result<Duration> {
     let mut patterns = geometry.pattern_buffer();
-    let mut buf = Datagrams::default();
+    let mut buf = Frames::default();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(max_inflight);
 
     let start = Instant::now();
@@ -141,8 +141,8 @@ async fn configure(client: &Client, geometry: &Geometry) -> Result<()> {
             size: 1,
             loop_behavior: LoopBehavior::Infinite,
         });
-    let datagrams = builder.build()?;
-    for frame in &datagrams {
+    let frames = builder.build()?;
+    for frame in &frames {
         client.send_checked(frame).await?;
     }
     Ok(())
@@ -151,7 +151,7 @@ async fn configure(client: &Client, geometry: &Geometry) -> Result<()> {
 fn write_focus(
     client: &Client,
     patterns: &[[Emission; NUM_TRANSDUCERS]],
-    buf: &mut Datagrams,
+    buf: &mut Frames,
 ) -> Result<()> {
     let mut builder = client.datagram_builder();
     builder.push(WritePatternBuffer {

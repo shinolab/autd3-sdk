@@ -10,7 +10,7 @@ use autd3_rs::operation::{ConfigPattern, WritePatternBuffer};
 use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
-    Client, ClientConfig, Datagrams, Error as ClientError, Link, ResponseFuture, StateCheck,
+    Client, ClientConfig, Error as ClientError, Frames, Link, ResponseFuture, StateCheck,
 };
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
@@ -147,8 +147,8 @@ async fn send_config_pattern_once(client: &Client) -> Result<()> {
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
     });
-    let datagrams = builder.build()?;
-    for frame in &datagrams {
+    let frames = builder.build()?;
+    for frame in &frames {
         client.send_checked(frame).await?;
     }
     Ok(())
@@ -161,7 +161,7 @@ async fn soak_stop_and_wait(
     shutdown: Arc<AtomicBool>,
 ) -> Result<()> {
     let mut emissions = geometry.pattern_buffer();
-    let mut datagrams = Datagrams::default();
+    let mut frames = Frames::default();
     let mut progress = Progress::new(cli);
 
     let mut tick: u8 = 0;
@@ -173,9 +173,9 @@ async fn soak_stop_and_wait(
         }
 
         fill_emissions(&mut emissions, tick);
-        encode_write(client, &emissions, &mut datagrams)?;
+        encode_write(client, &emissions, &mut frames)?;
         let res = client
-            .send_checked(datagrams.frame(0).expect("one frame"))
+            .send_checked(frames.frame(0).expect("one frame"))
             .await;
 
         match res {
@@ -208,7 +208,7 @@ async fn soak_streaming(
     max_inflight: usize,
 ) -> Result<()> {
     let mut emissions = geometry.pattern_buffer();
-    let mut datagrams = Datagrams::default();
+    let mut frames = Frames::default();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(max_inflight);
     let mut progress = Progress::new(cli);
 
@@ -221,8 +221,8 @@ async fn soak_streaming(
 
         if need_send && pending.len() < max_inflight {
             fill_emissions(&mut emissions, tick);
-            encode_write(client, &emissions, &mut datagrams)?;
-            let fut = client.send(datagrams.frame(0).expect("one frame")).await?;
+            encode_write(client, &emissions, &mut frames)?;
+            let fut = client.send(frames.frame(0).expect("one frame")).await?;
             pending.push_back(fut);
             sends_issued += 1;
             tick = tick.wrapping_add(1);
@@ -273,7 +273,7 @@ fn should_stop(shutdown: &AtomicBool, cli: &Cli, issued: u64, start: Instant) ->
 fn encode_write(
     client: &Client,
     emissions: &[[Emission; NUM_TRANSDUCERS]],
-    datagrams: &mut Datagrams,
+    frames: &mut Frames,
 ) -> Result<()> {
     let mut builder = client.datagram_builder();
     builder.push(WritePatternBuffer {
@@ -282,7 +282,7 @@ fn encode_write(
         emissions,
     });
     builder
-        .build_into(datagrams)
+        .build_into(frames)
         .context("encoding WritePatternBuffer")?;
     Ok(())
 }
