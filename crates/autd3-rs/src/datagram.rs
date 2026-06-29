@@ -60,12 +60,12 @@ struct FrameDesc {
 }
 
 #[derive(Debug, Default)]
-pub struct Datagrams {
+pub struct Frames {
     payloads: Vec<Datagram>,
     frames: Vec<FrameDesc>,
 }
 
-impl Datagrams {
+impl Frames {
     #[must_use]
     pub fn len(&self) -> usize {
         self.frames.len()
@@ -87,7 +87,7 @@ impl Datagrams {
     #[must_use]
     pub fn iter(&self) -> FrameIter<'_> {
         FrameIter {
-            datagrams: self,
+            frames: self,
             index: 0,
         }
     }
@@ -148,7 +148,7 @@ impl Datagrams {
 }
 
 pub struct FrameIter<'a> {
-    datagrams: &'a Datagrams,
+    frames: &'a Frames,
     index: usize,
 }
 
@@ -156,13 +156,13 @@ impl<'a> Iterator for FrameIter<'a> {
     type Item = Frame<'a>;
 
     fn next(&mut self) -> Option<Frame<'a>> {
-        let frame = self.datagrams.frame(self.index)?;
+        let frame = self.frames.frame(self.index)?;
         self.index += 1;
         Some(frame)
     }
 }
 
-impl<'a> IntoIterator for &'a Datagrams {
+impl<'a> IntoIterator for &'a Frames {
     type Item = Frame<'a>;
     type IntoIter = FrameIter<'a>;
 
@@ -268,13 +268,13 @@ impl<'a> DatagramBuilder<'a> {
             .collect()
     }
 
-    pub fn build(&self) -> Result<Datagrams, Error> {
-        let mut out = Datagrams::default();
+    pub fn build(&self) -> Result<Frames, Error> {
+        let mut out = Frames::default();
         self.build_into(&mut out)?;
         Ok(out)
     }
 
-    pub fn build_into(&self, out: &mut Datagrams) -> Result<(), Error> {
+    pub fn build_into(&self, out: &mut Frames) -> Result<(), Error> {
         out.clear();
 
         let mut guard = self
@@ -427,8 +427,8 @@ mod tests {
         }
     }
 
-    fn cmd_at(datagrams: &Datagrams, frame: usize, device: usize) -> Cmd {
-        datagrams.frame(frame).unwrap().datagrams()[device].cmd
+    fn cmd_at(frames: &Frames, frame: usize, device: usize) -> Cmd {
+        frames.frame(frame).unwrap().datagrams()[device].cmd
     }
 
     #[test]
@@ -446,10 +446,10 @@ mod tests {
                 loop_behavior: LoopBehavior::Infinite,
             })
         });
-        let datagrams = b.build().unwrap();
+        let frames = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 1);
-        let frame = datagrams.frame(0).unwrap();
+        assert_eq!(frames.len(), 1);
+        let frame = frames.frame(0).unwrap();
         assert_eq!(frame.distribution(), Distribution::PerDevice);
         assert_eq!(frame.datagrams()[0].payload[0], 0, "device 0 -> bank B0");
         assert_eq!(frame.datagrams()[1].payload[0], 1, "device 1 -> bank B1");
@@ -466,26 +466,26 @@ mod tests {
                 loop_behavior: LoopBehavior::Infinite,
             })
         });
-        let datagrams = b.build().unwrap();
+        let frames = b.build().unwrap();
 
-        assert_eq!(cmd_at(&datagrams, 0, 0), Cmd::ConfigModulation);
-        assert_eq!(cmd_at(&datagrams, 0, 1), Cmd::Nop, "unassigned -> Nop");
+        assert_eq!(cmd_at(&frames, 0, 0), Cmd::ConfigModulation);
+        assert_eq!(cmd_at(&frames, 0, 1), Cmd::Nop, "unassigned -> Nop");
     }
 
     #[test]
     fn push_each_pads_shorter_device_with_nop() {
         let mut b = DatagramBuilder::new(2);
         b.push_each(|device| Some(if device == 0 { Multi(1) } else { Multi(3) }));
-        let datagrams = b.build().unwrap();
+        let frames = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 3, "frame count = max over devices");
-        assert_eq!(cmd_at(&datagrams, 0, 0), Cmd::ConfigModulation);
-        assert_eq!(cmd_at(&datagrams, 1, 0), Cmd::Nop);
-        assert_eq!(cmd_at(&datagrams, 2, 0), Cmd::Nop);
+        assert_eq!(frames.len(), 3, "frame count = max over devices");
+        assert_eq!(cmd_at(&frames, 0, 0), Cmd::ConfigModulation);
+        assert_eq!(cmd_at(&frames, 1, 0), Cmd::Nop);
+        assert_eq!(cmd_at(&frames, 2, 0), Cmd::Nop);
         for frame in 0..3 {
-            assert_eq!(cmd_at(&datagrams, frame, 1), Cmd::ConfigModulation);
+            assert_eq!(cmd_at(&frames, frame, 1), Cmd::ConfigModulation);
             assert_eq!(
-                datagrams.frame(frame).unwrap().datagrams()[1].payload[0] as usize,
+                frames.frame(frame).unwrap().datagrams()[1].payload[0] as usize,
                 frame
             );
         }
@@ -508,13 +508,13 @@ mod tests {
                 .boxed()
             })
         });
-        let datagrams = b.build().unwrap();
+        let frames = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 3);
-        assert_eq!(cmd_at(&datagrams, 0, 0), Cmd::WritePatternBuffer);
-        assert_eq!(cmd_at(&datagrams, 0, 1), Cmd::ConfigModulation);
-        assert_eq!(cmd_at(&datagrams, 1, 1), Cmd::Nop);
-        assert_eq!(cmd_at(&datagrams, 2, 1), Cmd::Nop);
+        assert_eq!(frames.len(), 3);
+        assert_eq!(cmd_at(&frames, 0, 0), Cmd::WritePatternBuffer);
+        assert_eq!(cmd_at(&frames, 0, 1), Cmd::ConfigModulation);
+        assert_eq!(cmd_at(&frames, 1, 1), Cmd::Nop);
+        assert_eq!(cmd_at(&frames, 2, 1), Cmd::Nop);
     }
 
     #[test]
@@ -536,10 +536,10 @@ mod tests {
                 loop_behavior: LoopBehavior::Infinite,
             })
         });
-        let datagrams = b.build().unwrap();
+        let frames = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 1, "disjoint groups fuse into one frame");
-        let frame = datagrams.frame(0).unwrap();
+        assert_eq!(frames.len(), 1, "disjoint groups fuse into one frame");
+        let frame = frames.frame(0).unwrap();
         assert_eq!(frame.datagrams()[0].payload[0], 0, "device 0 -> B0");
         assert_eq!(frame.datagrams()[1].payload[0], 1, "device 1 -> B1");
     }
@@ -563,11 +563,11 @@ mod tests {
                 loop_behavior: LoopBehavior::Infinite,
             })
         });
-        let datagrams = b.build().unwrap();
+        let frames = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 2, "overlapping coverage stays sequential");
-        assert_eq!(datagrams.frame(0).unwrap().datagrams()[0].payload[0], 0);
-        assert_eq!(datagrams.frame(1).unwrap().datagrams()[0].payload[0], 1);
+        assert_eq!(frames.len(), 2, "overlapping coverage stays sequential");
+        assert_eq!(frames.frame(0).unwrap().datagrams()[0].payload[0], 0);
+        assert_eq!(frames.frame(1).unwrap().datagrams()[0].payload[0], 1);
     }
 
     #[test]
@@ -595,15 +595,11 @@ mod tests {
                 loop_behavior: LoopBehavior::Infinite,
             })
         });
-        let datagrams = b.build().unwrap();
+        let frames = b.build().unwrap();
 
+        assert_eq!(frames.len(), 3, "broadcast between steps prevents fusion");
         assert_eq!(
-            datagrams.len(),
-            3,
-            "broadcast between steps prevents fusion"
-        );
-        assert_eq!(
-            datagrams.frame(1).unwrap().distribution(),
+            frames.frame(1).unwrap().distribution(),
             Distribution::Broadcast
         );
     }
@@ -620,10 +616,10 @@ mod tests {
         };
         let mut b = DatagramBuilder::new(4);
         b.push(op);
-        let datagrams = b.build().unwrap();
+        let frames = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 1);
-        let frame = datagrams.frame(0).unwrap();
+        assert_eq!(frames.len(), 1);
+        let frame = frames.frame(0).unwrap();
         assert_eq!(frame.distribution(), Distribution::Broadcast);
         assert_eq!(frame.datagrams().len(), 1);
         assert_eq!(frame.datagrams()[0].cmd, Cmd::ConfigPattern);
@@ -639,10 +635,10 @@ mod tests {
         };
         let mut b = DatagramBuilder::new(3);
         b.push(op);
-        let datagrams = b.build().unwrap();
+        let frames = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 1);
-        let frame = datagrams.frame(0).unwrap();
+        assert_eq!(frames.len(), 1);
+        let frame = frames.frame(0).unwrap();
         assert_eq!(frame.distribution(), Distribution::PerDevice);
         assert_eq!(frame.datagrams().len(), 3);
     }
@@ -663,20 +659,20 @@ mod tests {
         };
         let mut b = DatagramBuilder::new(2);
         b.push(we).push(ce);
-        let datagrams = b.build().unwrap();
+        let frames = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 2);
+        assert_eq!(frames.len(), 2);
         assert_eq!(
-            datagrams.frame(0).unwrap().distribution(),
+            frames.frame(0).unwrap().distribution(),
             Distribution::PerDevice
         );
-        assert_eq!(datagrams.frame(0).unwrap().datagrams().len(), 2);
+        assert_eq!(frames.frame(0).unwrap().datagrams().len(), 2);
         assert_eq!(
-            datagrams.frame(1).unwrap().distribution(),
+            frames.frame(1).unwrap().distribution(),
             Distribution::Broadcast
         );
         assert_eq!(
-            datagrams.frame(1).unwrap().datagrams()[0].cmd,
+            frames.frame(1).unwrap().datagrams()[0].cmd,
             Cmd::ConfigPattern
         );
     }
@@ -692,7 +688,7 @@ mod tests {
         let mut b = DatagramBuilder::new(1);
         b.push(op);
 
-        let mut buf = Datagrams::default();
+        let mut buf = Frames::default();
         b.build_into(&mut buf).unwrap();
         let cap_after_first = buf.payloads.capacity();
         b.build_into(&mut buf).unwrap();

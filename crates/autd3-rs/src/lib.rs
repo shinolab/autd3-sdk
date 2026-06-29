@@ -25,7 +25,7 @@ pub use autd3_rs_core::{
 pub use client::{Client, ClientConfig, MAX_DEVICES, ResponseFuture};
 pub use command::{BoxedCommand, Command, Modulation, Pattern};
 pub use core_affinity::CoreId;
-pub use datagram::{Datagram, DatagramBuilder, Datagrams, Frame};
+pub use datagram::{Datagram, DatagramBuilder, Frame, Frames};
 pub use firmware_version::FirmwareVersion;
 pub use fpga_state::FpgaState;
 pub use operation::{
