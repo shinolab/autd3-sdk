@@ -78,16 +78,15 @@ impl<'a> Command<'a> for PatternStm<'a> {
                 let mut base = 0;
                 while base < n {
                     let count = per_frame.min(n - base);
-                    let mut patterns: [&'a [[Emission; NUM_TRANSDUCERS]]; PATTERN_MAX_PER_FRAME] =
-                        [&[]; PATTERN_MAX_PER_FRAME];
+                    let mut patterns: [Option<&'a [[Emission; NUM_TRANSDUCERS]]>;
+                        PATTERN_MAX_PER_FRAME] = [None; PATTERN_MAX_PER_FRAME];
                     for (g, slot) in patterns.iter_mut().take(count).enumerate() {
-                        *slot = self.patterns[base + g].as_slice();
+                        *slot = Some(self.patterns[base + g].as_slice());
                     }
                     builder.push(WritePatternCompressed {
                         bank,
                         index: base,
                         format,
-                        count: u8::try_from(count).unwrap_or(1),
                         patterns,
                     });
                     base += count;
