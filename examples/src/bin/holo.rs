@@ -42,13 +42,13 @@ async fn main() -> Result<()> {
     ];
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
-    let mut patterns = geometry.pattern_buffer();
+    let mut emissions = geometry.pattern_buffer();
     gspat(
         &geometry,
         &foci,
         wavelength,
         &GspatOption::default(),
-        &mut patterns,
+        &mut emissions,
     )?;
 
     let mut modulation = autd3_rs_modulation::modulation_buffer();
@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
     let mut builder = client.datagram_builder();
     builder
         .push(SetSilencer::default())
-        .push(Pattern::new(&patterns))
+        .push(Pattern::new(&emissions))
         .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation));
     let datagrams = builder.build()?;
     for frame in &datagrams {

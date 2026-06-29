@@ -70,7 +70,7 @@ async fn run_stop_and_wait(
     targets: &[Point3<f32>],
     wavelength: Length,
 ) -> Result<Duration> {
-    let mut patterns = geometry.pattern_buffer();
+    let mut emissions = geometry.pattern_buffer();
     let mut buf = Frames::default();
 
     let start = Instant::now();
@@ -80,9 +80,9 @@ async fn run_stop_and_wait(
             target,
             wavelength,
             &autd3_rs_pattern::FocusOption::default(),
-            &mut patterns,
+            &mut emissions,
         );
-        write_focus(client, &patterns, &mut buf)?;
+        write_focus(client, &emissions, &mut buf)?;
         for frame in &buf {
             client.send_checked(frame).await?;
         }
@@ -98,7 +98,7 @@ async fn run_streaming(
     wavelength: Length,
     max_inflight: usize,
 ) -> Result<Duration> {
-    let mut patterns = geometry.pattern_buffer();
+    let mut emissions = geometry.pattern_buffer();
     let mut buf = Frames::default();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(max_inflight);
 
@@ -109,9 +109,9 @@ async fn run_streaming(
             target,
             wavelength,
             &autd3_rs_pattern::FocusOption::default(),
-            &mut patterns,
+            &mut emissions,
         );
-        write_focus(client, &patterns, &mut buf)?;
+        write_focus(client, &emissions, &mut buf)?;
         for frame in &buf {
             if pending.len() >= max_inflight {
                 pending.pop_front().expect("non-empty").await?.check()?;
@@ -126,14 +126,14 @@ async fn run_streaming(
 }
 
 async fn configure(client: &Client, geometry: &Geometry) -> Result<()> {
-    let mut patterns = geometry.pattern_buffer();
-    autd3_rs_pattern::null(&mut patterns);
+    let mut emissions = geometry.pattern_buffer();
+    autd3_rs_pattern::null(&mut emissions);
     let mut builder = client.datagram_builder();
     builder
         .push(WritePatternBuffer {
             bank: PatternBank::B0,
             index: 0,
-            emissions: &patterns,
+            emissions: &emissions,
         })
         .push(ConfigPattern {
             bank: PatternBank::B0,
@@ -150,14 +150,14 @@ async fn configure(client: &Client, geometry: &Geometry) -> Result<()> {
 
 fn write_focus(
     client: &Client,
-    patterns: &[[Emission; NUM_TRANSDUCERS]],
+    emissions: &[[Emission; NUM_TRANSDUCERS]],
     buf: &mut Frames,
 ) -> Result<()> {
     let mut builder = client.datagram_builder();
     builder.push(WritePatternBuffer {
         bank: PatternBank::B0,
         index: 0,
-        emissions: patterns,
+        emissions,
     });
     builder.build_into(buf)?;
     Ok(())

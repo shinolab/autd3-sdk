@@ -118,12 +118,12 @@ mod tests {
         let dir = UnitVector3::new_normalize(Vector3::new(0.0, 1.0, 1.0));
         let option = PlaneOption::default();
 
-        let mut patterns = vec![[Emission::default(); NUM_TRANSDUCERS]; geo.len()];
-        plane(&geo, dir, lambda, &option, &mut patterns);
-        for (pattern, dev) in patterns.iter().zip(&geo) {
+        let mut emissions = vec![[Emission::default(); NUM_TRANSDUCERS]; geo.len()];
+        plane(&geo, dir, lambda, &option, &mut emissions);
+        for (actual, dev) in emissions.iter().zip(&geo) {
             let mut expected = [Emission::default(); NUM_TRANSDUCERS];
             plane_device(dev, dir, lambda, &option, &mut expected);
-            assert_eq!(*pattern, expected);
+            assert_eq!(*actual, expected);
         }
     }
 }

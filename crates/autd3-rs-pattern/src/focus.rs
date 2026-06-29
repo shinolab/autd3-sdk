@@ -143,13 +143,13 @@ mod tests {
         let lambda = 8.5 * mm;
         let option = FocusOption::default();
 
-        let mut patterns = vec![[Emission::default(); NUM_TRANSDUCERS]; geo.len()];
-        focus(&geo, target, lambda, &option, &mut patterns);
-        assert_eq!(patterns.len(), 2);
-        for (pattern, dev) in patterns.iter().zip(&geo) {
+        let mut emissions = vec![[Emission::default(); NUM_TRANSDUCERS]; geo.len()];
+        focus(&geo, target, lambda, &option, &mut emissions);
+        assert_eq!(emissions.len(), 2);
+        for (actual, dev) in emissions.iter().zip(&geo) {
             let mut expected = [Emission::default(); NUM_TRANSDUCERS];
             focus_device(dev, target, lambda, &option, &mut expected);
-            assert_eq!(*pattern, expected);
+            assert_eq!(*actual, expected);
         }
     }
 }
