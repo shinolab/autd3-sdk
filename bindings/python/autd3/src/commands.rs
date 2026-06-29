@@ -261,9 +261,9 @@ impl GpioOut {
     }
 
     #[classattr]
-    #[pyo3(name = "IsPatternMode")]
-    fn is_pattern_mode() -> Self {
-        Self(CoreGpioOut::IsPatternMode)
+    #[pyo3(name = "IsStmMode")]
+    fn is_stm_mode() -> Self {
+        Self(CoreGpioOut::IsStmMode)
     }
 
     #[classattr]

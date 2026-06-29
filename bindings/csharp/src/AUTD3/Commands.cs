@@ -78,7 +78,7 @@ namespace AUTD3
         public static GpioOut ModIdx(ushort idx) => new GpioOut(6, idx);
         public static GpioOut PatternBank => new GpioOut(7, 0);
         public static GpioOut PatternIdx(ushort idx) => new GpioOut(8, idx);
-        public static GpioOut IsPatternMode => new GpioOut(9, 0);
+        public static GpioOut IsStmMode => new GpioOut(9, 0);
         public static GpioOut SysTimeEq(ulong sysTime) => new GpioOut(10, sysTime);
         public static GpioOut SyncDiff => new GpioOut(11, 0);
         public static GpioOut PwmOut(byte transducer) => new GpioOut(12, transducer);

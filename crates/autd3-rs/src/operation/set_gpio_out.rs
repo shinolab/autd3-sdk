@@ -12,7 +12,7 @@ const TYPE_MOD_BANK: u8 = 0x20;
 const TYPE_MOD_IDX: u8 = 0x21;
 const TYPE_PATTERN_BANK: u8 = 0x50;
 const TYPE_PATTERN_IDX: u8 = 0x51;
-const TYPE_IS_PATTERN_MODE: u8 = 0x52;
+const TYPE_IS_STM_MODE: u8 = 0x52;
 const TYPE_SYS_TIME_EQ: u8 = 0x60;
 const TYPE_SYNC_DIFF: u8 = 0x70;
 const TYPE_PWM_OUT: u8 = 0xE0;
@@ -32,7 +32,7 @@ pub enum GpioOut {
     ModIdx(u16),
     PatternBank,
     PatternIdx(u16),
-    IsPatternMode,
+    IsStmMode,
     SysTimeEq(u64),
     SyncDiff,
     PwmOut(u8),
@@ -51,7 +51,7 @@ impl GpioOut {
             GpioOut::ModIdx(idx) => (TYPE_MOD_IDX, u64::from(idx)),
             GpioOut::PatternBank => (TYPE_PATTERN_BANK, 0),
             GpioOut::PatternIdx(idx) => (TYPE_PATTERN_IDX, u64::from(idx)),
-            GpioOut::IsPatternMode => (TYPE_IS_PATTERN_MODE, 0),
+            GpioOut::IsStmMode => (TYPE_IS_STM_MODE, 0),
             GpioOut::SysTimeEq(t) => (TYPE_SYS_TIME_EQ, t),
             GpioOut::SyncDiff => (TYPE_SYNC_DIFF, 0),
             GpioOut::PwmOut(tr) => (TYPE_PWM_OUT, u64::from(tr)),
