@@ -880,7 +880,7 @@ async fn commands_still_succeed_with_send_interval_above_one() {
 #[tokio::test]
 async fn build_rejects_too_fast_pattern_under_strict_silencer() {
     use crate::operation::{ConfigPattern, SetSilencer};
-    use crate::value::{LoopBehavior, PatternBank, PatternDataType, SamplingConfig};
+    use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
     let (client, _slave) = open_client().await;
     let mut builder = client.datagram_builder();
@@ -888,7 +888,6 @@ async fn build_rejects_too_fast_pattern_under_strict_silencer() {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
         size: 1,
-        data_type: PatternDataType::Raw,
         loop_behavior: LoopBehavior::Infinite,
     });
     match builder.build().unwrap_err() {
@@ -942,7 +941,7 @@ async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
 #[tokio::test]
 async fn opt_out_disables_precheck() {
     use crate::operation::{ConfigPattern, SetSilencer};
-    use crate::value::{LoopBehavior, PatternBank, PatternDataType, SamplingConfig};
+    use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
     let (link, _slave) = slave_pair();
     let config = ClientConfig {
@@ -955,7 +954,6 @@ async fn opt_out_disables_precheck() {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
         size: 1,
-        data_type: PatternDataType::Raw,
         loop_behavior: LoopBehavior::Infinite,
     });
     assert!(
@@ -967,7 +965,7 @@ async fn opt_out_disables_precheck() {
 #[tokio::test]
 async fn desync_after_send_failure_stops_precheck() {
     use crate::operation::{ConfigPattern, SetSilencer};
-    use crate::value::{LoopBehavior, PatternBank, PatternDataType, SamplingConfig};
+    use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
     let too_fast = |client: &Client| {
         let mut builder = client.datagram_builder();
@@ -975,7 +973,6 @@ async fn desync_after_send_failure_stops_precheck() {
             bank: PatternBank::B0,
             config: SamplingConfig::FREQ_40K,
             size: 1,
-            data_type: PatternDataType::Raw,
             loop_behavior: LoopBehavior::Infinite,
         });
         builder.build()
@@ -1051,7 +1048,7 @@ async fn build_rejects_per_device_group_under_strict_silencer() {
 #[tokio::test]
 async fn separate_builders_share_committed_mirror_state() {
     use crate::operation::{ConfigPattern, SetSilencer};
-    use crate::value::{LoopBehavior, PatternBank, PatternDataType, SamplingConfig};
+    use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
     let (client, _slave) = open_client().await;
     client
@@ -1064,7 +1061,6 @@ async fn separate_builders_share_committed_mirror_state() {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
         size: 1,
-        data_type: PatternDataType::Raw,
         loop_behavior: LoopBehavior::Infinite,
     });
     assert!(matches!(b2.build(), Err(Error::SilencerConstraint { .. })));

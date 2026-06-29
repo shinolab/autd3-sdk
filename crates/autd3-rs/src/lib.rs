@@ -11,7 +11,9 @@ mod response;
 
 pub use autd3_rs_core::{common, error, geometry, link, mirror, params, protocol, units, value};
 
-pub use autd3_rs_core::value::{PULSE_WIDTH_PERIOD, PulseWidth, PulseWidthError};
+pub use autd3_rs_core::value::{
+    ControlPoint, ControlPoints, PULSE_WIDTH_PERIOD, PulseWidth, PulseWidthError,
+};
 
 pub use autd3_rs_core::{
     Angle, Autd3, Autd3Unity, Cmd, ConstStateChecker, CycleOutcome, Device, DeviceState, Error,
@@ -27,16 +29,15 @@ pub use datagram::{Datagram, DatagramBuilder, Datagrams, Frame};
 pub use firmware_version::FirmwareVersion;
 pub use fpga_state::FpgaState;
 pub use operation::{
-    ChangeModulationBank, ChangePatternBank, Clear, ConfigModulation, ConfigPattern, Distribution,
-    EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, ForceFan, GpioOut, Nop, Operation,
-    PWE_TABLE_SIZE, PatternCompression, SetGpioOut, SetOutputMask, SetPhaseCorrection,
+    ChangeModulationBank, ChangePatternBank, Clear, ConfigFociStm, ConfigModulation, ConfigPattern,
+    Distribution, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, ForceFan, GpioOut, Nop,
+    Operation, PWE_TABLE_SIZE, PatternCompression, SetGpioOut, SetOutputMask, SetPhaseCorrection,
     SetPulseWidthTable, SetSilencer, SilencerConfig, WriteFociBuffer, WriteModulationBuffer,
     WritePatternBuffer, WritePatternCompressed, XorHashCmd,
 };
 pub use response::Response;
 pub use stm::{
-    ControlPoint, ControlPoints, FociStm, FociStmOption, PatternStm, PatternStmMode,
-    PatternStmOption, StmConfig, circle, line,
+    FociStm, FociStmOption, PatternStm, PatternStmMode, PatternStmOption, StmConfig, circle, line,
 };
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
 pub use tuning::PerfTuning;

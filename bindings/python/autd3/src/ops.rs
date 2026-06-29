@@ -6,7 +6,7 @@ use autd3_python_capsule::{
 use autd3_rs::value::{
     DcSysTime, GpioIn as CoreGpioIn, LoopBehavior as CoreLoopBehavior,
     ModulationBank as CoreModulationBank, PatternBank as CorePatternBank,
-    PatternDataType as CorePatternDataType, TransitionMode as CoreTransitionMode,
+    TransitionMode as CoreTransitionMode,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -57,28 +57,40 @@ impl ModulationBank {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum PatternData {
+    Raw,
+    Foci { num_foci: u8, sound_speed: u16 },
+}
+
 #[pyclass(name = "PatternDataType", module = "autd3", from_py_object)]
 #[derive(Clone, Copy)]
-pub struct PatternDataType(pub(crate) CorePatternDataType);
+pub struct PatternDataType(pub(crate) PatternData);
 
 #[pymethods]
 impl PatternDataType {
     #[classattr]
     #[pyo3(name = "Raw")]
     fn raw() -> Self {
-        Self(CorePatternDataType::Raw)
+        Self(PatternData::Raw)
     }
 
     #[staticmethod]
     fn foci(num_foci: u8, sound_speed: u16) -> Self {
-        Self(CorePatternDataType::Foci {
+        Self(PatternData::Foci {
             num_foci,
             sound_speed,
         })
     }
 
     fn __repr__(&self) -> String {
-        format!("PatternDataType.{:?}", self.0)
+        match self.0 {
+            PatternData::Raw => "PatternDataType.Raw".to_string(),
+            PatternData::Foci {
+                num_foci,
+                sound_speed,
+            } => format!("PatternDataType.Foci(num_foci={num_foci}, sound_speed={sound_speed})"),
+        }
     }
 }
 
@@ -221,7 +233,7 @@ pub struct ConfigPattern {
     pub(crate) bank: CorePatternBank,
     pub(crate) divider: u16,
     pub(crate) size: u32,
-    pub(crate) data_type: CorePatternDataType,
+    pub(crate) data_type: PatternData,
     pub(crate) loop_behavior: CoreLoopBehavior,
 }
 

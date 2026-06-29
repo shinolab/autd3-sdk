@@ -1,13 +1,9 @@
-#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-
-use super::{ControlPoints, StmConfig};
+use super::StmConfig;
 use crate::Velocity;
 use crate::command::Command;
 use crate::datagram::DatagramBuilder;
-use crate::operation::{ChangePatternBank, ConfigPattern, WriteFociBuffer};
-use crate::value::{Focus, LoopBehavior, PatternBank, PatternDataType, TransitionMode};
-
-const FOCUS_UNIT_MM: f32 = 0.025;
+use crate::operation::{ChangePatternBank, ConfigFociStm, WriteFociBuffer};
+use crate::value::{ControlPoints, LoopBehavior, PatternBank, TransitionMode};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FociStmOption {
@@ -25,12 +21,6 @@ impl Default for FociStmOption {
             loop_behavior: LoopBehavior::Infinite,
             transition_mode: TransitionMode::Immediate,
         }
-    }
-}
-
-impl FociStmOption {
-    fn sound_speed_value(self) -> u16 {
-        (self.sound_speed.m_s() * 64.0).round() as u16
     }
 }
 
@@ -62,10 +52,6 @@ impl<'a, const N: usize> FociStm<'a, N> {
     }
 }
 
-fn to_fixed(mm: f32) -> i32 {
-    (mm / FOCUS_UNIT_MM).round() as i32
-}
-
 impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
         let n = self.points.len();
@@ -73,38 +59,19 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
         let size = n;
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
 
-        let mut foci = Vec::with_capacity(self.points.len() * N);
-        for sample in self.points {
-            for (j, point) in sample.points.iter().enumerate() {
-                let intensity_or_offset = if j == 0 {
-                    sample.intensity.0
-                } else {
-                    point.phase_offset.0
-                };
-                foci.push(Focus {
-                    x: to_fixed(point.point.x),
-                    y: to_fixed(point.point.y),
-                    z: to_fixed(point.point.z),
-                    intensity_or_offset,
-                });
-            }
-        }
-
         let bank = self.option.bank;
         builder
             .push(WriteFociBuffer {
                 bank,
-                offset: 0,
-                foci,
+                index_offset: 0,
+                points: self.points,
             })
-            .push(ConfigPattern {
+            .push(ConfigFociStm {
                 bank,
                 config,
                 size,
-                data_type: PatternDataType::Foci {
-                    num_foci,
-                    sound_speed: self.option.sound_speed_value(),
-                },
+                num_foci,
+                sound_speed: self.option.sound_speed,
                 loop_behavior: self.option.loop_behavior,
             })
             .push(ChangePatternBank {
@@ -123,7 +90,7 @@ mod tests {
     use crate::value::{Intensity, Phase, SamplingConfig};
     use core::num::NonZeroU16;
 
-    use super::super::ControlPoint;
+    use crate::value::{ControlPoint, Focus};
 
     #[test]
     fn foci_stm_expands_to_write_config_change() {
@@ -191,9 +158,8 @@ mod tests {
         assert_eq!((f0 >> 54) & 0xFF, 0x80, "first focus = intensity");
         assert_eq!((f1 >> 54) & 0xFF, 0x22, "second focus = phase offset");
 
-        let neg_40 = (-40i32) as u64;
         assert_eq!(f0 & 0x3_FFFF, 40);
-        assert_eq!(f1 & 0x3_FFFF, neg_40 & 0x3_FFFF);
+        assert_eq!(f1 & 0x3_FFFF, 0x3_FFD8, "-40 in 18-bit two's complement");
 
         let cfg = datagrams.frame(1).unwrap();
         assert_eq!(cfg.datagrams()[0].payload[8], 2, "num_foci = 2");
@@ -237,10 +203,7 @@ mod tests {
             sound_speed: Velocity::from_m_s(350.0),
             ..Default::default()
         };
-        assert_eq!(
-            option.sound_speed_value(),
-            (350.0_f32 * 64.0).round() as u16
-        );
+        assert_eq!(option.sound_speed, Velocity::from_m_s(350.0));
     }
 
     #[test]

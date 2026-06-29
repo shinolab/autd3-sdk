@@ -6,7 +6,7 @@ use crate::operation::{
     WritePatternBuffer, WritePatternCompressed,
 };
 use crate::params::NUM_TRANSDUCERS;
-use crate::value::{Emission, LoopBehavior, PatternBank, PatternDataType, TransitionMode};
+use crate::value::{Emission, LoopBehavior, PatternBank, TransitionMode};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PatternStmMode {
@@ -106,7 +106,6 @@ impl<'a> Command<'a> for PatternStm<'a> {
                 bank,
                 config,
                 size,
-                data_type: PatternDataType::Raw,
                 loop_behavior: self.option.loop_behavior,
             })
             .push(ChangePatternBank {

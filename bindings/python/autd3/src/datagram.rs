@@ -6,14 +6,13 @@ use autd3_python_capsule::{
 };
 use autd3_rs::value::{
     LoopBehavior as CoreLoopBehavior, ModulationBank as CoreModulationBank,
-    PatternBank as CorePatternBank, PatternDataType as CorePatternDataType, SamplingConfig,
-    TransitionMode as CoreTransitionMode,
+    PatternBank as CorePatternBank, SamplingConfig, TransitionMode as CoreTransitionMode,
 };
 use autd3_rs::{
     ChangeModulationBank as CoreChangeModulationBank, ChangePatternBank as CoreChangePatternBank,
-    ConfigModulation as CoreConfigModulation, ConfigPattern as CoreConfigPattern,
-    DatagramBuilder as CoreDatagramBuilder, Datagrams as CoreDatagrams,
-    Modulation as CoreModulation, Pattern as CorePattern,
+    ConfigFociStm as CoreConfigFociStm, ConfigModulation as CoreConfigModulation,
+    ConfigPattern as CoreConfigPattern, DatagramBuilder as CoreDatagramBuilder,
+    Datagrams as CoreDatagrams, Modulation as CoreModulation, Pattern as CorePattern, Velocity,
     WriteModulationBuffer as CoreWriteModulationBuffer,
     WritePatternBuffer as CoreWritePatternBuffer,
 };
@@ -96,7 +95,7 @@ enum Pending {
         bank: CorePatternBank,
         divider: u16,
         size: u32,
-        data_type: CorePatternDataType,
+        data_type: ops::PatternData,
         loop_behavior: CoreLoopBehavior,
     },
     ChangePatternBank {
@@ -296,13 +295,30 @@ impl DatagramBuilder {
                 } => {
                     let divider = NonZeroU16::new(*divider)
                         .ok_or_else(|| PyValueError::new_err("divider must be >= 1"))?;
-                    builder.push(CoreConfigPattern {
-                        bank: *bank,
-                        config: SamplingConfig::Divide(divider),
-                        size: usize::try_from(*size).unwrap_or(usize::MAX),
-                        data_type: *data_type,
-                        loop_behavior: *loop_behavior,
-                    });
+                    let size = usize::try_from(*size).unwrap_or(usize::MAX);
+                    match *data_type {
+                        ops::PatternData::Foci {
+                            num_foci,
+                            sound_speed,
+                        } => {
+                            builder.push(CoreConfigFociStm {
+                                bank: *bank,
+                                config: SamplingConfig::Divide(divider),
+                                size,
+                                num_foci,
+                                sound_speed: Velocity::from_m_s(f32::from(sound_speed) / 64.0),
+                                loop_behavior: *loop_behavior,
+                            });
+                        }
+                        ops::PatternData::Raw => {
+                            builder.push(CoreConfigPattern {
+                                bank: *bank,
+                                config: SamplingConfig::Divide(divider),
+                                size,
+                                loop_behavior: *loop_behavior,
+                            });
+                        }
+                    }
                 }
                 Pending::ChangePatternBank {
                     bank,

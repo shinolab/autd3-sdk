@@ -1,5 +1,12 @@
+use super::{Focus, Intensity, Phase};
 use crate::geometry::Point3;
-use crate::value::{Intensity, Phase};
+
+const FOCUS_UNIT_MM: f32 = 0.025;
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn to_fixed(mm: f32) -> i32 {
+    (mm / FOCUS_UNIT_MM).round() as i32
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ControlPoint {
@@ -36,6 +43,21 @@ impl<const N: usize> ControlPoints<N> {
     #[must_use]
     pub const fn new(points: [ControlPoint; N], intensity: Intensity) -> Self {
         Self { points, intensity }
+    }
+
+    #[must_use]
+    pub fn focus(&self, j: usize) -> Focus {
+        let cp = self.points[j];
+        Focus {
+            x: to_fixed(cp.point.x),
+            y: to_fixed(cp.point.y),
+            z: to_fixed(cp.point.z),
+            intensity_or_offset: if j == 0 {
+                self.intensity.0
+            } else {
+                cp.phase_offset.0
+            },
+        }
     }
 }
 

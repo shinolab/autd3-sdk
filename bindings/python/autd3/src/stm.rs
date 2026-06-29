@@ -2,12 +2,14 @@ use core::time::Duration;
 
 use autd3_python_capsule::{DevicePattern, capsule_of, pattern_from_capsule};
 use autd3_rs::stm::{
-    ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, FociStm as CoreFociStm,
-    FociStmOption as CoreFociStmOption, PatternStmMode as CorePatternStmMode,
-    PatternStmOption as CorePatternStmOption, StmConfig as CoreStmConfig, circle as core_circle,
-    line as core_line,
+    FociStm as CoreFociStm, FociStmOption as CoreFociStmOption,
+    PatternStmMode as CorePatternStmMode, PatternStmOption as CorePatternStmOption,
+    StmConfig as CoreStmConfig, circle as core_circle, line as core_line,
 };
-use autd3_rs::value::{Intensity, Phase, SamplingConfig};
+use autd3_rs::value::{
+    ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity, Phase,
+    SamplingConfig,
+};
 use autd3_rs::{Point3, Vector3, Velocity};
 use autd3_rs_core::geometry::UnitVector3;
 use autd3_rs_core::units::{Hz, mm};

@@ -11,16 +11,17 @@ use autd3_rs::operation::Synchronize;
 use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
-    DcSysTime, Focus, GpioIn, Intensity, LoopBehavior, ModulationBank, PatternBank,
-    PatternDataType, Phase, SamplingConfig, TransitionMode,
+    DcSysTime, GpioIn, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
+    TransitionMode,
 };
 use autd3_rs::{
-    ChangeModulationBank, ChangePatternBank, Clear, ClientConfig, ConfigModulation, ConfigPattern,
-    ControlPoint, ControlPoints, DatagramBuilder as CoreDatagramBuilder, Datagrams, EmulateGpioIn,
-    FixedCompletionTime, FixedUpdateRate, ForceFan, Geometry, GpioOut, Length, Modulation, Nop,
-    PWE_TABLE_SIZE, Pattern, PatternStm, PatternStmMode, PatternStmOption, Point3, PulseWidth,
-    SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig,
-    UnitVector3, Vector3, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, circle, line,
+    ChangeModulationBank, ChangePatternBank, Clear, ClientConfig, ConfigFociStm, ConfigModulation,
+    ConfigPattern, ControlPoint, ControlPoints, DatagramBuilder as CoreDatagramBuilder, Datagrams,
+    EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, FociStm as CoreFociStm, FociStmOption,
+    ForceFan, Geometry, GpioOut, Length, Modulation, Nop, PWE_TABLE_SIZE, Pattern, PatternStm,
+    PatternStmMode, PatternStmOption, Point3, PulseWidth, SetGpioOut, SetOutputMask,
+    SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig, UnitVector3, Vector3, Velocity,
+    WriteModulationBuffer, WritePatternBuffer, circle, line,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -109,17 +110,6 @@ fn to_gpio_out(g: &Autd3GpioOut) -> GpioOut {
     }
 }
 
-fn to_pattern_data_type(kind: u8, num_foci: u8, sound_speed: u16) -> PatternDataType {
-    if kind == 1 {
-        PatternDataType::Foci {
-            num_foci,
-            sound_speed,
-        }
-    } else {
-        PatternDataType::Raw
-    }
-}
-
 fn rep_to_loop_behavior(rep: u16) -> LoopBehavior {
     if rep == 0xFFFF {
         LoopBehavior::Infinite
@@ -147,12 +137,44 @@ pub struct FociSample {
     points: Vec<ControlPoint>,
 }
 
-const FOCUS_UNIT_MM: f32 = 0.025;
+macro_rules! foci_points {
+    ($($n:literal => $variant:ident),* $(,)?) => {
+        pub enum FociPoints {
+            $($variant(Vec<ControlPoints<$n>>)),*
+        }
 
-#[allow(clippy::cast_possible_truncation)]
-fn to_fixed(mm: f32) -> i32 {
-    (mm / FOCUS_UNIT_MM).round() as i32
+        impl FociPoints {
+            fn from_samples(samples: &[FociSample], num_foci: usize) -> Option<Self> {
+                match num_foci {
+                    $($n => Some(FociPoints::$variant(
+                        samples
+                            .iter()
+                            .map(|s| {
+                                let arr: [ControlPoint; $n] = core::array::from_fn(|k| s.points[k]);
+                                ControlPoints::new(arr, s.intensity)
+                            })
+                            .collect(),
+                    )),)*
+                    _ => None,
+                }
+            }
+
+            fn push_into<'a>(
+                &'a self,
+                config: StmConfig,
+                option: FociStmOption,
+                builder: &mut CoreDatagramBuilder<'a>,
+            ) {
+                match self {
+                    $(FociPoints::$variant(v) => {
+                        builder.push(CoreFociStm::new(config, v.as_slice(), option));
+                    })*
+                }
+            }
+        }
+    };
 }
+foci_points!(1 => N1, 2 => N2, 3 => N3, 4 => N4, 5 => N5, 6 => N6, 7 => N7, 8 => N8);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_freq(hz: f32) -> *mut StmConfig {
@@ -279,7 +301,9 @@ pub enum Pending {
         bank: PatternBank,
         config: SamplingConfig,
         size: u32,
-        data_type: PatternDataType,
+        data_type_kind: u8,
+        num_foci: u8,
+        sound_speed: u16,
         loop_behavior: LoopBehavior,
     },
     ChangePatternBank {
@@ -322,8 +346,7 @@ pub enum Pending {
     SetPulseWidthTable(Box<[u16; PWE_TABLE_SIZE]>),
     FociStm {
         config: StmConfig,
-        samples: Vec<FociSample>,
-        num_foci: u8,
+        points: FociPoints,
         bank: PatternBank,
         sound_speed: f32,
         loop_behavior: LoopBehavior,
@@ -399,7 +422,9 @@ pub unsafe extern "C" fn autd3_op_config_pattern(
         bank: to_pattern_bank(bank),
         config: *unsafe { &*sampling_config },
         size,
-        data_type: to_pattern_data_type(data_type_kind, num_foci, sound_speed),
+        data_type_kind,
+        num_foci,
+        sound_speed,
         loop_behavior: rep_to_loop_behavior(rep),
     })
 }
@@ -658,11 +683,13 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
                 })
                 .collect(),
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let Some(points) = FociPoints::from_samples(&samples, n) else {
+        return std::ptr::null_mut();
+    };
     into_handle(Pending::FociStm {
         config: *unsafe { &*config },
-        samples,
-        num_foci,
+        points,
         bank: to_pattern_bank(bank),
         sound_speed: sound_speed_m_s,
         loop_behavior: rep_to_loop_behavior(loop_rep),
@@ -778,16 +805,29 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 bank,
                 config,
                 size,
-                data_type,
+                data_type_kind,
+                num_foci,
+                sound_speed,
                 loop_behavior,
             } => {
-                core.push(ConfigPattern {
-                    bank: *bank,
-                    config: *config,
-                    size: usize::try_from(*size).unwrap_or(usize::MAX),
-                    data_type: *data_type,
-                    loop_behavior: *loop_behavior,
-                });
+                let size = usize::try_from(*size).unwrap_or(usize::MAX);
+                if *data_type_kind == 1 {
+                    core.push(ConfigFociStm {
+                        bank: *bank,
+                        config: *config,
+                        size,
+                        num_foci: *num_foci,
+                        sound_speed: Velocity::from_m_s(f32::from(*sound_speed) / 64.0),
+                        loop_behavior: *loop_behavior,
+                    });
+                } else {
+                    core.push(ConfigPattern {
+                        bank: *bank,
+                        config: *config,
+                        size,
+                        loop_behavior: *loop_behavior,
+                    });
+                }
             }
             Pending::ChangePatternBank {
                 bank,
@@ -876,53 +916,19 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             }
             Pending::FociStm {
                 config,
-                samples,
-                num_foci,
+                points,
                 bank,
                 sound_speed,
                 loop_behavior,
                 transition_mode,
             } => {
-                let n = samples.len();
-                let sampling_config = config.into_sampling_config(n);
-                let size = n;
-                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                let sound_speed_value = (*sound_speed * 64.0).round() as u16;
-                let mut foci = Vec::with_capacity(n * usize::from(*num_foci));
-                for s in samples {
-                    for (j, point) in s.points.iter().enumerate() {
-                        let intensity_or_offset = if j == 0 {
-                            s.intensity.0
-                        } else {
-                            point.phase_offset.0
-                        };
-                        foci.push(Focus {
-                            x: to_fixed(point.point.x),
-                            y: to_fixed(point.point.y),
-                            z: to_fixed(point.point.z),
-                            intensity_or_offset,
-                        });
-                    }
-                }
-                core.push(WriteFociBuffer {
+                let option = FociStmOption {
                     bank: *bank,
-                    offset: 0,
-                    foci,
-                })
-                .push(ConfigPattern {
-                    bank: *bank,
-                    config: sampling_config,
-                    size,
-                    data_type: PatternDataType::Foci {
-                        num_foci: *num_foci,
-                        sound_speed: sound_speed_value,
-                    },
+                    sound_speed: Velocity::from_m_s(*sound_speed),
                     loop_behavior: *loop_behavior,
-                })
-                .push(ChangePatternBank {
-                    bank: *bank,
                     transition_mode: *transition_mode,
-                });
+                };
+                points.push_into(*config, option, &mut core);
             }
             Pending::PatternStm {
                 config,
