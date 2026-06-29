@@ -7,7 +7,7 @@ name = "autd3-pattern-holo"
 description = "Python bindings for autd3-rs-pattern-holo (naive, gs, gspat, greedy)."
 requires-python = ">=3.10"
 license = "MIT"
-dynamic = ["version"]
+version = "0.1.0"
 dependencies = ["autd3-core", "autd3-pattern"]
 
 [tool.maturin]

@@ -7,7 +7,7 @@ name = "autd3-link-nop"
 description = "Python bindings for the no-op (hardware-free) link."
 requires-python = ">=3.10"
 license = "MIT"
-dynamic = ["version"]
+version = "0.1.0"
 dependencies = ["autd3-core"]
 
 [tool.maturin]
