@@ -13,7 +13,7 @@ mod transition_mode;
 
 pub use bank::{ModulationBank, PatternBank};
 pub use control_point::{ControlPoint, ControlPoints};
-pub use dc_sys_time::DcSysTime;
+pub use dc_sys_time::{DcSysTime, DcSysTimeError};
 pub use emission::Emission;
 pub use focus::Focus;
 pub use gpio::GpioIn;

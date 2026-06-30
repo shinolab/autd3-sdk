@@ -9,6 +9,7 @@ repository.workspace = true
 description = "Core types and link abstraction shared across the AUTD3 phased-array sdk crates."
 
 [dependencies]
+chrono.workspace = true
 nalgebra.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync"] }
