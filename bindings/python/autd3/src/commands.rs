@@ -472,7 +472,7 @@ impl SetPhaseCorrectionPy {
 
 #[derive(Clone)]
 struct SetPulseWidthTableCmd {
-    table: [u16; PWE_TABLE_SIZE],
+    table: [CorePulseWidth; PWE_TABLE_SIZE],
 }
 
 impl PushCommand for SetPulseWidthTableCmd {
@@ -501,13 +501,18 @@ impl SetPulseWidthTablePy {
 
     #[staticmethod]
     fn default_table() -> Vec<u16> {
-        CoreSetPulseWidthTable::default_table().to_vec()
+        CoreSetPulseWidthTable::default_table()
+            .into_iter()
+            .map(|pw| pw.pulse_width().unwrap_or(0))
+            .collect()
     }
 }
 
 impl SetPulseWidthTablePy {
     pub(crate) fn boxed(&self) -> Box<dyn PushCommand> {
-        Box::new(SetPulseWidthTableCmd { table: self.table })
+        Box::new(SetPulseWidthTableCmd {
+            table: self.table.map(CorePulseWidth::new),
+        })
     }
 }
 
@@ -532,7 +537,10 @@ impl PulseWidth {
 
     #[staticmethod]
     fn default_table() -> Vec<u16> {
-        CoreSetPulseWidthTable::default_table().to_vec()
+        CoreSetPulseWidthTable::default_table()
+            .into_iter()
+            .map(|pw| pw.pulse_width().unwrap_or(0))
+            .collect()
     }
 }
 

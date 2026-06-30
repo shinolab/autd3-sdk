@@ -12,7 +12,7 @@ use autd3_rs::{
     ChangeModulationBank as CoreChangeModulationBank, ChangePatternBank as CoreChangePatternBank,
     ConfigFociStm as CoreConfigFociStm, ConfigModulation as CoreConfigModulation,
     ConfigPattern as CoreConfigPattern, DatagramBuilder as CoreDatagramBuilder,
-    Datagrams as CoreDatagrams, Modulation as CoreModulation, Pattern as CorePattern, Velocity,
+    Frames as CoreDatagrams, Modulation as CoreModulation, Pattern as CorePattern, Velocity,
     WriteModulationBuffer as CoreWriteModulationBuffer,
     WritePatternBuffer as CoreWritePatternBuffer,
 };
