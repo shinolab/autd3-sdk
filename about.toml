@@ -14,6 +14,7 @@ accepted = [
     "OFL-1.1",
     "Ubuntu-font-1.0",
     "GPL-3.0-only",
+    "CDLA-Permissive-2.0",
 ]
 
 ignore-build-dependencies = true

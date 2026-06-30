@@ -14,6 +14,7 @@ members = [
     "tools/perftest",
     "tools/patternsoak",
     "tools/synctune",
+    "tools/firmware",
     "examples",
 ]
 exclude = [
