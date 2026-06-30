@@ -3,7 +3,7 @@ use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PatternBank, TransitionMode};
 
-use super::{Distribution, Operation, silencer_constraint};
+use super::{Distribution, Operation, silencer_constraint, transition_constraint};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ChangePatternBank {
@@ -36,6 +36,12 @@ impl Operation for ChangePatternBank {
         let bank = self.bank.as_u8();
         if let Err(v) = state.silencer.check_pattern_bank(bank) {
             return Err(silencer_constraint(device, v));
+        }
+        if let Err(v) = state
+            .transition
+            .check_pattern_bank(bank, self.transition_mode)
+        {
+            return Err(transition_constraint(device, v));
         }
         state.silencer.note_pattern_bank(bank);
         Ok(())

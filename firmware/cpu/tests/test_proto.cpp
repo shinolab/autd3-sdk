@@ -13,6 +13,7 @@ uint32_t port_test_total_sleep_ms();
 void port_test_reset_sleep();
 void port_test_fpga_reset();
 void port_test_set_next_sync0(uint64_t t);
+void port_test_set_dc_sys_time(uint64_t t);
 uint16_t port_test_fpga_ctl(uint16_t addr);
 uint16_t port_test_fpga_phase_corr(uint16_t idx);
 uint16_t port_test_fpga_output_mask(uint16_t idx);
@@ -922,7 +923,10 @@ TEST(Proto, ChangePatternBankWritesTransitionAndReqBankAndLatches) {
 TEST(Proto, ChangePatternBankWritesTransitionValue) {
   reset_all();
 
-  make_change_pattern_bank(0, 0, TRANSITION_MODE_SYS_TIME, 0x0123456789ABCDEFull).deliver();
+  make_config_pattern(0, 0, EMISSION_TYPE_RAW, 2, EMISSION_MAX_INDICES, 0, 0, 4).deliver();
+  ASSERT_EQ(_sTx.data, 0) << "finite loop bank accepts a SYS_TIME transition";
+
+  make_change_pattern_bank(1, 0, TRANSITION_MODE_SYS_TIME, 0x0123456789ABCDEFull).deliver();
 
   EXPECT_EQ(_sTx.data, 0);
   EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_TRANSITION_MODE), TRANSITION_MODE_SYS_TIME);
@@ -957,6 +961,89 @@ TEST(Proto, ChangeModBankRejectsInvalidBank) {
   make_change_mod_bank(0, NUM_BANKS, TRANSITION_MODE_IMMEDIATE, 0).deliver();
   EXPECT_EQ(_sTx.data, ERR_INVALID_PAYLOAD);
   EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 0) << "rejected change must not switch the bank";
+}
+
+TEST(Proto, ChangeModBankRejectsTimedTransitionOnInfiniteLoop) {
+  reset_all();
+
+  make_change_mod_bank(0, 1, TRANSITION_MODE_SYNC_IDX, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_TRANSITION_MODE) << "infinite loop only accepts IMMEDIATE/EXT";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 0) << "rejected change must not switch the bank";
+
+  make_change_mod_bank(1, 1, TRANSITION_MODE_EXT, 0).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "EXT is valid for an infinite loop bank";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 1);
+}
+
+TEST(Proto, ChangeModBankRejectsImmediateTransitionOnFiniteLoop) {
+  reset_all();
+  make_config_mod(0, 1, 10, 100, 4).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_change_mod_bank(1, 1, TRANSITION_MODE_IMMEDIATE, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_TRANSITION_MODE) << "finite loop only accepts SYNC_IDX/SYS_TIME/GPIO";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 0) << "rejected change must not switch the bank";
+
+  make_change_mod_bank(2, 1, TRANSITION_MODE_GPIO, 1).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "GPIO is valid for a finite loop bank";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 1);
+}
+
+TEST(Proto, ChangePatternBankRejectsTimedTransitionOnInfiniteLoop) {
+  reset_all();
+
+  make_change_pattern_bank(0, 1, TRANSITION_MODE_GPIO, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_TRANSITION_MODE) << "infinite loop only accepts IMMEDIATE/EXT";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 0) << "rejected change must not switch the bank";
+
+  make_change_pattern_bank(1, 1, TRANSITION_MODE_IMMEDIATE, 0).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "IMMEDIATE is valid for an infinite loop bank";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
+}
+
+TEST(Proto, ChangePatternBankRejectsImmediateTransitionOnFiniteLoop) {
+  reset_all();
+  make_config_pattern(0, 1, EMISSION_TYPE_RAW, 2, EMISSION_MAX_INDICES, 0, 0, 4).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+
+  make_change_pattern_bank(1, 1, TRANSITION_MODE_EXT, 0).deliver();
+  EXPECT_EQ(_sTx.data, ERR_INVALID_TRANSITION_MODE) << "finite loop only accepts SYNC_IDX/SYS_TIME/GPIO";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 0) << "rejected change must not switch the bank";
+
+  make_change_pattern_bank(2, 1, TRANSITION_MODE_SYNC_IDX, 0).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "SYNC_IDX is valid for a finite loop bank";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
+}
+
+TEST(Proto, ChangeModBankRejectsSysTimeTransitionWithinMargin) {
+  reset_all();
+  make_config_mod(0, 1, 10, 100, 4).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+  port_test_set_dc_sys_time(1'000'000'000ull);
+
+  make_change_mod_bank(1, 1, TRANSITION_MODE_SYS_TIME, 1'000'000'000ull + SYS_TIME_TRANSITION_MARGIN_NS - 1).deliver();
+  EXPECT_EQ(_sTx.data, ERR_MISS_TRANSITION_TIME) << "transition time within the margin would be missed";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 0) << "rejected change must not switch the bank";
+
+  make_change_mod_bank(2, 1, TRANSITION_MODE_SYS_TIME, 1'000'000'000ull + SYS_TIME_TRANSITION_MARGIN_NS).deliver();
+  EXPECT_EQ(_sTx.data, 0) << "exactly margin ahead is accepted";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_MOD_REQ_RD_BANK), 1);
+}
+
+TEST(Proto, ChangePatternBankRejectsSysTimeTransitionWithinMargin) {
+  reset_all();
+  make_config_pattern(0, 1, EMISSION_TYPE_RAW, 2, EMISSION_MAX_INDICES, 0, 0, 4).deliver();
+  ASSERT_EQ(_sTx.data, 0);
+  port_test_set_dc_sys_time(2'000'000'000ull);
+
+  make_change_pattern_bank(1, 1, TRANSITION_MODE_SYS_TIME, 2'000'000'000ull).deliver();
+  EXPECT_EQ(_sTx.data, ERR_MISS_TRANSITION_TIME) << "transition time equal to now is within the margin";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 0) << "rejected change must not switch the bank";
+
+  make_change_pattern_bank(2, 1, TRANSITION_MODE_SYS_TIME, 2'000'000'000ull + SYS_TIME_TRANSITION_MARGIN_NS + 1)
+      .deliver();
+  EXPECT_EQ(_sTx.data, 0) << "well beyond the margin is accepted";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
 }
 
 

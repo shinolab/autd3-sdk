@@ -233,6 +233,9 @@ async fn run_stop_and_wait(
             Err(e @ ClientError::SilencerConstraint { .. }) => {
                 anyhow::bail!("rejected by the local silencer precheck: {e}");
             }
+            Err(e @ ClientError::TransitionConstraint { .. }) => {
+                anyhow::bail!("rejected by the local transition precheck: {e}");
+            }
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
                 SampleStatus::LinkError
@@ -316,6 +319,9 @@ async fn run_streaming(
             }
             Err(e @ ClientError::SilencerConstraint { .. }) => {
                 anyhow::bail!("rejected by the local silencer precheck: {e}");
+            }
+            Err(e @ ClientError::TransitionConstraint { .. }) => {
+                anyhow::bail!("rejected by the local transition precheck: {e}");
             }
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");

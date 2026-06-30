@@ -61,6 +61,9 @@ impl Operation for ConfigModulation {
             return Err(silencer_constraint(device, v));
         }
         state.silencer.note_mod_div(self.bank.as_u8(), divider);
+        state
+            .transition
+            .note_mod_loop(self.bank.as_u8(), self.loop_behavior);
         Ok(())
     }
 }

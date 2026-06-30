@@ -150,6 +150,10 @@ impl FpgaEmulator {
         self.next_sync0
     }
 
+    pub(crate) fn dc_sys_time(&mut self) -> u64 {
+        self.sys_time_ns
+    }
+
     fn reg_u64(&self, base: usize) -> u64 {
         (0..4)
             .map(|i| u64::from(self.controller[base + i]) << (16 * i))

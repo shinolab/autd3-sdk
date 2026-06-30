@@ -13,6 +13,7 @@ extern "C" {
 
 #define TRANSITION_MODE_IMMEDIATE (0xFF)
 #define REP_INFINITE (0xFFFF)
+#define SYS_TIME_TRANSITION_MARGIN_NS (10000000ULL)
 
 #define PWE_TABLE_SIZE (256)
 #define SILENCER_DEFAULT_UPDATE_RATE (256)
@@ -28,6 +29,7 @@ void set_and_wait_update(uint16_t flag);
 void fpga_write_u64(uint16_t addr, uint64_t value);
 void fpga_write_change_bank(uint16_t req_rd_bank_addr, uint16_t transition_mode_addr, uint16_t transition_value_addr,
                             uint8_t bank, uint8_t transition_mode, uint64_t transition_value);
+uint8_t transition_mode_violates_loop(uint16_t rep, uint8_t transition_mode);
 void fpga_write_ram(uint8_t select, uint16_t wr_bank_reg, uint16_t wr_page_reg, uint8_t bank, uint32_t offset,
                     const uint8_t* src, uint16_t len_bytes);
 void fpga_init(void);

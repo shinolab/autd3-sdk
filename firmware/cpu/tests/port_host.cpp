@@ -29,6 +29,7 @@ uint16_t g_mod_ram[NUM_BANKS][kModWords];
 uint16_t g_em_ram[NUM_BANKS][EMISSION_RAM_WORDS];
 uint32_t g_latch_count[16];
 uint64_t g_next_sync0 = 0;
+uint64_t g_dc_sys_time = 0;
 
 void write_controller(uint32_t a, uint16_t value) {
   switch (a >> 8) {
@@ -92,9 +93,13 @@ extern "C" uint16_t port_fpga_read(uint16_t addr) {
 
 extern "C" uint64_t port_next_sync0() { return g_next_sync0; }
 
+extern "C" uint64_t port_dc_sys_time() { return g_dc_sys_time; }
+
 extern "C" void port_test_fpga_set_controller(uint16_t addr, uint16_t value) { g_ctl[addr & 0xFF] = value; }
 
 extern "C" void port_test_set_next_sync0(uint64_t t) { g_next_sync0 = t; }
+
+extern "C" void port_test_set_dc_sys_time(uint64_t t) { g_dc_sys_time = t; }
 
 extern "C" void port_test_fpga_reset() {
   std::memset(g_ctl, 0, sizeof(g_ctl));
@@ -105,6 +110,7 @@ extern "C" void port_test_fpga_reset() {
   std::memset(g_em_ram, 0, sizeof(g_em_ram));
   std::memset(g_latch_count, 0, sizeof(g_latch_count));
   g_next_sync0 = 0;
+  g_dc_sys_time = 0;
 }
 
 extern "C" uint16_t port_test_fpga_ctl(uint16_t addr) { return g_ctl[addr & 0xFF]; }

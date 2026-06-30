@@ -58,6 +58,8 @@ uint16_t port_fpga_read(uint16_t addr);
 
 uint64_t port_next_sync0(void);
 
+uint64_t port_dc_sys_time(void);
+
 #ifdef __cplusplus
 }
 #endif

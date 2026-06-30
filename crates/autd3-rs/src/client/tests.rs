@@ -1009,6 +1009,116 @@ async fn desync_after_send_failure_stops_precheck() {
 }
 
 #[tokio::test]
+async fn build_rejects_transition_mode_incompatible_with_loop() {
+    use crate::command::Modulation;
+    use crate::value::{LoopBehavior, SamplingConfig, TransitionMode};
+    use core::num::NonZeroU16;
+
+    let data = [0x80u8; 4];
+    let finite = LoopBehavior::Finite(NonZeroU16::new(2).unwrap());
+
+    let (client, _slave) = open_client().await;
+
+    let mut builder = client.datagram_builder();
+    builder.push(Modulation {
+        loop_behavior: finite,
+        transition_mode: TransitionMode::Immediate,
+        ..Modulation::new(SamplingConfig::FREQ_4K, &data)
+    });
+    assert!(
+        matches!(
+            builder.build().unwrap_err(),
+            Error::TransitionConstraint {
+                device: 0,
+                transition_mode: TransitionMode::Immediate,
+                bank_loop: crate::BankLoop::Finite,
+            }
+        ),
+        "finite loop must reject an immediate transition"
+    );
+
+    let mut builder = client.datagram_builder();
+    builder.push(Modulation {
+        loop_behavior: finite,
+        transition_mode: TransitionMode::SyncIdx,
+        ..Modulation::new(SamplingConfig::FREQ_4K, &data)
+    });
+    assert!(
+        builder.build().is_ok(),
+        "finite loop with a timed transition is valid"
+    );
+}
+
+#[tokio::test]
+async fn build_rejects_timed_transition_on_infinite_loop() {
+    use crate::geometry::Point3;
+    use crate::stm::{FociStm, FociStmOption};
+    use crate::value::{ControlPoints, GpioIn, LoopBehavior, SamplingConfig, TransitionMode};
+
+    let points = [ControlPoints::from(Point3::new(0.0, 0.0, 150.0))];
+
+    let (client, _slave) = open_client().await;
+
+    let mut builder = client.datagram_builder();
+    builder.push(FociStm::new(
+        SamplingConfig::FREQ_4K,
+        &points,
+        FociStmOption {
+            loop_behavior: LoopBehavior::Infinite,
+            transition_mode: TransitionMode::Gpio(GpioIn::I1),
+            ..Default::default()
+        },
+    ));
+    assert!(
+        matches!(
+            builder.build().unwrap_err(),
+            Error::TransitionConstraint {
+                bank_loop: crate::BankLoop::Infinite,
+                ..
+            }
+        ),
+        "infinite loop must reject a GPIO-timed transition"
+    );
+
+    let mut builder = client.datagram_builder();
+    builder.push(FociStm::new(
+        SamplingConfig::FREQ_4K,
+        &points,
+        FociStmOption::default(),
+    ));
+    assert!(
+        builder.build().is_ok(),
+        "infinite loop with the default immediate transition is valid"
+    );
+}
+
+#[tokio::test]
+async fn transition_precheck_opts_out_with_validate_state() {
+    use crate::command::Modulation;
+    use crate::value::{LoopBehavior, SamplingConfig, TransitionMode};
+    use core::num::NonZeroU16;
+
+    let (link, _slave) = slave_pair();
+    let config = ClientConfig {
+        validate_state: false,
+        ..ClientConfig::default()
+    };
+    let client = Client::open(&geometry(1), link, config).await.unwrap();
+
+    let data = [0x80u8; 4];
+    let mut builder = client.datagram_builder();
+    builder.push(Modulation {
+        loop_behavior: LoopBehavior::Finite(NonZeroU16::new(2).unwrap()),
+        transition_mode: TransitionMode::Immediate,
+        ..Modulation::new(SamplingConfig::FREQ_4K, &data)
+    });
+    assert!(
+        builder.build().is_ok(),
+        "opt-out must skip the transition pre-check and defer to the firmware"
+    );
+}
+
+#[tokio::test]
 async fn build_rejects_per_device_group_under_strict_silencer() {
     use crate::operation::{ConfigModulation, SetSilencer};
     use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
