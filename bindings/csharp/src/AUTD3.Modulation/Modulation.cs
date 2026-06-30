@@ -55,6 +55,9 @@ namespace AUTD3
         internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, IntPtr option, IntPtr buffer);
 
         [DllImport(Lib)]
+        internal static extern int autd3_modulation_constant(byte intensity, IntPtr buffer);
+
+        [DllImport(Lib)]
         internal static extern int autd3_modulation_radiation_pressure(IntPtr src, IntPtr dst);
 
         [DllImport(Lib)]
@@ -238,6 +241,14 @@ namespace AUTD3
             finally
             {
                 NativeCore.autd3_core_sampling_config_free(sampling);
+            }
+        }
+
+        public static void Constant(byte intensity, ModulationBuffer buffer)
+        {
+            if (NativeModulation.autd3_modulation_constant(intensity, buffer.Handle) != 0)
+            {
+                throw new Autd3Exception("constant modulation failed");
             }
         }
 
