@@ -57,6 +57,17 @@ pub(crate) fn silencer_constraint(
     }
 }
 
+pub(crate) fn transition_constraint(
+    device: usize,
+    violation: autd3_rs_core::TransitionViolation,
+) -> Error {
+    Error::TransitionConstraint {
+        device,
+        transition_mode: violation.transition_mode,
+        bank_loop: violation.bank_loop,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Distribution {
     Broadcast,

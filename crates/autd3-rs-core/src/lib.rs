@@ -18,7 +18,10 @@ pub use link::{
     ConstStateChecker, CycleOutcome, DeviceState, Interface, IntoLink, Link, LinkStats, LinkStatus,
     StateCheck,
 };
-pub use mirror::{FirmwareState, SilencerAxis, SilencerGuardState, SilencerViolation};
+pub use mirror::{
+    BankLoop, FirmwareState, SilencerAxis, SilencerGuardState, SilencerViolation,
+    TransitionGuardState, TransitionViolation,
+};
 pub use protocol::{
     Cmd, DeviceErrorCode, MAX_IN_FLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, RxFrame, Seq,
     TX_FRAME_BYTES, TxFrame, describe_device_error,

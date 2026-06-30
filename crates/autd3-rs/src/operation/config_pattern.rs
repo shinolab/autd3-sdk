@@ -34,6 +34,7 @@ fn divider_of(config: SamplingConfig) -> Result<u16, Error> {
 fn reflect_pattern(
     config: SamplingConfig,
     bank: PatternBank,
+    loop_behavior: LoopBehavior,
     device: usize,
     state: &mut FirmwareState,
 ) -> Result<(), Error> {
@@ -42,6 +43,9 @@ fn reflect_pattern(
         return Err(silencer_constraint(device, v));
     }
     state.silencer.note_pattern_div(bank.as_u8(), divider);
+    state
+        .transition
+        .note_pattern_loop(bank.as_u8(), loop_behavior);
     Ok(())
 }
 
@@ -82,7 +86,7 @@ impl Operation for ConfigPattern {
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        reflect_pattern(self.config, self.bank, device, state)
+        reflect_pattern(self.config, self.bank, self.loop_behavior, device, state)
     }
 }
 
@@ -135,7 +139,7 @@ impl Operation for ConfigFociStm {
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        reflect_pattern(self.config, self.bank, device, state)
+        reflect_pattern(self.config, self.bank, self.loop_behavior, device, state)
     }
 }
 

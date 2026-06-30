@@ -37,6 +37,16 @@ void fpga_write_change_bank(uint16_t req_rd_bank_addr, uint16_t transition_mode_
   fpga_write(BRAM_SELECT_CONTROLLER, req_rd_bank_addr, bank);
 }
 
+uint8_t transition_mode_violates_loop(uint16_t rep, uint8_t transition_mode) {
+  if (rep == REP_INFINITE) {
+    return ((transition_mode == TRANSITION_MODE_IMMEDIATE) || (transition_mode == TRANSITION_MODE_EXT)) ? 0u : 1u;
+  }
+  return ((transition_mode == TRANSITION_MODE_SYNC_IDX) || (transition_mode == TRANSITION_MODE_SYS_TIME) ||
+          (transition_mode == TRANSITION_MODE_GPIO))
+             ? 0u
+             : 1u;
+}
+
 void fpga_write_ram(uint8_t select, uint16_t wr_bank_reg, uint16_t wr_page_reg, uint8_t bank, uint32_t offset,
                     const uint8_t* src, uint16_t len_bytes) {
   fpga_write(BRAM_SELECT_CONTROLLER, wr_bank_reg, bank);

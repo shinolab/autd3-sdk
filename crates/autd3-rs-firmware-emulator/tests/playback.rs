@@ -30,7 +30,7 @@ fn modulation_buffer_and_index_follow_time() {
     config.extend_from_slice(&(samples.len() as u32).to_le_bytes());
     config.extend_from_slice(&0xFFFFu16.to_le_bytes());
 
-    let mut change = vec![bank, 0x00];
+    let mut change = vec![bank, 0xFF];
     change.extend_from_slice(&0u64.to_le_bytes());
 
     let mut device = Device::new(NUM_TRANSDUCERS);
@@ -105,5 +105,61 @@ fn modulation_finite_loop_stops_after_rep() {
     assert!(
         indices.windows(2).rev().take(4).all(|w| w[0] == w[1]),
         "playback must be stopped (index frozen): {indices:?}"
+    );
+}
+
+#[test]
+fn sys_time_transition_within_margin_is_rejected() {
+    const MARGIN_NS: u64 = 10_000_000;
+    const MISS_TRANSITION_TIME: u8 = 0x06;
+
+    let samples: [u8; 4] = [10, 20, 30, 40];
+    let bank = 1u8;
+
+    let mut write = vec![bank, 0];
+    write.extend_from_slice(&0u32.to_le_bytes());
+    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
+    write.extend_from_slice(&samples);
+
+    let mut config = vec![bank, 0];
+    config.extend_from_slice(&1u16.to_le_bytes());
+    config.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+    config.extend_from_slice(&3u16.to_le_bytes());
+
+    let sys_time = 1_000_000_000u64;
+    let change = |value: u64| {
+        let mut c = vec![bank, 0x01];
+        c.extend_from_slice(&value.to_le_bytes());
+        c
+    };
+
+    let mut device = Device::new(NUM_TRANSDUCERS);
+    device.send(&frame(0, Cmd::Reset, &[]));
+    device.send(&frame(0, Cmd::WriteModulationBuffer, &write));
+    device.send(&frame(1, Cmd::ConfigModulation, &config));
+    device.fpga_mut().update_with_sys_time(sys_time);
+
+    assert_eq!(
+        device
+            .send(&frame(
+                2,
+                Cmd::ChangeModulationBank,
+                &change(sys_time + MARGIN_NS - 1)
+            ))
+            .data,
+        MISS_TRANSITION_TIME,
+        "transition within the margin must be rejected"
+    );
+
+    assert_eq!(
+        device
+            .send(&frame(
+                3,
+                Cmd::ChangeModulationBank,
+                &change(sys_time + MARGIN_NS)
+            ))
+            .data,
+        0,
+        "transition at least a margin ahead is accepted"
     );
 }

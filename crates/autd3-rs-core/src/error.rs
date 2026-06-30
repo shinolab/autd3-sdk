@@ -1,7 +1,7 @@
 use thiserror::Error;
 
-use crate::mirror::SilencerAxis;
-use crate::value::{PulseWidthError, SamplingConfigError};
+use crate::mirror::{BankLoop, SilencerAxis};
+use crate::value::{PulseWidthError, SamplingConfigError, TransitionMode};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -16,6 +16,15 @@ pub enum Error {
         axis: SilencerAxis,
         completion_steps: u16,
         sampling_div: u16,
+    },
+
+    #[error(
+        "device {device}: transition mode {transition_mode:?} is invalid for a {bank_loop:?} loop bank"
+    )]
+    TransitionConstraint {
+        device: usize,
+        transition_mode: TransitionMode,
+        bank_loop: BankLoop,
     },
 
     #[error("ack timeout after {cycles} cycles")]
