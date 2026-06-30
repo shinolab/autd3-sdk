@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Subcommand;
@@ -103,6 +103,12 @@ fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     copy_file(&sim_bin, &sim_dir.join(exe_name("autd3-rs-simulator")))?;
     copy_dir(&sim_web, &sim_dir.join("web"))?;
 
+    let fw_bin = build_firmware_cli(root, debug)?;
+    copy_file(
+        &fw_bin,
+        &staging.join("firmware").join(exe_name("autd3-firmware")),
+    )?;
+
     if cfg!(target_os = "windows") {
         let exe = build_twincat_cli(root, debug)?;
         let dist = exe
@@ -132,6 +138,19 @@ fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     };
     println!("created {}", archive.display());
     Ok(())
+}
+
+fn build_firmware_cli(root: &Path, debug: bool) -> Result<PathBuf> {
+    let mut args = vec!["build", "-p", "autd3-firmware"];
+    if !debug {
+        args.push("--release");
+    }
+    run("cargo", args, root)?;
+    let profile = if debug { "debug" } else { "release" };
+    Ok(root
+        .join("target")
+        .join(profile)
+        .join(exe_name("autd3-firmware")))
 }
 
 fn exe_name(name: &str) -> String {

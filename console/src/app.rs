@@ -2,13 +2,14 @@ use std::time::Duration;
 
 use eframe::egui;
 
-use crate::panel::{SimulatorPanel, TwinCatPanel};
+use crate::panel::{FirmwarePanel, SimulatorPanel, TwinCatPanel};
 
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 enum Tab {
     #[default]
     Simulator,
     TwinCat,
+    Firmware,
     About,
 }
 
@@ -17,6 +18,7 @@ pub struct ConsoleApp {
     tab: Tab,
     simulator: SimulatorPanel,
     twincat: TwinCatPanel,
+    firmware: FirmwarePanel,
 }
 
 impl ConsoleApp {
@@ -28,6 +30,9 @@ impl ConsoleApp {
             }
             if let Some(config) = eframe::get_value(storage, "twincat") {
                 app.twincat.config = config;
+            }
+            if let Some(config) = eframe::get_value(storage, "firmware") {
+                app.firmware.config = config;
             }
         }
         if !cfg!(target_os = "windows") {
@@ -41,7 +46,8 @@ impl eframe::App for ConsoleApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.simulator.pump();
         self.twincat.pump();
-        if self.simulator.is_running() || self.twincat.is_running() {
+        self.firmware.pump();
+        if self.simulator.is_running() || self.twincat.is_running() || self.firmware.is_running() {
             ctx.request_repaint_after(Duration::from_millis(250));
         }
     }
@@ -53,12 +59,14 @@ impl eframe::App for ConsoleApp {
                 if cfg!(target_os = "windows") {
                     ui.selectable_value(&mut self.tab, Tab::TwinCat, "TwinCAT");
                 }
+                ui.selectable_value(&mut self.tab, Tab::Firmware, "Firmware");
                 ui.selectable_value(&mut self.tab, Tab::About, "About");
             });
         });
         egui::CentralPanel::default().show(ui, |ui| match self.tab {
             Tab::Simulator => self.simulator.ui(ui),
             Tab::TwinCat => self.twincat.ui(ui),
+            Tab::Firmware => self.firmware.ui(ui),
             Tab::About => crate::about::ui(ui),
         });
     }
@@ -66,5 +74,6 @@ impl eframe::App for ConsoleApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, "simulator", &self.simulator.config);
         eframe::set_value(storage, "twincat", &self.twincat.config);
+        eframe::set_value(storage, "firmware", &self.firmware.config);
     }
 }

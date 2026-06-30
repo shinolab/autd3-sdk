@@ -1,6 +1,8 @@
+mod firmware;
 mod simulator;
 mod twincat;
 
+pub use firmware::FirmwarePanel;
 pub use simulator::SimulatorPanel;
 pub use twincat::TwinCatPanel;
 

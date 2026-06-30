@@ -1304,6 +1304,11 @@ html {
   }
 }
 
+.link {
+  cursor: pointer;
+  text-decoration-line: underline;
+}
+
 :where(.menu li) .badge {
   justify-self: end;
 }
@@ -1771,6 +1776,15 @@ input.tab:checked + .tab-content,
   line-height: 1.25rem;
 }
 
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+}
+
 .card.image-full :where(figure) {
   overflow: hidden;
   border-radius: inherit;
@@ -2037,6 +2051,29 @@ details.collapse summary::-webkit-details-marker {
 
 .join-item:focus {
   isolation: isolate;
+}
+
+.link-primary {
+  --tw-text-opacity: 1;
+  color: var(--fallback-p,oklch(var(--p)/var(--tw-text-opacity)));
+}
+
+@supports (color:color-mix(in oklab,black,black)) {
+  @media (hover:hover) {
+    .link-primary:hover {
+      color: color-mix(in oklab,var(--fallback-p,oklch(var(--p)/1)) 80%,black);
+    }
+  }
+}
+
+.link:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .mockup-phone .camera {
@@ -2775,10 +2812,18 @@ details.collapse summary::-webkit-details-marker {
   line-height: 1.25rem;
 }
 
+.card-compact .card-title {
+  margin-bottom: 0.25rem;
+}
+
 .card-normal .card-body {
   padding: var(--padding-card, 2rem);
   font-size: 1rem;
   line-height: 1.5rem;
+}
+
+.card-normal .card-title {
+  margin-bottom: 0.75rem;
 }
 
 .join.join-vertical > :where(*:not(:first-child)) {
@@ -2890,6 +2935,14 @@ details.collapse summary::-webkit-details-marker {
   height: 2.25rem;
 }
 
+.max-h-48 {
+  max-height: 12rem;
+}
+
+.max-h-96 {
+  max-height: 24rem;
+}
+
 .min-h-0 {
   min-height: 0px;
 }
@@ -2983,6 +3036,14 @@ details.collapse summary::-webkit-details-marker {
   gap: 1.5rem;
 }
 
+.overflow-auto {
+  overflow: auto;
+}
+
+.whitespace-pre-wrap {
+  white-space: pre-wrap;
+}
+
 .rounded {
   border-radius: 0.25rem;
 }
@@ -3004,6 +3065,10 @@ details.collapse summary::-webkit-details-marker {
 .bg-base-200 {
   --tw-bg-opacity: 1;
   background-color: var(--fallback-b2,oklch(var(--b2)/var(--tw-bg-opacity, 1)));
+}
+
+.p-3 {
+  padding: 0.75rem;
 }
 
 .p-4 {
@@ -3064,6 +3129,11 @@ details.collapse summary::-webkit-details-marker {
 .text-sm {
   font-size: 0.875rem;
   line-height: 1.25rem;
+}
+
+.text-xs {
+  font-size: 0.75rem;
+  line-height: 1rem;
 }
 
 .font-medium {
