@@ -1,7 +1,7 @@
+mod constant;
 mod fourier;
 mod radiation_pressure;
 mod sampling;
-mod constant;
 mod sampling_mode;
 mod sine;
 mod square;
@@ -14,10 +14,10 @@ pub fn modulation_buffer() -> Vec<u8> {
 }
 
 pub use autd3_rs_core::value::Nearest;
+pub use constant::constant;
 pub use fourier::{FourierOption, SineComponent, fourier};
 pub use radiation_pressure::{radiation_pressure, radiation_pressure_inplace};
 pub use sampling::samples_per_period;
 pub use sampling_mode::SamplingMode;
 pub use sine::{SineOption, sine};
-pub use constant::constant;
 pub use square::{SquareOption, square};
