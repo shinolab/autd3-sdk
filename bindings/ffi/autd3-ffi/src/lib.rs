@@ -16,10 +16,10 @@ use autd3_rs::value::{
 };
 use autd3_rs::{
     ChangeModulationBank, ChangePatternBank, Clear, ClientConfig, ConfigFociStm, ConfigModulation,
-    ConfigPattern, ControlPoint, ControlPoints, DatagramBuilder as CoreDatagramBuilder, Datagrams,
+    ConfigPattern, ControlPoint, ControlPoints, DatagramBuilder as CoreDatagramBuilder,
     EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, FociStm as CoreFociStm, FociStmOption,
-    ForceFan, Geometry, GpioOut, Length, Modulation, Nop, PWE_TABLE_SIZE, Pattern, PatternStm,
-    PatternStmMode, PatternStmOption, Point3, PulseWidth, SetGpioOut, SetOutputMask,
+    ForceFan, Frames, Geometry, GpioOut, Length, Modulation, Nop, PWE_TABLE_SIZE, Pattern,
+    PatternStm, PatternStmMode, PatternStmOption, Point3, PulseWidth, SetGpioOut, SetOutputMask,
     SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig, UnitVector3, Vector3, Velocity,
     WriteModulationBuffer, WritePatternBuffer, circle, line,
 };
@@ -343,7 +343,7 @@ pub enum Pending {
     EmulateGpioIn([bool; 4]),
     SetOutputMask(Vec<[bool; NUM_TRANSDUCERS]>),
     SetPhaseCorrection(Vec<[Phase; NUM_TRANSDUCERS]>),
-    SetPulseWidthTable(Box<[u16; PWE_TABLE_SIZE]>),
+    SetPulseWidthTable(Box<[PulseWidth; PWE_TABLE_SIZE]>),
     FociStm {
         config: StmConfig,
         points: FociPoints,
@@ -619,8 +619,10 @@ pub unsafe extern "C" fn autd3_op_set_pulse_width_table(table: *const u16) -> *m
     }
 
     let slice = unsafe { std::slice::from_raw_parts(table, PWE_TABLE_SIZE) };
-    let mut t = Box::new([0u16; PWE_TABLE_SIZE]);
-    t.copy_from_slice(slice);
+    let mut t = Box::new([PulseWidth::new(0); PWE_TABLE_SIZE]);
+    for (dst, &src) in t.iter_mut().zip(slice.iter()) {
+        *dst = PulseWidth::new(src);
+    }
     into_handle(Pending::SetPulseWidthTable(t))
 }
 
@@ -631,7 +633,9 @@ pub unsafe extern "C" fn autd3_pulse_width_default_table(out: *mut u16) {
     }
 
     let table = SetPulseWidthTable::default_table();
-    unsafe { std::ptr::copy_nonoverlapping(table.as_ptr(), out, PWE_TABLE_SIZE) };
+    for (i, pw) in table.iter().enumerate() {
+        unsafe { *out.add(i) = pw.pulse_width().unwrap_or(0) };
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -770,7 +774,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
     builder: *const DatagramBuilder,
     out_err: *mut c_char,
     out_err_len: usize,
-) -> *mut Arc<Datagrams> {
+) -> *mut Arc<Frames> {
     if builder.is_null() {
         unsafe { write_cstr(out_err, out_err_len, "null builder") };
         return std::ptr::null_mut();
@@ -961,7 +965,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_datagrams_num_frames(datagrams: *const Arc<Datagrams>) -> usize {
+pub unsafe extern "C" fn autd3_datagrams_num_frames(datagrams: *const Arc<Frames>) -> usize {
     if datagrams.is_null() {
         return 0;
     }
@@ -970,7 +974,7 @@ pub unsafe extern "C" fn autd3_datagrams_num_frames(datagrams: *const Arc<Datagr
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_datagrams_free(datagrams: *mut Arc<Datagrams>) {
+pub unsafe extern "C" fn autd3_datagrams_free(datagrams: *mut Arc<Frames>) {
     unsafe { drop_handle(datagrams) }
 }
 
@@ -1033,7 +1037,7 @@ pub unsafe extern "C" fn autd3_client_num_devices(client: *const ClientHandle) -
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_send_checked(
     client: *const ClientHandle,
-    datagrams: *const Arc<Datagrams>,
+    datagrams: *const Arc<Frames>,
     frame: i64,
     cb: CompletionCallback,
     user_data: *mut c_void,

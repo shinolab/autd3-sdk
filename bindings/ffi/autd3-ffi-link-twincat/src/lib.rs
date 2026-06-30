@@ -5,7 +5,7 @@ use std::sync::{Arc, OnceLock};
 use autd3_ffi_abi::{
     BoxFuture, ClientBackend, ClientOpener, LinkStatusData, client_opener, into_handle,
 };
-use autd3_rs::{Client, Datagrams};
+use autd3_rs::{Client, Frames};
 use autd3_rs_core::{Error, StateCheck};
 use autd3_rs_link_twincat::{AmsNetId, TwinCATLinkOption, TwinCATStateChecker};
 use tokio::sync::Mutex;
@@ -71,7 +71,7 @@ impl ClientBackend for TwinCATBackend {
         })
     }
 
-    fn send_checked(&self, datagrams: Arc<Datagrams>, frame: Option<usize>) -> BoxFuture<()> {
+    fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()> {
         let client = Arc::clone(&self.client);
         Box::pin(async move {
             link_runtime()

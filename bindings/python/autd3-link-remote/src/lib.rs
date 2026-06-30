@@ -5,7 +5,7 @@ use std::time::Duration;
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, client_opener, link_into_capsule,
 };
-use autd3_rs::{Client, ConstStateChecker, Datagrams, StateCheck};
+use autd3_rs::{Client, ConstStateChecker, Frames, StateCheck};
 use autd3_rs_core::Error;
 use autd3_rs_link_remote::RemoteLinkOption as CoreOption;
 use pyo3::exceptions::PyValueError;
@@ -73,7 +73,7 @@ impl ClientBackend for RemoteBackend {
         })
     }
 
-    fn send_checked(&self, datagrams: Arc<Datagrams>, frame: Option<usize>) -> BoxFuture<()> {
+    fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()> {
         let client = Arc::clone(&self.client);
         Box::pin(async move {
             link_runtime()

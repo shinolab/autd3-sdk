@@ -67,7 +67,7 @@ mod client {
     use std::pin::Pin;
     use std::sync::Arc;
 
-    use autd3_rs::{ClientConfig, Datagrams};
+    use autd3_rs::{ClientConfig, Frames};
     use autd3_rs_core::{Error, Geometry};
 
     pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send>>;
@@ -85,7 +85,7 @@ mod client {
         fn read_fpga_state(&self) -> BoxFuture<Vec<u8>>;
         fn read_error_detail(&self) -> BoxFuture<Vec<u8>>;
 
-        fn send_checked(&self, datagrams: Arc<Datagrams>, frame: Option<usize>) -> BoxFuture<()>;
+        fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()>;
         fn check_status(&self) -> BoxFuture<LinkStatusData>;
         fn stop(&self) -> BoxFuture<()>;
         fn close(&self) -> BoxFuture<()>;
