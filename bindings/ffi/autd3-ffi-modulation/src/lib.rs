@@ -125,6 +125,20 @@ pub unsafe extern "C" fn autd3_modulation_square(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_modulation_constant(
+    intensity: u8,
+    buffer: *mut ModulationBuffer,
+) -> i32 {
+    if buffer.is_null() {
+        return -1;
+    }
+
+    let buffer = unsafe { &mut *buffer };
+    autd3_rs_modulation::constant(intensity, &mut buffer.0);
+    0
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn autd3_modulation_fourier_option_new(
     has_scale_factor: bool,
     scale_factor: f32,

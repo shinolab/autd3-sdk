@@ -179,6 +179,11 @@ fn square(
 }
 
 #[pyfunction]
+fn constant(intensity: u8, mut buffer: PyRefMut<'_, ModulationBuffer>) {
+    autd3_rs_modulation::constant(intensity, &mut buffer.data);
+}
+
+#[pyfunction]
 fn fourier(
     py: Python<'_>,
     components: Vec<PyRef<'_, SineComponent>>,
@@ -216,6 +221,7 @@ fn autd3_modulation(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(modulation_buffer, m)?)?;
     m.add_function(wrap_pyfunction!(sine, m)?)?;
     m.add_function(wrap_pyfunction!(square, m)?)?;
+    m.add_function(wrap_pyfunction!(constant, m)?)?;
     m.add_function(wrap_pyfunction!(fourier, m)?)?;
     m.add_function(wrap_pyfunction!(radiation_pressure, m)?)?;
     m.add_function(wrap_pyfunction!(radiation_pressure_inplace, m)?)?;

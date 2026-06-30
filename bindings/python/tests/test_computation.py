@@ -36,6 +36,10 @@ def test_modulation_sine_square_fourier_radiation() -> None:
     modulation.square(150.0, modulation.SquareOption(), sq)
     assert len(sq) > 0
 
+    c = modulation.modulation_buffer()
+    modulation.constant(0xFF, c)
+    assert len(c) == 2
+
     fo = modulation.modulation_buffer()
     modulation.fourier(
         [modulation.SineComponent(100.0, modulation.SineOption()),

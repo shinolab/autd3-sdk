@@ -44,6 +44,14 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void ConstantFillsTwoSamples()
+        {
+            using var modulation = Modulation.ModulationBuffer();
+            Modulation.Constant(0xFF, modulation);
+            Assert.Equal(2, modulation.Length);
+        }
+
+        [Fact]
         public void SamplingConfigResolvesDivider()
         {
             Assert.True(SamplingConfig.Freq4k.DivideValue() > 0);
