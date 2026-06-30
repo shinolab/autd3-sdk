@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::mirror::SilencerAxis;
-use crate::value::SamplingConfigError;
+use crate::value::{PulseWidthError, SamplingConfigError};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -154,4 +154,7 @@ pub enum PayloadError {
 
     #[error(transparent)]
     SamplingConfig(#[from] SamplingConfigError),
+
+    #[error(transparent)]
+    PulseWidth(#[from] PulseWidthError),
 }
