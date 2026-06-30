@@ -283,12 +283,12 @@ fn find_jlink_windows() -> Option<String> {
             continue;
         };
         let display_name: String = subkey.get_value("DisplayName").unwrap_or_default();
-        if display_name.contains("J-Link") {
-            if let Ok(loc) = subkey.get_value::<String, _>("InstallLocation") {
-                let exe = WinPathBuf::from(loc).join("JLink.exe");
-                if exe.is_file() {
-                    return Some(exe.to_string_lossy().into_owned());
-                }
+        if display_name.contains("J-Link")
+            && let Ok(loc) = subkey.get_value::<String, _>("InstallLocation")
+        {
+            let exe = WinPathBuf::from(loc).join("JLink.exe");
+            if exe.is_file() {
+                return Some(exe.to_string_lossy().into_owned());
             }
         }
     }
@@ -317,10 +317,10 @@ fn find_vivado_windows() -> Option<String> {
             continue;
         };
         let display_name: String = subkey.get_value("DisplayName").unwrap_or_default();
-        if NEEDLES.iter().any(|n| display_name.contains(n)) {
-            if let Ok(loc) = subkey.get_value::<String, _>("InstallLocation") {
-                install_location = Some(loc);
-            }
+        if NEEDLES.iter().any(|n| display_name.contains(n))
+            && let Ok(loc) = subkey.get_value::<String, _>("InstallLocation")
+        {
+            install_location = Some(loc);
         }
     }
 
