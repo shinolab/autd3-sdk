@@ -2,10 +2,11 @@
 
 use anyhow::Result;
 
+use autd3_rs::commands::{FociStm, FociStmOption, SetSilencer, circle};
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig, FociStm, FociStmOption, SetSilencer, circle};
+use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 
 #[tokio::main(flavor = "multi_thread")]

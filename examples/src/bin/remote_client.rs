@@ -6,10 +6,11 @@ use std::net::SocketAddr;
 
 use anyhow::Result;
 
+use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::SamplingConfig;
-use autd3_rs::{Client, ClientConfig, Modulation, Pattern, SetSilencer};
+use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_remote::RemoteLinkOption;
 
 const SERVER_ADDR: &str = "127.0.0.1:8080";
