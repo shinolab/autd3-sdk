@@ -1,11 +1,9 @@
 use autd3_rs_core::geometry::{Device, Geometry};
-use autd3_rs_core::params::NUM_TRANSDUCERS;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TransducerMask<'a> {
     #[default]
     AllEnabled,
-    Masked(&'a [[bool; NUM_TRANSDUCERS]]),
+    Masked(&'a [Vec<bool>]),
 }
 
 impl TransducerMask<'_> {
@@ -13,7 +11,7 @@ impl TransducerMask<'_> {
         if let TransducerMask::Masked(m) = self {
             assert_eq!(
                 m.len(),
-                geometry.len(),
+                geometry.num_devices(),
                 "mask must have one slot per device"
             );
         }
@@ -30,7 +28,7 @@ impl TransducerMask<'_> {
     #[must_use]
     pub(crate) fn num_enabled(self, geometry: &Geometry) -> usize {
         match self {
-            TransducerMask::AllEnabled => geometry.iter().map(Device::len).sum(),
+            TransducerMask::AllEnabled => geometry.iter().map(Device::num_transducers).sum(),
             TransducerMask::Masked(m) => m.iter().flatten().filter(|&&b| b).count(),
         }
     }

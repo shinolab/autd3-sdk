@@ -53,7 +53,7 @@ impl Device {
     }
 
     #[must_use]
-    pub const fn len(&self) -> usize {
+    pub const fn num_transducers(&self) -> usize {
         self.positions.len()
     }
 

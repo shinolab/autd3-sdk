@@ -1,7 +1,5 @@
 use nalgebra::{Point3, UnitQuaternion, Vector3};
 
-use crate::params::NUM_TRANSDUCERS;
-
 use super::Device;
 
 pub struct Autd3 {
@@ -10,6 +8,7 @@ pub struct Autd3 {
 }
 
 impl Autd3 {
+    pub const NUM_TRANSDUCERS: usize = 249;
     pub const GRID_X: u32 = 18;
     pub const GRID_Y: u32 = 14;
     pub const PITCH_MM: f32 = 10.16;
@@ -35,8 +34,8 @@ impl Default for Autd3 {
 impl From<Autd3> for Device {
     fn from(a: Autd3) -> Device {
         let direction = a.rotation * Vector3::z_axis();
-        let mut positions = Vec::with_capacity(NUM_TRANSDUCERS);
-        let mut directions = Vec::with_capacity(NUM_TRANSDUCERS);
+        let mut positions = Vec::with_capacity(Autd3::NUM_TRANSDUCERS);
+        let mut directions = Vec::with_capacity(Autd3::NUM_TRANSDUCERS);
         for y in 0..Autd3::GRID_Y {
             for x in 0..Autd3::GRID_X {
                 if !is_missing_transducer(x, y) {
@@ -53,7 +52,7 @@ impl From<Autd3> for Device {
                 }
             }
         }
-        debug_assert_eq!(positions.len(), NUM_TRANSDUCERS);
+        debug_assert_eq!(positions.len(), Autd3::NUM_TRANSDUCERS);
         Device::new(a.rotation, positions, directions)
     }
 }
@@ -65,7 +64,7 @@ mod tests {
     #[test]
     fn autd3_has_249_transducers_in_fpga_order() {
         let dev: Device = Autd3::new(Point3::origin(), UnitQuaternion::identity()).into();
-        assert_eq!(dev.len(), NUM_TRANSDUCERS);
+        assert_eq!(dev.num_transducers(), Autd3::NUM_TRANSDUCERS);
 
         assert_eq!(dev.position(0), Point3::origin());
         assert_eq!(

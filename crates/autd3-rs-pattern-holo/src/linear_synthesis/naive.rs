@@ -1,6 +1,5 @@
 use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::Geometry;
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::{Emission, Intensity};
 
 use crate::backend::{LinAlgBackend, NalgebraBackend};
@@ -35,7 +34,7 @@ pub fn naive<B: LinAlgBackend>(
     foci: &[ControlPoint],
     wavelength: Length,
     option: &NaiveOption<'_, B>,
-    out: &mut [[Emission; NUM_TRANSDUCERS]],
+    out: &mut [Vec<Emission>],
 ) -> Result<(), HoloError> {
     if foci.is_empty() {
         return Err(HoloError::NoFoci);

@@ -1,5 +1,6 @@
 use crate::error::{Error, PayloadError};
-use crate::params::{EMISSION_MAX_INDICES, EMISSION_SLOT_WORDS, NUM_TRANSDUCERS};
+use crate::geometry::Autd3;
+use crate::params::{EMISSION_MAX_INDICES, EMISSION_SLOT_WORDS};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Emission, PatternBank};
 
@@ -40,7 +41,7 @@ struct CompressedPayload {
     count: u8,
     _reserved: u8,
     offset: little_endian::U32,
-    words: [little_endian::U16; NUM_TRANSDUCERS],
+    words: [little_endian::U16; Autd3::NUM_TRANSDUCERS],
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -48,7 +49,7 @@ pub struct WritePatternCompressed<'a> {
     pub bank: PatternBank,
     pub index: usize,
     pub format: PatternCompression,
-    pub patterns: [Option<&'a [[Emission; NUM_TRANSDUCERS]]>; PATTERN_MAX_PER_FRAME],
+    pub patterns: [Option<&'a [Vec<Emission>]>; PATTERN_MAX_PER_FRAME],
 }
 
 impl Operation for WritePatternCompressed<'_> {
@@ -84,6 +85,17 @@ impl Operation for WritePatternCompressed<'_> {
                     max: EMISSION_MAX_INDICES,
                 },
             ));
+        }
+        for pattern in self.patterns.iter().flatten() {
+            if pattern[device].len() != Autd3::NUM_TRANSDUCERS {
+                return Err(Error::InvalidPayload(
+                    PayloadError::TransducerCountMismatch {
+                        device,
+                        got: pattern[device].len(),
+                        expected: Autd3::NUM_TRANSDUCERS,
+                    },
+                ));
+            }
         }
         let offset =
             u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");
@@ -131,8 +143,8 @@ mod tests {
 
     #[test]
     fn phase_full_packs_two_phases_per_word() {
-        let mut g0 = [Emission::default(); NUM_TRANSDUCERS];
-        let mut g1 = [Emission::default(); NUM_TRANSDUCERS];
+        let mut g0 = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
+        let mut g1 = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
         for (i, (a, b)) in g0.iter_mut().zip(g1.iter_mut()).enumerate() {
             a.phase = Phase(u8::try_from(i % 256).unwrap());
             a.intensity = Intensity(0x12);
@@ -156,12 +168,12 @@ mod tests {
         assert_eq!(out[2], 2, "count = 2");
         let expected_offset = u32::try_from(4 * EMISSION_SLOT_WORDS).unwrap();
         assert_eq!(&out[4..8], &expected_offset.to_le_bytes());
-        for i in 0..NUM_TRANSDUCERS {
+        for i in 0..Autd3::NUM_TRANSDUCERS {
             let word = u16::from_le_bytes([
                 out[WRITE_HEADER_BYTES + 2 * i],
                 out[WRITE_HEADER_BYTES + 2 * i + 1],
             ]);
-            let expected = u16::from(g0[i].phase.0) | (u16::from(g1[i].phase.0) << 8);
+            let expected = u16::from(p0[0][i].phase.0) | (u16::from(p1[0][i].phase.0) << 8);
             assert_eq!(word, expected, "t={i}");
         }
     }
@@ -169,7 +181,7 @@ mod tests {
     #[test]
     fn phase_half_packs_four_nibbles_per_word() {
         let mk = |off: u8| {
-            let mut g = [Emission::default(); NUM_TRANSDUCERS];
+            let mut g = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
             for (i, e) in g.iter_mut().enumerate() {
                 e.phase = Phase(u8::try_from((i + usize::from(off)) % 256).unwrap());
                 e.intensity = Intensity(0x55);
@@ -190,22 +202,22 @@ mod tests {
 
         assert_eq!(out[1], 2, "format = PhaseHalf");
         assert_eq!(out[2], 4, "count = 4");
-        for i in 0..NUM_TRANSDUCERS {
+        for i in 0..Autd3::NUM_TRANSDUCERS {
             let word = u16::from_le_bytes([
                 out[WRITE_HEADER_BYTES + 2 * i],
                 out[WRITE_HEADER_BYTES + 2 * i + 1],
             ]);
-            let expected = u16::from(g0[i].phase.0 >> 4)
-                | (u16::from(g1[i].phase.0 >> 4) << 4)
-                | (u16::from(g2[i].phase.0 >> 4) << 8)
-                | (u16::from(g3[i].phase.0 >> 4) << 12);
+            let expected = u16::from(p0[0][i].phase.0 >> 4)
+                | (u16::from(p1[0][i].phase.0 >> 4) << 4)
+                | (u16::from(p2[0][i].phase.0 >> 4) << 8)
+                | (u16::from(p3[0][i].phase.0 >> 4) << 12);
             assert_eq!(word, expected, "t={i}");
         }
     }
 
     #[test]
     fn rejects_last_index_out_of_range() {
-        let patterns = [[Emission::default(); NUM_TRANSDUCERS]];
+        let patterns = [vec![Emission::default(); Autd3::NUM_TRANSDUCERS]];
         let op = WritePatternCompressed {
             bank: PatternBank::B0,
             index: EMISSION_MAX_INDICES - 1,
@@ -221,7 +233,7 @@ mod tests {
 
     #[test]
     fn rejects_device_out_of_range() {
-        let patterns = [[Emission::default(); NUM_TRANSDUCERS]];
+        let patterns = [vec![Emission::default(); Autd3::NUM_TRANSDUCERS]];
         let op = WritePatternCompressed {
             bank: PatternBank::B0,
             index: 0,

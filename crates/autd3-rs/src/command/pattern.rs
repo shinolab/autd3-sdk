@@ -1,24 +1,23 @@
 use super::Command;
 use crate::datagram::DatagramBuilder;
 use crate::operation::{ChangePatternBank, ConfigPattern, WritePatternBuffer};
-use crate::params::NUM_TRANSDUCERS;
 use crate::value::{Emission, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 use core::num::NonZeroU16;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Pattern<'a> {
     pub bank: PatternBank,
-    pub emissions: &'a [[Emission; NUM_TRANSDUCERS]],
+    pub emissions: &'a [Vec<Emission>],
 }
 
 impl<'a> Pattern<'a> {
     #[must_use]
-    pub fn new(emissions: &'a [[Emission; NUM_TRANSDUCERS]]) -> Self {
+    pub fn new(emissions: &'a [Vec<Emission>]) -> Self {
         Self::with_bank(PatternBank::B0, emissions)
     }
 
     #[must_use]
-    pub fn with_bank(bank: PatternBank, emissions: &'a [[Emission; NUM_TRANSDUCERS]]) -> Self {
+    pub fn with_bank(bank: PatternBank, emissions: &'a [Vec<Emission>]) -> Self {
         Self { bank, emissions }
     }
 }
@@ -47,12 +46,13 @@ impl<'a> Command<'a> for Pattern<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::Autd3;
     use crate::mirror::FREQ_DIV_NO_LIMIT;
     use crate::protocol::Cmd;
 
     #[test]
     fn pattern_expands_to_write_config_then_change_bank() {
-        let patterns = vec![[Emission::default(); NUM_TRANSDUCERS]; 2];
+        let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
         let mut b = DatagramBuilder::new(2);
         b.push(Pattern::new(&patterns));
         let datagrams = b.build().unwrap();

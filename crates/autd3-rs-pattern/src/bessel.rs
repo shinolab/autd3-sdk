@@ -2,8 +2,8 @@ use core::f32::consts::PI;
 
 use autd3_rs_core::common::units::rad;
 use autd3_rs_core::common::{Angle, Length};
+use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitQuaternion, UnitVector3, Vector3};
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -46,12 +46,12 @@ fn bessel_phase(
 pub fn bessel_transducer(
     position: Point3<f32>,
     apex: Point3<f32>,
-    dir: UnitVector3<f32>,
+    direction: UnitVector3<f32>,
     theta: Angle,
     wavelength: Length,
     option: &BesselOption,
 ) -> Emission {
-    let rot = rotation(dir);
+    let rot = rotation(direction);
     Emission {
         phase: bessel_phase(position, apex, &rot, theta, wavelength) + option.phase_offset,
         intensity: option.intensity,
@@ -61,14 +61,18 @@ pub fn bessel_transducer(
 pub fn bessel_device(
     device: &Device,
     apex: Point3<f32>,
-    dir: UnitVector3<f32>,
+    direction: UnitVector3<f32>,
     theta: Angle,
     wavelength: Length,
     option: &BesselOption,
-    out: &mut [Emission; NUM_TRANSDUCERS],
+    out: &mut [Emission],
 ) {
-    assert_eq!(device.len(), NUM_TRANSDUCERS, "not an AUTD3 device");
-    let rot = rotation(dir);
+    assert_eq!(
+        device.num_transducers(),
+        Autd3::NUM_TRANSDUCERS,
+        "not an AUTD3 device"
+    );
+    let rot = rotation(direction);
     for (e, &pos) in out.iter_mut().zip(device.positions()) {
         *e = Emission {
             phase: bessel_phase(pos, apex, &rot, theta, wavelength) + option.phase_offset,
@@ -80,19 +84,19 @@ pub fn bessel_device(
 pub fn bessel(
     geometry: &Geometry,
     apex: Point3<f32>,
-    dir: UnitVector3<f32>,
+    direction: UnitVector3<f32>,
     theta: Angle,
     wavelength: Length,
     option: &BesselOption,
-    out: &mut [[Emission; NUM_TRANSDUCERS]],
+    out: &mut [Vec<Emission>],
 ) {
     assert_eq!(
         out.len(),
-        geometry.len(),
+        geometry.num_devices(),
         "out must have one slot per device"
     );
     for (slot, dev) in out.iter_mut().zip(geometry.iter()) {
-        bessel_device(dev, apex, dir, theta, wavelength, option, slot);
+        bessel_device(dev, apex, direction, theta, wavelength, option, slot);
     }
 }
 
@@ -160,7 +164,7 @@ mod tests {
             phase_offset: Phase(0x20),
         };
 
-        let mut pattern = [Emission::default(); NUM_TRANSDUCERS];
+        let mut pattern = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
         bessel_device(&dev, apex, dir, theta, lambda, &option, &mut pattern);
         for (i, &pos) in dev.positions().iter().enumerate() {
             assert_eq!(

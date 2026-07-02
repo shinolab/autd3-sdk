@@ -2,8 +2,8 @@ use core::f32::consts::PI;
 
 use autd3_rs_core::common::Length;
 use autd3_rs_core::common::units::rad;
+use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::{Device, Geometry, Point3};
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -40,9 +40,13 @@ pub fn focus_device(
     target: Point3<f32>,
     wavelength: Length,
     option: &FocusOption,
-    out: &mut [Emission; NUM_TRANSDUCERS],
+    out: &mut [Emission],
 ) {
-    assert_eq!(device.len(), NUM_TRANSDUCERS, "not an AUTD3 device");
+    assert_eq!(
+        device.num_transducers(),
+        Autd3::NUM_TRANSDUCERS,
+        "not an AUTD3 device"
+    );
     for (e, &pos) in out.iter_mut().zip(device.positions()) {
         *e = focus_transducer(pos, target, wavelength, option);
     }
@@ -53,11 +57,11 @@ pub fn focus(
     target: Point3<f32>,
     wavelength: Length,
     option: &FocusOption,
-    out: &mut [[Emission; NUM_TRANSDUCERS]],
+    out: &mut [Vec<Emission>],
 ) {
     assert_eq!(
         out.len(),
-        geometry.len(),
+        geometry.num_devices(),
         "out must have one slot per device"
     );
     for (slot, dev) in out.iter_mut().zip(geometry.iter()) {
@@ -126,7 +130,7 @@ mod tests {
         let lambda = 8.5 * mm;
         let option = FocusOption::default();
 
-        let mut pattern = [Emission::default(); NUM_TRANSDUCERS];
+        let mut pattern = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
         focus_device(&dev, target, lambda, &option, &mut pattern);
         for (i, &pos) in dev.positions().iter().enumerate() {
             assert_eq!(pattern[i], focus_transducer(pos, target, lambda, &option));
@@ -143,11 +147,12 @@ mod tests {
         let lambda = 8.5 * mm;
         let option = FocusOption::default();
 
-        let mut emissions = vec![[Emission::default(); NUM_TRANSDUCERS]; geo.len()];
+        let mut emissions =
+            vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geo.num_devices()];
         focus(&geo, target, lambda, &option, &mut emissions);
         assert_eq!(emissions.len(), 2);
         for (actual, dev) in emissions.iter().zip(&geo) {
-            let mut expected = [Emission::default(); NUM_TRANSDUCERS];
+            let mut expected = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
             focus_device(dev, target, lambda, &option, &mut expected);
             assert_eq!(*actual, expected);
         }

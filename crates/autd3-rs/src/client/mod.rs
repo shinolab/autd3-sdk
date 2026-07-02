@@ -20,11 +20,11 @@ use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
 use crate::fpga_state::FpgaState;
+use crate::geometry::Autd3;
 use crate::geometry::Geometry;
 use crate::link::{IntoLink, Link};
 use crate::mirror::FirmwareState;
 use crate::operation::{Clear, Distribution, Synchronize};
-use crate::params::NUM_TRANSDUCERS;
 use crate::protocol::Cmd;
 use crate::value::Emission;
 
@@ -76,10 +76,10 @@ impl Client {
                 max: MAX_DEVICES,
             }));
         }
-        if geometry.len() != num_devices {
+        if geometry.num_devices() != num_devices {
             return Err(Error::InvalidPayload(
                 PayloadError::GeometryDeviceMismatch {
-                    geometry: geometry.len(),
+                    geometry: geometry.num_devices(),
                     link: num_devices,
                 },
             ));
@@ -242,7 +242,7 @@ impl Client {
     }
 
     pub async fn stop(&self) -> Result<(), Error> {
-        let patterns = vec![[Emission::default(); NUM_TRANSDUCERS]; self.num_devices];
+        let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; self.num_devices];
         let datagrams = self
             .datagram_builder()
             .push(Pattern::new(&patterns))

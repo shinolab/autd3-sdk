@@ -216,6 +216,7 @@ name = "autd3-rs-pattern"
 version = "0.1.0"
 dependencies = [
  "autd3-rs-core",
+ "criterion",
 ]
 
 [[package]]

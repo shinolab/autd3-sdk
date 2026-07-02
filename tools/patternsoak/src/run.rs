@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::operation::{ConfigPattern, WritePatternBuffer};
-use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
     Client, ClientConfig, Error as ClientError, Frames, Link, ResponseFuture, StateCheck,
@@ -270,11 +269,7 @@ fn should_stop(shutdown: &AtomicBool, cli: &Cli, issued: u64, start: Instant) ->
     false
 }
 
-fn encode_write(
-    client: &Client,
-    emissions: &[[Emission; NUM_TRANSDUCERS]],
-    frames: &mut Frames,
-) -> Result<()> {
+fn encode_write(client: &Client, emissions: &[Vec<Emission>], frames: &mut Frames) -> Result<()> {
     let mut builder = client.datagram_builder();
     builder.push(WritePatternBuffer {
         bank: PatternBank::B0,
@@ -287,7 +282,7 @@ fn encode_write(
     Ok(())
 }
 
-fn fill_emissions(emissions: &mut [[Emission; NUM_TRANSDUCERS]], tick: u8) {
+fn fill_emissions(emissions: &mut [Vec<Emission>], tick: u8) {
     for device in emissions {
         let mut phase = tick;
         for e in device.iter_mut() {
