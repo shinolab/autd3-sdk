@@ -31,7 +31,15 @@ async fn main() -> Result<()> {
 
     // 200-point circle of radius 30 mm, 150 mm above the array center.
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let points = circle(center, 30.0 * mm, 200, Vector3::z_axis(), Intensity::MAX);
+    let mut points = Vec::new();
+    circle(
+        center,
+        30.0 * mm,
+        200,
+        Vector3::z_axis(),
+        Intensity::MAX,
+        &mut points,
+    );
 
     let mut builder = client.datagram_builder();
     builder.push(SetSilencer::default()).push(FociStm::new(
