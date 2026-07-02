@@ -38,7 +38,7 @@ pub use write_pattern_buffer::WritePatternBuffer;
 pub use write_pattern_compressed::{
     PATTERN_MAX_PER_FRAME, PatternCompression, WritePatternCompressed,
 };
-pub use xor_hash::{XOR_HASH_HEADER_BYTES, XOR_HASH_MAX_DATA_LEN, XorHashCmd};
+pub use xor_hash::{XOR_HASH_MAX_DATA_LEN, XorHashCmd};
 
 use crate::error::Error;
 use crate::mirror::FirmwareState;
