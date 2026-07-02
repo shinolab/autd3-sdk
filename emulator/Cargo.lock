@@ -161,6 +161,7 @@ dependencies = [
 name = "autd3-rs-core"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "nalgebra",
  "thiserror",
  "tokio",
