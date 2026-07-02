@@ -11,10 +11,11 @@ description = "Internal cross-wheel PyCapsule contracts shared by autd3 python b
 [dependencies]
 autd3-rs-core.workspace = true
 autd3-rs = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
 pyo3.workspace = true
 
 [features]
-client = ["dep:autd3-rs"]
+client = ["dep:autd3-rs", "dep:tokio"]
 
 [lints]
 workspace = true

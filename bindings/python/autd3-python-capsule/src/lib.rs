@@ -2,7 +2,6 @@ use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 
 use autd3_rs_core::Geometry;
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::Emission;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -12,7 +11,7 @@ pub const GEOMETRY_CAPSULE_NAME: &CStr = c"autd3.geometry.v1";
 pub const PATTERN_CAPSULE_NAME: &CStr = c"autd3.pattern.v1";
 pub const MODULATION_CAPSULE_NAME: &CStr = c"autd3.modulation.v1";
 
-pub type DevicePattern = [Emission; NUM_TRANSDUCERS];
+pub type DevicePattern = Vec<Emission>;
 
 pub fn to_pyerr<E: core::fmt::Display>(py: Python<'_>, e: E) -> PyErr {
     let msg = e.to_string();
@@ -101,7 +100,7 @@ mod link {
     use std::ptr::NonNull;
     use std::sync::Arc;
 
-    use autd3_rs::{ClientConfig, Frames};
+    use autd3_rs::{ClientConfig, Frames, ResponseFuture};
     use autd3_rs_core::{Error, Geometry};
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
@@ -118,11 +117,35 @@ mod link {
         pub recoveries: u64,
     }
 
+    pub struct ResponseToken {
+        fut: ResponseFuture,
+        handle: tokio::runtime::Handle,
+    }
+
+    impl ResponseToken {
+        #[must_use]
+        pub fn new(fut: ResponseFuture, handle: tokio::runtime::Handle) -> Self {
+            Self { fut, handle }
+        }
+
+        #[must_use]
+        pub fn check(self) -> BoxFuture<()> {
+            let Self { fut, handle } = self;
+            Box::pin(async move {
+                handle
+                    .spawn(async move { fut.await.and_then(|response| response.check()) })
+                    .await
+                    .map_err(|e| Error::Link(e.to_string()))?
+            })
+        }
+    }
+
     pub trait ClientBackend: Send + Sync {
         fn num_devices(&self) -> usize;
         fn read_firmware_version(&self) -> BoxFuture<Vec<String>>;
         fn read_fpga_state(&self) -> BoxFuture<Vec<u8>>;
         fn read_error_detail(&self) -> BoxFuture<Vec<u8>>;
+        fn send(&self, datagrams: Arc<Frames>, index: usize) -> BoxFuture<ResponseToken>;
         fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()>;
         fn check_status(&self) -> BoxFuture<LinkStatusData>;
         fn stop(&self) -> BoxFuture<()>;
@@ -160,6 +183,6 @@ mod link {
 
 #[cfg(feature = "client")]
 pub use link::{
-    BoxFuture, ClientBackend, ClientOpener, LINK_CAPSULE_NAME, LinkStatusData, client_opener,
-    link_into_capsule, take_client_opener,
+    BoxFuture, ClientBackend, ClientOpener, LINK_CAPSULE_NAME, LinkStatusData, ResponseToken,
+    client_opener, link_into_capsule, take_client_opener,
 };

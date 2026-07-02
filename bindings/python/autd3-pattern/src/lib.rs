@@ -2,8 +2,8 @@ use autd3_python_capsule::{
     DevicePattern, capsule_of, geometry_from_capsule, pattern_from_capsule, pattern_into_capsule,
 };
 use autd3_rs_core::common::Angle;
+use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::{UnitVector3, Vector3};
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 use autd3_rs_core::{Length, Point3, Velocity};
 use autd3_rs_pattern::{
@@ -32,6 +32,54 @@ fn extract_direction(obj: &Bound<'_, PyAny>) -> PyResult<UnitVector3<f32>> {
     Ok(UnitVector3::new_normalize(Vector3::new(x, y, z)))
 }
 
+fn extract_u8(obj: &Bound<'_, PyAny>) -> PyResult<u8> {
+    if let Ok(v) = obj.extract::<u8>() {
+        return Ok(v);
+    }
+    obj.getattr("value")?.extract::<u8>()
+}
+
+fn extract_intensity(obj: &Bound<'_, PyAny>) -> PyResult<Intensity> {
+    Ok(Intensity(extract_u8(obj)?))
+}
+
+fn extract_phase(obj: &Bound<'_, PyAny>) -> PyResult<Phase> {
+    Ok(Phase(extract_u8(obj)?))
+}
+
+fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
+    let mm_per_s: f32 = obj.getattr("mm_per_s").and_then(|v| v.extract()).map_err(|_| {
+        PyValueError::new_err(
+            "sound speed must be a Velocity, e.g. 340 * m / s (bare numbers are no longer accepted)",
+        )
+    })?;
+    Ok(Velocity::from_mm_s(mm_per_s))
+}
+
+fn extract_angle(obj: &Bound<'_, PyAny>) -> PyResult<Angle> {
+    let radian: f32 = obj
+        .getattr("radian")
+        .and_then(|v| v.extract())
+        .map_err(|_| PyValueError::new_err("theta must be an Angle, e.g. 18 * deg"))?;
+    Ok(Angle::from_radian(radian))
+}
+
+fn extract_emission(obj: &Bound<'_, PyAny>) -> PyResult<Emission> {
+    if let (Ok(phase), Ok(intensity)) = (obj.getattr("phase"), obj.getattr("intensity")) {
+        return Ok(Emission {
+            phase: Phase(extract_u8(&phase)?),
+            intensity: Intensity(extract_u8(&intensity)?),
+        });
+    }
+    let (phase, intensity): (u8, u8) = obj
+        .extract()
+        .map_err(|_| PyValueError::new_err("expected an Emission or a (phase, intensity) tuple"))?;
+    Ok(Emission {
+        phase: Phase(phase),
+        intensity: Intensity(intensity),
+    })
+}
+
 #[pyclass(name = "FocusOption", module = "autd3_pattern", from_py_object)]
 #[derive(Clone, Copy)]
 pub struct FocusOption(pub(crate) CoreFocusOption);
@@ -39,11 +87,14 @@ pub struct FocusOption(pub(crate) CoreFocusOption);
 #[pymethods]
 impl FocusOption {
     #[new]
-    #[pyo3(signature = (intensity = 0xFF, phase_offset = 0))]
-    fn new(intensity: u8, phase_offset: u8) -> Self {
+    #[pyo3(signature = (intensity = Intensity::MAX, phase_offset = Phase::ZERO))]
+    fn new(
+        #[pyo3(from_py_with = extract_intensity)] intensity: Intensity,
+        #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
+    ) -> Self {
         Self(CoreFocusOption {
-            intensity: Intensity(intensity),
-            phase_offset: Phase(phase_offset),
+            intensity,
+            phase_offset,
         })
     }
 }
@@ -55,11 +106,14 @@ pub struct PlaneOption(pub(crate) CorePlaneOption);
 #[pymethods]
 impl PlaneOption {
     #[new]
-    #[pyo3(signature = (intensity = 0xFF, phase_offset = 0))]
-    fn new(intensity: u8, phase_offset: u8) -> Self {
+    #[pyo3(signature = (intensity = Intensity::MAX, phase_offset = Phase::ZERO))]
+    fn new(
+        #[pyo3(from_py_with = extract_intensity)] intensity: Intensity,
+        #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
+    ) -> Self {
         Self(CorePlaneOption {
-            intensity: Intensity(intensity),
-            phase_offset: Phase(phase_offset),
+            intensity,
+            phase_offset,
         })
     }
 }
@@ -71,11 +125,14 @@ pub struct BesselOption(pub(crate) CoreBesselOption);
 #[pymethods]
 impl BesselOption {
     #[new]
-    #[pyo3(signature = (intensity = 0xFF, phase_offset = 0))]
-    fn new(intensity: u8, phase_offset: u8) -> Self {
+    #[pyo3(signature = (intensity = Intensity::MAX, phase_offset = Phase::ZERO))]
+    fn new(
+        #[pyo3(from_py_with = extract_intensity)] intensity: Intensity,
+        #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
+    ) -> Self {
         Self(CoreBesselOption {
-            intensity: Intensity(intensity),
-            phase_offset: Phase(phase_offset),
+            intensity,
+            phase_offset,
         })
     }
 }
@@ -90,26 +147,24 @@ impl PatternBuffer {
     #[new]
     fn new(num_devices: usize) -> Self {
         Self {
-            inner: vec![[Emission::default(); NUM_TRANSDUCERS]; num_devices],
+            inner: vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; num_devices],
         }
     }
 
     #[staticmethod]
-    fn from_array(emissions: Vec<Vec<(u8, u8)>>) -> PyResult<PatternBuffer> {
+    fn from_array(emissions: Vec<Vec<Bound<'_, PyAny>>>) -> PyResult<PatternBuffer> {
         let mut inner = Vec::with_capacity(emissions.len());
         for device in emissions {
-            if device.len() != NUM_TRANSDUCERS {
+            if device.len() != Autd3::NUM_TRANSDUCERS {
                 return Err(PyValueError::new_err(format!(
-                    "each device needs {NUM_TRANSDUCERS} emissions, got {}",
+                    "each device needs {} emissions, got {}",
+                    Autd3::NUM_TRANSDUCERS,
                     device.len()
                 )));
             }
-            let mut slot = [Emission::default(); NUM_TRANSDUCERS];
-            for (e, (phase, intensity)) in slot.iter_mut().zip(device) {
-                *e = Emission {
-                    phase: Phase(phase),
-                    intensity: Intensity(intensity),
-                };
+            let mut slot = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
+            for (e, obj) in slot.iter_mut().zip(device) {
+                *e = extract_emission(&obj)?;
             }
             inner.push(slot);
         }
@@ -137,8 +192,8 @@ impl PatternBuffer {
 }
 
 #[pyfunction]
-fn wavelength(sound_speed_mm_per_s: f32) -> f32 {
-    autd3_rs_pattern::wavelength(Velocity::from_mm_s(sound_speed_mm_per_s)).mm()
+fn wavelength(sound_speed: &Bound<'_, PyAny>) -> PyResult<f32> {
+    Ok(autd3_rs_pattern::wavelength(extract_velocity(sound_speed)?).mm())
 }
 
 #[pyfunction]
@@ -186,12 +241,12 @@ fn plane(
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, apex, direction, theta_rad, wavelength, option, buffer))]
+#[pyo3(signature = (geometry, apex, direction, theta, wavelength, option, buffer))]
 fn bessel(
     geometry: &Bound<'_, PyAny>,
     apex: &Bound<'_, PyAny>,
     direction: &Bound<'_, PyAny>,
-    theta_rad: f32,
+    theta: &Bound<'_, PyAny>,
     wavelength: f32,
     option: BesselOption,
     mut buffer: PyRefMut<'_, PatternBuffer>,
@@ -200,11 +255,12 @@ fn bessel(
     let geometry = geometry_from_capsule(&capsule)?;
     let apex = extract_point(apex)?;
     let direction = extract_direction(direction)?;
+    let theta = extract_angle(theta)?;
     autd3_rs_pattern::bessel(
         geometry,
         apex,
         direction,
-        Angle::from_radian(theta_rad),
+        theta,
         Length::millimeters(wavelength),
         &option.0,
         &mut buffer.inner,
@@ -213,15 +269,10 @@ fn bessel(
 }
 
 #[pyfunction]
-#[pyo3(signature = (intensity, phase, buffer))]
-fn uniform(intensity: u8, phase: u8, mut buffer: PyRefMut<'_, PatternBuffer>) {
-    autd3_rs_pattern::uniform(
-        Emission {
-            phase: Phase(phase),
-            intensity: Intensity(intensity),
-        },
-        &mut buffer.inner,
-    );
+#[pyo3(signature = (emission, buffer))]
+fn uniform(emission: &Bound<'_, PyAny>, mut buffer: PyRefMut<'_, PatternBuffer>) -> PyResult<()> {
+    autd3_rs_pattern::uniform(extract_emission(emission)?, &mut buffer.inner);
+    Ok(())
 }
 
 #[pyfunction]

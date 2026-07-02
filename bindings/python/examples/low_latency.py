@@ -9,6 +9,7 @@ import numpy as np
 import autd3
 import autd3_link_ethercrab as ethercrab
 import autd3_pattern as pattern
+from autd3.units import m, s
 
 ITERATIONS = 1000
 WARMUP = 10
@@ -16,7 +17,7 @@ ENABLE_LOW_LATENCY = True
 
 
 async def main() -> None:
-    geometry = autd3.Geometry([autd3.Autd3()])
+    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     client = await autd3.Client.open(
         geometry,
@@ -27,11 +28,11 @@ async def main() -> None:
     print("devices:", client.num_devices())
 
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
-    wavelength = pattern.wavelength(340_000.0)
+    wavelength = pattern.wavelength(340 * m / s)
     patterns = geometry.pattern_buffer()
     pattern.focus(geometry, target, wavelength, pattern.FocusOption(intensity=0), patterns)
     builder = client.datagram_builder()
-    builder.push(autd3.Pattern(patterns))
+    builder.push(autd3.commands.Pattern(patterns))
     datagrams = builder.build()
 
     frame = datagrams[0]
