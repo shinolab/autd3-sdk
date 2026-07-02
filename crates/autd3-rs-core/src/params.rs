@@ -1,5 +1,3 @@
-pub const NUM_TRANSDUCERS: usize = 249;
-
 pub const ULTRASOUND_FREQ_HZ: u32 = 40_000;
 
 pub const NUM_BANKS: usize = 2;

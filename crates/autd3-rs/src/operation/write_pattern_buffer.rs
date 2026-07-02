@@ -1,5 +1,6 @@
 use crate::error::{Error, PayloadError};
-use crate::params::{EMISSION_MAX_INDICES, EMISSION_SLOT_WORDS, NUM_TRANSDUCERS};
+use crate::geometry::Autd3;
+use crate::params::{EMISSION_MAX_INDICES, EMISSION_SLOT_WORDS};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Emission, PatternBank};
 
@@ -14,14 +15,14 @@ struct PatternPayload {
     _reserved: u8,
     offset: little_endian::U32,
     len: little_endian::U16,
-    emissions: [Emission; NUM_TRANSDUCERS],
+    emissions: [Emission; Autd3::NUM_TRANSDUCERS],
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct WritePatternBuffer<'a> {
     pub bank: PatternBank,
     pub index: usize,
-    pub emissions: &'a [[Emission; NUM_TRANSDUCERS]],
+    pub emissions: &'a [Vec<Emission>],
 }
 
 impl Operation for WritePatternBuffer<'_> {
@@ -55,15 +56,25 @@ impl Operation for WritePatternBuffer<'_> {
                 },
             ));
         }
+        let emissions = &self.emissions[device];
+        if emissions.len() != Autd3::NUM_TRANSDUCERS {
+            return Err(Error::InvalidPayload(
+                PayloadError::TransducerCountMismatch {
+                    device,
+                    got: emissions.len(),
+                    expected: Autd3::NUM_TRANSDUCERS,
+                },
+            ));
+        }
         let offset =
             u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");
-        let len = u16::try_from(NUM_TRANSDUCERS * 2).expect("fits one frame");
+        let len = u16::try_from(Autd3::NUM_TRANSDUCERS * 2).expect("fits one frame");
         let (frame, _) =
             PatternPayload::mut_from_prefix(&mut out[..]).expect("PatternPayload fits the payload");
         frame.bank = self.bank.as_u8();
         frame.offset = offset.into();
         frame.len = len.into();
-        frame.emissions = self.emissions[device];
+        frame.emissions.copy_from_slice(emissions);
         Ok(Cmd::WritePatternBuffer)
     }
 }
@@ -76,7 +87,7 @@ mod tests {
 
     #[test]
     fn write_pattern_lays_out_slot_words() {
-        let mut emissions = [Emission::default(); NUM_TRANSDUCERS];
+        let mut emissions = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
         for (i, e) in emissions.iter_mut().enumerate() {
             e.phase = Phase(u8::try_from(i % 251).unwrap());
             e.intensity = Intensity(u8::try_from((i * 3) % 256).unwrap());
@@ -96,7 +107,7 @@ mod tests {
         let expected_offset = u32::try_from(3 * EMISSION_SLOT_WORDS).unwrap();
         assert_eq!(&out[2..6], &expected_offset.to_le_bytes());
         assert_eq!(&out[6..8], &498u16.to_le_bytes());
-        for (i, e) in emissions.iter().enumerate() {
+        for (i, e) in patterns[0].iter().enumerate() {
             assert_eq!(out[WRITE_HEADER_BYTES + 2 * i], e.phase.0);
             assert_eq!(out[WRITE_HEADER_BYTES + 2 * i + 1], e.intensity.0);
         }
@@ -104,7 +115,7 @@ mod tests {
 
     #[test]
     fn write_pattern_rejects_index_out_of_range() {
-        let patterns = [[Emission::default(); NUM_TRANSDUCERS]];
+        let patterns = [vec![Emission::default(); Autd3::NUM_TRANSDUCERS]];
         let op = WritePatternBuffer {
             bank: PatternBank::B0,
             index: EMISSION_MAX_INDICES,
@@ -119,7 +130,7 @@ mod tests {
 
     #[test]
     fn write_pattern_rejects_device_out_of_range() {
-        let patterns = [[Emission::default(); NUM_TRANSDUCERS]];
+        let patterns = [vec![Emission::default(); Autd3::NUM_TRANSDUCERS]];
         let op = WritePatternBuffer {
             bank: PatternBank::B0,
             index: 0,

@@ -17,6 +17,6 @@ impl IntoLink for Nop {
     type Link = Audit;
 
     async fn into_link(self, geometry: &Geometry) -> Result<Audit, autd3_rs_core::Error> {
-        Ok(Audit::new(geometry.iter().map(Device::len)))
+        Ok(Audit::new(geometry.iter().map(Device::num_transducers)))
     }
 }

@@ -11,5 +11,12 @@ description = "Emission-pattern computation utilities for autd3-rs (focus, besse
 [dependencies]
 autd3-rs-core.workspace = true
 
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "layout"
+harness = false
+
 [lints]
 workspace = true

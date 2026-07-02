@@ -5,7 +5,6 @@ use crate::operation::{
     ChangePatternBank, ConfigPattern, PATTERN_MAX_PER_FRAME, PatternCompression,
     WritePatternBuffer, WritePatternCompressed,
 };
-use crate::params::NUM_TRANSDUCERS;
 use crate::value::{Emission, LoopBehavior, PatternBank, TransitionMode};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -37,7 +36,7 @@ pub struct PatternStmOption {
 #[derive(Clone, Copy, Debug)]
 pub struct PatternStm<'a> {
     pub config: StmConfig,
-    pub patterns: &'a [Vec<[Emission; NUM_TRANSDUCERS]>],
+    pub patterns: &'a [Vec<Vec<Emission>>],
     pub option: PatternStmOption,
 }
 
@@ -45,7 +44,7 @@ impl<'a> PatternStm<'a> {
     #[must_use]
     pub fn new(
         config: impl Into<StmConfig>,
-        patterns: &'a [Vec<[Emission; NUM_TRANSDUCERS]>],
+        patterns: &'a [Vec<Vec<Emission>>],
         option: PatternStmOption,
     ) -> Self {
         Self {
@@ -78,8 +77,8 @@ impl<'a> Command<'a> for PatternStm<'a> {
                 let mut base = 0;
                 while base < n {
                     let count = per_frame.min(n - base);
-                    let mut patterns: [Option<&'a [[Emission; NUM_TRANSDUCERS]]>;
-                        PATTERN_MAX_PER_FRAME] = [None; PATTERN_MAX_PER_FRAME];
+                    let mut patterns: [Option<&'a [Vec<Emission>]>; PATTERN_MAX_PER_FRAME] =
+                        [None; PATTERN_MAX_PER_FRAME];
                     for (g, slot) in patterns.iter_mut().take(count).enumerate() {
                         *slot = Some(self.patterns[base + g].as_slice());
                     }
@@ -111,14 +110,15 @@ impl<'a> Command<'a> for PatternStm<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::Autd3;
     use crate::params::EMISSION_SLOT_WORDS;
     use crate::protocol::Cmd;
     use crate::value::SamplingConfig;
 
     #[test]
     fn pattern_stm_expands_per_index_then_config_change() {
-        let patterns: Vec<Vec<[Emission; NUM_TRANSDUCERS]>> = (0..3)
-            .map(|_| vec![[Emission::default(); NUM_TRANSDUCERS]])
+        let patterns: Vec<Vec<Vec<Emission>>> = (0..3)
+            .map(|_| vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]])
             .collect();
         let stm = PatternStm::new(
             SamplingConfig::FREQ_4K,
@@ -157,11 +157,11 @@ mod tests {
         assert_eq!(chg.datagrams()[0].payload[1], 0xFF, "IMMEDIATE");
     }
 
-    fn make_patterns(n: usize) -> Vec<Vec<[Emission; NUM_TRANSDUCERS]>> {
+    fn make_patterns(n: usize) -> Vec<Vec<Vec<Emission>>> {
         use crate::value::{Intensity, Phase};
         (0..n)
             .map(|k| {
-                let mut e = [Emission::default(); NUM_TRANSDUCERS];
+                let mut e = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
                 for (t, em) in e.iter_mut().enumerate() {
                     em.phase = Phase(u8::try_from((k * 7 + t) % 256).unwrap());
                     em.intensity = Intensity(0x80);

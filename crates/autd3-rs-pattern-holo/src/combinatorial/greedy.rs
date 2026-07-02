@@ -5,8 +5,8 @@ use nalgebra::Complex;
 use rand::seq::SliceRandom;
 
 use autd3_rs_core::common::Length;
+use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::{Device, Geometry};
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
 use crate::amp::Amplitude;
@@ -49,14 +49,14 @@ pub fn greedy(
     foci: &[ControlPoint],
     wavelength: Length,
     option: &GreedyOption<'_>,
-    out: &mut [[Emission; NUM_TRANSDUCERS]],
+    out: &mut [Vec<Emission>],
 ) -> Result<(), HoloError> {
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
     assert_eq!(
         out.len(),
-        geometry.len(),
+        geometry.num_devices(),
         "out must have one slot per device"
     );
     let mask = option.mask;
@@ -75,7 +75,7 @@ pub fn greedy(
         .iter()
         .enumerate()
         .flat_map(|(d, dev)| {
-            (0..dev.len())
+            (0..dev.num_transducers())
                 .filter(move |&t| mask.is_enabled(d, t))
                 .map(move |t| (d, t))
         })
@@ -83,7 +83,7 @@ pub fn greedy(
     indices.shuffle(&mut rand::rng());
 
     for slot in out.iter_mut() {
-        *slot = [Emission::default(); NUM_TRANSDUCERS];
+        *slot = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
     }
 
     let intensity = option.constraint.convert(1.0, 1.0);
@@ -147,8 +147,8 @@ mod tests {
         }]
     }
 
-    fn buffer(geometry: &Geometry) -> Vec<[Emission; NUM_TRANSDUCERS]> {
-        vec![[Emission::default(); NUM_TRANSDUCERS]; geometry.len()]
+    fn buffer(geometry: &Geometry) -> Vec<Vec<Emission>> {
+        vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()]
     }
 
     #[test]

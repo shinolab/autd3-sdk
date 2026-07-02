@@ -1,7 +1,5 @@
 use nalgebra::{Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3};
 
-use crate::params::NUM_TRANSDUCERS;
-
 use super::autd3::is_missing_transducer;
 use super::{Autd3, Device};
 
@@ -29,8 +27,8 @@ impl From<Autd3Unity> for Device {
             dir_rh.into_inner(),
         ]);
 
-        let mut positions = Vec::with_capacity(NUM_TRANSDUCERS);
-        let mut directions = Vec::with_capacity(NUM_TRANSDUCERS);
+        let mut positions = Vec::with_capacity(Autd3::NUM_TRANSDUCERS);
+        let mut directions = Vec::with_capacity(Autd3::NUM_TRANSDUCERS);
         for y in 0..Autd3::GRID_Y {
             for x in 0..Autd3::GRID_X {
                 if !is_missing_transducer(x, y) {
@@ -44,7 +42,7 @@ impl From<Autd3Unity> for Device {
                 }
             }
         }
-        debug_assert_eq!(positions.len(), NUM_TRANSDUCERS);
+        debug_assert_eq!(positions.len(), Autd3::NUM_TRANSDUCERS);
         Device::new(rotation, positions, directions)
     }
 }

@@ -2,8 +2,8 @@ use core::f32::consts::PI;
 
 use autd3_rs_core::common::Length;
 use autd3_rs_core::common::units::rad;
+use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -24,12 +24,12 @@ impl Default for PlaneOption {
 #[must_use]
 pub fn plane_transducer(
     position: Point3<f32>,
-    dir: UnitVector3<f32>,
+    direction: UnitVector3<f32>,
     wavelength: Length,
     option: &PlaneOption,
 ) -> Emission {
     Emission {
-        phase: Phase::from(-dir.dot(&position.coords) / wavelength.mm() * 2.0 * PI * rad)
+        phase: Phase::from(-direction.dot(&position.coords) / wavelength.mm() * 2.0 * PI * rad)
             + option.phase_offset,
         intensity: option.intensity,
     }
@@ -37,31 +37,35 @@ pub fn plane_transducer(
 
 pub fn plane_device(
     device: &Device,
-    dir: UnitVector3<f32>,
+    direction: UnitVector3<f32>,
     wavelength: Length,
     option: &PlaneOption,
-    out: &mut [Emission; NUM_TRANSDUCERS],
+    out: &mut [Emission],
 ) {
-    assert_eq!(device.len(), NUM_TRANSDUCERS, "not an AUTD3 device");
+    assert_eq!(
+        device.num_transducers(),
+        Autd3::NUM_TRANSDUCERS,
+        "not an AUTD3 device"
+    );
     for (e, &pos) in out.iter_mut().zip(device.positions()) {
-        *e = plane_transducer(pos, dir, wavelength, option);
+        *e = plane_transducer(pos, direction, wavelength, option);
     }
 }
 
 pub fn plane(
     geometry: &Geometry,
-    dir: UnitVector3<f32>,
+    direction: UnitVector3<f32>,
     wavelength: Length,
     option: &PlaneOption,
-    out: &mut [[Emission; NUM_TRANSDUCERS]],
+    out: &mut [Vec<Emission>],
 ) {
     assert_eq!(
         out.len(),
-        geometry.len(),
+        geometry.num_devices(),
         "out must have one slot per device"
     );
     for (slot, dev) in out.iter_mut().zip(geometry.iter()) {
-        plane_device(dev, dir, wavelength, option, slot);
+        plane_device(dev, direction, wavelength, option, slot);
     }
 }
 
@@ -118,10 +122,11 @@ mod tests {
         let dir = UnitVector3::new_normalize(Vector3::new(0.0, 1.0, 1.0));
         let option = PlaneOption::default();
 
-        let mut emissions = vec![[Emission::default(); NUM_TRANSDUCERS]; geo.len()];
+        let mut emissions =
+            vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geo.num_devices()];
         plane(&geo, dir, lambda, &option, &mut emissions);
         for (actual, dev) in emissions.iter().zip(&geo) {
-            let mut expected = [Emission::default(); NUM_TRANSDUCERS];
+            let mut expected = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
             plane_device(dev, dir, lambda, &option, &mut expected);
             assert_eq!(*actual, expected);
         }

@@ -493,7 +493,7 @@ mod tests {
 
     #[test]
     fn push_each_accepts_heterogeneous_boxed_commands() {
-        let patterns = vec![[crate::value::Emission::default(); crate::params::NUM_TRANSDUCERS]; 2];
+        let patterns = vec![vec![crate::value::Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
         let mut b = DatagramBuilder::new(2);
         b.push_each(|device| {
             Some(if device == 0 {
@@ -603,7 +603,7 @@ mod tests {
             Distribution::Broadcast
         );
     }
-    use crate::params::NUM_TRANSDUCERS;
+    use crate::geometry::Autd3;
     use crate::value::{Emission, PatternBank};
 
     #[test]
@@ -627,7 +627,7 @@ mod tests {
 
     #[test]
     fn per_device_op_yields_one_datagram_per_device() {
-        let patterns = vec![[Emission::default(); NUM_TRANSDUCERS]; 3];
+        let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 3];
         let op = WritePatternBuffer {
             bank: PatternBank::B0,
             index: 0,
@@ -645,7 +645,7 @@ mod tests {
 
     #[test]
     fn composite_emission_orders_write_then_config() {
-        let patterns = vec![[Emission::default(); NUM_TRANSDUCERS]; 2];
+        let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
         let we = WritePatternBuffer {
             bank: PatternBank::B0,
             index: 0,

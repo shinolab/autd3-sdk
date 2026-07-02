@@ -8,7 +8,6 @@ pub use device::Device;
 pub use nalgebra::{Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3};
 
 use crate::common::Length;
-use crate::params::NUM_TRANSDUCERS;
 use crate::value::Emission;
 
 #[must_use]
@@ -43,18 +42,18 @@ impl Geometry {
     }
 
     #[must_use]
-    pub const fn len(&self) -> usize {
+    pub const fn num_devices(&self) -> usize {
         self.devices.len()
     }
 
     #[must_use]
-    pub fn pattern_buffer(&self) -> Vec<[Emission; NUM_TRANSDUCERS]> {
-        vec![[Emission::default(); NUM_TRANSDUCERS]; self.len()]
+    pub fn pattern_buffer(&self) -> Vec<Vec<Emission>> {
+        vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; self.num_devices()]
     }
 
     #[must_use]
     pub fn num_transducers(&self) -> usize {
-        self.devices.iter().map(Device::len).sum()
+        self.devices.iter().map(Device::num_transducers).sum()
     }
 
     #[must_use]
@@ -100,14 +99,13 @@ mod tests {
     use nalgebra::UnitQuaternion;
 
     use super::*;
-    use crate::params::NUM_TRANSDUCERS;
 
     #[test]
     fn geometry_sets_device_idx_and_num_transducers() {
         let g = Geometry::new(vec![Autd3::default(), Autd3::default()]);
         assert_eq!(g[0].idx(), 0);
         assert_eq!(g[1].idx(), 1);
-        assert_eq!(g.num_transducers(), 2 * NUM_TRANSDUCERS);
+        assert_eq!(g.num_transducers(), 2 * Autd3::NUM_TRANSDUCERS);
     }
 
     #[test]

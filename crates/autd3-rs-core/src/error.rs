@@ -137,6 +137,13 @@ pub enum PayloadError {
     #[error("emissions has {len} entr(ies) but device {device} was requested")]
     EmissionsDeviceOutOfRange { device: usize, len: usize },
 
+    #[error("device {device} has {got} transducer entr(ies) but {expected} are required")]
+    TransducerCountMismatch {
+        device: usize,
+        got: usize,
+        expected: usize,
+    },
+
     #[error("pattern STM index {index} out of range 0..{max}")]
     PatternIndexOutOfRange { index: usize, max: usize },
 

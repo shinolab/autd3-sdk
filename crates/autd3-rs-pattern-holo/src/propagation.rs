@@ -3,8 +3,8 @@ use core::f32::consts::PI;
 use nalgebra::Complex;
 
 use autd3_rs_core::common::Length;
+use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::{Geometry, Point3, UnitVector3};
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::{Emission, Phase};
 
 use crate::backend::LinAlgBackend;
@@ -70,11 +70,11 @@ pub(crate) fn quantize(
     q: &[Complex<f32>],
     constraint: EmissionConstraint,
     mask: TransducerMask<'_>,
-    out: &mut [[Emission; NUM_TRANSDUCERS]],
+    out: &mut [Vec<Emission>],
 ) {
     assert_eq!(
         out.len(),
-        geometry.len(),
+        geometry.num_devices(),
         "out must have one slot per device"
     );
     let max_coefficient = q
@@ -84,7 +84,11 @@ pub(crate) fn quantize(
         .sqrt();
     let mut idx = 0;
     for (d, (slot, dev)) in out.iter_mut().zip(geometry.iter()).enumerate() {
-        assert_eq!(dev.len(), NUM_TRANSDUCERS, "not an AUTD3 device");
+        assert_eq!(
+            dev.num_transducers(),
+            Autd3::NUM_TRANSDUCERS,
+            "not an AUTD3 device"
+        );
         for (t, e) in slot.iter_mut().enumerate() {
             if mask.is_enabled(d, t) {
                 let v = q[idx];
