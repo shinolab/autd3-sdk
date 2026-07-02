@@ -1,0 +1,58 @@
+---
+title: ファームウェア
+description: autd3-console を用いた CPU / FPGA ファームウェアの更新手順
+sidebar:
+  order: 2
+---
+
+import Figure from "@components/Figure.astro";
+
+AUTD3 デバイスを正しく動作させるには, SDK に対応したバージョンの CPU / FPGA ファームウェアが書き込まれている必要がある.
+
+:::note
+このバージョンの SDK は, Firmware v0.1.x をサポートする.
+:::
+
+ファームウェアの更新には, GUI コンソール autd3-console の **Firmware** タブを使う.
+
+:::caution
+ファームウェアのバージョンが SDK と一致しない場合, 正常な動作は保証されない.
+:::
+
+## autd3-console の入手
+
+autd3-console は GitHub Releases (`console-v*`) から配布している.
+[Releases](https://github.com/shinolab/autd3-sdk/releases) から実行環境に対応する配布物 (`autd3-console-<os>.tar.gz`, Windows では `.zip`) をダウンロードし, 展開して実行する.
+
+## 事前準備
+
+ファームウェアの書き込みには, 以下の外部ツールが必要である.
+いずれも実行ファイルが `PATH` 上にある必要がある (Windows ではインストール先を自動検出する).
+
+- **FPGA 書き込み**: [Vivado](https://www.xilinx.com/products/design-tools/vivado.html) (`vivado` / `vivado_lab`) と, 接続用の [XILINX Platform Cable](https://www.xilinx.com/products/boards-and-kits/hw-usb-ii-g.html).
+
+:::note
+FPGA 書き込みのみが目的であれば, **Vivado Lab Edition** の使用を強く推奨する.
+標準版 (ML Edition) はインストールに 60 GB 以上を要するが, Lab Edition は 6 GB 程度で済む.
+:::
+
+- **CPU 書き込み**: [J-Link Software](https://www.segger.com/downloads/jlink/) (`JLink` / `JLinkExe`) と, [J-Link 9-Pin Cortex-M Adapter](https://www.segger-pocjapan.com/j-link-9-pin-cortex-m-adapter) を介した [J-Link Plus](https://www.segger.com/products/debug-probes/j-link/models/j-link-plus/) プローブ.
+
+:::note
+古い J-Link デバイス (例: J-Link Plus V10 以前) を使用する場合, J-Link Software のインストール時に "**Install legacy USB Driver for J-Link**" にチェックを入れること.
+詳細は [Segger Wiki](https://wiki.segger.com/J-Link_Model_Overview) を参照.
+:::
+
+## 書き込み手順
+
+<Figure src="img/hardware/cable.jpg" alt="ファームウェアアップデート用ケーブルの接続先" />
+
+1. AUTD3の電源を切る
+1. 上記ケーブルを接続する. 接続先は上図の通り.
+1. AUTD3 の電源を入れる
+1. autd3-console を起動し, **Firmware** タブを開く.
+1. **Version** から書き込むバージョンを選択する
+1. **Target** で書き込む対象を選ぶ (`Both` / `FPGA` / `CPU`).
+1. **Flash** を押す. 進捗はパネル下部のログに表示される. 書き込みには数分を要する.
+1. 書き込み完了後, AUTD3 の電源を入れ直すと新しいファームウェアが反映される.
+

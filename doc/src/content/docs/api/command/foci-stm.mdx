@@ -1,0 +1,94 @@
+---
+title: FociStm
+description: 焦点座標の列を高速に切り替える STM
+sidebar:
+  order: 4
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/foci-stm.rs?raw";
+import pySample from "@codes/python/examples/api/command/foci-stm.py?raw";
+import fullSample from "@codes/rust/examples/api/command/foci-stm-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/foci-stm-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`FociStm` は, ハードウェアタイマにより単一, 及び, 多焦点音場を切り替える STM 機能を提供する.
+[`PatternStm`](/autd3-sdk/api/command/pattern-stm/) と異なり, 焦点しか扱えないが, データ転送量が少ないためレイテンシが小さい. 
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数      | 型                       | 説明                                       |
+| --------- | ------------------------ | ------------------------------------------ |
+| `freq`    | `impl Into<StmConfig>`   | 再生レート (`Freq` / `Duration` / `SamplingConfig`)  |
+| `points`  | `&[ControlPoints<N>]`    | 焦点サンプルの列                           |
+| `option`  | `FociStmOption`          | 音速・ループ・遷移などのオプション         |
+
+`freq` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
+サンプリング周波数を指定することもできる.
+
+## ControlPoint / ControlPoints
+
+1 サンプルは `ControlPoints<N>` で表される. `N` は同時に出す焦点の数 (最大 8) である. 
+
+- `ControlPoint { point, phase_offset }` — 焦点座標 [mm] と位相オフセット. 
+- `ControlPoints<N> { points: [ControlPoint; N], intensity }` — `N` 個の焦点と振幅. 
+
+## FociStmOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+
+| フィールド        | 型               | デフォルト                 | 説明                                   |
+| ----------------- | ---------------- | -------------------------- | -------------------------------------- |
+| `bank`            | `PatternBank`    | `PatternBank::B0`          | 書き込み先・再生対象のバンク           |
+| `sound_speed`     | `Velocity`       | `340 m/s`                  | 焦点計算に使う音速                     |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`   | ループ回数                             |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | バンク切替時の遷移タイミング           |
+
+`loop_behavior` と `transition_mode` の挙動は[再生制御](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) を参照. 
+
+## ヘルパ関数
+
+典型的な軌道を生成するヘルパ関数が用意されている. 
+
+### circle
+
+<CodeTabs rust={excerpt(sample, "circle")} python={excerpt(pySample, "circle")} />
+
+| 引数         | 型                           | 説明                        |
+| ------------ | ---------------------------- | --------------------------- |
+| `center`     | `Point3<f32>`                | 円の中心 [mm]               |
+| `radius`     | `Length`                     | 円の半径                    |
+| `num_points` | `usize`                      | 生成する点の数              |
+| `normal`     | `UnitVector3<f32>`           | 円平面の法線 (単位ベクトル) |
+| `intensity`  | `Intensity`                  | 各点の振幅                  |
+| `out`        | `&mut Vec<ControlPoints<1>>` | 出力バッファ                |
+
+`normal` を法線とする円周上に等間隔で `num_points` 個の点を並べる. 
+
+### line
+
+<CodeTabs rust={excerpt(sample, "line")} python={excerpt(pySample, "line")} />
+
+| 引数         | 型                           | 説明           |
+| ------------ | ---------------------------- | -------------- |
+| `start`      | `Point3<f32>`                | 始点 [mm]      |
+| `end`        | `Point3<f32>`                | 終点 [mm]      |
+| `num_points` | `usize`                      | 生成する点の数 |
+| `intensity`  | `Intensity`                  | 各点の振幅     |
+| `out`        | `&mut Vec<ControlPoints<1>>` | 出力バッファ   |
+
+始点・終点を含む等間隔の直線上に `num_points` 個の点を並べる. 
+
+## 等価な低レベルコマンド
+
+`FociStm` は内部で [WriteFociBuffer](/autd3-sdk/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/api/command/lowlevel/config-foci-stm/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
+以下は `FociStm::new(freq, &points, option)` と等価な組み合わせである.
+
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

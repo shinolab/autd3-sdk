@@ -1,0 +1,45 @@
+---
+title: パフォーマンス Tips
+description: スループットを上げるための実践的な指針
+sidebar:
+  order: 4
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/tutorial/performance.rs?raw";
+import pySample from "@codes/python/examples/tutorial/performance.py?raw";
+
+高頻度に焦点を更新するなど, スループットが要求される場面で性能を引き出すための指針.
+
+## 複合コマンドを避ける
+
+[Pattern](/autd3-sdk/api/command/pattern/) は内部で `WritePatternBuffer` + `ConfigPattern` + `ChangePatternBank` をまとめて送る複合コマンド.
+だが, いったん [バンク](/autd3-sdk/getting-started/tutorial/bank/)を設定してしまえば, 毎フレームの焦点更新で必要なのはバッファの書き換え, すなわち `WritePatternBuffer` だけである. 
+
+最初に一度だけバンクを設定しておく. (最初は`Pattern`を使っても良い.)
+
+<CodeTabs rust={excerpt(sample, "configure")} python={excerpt(pySample, "configure")} />
+
+以降のホットループでは `WritePatternBuffer` のみを送る.
+送信するコマンド量が減り, そのぶんスループットが上がる. 
+
+<CodeTabs rust={excerpt(sample, "hot_loop")} python={excerpt(pySample, "hot_loop")} />
+
+## streaming 送信
+
+上のホットループでは, 応答を待たずに次々と送る[streaming](/autd3-sdk/getting-started/tutorial/send-modes/)を使っている.
+`send` でフレームをキューに積み, `MAX_IN_FLIGHT` を超えたら古い応答から回収する.
+往復レイテンシが隠蔽されてスループットがさらに向上するため, 高頻度更新では stop-and-wait より streaming を選ぶ. 
+
+## バッファの再利用
+
+毎フレームの確保を避けるため, バッファは使い回す. 
+
+- `pattern_buffer()` で得たバッファは, Pattern 計算関数の出力先として毎フレーム上書きできる. フレームごとに作り直さない. 両言語のホットループはこれを実践している. 
+- Rust では `Frames` も `build_into` で同じバッファへ書き出せば, `build` のたびに確保せずに済む (上の Rust ホットループが実践). 
+  Python の `Frames` は送信キューと共有されるため `build_into` は提供せず, 毎フレーム `build` するしかない. 
+
+## OS チューニング
+
+EtherCAT のリアルタイム性は OS の設定にも左右される. スレッドの優先度・CPU アフィニティ・タイマ精度などを調整することで, ジッタを抑えてより安定した高レート送信ができる可能性がある. 

@@ -1,0 +1,56 @@
+---
+title: 静音化
+description: Silencer で位相・強度の急変を補間し, 可聴ノイズを抑える
+sidebar:
+  order: 5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/tutorial/silencer.rs?raw";
+import pySample from "@codes/python/examples/tutorial/silencer.py?raw";
+
+焦点を高速に動かしたり, AM 変調をかけたりすると可聴音ノイズが発生する.
+AUTD3 にはこれを抑制する [Silencer](/autd3-sdk/guide/silencer/) という機能がある. 
+Silencer は, 振幅 / 位相データの急峻な変化を抑える, つまり, 位相 / 振幅変化を補間することで可聴音ノイズを抑制する. 
+
+Silencerを設定するには`SetSilencer`を使用する.
+なお, Silencer はデフォルトで有効になっている.
+無効化するには補間隔を最短 (25 µs) に設定する. 
+
+Silencerの効果を実感するには以下のコードを実行してみるとよい.
+
+:::caution
+以下のコードを実行すると大きな騒音が発生するので, 実行する際は注意すること. 
+:::
+
+<CodeTabs rust={excerpt(sample, "disable")} python={excerpt(pySample, "disable")} />
+
+`Silencer` によってノイズは抑制されるものの, ユーザーが指定していない位相や振幅が出力される, あるいは, ユーザーが指定した位相や振幅が出力されない可能性がある. 
+前者は本質的に避けられないが, 後者は避けられる場合もある. 
+具体的には, `FociStm` / `PatternStm` や `Modulation` など, 位相 / 振幅が変化する間隔がわかっている場合, `Silencer` による補間がその間隔よりも短ければ後者の問題は起こらない. 
+
+デフォルトでは, 上記のようなユーザーが指定した位相や振幅が出力されない問題を回避するように設定されている.
+`Silencer` は振幅に対して 0.25 ms, 位相に対して 1 ms の時間をかけて補間を行い, これを超えるサンプリングレートに対してはエラーを返す.
+つまり, `FociStm` / `PatternStm` のサンプリング周期は 1 ms 以上, `Modulation` のサンプリング周期は 0.25 ms 以上である必要がある. 
+
+したがって, 例えば以下のコードはサンプリング周期が 1/50 Hz/40 = 0.5 ms となるので実行時エラーとなる. 
+
+<CodeTabs rust={excerpt(sample, "err")} python={excerpt(pySample, "err")} />
+
+このエラーを回避する方法は以下の通りである. 
+
+1. サンプリングレートを下げる. 
+    - 点数を 20 とすれば, サンプリング周期が 1/50 Hz/20 = 1 ms となるので, エラーは発生しない. 
+2. `Silencer` の補間周期を短くする. 
+    - デフォルトの補間間隔は振幅に対して 0.25 ms, 位相に対して 1 ms だが, これは[変更できる](/autd3-sdk/api/command/silencer/).
+      例えば 0.5 ms に設定すればエラーにならなくなる. 
+    - ただし, 補間間隔を短くするとその分ノイズが大きくなるので注意. なお, 補間間隔を 25 µs に設定するのは Silencer の無効化と等価である. 
+
+<CodeTabs rust={excerpt(sample, "workaround")} python={excerpt(pySample, "workaround")} />
+
+3. [`FixedUpdateRate`](/autd3-sdk/api/command/silencer/) を使用する. 
+    - これを使用する場合, ユーザーが指定した位相や振幅が出力されない (補間が完了する前に次のデータに移行してしまう) 可能性があるので注意. 
+4. `FixedCompletionTime` の `strict_mode` を `false` に設定する. 
+    - これは単にエラーを無視するだけなので, 使用は推奨されない. 
+

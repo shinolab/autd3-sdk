@@ -1,0 +1,53 @@
+---
+title: greedy
+description: 組合せ最適化による多焦点最適化
+sidebar:
+  order: 14
+srcPath: crates/autd3-rs-pattern-holo/src/combinatorial/greedy.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/holo/greedy.rs?raw";
+import pySample from "@codes/python/examples/api/compute/holo/greedy.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/holo/greedy-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/holo/greedy-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+greedy は各振動子の位相を離散的な候補から 1 つずつ貪欲に選択していく組合せ最適化. 
+アルゴリズムは Suzuki らの論文 ([Suzuki et al., 2021](https://doi.org/10.1109/TOH.2021.3076489)) に基づく. 
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数         | 型                     | 説明                      |
+| ------------ | ---------------------- | ------------------------- |
+| `geometry`   | `&Geometry`            | デバイス配置              |
+| `foci`       | `&[ControlPoint]`      | 焦点列 (位置と目標振幅)   |
+| `wavelength` | `Length`               | 波長                      |
+| `option`     | `&GreedyOption`        | 追加オプション (下記参照) |
+| `out`        | `&mut [[Emission; _]]` | 出力バッファ              |
+
+共通要素 (`ControlPoint` / `TransducerMask` など) は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 
+
+## GreedyOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+
+| フィールド                  | 型                                | デフォルト              |
+|-----------------------------|-----------------------------------|---------------------|
+| `phase_quantization_levels` | `NonZeroU8`                       | `16`                |
+| `constraint`                | `EmissionConstraint`              | `Uniform(MAX)`      |
+| `directivity`               | `Directivity`                     | `Sphere`            |
+| `objective_func`            | `fn(Complex<f32>, Amplitude) -> f32` | `abs_objective_func` |
+| `mask`                      | `TransducerMask`                  | `AllEnabled`        |
+
+- `phase_quantization_levels` — 位相候補の分割数. 大きいほど位相分解能が上がる. 
+- `objective_func` — 各候補を評価する目的関数. デフォルトの `abs_objective_func` は, 合成音圧の
+  大きさと目標振幅の差の絶対値を返す. 
+  - Rust版のみ設定可能. 他の言語ではデフォルトの目的関数が使われる
+- `constraint` / `directivity` / `mask` の意味は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

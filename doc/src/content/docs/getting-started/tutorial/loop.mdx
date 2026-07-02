@@ -1,0 +1,49 @@
+---
+title: ループと遷移
+description: 有限ループ回数と, バンク切り替えタイミングの制御
+sidebar:
+  order: 8
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/tutorial/loop.rs?raw";
+import pySample from "@codes/python/examples/tutorial/loop.py?raw";
+
+`FociStm` / `PatternStm` は, デフォルトでは同じパターン列を無限に繰り返し再生する.
+再生回数を有限にする場合は以下の通り.
+
+## 有限ループ
+
+再生回数は `FociStmOption` などの `loop_behavior` で指定する.
+`LoopBehavior::Infinite` (デフォルト) は無限ループ, `LoopBehavior::Finite(n)` は `n` 回 (最大65535回) 再生して停止する.
+なお, 停止時は最後のパターンが出力され続ける.
+
+重要な点として, **有限ループは現在と異なるバンクへ切り替えたときに初めて機能する**.
+そのため, 下記の例では有限ループを現在の `B0` とは別の `B1` に書き込んでいる.
+
+<CodeTabs rust={excerpt(sample, "finite")} python={excerpt(pySample, "finite")} />
+
+## 遷移タイミング
+
+再生対象のバンクへ切り替えるタイミングは `transition_mode` で指定する.
+使用できるモードは, 遷移先バンクのループ設定 (`loop_behavior`) によって制限される.
+
+遷移先が無限ループのとき使用できるモード.
+
+- `Immediate` (デフォルト): 書き込み後, 直ちにバンクを切り替える.
+- `Ext`: 拡張モード. バンク内の再生が終わると次のバンクへ自動で切り替わる.
+
+遷移先が有限ループのとき使用できるモード.
+
+- `SyncIdx`: 次に切り替え対象バンクの再生インデックスが 0 に戻ったタイミングで切り替える.
+- `SysTime(DcSysTime)`: 指定した DC システム時刻に切り替える.
+- `Gpio(GpioIn)`: 指定した GPIO 入力ピンのトリガで切り替える.
+
+:::note
+このモードによる, 遷移タイミングの制約は複数のデバイスを同期させるために存在している.
+:::
+
+ループ設定と同様, 遷移タイミングもバンクを切り替えたときにのみ作用する.
+
+あらかじめ別バンクへ次の出力を仕込んでおき, 任意のタイミングで切り替える, などの細かい制御を行う場合は, API リファレンスの [低レベルコマンド](/autd3-sdk/api/command/lowlevel/) を参照されたい.

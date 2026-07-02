@@ -1,0 +1,59 @@
+---
+title: Modulation
+description: 計算した AM 波形をデバイスへ送るコマンド
+sidebar:
+  order: 2
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+import sample from "@codes/rust/examples/api/command/modulation.rs?raw";
+import pySample from "@codes/python/examples/api/command/modulation.py?raw";
+import fullSample from "@codes/rust/examples/api/command/modulation-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/modulation-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`Modulation` は, AM 波形データ (`&[u8]`) をデバイスへ送るコマンド.
+
+## API
+
+<CodeTabs>
+<Fragment slot="rust">
+<Code code={excerpt(sample, "api")} lang="rust" />
+
+`Modulation::new` は書き込み先バンクを `ModulationBank::B0`, ループを `Infinite`, 遷移を `Immediate` とする.
+別バンクへ書く場合は `Modulation::with_bank(bank, config, data)` を使う.
+ループ回数や遷移タイミングも変えたい場合は, フィールドを直接指定して構築する.
+</Fragment>
+<Fragment slot="python">
+<Code code={excerpt(pySample, "api")} lang="python" />
+
+`Modulation` は書き込み先バンクをデフォルトで `ModulationBank.B0`, ループを `Infinite`, 遷移を `Immediate` とする.
+別バンク・ループ回数・遷移タイミングを指定したい場合は, `bank` / `loop_behavior` / `transition_mode` 引数を渡す.
+</Fragment>
+</CodeTabs>
+
+| フィールド        | 型               | デフォルト                  | 説明                         |
+| ----------------- | ---------------- | --------------------------- | ---------------------------- |
+| `bank`            | `ModulationBank` | `ModulationBank::B0`        | 書き込み先・再生対象のバンク |
+| `config`          | `SamplingConfig` | —                           | 再生サンプリング周波数       |
+| `data`            | `&[u8]`          | —                           | AM 波形サンプル列            |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`    | 再生ループ回数               |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | バンク切替時の遷移挙動       |
+
+`config` は [`SamplingConfig`](/autd3-sdk/api/basics/sampling-config/) で指定する.
+`data` は `modulation_buffer()` で確保したバッファへ書き込む.
+`loop_behavior` / `transition_mode` の挙動は [ChangeModulationBank](/autd3-sdk/api/command/lowlevel/change-modulation-bank/) を参照.
+
+modulation の計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/modulation/)が用意されている.
+
+## 等価な低レベルコマンド
+
+`Modulation` は内部で [WriteModulationBuffer](/autd3-sdk/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/api/command/lowlevel/config-modulation/) + [ChangeModulationBank](/autd3-sdk/api/command/lowlevel/change-modulation-bank/) の 3 つへ展開される.
+以下は `Modulation { bank, config, data, loop_behavior, transition_mode }` と等価な組み合わせである
+
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

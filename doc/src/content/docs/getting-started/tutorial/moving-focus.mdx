@@ -1,0 +1,39 @@
+---
+title: 焦点の移動
+description: 焦点を時間的に動かす方法 (ソフトウェア制御 / STM）
+sidebar:
+  order: 4
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import software from "@codes/rust/examples/tutorial/moving-focus-software.rs?raw";
+import pySoftware from "@codes/python/examples/tutorial/moving-focus-software.py?raw";
+import stm from "@codes/rust/examples/tutorial/moving-focus-stm.rs?raw";
+import pyStm from "@codes/python/examples/tutorial/moving-focus-stm.py?raw";
+
+## ソフトウェア制御
+
+AUTD3 において, `Pattern` は送信するたびに上書きされる.
+したがって, 次のようなコードを実行すると, 約1秒ごとに焦点の位置が移動する. 
+
+<CodeTabs rust={excerpt(software, ["loop"])} python={excerpt(pySoftware, ["loop"])} />
+
+上記のコードだとソフトウェア的にタイミングを制御している. 
+これの精度は OS や実行環境に依存するため, より精度の高い制御が必要な場合は, `FociStm` / `PatternStm` を使用することをおすすめする. 
+
+## FociStmによるハードウェア制御
+
+[`FociStm`](/autd3-sdk/api/command/foci-stm/) を使用して上記と同等の動作を実現するコードは以下の通りである. 
+
+<CodeTabs rust={excerpt(stm, "stm")} python={excerpt(pyStm, "stm")} />
+
+`FociStm` / `PatternStm` は AUTD3 デバイス内部でループされるため, ソフトウェアループは必要なく, 送信以降自動的に無限ループする.
+また, タイミングは AUTD3 デバイス内蔵のタイマーで制御されるため, 精度が高く, 解像度も最高で 25 µs 単位で指定できる.
+ただし, このタイマーの制約上, [出力不可能な周波数](/autd3-sdk/api/basics/sampling-config/#制約)が存在する. 
+
+`FociStm` / `PatternStm` の切り替えタイミングは, 1 ループの周波数, または周期で指定する. 
+すなわち, この場合は 2 つの焦点で 0.5 Hz (2 s) となるので, 各焦点は 1 s 出力される.
+なお, [`SamplingConfig`](/autd3-sdk/api/basics/sampling-config/) を使用することで, 1 ループあたりではなく, サンプリング周波数, すなわち 1 焦点あたりの周波数や周期を指定することもできる. 
+
+焦点に限らず任意の Pattern を切り替えたい場合は, `FociStm` の代わりに[`PatternStm`](/autd3-sdk/api/command/pattern-stm/) を使う. 

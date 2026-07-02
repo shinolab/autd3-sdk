@@ -1,0 +1,44 @@
+---
+title: AUTD3
+description: 振動子回路基板の構成・寸法・座標系・コネクタ
+sidebar:
+  order: 1
+---
+
+import Figure from "@components/Figure.astro";
+import Math from "@components/Math.astro";
+
+AUTD3 デバイスは 1 台あたり 249 個の振動子から構成される[^fn_asm].
+各振動子には以下のインデックスが割り当てられている.
+
+<Figure src="img/hardware/autd_trans_idx.jpg" alt="AUTD3 の表面写真と振動子インデックス" />
+
+AUTD3 は複数台をデイジーチェインで接続して拡張でき, SDK からは全ての振動子の位相 / 強度を個別に指定できる.
+複数台つなぐ場合は, PCと最初の AUTD3のEtherCAT In (下図参照) を接続し, その後, n 台目の AUTD3 の EtherCAT Out を n+1 台目の AUTD3 の EtherCAT In に接続する.
+
+<Figure src="img/hardware/autd_back.jpg" alt="AUTD3 の背面写真" />
+
+## 座標系
+
+AUTD3 の座標系は右手座標系であり, 0 番目の振動子の中心が原点になる.
+x 軸は長軸方向, すなわち 0 → 17 の方向であり, y 軸は 0 → 18 の方向である.
+距離の単位は mm を採用する.
+
+## 寸法
+
+振動子は <Math tex="10.16\,\mathrm{mm}" /> の間隔で配置されており, 基板を含めたサイズは <Math tex="192\,\mathrm{mm} \times 151.4\,\mathrm{mm}" /> である.
+
+<Figure src="img/hardware/transducers_array.jpg" alt="AUTD3 デバイスの寸法図" />
+
+## 電源
+
+AUTD3 の電源は <Math tex="24\,\mathrm{V}" /> の直流電源を使用する.
+電源は相互に接続でき, 電源コネクタは 3 つのうち好きなところを使ってよい.
+デバイス側の電源コネクタは Molex 社 5566-02A を使用している.
+
+:::note
+AUTD3 はデバイスあたり最大で <Math tex="2\,\mathrm{A}" /> の電流を消費する.
+電源の最大出力電流に注意すること.
+:::
+
+[^fn_asm]: <Math tex="18 \times 14 = 252" /> からアセンブリ用に 3 つの振動子が抜けている. 態々この位置にネジ穴を持ってきたのは, 複数台並べたときの隙間を可能な限り小さくするため.

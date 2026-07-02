@@ -1,0 +1,25 @@
+---
+title: ファン制御
+description: 冷却ファンの On/Off/Auto 切り替え方法
+sidebar:
+  order: 3
+---
+
+import Figure from "@components/Figure.astro";
+
+AUTD3 デバイスにはファンがついており, Auto / Off / On の 3 つのモードがある.
+
+- Auto: 温度監視 IC が温度を監視し, 一定温度以上になると自動でファンを起動する.
+- Off: ファンは常時オフ.
+- On: ファンは常時オン.
+
+モードの切り替えは, ファン横のジャンパスイッチで行う.
+少しわかりにくいが, 下図のようにファン側をショートすると Auto, 真ん中で Off, 右側で On となる.
+
+<Figure src="img/hardware/fan.jpg" alt="AUTD ファン制御用のジャンパスイッチ" />
+
+Auto モードの場合, [`ForceFan`](/autd3-sdk/api/command/force-fan/) を送信することでファンを強制的に起動できる.
+
+:::note
+Auto モードではファンを強制的にオフにすることはできない.
+:::

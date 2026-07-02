@@ -1,0 +1,31 @@
+---
+title: TwinCAT
+description: Windows/TwinCAT 環境向けの Link
+sidebar:
+  order: 1
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/link/twincat.rs?raw";
+import pySample from "@codes/python/examples/api/link/twincat.py?raw";
+
+`TwinCATLink` は, Windows 上の [TwinCAT](https://www.beckhoff.com/) を EtherCAT マスタとして利用する Link 実装. 
+`autd3-rs-link-twincat` クレートで提供される.
+TwinCAT がセットアップ済みの Windows 環境で使用する.
+TwinCAT のセットアップ手順は [TwinCAT のインストール](/autd3-sdk/getting-started/twincat/) を参照すること.
+
+ローカルの TwinCAT に接続する構成と, ADS 経由でリモートの TwinCAT サーバへ接続する構成がある.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数         | 型         | 説明                                       |
+| ------------ | ---------- | ------------------------------------------ |
+| `addr`       | `IpAddr`   | リモート TwinCAT サーバの IP アドレス      |
+| `ams_net_id` | `AmsNetId` | リモート TwinCAT サーバの AMS Net ID       |
+
+タイムアウトを指定するには`*_with_timeouts`を使用する.
+デフォルトはタイムアウトなし.
+

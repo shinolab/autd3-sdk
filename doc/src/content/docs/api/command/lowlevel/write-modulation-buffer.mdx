@@ -1,0 +1,31 @@
+---
+title: WriteModulationBuffer
+description: Modulation バッファへの書き込み
+sidebar:
+  order: 15
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/mod-bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/mod-bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/mod-bank-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/mod-bank-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`WriteModulationBuffer` は, 指定したバンク・オフセットへ AM 波形 (`&[u8]`) を書き込む低レベルコマンド.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "write")} python={excerpt(pySample, "write")} />
+
+| フィールド | 型               | 説明                             |
+| ---------- | ---------------- | -------------------------------- |
+| `bank`     | `ModulationBank` | 書き込み先バンク                 |
+| `offset`   | `usize`          | バンク内の書き込み開始オフセット |
+| `data`     | `&[u8]`          | AM 波形サンプル列                |
+
+## Example
+
+`WriteModulationBuffer` → `ConfigModulation` → `ChangeModulationBank` で AM 波形を再生する例 (高レベルの [Modulation](/autd3-sdk/api/command/modulation/) と等価).
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

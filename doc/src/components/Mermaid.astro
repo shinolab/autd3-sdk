@@ -1,0 +1,68 @@
+---
+interface Props {
+  code: string;
+  title?: string;
+}
+const { code, title } = Astro.props;
+---
+
+<figure class="mermaid-figure">
+  <div class="mermaid-figure-graph" data-mermaid-src={code}></div>
+  {title && <figcaption>{title}</figcaption>}
+</figure>
+
+<script>
+  import mermaid from "mermaid";
+
+  let seq = 0;
+
+  function themeFor(): "default" | "dark" {
+    return document.documentElement.dataset.theme === "light" ? "default" : "dark";
+  }
+
+  async function renderAll() {
+    const nodes = document.querySelectorAll<HTMLElement>(
+      ".mermaid-figure-graph[data-mermaid-src]",
+    );
+    if (!nodes.length) return;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: themeFor(),
+      securityLevel: "strict",
+      flowchart: { htmlLabels: true, curve: "basis" },
+    });
+    for (const el of nodes) {
+      const src = el.dataset.mermaidSrc;
+      if (!src) continue;
+      try {
+        const { svg } = await mermaid.render(`mermaid-${seq++}`, src);
+        el.innerHTML = svg;
+      } catch (e) {
+        el.textContent = String(e);
+      }
+    }
+  }
+
+  renderAll();
+  document.addEventListener("astro:page-load", renderAll);
+  new MutationObserver(() => renderAll()).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
+</script>
+
+<style>
+  .mermaid-figure {
+    margin: 1.5rem 0;
+    text-align: center;
+  }
+  .mermaid-figure-graph :global(svg) {
+    max-width: 100%;
+    height: auto;
+  }
+  .mermaid-figure figcaption {
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+</style>

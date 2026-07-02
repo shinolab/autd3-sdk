@@ -1,0 +1,36 @@
+---
+title: ConfigFociStm
+description: Foci STM バンクの設定
+sidebar:
+  order: 19
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/foci-buffer.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/foci-buffer.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/foci-buffer-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/foci-buffer-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`ConfigFociStm` は, Foci STM バンクの再生パラメータを設定する低レベルコマンド.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "config")} python={excerpt(pySample, "config")} />
+
+| フィールド      | 型               | 説明                                               |
+| --------------- | ---------------- | -------------------------------------------------- |
+| `bank`          | `PatternBank`    | 対象バンク                                         |
+| `config`        | `SamplingConfig` | 再生サンプリング周波数                             |
+| `size`          | `usize`          | STM サンプル数                                     |
+| `num_foci`      | `u8`             | 1 サンプルあたりの焦点数 (`ControlPoints<N>` の N) |
+| `sound_speed`   | `Velocity`       | 焦点計算に使う音速                                 |
+| `loop_behavior` | `LoopBehavior`   | 再生ループ回数 (`Infinite` / `Finite`)             |
+
+`loop_behavior` と遷移の反映タイミングは [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) を参照.
+
+## Example
+
+`ConfigFociStm` は `WriteFociBuffer` で焦点列を書き込んだ後, `ChangePatternBank` で再生を切り替える流れの中で使う.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

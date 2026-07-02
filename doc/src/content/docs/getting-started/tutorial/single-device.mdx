@@ -1,0 +1,80 @@
+---
+title: 単一デバイス
+description: 1台のAUTD3で焦点を生成する
+sidebar:
+  order: 1
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import focusRust from "@codes/rust/examples/tutorial/single-device.rs?raw";
+import focusPython from "@codes/python/examples/tutorial/single-device.py?raw";
+import { Code } from "astro-expressive-code/components";
+import { excerpt } from "@lib/excerpt";
+
+ここでは, 一つのデバイスを駆動する方法について説明する.
+
+## 依存プログラムのインストール
+
+本チュートリアルでは[EtherCrab](https://github.com/ethercrab-rs/ethercrab)を利用する.
+Windowsを使用する場合, [Npcap](https://npcap.com/)を「**WinPcap API-compatible Mode**」でインストールしておくこと.
+
+なお, ファームウェアが異なる場合, 正常な動作は保証されない.
+本文章におけるファームウェアのバージョンはv0.1.0が想定される.
+ファームウェアのアップデートは[セットアップ/ファームウェア](/autd3-sdk/getting-started/setup/firmware/)を参照されたい.
+
+以下は, 1台のAUTD3デバイスでアレイの中心から150 mm直上に焦点を生成し, 200 Hzの正弦波AMかける例である.
+
+<CodeTabs>
+<Fragment slot="rust" >
+まずは適当なプロジェクトを作成し, autd3ライブラリを依存関係に追加する.
+また, デバイスとの通信を行うautd3-link-ethercrabライブラリも依存関係に追加する.
+非同期ランタイムも必要なので, tokioも追加する.
+
+```
+cargo new --bin autd3-sample && cd autd3-sample
+cargo add autd3-rs
+cargo add autd3-rs-link-ethercrab
+cargo add tokio --features full
+```
+次に, `src/main.rs`ファイルを編集し, 以下のようにする. 
+
+<Code code={excerpt(focusRust)} lang="rust" />
+
+そして, これを実行する.
+```
+cargo run --release
+```
+
+Linux, macOSでは, EtherCrabを使用するのに管理者権限が必要になるかもしれない. その場合は,
+```
+cargo build --release && sudo ./target/release/autd3_sample
+```
+とすること.
+</Fragment>
+<Fragment slot="python" >
+まずは適当なディレクトリを作成し, 仮想環境を用意してautd3ライブラリを追加する.
+また, デバイスとの通信を行うautd3-link-ethercrab, 焦点計算のautd3-pattern, AM変調のautd3-modulationも併せて追加する.
+
+```
+mkdir autd3-sample && cd autd3-sample
+python3 -m venv .venv
+source .venv/bin/activate
+pip install autd3 autd3-pattern autd3-modulation autd3-link-ethercrab
+```
+次に, `main.py`ファイルを以下のようにする.
+
+<Code code={excerpt(focusPython)} lang="python" />
+
+そして, これを実行する.
+```
+python3 main.py
+```
+
+Linux, macOSでは, EtherCrabを使用するのに管理者権限が必要になるかもしれない. その場合は,
+```
+sudo .venv/bin/python3 main.py
+```
+とすること.
+</Fragment>
+</CodeTabs>
+
