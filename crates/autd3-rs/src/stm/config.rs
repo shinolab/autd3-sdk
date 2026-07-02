@@ -19,6 +19,11 @@ pub struct StmConfig(StmConfigInner);
 
 impl StmConfig {
     #[must_use]
+    pub fn new(value: impl Into<StmConfig>) -> Self {
+        value.into()
+    }
+
+    #[must_use]
     pub fn into_sampling_config(self, size: usize) -> SamplingConfig {
         let size = size.max(1);
         match self.0 {
@@ -71,7 +76,7 @@ mod tests {
     #[test]
     fn stm_freq_multiplies_sampling_rate_by_size() {
         assert_eq!(
-            StmConfig::from(100.0 * Hz).into_sampling_config(4).divide(),
+            StmConfig::new(100.0 * Hz).into_sampling_config(4).divide(),
             Ok(100)
         );
     }
@@ -79,7 +84,7 @@ mod tests {
     #[test]
     fn stm_period_divides_by_size() {
         assert_eq!(
-            StmConfig::from(Duration::from_millis(1))
+            StmConfig::new(Duration::from_millis(1))
                 .into_sampling_config(4)
                 .divide(),
             Ok(10)
@@ -89,7 +94,7 @@ mod tests {
     #[test]
     fn stm_sampling_config_passes_through_regardless_of_size() {
         assert_eq!(
-            StmConfig::from(SamplingConfig::FREQ_4K)
+            StmConfig::new(SamplingConfig::FREQ_4K)
                 .into_sampling_config(7)
                 .divide(),
             Ok(10)
@@ -99,7 +104,7 @@ mod tests {
     #[test]
     fn stm_nearest_freq_rounds_to_a_valid_divider() {
         assert!(
-            StmConfig::from(Nearest(4001.0 * Hz))
+            StmConfig::new(Nearest(4001.0 * Hz))
                 .into_sampling_config(1)
                 .divide()
                 .is_ok()
@@ -109,7 +114,7 @@ mod tests {
     #[test]
     fn stm_nearest_period_rounds_to_a_valid_divider() {
         assert!(
-            StmConfig::from(Nearest(Duration::from_micros(251)))
+            StmConfig::new(Nearest(Duration::from_micros(251)))
                 .into_sampling_config(1)
                 .divide()
                 .is_ok()
