@@ -1,11 +1,11 @@
 use std::sync::{Arc, OnceLock};
 
 use autd3_python_capsule::{
-    BoxFuture, ClientBackend, LinkStatusData, client_opener, link_into_capsule,
+    BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, link_into_capsule,
 };
 use autd3_rs::{Client, ConstStateChecker, Frames, StateCheck};
 use autd3_rs_core::Error;
-use autd3_rs_firmware_emulator::Nop as CoreNop;
+use autd3_rs_link_nop::Nop as CoreNop;
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 use tokio::sync::Mutex;
@@ -67,6 +67,22 @@ impl ClientBackend for NopBackend {
                 .spawn(async move { client.read_error_detail().await })
                 .await
                 .map_err(join_err)?
+        })
+    }
+
+    fn send(&self, datagrams: Arc<Frames>, index: usize) -> BoxFuture<ResponseToken> {
+        let client = Arc::clone(&self.client);
+        Box::pin(async move {
+            let fut = link_runtime()
+                .spawn(async move {
+                    let frame = datagrams
+                        .frame(index)
+                        .ok_or_else(|| Error::Link(format!("frame {index} out of range")))?;
+                    client.send(frame).await
+                })
+                .await
+                .map_err(join_err)??;
+            Ok(ResponseToken::new(fut, link_runtime().handle().clone()))
         })
     }
 

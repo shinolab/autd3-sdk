@@ -10,10 +10,12 @@ import autd3_link_ethercrab as ethercrab
 import autd3_modulation as modulation
 import autd3_pattern as pattern
 import autd3_pattern_holo as holo
+from autd3.units import Hz, m, s
+from autd3_pattern_holo import dB
 
 
 async def main() -> None:
-    geometry = autd3.Geometry([autd3.Autd3()])
+    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     client = await autd3.Client.open(
         geometry,
@@ -22,21 +24,21 @@ async def main() -> None:
     )
 
     center = geometry.center()
-    wavelength = pattern.wavelength(340_000.0)
+    wavelength = pattern.wavelength(340 * m / s)
     foci = [
-        holo.ControlPoint(center + np.array([-20.0, 0.0, 150.0]), holo.Amplitude.spl(150.0)),
-        holo.ControlPoint(center + np.array([20.0, 0.0, 150.0]), holo.Amplitude.spl(150.0)),
+        holo.ControlPoint(center + np.array([-20.0, 0.0, 150.0]), 150 * dB),
+        holo.ControlPoint(center + np.array([20.0, 0.0, 150.0]), 150 * dB),
     ]
 
     patterns = geometry.pattern_buffer()
     holo.gspat(geometry, foci, wavelength, holo.GspatOption(repeat=100), patterns)
 
     mod_buf = modulation.modulation_buffer()
-    modulation.sine(200.0, modulation.SineOption(), mod_buf)
+    modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
 
     builder = client.datagram_builder()
-    builder.push(autd3.Pattern(patterns))
-    builder.push(autd3.Modulation(autd3.SamplingConfig.FREQ_4K, mod_buf))
+    builder.push(autd3.commands.Pattern(patterns))
+    builder.push(autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf))
     for frame in builder.build():
         await client.send_checked(frame)
 

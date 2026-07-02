@@ -1,7 +1,8 @@
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use autd3_python_capsule::{
-    BoxFuture, ClientBackend, LinkStatusData, client_opener, link_into_capsule,
+    BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, link_into_capsule,
 };
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::{Error, Interface};
@@ -22,6 +23,18 @@ fn link_runtime() -> &'static tokio::runtime::Runtime {
 
 fn join_err(e: tokio::task::JoinError) -> Error {
     Error::Link(e.to_string())
+}
+
+fn opt_duration(obj: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Duration>> {
+    match obj {
+        None => Ok(None),
+        Some(o) => {
+            let ns: u128 = o.call_method0("as_nanos")?.extract()?;
+            Ok(Some(Duration::from_nanos(
+                u64::try_from(ns).unwrap_or(u64::MAX),
+            )))
+        }
+    }
 }
 
 struct SoemBackend {
@@ -67,6 +80,22 @@ impl ClientBackend for SoemBackend {
                 .spawn(async move { client.read_error_detail().await })
                 .await
                 .map_err(join_err)?
+        })
+    }
+
+    fn send(&self, datagrams: Arc<Frames>, index: usize) -> BoxFuture<ResponseToken> {
+        let client = Arc::clone(&self.client);
+        Box::pin(async move {
+            let fut = link_runtime()
+                .spawn(async move {
+                    let frame = datagrams
+                        .frame(index)
+                        .ok_or_else(|| Error::Link(format!("frame {index} out of range")))?;
+                    client.send(frame).await
+                })
+                .await
+                .map_err(join_err)??;
+            Ok(ResponseToken::new(fut, link_runtime().handle().clone()))
         })
     }
 
@@ -146,13 +175,50 @@ pub struct SoemLinkOption {
 #[pymethods]
 impl SoemLinkOption {
     #[new]
-    #[pyo3(signature = (interface = None))]
-    fn new(interface: Option<String>) -> Self {
+    #[pyo3(signature = (
+        interface = None,
+        sync0_period = None,
+        sync0_shift = None,
+        sync_tolerance = None,
+        sync_timeout = None,
+    ))]
+    fn new(
+        interface: Option<String>,
+        sync0_period: Option<&Bound<'_, PyAny>>,
+        sync0_shift: Option<&Bound<'_, PyAny>>,
+        sync_tolerance: Option<&Bound<'_, PyAny>>,
+        sync_timeout: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
+        let mut inner = CoreOption {
+            interface: Interface::from(interface),
+            ..CoreOption::default()
+        };
+        if let Some(v) = opt_duration(sync0_period)? {
+            inner.sync0_period = v;
+        }
+        if let Some(v) = opt_duration(sync0_shift)? {
+            inner.sync0_shift = v;
+        }
+        if let Some(v) = opt_duration(sync_tolerance)? {
+            inner.sync_tolerance = v;
+        }
+        if let Some(v) = opt_duration(sync_timeout)? {
+            inner.sync_timeout = v;
+        }
+        Ok(Self { inner })
+    }
+
+    #[staticmethod]
+    fn safe_default() -> Self {
         Self {
-            inner: CoreOption {
-                interface: Interface::from(interface),
-                ..CoreOption::default()
-            },
+            inner: CoreOption::safe_default(),
+        }
+    }
+
+    #[staticmethod]
+    fn performance_default() -> Self {
+        Self {
+            inner: CoreOption::performance_default(),
         }
     }
 

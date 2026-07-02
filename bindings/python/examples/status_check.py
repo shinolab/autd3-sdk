@@ -11,9 +11,9 @@ CHECK_INTERVAL = 0.1
 
 
 async def main() -> None:
-    geometry = autd3.Geometry([autd3.Autd3()])
+    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client = await autd3.Client.open(
+    client, checker = await autd3.Client.open_with_checker(
         geometry,
         ethercrab.EtherCrabLinkOption(),
         autd3.ClientConfig(),
@@ -27,7 +27,7 @@ async def main() -> None:
 
     last = None
     while not stop.is_set():
-        status = await client.check_status()
+        status = await checker.check()
         key = (tuple(status.device_states), status.recoveries)
         if key != last:
             for i, state in enumerate(status.device_states):

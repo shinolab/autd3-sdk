@@ -10,10 +10,11 @@ import numpy as np
 
 import autd3
 import autd3_link_ethercrab as ethercrab
+from autd3.units import Hz
 
 
 async def main() -> None:
-    geometry = autd3.Geometry([autd3.Autd3()])
+    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     client = await autd3.Client.open(
         geometry,
@@ -22,8 +23,9 @@ async def main() -> None:
     )
 
     center = geometry.center() + np.array([0.0, 0.0, 150.0])
-    samples = autd3.circle(center, 30.0, 200, [0.0, 0.0, 1.0])
-    stm = autd3.FociStm(autd3.StmConfig.Freq(1.0), samples, autd3.FociStmOption())
+    samples = []
+    autd3.commands.circle(center, 30.0, 200, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, samples)
+    stm = autd3.commands.FociStm(1.0 * Hz, samples, autd3.commands.FociStmOption())
 
     builder = client.datagram_builder()
     builder.push(stm)

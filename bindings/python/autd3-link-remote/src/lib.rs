@@ -3,7 +3,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use autd3_python_capsule::{
-    BoxFuture, ClientBackend, LinkStatusData, client_opener, link_into_capsule,
+    BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, link_into_capsule,
 };
 use autd3_rs::{Client, ConstStateChecker, Frames, StateCheck};
 use autd3_rs_core::Error;
@@ -25,6 +25,18 @@ fn link_runtime() -> &'static tokio::runtime::Runtime {
 
 fn join_err(e: tokio::task::JoinError) -> Error {
     Error::Link(e.to_string())
+}
+
+fn opt_duration(obj: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Duration>> {
+    match obj {
+        None => Ok(None),
+        Some(o) => {
+            let ns: u128 = o.call_method0("as_nanos")?.extract()?;
+            Ok(Some(Duration::from_nanos(
+                u64::try_from(ns).unwrap_or(u64::MAX),
+            )))
+        }
+    }
 }
 
 struct RemoteBackend {
@@ -70,6 +82,22 @@ impl ClientBackend for RemoteBackend {
                 .spawn(async move { client.read_error_detail().await })
                 .await
                 .map_err(join_err)?
+        })
+    }
+
+    fn send(&self, datagrams: Arc<Frames>, index: usize) -> BoxFuture<ResponseToken> {
+        let client = Arc::clone(&self.client);
+        Box::pin(async move {
+            let fut = link_runtime()
+                .spawn(async move {
+                    let frame = datagrams
+                        .frame(index)
+                        .ok_or_else(|| Error::Link(format!("frame {index} out of range")))?;
+                    client.send(frame).await
+                })
+                .await
+                .map_err(join_err)??;
+            Ok(ResponseToken::new(fut, link_runtime().handle().clone()))
         })
     }
 
@@ -152,17 +180,11 @@ pub struct RemoteLinkOption {
 impl RemoteLinkOption {
     #[new]
     #[pyo3(signature = (addr, timeout = None))]
-    fn new(addr: &str, timeout: Option<f64>) -> PyResult<Self> {
+    fn new(addr: &str, timeout: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         let addr = addr
             .parse::<SocketAddr>()
             .map_err(|e| PyValueError::new_err(format!("invalid socket address `{addr}`: {e}")))?;
-        let timeout = match timeout {
-            Some(t) if t < 0.0 => {
-                return Err(PyValueError::new_err("timeout must be non-negative"));
-            }
-            Some(t) => Some(Duration::from_secs_f64(t)),
-            None => None,
-        };
+        let timeout = opt_duration(timeout)?;
         Ok(Self { addr, timeout })
     }
 

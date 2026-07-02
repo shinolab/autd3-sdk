@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 
 mod error;
 mod geometry;
+mod units;
 mod value;
 
 #[pymodule]
@@ -11,9 +12,12 @@ fn autd3_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<value::Phase>()?;
     m.add_class::<value::Emission>()?;
     m.add_class::<value::SamplingConfig>()?;
+    m.add_class::<value::PyNearest>()?;
+    m.add_class::<value::Duration>()?;
     m.add_class::<geometry::Autd3>()?;
     m.add_class::<geometry::Geometry>()?;
     m.add_class::<geometry::Device>()?;
     m.add_function(wrap_pyfunction!(geometry::_read_geometry_capsule, m)?)?;
+    units::register(m)?;
     Ok(())
 }

@@ -2,16 +2,30 @@ use core::num::NonZeroU16;
 use core::time::Duration;
 
 use autd3_rs::DatagramBuilder as CoreDatagramBuilder;
-use autd3_rs::operation::{
+use autd3_rs::commands::{
     Clear as CoreClear, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
     ForceFan as CoreForceFan, GpioOut as CoreGpioOut, Nop as CoreNop, PWE_TABLE_SIZE, SetGpioOut,
     SetOutputMask, SetPhaseCorrection, SetPulseWidthTable as CoreSetPulseWidthTable, SetSilencer,
     Synchronize as CoreSynchronize,
 };
-use autd3_rs::params::NUM_TRANSDUCERS;
+use autd3_rs::geometry::Autd3;
 use autd3_rs::value::{Phase, PulseWidth as CorePulseWidth};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+
+fn extract_u8(obj: &Bound<'_, PyAny>) -> PyResult<u8> {
+    if let Ok(v) = obj.extract::<u8>() {
+        return Ok(v);
+    }
+    obj.getattr("value")?.extract::<u8>()
+}
+
+fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
+    let nanos = obj.call_method0("as_nanos")?.extract::<u128>()?;
+    u64::try_from(nanos)
+        .map(Duration::from_nanos)
+        .map_err(|_| PyValueError::new_err("duration is out of range"))
+}
 
 pub(crate) trait PushCommand: Send + Sync {
     fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>);
@@ -26,7 +40,7 @@ macro_rules! simple_command {
             fn push_into<'a>(&'a $self, $builder: &mut CoreDatagramBuilder<'a>) $body
         }
 
-        #[pyclass(name = $pyname, module = "autd3")]
+        #[pyclass(name = $pyname, module = "autd3.commands")]
         pub struct $py;
 
         #[pymethods]
@@ -92,7 +106,7 @@ impl PushCommand for ForceFanCmd {
     }
 }
 
-#[pyclass(name = "ForceFan", module = "autd3")]
+#[pyclass(name = "ForceFan", module = "autd3.commands")]
 pub struct ForceFan {
     value: bool,
 }
@@ -117,7 +131,11 @@ enum SilencerConfigKind {
     UpdateRate(FixedUpdateRate),
 }
 
-#[pyclass(name = "FixedCompletionTime", module = "autd3", skip_from_py_object)]
+#[pyclass(
+    name = "FixedCompletionTime",
+    module = "autd3.commands",
+    skip_from_py_object
+)]
 pub struct FixedCompletionTimePy {
     inner: FixedCompletionTime,
 }
@@ -125,19 +143,34 @@ pub struct FixedCompletionTimePy {
 #[pymethods]
 impl FixedCompletionTimePy {
     #[new]
-    #[pyo3(signature = (intensity_us = 250.0, phase_us = 1000.0, strict_mode = true))]
-    fn new(intensity_us: f32, phase_us: f32, strict_mode: bool) -> Self {
-        Self {
+    #[pyo3(signature = (intensity = None, phase = None, strict_mode = true))]
+    fn new(
+        intensity: Option<&Bound<'_, PyAny>>,
+        phase: Option<&Bound<'_, PyAny>>,
+        strict_mode: bool,
+    ) -> PyResult<Self> {
+        let default = FixedCompletionTime::default();
+        Ok(Self {
             inner: FixedCompletionTime {
-                intensity: Duration::from_secs_f32(intensity_us / 1_000_000.0),
-                phase: Duration::from_secs_f32(phase_us / 1_000_000.0),
+                intensity: intensity
+                    .map(extract_duration)
+                    .transpose()?
+                    .unwrap_or(default.intensity),
+                phase: phase
+                    .map(extract_duration)
+                    .transpose()?
+                    .unwrap_or(default.phase),
                 strict_mode,
             },
-        }
+        })
     }
 }
 
-#[pyclass(name = "FixedUpdateRate", module = "autd3", skip_from_py_object)]
+#[pyclass(
+    name = "FixedUpdateRate",
+    module = "autd3.commands",
+    skip_from_py_object
+)]
 pub struct FixedUpdateRatePy {
     inner: FixedUpdateRate,
 }
@@ -175,7 +208,7 @@ impl PushCommand for SetSilencerCmd {
     }
 }
 
-#[pyclass(name = "SetSilencer", module = "autd3")]
+#[pyclass(name = "SetSilencer", module = "autd3.commands")]
 pub struct SetSilencerPy {
     config: SilencerConfigKind,
 }
@@ -183,7 +216,13 @@ pub struct SetSilencerPy {
 #[pymethods]
 impl SetSilencerPy {
     #[new]
-    fn new(config: &Bound<'_, PyAny>) -> PyResult<Self> {
+    #[pyo3(signature = (config = None))]
+    fn new(config: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        let Some(config) = config else {
+            return Ok(Self {
+                config: SilencerConfigKind::Completion(SetSilencer::default().config),
+            });
+        };
         let config = if let Ok(c) = config.cast::<FixedCompletionTimePy>() {
             SilencerConfigKind::Completion(c.borrow().inner)
         } else if let Ok(c) = config.cast::<FixedUpdateRatePy>() {
@@ -212,7 +251,7 @@ impl SetSilencerPy {
     }
 }
 
-#[pyclass(name = "GpioOut", module = "autd3", from_py_object)]
+#[pyclass(name = "GpioOut", module = "autd3.commands", from_py_object)]
 #[derive(Clone, Copy)]
 pub struct GpioOut(pub(crate) CoreGpioOut);
 
@@ -221,7 +260,7 @@ impl GpioOut {
     #[classattr]
     #[pyo3(name = "Off")]
     fn off() -> Self {
-        Self(CoreGpioOut::None)
+        Self(CoreGpioOut::Off)
     }
 
     #[classattr]
@@ -316,7 +355,7 @@ impl PushCommand for SetGpioOutCmd {
     }
 }
 
-#[pyclass(name = "SetGpioOut", module = "autd3")]
+#[pyclass(name = "SetGpioOut", module = "autd3.commands")]
 pub struct SetGpioOutPy {
     outputs: [CoreGpioOut; 4],
 }
@@ -355,7 +394,7 @@ impl PushCommand for EmulateGpioInCmd {
     }
 }
 
-#[pyclass(name = "EmulateGpioIn", module = "autd3")]
+#[pyclass(name = "EmulateGpioIn", module = "autd3.commands")]
 pub struct EmulateGpioInPy {
     values: [bool; 4],
 }
@@ -381,7 +420,7 @@ impl EmulateGpioInPy {
 
 #[derive(Clone)]
 struct SetOutputMaskCmd {
-    masks: Vec<[bool; NUM_TRANSDUCERS]>,
+    masks: Vec<Vec<bool>>,
 }
 
 impl PushCommand for SetOutputMaskCmd {
@@ -392,26 +431,24 @@ impl PushCommand for SetOutputMaskCmd {
     }
 }
 
-#[pyclass(name = "SetOutputMask", module = "autd3")]
+#[pyclass(name = "SetOutputMask", module = "autd3.commands")]
 pub struct SetOutputMaskPy {
-    masks: Vec<[bool; NUM_TRANSDUCERS]>,
+    masks: Vec<Vec<bool>>,
 }
 
 #[pymethods]
 impl SetOutputMaskPy {
     #[new]
     fn new(masks: Vec<Vec<bool>>) -> PyResult<Self> {
-        let masks = masks
-            .into_iter()
-            .map(|device| {
-                device.try_into().map_err(|v: Vec<bool>| {
-                    PyValueError::new_err(format!(
-                        "each device mask needs {NUM_TRANSDUCERS} entries, got {}",
-                        v.len()
-                    ))
-                })
-            })
-            .collect::<PyResult<Vec<_>>>()?;
+        for device in &masks {
+            if device.len() != Autd3::NUM_TRANSDUCERS {
+                return Err(PyValueError::new_err(format!(
+                    "each device mask needs {} entries, got {}",
+                    Autd3::NUM_TRANSDUCERS,
+                    device.len()
+                )));
+            }
+        }
         Ok(Self { masks })
     }
 }
@@ -426,7 +463,7 @@ impl SetOutputMaskPy {
 
 #[derive(Clone)]
 struct SetPhaseCorrectionCmd {
-    phases: Vec<[Phase; NUM_TRANSDUCERS]>,
+    phases: Vec<Vec<Phase>>,
 }
 
 impl PushCommand for SetPhaseCorrectionCmd {
@@ -437,25 +474,29 @@ impl PushCommand for SetPhaseCorrectionCmd {
     }
 }
 
-#[pyclass(name = "SetPhaseCorrection", module = "autd3")]
+#[pyclass(name = "SetPhaseCorrection", module = "autd3.commands")]
 pub struct SetPhaseCorrectionPy {
-    phases: Vec<[Phase; NUM_TRANSDUCERS]>,
+    phases: Vec<Vec<Phase>>,
 }
 
 #[pymethods]
 impl SetPhaseCorrectionPy {
     #[new]
-    fn new(phases: Vec<Vec<u8>>) -> PyResult<Self> {
+    fn new(phases: Vec<Vec<Bound<'_, PyAny>>>) -> PyResult<Self> {
         let phases = phases
             .into_iter()
             .map(|device| {
-                if device.len() != NUM_TRANSDUCERS {
+                if device.len() != Autd3::NUM_TRANSDUCERS {
                     return Err(PyValueError::new_err(format!(
-                        "each device needs {NUM_TRANSDUCERS} phases, got {}",
+                        "each device needs {} phases, got {}",
+                        Autd3::NUM_TRANSDUCERS,
                         device.len()
                     )));
                 }
-                Ok(core::array::from_fn(|i| Phase(device[i])))
+                device
+                    .iter()
+                    .map(|p| extract_u8(p).map(Phase))
+                    .collect::<PyResult<Vec<_>>>()
             })
             .collect::<PyResult<Vec<_>>>()?;
         Ok(Self { phases })
@@ -481,7 +522,7 @@ impl PushCommand for SetPulseWidthTableCmd {
     }
 }
 
-#[pyclass(name = "SetPulseWidthTable", module = "autd3")]
+#[pyclass(name = "SetPulseWidthTable", module = "autd3.commands")]
 pub struct SetPulseWidthTablePy {
     table: [u16; PWE_TABLE_SIZE],
 }
@@ -516,7 +557,7 @@ impl SetPulseWidthTablePy {
     }
 }
 
-#[pyclass(name = "PulseWidth", module = "autd3")]
+#[pyclass(name = "PulseWidth", module = "autd3.value")]
 pub struct PulseWidth;
 
 #[pymethods]
