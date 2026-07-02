@@ -1,0 +1,48 @@
+---
+title: SamplingConfig
+description: Modulation / STM のサンプリング周波数を表す SamplingConfig
+sidebar:
+  order: 4
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import sample from "@codes/rust/examples/api/basics/sampling-config.rs?raw";
+import pySample from "@codes/python/examples/api/basics/sampling-config.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`SamplingConfig` は Modulation や STM のサンプリング周波数を表す.
+サンプリング周波数は超音波周波数 (40 kHz) を整数で分周した値でなければならない. 
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+`SamplingConfig::new` は `NonZeroU16` / `Freq<f32>` / `Duration` / `Nearest<Freq<f32>>` / `Nearest<Duration>` を受け取る.
+上記はいずれも 4 kHz (分周比 10) を表し, 互いに等価. 
+
+## 内部表現
+
+`SamplingConfig` は次のいずれかとして指定できる. 内部では最終的に分周比 (`u16`) へ変換される. 
+
+| 指定方法              | 型              | 
+| --------------------- | --------------- | 
+| 分周比                | `NonZeroU16`    | 
+| 周波数                | `Freq<f32>`     |
+| 周期                  | `Duration`      | 
+
+分周比 <Math tex="N" /> とサンプリング周波数 <Math tex="f_s" />, サンプリング周期 <Math tex="T_s" /> の関係は次の通り. 
+
+<MathBlock tex="f_s = \frac{40\,\mathrm{kHz}}{N}, \quad T_s = 25\,\mathrm{\mu s} \times N" />
+
+周波数・周期で指定した場合, それが 40 kHz を割り切れない (整数の分周比にならない) とエラーになる. 
+割り切れない値を最も近い分周比へ丸めたいときは周波数/周期を `Nearest` でラップする. 
+
+## プリセット
+
+よく使う定数はあらかじめ用意されている. 
+
+| 定数      | サンプリング周波数 | 分周比 |
+| --------- | ------------------ | ------ |
+| `FREQ_40K`| 40 kHz             | 1      |
+| `FREQ_4K` | 4 kHz              | 10     |
+

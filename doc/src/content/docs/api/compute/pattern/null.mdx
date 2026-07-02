@@ -1,0 +1,28 @@
+---
+title: "null"
+description: 全振動子を無出力にする Pattern
+sidebar:
+  order: 6
+srcPath: crates/autd3-rs-pattern/src/null.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/null.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/null.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/null-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/null-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`null` は全振動子の振幅を 0 にし, 出力を停止する.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数  | 型                     | 説明         |
+| ----- | ---------------------- | ------------ |
+| `out` | `&mut [[Emission; _]]` | 出力バッファ |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

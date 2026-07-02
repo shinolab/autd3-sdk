@@ -1,0 +1,51 @@
+---
+title: gs
+description: Gerchberg-Saxton 法による多焦点最適化
+sidebar:
+  order: 12
+srcPath: crates/autd3-rs-pattern-holo/src/linear_synthesis/gs.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/holo/gs.rs?raw";
+import pySample from "@codes/python/examples/api/compute/holo/gs.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/holo/gs-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/holo/gs-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+gs (Gerchberg-Saxton 法) は, 振動子側と焦点側の振幅制約を交互に課しながら順伝搬と逆伝搬を反復するアルゴリズム. 
+naive より焦点間の干渉を抑えられるが, 反復回数に応じて計算量が増える. 
+アルゴリズムは Marzo らの論文 ([Marzo & Drinkwater, 2019](https://doi.org/10.1073/pnas.1813047115)) に基づく. 
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数         | 型                     | 説明                      |
+| ------------ | ---------------------- | ------------------------- |
+| `geometry`   | `&Geometry`            | デバイス配置              |
+| `foci`       | `&[ControlPoint]`      | 焦点列 (位置と目標振幅)   |
+| `wavelength` | `Length`               | 波長                      |
+| `option`     | `&GsOption`            | 追加オプション (下記参照) |
+| `out`        | `&mut [[Emission; _]]` | 出力バッファ              |
+
+`option` 以外の引数は [Naive](/autd3-sdk/api/compute/holo/naive/) と同一. 
+
+## GsOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+
+| フィールド    | 型                   | デフォルト                    |
+|---------------|----------------------|---------------------------|
+| `repeat`      | `NonZeroUsize`       | `100`                     |
+| `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
+| `directivity` | `Directivity`        | `Sphere`                  |
+| `backend`     | `impl LinAlgBackend` | `NalgebraBackend`         |
+| `mask`        | `TransducerMask`     | `AllEnabled`              |
+
+`repeat` は反復回数. 大きくするほど品質は向上するが計算時間も増える. 
+`constraint` / `directivity` / `backend` / `mask` の意味は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

@@ -1,0 +1,41 @@
+---
+title: WritePatternCompressed
+description: Pattern バッファへの圧縮書き込み
+sidebar:
+  order: 12.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/pattern-compressed-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/pattern-compressed-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`WritePatternCompressed` は, [`WritePatternBuffer`](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) の圧縮版.
+位相情報のみを送ることで 1 フレームに複数 Pattern を書き込む低レベルコマンド.
+強度は最大 (255) で固定される.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "compressed")} python={excerpt(pySample, "compressed")} />
+
+| フィールド | 型                                                | 説明                                       |
+| ---------- | ------------------------------------------------- | ------------------------------------------ |
+| `bank`     | `PatternBank`                                     | 書き込み先バンク                           |
+| `index`    | `usize`                                           | バンク内の書き込み開始インデックス         |
+| `format`   | `PatternCompression`                              | 圧縮形式 (下記参照)                      |
+| `patterns` | `[Option<&[Vec<Emission>]>; 4]`     | 書き込む Pattern 列                        |
+
+## PatternCompression
+
+| バリアント  | 1 フレームあたりの Pattern 数 | 説明                                  |
+| ----------- | ----------------------------- | ------------------------------------- |
+| `PhaseFull` | 2                             | 位相を全分解能 (8 bit) で送る        |
+| `PhaseHalf` | 4                             | 位相を半分解能 (4 bit) で送る        |
+
+## Example
+
+`PhaseHalf` で 4 枚の Pattern を 1 コマンドに圧縮して書き込み, `ConfigPattern` + `ChangePatternBank` で STM として再生する例.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

@@ -1,0 +1,29 @@
+---
+title: constant
+description: 一定振幅の (変調なしの) Modulation
+sidebar:
+  order: 20.5
+srcPath: crates/autd3-rs-modulation/src/constant.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/modulation/constant.rs?raw";
+import pySample from "@codes/python/examples/api/compute/modulation/constant.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/modulation/constant-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/modulation/constant-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`constant` は一定の振幅を出力する変調を生成する (実質的に変調なし).
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数        | 型             | 説明                   |
+| ----------- | -------------- | ---------------------- |
+| `intensity` | `u8`           | 振幅係数               |
+| `out`       | `&mut Vec<u8>` | 出力バッファ           |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

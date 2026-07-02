@@ -1,0 +1,34 @@
+---
+title: バンクの切り替え
+description: Pattern バンクへの書き込みと切り替えによるダブルバッファリング
+sidebar:
+  order: 7
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/tutorial/bank.rs?raw";
+import pySample from "@codes/python/examples/tutorial/bank.py?raw";
+
+[焦点の移動](/autd3-sdk/getting-started/tutorial/moving-focus/)で説明したように, AUTD3 において `Pattern` 等は送信するたびに上書きされ, この書き込みはバッファリングされない.
+そのため, 再生中のデータを上書きすると, 書き込みの途中で意図しない中間データが出力されてしまうことがある.
+
+これを防ぐために, AUTD3 の `Pattern` は複数のメモリ領域 (バンクと呼ぶ) を持っている.
+再生中でない別のバンクへ書き込み, 書き込み完了後に再生対象をそのバンクへ切り替えれば, 出力を乱さずにデータを差し替えられる (ダブルバッファリング).
+
+## バンクを指定して書き込む
+
+書き込み先・再生対象のバンクは `Pattern::with_bank` で指定する.
+`Pattern::new` ( バンク省略時) は `PatternBank::B0` を使う.
+
+下記の例では, まず `B0` へ焦点 A を書き込んで再生し, 次の焦点 B は再生中でない `B1` へ書き込む.
+`B1` への書き込み中も `B0` の出力は乱れず, 書き込み完了後に `B1` へ切り替わる.
+
+<CodeTabs rust={excerpt(sample, "switch")} python={excerpt(pySample, "switch")} />
+
+このように再生中でないバンクへ交互に書き込むことで, 出力を乱さずにパターンを差し替えられる.
+
+`Modulation` も同様にバンクを持っており, `Modulation::with_bank` で書き込み先のバンク (`ModulationBank`) を指定できる.
+
+なお, 再生の有限ループや切り替えタイミングの制御については, 次の [ループと遷移](/autd3-sdk/getting-started/tutorial/loop/) を参照.
+バンクの書き込み・設定・切り替えをより細かく制御したい場合は, API リファレンスの [低レベルコマンド](/autd3-sdk/api/command/lowlevel/) を参照.

@@ -1,0 +1,52 @@
+/* 左サイドバーの折りたたみ。
+   目次 (TOC) の幅は --sl-sidebar-width を流用しているため, この変数は変えない。
+   代わりに .sidebar を隠し, 本文 (.main-frame) の左 padding を 0 にして全幅化する。
+   Starlight が既にハンバーガー表示になる狭幅 (<50rem) では何もしない。 */
+@media (min-width: 50rem) {
+  html.autd-sidebar-collapsed .sidebar {
+    display: none;
+  }
+  html.autd-sidebar-collapsed .main-frame {
+    padding-inline-start: 0;
+  }
+}
+
+/* サイドバー右端・縦中心のノッチ風トグル。畳むと画面左端へ移り少し飛び出す。 */
+.autd-sidebar-toggle {
+  position: fixed;
+  top: 50%;
+  left: var(--sl-sidebar-width);
+  transform: translate(-50%, -50%);
+  z-index: var(--sl-z-index-navbar, 10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 54px;
+  padding: 0;
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: 8px;
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-gray-2);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--sl-shadow-md);
+  transition:
+    left 0.15s ease,
+    background 0.1s ease;
+}
+.autd-sidebar-toggle:hover {
+  background: var(--sl-color-gray-5);
+  color: var(--sl-color-white);
+}
+/* 折りたたみ時は画面左端へ。半分は画面外, 右半分が本文側へ飛び出す。 */
+html.autd-sidebar-collapsed .autd-sidebar-toggle {
+  left: 0;
+}
+/* 狭幅ではハンバーガーがあるのでトグルは隠す。 */
+@media (max-width: 50rem) {
+  .autd-sidebar-toggle {
+    display: none;
+  }
+}

@@ -1,0 +1,52 @@
+---
+title: square
+description: 矩形波の振幅変調を生成する Modulation
+sidebar:
+  order: 22
+srcPath: crates/autd3-rs-modulation/src/square.rs
+---
+
+import Math from "@components/Math.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+import sample from "@codes/rust/examples/api/compute/modulation/square.rs?raw";
+import pySample from "@codes/python/examples/api/compute/modulation/square.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/modulation/square-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/modulation/square-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`square` は矩形波の振幅変調を生成する. 指定周波数 `freq` で `high` と `low` の 2 値を切り替える. 
+
+<ModulationPlot kind="square" />
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数      | 型              | 説明                      |
+| --------- | --------------- | ------------------------- |
+| `freq`    | `Freq<u32>` 等  | 変調周波数                |
+| `option`  | `&SquareOption` | 追加オプション (下記参照) |
+| `out`     | `&mut Vec<u8>`  | 出力バッファ              |
+
+`freq` の指定方法は [sine](/autd3-sdk/api/compute/modulation/sine/) と同じ. 
+
+## SquareOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+
+| フィールド        | 型               | デフォルト                | 説明                        |
+| ----------------- | ---------------- | ------------------------- | --------------------------- |
+| `low`             | `u8`             | `u8::MIN`                 | 低レベルの振幅              |
+| `high`            | `u8`             | `u8::MAX`                 | 高レベルの振幅              |
+| `duty`            | `f32`            | `0.5`                     | 1 周期に占める `high` の割合 |
+| `sampling_config` | `SamplingConfig` | `SamplingConfig::FREQ_4K` | サンプリング設定            |
+
+1 周期のうち `duty` の割合が `high`, 残りが `low` になる. 
+
+`duty` が 0.0〜1.0 の範囲外だとエラーになる. 
+`duty` を <Math tex="0" /> にすると常に `low`, <Math tex="1" /> にすると常に `high` になる. 
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

@@ -1,0 +1,60 @@
+---
+title: fourier
+description: 複数の正弦波を合成した振幅変調を生成する Modulation
+sidebar:
+  order: 23
+srcPath: crates/autd3-rs-modulation/src/fourier.rs
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/modulation/fourier.rs?raw";
+import pySample from "@codes/python/examples/api/compute/modulation/fourier.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/modulation/fourier-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/modulation/fourier-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`fourier` は複数の正弦波成分を合成した振幅変調を生成する. 各成分を [sine](/autd3-sdk/api/compute/modulation/sine/) と同じ方法で計算し, 足し合わせて 1 つの波形にする. 
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数         | 型                    | 説明                      |
+| ------------ | --------------------- | ------------------------- |
+| `components` | `&[SineComponent<S>]` | 合成する正弦波成分の配列  |
+| `option`     | `&FourierOption`      | 追加オプション (下記参照) |
+| `out`        | `&mut Vec<u8>`        | 出力バッファ              |
+
+各 `SineComponent` は周波数 `freq` と `SineOption` の組である. 
+全成分の `sampling_config` は一致している必要があり, 異なるとエラーになる. 
+合成波形の長さは各成分の周期の最小公倍数である. 
+
+各サンプルは全成分の和にスケール <Math tex="s" /> (`scale_factor`) を掛け, オフセット <Math tex="b" /> (`offset`) を加えた値である. 
+
+<MathBlock tex="m_i = s \sum_{k} m^{(k)}_i + b" />
+
+## SineComponent
+
+| フィールド | 型             | 説明                    |
+| ---------- | -------------- | ----------------------- |
+| `freq`     | `Freq<u32>` 等 | 成分の周波数            |
+| `option`   | `SineOption`   | 成分ごとの正弦波 Option |
+
+<CodeTabs rust={excerpt(sample, "components")} python={excerpt(pySample, "components")} />
+
+## FourierOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+
+| フィールド     | 型            | デフォルト | 説明                                                      |
+| -------------- | ------------- | ---------- | --------------------------------------------------------- |
+| `scale_factor` | `Option<f32>` | `None`     | 合成値に掛けるスケール. `None` 場合, 成分数の逆数         |
+| `clamp`        | `bool`        | `false`    | 範囲外の値を [0, 255] clampするか                         |
+| `offset`       | `u8`          | `0`        | 合成後に加える直流オフセット                              |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

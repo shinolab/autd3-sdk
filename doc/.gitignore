@@ -1,0 +1,18 @@
+# build output
+dist/
+# astro generated
+.astro/
+# dependencies
+node_modules/
+# generated types
+env.d.ts
+# pagefind / cache
+.cache/
+# rust sample build output
+codes/rust/target/
+# starlight-versions が現行コンテンツから毎ビルド再生成するスナップショット。
+# 0.1.x は現行開発版そのものなので凍結コミットせず、ビルド時に再生成させる。
+# 将来リリースで版を凍結する際はここから外して該当版をコミットする。
+src/content/docs/0.1.x/
+src/content/docs/*/0.1.x/
+src/content/versions/

@@ -1,0 +1,64 @@
+---
+title: Holo
+description: 複数の焦点を同時に生成する多焦点ホログラム最適化
+sidebar:
+  order: 10
+---
+
+import Math from "@components/Math.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+
+Holo は複数の焦点 (制御点) を同時に生成するための Pattern 計算群. 
+各振動子の位相・振幅を最適化し, 指定した複数点で目標音圧が得られるようにする. 
+
+提供するアルゴリズムは以下の通り. 
+
+- [Naive](/autd3-sdk/api/compute/holo/naive/) — 単一ステップの逆伝搬
+- [GS](/autd3-sdk/api/compute/holo/gs/) — Gerchberg-Saxton 法
+- [GS-PAT](/autd3-sdk/api/compute/holo/gspat/) — GS-PAT 法
+- [Greedy](/autd3-sdk/api/compute/holo/greedy/) — 位相を貪欲に決定する組合せ最適化 
+
+## 共通要素
+
+### ControlPoint
+
+焦点を表す構造体. 位置と目標振幅を持つ. 
+
+### 振幅単位 `Pa` / `kPa` / `dB`
+
+目標振幅 `Amplitude` は, `f32` に振幅単位を掛けて構築する. 
+
+### EmissionConstraint
+
+最適化で得られた振幅は, そのままでは振動子では出力できない強度の可能性がある.
+そこで, 最適化で得た振幅を, 出力する振動子強度へ変換するための制約を指定する.
+
+|                                 |                                                |
+|---------------------------------|------------------------------------------------|
+| `Normalize`                     | 最大値で正規化する                             |
+| `Multiply(f32)`                 | 正規化後に係数を掛けてクランプする             |
+| `Uniform(Intensity)`            | 全振動子を一定強度にする                       |
+| `Clamp(Intensity, Intensity)`   | 振幅を指定範囲にクランプする                   |
+
+各 Option の `constraint` フィールドで指定する. デフォルトはアルゴリズムにより異なる. 
+
+### Directivity
+
+振動子の指向性モデル. `Sphere` (無指向性) 実機指向性 `T4010A1` を選べる.
+各 Option の `directivity` フィールドで指定する (デフォルトは `Sphere`). 
+
+### TransducerMask
+
+最適化に含める振動子を選択する.
+各 Option の `mask` フィールドで指定する (デフォルトは `AllEnabled`). 
+
+- `TransducerMask::AllEnabled` — 全振動子を使う (デフォルト). 
+- `TransducerMask::Masked(&[Vec<bool>])` — 各振動子ごとに有効/無効を指定する. 
+
+### LinAlgBackend (NalgebraBackend)
+
+`naive` / `gs` / `gspat` は線形代数演算を `LinAlgBackend` トレイトに委譲する.
+標準実装として`NalgebraBackend` を用いる.
+各 Option の `backend` フィールドで指定する (デフォルトは `NalgebraBackend`). 
+
+`Greedy` は行列演算を使わないため `backend` フィールドを持たない. 

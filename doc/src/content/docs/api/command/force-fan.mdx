@@ -1,0 +1,30 @@
+---
+title: ForceFan
+description: ファンを強制起動する ForceFan
+sidebar:
+  order: 6
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/command/force-fan.rs?raw";
+import pySample from "@codes/python/examples/api/command/force-fan.py?raw";
+import fullSample from "@codes/rust/examples/api/command/force-fan-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/force-fan-example.py?raw";
+
+`ForceFan` は, 冷却ファンを強制的に On にするコマンド.
+
+:::caution
+強制的にOffにすることはできない.
+:::
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| フィールド | 型     | 説明                                      |
+| ---------- | ------ | ----------------------------------------- |
+| `value`    | `bool` | `true` でファンを強制起動                 |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

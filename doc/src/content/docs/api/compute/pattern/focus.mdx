@@ -1,0 +1,45 @@
+---
+title: focus
+description: 単一焦点を生成する Pattern
+sidebar:
+  order: 2
+srcPath: crates/autd3-rs-pattern/src/focus.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import PatternField from "@components/PatternField.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/focus.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/focus.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/focus-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/focus-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`focus` は単一の焦点を生成する.
+
+<PatternField />
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数         | 型              | 説明                                       |
+| ------------ | --------------- | ------------------------------------------ |
+| `geometry`   | `&Geometry`     | デバイス配置                               |
+| `target`     | `Point3<f32>`   | 焦点座標 [mm]                              |
+| `wavelength` | `Length`        | 波長                                       |
+| `option`     | `&FocusOption`  | 追加オプション (下記参照)                  |
+| `out`        | `&mut [[Emission; _]]` | 出力バッファ                        |
+
+## FocusOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+
+| フィールド     | 型          | デフォルト       | 説明                               |
+| -------------- | ----------- | ---------------- | ---------------------------------- |
+| `intensity`    | `Intensity` | `Intensity::MAX` | 全振動子の振幅                     |
+| `phase_offset` | `Phase`     | `Phase::ZERO`    | 全振動子へ一律に加算する位相       |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

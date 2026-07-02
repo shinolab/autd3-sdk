@@ -1,0 +1,26 @@
+---
+title: ライセンス
+description: 本 SDK の各コンポーネントのライセンス
+sidebar:
+  order: 2
+---
+
+本 SDK は原則として **MIT ライセンス** で配布される.
+ただし一部のコンポーネントは, 依存ライブラリの都合により別のライセンスに従う.
+
+## MIT ライセンス
+
+ワークスペースの大半のクレート (`autd3-rs` 本体, パターン・変調計算, EtherCrab/TwinCAT/Remote の各 Link 等) と, CPU / FPGA ファームウェアは MIT ライセンスである.
+
+## GPL-3.0-only (SOEM 系)
+
+`autd3-rs-link-soem` は [SOEM](https://github.com/OpenEtherCATsociety/SOEM) (Simple Open EtherCAT Master) C ライブラリを静的リンクする.
+SOEM は GPLv3 / 商用のデュアルライセンスであり, 本 SDK は GPLv3 のもとで利用する.
+このため `autd3-rs-link-soem` クレート, およびこれをリンクするバイナリ (例: `perftest`) の配布は **GPL-3.0-only** に従う.
+
+:::caution
+SOEM を使う構成を配布する場合, 成果物全体が GPLv3 の対象となる.
+GPL を避けたい場合は, [EtherCrab](/autd3-sdk/api/link/ethercrab/) や [TwinCAT](/autd3-sdk/api/link/twincat/) など MIT ライセンスの Link を使用すること.
+:::
+
+ライセンス全文と第三者コンポーネントの著作権表示は, 各リポジトリの `LICENSE` / `COPYING` および同梱の通知ファイルを参照すること.

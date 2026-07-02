@@ -1,0 +1,43 @@
+---
+title: AUTD3 SDK
+description: Documentation for the next-generation AUTD3 SDK for the AUTD3 ultrasound phased array
+hero:
+  tagline: Control the AUTD3 ultrasound phased array — next-generation SDK
+  actions:
+    - text: Get started
+      link: /autd3-sdk/en/getting-started/setup/
+      icon: right-arrow
+      variant: primary
+    - text: GitHub
+      link: https://github.com/shinolab/autd3-sdk
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+## What is AUTD3 SDK
+
+AUTD3 SDK is a set of client libraries for controlling the **AUTD3** ultrasound phased array.
+It is a next-generation, **incompatible** rewrite of the previous autd3 series, covering focus
+generation, amplitude modulation, spatio-temporal modulation (STM) and hologram optimization
+from Rust.
+
+:::note
+English pages are being prepared. Untranslated pages fall back to Japanese for now.
+:::
+
+<CardGrid stagger>
+  <Card title="Getting Started" icon="rocket">
+    Hardware, firmware and software setup.
+  </Card>
+  <Card title="Tutorial" icon="open-book">
+    Basic usage for single and multiple devices.
+  </Card>
+  <Card title="API Reference" icon="information">
+    Geometry / Client / Pattern / Modulation / STM / Link and more.
+  </Card>
+  <Card title="Concept" icon="puzzle">
+    SDK architecture and design.
+  </Card>
+</CardGrid>

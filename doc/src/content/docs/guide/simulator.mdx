@@ -1,0 +1,23 @@
+---
+title: Simulator
+description: 音場シミュレータの起動と接続
+sidebar:
+  order: 7
+---
+
+`Simulator` は, AUTD3 の出力音場をブラウザ上で可視化する音場シミュレータ.
+実機がなくても, クライアントが送ったデータから生成される音場を確認できる.
+
+## 起動
+
+`Simulator` は GUI コンソール `autd3-console` に同梱されている.
+
+GitHub の [Release ページ](https://github.com/shinolab/autd3-sdk/releases) から `autd3-console` をダウンロードして起動し, 上部の「Simulator」タブを開く.
+タブから `Simulator` を起動できる.
+
+## 接続
+
+`Simulator` は内部で `RemoteServer` を起動しているため, クライアントからは [`RemoteLink`](/autd3-sdk/api/link/remote/) で接続する.
+接続先は `127.0.0.1:<link-port>` ( デフォルトは 8080 ).
+
+シミュレータは接続時にクライアントの `Geometry` を受け取り, そこからデバイス数や配置を決定する.

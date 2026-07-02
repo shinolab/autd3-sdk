@@ -1,0 +1,46 @@
+---
+title: bessel
+description: ベッセルビームを生成する Pattern
+sidebar:
+  order: 4
+srcPath: crates/autd3-rs-pattern/src/bessel.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import PatternField from "@components/PatternField.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/bessel.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/bessel.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/bessel-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/bessel-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`bessel` はベッセルビームを生成する.
+アルゴリズムは長谷川らの論文 ([Hasegawa et al., 2017](https://doi.org/10.1063/1.4985159)) に基づく.
+<PatternField kind="bessel" />
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数         | 型                     | 説明                                |
+| ------------ | ---------------------- | ----------------------------------- |
+| `geometry`   | `&Geometry`            | デバイス配置                        |
+| `apex`       | `Point3<f32>`          | ビームを生成する仮想円錐の頂点座標 [mm] |
+| `direction`  | `UnitVector3<f32>`     | ビームの方向 (単位ベクトル)             |
+| `theta`      | `Angle`                | 円錐の半頂角 (`18.0 * deg` など)        |
+| `wavelength` | `Length`               | 波長                                    |
+| `option`     | `&BesselOption`        | 追加オプション (下記参照)               |
+| `out`        | `&mut [[Emission; _]]` | 出力バッファ                            |
+
+## BesselOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+
+| フィールド     | 型          | デフォルト       | 説明                         |
+| -------------- | ----------- | ---------------- | ---------------------------- |
+| `intensity`    | `Intensity` | `Intensity::MAX` | 全振動子の振幅               |
+| `phase_offset` | `Phase`     | `Phase::ZERO`    | 全振動子へ一律に加算する位相 |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

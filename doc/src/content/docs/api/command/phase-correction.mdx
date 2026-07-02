@@ -1,0 +1,29 @@
+---
+title: SetPhaseCorrection
+description: 振動子ごとの位相補正 SetPhaseCorrection
+sidebar:
+  order: 8
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/phase-correction.rs?raw";
+import pySample from "@codes/python/examples/api/command/phase-correction.py?raw";
+import fullSample from "@codes/rust/examples/api/command/phase-correction-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/phase-correction-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`SetPhaseCorrection` は, 各振動子へ加える位相オフセットを設定するコマンド.
+ここで設定したオフセットは以降のすべての出力位相へ加算される. 
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| フィールド | 型              | 説明                                                                                     |
+| ---------- | --------------- | ---------------------------------------------------------------------------------------- |
+| `phases`   | `&[Vec<Phase>]` | デバイスごとの位相オフセット表. |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

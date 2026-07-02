@@ -1,0 +1,30 @@
+---
+title: uniform
+description: 全振動子へ一様な emission を与える Pattern
+sidebar:
+  order: 5
+srcPath: crates/autd3-rs-pattern/src/uniform.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/uniform.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/uniform.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/uniform-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/uniform-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`uniform` は全振動子へ同一の位相・振幅を与える.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数       | 型                     | 説明                         |
+| ---------- | ---------------------- | ---------------------------- |
+| `emission` | `Emission`             | 全振動子へ設定する位相・振幅 |
+| `out`      | `&mut [[Emission; _]]` | 出力バッファ                 |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

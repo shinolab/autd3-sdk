@@ -1,0 +1,30 @@
+---
+title: SetPulseWidthTable
+description: 強度から PWM パルス幅への変換テーブルを設定する SetPulseWidthTable
+sidebar:
+  order: 9.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/set-pulse-width-table.rs?raw";
+import pySample from "@codes/python/examples/api/command/set-pulse-width-table.py?raw";
+import fullSample from "@codes/rust/examples/api/command/set-pulse-width-table-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/set-pulse-width-table-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`SetPulseWidthTable` は, 強度 (0–255) から PWM のパルス幅への変換テーブルを設定するコマンド.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| フィールド | 型                      | 説明                                                 |
+| ---------- | ----------------------- | ---------------------------------------------------- |
+| `table`    | `&[u16; PWE_TABLE_SIZE]` | 強度インデックス (0–255) ごとのパルス幅 (256 要素) |
+
+`SetPulseWidthTable::default_table()` は arcsin 形状のデフォルトテーブルを返す.
+これは出力音圧が強度に対して (理論的に) 線形になるようなテーブルである.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

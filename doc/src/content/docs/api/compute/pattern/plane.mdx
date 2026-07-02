@@ -1,0 +1,44 @@
+---
+title: plane
+description: 平面波を生成する Pattern
+sidebar:
+  order: 3
+srcPath: crates/autd3-rs-pattern/src/plane.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import PatternField from "@components/PatternField.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/plane.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/plane.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/plane-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/plane-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`plane` は指定方向に伝搬する平面波を生成する.
+
+<PatternField kind="plane" />
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数         | 型                     | 説明                            |
+| ------------ | ---------------------- | ------------------------------- |
+| `geometry`   | `&Geometry`            | デバイス配置                    |
+| `direction`  | `UnitVector3<f32>`     | 平面波の伝搬方向 (単位ベクトル) |
+| `wavelength` | `Length`               | 波長                            |
+| `option`     | `&PlaneOption`         | 追加オプション (下記参照)       |
+| `out`        | `&mut [[Emission; _]]` | 出力バッファ                    |
+
+## PlaneOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+
+| フィールド     | 型          | デフォルト       | 説明                         |
+| -------------- | ----------- | ---------------- | ---------------------------- |
+| `intensity`    | `Intensity` | `Intensity::MAX` | 全振動子の振幅               |
+| `phase_offset` | `Phase`     | `Phase::ZERO`    | 全振動子へ一律に加算する位相 |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

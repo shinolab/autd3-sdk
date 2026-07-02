@@ -1,0 +1,12 @@
+---
+import { renderTeX } from "../lib/mathjax";
+
+interface Props {
+  tex: string;
+}
+
+const { tex } = Astro.props;
+const html = renderTeX(tex, false);
+---
+
+<span class="math-inline" set:html={html} />

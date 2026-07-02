@@ -1,0 +1,62 @@
+---
+title: Client
+description: デバイスとの接続・送信を司る Client
+sidebar:
+  order: 2
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import open from "@codes/rust/examples/api/basics/client-config.rs?raw";
+import pyOpen from "@codes/python/examples/api/basics/client-config.py?raw";
+import methods from "@codes/rust/examples/api/basics/client.rs?raw";
+import pyMethods from "@codes/python/examples/api/basics/client.py?raw";
+
+`Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
+
+<CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} />
+
+| 引数       | 型             | 説明                 |
+| ---------- | -------------- | -------------------- |
+| `geometry` | `&Geometry`    | デバイスの物理配置   |
+| `link`     | `impl IntoLink`| リンク               |
+| `config`   | `ClientConfig` | 下記参照             |
+
+リンクの稼働状態を継続的に監視したい場合は `open_with_checker` を使い, 返り値の `Checker` を駆動する.
+
+## API
+
+<CodeTabs rust={excerpt(methods, "api")} python={excerpt(pyMethods, "api")} />
+
+| メソッド                  | async | 返り値                                | 説明                                                       |
+| ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
+| `num_devices()`           | —     | `usize`                               | 接続中のデバイス台数                                       |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスのファームウェアバージョン                       |
+| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                      |
+| `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | 各デバイスのエラー詳細                                      |
+| `datagram_builder()`      | —     | `DatagramBuilder`                     | [DatagramBuilder](/autd3-sdk/api/basics/datagram-builder/) |
+| `send(frame)`             | ✓     | `Result<ResponseFuture, Error>`       | フレームを送信キューにいれる. 応答は `ResponseFuture` で待つ |
+| `send_checked(frame)`     | ✓     | `Result<(), Error>`                   | 送信し, 応答確認まで行う                                   |
+| `stop()`                  | ✓     | `Result<(), Error>`                   | 全振動子を停止                                             |
+| `close()`                 | ✓     | `Result<(), Error>`                   | 接続を閉じる                                               |
+
+## ClientConfig
+
+<CodeTabs rust={excerpt(open, "config")} python={excerpt(pyOpen, "config")} />
+
+| フィールド             | 型                    | デフォルト          | 説明                                                       |
+| ---------------------- | --------------------- | --------------- | ---------------------------------------------------------- |
+| `timeout_cycles`       | `u32`                 | `10`            | 応答待ちのタイムアウト (送信サイクル数)                    |
+| `max_inflight`         | `NonZeroUsize`        | `127`           | 送信キューサイズ                     |
+| `send_interval_cycles` | `NonZeroU32`          | `1`             | 連続送信の最小間隔 (サイクル数)                            |
+| `max_resync_rounds`    | `NonZeroU32`          | `8`             | 再同期を試みる最大ラウンド数                               |
+| `low_latency`          | `bool`                | `false`         | 低レイテンシモード          |
+| `reset_resend_cycles`  | `u32`                 | `2`             | リセット後に再送するサイクル数                             |
+| `rt_priority`          | `Option<ThreadPriority>` | `None`       | RT スレッドの優先度 (未指定なら OS 既定)                   |
+| `rt_affinity`          | `Option<CoreId>`      | `None`          | RT スレッドをCPU affinity (未指定なら OS 既定)      |
+| `validate_state`       | `bool`                | `true`          | 送信前検証を有効にする                     |
+
+`max_inflight` は `MAX_IN_FLIGHT (127)` を超えるとエラーになる.
+
+`low_latency` を有効にすると, ファームウェア内部での受信バッファをバイパスするため, レイテンシが改善する. ただし, 動作が不安定になる可能性がある.
+

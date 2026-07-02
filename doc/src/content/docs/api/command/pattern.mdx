@@ -1,0 +1,51 @@
+---
+title: Pattern
+description: 計算した Emission パターンをデバイスへ送るコマンド
+sidebar:
+  order: 1
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+import sample from "@codes/rust/examples/api/command/pattern.rs?raw";
+import pySample from "@codes/python/examples/api/command/pattern.py?raw";
+import fullSample from "@codes/rust/examples/api/command/pattern-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/pattern-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`Pattern` は, 各振動子の `Emission` をデバイスへ送るコマンド.
+
+## API
+
+<CodeTabs>
+<Fragment slot="rust">
+<Code code={excerpt(sample, "api")} lang="rust" />
+
+`Pattern::new` は書き込み先バンクを `PatternBank::B0` とする.
+別バンクへ書く場合は `Pattern::with_bank(bank, emissions)` を使う.
+</Fragment>
+<Fragment slot="python">
+<Code code={excerpt(pySample, "api")} lang="python" />
+
+`Pattern` は書き込み先バンクをデフォルトで `PatternBank.B0` とする.
+別バンクを指定したい場合は `bank` 引数を渡す.
+</Fragment>
+</CodeTabs>
+
+| フィールド        | 型                               | デフォルト                      | 説明                             |
+| ----------------- | -------------------------------- | --------------------------- | -------------------------------- |
+| `bank`            | `PatternBank`                    | `PatternBank::B0`           | 書き込み先・再生対象のバンク     |
+| `emissions`       | `&[Vec<Emission>]` | —                           | デバイスごとの emission パターン |
+
+patternの計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/pattern/)が用意されている.
+
+## 等価な低レベルコマンド
+
+`Pattern` は内部で [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
+以下は `Pattern { bank, emissions }` と等価な組み合わせである.
+
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

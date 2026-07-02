@@ -1,0 +1,23 @@
+.math-block {
+  overflow-x: auto;
+  text-align: center;
+  margin: 1rem 0;
+}
+
+.math-block mjx-container {
+  display: block;
+}
+
+.math-block svg {
+  margin-inline: auto;
+}
+
+.math-inline {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.math-block svg,
+.math-inline svg {
+  max-width: 100%;
+}

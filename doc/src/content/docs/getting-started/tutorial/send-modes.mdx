@@ -1,0 +1,47 @@
+---
+title: 送信モード
+description: stop-and-wait と streaming の使い分け
+sidebar:
+  order: 9
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/tutorial/send-modes.rs?raw";
+import pySample from "@codes/python/examples/tutorial/send-modes.py?raw";
+
+`DatagramBuilder::build` で得た `Frames` は複数の`Frame`に分かれうる.
+`Frame`の送信方法は 2 つあり, 確実性とスループットがトレードオフになる. 
+
+以下では, 焦点を円周上で動かす例で 2 つの送信方法を比較する.
+あらかじめ移動先となる焦点位置を `targets` として用意しておく. 
+
+<CodeTabs rust={excerpt(sample, "targets")} python={excerpt(pySample, "targets")} />
+
+## stop-and-wait
+
+1 フレームごとに応答を待ってから次を送る方式.
+`send_checked` を使う.
+各更新が確実に反映されたことを確認してから次へ進むため確実だが, 毎フレームで往復のレイテンシがかかるためスループットは低い. 
+
+<CodeTabs rust={excerpt(sample, "stop_and_wait")} python={excerpt(pySample, "stop_and_wait")} />
+
+## streaming
+
+応答を待たずに次々と送り, 後で応答をまとめて回収する方式.
+`send` はフレームをキューに積んだ時点で `ResponseFuture` を返し, その `ResponseFuture` を await すると応答を待てる.
+送信キューの最大サイズは `MAX_IN_FLIGHT (127)`.
+`ResponseFuture` を FIFO で保持し, キューが埋まったら最古の応答を回収する.
+1 フレームごとに応答を待たないため, スループットが高い. 
+
+<CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} />
+
+:::note
+上記のコードはシンプルにするために, どちらも複合コマンドである [`Pattern`](/autd3-sdk/api/command/pattern/) を使っているが, これは内部で3つの低レベルコマンドに分解される.
+単に出力音場を書き換えるだけであれば, 低レベルコマンドの [`WritePatternBuffer`](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) を使うべきである.
+上記のコードは, 低レベルコマンドを使う場合にくらべて, スループットが3分の1になっている. 
+:::
+
+初期化や設定など, 確実に 1 つずつ反映させたいコマンドは stop-and-wait.
+焦点を高頻度で更新するなど, スループットが重要な場面では streaming を使う.
+`send` / `send_checked` の詳細は [Client](/autd3-sdk/api/basics/client/) を参照. 

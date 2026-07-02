@@ -1,0 +1,46 @@
+---
+title: Remote
+description: 実機につながる別ホストへ TCP 接続する Remote Link
+sidebar:
+  order: 4
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import client from "@codes/rust/examples/api/link/remote_client.rs?raw";
+import pyClient from "@codes/python/examples/api/link/remote_client.py?raw";
+import server from "@codes/rust/examples/api/link/remote_server.rs?raw";
+
+`RemoteLink` は, AUTD3 デバイスに直接配線された**別ホスト**へ TCP 接続して送受信する Link 実装. 
+`autd3-rs-link-remote` クレートで提供される. AUTD3 を操作したいマシンと実機を配線したマシンが異なる場合に使う.
+
+サーバとクライアントの 2 プロセスで構成する.
+
+- `RemoteServer`: 実機に配線されたホストで動かす. EtherCrab などの実機リンクを駆動し, tx/rx フレームを TCP で中継する. 
+- `RemoteLink`: 操作側のホストで動かす. 
+
+[`Simulator`](/autd3-sdk/guide/simulator/) への接続も`RemoteLink`で行う (`Simulator` は内部で `RemoteServer` を起動している).
+
+## API
+
+### RemoteServer
+
+`RemoteServer::open` で実機リンクを開き, TCP の待ち受けを開始する.
+
+<CodeTabs rust={excerpt(server, "api")} />
+
+| 引数   | 型             | 説明                                                       |
+| ------ | -------------- | ---------------------------------------------------------- |
+| `bind` | `SocketAddr`   | サーバが待ち受ける TCP アドレス                            |
+| `link` | `impl IntoLink` | 中継する実機リンクの Option (EtherCrab など)             |
+
+`open` は内部でEtherCATスレッドを起動し, クライアントの接続有無によらずEtherCATはを駆動し続ける.
+`serve` はクライアントの接続を待ち受け, tx/rx フレームの中継を開始する (戻らないブロッキング呼び出し).
+
+### RemoteLink
+
+<CodeTabs rust={excerpt(client, "api")} python={excerpt(pyClient, "api")} />
+
+| フィールド | 型           | 説明                       |
+| ---------- | ------------ | -------------------------- |
+| `addr`     | `SocketAddr` | 接続先サーバのアドレス     |

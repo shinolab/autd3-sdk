@@ -1,0 +1,20 @@
+---
+title: Link
+description: AUTD3 デバイスとの物理通信路を抽象化する Link
+sidebar:
+  order: 0
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Link` は AUTD3 デバイスとの物理的な通信路を抽象化したもの. EtherCAT などの
+通信方式の違いを吸収し, 上位の `Client` からは同一の API で扱えるようにする. 
+
+## 使い方
+
+Link は `Client::open` に Link Option を渡すことで構築する. Option には接続先や
+同期パラメータなどを指定する. 
+
+`Client` から見た送受信のインターフェースは Link 実装によらず共通である. そのため, 
+リンクを差し替えても上位コードを変更する必要はない. 
+

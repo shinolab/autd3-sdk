@@ -1,0 +1,85 @@
+---
+title: 複数デバイス
+description: 複数の AUTD3 をデイジーチェーンして 1 つのアレイとして扱う
+sidebar:
+  order: 3
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Model from "@components/Model.astro";
+import { excerpt } from "@lib/excerpt";
+import multiple from "@codes/rust/examples/tutorial/multiple-device.rs?raw";
+import pyMultiple from "@codes/python/examples/tutorial/multiple-device.py?raw";
+
+AUTD3 は複数のデバイスをデイジーチェーン接続して大きな一つのアレイを構成できる. 
+SDK は複数台を接続しても透過的に扱えるように設計されている. 
+
+複数台を使用する場合は `Geometry::new` の引数に, **接続したデバイスの順で** `Autd3` を指定する. 
+以下では 2 台を接続する場合の手順を示す. 
+
+## 並進のみ
+
+例えば 1 台目を左, 2 台目を右に並べて接続し, グローバル座標を 1 台目のローカル座標と
+同じようにとるとすると, コードは以下の通りになる. 
+
+<CodeTabs rust={excerpt(multiple, "translation")} python={excerpt(pyMultiple, "translation")} />
+
+ここで第1引数はグローバル座標におけるデバイスの位置を, 第2引数はデバイスの回転を表す. 
+なお `Autd3::DEVICE_WIDTH` はデバイスの (基板外形を含めた) 横幅である. 
+
+<Model
+  src="models/autd3.glb"
+  caption="2 台を +x 方向に DEVICE_WIDTH ずらして並べた配置"
+  devices={[
+    { position: [0, 0, 0], rotation: [90, 0, 0] },
+    { position: [192, 0, 0], rotation: [90, 0, 0] },
+  ]}
+  view={[0.4, -1, 1]}
+  distance={1.2}
+  axesLength={100}
+  axesOrigin={[0, 0, 5]}
+  labelAnchor={[0, 80, -60]}
+/>
+
+### グローバル座標の設定
+
+SDK で使用するグローバル座標の原点や向きは, ユーザーが自由に設定できる. 例えば
+グローバル座標を 2 台目のローカル座標と同じようにとると, 1 台目を -x 方向へずらした
+次のコードになる. 
+
+<CodeTabs rust={excerpt(multiple, "global")} python={excerpt(pyMultiple, "global")} />
+
+<Model
+  src="models/autd3.glb"
+  caption="グローバル座標を 2 台目のローカル座標に合わせた配置"
+  devices={[
+    { position: [-192, 0, 0], rotation: [90, 0, 0] },
+    { position: [0, 0, 0], rotation: [90, 0, 0] },
+  ]}
+  view={[0.4, -1, 1]}
+  distance={1.2}
+  axesLength={100}
+  axesOrigin={[0, 0, 5]}
+  labelAnchor={[0, 80, -60]}
+/>
+
+## 並進と回転
+
+デバイスの回転は `Autd3::new` の第 2 引数 (`UnitQuaternion`) で指定する.
+例えば 2 台目を +z 方向に置き, y 軸まわりに 90° 回転させると次のようになる. 
+
+<CodeTabs rust={excerpt(multiple, "rotation")} python={excerpt(pyMultiple, "rotation")} />
+
+<Model
+  src="models/autd3.glb"
+  caption="2 台目を +z へ置き, y 軸まわりに 90° 回転させた配置"
+  devices={[
+    { position: [0, 0, 0], rotation: [90, 0, 0] },
+    { position: [0, 0, 192], rotation: [90, 0, 270] },
+  ]}
+  view={[0.6, -1, 1]}
+  distance={1.8}
+  axesLength={100}
+  axesOrigin={[5, 0, 5]}
+  labelAnchor={[-30, 40, -90]}
+/>

@@ -1,0 +1,29 @@
+---
+title: Modulation
+description: 出力の振幅を時間方向に変調する振幅変調 (AM)
+sidebar:
+  order: 20
+---
+
+import Math from "@components/Math.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+
+Modulation は, 各振動子の出力振幅を時間方向に変調する振幅変調 (AM) 機能である. 
+全振動子に共通の係数列を一定周期でサンプリングしながら適用し, Pattern が作る音場の強度を時間的に変化させる. 
+
+各サンプルは 8 bit の振幅係数 <Math tex="0 \le m \le 255" /> で, 振動子の出力振幅に乗算され, その後 255 で割られる. 
+
+## SamplingConfig
+
+バッファの各サンプルは, `Modulation::new` に渡す `SamplingConfig` の周期で順に適用される. 
+波形計算関数の Option が持つ `sampling_config` は波形の長さ (サンプル数) を決めるためのもので, `Modulation::new` に渡す `SamplingConfig` と一致させる必要がある.
+たとえば `SamplingConfig::FREQ_4K` (4 kHz, サンプリング周期 250 µs) の場合, 200 Hz の正弦波 1 周期は 20 サンプルになる. 
+
+## 関数一覧
+
+- [constant](/autd3-sdk/api/compute/modulation/constant/) — 一定振幅 (変調なし)
+- [sine](/autd3-sdk/api/compute/modulation/sine/) — 正弦波
+- [square](/autd3-sdk/api/compute/modulation/square/) — 矩形波
+- [fourier](/autd3-sdk/api/compute/modulation/fourier/) — 複数正弦波の合成
+- [radiation_pressure](/autd3-sdk/api/compute/modulation/radiation/) — 放射圧補正
+  

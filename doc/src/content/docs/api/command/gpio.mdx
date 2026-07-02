@@ -1,0 +1,47 @@
+---
+title: SetGpioOut
+description: GPIO 出力を制御する SetGpioOut / GpioOut
+sidebar:
+  order: 7
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/gpio.rs?raw";
+import pySample from "@codes/python/examples/api/command/gpio.py?raw";
+import fullSample from "@codes/rust/examples/api/command/gpio-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/gpio-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`SetGpioOut` は, デバイスの 4 本の GPIO 出力端子に出力する信号を設定するコマンド.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| フィールド | 型             | 説明                      |
+| ---------- | -------------- | ------------------------- |
+| `outputs`  | `[GpioOut; 4]` | 端子 0..3 に割り当てる出力 |
+
+## GpioOut
+
+|         |                                  |
+| ----------------- | ---------------------------------------- |
+| `Off`             | 常に Low (デフォルト)                    |
+| `BaseSignal`      | 超音波の基準信号 (40 kHz)                |
+| `Thermo`          | 温度センサのアサート                     |
+| `ForceFan`        | ForceFan の状態                          |
+| `Sync`            | 同期信号                                 |
+| `ModBank`         | アクティブな Modulation バンク           |
+| `ModIdx(u16)`     | Modulation が指定インデックスのとき High |
+| `PatternBank`     | アクティブな Pattern バンク              |
+| `PatternIdx(u16)` | Pattern が指定インデックスのとき High    |
+| `IsStmMode`   | Stm モード (`size != 1`) のとき High                |
+| `SysTimeEq(u64)`  | システム時刻が指定値に一致したとき High  |
+| `SyncDiff`        | 同期誤差                                 |
+| `PwmOut(u8)`      | 指定振動子の PWM 出力                    |
+| `Direct(bool)`    | 指定した固定値を直接出力                 |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

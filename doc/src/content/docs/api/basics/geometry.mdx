@@ -1,0 +1,88 @@
+---
+title: Geometry
+description: デバイスの物理配置を表現する Geometry
+sidebar:
+  order: 1
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import sample from "@codes/rust/examples/api/basics/geometry.rs?raw";
+import pySample from "@codes/python/examples/api/basics/geometry.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`Geometry` は AUTD3 デバイスの物理配置 (位置・姿勢) を表現する.
+
+<CodeTabs>
+<Fragment slot="rust">
+<Code code={excerpt(sample, "api")} lang="rust" />
+
+`Autd3::new(origin, rotation)` は原点位置 (`Point3`) と姿勢 (`UnitQuaternion`) から 1 台のデバイスを構築する.
+原点を `Point3::origin()`, 姿勢を `UnitQuaternion::identity()` とする `Autd3::default()` もある.
+</Fragment>
+<Fragment slot="python">
+<Code code={excerpt(pySample, "api")} lang="python" />
+
+`Autd3([x, y, z], [w, i, j, k])` は原点位置と姿勢から 1 台のデバイスを構築する.
+長さ 3 の位置と長さ 4 のクォータニオン (`w, i, j, k`) を渡す. 原点と姿勢はいずれも必須.
+</Fragment>
+</CodeTabs>
+
+`Geometry::new` に複数台を渡すと, 先頭から順にデバイス番号 (`idx`) が割り振られる.
+
+## API
+
+配置全体の情報取得と, 各 `Device` へのアクセスを提供する.
+
+<CodeTabs rust={excerpt(sample, "access")} python={excerpt(pySample, "access")} />
+
+| メソッド             | 返り値                             | 説明                                  |
+| -------------------- | ---------------------------------- | ------------------------------------- |
+| `num_devices()`      | `usize`                            | デバイス台数                          |
+| `num_transducers()`  | `usize`                            | 全デバイスの振動子総数                |
+| `center()`           | `Point3<f32>`                      | アレイ全体の中心座標                  |
+| `pattern_buffer()`   | `Vec<Vec<Emission>>` | Pattern 計算用の出力バッファを確保    |
+| `iter()` / `&geometry` | `Iterator<Item = &Device>`       | 各 `Device` を走査                    |
+| `geometry[i]`        | `&Device`                          | `i` 番目の `Device` を取得            |
+
+Python では座標を返す `center()` は `numpy.ndarray` (shape `(3,)`) を返す.
+そのため `geometry.center() + np.array([0.0, 0.0, 150.0])` のようにそのまま numpy 演算に渡せる.
+
+## Device
+
+1 台のデバイスを表す.
+`geometry[i]` または `&geometry` の走査で得る.
+各振動子の位置・法線方向や, デバイスの姿勢を取得できる.
+
+<CodeTabs rust={excerpt(sample, "device")} python={excerpt(pySample, "device")} />
+
+| メソッド             | 返り値                  | 説明                                          |
+| -------------------- | ----------------------- | --------------------------------------------- |
+| `idx()`              | `usize`                 | `Geometry` 内でのデバイス番号                 |
+| `num_transducers()`  | `usize`                 | 振動子数                                      |
+| `center()`           | `Point3<f32>`           | デバイス中心座標                              |
+| `rotation()`         | `UnitQuaternion<f32>`   | デバイスの姿勢 (回転)                         |
+| `x_direction()`      | `UnitVector3<f32>`      | ローカル x 軸方向                             |
+| `y_direction()`      | `UnitVector3<f32>`      | ローカル y 軸方向                             |
+| `axial_direction()`  | `UnitVector3<f32>`      | 軸方向 (超音波の放射方向)                     |
+| `positions()`        | `&[Point3<f32>]`        | 全振動子の位置                                |
+| `directions()`       | `&[UnitVector3<f32>]`   | 全振動子の法線方向                            |
+| `position(i)`        | `Point3<f32>`           | `i` 番目の振動子の位置                        |
+| `direction(i)`       | `UnitVector3<f32>`      | `i` 番目の振動子の方向                        |
+
+Python では座標・方向を返すメソッドは `numpy.ndarray` を返す.
+単一ベクトル (`center`/`position`/`direction`/`x_direction`/`y_direction`/`axial_direction`) は shape `(3,)`, `rotation` は shape `(4,)` (`w, i, j, k`), `positions`/`directions` は shape `(N, 3)` となる.
+
+## 座標ヘルパ (Rustのみ)
+
+`autd3_rs::geometry` には座標を組み立てる補助関数がある.
+引数の型が `Length` になっており, 単位を指定することができる.
+
+| 関数                | 返り値          | 説明                                         |
+| ------------------- | --------------- | -------------------------------------------- |
+| `point(x, y, z)`    | `Point3<f32>`   | 絶対座標の点                                 |
+| `offset(x, y, z)`   | `Vector3<f32>`  | 相対変位ベクトル                             |
+
+Python には長さの単位型が無く座標は mm 単位の素の値で扱うため, これらのヘルパは存在しない. 位置は numpy 配列やタプルで直接渡す.

@@ -1,0 +1,27 @@
+---
+title: 出力音圧の制御
+description: Intensity と Modulation で出力音圧を制御する
+sidebar:
+  order: 6
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/tutorial/output-intensity.rs?raw";
+import pySample from "@codes/python/examples/tutorial/output-intensity.py?raw";
+
+`focus` などの Pattern には出力強度を 8 bit で制御する `intensity` パラメータがある. 
+例えば, 以下のコードでは, この強度を最大値の約半分に設定している. 
+
+<CodeTabs rust={excerpt(sample, "pattern_intensity")} python={excerpt(pySample, "pattern_intensity")} />
+
+AUTD3 は出力音圧を PWM で制御しており, デフォルトでは `intensity` パラメータと出力音圧がおおよそ線形に比例するように変換される. 
+振動子の個体差などにより厳密な線形性は保証されないが, `intensity` に対して出力音圧は単調増加すると考えてよい. 
+
+PWM やパルス幅への変換式, およびその変更方法の詳細は [Pulse Width と出力音圧](/autd3-sdk/guide/pulse-width/) を参照されたい.
+
+## Modulationによる調整 
+
+`Modulation` は`Pattern`の`intensity`パラメータを時間的に変調することで作用する.
+したがって, 実際の`intensity`としては, `Pattern` 等で指定する`intensity`パラメータに`Modulation` による変調データ (8 bit) をかけ合わせ 255 で割った値が使用される. 
+

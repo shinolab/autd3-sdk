@@ -1,0 +1,49 @@
+---
+import { Code } from "astro-expressive-code/components";
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+interface Props {
+  rust?: string;
+  python?: string;
+  csharp?: string;
+}
+
+const { rust, python, csharp } = Astro.props;
+const slots = Astro.slots;
+---
+
+<Tabs syncKey="lang">
+  {
+    (rust !== undefined || slots.has("rust")) && (
+      <TabItem label="Rust" icon="seti:rust">
+        {slots.has("rust") ? (
+          <slot name="rust" />
+        ) : (
+          <Code code={rust} lang="rust" />
+        )}
+      </TabItem>
+    )
+  }
+  {
+    (python !== undefined || slots.has("python")) && (
+      <TabItem label="Python" icon="seti:python">
+        {slots.has("python") ? (
+          <slot name="python" />
+        ) : (
+          <Code code={python} lang="python" />
+        )}
+      </TabItem>
+    )
+  }
+  {
+    (csharp !== undefined || slots.has("csharp")) && (
+      <TabItem label="C#" icon="seti:c-sharp">
+        {slots.has("csharp") ? (
+          <slot name="csharp" />
+        ) : (
+          <Code code={csharp} lang="csharp" />
+        )}
+      </TabItem>
+    )
+  }
+</Tabs>

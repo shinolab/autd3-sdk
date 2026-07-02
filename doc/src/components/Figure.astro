@@ -1,0 +1,13 @@
+---
+interface Props {
+  src: string;
+  alt: string;
+}
+
+const { src, alt } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+
+<figure class="doc-figure">
+  <img src={`${base}/${src}`} alt={alt} />
+</figure>

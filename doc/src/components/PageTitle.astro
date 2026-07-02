@@ -1,0 +1,62 @@
+---
+import { Icon } from "@astrojs/starlight/components";
+
+const { entry } = Astro.locals.starlightRoute;
+const srcPath = entry.data.srcPath;
+const repoBase = "https://github.com/shinolab/autd3-sdk/blob/main/";
+---
+
+<div class="title-row">
+  <h1 id="_top">{entry.data.title}</h1>
+  {
+    srcPath && (
+      <a
+        class="src-link"
+        href={`${repoBase}${srcPath}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="実装を GitHub で開く"
+      >
+        <Icon name="github" size="0.9em" />
+        <span>src</span>
+      </a>
+    )
+  }
+</div>
+
+<style>
+  @layer starlight.core {
+    h1 {
+      margin-top: 1rem;
+      font-size: var(--sl-text-h1);
+      line-height: var(--sl-line-height-headings);
+      font-weight: 600;
+      color: var(--sl-color-white);
+    }
+  }
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .src-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25em;
+    font-size: var(--sl-text-xs);
+    font-weight: 500;
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.375rem;
+    padding: 0.1rem 0.4rem;
+    line-height: 1.4;
+    transform: translateY(-0.1em);
+  }
+  .src-link:hover {
+    color: var(--sl-color-white);
+    border-color: var(--sl-color-gray-4);
+    background-color: var(--sl-color-gray-6);
+  }
+</style>

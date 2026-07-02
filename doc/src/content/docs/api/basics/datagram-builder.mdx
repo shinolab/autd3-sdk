@@ -1,0 +1,41 @@
+---
+title: DatagramBuilder
+description: コマンドを組み立てて Frames に変換する DatagramBuilder
+sidebar:
+  order: 3
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/datagram-builder.rs?raw";
+import pySample from "@codes/python/examples/api/basics/datagram-builder.py?raw";
+
+`DatagramBuilder` は送信するコマンドを積み上げ, `Frames` へ変換する構造体.
+`Client::datagram_builder` で得る.
+
+## API
+
+`push` でコマンドを積み, `build` で `Frames` に変換する.
+得られた `Frames` は複数の `Frame` に分割されており, `Client::send` / `send_checked` で 1 フレームずつ送信する.
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| メソッド            | 説明                                         |
+| ------------------- | -------------------------------------------- |
+| `push(cmd)`         | 全デバイス共通のコマンドを積む               |
+| `push_each(assign)` | デバイスごとに異なるコマンドを積む (下記参照) |
+| `build()`           | 積んだコマンドを `Frames` に変換する       |
+
+## push_each
+
+`push_each` はデバイス番号ごとに呼ばれるクロージャを受け取り, デバイスごとに異なるコマンドを割り当てる.
+Rust では `FnMut(usize) -> Option<C>`, Python では `Callable[[int], Command | None]`.
+`None` を返したデバイスには, そのステップで何も割り当てない.
+
+<CodeTabs rust={excerpt(sample, "push_each")} python={excerpt(pySample, "push_each")} />
+
+Rust ではクロージャの返り値はすべて同じ型 `C` でなければならない.
+型の異なるコマンドを混在させたい場合は, `Command::boxed` で `BoxedCommand` に揃える.
+Python は動的型付けのため, デバイスごとに異なる型のコマンドをそのまま返せる (`boxed` 相当の操作は不要).
+
+<CodeTabs rust={excerpt(sample, "push_each_boxed")} />

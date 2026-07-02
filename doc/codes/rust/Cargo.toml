@@ -1,0 +1,347 @@
+[package]
+name = "autd3-doc-samples"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.96"
+license = "MIT"
+publish = false
+autoexamples = false
+
+[workspace]
+
+[dependencies]
+autd3-rs = { path = "../../../crates/autd3-rs" }
+autd3-rs-pattern = { path = "../../../crates/autd3-rs-pattern" }
+autd3-rs-pattern-holo = { path = "../../../crates/autd3-rs-pattern-holo" }
+autd3-rs-modulation = { path = "../../../crates/autd3-rs-modulation" }
+autd3-rs-firmware-emulator = { path = "../../../crates/autd3-rs-firmware-emulator" }
+autd3-rs-link-nop = { path = "../../../crates/autd3-rs-link-nop" }
+autd3-rs-link-ethercrab = { path = "../../../crates/autd3-rs-link-ethercrab" }
+autd3-rs-link-remote = { path = "../../../crates/autd3-rs-link-remote" }
+autd3-rs-link-twincat = { path = "../../../crates/autd3-rs-link-twincat" }
+ethercrab = "0.7.1"
+anyhow = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
+
+[lints.rust]
+unused = "allow"
+
+[[example]]
+name = "api_basics_client_config"
+path = "examples/api/basics/client-config.rs"
+
+[[example]]
+name = "api_basics_client"
+path = "examples/api/basics/client.rs"
+
+[[example]]
+name = "api_basics_datagram_builder"
+path = "examples/api/basics/datagram-builder.rs"
+
+[[example]]
+name = "api_basics_geometry"
+path = "examples/api/basics/geometry.rs"
+
+[[example]]
+name = "api_basics_sampling_config"
+path = "examples/api/basics/sampling-config.rs"
+
+[[example]]
+name = "api_command_clear_example"
+path = "examples/api/command/clear-example.rs"
+
+[[example]]
+name = "api_command_clear"
+path = "examples/api/command/clear.rs"
+
+[[example]]
+name = "api_command_foci_stm_example"
+path = "examples/api/command/foci-stm-example.rs"
+
+[[example]]
+name = "api_command_foci_stm"
+path = "examples/api/command/foci-stm.rs"
+
+[[example]]
+name = "api_command_force_fan_example"
+path = "examples/api/command/force-fan-example.rs"
+
+[[example]]
+name = "api_command_force_fan"
+path = "examples/api/command/force-fan.rs"
+
+[[example]]
+name = "api_command_gpio_example"
+path = "examples/api/command/gpio-example.rs"
+
+[[example]]
+name = "api_command_gpio"
+path = "examples/api/command/gpio.rs"
+
+[[example]]
+name = "api_command_lowlevel_bank_example"
+path = "examples/api/command/lowlevel/bank-example.rs"
+
+[[example]]
+name = "api_command_lowlevel_bank"
+path = "examples/api/command/lowlevel/bank.rs"
+
+[[example]]
+name = "api_command_lowlevel_foci_buffer_example"
+path = "examples/api/command/lowlevel/foci-buffer-example.rs"
+
+[[example]]
+name = "api_command_lowlevel_foci_buffer"
+path = "examples/api/command/lowlevel/foci-buffer.rs"
+
+[[example]]
+name = "api_command_lowlevel_mod_bank_example"
+path = "examples/api/command/lowlevel/mod-bank-example.rs"
+
+[[example]]
+name = "api_command_lowlevel_mod_bank"
+path = "examples/api/command/lowlevel/mod-bank.rs"
+
+[[example]]
+name = "api_command_lowlevel_pattern_compressed_example"
+path = "examples/api/command/lowlevel/pattern-compressed-example.rs"
+
+[[example]]
+name = "api_command_modulation_example"
+path = "examples/api/command/modulation-example.rs"
+
+[[example]]
+name = "api_command_modulation"
+path = "examples/api/command/modulation.rs"
+
+[[example]]
+name = "api_command_output_mask_example"
+path = "examples/api/command/output-mask-example.rs"
+
+[[example]]
+name = "api_command_output_mask"
+path = "examples/api/command/output-mask.rs"
+
+[[example]]
+name = "api_command_pattern_example"
+path = "examples/api/command/pattern-example.rs"
+
+[[example]]
+name = "api_command_pattern_stm_example"
+path = "examples/api/command/pattern-stm-example.rs"
+
+[[example]]
+name = "api_command_pattern_stm"
+path = "examples/api/command/pattern-stm.rs"
+
+[[example]]
+name = "api_command_pattern"
+path = "examples/api/command/pattern.rs"
+
+[[example]]
+name = "api_command_phase_correction_example"
+path = "examples/api/command/phase-correction-example.rs"
+
+[[example]]
+name = "api_command_phase_correction"
+path = "examples/api/command/phase-correction.rs"
+
+[[example]]
+name = "api_command_set_pulse_width_table_example"
+path = "examples/api/command/set-pulse-width-table-example.rs"
+
+[[example]]
+name = "api_command_set_pulse_width_table"
+path = "examples/api/command/set-pulse-width-table.rs"
+
+[[example]]
+name = "api_command_silencer_example"
+path = "examples/api/command/silencer-example.rs"
+
+[[example]]
+name = "api_command_silencer"
+path = "examples/api/command/silencer.rs"
+
+[[example]]
+name = "api_compute_holo_greedy_example"
+path = "examples/api/compute/holo/greedy-example.rs"
+
+[[example]]
+name = "api_compute_holo_greedy"
+path = "examples/api/compute/holo/greedy.rs"
+
+[[example]]
+name = "api_compute_holo_gs_example"
+path = "examples/api/compute/holo/gs-example.rs"
+
+[[example]]
+name = "api_compute_holo_gs"
+path = "examples/api/compute/holo/gs.rs"
+
+[[example]]
+name = "api_compute_holo_gspat_example"
+path = "examples/api/compute/holo/gspat-example.rs"
+
+[[example]]
+name = "api_compute_holo_gspat"
+path = "examples/api/compute/holo/gspat.rs"
+
+[[example]]
+name = "api_compute_holo_naive_example"
+path = "examples/api/compute/holo/naive-example.rs"
+
+[[example]]
+name = "api_compute_holo_naive"
+path = "examples/api/compute/holo/naive.rs"
+
+[[example]]
+name = "api_compute_modulation_constant_example"
+path = "examples/api/compute/modulation/constant-example.rs"
+
+[[example]]
+name = "api_compute_modulation_constant"
+path = "examples/api/compute/modulation/constant.rs"
+
+[[example]]
+name = "api_compute_modulation_fourier_example"
+path = "examples/api/compute/modulation/fourier-example.rs"
+
+[[example]]
+name = "api_compute_modulation_fourier"
+path = "examples/api/compute/modulation/fourier.rs"
+
+[[example]]
+name = "api_compute_modulation_radiation_example"
+path = "examples/api/compute/modulation/radiation-example.rs"
+
+[[example]]
+name = "api_compute_modulation_radiation"
+path = "examples/api/compute/modulation/radiation.rs"
+
+[[example]]
+name = "api_compute_modulation_sine_example"
+path = "examples/api/compute/modulation/sine-example.rs"
+
+[[example]]
+name = "api_compute_modulation_sine"
+path = "examples/api/compute/modulation/sine.rs"
+
+[[example]]
+name = "api_compute_modulation_square_example"
+path = "examples/api/compute/modulation/square-example.rs"
+
+[[example]]
+name = "api_compute_modulation_square"
+path = "examples/api/compute/modulation/square.rs"
+
+[[example]]
+name = "api_compute_pattern_bessel_example"
+path = "examples/api/compute/pattern/bessel-example.rs"
+
+[[example]]
+name = "api_compute_pattern_bessel"
+path = "examples/api/compute/pattern/bessel.rs"
+
+[[example]]
+name = "api_compute_pattern_focus_example"
+path = "examples/api/compute/pattern/focus-example.rs"
+
+[[example]]
+name = "api_compute_pattern_focus"
+path = "examples/api/compute/pattern/focus.rs"
+
+[[example]]
+name = "api_compute_pattern_null_example"
+path = "examples/api/compute/pattern/null-example.rs"
+
+[[example]]
+name = "api_compute_pattern_null"
+path = "examples/api/compute/pattern/null.rs"
+
+[[example]]
+name = "api_compute_pattern_plane_example"
+path = "examples/api/compute/pattern/plane-example.rs"
+
+[[example]]
+name = "api_compute_pattern_plane"
+path = "examples/api/compute/pattern/plane.rs"
+
+[[example]]
+name = "api_compute_pattern_uniform_example"
+path = "examples/api/compute/pattern/uniform-example.rs"
+
+[[example]]
+name = "api_compute_pattern_uniform"
+path = "examples/api/compute/pattern/uniform.rs"
+
+[[example]]
+name = "api_compute_pattern_wavelength"
+path = "examples/api/compute/pattern/wavelength.rs"
+
+[[example]]
+name = "api_link_ethercrab"
+path = "examples/api/link/ethercrab.rs"
+
+[[example]]
+name = "api_link_remote_client"
+path = "examples/api/link/remote_client.rs"
+
+[[example]]
+name = "api_link_remote_server"
+path = "examples/api/link/remote_server.rs"
+
+[[example]]
+name = "api_link_twincat"
+path = "examples/api/link/twincat.rs"
+
+[[example]]
+name = "guide_custom_modulation"
+path = "examples/guide/custom-modulation.rs"
+
+[[example]]
+name = "guide_custom_pattern"
+path = "examples/guide/custom-pattern.rs"
+
+[[example]]
+name = "guide_state_check"
+path = "examples/guide/state-check.rs"
+
+[[example]]
+name = "tutorial_bank"
+path = "examples/tutorial/bank.rs"
+
+[[example]]
+name = "tutorial_loop"
+path = "examples/tutorial/loop.rs"
+
+[[example]]
+name = "tutorial_moving_focus_software"
+path = "examples/tutorial/moving-focus-software.rs"
+
+[[example]]
+name = "tutorial_moving_focus_stm"
+path = "examples/tutorial/moving-focus-stm.rs"
+
+[[example]]
+name = "tutorial_multiple_device"
+path = "examples/tutorial/multiple-device.rs"
+
+[[example]]
+name = "tutorial_output_intensity"
+path = "examples/tutorial/output-intensity.rs"
+
+[[example]]
+name = "tutorial_performance"
+path = "examples/tutorial/performance.rs"
+
+[[example]]
+name = "tutorial_send_modes"
+path = "examples/tutorial/send-modes.rs"
+
+[[example]]
+name = "tutorial_silencer"
+path = "examples/tutorial/silencer.rs"
+
+[[example]]
+name = "tutorial_single_device"
+path = "examples/tutorial/single-device.rs"

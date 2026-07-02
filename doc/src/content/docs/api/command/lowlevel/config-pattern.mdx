@@ -1,0 +1,36 @@
+---
+title: ConfigPattern
+description: Pattern バンクの設定
+sidebar:
+  order: 13
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/bank-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/bank-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`ConfigPattern` は, Pattern バンクの再生パラメータを設定する低レベルコマンド.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "config")} python={excerpt(pySample, "config")} />
+
+| フィールド  | 型                | 説明                                              |
+| ----------- | ----------------- | ------------------------------------------------- |
+| `bank`      | `PatternBank`     | 対象バンク                                        |
+| `config`    | `SamplingConfig`  | 再生サンプリング周波数                            |
+| `size`      | `usize`           | バンク内のサンプル数. 静的 Pattern は `1`         |
+| `loop_behavior` | `LoopBehavior` | 再生ループ回数 (`Infinite` / `Finite`)           |
+
+
+`loop_behavior` は, [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) で現在と異なるバンクへ切り替えたときのみ作用する.
+
+## Example
+
+`ConfigPattern` は `WritePatternBuffer` でバッファを書き込んだ後, `ChangePatternBank` で再生を切り替える一連の流れの中で使う.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

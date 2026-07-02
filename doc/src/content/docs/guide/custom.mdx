@@ -1,0 +1,36 @@
+---
+title: 任意のパターン・変調
+description: ヘルパ関数を使わず, 任意の Emission パターン・AM 波形を直接構築する方法
+sidebar:
+  order: 5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import pattern from "@codes/rust/examples/guide/custom-pattern.rs?raw";
+import pyPattern from "@codes/python/examples/guide/custom-pattern.py?raw";
+import modulation from "@codes/rust/examples/guide/custom-modulation.rs?raw";
+import pyModulation from "@codes/python/examples/guide/custom-modulation.py?raw";
+
+`Pattern` と `Modulation` は, 計算済みのバッファをそのままデバイスへ送るコマンドである.
+[計算ヘルパ](/autd3-sdk/api/compute/pattern/) はあらかじめ用意された計算ヘルパである.
+ヘルパを介さずバッファを直接構築すれば, 任意のパターン・変調を表現できる.
+
+## 任意のPattern
+
+パターンは, デバイスごとに `Vec<Emission>` を並べたバッファである.
+`Geometry::pattern_buffer` で全デバイス分のバッファを確保し, 各振動子の `Emission` (位相と強度) を自由に設定できる.
+
+以下は, [`focus`](/autd3-sdk/api/compute/pattern/focus/) と同じ単一焦点を, ヘルパを使わず手動で計算する例である.
+各振動子から焦点までの距離に応じた位相を与えている.
+
+<CodeTabs rust={excerpt(pattern, "api")} python={excerpt(pyPattern, "api")} />
+
+## 任意のModulation
+
+変調は, AM 波形を表す `&[u8]` バッファと [`SamplingConfig`](/autd3-sdk/api/basics/sampling-config/) の組である.
+バッファの各要素は 1 サンプルの振幅を表す.
+
+以下は, 周期中の最初の 1 サンプルだけ出力する Burst 変調の例.
+
+<CodeTabs rust={excerpt(modulation, "api")} python={excerpt(pyModulation, "api")} />

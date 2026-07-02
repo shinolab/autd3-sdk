@@ -1,0 +1,21 @@
+---
+title: 低レベル
+description: バンク/バッファを直接操作する低レベルコマンド
+sidebar:
+  order: 11
+---
+
+`Pattern` / `Modulation` などの複合コマンドは, 内部で以下の低レベルコマンドへ展開される.
+
+| 種別         | Pattern 系                                                                 | Modulation 系                                                                    |
+| ------------ | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| バッファ書込 | [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) | [WriteModulationBuffer](/autd3-sdk/api/command/lowlevel/write-modulation-buffer/) |
+| バンク設定   | [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/)           | [ConfigModulation](/autd3-sdk/api/command/lowlevel/config-modulation/)           |
+| バンク切替   | [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/)   | [ChangeModulationBank](/autd3-sdk/api/command/lowlevel/change-modulation-bank/)   |
+
+Foci STM 用の焦点列を書く [WriteFociBuffer](/autd3-sdk/api/command/lowlevel/write-foci-buffer/) とその設定 [ConfigFociStm](/autd3-sdk/api/command/lowlevel/config-foci-stm/) もここに含む.
+
+Pattern バッファへの書き込みには, 位相のみを圧縮して送り 1 フレームに複数 Pattern を書き込む [WritePatternCompressed](/autd3-sdk/api/command/lowlevel/write-pattern-compressed/) もある.
+強度は最大で固定されるが, 高頻度更新で送信量を削減したい場合に有効.
+
+バンク切り替えの考え方は [バンクの切り替えチュートリアル](/autd3-sdk/getting-started/tutorial/bank/) を, ループや遷移については [ループと遷移チュートリアル](/autd3-sdk/getting-started/tutorial/loop/) を参照.

@@ -1,0 +1,46 @@
+---
+title: コンセプト
+description: AUTD3 SDK のアーキテクチャと設計思想
+sidebar:
+  order: 1
+---
+
+import Mermaid from "@components/Mermaid.astro";
+
+このページでは AUTD3 SDK の全体像と中心的な概念を説明する. 各 API の詳細は
+[API リファレンス](/autd3-sdk/api/basics/geometry/) を参照すること. 
+
+各振動子へ送る駆動信号は, 以下のデータフローで生成される. 
+
+<Mermaid
+  title="駆動信号生成のデータフロー"
+  code={`flowchart LR
+  MOD["Modulation"]
+  PS["Pattern / STM"]
+  MUL(["×"])
+  SIL["Silencer"]
+  PWM["PWM"]
+  SIG["Signal"]
+  PS -- Intensity --> MUL
+  MOD --> MUL
+  MUL --> SIL
+  PS -- Phase --> SIL
+  SIL --> PWM
+  PWM --> SIG`}
+/>
+
+AUTD3 は多数の超音波振動子の位相を制御し, 空間中の任意の音場を生成する装置である. 
+
+本 SDK はこの位相・振幅の計算と, 装置への送信を担う. 
+
+## 全体像
+
+AUTD3 SDK は次の層から構成される. 
+
+- **Geometry** — デバイスの物理配置 (位置・姿勢) を表現する. 
+- **Pattern** — 各振動子の位相・振幅 (`Emission`) を束ねたもの. 
+- **Modulation** — 出力振幅を時間方向に変調する (AM). 
+- **STM** — Pattern をハードウェアタイマにより切り替える機能. 
+- **Client** — 上記をPattern/Modulationなどのデータを, Link を介してデバイスへ送信する. 
+- **Link** — デバイスとの通信路の抽象. 
+

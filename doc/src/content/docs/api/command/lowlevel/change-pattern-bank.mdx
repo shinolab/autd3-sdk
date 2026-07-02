@@ -1,0 +1,43 @@
+---
+title: ChangePatternBank
+description: Pattern バンクの切り替え
+sidebar:
+  order: 14
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/bank-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/bank-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`ChangePatternBank` は, 再生対象の Pattern バンクを切り替える低レベルコマンド.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "change")} python={excerpt(pySample, "change")} />
+
+| フィールド        | 型               | 説明                     |
+| ----------------- | ---------------- | ------------------------ |
+| `bank`            | `PatternBank`    | 切り替え先バンク         |
+| `transition_mode` | `TransitionMode` | 切り替え時の挙動         |
+
+## TransitionMode
+
+|            |              |
+| -------------------- | --------------------------        |
+| `Immediate`          | 即時                              |
+| `SyncIdx`            | 次に再生インデックスが0になった時 |
+| `SysTime(DcSysTime)` | 指定した DC システム時刻          |
+| `Gpio(GpioIn)`       | 指定 GPIO 入力ピンのトリガ        |
+| `Ext`                | 拡張モード (バンク内の再生が終わると次のバンクに自動で切り替え) |
+
+同一バンクへの切り替えでは, `TransitionMode` や `LoopBehavior` の設定は機能しない.
+バンク運用の詳細は [バンクの切り替え チュートリアル](/autd3-sdk/getting-started/tutorial/bank/) を参照.
+
+## Example
+
+`ChangePatternBank` は `WritePatternBuffer` + `ConfigPattern` でバンクを準備した後に送り, 再生対象を切り替える.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
