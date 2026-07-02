@@ -4,13 +4,17 @@ mod client;
 mod commands;
 mod config;
 mod datagram;
+mod future;
 mod ops;
 mod runtime;
 mod stm;
 
 #[pymodule]
 fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    runtime::init();
+    m.add_function(wrap_pyfunction!(runtime::_shutdown_runtime, m)?)?;
+    m.py()
+        .import("atexit")?
+        .call_method1("register", (m.getattr("_shutdown_runtime")?,))?;
     m.add("MAX_IN_FLIGHT", autd3_rs::MAX_IN_FLIGHT)?;
     m.add_class::<client::Client>()?;
     m.add_class::<client::Checker>()?;

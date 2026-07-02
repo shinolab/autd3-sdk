@@ -1,15 +1,14 @@
 use std::sync::{Arc, Mutex};
 
+use crate::config::ClientConfig;
+use crate::datagram::{DatagramBuilder, Frame};
+use crate::future::future_into_py;
 use autd3_python_capsule::{
     ClientBackend, ResponseToken, capsule_of, geometry_from_capsule, take_client_opener,
     to_pyerr_gil,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3_async_runtimes::tokio::future_into_py;
-
-use crate::config::ClientConfig;
-use crate::datagram::{DatagramBuilder, Frame};
 
 #[pyclass(name = "LinkStatus", module = "autd3")]
 pub struct LinkStatus {
