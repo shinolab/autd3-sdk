@@ -1,7 +1,6 @@
 use autd3_rs_core::geometry::{Device, Geometry};
 use autd3_rs_core::link::IntoLink;
-
-use crate::audit::Audit;
+use autd3_rs_firmware_emulator::Audit;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Nop;
