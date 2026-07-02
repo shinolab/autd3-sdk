@@ -9,11 +9,10 @@ use std::time::Duration;
 use anyhow::Result;
 use textplots::{Chart, Plot, Shape};
 
+use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
-use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Emission, SamplingConfig};
-use autd3_rs::{Modulation, Pattern, SetSilencer};
 
 use autd3_rs_emulator::{ClientApi, Emulator};
 
@@ -22,7 +21,8 @@ fn main() -> Result<()> {
 
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
-    let mut patterns = vec![[Emission::default(); NUM_TRANSDUCERS]; geometry.len()];
+    let mut patterns =
+        vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
     autd3_rs_pattern::focus(
         &geometry,
         target,

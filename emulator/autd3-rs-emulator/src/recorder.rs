@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use autd3_rs::operation::Distribution;
+use autd3_rs::commands::Distribution;
 use autd3_rs::{DatagramBuilder, Frame};
 use autd3_rs_core::common::ULTRASOUND_PERIOD;
 use autd3_rs_core::geometry::{Geometry, Point3};
