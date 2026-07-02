@@ -14,7 +14,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 autd3-rs.workspace = true
-autd3-rs-firmware-emulator = { path = "../../../crates/autd3-rs-firmware-emulator" }
+autd3-rs-link-nop = { path = "../../../crates/autd3-rs-link-nop" }
 autd3-rs-core.workspace = true
 autd3-ffi-abi = { workspace = true, features = ["client"] }
 tokio.workspace = true

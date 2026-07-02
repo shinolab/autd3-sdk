@@ -1,7 +1,7 @@
 use std::num::{NonZeroU8, NonZeroUsize};
 
 use autd3_ffi_abi::PatternBuffer;
-use autd3_rs_core::params::NUM_TRANSDUCERS;
+use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::value::Intensity;
 use autd3_rs_core::{Geometry, Length, Point3};
 use autd3_rs_pattern_holo::{
@@ -67,16 +67,16 @@ unsafe fn build_foci(foci: *const Autd3HoloControlPoint, num_foci: usize) -> Vec
         .collect()
 }
 
-unsafe fn build_mask(mask: *const u8, num_devices: usize) -> Option<Vec<[bool; NUM_TRANSDUCERS]>> {
+unsafe fn build_mask(mask: *const u8, num_devices: usize) -> Option<Vec<Vec<bool>>> {
     if mask.is_null() {
         return None;
     }
-    let slice = unsafe { std::slice::from_raw_parts(mask, num_devices * NUM_TRANSDUCERS) };
+    let slice = unsafe { std::slice::from_raw_parts(mask, num_devices * Autd3::NUM_TRANSDUCERS) };
     Some(
         slice
-            .chunks_exact(NUM_TRANSDUCERS)
+            .chunks_exact(Autd3::NUM_TRANSDUCERS)
             .map(|device| {
-                let mut slot = [false; NUM_TRANSDUCERS];
+                let mut slot = vec![false; Autd3::NUM_TRANSDUCERS];
                 for (m, src) in slot.iter_mut().zip(device) {
                     *m = *src != 0;
                 }
@@ -86,7 +86,7 @@ unsafe fn build_mask(mask: *const u8, num_devices: usize) -> Option<Vec<[bool; N
     )
 }
 
-fn mask_ref(mask: Option<&[[bool; NUM_TRANSDUCERS]]>) -> TransducerMask<'_> {
+fn mask_ref(mask: Option<&[Vec<bool>]>) -> TransducerMask<'_> {
     match mask {
         Some(m) => TransducerMask::Masked(m),
         None => TransducerMask::AllEnabled,
@@ -109,7 +109,7 @@ pub unsafe extern "C" fn autd3_holo_naive(
     }
     let geometry = unsafe { &*geometry };
     let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.len() {
+    if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
     let foci = unsafe { build_foci(foci, num_foci) };
@@ -149,7 +149,7 @@ pub unsafe extern "C" fn autd3_holo_gs(
     }
     let geometry = unsafe { &*geometry };
     let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.len() {
+    if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
     let foci = unsafe { build_foci(foci, num_foci) };
@@ -190,7 +190,7 @@ pub unsafe extern "C" fn autd3_holo_gspat(
     }
     let geometry = unsafe { &*geometry };
     let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.len() {
+    if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
     let foci = unsafe { build_foci(foci, num_foci) };
@@ -231,7 +231,7 @@ pub unsafe extern "C" fn autd3_holo_greedy(
     }
     let geometry = unsafe { &*geometry };
     let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.len() {
+    if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
     let foci = unsafe { build_foci(foci, num_foci) };

@@ -1,9 +1,8 @@
 use std::ffi::{CString, c_char, c_void};
 
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::Emission;
 
-pub type DevicePattern = [Emission; NUM_TRANSDUCERS];
+pub type DevicePattern = Vec<Emission>;
 
 #[repr(transparent)]
 pub struct PatternBuffer(pub Vec<DevicePattern>);

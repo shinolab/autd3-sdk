@@ -43,7 +43,7 @@ pub unsafe extern "C" fn autd3_core_geometry_num_devices(geometry: *const Geomet
         return 0;
     }
 
-    unsafe { &*geometry }.len()
+    unsafe { &*geometry }.num_devices()
 }
 
 #[unsafe(no_mangle)]
@@ -82,7 +82,7 @@ pub unsafe extern "C" fn autd3_core_device_num_transducers(
     let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
         return 0;
     };
-    device.len()
+    device.num_transducers()
 }
 
 #[unsafe(no_mangle)]
