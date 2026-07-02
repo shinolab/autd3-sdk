@@ -8,6 +8,7 @@ sidebar:
 import CodeTabs from "@components/CodeTabs.astro";
 import focusRust from "@codes/rust/examples/tutorial/single-device.rs?raw";
 import focusPython from "@codes/python/examples/tutorial/single-device.py?raw";
+import focusCsharp from "@codes/csharp/examples/tutorial/single-device.cs?raw";
 import { Code } from "astro-expressive-code/components";
 import { excerpt } from "@lib/excerpt";
 
@@ -75,6 +76,28 @@ Linux, macOSでは, EtherCrabを使用するのに管理者権限が必要にな
 sudo .venv/bin/python3 main.py
 ```
 とすること.
+</Fragment>
+<Fragment slot="csharp">
+まずは適当なディレクトリを作成し, autd3 ライブラリを追加する.
+また, デバイスとの通信を行う AUTD3.Link.Ethercrab, 焦点計算の AUTD3.Pattern, AM 変調の AUTD3.Modulation も併せて追加する.
+
+```
+dotnet new console -o autd3-sample && cd autd3-sample
+dotnet add package AUTD3
+dotnet add package AUTD3.Pattern
+dotnet add package AUTD3.Modulation
+dotnet add package AUTD3.Link.Ethercrab
+```
+次に, `Program.cs`ファイルを以下のようにする.
+
+<Code code={excerpt(focusCsharp)} lang="csharp" />
+
+そして, これを実行する.
+```
+dotnet run -c Release
+```
+
+Linux, macOSでは, EtherCrabを使用するのに管理者権限が必要になるかもしれない.
 </Fragment>
 </CodeTabs>
 

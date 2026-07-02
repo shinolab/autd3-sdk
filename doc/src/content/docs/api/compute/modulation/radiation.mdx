@@ -14,6 +14,8 @@ import sample from "@codes/rust/examples/api/compute/modulation/radiation.rs?raw
 import pySample from "@codes/python/examples/api/compute/modulation/radiation.py?raw";
 import fullSample from "@codes/rust/examples/api/compute/modulation/radiation-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/compute/modulation/radiation-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/modulation/radiation.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/modulation/radiation-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `radiation_pressure` は変調波形に放射圧補正を適用する. `sine` などで計算した波形に対して補正をかける. 
@@ -30,7 +32,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 ### radiation_pressure
 
@@ -43,4 +45,4 @@ in-placeに書き換える `radiation_pressure_inplace` もある.
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

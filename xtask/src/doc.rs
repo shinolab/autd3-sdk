@@ -30,6 +30,9 @@ pub enum DocCmd {
         /// Only run the Python samples (skip the Rust compile).
         #[arg(long)]
         python: bool,
+        /// Only compile the C# samples (skip the Rust compile).
+        #[arg(long)]
+        csharp: bool,
     },
     Check,
     /// Inline a version snapshot's code examples to drop its `@codes` dependency.
@@ -47,13 +50,30 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
         DocCmd::Samples {
             check: false,
             python: true,
+            csharp: false,
         } => run_python_samples(root, &doc),
         DocCmd::Samples {
             check: false,
             python: false,
+            csharp: true,
+        } => build_csharp_samples(&doc),
+        DocCmd::Samples {
+            check: false,
+            python,
+            csharp,
         } => {
-            build_samples(&samples)?;
-            run_python_samples(root, &doc)
+            if !*python && !*csharp {
+                build_samples(&samples)?;
+                run_python_samples(root, &doc)?;
+                return build_csharp_samples(&doc);
+            }
+            if *python {
+                run_python_samples(root, &doc)?;
+            }
+            if *csharp {
+                build_csharp_samples(&doc)?;
+            }
+            Ok(())
         }
         DocCmd::Build => {
             build_samples(&samples)?;
@@ -88,6 +108,31 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
 fn build_samples(samples: &Path) -> Result<()> {
     sync_examples(samples, false)?;
     run("cargo", ["build", "--examples"], samples)
+}
+
+fn build_csharp_samples(doc: &Path) -> Result<()> {
+    if !on_path("dotnet") {
+        bail!("`dotnet` is required for the C# doc samples (install the .NET SDK)");
+    }
+    let csproj = doc
+        .join("codes")
+        .join("csharp")
+        .join("AUTD3.DocSamples.csproj");
+    if !csproj.is_file() {
+        bail!("C# doc sample project not found: {}", csproj.display());
+    }
+    run(
+        "dotnet",
+        [
+            "build",
+            "codes/csharp/AUTD3.DocSamples.csproj",
+            "-c",
+            "Release",
+        ],
+        doc,
+    )?;
+    println!("doc: C# samples compiled");
+    Ok(())
 }
 
 fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {

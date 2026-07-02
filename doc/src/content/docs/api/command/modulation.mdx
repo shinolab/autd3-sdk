@@ -11,6 +11,8 @@ import sample from "@codes/rust/examples/api/command/modulation.rs?raw";
 import pySample from "@codes/python/examples/api/command/modulation.py?raw";
 import fullSample from "@codes/rust/examples/api/command/modulation-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/modulation-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/modulation.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/modulation-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `Modulation` は, AM 波形データ (`&[u8]`) をデバイスへ送るコマンド.
@@ -30,6 +32,12 @@ import { excerpt } from "@lib/excerpt";
 
 `Modulation` は書き込み先バンクをデフォルトで `ModulationBank.B0`, ループを `Infinite`, 遷移を `Immediate` とする.
 別バンク・ループ回数・遷移タイミングを指定したい場合は, `bank` / `loop_behavior` / `transition_mode` 引数を渡す.
+</Fragment>
+<Fragment slot="csharp">
+<Code code={excerpt(csSample, "api")} lang="csharp" />
+
+`new Modulation(config, data)` は書き込み先バンクをデフォルトで `ModulationBank.B0`, ループを `Infinite`, 遷移を `Immediate` とする.
+別バンク・ループ回数・遷移タイミングを指定したい場合は, `bank` / `loopBehavior` / `transitionMode` 引数を渡す.
 </Fragment>
 </CodeTabs>
 
@@ -52,8 +60,8 @@ modulation の計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/m
 `Modulation` は内部で [WriteModulationBuffer](/autd3-sdk/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/api/command/lowlevel/config-modulation/) + [ChangeModulationBank](/autd3-sdk/api/command/lowlevel/change-modulation-bank/) の 3 つへ展開される.
 以下は `Modulation { bank, config, data, loop_behavior, transition_mode }` と等価な組み合わせである
 
-<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} />
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

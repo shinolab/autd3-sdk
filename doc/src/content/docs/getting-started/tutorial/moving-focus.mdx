@@ -11,13 +11,15 @@ import software from "@codes/rust/examples/tutorial/moving-focus-software.rs?raw
 import pySoftware from "@codes/python/examples/tutorial/moving-focus-software.py?raw";
 import stm from "@codes/rust/examples/tutorial/moving-focus-stm.rs?raw";
 import pyStm from "@codes/python/examples/tutorial/moving-focus-stm.py?raw";
+import csSoftware from "@codes/csharp/examples/tutorial/moving-focus-software.cs?raw";
+import csStm from "@codes/csharp/examples/tutorial/moving-focus-stm.cs?raw";
 
 ## ソフトウェア制御
 
 AUTD3 において, `Pattern` は送信するたびに上書きされる.
 したがって, 次のようなコードを実行すると, 約1秒ごとに焦点の位置が移動する. 
 
-<CodeTabs rust={excerpt(software, ["loop"])} python={excerpt(pySoftware, ["loop"])} />
+<CodeTabs rust={excerpt(software, ["loop"])} python={excerpt(pySoftware, ["loop"])} csharp={excerpt(csSoftware, ["loop"])} />
 
 上記のコードだとソフトウェア的にタイミングを制御している. 
 これの精度は OS や実行環境に依存するため, より精度の高い制御が必要な場合は, `FociStm` / `PatternStm` を使用することをおすすめする. 
@@ -26,7 +28,7 @@ AUTD3 において, `Pattern` は送信するたびに上書きされる.
 
 [`FociStm`](/autd3-sdk/api/command/foci-stm/) を使用して上記と同等の動作を実現するコードは以下の通りである. 
 
-<CodeTabs rust={excerpt(stm, "stm")} python={excerpt(pyStm, "stm")} />
+<CodeTabs rust={excerpt(stm, "stm")} python={excerpt(pyStm, "stm")} csharp={excerpt(csStm, "stm")} />
 
 `FociStm` / `PatternStm` は AUTD3 デバイス内部でループされるため, ソフトウェアループは必要なく, 送信以降自動的に無限ループする.
 また, タイミングは AUTD3 デバイス内蔵のタイマーで制御されるため, 精度が高く, 解像度も最高で 25 µs 単位で指定できる.

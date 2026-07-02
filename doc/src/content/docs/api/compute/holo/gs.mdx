@@ -11,6 +11,8 @@ import sample from "@codes/rust/examples/api/compute/holo/gs.rs?raw";
 import pySample from "@codes/python/examples/api/compute/holo/gs.py?raw";
 import fullSample from "@codes/rust/examples/api/compute/holo/gs-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/compute/holo/gs-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/holo/gs.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/holo/gs-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 gs (Gerchberg-Saxton 法) は, 振動子側と焦点側の振幅制約を交互に課しながら順伝搬と逆伝搬を反復するアルゴリズム. 
@@ -19,7 +21,7 @@ naive より焦点間の干渉を抑えられるが, 反復回数に応じて計
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数         | 型                     | 説明                      |
 | ------------ | ---------------------- | ------------------------- |
@@ -33,7 +35,7 @@ naive より焦点間の干渉を抑えられるが, 反復回数に応じて計
 
 ## GsOption
 
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
 
 | フィールド    | 型                   | デフォルト                    |
 |---------------|----------------------|---------------------------|
@@ -48,4 +50,4 @@ naive より焦点間の干渉を抑えられるが, 反復回数に応じて計
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

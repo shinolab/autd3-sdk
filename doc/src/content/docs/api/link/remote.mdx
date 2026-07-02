@@ -9,6 +9,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import client from "@codes/rust/examples/api/link/remote_client.rs?raw";
 import pyClient from "@codes/python/examples/api/link/remote_client.py?raw";
+import csClient from "@codes/csharp/examples/api/link/remote_client.cs?raw";
 import server from "@codes/rust/examples/api/link/remote_server.rs?raw";
 
 `RemoteLink` は, AUTD3 デバイスに直接配線された**別ホスト**へ TCP 接続して送受信する Link 実装. 
@@ -39,7 +40,7 @@ import server from "@codes/rust/examples/api/link/remote_server.rs?raw";
 
 ### RemoteLink
 
-<CodeTabs rust={excerpt(client, "api")} python={excerpt(pyClient, "api")} />
+<CodeTabs rust={excerpt(client, "api")} python={excerpt(pyClient, "api")} csharp={excerpt(csClient, "api")} />
 
 | フィールド | 型           | 説明                       |
 | ---------- | ------------ | -------------------------- |

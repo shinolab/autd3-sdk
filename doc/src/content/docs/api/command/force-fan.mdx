@@ -11,6 +11,8 @@ import sample from "@codes/rust/examples/api/command/force-fan.rs?raw";
 import pySample from "@codes/python/examples/api/command/force-fan.py?raw";
 import fullSample from "@codes/rust/examples/api/command/force-fan-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/force-fan-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/force-fan.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/force-fan-example.cs?raw";
 
 `ForceFan` は, 冷却ファンを強制的に On にするコマンド.
 
@@ -19,7 +21,7 @@ import pyFullSample from "@codes/python/examples/api/command/force-fan-example.p
 :::
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | フィールド | 型     | 説明                                      |
 | ---------- | ------ | ----------------------------------------- |
@@ -27,4 +29,4 @@ import pyFullSample from "@codes/python/examples/api/command/force-fan-example.p
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

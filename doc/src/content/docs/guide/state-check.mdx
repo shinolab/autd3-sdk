@@ -9,6 +9,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/guide/state-check.rs?raw";
 import pySample from "@codes/python/examples/guide/state-check.py?raw";
+import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
 稼働中にデバイスとの EtherCAT リンクが健全かどうかを監視したい場合がある.
 `Client` はバックグラウンドで状態を監視するタスクを勝手に起動しない.
@@ -19,7 +20,7 @@ import pySample from "@codes/python/examples/guide/state-check.py?raw";
 
 通常の [`Client::open`](/autd3-sdk/api/basics/client/) の代わりに `open_with_checker` を使うと, `Client` と `Checker` の組が返る.
 
-<CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} />
+<CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} csharp={excerpt(csSample, "open")} />
 
 ## 状態の取得
 
@@ -33,7 +34,7 @@ import pySample from "@codes/python/examples/guide/state-check.py?raw";
 
 以下は, 一定間隔で `check` を呼び, 状態が変化したときだけ出力する例.
 
-<CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} />
+<CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
 
 `check` を呼ぶ頻度はユーザー次第である.
 高頻度の送信ループとは別のタスクで, 上のように低頻度でポーリングするのが典型的な使い方である.

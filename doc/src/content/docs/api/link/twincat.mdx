@@ -9,6 +9,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/api/link/twincat.rs?raw";
 import pySample from "@codes/python/examples/api/link/twincat.py?raw";
+import csSample from "@codes/csharp/examples/api/link/twincat.cs?raw";
 
 `TwinCATLink` は, Windows 上の [TwinCAT](https://www.beckhoff.com/) を EtherCAT マスタとして利用する Link 実装. 
 `autd3-rs-link-twincat` クレートで提供される.
@@ -19,7 +20,7 @@ TwinCAT のセットアップ手順は [TwinCAT のインストール](/autd3-sd
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数         | 型         | 説明                                       |
 | ------------ | ---------- | ------------------------------------------ |

@@ -104,8 +104,10 @@ jobs:
               - *shared
               - *xtask-core
               - 'xtask/src/cs.rs'
+              - 'xtask/src/doc.rs'
               - 'bindings/csharp/**'
               - 'bindings/ffi/**'
+              - 'doc/codes/csharp/**'
               - '.github/workflows/ci-cs.yml'
             license:
               - *shared

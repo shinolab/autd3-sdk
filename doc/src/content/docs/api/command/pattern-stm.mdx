@@ -10,6 +10,8 @@ import sample from "@codes/rust/examples/api/command/pattern-stm.rs?raw";
 import pySample from "@codes/python/examples/api/command/pattern-stm.py?raw";
 import fullSample from "@codes/rust/examples/api/command/pattern-stm-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/pattern-stm-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/pattern-stm.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/pattern-stm-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `PatternStm` は, ハードウェアタイマにより任意の音場 (各振動子の emission) を切り替える STM 機能を提供する.
@@ -17,7 +19,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数       | 型                                    | 説明                                                 |
 | ---------- | ------------------------------------- | ---------------------------------------------------- |
@@ -30,7 +32,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## PatternStmOption
 
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
 
 | フィールド        | 型               | デフォルト                           | 説明                         |
 | ----------------- | ---------------- | ------------------------------------ | ---------------------------- |
@@ -58,9 +60,9 @@ import { excerpt } from "@lib/excerpt";
 
 `PatternStmMode` が `PhaseFull` / `PhaseHalf` のときは, `WritePatternBuffer` の代わりに [WritePatternCompressed](/autd3-sdk/api/command/lowlevel/write-pattern-compressed/) が使われる.
 
-<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} />
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

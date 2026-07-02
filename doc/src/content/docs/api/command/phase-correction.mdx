@@ -10,6 +10,8 @@ import sample from "@codes/rust/examples/api/command/phase-correction.rs?raw";
 import pySample from "@codes/python/examples/api/command/phase-correction.py?raw";
 import fullSample from "@codes/rust/examples/api/command/phase-correction-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/phase-correction-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/phase-correction.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/phase-correction-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `SetPhaseCorrection` は, 各振動子へ加える位相オフセットを設定するコマンド.
@@ -17,7 +19,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | フィールド | 型              | 説明                                                                                     |
 | ---------- | --------------- | ---------------------------------------------------------------------------------------- |
@@ -25,5 +27,5 @@ import { excerpt } from "@lib/excerpt";
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

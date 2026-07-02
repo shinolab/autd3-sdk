@@ -9,8 +9,10 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import pattern from "@codes/rust/examples/guide/custom-pattern.rs?raw";
 import pyPattern from "@codes/python/examples/guide/custom-pattern.py?raw";
+import csPattern from "@codes/csharp/examples/guide/custom-pattern.cs?raw";
 import modulation from "@codes/rust/examples/guide/custom-modulation.rs?raw";
 import pyModulation from "@codes/python/examples/guide/custom-modulation.py?raw";
+import csModulation from "@codes/csharp/examples/guide/custom-modulation.cs?raw";
 
 `Pattern` と `Modulation` は, 計算済みのバッファをそのままデバイスへ送るコマンドである.
 [計算ヘルパ](/autd3-sdk/api/compute/pattern/) はあらかじめ用意された計算ヘルパである.
@@ -24,7 +26,7 @@ import pyModulation from "@codes/python/examples/guide/custom-modulation.py?raw"
 以下は, [`focus`](/autd3-sdk/api/compute/pattern/focus/) と同じ単一焦点を, ヘルパを使わず手動で計算する例である.
 各振動子から焦点までの距離に応じた位相を与えている.
 
-<CodeTabs rust={excerpt(pattern, "api")} python={excerpt(pyPattern, "api")} />
+<CodeTabs rust={excerpt(pattern, "api")} python={excerpt(pyPattern, "api")} csharp={excerpt(csPattern, "api")} />
 
 ## 任意のModulation
 
@@ -33,4 +35,4 @@ import pyModulation from "@codes/python/examples/guide/custom-modulation.py?raw"
 
 以下は, 周期中の最初の 1 サンプルだけ出力する Burst 変調の例.
 
-<CodeTabs rust={excerpt(modulation, "api")} python={excerpt(pyModulation, "api")} />
+<CodeTabs rust={excerpt(modulation, "api")} python={excerpt(pyModulation, "api")} csharp={excerpt(csModulation, "api")} />

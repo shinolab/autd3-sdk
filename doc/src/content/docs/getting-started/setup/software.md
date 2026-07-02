@@ -8,7 +8,7 @@ sidebar:
 AUTD3 SDK は, 以下の Rust クレート群として提供される.
 
 :::note
-Python / C# などのバインディングは今後追加予定.
+Python / C# 向けのバインディングも提供される. 使い方は各 API ページのコードタブを参照.
 :::
 
 - [autd3-rs](https://crates.io/crates/autd3-rs): クライアント本体.

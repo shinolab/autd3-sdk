@@ -11,6 +11,8 @@ import sample from "@codes/rust/examples/api/command/silencer.rs?raw";
 import pySample from "@codes/python/examples/api/command/silencer.py?raw";
 import fullSample from "@codes/rust/examples/api/command/silencer-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/silencer-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/silencer.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/silencer-example.cs?raw";
 
 `SetSilencer` は, 位相・強度の急激な変化を線形補間し出力ノイズを抑える `Silencer` を設定するコマンド.
 
@@ -18,7 +20,7 @@ import pyFullSample from "@codes/python/examples/api/command/silencer-example.py
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 `SetSilencer::default()` は `FixedCompletionTime` のデフォルトを渡すのと等価.
 `SetSilencer::disable()` は `Silencer` による補間を無効化する (25 μs で補間を完了するのと等価).
@@ -45,5 +47,5 @@ import pyFullSample from "@codes/python/examples/api/command/silencer-example.py
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

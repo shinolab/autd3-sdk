@@ -14,6 +14,8 @@ import sample from "@codes/rust/examples/api/compute/modulation/sine.rs?raw";
 import pySample from "@codes/python/examples/api/compute/modulation/sine.py?raw";
 import fullSample from "@codes/rust/examples/api/compute/modulation/sine-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/compute/modulation/sine-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/modulation/sine.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/modulation/sine-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `sine` は正弦波の振幅変調を生成する.
@@ -22,7 +24,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数      | 型             | 説明                                         |
 | --------- | -------------- | -------------------------------------------- |
@@ -38,7 +40,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## SineOption
 
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
 
 | フィールド        | 型               | デフォルト              | 説明                                                     |
 | ----------------- | ---------------- | ----------------------- | -------------------------------------------------------- |
@@ -56,9 +58,9 @@ import { excerpt } from "@lib/excerpt";
 [SamplingConfigの制約](/autd3-sdk/api/basics/sampling-config/)により, 指定した周波数が表現可能な周波数でない場合がある. 
 その場合は`Nearest(freq)` を渡すと最も近い表現可能な周波数に丸める. 
 
-<CodeTabs rust={excerpt(sample, "nearest")} python={excerpt(pySample, "nearest")} />
+<CodeTabs rust={excerpt(sample, "nearest")} python={excerpt(pySample, "nearest")} csharp={excerpt(csSample, "nearest")} />
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

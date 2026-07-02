@@ -12,6 +12,8 @@ import sample from "@codes/rust/examples/api/compute/pattern/plane.rs?raw";
 import pySample from "@codes/python/examples/api/compute/pattern/plane.py?raw";
 import fullSample from "@codes/rust/examples/api/compute/pattern/plane-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/compute/pattern/plane-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/pattern/plane.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/pattern/plane-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `plane` は指定方向に伝搬する平面波を生成する.
@@ -20,7 +22,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数         | 型                     | 説明                            |
 | ------------ | ---------------------- | ------------------------------- |
@@ -32,7 +34,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## PlaneOption
 
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
 
 | フィールド     | 型          | デフォルト       | 説明                         |
 | -------------- | ----------- | ---------------- | ---------------------------- |
@@ -41,4 +43,4 @@ import { excerpt } from "@lib/excerpt";
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

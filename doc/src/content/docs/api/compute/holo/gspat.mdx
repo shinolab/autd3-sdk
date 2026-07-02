@@ -11,6 +11,8 @@ import sample from "@codes/rust/examples/api/compute/holo/gspat.rs?raw";
 import pySample from "@codes/python/examples/api/compute/holo/gspat.py?raw";
 import fullSample from "@codes/rust/examples/api/compute/holo/gspat-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/compute/holo/gspat-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/holo/gspat.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/holo/gspat-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 gspat は, [gs](/autd3-sdk/api/compute/holo/gs/) を高速化したアルゴリズム.
@@ -18,7 +20,7 @@ gspat は, [gs](/autd3-sdk/api/compute/holo/gs/) を高速化したアルゴリ�
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数         | 型                     | 説明                      |
 | ------------ | ---------------------- | ------------------------- |
@@ -32,7 +34,7 @@ gspat は, [gs](/autd3-sdk/api/compute/holo/gs/) を高速化したアルゴリ�
 
 ## GspatOption
 
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
 
 | フィールド    | 型                   | デフォルト                    |
 |---------------|----------------------|---------------------------|
@@ -46,5 +48,5 @@ gspat は, [gs](/autd3-sdk/api/compute/holo/gs/) を高速化したアルゴリ�
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

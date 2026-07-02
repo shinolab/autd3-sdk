@@ -11,13 +11,15 @@ import sample from "@codes/rust/examples/api/compute/modulation/constant.rs?raw"
 import pySample from "@codes/python/examples/api/compute/modulation/constant.py?raw";
 import fullSample from "@codes/rust/examples/api/compute/modulation/constant-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/compute/modulation/constant-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/modulation/constant.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/modulation/constant-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `constant` は一定の振幅を出力する変調を生成する (実質的に変調なし).
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数        | 型             | 説明                   |
 | ----------- | -------------- | ---------------------- |
@@ -26,4 +28,4 @@ import { excerpt } from "@lib/excerpt";
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

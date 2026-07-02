@@ -10,13 +10,15 @@ import sample from "@codes/rust/examples/api/command/gpio.rs?raw";
 import pySample from "@codes/python/examples/api/command/gpio.py?raw";
 import fullSample from "@codes/rust/examples/api/command/gpio-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/gpio-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/gpio.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/gpio-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `SetGpioOut` は, デバイスの 4 本の GPIO 出力端子に出力する信号を設定するコマンド.
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | フィールド | 型             | 説明                      |
 | ---------- | -------------- | ------------------------- |
@@ -43,5 +45,5 @@ import { excerpt } from "@lib/excerpt";
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

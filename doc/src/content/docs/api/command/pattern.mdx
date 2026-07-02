@@ -11,6 +11,8 @@ import sample from "@codes/rust/examples/api/command/pattern.rs?raw";
 import pySample from "@codes/python/examples/api/command/pattern.py?raw";
 import fullSample from "@codes/rust/examples/api/command/pattern-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/pattern-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/pattern.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/pattern-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `Pattern` は, 各振動子の `Emission` をデバイスへ送るコマンド.
@@ -30,6 +32,12 @@ import { excerpt } from "@lib/excerpt";
 `Pattern` は書き込み先バンクをデフォルトで `PatternBank.B0` とする.
 別バンクを指定したい場合は `bank` 引数を渡す.
 </Fragment>
+<Fragment slot="csharp">
+<Code code={excerpt(csSample, "api")} lang="csharp" />
+
+`new Pattern(emissions)` は書き込み先バンクをデフォルトで `PatternBank.B0` とする.
+別バンクを指定したい場合は `bank` 引数を渡す.
+</Fragment>
 </CodeTabs>
 
 | フィールド        | 型                               | デフォルト                      | 説明                             |
@@ -44,8 +52,8 @@ patternの計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/patte
 `Pattern` は内部で [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
 以下は `Pattern { bank, emissions }` と等価な組み合わせである.
 
-<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} />
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

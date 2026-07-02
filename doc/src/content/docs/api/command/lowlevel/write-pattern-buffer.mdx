@@ -10,13 +10,15 @@ import sample from "@codes/rust/examples/api/command/lowlevel/bank.rs?raw";
 import pySample from "@codes/python/examples/api/command/lowlevel/bank.py?raw";
 import fullSample from "@codes/rust/examples/api/command/lowlevel/bank-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/lowlevel/bank-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `WritePatternBuffer` は, 指定したバンク・インデックスへ Pattern (各振動子の `Emission`) を書き込む低レベルコマンド.
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "write")} python={excerpt(pySample, "write")} />
+<CodeTabs rust={excerpt(sample, "write")} python={excerpt(pySample, "write")} csharp={excerpt(csSample, "write")} />
 
 | フィールド  | 型                               | 説明                             |
 | ----------- | -------------------------------- | -------------------------------- |
@@ -28,5 +30,5 @@ import { excerpt } from "@lib/excerpt";
 
 複数の低レベルコマンドは 1 つの datagram にまとめて送る. 以下は `WritePatternBuffer` → `ConfigPattern` → `ChangePatternBank` で 1 つの Pattern を再生する例 (高レベルの [Pattern](/autd3-sdk/api/command/pattern/) と等価).
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

@@ -11,10 +11,12 @@ import open from "@codes/rust/examples/api/basics/client-config.rs?raw";
 import pyOpen from "@codes/python/examples/api/basics/client-config.py?raw";
 import methods from "@codes/rust/examples/api/basics/client.rs?raw";
 import pyMethods from "@codes/python/examples/api/basics/client.py?raw";
+import csOpen from "@codes/csharp/examples/api/basics/client-config.cs?raw";
+import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 `Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
 
-<CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} />
+<CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} csharp={excerpt(csOpen, "api")} />
 
 | 引数       | 型             | 説明                 |
 | ---------- | -------------- | -------------------- |
@@ -26,7 +28,7 @@ import pyMethods from "@codes/python/examples/api/basics/client.py?raw";
 
 ## API
 
-<CodeTabs rust={excerpt(methods, "api")} python={excerpt(pyMethods, "api")} />
+<CodeTabs rust={excerpt(methods, "api")} python={excerpt(pyMethods, "api")} csharp={excerpt(csMethods, "api")} />
 
 | メソッド                  | async | 返り値                                | 説明                                                       |
 | ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
@@ -42,7 +44,7 @@ import pyMethods from "@codes/python/examples/api/basics/client.py?raw";
 
 ## ClientConfig
 
-<CodeTabs rust={excerpt(open, "config")} python={excerpt(pyOpen, "config")} />
+<CodeTabs rust={excerpt(open, "config")} python={excerpt(pyOpen, "config")} csharp={excerpt(csOpen, "config")} />
 
 | フィールド             | 型                    | デフォルト          | 説明                                                       |
 | ---------------------- | --------------------- | --------------- | ---------------------------------------------------------- |

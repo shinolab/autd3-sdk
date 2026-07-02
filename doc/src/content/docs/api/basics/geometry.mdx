@@ -11,6 +11,7 @@ import Math from "@components/Math.astro";
 import MathBlock from "@components/MathBlock.astro";
 import sample from "@codes/rust/examples/api/basics/geometry.rs?raw";
 import pySample from "@codes/python/examples/api/basics/geometry.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/geometry.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `Geometry` は AUTD3 デバイスの物理配置 (位置・姿勢) を表現する.
@@ -28,6 +29,12 @@ import { excerpt } from "@lib/excerpt";
 `Autd3([x, y, z], [w, i, j, k])` は原点位置と姿勢から 1 台のデバイスを構築する.
 長さ 3 の位置と長さ 4 のクォータニオン (`w, i, j, k`) を渡す. 原点と姿勢はいずれも必須.
 </Fragment>
+<Fragment slot="csharp">
+<Code code={excerpt(csSample, "api")} lang="csharp" />
+
+`new Device(origin, rotation)` は原点位置 (`Vector3`) と姿勢 (`Quaternion`) から 1 台のデバイスを構築する.
+姿勢を省略した `new Device(origin)` もある (`Quaternion.Identity` を使う).
+</Fragment>
 </CodeTabs>
 
 `Geometry::new` に複数台を渡すと, 先頭から順にデバイス番号 (`idx`) が割り振られる.
@@ -36,7 +43,7 @@ import { excerpt } from "@lib/excerpt";
 
 配置全体の情報取得と, 各 `Device` へのアクセスを提供する.
 
-<CodeTabs rust={excerpt(sample, "access")} python={excerpt(pySample, "access")} />
+<CodeTabs rust={excerpt(sample, "access")} python={excerpt(pySample, "access")} csharp={excerpt(csSample, "access")} />
 
 | メソッド             | 返り値                             | 説明                                  |
 | -------------------- | ---------------------------------- | ------------------------------------- |
@@ -56,7 +63,7 @@ Python では座標を返す `center()` は `numpy.ndarray` (shape `(3,)`) を�
 `geometry[i]` または `&geometry` の走査で得る.
 各振動子の位置・法線方向や, デバイスの姿勢を取得できる.
 
-<CodeTabs rust={excerpt(sample, "device")} python={excerpt(pySample, "device")} />
+<CodeTabs rust={excerpt(sample, "device")} python={excerpt(pySample, "device")} csharp={excerpt(csSample, "device")} />
 
 | メソッド             | 返り値                  | 説明                                          |
 | -------------------- | ----------------------- | --------------------------------------------- |

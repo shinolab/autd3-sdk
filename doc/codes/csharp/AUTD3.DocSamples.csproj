@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../bindings/csharp/src/AUTD3/AUTD3.csproj" />
+    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Core/AUTD3.Core.csproj" />
+    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Pattern/AUTD3.Pattern.csproj" />
+    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Pattern.Holo/AUTD3.Pattern.Holo.csproj" />
+    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Modulation/AUTD3.Modulation.csproj" />
+    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Link.Nop/AUTD3.Link.Nop.csproj" />
+    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Link.Ethercrab/AUTD3.Link.Ethercrab.csproj" />
+    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Link.Soem/AUTD3.Link.Soem.csproj" />
+    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Link.Remote/AUTD3.Link.Remote.csproj" />
+    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Link.Twincat/AUTD3.Link.Twincat.csproj" />
+  </ItemGroup>
+
+</Project>

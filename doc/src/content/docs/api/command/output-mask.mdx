@@ -10,13 +10,15 @@ import sample from "@codes/rust/examples/api/command/output-mask.rs?raw";
 import pySample from "@codes/python/examples/api/command/output-mask.py?raw";
 import fullSample from "@codes/rust/examples/api/command/output-mask-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/output-mask-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/output-mask.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/output-mask-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `SetOutputMask` は, 振動子ごとに出力の有効/無効を切り替えるコマンド.
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | フィールド | 型             | 説明                                                                                          |
 | ---------- | -------------- | --------------------------------------------------------------------------------------------- |
@@ -24,5 +26,5 @@ import { excerpt } from "@lib/excerpt";
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

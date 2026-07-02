@@ -10,13 +10,15 @@ import sample from "@codes/rust/examples/api/command/lowlevel/foci-buffer.rs?raw
 import pySample from "@codes/python/examples/api/command/lowlevel/foci-buffer.py?raw";
 import fullSample from "@codes/rust/examples/api/command/lowlevel/foci-buffer-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/lowlevel/foci-buffer-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/foci-buffer.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/foci-buffer-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `ConfigFociStm` は, Foci STM バンクの再生パラメータを設定する低レベルコマンド.
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "config")} python={excerpt(pySample, "config")} />
+<CodeTabs rust={excerpt(sample, "config")} python={excerpt(pySample, "config")} csharp={excerpt(csSample, "config")} />
 
 | フィールド      | 型               | 説明                                               |
 | --------------- | ---------------- | -------------------------------------------------- |
@@ -33,4 +35,4 @@ import { excerpt } from "@lib/excerpt";
 
 `ConfigFociStm` は `WriteFociBuffer` で焦点列を書き込んだ後, `ChangePatternBank` で再生を切り替える流れの中で使う.
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

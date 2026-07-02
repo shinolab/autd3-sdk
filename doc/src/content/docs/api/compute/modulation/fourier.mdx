@@ -13,13 +13,15 @@ import sample from "@codes/rust/examples/api/compute/modulation/fourier.rs?raw";
 import pySample from "@codes/python/examples/api/compute/modulation/fourier.py?raw";
 import fullSample from "@codes/rust/examples/api/compute/modulation/fourier-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/compute/modulation/fourier-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/modulation/fourier.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/modulation/fourier-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `fourier` は複数の正弦波成分を合成した振幅変調を生成する. 各成分を [sine](/autd3-sdk/api/compute/modulation/sine/) と同じ方法で計算し, 足し合わせて 1 つの波形にする. 
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数         | 型                    | 説明                      |
 | ------------ | --------------------- | ------------------------- |
@@ -42,11 +44,11 @@ import { excerpt } from "@lib/excerpt";
 | `freq`     | `Freq<u32>` 等 | 成分の周波数            |
 | `option`   | `SineOption`   | 成分ごとの正弦波 Option |
 
-<CodeTabs rust={excerpt(sample, "components")} python={excerpt(pySample, "components")} />
+<CodeTabs rust={excerpt(sample, "components")} python={excerpt(pySample, "components")} csharp={excerpt(csSample, "components")} />
 
 ## FourierOption
 
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
 
 | フィールド     | 型            | デフォルト | 説明                                                      |
 | -------------- | ------------- | ---------- | --------------------------------------------------------- |
@@ -56,5 +58,5 @@ import { excerpt } from "@lib/excerpt";
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

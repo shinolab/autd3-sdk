@@ -9,6 +9,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/tutorial/silencer.rs?raw";
 import pySample from "@codes/python/examples/tutorial/silencer.py?raw";
+import csSample from "@codes/csharp/examples/tutorial/silencer.cs?raw";
 
 焦点を高速に動かしたり, AM 変調をかけたりすると可聴音ノイズが発生する.
 AUTD3 にはこれを抑制する [Silencer](/autd3-sdk/guide/silencer/) という機能がある. 
@@ -24,7 +25,7 @@ Silencerの効果を実感するには以下のコードを実行してみると
 以下のコードを実行すると大きな騒音が発生するので, 実行する際は注意すること. 
 :::
 
-<CodeTabs rust={excerpt(sample, "disable")} python={excerpt(pySample, "disable")} />
+<CodeTabs rust={excerpt(sample, "disable")} python={excerpt(pySample, "disable")} csharp={excerpt(csSample, "disable")} />
 
 `Silencer` によってノイズは抑制されるものの, ユーザーが指定していない位相や振幅が出力される, あるいは, ユーザーが指定した位相や振幅が出力されない可能性がある. 
 前者は本質的に避けられないが, 後者は避けられる場合もある. 
@@ -36,7 +37,7 @@ Silencerの効果を実感するには以下のコードを実行してみると
 
 したがって, 例えば以下のコードはサンプリング周期が 1/50 Hz/40 = 0.5 ms となるので実行時エラーとなる. 
 
-<CodeTabs rust={excerpt(sample, "err")} python={excerpt(pySample, "err")} />
+<CodeTabs rust={excerpt(sample, "err")} python={excerpt(pySample, "err")} csharp={excerpt(csSample, "err")} />
 
 このエラーを回避する方法は以下の通りである. 
 
@@ -47,7 +48,7 @@ Silencerの効果を実感するには以下のコードを実行してみると
       例えば 0.5 ms に設定すればエラーにならなくなる. 
     - ただし, 補間間隔を短くするとその分ノイズが大きくなるので注意. なお, 補間間隔を 25 µs に設定するのは Silencer の無効化と等価である. 
 
-<CodeTabs rust={excerpt(sample, "workaround")} python={excerpt(pySample, "workaround")} />
+<CodeTabs rust={excerpt(sample, "workaround")} python={excerpt(pySample, "workaround")} csharp={excerpt(csSample, "workaround")} />
 
 3. [`FixedUpdateRate`](/autd3-sdk/api/command/silencer/) を使用する. 
     - これを使用する場合, ユーザーが指定した位相や振幅が出力されない (補間が完了する前に次のデータに移行してしまう) 可能性があるので注意. 

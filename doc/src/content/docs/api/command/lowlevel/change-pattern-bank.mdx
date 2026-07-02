@@ -10,13 +10,15 @@ import sample from "@codes/rust/examples/api/command/lowlevel/bank.rs?raw";
 import pySample from "@codes/python/examples/api/command/lowlevel/bank.py?raw";
 import fullSample from "@codes/rust/examples/api/command/lowlevel/bank-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/lowlevel/bank-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `ChangePatternBank` は, 再生対象の Pattern バンクを切り替える低レベルコマンド.
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "change")} python={excerpt(pySample, "change")} />
+<CodeTabs rust={excerpt(sample, "change")} python={excerpt(pySample, "change")} csharp={excerpt(csSample, "change")} />
 
 | フィールド        | 型               | 説明                     |
 | ----------------- | ---------------- | ------------------------ |
@@ -40,4 +42,4 @@ import { excerpt } from "@lib/excerpt";
 
 `ChangePatternBank` は `WritePatternBuffer` + `ConfigPattern` でバンクを準備した後に送り, 再生対象を切り替える.
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

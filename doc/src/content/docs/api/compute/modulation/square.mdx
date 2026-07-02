@@ -13,6 +13,8 @@ import sample from "@codes/rust/examples/api/compute/modulation/square.rs?raw";
 import pySample from "@codes/python/examples/api/compute/modulation/square.py?raw";
 import fullSample from "@codes/rust/examples/api/compute/modulation/square-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/compute/modulation/square-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/modulation/square.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/modulation/square-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `square` は矩形波の振幅変調を生成する. 指定周波数 `freq` で `high` と `low` の 2 値を切り替える. 
@@ -21,7 +23,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数      | 型              | 説明                      |
 | --------- | --------------- | ------------------------- |
@@ -33,7 +35,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## SquareOption
 
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
 
 | フィールド        | 型               | デフォルト                | 説明                        |
 | ----------------- | ---------------- | ------------------------- | --------------------------- |
@@ -49,4 +51,4 @@ import { excerpt } from "@lib/excerpt";
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

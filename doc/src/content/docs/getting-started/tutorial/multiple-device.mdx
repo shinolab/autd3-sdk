@@ -10,6 +10,7 @@ import Model from "@components/Model.astro";
 import { excerpt } from "@lib/excerpt";
 import multiple from "@codes/rust/examples/tutorial/multiple-device.rs?raw";
 import pyMultiple from "@codes/python/examples/tutorial/multiple-device.py?raw";
+import csMultiple from "@codes/csharp/examples/tutorial/multiple-device.cs?raw";
 
 AUTD3 は複数のデバイスをデイジーチェーン接続して大きな一つのアレイを構成できる. 
 SDK は複数台を接続しても透過的に扱えるように設計されている. 
@@ -22,7 +23,7 @@ SDK は複数台を接続しても透過的に扱えるように設計されて�
 例えば 1 台目を左, 2 台目を右に並べて接続し, グローバル座標を 1 台目のローカル座標と
 同じようにとるとすると, コードは以下の通りになる. 
 
-<CodeTabs rust={excerpt(multiple, "translation")} python={excerpt(pyMultiple, "translation")} />
+<CodeTabs rust={excerpt(multiple, "translation")} python={excerpt(pyMultiple, "translation")} csharp={excerpt(csMultiple, "translation")} />
 
 ここで第1引数はグローバル座標におけるデバイスの位置を, 第2引数はデバイスの回転を表す. 
 なお `Autd3::DEVICE_WIDTH` はデバイスの (基板外形を含めた) 横幅である. 
@@ -47,7 +48,7 @@ SDK で使用するグローバル座標の原点や向きは, ユーザーが�
 グローバル座標を 2 台目のローカル座標と同じようにとると, 1 台目を -x 方向へずらした
 次のコードになる. 
 
-<CodeTabs rust={excerpt(multiple, "global")} python={excerpt(pyMultiple, "global")} />
+<CodeTabs rust={excerpt(multiple, "global")} python={excerpt(pyMultiple, "global")} csharp={excerpt(csMultiple, "global")} />
 
 <Model
   src="models/autd3.glb"
@@ -68,7 +69,7 @@ SDK で使用するグローバル座標の原点や向きは, ユーザーが�
 デバイスの回転は `Autd3::new` の第 2 引数 (`UnitQuaternion`) で指定する.
 例えば 2 台目を +z 方向に置き, y 軸まわりに 90° 回転させると次のようになる. 
 
-<CodeTabs rust={excerpt(multiple, "rotation")} python={excerpt(pyMultiple, "rotation")} />
+<CodeTabs rust={excerpt(multiple, "rotation")} python={excerpt(pyMultiple, "rotation")} csharp={excerpt(csMultiple, "rotation")} />
 
 <Model
   src="models/autd3.glb"

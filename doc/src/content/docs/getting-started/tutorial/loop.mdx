@@ -9,6 +9,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/tutorial/loop.rs?raw";
 import pySample from "@codes/python/examples/tutorial/loop.py?raw";
+import csSample from "@codes/csharp/examples/tutorial/loop.cs?raw";
 
 `FociStm` / `PatternStm` は, デフォルトでは同じパターン列を無限に繰り返し再生する.
 再生回数を有限にする場合は以下の通り.
@@ -22,7 +23,7 @@ import pySample from "@codes/python/examples/tutorial/loop.py?raw";
 重要な点として, **有限ループは現在と異なるバンクへ切り替えたときに初めて機能する**.
 そのため, 下記の例では有限ループを現在の `B0` とは別の `B1` に書き込んでいる.
 
-<CodeTabs rust={excerpt(sample, "finite")} python={excerpt(pySample, "finite")} />
+<CodeTabs rust={excerpt(sample, "finite")} python={excerpt(pySample, "finite")} csharp={excerpt(csSample, "finite")} />
 
 ## 遷移タイミング
 

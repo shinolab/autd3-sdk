@@ -9,11 +9,12 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/tutorial/output-intensity.rs?raw";
 import pySample from "@codes/python/examples/tutorial/output-intensity.py?raw";
+import csSample from "@codes/csharp/examples/tutorial/output-intensity.cs?raw";
 
 `focus` などの Pattern には出力強度を 8 bit で制御する `intensity` パラメータがある. 
 例えば, 以下のコードでは, この強度を最大値の約半分に設定している. 
 
-<CodeTabs rust={excerpt(sample, "pattern_intensity")} python={excerpt(pySample, "pattern_intensity")} />
+<CodeTabs rust={excerpt(sample, "pattern_intensity")} python={excerpt(pySample, "pattern_intensity")} csharp={excerpt(csSample, "pattern_intensity")} />
 
 AUTD3 は出力音圧を PWM で制御しており, デフォルトでは `intensity` パラメータと出力音圧がおおよそ線形に比例するように変換される. 
 振動子の個体差などにより厳密な線形性は保証されないが, `intensity` に対して出力音圧は単調増加すると考えてよい. 

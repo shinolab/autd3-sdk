@@ -11,6 +11,8 @@ import sample from "@codes/rust/examples/api/compute/holo/greedy.rs?raw";
 import pySample from "@codes/python/examples/api/compute/holo/greedy.py?raw";
 import fullSample from "@codes/rust/examples/api/compute/holo/greedy-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/compute/holo/greedy-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/holo/greedy.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/holo/greedy-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 greedy は各振動子の位相を離散的な候補から 1 つずつ貪欲に選択していく組合せ最適化. 
@@ -18,7 +20,7 @@ greedy は各振動子の位相を離散的な候補から 1 つずつ貪欲に�
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数         | 型                     | 説明                      |
 | ------------ | ---------------------- | ------------------------- |
@@ -32,7 +34,7 @@ greedy は各振動子の位相を離散的な候補から 1 つずつ貪欲に�
 
 ## GreedyOption
 
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
 
 | フィールド                  | 型                                | デフォルト              |
 |-----------------------------|-----------------------------------|---------------------|
@@ -50,4 +52,4 @@ greedy は各振動子の位相を離散的な候補から 1 つずつ貪欲に�
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

@@ -9,6 +9,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/tutorial/send-modes.rs?raw";
 import pySample from "@codes/python/examples/tutorial/send-modes.py?raw";
+import csSample from "@codes/csharp/examples/tutorial/send-modes.cs?raw";
 
 `DatagramBuilder::build` で得た `Frames` は複数の`Frame`に分かれうる.
 `Frame`の送信方法は 2 つあり, 確実性とスループットがトレードオフになる. 
@@ -16,7 +17,7 @@ import pySample from "@codes/python/examples/tutorial/send-modes.py?raw";
 以下では, 焦点を円周上で動かす例で 2 つの送信方法を比較する.
 あらかじめ移動先となる焦点位置を `targets` として用意しておく. 
 
-<CodeTabs rust={excerpt(sample, "targets")} python={excerpt(pySample, "targets")} />
+<CodeTabs rust={excerpt(sample, "targets")} python={excerpt(pySample, "targets")} csharp={excerpt(csSample, "targets")} />
 
 ## stop-and-wait
 
@@ -24,7 +25,7 @@ import pySample from "@codes/python/examples/tutorial/send-modes.py?raw";
 `send_checked` を使う.
 各更新が確実に反映されたことを確認してから次へ進むため確実だが, 毎フレームで往復のレイテンシがかかるためスループットは低い. 
 
-<CodeTabs rust={excerpt(sample, "stop_and_wait")} python={excerpt(pySample, "stop_and_wait")} />
+<CodeTabs rust={excerpt(sample, "stop_and_wait")} python={excerpt(pySample, "stop_and_wait")} csharp={excerpt(csSample, "stop_and_wait")} />
 
 ## streaming
 
@@ -34,7 +35,7 @@ import pySample from "@codes/python/examples/tutorial/send-modes.py?raw";
 `ResponseFuture` を FIFO で保持し, キューが埋まったら最古の応答を回収する.
 1 フレームごとに応答を待たないため, スループットが高い. 
 
-<CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} />
+<CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
 :::note
 上記のコードはシンプルにするために, どちらも複合コマンドである [`Pattern`](/autd3-sdk/api/command/pattern/) を使っているが, これは内部で3つの低レベルコマンドに分解される.

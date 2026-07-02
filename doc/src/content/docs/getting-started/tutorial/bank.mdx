@@ -9,6 +9,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/tutorial/bank.rs?raw";
 import pySample from "@codes/python/examples/tutorial/bank.py?raw";
+import csSample from "@codes/csharp/examples/tutorial/bank.cs?raw";
 
 [焦点の移動](/autd3-sdk/getting-started/tutorial/moving-focus/)で説明したように, AUTD3 において `Pattern` 等は送信するたびに上書きされ, この書き込みはバッファリングされない.
 そのため, 再生中のデータを上書きすると, 書き込みの途中で意図しない中間データが出力されてしまうことがある.
@@ -24,7 +25,7 @@ import pySample from "@codes/python/examples/tutorial/bank.py?raw";
 下記の例では, まず `B0` へ焦点 A を書き込んで再生し, 次の焦点 B は再生中でない `B1` へ書き込む.
 `B1` への書き込み中も `B0` の出力は乱れず, 書き込み完了後に `B1` へ切り替わる.
 
-<CodeTabs rust={excerpt(sample, "switch")} python={excerpt(pySample, "switch")} />
+<CodeTabs rust={excerpt(sample, "switch")} python={excerpt(pySample, "switch")} csharp={excerpt(csSample, "switch")} />
 
 このように再生中でないバンクへ交互に書き込むことで, 出力を乱さずにパターンを差し替えられる.
 

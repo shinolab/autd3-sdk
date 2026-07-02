@@ -9,6 +9,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/tutorial/performance.rs?raw";
 import pySample from "@codes/python/examples/tutorial/performance.py?raw";
+import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
 
 高頻度に焦点を更新するなど, スループットが要求される場面で性能を引き出すための指針.
 
@@ -19,12 +20,12 @@ import pySample from "@codes/python/examples/tutorial/performance.py?raw";
 
 最初に一度だけバンクを設定しておく. (最初は`Pattern`を使っても良い.)
 
-<CodeTabs rust={excerpt(sample, "configure")} python={excerpt(pySample, "configure")} />
+<CodeTabs rust={excerpt(sample, "configure")} python={excerpt(pySample, "configure")} csharp={excerpt(csSample, "configure")} />
 
 以降のホットループでは `WritePatternBuffer` のみを送る.
 送信するコマンド量が減り, そのぶんスループットが上がる. 
 
-<CodeTabs rust={excerpt(sample, "hot_loop")} python={excerpt(pySample, "hot_loop")} />
+<CodeTabs rust={excerpt(sample, "hot_loop")} python={excerpt(pySample, "hot_loop")} csharp={excerpt(csSample, "hot_loop")} />
 
 ## streaming 送信
 

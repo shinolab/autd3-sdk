@@ -9,6 +9,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/api/link/ethercrab.rs?raw";
 import pySample from "@codes/python/examples/api/link/ethercrab.py?raw";
+import csSample from "@codes/csharp/examples/api/link/ethercrab.cs?raw";
 
 `EtherCrabLink` は Rust 製の EtherCAT マスタ [EtherCrab](https://github.com/ethercrab-rs/ethercrab) を用いた Link 実装. 
 `autd3-rs-link-ethercrab` クレートで提供される.
@@ -18,7 +19,7 @@ Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mo
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | フィールド       | 型         | 説明                                                                            |
 | ---------------- | ---------- | ------------------------------------------------------------------------------- |

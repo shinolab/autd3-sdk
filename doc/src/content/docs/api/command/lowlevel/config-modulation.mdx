@@ -10,13 +10,15 @@ import sample from "@codes/rust/examples/api/command/lowlevel/mod-bank.rs?raw";
 import pySample from "@codes/python/examples/api/command/lowlevel/mod-bank.py?raw";
 import fullSample from "@codes/rust/examples/api/command/lowlevel/mod-bank-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/command/lowlevel/mod-bank-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 `ConfigModulation` は, Modulation バンクの再生パラメータを設定する低レベルコマンド.
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "config")} python={excerpt(pySample, "config")} />
+<CodeTabs rust={excerpt(sample, "config")} python={excerpt(pySample, "config")} csharp={excerpt(csSample, "config")} />
 
 | フィールド | 型               | 説明                                              |
 | ---------- | ---------------- | ------------------------------------------------- |
@@ -31,4 +33,4 @@ import { excerpt } from "@lib/excerpt";
 
 `ConfigModulation` は `WriteModulationBuffer` で波形を書き込んだ後, `ChangeModulationBank` で再生を切り替える流れの中で使う.
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

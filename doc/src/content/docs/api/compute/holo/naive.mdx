@@ -11,6 +11,8 @@ import sample from "@codes/rust/examples/api/compute/holo/naive.rs?raw";
 import pySample from "@codes/python/examples/api/compute/holo/naive.py?raw";
 import fullSample from "@codes/rust/examples/api/compute/holo/naive-example.rs?raw";
 import pyFullSample from "@codes/python/examples/api/compute/holo/naive-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/holo/naive.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/holo/naive-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 Naive 法は, 目標音圧ベクトルに逆伝搬をかけるアルゴリズム. 
@@ -18,7 +20,7 @@ Naive 法は, 目標音圧ベクトルに逆伝搬をかけるアルゴリズム
 
 ## API
 
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
 | 引数         | 型                     | 説明                      |
 | ------------ | ---------------------- | ------------------------- |
@@ -32,7 +34,7 @@ Naive 法は, 目標音圧ベクトルに逆伝搬をかけるアルゴリズム
 
 ## NaiveOption
 
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
 
 | フィールド    | 型                   | デフォルト                    |
 |---------------|----------------------|---------------------------|
@@ -45,5 +47,5 @@ Naive 法は, 目標音圧ベクトルに逆伝搬をかけるアルゴリズム
 
 ## Example
 
-<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 
