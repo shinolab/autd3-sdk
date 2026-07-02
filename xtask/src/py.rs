@@ -6,7 +6,7 @@ use clap::Subcommand;
 
 use crate::util::{cargo_fmt_packages, on_path, run};
 
-const MIT_WHEELS: &[&str] = &[
+pub(crate) const MIT_WHEELS: &[&str] = &[
     "autd3-core",
     "autd3-pattern",
     "autd3-pattern-holo",
@@ -143,7 +143,7 @@ fn module_name(wheel: &str) -> String {
     wheel.replace('-', "_")
 }
 
-fn develop(dir: &Path, venv: &Path, wheels: &[&str], release: bool) -> Result<()> {
+pub(crate) fn develop(dir: &Path, venv: &Path, wheels: &[&str], release: bool) -> Result<()> {
     for wheel in wheels {
         let manifest = manifest(wheel);
         let mut args = vec!["develop", "-m", &manifest];
@@ -155,7 +155,7 @@ fn develop(dir: &Path, venv: &Path, wheels: &[&str], release: bool) -> Result<()
     Ok(())
 }
 
-fn pip_install(dir: &Path, venv: &Path, packages: &[&str]) -> Result<()> {
+pub(crate) fn pip_install(dir: &Path, venv: &Path, packages: &[&str]) -> Result<()> {
     if !on_path("uv") {
         bail!("`uv` is required for the `py` scope (https://docs.astral.sh/uv/)");
     }
@@ -167,7 +167,7 @@ fn pip_install(dir: &Path, venv: &Path, packages: &[&str]) -> Result<()> {
     spawn(cmd, "uv")
 }
 
-fn ensure_venv(dir: &Path) -> Result<PathBuf> {
+pub(crate) fn ensure_venv(dir: &Path) -> Result<PathBuf> {
     if !on_path("uv") {
         bail!("`uv` is required for the `py` scope (https://docs.astral.sh/uv/)");
     }
@@ -178,7 +178,7 @@ fn ensure_venv(dir: &Path) -> Result<PathBuf> {
     Ok(venv)
 }
 
-fn venv_python(venv: &Path) -> PathBuf {
+pub(crate) fn venv_python(venv: &Path) -> PathBuf {
     if cfg!(windows) {
         venv.join("Scripts").join("python.exe")
     } else {
