@@ -28,6 +28,7 @@ jobs:
       ffi: ${{ steps.filter.outputs.ffi }}
       cs: ${{ steps.filter.outputs.cs }}
       license: ${{ steps.filter.outputs.license }}
+      doc: ${{ steps.filter.outputs.doc }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
@@ -89,7 +90,9 @@ jobs:
               - *shared
               - *xtask-core
               - 'xtask/src/py.rs'
+              - 'xtask/src/doc.rs'
               - 'bindings/python/**'
+              - 'doc/codes/python/**'
               - '.github/workflows/ci-py.yml'
             ffi:
               - *shared
@@ -124,6 +127,13 @@ jobs:
               - 'bindings/python/**/Cargo.toml'
               - 'bindings/python/Cargo.lock'
               - '.github/workflows/ci-license.yml'
+            doc:
+              - *shared
+              - *xtask-core
+              - 'xtask/src/doc.rs'
+              - 'doc/**'
+              - 'crates/**'
+              - '.github/workflows/ci-doc.yml'
 
   rust:
     name: rust
@@ -178,6 +188,11 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.license == 'true' }}
     uses: ./.github/workflows/ci-license.yml
+  doc:
+    name: doc
+    needs: changes
+    if: ${{ needs.changes.outputs.doc == 'true' }}
+    uses: ./.github/workflows/ci-doc.yml
 
   guard:
     name: guard-main-source
@@ -225,7 +240,7 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [rust, simulator, console, emulator, cpu, py, ffi, cs, license, guard]
+    needs: [rust, simulator, console, emulator, cpu, py, ffi, cs, license, doc, guard]
     runs-on: ubuntu-latest
     steps:
       - name: Verify no job failed
@@ -239,6 +254,7 @@ jobs:
             || [ "${{ needs.ffi.result }}" = "failure" ] \
             || [ "${{ needs.cs.result }}" = "failure" ] \
             || [ "${{ needs.license.result }}" = "failure" ] \
+            || [ "${{ needs.doc.result }}" = "failure" ] \
             || [ "${{ needs.guard.result }}" != "success" ]; then
             echo "A required job failed."
             exit 1
