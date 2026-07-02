@@ -7,6 +7,8 @@ using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Link;
+using static AUTD3.HoloUnits;
+using static AUTD3.Units;
 
 internal static class Program
 {
@@ -18,19 +20,19 @@ internal static class Program
 
         Console.WriteLine($"devices: {client.NumDevices}");
 
-        var center = geometry.Center + new Vector3(0f, 0f, 150f);
-        var wavelength = Pattern.Wavelength(340f * 1000f);
+        var center = geometry.Center;
+        var wavelength = Pattern.Wavelength(340 * m / s);
         var foci = new[]
         {
-            new HoloControlPoint(center + new Vector3(-20f, 0f, 0f), Amplitude.FromSpl(150f)),
-            new HoloControlPoint(center + new Vector3(20f, 0f, 0f), Amplitude.FromSpl(150f)),
+            new HoloControlPoint(center + new Vector3(-20f, 0f, 150f), 150 * dB),
+            new HoloControlPoint(center + new Vector3(20f, 0f, 150f), 150 * dB),
         };
 
         using var patterns = geometry.PatternBuffer();
-        Holo.Gspat(geometry, foci, wavelength, new GspatOption(constraint: EmissionConstraint.Uniform(Intensity.Max)), patterns);
+        Holo.Gspat(geometry, foci, wavelength, new GspatOption(repeat: 100), patterns);
 
         using var modulation = Modulation.ModulationBuffer();
-        Modulation.Sine(200f, new SineOption(), modulation);
+        Modulation.Sine(200 * Hz, new SineOption(), modulation);
 
         using var builder = client.DatagramBuilder();
         builder

@@ -3,7 +3,8 @@ use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 
 use autd3_ffi_abi::{
-    BoxFuture, ClientBackend, ClientOpener, LinkStatusData, client_opener, into_handle,
+    BoxFuture, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData, client_opener,
+    into_handle,
 };
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::{ConstStateChecker, Error, StateCheck};
@@ -66,6 +67,38 @@ impl ClientBackend for RemoteBackend {
         Box::pin(async move {
             link_runtime()
                 .spawn(async move { client.read_error_detail().await })
+                .await
+                .map_err(join_err)?
+        })
+    }
+
+    fn send(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<ResponseTokenData> {
+        let client = Arc::clone(&self.client);
+        Box::pin(async move {
+            link_runtime()
+                .spawn(async move {
+                    let mut futures = Vec::new();
+                    match frame {
+                        Some(index) => {
+                            let frame = datagrams.frame(index).ok_or_else(|| {
+                                Error::Link(format!("frame {index} out of range"))
+                            })?;
+                            futures.push(client.send(frame).await?);
+                        }
+                        None => {
+                            for frame in datagrams.iter() {
+                                futures.push(client.send(frame).await?);
+                            }
+                        }
+                    }
+                    let token: BoxFuture<()> = Box::pin(async move {
+                        for future in futures {
+                            future.await?;
+                        }
+                        Ok::<(), Error>(())
+                    });
+                    Ok::<ResponseTokenData, Error>(ResponseTokenData(token))
+                })
                 .await
                 .map_err(join_err)?
         })

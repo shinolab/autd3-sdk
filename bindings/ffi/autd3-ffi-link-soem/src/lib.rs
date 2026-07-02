@@ -1,8 +1,10 @@
 use std::ffi::{CStr, c_char};
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use autd3_ffi_abi::{
-    BoxFuture, ClientBackend, ClientOpener, LinkStatusData, client_opener, into_handle,
+    BoxFuture, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData, client_opener,
+    into_handle,
 };
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::{Error, Interface};
@@ -65,6 +67,38 @@ impl ClientBackend for SoemBackend {
         Box::pin(async move {
             link_runtime()
                 .spawn(async move { client.read_error_detail().await })
+                .await
+                .map_err(join_err)?
+        })
+    }
+
+    fn send(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<ResponseTokenData> {
+        let client = Arc::clone(&self.client);
+        Box::pin(async move {
+            link_runtime()
+                .spawn(async move {
+                    let mut futures = Vec::new();
+                    match frame {
+                        Some(index) => {
+                            let frame = datagrams.frame(index).ok_or_else(|| {
+                                Error::Link(format!("frame {index} out of range"))
+                            })?;
+                            futures.push(client.send(frame).await?);
+                        }
+                        None => {
+                            for frame in datagrams.iter() {
+                                futures.push(client.send(frame).await?);
+                            }
+                        }
+                    }
+                    let token: BoxFuture<()> = Box::pin(async move {
+                        for future in futures {
+                            future.await?;
+                        }
+                        Ok::<(), Error>(())
+                    });
+                    Ok::<ResponseTokenData, Error>(ResponseTokenData(token))
+                })
                 .await
                 .map_err(join_err)?
         })
@@ -139,7 +173,18 @@ impl ClientBackend for SoemBackend {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_soem(interface: *const c_char) -> *mut ClientOpener {
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+pub unsafe extern "C" fn autd3_link_soem(
+    interface: *const c_char,
+    has_sync0_period: bool,
+    sync0_period_ns: u64,
+    has_sync0_shift: bool,
+    sync0_shift_ns: u64,
+    has_sync_tolerance: bool,
+    sync_tolerance_ns: u64,
+    has_sync_timeout: bool,
+    sync_timeout_ns: u64,
+) -> *mut ClientOpener {
     let interface = if interface.is_null() {
         None
     } else {
@@ -149,10 +194,22 @@ pub unsafe extern "C" fn autd3_link_soem(interface: *const c_char) -> *mut Clien
                 .into_owned(),
         )
     };
-    let option = CoreOption {
+    let mut option = CoreOption {
         interface: Interface::from(interface),
         ..CoreOption::default()
     };
+    if has_sync0_period {
+        option.sync0_period = Duration::from_nanos(sync0_period_ns);
+    }
+    if has_sync0_shift {
+        option.sync0_shift = Duration::from_nanos(sync0_shift_ns);
+    }
+    if has_sync_tolerance {
+        option.sync_tolerance = Duration::from_nanos(sync_tolerance_ns);
+    }
+    if has_sync_timeout {
+        option.sync_timeout = Duration::from_nanos(sync_timeout_ns);
+    }
     let opener = client_opener(move |geometry, config| async move {
         let (client, checker) = link_runtime()
             .spawn(async move { Client::open_with_checker(&geometry, option, config).await })

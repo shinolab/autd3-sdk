@@ -78,12 +78,19 @@ mod client {
         pub recoveries: u64,
     }
 
+    pub struct ResponseTokenData(pub BoxFuture<()>);
+
     pub trait ClientBackend: Send + Sync {
         fn num_devices(&self) -> usize;
         fn read_firmware_version(&self) -> BoxFuture<Vec<String>>;
         fn read_fpga_state(&self) -> BoxFuture<Vec<u8>>;
         fn read_error_detail(&self) -> BoxFuture<Vec<u8>>;
 
+        fn send(
+            &self,
+            datagrams: Arc<Frames>,
+            frame: Option<usize>,
+        ) -> BoxFuture<ResponseTokenData>;
         fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()>;
         fn check_status(&self) -> BoxFuture<LinkStatusData>;
         fn stop(&self) -> BoxFuture<()>;
@@ -103,4 +110,6 @@ mod client {
 }
 
 #[cfg(feature = "client")]
-pub use client::{BoxFuture, ClientBackend, ClientOpener, LinkStatusData, client_opener};
+pub use client::{
+    BoxFuture, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData, client_opener,
+};

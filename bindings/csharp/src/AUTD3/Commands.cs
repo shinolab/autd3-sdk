@@ -56,6 +56,10 @@ namespace AUTD3
         [DllImport(Lib)]
         [return: MarshalAs(UnmanagedType.I1)]
         internal static extern bool autd3_pulse_width_from_duty(float duty, [Out] ushort[] outValue);
+
+        [DllImport(Lib)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        internal static extern bool autd3_pulse_width_from_raw(ushort pulseWidth, [Out] ushort[] outValue);
     }
 
     public readonly struct GpioOut
@@ -114,34 +118,75 @@ namespace AUTD3
         IntPtr ICommand.CreateOp() => NativeCommand.autd3_op_force_fan(_value);
     }
 
-    public sealed class SetSilencer : ICommand
+    public interface ISilencerConfig
     {
-        private readonly Func<IntPtr> _create;
+        internal IntPtr CreateOp();
+    }
 
-        private SetSilencer(Func<IntPtr> create)
+    public sealed class FixedCompletionTime : ISilencerConfig
+    {
+        public TimeSpan Intensity { get; }
+        public TimeSpan Phase { get; }
+        public bool StrictMode { get; }
+
+        public FixedCompletionTime(TimeSpan? intensity = null, TimeSpan? phase = null, bool strictMode = true)
         {
-            _create = create;
+            // defaults: intensity = 25us * 10 = 250us, phase = 25us * 40 = 1000us
+            Intensity = intensity ?? TimeSpan.FromTicks(2500);
+            Phase = phase ?? TimeSpan.FromTicks(10000);
+            StrictMode = strictMode;
         }
 
-        public static SetSilencer FromCompletionTime(TimeSpan intensity, TimeSpan phase, bool strict = true) =>
-            new SetSilencer(() => NativeCommand.autd3_op_set_silencer_completion_time(
-                (ulong)(intensity.Ticks * 100), (ulong)(phase.Ticks * 100), strict));
+        IntPtr ISilencerConfig.CreateOp() =>
+            NativeCommand.autd3_op_set_silencer_completion_time(
+                (ulong)(Intensity.Ticks * 100), (ulong)(Phase.Ticks * 100), StrictMode);
+    }
 
-        public static SetSilencer FromUpdateRate(ushort intensity, ushort phase) =>
-            new SetSilencer(() =>
+    public sealed class FixedUpdateRate : ISilencerConfig
+    {
+        public ushort Intensity { get; }
+        public ushort Phase { get; }
+
+        public FixedUpdateRate(ushort intensity = 256, ushort phase = 256)
+        {
+            Intensity = intensity;
+            Phase = phase;
+        }
+
+        IntPtr ISilencerConfig.CreateOp()
+        {
+            var op = NativeCommand.autd3_op_set_silencer_update_rate(Intensity, Phase);
+            if (op == IntPtr.Zero)
             {
-                var op = NativeCommand.autd3_op_set_silencer_update_rate(intensity, phase);
-                if (op == IntPtr.Zero)
-                {
-                    throw new Autd3Exception("silencer update rate must be >= 1");
-                }
-                return op;
-            });
+                throw new Autd3Exception("silencer update rate must be >= 1");
+            }
+            return op;
+        }
+    }
 
-        public static SetSilencer Disable() =>
-            new SetSilencer(NativeCommand.autd3_op_set_silencer_disable);
+    public sealed class SetSilencer : ICommand
+    {
+        private readonly ISilencerConfig? _config;
+        private readonly bool _disable;
 
-        IntPtr ICommand.CreateOp() => _create();
+        public SetSilencer() : this(new FixedCompletionTime())
+        {
+        }
+
+        public SetSilencer(ISilencerConfig config)
+        {
+            _config = config;
+        }
+
+        private SetSilencer(bool disable)
+        {
+            _disable = disable;
+        }
+
+        public static SetSilencer Disable() => new SetSilencer(true);
+
+        IntPtr ICommand.CreateOp() =>
+            _disable ? NativeCommand.autd3_op_set_silencer_disable() : _config!.CreateOp();
     }
 
     public sealed class SetGpioOut : ICommand
@@ -238,6 +283,16 @@ namespace AUTD3
             if (!NativeCommand.autd3_pulse_width_from_duty(duty, outValue))
             {
                 throw new Autd3Exception("duty must be in [0, 1)");
+            }
+            return outValue[0];
+        }
+
+        public static ushort FromRaw(ushort pulseWidth)
+        {
+            var outValue = new ushort[1];
+            if (!NativeCommand.autd3_pulse_width_from_raw(pulseWidth, outValue))
+            {
+                throw new Autd3Exception("invalid pulse width");
             }
             return outValue[0];
         }

@@ -13,7 +13,18 @@ namespace AUTD3
         private const string Lib = "autd3capi";
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_client_config_new([MarshalAs(UnmanagedType.I1)] bool lowLatency);
+        internal static extern IntPtr autd3_client_config_new(
+            [MarshalAs(UnmanagedType.I1)] bool lowLatency,
+            uint timeoutCycles,
+            UIntPtr maxInflight,
+            uint sendIntervalCycles,
+            uint maxResyncRounds,
+            uint resetResendCycles,
+            [MarshalAs(UnmanagedType.I1)] bool hasRtPriority,
+            byte rtPriority,
+            [MarshalAs(UnmanagedType.I1)] bool hasRtAffinity,
+            UIntPtr rtAffinity,
+            [MarshalAs(UnmanagedType.I1)] bool validateState);
 
         [DllImport(Lib)]
         internal static extern void autd3_client_config_free(IntPtr config);
@@ -23,6 +34,12 @@ namespace AUTD3
 
         [DllImport(Lib)]
         internal static extern void autd3_datagram_builder_push(IntPtr builder, IntPtr op);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_datagram_builder_push_each(IntPtr builder, IntPtr[] ops, UIntPtr numDevices);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_op_free(IntPtr op);
 
         [DllImport(Lib)]
         internal static extern void autd3_datagram_builder_free(IntPtr builder);
@@ -44,6 +61,15 @@ namespace AUTD3
 
         [DllImport(Lib)]
         internal static extern void autd3_client_send_checked(IntPtr client, IntPtr datagrams, long frame, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_client_send(IntPtr client, IntPtr datagrams, long frame, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_response_token_await(IntPtr token, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_response_token_free(IntPtr token);
 
         [DllImport(Lib)]
         internal static extern void autd3_client_stop(IntPtr client, CompletionCallback cb, IntPtr userData);

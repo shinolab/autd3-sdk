@@ -12,6 +12,8 @@ namespace AUTD3
 
     public readonly struct Amplitude
     {
+        internal const float AbsoluteThresholdOfHearing = 20e-6f;
+
         internal float Pascal { get; }
 
         private Amplitude(float pascal)
@@ -27,6 +29,44 @@ namespace AUTD3
 
         public static Amplitude FromSpl(float value) =>
             new Amplitude(NativeHolo.autd3_holo_amplitude_spl(value));
+
+        public float Spl => 20f * MathF.Log10(Pascal / AbsoluteThresholdOfHearing);
+    }
+
+    public readonly struct PressureUnit
+    {
+        internal float PaPerUnit { get; }
+
+        internal PressureUnit(float paPerUnit)
+        {
+            PaPerUnit = paPerUnit;
+        }
+
+        public static Amplitude operator *(float value, PressureUnit unit) => Amplitude.FromPascal(value * unit.PaPerUnit);
+
+        public static Amplitude operator *(int value, PressureUnit unit) => Amplitude.FromPascal(value * unit.PaPerUnit);
+    }
+
+    public readonly struct SplUnit
+    {
+        public static Amplitude operator *(float value, SplUnit unit)
+        {
+            _ = unit;
+            return Amplitude.FromSpl(value);
+        }
+
+        public static Amplitude operator *(int value, SplUnit unit)
+        {
+            _ = unit;
+            return Amplitude.FromSpl(value);
+        }
+    }
+
+    public static class HoloUnits
+    {
+        public static readonly PressureUnit Pa = new PressureUnit(1f);
+        public static readonly PressureUnit kPa = new PressureUnit(1000f);
+        public static readonly SplUnit dB = default;
     }
 
     public readonly struct HoloControlPoint
@@ -226,37 +266,37 @@ namespace AUTD3
             return flat;
         }
 
-        public static void Naive(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, NaiveOption option, PatternBuffer buffer)
+        public static void Naive(Geometry geometry, HoloControlPoint[] foci, Length wavelength, NaiveOption option, PatternBuffer buffer)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
+            if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
             {
                 throw new Autd3Exception("naive failed");
             }
         }
 
-        public static void Gs(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, GsOption option, PatternBuffer buffer)
+        public static void Gs(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GsOption option, PatternBuffer buffer)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
+            if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
             {
                 throw new Autd3Exception("gs failed");
             }
         }
 
-        public static void Gspat(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, GspatOption option, PatternBuffer buffer)
+        public static void Gspat(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GspatOption option, PatternBuffer buffer)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
+            if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
             {
                 throw new Autd3Exception("gspat failed");
             }
         }
 
-        public static void Greedy(Geometry geometry, HoloControlPoint[] foci, float wavelengthMm, GreedyOption option, PatternBuffer buffer)
+        public static void Greedy(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GreedyOption option, PatternBuffer buffer)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelengthMm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
+            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
             {
                 throw new Autd3Exception("greedy failed");
             }

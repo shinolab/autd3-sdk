@@ -46,6 +46,9 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_foci_stm(IntPtr config, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(Lib)]
+        internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint indexOffset, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
+
+        [DllImport(Lib)]
         internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] patterns, UIntPtr numPatterns, byte bank, byte mode, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(Lib)]
@@ -82,6 +85,17 @@ namespace AUTD3
         public static StmConfig Period(float secs) => new StmConfig(ConfigKind.Period, secs, 0);
         public static StmConfig PeriodNearest(float secs) => new StmConfig(ConfigKind.PeriodNearest, secs, 0);
         public static StmConfig Sampling(ushort divide) => new StmConfig(ConfigKind.Sampling, 0, divide);
+
+        public static StmConfig FromFreq(Freq freq) =>
+            freq.Mode == AUTD3.Freq.FreqMode.Nearest
+                ? new StmConfig(ConfigKind.FreqNearest, freq.Hz, 0)
+                : new StmConfig(ConfigKind.Freq, freq.Hz, 0);
+
+        public static StmConfig FromPeriod(TimeSpan period) =>
+            new StmConfig(ConfigKind.Period, (float)period.TotalSeconds, 0);
+
+        public static StmConfig FromPeriodNearest(TimeSpan period) =>
+            new StmConfig(ConfigKind.PeriodNearest, (float)period.TotalSeconds, 0);
 
         internal IntPtr CreateHandle()
         {
@@ -241,6 +255,51 @@ namespace AUTD3
             {
                 NativeStm.autd3_stm_config_free(configHandle);
             }
+        }
+    }
+
+    public sealed class WriteFociBuffer : ICommand
+    {
+        private readonly PatternBank _bank;
+        private readonly uint _indexOffset;
+        private readonly ControlPoints[] _samples;
+
+        public WriteFociBuffer(PatternBank bank, uint indexOffset, ControlPoints[] samples)
+        {
+            _bank = bank;
+            _indexOffset = indexOffset;
+            _samples = samples;
+        }
+
+        IntPtr ICommand.CreateOp()
+        {
+            if (_samples.Length == 0)
+            {
+                throw new Autd3Exception("WriteFociBuffer requires at least one sample");
+            }
+            var numFoci = (byte)_samples[0].Points.Length;
+            var points = new Autd3StmControlPointNative[_samples.Length * numFoci];
+            var intensities = new byte[_samples.Length];
+            for (var i = 0; i < _samples.Length; i++)
+            {
+                if (_samples[i].Points.Length != numFoci)
+                {
+                    throw new Autd3Exception("all WriteFociBuffer samples must have the same number of foci");
+                }
+                intensities[i] = _samples[i].Intensity.Value;
+                for (var j = 0; j < numFoci; j++)
+                {
+                    var cp = _samples[i].Points[j];
+                    points[i * numFoci + j] = new Autd3StmControlPointNative
+                    {
+                        X = cp.Point.X,
+                        Y = cp.Point.Y,
+                        Z = cp.Point.Z,
+                        PhaseOffset = cp.PhaseOffset.Value,
+                    };
+                }
+            }
+            return NativeStm.autd3_op_write_foci_buffer((byte)_bank, _indexOffset, points, (UIntPtr)_samples.Length, numFoci, intensities);
         }
     }
 

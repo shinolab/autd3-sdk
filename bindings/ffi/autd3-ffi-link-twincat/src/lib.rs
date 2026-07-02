@@ -1,14 +1,31 @@
 use std::ffi::{CStr, c_char};
 use std::net::IpAddr;
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use autd3_ffi_abi::{
-    BoxFuture, ClientBackend, ClientOpener, LinkStatusData, client_opener, into_handle,
+    BoxFuture, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData, client_opener,
+    into_handle,
 };
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::{Error, StateCheck};
-use autd3_rs_link_twincat::{AmsNetId, TwinCATLinkOption, TwinCATStateChecker};
+use autd3_rs_link_twincat::{AmsNetId, Timeouts, TwinCATLinkOption, TwinCATStateChecker};
 use tokio::sync::Mutex;
+
+fn build_timeouts(
+    has_connect: bool,
+    connect_ns: u64,
+    has_read: bool,
+    read_ns: u64,
+    has_write: bool,
+    write_ns: u64,
+) -> Timeouts {
+    Timeouts {
+        connect: has_connect.then(|| Duration::from_nanos(connect_ns)),
+        read: has_read.then(|| Duration::from_nanos(read_ns)),
+        write: has_write.then(|| Duration::from_nanos(write_ns)),
+    }
+}
 
 fn link_runtime() -> &'static tokio::runtime::Runtime {
     static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
@@ -66,6 +83,38 @@ impl ClientBackend for TwinCATBackend {
         Box::pin(async move {
             link_runtime()
                 .spawn(async move { client.read_error_detail().await })
+                .await
+                .map_err(join_err)?
+        })
+    }
+
+    fn send(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<ResponseTokenData> {
+        let client = Arc::clone(&self.client);
+        Box::pin(async move {
+            link_runtime()
+                .spawn(async move {
+                    let mut futures = Vec::new();
+                    match frame {
+                        Some(index) => {
+                            let frame = datagrams.frame(index).ok_or_else(|| {
+                                Error::Link(format!("frame {index} out of range"))
+                            })?;
+                            futures.push(client.send(frame).await?);
+                        }
+                        None => {
+                            for frame in datagrams.iter() {
+                                futures.push(client.send(frame).await?);
+                            }
+                        }
+                    }
+                    let token: BoxFuture<()> = Box::pin(async move {
+                        for future in futures {
+                            future.await?;
+                        }
+                        Ok::<(), Error>(())
+                    });
+                    Ok::<ResponseTokenData, Error>(ResponseTokenData(token))
+                })
                 .await
                 .map_err(join_err)?
         })
@@ -156,14 +205,36 @@ fn into_opener(option: TwinCATLinkOption) -> *mut ClientOpener {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_link_twincat_local() -> *mut ClientOpener {
-    into_opener(TwinCATLinkOption::local())
+#[allow(clippy::fn_params_excessive_bools)]
+pub extern "C" fn autd3_link_twincat_local(
+    has_connect: bool,
+    connect_ns: u64,
+    has_read: bool,
+    read_ns: u64,
+    has_write: bool,
+    write_ns: u64,
+) -> *mut ClientOpener {
+    into_opener(TwinCATLinkOption::local_with_timeouts(build_timeouts(
+        has_connect,
+        connect_ns,
+        has_read,
+        read_ns,
+        has_write,
+        write_ns,
+    )))
 }
 
 #[unsafe(no_mangle)]
+#[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
 pub unsafe extern "C" fn autd3_link_twincat_remote(
     addr: *const c_char,
     ams_net_id: *const c_char,
+    has_connect: bool,
+    connect_ns: u64,
+    has_read: bool,
+    read_ns: u64,
+    has_write: bool,
+    write_ns: u64,
 ) -> *mut ClientOpener {
     if addr.is_null() || ams_net_id.is_null() {
         return std::ptr::null_mut();
@@ -178,5 +249,16 @@ pub unsafe extern "C" fn autd3_link_twincat_remote(
     else {
         return std::ptr::null_mut();
     };
-    into_opener(TwinCATLinkOption::remote(addr, ams_net_id))
+    into_opener(TwinCATLinkOption::remote_with_timeouts(
+        addr,
+        ams_net_id,
+        build_timeouts(
+            has_connect,
+            connect_ns,
+            has_read,
+            read_ns,
+            has_write,
+            write_ns,
+        ),
+    ))
 }

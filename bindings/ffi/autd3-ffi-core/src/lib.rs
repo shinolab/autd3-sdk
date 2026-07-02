@@ -1,7 +1,9 @@
 use std::num::NonZeroU16;
+use std::time::Duration;
 
 use autd3_ffi_abi::{drop_handle, into_handle};
-use autd3_rs_core::value::{Phase, SamplingConfig};
+use autd3_rs_core::units::Hz;
+use autd3_rs_core::value::{Nearest, Phase, SamplingConfig};
 use autd3_rs_core::{Autd3, Geometry, Point3, Quaternion, UnitQuaternion};
 
 #[repr(C)]
@@ -121,6 +123,60 @@ pub unsafe extern "C" fn autd3_core_device_rotation(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_transducer_position(
+    geometry: *const Geometry,
+    dev: usize,
+    tr: usize,
+    out: *mut f32,
+) -> i32 {
+    if geometry.is_null() || out.is_null() {
+        return -1;
+    }
+
+    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+        return -1;
+    };
+    if tr >= device.num_transducers() {
+        return -1;
+    }
+    let p = device.position(tr);
+
+    unsafe {
+        *out = p.x;
+        *out.add(1) = p.y;
+        *out.add(2) = p.z;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_transducer_direction(
+    geometry: *const Geometry,
+    dev: usize,
+    tr: usize,
+    out: *mut f32,
+) -> i32 {
+    if geometry.is_null() || out.is_null() {
+        return -1;
+    }
+
+    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+        return -1;
+    };
+    if tr >= device.num_transducers() {
+        return -1;
+    }
+    let d = device.direction(tr).into_inner();
+
+    unsafe {
+        *out = d.x;
+        *out.add(1) = d.y;
+        *out.add(2) = d.z;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_core_device_direction_x(
     geometry: *const Geometry,
     dev: usize,
@@ -212,6 +268,64 @@ pub extern "C" fn autd3_core_sampling_config_divide(divide: u16) -> *mut Samplin
         Some(divide) => into_handle(SamplingConfig::new(divide)),
         None => std::ptr::null_mut(),
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_core_sampling_config_freq(hz: f32) -> *mut SamplingConfig {
+    into_handle(SamplingConfig::new(hz * Hz))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_core_sampling_config_freq_nearest(hz: f32) -> *mut SamplingConfig {
+    into_handle(SamplingConfig::new(Nearest(hz * Hz)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_core_sampling_config_period(nanos: u64) -> *mut SamplingConfig {
+    into_handle(SamplingConfig::new(Duration::from_nanos(nanos)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_core_sampling_config_period_nearest(nanos: u64) -> *mut SamplingConfig {
+    into_handle(SamplingConfig::new(Nearest(Duration::from_nanos(nanos))))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_sampling_config_freq_value(
+    config: *const SamplingConfig,
+    out: *mut f32,
+) -> i32 {
+    if config.is_null() || out.is_null() {
+        return -1;
+    }
+
+    let Ok(freq) = unsafe { &*config }.freq() else {
+        return -1;
+    };
+
+    unsafe { *out = freq.hz() };
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_sampling_config_period_value(
+    config: *const SamplingConfig,
+    out: *mut u64,
+) -> i32 {
+    if config.is_null() || out.is_null() {
+        return -1;
+    }
+
+    let Ok(period) = unsafe { &*config }.period() else {
+        return -1;
+    };
+
+    let Ok(nanos) = u64::try_from(period.as_nanos()) else {
+        return -1;
+    };
+
+    unsafe { *out = nanos };
+    0
 }
 
 #[unsafe(no_mangle)]

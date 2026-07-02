@@ -83,13 +83,53 @@ namespace AUTD3
             }
         }
 
-        public Vector3 XDirection => Direction(NativeCore.autd3_core_device_direction_x);
+        public Vector3 XDirection => DeviceDirection(NativeCore.autd3_core_device_direction_x);
 
-        public Vector3 YDirection => Direction(NativeCore.autd3_core_device_direction_y);
+        public Vector3 YDirection => DeviceDirection(NativeCore.autd3_core_device_direction_y);
 
-        public Vector3 AxialDirection => Direction(NativeCore.autd3_core_device_direction_axial);
+        public Vector3 AxialDirection => DeviceDirection(NativeCore.autd3_core_device_direction_axial);
 
-        private Vector3 Direction(Action<IntPtr, UIntPtr, float[]> native)
+        public Vector3 Position(int tr)
+        {
+            var xyz = new float[3];
+            if (NativeCore.autd3_core_transducer_position(_geometry, _dev, (UIntPtr)tr, xyz) != 0)
+                throw new ArgumentOutOfRangeException(nameof(tr));
+            return new Vector3(xyz[0], xyz[1], xyz[2]);
+        }
+
+        public Vector3 Direction(int tr)
+        {
+            var xyz = new float[3];
+            if (NativeCore.autd3_core_transducer_direction(_geometry, _dev, (UIntPtr)tr, xyz) != 0)
+                throw new ArgumentOutOfRangeException(nameof(tr));
+            return new Vector3(xyz[0], xyz[1], xyz[2]);
+        }
+
+        public Vector3[] Positions
+        {
+            get
+            {
+                var n = NumTransducers;
+                var result = new Vector3[n];
+                for (var i = 0; i < n; i++)
+                    result[i] = Position(i);
+                return result;
+            }
+        }
+
+        public Vector3[] Directions
+        {
+            get
+            {
+                var n = NumTransducers;
+                var result = new Vector3[n];
+                for (var i = 0; i < n; i++)
+                    result[i] = Direction(i);
+                return result;
+            }
+        }
+
+        private Vector3 DeviceDirection(Action<IntPtr, UIntPtr, float[]> native)
         {
             var xyz = new float[3];
             native(_geometry, _dev, xyz);

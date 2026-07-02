@@ -46,6 +46,12 @@ namespace AUTD3
         internal static extern void autd3_core_device_direction_axial(IntPtr geometry, UIntPtr dev, [Out] float[] outXyz);
 
         [DllImport(Lib)]
+        internal static extern int autd3_core_transducer_position(IntPtr geometry, UIntPtr dev, UIntPtr tr, [Out] float[] outXyz);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_core_transducer_direction(IntPtr geometry, UIntPtr dev, UIntPtr tr, [Out] float[] outXyz);
+
+        [DllImport(Lib)]
         internal static extern void autd3_core_geometry_free(IntPtr geometry);
 
         [DllImport(Lib)]
@@ -61,7 +67,25 @@ namespace AUTD3
         internal static extern IntPtr autd3_core_sampling_config_divide(ushort divide);
 
         [DllImport(Lib)]
+        internal static extern IntPtr autd3_core_sampling_config_freq(float hz);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_core_sampling_config_freq_nearest(float hz);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_core_sampling_config_period(ulong nanos);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_core_sampling_config_period_nearest(ulong nanos);
+
+        [DllImport(Lib)]
         internal static extern int autd3_core_sampling_config_divide_value(IntPtr config, out ushort outValue);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_core_sampling_config_freq_value(IntPtr config, out float outValue);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_core_sampling_config_period_value(IntPtr config, out ulong outValue);
 
         [DllImport(Lib)]
         internal static extern void autd3_core_sampling_config_free(IntPtr config);

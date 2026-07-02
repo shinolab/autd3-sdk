@@ -5,17 +5,15 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Numerics;
-using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Link;
+using static AUTD3.Units;
 
 internal static class Program
 {
     private const int TotalPoints = 1000;
-    private const int MaxInflight = 127;
 
     private static void Report(string label, double elapsedSeconds)
     {
@@ -51,7 +49,7 @@ internal static class Program
 
         var center = geometry.Center;
         const float radius = 30f;
-        var wavelength = Pattern.Wavelength(340f * 1000f);
+        var wavelength = Pattern.Wavelength(340 * m / s);
 
         using var patterns = geometry.PatternBuffer();
         await Configure(client, patterns);
@@ -78,24 +76,25 @@ internal static class Program
         }
         Report("stop-and-wait", sw.Elapsed.TotalSeconds);
 
-        // streaming: keep MaxInflight frames on the wire concurrently.
-        using var sem = new SemaphoreSlim(MaxInflight);
-        async Task Send(Frame frame)
+        // streaming: keep Client.MaxInflight frames on the wire, draining the oldest
+        // response once the window is full.
+        sw.Restart();
+        var pending = new Queue<ResponseToken>();
+        foreach (var dg in datagrams)
         {
-            await sem.WaitAsync();
-            try
+            foreach (var frame in dg)
             {
-                await client.SendCheckedAsync(frame);
-            }
-            finally
-            {
-                sem.Release();
+                if (pending.Count >= Client.MaxInflight)
+                {
+                    await pending.Dequeue().AwaitAsync();
+                }
+                pending.Enqueue(await client.SendAsync(frame));
             }
         }
-
-        sw.Restart();
-        var tasks = datagrams.SelectMany(dg => dg).Select(Send).ToList();
-        await Task.WhenAll(tasks);
+        while (pending.Count > 0)
+        {
+            await pending.Dequeue().AwaitAsync();
+        }
         Report("streaming", sw.Elapsed.TotalSeconds);
 
         await client.StopAsync();

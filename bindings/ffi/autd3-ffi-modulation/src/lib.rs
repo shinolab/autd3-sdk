@@ -1,8 +1,34 @@
 use autd3_ffi_abi::{ModulationBuffer, drop_handle, into_handle};
+use autd3_rs_core::Angle;
 use autd3_rs_core::units::Hz;
-use autd3_rs_core::value::SamplingConfig;
-use autd3_rs_core::{Angle, Freq};
-use autd3_rs_modulation::{FourierOption, SineComponent, SineOption, SquareOption};
+use autd3_rs_core::value::{Nearest, SamplingConfig};
+use autd3_rs_modulation::{FourierOption, SamplingMode, SineComponent, SineOption, SquareOption};
+
+fn to_sampling_mode(mode: u8, freq: f32, freq_int: u32) -> SamplingMode {
+    match mode {
+        1 => SamplingMode::from(freq_int * Hz),
+        2 => SamplingMode::from(Nearest(freq * Hz)),
+        _ => SamplingMode::from(freq * Hz),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_modulation_samples_per_period(
+    divider: u16,
+    freq_hz: u32,
+    out: *mut u32,
+) -> bool {
+    if out.is_null() {
+        return false;
+    }
+
+    let Some(value) = autd3_rs_modulation::samples_per_period(divider, freq_hz) else {
+        return false;
+    };
+
+    unsafe { *out = value };
+    true
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_modulation_buffer_new() -> *mut ModulationBuffer {
@@ -65,7 +91,9 @@ pub unsafe extern "C" fn autd3_modulation_sine_option_free(option: *mut SineOpti
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_sine(
+    mode: u8,
     freq: f32,
+    freq_int: u32,
     option: *const SineOption,
     buffer: *mut ModulationBuffer,
 ) -> i32 {
@@ -75,7 +103,11 @@ pub unsafe extern "C" fn autd3_modulation_sine(
 
     let option = unsafe { &*option };
     let buffer = unsafe { &mut *buffer };
-    match autd3_rs_modulation::sine(freq * Hz, option, &mut buffer.0) {
+    match autd3_rs_modulation::sine(
+        to_sampling_mode(mode, freq, freq_int),
+        option,
+        &mut buffer.0,
+    ) {
         Ok(()) => 0,
         Err(_) => -1,
     }
@@ -108,7 +140,9 @@ pub unsafe extern "C" fn autd3_modulation_square_option_free(option: *mut Square
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_square(
+    mode: u8,
     freq: f32,
+    freq_int: u32,
     option: *const SquareOption,
     buffer: *mut ModulationBuffer,
 ) -> i32 {
@@ -118,7 +152,11 @@ pub unsafe extern "C" fn autd3_modulation_square(
 
     let option = unsafe { &*option };
     let buffer = unsafe { &mut *buffer };
-    match autd3_rs_modulation::square(freq * Hz, option, &mut buffer.0) {
+    match autd3_rs_modulation::square(
+        to_sampling_mode(mode, freq, freq_int),
+        option,
+        &mut buffer.0,
+    ) {
         Ok(()) => 0,
         Err(_) => -1,
     }
@@ -159,7 +197,9 @@ pub unsafe extern "C" fn autd3_modulation_fourier_option_free(option: *mut Fouri
 
 #[repr(C)]
 pub struct Autd3SineComponent {
+    pub mode: u8,
     pub freq: f32,
+    pub freq_int: u32,
     pub option: *const SineOption,
 }
 
@@ -178,10 +218,10 @@ pub unsafe extern "C" fn autd3_modulation_fourier(
     if slice.iter().any(|c| c.option.is_null()) {
         return -1;
     }
-    let components: Vec<SineComponent<Freq<f32>>> = slice
+    let components: Vec<SineComponent<SamplingMode>> = slice
         .iter()
         .map(|c| SineComponent {
-            freq: c.freq * Hz,
+            freq: to_sampling_mode(c.mode, c.freq, c.freq_int),
             option: *unsafe { &*c.option },
         })
         .collect();

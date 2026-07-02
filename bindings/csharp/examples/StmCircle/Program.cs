@@ -7,6 +7,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Link;
+using static AUTD3.Units;
 
 internal static class Program
 {
@@ -22,7 +23,7 @@ internal static class Program
         var points = Stm.Circle(center, 30f, 50, new Vector3(0f, 0f, 1f));
 
         using var builder = client.DatagramBuilder();
-        builder.Push(new FociStm(StmConfig.Freq(1f), points));
+        builder.Push(new FociStm(StmConfig.FromFreq(1 * Hz), points));
         using var datagrams = builder.Build();
         foreach (var frame in datagrams)
         {

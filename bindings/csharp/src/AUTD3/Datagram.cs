@@ -9,21 +9,68 @@ namespace AUTD3
     public readonly struct ClientConfig
     {
         public bool LowLatency { get; }
+        public uint TimeoutCycles { get; }
+        public uint MaxInflight { get; }
+        public uint SendIntervalCycles { get; }
+        public uint MaxResyncRounds { get; }
+        public uint ResetResendCycles { get; }
+        public byte? RtPriority { get; }
+        public ulong? RtAffinity { get; }
+        public bool ValidateState { get; }
 
-        public ClientConfig(bool lowLatency = false)
+        public ClientConfig(
+            bool lowLatency = false,
+            uint timeoutCycles = 10,
+            uint maxInflight = 127,
+            uint sendIntervalCycles = 1,
+            uint maxResyncRounds = 8,
+            uint resetResendCycles = 2,
+            byte? rtPriority = null,
+            ulong? rtAffinity = null,
+            bool validateState = true)
         {
             LowLatency = lowLatency;
+            TimeoutCycles = timeoutCycles;
+            MaxInflight = maxInflight;
+            SendIntervalCycles = sendIntervalCycles;
+            MaxResyncRounds = maxResyncRounds;
+            ResetResendCycles = resetResendCycles;
+            RtPriority = rtPriority;
+            RtAffinity = rtAffinity;
+            ValidateState = validateState;
         }
 
-        internal IntPtr CreateHandle() => NativeClient.autd3_client_config_new(LowLatency);
+        internal IntPtr CreateHandle()
+        {
+            var handle = NativeClient.autd3_client_config_new(
+                LowLatency,
+                TimeoutCycles,
+                (UIntPtr)MaxInflight,
+                SendIntervalCycles,
+                MaxResyncRounds,
+                ResetResendCycles,
+                RtPriority.HasValue,
+                RtPriority ?? 0,
+                RtAffinity.HasValue,
+                (UIntPtr)(RtAffinity ?? 0),
+                ValidateState);
+            if (handle == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create client config");
+            }
+            return handle;
+        }
     }
 
     public sealed class DatagramBuilder : IDisposable
     {
+        private readonly int _numDevices;
+
         internal IntPtr Handle { get; private set; }
 
         internal DatagramBuilder(int numDevices)
         {
+            _numDevices = numDevices;
             Handle = NativeClient.autd3_datagram_builder_new((UIntPtr)numDevices);
         }
 
@@ -36,6 +83,32 @@ namespace AUTD3
         {
             var op = command.CreateOp();
             NativeClient.autd3_datagram_builder_push(Handle, op);
+            return this;
+        }
+
+        public DatagramBuilder PushEach(Func<int, ICommand?> factory)
+        {
+            var ops = new IntPtr[_numDevices];
+            try
+            {
+                for (var i = 0; i < _numDevices; i++)
+                {
+                    var command = factory(i);
+                    ops[i] = command == null ? IntPtr.Zero : command.CreateOp();
+                }
+            }
+            catch
+            {
+                foreach (var op in ops)
+                {
+                    if (op != IntPtr.Zero)
+                    {
+                        NativeClient.autd3_op_free(op);
+                    }
+                }
+                throw;
+            }
+            NativeClient.autd3_datagram_builder_push_each(Handle, ops, (UIntPtr)_numDevices);
             return this;
         }
 

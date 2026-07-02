@@ -82,5 +82,7 @@ namespace AUTD3
             Phase = phase;
             Intensity = intensity;
         }
+
+        public static Emission Null => new Emission(Phase.Zero, Intensity.Min);
     }
 }

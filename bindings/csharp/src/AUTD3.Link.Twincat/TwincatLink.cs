@@ -3,13 +3,6 @@ using System.Runtime.InteropServices;
 
 namespace AUTD3.Link
 {
-    public enum TwinCATRoute : byte
-    {
-        Auto = 0,
-        Notify = 1,
-        Ads = 2,
-    }
-
     public sealed class TwinCATLink : ILink
     {
         private IntPtr _opener;
@@ -19,9 +12,12 @@ namespace AUTD3.Link
             _opener = opener;
         }
 
-        public static TwinCATLink Local(TwinCATRoute route = TwinCATRoute.Auto)
+        public static TwinCATLink Local(TimeSpan? connectTimeout = null, TimeSpan? readTimeout = null, TimeSpan? writeTimeout = null)
         {
-            var opener = NativeTwincat.autd3_link_twincat_local((byte)route);
+            var opener = NativeTwincat.autd3_link_twincat_local(
+                connectTimeout.HasValue, (ulong)(connectTimeout?.Ticks * 100 ?? 0),
+                readTimeout.HasValue, (ulong)(readTimeout?.Ticks * 100 ?? 0),
+                writeTimeout.HasValue, (ulong)(writeTimeout?.Ticks * 100 ?? 0));
             if (opener == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create twincat link");
@@ -29,9 +25,13 @@ namespace AUTD3.Link
             return new TwinCATLink(opener);
         }
 
-        public static TwinCATLink Remote(string addr, string amsNetId, TwinCATRoute route = TwinCATRoute.Auto)
+        public static TwinCATLink Remote(string addr, string amsNetId, TimeSpan? connectTimeout = null, TimeSpan? readTimeout = null, TimeSpan? writeTimeout = null)
         {
-            var opener = NativeTwincat.autd3_link_twincat_remote(addr, amsNetId, (byte)route);
+            var opener = NativeTwincat.autd3_link_twincat_remote(
+                addr, amsNetId,
+                connectTimeout.HasValue, (ulong)(connectTimeout?.Ticks * 100 ?? 0),
+                readTimeout.HasValue, (ulong)(readTimeout?.Ticks * 100 ?? 0),
+                writeTimeout.HasValue, (ulong)(writeTimeout?.Ticks * 100 ?? 0));
             if (opener == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create twincat link (invalid address or AMS Net Id?)");
@@ -52,9 +52,17 @@ namespace AUTD3.Link
         private const string Lib = "autd3_link_twincat";
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_twincat_local(byte route);
+        internal static extern IntPtr autd3_link_twincat_local(
+            [MarshalAs(UnmanagedType.I1)] bool hasConnect, ulong connectNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasRead, ulong readNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasWrite, ulong writeNs);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_twincat_remote([MarshalAs(UnmanagedType.LPUTF8Str)] string addr, [MarshalAs(UnmanagedType.LPUTF8Str)] string amsNetId, byte route);
+        internal static extern IntPtr autd3_link_twincat_remote(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string addr,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string amsNetId,
+            [MarshalAs(UnmanagedType.I1)] bool hasConnect, ulong connectNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasRead, ulong readNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasWrite, ulong writeNs);
     }
 }

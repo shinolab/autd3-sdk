@@ -6,6 +6,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Link;
+using static AUTD3.Units;
 
 internal static class Program
 {
@@ -16,15 +17,20 @@ internal static class Program
         using var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
+        var versions = await client.ReadFirmwareVersionAsync();
+        for (var i = 0; i < versions.Count; i++)
+        {
+            Console.WriteLine($"device[{i}] firmware version: {versions[i]}");
+        }
 
-        // length in mm, speed in mm/s, frequency in Hz
+        // length in mm; sound speed as a Velocity
         var target = geometry.Center + new Vector3(0f, 0f, 150f);
-        var wavelength = Pattern.Wavelength(340f * 1000f);
+        var wavelength = Pattern.Wavelength(340 * m / s);
         using var patterns = geometry.PatternBuffer();
-        Pattern.Focus(geometry, target, wavelength, Intensity.Max, patterns);
+        Pattern.Focus(geometry, target, wavelength, new FocusOption(), patterns);
 
         using var modulation = Modulation.ModulationBuffer();
-        Modulation.Sine(200f, new SineOption(), modulation);
+        Modulation.Sine(200 * Hz, new SineOption(), modulation);
 
         using var builder = client.DatagramBuilder();
         builder

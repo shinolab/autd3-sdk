@@ -27,6 +27,42 @@ namespace AUTD3
             new PatternDataType(1, numFoci, soundSpeed);
     }
 
+    public enum PatternCompression : byte
+    {
+        PhaseFull = 1,
+        PhaseHalf = 2,
+    }
+
+    public sealed class WritePatternCompressed : ICommand
+    {
+        private readonly PatternBank _bank;
+        private readonly uint _index;
+        private readonly PatternCompression _format;
+        private readonly PatternBuffer[] _patterns;
+
+        public WritePatternCompressed(PatternBank bank, uint index, PatternCompression format, PatternBuffer[] patterns)
+        {
+            if (patterns.Length == 0 || patterns.Length > 4)
+            {
+                throw new Autd3Exception("WritePatternCompressed expects 1..=4 pattern buffers");
+            }
+            _bank = bank;
+            _index = index;
+            _format = format;
+            _patterns = patterns;
+        }
+
+        IntPtr ICommand.CreateOp()
+        {
+            var handles = new IntPtr[_patterns.Length];
+            for (var i = 0; i < _patterns.Length; i++)
+            {
+                handles[i] = _patterns[i].Handle;
+            }
+            return NativePattern.autd3_op_write_pattern_compressed((byte)_bank, _index, (byte)_format, handles, (UIntPtr)handles.Length);
+        }
+    }
+
     public sealed class WritePatternBuffer : ICommand
     {
         private readonly PatternBank _bank;

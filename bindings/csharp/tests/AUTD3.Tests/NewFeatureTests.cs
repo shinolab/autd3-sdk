@@ -1,6 +1,8 @@
 using System.Numerics;
 using AUTD3;
 using Xunit;
+using static AUTD3.HoloUnits;
+using static AUTD3.Units;
 
 namespace AUTD3.Tests
 {
@@ -13,7 +15,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var buffer = geometry.PatternBuffer();
-            Pattern.Plane(geometry, new Vector3(0f, 0f, 1f), Pattern.Wavelength(340f * 1000f), new PlaneOption(), buffer);
+            Pattern.Plane(geometry, new Vector3(0f, 0f, 1f), Pattern.Wavelength(340 * m / s), new PlaneOption(), buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
 
@@ -22,7 +24,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var buffer = geometry.PatternBuffer();
-            Pattern.Bessel(geometry, geometry.Center, new Vector3(0f, 0f, 1f), 0.3f, Pattern.Wavelength(340f * 1000f), new BesselOption(), buffer);
+            Pattern.Bessel(geometry, geometry.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, Pattern.Wavelength(340 * m / s), new BesselOption(), buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
 
@@ -31,7 +33,20 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var buffer = geometry.PatternBuffer();
-            Pattern.Uniform(Phase.Pi, Intensity.Max, buffer);
+            Pattern.Uniform(new Emission(Phase.Pi, Intensity.Max), buffer);
+            Assert.Equal(1, buffer.NumDevices);
+        }
+
+        [Fact]
+        public void PatternBufferFromArray()
+        {
+            var emissions = new Emission[1][];
+            emissions[0] = new Emission[249];
+            for (var i = 0; i < 249; i++)
+            {
+                emissions[0][i] = Emission.Null;
+            }
+            using var buffer = PatternBuffer.FromArray(emissions);
             Assert.Equal(1, buffer.NumDevices);
         }
 
@@ -42,9 +57,9 @@ namespace AUTD3.Tests
             using var buffer = geometry.PatternBuffer();
             var foci = new[]
             {
-                new HoloControlPoint(geometry.Center + new Vector3(0f, 0f, 150f), Amplitude.FromSpl(150f)),
+                new HoloControlPoint(geometry.Center + new Vector3(0f, 0f, 150f), 150 * dB),
             };
-            Holo.Naive(geometry, foci, Pattern.Wavelength(340f * 1000f), new NaiveOption(EmissionConstraint.Clamp(Intensity.Min, Intensity.Max)), buffer);
+            Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new NaiveOption(EmissionConstraint.Clamp(Intensity.Min, Intensity.Max)), buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
 
@@ -52,7 +67,7 @@ namespace AUTD3.Tests
         public void SquareProducesSamples()
         {
             using var modulation = Modulation.ModulationBuffer();
-            Modulation.Square(200f, new SquareOption(), modulation);
+            Modulation.Square(200 * Hz, new SquareOption(), modulation);
             Assert.True(modulation.Length > 0);
         }
 
@@ -62,8 +77,8 @@ namespace AUTD3.Tests
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Fourier(new[]
             {
-                new SineComponent(100f, new SineOption()),
-                new SineComponent(200f, new SineOption()),
+                new SineComponent(100 * Hz, new SineOption()),
+                new SineComponent(200 * Hz, new SineOption()),
             }, new FourierOption(), modulation);
             Assert.True(modulation.Length > 0);
         }
@@ -72,7 +87,7 @@ namespace AUTD3.Tests
         public void RadiationPressureKeepsLength()
         {
             using var modulation = Modulation.ModulationBuffer();
-            Modulation.Sine(200f, new SineOption(), modulation);
+            Modulation.Sine(200 * Hz, new SineOption(), modulation);
             var before = modulation.Length;
 
             using var pressure = Modulation.ModulationBuffer();
@@ -97,7 +112,7 @@ namespace AUTD3.Tests
             using var geometry = SingleDevice();
             var points = Stm.Circle(geometry.Center + new Vector3(0f, 0f, 150f), 30f, 4, new Vector3(0f, 0f, 1f));
             using var builder = new DatagramBuilder(geometry);
-            builder.Push(new FociStm(StmConfig.Freq(1f), points));
+            builder.Push(new FociStm(StmConfig.FromFreq(1 * Hz), points));
             using var datagrams = builder.Build();
             Assert.True(datagrams.NumFrames > 0);
         }
@@ -111,8 +126,23 @@ namespace AUTD3.Tests
                 .Push(new Clear())
                 .Push(new Synchronize())
                 .Push(new ForceFan(true))
-                .Push(SetSilencer.FromUpdateRate(256, 256))
+                .Push(new SetSilencer(new FixedUpdateRate(256, 256)))
+                .Push(new SetSilencer())
                 .Push(SetSilencer.Disable());
+            using var datagrams = builder.Build();
+            Assert.True(datagrams.NumFrames > 0);
+        }
+
+        [Fact]
+        public void PushEachAssignsPerDevice()
+        {
+            using var geometry = new Geometry(new[]
+            {
+                new Device(Vector3.Zero),
+                new Device(new Vector3(Device.Width, 0f, 0f)),
+            });
+            using var builder = new DatagramBuilder(geometry);
+            builder.PushEach(device => device == 0 ? new Clear() : (ICommand?)null);
             using var datagrams = builder.Build();
             Assert.True(datagrams.NumFrames > 0);
         }

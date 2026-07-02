@@ -32,10 +32,94 @@ namespace AUTD3
             AnyLost = anyLost;
             Recoveries = recoveries;
         }
+
+        public override bool Equals(object? obj)
+        {
+            if (obj is not LinkStatus other)
+            {
+                return false;
+            }
+            if (AllOp != other.AllOp || AnyLost != other.AnyLost || Recoveries != other.Recoveries)
+            {
+                return false;
+            }
+            if (DeviceStates.Count != other.DeviceStates.Count)
+            {
+                return false;
+            }
+            for (var i = 0; i < DeviceStates.Count; i++)
+            {
+                if (!string.Equals(DeviceStates[i], other.DeviceStates[i], StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(AllOp);
+            hash.Add(AnyLost);
+            hash.Add(Recoveries);
+            foreach (var state in DeviceStates)
+            {
+                hash.Add(state, StringComparer.Ordinal);
+            }
+            return hash.ToHashCode();
+        }
+
+        public static bool operator ==(LinkStatus? left, LinkStatus? right) =>
+            left is null ? right is null : left.Equals(right);
+
+        public static bool operator !=(LinkStatus? left, LinkStatus? right) => !(left == right);
+    }
+
+    public sealed class ResponseToken : IDisposable
+    {
+        private IntPtr _handle;
+
+        internal ResponseToken(IntPtr handle)
+        {
+            _handle = handle;
+        }
+
+        public Task AwaitAsync()
+        {
+            var handle = _handle;
+            _handle = IntPtr.Zero;
+            if (handle == IntPtr.Zero)
+            {
+                return Task.CompletedTask;
+            }
+            GC.SuppressFinalize(this);
+            return AsyncOps.InvokeAsync((cb, ud) => NativeClient.autd3_response_token_await(handle, cb, ud));
+        }
+
+        public void Dispose()
+        {
+            if (_handle != IntPtr.Zero)
+            {
+                NativeClient.autd3_response_token_free(_handle);
+                _handle = IntPtr.Zero;
+            }
+            GC.SuppressFinalize(this);
+        }
+
+        ~ResponseToken()
+        {
+            if (_handle != IntPtr.Zero)
+            {
+                NativeClient.autd3_response_token_free(_handle);
+            }
+        }
     }
 
     public sealed class Client : IDisposable
     {
+        public const int MaxInflight = 127;
+
         internal IntPtr Handle { get; private set; }
 
         private Client(IntPtr handle)
@@ -73,6 +157,13 @@ namespace AUTD3
         public Task SendCheckedAsync(Frame frame) =>
             AsyncOps.InvokeAsync((cb, ud) =>
                 NativeClient.autd3_client_send_checked(Handle, frame.Datagrams.Handle, frame.Index, cb, ud));
+
+        public async Task<ResponseToken> SendAsync(Frame frame)
+        {
+            var token = await AsyncOps.InvokeAsync((cb, ud) =>
+                NativeClient.autd3_client_send(Handle, frame.Datagrams.Handle, frame.Index, cb, ud)).ConfigureAwait(false);
+            return new ResponseToken(token);
+        }
 
         public async Task<IReadOnlyList<string>> ReadFirmwareVersionAsync()
         {
