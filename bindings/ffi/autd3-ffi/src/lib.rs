@@ -7,21 +7,22 @@ use autd3_ffi_abi::{
     ClientBackend, ClientOpener, CompletionCallback, CompletionCtx, DevicePattern,
     ModulationBuffer, PatternBuffer, drop_handle, into_handle,
 };
-use autd3_rs::operation::Synchronize;
-use autd3_rs::params::NUM_TRANSDUCERS;
+use autd3_rs::commands::{
+    ChangeModulationBank, ChangePatternBank, Clear, ConfigFociStm, ConfigModulation, ConfigPattern,
+    EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, FociStm as CoreFociStm, FociStmOption,
+    ForceFan, GpioOut, Modulation, Nop, PWE_TABLE_SIZE, Pattern, PatternStm, PatternStmMode,
+    PatternStmOption, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable,
+    SetSilencer, StmConfig, Synchronize, WriteModulationBuffer, WritePatternBuffer, circle, line,
+};
+use autd3_rs::geometry::Autd3;
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
     DcSysTime, GpioIn, Intensity, LoopBehavior, ModulationBank, Nearest, PatternBank, Phase,
     SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
-    ChangeModulationBank, ChangePatternBank, Clear, ClientConfig, ConfigFociStm, ConfigModulation,
-    ConfigPattern, ControlPoint, ControlPoints, DatagramBuilder as CoreDatagramBuilder,
-    EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, FociStm as CoreFociStm, FociStmOption,
-    ForceFan, Frames, Geometry, GpioOut, Length, Modulation, Nop, PWE_TABLE_SIZE, Pattern,
-    PatternStm, PatternStmMode, PatternStmOption, Point3, PulseWidth, SetGpioOut, SetOutputMask,
-    SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig, UnitVector3, Vector3, Velocity,
-    WriteModulationBuffer, WritePatternBuffer, circle, line,
+    ClientConfig, ControlPoint, ControlPoints, DatagramBuilder as CoreDatagramBuilder, Frames,
+    Geometry, Length, Point3, PulseWidth, UnitVector3, Vector3, Velocity,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -106,7 +107,7 @@ fn to_gpio_out(g: &Autd3GpioOut) -> GpioOut {
         11 => GpioOut::SyncDiff,
         12 => GpioOut::PwmOut(g.value as u8),
         13 => GpioOut::Direct(g.value != 0),
-        _ => GpioOut::None,
+        _ => GpioOut::Off,
     }
 }
 
@@ -178,28 +179,28 @@ foci_points!(1 => N1, 2 => N2, 3 => N3, 4 => N4, 5 => N5, 6 => N6, 7 => N7, 8 =>
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_freq(hz: f32) -> *mut StmConfig {
-    into_handle(StmConfig::from(hz * Hz))
+    into_handle(StmConfig::new(hz * Hz))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_freq_nearest(hz: f32) -> *mut StmConfig {
-    into_handle(StmConfig::from(Nearest(hz * Hz)))
+    into_handle(StmConfig::new(Nearest(hz * Hz)))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_period(secs: f32) -> *mut StmConfig {
-    into_handle(StmConfig::from(Duration::from_secs_f32(secs)))
+    into_handle(StmConfig::new(Duration::from_secs_f32(secs)))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_period_nearest(secs: f32) -> *mut StmConfig {
-    into_handle(StmConfig::from(Nearest(Duration::from_secs_f32(secs))))
+    into_handle(StmConfig::new(Nearest(Duration::from_secs_f32(secs))))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_sampling(divide: u16) -> *mut StmConfig {
     match NonZeroU16::new(divide) {
-        Some(divide) => into_handle(StmConfig::from(SamplingConfig::new(divide))),
+        Some(divide) => into_handle(StmConfig::new(SamplingConfig::new(divide))),
         None => std::ptr::null_mut(),
     }
 }
@@ -241,12 +242,14 @@ pub unsafe extern "C" fn autd3_stm_circle(
     }
     let center = unsafe { std::slice::from_raw_parts(center, 3) };
     let normal = unsafe { std::slice::from_raw_parts(normal, 3) };
-    let points = circle(
+    let mut points = Vec::new();
+    circle(
         Point3::new(center[0], center[1], center[2]),
         Length::millimeters(radius_mm),
         num_points,
         UnitVector3::new_normalize(Vector3::new(normal[0], normal[1], normal[2])),
         Intensity(intensity),
+        &mut points,
     );
     unsafe { write_control_points(&points, out_points, out_intensities) };
     0
@@ -266,11 +269,13 @@ pub unsafe extern "C" fn autd3_stm_line(
     }
     let start = unsafe { std::slice::from_raw_parts(start, 3) };
     let end = unsafe { std::slice::from_raw_parts(end, 3) };
-    let points = line(
+    let mut points = Vec::new();
+    line(
         Point3::new(start[0], start[1], start[2]),
         Point3::new(end[0], end[1], end[2]),
         num_points,
         Intensity(intensity),
+        &mut points,
     );
     unsafe { write_control_points(&points, out_points, out_intensities) };
     0
@@ -341,8 +346,8 @@ pub enum Pending {
     SetSilencerDisable,
     SetGpioOut([GpioOut; 4]),
     EmulateGpioIn([bool; 4]),
-    SetOutputMask(Vec<[bool; NUM_TRANSDUCERS]>),
-    SetPhaseCorrection(Vec<[Phase; NUM_TRANSDUCERS]>),
+    SetOutputMask(Vec<Vec<bool>>),
+    SetPhaseCorrection(Vec<Vec<Phase>>),
     SetPulseWidthTable(Box<[PulseWidth; PWE_TABLE_SIZE]>),
     FociStm {
         config: StmConfig,
@@ -575,16 +580,10 @@ pub unsafe extern "C" fn autd3_op_set_output_mask(
         return std::ptr::null_mut();
     }
 
-    let slice = unsafe { std::slice::from_raw_parts(masks, num_devices * NUM_TRANSDUCERS) };
+    let slice = unsafe { std::slice::from_raw_parts(masks, num_devices * Autd3::NUM_TRANSDUCERS) };
     let masks = slice
-        .chunks_exact(NUM_TRANSDUCERS)
-        .map(|device| {
-            let mut slot = [false; NUM_TRANSDUCERS];
-            for (m, src) in slot.iter_mut().zip(device) {
-                *m = *src != 0;
-            }
-            slot
-        })
+        .chunks_exact(Autd3::NUM_TRANSDUCERS)
+        .map(|device| device.iter().map(|&src| src != 0).collect())
         .collect();
     into_handle(Pending::SetOutputMask(masks))
 }
@@ -598,16 +597,10 @@ pub unsafe extern "C" fn autd3_op_set_phase_correction(
         return std::ptr::null_mut();
     }
 
-    let slice = unsafe { std::slice::from_raw_parts(phases, num_devices * NUM_TRANSDUCERS) };
+    let slice = unsafe { std::slice::from_raw_parts(phases, num_devices * Autd3::NUM_TRANSDUCERS) };
     let phases = slice
-        .chunks_exact(NUM_TRANSDUCERS)
-        .map(|device| {
-            let mut slot = [Phase::ZERO; NUM_TRANSDUCERS];
-            for (p, src) in slot.iter_mut().zip(device) {
-                *p = Phase(*src);
-            }
-            slot
-        })
+        .chunks_exact(Autd3::NUM_TRANSDUCERS)
+        .map(|device| device.iter().map(|&src| Phase(src)).collect())
         .collect();
     into_handle(Pending::SetPhaseCorrection(phases))
 }
