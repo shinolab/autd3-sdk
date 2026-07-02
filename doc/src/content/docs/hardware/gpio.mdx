@@ -1,0 +1,15 @@
+---
+title: GPIO ピン
+description: GPIO ピンの位置と各ピンの役割
+sidebar:
+  order: 2
+---
+
+import Figure from "@components/Figure.astro";
+
+AUTD3 デバイスには 4 本の GPIO 出力端子がある.
+端子の位置は下図の通り.
+
+<Figure src="img/hardware/gpio_pin.jpg" alt="GPIO ピン" />
+
+各端子から出力する信号 (基準信号・温度センサ・同期信号・PWM 出力など) は [`SetGpioOut`](/autd3-sdk/api/command/gpio/) で設定できる.

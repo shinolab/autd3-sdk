@@ -1,0 +1,34 @@
+---
+title: WriteFociBuffer
+description: Foci STM 用バッファへの書き込み
+sidebar:
+  order: 18
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/foci-buffer.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/foci-buffer.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/foci-buffer-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/foci-buffer-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`WriteFociBuffer` は, Foci STM 用の焦点列をバンクへ書き込む低レベルコマンド.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "write")} python={excerpt(pySample, "write")} />
+
+| フィールド     | 型                    | 説明                               |
+| -------------- | --------------------- | ---------------------------------- |
+| `bank`         | `PatternBank`         | 書き込み先バンク                   |
+| `index_offset` | `usize`               | バンク内の書き込み開始インデックス |
+| `points`       | `&[ControlPoints<N>]` | 焦点サンプルの列                   |
+
+`ControlPoints<N>` は `N` 個の焦点 (`ControlPoint`) と振幅を持つ 1 サンプル.
+詳細は [FociStm](/autd3-sdk/api/command/foci-stm/#controlpoint--controlpoints) を参照.
+
+## Example
+
+`WriteFociBuffer` → `ConfigFociStm` → `ChangePatternBank` で焦点列を Foci STM として再生する例 (高レベルの [FociStm](/autd3-sdk/api/command/foci-stm/) と等価).
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

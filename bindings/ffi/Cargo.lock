@@ -124,7 +124,7 @@ dependencies = [
  "autd3-ffi-abi",
  "autd3-rs",
  "autd3-rs-core",
- "autd3-rs-firmware-emulator",
+ "autd3-rs-link-nop",
  "tokio",
 ]
 
@@ -234,6 +234,14 @@ dependencies = [
  "thread-priority",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "autd3-rs-link-nop"
+version = "0.1.0"
+dependencies = [
+ "autd3-rs-core",
+ "autd3-rs-firmware-emulator",
 ]
 
 [[package]]

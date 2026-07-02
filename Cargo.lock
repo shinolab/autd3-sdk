@@ -169,6 +169,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-rs-link-nop"
+version = "0.1.0"
+dependencies = [
+ "autd3-rs-core",
+ "autd3-rs-firmware-emulator",
+]
+
+[[package]]
 name = "autd3-rs-link-remote"
 version = "0.1.0"
 dependencies = [
@@ -216,6 +224,7 @@ name = "autd3-rs-pattern"
 version = "0.1.0"
 dependencies = [
  "autd3-rs-core",
+ "criterion",
 ]
 
 [[package]]

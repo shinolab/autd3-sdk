@@ -1,7 +1,6 @@
 use autd3_rs_core::geometry::{Device, Geometry};
 use autd3_rs_core::link::IntoLink;
-
-use crate::audit::Audit;
+use autd3_rs_firmware_emulator::Audit;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Nop;
@@ -17,6 +16,6 @@ impl IntoLink for Nop {
     type Link = Audit;
 
     async fn into_link(self, geometry: &Geometry) -> Result<Audit, autd3_rs_core::Error> {
-        Ok(Audit::new(geometry.iter().map(Device::len)))
+        Ok(Audit::new(geometry.iter().map(Device::num_transducers)))
     }
 }

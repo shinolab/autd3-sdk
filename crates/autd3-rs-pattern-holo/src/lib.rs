@@ -23,7 +23,6 @@ pub use mask::TransducerMask;
 mod tests {
     use autd3_rs_core::common::units::{m, s};
     use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion};
-    use autd3_rs_core::params::NUM_TRANSDUCERS;
     use autd3_rs_core::value::{Emission, Intensity};
 
     use super::*;
@@ -40,8 +39,8 @@ mod tests {
         geometry.center() + autd3_rs_core::geometry::Vector3::new(0.0, 0.0, 150.0)
     }
 
-    fn buffer(geometry: &Geometry) -> Vec<[Emission; NUM_TRANSDUCERS]> {
-        vec![[Emission::default(); NUM_TRANSDUCERS]; geometry.len()]
+    fn buffer(geometry: &Geometry) -> Vec<Vec<Emission>> {
+        vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()]
     }
 
     #[test]
@@ -79,7 +78,7 @@ mod tests {
             &mut out,
         )
         .unwrap();
-        assert_eq!(out.len(), geometry.len());
+        assert_eq!(out.len(), geometry.num_devices());
         assert!(
             out.iter()
                 .all(|slot| slot.iter().any(|e| *e != Emission::default()))
@@ -216,7 +215,7 @@ mod tests {
             amplitude: 5e3 * Pa,
         }];
 
-        let mut enabled = [[true; NUM_TRANSDUCERS]; 1];
+        let mut enabled = vec![vec![true; Autd3::NUM_TRANSDUCERS]; 1];
         for (t, slot) in enabled[0].iter_mut().enumerate() {
             *slot = t % 2 == 0;
         }

@@ -1,0 +1,28 @@
+---
+title: SetOutputMask
+description: 出力の有効/無効を切り替える SetOutputMask
+sidebar:
+  order: 9
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/output-mask.rs?raw";
+import pySample from "@codes/python/examples/api/command/output-mask.py?raw";
+import fullSample from "@codes/rust/examples/api/command/output-mask-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/output-mask-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`SetOutputMask` は, 振動子ごとに出力の有効/無効を切り替えるコマンド.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| フィールド | 型             | 説明                                                                                          |
+| ---------- | -------------- | --------------------------------------------------------------------------------------------- |
+| `masks`    | `&[Vec<bool>]` | デバイスごとの出力マスク (`true` で出力). |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

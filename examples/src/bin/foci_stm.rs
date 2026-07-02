@@ -2,10 +2,11 @@
 
 use anyhow::Result;
 
+use autd3_rs::commands::{FociStm, FociStmOption, SetSilencer, circle};
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig, FociStm, FociStmOption, SetSilencer, circle};
+use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -30,7 +31,15 @@ async fn main() -> Result<()> {
 
     // 200-point circle of radius 30 mm, 150 mm above the array center.
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let points = circle(center, 30.0 * mm, 200, Vector3::z_axis(), Intensity::MAX);
+    let mut points = Vec::new();
+    circle(
+        center,
+        30.0 * mm,
+        200,
+        Vector3::z_axis(),
+        Intensity::MAX,
+        &mut points,
+    );
 
     let mut builder = client.datagram_builder();
     builder.push(SetSilencer::default()).push(FociStm::new(

@@ -1,0 +1,71 @@
+---
+title: SOEM
+description: C 実装の SOEM を用いた EtherCAT Link (GPL-3.0）
+sidebar:
+  order: 3
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SoemLink` は C 実装の EtherCAT マスタ [SOEM](https://github.com/OpenEtherCATsociety/SOEM) を用いた Link 実装.
+`autd3-rs-link-soem` クレートで提供される.
+
+:::caution[ライセンス]
+このクレートは SOEM (GPL-3.0) を静的リンクするため, ライセンスは **GPL-3.0-only** である. `autd3-rs-link-soem` をリンクして配布する成果物も GPL-3.0 に従う必要がある. ライセンス上の制約を避けたい場合は [EtherCrab](/autd3-sdk/api/link/ethercrab/) を使用する.
+:::
+
+Ethernet の raw socket を扱うため, Linux/macOS では実行に root 権限 (または `CAP_NET_RAW`) が必要.
+Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mode」でインストールする必要がある.
+
+## API
+
+<CodeTabs
+  rust={`SoemLinkOption {
+    interface,
+    sync0_period,
+    sync0_shift,
+    sync_tolerance,
+    sync_timeout,
+};`}
+  python={`SoemLinkOption(
+    interface,
+    sync0_period,
+    sync0_shift,
+    sync_tolerance,
+    sync_timeout,
+)`}
+/>
+
+| フィールド       | 型         | 説明                                                                            |
+| ---------------- | ---------- | ------------------------------------------------------------------------------- |
+| `interface`      | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
+| `sync0_period`   | `Duration` | SYNC0 信号の周期                                                                |
+| `sync0_shift`    | `Duration` | SYNC0 信号のシフト量                                                            |
+| `sync_tolerance` | `Duration` | 同期完了とみなす許容誤差                                                        |
+| `sync_timeout`   | `Duration` | 同期完了を待つタイムアウト                                                      |
+
+SOEMの設定をフルに行う `SoemLinkOptionFull` も用意されている (Rust のみ).
+
+<CodeTabs
+  rust={`SoemLinkOptionFull {
+    interface,
+    sync0_period,
+    sync0_shift,
+    send_cycle,
+    sync_tolerance,
+    sync_timeout,
+    state_timeout,
+    op_wait_timeout,
+};`}
+/>
+
+| フィールド         | 型          | 説明                                                                            |
+| ------------------ | ----------- | ------------------------------------------------------------------------------- |
+| `interface`        | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
+| `sync0_period`     | `Duration`  | SYNC0 信号の周期                                                                |
+| `sync0_shift`      | `Duration`  | SYNC0 信号のシフト量                                                            |
+| `send_cycle`       | `Duration`  | プロセスデータ送信の周期                                                        |
+| `sync_tolerance`   | `Duration`  | 同期完了とみなす許容誤差                                                        |
+| `sync_timeout`     | `Duration`  | 同期完了を待つタイムアウト                                                      |
+| `state_timeout`    | `Duration`  | SAFE-OP 状態への遷移を待つタイムアウト                                         |
+| `op_wait_timeout`  | `Duration`  | OP 状態への移行を待つタイムアウト                                              |

@@ -5,8 +5,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+use autd3_rs::commands::XorHashCmd;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::operation::XorHashCmd;
 use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, Frames, Link, ResponseFuture, StateCheck,
     ThreadPriority, ThreadPriorityValue,

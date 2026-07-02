@@ -99,6 +99,7 @@ dependencies = [
  "autd3-rs",
  "autd3-rs-core",
  "pyo3",
+ "tokio",
 ]
 
 [[package]]
@@ -129,7 +130,7 @@ dependencies = [
  "autd3-python-capsule",
  "autd3-rs",
  "autd3-rs-core",
- "autd3-rs-firmware-emulator",
+ "autd3-rs-link-nop",
  "pyo3",
  "tokio",
 ]
@@ -246,6 +247,14 @@ dependencies = [
  "thread-priority",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "autd3-rs-link-nop"
+version = "0.1.0"
+dependencies = [
+ "autd3-rs-core",
+ "autd3-rs-firmware-emulator",
 ]
 
 [[package]]

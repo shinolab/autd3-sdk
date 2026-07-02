@@ -4,6 +4,7 @@ mod component;
 mod console;
 mod cpu;
 mod cs;
+mod doc;
 mod emulator;
 mod example;
 mod ffi;
@@ -25,6 +26,7 @@ use changelog::{ChangelogCmd, run_changelog};
 use console::{ConsoleCmd, run_console};
 use cpu::{CpuCmd, run_cpu};
 use cs::{CsCmd, run_cs};
+use doc::{DocCmd, run_doc};
 use emulator::{EmulatorCmd, run_emulator};
 use example::{ExampleCmd, run_example};
 use ffi::{FfiCmd, run_ffi};
@@ -95,6 +97,10 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: LicenseCmd,
     },
+    Doc {
+        #[command(subcommand)]
+        cmd: DocCmd,
+    },
     Example(ExampleCmd),
     Changelog(ChangelogCmd),
     BumpVersion(BumpVersionCmd),
@@ -117,6 +123,7 @@ fn main() -> Result<()> {
         TopCmd::Ffi { cmd } => run_ffi(&root, cmd),
         TopCmd::Cs { cmd } => run_cs(&root, cmd),
         TopCmd::License { cmd } => run_license(&root, &cmd),
+        TopCmd::Doc { cmd } => run_doc(&root, &cmd),
         TopCmd::Example(cmd) => run_example(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),

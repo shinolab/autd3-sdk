@@ -8,11 +8,10 @@ use anyhow::Result;
 use autd3_rs::common::ULTRASOUND_PERIOD;
 use textplots::{Chart, Plot, Shape};
 
+use autd3_rs::commands::{Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::units::rad;
 use autd3_rs::value::{Emission, Intensity, Phase};
-use autd3_rs::{Pattern, SetSilencer};
 
 use autd3_rs_emulator::{ClientApi, Emulator};
 
@@ -34,7 +33,8 @@ fn lineplot(title: &str, samples: &[f32]) {
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut patterns = vec![[Emission::default(); NUM_TRANSDUCERS]; geometry.len()];
+    let mut patterns =
+        vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
     autd3_rs_pattern::uniform(
         Emission {
             phase: Phase::from(std::f32::consts::PI / 2.0 * rad),

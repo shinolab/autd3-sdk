@@ -1,0 +1,123 @@
+---
+title: TwinCAT のインストール
+description: TwinCAT を EtherCAT マスタとして用いる場合のインストール・セットアップ手順
+sidebar:
+  order: 2
+---
+
+:::note
+TwinCAT は Windows における EtherCAT マスタの選択肢の一つであり, [TwinCATLink](/autd3-sdk/api/link/twincat/) を使う場合にのみ必要.
+Linux/macOS や [EtherCrab](/autd3-sdk/api/link/ethercrab/) など他の Link を使う場合, このページの手順は不要.
+:::
+
+TwinCAT は PC で EtherCAT を使用する際の唯一の公式の方法であり, Windows をリアルタイム化する Windows 専用のソフトウェアである.
+[TwinCATLink](/autd3-sdk/api/link/twincat/) を使う場合は, あらかじめ以下の手順で TwinCAT をセットアップする必要がある.
+
+TwinCAT は特定のネットワークコントローラを要求する.
+[対応するネットワークコントローラの一覧](https://infosys.beckhoff.com/english.php?content=../content/1033/tc3_overview/9309844363.html&id=)を確認すること.
+
+:::note
+TwinCAT のインストール後であれば, `<TwinCAT install dir>/TwinCAT/3.1/Driver/System/TcI8254x.inf` に対応デバイスの Vendor ID と Device ID が書かれている.
+「デバイスマネージャー」→「イーサネットアダプタ」→「プロパティ」→「詳細」→「ハードウェア ID」と照らし合わせることでも確認できる.
+:::
+
+一覧以外のネットワークコントローラでも動作する場合があるが, その場合は正常な動作とリアルタイム性は保証されない.
+
+## TwinCAT のインストール
+
+[公式サイト](https://infosys.beckhoff.com/content/1033/tc3_installation/15698617995.html?id=7523796010185393366)を参照し, TwinCAT Package Manager をインストールする.
+インストールおよびパッケージの取得には, 無料の myBeckhoff アカウントの登録が必要.
+
+Package Manager の初回起動時には, 以下の初期設定が必要になる.
+
+1. Feed の登録
+   - 「Add new feed」を押し, URL が `/stable` で終わる feed を追加する.
+   - myBeckhoff アカウントの認証情報を入力し, 「Save」で保存する.
+2. Integration の選択
+   TwinCAT XAE Shell の 64bit 版を選択すればよい. Visual Studio への統合は不要である.
+
+初期設定が済んだら, ワークロードの一覧から「TwinCAT Standard」(Engineering/Runtime 両方) をインストールする.
+
+## autd3-console の入手
+
+TwinCAT のセットアップには, GUI ツールである `autd3-console` を用いる.
+GitHub の [Release ページ](https://github.com/shinolab/autd3-sdk/releases) から `autd3-console` をダウンロードして起動し, 上部の「TwinCAT」タブを開く.
+このタブは Windows でのみ表示される.
+
+なお, CLI版も同梱されている.
+
+## 初回セットアップ
+
+以下の 3 つは, 環境ごとに初回のみ必要な作業である.
+
+### 仮想化ベースのセキュリティの無効化
+
+TwinCAT は仮想化ベースのセキュリティ機能が有効になっていると動かない.
+
+無効化されているかは, `autd3-console` の「TwinCAT」タブで「Doctor」を選び「Run」を押すと診断できる.
+無効化されていない場合は無効化手順が表示される.
+
+:::note
+Microsoft アカウントで Windows にログインしている場合は無効化できないという報告がある.
+その場合はローカルアカウントで試すこと.
+:::
+
+### AUTD3 用 ESI のインストール
+
+AUTD3 を認識させるには, AUTD3 の ESI ファイル (`AUTD.xml`) を TwinCAT に配置する必要がある.
+「TwinCAT」タブで「Install ESI」を選び「Run」を押す.
+これにより `AUTD.xml` が TwinCAT の ESI ディレクトリ (`<TwinCAT install dir>/TwinCAT/3.1/Config/Io/EtherCAT/`) へコピーされる.
+
+:::note
+ESI のコピー先は書き込みに管理者権限を要する場合がある.
+その場合は `autd3-console` を管理者として起動すること.
+:::
+
+### リアルタイム Ethernet ドライバのインストール
+
+使用するネットワークアダプタにリアルタイム Ethernet ドライバをインストールする.
+
+TwinCAT XAE Shell を開き, 上部メニューの「TwinCAT」→「Show Realtime Ethernet Compatible Devices」を開く.
+「Compatible devices」の中の対応デバイスを選択し, 「Install」をクリックする.
+「Installed and ready to use devices (realtime capable)」にインストールされたアダプタが表示されれば成功である.
+
+:::note
+「Compatible devices」に何も表示されない場合, その PC のイーサネットデバイスは TwinCAT に対応していない.
+「Incompatible devices」内のドライバもインストール自体は可能だが, その場合は動作保証がない.
+:::
+
+## TwinCATプロジェクトの構築
+
+AUTD3 と PC を接続し, AUTD3 の電源が入った状態で, 「TwinCAT」タブの「Run」を選ぶ.
+必要に応じて以下のパラメータを設定し, 「Run」を押すとデバイスをスキャンして TwinCAT プロジェクトが構成される.
+
+| 項目                 | 説明                                                              | デフォルト |
+| -------------------- | ----------------------------------------------------------------- | ---------- |
+| Client IP            | クライアントの IP アドレス. ローカルならからで良い.               | 空         |
+| Device name          | 使用する Ethernet デバイス名. 空なら最初に見つかったデバイス.     | 空         |
+| Sync0 (x500us)       | Sync0 サイクルタイム (500 µs 単位).                              | 2 (= 1 ms) |
+| Task (x base time)   | タスクサイクルタイム (Base time 単位).                           | 1          |
+| Base time            | CPU 基準時間.                                                     | 1 ms       |
+| Keep XAE Shell open  | XAE Shell を開いたままにするか.                                   | オン       |
+
+:::caution
+TwinCAT は PC の電源を切る, スリープモードに入る等で接続が途切れる.
+その場合「Run」を実行し直すこと.
+:::
+
+一度構成したプロジェクトを再度開くだけなら, 「Open」から開ける.
+
+### ライセンス
+
+ライセンス関係のエラーが出た場合は, ライセンスを設定する.
+ライセンスを持っていない場合, 7 日間限定のトライアルライセンスを発行できる.
+
+XAE Shell で「Solution Explorer」→「SYSTEM」→「License」を開き, 「7 Days Trial License ...」をクリックし, 画面に表示される文字を入力する.
+設定後は XAE Shell を閉じて再び実行する.
+
+## トラブルシューティング
+
+多数のデバイスを使用しようとすると, TwinCAT がエラーを出すことがある.
+この場合は「Run」フォームの `Sync0` / `Task` の値を増やして再実行する.
+適切な値は接続台数による.
+エラーが出ない範囲でできる限り小さい値が望ましい.

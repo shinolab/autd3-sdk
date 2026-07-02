@@ -1,13 +1,12 @@
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::Emission;
 
-pub fn uniform_device(emission: Emission, out: &mut [Emission; NUM_TRANSDUCERS]) {
+pub fn uniform_device(emission: Emission, out: &mut [Emission]) {
     for slot in out.iter_mut() {
         *slot = emission;
     }
 }
 
-pub fn uniform(emission: Emission, out: &mut [[Emission; NUM_TRANSDUCERS]]) {
+pub fn uniform(emission: Emission, out: &mut [Vec<Emission>]) {
     for slot in &mut *out {
         uniform_device(emission, slot);
     }
@@ -15,6 +14,7 @@ pub fn uniform(emission: Emission, out: &mut [[Emission; NUM_TRANSDUCERS]]) {
 
 #[cfg(test)]
 mod tests {
+    use autd3_rs_core::geometry::Autd3;
     use autd3_rs_core::value::{Intensity, Phase};
 
     use super::*;
@@ -26,7 +26,7 @@ mod tests {
             intensity: Intensity(0x80),
         };
 
-        let mut out = [[Emission::default(); NUM_TRANSDUCERS]; 2];
+        let mut out = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
         uniform(emission, &mut out);
 
         for dev in &out {

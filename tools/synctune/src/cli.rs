@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use autd3_rs::MAX_IN_FLIGHT;
-use autd3_rs::operation::XOR_HASH_MAX_DATA_LEN;
+use autd3_rs::commands::XOR_HASH_MAX_DATA_LEN;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]

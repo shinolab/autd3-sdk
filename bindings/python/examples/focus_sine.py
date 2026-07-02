@@ -9,10 +9,11 @@ import autd3
 import autd3_link_ethercrab as ethercrab
 import autd3_modulation as modulation
 import autd3_pattern as pattern
+from autd3.units import Hz, m, s
 
 
 async def main() -> None:
-    geometry = autd3.Geometry([autd3.Autd3()])
+    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     client = await autd3.Client.open(
         geometry,
@@ -24,18 +25,18 @@ async def main() -> None:
     for i, fw in enumerate(await client.read_firmware_version()):
         print(f"device[{i}] firmware version: {fw}")
 
-    # length in mm; sound speed in mm/s (340 m/s)
+    # length in mm; sound speed as a Velocity
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
-    wavelength = pattern.wavelength(340_000.0)
+    wavelength = pattern.wavelength(340 * m / s)
     patterns = geometry.pattern_buffer()
     pattern.focus(geometry, target, wavelength, pattern.FocusOption(), patterns)
 
     mod_buf = modulation.modulation_buffer()
-    modulation.sine(200.0, modulation.SineOption(), mod_buf)
+    modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
 
     builder = client.datagram_builder()
-    builder.push(autd3.Pattern(patterns))
-    builder.push(autd3.Modulation(autd3.SamplingConfig.FREQ_4K, mod_buf))
+    builder.push(autd3.commands.Pattern(patterns))
+    builder.push(autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf))
     datagrams = builder.build()
     for frame in datagrams:
         await client.send_checked(frame)

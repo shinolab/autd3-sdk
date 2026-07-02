@@ -1,0 +1,24 @@
+---
+title: Clear
+description: デバイス状態をクリアするコマンド
+sidebar:
+  order: 10
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/clear.rs?raw";
+import pySample from "@codes/python/examples/api/command/clear.py?raw";
+import fullSample from "@codes/rust/examples/api/command/clear-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/clear-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`Clear` は, デバイスのバンク・各種設定を起動直後の状態へ戻すコマンド.
+Silencer / Pattern / Modulation などの設定がすべて初期化される.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

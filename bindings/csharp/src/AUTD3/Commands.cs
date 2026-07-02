@@ -69,7 +69,7 @@ namespace AUTD3
             Value = value;
         }
 
-        public static GpioOut None => new GpioOut(0, 0);
+        public static GpioOut Off => new GpioOut(0, 0);
         public static GpioOut BaseSignal => new GpioOut(1, 0);
         public static GpioOut Thermo => new GpioOut(2, 0);
         public static GpioOut ForceFan => new GpioOut(3, 0);

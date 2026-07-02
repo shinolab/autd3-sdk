@@ -1,0 +1,303 @@
+---
+interface Props {
+  kind?: "focus" | "plane" | "bessel";
+}
+const { kind = "focus" } = Astro.props;
+const config = JSON.stringify({ kind });
+---
+
+<div class="autd-field" data-config={config}>
+  <div class="autd-field-main">
+    <div class="autd-field-controls"></div>
+    <div class="autd-field-stage">
+      <canvas class="autd-field-canvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+  const GRID_X = 18;
+  const GRID_Y = 14;
+  const PITCH = 10.16; // mm
+  const SOUND_SPEED = 340_000; // mm/s
+  const ULTRASOUND_FREQ = 40_000; // Hz
+  const WAVELEN = SOUND_SPEED / ULTRASOUND_FREQ; // = 8.5 mm
+  const K = (2 * Math.PI) / WAVELEN;
+  const RES = 220;
+  const TWO_PI = 2 * Math.PI;
+
+  const INFERNO = [
+    [0.001, 0.0, 0.014],
+    [0.282, 0.068, 0.377],
+    [0.61, 0.162, 0.506],
+    [0.898, 0.318, 0.388],
+    [0.988, 0.645, 0.212],
+    [0.988, 0.998, 0.645],
+  ];
+  function inferno(x: number): [number, number, number] {
+    const t = Math.min(Math.max(x, 0), 1) * 5;
+    const i = Math.min(Math.floor(t), 4);
+    const f = t - i;
+    const a = INFERNO[i];
+    const b = INFERNO[i + 1];
+    return [
+      (a[0] + (b[0] - a[0]) * f) * 255,
+      (a[1] + (b[1] - a[1]) * f) * 255,
+      (a[2] + (b[2] - a[2]) * f) * 255,
+    ];
+  }
+
+  function missing(x: number, y: number): boolean {
+    return y === 1 && (x === 1 || x === 2 || x === 16);
+  }
+
+  const txs: number[] = [];
+  const tys: number[] = [];
+  for (let y = 0; y < GRID_Y; y++) {
+    for (let x = 0; x < GRID_X; x++) {
+      if (missing(x, y)) continue;
+      txs.push(x * PITCH);
+      tys.push(y * PITCH);
+    }
+  }
+  const N = txs.length;
+  const CX = txs.reduce((s, v) => s + v, 0) / N;
+  const CY = tys.reduce((s, v) => s + v, 0) / N;
+
+  interface Spec {
+    key: string;
+    label: string;
+    unit: string;
+    min: number;
+    max: number;
+    step: number;
+    def: number;
+  }
+  type Cfg = Record<string, number> & { kind: string };
+
+  const SPECS: Record<string, Spec[]> = {
+    focus: [
+      { key: "fx", label: "target.x", unit: "mm", min: -80, max: 80, step: 1, def: 0 },
+      { key: "fz", label: "target.z", unit: "mm", min: 20, max: 260, step: 1, def: 150 },
+    ],
+    plane: [
+      { key: "tilt", label: "dir", unit: "°", min: -40, max: 40, step: 1, def: 0 },
+    ],
+    bessel: [
+      { key: "theta", label: "theta", unit: "°", min: 50, max: 88, step: 1, def: 72 },
+    ],
+  };
+
+  function phaseFor(kind: string, cfg: Cfg): Float32Array {
+    const ph = new Float32Array(N);
+    if (kind === "focus") {
+      const fx = CX + cfg.fx;
+      const fz = cfg.fz;
+      for (let i = 0; i < N; i++) {
+        const dx = fx - txs[i];
+        const dy = CY - tys[i];
+        const d = Math.sqrt(dx * dx + dy * dy + fz * fz);
+        ph[i] = (-d / WAVELEN) * TWO_PI;
+      }
+    } else if (kind === "plane") {
+      const nx = Math.sin((cfg.tilt * Math.PI) / 180);
+      for (let i = 0; i < N; i++) {
+        ph[i] = (-(nx * txs[i]) / WAVELEN) * TWO_PI;
+      }
+    } else if (kind === "bessel") {
+      const a = (cfg.theta * Math.PI) / 180;
+      const ca = Math.cos(a);
+      for (let i = 0; i < N; i++) {
+        const rx = txs[i] - CX;
+        const ry = tys[i] - CY;
+        const rxy = Math.sqrt(rx * rx + ry * ry);
+        ph[i] = (-(ca * rxy) / WAVELEN) * TWO_PI;
+      }
+    }
+    return ph;
+  }
+
+  function draw(canvas: HTMLCanvasElement, kind: string, cfg: Cfg) {
+    const W = RES;
+    const H = RES;
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d")!;
+
+    const xmin = CX - 110;
+    const xmax = CX + 110;
+    const zmin = 0;
+    const zmax = 260;
+
+    const phase = phaseFor(kind, cfg);
+
+    const mag = new Float32Array(W * H);
+    let maxMag = 1e-9;
+    for (let py = 0; py < H; py++) {
+      const wz = zmax - ((zmax - zmin) * py) / (H - 1);
+      for (let px = 0; px < W; px++) {
+        const wx = xmin + ((xmax - xmin) * px) / (W - 1);
+        let re = 0;
+        let im = 0;
+        for (let i = 0; i < N; i++) {
+          const dx = wx - txs[i];
+          const dy = CY - tys[i];
+          const d = Math.sqrt(dx * dx + dy * dy + wz * wz);
+          const p = -phase[i] - K * d;
+          const a = 1 / d;
+          re += a * Math.cos(p);
+          im += a * Math.sin(p);
+        }
+        const m = Math.sqrt(re * re + im * im);
+        mag[py * W + px] = m;
+        if (m > maxMag) maxMag = m;
+      }
+    }
+
+    const img = ctx.createImageData(W, H);
+    for (let i = 0; i < W * H; i++) {
+      const [r, g, b] = inferno(mag[i] / maxMag);
+      img.data[i * 4] = r;
+      img.data[i * 4 + 1] = g;
+      img.data[i * 4 + 2] = b;
+      img.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+
+    if (kind === "focus") {
+      const mx = ((CX + cfg.fx - xmin) / (xmax - xmin)) * W;
+      const my = ((zmax - cfg.fz) / (zmax - zmin)) * H;
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(mx - 6, my);
+      ctx.lineTo(mx + 6, my);
+      ctx.moveTo(mx, my - 6);
+      ctx.lineTo(mx, my + 6);
+      ctx.stroke();
+    }
+  }
+
+  function initOne(root: HTMLElement) {
+    const cfg: Cfg = JSON.parse(root.dataset.config || "{}");
+    const kind = cfg.kind || "focus";
+    const canvas = root.querySelector(
+      ".autd-field-canvas",
+    ) as HTMLCanvasElement;
+    const controls = root.querySelector(".autd-field-controls") as HTMLElement;
+
+    controls.innerHTML = "";
+    const specs = SPECS[kind] || [];
+    if (specs.length === 0) controls.style.display = "none";
+    specs.forEach((s) => {
+      cfg[s.key] = s.def;
+      const label = document.createElement("label");
+      const name = document.createElement("span");
+      name.className = "autd-field-name";
+      name.textContent = s.label;
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(s.min);
+      input.max = String(s.max);
+      input.step = String(s.step);
+      input.value = String(s.def);
+      input.dataset.in = s.key;
+      const out = document.createElement("output");
+      out.dataset.out = s.key;
+      out.textContent = String(s.def);
+      const val = document.createElement("span");
+      val.className = "autd-field-val";
+      val.append(out, document.createTextNode(" " + s.unit));
+      label.append(name, input, val);
+      controls.appendChild(label);
+    });
+
+    const inputs = controls.querySelectorAll<HTMLInputElement>("input[data-in]");
+    let raf = 0;
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        draw(canvas, kind, cfg);
+      });
+    };
+    const sync = () => {
+      inputs.forEach((inp) => {
+        const key = inp.dataset.in!;
+        cfg[key] = Number(inp.value);
+        const o = controls.querySelector(`output[data-out="${key}"]`);
+        if (o) o.textContent = inp.value;
+      });
+      schedule();
+    };
+    inputs.forEach((inp) => inp.addEventListener("input", sync));
+    sync();
+  }
+
+  function initAll() {
+    document
+      .querySelectorAll<HTMLElement>(".autd-field")
+      .forEach((el) => initOne(el));
+  }
+
+  initAll();
+  document.addEventListener("astro:page-load", initAll);
+</script>
+
+<style>
+  .autd-field {
+    margin: 1rem 0;
+    border: 1px solid var(--sl-color-hairline-light);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    background: var(--sl-color-black);
+  }
+  .autd-field-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+  }
+  .autd-field-controls {
+    order: 2;
+    flex: 1 1 180px;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .autd-field-controls :global(label) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-2);
+  }
+  .autd-field-controls :global(input[type="range"]) {
+    width: 100%;
+    margin: 0;
+  }
+  .autd-field-controls :global(.autd-field-val) {
+    font-variant-numeric: tabular-nums;
+    color: var(--sl-color-white);
+  }
+  .autd-field-controls :global(.autd-field-name) {
+    white-space: nowrap;
+  }
+  .autd-field-stage {
+    flex: 2 1 280px;
+    display: flex;
+    gap: 0.5rem;
+    min-width: 0;
+    align-items: stretch;
+  }
+  .autd-field-canvas {
+    flex: 1;
+    width: 100%;
+    max-width: 420px;
+    aspect-ratio: 1 / 1;
+    image-rendering: auto;
+    border-radius: 0.25rem;
+  }
+</style>

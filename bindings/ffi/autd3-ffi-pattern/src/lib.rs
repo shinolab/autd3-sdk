@@ -1,5 +1,5 @@
 use autd3_ffi_abi::{PatternBuffer, drop_handle, into_handle};
-use autd3_rs_core::params::NUM_TRANSDUCERS;
+use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 use autd3_rs_core::{Angle, Geometry, Length, Point3, UnitVector3, Vector3, Velocity};
 use autd3_rs_pattern::{BesselOption, FocusOption, PlaneOption};
@@ -61,11 +61,12 @@ pub unsafe extern "C" fn autd3_pattern_buffer_from_array(
         return std::ptr::null_mut();
     }
 
-    let slice = unsafe { std::slice::from_raw_parts(emissions, num_devices * NUM_TRANSDUCERS) };
+    let slice =
+        unsafe { std::slice::from_raw_parts(emissions, num_devices * Autd3::NUM_TRANSDUCERS) };
     let buffer = slice
-        .chunks_exact(NUM_TRANSDUCERS)
+        .chunks_exact(Autd3::NUM_TRANSDUCERS)
         .map(|device| {
-            let mut slot = [Emission::default(); NUM_TRANSDUCERS];
+            let mut slot = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
             for (e, src) in slot.iter_mut().zip(device) {
                 *e = Emission {
                     phase: Phase(src.phase),
@@ -108,7 +109,7 @@ pub unsafe extern "C" fn autd3_pattern_focus(
     let target = unsafe { point(target) };
     let option = unsafe { &*option };
     let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.len() {
+    if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
     autd3_rs_pattern::focus(
@@ -140,7 +141,7 @@ pub unsafe extern "C" fn autd3_pattern_plane(
     let dir = unsafe { unit_vector(dir) };
     let option = unsafe { &*option };
     let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.len() {
+    if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
     autd3_rs_pattern::plane(
@@ -176,7 +177,7 @@ pub unsafe extern "C" fn autd3_pattern_bessel(
     let dir = unsafe { unit_vector(dir) };
     let option = unsafe { &*option };
     let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.len() {
+    if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
     autd3_rs_pattern::bessel(

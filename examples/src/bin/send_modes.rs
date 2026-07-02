@@ -7,14 +7,11 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 
+use autd3_rs::commands::{ConfigPattern, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
-use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Emission, LoopBehavior, PatternBank, SamplingConfig};
-use autd3_rs::{
-    Client, ClientConfig, ConfigPattern, Frames, Length, MAX_IN_FLIGHT, ResponseFuture,
-    WritePatternBuffer,
-};
+use autd3_rs::{Client, ClientConfig, Frames, Length, MAX_IN_FLIGHT, ResponseFuture};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 
 const TOTAL_POINTS: usize = 1000;
@@ -148,11 +145,7 @@ async fn configure(client: &Client, geometry: &Geometry) -> Result<()> {
     Ok(())
 }
 
-fn write_focus(
-    client: &Client,
-    emissions: &[[Emission; NUM_TRANSDUCERS]],
-    buf: &mut Frames,
-) -> Result<()> {
+fn write_focus(client: &Client, emissions: &[Vec<Emission>], buf: &mut Frames) -> Result<()> {
     let mut builder = client.datagram_builder();
     builder.push(WritePatternBuffer {
         bank: PatternBank::B0,

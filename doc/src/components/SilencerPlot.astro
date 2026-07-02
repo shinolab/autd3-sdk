@@ -1,0 +1,292 @@
+---
+interface Props {
+  mode?: "phase" | "intensity";
+  period?: number;
+  p0?: number;
+  target?: number;
+  delta?: number;
+}
+const {
+  mode = "phase",
+  period = 12,
+  p0 = 2,
+  target = 6,
+  delta = 1,
+} = Astro.props;
+const config = JSON.stringify({ mode, period, p0, target, delta });
+---
+
+<div class="autd-sil" data-config={config}>
+  <canvas class="autd-sil-canvas"></canvas>
+  <div class="autd-sil-controls"></div>
+</div>
+
+<script>
+  type Cfg = {
+    mode: "phase" | "intensity";
+    period: number;
+    p0: number;
+    target: number;
+    delta: number;
+  };
+
+  interface Spec {
+    key: "p0" | "target" | "delta";
+    label: string;
+    min: number;
+    max: number;
+    step: number;
+  }
+
+  const sign = (x: number) => (x > 0 ? 1 : x < 0 ? -1 : 0);
+  const wrap = (x: number, m: number) => ((x % m) + m) % m;
+
+  function step(c: Cfg, p: number): number {
+    if (c.mode === "phase") {
+      const T = c.period;
+      let d = wrap(c.target - p, T);
+      if (d > T / 2) d -= T;
+      return wrap(p + sign(d) * Math.min(Math.abs(d), c.delta), T);
+    }
+    const d = c.target - p;
+    return p + sign(d) * Math.min(Math.abs(d), c.delta);
+  }
+
+  const PREFIX = 4;
+  const TAIL = 6;
+
+  function series(c: Cfg): number[] {
+    const dist =
+      c.mode === "phase"
+        ? Math.min(wrap(c.target - c.p0, c.period), wrap(c.p0 - c.target, c.period))
+        : Math.abs(c.target - c.p0);
+    const converge = c.delta > 0 ? Math.ceil(dist / c.delta) : 0;
+    const n = Math.min(PREFIX + converge + TAIL, 400);
+    const vals: number[] = [];
+    let p = c.p0;
+    for (let i = 0; i <= n; i++) {
+      vals.push(p);
+      if (i >= PREFIX) p = step(c, p);
+    }
+    return vals;
+  }
+
+  function draw(canvas: HTMLCanvasElement, c: Cfg) {
+    const ctx = canvas.getContext("2d")!;
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    const cssW = canvas.clientWidth || 600;
+    const cssH = canvas.clientHeight || 240;
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    const css = getComputedStyle(canvas);
+    const grid = css.getPropertyValue("--autd-grid") || "#5b5b66";
+    const axis = css.getPropertyValue("--autd-axis") || "#9b9ba6";
+    const accent = css.getPropertyValue("--autd-accent") || "#3b82f6";
+    const dot = css.getPropertyValue("--autd-dot") || "#e5e7eb";
+
+    const padL = 40;
+    const padR = 10;
+    const padT = 12;
+    const padB = 20;
+    const w = cssW - padL - padR;
+    const h = cssH - padT - padB;
+
+    const vals = series(c);
+    const n = vals.length - 1;
+    const yMax = c.mode === "phase" ? c.period : 255;
+    const xOf = (i: number) => padL + (w * i) / n;
+    const yOf = (v: number) => padT + h * (1 - v / yMax);
+
+    ctx.strokeStyle = grid;
+    ctx.lineWidth = 1;
+    ctx.fillStyle = axis;
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    const ticks: [number, string][] =
+      c.mode === "phase"
+        ? [
+            [0, "0"],
+            [c.period / 2, "π"],
+            [c.period, "2π"],
+          ]
+        : [
+            [0, "0"],
+            [128, "128"],
+            [255, "255"],
+          ];
+    for (const [v, label] of ticks) {
+      ctx.beginPath();
+      ctx.moveTo(padL, yOf(v));
+      ctx.lineTo(padL + w, yOf(v));
+      ctx.stroke();
+      ctx.fillText(label, padL - 6, yOf(v));
+    }
+
+    ctx.strokeStyle = axis;
+    ctx.globalAlpha = 0.6;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(padL, yOf(c.target));
+    ctx.lineTo(padL + w, yOf(c.target));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = grid;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(xOf(PREFIX), padT);
+    ctx.lineTo(xOf(PREFIX), padT + h);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = axis;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText("t_s", xOf(PREFIX), padT + h + 4);
+
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let pen = false;
+    for (let i = 0; i <= n; i++) {
+      const jump =
+        c.mode === "phase" && i > 0 && Math.abs(vals[i] - vals[i - 1]) > c.period / 2;
+      if (jump) pen = false;
+      const x = xOf(i);
+      const y = yOf(vals[i]);
+      if (!pen) {
+        ctx.moveTo(x, y);
+        pen = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = dot;
+    for (let i = 0; i <= n; i++) {
+      ctx.beginPath();
+      ctx.arc(xOf(i), yOf(vals[i]), 2, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  }
+
+  function specs(c: Cfg): Spec[] {
+    const hi = c.mode === "phase" ? c.period : 255;
+    const dMax = c.mode === "phase" ? c.period / 2 : 64;
+    const dStep = c.mode === "phase" ? 0.5 : 1;
+    return [
+      { key: "p0", label: "initial", min: 0, max: hi, step: dStep },
+      { key: "target", label: "target", min: 0, max: hi, step: dStep },
+      { key: "delta", label: "Δ", min: dStep, max: dMax, step: dStep },
+    ];
+  }
+
+  function initOne(root: HTMLElement) {
+    const cfg: Cfg = JSON.parse(root.dataset.config || "{}");
+    const canvas = root.querySelector(".autd-sil-canvas") as HTMLCanvasElement;
+    const controls = root.querySelector(".autd-sil-controls") as HTMLElement;
+    controls.querySelectorAll("label").forEach((l) => l.remove());
+
+    specs(cfg).forEach((s) => {
+      const label = document.createElement("label");
+      const name = document.createElement("span");
+      name.className = "autd-sil-name";
+      name.textContent = s.label;
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(s.min);
+      input.max = String(s.max);
+      input.step = String(s.step);
+      input.value = String(cfg[s.key]);
+      input.dataset.in = s.key;
+      const out = document.createElement("output");
+      out.dataset.out = s.key;
+      out.textContent = String(cfg[s.key]);
+      const val = document.createElement("span");
+      val.className = "autd-sil-val";
+      val.appendChild(out);
+      label.append(name, input, val);
+      controls.appendChild(label);
+    });
+
+    const inputs = controls.querySelectorAll<HTMLInputElement>("input[data-in]");
+    const sync = () => {
+      inputs.forEach((inp) => {
+        const key = inp.dataset.in as "p0" | "target" | "delta";
+        cfg[key] = Number(inp.value);
+        const o = controls.querySelector(`output[data-out="${key}"]`);
+        if (o) o.textContent = inp.value;
+      });
+      draw(canvas, cfg);
+    };
+    inputs.forEach((inp) => inp.addEventListener("input", sync));
+    sync();
+    new ResizeObserver(() => draw(canvas, cfg)).observe(canvas);
+  }
+
+  function initAll() {
+    document
+      .querySelectorAll<HTMLElement>(".autd-sil")
+      .forEach((el) => initOne(el));
+  }
+
+  initAll();
+  document.addEventListener("astro:page-load", initAll);
+</script>
+
+<style>
+  .autd-sil {
+    --autd-grid: var(--sl-color-gray-5);
+    --autd-axis: var(--sl-color-gray-3);
+    --autd-accent: var(--sl-color-accent);
+    --autd-dot: var(--sl-color-white);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin: 1rem 0;
+    border: 1px solid var(--sl-color-hairline-light);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    background: var(--sl-color-black);
+  }
+  .autd-sil-controls {
+    order: 2;
+    flex: 1 1 190px;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .autd-sil-controls :global(label) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-2);
+  }
+  .autd-sil-controls :global(input[type="range"]) {
+    width: 100%;
+    margin: 0;
+  }
+  .autd-sil-controls :global(.autd-sil-val) {
+    font-variant-numeric: tabular-nums;
+    color: var(--sl-color-white);
+  }
+  .autd-sil-controls :global(.autd-sil-name) {
+    font-family: var(--sl-font-mono, monospace);
+  }
+  .autd-sil-canvas {
+    flex: 2 1 300px;
+    display: block;
+    min-width: 0;
+    width: 100%;
+    height: 240px;
+  }
+</style>

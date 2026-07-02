@@ -1,0 +1,64 @@
+---
+title: sine
+description: 正弦波の振幅変調を生成する Modulation
+sidebar:
+  order: 21
+srcPath: crates/autd3-rs-modulation/src/sine.rs
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+import sample from "@codes/rust/examples/api/compute/modulation/sine.rs?raw";
+import pySample from "@codes/python/examples/api/compute/modulation/sine.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/modulation/sine-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/modulation/sine-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`sine` は正弦波の振幅変調を生成する.
+
+<ModulationPlot fixed="freq = 200 Hz (clamp = true)" />
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数      | 型             | 説明                                         |
+| --------- | -------------- | -------------------------------------------- |
+| `freq`    | `Freq<u32>` 等 | 変調周波数                                   |
+| `option`  | `&SineOption`  | 追加オプション (下記参照)                    |
+| `out`     | `&mut Vec<u8>` | 出力バッファ                                 |
+
+各サンプル <Math tex="i" /> の値は, 振幅 <Math tex="A" />（`amplitude`）, オフセット <Math tex="b" />（`offset`）, 位相 <Math tex="\theta" />（`phase`）に対して次式で与えられる. 
+
+<MathBlock tex="m_i = \frac{A}{2}\sin\!\left(2\pi f t_i + \theta\right) + b" />
+
+`freq` は `Freq<u32>`（`150 * Hz`）や `Freq<f32>`（`150.0 * Hz`）で指定する.
+
+## SineOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+
+| フィールド        | 型               | デフォルト              | 説明                                                     |
+| ----------------- | ---------------- | ----------------------- | -------------------------------------------------------- |
+| `amplitude`       | `u8`             | `0xFF`                  | 正弦波の振幅                                             |
+| `offset`          | `u8`             | `0x80`                  | 直流オフセット                                           |
+| `phase`           | `Angle`          | `Angle::ZERO`           | 位相                                                     |
+| `clamp`           | `bool`           | `false`                 | 範囲外の値を [0, 255] clampするか                        |
+| `sampling_config` | `SamplingConfig` | `SamplingConfig::FREQ_4K` | サンプリング設定                                       |
+
+`amplitude` と `offset` の組み合わせで波形が [0, 255] の範囲を外れる場合, `clamp` が `false` だとエラーになる.
+範囲内に収まるよう値を選ぶか, `clamp` を `true` にする. 
+
+## 制約
+
+[SamplingConfigの制約](/autd3-sdk/api/basics/sampling-config/)により, 指定した周波数が表現可能な周波数でない場合がある. 
+その場合は`Nearest(freq)` を渡すと最も近い表現可能な周波数に丸める. 
+
+<CodeTabs rust={excerpt(sample, "nearest")} python={excerpt(pySample, "nearest")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

@@ -1,11 +1,9 @@
 use std::time::Duration;
 
+use autd3_rs::commands::{FixedCompletionTime, Modulation, Pattern, SetSilencer};
 use autd3_rs::common::ULTRASOUND_PERIOD;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::operation::{FixedCompletionTime, SetSilencer};
-use autd3_rs::params::NUM_TRANSDUCERS;
 use autd3_rs::value::{Emission, Intensity, Phase, SamplingConfig};
-use autd3_rs::{Modulation, Pattern};
 
 use autd3_rs_emulator::{
     ClientApi, Emulator, InstantRecordOption, RangeXY, Record, RmsRecordOption,
@@ -13,12 +11,13 @@ use autd3_rs_emulator::{
 
 fn recorded() -> Record {
     let emulator = Emulator::new(Geometry::new(vec![Autd3::default()]));
-    let emissions = vec![
-        [Emission {
+    let emissions = vec![vec![
+        Emission {
             phase: Phase::ZERO,
             intensity: Intensity::MAX,
-        }; NUM_TRANSDUCERS],
-    ];
+        };
+        Autd3::NUM_TRANSDUCERS
+    ]];
     let modulation = vec![0xFF, 0xFF];
 
     emulator

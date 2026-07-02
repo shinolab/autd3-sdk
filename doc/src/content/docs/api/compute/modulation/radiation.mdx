@@ -1,0 +1,46 @@
+---
+title: radiation_pressure
+description: 既存の変調波形に放射圧補正を適用する Modulation
+sidebar:
+  order: 24
+srcPath: crates/autd3-rs-modulation/src/radiation_pressure.rs
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+import sample from "@codes/rust/examples/api/compute/modulation/radiation.rs?raw";
+import pySample from "@codes/python/examples/api/compute/modulation/radiation.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/modulation/radiation-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/modulation/radiation-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`radiation_pressure` は変調波形に放射圧補正を適用する. `sine` などで計算した波形に対して補正をかける. 
+
+音響放射圧は音圧の 2 乗に比例する. 
+`sine` などが指定するのは音圧の振幅なので, 放射圧を目的の波形に合わせたい場合は各サンプルの平方根を取る必要がある. 
+`radiation_pressure` はこの補正を行う. 
+
+各サンプル <Math tex="m" /> は次式で書き換えられる. 
+
+<MathBlock tex="m' = \mathrm{round}\!\left(255 \sqrt{\tfrac{m}{255}}\right)" />
+
+<ModulationPlot kind="radiation" fixed="" />
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+### radiation_pressure
+
+| 引数  | 型             | 説明                           |
+| ----- | -------------- | ------------------------------ |
+| `src` | `&[u8]`        | 補正前の変調波形               |
+| `out` | `&mut Vec<u8>` | 補正後の波形を書き出すバッファ |
+
+in-placeに書き換える `radiation_pressure_inplace` もある.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />

@@ -1,0 +1,49 @@
+---
+title: SetSilencer
+description: 位相・強度の急変を補間してノイズを抑える SetSilencer
+sidebar:
+  order: 5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/command/silencer.rs?raw";
+import pySample from "@codes/python/examples/api/command/silencer.py?raw";
+import fullSample from "@codes/rust/examples/api/command/silencer-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/silencer-example.py?raw";
+
+`SetSilencer` は, 位相・強度の急激な変化を線形補間し出力ノイズを抑える `Silencer` を設定するコマンド.
+
+補間方式は, 補間完了時間を指定する `FixedCompletionTime` と, 1補間ステップあたりの更新量を指定する `FixedUpdateRate` の 2 つ.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+`SetSilencer::default()` は `FixedCompletionTime` のデフォルトを渡すのと等価.
+`SetSilencer::disable()` は `Silencer` による補間を無効化する (25 μs で補間を完了するのと等価).
+
+## FixedCompletionTime
+
+目標値へ到達するまでの完了時間を指定する.
+各更新ステップは超音波周期 (25 µs) 単位であり, 指定時間がその整数倍でないとエラーになる.
+
+| フィールド    | 型         | デフォルト | 説明                                                     |
+| ------------- | ---------- | ---------- | -------------------------------------------------------- |
+| `intensity`   | `Duration` | `250 µs`   | 強度が目標へ到達するまでの完了時間                       |
+| `phase`       | `Duration` | `1000 µs`  | 位相が目標へ到達するまでの完了時間                       |
+| `strict_mode` | `bool`     | `true`     | 完了時間が変調・STM のサンプリング周期に収まらない場合にエラーとするか |
+
+## FixedUpdateRate
+
+1 補間ステップあたり (25 μs毎) の更新量を固定する.
+
+| フィールド  | 型           | 説明                          |
+| ----------- | ------------ | ----------------------------- |
+| `intensity` | `NonZeroU16` | 強度の 1 ステップあたり更新量 |
+| `phase`     | `NonZeroU16` | 位相の 1 ステップあたり更新量 |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

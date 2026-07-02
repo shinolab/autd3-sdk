@@ -23,7 +23,7 @@ const VALUE_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum GpioOut {
     #[default]
-    None,
+    Off,
     BaseSignal,
     Thermo,
     ForceFan,
@@ -42,7 +42,7 @@ pub enum GpioOut {
 impl GpioOut {
     fn encode(self) -> u64 {
         let (tag, value): (u8, u64) = match self {
-            GpioOut::None => (TYPE_NONE, 0),
+            GpioOut::Off => (TYPE_NONE, 0),
             GpioOut::BaseSignal => (TYPE_BASE_SIG, 0),
             GpioOut::Thermo => (TYPE_THERMO, 0),
             GpioOut::ForceFan => (TYPE_FORCE_FAN, 0),
@@ -97,7 +97,7 @@ mod tests {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = SetGpioOut {
             outputs: [
-                GpioOut::None,
+                GpioOut::Off,
                 GpioOut::Direct(true),
                 GpioOut::PwmOut(7),
                 GpioOut::ModIdx(0x1234),

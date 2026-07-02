@@ -7,10 +7,13 @@ import autd3_link_ethercrab as ethercrab
 
 
 async def main() -> None:
-    geometry = autd3.Geometry(
+    geometry = autd3.geometry.Geometry(
         [
-            autd3.Autd3(),
-            autd3.Autd3(origin=(autd3.Autd3.DEVICE_WIDTH, 0.0, 0.0)),
+            autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+            autd3.geometry.Autd3(
+                origin=(autd3.geometry.Autd3.DEVICE_WIDTH, 0.0, 0.0),
+                rotation=(1.0, 0.0, 0.0, 0.0),
+            ),
         ]
     )
 

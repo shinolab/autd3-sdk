@@ -1,0 +1,362 @@
+---
+interface Device {
+  position?: [number, number, number];
+  rotation?: [number, number, number];
+  quaternion?: [number, number, number, number];
+  label?: string;
+}
+
+interface Props {
+  src: string;
+  devices?: Device[];
+  height?: number;
+  up?: "y" | "z";
+  view?: [number, number, number];
+  distance?: number;
+  controls?: boolean;
+  labels?: boolean;
+  labelAnchor?: [number, number, number];
+  axes?: boolean;
+  axesLength?: number;
+  axesOrigin?: [number, number, number];
+  caption?: string;
+}
+
+const {
+  src,
+  devices = [{ position: [0, 0, 0] }],
+  height = 420,
+  up = "z",
+  view = [1, -1, 0.7],
+  distance = 1.8,
+  controls = false,
+  labels = true,
+  labelAnchor = [0, 0, 0],
+  axes = true,
+  axesLength,
+  axesOrigin = [0, 0, 0],
+  caption,
+} = Astro.props;
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const modelUrl = `${base}/${src}`;
+const config = JSON.stringify({
+  devices,
+  up,
+  view,
+  distance,
+  controls,
+  labels,
+  labelAnchor,
+  axes,
+  axesLength,
+  axesOrigin,
+});
+---
+
+<figure class="autd-model-figure">
+  <div
+    class="autd-model"
+    data-src={modelUrl}
+    data-config={config}
+    style={`height:${height}px`}
+  >
+    <canvas></canvas>
+    <div class="autd-model-status">モデルを読み込み中…</div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as THREE from "three";
+  import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+  import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+  import {
+    CSS2DRenderer,
+    CSS2DObject,
+  } from "three/addons/renderers/CSS2DRenderer.js";
+
+  interface Device {
+    position?: [number, number, number];
+    rotation?: [number, number, number];
+    quaternion?: [number, number, number, number];
+    label?: string;
+  }
+
+  function initModel(container: HTMLElement) {
+    if (container.dataset.inited) return;
+    container.dataset.inited = "1";
+
+    const src = container.dataset.src!;
+    const cfg = JSON.parse(container.dataset.config || "{}");
+    const devices: Device[] = cfg.devices || [];
+    const up = cfg.up || "z";
+    const view = cfg.view || [1, -1, 0.7];
+    const distance = cfg.distance ?? 1.8;
+    const interactive = cfg.controls === true;
+    const showLabels = cfg.labels !== false;
+    const labelAnchor = cfg.labelAnchor || [0, 0, 0];
+    const showAxes = cfg.axes !== false;
+    const axesLength = cfg.axesLength;
+    const axesOrigin = cfg.axesOrigin || [0, 0, 0];
+    const canvas = container.querySelector("canvas") as HTMLCanvasElement;
+    const status = container.querySelector(".autd-model-status") as HTMLElement;
+    if (interactive) container.classList.add("interactive");
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: true,
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.domElement.style.position = "absolute";
+    labelRenderer.domElement.style.top = "0";
+    labelRenderer.domElement.style.left = "0";
+    labelRenderer.domElement.style.pointerEvents = "none";
+    container.appendChild(labelRenderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1_000_000);
+    if (up === "z") camera.up.set(0, 0, 1);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+    const key = new THREE.DirectionalLight(0xffffff, 1.2);
+    key.position.set(1, 1, 2);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+    fill.position.set(-1, -1, 1);
+    scene.add(fill);
+
+    let orbit: OrbitControls | null = null;
+    if (interactive) {
+      orbit = new OrbitControls(camera, renderer.domElement);
+      orbit.enableDamping = true;
+    }
+
+    function render() {
+      renderer.render(scene, camera);
+      labelRenderer.render(scene, camera);
+    }
+
+    function resize() {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w === 0 || h === 0) return;
+      renderer.setSize(w, h, false);
+      labelRenderer.setSize(w, h);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      render();
+    }
+
+    new GLTFLoader().load(
+      src,
+      (gltf) => {
+        const group = new THREE.Group();
+        const instances: THREE.Object3D[] = [];
+        for (const d of devices) {
+          const inst = gltf.scene.clone(true);
+          const [x, y, z] = d.position || [0, 0, 0];
+          inst.position.set(x, y, z);
+          if (d.quaternion) {
+            const [qx, qy, qz, qw] = d.quaternion;
+            inst.quaternion.set(qx, qy, qz, qw);
+          } else if (d.rotation) {
+            const [rx, ry, rz] = d.rotation;
+            inst.rotation.set(
+              THREE.MathUtils.degToRad(rx),
+              THREE.MathUtils.degToRad(ry),
+              THREE.MathUtils.degToRad(rz),
+            );
+          }
+          group.add(inst);
+          instances.push(inst);
+        }
+
+        const AX = [
+          { dir: new THREE.Vector3(1, 0, 0), color: 0xff4d4d, name: "X" },
+          { dir: new THREE.Vector3(0, 1, 0), color: 0x4dff4d, name: "Y" },
+          { dir: new THREE.Vector3(0, 0, 1), color: 0x4d7dff, name: "Z" },
+        ];
+        let axisLen = 0;
+        if (showAxes) {
+          const ms = new THREE.Box3()
+            .setFromObject(gltf.scene)
+            .getSize(new THREE.Vector3());
+          axisLen = axesLength ?? (Math.max(ms.x, ms.y, ms.z) || 100);
+          const gap = axisLen * 0.0; 
+          const shaftRadius = axisLen * 0.012; 
+          const headLength = axisLen * 0.12; 
+          const headRadius = axisLen * 0.03;
+
+          const yAxis = new THREE.Vector3(0, 1, 0);
+          const makeArrow = (dir: THREE.Vector3, color: number) => {
+            const g = new THREE.Group();
+            const mat = new THREE.MeshBasicMaterial({ color });
+            const shaftLen = Math.max(0.001, axisLen - gap - headLength);
+            const shaft = new THREE.Mesh(
+              new THREE.CylinderGeometry(shaftRadius, shaftRadius, shaftLen, 16),
+              mat,
+            );
+            shaft.position.y = gap + shaftLen / 2;
+            const head = new THREE.Mesh(
+              new THREE.ConeGeometry(headRadius, headLength, 20),
+              mat,
+            );
+            head.position.y = gap + shaftLen + headLength / 2;
+            g.add(shaft, head);
+            g.quaternion.setFromUnitVectors(yAxis, dir.clone().normalize());
+            return g;
+          };
+
+          const axesGroup = new THREE.Group();
+          axesGroup.position.set(axesOrigin[0], axesOrigin[1], axesOrigin[2]);
+          for (const a of AX) {
+            axesGroup.add(makeArrow(a.dir, a.color));
+            const div = document.createElement("div");
+            div.className = "autd-model-axis";
+            div.textContent = a.name;
+            div.style.color = `#${a.color.toString(16).padStart(6, "0")}`;
+            const obj = new CSS2DObject(div);
+            obj.position.copy(a.dir.clone().multiplyScalar(axisLen * 1.1));
+            obj.center.set(0.5, 0.5);
+            axesGroup.add(obj);
+          }
+          group.add(axesGroup);
+        }
+
+        scene.add(group);
+        scene.updateMatrixWorld(true);
+
+        if (showLabels) {
+          const localBox = new THREE.Box3().setFromObject(gltf.scene);
+          const lc = localBox.getCenter(new THREE.Vector3());
+          const localBase =
+            up === "z"
+              ? new THREE.Vector3(lc.x, lc.y, localBox.max.z)
+              : new THREE.Vector3(lc.x, localBox.max.y, lc.z);
+          devices.forEach((d, i) => {
+            const pos = localBase
+              .clone()
+              .add(
+                new THREE.Vector3(
+                  labelAnchor[0],
+                  labelAnchor[1],
+                  labelAnchor[2],
+                ),
+              );
+            instances[i].localToWorld(pos);
+            const div = document.createElement("div");
+            div.className = "autd-model-label";
+            div.textContent = d.label ?? String(i + 1);
+            const obj = new CSS2DObject(div);
+            obj.position.copy(pos);
+            obj.center.set(0.5, 0.5);
+            scene.add(obj);
+          });
+        }
+
+        const box = new THREE.Box3().setFromObject(group);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 200;
+        const dir = new THREE.Vector3(view[0], view[1], view[2]).normalize();
+        camera.position.copy(center).add(dir.multiplyScalar(maxDim * distance));
+        camera.near = maxDim / 100;
+        camera.far = maxDim * 100;
+        camera.updateProjectionMatrix();
+        if (orbit) {
+          orbit.target.copy(center);
+          orbit.update();
+        } else {
+          camera.lookAt(center);
+        }
+        status.style.display = "none";
+
+        if (orbit) {
+          const tick = () => {
+            orbit!.update();
+            render();
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        } else {
+          render();
+        }
+      },
+      undefined,
+      () => {
+        status.textContent = `Cannot load model: ${src}`;
+      },
+    );
+
+    resize();
+    new ResizeObserver(resize).observe(container);
+  }
+
+  function initAll() {
+    document.querySelectorAll<HTMLElement>(".autd-model").forEach(initModel);
+  }
+
+  initAll();
+  document.addEventListener("astro:page-load", initAll);
+</script>
+
+<style>
+  .autd-model-figure {
+    margin: 1rem 0;
+  }
+  .autd-model {
+    position: relative;
+    width: 100%;
+    border: 1px solid var(--sl-color-hairline-light);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: #77767b;
+  }
+  .autd-model canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .autd-model.interactive {
+    touch-action: none;
+  }
+  .autd-model.interactive canvas {
+    pointer-events: auto;
+  }
+  .autd-model-status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+    pointer-events: none;
+  }
+  .autd-model :global(.autd-model-label) {
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background: var(--sl-color-accent);
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-xs);
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .autd-model :global(.autd-model-axis) {
+    font-size: var(--sl-text-sm);
+    font-weight: 700;
+    text-shadow: 0 0 3px var(--sl-color-black);
+  }
+  .autd-model-figure figcaption {
+    margin-top: 0.5rem;
+    text-align: center;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+</style>

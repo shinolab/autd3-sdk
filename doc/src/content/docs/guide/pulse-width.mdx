@@ -1,0 +1,26 @@
+---
+title: Pulse Width Encoder 
+description: PWM による出力音圧制御と intensity からパルス幅への変換
+sidebar:
+  order: 3
+  label: Pulse Width と出力音圧
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+
+AUTD3 では, 出力する音圧を PWM (Pulse Width Modulation) で制御している.
+PWM では, パルス幅 <Math tex="D" /> と出力音圧 <Math tex="P" /> の関係は理論上以下のように表される.
+
+<MathBlock tex="P \propto \sin\left(D\pi\right)." />
+
+デフォルトでは, `intensity` パラメータと出力音圧 <Math tex="P" /> が理論上は線形に比例するように設定されている.
+具体的には, `intensity` パラメータ <Math tex="I" /> (8 bit) からパルス幅 <Math tex="D" /> が以下のように変換される.
+
+<MathBlock tex="D = \frac{\arcsin\left(\frac{I}{255}\right)}{\pi} \quad\left(\therefore P \propto \sin\left(\arcsin\left(\frac{I}{255}\right)\right) = \frac{I}{255}\right)" />
+
+しかし, 実際には振動子の個体差や理論値とのズレによって, 必ずしも線形に比例するとは限らないことに注意が必要である.
+ただし, その場合でも, `intensity` パラメータに対して, 出力音圧は単調増加すると考えてよい.
+
+なお, この変換はIntensityをキーとするルックアップテーブルにより行っており, このテーブルは変更することができる.
+詳細は [SetPulseWidthTable](/autd3-sdk/api/command/set-pulse-width-table/) を参照されたい.

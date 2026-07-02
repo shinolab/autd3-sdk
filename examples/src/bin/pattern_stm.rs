@@ -3,9 +3,10 @@
 
 use anyhow::Result;
 
+use autd3_rs::commands::{PatternStm, PatternStmMode, PatternStmOption, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::{Client, ClientConfig, PatternStm, PatternStmMode, PatternStmOption, SetSilencer};
+use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 
 const NUM_POINTS: usize = 200;

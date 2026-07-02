@@ -142,8 +142,7 @@ pub extern "C" fn autd3_link_nop() -> *mut ClientOpener {
     let opener = client_opener(move |geometry, config| async move {
         let (client, checker) = link_runtime()
             .spawn(async move {
-                Client::open_with_checker(&geometry, autd3_rs_firmware_emulator::Nop::new(), config)
-                    .await
+                Client::open_with_checker(&geometry, autd3_rs_link_nop::Nop::new(), config).await
             })
             .await
             .map_err(join_err)??;

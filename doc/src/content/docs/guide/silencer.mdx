@@ -1,0 +1,77 @@
+---
+title: Silencer
+description: 位相・強度の急変を補間して可聴ノイズを抑える Silencer の仕組み
+sidebar:
+  order: 2
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import SilencerPlot from "@components/SilencerPlot.astro";
+
+焦点を高速に動かしたり, AM 変調をかけたりすると, 振動子に与える位相・強度データが時間的に急峻に変化し, 可聴音ノイズとなって現れる.
+
+AUTD3には Silencer 機能があり, 位相・強度データの変化を線形補間することでこのノイズを抑制する.
+
+Silencerの設定は [`SetSilencer`](/autd3-sdk/api/command/silencer/) で行う.
+
+## 理論
+
+詳細は鈴木らの論文[^suzuki2020]を参照されたい.
+概要は以下の通りである.
+
+- 振幅変調された超音波は可聴音を生じる.
+- 超音波振動子を駆動する際, 位相変化が振幅変動を引き起こす.
+    - したがって可聴音の騒音が生じる.
+- 位相変化を線形に補間し段階的に変化させることで, 振幅変動を抑えられる.
+    - したがって騒音を低減できる.
+- 補間を細かくするほど, 騒音を小さくできる.
+
+## 位相の補間
+
+Silencer は位相 <Math tex="P" /> の変化を線形補間し, 段階的にすることで静音化する.
+これは位相の時系列データを移動平均フィルタに通すのにほぼ等しいが, 位相データが周期的であることを考慮する点で異なる.
+
+超音波の周期を <Math tex="T" /> とする.
+即ち <Math tex="P=0" /> が <Math tex="0\,\mathrm{rad}" />, <Math tex="P=T" /> が <Math tex="2\pi\,\mathrm{rad}" /> に対応する.
+現在の位相 <Math tex="P" /> と目標値 <Math tex="P_r" /> に対し, Silencer は以下のように <Math tex="P" /> を更新する.
+
+<MathBlock tex="P \leftarrow \begin{cases} P + \mathrm{sign}(P_r - P) \min (|P_r - P|, \Delta) & \text{if } |P_r - P| \le T/2 \\ P - \mathrm{sign}(P_r - P) \min (|P_r - P|, \Delta) & \text{(otherwise)} \end{cases}" />
+
+ここで <Math tex="\Delta" /> は 1 ステップあたりの更新量であり, 更新は超音波周期 (25 µs) ごとに行われる.
+下図は <Math tex="t_s" /> で目標値が変化したときの位相変化である.
+<Math tex="\Delta" /> を小さくするほど変化はなだらかになり, 騒音は強く抑制される.
+
+<SilencerPlot mode="phase" period={12} p0={2} target={6} delta={1} />
+
+目標までの距離が <Math tex="T/2" /> を超える場合は, 逆回りのほうが近いためそちらへ補間する.
+例えば <Math tex="P=2" /> から <Math tex="P_r=10" /> へ変化する場合, <Math tex="P=10" /> より <Math tex="P=-2" /> のほうが近い.
+
+この実装の都合上, 移動平均フィルタとは異なる挙動を示す場合がある.
+元時系列への忠実度という観点では移動平均フィルタが正しいが, 位相変化量が <Math tex="\pi" /> を超える場合の扱いや <Math tex="\Delta" /> の可変化 (フィルタ長の可変化) が煩雑なため, 現在の実装となっている.
+
+## 強度の補間
+
+振幅変動が騒音を引き起こすため, 強度パラメータ <Math tex="D" /> にも同等のフィルタをかけることで AM による騒音を抑制できる.
+強度は位相と異なり周期的ではないので, 現在の <Math tex="D" /> と目標値 <Math tex="D_r" /> に対し以下のように更新する.
+
+<MathBlock tex="D \leftarrow D + \mathrm{sign}(D_r - D) \min (|D_r - D|, \Delta)" />
+
+<SilencerPlot mode="intensity" p0={40} target={200} delta={16} />
+
+## 設定モード
+
+補間方式は 2 つのモードがある.
+
+- `FixedCompletionTime`: 位相 / 強度の変化が一定時間で完了するように, 完了時間を指定する.
+    - 完了時間は超音波周期 (25 µs) の整数倍である必要がある.
+- `FixedUpdateRate`: 上述の <Math tex="\Delta" /> を直接指定し, 全振動子で位相 / 強度の変化速度を一定にする.
+
+デフォルトは `FixedCompletionTime` であり, 強度 0.25 ms, 位相 1 ms の完了時間に設定されている.
+Silencer の無効化は, 位相 / 強度変化が超音波周期 (25 µs) で完了することと等価である.
+
+`FixedCompletionTime` モードの場合, 補間完了時間が, サンプリング周期より長くなると, 目標値に到達する前に次のデータが来てしまうため, 補間が完了しないまま次の目標値へ変化してしまう.
+そのため, これが起きないように, 補間完了時間がサンプリング周期より長い値を設定するとエラーとなる.
+このエラーの対処方については [チュートリアル/静音化](/autd3-sdk/getting-started/tutorial/silencer) を参照されたい.
+
+[^suzuki2020]: Suzuki, Shun, et al. "Reducing amplitude fluctuation by gradual phase shift in midair ultrasound haptics." IEEE transactions on haptics 13.1 (2020): 87-93.

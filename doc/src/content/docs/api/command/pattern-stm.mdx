@@ -1,0 +1,66 @@
+---
+title: PatternStm
+description: ホスト計算した Pattern の列を高速に切り替える STM
+sidebar:
+  order: 3
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/pattern-stm.rs?raw";
+import pySample from "@codes/python/examples/api/command/pattern-stm.py?raw";
+import fullSample from "@codes/rust/examples/api/command/pattern-stm-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/pattern-stm-example.py?raw";
+import { excerpt } from "@lib/excerpt";
+
+`PatternStm` は, ハードウェアタイマにより任意の音場 (各振動子の emission) を切り替える STM 機能を提供する.
+[FociStm](/autd3-sdk/api/command/foci-stm/) と異なり, 任意の Pattern を扱えるが, データ転送量が大きい.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} />
+
+| 引数       | 型                                    | 説明                                                 |
+| ---------- | ------------------------------------- | ---------------------------------------------------- |
+| `freq`     | `impl Into<StmConfig>`                | 再生レート (`Freq` / `Duration` / `SamplingConfig`) |
+| `patterns` | `&[Vec<Vec<Emission>>]` | Pattern サンプルの列                                 |
+| `option`   | `PatternStmOption`                    | 転送モード・ループ・遷移などのオプション             |
+
+`freq` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
+サンプリング周波数を指定することもできる.
+
+## PatternStmOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} />
+
+| フィールド        | 型               | デフォルト                           | 説明                         |
+| ----------------- | ---------------- | ------------------------------------ | ---------------------------- |
+| `bank`            | `PatternBank`    | `PatternBank::B0`                    | 書き込み先・再生対象のバンク |
+| `mode`            | `PatternStmMode` | `PatternStmMode::PhaseIntensityFull` | 転送形式                     |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`             | ループ回数                   |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate`          | バンク切替時の遷移タイミング |
+
+`loop_behavior` と `transition_mode` の挙動は[再生制御](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) を参照.
+
+## PatternStmMode
+
+各 Pattern の転送形式を選ぶ. 位相のみ・低分解能の形式は転送量を減らせる.
+
+| モード               | 内容                                   | 
+| -------------------- | -------------------------------------- |
+| `PhaseIntensityFull` | 位相・振幅をそのまま転送 (デフォルト) | 
+| `PhaseFull`          | 位相のみ転送. 振幅は最大に固定         |
+| `PhaseHalf`          | 位相を 4 bit に圧縮して転送            |
+
+## 等価な低レベルコマンド
+
+`PatternStm` は内部で [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/)  (各 index) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
+以下は `PatternStm::new(freq, &patterns, option)` と等価な組み合わせである.
+
+`PatternStmMode` が `PhaseFull` / `PhaseHalf` のときは, `WritePatternBuffer` の代わりに [WritePatternCompressed](/autd3-sdk/api/command/lowlevel/write-pattern-compressed/) が使われる.
+
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} />
+

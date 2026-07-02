@@ -1,9 +1,9 @@
 use core::num::{NonZeroU8, NonZeroUsize};
 
-use autd3_python_capsule::{capsule_of, geometry_from_capsule, pattern_from_capsule_mut, to_pyerr};
+use autd3_python_capsule::{capsule_of, geometry_from_capsule, pattern_from_capsule_mut};
 use autd3_rs_core::Length;
+use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::Point3;
-use autd3_rs_core::params::NUM_TRANSDUCERS;
 use autd3_rs_core::value::Intensity;
 use autd3_rs_pattern_holo::{
     Amplitude as CoreAmplitude, ControlPoint as CoreControlPoint, Directivity as CoreDirectivity,
@@ -11,9 +11,16 @@ use autd3_rs_pattern_holo::{
     GsOption as CoreGsOption, GspatOption as CoreGspatOption, NaiveOption as CoreNaiveOption, Pa,
     TransducerMask, dB, kPa,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::create_exception;
+use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
+
+create_exception!(autd3_pattern_holo, HoloError, PyException);
+
+fn holo_err(e: autd3_rs_pattern_holo::HoloError) -> PyErr {
+    HoloError::new_err(e.to_string())
+}
 
 fn extract_point(obj: &Bound<'_, PyAny>) -> PyResult<Point3<f32>> {
     let [x, y, z] = obj.extract::<[f32; 3]>().map_err(|_| {
@@ -24,35 +31,73 @@ fn extract_point(obj: &Bound<'_, PyAny>) -> PyResult<Point3<f32>> {
     Ok(Point3::new(x, y, z))
 }
 
+fn extract_u8(obj: &Bound<'_, PyAny>) -> PyResult<u8> {
+    if let Ok(v) = obj.extract::<u8>() {
+        return Ok(v);
+    }
+    obj.getattr("value")?.extract::<u8>()
+}
+
+fn number_f32(obj: &Bound<'_, PyAny>) -> PyResult<f32> {
+    obj.extract::<f32>()
+        .map_err(|_| PyValueError::new_err("expected a number"))
+}
+
 #[pyclass(name = "Amplitude", module = "autd3_pattern_holo", from_py_object)]
 #[derive(Clone, Copy)]
 pub struct Amplitude(pub(crate) CoreAmplitude);
 
 #[pymethods]
 impl Amplitude {
-    #[staticmethod]
-    fn pascal(value: f32) -> Self {
-        Self(value * Pa)
-    }
-
-    #[staticmethod]
-    fn kilo_pascal(value: f32) -> Self {
-        Self(value * kPa)
-    }
-
-    #[staticmethod]
-    fn spl(value: f32) -> Self {
-        Self(value * dB)
-    }
-
-    #[pyo3(name = "as_pascal")]
-    fn get_pascal(&self) -> f32 {
+    #[getter]
+    fn as_pascal(&self) -> f32 {
         self.0.pascal()
     }
 
-    #[pyo3(name = "as_spl")]
-    fn get_spl(&self) -> f32 {
+    #[getter]
+    fn as_spl(&self) -> f32 {
         self.0.spl()
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        other.extract::<Amplitude>().is_ok_and(|o| self.0 == o.0)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{} Pa", self.0.pascal())
+    }
+}
+
+#[derive(Clone, Copy)]
+enum AmpKind {
+    Pa,
+    KPa,
+    Db,
+}
+
+#[pyclass(
+    name = "_AmplitudeUnit",
+    module = "autd3_pattern_holo",
+    skip_from_py_object
+)]
+#[derive(Clone, Copy)]
+pub struct AmplitudeUnit(AmpKind);
+
+impl AmplitudeUnit {
+    pub(crate) const PA: Self = Self(AmpKind::Pa);
+    pub(crate) const KPA: Self = Self(AmpKind::KPa);
+    pub(crate) const DB: Self = Self(AmpKind::Db);
+}
+
+#[pymethods]
+impl AmplitudeUnit {
+    fn __rmul__(&self, lhs: &Bound<'_, PyAny>) -> PyResult<Amplitude> {
+        let v = number_f32(lhs)?;
+        Ok(Amplitude(match self.0 {
+            AmpKind::Pa => v * Pa,
+            AmpKind::KPa => v * kPa,
+            AmpKind::Db => v * dB,
+        }))
     }
 }
 
@@ -98,17 +143,19 @@ impl EmissionConstraint {
 
     #[staticmethod]
     #[pyo3(name = "Uniform")]
-    fn uniform(intensity: u8) -> Self {
-        Self(CoreEmissionConstraint::Uniform(Intensity(intensity)))
+    fn uniform(intensity: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Self(CoreEmissionConstraint::Uniform(Intensity(
+            extract_u8(intensity)?,
+        ))))
     }
 
     #[staticmethod]
     #[pyo3(name = "Clamp")]
-    fn clamp(min: u8, max: u8) -> Self {
-        Self(CoreEmissionConstraint::Clamp(
-            Intensity(min),
-            Intensity(max),
-        ))
+    fn clamp(min: &Bound<'_, PyAny>, max: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Self(CoreEmissionConstraint::Clamp(
+            Intensity(extract_u8(min)?),
+            Intensity(extract_u8(max)?),
+        )))
     }
 }
 
@@ -131,9 +178,10 @@ impl Directivity {
     }
 }
 
-#[pyclass(name = "TransducerMask", module = "autd3_pattern_holo")]
+#[pyclass(name = "TransducerMask", module = "autd3_pattern_holo", from_py_object)]
+#[derive(Clone)]
 pub struct PyTransducerMask {
-    pub(crate) mask: Option<Vec<[bool; NUM_TRANSDUCERS]>>,
+    pub(crate) mask: Option<Vec<Vec<bool>>>,
 }
 
 #[pymethods]
@@ -148,19 +196,25 @@ impl PyTransducerMask {
     fn masked(mask: Vec<Vec<bool>>) -> PyResult<Self> {
         let mut out = Vec::with_capacity(mask.len());
         for device in mask {
-            let slot: [bool; NUM_TRANSDUCERS] = device.try_into().map_err(|v: Vec<bool>| {
-                PyValueError::new_err(format!(
-                    "each device mask needs {NUM_TRANSDUCERS} entries, got {}",
-                    v.len()
-                ))
-            })?;
-            out.push(slot);
+            if device.len() != Autd3::NUM_TRANSDUCERS {
+                return Err(PyValueError::new_err(format!(
+                    "each device mask needs {} entries, got {}",
+                    Autd3::NUM_TRANSDUCERS,
+                    device.len()
+                )));
+            }
+            out.push(device);
         }
         Ok(Self { mask: Some(out) })
     }
 }
 
-#[pyclass(name = "NalgebraBackend", module = "autd3_pattern_holo")]
+#[pyclass(
+    name = "NalgebraBackend",
+    module = "autd3_pattern_holo",
+    from_py_object
+)]
+#[derive(Clone)]
 pub struct PyNalgebraBackend;
 
 #[pymethods]
@@ -178,28 +232,32 @@ impl PyNalgebraBackend {
 )]
 pub struct NaiveOption {
     inner: CoreNaiveOption<'static>,
-    mask: Option<Vec<[bool; NUM_TRANSDUCERS]>>,
+    mask: Option<Vec<Vec<bool>>>,
 }
 
 #[pymethods]
 impl NaiveOption {
     #[new]
-    #[pyo3(signature = (constraint = None, directivity = None, mask = None))]
+    #[pyo3(signature = (
+        constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
+        directivity = Directivity(CoreDirectivity::Sphere),
+        backend = PyNalgebraBackend,
+        mask = PyTransducerMask::all_enabled(),
+    ))]
     fn new(
-        constraint: Option<EmissionConstraint>,
-        directivity: Option<Directivity>,
-        mask: Option<PyRef<'_, PyTransducerMask>>,
+        constraint: EmissionConstraint,
+        directivity: Directivity,
+        backend: PyNalgebraBackend,
+        mask: PyTransducerMask,
     ) -> Self {
-        let mut inner = CoreNaiveOption::default();
-        if let Some(c) = constraint {
-            inner.constraint = c.0;
-        }
-        if let Some(d) = directivity {
-            inner.directivity = d.0;
-        }
+        let _ = backend;
         Self {
-            inner,
-            mask: mask.and_then(|m| m.mask.clone()),
+            inner: CoreNaiveOption {
+                constraint: constraint.0,
+                directivity: directivity.0,
+                ..CoreNaiveOption::default()
+            },
+            mask: mask.mask,
         }
     }
 }
@@ -207,33 +265,36 @@ impl NaiveOption {
 #[pyclass(name = "GsOption", module = "autd3_pattern_holo", skip_from_py_object)]
 pub struct GsOption {
     inner: CoreGsOption<'static>,
-    mask: Option<Vec<[bool; NUM_TRANSDUCERS]>>,
+    mask: Option<Vec<Vec<bool>>>,
 }
 
 #[pymethods]
 impl GsOption {
     #[new]
-    #[pyo3(signature = (repeat = 100, constraint = None, directivity = None, mask = None))]
+    #[pyo3(signature = (
+        repeat = 100,
+        constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
+        directivity = Directivity(CoreDirectivity::Sphere),
+        backend = PyNalgebraBackend,
+        mask = PyTransducerMask::all_enabled(),
+    ))]
     fn new(
         repeat: usize,
-        constraint: Option<EmissionConstraint>,
-        directivity: Option<Directivity>,
-        mask: Option<PyRef<'_, PyTransducerMask>>,
+        constraint: EmissionConstraint,
+        directivity: Directivity,
+        backend: PyNalgebraBackend,
+        mask: PyTransducerMask,
     ) -> PyResult<Self> {
-        let mut inner = CoreGsOption {
-            repeat: NonZeroUsize::new(repeat)
-                .ok_or_else(|| PyValueError::new_err("repeat must be >= 1"))?,
-            ..CoreGsOption::default()
-        };
-        if let Some(c) = constraint {
-            inner.constraint = c.0;
-        }
-        if let Some(d) = directivity {
-            inner.directivity = d.0;
-        }
+        let _ = backend;
         Ok(Self {
-            inner,
-            mask: mask.and_then(|m| m.mask.clone()),
+            inner: CoreGsOption {
+                repeat: NonZeroUsize::new(repeat)
+                    .ok_or_else(|| PyValueError::new_err("repeat must be >= 1"))?,
+                constraint: constraint.0,
+                directivity: directivity.0,
+                ..CoreGsOption::default()
+            },
+            mask: mask.mask,
         })
     }
 }
@@ -245,33 +306,36 @@ impl GsOption {
 )]
 pub struct GspatOption {
     inner: CoreGspatOption<'static>,
-    mask: Option<Vec<[bool; NUM_TRANSDUCERS]>>,
+    mask: Option<Vec<Vec<bool>>>,
 }
 
 #[pymethods]
 impl GspatOption {
     #[new]
-    #[pyo3(signature = (repeat = 100, constraint = None, directivity = None, mask = None))]
+    #[pyo3(signature = (
+        repeat = 100,
+        constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
+        directivity = Directivity(CoreDirectivity::Sphere),
+        backend = PyNalgebraBackend,
+        mask = PyTransducerMask::all_enabled(),
+    ))]
     fn new(
         repeat: usize,
-        constraint: Option<EmissionConstraint>,
-        directivity: Option<Directivity>,
-        mask: Option<PyRef<'_, PyTransducerMask>>,
+        constraint: EmissionConstraint,
+        directivity: Directivity,
+        backend: PyNalgebraBackend,
+        mask: PyTransducerMask,
     ) -> PyResult<Self> {
-        let mut inner = CoreGspatOption {
-            repeat: NonZeroUsize::new(repeat)
-                .ok_or_else(|| PyValueError::new_err("repeat must be >= 1"))?,
-            ..CoreGspatOption::default()
-        };
-        if let Some(c) = constraint {
-            inner.constraint = c.0;
-        }
-        if let Some(d) = directivity {
-            inner.directivity = d.0;
-        }
+        let _ = backend;
         Ok(Self {
-            inner,
-            mask: mask.and_then(|m| m.mask.clone()),
+            inner: CoreGspatOption {
+                repeat: NonZeroUsize::new(repeat)
+                    .ok_or_else(|| PyValueError::new_err("repeat must be >= 1"))?,
+                constraint: constraint.0,
+                directivity: directivity.0,
+                ..CoreGspatOption::default()
+            },
+            mask: mask.mask,
         })
     }
 }
@@ -283,33 +347,34 @@ impl GspatOption {
 )]
 pub struct GreedyOption {
     inner: CoreGreedyOption<'static>,
-    mask: Option<Vec<[bool; NUM_TRANSDUCERS]>>,
+    mask: Option<Vec<Vec<bool>>>,
 }
 
 #[pymethods]
 impl GreedyOption {
     #[new]
-    #[pyo3(signature = (phase_quantization_levels = 16, constraint = None, directivity = None, mask = None))]
+    #[pyo3(signature = (
+        phase_quantization_levels = 16,
+        constraint = EmissionConstraint(CoreEmissionConstraint::Uniform(Intensity::MAX)),
+        directivity = Directivity(CoreDirectivity::Sphere),
+        mask = PyTransducerMask::all_enabled(),
+    ))]
     fn new(
         phase_quantization_levels: u8,
-        constraint: Option<EmissionConstraint>,
-        directivity: Option<Directivity>,
-        mask: Option<PyRef<'_, PyTransducerMask>>,
+        constraint: EmissionConstraint,
+        directivity: Directivity,
+        mask: PyTransducerMask,
     ) -> PyResult<Self> {
-        let mut inner = CoreGreedyOption {
-            phase_quantization_levels: NonZeroU8::new(phase_quantization_levels)
-                .ok_or_else(|| PyValueError::new_err("phase_quantization_levels must be >= 1"))?,
-            ..CoreGreedyOption::default()
-        };
-        if let Some(c) = constraint {
-            inner.constraint = c.0;
-        }
-        if let Some(d) = directivity {
-            inner.directivity = d.0;
-        }
         Ok(Self {
-            inner,
-            mask: mask.and_then(|m| m.mask.clone()),
+            inner: CoreGreedyOption {
+                phase_quantization_levels: NonZeroU8::new(phase_quantization_levels).ok_or_else(
+                    || PyValueError::new_err("phase_quantization_levels must be >= 1"),
+                )?,
+                constraint: constraint.0,
+                directivity: directivity.0,
+                ..CoreGreedyOption::default()
+            },
+            mask: mask.mask,
         })
     }
 }
@@ -318,7 +383,7 @@ fn collect_foci(foci: &[PyRef<'_, ControlPoint>]) -> Vec<CoreControlPoint> {
     foci.iter().map(|f| f.inner).collect()
 }
 
-fn mask_ref(mask: Option<&[[bool; NUM_TRANSDUCERS]]>) -> TransducerMask<'_> {
+fn mask_ref(mask: Option<&[Vec<bool>]>) -> TransducerMask<'_> {
     match mask {
         Some(m) => TransducerMask::Masked(m),
         None => TransducerMask::AllEnabled,
@@ -339,7 +404,6 @@ where
 #[pyfunction]
 #[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
 fn naive(
-    py: Python<'_>,
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, ControlPoint>>,
     wavelength: f32,
@@ -361,14 +425,13 @@ fn naive(
             &option,
             out,
         )
-        .map_err(|e| to_pyerr(py, e))
+        .map_err(holo_err)
     })
 }
 
 #[pyfunction]
 #[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
 fn gs(
-    py: Python<'_>,
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, ControlPoint>>,
     wavelength: f32,
@@ -390,14 +453,13 @@ fn gs(
             &option,
             out,
         )
-        .map_err(|e| to_pyerr(py, e))
+        .map_err(holo_err)
     })
 }
 
 #[pyfunction]
 #[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
 fn gspat(
-    py: Python<'_>,
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, ControlPoint>>,
     wavelength: f32,
@@ -419,14 +481,13 @@ fn gspat(
             &option,
             out,
         )
-        .map_err(|e| to_pyerr(py, e))
+        .map_err(holo_err)
     })
 }
 
 #[pyfunction]
 #[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
 fn greedy(
-    py: Python<'_>,
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, ControlPoint>>,
     wavelength: f32,
@@ -448,13 +509,14 @@ fn greedy(
             &option,
             out,
         )
-        .map_err(|e| to_pyerr(py, e))
+        .map_err(holo_err)
     })
 }
 
 #[pymodule]
 fn autd3_pattern_holo(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Amplitude>()?;
+    m.add_class::<AmplitudeUnit>()?;
     m.add_class::<ControlPoint>()?;
     m.add_class::<EmissionConstraint>()?;
     m.add_class::<Directivity>()?;
@@ -464,6 +526,10 @@ fn autd3_pattern_holo(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GsOption>()?;
     m.add_class::<GspatOption>()?;
     m.add_class::<GreedyOption>()?;
+    m.add("HoloError", m.py().get_type::<HoloError>())?;
+    m.add("Pa", Py::new(m.py(), AmplitudeUnit::PA)?)?;
+    m.add("kPa", Py::new(m.py(), AmplitudeUnit::KPA)?)?;
+    m.add("dB", Py::new(m.py(), AmplitudeUnit::DB)?)?;
     m.add_function(wrap_pyfunction!(naive, m)?)?;
     m.add_function(wrap_pyfunction!(gs, m)?)?;
     m.add_function(wrap_pyfunction!(gspat, m)?)?;
