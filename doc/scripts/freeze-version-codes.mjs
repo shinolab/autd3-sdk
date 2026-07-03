@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -146,11 +146,29 @@ if (!slug) {
   console.error("usage: node scripts/freeze-version-codes.mjs <slug>");
   process.exit(1);
 }
-const versionDir = join(DOC_ROOT, "src", "content", "docs", slug);
+const docsRoot = join(DOC_ROOT, "src", "content", "docs");
+// A version snapshot exists once per locale: `docs/<slug>` (root locale) and
+// `docs/<locale>/<slug>` for each additional locale.
+const versionDirs = [];
+if (existsSync(join(docsRoot, slug))) versionDirs.push(join(docsRoot, slug));
+for (const entry of readdirSync(docsRoot)) {
+  const dir = join(docsRoot, entry);
+  if (!statSync(dir).isDirectory()) continue;
+  const localeDir = join(dir, slug);
+  if (existsSync(localeDir)) versionDirs.push(localeDir);
+}
+if (versionDirs.length === 0) {
+  console.error(
+    `freeze-version-codes: no snapshot found for "${slug}"; run \`cargo xtask doc build\` first`,
+  );
+  process.exit(1);
+}
 const files = [];
-walk(versionDir, files);
+for (const d of versionDirs) walk(d, files);
 let changed = 0;
 for (const f of files) {
   if (processFile(f)) changed++;
 }
-console.log(`freeze-version-codes: inlined codes in ${changed} file(s) under ${slug}/`);
+console.log(
+  `freeze-version-codes: inlined codes in ${changed} file(s) across ${versionDirs.length} locale dir(s) for ${slug}`,
+);

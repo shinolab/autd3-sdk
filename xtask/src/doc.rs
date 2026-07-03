@@ -9,7 +9,7 @@ use clap::Subcommand;
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
 use crate::py::{MIT_WHEELS, develop, ensure_venv, pip_install, venv_python};
-use crate::util::{on_path, run};
+use crate::util::{capture, on_path, run};
 
 const EXPECT_ERROR_MARKER: &str = "# xtask:expect-error";
 const LONG_RUNNING_MARKER: &str = "# xtask:long-running";
@@ -76,6 +76,7 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
             Ok(())
         }
         DocCmd::Build => {
+            verify_frozen_versions(&doc)?;
             build_samples(&samples)?;
             npm_install(&doc)?;
             npm(&doc, &["run", "build"])
@@ -89,6 +90,7 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
             npm(&doc, &args)
         }
         DocCmd::Check => {
+            verify_frozen_versions(&doc)?;
             npm_install(&doc)?;
             npm(&doc, &["run", "check"])
         }
@@ -103,6 +105,62 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
             )
         }
     }
+}
+
+fn version_slugs(doc: &Path) -> Result<Vec<String>> {
+    let cfg = fs::read_to_string(doc.join("astro.config.mjs"))
+        .context("failed to read astro.config.mjs")?;
+    let mut slugs = Vec::new();
+    let mut rest = cfg.as_str();
+    while let Some(pos) = rest.find("slug:") {
+        rest = &rest[pos + "slug:".len()..];
+        let Some(q) = rest.find(['"', '\'']) else {
+            break;
+        };
+        let quote = rest[q..].chars().next().unwrap();
+        let after = &rest[q + 1..];
+        let Some(end) = after.find(quote) else {
+            break;
+        };
+        slugs.push(after[..end].to_string());
+        rest = &after[end + 1..];
+    }
+    Ok(slugs)
+}
+
+fn verify_frozen_versions(doc: &Path) -> Result<()> {
+    if !on_path("git") {
+        return Ok(());
+    }
+    let slugs = version_slugs(doc)?;
+    if slugs.is_empty() {
+        return Ok(());
+    }
+    let Ok(tracked) = capture("git", &["ls-files", "src/content/docs"], doc) else {
+        return Ok(());
+    };
+    let mut offenders = Vec::new();
+    for rel in tracked.lines() {
+        let ext = Path::new(rel).extension().and_then(|e| e.to_str());
+        if !matches!(ext, Some("md" | "mdx")) {
+            continue;
+        }
+        let Some(slug) = slugs.iter().find(|s| rel.split('/').any(|seg| seg == s.as_str())) else {
+            continue;
+        };
+        let text = fs::read_to_string(doc.join(rel)).with_context(|| format!("failed to read {rel}"))?;
+        if (text.contains("@codes/") && text.contains("?raw")) || text.contains("excerpt(") {
+            offenders.push(format!("{rel} (version {slug})"));
+        }
+    }
+    if !offenders.is_empty() {
+        bail!(
+            "committed version snapshot(s) still depend on live `@codes` sources (not frozen):\n  {}\n\
+             run `cargo xtask doc freeze-version <slug>` for each affected version, then re-commit.",
+            offenders.join("\n  ")
+        );
+    }
+    Ok(())
 }
 
 fn build_samples(samples: &Path) -> Result<()> {
