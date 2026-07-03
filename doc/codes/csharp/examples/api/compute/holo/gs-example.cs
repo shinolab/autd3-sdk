@@ -19,8 +19,8 @@ Holo.Gs(
     geometry,
     new[]
     {
-        new HoloControlPoint(geometry.Center + new Vector3(-30.0f, 0.0f, 150.0f), 2.5e3f * Pa),
-        new HoloControlPoint(geometry.Center + new Vector3(30.0f, 0.0f, 150.0f), 2.5e3f * Pa),
+        new Holo.ControlPoint(geometry.Center + new Vector3(-30.0f, 0.0f, 150.0f), 2.5e3f * Pa),
+        new Holo.ControlPoint(geometry.Center + new Vector3(30.0f, 0.0f, 150.0f), 2.5e3f * Pa),
     },
     Pattern.Wavelength(340.0f * m / s),
     new GsOption(

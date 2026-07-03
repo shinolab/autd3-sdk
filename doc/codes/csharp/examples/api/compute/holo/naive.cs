@@ -14,8 +14,8 @@ internal static class Sample
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var foci = new[]
         {
-            new HoloControlPoint(center + new Vector3(-30.0f, 0.0f, 0.0f), 2.5e3f * Pa),
-            new HoloControlPoint(center + new Vector3(30.0f, 0.0f, 0.0f), 2.5e3f * Pa),
+            new Holo.ControlPoint(center + new Vector3(-30.0f, 0.0f, 0.0f), 2.5e3f * Pa),
+            new Holo.ControlPoint(center + new Vector3(30.0f, 0.0f, 0.0f), 2.5e3f * Pa),
         };
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
@@ -24,6 +24,7 @@ internal static class Sample
             new NaiveOption(
                 constraint: EmissionConstraint.Clamp(Intensity.Min, Intensity.Max),
                 directivity: Directivity.Sphere,
+                backend: new NalgebraBackend(),
                 mask: TransducerMask.AllEnabled
             )
             // ANCHOR_END: option

@@ -69,16 +69,8 @@ namespace AUTD3
         public static readonly SplUnit dB = default;
     }
 
-    public readonly struct HoloControlPoint
+    public readonly struct NalgebraBackend
     {
-        public Vector3 Point { get; }
-        public Amplitude Amplitude { get; }
-
-        public HoloControlPoint(Vector3 point, Amplitude amplitude)
-        {
-            Point = point;
-            Amplitude = amplitude;
-        }
     }
 
     public readonly struct EmissionConstraint
@@ -132,12 +124,14 @@ namespace AUTD3
     {
         public EmissionConstraint Constraint { get; }
         public Directivity Directivity { get; }
+        public NalgebraBackend Backend { get; }
         public TransducerMask Mask { get; }
 
-        public NaiveOption(EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
+        public NaiveOption(EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, NalgebraBackend backend = default, TransducerMask mask = default)
         {
             Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
             Directivity = directivity;
+            Backend = backend;
             Mask = mask;
         }
     }
@@ -147,13 +141,15 @@ namespace AUTD3
         public uint Repeat { get; }
         public EmissionConstraint Constraint { get; }
         public Directivity Directivity { get; }
+        public NalgebraBackend Backend { get; }
         public TransducerMask Mask { get; }
 
-        public GsOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
+        public GsOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, NalgebraBackend backend = default, TransducerMask mask = default)
         {
             Repeat = repeat;
             Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
             Directivity = directivity;
+            Backend = backend;
             Mask = mask;
         }
     }
@@ -163,13 +159,15 @@ namespace AUTD3
         public uint Repeat { get; }
         public EmissionConstraint Constraint { get; }
         public Directivity Directivity { get; }
+        public NalgebraBackend Backend { get; }
         public TransducerMask Mask { get; }
 
-        public GspatOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
+        public GspatOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, NalgebraBackend backend = default, TransducerMask mask = default)
         {
             Repeat = repeat;
             Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
             Directivity = directivity;
+            Backend = backend;
             Mask = mask;
         }
     }
@@ -227,9 +225,21 @@ namespace AUTD3
 
     public static class Holo
     {
+        public readonly struct ControlPoint
+        {
+            public Vector3 Point { get; }
+            public Amplitude Amplitude { get; }
+
+            public ControlPoint(Vector3 point, Amplitude amplitude)
+            {
+                Point = point;
+                Amplitude = amplitude;
+            }
+        }
+
         private const int NumTransducers = 249;
 
-        private static HoloControlPointNative[] ToNative(HoloControlPoint[] foci)
+        private static HoloControlPointNative[] ToNative(ControlPoint[] foci)
         {
             var native = new HoloControlPointNative[foci.Length];
             for (var i = 0; i < foci.Length; i++)
@@ -266,7 +276,7 @@ namespace AUTD3
             return flat;
         }
 
-        public static void Naive(Geometry geometry, HoloControlPoint[] foci, Length wavelength, NaiveOption option, PatternBuffer dst)
+        public static void Naive(Geometry geometry, ControlPoint[] foci, Length wavelength, NaiveOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
             if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle) != 0)
@@ -275,7 +285,7 @@ namespace AUTD3
             }
         }
 
-        public static void Gs(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GsOption option, PatternBuffer dst)
+        public static void Gs(Geometry geometry, ControlPoint[] foci, Length wavelength, GsOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
             if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle) != 0)
@@ -284,7 +294,7 @@ namespace AUTD3
             }
         }
 
-        public static void Gspat(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GspatOption option, PatternBuffer dst)
+        public static void Gspat(Geometry geometry, ControlPoint[] foci, Length wavelength, GspatOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
             if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle) != 0)
@@ -293,7 +303,7 @@ namespace AUTD3
             }
         }
 
-        public static void Greedy(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GreedyOption option, PatternBuffer dst)
+        public static void Greedy(Geometry geometry, ControlPoint[] foci, Length wavelength, GreedyOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
             if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle) != 0)

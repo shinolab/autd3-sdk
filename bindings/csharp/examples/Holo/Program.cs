@@ -24,8 +24,8 @@ internal static class Program
         var wavelength = Pattern.Wavelength(340 * m / s);
         var foci = new[]
         {
-            new HoloControlPoint(center + new Vector3(-20f, 0f, 150f), 150 * dB),
-            new HoloControlPoint(center + new Vector3(20f, 0f, 150f), 150 * dB),
+            new Holo.ControlPoint(center + new Vector3(-20f, 0f, 150f), 150 * dB),
+            new Holo.ControlPoint(center + new Vector3(20f, 0f, 150f), 150 * dB),
         };
 
         using var patterns = geometry.PatternBuffer();
