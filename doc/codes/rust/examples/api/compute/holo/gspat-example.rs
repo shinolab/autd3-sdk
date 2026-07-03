@@ -1,7 +1,5 @@
 use std::num::NonZeroUsize;
 
-use anyhow::Result;
-
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
@@ -11,7 +9,9 @@ use autd3_rs_pattern_holo::{
     TransducerMask, gspat,
 };
 
-fn main() -> Result<()> {
+// HIDE
+fn main() -> anyhow::Result<()> {
+    // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     let mut dst = geometry.pattern_buffer();
@@ -39,5 +39,7 @@ fn main() -> Result<()> {
         &mut dst,
     )?;
 
+    // HIDE
     Ok(())
 }
+// HIDE_END

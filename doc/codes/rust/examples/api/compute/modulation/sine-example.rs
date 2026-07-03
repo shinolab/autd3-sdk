@@ -1,10 +1,10 @@
-use anyhow::Result;
-
 use autd3_rs::units::{Hz, rad};
 use autd3_rs::value::SamplingConfig;
 use autd3_rs_modulation::{SineOption, sine};
 
-fn main() -> Result<()> {
+// HIDE
+fn main() -> anyhow::Result<()> {
+    // HIDE_END
     let mut dst = Vec::new();
 
     sine(
@@ -19,5 +19,7 @@ fn main() -> Result<()> {
         &mut dst,
     )?;
 
+    // HIDE
     Ok(())
 }
+// HIDE_END

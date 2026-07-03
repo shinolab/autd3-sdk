@@ -1,9 +1,9 @@
-use anyhow::Result;
-
 use autd3_rs::units::Hz;
 use autd3_rs_modulation::{FourierOption, SineComponent, SineOption, fourier};
 
-fn main() -> Result<()> {
+// HIDE
+fn main() -> anyhow::Result<()> {
+    // HIDE_END
     let mut dst = Vec::new();
 
     fourier(
@@ -19,5 +19,7 @@ fn main() -> Result<()> {
         &mut dst,
     )?;
 
+    // HIDE
     Ok(())
 }
+// HIDE_END
