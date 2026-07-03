@@ -116,7 +116,6 @@ jobs:
               - 'deny.toml'
               - 'about.toml'
               - 'about.hbs'
-              - 'extra-licenses/**'
               - 'Cargo.lock'
               - 'crates/**/Cargo.toml'
               - 'console/Cargo.toml'

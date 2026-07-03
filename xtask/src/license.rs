@@ -44,6 +44,35 @@ const DENY_WORKSPACES: &[&str] = &[
 
 const THIRD_PARTY: &str = "THIRD-PARTY-LICENSES.md";
 
+const SOEM_NOTICE: &str = "\
+# NOTICE — SOEM (GPL-3.0-only)
+
+This artifact statically links the Simple Open EtherCAT Master (SOEM) C library
+and is therefore distributed under the **GNU General Public License v3.0 only**.
+The full license text is provided alongside this file as `COPYING`.
+
+## SOEM copyright
+
+    Copyright (C) 2005-2025 Speciaal Machinefabriek Ketels v.o.f.
+    Copyright (C) 2005-2025 Arthur Ketels
+    Copyright (C) 2009-2025 RT-Labs AB, Sweden
+
+SOEM is dual-licensed (GPLv3 / commercial); this distribution uses it under GPLv3.
+
+## Written offer for corresponding source (GPLv3 §6)
+
+The complete corresponding source for the GPL-covered components of this artifact
+is publicly available at:
+
+- autd3-rs-link-soem (the Rust binding and its build glue):
+  https://github.com/shinolab/autd3-sdk (tag matching this release)
+- SOEM (vendored as a git submodule at the pinned revision):
+  https://github.com/OpenEtherCATsociety/SOEM
+
+The exact SOEM revision used is recorded by the `3rdparty/SOEM` submodule pointer
+in the autd3-sdk repository at the release tag.
+";
+
 #[derive(Subcommand)]
 pub enum LicenseCmd {
     /// Generate THIRD-PARTY-LICENSES.md for every distributable (via cargo-about)
@@ -101,7 +130,6 @@ pub fn generate_python(root: &Path) -> Result<()> {
     ensure_about()?;
     let mit_license = root.join("LICENSE");
     let gpl_license = root.join("crates/autd3-rs-link-soem/COPYING");
-    let soem_notice = root.join("extra-licenses/soem-notice.md");
 
     let py = root.join("bindings/python");
     for wheel in PY_MIT_WHEELS {
@@ -112,7 +140,7 @@ pub fn generate_python(root: &Path) -> Result<()> {
     let dir = py.join(PY_SOEM_WHEEL);
     about(root, &dir.join("Cargo.toml"), &dir.join(THIRD_PARTY))?;
     copy(&gpl_license, &dir.join("LICENSE"))?;
-    copy(&soem_notice, &dir.join("NOTICE"))?;
+    write(SOEM_NOTICE, &dir.join("NOTICE"))?;
     Ok(())
 }
 
@@ -121,7 +149,6 @@ pub fn generate_python(root: &Path) -> Result<()> {
 pub fn generate_csharp(root: &Path) -> Result<()> {
     ensure_about()?;
     let gpl_license = root.join("crates/autd3-rs-link-soem/COPYING");
-    let soem_notice = root.join("extra-licenses/soem-notice.md");
 
     let ffi = root.join("bindings/ffi");
     let cs_src = root.join("bindings/csharp/src");
@@ -140,7 +167,7 @@ pub fn generate_csharp(root: &Path) -> Result<()> {
         &dir.join(THIRD_PARTY),
     )?;
     copy(&gpl_license, &dir.join("COPYING"))?;
-    copy(&soem_notice, &dir.join("NOTICE"))?;
+    write(SOEM_NOTICE, &dir.join("NOTICE"))?;
     Ok(())
 }
 
@@ -202,5 +229,13 @@ fn copy(src: &Path, dst: &Path) -> Result<()> {
     }
     std::fs::copy(src, dst)
         .with_context(|| format!("copying {} -> {}", src.display(), dst.display()))?;
+    Ok(())
+}
+
+fn write(contents: &str, dst: &Path) -> Result<()> {
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(dst, contents).with_context(|| format!("writing {}", dst.display()))?;
     Ok(())
 }
