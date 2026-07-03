@@ -1,4 +1,4 @@
-use autd3_rs::geometry::{Autd3, Geometry, UnitVector3, Vector3};
+use autd3_rs::geometry::{Autd3, Geometry, Vector3};
 use autd3_rs::units::{m, s};
 use autd3_rs::value::{Intensity, Phase};
 use autd3_rs_pattern::{PlaneOption, plane, wavelength};
@@ -12,7 +12,7 @@ fn main() {
 
     plane(
         &geometry,
-        UnitVector3::new_normalize(Vector3::new(0.0, 0.0, 1.0)),
+        Vector3::z_axis(),
         wavelength(340.0 * m / s),
         &PlaneOption {
             intensity: Intensity::MAX,
