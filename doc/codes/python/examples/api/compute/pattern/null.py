@@ -3,8 +3,8 @@ from autd3_pattern import null
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-out = geometry.pattern_buffer()
+dst = geometry.pattern_buffer()
 
 # ANCHOR: api
-null(out)
+null(dst)
 # ANCHOR_END: api

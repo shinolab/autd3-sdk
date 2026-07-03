@@ -9,9 +9,9 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
 
-        var @out = geometry.PatternBuffer();
+        var dst = geometry.PatternBuffer();
         // ANCHOR: api
-        Pattern.Null(@out);
+        Pattern.Null(dst);
         // ANCHOR_END: api
     }
 }

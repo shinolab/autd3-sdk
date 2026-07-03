@@ -13,15 +13,15 @@ fn main() {
     let num_points = 200;
     let normal = Vector3::z_axis();
     let intensity = Intensity::MAX;
-    let mut out = Vec::new();
+    let mut dst = Vec::new();
     // ANCHOR: circle
-    circle(center, radius, num_points, normal, intensity, &mut out);
+    circle(center, radius, num_points, normal, intensity, &mut dst);
     // ANCHOR_END: circle
 
     let start = center + offset(-15.0 * mm, 0.0 * mm, 0.0 * mm);
     let end = center + offset(15.0 * mm, 0.0 * mm, 0.0 * mm);
     // ANCHOR: line
-    line(start, end, num_points, intensity, &mut out);
+    line(start, end, num_points, intensity, &mut dst);
     // ANCHOR_END: line
     let freq = 1.0 * Hz;
     let option =
@@ -34,7 +34,7 @@ fn main() {
         }
         // ANCHOR_END: option
         ;
-    let points = out;
+    let points = dst;
     // ANCHOR: api
     FociStm::new(freq, &points, option);
     // ANCHOR_END: api

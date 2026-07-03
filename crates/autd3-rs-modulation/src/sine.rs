@@ -57,16 +57,16 @@ pub(crate) fn sine_raw<S: Into<SamplingMode>>(
 pub fn sine<S: Into<SamplingMode>>(
     freq: S,
     option: &SineOption,
-    out: &mut Vec<u8>,
+    dst: &mut Vec<u8>,
 ) -> Result<(), Error> {
     let raw = sine_raw(freq, option)?;
 
-    out.clear();
-    out.reserve(raw.len());
+    dst.clear();
+    dst.reserve(raw.len());
     let mut out_of_range = false;
     for v in raw {
         let v = v.floor() as i16;
-        out.push(if (0..=255).contains(&v) {
+        dst.push(if (0..=255).contains(&v) {
             v as u8
         } else if option.clamp {
             v.clamp(0, 255) as u8

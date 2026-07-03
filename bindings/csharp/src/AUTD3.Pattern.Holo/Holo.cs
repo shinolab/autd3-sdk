@@ -266,37 +266,37 @@ namespace AUTD3
             return flat;
         }
 
-        public static void Naive(Geometry geometry, HoloControlPoint[] foci, Length wavelength, NaiveOption option, PatternBuffer buffer)
+        public static void Naive(Geometry geometry, HoloControlPoint[] foci, Length wavelength, NaiveOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
+            if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle) != 0)
             {
                 throw new Autd3Exception("naive failed");
             }
         }
 
-        public static void Gs(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GsOption option, PatternBuffer buffer)
+        public static void Gs(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GsOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
+            if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle) != 0)
             {
                 throw new Autd3Exception("gs failed");
             }
         }
 
-        public static void Gspat(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GspatOption option, PatternBuffer buffer)
+        public static void Gspat(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GspatOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
+            if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle) != 0)
             {
                 throw new Autd3Exception("gspat failed");
             }
         }
 
-        public static void Greedy(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GreedyOption option, PatternBuffer buffer)
+        public static void Greedy(Geometry geometry, HoloControlPoint[] foci, Length wavelength, GreedyOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, buffer.NumDevices), buffer.Handle) != 0)
+            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle) != 0)
             {
                 throw new Autd3Exception("greedy failed");
             }

@@ -5,7 +5,7 @@ use autd3_rs::value::SamplingConfig;
 use autd3_rs_modulation::{SquareOption, square};
 
 fn main() -> Result<()> {
-    let mut out = Vec::new();
+    let mut dst = Vec::new();
 
     square(
         150 * Hz,
@@ -15,7 +15,7 @@ fn main() -> Result<()> {
             duty: 0.5,
             sampling_config: SamplingConfig::FREQ_4K,
         },
-        &mut out,
+        &mut dst,
     )?;
 
     Ok(())

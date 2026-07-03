@@ -3,6 +3,6 @@ from autd3_pattern import null
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-out = geometry.pattern_buffer()
+dst = geometry.pattern_buffer()
 
-null(out)
+null(dst)

@@ -13,7 +13,7 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
 
-var @out = geometry.PatternBuffer();
+var dst = geometry.PatternBuffer();
 
 Holo.Greedy(
     geometry,
@@ -29,7 +29,7 @@ Holo.Greedy(
         directivity: Directivity.Sphere,
         mask: TransducerMask.AllEnabled
     ),
-    @out
+    dst
 );
         // HIDE
     }

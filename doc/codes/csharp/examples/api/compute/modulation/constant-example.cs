@@ -8,9 +8,9 @@ internal static class Sample
     internal static void Run()
     {
         // HIDE_END
-var @out = Modulation.ModulationBuffer();
+var dst = Modulation.ModulationBuffer();
 
-Modulation.Constant(0xFF, @out);
+Modulation.Constant(0xFF, dst);
         // HIDE
     }
 }

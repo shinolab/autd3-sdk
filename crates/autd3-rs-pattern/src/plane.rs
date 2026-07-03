@@ -40,14 +40,14 @@ pub fn plane_device(
     direction: UnitVector3<f32>,
     wavelength: Length,
     option: &PlaneOption,
-    out: &mut [Emission],
+    dst: &mut [Emission],
 ) {
     assert_eq!(
         device.num_transducers(),
         Autd3::NUM_TRANSDUCERS,
         "not an AUTD3 device"
     );
-    for (e, &pos) in out.iter_mut().zip(device.positions()) {
+    for (e, &pos) in dst.iter_mut().zip(device.positions()) {
         *e = plane_transducer(pos, direction, wavelength, option);
     }
 }
@@ -57,14 +57,14 @@ pub fn plane(
     direction: UnitVector3<f32>,
     wavelength: Length,
     option: &PlaneOption,
-    out: &mut [Vec<Emission>],
+    dst: &mut [Vec<Emission>],
 ) {
     assert_eq!(
-        out.len(),
+        dst.len(),
         geometry.num_devices(),
-        "out must have one slot per device"
+        "dst must have one slot per device"
     );
-    for (slot, dev) in out.iter_mut().zip(geometry.iter()) {
+    for (slot, dev) in dst.iter_mut().zip(geometry.iter()) {
         plane_device(dev, direction, wavelength, option, slot);
     }
 }

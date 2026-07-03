@@ -12,9 +12,9 @@ internal static class Sample
 var src = Modulation.ModulationBuffer();
 Modulation.Sine(150 * Hz, new SineOption(), src);
 
-var @out = Modulation.ModulationBuffer();
+var dst = Modulation.ModulationBuffer();
 
-Modulation.RadiationPressure(src, @out);
+Modulation.RadiationPressure(src, dst);
         // HIDE
     }
 }

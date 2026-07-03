@@ -5,7 +5,7 @@ use autd3_rs::value::SamplingConfig;
 use autd3_rs_modulation::{SineOption, sine};
 
 fn main() -> Result<()> {
-    let mut out = Vec::new();
+    let mut dst = Vec::new();
 
     sine(
         150 * Hz,
@@ -16,7 +16,7 @@ fn main() -> Result<()> {
             clamp: false,
             sampling_config: SamplingConfig::FREQ_4K,
         },
-        &mut out,
+        &mut dst,
     )?;
 
     Ok(())

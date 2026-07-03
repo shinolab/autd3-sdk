@@ -216,7 +216,7 @@ namespace AUTD3
             }
         }
 
-        public static void Sine(Freq freq, SineOption option, ModulationBuffer buffer)
+        public static void Sine(Freq freq, SineOption option, ModulationBuffer dst)
         {
             var sampling = option.SamplingConfig.CreateHandle();
             try
@@ -225,7 +225,7 @@ namespace AUTD3
                     option.Intensity, option.Offset, option.Phase.Radian, option.Clamp, sampling);
                 try
                 {
-                    if (NativeModulation.autd3_modulation_sine(freq.ModeCode, freq.HzValue, freq.HzIntValue, optionHandle, buffer.Handle) != 0)
+                    if (NativeModulation.autd3_modulation_sine(freq.ModeCode, freq.HzValue, freq.HzIntValue, optionHandle, dst.Handle) != 0)
                     {
                         throw new Autd3Exception("sine modulation failed");
                     }
@@ -241,7 +241,7 @@ namespace AUTD3
             }
         }
 
-        public static void Square(Freq freq, SquareOption option, ModulationBuffer buffer)
+        public static void Square(Freq freq, SquareOption option, ModulationBuffer dst)
         {
             var sampling = option.SamplingConfig.CreateHandle();
             try
@@ -250,7 +250,7 @@ namespace AUTD3
                     option.Low, option.High, option.Duty, sampling);
                 try
                 {
-                    if (NativeModulation.autd3_modulation_square(freq.ModeCode, freq.HzValue, freq.HzIntValue, optionHandle, buffer.Handle) != 0)
+                    if (NativeModulation.autd3_modulation_square(freq.ModeCode, freq.HzValue, freq.HzIntValue, optionHandle, dst.Handle) != 0)
                     {
                         throw new Autd3Exception("square modulation failed");
                     }
@@ -266,15 +266,15 @@ namespace AUTD3
             }
         }
 
-        public static void Constant(byte intensity, ModulationBuffer buffer)
+        public static void Constant(byte intensity, ModulationBuffer dst)
         {
-            if (NativeModulation.autd3_modulation_constant(intensity, buffer.Handle) != 0)
+            if (NativeModulation.autd3_modulation_constant(intensity, dst.Handle) != 0)
             {
                 throw new Autd3Exception("constant modulation failed");
             }
         }
 
-        public static void Fourier(SineComponent[] components, FourierOption option, ModulationBuffer buffer)
+        public static void Fourier(SineComponent[] components, FourierOption option, ModulationBuffer dst)
         {
             var samplingHandles = new List<IntPtr>();
             var optionHandles = new List<IntPtr>();
@@ -302,7 +302,7 @@ namespace AUTD3
                     option.ScaleFactor.HasValue, option.ScaleFactor ?? 0f, option.Clamp, option.Offset);
                 try
                 {
-                    if (NativeModulation.autd3_modulation_fourier(native, (UIntPtr)components.Length, fourierOption, buffer.Handle) != 0)
+                    if (NativeModulation.autd3_modulation_fourier(native, (UIntPtr)components.Length, fourierOption, dst.Handle) != 0)
                     {
                         throw new Autd3Exception("fourier modulation failed");
                     }

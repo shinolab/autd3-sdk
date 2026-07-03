@@ -27,7 +27,7 @@ impl Default for SquareOption {
 pub fn square<S: Into<SamplingMode>>(
     freq: S,
     option: &SquareOption,
-    out: &mut Vec<u8>,
+    dst: &mut Vec<u8>,
 ) -> Result<(), Error> {
     if !(0.0..=1.0).contains(&option.duty) {
         return Err(Error::InvalidPayload(PayloadError::DutyOutOfRange {
@@ -40,13 +40,13 @@ pub fn square<S: Into<SamplingMode>>(
     let n =
         usize::try_from(n).map_err(|_| Error::InvalidPayload(PayloadError::SampleCountOverflow))?;
 
-    out.clear();
-    out.reserve(n);
+    dst.clear();
+    dst.reserve(n);
     for i in 0..rep {
         let size = ((n as u64 + i) / rep) as usize;
         let n_high = (size as f32 * option.duty) as usize;
-        out.extend(core::iter::repeat_n(option.high, n_high));
-        out.extend(core::iter::repeat_n(option.low, size - n_high));
+        dst.extend(core::iter::repeat_n(option.high, n_high));
+        dst.extend(core::iter::repeat_n(option.low, size - n_high));
     }
     Ok(())
 }

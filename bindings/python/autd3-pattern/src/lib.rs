@@ -197,13 +197,13 @@ fn wavelength(sound_speed: &Bound<'_, PyAny>) -> PyResult<f32> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, target, wavelength, option, buffer))]
+#[pyo3(signature = (geometry, target, wavelength, option, dst))]
 fn focus(
     geometry: &Bound<'_, PyAny>,
     target: &Bound<'_, PyAny>,
     wavelength: f32,
     option: FocusOption,
-    mut buffer: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, PatternBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
@@ -213,19 +213,19 @@ fn focus(
         target,
         Length::millimeters(wavelength),
         &option.0,
-        &mut buffer.inner,
+        &mut dst.inner,
     );
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, direction, wavelength, option, buffer))]
+#[pyo3(signature = (geometry, direction, wavelength, option, dst))]
 fn plane(
     geometry: &Bound<'_, PyAny>,
     direction: &Bound<'_, PyAny>,
     wavelength: f32,
     option: PlaneOption,
-    mut buffer: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, PatternBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
@@ -235,13 +235,13 @@ fn plane(
         direction,
         Length::millimeters(wavelength),
         &option.0,
-        &mut buffer.inner,
+        &mut dst.inner,
     );
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, apex, direction, theta, wavelength, option, buffer))]
+#[pyo3(signature = (geometry, apex, direction, theta, wavelength, option, dst))]
 fn bessel(
     geometry: &Bound<'_, PyAny>,
     apex: &Bound<'_, PyAny>,
@@ -249,7 +249,7 @@ fn bessel(
     theta: &Bound<'_, PyAny>,
     wavelength: f32,
     option: BesselOption,
-    mut buffer: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, PatternBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
@@ -263,21 +263,21 @@ fn bessel(
         theta,
         Length::millimeters(wavelength),
         &option.0,
-        &mut buffer.inner,
+        &mut dst.inner,
     );
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (emission, buffer))]
-fn uniform(emission: &Bound<'_, PyAny>, mut buffer: PyRefMut<'_, PatternBuffer>) -> PyResult<()> {
-    autd3_rs_pattern::uniform(extract_emission(emission)?, &mut buffer.inner);
+#[pyo3(signature = (emission, dst))]
+fn uniform(emission: &Bound<'_, PyAny>, mut dst: PyRefMut<'_, PatternBuffer>) -> PyResult<()> {
+    autd3_rs_pattern::uniform(extract_emission(emission)?, &mut dst.inner);
     Ok(())
 }
 
 #[pyfunction]
-fn null(mut buffer: PyRefMut<'_, PatternBuffer>) {
-    autd3_rs_pattern::null(&mut buffer.inner);
+fn null(mut dst: PyRefMut<'_, PatternBuffer>) {
+    autd3_rs_pattern::null(&mut dst.inner);
 }
 
 #[pyfunction]

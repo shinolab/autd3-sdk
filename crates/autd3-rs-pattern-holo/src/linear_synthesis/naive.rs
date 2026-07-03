@@ -34,7 +34,7 @@ pub fn naive<B: LinAlgBackend>(
     foci: &[ControlPoint],
     wavelength: Length,
     option: &NaiveOption<'_, B>,
-    out: &mut [Vec<Emission>],
+    dst: &mut [Vec<Emission>],
 ) -> Result<(), HoloError> {
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
@@ -60,7 +60,7 @@ pub fn naive<B: LinAlgBackend>(
         &backend.vector_to_host(&q),
         option.constraint,
         mask,
-        out,
+        dst,
     );
     Ok(())
 }

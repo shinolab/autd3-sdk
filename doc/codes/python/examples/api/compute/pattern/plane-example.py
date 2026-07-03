@@ -6,7 +6,7 @@ from autd3_pattern import PlaneOption, plane, wavelength
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-out = geometry.pattern_buffer()
+dst = geometry.pattern_buffer()
 
 plane(
     geometry,
@@ -16,5 +16,5 @@ plane(
         intensity=Intensity.MAX,
         phase_offset=Phase.ZERO,
     ),
-    out,
+    dst,
 )

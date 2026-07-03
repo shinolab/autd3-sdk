@@ -16,9 +16,9 @@ fn main() -> Result<()> {
         }
         // ANCHOR_END: option
         ;
-    let mut out = Vec::new();
+    let mut dst = Vec::new();
     // ANCHOR: api
-    square(freq, &option, &mut out)?;
+    square(freq, &option, &mut dst)?;
     // ANCHOR_END: api
     Ok(())
 }

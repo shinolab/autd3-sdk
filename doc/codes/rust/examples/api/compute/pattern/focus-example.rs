@@ -6,7 +6,7 @@ use autd3_rs_pattern::{FocusOption, focus, wavelength};
 fn main() {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut out = geometry.pattern_buffer();
+    let mut dst = geometry.pattern_buffer();
 
     focus(
         &geometry,
@@ -16,6 +16,6 @@ fn main() {
             intensity: Intensity::MAX,
             phase_offset: Phase::ZERO,
         },
-        &mut out,
+        &mut dst,
     );
 }

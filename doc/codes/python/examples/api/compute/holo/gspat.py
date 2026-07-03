@@ -39,7 +39,7 @@ option = (
     )
     # ANCHOR_END: option
 )
-out = geometry.pattern_buffer()
+dst = geometry.pattern_buffer()
 # ANCHOR: api
-gspat(geometry, foci, wl, option, out)
+gspat(geometry, foci, wl, option, dst)
 # ANCHOR_END: api

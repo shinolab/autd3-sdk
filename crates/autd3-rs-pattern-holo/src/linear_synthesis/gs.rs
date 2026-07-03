@@ -41,7 +41,7 @@ pub fn gs<B: LinAlgBackend>(
     foci: &[ControlPoint],
     wavelength: Length,
     option: &GsOption<'_, B>,
-    out: &mut [Vec<Emission>],
+    dst: &mut [Vec<Emission>],
 ) -> Result<(), HoloError> {
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
@@ -77,7 +77,7 @@ pub fn gs<B: LinAlgBackend>(
         &backend.vector_to_host(&q),
         option.constraint,
         mask,
-        out,
+        dst,
     );
     Ok(())
 }

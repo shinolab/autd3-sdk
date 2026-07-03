@@ -10,9 +10,9 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
 
         var emission = new Emission(Phase.Zero, Intensity.Max);
-        var @out = geometry.PatternBuffer();
+        var dst = geometry.PatternBuffer();
         // ANCHOR: api
-        Pattern.Uniform(emission, @out);
+        Pattern.Uniform(emission, dst);
         // ANCHOR_END: api
     }
 }

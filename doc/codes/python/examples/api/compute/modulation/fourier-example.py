@@ -7,7 +7,7 @@ from autd3_modulation import (
     modulation_buffer,
 )
 
-out = modulation_buffer()
+dst = modulation_buffer()
 
 fourier(
     [
@@ -21,5 +21,5 @@ fourier(
         clamp=False,
         offset=0x00,
     ),
-    out,
+    dst,
 )

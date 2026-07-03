@@ -19,13 +19,13 @@ internal static class Sample
             )
             // ANCHOR_END: option
             ;
-        var @out = Modulation.ModulationBuffer();
+        var dst = Modulation.ModulationBuffer();
         // ANCHOR: api
-        Modulation.Sine(freq, option, @out);
+        Modulation.Sine(freq, option, dst);
         // ANCHOR_END: api
 
         // ANCHOR: nearest
-        Modulation.Sine(Nearest(150.5f * Hz), option, @out);
+        Modulation.Sine(Nearest(150.5f * Hz), option, dst);
         // ANCHOR_END: nearest
     }
 }

@@ -39,7 +39,7 @@ pub fn gspat<B: LinAlgBackend>(
     foci: &[ControlPoint],
     wavelength: Length,
     option: &GspatOption<'_, B>,
-    out: &mut [Vec<Emission>],
+    dst: &mut [Vec<Emission>],
 ) -> Result<(), HoloError> {
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
@@ -76,7 +76,7 @@ pub fn gspat<B: LinAlgBackend>(
         &backend.vector_to_host(&q),
         option.constraint,
         mask,
-        out,
+        dst,
     );
     Ok(())
 }

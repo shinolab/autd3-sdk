@@ -199,49 +199,49 @@ namespace AUTD3
             new Length(NativePattern.autd3_pattern_wavelength(soundSpeed.MmPerSec));
 
 
-        public static void Focus(Geometry geometry, Vector3 target, Length wavelength, FocusOption option, PatternBuffer buffer)
+        public static void Focus(Geometry geometry, Vector3 target, Length wavelength, FocusOption option, PatternBuffer dst)
         {
             var t = new[] { target.X, target.Y, target.Z };
             var o = option.ToNative();
-            if (NativePattern.autd3_pattern_focus(geometry.Handle, t, wavelength.Mm, in o, buffer.Handle) != 0)
+            if (NativePattern.autd3_pattern_focus(geometry.Handle, t, wavelength.Mm, in o, dst.Handle) != 0)
             {
                 throw new Autd3Exception("focus failed (buffer device count must match geometry)");
             }
         }
 
-        public static void Focus(Geometry geometry, Vector3 target, Length wavelength, Intensity intensity, PatternBuffer buffer) =>
-            Focus(geometry, target, wavelength, new FocusOption(intensity), buffer);
+        public static void Focus(Geometry geometry, Vector3 target, Length wavelength, Intensity intensity, PatternBuffer dst) =>
+            Focus(geometry, target, wavelength, new FocusOption(intensity), dst);
 
-        public static void Plane(Geometry geometry, Vector3 dir, Length wavelength, PlaneOption option, PatternBuffer buffer)
+        public static void Plane(Geometry geometry, Vector3 dir, Length wavelength, PlaneOption option, PatternBuffer dst)
         {
             var d = new[] { dir.X, dir.Y, dir.Z };
             var o = option.ToNative();
-            if (NativePattern.autd3_pattern_plane(geometry.Handle, d, wavelength.Mm, in o, buffer.Handle) != 0)
+            if (NativePattern.autd3_pattern_plane(geometry.Handle, d, wavelength.Mm, in o, dst.Handle) != 0)
             {
                 throw new Autd3Exception("plane failed (buffer device count must match geometry)");
             }
         }
 
-        public static void Bessel(Geometry geometry, Vector3 apex, Vector3 dir, Angle theta, Length wavelength, BesselOption option, PatternBuffer buffer)
+        public static void Bessel(Geometry geometry, Vector3 apex, Vector3 dir, Angle theta, Length wavelength, BesselOption option, PatternBuffer dst)
         {
             var a = new[] { apex.X, apex.Y, apex.Z };
             var d = new[] { dir.X, dir.Y, dir.Z };
             var o = option.ToNative();
-            if (NativePattern.autd3_pattern_bessel(geometry.Handle, a, d, theta.Radian, wavelength.Mm, in o, buffer.Handle) != 0)
+            if (NativePattern.autd3_pattern_bessel(geometry.Handle, a, d, theta.Radian, wavelength.Mm, in o, dst.Handle) != 0)
             {
                 throw new Autd3Exception("bessel failed (buffer device count must match geometry)");
             }
         }
 
-        public static void Uniform(Emission emission, PatternBuffer buffer)
+        public static void Uniform(Emission emission, PatternBuffer dst)
         {
-            if (NativePattern.autd3_pattern_uniform(emission.Phase.Value, emission.Intensity.Value, buffer.Handle) != 0)
+            if (NativePattern.autd3_pattern_uniform(emission.Phase.Value, emission.Intensity.Value, dst.Handle) != 0)
             {
                 throw new Autd3Exception("uniform failed");
             }
         }
 
 
-        public static void Null(PatternBuffer buffer) => NativePattern.autd3_pattern_null(buffer.Handle);
+        public static void Null(PatternBuffer dst) => NativePattern.autd3_pattern_null(dst.Handle);
     }
 }

@@ -11,15 +11,15 @@ radius = 30.0
 num_points = 200
 normal = [0.0, 0.0, 1.0]
 intensity = Intensity.MAX
-out = []
+dst = []
 # ANCHOR: circle
-circle(center, radius, num_points, normal, intensity, out)
+circle(center, radius, num_points, normal, intensity, dst)
 # ANCHOR_END: circle
 
 start = center + np.array([-15.0, 0.0, 0.0])
 end = center + np.array([15.0, 0.0, 0.0])
 # ANCHOR: line
-line(start, end, num_points, intensity, out)
+line(start, end, num_points, intensity, dst)
 # ANCHOR_END: line
 freq = 1.0 * Hz
 option = (
@@ -32,7 +32,7 @@ option = (
     )
     # ANCHOR_END: option
 )
-points = out
+points = dst
 # ANCHOR: api
 FociStm(freq, points, option)
 # ANCHOR_END: api

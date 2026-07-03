@@ -2,7 +2,7 @@ from autd3.units import Hz
 from autd3.value import SamplingConfig
 from autd3_modulation import SquareOption, modulation_buffer, square
 
-out = modulation_buffer()
+dst = modulation_buffer()
 
 square(
     150 * Hz,
@@ -12,5 +12,5 @@ square(
         duty=0.5,
         sampling_config=SamplingConfig.FREQ_4K,
     ),
-    out,
+    dst,
 )

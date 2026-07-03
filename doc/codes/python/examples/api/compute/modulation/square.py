@@ -13,7 +13,7 @@ option = (
     )
     # ANCHOR_END: option
 )
-out = modulation_buffer()
+dst = modulation_buffer()
 # ANCHOR: api
-square(freq, option, out)
+square(freq, option, dst)
 # ANCHOR_END: api

@@ -30,7 +30,7 @@ import { excerpt } from "@lib/excerpt";
 | --------- | -------------- | -------------------------------------------- |
 | `freq`    | `Freq<u32>` 等 | 変調周波数                                   |
 | `option`  | `&SineOption`  | 追加オプション (下記参照)                    |
-| `out`     | `&mut Vec<u8>` | 出力バッファ                                 |
+| `dst`     | `&mut Vec<u8>` | 出力バッファ                                 |
 
 各サンプル <Math tex="i" /> の値は, 振幅 <Math tex="A" />（`amplitude`）, オフセット <Math tex="b" />（`offset`）, 位相 <Math tex="\theta" />（`phase`）に対して次式で与えられる. 
 

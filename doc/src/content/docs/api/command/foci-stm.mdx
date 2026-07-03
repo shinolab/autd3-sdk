@@ -65,7 +65,7 @@ import { excerpt } from "@lib/excerpt";
 | `num_points` | `usize`                      | 生成する点の数              |
 | `normal`     | `UnitVector3<f32>`           | 円平面の法線 (単位ベクトル) |
 | `intensity`  | `Intensity`                  | 各点の振幅                  |
-| `out`        | `&mut Vec<ControlPoints<1>>` | 出力バッファ                |
+| `dst`        | `&mut Vec<ControlPoints<1>>` | 出力バッファ                |
 
 `normal` を法線とする円周上に等間隔で `num_points` 個の点を並べる. 
 
@@ -79,7 +79,7 @@ import { excerpt } from "@lib/excerpt";
 | `end`        | `Point3<f32>`                | 終点 [mm]      |
 | `num_points` | `usize`                      | 生成する点の数 |
 | `intensity`  | `Intensity`                  | 各点の振幅     |
-| `out`        | `&mut Vec<ControlPoints<1>>` | 出力バッファ   |
+| `dst`        | `&mut Vec<ControlPoints<1>>` | 出力バッファ   |
 
 始点・終点を含む等間隔の直線上に `num_points` 個の点を並べる. 
 

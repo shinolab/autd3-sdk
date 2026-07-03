@@ -188,34 +188,34 @@ impl SineComponent {
 }
 
 #[pyfunction]
-#[pyo3(signature = (freq, option, buffer))]
+#[pyo3(signature = (freq, option, dst))]
 fn sine(
     py: Python<'_>,
     freq: &Bound<'_, PyAny>,
     option: &SineOption,
-    mut buffer: PyRefMut<'_, ModulationBuffer>,
+    mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
-    autd3_rs_modulation::sine(freq_mode(freq)?, &option.inner, &mut buffer.data)
+    autd3_rs_modulation::sine(freq_mode(freq)?, &option.inner, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (freq, option, buffer))]
+#[pyo3(signature = (freq, option, dst))]
 fn square(
     py: Python<'_>,
     freq: &Bound<'_, PyAny>,
     option: &SquareOption,
-    mut buffer: PyRefMut<'_, ModulationBuffer>,
+    mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
-    autd3_rs_modulation::square(freq_mode(freq)?, &option.inner, &mut buffer.data)
+    autd3_rs_modulation::square(freq_mode(freq)?, &option.inner, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }
 
 #[pyfunction]
-fn constant(intensity: u8, mut buffer: PyRefMut<'_, ModulationBuffer>) {
-    autd3_rs_modulation::constant(intensity, &mut buffer.data);
+fn constant(intensity: u8, mut dst: PyRefMut<'_, ModulationBuffer>) {
+    autd3_rs_modulation::constant(intensity, &mut dst.data);
 }
 
 #[pyfunction]
@@ -223,17 +223,17 @@ fn fourier(
     py: Python<'_>,
     components: Vec<PyRef<'_, SineComponent>>,
     option: &FourierOption,
-    mut buffer: PyRefMut<'_, ModulationBuffer>,
+    mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
     let components = components.iter().map(|c| c.inner).collect::<Vec<_>>();
-    autd3_rs_modulation::fourier(&components, &option.inner, &mut buffer.data)
+    autd3_rs_modulation::fourier(&components, &option.inner, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }
 
 #[pyfunction]
-fn radiation_pressure(src: PyRef<'_, ModulationBuffer>, mut out: PyRefMut<'_, ModulationBuffer>) {
-    autd3_rs_modulation::radiation_pressure(&src.data, &mut out.data);
+fn radiation_pressure(src: PyRef<'_, ModulationBuffer>, mut dst: PyRefMut<'_, ModulationBuffer>) {
+    autd3_rs_modulation::radiation_pressure(&src.data, &mut dst.data);
 }
 
 #[pyfunction]

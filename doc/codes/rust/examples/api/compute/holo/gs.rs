@@ -37,9 +37,9 @@ fn main() -> Result<()> {
         }
         // ANCHOR_END: option
         ;
-    let mut out = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
+    let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
     // ANCHOR: api
-    gs(&geometry, &foci, wavelength, &option, &mut out)?;
+    gs(&geometry, &foci, wavelength, &option, &mut dst)?;
     // ANCHOR_END: api
     Ok(())
 }

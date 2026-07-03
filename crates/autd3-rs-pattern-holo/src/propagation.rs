@@ -70,12 +70,12 @@ pub(crate) fn quantize(
     q: &[Complex<f32>],
     constraint: EmissionConstraint,
     mask: TransducerMask<'_>,
-    out: &mut [Vec<Emission>],
+    dst: &mut [Vec<Emission>],
 ) {
     assert_eq!(
-        out.len(),
+        dst.len(),
         geometry.num_devices(),
-        "out must have one slot per device"
+        "dst must have one slot per device"
     );
     let max_coefficient = q
         .iter()
@@ -83,7 +83,7 @@ pub(crate) fn quantize(
         .fold(0.0_f32, f32::max)
         .sqrt();
     let mut idx = 0;
-    for (d, (slot, dev)) in out.iter_mut().zip(geometry.iter()).enumerate() {
+    for (d, (slot, dev)) in dst.iter_mut().zip(geometry.iter()).enumerate() {
         assert_eq!(
             dev.num_transducers(),
             Autd3::NUM_TRANSDUCERS,

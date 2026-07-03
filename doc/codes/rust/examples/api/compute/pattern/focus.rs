@@ -16,9 +16,9 @@ fn main() {
         }
         // ANCHOR_END: option
         ;
-    let mut out = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
+    let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
 
     // ANCHOR: api
-    focus(&geometry, target, wavelength, &option, &mut out);
+    focus(&geometry, target, wavelength, &option, &mut dst);
     // ANCHOR_END: api
 }

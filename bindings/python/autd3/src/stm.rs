@@ -458,14 +458,14 @@ impl PatternStm {
 }
 
 #[pyfunction]
-#[pyo3(signature = (center, radius, num_points, normal, intensity, out))]
+#[pyo3(signature = (center, radius, num_points, normal, intensity, dst))]
 fn circle(
     center: &Bound<'_, PyAny>,
     radius: f32,
     num_points: usize,
     normal: &Bound<'_, PyAny>,
     intensity: &Bound<'_, PyAny>,
-    out: &Bound<'_, PyList>,
+    dst: &Bound<'_, PyList>,
 ) -> PyResult<()> {
     let intensity = Intensity(extract_u8(intensity)?);
     let mut pts = Vec::new();
@@ -477,21 +477,21 @@ fn circle(
         intensity,
         &mut pts,
     );
-    out.call_method0("clear")?;
+    dst.call_method0("clear")?;
     for cp in pts {
-        out.append(ControlPoints::from_core(cp))?;
+        dst.append(ControlPoints::from_core(cp))?;
     }
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (start, end, num_points, intensity, out))]
+#[pyo3(signature = (start, end, num_points, intensity, dst))]
 fn line(
     start: &Bound<'_, PyAny>,
     end: &Bound<'_, PyAny>,
     num_points: usize,
     intensity: &Bound<'_, PyAny>,
-    out: &Bound<'_, PyList>,
+    dst: &Bound<'_, PyList>,
 ) -> PyResult<()> {
     let intensity = Intensity(extract_u8(intensity)?);
     let mut pts = Vec::new();
@@ -502,9 +502,9 @@ fn line(
         intensity,
         &mut pts,
     );
-    out.call_method0("clear")?;
+    dst.call_method0("clear")?;
     for cp in pts {
-        out.append(ControlPoints::from_core(cp))?;
+        dst.append(ControlPoints::from_core(cp))?;
     }
     Ok(())
 }

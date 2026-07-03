@@ -9,7 +9,7 @@ internal static class Sample
     internal static void Run()
     {
         // HIDE_END
-var @out = Modulation.ModulationBuffer();
+var dst = Modulation.ModulationBuffer();
 
 Modulation.Fourier(
     new[]
@@ -24,7 +24,7 @@ Modulation.Fourier(
         clamp: false,
         offset: 0x00
     ),
-    @out
+    dst
 );
         // HIDE
     }

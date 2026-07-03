@@ -12,7 +12,7 @@ use autd3_rs_pattern_holo::{
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut out = geometry.pattern_buffer();
+    let mut dst = geometry.pattern_buffer();
 
     naive(
         &geometry,
@@ -33,7 +33,7 @@ fn main() -> Result<()> {
             backend: NalgebraBackend,
             mask: TransducerMask::AllEnabled,
         },
-        &mut out,
+        &mut dst,
     )?;
 
     Ok(())

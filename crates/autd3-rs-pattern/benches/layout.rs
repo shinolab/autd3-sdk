@@ -65,22 +65,22 @@ fn compute_vec(
     }
 }
 
-fn pack_array(buf: &[[Emission; N]], out: &mut [u8]) {
+fn pack_array(buf: &[[Emission; N]], dst: &mut [u8]) {
     for (d, slot) in buf.iter().enumerate() {
         let base = d * DEV_STRIDE + HEADER;
         for (i, e) in slot.iter().enumerate() {
-            out[base + 2 * i] = e.phase.0;
-            out[base + 2 * i + 1] = e.intensity.0;
+            dst[base + 2 * i] = e.phase.0;
+            dst[base + 2 * i + 1] = e.intensity.0;
         }
     }
 }
 
-fn pack_vec(buf: &[Vec<Emission>], out: &mut [u8]) {
+fn pack_vec(buf: &[Vec<Emission>], dst: &mut [u8]) {
     for (d, slot) in buf.iter().enumerate() {
         let base = d * DEV_STRIDE + HEADER;
         for (i, e) in slot.iter().enumerate() {
-            out[base + 2 * i] = e.phase.0;
-            out[base + 2 * i + 1] = e.intensity.0;
+            dst[base + 2 * i] = e.phase.0;
+            dst[base + 2 * i + 1] = e.intensity.0;
         }
     }
 }
@@ -116,20 +116,20 @@ fn bench(c: &mut Criterion) {
         let geo = make_geometry(devices);
         let mut arr = vec![[Emission::default(); N]; devices];
         let mut vc = vec![vec![Emission::default(); N]; devices];
-        let mut out = vec![0u8; devices * DEV_STRIDE];
+        let mut dst = vec![0u8; devices * DEV_STRIDE];
 
         g_pack.bench_with_input(BenchmarkId::new("array", devices), &devices, |b, _| {
             b.iter(|| {
                 compute_array(&geo, target, wl, opt, &mut arr);
-                pack_array(&arr, &mut out);
-                black_box(&out);
+                pack_array(&arr, &mut dst);
+                black_box(&dst);
             });
         });
         g_pack.bench_with_input(BenchmarkId::new("vec", devices), &devices, |b, _| {
             b.iter(|| {
                 compute_vec(&geo, target, wl, opt, &mut vc);
-                pack_vec(&vc, &mut out);
-                black_box(&out);
+                pack_vec(&vc, &mut dst);
+                black_box(&dst);
             });
         });
     }

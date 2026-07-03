@@ -49,15 +49,15 @@ pub fn greedy(
     foci: &[ControlPoint],
     wavelength: Length,
     option: &GreedyOption<'_>,
-    out: &mut [Vec<Emission>],
+    dst: &mut [Vec<Emission>],
 ) -> Result<(), HoloError> {
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
     assert_eq!(
-        out.len(),
+        dst.len(),
         geometry.num_devices(),
-        "out must have one slot per device"
+        "dst must have one slot per device"
     );
     let mask = option.mask;
     mask.validate(geometry);
@@ -82,7 +82,7 @@ pub fn greedy(
         .collect();
     indices.shuffle(&mut rand::rng());
 
-    for slot in out.iter_mut() {
+    for slot in dst.iter_mut() {
         *slot = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
     }
 
@@ -119,7 +119,7 @@ pub fn greedy(
             *c += trans * best_phase;
         }
 
-        out[d][t] = Emission {
+        dst[d][t] = Emission {
             phase: Phase::from(best_phase),
             intensity,
         };
@@ -154,14 +154,14 @@ mod tests {
     #[test]
     fn empty_foci_is_error() {
         let geometry = Geometry::new(vec![Autd3::default()]);
-        let mut out = buffer(&geometry);
+        let mut dst = buffer(&geometry);
         assert_eq!(
             greedy(
                 &geometry,
                 &[],
                 wavelength(),
                 &GreedyOption::default(),
-                &mut out
+                &mut dst
             ),
             Err(HoloError::NoFoci)
         );
@@ -170,17 +170,17 @@ mod tests {
     #[test]
     fn uniform_default_sets_all_max_and_focuses() {
         let geometry = Geometry::new(vec![Autd3::default()]);
-        let mut out = buffer(&geometry);
+        let mut dst = buffer(&geometry);
         greedy(
             &geometry,
             &single_focus(),
             wavelength(),
             &GreedyOption::default(),
-            &mut out,
+            &mut dst,
         )
         .unwrap();
-        assert_eq!(out.len(), 1);
-        assert!(out[0].iter().all(|e| e.intensity == Intensity::MAX));
-        assert!(out[0].iter().any(|e| e.phase != out[0][0].phase));
+        assert_eq!(dst.len(), 1);
+        assert!(dst[0].iter().all(|e| e.intensity == Intensity::MAX));
+        assert!(dst[0].iter().any(|e| e.phase != dst[0][0].phase));
     }
 }

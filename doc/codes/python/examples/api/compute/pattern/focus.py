@@ -16,8 +16,8 @@ option = (
     )
     # ANCHOR_END: option
 )
-out = geometry.pattern_buffer()
+dst = geometry.pattern_buffer()
 
 # ANCHOR: api
-focus(geometry, target, wl, option, out)
+focus(geometry, target, wl, option, dst)
 # ANCHOR_END: api

@@ -14,11 +14,11 @@ option = (
     )
     # ANCHOR_END: option
 )
-out = modulation_buffer()
+dst = modulation_buffer()
 # ANCHOR: api
-sine(freq, option, out)
+sine(freq, option, dst)
 # ANCHOR_END: api
 
 # ANCHOR: nearest
-sine(Nearest(150.5 * Hz), option, out)
+sine(Nearest(150.5 * Hz), option, dst)
 # ANCHOR_END: nearest

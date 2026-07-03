@@ -9,7 +9,7 @@ internal static class Sample
     internal static void Run()
     {
         // HIDE_END
-var @out = Modulation.ModulationBuffer();
+var dst = Modulation.ModulationBuffer();
 
 Modulation.Sine(
     150 * Hz,
@@ -20,7 +20,7 @@ Modulation.Sine(
         clamp: false,
         samplingConfig: SamplingConfig.Freq4k
     ),
-    @out
+    dst
 );
         // HIDE
     }

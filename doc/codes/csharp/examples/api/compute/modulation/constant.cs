@@ -6,10 +6,10 @@ internal static class Sample
 {
     internal static void Run()
     {
-        var @out = Modulation.ModulationBuffer();
+        var dst = Modulation.ModulationBuffer();
         byte intensity = 0xFF;
         // ANCHOR: api
-        Modulation.Constant(intensity, @out);
+        Modulation.Constant(intensity, dst);
         // ANCHOR_END: api
     }
 }

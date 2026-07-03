@@ -17,13 +17,13 @@ fn main() -> Result<()> {
         }
         // ANCHOR_END: option
         ;
-    let mut out = Vec::new();
+    let mut dst = Vec::new();
     // ANCHOR: api
-    sine(freq, &option, &mut out)?;
+    sine(freq, &option, &mut dst)?;
     // ANCHOR_END: api
 
     // ANCHOR: nearest
-    sine(Nearest(150.5 * Hz), &option, &mut out)?;
+    sine(Nearest(150.5 * Hz), &option, &mut dst)?;
     // ANCHOR_END: nearest
     Ok(())
 }

@@ -390,25 +390,25 @@ fn mask_ref(mask: Option<&[Vec<bool>]>) -> TransducerMask<'_> {
     }
 }
 
-fn with_out_buffer<F>(buffer: &Bound<'_, PyAny>, f: F) -> PyResult<()>
+fn with_dst_buffer<F>(buffer: &Bound<'_, PyAny>, f: F) -> PyResult<()>
 where
     F: FnOnce(&mut [autd3_python_capsule::DevicePattern]) -> PyResult<()>,
 {
     let capsule = buffer
         .call_method0("_capsule_mut")?
         .cast_into::<PyCapsule>()?;
-    let out = pattern_from_capsule_mut(&capsule)?;
-    f(out.as_mut_slice())
+    let dst = pattern_from_capsule_mut(&capsule)?;
+    f(dst.as_mut_slice())
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
+#[pyo3(signature = (geometry, foci, wavelength, option, dst))]
 fn naive(
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, ControlPoint>>,
     wavelength: f32,
     option: &NaiveOption,
-    buffer: &Bound<'_, PyAny>,
+    dst: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
@@ -417,26 +417,26 @@ fn naive(
         mask: mask_ref(option.mask.as_deref()),
         ..option.inner
     };
-    with_out_buffer(buffer, |out| {
+    with_dst_buffer(dst, |dst| {
         autd3_rs_pattern_holo::naive(
             geometry,
             &foci,
             Length::millimeters(wavelength),
             &option,
-            out,
+            dst,
         )
         .map_err(holo_err)
     })
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
+#[pyo3(signature = (geometry, foci, wavelength, option, dst))]
 fn gs(
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, ControlPoint>>,
     wavelength: f32,
     option: &GsOption,
-    buffer: &Bound<'_, PyAny>,
+    dst: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
@@ -445,26 +445,26 @@ fn gs(
         mask: mask_ref(option.mask.as_deref()),
         ..option.inner
     };
-    with_out_buffer(buffer, |out| {
+    with_dst_buffer(dst, |dst| {
         autd3_rs_pattern_holo::gs(
             geometry,
             &foci,
             Length::millimeters(wavelength),
             &option,
-            out,
+            dst,
         )
         .map_err(holo_err)
     })
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
+#[pyo3(signature = (geometry, foci, wavelength, option, dst))]
 fn gspat(
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, ControlPoint>>,
     wavelength: f32,
     option: &GspatOption,
-    buffer: &Bound<'_, PyAny>,
+    dst: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
@@ -473,26 +473,26 @@ fn gspat(
         mask: mask_ref(option.mask.as_deref()),
         ..option.inner
     };
-    with_out_buffer(buffer, |out| {
+    with_dst_buffer(dst, |dst| {
         autd3_rs_pattern_holo::gspat(
             geometry,
             &foci,
             Length::millimeters(wavelength),
             &option,
-            out,
+            dst,
         )
         .map_err(holo_err)
     })
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, buffer))]
+#[pyo3(signature = (geometry, foci, wavelength, option, dst))]
 fn greedy(
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, ControlPoint>>,
     wavelength: f32,
     option: &GreedyOption,
-    buffer: &Bound<'_, PyAny>,
+    dst: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
@@ -501,13 +501,13 @@ fn greedy(
         mask: mask_ref(option.mask.as_deref()),
         ..option.inner
     };
-    with_out_buffer(buffer, |out| {
+    with_dst_buffer(dst, |dst| {
         autd3_rs_pattern_holo::greedy(
             geometry,
             &foci,
             Length::millimeters(wavelength),
             &option,
-            out,
+            dst,
         )
         .map_err(holo_err)
     })

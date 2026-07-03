@@ -4,7 +4,7 @@ from autd3_modulation import SineOption, modulation_buffer, radiation_pressure, 
 src = modulation_buffer()
 sine(150.0 * Hz, SineOption(), src)
 
-out = modulation_buffer()
+dst = modulation_buffer()
 # ANCHOR: api
-radiation_pressure(src, out)
+radiation_pressure(src, dst)
 # ANCHOR_END: api

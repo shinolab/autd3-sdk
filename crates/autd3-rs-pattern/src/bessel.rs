@@ -65,7 +65,7 @@ pub fn bessel_device(
     theta: Angle,
     wavelength: Length,
     option: &BesselOption,
-    out: &mut [Emission],
+    dst: &mut [Emission],
 ) {
     assert_eq!(
         device.num_transducers(),
@@ -73,7 +73,7 @@ pub fn bessel_device(
         "not an AUTD3 device"
     );
     let rot = rotation(direction);
-    for (e, &pos) in out.iter_mut().zip(device.positions()) {
+    for (e, &pos) in dst.iter_mut().zip(device.positions()) {
         *e = Emission {
             phase: bessel_phase(pos, apex, &rot, theta, wavelength) + option.phase_offset,
             intensity: option.intensity,
@@ -88,14 +88,14 @@ pub fn bessel(
     theta: Angle,
     wavelength: Length,
     option: &BesselOption,
-    out: &mut [Vec<Emission>],
+    dst: &mut [Vec<Emission>],
 ) {
     assert_eq!(
-        out.len(),
+        dst.len(),
         geometry.num_devices(),
-        "out must have one slot per device"
+        "dst must have one slot per device"
     );
-    for (slot, dev) in out.iter_mut().zip(geometry.iter()) {
+    for (slot, dev) in dst.iter_mut().zip(geometry.iter()) {
         bessel_device(dev, apex, direction, theta, wavelength, option, slot);
     }
 }

@@ -20,10 +20,10 @@ internal static class Sample
             )
             // ANCHOR_END: option
             ;
-        var @out = geometry.PatternBuffer();
+        var dst = geometry.PatternBuffer();
 
         // ANCHOR: api
-        Pattern.Focus(geometry, target, wavelength, option, @out);
+        Pattern.Focus(geometry, target, wavelength, option, dst);
         // ANCHOR_END: api
     }
 }

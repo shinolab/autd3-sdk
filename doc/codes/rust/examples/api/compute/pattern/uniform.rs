@@ -9,8 +9,8 @@ fn main() {
         phase: Phase::ZERO,
         intensity: Intensity::MAX,
     };
-    let mut out = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
+    let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
     // ANCHOR: api
-    uniform(emission, &mut out);
+    uniform(emission, &mut dst);
     // ANCHOR_END: api
 }

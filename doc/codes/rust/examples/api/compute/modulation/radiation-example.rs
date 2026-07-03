@@ -7,9 +7,9 @@ fn main() -> Result<()> {
     let mut src = Vec::new();
     sine(150 * Hz, &SineOption::default(), &mut src)?;
 
-    let mut out = Vec::new();
+    let mut dst = Vec::new();
 
-    radiation_pressure(&src, &mut out);
+    radiation_pressure(&src, &mut dst);
 
     Ok(())
 }

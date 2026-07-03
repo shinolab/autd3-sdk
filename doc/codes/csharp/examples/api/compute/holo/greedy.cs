@@ -29,9 +29,9 @@ internal static class Sample
             )
             // ANCHOR_END: option
             ;
-        var @out = geometry.PatternBuffer();
+        var dst = geometry.PatternBuffer();
         // ANCHOR: api
-        Holo.Greedy(geometry, foci, wavelength, option, @out);
+        Holo.Greedy(geometry, foci, wavelength, option, dst);
         // ANCHOR_END: api
     }
 }

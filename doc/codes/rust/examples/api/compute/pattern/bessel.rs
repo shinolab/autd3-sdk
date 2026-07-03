@@ -18,9 +18,9 @@ fn main() {
         }
         // ANCHOR_END: option
         ;
-    let mut out = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
+    let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
 
     // ANCHOR: api
-    bessel(&geometry, apex, direction, theta, wavelength, &option, &mut out);
+    bessel(&geometry, apex, direction, theta, wavelength, &option, &mut dst);
     // ANCHOR_END: api
 }

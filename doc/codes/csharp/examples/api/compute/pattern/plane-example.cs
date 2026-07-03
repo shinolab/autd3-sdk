@@ -12,7 +12,7 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
 
-var @out = geometry.PatternBuffer();
+var dst = geometry.PatternBuffer();
 
 Pattern.Plane(
     geometry,
@@ -22,7 +22,7 @@ Pattern.Plane(
         intensity: Intensity.Max,
         phaseOffset: Phase.Zero
     ),
-    @out
+    dst
 );
         // HIDE
     }

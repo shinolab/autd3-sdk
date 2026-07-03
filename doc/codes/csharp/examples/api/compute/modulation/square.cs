@@ -18,9 +18,9 @@ internal static class Sample
             )
             // ANCHOR_END: option
             ;
-        var @out = Modulation.ModulationBuffer();
+        var dst = Modulation.ModulationBuffer();
         // ANCHOR: api
-        Modulation.Square(freq, option, @out);
+        Modulation.Square(freq, option, dst);
         // ANCHOR_END: api
     }
 }

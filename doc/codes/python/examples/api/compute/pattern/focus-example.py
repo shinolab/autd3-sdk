@@ -6,7 +6,7 @@ from autd3_pattern import FocusOption, focus, wavelength
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-out = geometry.pattern_buffer()
+dst = geometry.pattern_buffer()
 
 focus(
     geometry,
@@ -16,5 +16,5 @@ focus(
         intensity=Intensity.MAX,
         phase_offset=Phase.ZERO,
     ),
-    out,
+    dst,
 )

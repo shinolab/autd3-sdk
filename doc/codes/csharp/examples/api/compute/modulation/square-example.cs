@@ -9,7 +9,7 @@ internal static class Sample
     internal static void Run()
     {
         // HIDE_END
-var @out = Modulation.ModulationBuffer();
+var dst = Modulation.ModulationBuffer();
 
 Modulation.Square(
     150 * Hz,
@@ -19,7 +19,7 @@ Modulation.Square(
         duty: 0.5f,
         samplingConfig: SamplingConfig.Freq4k
     ),
-    @out
+    dst
 );
         // HIDE
     }

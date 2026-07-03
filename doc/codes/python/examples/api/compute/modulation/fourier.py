@@ -16,7 +16,7 @@ option = (
     )
     # ANCHOR_END: option
 )
-out = modulation_buffer()
+dst = modulation_buffer()
 
 # Shown standalone in the SineComponent section of the docs.
 # ANCHOR: components
@@ -33,5 +33,5 @@ components = [
     )
 ]
 # ANCHOR: api
-fourier(components, option, out)
+fourier(components, option, dst)
 # ANCHOR_END: api

@@ -8,8 +8,8 @@ emission = Emission(
     Phase.ZERO,
     Intensity.MAX,
 )
-out = geometry.pattern_buffer()
+dst = geometry.pattern_buffer()
 
 # ANCHOR: api
-uniform(emission, out)
+uniform(emission, dst)
 # ANCHOR_END: api

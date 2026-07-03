@@ -34,7 +34,7 @@ fn lcm(a: usize, b: usize) -> usize {
 pub fn fourier<S: Into<SamplingMode> + Copy>(
     components: &[SineComponent<S>],
     option: &FourierOption,
-    out: &mut Vec<u8>,
+    dst: &mut Vec<u8>,
 ) -> Result<(), Error> {
     let Some(first) = components.first() else {
         return Err(Error::InvalidPayload(PayloadError::FourierComponentsEmpty));
@@ -65,12 +65,12 @@ pub fn fourier<S: Into<SamplingMode> + Copy>(
         }
     }
 
-    out.clear();
-    out.reserve(len);
+    dst.clear();
+    dst.reserve(len);
     let mut out_of_range = false;
     for v in acc {
         let v = (v * scale + offset).floor() as i32;
-        out.push(if (0..=255).contains(&v) {
+        dst.push(if (0..=255).contains(&v) {
             v as u8
         } else if option.clamp {
             v.clamp(0, 255) as u8

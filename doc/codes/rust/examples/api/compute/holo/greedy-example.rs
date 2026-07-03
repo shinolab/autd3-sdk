@@ -14,7 +14,7 @@ use autd3_rs_pattern_holo::{
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut out = geometry.pattern_buffer();
+    let mut dst = geometry.pattern_buffer();
 
     greedy(
         &geometry,
@@ -36,7 +36,7 @@ fn main() -> Result<()> {
             objective_func: abs_objective_func,
             mask: TransducerMask::AllEnabled,
         },
-        &mut out,
+        &mut dst,
     )?;
 
     Ok(())

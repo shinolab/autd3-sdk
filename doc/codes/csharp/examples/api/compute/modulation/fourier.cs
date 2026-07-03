@@ -16,7 +16,7 @@ internal static class Sample
             )
             // ANCHOR_END: option
             ;
-        var @out = Modulation.ModulationBuffer();
+        var dst = Modulation.ModulationBuffer();
 
         // Shown standalone in the SineComponent section of the docs.
         // ANCHOR: components
@@ -31,7 +31,7 @@ internal static class Sample
             new SineComponent(100 * Hz, new SineOption()),
         };
         // ANCHOR: api
-        Modulation.Fourier(components, option, @out);
+        Modulation.Fourier(components, option, dst);
         // ANCHOR_END: api
     }
 }

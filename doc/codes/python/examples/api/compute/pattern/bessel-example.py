@@ -6,7 +6,7 @@ from autd3_pattern import BesselOption, bessel, wavelength
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-out = geometry.pattern_buffer()
+dst = geometry.pattern_buffer()
 
 bessel(
     geometry,
@@ -18,5 +18,5 @@ bessel(
         intensity=Intensity.MAX,
         phase_offset=Phase.ZERO,
     ),
-    out,
+    dst,
 )

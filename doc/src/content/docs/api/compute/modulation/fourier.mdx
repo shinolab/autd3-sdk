@@ -27,7 +27,7 @@ import { excerpt } from "@lib/excerpt";
 | ------------ | --------------------- | ------------------------- |
 | `components` | `&[SineComponent<S>]` | 合成する正弦波成分の配列  |
 | `option`     | `&FourierOption`      | 追加オプション (下記参照) |
-| `out`        | `&mut Vec<u8>`        | 出力バッファ              |
+| `dst`        | `&mut Vec<u8>`        | 出力バッファ              |
 
 各 `SineComponent` は周波数 `freq` と `SineOption` の組である. 
 全成分の `sampling_config` は一致している必要があり, 異なるとエラーになる. 

@@ -4,12 +4,12 @@ from autd3_pattern import uniform
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-out = geometry.pattern_buffer()
+dst = geometry.pattern_buffer()
 
 uniform(
     Emission(
         phase=Phase.ZERO,
         intensity=Intensity.MAX,
     ),
-    out,
+    dst,
 )

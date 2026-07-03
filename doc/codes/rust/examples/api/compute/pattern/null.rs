@@ -5,8 +5,8 @@ use autd3_rs_pattern::null;
 fn main() {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut out = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
+    let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
     // ANCHOR: api
-    null(&mut out);
+    null(&mut dst);
     // ANCHOR_END: api
 }

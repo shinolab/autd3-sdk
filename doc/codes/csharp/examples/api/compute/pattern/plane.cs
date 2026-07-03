@@ -20,10 +20,10 @@ internal static class Sample
             )
             // ANCHOR_END: option
             ;
-        var @out = geometry.PatternBuffer();
+        var dst = geometry.PatternBuffer();
 
         // ANCHOR: api
-        Pattern.Plane(geometry, direction, wavelength, option, @out);
+        Pattern.Plane(geometry, direction, wavelength, option, dst);
         // ANCHOR_END: api
     }
 }

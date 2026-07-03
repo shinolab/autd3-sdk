@@ -1,13 +1,13 @@
 use autd3_rs_core::value::Emission;
 
-pub fn uniform_device(emission: Emission, out: &mut [Emission]) {
-    for slot in out.iter_mut() {
+pub fn uniform_device(emission: Emission, dst: &mut [Emission]) {
+    for slot in dst.iter_mut() {
         *slot = emission;
     }
 }
 
-pub fn uniform(emission: Emission, out: &mut [Vec<Emission>]) {
-    for slot in &mut *out {
+pub fn uniform(emission: Emission, dst: &mut [Vec<Emission>]) {
+    for slot in &mut *dst {
         uniform_device(emission, slot);
     }
 }
@@ -26,10 +26,10 @@ mod tests {
             intensity: Intensity(0x80),
         };
 
-        let mut out = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
-        uniform(emission, &mut out);
+        let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
+        uniform(emission, &mut dst);
 
-        for dev in &out {
+        for dev in &dst {
             for &e in dev {
                 assert_eq!(e, emission);
             }

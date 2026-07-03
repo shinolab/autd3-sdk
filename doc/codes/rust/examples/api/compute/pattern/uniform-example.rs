@@ -5,13 +5,13 @@ use autd3_rs_pattern::uniform;
 fn main() {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut out = geometry.pattern_buffer();
+    let mut dst = geometry.pattern_buffer();
 
     uniform(
         Emission {
             phase: Phase::ZERO,
             intensity: Intensity::MAX,
         },
-        &mut out,
+        &mut dst,
     );
 }

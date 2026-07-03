@@ -4,7 +4,7 @@ use autd3_rs::units::Hz;
 use autd3_rs_modulation::{FourierOption, SineComponent, SineOption, fourier};
 
 fn main() -> Result<()> {
-    let mut out = Vec::new();
+    let mut dst = Vec::new();
 
     fourier(
         &[SineComponent {
@@ -16,7 +16,7 @@ fn main() -> Result<()> {
             clamp: false,
             offset: 0x00,
         },
-        &mut out,
+        &mut dst,
     )?;
 
     Ok(())

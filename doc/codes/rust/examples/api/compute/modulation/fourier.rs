@@ -13,7 +13,7 @@ fn main() -> Result<()> {
         }
         // ANCHOR_END: option
         ;
-    let mut out = Vec::new();
+    let mut dst = Vec::new();
 
     // Shown standalone in the SineComponent section of the docs.
     // ANCHOR: components
@@ -28,7 +28,7 @@ fn main() -> Result<()> {
         option: SineOption::default(),
     }];
     // ANCHOR: api
-    fourier(&components, &option, &mut out)?;
+    fourier(&components, &option, &mut dst)?;
     // ANCHOR_END: api
     Ok(())
 }

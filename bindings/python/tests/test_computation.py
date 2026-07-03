@@ -78,9 +78,9 @@ def test_modulation_sine_square_fourier_radiation() -> None:
     modulation.sine(200 * Hz, modulation.SineOption(), rp)
     before = len(rp)
 
-    out = modulation.modulation_buffer()
-    modulation.radiation_pressure(rp, out)
-    assert len(out) == before
+    dst = modulation.modulation_buffer()
+    modulation.radiation_pressure(rp, dst)
+    assert len(dst) == before
     assert len(rp) == before
 
     modulation.radiation_pressure_inplace(rp)

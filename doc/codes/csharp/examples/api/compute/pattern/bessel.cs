@@ -22,10 +22,10 @@ internal static class Sample
             )
             // ANCHOR_END: option
             ;
-        var @out = geometry.PatternBuffer();
+        var dst = geometry.PatternBuffer();
 
         // ANCHOR: api
-        Pattern.Bessel(geometry, apex, direction, theta, wavelength, option, @out);
+        Pattern.Bessel(geometry, apex, direction, theta, wavelength, option, dst);
         // ANCHOR_END: api
     }
 }

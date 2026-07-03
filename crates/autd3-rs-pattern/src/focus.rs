@@ -40,14 +40,14 @@ pub fn focus_device(
     target: Point3<f32>,
     wavelength: Length,
     option: &FocusOption,
-    out: &mut [Emission],
+    dst: &mut [Emission],
 ) {
     assert_eq!(
         device.num_transducers(),
         Autd3::NUM_TRANSDUCERS,
         "not an AUTD3 device"
     );
-    for (e, &pos) in out.iter_mut().zip(device.positions()) {
+    for (e, &pos) in dst.iter_mut().zip(device.positions()) {
         *e = focus_transducer(pos, target, wavelength, option);
     }
 }
@@ -57,14 +57,14 @@ pub fn focus(
     target: Point3<f32>,
     wavelength: Length,
     option: &FocusOption,
-    out: &mut [Vec<Emission>],
+    dst: &mut [Vec<Emission>],
 ) {
     assert_eq!(
-        out.len(),
+        dst.len(),
         geometry.num_devices(),
-        "out must have one slot per device"
+        "dst must have one slot per device"
     );
-    for (slot, dev) in out.iter_mut().zip(geometry.iter()) {
+    for (slot, dev) in dst.iter_mut().zip(geometry.iter()) {
         focus_device(dev, target, wavelength, option, slot);
     }
 }

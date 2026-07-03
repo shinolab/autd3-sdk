@@ -11,7 +11,7 @@ pub fn circle(
     num_points: usize,
     normal: UnitVector3<f32>,
     intensity: Intensity,
-    out: &mut Vec<ControlPoints<1>>,
+    dst: &mut Vec<ControlPoints<1>>,
 ) {
     let z = Vector3::z();
     let v0 = if normal.dot(&z).abs() < 0.9 {
@@ -22,8 +22,8 @@ pub fn circle(
     let u = normal.cross(&v0).normalize();
     let v = normal.cross(&u).normalize();
     let radius = radius.mm();
-    out.clear();
-    out.extend((0..num_points).map(|i| {
+    dst.clear();
+    dst.extend((0..num_points).map(|i| {
         let theta = 2.0 * PI * i as f32 / num_points as f32;
         let point = center + (u * theta.cos() + v * theta.sin()) * radius;
         ControlPoints::new([ControlPoint::from(point)], intensity)
@@ -35,12 +35,12 @@ pub fn line(
     end: Point3<f32>,
     num_points: usize,
     intensity: Intensity,
-    out: &mut Vec<ControlPoints<1>>,
+    dst: &mut Vec<ControlPoints<1>>,
 ) {
     let dir = end - start;
     let denom = (num_points.max(2) - 1) as f32;
-    out.clear();
-    out.extend((0..num_points).map(|i| {
+    dst.clear();
+    dst.extend((0..num_points).map(|i| {
         let point = start + dir * (i as f32 / denom);
         ControlPoints::new([ControlPoint::from(point)], intensity)
     }));
