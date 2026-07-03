@@ -27,6 +27,7 @@ Holo.Gspat(
         repeat: 100,
         constraint: EmissionConstraint.Clamp(Intensity.Min, Intensity.Max),
         directivity: Directivity.Sphere,
+        backend: new NalgebraBackend(),
         mask: TransducerMask.AllEnabled
     ),
     dst

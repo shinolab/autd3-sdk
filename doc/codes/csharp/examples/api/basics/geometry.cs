@@ -8,7 +8,10 @@ internal static class Sample
     internal static void Run()
     {
         // ANCHOR: api
-        new Geometry(new[] { new Device(Vector3.Zero, Quaternion.Identity) });
+        new Geometry(new[] { new Device(
+            Vector3.Zero,
+            Quaternion.Identity
+        ) });
         // ANCHOR_END: api
 
         var geometry = new Geometry(new[] { new Device(Vector3.Zero, Quaternion.Identity) });

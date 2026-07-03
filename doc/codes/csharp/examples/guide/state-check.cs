@@ -13,7 +13,11 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
 
         // ANCHOR: open
-        var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        var client = await Client.OpenAsync(
+            geometry,
+            EtherCrabLink.Create(),
+            new ClientConfig()
+        );
         // ANCHOR_END: open
 
         try

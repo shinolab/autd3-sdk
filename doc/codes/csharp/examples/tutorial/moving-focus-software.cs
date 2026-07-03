@@ -25,7 +25,13 @@ internal static class Sample
             foreach (var sign in new[] { 1.0f, -1.0f })
             {
                 var target = center + new Vector3(sign * 20.0f, 0.0f, 0.0f);
-                Pattern.Focus(geometry, target, wavelength, new FocusOption(), patterns);
+                Pattern.Focus(
+                    geometry,
+                    target,
+                    wavelength,
+                    new FocusOption(),
+                    patterns
+                );
                 var builder = client.DatagramBuilder();
                 builder.Push(new Pattern(patterns));
                 foreach (var frame in builder.Build())

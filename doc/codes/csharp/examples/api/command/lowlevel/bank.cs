@@ -13,17 +13,30 @@ internal static class Sample
         ushort index = 0;
         var emissions = geometry.PatternBuffer();
         // ANCHOR: write
-        new WritePatternBuffer(bank, index, emissions);
+        new WritePatternBuffer(
+            bank,
+            index,
+            emissions
+        );
         // ANCHOR_END: write
         var config = SamplingConfig.Freq4k;
         var size = 1u;
         var loopBehavior = LoopBehavior.Infinite;
         // ANCHOR: config
-        new ConfigPattern(bank, config, size, PatternDataType.Raw, loopBehavior);
+        new ConfigPattern(
+            bank,
+            config,
+            size,
+            PatternDataType.Raw,
+            loopBehavior
+        );
         // ANCHOR_END: config
         var transitionMode = TransitionMode.Immediate;
         // ANCHOR: change
-        new ChangePatternBank(bank, transitionMode);
+        new ChangePatternBank(
+            bank,
+            transitionMode
+        );
         // ANCHOR_END: change
 
         var p0 = geometry.PatternBuffer();
@@ -34,7 +47,12 @@ internal static class Sample
         var compressedIndex = 0u;
         var format = PatternCompression.PhaseHalf;
         // ANCHOR: compressed
-        new WritePatternCompressed(bank, compressedIndex, format, patterns);
+        new WritePatternCompressed(
+            bank,
+            compressedIndex,
+            format,
+            patterns
+        );
         // ANCHOR_END: compressed
     }
 }

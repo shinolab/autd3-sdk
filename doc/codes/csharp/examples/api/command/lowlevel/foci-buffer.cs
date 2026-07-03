@@ -14,14 +14,24 @@ internal static class Sample
 
         var indexOffset = 0u;
         // ANCHOR: write
-        new WriteFociBuffer(bank, indexOffset, points);
+        new WriteFociBuffer(
+            bank,
+            indexOffset,
+            points
+        );
         // ANCHOR_END: write
         var size = (uint)points.Length;
         byte numFoci = 1;
         ushort soundSpeed = 340;
         var loopBehavior = LoopBehavior.Infinite;
         // ANCHOR: config
-        new ConfigPattern(bank, config, size, PatternDataType.Foci(numFoci, soundSpeed), loopBehavior);
+        new ConfigPattern(
+            bank,
+            config,
+            size,
+            PatternDataType.Foci(numFoci, soundSpeed),
+            loopBehavior
+        );
         // ANCHOR_END: config
     }
 }

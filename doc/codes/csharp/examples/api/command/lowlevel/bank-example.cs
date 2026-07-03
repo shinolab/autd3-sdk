@@ -27,9 +27,22 @@ Pattern.Focus(
 var bank = PatternBank.B0;
 
 var builder = client.DatagramBuilder();
-builder.Push(new WritePatternBuffer(bank, 0, emissions));
-builder.Push(new ConfigPattern(bank, SamplingConfig.Divide(ushort.MaxValue), 1, PatternDataType.Raw, LoopBehavior.Infinite));
-builder.Push(new ChangePatternBank(bank, TransitionMode.Immediate));
+builder.Push(new WritePatternBuffer(
+    bank,
+    0,
+    emissions
+));
+builder.Push(new ConfigPattern(
+    bank,
+    SamplingConfig.Divide(ushort.MaxValue),
+    1,
+    PatternDataType.Raw,
+    LoopBehavior.Infinite
+));
+builder.Push(new ChangePatternBank(
+    bank,
+    TransitionMode.Immediate
+));
 var frames = builder.Build();
 foreach (var frame in frames)
 {

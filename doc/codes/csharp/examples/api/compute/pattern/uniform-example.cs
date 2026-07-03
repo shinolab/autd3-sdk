@@ -14,7 +14,10 @@ var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
 var dst = geometry.PatternBuffer();
 
 Pattern.Uniform(
-    new Emission(Phase.Zero, Intensity.Max),
+    new Emission(
+        Phase.Zero,
+        Intensity.Max
+    ),
     dst
 );
         // HIDE
