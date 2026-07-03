@@ -275,10 +275,6 @@ name = "api_compute_pattern_uniform"
 path = "examples/api/compute/pattern/uniform.rs"
 
 [[example]]
-name = "api_compute_pattern_wavelength"
-path = "examples/api/compute/pattern/wavelength.rs"
-
-[[example]]
 name = "api_link_ethercrab"
 path = "examples/api/link/ethercrab.rs"
 

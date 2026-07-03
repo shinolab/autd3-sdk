@@ -1,7 +1,7 @@
 import numpy as np
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
-from autd3_pattern import wavelength
+from autd3_pattern import wavelength as calc_wavelength
 from autd3_pattern_holo import (
     ControlPoint,
     Directivity,
@@ -26,7 +26,7 @@ foci = [
     ),
 ]
 
-wl = wavelength(340 * m / s)
+wavelength = calc_wavelength(340 * m / s)
 option = (
     # ANCHOR: option
     GreedyOption(
@@ -39,5 +39,5 @@ option = (
 )
 dst = geometry.pattern_buffer()
 # ANCHOR: api
-greedy(geometry, foci, wl, option, dst)
+greedy(geometry, foci, wavelength, option, dst)
 # ANCHOR_END: api
