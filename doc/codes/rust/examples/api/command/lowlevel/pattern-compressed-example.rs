@@ -1,5 +1,3 @@
-use anyhow::Result;
-
 use autd3_rs::commands::{
     ChangePatternBank, ConfigPattern, PatternCompression, StmConfig, WritePatternCompressed,
 };
@@ -10,8 +8,10 @@ use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_nop::Nop;
 use autd3_rs_pattern::{FocusOption, focus, wavelength};
 
+// HIDE
 #[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
+    // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
     let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
 
@@ -61,5 +61,7 @@ async fn main() -> Result<()> {
     }
 
     client.close().await?;
+    // HIDE
     Ok(())
 }
+// HIDE_END

@@ -21,22 +21,31 @@ const hideLineRe = /(?:\/\/|#)\s*\[hide\]\s*$/;
 
 function clean(lines: string[]): string {
   const out: string[] = [];
+  let seg: string[] = [];
   let hiding = false;
+  const flush = () => {
+    if (seg.length) {
+      out.push(...dedent(seg));
+      seg = [];
+    }
+  };
   for (const l of lines) {
     if (hideEndRe.test(l)) {
       hiding = false;
       continue;
     }
     if (hideStartRe.test(l)) {
+      flush();
       hiding = true;
       continue;
     }
     if (hiding) continue;
     if (anchorRe.test(l)) continue;
     if (hideLineRe.test(l)) continue;
-    out.push(l);
+    seg.push(l);
   }
-  return dedent(out).join("\n").replace(/^\n+|\n+$/g, "");
+  flush();
+  return out.join("\n").replace(/^\n+|\n+$/g, "");
 }
 
 function collectRegions(lines: string[], rawName: string): string[][] {
