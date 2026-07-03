@@ -6,11 +6,6 @@ sidebar:
 ---
 
 import Math from "@components/Math.astro";
-import CodeTabs from "@components/CodeTabs.astro";
-import sample from "@codes/rust/examples/api/compute/pattern/wavelength.rs?raw";
-import pySample from "@codes/python/examples/api/compute/pattern/wavelength.py?raw";
-import csSample from "@codes/csharp/examples/api/compute/pattern/wavelength.cs?raw";
-import { excerpt } from "@lib/excerpt";
 
 `autd3_rs_pattern` crateが, 単一焦点・平面波・ベッセルビームなどの代表的な音場計算ユーティリティを提供する.
 
@@ -29,6 +24,4 @@ import { excerpt } from "@lib/excerpt";
 位相計算には波長 <Math tex="\lambda = c / f" /> が必要にになる.
 音速 <Math tex="c" /> から `autd3_rs_pattern::wavelength(sound_speed)` で波長を求められる. 
 音速 340 m/s (室温約15°の空気中での音速) では<Math tex="\lambda \approx 8.5\,\mathrm{mm}" />. 
-
-<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 

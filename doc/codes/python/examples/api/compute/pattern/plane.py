@@ -2,12 +2,12 @@ import numpy as np
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 from autd3.value import Intensity, Phase
-from autd3_pattern import PlaneOption, plane, wavelength
+from autd3_pattern import PlaneOption, plane, wavelength as calc_wavelength
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 direction = np.array([0.0, 0.0, 1.0])
-wl = wavelength(340 * m / s)
+wavelength = calc_wavelength(340 * m / s)
 option = (
     # ANCHOR: option
     PlaneOption(
@@ -19,5 +19,5 @@ option = (
 dst = geometry.pattern_buffer()
 
 # ANCHOR: api
-plane(geometry, direction, wl, option, dst)
+plane(geometry, direction, wavelength, option, dst)
 # ANCHOR_END: api

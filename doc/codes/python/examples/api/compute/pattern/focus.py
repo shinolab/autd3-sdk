@@ -2,12 +2,12 @@ import numpy as np
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 from autd3.value import Intensity, Phase
-from autd3_pattern import FocusOption, focus, wavelength
+from autd3_pattern import FocusOption, focus, wavelength as calc_wavelength
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 target = geometry.center() + np.array([0.0, 0.0, 150.0])
-wl = wavelength(340 * m / s)
+wavelength = calc_wavelength(340 * m / s)
 option = (
     # ANCHOR: option
     FocusOption(
@@ -19,5 +19,5 @@ option = (
 dst = geometry.pattern_buffer()
 
 # ANCHOR: api
-focus(geometry, target, wl, option, dst)
+focus(geometry, target, wavelength, option, dst)
 # ANCHOR_END: api
