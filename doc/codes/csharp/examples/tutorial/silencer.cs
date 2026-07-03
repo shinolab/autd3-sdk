@@ -15,10 +15,17 @@ internal static class Sample
         var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
 
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+        var radius = 30.0f;
 
         {
             // ANCHOR: disable
-            var foci = Stm.Circle(center, 30.0f, 20, Vector3.UnitZ, Intensity.Max);
+            var foci = new ControlPoints[20];
+            for (var i = 0; i < 20; i++)
+            {
+                var theta = 2.0f * MathF.PI * i / 20.0f;
+                var p = center + new Vector3(radius * MathF.Cos(theta), radius * MathF.Sin(theta), 0.0f);
+                foci[i] = new ControlPoints(new[] { new ControlPoint(p) }, Intensity.Max);
+            }
             var builder = client.DatagramBuilder();
             builder.Push(SetSilencer.Disable());
             builder.Push(new FociStm(StmConfig.Freq(50.0f), foci, new FociStmOption()));
@@ -31,7 +38,13 @@ internal static class Sample
 
         {
             // ANCHOR: err
-            var foci = Stm.Circle(center, 30.0f, 40, Vector3.UnitZ, Intensity.Max);
+            var foci = new ControlPoints[40];
+            for (var i = 0; i < 40; i++)
+            {
+                var theta = 2.0f * MathF.PI * i / 40.0f;
+                var p = center + new Vector3(radius * MathF.Cos(theta), radius * MathF.Sin(theta), 0.0f);
+                foci[i] = new ControlPoints(new[] { new ControlPoint(p) }, Intensity.Max);
+            }
             var builder = client.DatagramBuilder();
             builder.Push(new SetSilencer());
             builder.Push(new FociStm(StmConfig.Freq(50.0f), foci, new FociStmOption()));
@@ -44,7 +57,13 @@ internal static class Sample
 
         {
             // ANCHOR: workaround
-            var foci = Stm.Circle(center, 30.0f, 40, Vector3.UnitZ, Intensity.Max);
+            var foci = new ControlPoints[40];
+            for (var i = 0; i < 40; i++)
+            {
+                var theta = 2.0f * MathF.PI * i / 40.0f;
+                var p = center + new Vector3(radius * MathF.Cos(theta), radius * MathF.Sin(theta), 0.0f);
+                foci[i] = new ControlPoints(new[] { new ControlPoint(p) }, Intensity.Max);
+            }
             var builder = client.DatagramBuilder();
             builder.Push(new SetSilencer(new FixedCompletionTime(
                 intensity: TimeSpan.FromMicroseconds(500),

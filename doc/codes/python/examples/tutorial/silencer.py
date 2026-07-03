@@ -20,10 +20,14 @@ async def main() -> None:
     )
 
     center = geometry.center() + np.array([0.0, 0.0, 150.0])
+    radius = 30.0
 
     # ANCHOR: disable
     foci = []
-    autd3.commands.circle(center, 30.0, 20, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, foci)
+    for i in range(20):
+        theta = 2.0 * np.pi * i / 20.0
+        p = center + np.array([radius * np.cos(theta), radius * np.sin(theta), 0.0])
+        foci.append(autd3.value.ControlPoints([autd3.value.ControlPoint(p)], autd3.value.Intensity.MAX))
     builder = client.datagram_builder()
     builder.push(autd3.commands.SetSilencer.disable())
     builder.push(
@@ -39,7 +43,10 @@ async def main() -> None:
 
     # ANCHOR: err
     foci = []
-    autd3.commands.circle(center, 30.0, 40, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, foci)
+    for i in range(40):
+        theta = 2.0 * np.pi * i / 40.0
+        p = center + np.array([radius * np.cos(theta), radius * np.sin(theta), 0.0])
+        foci.append(autd3.value.ControlPoints([autd3.value.ControlPoint(p)], autd3.value.Intensity.MAX))
     builder = client.datagram_builder()
     builder.push(autd3.commands.SetSilencer())
     builder.push(
@@ -55,7 +62,10 @@ async def main() -> None:
 
     # ANCHOR: workaround
     foci = []
-    autd3.commands.circle(center, 30.0, 40, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, foci)
+    for i in range(40):
+        theta = 2.0 * np.pi * i / 40.0
+        p = center + np.array([radius * np.cos(theta), radius * np.sin(theta), 0.0])
+        foci.append(autd3.value.ControlPoints([autd3.value.ControlPoint(p)], autd3.value.Intensity.MAX))
     builder = client.datagram_builder()
     builder.push(
         autd3.commands.SetSilencer(
