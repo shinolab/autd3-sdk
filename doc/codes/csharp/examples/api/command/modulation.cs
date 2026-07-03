@@ -18,13 +18,31 @@ internal static class Sample
 
         new Modulation(config, data, bank);
 
-        new Modulation(config, data, bank, loopBehavior, transitionMode);
+        new Modulation(
+            config,
+            data,
+            bank,
+            loopBehavior,
+            transitionMode
+        );
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
-        new WriteModulationBuffer(bank, 0, data);
-        new ConfigModulation(bank, config, (uint)data.Length, loopBehavior);
-        new ChangeModulationBank(bank, transitionMode);
+        new WriteModulationBuffer(
+            bank,
+            0,
+            data
+        );
+        new ConfigModulation(
+            bank,
+            config,
+            (uint)data.Length,
+            loopBehavior
+        );
+        new ChangeModulationBank(
+            bank,
+            transitionMode
+        );
         // ANCHOR_END: equivalent
     }
 }

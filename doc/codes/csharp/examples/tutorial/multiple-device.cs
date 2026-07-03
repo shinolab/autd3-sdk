@@ -12,14 +12,20 @@ internal static class Sample
         new Geometry(new[]
         {
             new Device(Vector3.Zero, Quaternion.Identity),
-            new Device(new Vector3(Device.Width, 0.0f, 0.0f), Quaternion.Identity),
+            new Device(
+                new Vector3(Device.Width, 0.0f, 0.0f),
+                Quaternion.Identity
+            ),
         });
         // ANCHOR_END: translation
 
         // ANCHOR: global
         new Geometry(new[]
         {
-            new Device(new Vector3(-Device.Width, 0.0f, 0.0f), Quaternion.Identity),
+            new Device(
+                new Vector3(-Device.Width, 0.0f, 0.0f),
+                Quaternion.Identity
+            ),
             new Device(Vector3.Zero, Quaternion.Identity),
         });
         // ANCHOR_END: global

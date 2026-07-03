@@ -24,7 +24,13 @@ for (var i = 0; i < 200; i++)
     var theta = 2.0f * MathF.PI * i / 200.0f;
     var target = center + new Vector3(30.0f * MathF.Cos(theta), 30.0f * MathF.Sin(theta), 0.0f);
     var buffer = geometry.PatternBuffer();
-    Pattern.Focus(geometry, target, wavelength, new FocusOption(), buffer);
+    Pattern.Focus(
+        geometry,
+        target,
+        wavelength,
+        new FocusOption(),
+        buffer
+    );
     patterns[i] = buffer;
 }
 

@@ -44,7 +44,11 @@ internal static class Sample
         // ANCHOR: equivalent
         for (var index = 0; index < patterns.Length; index++)
         {
-            new WritePatternBuffer(option.Bank, (ushort)index, patterns[index]);
+            new WritePatternBuffer(
+                option.Bank,
+                (ushort)index,
+                patterns[index]
+            );
         }
         new ConfigPattern(
             option.Bank,
@@ -53,7 +57,10 @@ internal static class Sample
             PatternDataType.Raw,
             option.LoopBehavior
         );
-        new ChangePatternBank(option.Bank, option.TransitionMode);
+        new ChangePatternBank(
+            option.Bank,
+            option.TransitionMode
+        );
         // ANCHOR_END: equivalent
     }
 }

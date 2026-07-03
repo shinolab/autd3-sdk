@@ -52,7 +52,13 @@ internal static class Sample
         var patterns = geometry.PatternBuffer();
         foreach (var target in targets)
         {
-            Pattern.Focus(geometry, target, wavelength, new FocusOption(), patterns);
+            Pattern.Focus(
+                geometry,
+                target,
+                wavelength,
+                new FocusOption(),
+                patterns
+            );
             var builder = client.DatagramBuilder();
             builder.Push(new Pattern(patterns));
             foreach (var frame in builder.Build())
@@ -70,7 +76,13 @@ internal static class Sample
         var pending = new Queue<ResponseToken>();
         foreach (var target in targets)
         {
-            Pattern.Focus(geometry, target, wavelength, new FocusOption(), patterns);
+            Pattern.Focus(
+                geometry,
+                target,
+                wavelength,
+                new FocusOption(),
+                patterns
+            );
             var builder = client.DatagramBuilder();
             builder.Push(new Pattern(patterns));
             foreach (var frame in builder.Build())

@@ -18,11 +18,19 @@ internal static class Sample
         var size = (uint)data.Length;
         var loopBehavior = LoopBehavior.Infinite;
         // ANCHOR: config
-        new ConfigModulation(bank, config, size, loopBehavior);
+        new ConfigModulation(
+            bank,
+            config,
+            size,
+            loopBehavior
+        );
         // ANCHOR_END: config
         var transitionMode = TransitionMode.Immediate;
         // ANCHOR: change
-        new ChangeModulationBank(bank, transitionMode);
+        new ChangeModulationBank(
+            bank,
+            transitionMode
+        );
         // ANCHOR_END: change
     }
 }

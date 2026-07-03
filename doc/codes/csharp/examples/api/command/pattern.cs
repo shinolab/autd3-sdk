@@ -20,9 +20,22 @@ internal static class Sample
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
-        new WritePatternBuffer(bank, 0, emissions);
-        new ConfigPattern(bank, SamplingConfig.Divide(ushort.MaxValue), 1, PatternDataType.Raw, LoopBehavior.Infinite);
-        new ChangePatternBank(bank, TransitionMode.Immediate);
+        new WritePatternBuffer(
+            bank,
+            0,
+            emissions
+        );
+        new ConfigPattern(
+            bank,
+            SamplingConfig.Divide(ushort.MaxValue),
+            1,
+            PatternDataType.Raw,
+            LoopBehavior.Infinite
+        );
+        new ChangePatternBank(
+            bank,
+            TransitionMode.Immediate
+        );
         // ANCHOR_END: equivalent
     }
 }

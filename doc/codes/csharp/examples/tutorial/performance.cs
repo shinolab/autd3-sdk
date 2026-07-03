@@ -24,8 +24,18 @@ internal static class Sample
         // ANCHOR: configure
         var builder = client.DatagramBuilder();
         builder.Push(SetSilencer.Disable());
-        builder.Push(new WritePatternBuffer(PatternBank.B0, 0, patterns));
-        builder.Push(new ConfigPattern(PatternBank.B0, SamplingConfig.Freq40k, 1, PatternDataType.Raw, LoopBehavior.Infinite));
+        builder.Push(new WritePatternBuffer(
+            PatternBank.B0,
+            0,
+            patterns
+        ));
+        builder.Push(new ConfigPattern(
+            PatternBank.B0,
+            SamplingConfig.Freq40k,
+            1,
+            PatternDataType.Raw,
+            LoopBehavior.Infinite
+        ));
         foreach (var frame in builder.Build())
         {
             await client.SendCheckedAsync(frame);
@@ -41,10 +51,20 @@ internal static class Sample
         {
             var theta = 2.0f * MathF.PI * i / NumPoints;
             var target = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0.0f);
-            Pattern.Focus(geometry, target, wavelength, new FocusOption(), patterns);
+            Pattern.Focus(
+                geometry,
+                target,
+                wavelength,
+                new FocusOption(),
+                patterns
+            );
 
             var hotBuilder = client.DatagramBuilder();
-            hotBuilder.Push(new WritePatternBuffer(PatternBank.B0, 0, patterns));
+            hotBuilder.Push(new WritePatternBuffer(
+                PatternBank.B0,
+                0,
+                patterns
+            ));
             foreach (var frame in hotBuilder.Build())
             {
                 if (pending.Count >= Client.MaxInflight)

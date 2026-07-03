@@ -20,7 +20,13 @@ internal static class Sample
         // Write focus A to bank B0 and play it.
         var targetA = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var patA = geometry.PatternBuffer();
-        Pattern.Focus(geometry, targetA, wavelength, new FocusOption(), patA);
+        Pattern.Focus(
+            geometry,
+            targetA,
+            wavelength,
+            new FocusOption(),
+            patA
+        );
         var builder = client.DatagramBuilder();
         builder.Push(new Pattern(patA, PatternBank.B0));
         foreach (var frame in builder.Build())
@@ -32,7 +38,13 @@ internal static class Sample
         // B0 keeps playing cleanly while B1 is being written (double buffering).
         var targetB = geometry.Center + new Vector3(0.0f, 30.0f, 150.0f);
         var patB = geometry.PatternBuffer();
-        Pattern.Focus(geometry, targetB, wavelength, new FocusOption(), patB);
+        Pattern.Focus(
+            geometry,
+            targetB,
+            wavelength,
+            new FocusOption(),
+            patB
+        );
         var builder2 = client.DatagramBuilder();
         builder2.Push(new Pattern(patB, PatternBank.B1));
         foreach (var frame in builder2.Build())

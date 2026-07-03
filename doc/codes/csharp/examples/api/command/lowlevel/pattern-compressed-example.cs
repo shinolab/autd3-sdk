@@ -34,7 +34,12 @@ for (var i = 0; i < offsets.Length; i++)
 var bank = PatternBank.B0;
 
 var builder = client.DatagramBuilder();
-builder.Push(new WritePatternCompressed(bank, 0, PatternCompression.PhaseHalf, patterns));
+builder.Push(new WritePatternCompressed(
+    bank,
+    0,
+    PatternCompression.PhaseHalf,
+    patterns
+));
 builder.Push(new ConfigPattern(
     bank,
     SamplingConfig.FromFreq(patterns.Length * Hz),
@@ -42,7 +47,10 @@ builder.Push(new ConfigPattern(
     PatternDataType.Raw,
     LoopBehavior.Infinite
 ));
-builder.Push(new ChangePatternBank(bank, TransitionMode.Immediate));
+builder.Push(new ChangePatternBank(
+    bank,
+    TransitionMode.Immediate
+));
 var frames = builder.Build();
 foreach (var frame in frames)
 {

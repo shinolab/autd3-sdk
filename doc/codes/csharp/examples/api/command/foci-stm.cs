@@ -40,7 +40,11 @@ internal static class Sample
 
         byte numFoci = 1;
         // ANCHOR: equivalent
-        new WriteFociBuffer(option.Bank, 0, points);
+        new WriteFociBuffer(
+            option.Bank,
+            0,
+            points
+        );
         new ConfigPattern(
             option.Bank,
             SamplingConfig.FromFreq(points.Length * Hz),
@@ -48,7 +52,10 @@ internal static class Sample
             PatternDataType.Foci(numFoci, 340),
             option.LoopBehavior
         );
-        new ChangePatternBank(option.Bank, option.TransitionMode);
+        new ChangePatternBank(
+            option.Bank,
+            option.TransitionMode
+        );
         // ANCHOR_END: equivalent
 
         _ = linePoints;

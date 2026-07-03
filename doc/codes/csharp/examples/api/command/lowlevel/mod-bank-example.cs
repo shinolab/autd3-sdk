@@ -21,9 +21,21 @@ Modulation.Sine(150 * Hz, new SineOption(), data);
 var bank = ModulationBank.B0;
 
 var builder = client.DatagramBuilder();
-builder.Push(new WriteModulationBuffer(bank, 0, data));
-builder.Push(new ConfigModulation(bank, SamplingConfig.Freq4k, (uint)data.Length, LoopBehavior.Infinite));
-builder.Push(new ChangeModulationBank(bank, TransitionMode.Immediate));
+builder.Push(new WriteModulationBuffer(
+    bank,
+    0,
+    data
+));
+builder.Push(new ConfigModulation(
+    bank,
+    SamplingConfig.Freq4k,
+    (uint)data.Length,
+    LoopBehavior.Infinite
+));
+builder.Push(new ChangeModulationBank(
+    bank,
+    TransitionMode.Immediate
+));
 var frames = builder.Build();
 foreach (var frame in frames)
 {

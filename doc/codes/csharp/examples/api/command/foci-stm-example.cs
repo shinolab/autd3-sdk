@@ -16,7 +16,13 @@ var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
 var client = await Client.OpenAsync(geometry, NopLink.Create(), new ClientConfig());
 
 var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
-var points = Stm.Circle(center, 30.0f, 200, Vector3.UnitZ, Intensity.Max);
+var points = Stm.Circle(
+    center,
+    30.0f,
+    200,
+    Vector3.UnitZ,
+    Intensity.Max
+);
 
 var builder = client.DatagramBuilder();
 builder.Push(new FociStm(
