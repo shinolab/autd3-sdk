@@ -1,9 +1,11 @@
 ---
 import { Icon } from "@astrojs/starlight/components";
 
-const { entry } = Astro.locals.starlightRoute;
+const { entry, lang } = Astro.locals.starlightRoute;
 const srcPath = entry.data.srcPath;
 const repoBase = "https://github.com/shinolab/autd3-sdk/blob/main/";
+const srcTitle =
+  lang === "ja" ? "実装を GitHub で開く" : "Open implementation on GitHub";
 ---
 
 <div class="title-row">
@@ -15,7 +17,7 @@ const repoBase = "https://github.com/shinolab/autd3-sdk/blob/main/";
         href={`${repoBase}${srcPath}`}
         target="_blank"
         rel="noopener noreferrer"
-        title="実装を GitHub で開く"
+        title={srcTitle}
       >
         <Icon name="github" size="0.9em" />
         <span>src</span>

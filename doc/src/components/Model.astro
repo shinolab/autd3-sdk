@@ -38,6 +38,9 @@ const {
   caption,
 } = Astro.props;
 
+const lang = Astro.locals.starlightRoute?.lang ?? "ja";
+const loadingLabel = lang === "ja" ? "モデルを読み込み中…" : "Loading model…";
+
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const modelUrl = `${base}/${src}`;
 const config = JSON.stringify({
@@ -62,7 +65,7 @@ const config = JSON.stringify({
     style={`height:${height}px`}
   >
     <canvas></canvas>
-    <div class="autd-model-status">モデルを読み込み中…</div>
+    <div class="autd-model-status">{loadingLabel}</div>
   </div>
   {caption && <figcaption>{caption}</figcaption>}
 </figure>
