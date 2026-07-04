@@ -24,9 +24,15 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
+      - name: Vendor firmware sources for self-contained packaging
+        run: cargo xtask vendor-fw
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
-      - name: Publish to crates.io
+      - name: Publish workspace to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        run: cargo publish --workspace --no-verify
+        run: cargo publish --workspace --no-verify --allow-dirty
+      - name: Publish autd3-rs-emulator to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish -p autd3-rs-emulator --manifest-path emulator/Cargo.toml --no-verify --allow-dirty
