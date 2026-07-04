@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Numerics;
 using AUTD3;
 using Xunit;
@@ -156,17 +157,19 @@ namespace AUTD3.Tests
         [Fact]
         public void CircleProducesControlPoints()
         {
-            var points = Stm.Circle(new Vector3(0f, 0f, 150f), 30f * mm, 4, new Vector3(0f, 0f, 1f));
-            Assert.Equal(4, points.Length);
+            var points = new List<ControlPoints>();
+            Stm.Circle(new Vector3(0f, 0f, 150f), 30f * mm, 4, new Vector3(0f, 0f, 1f), points);
+            Assert.Equal(4, points.Count);
         }
 
         [Fact]
         public void FociStmBuildsDatagrams()
         {
             using var geometry = SingleDevice();
-            var points = Stm.Circle(geometry.Center + new Vector3(0f, 0f, 150f), 30f * mm, 4, new Vector3(0f, 0f, 1f));
+            var points = new List<ControlPoints>();
+            Stm.Circle(geometry.Center + new Vector3(0f, 0f, 150f), 30f * mm, 4, new Vector3(0f, 0f, 1f), points);
             using var builder = new DatagramBuilder(geometry);
-            builder.Push(new FociStm(new StmConfig(1 * Hz), points));
+            builder.Push(new FociStm(new StmConfig(1 * Hz), points.ToArray()));
             using var frames = builder.Build();
             Assert.True(frames.Length > 0);
         }

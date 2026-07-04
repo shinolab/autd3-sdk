@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Numerics;
 using AUTD3;
 using static AUTD3.Units;
@@ -9,7 +10,9 @@ internal static class Sample
     internal static void Run()
     {
         var bank = PatternBank.B0;
-        var points = Stm.Circle(Vector3.Zero, 30.0f * mm, 200, Vector3.UnitZ, Intensity.Max);
+        var dst = new List<ControlPoints>();
+        Stm.Circle(Vector3.Zero, 30.0f * mm, 200, Vector3.UnitZ, Intensity.Max, dst);
+        var points = dst.ToArray();
         var config = new SamplingConfig(points.Length * Hz);
 
         var indexOffset = 0u;

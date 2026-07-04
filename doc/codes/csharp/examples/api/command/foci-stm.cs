@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Numerics;
 using AUTD3;
 using static AUTD3.Units;
@@ -14,15 +15,17 @@ internal static class Sample
         var numPoints = 200;
         var normal = Vector3.UnitZ;
         var intensity = Intensity.Max;
+        var dst = new List<ControlPoints>();
         // ANCHOR: circle
-        var points = Stm.Circle(center, radius, numPoints, normal, intensity);
+        Stm.Circle(center, radius, numPoints, normal, intensity, dst);
         // ANCHOR_END: circle
 
         var start = center + new Vector3(-15.0f, 0.0f, 0.0f);
         var end = center + new Vector3(15.0f, 0.0f, 0.0f);
         // ANCHOR: line
-        var linePoints = Stm.Line(start, end, numPoints, intensity);
+        Stm.Line(start, end, numPoints, intensity, dst);
         // ANCHOR_END: line
+        var points = dst.ToArray();
         var freq = 1.0f * Hz;
         var option =
             // ANCHOR: option
@@ -58,7 +61,5 @@ internal static class Sample
             transitionMode: option.TransitionMode
         );
         // ANCHOR_END: equivalent
-
-        _ = linePoints;
     }
 }

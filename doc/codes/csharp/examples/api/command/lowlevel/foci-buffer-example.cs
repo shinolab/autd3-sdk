@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
@@ -17,13 +18,16 @@ var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
 var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
-var points = Stm.Circle(
+var dst = new List<ControlPoints>();
+Stm.Circle(
     center,
     30.0f * mm,
     200,
     Vector3.UnitZ,
-    Intensity.Max
+    Intensity.Max,
+    dst
 );
+var points = dst.ToArray();
 
 var bank = PatternBank.B0;
 

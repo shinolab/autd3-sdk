@@ -20,10 +20,11 @@ internal static class Program
         Console.WriteLine($"devices: {client.NumDevices}");
 
         var center = geometry.Center + new Vector3(0f, 0f, 150f);
-        var points = Stm.Circle(center, 30f * mm, 50, new Vector3(0f, 0f, 1f));
+        var points = new List<ControlPoints>();
+        Stm.Circle(center, 30f * mm, 50, new Vector3(0f, 0f, 1f), points);
 
         using var builder = client.DatagramBuilder();
-        builder.Push(new FociStm(new StmConfig(1 * Hz), points));
+        builder.Push(new FociStm(new StmConfig(1 * Hz), points.ToArray()));
         using var frames = builder.Build();
         foreach (var frame in frames)
         {

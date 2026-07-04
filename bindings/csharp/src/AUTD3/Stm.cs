@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -316,39 +317,44 @@ namespace AUTD3
 
     public static class Stm
     {
-        private static ControlPoints[] Convert(Autd3StmControlPointNative[] points, byte[] intensities)
+        private static void Fill(List<ControlPoints> dst, Autd3StmControlPointNative[] points, byte[] intensities)
         {
-            var result = new ControlPoints[points.Length];
+            dst.Clear();
             for (var i = 0; i < points.Length; i++)
             {
                 var cp = new ControlPoint(new Vector3(points[i].X, points[i].Y, points[i].Z), new Phase(points[i].PhaseOffset));
-                result[i] = new ControlPoints(new[] { cp }, new Intensity(intensities[i]));
+                dst.Add(new ControlPoints(new[] { cp }, new Intensity(intensities[i])));
             }
-            return result;
         }
 
-        public static ControlPoints[] Circle(Vector3 center, Length radius, int numPoints, Vector3 normal, Intensity? intensity = null)
+        public static void Circle(Vector3 center, Length radius, int numPoints, Vector3 normal, Intensity intensity, List<ControlPoints> dst)
         {
             var outPoints = new Autd3StmControlPointNative[numPoints];
             var outIntensities = new byte[numPoints];
             if (NativeStm.autd3_stm_circle(new[] { center.X, center.Y, center.Z }, radius.Mm, (UIntPtr)numPoints,
-                new[] { normal.X, normal.Y, normal.Z }, (intensity ?? Intensity.Max).Value, outPoints, outIntensities) != 0)
+                new[] { normal.X, normal.Y, normal.Z }, intensity.Value, outPoints, outIntensities) != 0)
             {
                 throw new Autd3Exception("circle failed");
             }
-            return Convert(outPoints, outIntensities);
+            Fill(dst, outPoints, outIntensities);
         }
 
-        public static ControlPoints[] Line(Vector3 start, Vector3 end, int numPoints, Intensity? intensity = null)
+        public static void Circle(Vector3 center, Length radius, int numPoints, Vector3 normal, List<ControlPoints> dst) =>
+            Circle(center, radius, numPoints, normal, Intensity.Max, dst);
+
+        public static void Line(Vector3 start, Vector3 end, int numPoints, Intensity intensity, List<ControlPoints> dst)
         {
             var outPoints = new Autd3StmControlPointNative[numPoints];
             var outIntensities = new byte[numPoints];
             if (NativeStm.autd3_stm_line(new[] { start.X, start.Y, start.Z }, new[] { end.X, end.Y, end.Z }, (UIntPtr)numPoints,
-                (intensity ?? Intensity.Max).Value, outPoints, outIntensities) != 0)
+                intensity.Value, outPoints, outIntensities) != 0)
             {
                 throw new Autd3Exception("line failed");
             }
-            return Convert(outPoints, outIntensities);
+            Fill(dst, outPoints, outIntensities);
         }
+
+        public static void Line(Vector3 start, Vector3 end, int numPoints, List<ControlPoints> dst) =>
+            Line(start, end, numPoints, Intensity.Max, dst);
     }
 }
