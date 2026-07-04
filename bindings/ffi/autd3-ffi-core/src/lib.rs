@@ -123,6 +123,28 @@ pub unsafe extern "C" fn autd3_core_device_rotation(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_device_center(
+    geometry: *const Geometry,
+    dev: usize,
+    out: *mut f32,
+) {
+    if geometry.is_null() || out.is_null() {
+        return;
+    }
+
+    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+        return;
+    };
+    let center = device.center();
+
+    unsafe {
+        *out = center.x;
+        *out.add(1) = center.y;
+        *out.add(2) = center.z;
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_core_transducer_position(
     geometry: *const Geometry,
     dev: usize,

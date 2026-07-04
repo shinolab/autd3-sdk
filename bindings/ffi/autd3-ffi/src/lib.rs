@@ -4,9 +4,10 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use autd3_ffi_abi::{
-    ClientBackend, ClientOpener, CompletionCallback, CompletionCtx, DevicePattern,
+    CheckerBackend, ClientBackend, ClientOpener, CompletionCallback, CompletionCtx, DevicePattern,
     ModulationBuffer, PatternBuffer, ResponseTokenData, drop_handle, into_handle,
 };
+use autd3_rs::DeviceState;
 use autd3_rs::commands::{
     BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
     ConfigModulation, ConfigPattern, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
@@ -24,8 +25,8 @@ use autd3_rs::value::{
 };
 use autd3_rs::{
     ClientConfig, ControlPoint, ControlPoints, CoreId, DatagramBuilder as CoreDatagramBuilder,
-    Frames, Geometry, Length, Point3, PulseWidth, ThreadPriority, ThreadPriorityValue, UnitVector3,
-    Vector3, Velocity,
+    Frames, Geometry, Length, Point3, PulseWidth, Response, ThreadPriority, ThreadPriorityValue,
+    UnitVector3, Vector3, Velocity,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -382,9 +383,14 @@ pub enum Pending {
         bank: PatternBank,
         config: SamplingConfig,
         size: u32,
-        data_type_kind: u8,
+        loop_behavior: LoopBehavior,
+    },
+    ConfigFociStm {
+        bank: PatternBank,
+        config: SamplingConfig,
+        size: u32,
         num_foci: u8,
-        sound_speed: u16,
+        sound_speed: Velocity,
         loop_behavior: LoopBehavior,
     },
     ChangePatternBank {
@@ -582,9 +588,6 @@ pub unsafe extern "C" fn autd3_op_config_pattern(
     bank: u8,
     sampling_config: *const SamplingConfig,
     size: u32,
-    data_type_kind: u8,
-    num_foci: u8,
-    sound_speed: u16,
     rep: u16,
 ) -> *mut Pending {
     if sampling_config.is_null() {
@@ -594,9 +597,28 @@ pub unsafe extern "C" fn autd3_op_config_pattern(
         bank: to_pattern_bank(bank),
         config: *unsafe { &*sampling_config },
         size,
-        data_type_kind,
+        loop_behavior: rep_to_loop_behavior(rep),
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_op_config_foci_stm(
+    bank: u8,
+    sampling_config: *const SamplingConfig,
+    size: u32,
+    num_foci: u8,
+    sound_speed_m_s: f32,
+    rep: u16,
+) -> *mut Pending {
+    if sampling_config.is_null() {
+        return std::ptr::null_mut();
+    }
+    into_handle(Pending::ConfigFociStm {
+        bank: to_pattern_bank(bank),
+        config: *unsafe { &*sampling_config },
+        size,
         num_foci,
-        sound_speed,
+        sound_speed: Velocity::from_m_s(sound_speed_m_s),
         loop_behavior: rep_to_loop_behavior(rep),
     })
 }
@@ -787,7 +809,7 @@ pub unsafe extern "C" fn autd3_op_set_pulse_width_table(table: *const u16) -> *m
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pulse_width_default_table(out: *mut u16) {
+pub unsafe extern "C" fn autd3_set_pulse_width_table_default_table(out: *mut u16) {
     if out.is_null() {
         return;
     }
@@ -813,7 +835,7 @@ pub unsafe extern "C" fn autd3_pulse_width_from_duty(duty: f32, out: *mut u16) -
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pulse_width_from_raw(pulse_width: u16, out: *mut u16) -> bool {
+pub unsafe extern "C" fn autd3_pulse_width_new(pulse_width: u16, out: *mut u16) -> bool {
     if out.is_null() {
         return false;
     }
@@ -945,32 +967,30 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             bank,
             config,
             size,
-            data_type_kind,
+            loop_behavior,
+        } => ConfigPattern {
+            bank: *bank,
+            config: *config,
+            size: usize::try_from(*size).unwrap_or(usize::MAX),
+            loop_behavior: *loop_behavior,
+        }
+        .boxed(),
+        Pending::ConfigFociStm {
+            bank,
+            config,
+            size,
             num_foci,
             sound_speed,
             loop_behavior,
-        } => {
-            let size = usize::try_from(*size).unwrap_or(usize::MAX);
-            if *data_type_kind == 1 {
-                ConfigFociStm {
-                    bank: *bank,
-                    config: *config,
-                    size,
-                    num_foci: *num_foci,
-                    sound_speed: Velocity::from_m_s(f32::from(*sound_speed) / 64.0),
-                    loop_behavior: *loop_behavior,
-                }
-                .boxed()
-            } else {
-                ConfigPattern {
-                    bank: *bank,
-                    config: *config,
-                    size,
-                    loop_behavior: *loop_behavior,
-                }
-                .boxed()
-            }
+        } => ConfigFociStm {
+            bank: *bank,
+            config: *config,
+            size: usize::try_from(*size).unwrap_or(usize::MAX),
+            num_foci: *num_foci,
+            sound_speed: *sound_speed,
+            loop_behavior: *loop_behavior,
         }
+        .boxed(),
         Pending::ChangePatternBank {
             bank,
             transition_mode,
@@ -1169,29 +1189,31 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 bank,
                 config,
                 size,
-                data_type_kind,
+                loop_behavior,
+            } => {
+                core.push(ConfigPattern {
+                    bank: *bank,
+                    config: *config,
+                    size: usize::try_from(*size).unwrap_or(usize::MAX),
+                    loop_behavior: *loop_behavior,
+                });
+            }
+            Pending::ConfigFociStm {
+                bank,
+                config,
+                size,
                 num_foci,
                 sound_speed,
                 loop_behavior,
             } => {
-                let size = usize::try_from(*size).unwrap_or(usize::MAX);
-                if *data_type_kind == 1 {
-                    core.push(ConfigFociStm {
-                        bank: *bank,
-                        config: *config,
-                        size,
-                        num_foci: *num_foci,
-                        sound_speed: Velocity::from_m_s(f32::from(*sound_speed) / 64.0),
-                        loop_behavior: *loop_behavior,
-                    });
-                } else {
-                    core.push(ConfigPattern {
-                        bank: *bank,
-                        config: *config,
-                        size,
-                        loop_behavior: *loop_behavior,
-                    });
-                }
+                core.push(ConfigFociStm {
+                    bank: *bank,
+                    config: *config,
+                    size: usize::try_from(*size).unwrap_or(usize::MAX),
+                    num_foci: *num_foci,
+                    sound_speed: *sound_speed,
+                    loop_behavior: *loop_behavior,
+                });
             }
             Pending::ChangePatternBank {
                 bank,
@@ -1348,14 +1370,14 @@ pub unsafe extern "C" fn autd3_datagrams_free(datagrams: *mut Arc<Frames>) {
 
 pub struct ClientHandle(Box<dyn ClientBackend>);
 
+pub struct CheckerHandle(Box<dyn CheckerBackend>);
+
 pub struct StringArray(Vec<CString>);
 
 pub struct ByteArray(Vec<u8>);
 
 pub struct LinkStatus {
-    device_states: Vec<CString>,
-    all_op: bool,
-    any_lost: bool,
+    devices: Vec<DeviceState>,
     recoveries: u64,
 }
 
@@ -1470,7 +1492,7 @@ pub unsafe extern "C" fn autd3_response_token_await(
     let fut = token.0.0;
     runtime().spawn(async move {
         match fut.await {
-            Ok(()) => ctx.ok(std::ptr::null_mut()),
+            Ok(response) => ctx.ok(into_handle(ByteArray(response.data)).cast()),
             Err(e) => ctx.err(&e.to_string()),
         }
     });
@@ -1479,6 +1501,28 @@ pub unsafe extern "C" fn autd3_response_token_await(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_response_token_free(token: *mut ResponseToken) {
     unsafe { drop_handle(token) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_response_check(
+    data: *const u8,
+    len: usize,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> bool {
+    let data = if data.is_null() || len == 0 {
+        Vec::new()
+    } else {
+        // SAFETY: the caller guarantees `data` points to `len` readable bytes.
+        unsafe { std::slice::from_raw_parts(data, len) }.to_vec()
+    };
+    match (Response { data }).check() {
+        Ok(()) => true,
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            false
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -1568,25 +1612,32 @@ pub unsafe extern "C" fn autd3_byte_array_free(array: *mut ByteArray) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_check_status(
-    client: *const ClientHandle,
+pub unsafe extern "C" fn autd3_client_checker(client: *const ClientHandle) -> *mut CheckerHandle {
+    if client.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    into_handle(CheckerHandle(unsafe { &*client }.0.checker()))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_checker_check(
+    checker: *const CheckerHandle,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
-        ctx.err("null client");
+    if checker.is_null() {
+        ctx.err("null checker");
         return;
     }
 
-    let fut = unsafe { &*client }.0.check_status();
+    let fut = unsafe { &*checker }.0.check();
     runtime().spawn(async move {
         match fut.await {
             Ok(status) => {
                 let status = LinkStatus {
-                    device_states: to_cstrings(status.device_states),
-                    all_op: status.all_op,
-                    any_lost: status.any_lost,
+                    devices: status.devices,
                     recoveries: status.recoveries,
                 };
                 ctx.ok(into_handle(status).cast());
@@ -1594,6 +1645,11 @@ pub unsafe extern "C" fn autd3_client_check_status(
             Err(e) => ctx.err(&e.to_string()),
         }
     });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_checker_free(checker: *mut CheckerHandle) {
+    unsafe { drop_handle(checker) }
 }
 
 #[unsafe(no_mangle)]
@@ -1673,16 +1729,6 @@ pub unsafe extern "C" fn autd3_string_array_free(array: *mut StringArray) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_status_all_op(status: *const LinkStatus) -> bool {
-    !status.is_null() && unsafe { &*status }.all_op
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_status_any_lost(status: *const LinkStatus) -> bool {
-    !status.is_null() && unsafe { &*status }.any_lost
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_status_recoveries(status: *const LinkStatus) -> u64 {
     if status.is_null() {
         return 0;
@@ -1697,22 +1743,36 @@ pub unsafe extern "C" fn autd3_link_status_num_devices(status: *const LinkStatus
         return 0;
     }
 
-    unsafe { &*status }.device_states.len()
+    unsafe { &*status }.devices.len()
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_status_device_state(
     status: *const LinkStatus,
     index: usize,
-) -> *const c_char {
-    if status.is_null() {
-        return std::ptr::null();
+    out_kind: *mut u8,
+    out_bits: *mut u8,
+) -> bool {
+    if status.is_null() || out_kind.is_null() || out_bits.is_null() {
+        return false;
     }
 
-    unsafe { &*status }
-        .device_states
-        .get(index)
-        .map_or(std::ptr::null(), |s| s.as_ptr())
+    let Some(state) = unsafe { &*status }.devices.get(index) else {
+        return false;
+    };
+    let (kind, bits) = match state {
+        DeviceState::Op => (0, 0),
+        DeviceState::SafeOp => (1, 0),
+        DeviceState::SafeOpError => (2, 0),
+        DeviceState::Lost => (3, 0),
+        DeviceState::Other(bits) => (4, *bits),
+    };
+
+    unsafe {
+        *out_kind = kind;
+        *out_bits = bits;
+    }
+    true
 }
 
 #[unsafe(no_mangle)]

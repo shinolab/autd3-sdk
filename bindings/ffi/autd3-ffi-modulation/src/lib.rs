@@ -58,6 +58,40 @@ pub unsafe extern "C" fn autd3_modulation_buffer_len(buffer: *const ModulationBu
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_modulation_buffer_get(
+    buffer: *const ModulationBuffer,
+    index: usize,
+    out: *mut u8,
+) -> i32 {
+    if buffer.is_null() || out.is_null() {
+        return -1;
+    }
+
+    let Some(&value) = unsafe { &*buffer }.0.get(index) else {
+        return -1;
+    };
+    unsafe { *out = value };
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_modulation_buffer_set(
+    buffer: *mut ModulationBuffer,
+    index: usize,
+    value: u8,
+) -> i32 {
+    if buffer.is_null() {
+        return -1;
+    }
+
+    let Some(v) = unsafe { &mut *buffer }.0.get_mut(index) else {
+        return -1;
+    };
+    *v = value;
+    0
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_buffer_free(buffer: *mut ModulationBuffer) {
     unsafe { drop_handle(buffer) }
 }
