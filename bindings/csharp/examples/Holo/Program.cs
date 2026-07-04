@@ -6,17 +6,19 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
+using AUTD3.Holo;
 using AUTD3.Link;
-using static AUTD3.HoloUnits;
+using ControlPoint = AUTD3.Holo.ControlPoint;
+using static AUTD3.Holo.HoloUnits;
 using static AUTD3.Units;
 
 internal static class Program
 {
     private static async Task Main()
     {
-        using var geometry = new Geometry(new List<Device> { new Device(Vector3.Zero) });
+        using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
 
-        using var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        using var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
 
@@ -24,8 +26,8 @@ internal static class Program
         var wavelength = Pattern.Wavelength(340 * m / s);
         var foci = new[]
         {
-            new Holo.ControlPoint(center + new Vector3(-20f, 0f, 150f), 150 * dB),
-            new Holo.ControlPoint(center + new Vector3(20f, 0f, 150f), 150 * dB),
+            new ControlPoint(center + new Vector3(-20f, 0f, 150f), 150 * dB),
+            new ControlPoint(center + new Vector3(20f, 0f, 150f), 150 * dB),
         };
 
         using var patterns = geometry.PatternBuffer();
@@ -38,8 +40,8 @@ internal static class Program
         builder
             .Push(new Pattern(patterns))
             .Push(new Modulation(SamplingConfig.Freq4k, modulation));
-        using var datagrams = builder.Build();
-        foreach (var frame in datagrams)
+        using var frames = builder.Build();
+        foreach (var frame in frames)
         {
             await client.SendCheckedAsync(frame);
         }

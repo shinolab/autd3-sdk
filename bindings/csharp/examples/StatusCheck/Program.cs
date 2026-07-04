@@ -14,8 +14,10 @@ internal static class Program
 
     private static async Task Main()
     {
-        using var geometry = new Geometry(new List<Device> { new Device(Vector3.Zero) });
-        using var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
+        var (client, checker) = await Client.OpenWithCheckerAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
+        using var _client = client;
+        using var _checker = checker;
 
         Console.WriteLine("watching link status — press Ctrl+C to stop");
         using var cts = new CancellationTokenSource();
@@ -28,13 +30,13 @@ internal static class Program
         string? last = null;
         while (!cts.IsCancellationRequested)
         {
-            var status = await client.CheckStatusAsync();
-            var key = string.Join(",", status.DeviceStates) + $"|{status.Recoveries}";
+            var status = await checker.CheckAsync();
+            var key = string.Join(",", status.Devices) + $"|{status.Recoveries}";
             if (key != last)
             {
-                for (var i = 0; i < status.DeviceStates.Count; i++)
+                for (var i = 0; i < status.Devices.Count; i++)
                 {
-                    Console.WriteLine($"device[{i}]: {status.DeviceStates[i]}");
+                    Console.WriteLine($"device[{i}]: {status.Devices[i]}");
                 }
                 Console.WriteLine($"all operational: {status.AllOp}, any lost: {status.AnyLost}, recoveries: {status.Recoveries}");
                 last = key;

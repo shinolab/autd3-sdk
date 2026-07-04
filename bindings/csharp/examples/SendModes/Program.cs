@@ -27,15 +27,15 @@ internal static class Program
         using var builder = client.DatagramBuilder();
         builder
             .Push(new WritePatternBuffer(PatternBank.B0, 0, patterns))
-            .Push(new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1, PatternDataType.Raw));
-        using var datagrams = builder.Build();
-        foreach (var frame in datagrams)
+            .Push(new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1));
+        using var frames = builder.Build();
+        foreach (var frame in frames)
         {
             await client.SendCheckedAsync(frame);
         }
     }
 
-    private static Datagrams WriteFocus(Client client, PatternBuffer patterns)
+    private static Frames WriteFocus(Client client, PatternBuffer patterns)
     {
         using var builder = client.DatagramBuilder();
         builder.Push(new WritePatternBuffer(PatternBank.B0, 0, patterns));
@@ -44,8 +44,8 @@ internal static class Program
 
     private static async Task Main()
     {
-        using var geometry = new Geometry(new List<Device> { new Device(Vector3.Zero) });
-        using var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
+        using var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
 
         var center = geometry.Center;
         const float radius = 30f;
@@ -54,20 +54,20 @@ internal static class Program
         using var patterns = geometry.PatternBuffer();
         await Configure(client, patterns);
 
-        var datagrams = new List<Datagrams>(TotalPoints);
+        var frames = new List<Frames>(TotalPoints);
         for (var i = 0; i < TotalPoints; i++)
         {
             var theta = 2.0 * Math.PI * i / TotalPoints;
             var target = center + new Vector3(radius * (float)Math.Cos(theta), radius * (float)Math.Sin(theta), 150f);
             Pattern.Focus(geometry, target, wavelength, Intensity.Max, patterns);
-            datagrams.Add(WriteFocus(client, patterns));
+            frames.Add(WriteFocus(client, patterns));
         }
 
         Console.WriteLine($"sweeping a focus through {TotalPoints} positions, twice");
 
         // stop-and-wait: confirm each frame lands before issuing the next.
         var sw = Stopwatch.StartNew();
-        foreach (var dg in datagrams)
+        foreach (var dg in frames)
         {
             foreach (var frame in dg)
             {
@@ -80,27 +80,27 @@ internal static class Program
         // response once the window is full.
         sw.Restart();
         var pending = new Queue<ResponseToken>();
-        foreach (var dg in datagrams)
+        foreach (var dg in frames)
         {
             foreach (var frame in dg)
             {
                 if (pending.Count >= Client.MaxInflight)
                 {
-                    await pending.Dequeue().AwaitAsync();
+                    (await pending.Dequeue()).Check();
                 }
                 pending.Enqueue(await client.SendAsync(frame));
             }
         }
         while (pending.Count > 0)
         {
-            await pending.Dequeue().AwaitAsync();
+            (await pending.Dequeue()).Check();
         }
         Report("streaming", sw.Elapsed.TotalSeconds);
 
         await client.StopAsync();
         await client.CloseAsync();
 
-        foreach (var dg in datagrams)
+        foreach (var dg in frames)
         {
             dg.Dispose();
         }

@@ -2,7 +2,7 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
-namespace AUTD3
+namespace AUTD3.Holo
 {
     public enum Directivity : byte
     {
@@ -127,6 +127,10 @@ namespace AUTD3
         public NalgebraBackend Backend { get; }
         public TransducerMask Mask { get; }
 
+        public NaiveOption() : this(constraint: null)
+        {
+        }
+
         public NaiveOption(EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, NalgebraBackend backend = default, TransducerMask mask = default)
         {
             Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
@@ -143,6 +147,10 @@ namespace AUTD3
         public Directivity Directivity { get; }
         public NalgebraBackend Backend { get; }
         public TransducerMask Mask { get; }
+
+        public GsOption() : this(repeat: 100)
+        {
+        }
 
         public GsOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, NalgebraBackend backend = default, TransducerMask mask = default)
         {
@@ -162,6 +170,10 @@ namespace AUTD3
         public NalgebraBackend Backend { get; }
         public TransducerMask Mask { get; }
 
+        public GspatOption() : this(repeat: 100)
+        {
+        }
+
         public GspatOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, NalgebraBackend backend = default, TransducerMask mask = default)
         {
             Repeat = repeat;
@@ -178,6 +190,10 @@ namespace AUTD3
         public EmissionConstraint Constraint { get; }
         public Directivity Directivity { get; }
         public TransducerMask Mask { get; }
+
+        public GreedyOption() : this(phaseQuantizationLevels: 16)
+        {
+        }
 
         public GreedyOption(byte phaseQuantizationLevels = 16, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
         {
@@ -223,21 +239,20 @@ namespace AUTD3
         internal static extern int autd3_holo_greedy(IntPtr geometry, HoloControlPointNative[] foci, UIntPtr numFoci, float wavelengthMm, byte phaseQuantizationLevels, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, IntPtr buffer);
     }
 
+    public readonly struct ControlPoint
+    {
+        public Vector3 Point { get; }
+        public Amplitude Amplitude { get; }
+
+        public ControlPoint(Vector3 point, Amplitude amplitude)
+        {
+            Point = point;
+            Amplitude = amplitude;
+        }
+    }
+
     public static class Holo
     {
-        public readonly struct ControlPoint
-        {
-            public Vector3 Point { get; }
-            public Amplitude Amplitude { get; }
-
-            public ControlPoint(Vector3 point, Amplitude amplitude)
-            {
-                Point = point;
-                Amplitude = amplitude;
-            }
-        }
-
-        private const int NumTransducers = 249;
 
         private static HoloControlPointNative[] ToNative(ControlPoint[] foci)
         {
@@ -261,16 +276,16 @@ namespace AUTD3
             {
                 return null;
             }
-            var flat = new byte[numDevices * NumTransducers];
+            var flat = new byte[numDevices * Autd3.NumTransducers];
             for (var d = 0; d < numDevices; d++)
             {
-                if (mask[d].Length != NumTransducers)
+                if (mask[d].Length != Autd3.NumTransducers)
                 {
-                    throw new Autd3Exception($"each device mask requires {NumTransducers} values");
+                    throw new Autd3Exception($"each device mask requires {Autd3.NumTransducers} values");
                 }
-                for (var t = 0; t < NumTransducers; t++)
+                for (var t = 0; t < Autd3.NumTransducers; t++)
                 {
-                    flat[d * NumTransducers + t] = (byte)(mask[d][t] ? 1 : 0);
+                    flat[d * Autd3.NumTransducers + t] = (byte)(mask[d][t] ? 1 : 0);
                 }
             }
             return flat;

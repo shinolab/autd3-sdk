@@ -1,14 +1,15 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
 
 namespace AUTD3
 {
-    public sealed class Geometry : IDisposable
+    public sealed class Geometry : IDisposable, IEnumerable<Device>
     {
         internal IntPtr Handle { get; private set; }
 
-        public Geometry(IReadOnlyList<Device> devices)
+        public Geometry(IReadOnlyList<Autd3> devices)
         {
             var native = new NativeCore.Autd3Device[devices.Count];
             for (var i = 0; i < devices.Count; i++)
@@ -27,6 +28,8 @@ namespace AUTD3
 
         public int NumTransducers => (int)NativeCore.autd3_core_geometry_num_transducers(Handle);
 
+        public bool IsEmpty => NumDevices == 0;
+
         public Vector3 Center
         {
             get
@@ -37,7 +40,18 @@ namespace AUTD3
             }
         }
 
-        public DeviceView this[int dev] => new DeviceView(Handle, (UIntPtr)dev);
+        public Device this[int dev] => new Device(Handle, (UIntPtr)dev);
+
+        public IEnumerator<Device> GetEnumerator()
+        {
+            var count = NumDevices;
+            for (var i = 0; i < count; i++)
+            {
+                yield return this[i];
+            }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         public void Dispose()
         {
@@ -58,16 +72,20 @@ namespace AUTD3
         }
     }
 
-    public readonly struct DeviceView
+    public readonly struct Device
     {
         private readonly IntPtr _geometry;
         private readonly UIntPtr _dev;
 
-        internal DeviceView(IntPtr geometry, UIntPtr dev)
+        internal Device(IntPtr geometry, UIntPtr dev)
         {
             _geometry = geometry;
             _dev = dev;
         }
+
+        internal IntPtr GeometryHandle => _geometry;
+
+        internal UIntPtr DeviceIndex => _dev;
 
         public int Idx => (int)NativeCore.autd3_core_device_idx(_geometry, _dev);
 
@@ -80,6 +98,16 @@ namespace AUTD3
                 var wijk = new float[4];
                 NativeCore.autd3_core_device_rotation(_geometry, _dev, wijk);
                 return new Quaternion(wijk[1], wijk[2], wijk[3], wijk[0]);
+            }
+        }
+
+        public Vector3 Center
+        {
+            get
+            {
+                var xyz = new float[3];
+                NativeCore.autd3_core_device_center(_geometry, _dev, xyz);
+                return new Vector3(xyz[0], xyz[1], xyz[2]);
             }
         }
 

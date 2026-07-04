@@ -3,50 +3,35 @@ using System.Runtime.InteropServices;
 
 namespace AUTD3.Link
 {
-    public readonly struct EtherCrabLinkOption
+    public readonly struct EtherCrabLinkOption : ILink
     {
+        public Interface Interface { get; }
         public TimeSpan? Sync0Period { get; }
         public TimeSpan? Sync0Shift { get; }
         public TimeSpan? SyncTolerance { get; }
         public TimeSpan? SyncTimeout { get; }
 
-        public EtherCrabLinkOption(TimeSpan? sync0Period = null, TimeSpan? sync0Shift = null, TimeSpan? syncTolerance = null, TimeSpan? syncTimeout = null)
+        public EtherCrabLinkOption(Interface? @interface = null, TimeSpan? sync0Period = null, TimeSpan? sync0Shift = null, TimeSpan? syncTolerance = null, TimeSpan? syncTimeout = null)
         {
+            Interface = @interface ?? Interface.Auto;
             Sync0Period = sync0Period;
             Sync0Shift = sync0Shift;
             SyncTolerance = syncTolerance;
             SyncTimeout = syncTimeout;
         }
-    }
 
-    public sealed class EtherCrabLink : ILink
-    {
-        private IntPtr _opener;
-
-        private EtherCrabLink(IntPtr opener)
-        {
-            _opener = opener;
-        }
-
-        public static EtherCrabLink Create(string? interfaceName = null, EtherCrabLinkOption option = default)
+        IntPtr ILink.TakeOpener()
         {
             var opener = NativeEthercrab.autd3_link_ethercrab(
-                interfaceName,
-                option.Sync0Period.HasValue, (ulong)(option.Sync0Period?.Ticks * 100 ?? 0),
-                option.Sync0Shift.HasValue, (ulong)(option.Sync0Shift?.Ticks * 100 ?? 0),
-                option.SyncTolerance.HasValue, (ulong)(option.SyncTolerance?.Ticks * 100 ?? 0),
-                option.SyncTimeout.HasValue, (ulong)(option.SyncTimeout?.Ticks * 100 ?? 0));
+                Interface.NameValue,
+                Sync0Period.HasValue, (ulong)(Sync0Period?.Ticks * 100 ?? 0),
+                Sync0Shift.HasValue, (ulong)(Sync0Shift?.Ticks * 100 ?? 0),
+                SyncTolerance.HasValue, (ulong)(SyncTolerance?.Ticks * 100 ?? 0),
+                SyncTimeout.HasValue, (ulong)(SyncTimeout?.Ticks * 100 ?? 0));
             if (opener == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create ethercrab link");
             }
-            return new EtherCrabLink(opener);
-        }
-
-        public IntPtr TakeOpener()
-        {
-            var opener = _opener;
-            _opener = IntPtr.Zero;
             return opener;
         }
     }

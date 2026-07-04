@@ -18,6 +18,10 @@ namespace AUTD3
         public ulong? RtAffinity { get; }
         public bool ValidateState { get; }
 
+        public ClientConfig() : this(lowLatency: false)
+        {
+        }
+
         public ClientConfig(
             bool lowLatency = false,
             uint timeoutCycles = 10,
@@ -112,7 +116,7 @@ namespace AUTD3
             return this;
         }
 
-        public Datagrams Build()
+        public Frames Build()
         {
             var err = new byte[256];
             var handle = NativeClient.autd3_datagram_builder_build(Handle, err, (UIntPtr)err.Length);
@@ -120,7 +124,7 @@ namespace AUTD3
             {
                 throw new Autd3Exception(NativeUtil.Utf8(err));
             }
-            return new Datagrams(handle);
+            return new Frames(handle);
         }
 
         public void Dispose()
@@ -145,32 +149,32 @@ namespace AUTD3
 
     public readonly struct Frame
     {
-        internal Datagrams Datagrams { get; }
+        internal Frames Frames { get; }
         internal long Index { get; }
 
-        internal Frame(Datagrams datagrams, long index)
+        internal Frame(Frames frames, long index)
         {
-            Datagrams = datagrams;
+            Frames = frames;
             Index = index;
         }
     }
 
-    public sealed class Datagrams : IDisposable, IEnumerable<Frame>
+    public sealed class Frames : IDisposable, IEnumerable<Frame>
     {
         internal IntPtr Handle { get; private set; }
 
-        internal Datagrams(IntPtr handle)
+        internal Frames(IntPtr handle)
         {
             Handle = handle;
         }
 
-        public int NumFrames => (int)NativeClient.autd3_datagrams_num_frames(Handle);
+        public int Length => (int)NativeClient.autd3_datagrams_num_frames(Handle);
 
         public Frame this[int index]
         {
             get
             {
-                if (index < 0 || index >= NumFrames)
+                if (index < 0 || index >= Length)
                 {
                     throw new ArgumentOutOfRangeException(nameof(index));
                 }
@@ -180,7 +184,7 @@ namespace AUTD3
 
         public IEnumerator<Frame> GetEnumerator()
         {
-            var count = NumFrames;
+            var count = Length;
             for (long i = 0; i < count; i++)
             {
                 yield return new Frame(this, i);
@@ -199,7 +203,7 @@ namespace AUTD3
             GC.SuppressFinalize(this);
         }
 
-        ~Datagrams()
+        ~Frames()
         {
             if (Handle != IntPtr.Zero)
             {

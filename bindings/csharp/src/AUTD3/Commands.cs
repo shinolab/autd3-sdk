@@ -51,7 +51,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_set_pulse_width_table(ushort[] table);
 
         [DllImport(Lib)]
-        internal static extern void autd3_pulse_width_default_table([Out] ushort[] outTable);
+        internal static extern void autd3_set_pulse_width_table_default_table([Out] ushort[] outTable);
 
         [DllImport(Lib)]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -59,7 +59,7 @@ namespace AUTD3
 
         [DllImport(Lib)]
         [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_pulse_width_from_raw(ushort pulseWidth, [Out] ushort[] outValue);
+        internal static extern bool autd3_pulse_width_new(ushort pulseWidth, [Out] ushort[] outValue);
     }
 
     public readonly struct GpioOut
@@ -266,52 +266,75 @@ namespace AUTD3
         }
     }
 
-    public static class PulseWidth
+    public readonly struct PulseWidth
     {
-        public const int TableSize = 256;
+        public ushort Value { get; }
 
-        public static ushort[] DefaultTable()
+        public PulseWidth(ushort pulseWidth)
         {
-            var table = new ushort[TableSize];
-            NativeCommand.autd3_pulse_width_default_table(table);
-            return table;
+            var outValue = new ushort[1];
+            if (!NativeCommand.autd3_pulse_width_new(pulseWidth, outValue))
+            {
+                throw new Autd3Exception("invalid pulse width");
+            }
+            Value = outValue[0];
         }
 
-        public static ushort FromDuty(float duty)
+        private PulseWidth(ushort value, bool validated)
+        {
+            _ = validated;
+            Value = value;
+        }
+
+        internal static PulseWidth FromValidated(ushort value) => new PulseWidth(value, true);
+
+        public static PulseWidth FromDuty(float duty)
         {
             var outValue = new ushort[1];
             if (!NativeCommand.autd3_pulse_width_from_duty(duty, outValue))
             {
                 throw new Autd3Exception("duty must be in [0, 1)");
             }
-            return outValue[0];
-        }
-
-        public static ushort FromRaw(ushort pulseWidth)
-        {
-            var outValue = new ushort[1];
-            if (!NativeCommand.autd3_pulse_width_from_raw(pulseWidth, outValue))
-            {
-                throw new Autd3Exception("invalid pulse width");
-            }
-            return outValue[0];
+            return FromValidated(outValue[0]);
         }
     }
 
     public sealed class SetPulseWidthTable : ICommand
     {
-        private readonly ushort[] _table;
+        public const int TableSize = 256;
 
-        public SetPulseWidthTable(ushort[] table)
+        private readonly PulseWidth[] _table;
+
+        public SetPulseWidthTable(PulseWidth[] table)
         {
-            if (table.Length != PulseWidth.TableSize)
+            if (table.Length != TableSize)
             {
-                throw new Autd3Exception($"pulse width table requires {PulseWidth.TableSize} values");
+                throw new Autd3Exception($"pulse width table requires {TableSize} values");
             }
             _table = table;
         }
 
-        IntPtr ICommand.CreateOp() => NativeCommand.autd3_op_set_pulse_width_table(_table);
+        public static PulseWidth[] DefaultTable()
+        {
+            var raw = new ushort[TableSize];
+            NativeCommand.autd3_set_pulse_width_table_default_table(raw);
+            var table = new PulseWidth[TableSize];
+            for (var i = 0; i < TableSize; i++)
+            {
+                table[i] = PulseWidth.FromValidated(raw[i]);
+            }
+            return table;
+        }
+
+        IntPtr ICommand.CreateOp()
+        {
+            var raw = new ushort[TableSize];
+            for (var i = 0; i < TableSize; i++)
+            {
+                raw[i] = _table[i].Value;
+            }
+            return NativeCommand.autd3_op_set_pulse_width_table(raw);
+        }
     }
 
     public sealed class SetPhaseCorrection : ICommand

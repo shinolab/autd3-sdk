@@ -13,19 +13,19 @@ internal static class Program
 {
     private static async Task Main()
     {
-        using var geometry = new Geometry(new List<Device> { new Device(Vector3.Zero) });
+        using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
 
-        using var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        using var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
 
         var center = geometry.Center + new Vector3(0f, 0f, 150f);
-        var points = Stm.Circle(center, 30f, 50, new Vector3(0f, 0f, 1f));
+        var points = Stm.Circle(center, 30f * mm, 50, new Vector3(0f, 0f, 1f));
 
         using var builder = client.DatagramBuilder();
-        builder.Push(new FociStm(StmConfig.FromFreq(1 * Hz), points));
-        using var datagrams = builder.Build();
-        foreach (var frame in datagrams)
+        builder.Push(new FociStm(new StmConfig(1 * Hz), points));
+        using var frames = builder.Build();
+        foreach (var frame in frames)
         {
             await client.SendCheckedAsync(frame);
         }

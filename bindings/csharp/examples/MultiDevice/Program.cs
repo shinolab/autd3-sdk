@@ -11,13 +11,13 @@ internal static class Program
 {
     private static async Task Main()
     {
-        using var geometry = new Geometry(new List<Device>
+        using var geometry = new Geometry(new List<Autd3>
         {
-            new Device(Vector3.Zero),
-            new Device(new Vector3(Device.Width, 0f, 0f)),
+            new Autd3(Vector3.Zero),
+            new Autd3(new Vector3(Autd3.DeviceWidth, 0f, 0f)),
         });
 
-        using var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        using var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
         var versions = await client.ReadFirmwareVersionAsync();

@@ -8,8 +8,8 @@ namespace AUTD3
     {
         private enum Kind : byte
         {
-            Freq4k,
-            Freq40k,
+            // default(SamplingConfig) must stay usable: treat it as FREQ_4K like SineOption's default
+            Default,
             Divide,
             Freq,
             FreqNearest,
@@ -30,32 +30,39 @@ namespace AUTD3
             _periodNs = periodNs;
         }
 
-        public static SamplingConfig Freq4k => new SamplingConfig(Kind.Freq4k, 0, 0f, 0);
-
-        public static SamplingConfig Freq40k => new SamplingConfig(Kind.Freq40k, 0, 0f, 0);
-
-        public static SamplingConfig Divide(ushort divide)
+        public SamplingConfig(ushort divide)
         {
             if (divide == 0)
             {
                 throw new Autd3Exception("sampling divide must be >= 1");
             }
-            return new SamplingConfig(Kind.Divide, divide, 0f, 0);
+            _kind = Kind.Divide;
+            _divide = divide;
+            _freq = 0f;
+            _periodNs = 0;
         }
 
-        public static SamplingConfig FromFreq(Freq freq)
+        public SamplingConfig(Freq freq) : this(Kind.Freq, 0, freq.Hz, 0)
         {
-            var kind = freq.Mode == Freq.FreqMode.Nearest ? Kind.FreqNearest : Kind.Freq;
-            return new SamplingConfig(kind, 0, freq.Hz, 0);
         }
 
-        public static SamplingConfig FromPeriod(TimeSpan period) =>
-            new SamplingConfig(Kind.Period, 0, 0f, (ulong)(period.Ticks * 100));
+        public SamplingConfig(TimeSpan period) : this(Kind.Period, 0, 0f, (ulong)(period.Ticks * 100))
+        {
+        }
 
-        public static SamplingConfig FromPeriodNearest(TimeSpan period) =>
-            new SamplingConfig(Kind.PeriodNearest, 0, 0f, (ulong)(period.Ticks * 100));
+        public SamplingConfig(Nearest<Freq> freq) : this(Kind.FreqNearest, 0, freq.Value.Hz, 0)
+        {
+        }
 
-        public ushort DivideValue()
+        public SamplingConfig(Nearest<TimeSpan> period) : this(Kind.PeriodNearest, 0, 0f, (ulong)(period.Value.Ticks * 100))
+        {
+        }
+
+        public static SamplingConfig Freq4k => new SamplingConfig(4000 * Units.Hz);
+
+        public static SamplingConfig Freq40k => new SamplingConfig(40000 * Units.Hz);
+
+        public ushort Divide()
         {
             var handle = CreateHandle();
             try
@@ -72,7 +79,7 @@ namespace AUTD3
             }
         }
 
-        public Freq FreqValue()
+        public Freq Freq()
         {
             var handle = CreateHandle();
             try
@@ -89,7 +96,7 @@ namespace AUTD3
             }
         }
 
-        public TimeSpan PeriodValue()
+        public TimeSpan Period()
         {
             var handle = CreateHandle();
             try
@@ -110,8 +117,7 @@ namespace AUTD3
         {
             var handle = _kind switch
             {
-                Kind.Freq4k => NativeCore.autd3_core_sampling_config_freq_4k(),
-                Kind.Freq40k => NativeCore.autd3_core_sampling_config_freq_40k(),
+                Kind.Default => NativeCore.autd3_core_sampling_config_freq(4000f),
                 Kind.Divide => NativeCore.autd3_core_sampling_config_divide(_divide),
                 Kind.Freq => NativeCore.autd3_core_sampling_config_freq(_freq),
                 Kind.FreqNearest => NativeCore.autd3_core_sampling_config_freq_nearest(_freq),
