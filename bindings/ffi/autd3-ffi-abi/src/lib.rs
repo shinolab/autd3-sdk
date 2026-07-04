@@ -66,19 +66,45 @@ mod client {
     use std::pin::Pin;
     use std::sync::Arc;
 
-    use autd3_rs::{ClientConfig, Frames};
+    use autd3_rs::{ClientConfig, Frames, Response, ResponseFuture};
+    use autd3_rs_core::link::DeviceState;
     use autd3_rs_core::{Error, Geometry};
 
     pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send>>;
 
     pub struct LinkStatusData {
-        pub device_states: Vec<String>,
-        pub all_op: bool,
-        pub any_lost: bool,
+        pub devices: Vec<DeviceState>,
         pub recoveries: u64,
     }
 
-    pub struct ResponseTokenData(pub BoxFuture<()>);
+    pub struct ResponseTokenData(pub BoxFuture<Response>);
+
+    impl ResponseTokenData {
+        #[must_use]
+        pub fn from_futures(futures: Vec<ResponseFuture>) -> Self {
+            Self(Box::pin(async move {
+                let mut merged: Option<Response> = None;
+                for future in futures {
+                    let response = future.await?;
+                    match merged.as_mut() {
+                        None => merged = Some(response),
+                        Some(m) => {
+                            m.data.iter_mut().zip(response.data).for_each(|(m, d)| {
+                                if *m == 0 {
+                                    *m = d;
+                                }
+                            });
+                        }
+                    }
+                }
+                Ok(merged.unwrap_or(Response { data: Vec::new() }))
+            }))
+        }
+    }
+
+    pub trait CheckerBackend: Send + Sync {
+        fn check(&self) -> BoxFuture<LinkStatusData>;
+    }
 
     pub trait ClientBackend: Send + Sync {
         fn num_devices(&self) -> usize;
@@ -92,7 +118,7 @@ mod client {
             frame: Option<usize>,
         ) -> BoxFuture<ResponseTokenData>;
         fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()>;
-        fn check_status(&self) -> BoxFuture<LinkStatusData>;
+        fn checker(&self) -> Box<dyn CheckerBackend>;
         fn stop(&self) -> BoxFuture<()>;
         fn close(&self) -> BoxFuture<()>;
     }
@@ -111,5 +137,6 @@ mod client {
 
 #[cfg(feature = "client")]
 pub use client::{
-    BoxFuture, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData, client_opener,
+    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
+    client_opener,
 };

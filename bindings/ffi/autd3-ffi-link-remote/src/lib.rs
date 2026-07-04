@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 
 use autd3_ffi_abi::{
-    BoxFuture, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData, client_opener,
-    into_handle,
+    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
+    client_opener, into_handle,
 };
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::{ConstStateChecker, Error, StateCheck};
@@ -91,13 +91,7 @@ impl ClientBackend for RemoteBackend {
                             }
                         }
                     }
-                    let token: BoxFuture<()> = Box::pin(async move {
-                        for future in futures {
-                            future.await?;
-                        }
-                        Ok::<(), Error>(())
-                    });
-                    Ok::<ResponseTokenData, Error>(ResponseTokenData(token))
+                    Ok::<ResponseTokenData, Error>(ResponseTokenData::from_futures(futures))
                 })
                 .await
                 .map_err(join_err)?
@@ -129,27 +123,8 @@ impl ClientBackend for RemoteBackend {
         })
     }
 
-    fn check_status(&self) -> BoxFuture<LinkStatusData> {
-        let checker = Arc::clone(&self.checker);
-        Box::pin(async move {
-            link_runtime()
-                .spawn(async move {
-                    let status = checker
-                        .lock()
-                        .await
-                        .check()
-                        .await
-                        .map_err(|e| Error::Link(e.to_string()))?;
-                    Ok::<LinkStatusData, Error>(LinkStatusData {
-                        device_states: status.devices.iter().map(ToString::to_string).collect(),
-                        all_op: status.all_op(),
-                        any_lost: status.any_lost(),
-                        recoveries: status.recoveries,
-                    })
-                })
-                .await
-                .map_err(join_err)?
-        })
+    fn checker(&self) -> Box<dyn CheckerBackend> {
+        Box::new(RemoteChecker(Arc::clone(&self.checker)))
     }
 
     fn stop(&self) -> BoxFuture<()> {
@@ -167,6 +142,31 @@ impl ClientBackend for RemoteBackend {
         Box::pin(async move {
             link_runtime()
                 .spawn(async move { client.close().await })
+                .await
+                .map_err(join_err)?
+        })
+    }
+}
+
+struct RemoteChecker(Arc<Mutex<ConstStateChecker>>);
+
+impl CheckerBackend for RemoteChecker {
+    fn check(&self) -> BoxFuture<LinkStatusData> {
+        let checker = Arc::clone(&self.0);
+        Box::pin(async move {
+            link_runtime()
+                .spawn(async move {
+                    let status = checker
+                        .lock()
+                        .await
+                        .check()
+                        .await
+                        .map_err(|e| Error::Link(e.to_string()))?;
+                    Ok::<LinkStatusData, Error>(LinkStatusData {
+                        devices: status.devices,
+                        recoveries: status.recoveries,
+                    })
+                })
                 .await
                 .map_err(join_err)?
         })
