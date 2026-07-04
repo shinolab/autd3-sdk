@@ -2,24 +2,25 @@ using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Link;
+using Nop = AUTD3.Link.Nop;
 
-namespace AUTD3.DocSamples.ApiBasicsClientConfig;
+namespace DocSamples.ApiBasicsClientConfig;
 
 internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        var link = NopLink.Create();
+        var link = new Nop();
         var option =
             // ANCHOR: config
             new ClientConfig(
-                lowLatency: false,
                 timeoutCycles: 10,
                 maxInflight: (uint)Client.MaxInflight,
                 sendIntervalCycles: 1,
                 maxResyncRounds: 8,
+                lowLatency: false,
                 resetResendCycles: 2,
                 rtPriority: null,
                 rtAffinity: null,

@@ -1,13 +1,13 @@
 using System.Numerics;
 using AUTD3;
 
-namespace AUTD3.DocSamples.ApiCommandLowlevelBank;
+namespace DocSamples.ApiCommandLowlevelBank;
 
 internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         var bank = PatternBank.B0;
         ushort index = 0;
@@ -27,7 +27,6 @@ internal static class Sample
             bank,
             config,
             size,
-            PatternDataType.Raw,
             loopBehavior
         );
         // ANCHOR_END: config

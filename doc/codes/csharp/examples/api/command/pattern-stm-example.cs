@@ -3,18 +3,19 @@ using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Link;
+using Nop = AUTD3.Link.Nop;
 using static AUTD3.Units;
 
 // HIDE
-namespace AUTD3.DocSamples.ApiCommandPatternStmExample;
+namespace DocSamples.ApiCommandPatternStmExample;
 
 internal static class Sample
 {
     internal static async Task Run()
     {
         // HIDE_END
-var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
-var client = await Client.OpenAsync(geometry, NopLink.Create(), new ClientConfig());
+var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
 var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
 var wavelength = Pattern.Wavelength(340.0f * m / s);
@@ -36,7 +37,7 @@ for (var i = 0; i < 200; i++)
 
 var builder = client.DatagramBuilder();
 builder.Push(new PatternStm(
-    StmConfig.FromFreq(1.0f * Hz),
+    new StmConfig(1.0f * Hz),
     patterns,
     new PatternStmOption(
         bank: PatternBank.B0,

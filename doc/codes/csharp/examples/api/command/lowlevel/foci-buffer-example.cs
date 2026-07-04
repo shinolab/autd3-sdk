@@ -2,23 +2,24 @@ using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Link;
+using Nop = AUTD3.Link.Nop;
 using static AUTD3.Units;
 
 // HIDE
-namespace AUTD3.DocSamples.ApiCommandLowlevelFociBufferExample;
+namespace DocSamples.ApiCommandLowlevelFociBufferExample;
 
 internal static class Sample
 {
     internal static async Task Run()
     {
         // HIDE_END
-var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
-var client = await Client.OpenAsync(geometry, NopLink.Create(), new ClientConfig());
+var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
 var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
 var points = Stm.Circle(
     center,
-    30.0f,
+    30.0f * mm,
     200,
     Vector3.UnitZ,
     Intensity.Max
@@ -32,11 +33,12 @@ builder.Push(new WriteFociBuffer(
     0,
     points
 ));
-builder.Push(new ConfigPattern(
+builder.Push(new ConfigFociStm(
     bank,
-    SamplingConfig.FromFreq(points.Length * Hz),
+    new SamplingConfig(points.Length * Hz),
     (uint)points.Length,
-    PatternDataType.Foci(1, 340),
+    1,
+    340.0f * m / s,
     LoopBehavior.Infinite
 ));
 builder.Push(new ChangePatternBank(

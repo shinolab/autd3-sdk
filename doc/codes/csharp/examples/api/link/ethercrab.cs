@@ -1,7 +1,8 @@
 using System;
+using AUTD3;
 using AUTD3.Link;
 
-namespace AUTD3.DocSamples.ApiLinkEthercrab;
+namespace DocSamples.ApiLinkEthercrab;
 
 internal static class Sample
 {
@@ -13,6 +14,7 @@ internal static class Sample
         var syncTimeout = TimeSpan.FromSeconds(10);
         // ANCHOR: api
         new EtherCrabLinkOption(
+            @interface: Interface.Auto,
             sync0Period: sync0Period,
             sync0Shift: sync0Shift,
             syncTolerance: syncTolerance,

@@ -15,7 +15,7 @@ import csSample from "@codes/csharp/examples/tutorial/bank.cs?raw";
 そのため, 再生中のデータを上書きすると, 書き込みの途中で意図しない中間データが出力されてしまうことがある.
 
 これを防ぐために, AUTD3 の `Pattern` は複数のメモリ領域 (バンクと呼ぶ) を持っている.
-再生中でない別のバンクへ書き込み, 書き込み完了後に再生対象をそのバンクへ切り替えれば, 出力を乱さずにデータを差し替えられる (ダブルバッファリング).
+再生中でない別のバンクへ書き込み, 書き込み完了後に再生対象をそのバンクへ切り替えれば, 出力を乱さずにデータを差し替えられる.
 
 ## バンクを指定して書き込む
 
@@ -31,5 +31,4 @@ import csSample from "@codes/csharp/examples/tutorial/bank.cs?raw";
 
 `Modulation` も同様にバンクを持っており, `Modulation::with_bank` で書き込み先のバンク (`ModulationBank`) を指定できる.
 
-なお, 再生の有限ループや切り替えタイミングの制御については, 次の [ループと遷移](/autd3-sdk/getting-started/tutorial/loop/) を参照.
 バンクの書き込み・設定・切り替えをより細かく制御したい場合は, API リファレンスの [低レベルコマンド](/autd3-sdk/api/command/lowlevel/) を参照.

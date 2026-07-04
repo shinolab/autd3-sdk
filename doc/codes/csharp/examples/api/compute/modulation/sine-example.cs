@@ -2,7 +2,7 @@ using AUTD3;
 using static AUTD3.Units;
 
 // HIDE
-namespace AUTD3.DocSamples.ApiComputeModulationSineExample;
+namespace DocSamples.ApiComputeModulationSineExample;
 
 internal static class Sample
 {
@@ -14,7 +14,7 @@ var dst = Modulation.ModulationBuffer();
 Modulation.Sine(
     150 * Hz,
     new SineOption(
-        intensity: 0xFF,
+        amplitude: 0xFF,
         offset: 0x80,
         phase: 0.0f * rad,
         clamp: false,

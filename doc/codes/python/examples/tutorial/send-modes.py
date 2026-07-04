@@ -4,9 +4,11 @@ import math
 
 import numpy as np
 
-import autd3
 import autd3_link_ethercrab as ethercrab
 import autd3_pattern as pattern
+from autd3 import MAX_IN_FLIGHT, Client, ClientConfig
+from autd3.commands import Pattern, SetSilencer
+from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 
 NUM_POINTS = 1000
@@ -14,16 +16,16 @@ RADIUS_MM = 30.0
 
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client = await autd3.Client.open(
+    client = await Client.open(
         geometry,
         ethercrab.EtherCrabLinkOption(),
-        autd3.ClientConfig(),
+        ClientConfig(),
     )
 
     builder = client.datagram_builder()
-    builder.push(autd3.commands.SetSilencer())
+    builder.push(SetSilencer())
     for frame in builder.build():
         await client.send_checked(frame)
 
@@ -64,7 +66,7 @@ async def stop_and_wait(client, geometry, targets, wavelength) -> None:
             patterns,
         )
         builder = client.datagram_builder()
-        builder.push(autd3.commands.Pattern(patterns))
+        builder.push(Pattern(patterns))
         for frame in builder.build():
             await client.send_checked(frame)
     # ANCHOR_END: stop_and_wait
@@ -83,14 +85,14 @@ async def streaming(client, geometry, targets, wavelength) -> None:
             patterns,
         )
         builder = client.datagram_builder()
-        builder.push(autd3.commands.Pattern(patterns))
+        builder.push(Pattern(patterns))
         for frame in builder.build():
-            if len(pending) >= autd3.MAX_IN_FLIGHT:
-                await pending.popleft()
+            if len(pending) >= MAX_IN_FLIGHT:
+                (await pending.popleft()).check()
             pending.append(await client.send(frame))
     # Drain the remaining responses.
     while pending:
-        await pending.popleft()
+        (await pending.popleft()).check()
     # ANCHOR_END: streaming
 
 

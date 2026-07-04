@@ -1,21 +1,23 @@
 using System.Numerics;
 using AUTD3;
+using AUTD3.Holo;
+using ControlPoint = AUTD3.Holo.ControlPoint;
 using static AUTD3.Units;
-using static AUTD3.HoloUnits;
+using static AUTD3.Holo.HoloUnits;
 
-namespace AUTD3.DocSamples.ApiComputeHoloGreedy;
+namespace DocSamples.ApiComputeHoloGreedy;
 
 internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var foci = new[]
         {
-            new Holo.ControlPoint(center + new Vector3(-30.0f, 0.0f, 0.0f), 2.5e3f * Pa),
-            new Holo.ControlPoint(center + new Vector3(30.0f, 0.0f, 0.0f), 2.5e3f * Pa),
+            new ControlPoint(center + new Vector3(-30.0f, 0.0f, 0.0f), 2.5e3f * Pa),
+            new ControlPoint(center + new Vector3(30.0f, 0.0f, 0.0f), 2.5e3f * Pa),
         };
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);

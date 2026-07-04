@@ -1,6 +1,6 @@
 using AUTD3;
 
-namespace AUTD3.DocSamples.ApiCommandForceFan;
+namespace DocSamples.ApiCommandForceFan;
 
 internal static class Sample
 {

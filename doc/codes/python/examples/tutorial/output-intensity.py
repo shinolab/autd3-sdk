@@ -2,20 +2,22 @@ import asyncio
 
 import numpy as np
 
-import autd3
 import autd3_link_ethercrab as ethercrab
 import autd3_modulation as modulation
 import autd3_pattern as pattern
+from autd3 import Client, ClientConfig
+from autd3.commands import Modulation, Pattern, SetSilencer
+from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
-
+from autd3.value import Intensity, SamplingConfig
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client = await autd3.Client.open(
+    client = await Client.open(
         geometry,
         ethercrab.EtherCrabLinkOption(),
-        autd3.ClientConfig(),
+        ClientConfig(),
     )
 
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
@@ -27,7 +29,7 @@ async def main() -> None:
         geometry,
         target,
         wavelength,
-        pattern.FocusOption(intensity=autd3.value.Intensity(0x80)),
+        pattern.FocusOption(intensity=Intensity(0x80)),
         patterns,
     )
     # ANCHOR_END: pattern_intensity
@@ -39,16 +41,16 @@ async def main() -> None:
         modulation.SineOption(
             amplitude=0xFF,
             offset=0x80,
-            sampling_config=autd3.value.SamplingConfig.FREQ_4K,
+            sampling_config=SamplingConfig.FREQ_4K,
         ),
         mod_buf,
     )
     # ANCHOR_END: modulation
 
     builder = client.datagram_builder()
-    builder.push(autd3.commands.SetSilencer())
-    builder.push(autd3.commands.Pattern(patterns))
-    builder.push(autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf))
+    builder.push(SetSilencer())
+    builder.push(Pattern(patterns))
+    builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
     for frame in builder.build():
         await client.send_checked(frame)
 

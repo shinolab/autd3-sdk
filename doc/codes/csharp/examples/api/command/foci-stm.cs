@@ -2,15 +2,15 @@ using System.Numerics;
 using AUTD3;
 using static AUTD3.Units;
 
-namespace AUTD3.DocSamples.ApiCommandFociStm;
+namespace DocSamples.ApiCommandFociStm;
 
 internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
-        var radius = 30.0f;
+        var radius = 30.0f * mm;
         var numPoints = 200;
         var normal = Vector3.UnitZ;
         var intensity = Intensity.Max;
@@ -28,14 +28,14 @@ internal static class Sample
             // ANCHOR: option
             new FociStmOption(
                 bank: PatternBank.B0,
-                soundSpeedMS: 340.0f,
+                soundSpeed: 340.0f * m / s,
                 loopBehavior: LoopBehavior.Infinite,
                 transitionMode: TransitionMode.Immediate
             )
             // ANCHOR_END: option
             ;
         // ANCHOR: api
-        new FociStm(StmConfig.FromFreq(freq), points, option);
+        new FociStm(new StmConfig(freq), points, option);
         // ANCHOR_END: api
 
         byte numFoci = 1;
@@ -45,11 +45,12 @@ internal static class Sample
             0,
             points
         );
-        new ConfigPattern(
+        new ConfigFociStm(
             option.Bank,
-            SamplingConfig.FromFreq(points.Length * Hz),
+            new SamplingConfig(points.Length * Hz),
             (uint)points.Length,
-            PatternDataType.Foci(numFoci, 340),
+            numFoci,
+            option.SoundSpeed,
             option.LoopBehavior
         );
         new ChangePatternBank(

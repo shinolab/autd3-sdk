@@ -2,7 +2,7 @@ using AUTD3;
 using static AUTD3.Units;
 
 // HIDE
-namespace AUTD3.DocSamples.ApiComputeModulationSquareExample;
+namespace DocSamples.ApiComputeModulationSquareExample;
 
 internal static class Sample
 {

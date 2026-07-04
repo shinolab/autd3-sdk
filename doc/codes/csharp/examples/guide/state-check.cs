@@ -4,18 +4,18 @@ using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Link;
 
-namespace AUTD3.DocSamples.GuideStateCheck;
+namespace DocSamples.GuideStateCheck;
 
 internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         // ANCHOR: open
-        var client = await Client.OpenAsync(
+        var (client, checker) = await Client.OpenWithCheckerAsync(
             geometry,
-            EtherCrabLink.Create(),
+            new EtherCrabLinkOption(),
             new ClientConfig()
         );
         // ANCHOR_END: open
@@ -26,12 +26,12 @@ internal static class Sample
             LinkStatus? last = null;
             while (true)
             {
-                var status = await client.CheckStatusAsync();
+                var status = await checker.CheckAsync();
                 if (status != last)
                 {
-                    for (var i = 0; i < status.DeviceStates.Count; i++)
+                    for (var i = 0; i < status.Devices.Count; i++)
                     {
-                        Console.WriteLine($"device[{i}]: {status.DeviceStates[i]}");
+                        Console.WriteLine($"device[{i}]: {status.Devices[i]}");
                     }
                     Console.WriteLine($"all operational: {status.AllOp}, any lost: {status.AnyLost}, recoveries: {status.Recoveries}");
                     last = status;

@@ -1,7 +1,7 @@
 using AUTD3;
 using static AUTD3.Units;
 
-namespace AUTD3.DocSamples.ApiComputeModulationFourier;
+namespace DocSamples.ApiComputeModulationFourier;
 
 internal static class Sample
 {

@@ -1,7 +1,7 @@
 using AUTD3;
 using static AUTD3.Units;
 
-namespace AUTD3.DocSamples.ApiCommandLowlevelModBank;
+namespace DocSamples.ApiCommandLowlevelModBank;
 
 internal static class Sample
 {

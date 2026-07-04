@@ -1,13 +1,13 @@
 using System.Numerics;
 using AUTD3;
 
-namespace AUTD3.DocSamples.ApiCommandPattern;
+namespace DocSamples.ApiCommandPattern;
 
 internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         var bank = PatternBank.B0;
 
@@ -27,9 +27,8 @@ internal static class Sample
         );
         new ConfigPattern(
             bank,
-            SamplingConfig.Divide(ushort.MaxValue),
+            new SamplingConfig(ushort.MaxValue),
             1,
-            PatternDataType.Raw,
             LoopBehavior.Infinite
         );
         new ChangePatternBank(

@@ -1,20 +1,20 @@
 using System.Numerics;
 using AUTD3;
 
-namespace AUTD3.DocSamples.ApiBasicsGeometry;
+namespace DocSamples.ApiBasicsGeometry;
 
 internal static class Sample
 {
     internal static void Run()
     {
         // ANCHOR: api
-        new Geometry(new[] { new Device(
+        new Geometry(new[] { new Autd3(
             Vector3.Zero,
             Quaternion.Identity
         ) });
         // ANCHOR_END: api
 
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero, Quaternion.Identity) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero, Quaternion.Identity) });
 
         // ANCHOR: access
         var numDevices = geometry.NumDevices;
@@ -33,13 +33,19 @@ internal static class Sample
         // ANCHOR: device
         var idx = dev.Idx;
         var numTransducers = dev.NumTransducers;
+        var center = dev.Center;
         var rotation = dev.Rotation;
         var x = dev.XDirection;
         var y = dev.YDirection;
         var axial = dev.AxialDirection;
+        var positions = dev.Positions;
+        var directions = dev.Directions;
+        var pos0 = dev.Position(0);
+        var dir0 = dev.Direction(0);
         // ANCHOR_END: device
 
         _ = (numDevices, totalTransducers, arrayCenter, first);
-        _ = (idx, numTransducers, rotation, x, y, axial);
+        _ = (idx, numTransducers, center, rotation, x, y, axial);
+        _ = (positions, directions, pos0, dir0);
     }
 }
