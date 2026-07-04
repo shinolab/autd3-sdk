@@ -12,24 +12,24 @@ internal static class Sample
         var data = Modulation.ModulationBuffer();
         Modulation.Sine(150 * Hz, new SineOption(), data);
         // ANCHOR: write
-        new WriteModulationBuffer(bank, offset, data);
+        new WriteModulationBuffer(bank: bank, offset: offset, data: data);
         // ANCHOR_END: write
         var config = SamplingConfig.Freq4k;
         var size = (uint)data.Length;
         var loopBehavior = LoopBehavior.Infinite;
         // ANCHOR: config
         new ConfigModulation(
-            bank,
-            config,
-            size,
-            loopBehavior
+            bank: bank,
+            config: config,
+            size: size,
+            loopBehavior: loopBehavior
         );
         // ANCHOR_END: config
         var transitionMode = TransitionMode.Immediate;
         // ANCHOR: change
         new ChangeModulationBank(
-            bank,
-            transitionMode
+            bank: bank,
+            transitionMode: transitionMode
         );
         // ANCHOR_END: change
     }

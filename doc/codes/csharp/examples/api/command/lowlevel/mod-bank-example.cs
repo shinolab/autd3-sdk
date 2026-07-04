@@ -23,19 +23,19 @@ var bank = ModulationBank.B0;
 
 var builder = client.DatagramBuilder();
 builder.Push(new WriteModulationBuffer(
-    bank,
-    0,
-    data
+    bank: bank,
+    offset: 0,
+    data: data
 ));
 builder.Push(new ConfigModulation(
-    bank,
-    SamplingConfig.Freq4k,
-    (uint)data.Length,
-    LoopBehavior.Infinite
+    bank: bank,
+    config: SamplingConfig.Freq4k,
+    size: (uint)data.Length,
+    loopBehavior: LoopBehavior.Infinite
 ));
 builder.Push(new ChangeModulationBank(
-    bank,
-    TransitionMode.Immediate
+    bank: bank,
+    transitionMode: TransitionMode.Immediate
 ));
 var frames = builder.Build();
 foreach (var frame in frames)

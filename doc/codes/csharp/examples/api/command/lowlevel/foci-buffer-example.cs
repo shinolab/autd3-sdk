@@ -29,21 +29,21 @@ var bank = PatternBank.B0;
 
 var builder = client.DatagramBuilder();
 builder.Push(new WriteFociBuffer(
-    bank,
-    0,
-    points
+    bank: bank,
+    indexOffset: 0,
+    points: points
 ));
 builder.Push(new ConfigFociStm(
-    bank,
-    new SamplingConfig(points.Length * Hz),
-    (uint)points.Length,
-    1,
-    340.0f * m / s,
-    LoopBehavior.Infinite
+    bank: bank,
+    config: new SamplingConfig(points.Length * Hz),
+    size: (uint)points.Length,
+    numFoci: 1,
+    soundSpeed: 340.0f * m / s,
+    loopBehavior: LoopBehavior.Infinite
 ));
 builder.Push(new ChangePatternBank(
-    bank,
-    TransitionMode.Immediate
+    bank: bank,
+    transitionMode: TransitionMode.Immediate
 ));
 var frames = builder.Build();
 foreach (var frame in frames)

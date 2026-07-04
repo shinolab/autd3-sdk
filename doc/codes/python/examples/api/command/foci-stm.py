@@ -40,20 +40,20 @@ FociStm(freq, points, option)
 num_foci = 1
 # ANCHOR: equivalent
 WriteFociBuffer(
-    option.bank,
-    0,
-    points,
+    bank=option.bank,
+    index_offset=0,
+    points=points,
 )
 ConfigFociStm(
-    option.bank,
-    StmConfig(freq).into_sampling_config(len(points)),
-    len(points),
-    num_foci,
-    option.sound_speed,
+    bank=option.bank,
+    config=StmConfig(freq).into_sampling_config(len(points)),
+    size=len(points),
+    num_foci=num_foci,
+    sound_speed=option.sound_speed,
     loop_behavior=option.loop_behavior,
 )
 ChangePatternBank(
-    option.bank,
+    bank=option.bank,
     transition_mode=option.transition_mode,
 )
 # ANCHOR_END: equivalent

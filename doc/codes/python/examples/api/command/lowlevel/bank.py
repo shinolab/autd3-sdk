@@ -9,9 +9,9 @@ index = 0
 emissions = geometry.pattern_buffer()
 # ANCHOR: write
 WritePatternBuffer(
-    bank,
-    index,
-    emissions,
+    bank=bank,
+    index=index,
+    emissions=emissions,
 )
 # ANCHOR_END: write
 config = SamplingConfig.FREQ_4K
@@ -19,17 +19,17 @@ size = 1
 loop_behavior = LoopBehavior.Infinite
 # ANCHOR: config
 ConfigPattern(
-    bank,
-    config,
-    size,
-    loop_behavior,
+    bank=bank,
+    config=config,
+    size=size,
+    loop_behavior=loop_behavior,
 )
 # ANCHOR_END: config
 transition_mode = TransitionMode.Immediate
 # ANCHOR: change
 ChangePatternBank(
-    bank,
-    transition_mode,
+    bank=bank,
+    transition_mode=transition_mode,
 )
 # ANCHOR_END: change
 
@@ -42,9 +42,9 @@ index = 0
 format = PatternCompression.PhaseHalf
 # ANCHOR: compressed
 WritePatternCompressed(
-    bank,
-    index,
-    format,
-    patterns,
+    bank=bank,
+    index=index,
+    format=format,
+    patterns=patterns,
 )
 # ANCHOR_END: compressed

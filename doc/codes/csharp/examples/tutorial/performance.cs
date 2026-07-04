@@ -25,15 +25,15 @@ internal static class Sample
         var builder = client.DatagramBuilder();
         builder.Push(SetSilencer.Disable());
         builder.Push(new WritePatternBuffer(
-            PatternBank.B0,
-            0,
-            patterns
+            bank: PatternBank.B0,
+            index: 0,
+            emissions: patterns
         ));
         builder.Push(new ConfigPattern(
-            PatternBank.B0,
-            SamplingConfig.Freq40k,
-            1,
-            LoopBehavior.Infinite
+            bank: PatternBank.B0,
+            config: SamplingConfig.Freq40k,
+            size: 1,
+            loopBehavior: LoopBehavior.Infinite
         ));
         foreach (var frame in builder.Build())
         {
@@ -60,9 +60,9 @@ internal static class Sample
 
             var hotBuilder = client.DatagramBuilder();
             hotBuilder.Push(new WritePatternBuffer(
-                PatternBank.B0,
-                0,
-                patterns
+                bank: PatternBank.B0,
+                index: 0,
+                emissions: patterns
             ));
             foreach (var frame in hotBuilder.Build())
             {

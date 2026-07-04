@@ -28,7 +28,7 @@ internal static class Sample
             patA
         );
         var builder = client.DatagramBuilder();
-        builder.Push(new Pattern(patA, PatternBank.B0));
+        builder.Push(new Pattern(PatternBank.B0, patA));
         foreach (var frame in builder.Build())
         {
             await client.SendCheckedAsync(frame);
@@ -46,7 +46,7 @@ internal static class Sample
             patB
         );
         var builder2 = client.DatagramBuilder();
-        builder2.Push(new Pattern(patB, PatternBank.B1));
+        builder2.Push(new Pattern(PatternBank.B1, patB));
         foreach (var frame in builder2.Build())
         {
             await client.SendCheckedAsync(frame);

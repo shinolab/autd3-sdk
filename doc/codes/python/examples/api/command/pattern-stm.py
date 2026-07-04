@@ -47,18 +47,18 @@ PatternStm(freq, patterns, option)
 # ANCHOR: equivalent
 for index, emissions in enumerate(patterns):
     WritePatternBuffer(
-        option.bank,
-        index,
-        emissions,
+        bank=option.bank,
+        index=index,
+        emissions=emissions,
     )
 ConfigPattern(
-    option.bank,
-    StmConfig(freq).into_sampling_config(len(patterns)),
-    len(patterns),
+    bank=option.bank,
+    config=StmConfig(freq).into_sampling_config(len(patterns)),
+    size=len(patterns),
     loop_behavior=option.loop_behavior,
 )
 ChangePatternBank(
-    option.bank,
+    bank=option.bank,
     transition_mode=option.transition_mode,
 )
 # ANCHOR_END: equivalent

@@ -36,8 +36,9 @@ import { excerpt } from "@lib/excerpt";
 <Fragment slot="csharp">
 <Code code={excerpt(csSample, "api")} lang="csharp" />
 
-`new Modulation(config, data)` は書き込み先バンクをデフォルトで `ModulationBank.B0`, ループを `Infinite`, 遷移を `Immediate` とする.
-別バンク・ループ回数・遷移タイミングを指定したい場合は, `bank` / `loopBehavior` / `transitionMode` 引数を渡す.
+`new Modulation(config, data)` は書き込み先バンクを `ModulationBank.B0`, ループを `Infinite`, 遷移を `Immediate` とする.
+別バンクへ書く場合は `new Modulation(bank, config, data)` を使う.
+ループ回数や遷移タイミングも変えたい場合は, `loopBehavior` / `transitionMode` 引数を渡す.
 </Fragment>
 </CodeTabs>
 
