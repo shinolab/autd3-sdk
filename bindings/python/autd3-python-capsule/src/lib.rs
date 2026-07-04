@@ -100,7 +100,7 @@ mod link {
     use std::ptr::NonNull;
     use std::sync::Arc;
 
-    use autd3_rs::{ClientConfig, Frames, ResponseFuture};
+    use autd3_rs::{ClientConfig, Frames, Response, ResponseFuture};
     use autd3_rs_core::{Error, Geometry};
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
@@ -129,11 +129,11 @@ mod link {
         }
 
         #[must_use]
-        pub fn check(self) -> BoxFuture<()> {
+        pub fn wait(self) -> BoxFuture<Response> {
             let Self { fut, handle } = self;
             Box::pin(async move {
                 handle
-                    .spawn(async move { fut.await.and_then(|response| response.check()) })
+                    .spawn(fut)
                     .await
                     .map_err(|e| Error::Link(e.to_string()))?
             })

@@ -4,7 +4,7 @@ use crate::config::ClientConfig;
 use crate::datagram::{DatagramBuilder, Frame};
 use crate::future::future_into_py;
 use autd3_python_capsule::{
-    ClientBackend, ResponseToken, capsule_of, geometry_from_capsule, take_client_opener,
+    ClientBackend, ResponseToken, capsule_of, geometry_from_capsule, take_client_opener, to_pyerr,
     to_pyerr_gil,
 };
 use pyo3::exceptions::PyValueError;
@@ -190,6 +190,23 @@ impl Client {
     }
 }
 
+#[pyclass(name = "Response", module = "autd3")]
+pub struct Response {
+    inner: autd3_rs::Response,
+}
+
+#[pymethods]
+impl Response {
+    #[getter]
+    fn data(&self) -> Vec<u8> {
+        self.inner.data.clone()
+    }
+
+    fn check(&self, py: Python<'_>) -> PyResult<()> {
+        self.inner.check().map_err(|e| to_pyerr(py, e))
+    }
+}
+
 #[pyclass(name = "ResponseFuture", module = "autd3")]
 pub struct ResponseFuture {
     token: Mutex<Option<ResponseToken>>,
@@ -204,8 +221,10 @@ impl ResponseFuture {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
             .ok_or_else(|| PyValueError::new_err("ResponseFuture has already been awaited"))?;
-        let awaitable =
-            future_into_py(py, async move { token.check().await.map_err(to_pyerr_gil) })?;
+        let awaitable = future_into_py(py, async move {
+            let inner = token.wait().await.map_err(to_pyerr_gil)?;
+            Ok(Response { inner })
+        })?;
         awaitable.getattr("__await__")?.call0()
     }
 }
