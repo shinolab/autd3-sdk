@@ -50,11 +50,11 @@ namespace AUTD3
         private readonly ushort _index;
         private readonly PatternBuffer _buffer;
 
-        public WritePatternBuffer(PatternBank bank, ushort index, PatternBuffer buffer)
+        public WritePatternBuffer(PatternBank bank, ushort index, PatternBuffer emissions)
         {
             _bank = bank;
             _index = index;
-            _buffer = buffer;
+            _buffer = emissions;
         }
 
         IntPtr ICommand.CreateOp() =>

@@ -14,9 +14,9 @@ internal static class Sample
         var emissions = geometry.PatternBuffer();
         // ANCHOR: write
         new WritePatternBuffer(
-            bank,
-            index,
-            emissions
+            bank: bank,
+            index: index,
+            emissions: emissions
         );
         // ANCHOR_END: write
         var config = SamplingConfig.Freq4k;
@@ -24,17 +24,17 @@ internal static class Sample
         var loopBehavior = LoopBehavior.Infinite;
         // ANCHOR: config
         new ConfigPattern(
-            bank,
-            config,
-            size,
-            loopBehavior
+            bank: bank,
+            config: config,
+            size: size,
+            loopBehavior: loopBehavior
         );
         // ANCHOR_END: config
         var transitionMode = TransitionMode.Immediate;
         // ANCHOR: change
         new ChangePatternBank(
-            bank,
-            transitionMode
+            bank: bank,
+            transitionMode: transitionMode
         );
         // ANCHOR_END: change
 
@@ -47,10 +47,10 @@ internal static class Sample
         var format = PatternCompression.PhaseHalf;
         // ANCHOR: compressed
         new WritePatternCompressed(
-            bank,
-            compressedIndex,
-            format,
-            patterns
+            bank: bank,
+            index: compressedIndex,
+            format: format,
+            patterns: patterns
         );
         // ANCHOR_END: compressed
     }

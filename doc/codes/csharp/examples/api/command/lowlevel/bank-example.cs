@@ -29,19 +29,19 @@ var bank = PatternBank.B0;
 
 var builder = client.DatagramBuilder();
 builder.Push(new WritePatternBuffer(
-    bank,
-    0,
-    emissions
+    bank: bank,
+    index: 0,
+    emissions: emissions
 ));
 builder.Push(new ConfigPattern(
-    bank,
-    new SamplingConfig(ushort.MaxValue),
-    1,
-    LoopBehavior.Infinite
+    bank: bank,
+    config: new SamplingConfig(ushort.MaxValue),
+    size: 1,
+    loopBehavior: LoopBehavior.Infinite
 ));
 builder.Push(new ChangePatternBank(
-    bank,
-    TransitionMode.Immediate
+    bank: bank,
+    transitionMode: TransitionMode.Immediate
 ));
 var frames = builder.Build();
 foreach (var frame in frames)

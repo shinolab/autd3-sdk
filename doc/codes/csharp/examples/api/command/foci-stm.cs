@@ -41,21 +41,21 @@ internal static class Sample
         byte numFoci = 1;
         // ANCHOR: equivalent
         new WriteFociBuffer(
-            option.Bank,
-            0,
-            points
+            bank: option.Bank,
+            indexOffset: 0,
+            points: points
         );
         new ConfigFociStm(
-            option.Bank,
-            new SamplingConfig(points.Length * Hz),
-            (uint)points.Length,
-            numFoci,
-            option.SoundSpeed,
-            option.LoopBehavior
+            bank: option.Bank,
+            config: new SamplingConfig(points.Length * Hz),
+            size: (uint)points.Length,
+            numFoci: numFoci,
+            soundSpeed: option.SoundSpeed,
+            loopBehavior: option.LoopBehavior
         );
         new ChangePatternBank(
-            option.Bank,
-            option.TransitionMode
+            bank: option.Bank,
+            transitionMode: option.TransitionMode
         );
         // ANCHOR_END: equivalent
 

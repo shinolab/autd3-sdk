@@ -292,10 +292,14 @@ namespace AUTD3
         private readonly PatternBank _bank;
         private readonly PatternBuffer _buffer;
 
-        public Pattern(PatternBuffer buffer, PatternBank bank = PatternBank.B0)
+        public Pattern(PatternBuffer emissions) : this(PatternBank.B0, emissions)
+        {
+        }
+
+        public Pattern(PatternBank bank, PatternBuffer emissions)
         {
             _bank = bank;
-            _buffer = buffer;
+            _buffer = emissions;
         }
 
         IntPtr ICommand.CreateOp() => NativePattern.autd3_op_pattern((byte)_bank, _buffer.Handle);

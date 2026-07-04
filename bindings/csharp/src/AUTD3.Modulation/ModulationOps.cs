@@ -27,11 +27,11 @@ namespace AUTD3
         private readonly uint _offset;
         private readonly ModulationBuffer _buffer;
 
-        public WriteModulationBuffer(ModulationBank bank, uint offset, ModulationBuffer buffer)
+        public WriteModulationBuffer(ModulationBank bank, uint offset, ModulationBuffer data)
         {
             _bank = bank;
             _offset = offset;
-            _buffer = buffer;
+            _buffer = data;
         }
 
         IntPtr ICommand.CreateOp() =>

@@ -16,24 +16,24 @@ internal static class Sample
         // ANCHOR: api
         new Pattern(emissions);
 
-        new Pattern(emissions, bank);
+        new Pattern(bank, emissions);
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
         new WritePatternBuffer(
-            bank,
-            0,
-            emissions
+            bank: bank,
+            index: 0,
+            emissions: emissions
         );
         new ConfigPattern(
-            bank,
-            new SamplingConfig(ushort.MaxValue),
-            1,
-            LoopBehavior.Infinite
+            bank: bank,
+            config: new SamplingConfig(ushort.MaxValue),
+            size: 1,
+            loopBehavior: LoopBehavior.Infinite
         );
         new ChangePatternBank(
-            bank,
-            TransitionMode.Immediate
+            bank: bank,
+            transitionMode: TransitionMode.Immediate
         );
         // ANCHOR_END: equivalent
     }

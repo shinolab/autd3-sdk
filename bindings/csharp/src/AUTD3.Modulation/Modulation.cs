@@ -240,11 +240,16 @@ namespace AUTD3
         private readonly LoopBehavior _loopBehavior;
         private readonly TransitionMode _transitionMode;
 
-        public Modulation(SamplingConfig samplingConfig, ModulationBuffer buffer, ModulationBank bank = ModulationBank.B0, LoopBehavior? loopBehavior = null, TransitionMode? transitionMode = null)
+        public Modulation(SamplingConfig config, ModulationBuffer data, LoopBehavior? loopBehavior = null, TransitionMode? transitionMode = null)
+            : this(ModulationBank.B0, config, data, loopBehavior, transitionMode)
+        {
+        }
+
+        public Modulation(ModulationBank bank, SamplingConfig config, ModulationBuffer data, LoopBehavior? loopBehavior = null, TransitionMode? transitionMode = null)
         {
             _bank = bank;
-            _samplingConfig = samplingConfig;
-            _buffer = buffer;
+            _samplingConfig = config;
+            _buffer = data;
             _loopBehavior = loopBehavior ?? LoopBehavior.Infinite;
             _transitionMode = transitionMode ?? TransitionMode.Immediate;
         }

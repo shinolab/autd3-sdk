@@ -9,23 +9,23 @@ buffer = modulation_buffer()
 sine(150.0 * Hz, SineOption(), buffer)
 data = buffer
 # ANCHOR: write
-WriteModulationBuffer(bank, offset, data)
+WriteModulationBuffer(bank=bank, offset=offset, data=data)
 # ANCHOR_END: write
 config = SamplingConfig.FREQ_4K
 size = len(data)
 loop_behavior = LoopBehavior.Infinite
 # ANCHOR: config
 ConfigModulation(
-    bank,
-    config,
-    size,
-    loop_behavior,
+    bank=bank,
+    config=config,
+    size=size,
+    loop_behavior=loop_behavior,
 )
 # ANCHOR_END: config
 transition_mode = TransitionMode.Immediate
 # ANCHOR: change
 ChangeModulationBank(
-    bank,
-    transition_mode,
+    bank=bank,
+    transition_mode=transition_mode,
 )
 # ANCHOR_END: change

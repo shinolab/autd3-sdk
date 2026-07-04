@@ -45,20 +45,20 @@ internal static class Sample
         for (var index = 0; index < patterns.Length; index++)
         {
             new WritePatternBuffer(
-                option.Bank,
-                (ushort)index,
-                patterns[index]
+                bank: option.Bank,
+                index: (ushort)index,
+                emissions: patterns[index]
             );
         }
         new ConfigPattern(
-            option.Bank,
-            new SamplingConfig(patterns.Length * Hz),
-            (uint)patterns.Length,
-            option.LoopBehavior
+            bank: option.Bank,
+            config: new SamplingConfig(patterns.Length * Hz),
+            size: (uint)patterns.Length,
+            loopBehavior: option.LoopBehavior
         );
         new ChangePatternBank(
-            option.Bank,
-            option.TransitionMode
+            bank: option.Bank,
+            transitionMode: option.TransitionMode
         );
         // ANCHOR_END: equivalent
     }

@@ -17,9 +17,9 @@ config = StmConfig(1.0 * Hz).into_sampling_config(len(points))
 index_offset = 0
 # ANCHOR: write
 WriteFociBuffer(
-    bank,
-    index_offset,
-    points,
+    bank=bank,
+    index_offset=index_offset,
+    points=points,
 )
 # ANCHOR_END: write
 size = len(points)
@@ -28,11 +28,11 @@ sound_speed = 340.0 * m / s
 loop_behavior = LoopBehavior.Infinite
 # ANCHOR: config
 ConfigFociStm(
-    bank,
-    config,
-    size,
-    num_foci,
-    sound_speed,
-    loop_behavior,
+    bank=bank,
+    config=config,
+    size=size,
+    num_foci=num_foci,
+    sound_speed=sound_speed,
+    loop_behavior=loop_behavior,
 )
 # ANCHOR_END: config

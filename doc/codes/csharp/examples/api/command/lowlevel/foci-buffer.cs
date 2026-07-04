@@ -15,9 +15,9 @@ internal static class Sample
         var indexOffset = 0u;
         // ANCHOR: write
         new WriteFociBuffer(
-            bank,
-            indexOffset,
-            points
+            bank: bank,
+            indexOffset: indexOffset,
+            points: points
         );
         // ANCHOR_END: write
         var size = (uint)points.Length;
@@ -26,12 +26,12 @@ internal static class Sample
         var loopBehavior = LoopBehavior.Infinite;
         // ANCHOR: config
         new ConfigFociStm(
-            bank,
-            config,
-            size,
-            numFoci,
-            soundSpeed,
-            loopBehavior
+            bank: bank,
+            config: config,
+            size: size,
+            numFoci: numFoci,
+            soundSpeed: soundSpeed,
+            loopBehavior: loopBehavior
         );
         // ANCHOR_END: config
     }

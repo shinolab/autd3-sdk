@@ -32,16 +32,16 @@ async def main() -> None:
     builder.push(SetSilencer.disable())
     builder.push(
         WritePatternBuffer(
-            PatternBank.B0,
-            0,
-            patterns,
+            bank=PatternBank.B0,
+            index=0,
+            emissions=patterns,
         )
     )
     builder.push(
         ConfigPattern(
-            PatternBank.B0,
-            SamplingConfig.FREQ_40K,
-            1,
+            bank=PatternBank.B0,
+            config=SamplingConfig.FREQ_40K,
+            size=1,
             loop_behavior=LoopBehavior.Infinite,
         )
     )
@@ -67,9 +67,9 @@ async def main() -> None:
         builder = client.datagram_builder()
         builder.push(
             WritePatternBuffer(
-                PatternBank.B0,
-                0,
-                patterns,
+                bank=PatternBank.B0,
+                index=0,
+                emissions=patterns,
             )
         )
         for frame in builder.build():

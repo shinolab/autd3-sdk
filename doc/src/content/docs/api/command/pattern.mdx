@@ -35,8 +35,8 @@ import { excerpt } from "@lib/excerpt";
 <Fragment slot="csharp">
 <Code code={excerpt(csSample, "api")} lang="csharp" />
 
-`new Pattern(emissions)` は書き込み先バンクをデフォルトで `PatternBank.B0` とする.
-別バンクを指定したい場合は `bank` 引数を渡す.
+`new Pattern(emissions)` は書き込み先バンクを `PatternBank.B0` とする.
+別バンクへ書く場合は `new Pattern(bank, emissions)` を使う.
 </Fragment>
 </CodeTabs>
 

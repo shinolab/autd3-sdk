@@ -36,20 +36,20 @@ var bank = PatternBank.B0;
 
 var builder = client.DatagramBuilder();
 builder.Push(new WritePatternCompressed(
-    bank,
-    0,
-    PatternCompression.PhaseHalf,
-    patterns
+    bank: bank,
+    index: 0,
+    format: PatternCompression.PhaseHalf,
+    patterns: patterns
 ));
 builder.Push(new ConfigPattern(
-    bank,
-    new SamplingConfig(patterns.Length * Hz),
-    (uint)patterns.Length,
-    LoopBehavior.Infinite
+    bank: bank,
+    config: new SamplingConfig(patterns.Length * Hz),
+    size: (uint)patterns.Length,
+    loopBehavior: LoopBehavior.Infinite
 ));
 builder.Push(new ChangePatternBank(
-    bank,
-    TransitionMode.Immediate
+    bank: bank,
+    transitionMode: TransitionMode.Immediate
 ));
 var frames = builder.Build();
 foreach (var frame in frames)
