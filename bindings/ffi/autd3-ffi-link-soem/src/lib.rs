@@ -175,7 +175,7 @@ impl CheckerBackend for SoemChecker {
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub unsafe extern "C" fn autd3_link_soem(
-    interface: *const c_char,
+    iface: *const c_char,
     has_sync0_period: bool,
     sync0_period_ns: u64,
     has_sync0_shift: bool,
@@ -185,17 +185,17 @@ pub unsafe extern "C" fn autd3_link_soem(
     has_sync_timeout: bool,
     sync_timeout_ns: u64,
 ) -> *mut ClientOpener {
-    let interface = if interface.is_null() {
+    let iface = if iface.is_null() {
         None
     } else {
         Some(
-            unsafe { CStr::from_ptr(interface) }
+            unsafe { CStr::from_ptr(iface) }
                 .to_string_lossy()
                 .into_owned(),
         )
     };
     let mut option = CoreOption {
-        interface: Interface::from(interface),
+        iface: Interface::from(iface),
         ..CoreOption::default()
     };
     if has_sync0_period {

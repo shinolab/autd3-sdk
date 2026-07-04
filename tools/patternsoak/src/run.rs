@@ -51,7 +51,7 @@ pub async fn run(cli: &Cli) -> Result<()> {
     match cli.link {
         LinkKind::Ethercrab => {
             let link_cfg = EtherCrabLinkOption {
-                interface: cli.interface.clone().into(),
+                iface: cli.interface.clone().into(),
                 sync0_period: Duration::from_micros(cli.cycle_us),
                 ..Default::default()
             };
@@ -65,7 +65,7 @@ pub async fn run(cli: &Cli) -> Result<()> {
         }
         LinkKind::Soem => {
             let link_cfg = SoemLinkOption {
-                interface: cli.interface.clone().into(),
+                iface: cli.interface.clone().into(),
                 sync0_period: Duration::from_micros(cli.cycle_us),
                 ..Default::default()
             };

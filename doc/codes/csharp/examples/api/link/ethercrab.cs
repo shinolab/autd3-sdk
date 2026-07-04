@@ -8,17 +8,18 @@ internal static class Sample
 {
     internal static void Run()
     {
+        var iface = Interface.Auto;
         var sync0Period = TimeSpan.FromMilliseconds(1);
         var sync0Shift = TimeSpan.FromMilliseconds(0);
         var syncTolerance = TimeSpan.FromMicroseconds(1);
         var syncTimeout = TimeSpan.FromSeconds(10);
         // ANCHOR: api
         new EtherCrabLinkOption(
-            @interface: Interface.Auto,
-            sync0Period: sync0Period,
-            sync0Shift: sync0Shift,
-            syncTolerance: syncTolerance,
-            syncTimeout: syncTimeout
+            iface,
+            sync0Period,
+            sync0Shift,
+            syncTolerance,
+            syncTimeout
         );
         // ANCHOR_END: api
     }

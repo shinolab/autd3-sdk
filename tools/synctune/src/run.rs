@@ -28,7 +28,7 @@ pub async fn measure_candidate(
     match common.link {
         LinkKind::Ethercrab => {
             let opt = EtherCrabLinkOption {
-                interface: common.interface.clone().into(),
+                iface: common.interface.clone().into(),
                 sync0_period: period,
                 sync0_shift: shift,
                 ..Default::default()
@@ -46,7 +46,7 @@ pub async fn measure_candidate(
         }
         LinkKind::Soem => {
             let opt = SoemLinkOption {
-                interface: common.interface.clone().into(),
+                iface: common.interface.clone().into(),
                 sync0_period: period,
                 sync0_shift: shift,
                 ..Default::default()

@@ -77,7 +77,7 @@ impl SoemLink {
 
         let timer_resolution = TimerResolutionGuard::new(TIMER_RESOLUTION_MS);
 
-        let interface = if let Some(interface) = option.interface.name() {
+        let interface = if let Some(interface) = option.iface.name() {
             interface.to_owned()
         } else {
             tracing::info!("no interface specified, looking for AUTD devices");

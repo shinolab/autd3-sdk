@@ -6,7 +6,7 @@ use super::SoemLinkOption;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SoemLinkOptionFull {
-    pub interface: Interface,
+    pub iface: Interface,
     pub sync0_period: Duration,
     pub sync0_shift: Duration,
     pub send_cycle: Duration,

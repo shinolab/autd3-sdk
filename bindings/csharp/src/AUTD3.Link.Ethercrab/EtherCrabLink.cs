@@ -5,15 +5,15 @@ namespace AUTD3.Link
 {
     public readonly struct EtherCrabLinkOption : ILink
     {
-        public Interface Interface { get; }
+        public Interface Iface { get; }
         public TimeSpan? Sync0Period { get; }
         public TimeSpan? Sync0Shift { get; }
         public TimeSpan? SyncTolerance { get; }
         public TimeSpan? SyncTimeout { get; }
 
-        public EtherCrabLinkOption(Interface? @interface = null, TimeSpan? sync0Period = null, TimeSpan? sync0Shift = null, TimeSpan? syncTolerance = null, TimeSpan? syncTimeout = null)
+        public EtherCrabLinkOption(Interface? iface = null, TimeSpan? sync0Period = null, TimeSpan? sync0Shift = null, TimeSpan? syncTolerance = null, TimeSpan? syncTimeout = null)
         {
-            Interface = @interface ?? Interface.Auto;
+            Iface = iface ?? Interface.Auto;
             Sync0Period = sync0Period;
             Sync0Shift = sync0Shift;
             SyncTolerance = syncTolerance;
@@ -23,7 +23,7 @@ namespace AUTD3.Link
         IntPtr ILink.TakeOpener()
         {
             var opener = NativeEthercrab.autd3_link_ethercrab(
-                Interface.NameValue,
+                Iface.NameValue,
                 Sync0Period.HasValue, (ulong)(Sync0Period?.Ticks * 100 ?? 0),
                 Sync0Shift.HasValue, (ulong)(Sync0Shift?.Ticks * 100 ?? 0),
                 SyncTolerance.HasValue, (ulong)(SyncTolerance?.Ticks * 100 ?? 0),

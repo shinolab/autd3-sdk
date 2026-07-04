@@ -176,21 +176,21 @@ pub struct SoemLinkOption {
 impl SoemLinkOption {
     #[new]
     #[pyo3(signature = (
-        interface = None,
+        iface = None,
         sync0_period = None,
         sync0_shift = None,
         sync_tolerance = None,
         sync_timeout = None,
     ))]
     fn new(
-        interface: Option<String>,
+        iface: Option<String>,
         sync0_period: Option<&Bound<'_, PyAny>>,
         sync0_shift: Option<&Bound<'_, PyAny>>,
         sync_tolerance: Option<&Bound<'_, PyAny>>,
         sync_timeout: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let mut inner = CoreOption {
-            interface: Interface::from(interface),
+            iface: Interface::from(iface),
             ..CoreOption::default()
         };
         if let Some(v) = opt_duration(sync0_period)? {
