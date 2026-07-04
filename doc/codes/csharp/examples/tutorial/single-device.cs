@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -53,10 +54,25 @@ foreach (var frame in frames)
     await client.SendCheckedAsync(frame);
 }
 
-await Task.Delay(Timeout.InfiniteTimeSpan);
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true;
+    cts.Cancel();
+};
 
-await client.StopAsync();
-await client.CloseAsync();
+try
+{
+    await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token);
+}
+catch (OperationCanceledException)
+{
+}
+finally
+{
+    await client.StopAsync();
+    await client.CloseAsync();
+}
         // HIDE
     }
 }
