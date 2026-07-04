@@ -10,14 +10,14 @@ use autd3_rs_link_ethercrab::{EtherCrabLinkOption, EtherCrabLinkOptionFull};
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let interface = Interface::Auto;
+    let iface = Interface::Auto;
     let sync0_period = Duration::from_millis(1);
     let sync0_shift = Duration::from_millis(0);
     let sync_tolerance = Duration::from_micros(1);
     let sync_timeout = Duration::from_secs(10);
     // ANCHOR: api
     EtherCrabLinkOption {
-        interface,
+        iface,
         sync0_period,
         sync0_shift,
         sync_tolerance,
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
     };
     // ANCHOR_END: api
 
-    let interface = Interface::Auto;
+    let iface = Interface::Auto;
     let timeouts = ethercrab::Timeouts {
         state_transition: Duration::from_secs(10),
         pdu: Duration::from_secs(10),
@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
     };
     // ANCHOR: api_full
     EtherCrabLinkOptionFull {
-        interface,
+        iface,
         timeouts,
         main_device_config,
         dc_configuration,

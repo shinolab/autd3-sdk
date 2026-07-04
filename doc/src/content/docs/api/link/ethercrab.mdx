@@ -23,7 +23,7 @@ Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mo
 
 | フィールド       | 型         | 説明                                                                            |
 | ---------------- | ---------- | ------------------------------------------------------------------------------- |
-| `interface`      | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
+| `iface`          | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
 | `sync0_period`   | `Duration` | SYNC0 信号の周期                                                                |
 | `sync0_shift`    | `Duration` | SYNC0 信号のシフト量                                                            |
 | `sync_tolerance` | `Duration` | 同期完了とみなす許容誤差                                                        |
@@ -35,7 +35,7 @@ EtherCrabの設定をフルに行う `EtherCrabLinkOptionFull` も用意され�
 
 | フィールド            | 型                                                                                                       | 説明                                                                            |
 | --------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `interface`           | `Interface`                                                                                              | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
+| `iface`               | `Interface`                                                                                              | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
 | `timeouts`            | [`ethercrab::Timeouts`](https://docs.rs/ethercrab/0.7.1/ethercrab/struct.Timeouts.html)                  | EtherCrab のドキュメントを参照                                                  |
 | `main_device_config`  | [`ethercrab::MainDeviceConfig`](https://docs.rs/ethercrab/0.7.1/ethercrab/struct.MainDeviceConfig.html)  | EtherCrab のドキュメントを参照                                                  |
 | `dc_configuration`    | [`ethercrab::subdevice_group::DcConfiguration`](https://docs.rs/ethercrab/0.7.1/ethercrab/subdevice_group/struct.DcConfiguration.html) | EtherCrab のドキュメントを参照                                  |

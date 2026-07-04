@@ -6,7 +6,7 @@ use super::SoemLinkOptionFull;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SoemLinkOption {
-    pub interface: Interface,
+    pub iface: Interface,
     pub sync0_period: Duration,
     pub sync0_shift: Duration,
     pub sync_tolerance: Duration,
@@ -18,7 +18,7 @@ impl SoemLinkOption {
     pub fn safe_default() -> Self {
         let sync0_period = Duration::from_millis(1);
         Self {
-            interface: Interface::Auto,
+            iface: Interface::Auto,
             sync0_period,
             sync0_shift: sync0_period,
             sync_tolerance: Duration::from_micros(1),
@@ -29,7 +29,7 @@ impl SoemLinkOption {
     #[must_use]
     pub fn performance_default() -> Self {
         Self {
-            interface: Interface::Auto,
+            iface: Interface::Auto,
             sync0_period: Duration::from_millis(1),
             sync0_shift: Duration::ZERO,
             sync_tolerance: Duration::from_micros(1),
@@ -54,7 +54,7 @@ impl Default for SoemLinkOption {
 impl From<SoemLinkOption> for SoemLinkOptionFull {
     fn from(opt: SoemLinkOption) -> Self {
         Self {
-            interface: opt.interface,
+            iface: opt.iface,
             sync0_period: opt.sync0_period,
             sync0_shift: opt.sync0_shift,
             send_cycle: opt.sync0_period,

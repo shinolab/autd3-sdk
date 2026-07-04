@@ -21,31 +21,31 @@ Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mo
 
 <CodeTabs
   rust={`SoemLinkOption {
-    interface,
+    iface,
     sync0_period,
     sync0_shift,
     sync_tolerance,
     sync_timeout,
 };`}
   python={`SoemLinkOption(
-    interface,
+    iface,
     sync0_period,
     sync0_shift,
     sync_tolerance,
     sync_timeout,
 )`}
   csharp={`new SoemLinkOption(
-    @interface: Interface.Auto,
-    sync0Period: sync0Period,
-    sync0Shift: sync0Shift,
-    syncTolerance: syncTolerance,
-    syncTimeout: syncTimeout
+    iface,
+    sync0Period,
+    sync0Shift,
+    syncTolerance,
+    syncTimeout
 );`}
 />
 
 | フィールド       | 型         | 説明                                                                            |
 | ---------------- | ---------- | ------------------------------------------------------------------------------- |
-| `interface`      | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
+| `iface`          | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
 | `sync0_period`   | `Duration` | SYNC0 信号の周期                                                                |
 | `sync0_shift`    | `Duration` | SYNC0 信号のシフト量                                                            |
 | `sync_tolerance` | `Duration` | 同期完了とみなす許容誤差                                                        |
@@ -55,7 +55,7 @@ SOEMの設定をフルに行う `SoemLinkOptionFull` も用意されている (R
 
 <CodeTabs
   rust={`SoemLinkOptionFull {
-    interface,
+    iface,
     sync0_period,
     sync0_shift,
     send_cycle,
@@ -68,7 +68,7 @@ SOEMの設定をフルに行う `SoemLinkOptionFull` も用意されている (R
 
 | フィールド         | 型          | 説明                                                                            |
 | ------------------ | ----------- | ------------------------------------------------------------------------------- |
-| `interface`        | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
+| `iface`            | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
 | `sync0_period`     | `Duration`  | SYNC0 信号の周期                                                                |
 | `sync0_shift`      | `Duration`  | SYNC0 信号のシフト量                                                            |
 | `send_cycle`       | `Duration`  | プロセスデータ送信の周期                                                        |

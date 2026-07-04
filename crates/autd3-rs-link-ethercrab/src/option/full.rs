@@ -7,7 +7,7 @@ use super::EtherCrabLinkOption;
 
 #[derive(Clone, Debug)]
 pub struct EtherCrabLinkOptionFull {
-    pub interface: Interface,
+    pub iface: Interface,
     pub timeouts: Timeouts,
     pub main_device_config: MainDeviceConfig,
     pub dc_configuration: DcConfiguration,
@@ -48,7 +48,7 @@ impl PartialEq for EtherCrabLinkOptionFull {
             sync0_period,
             sync0_shift,
         } = self.dc_configuration;
-        self.interface == other.interface
+        self.iface == other.iface
             && state_transition == other.timeouts.state_transition
             && pdu == other.timeouts.pdu
             && eeprom == other.timeouts.eeprom

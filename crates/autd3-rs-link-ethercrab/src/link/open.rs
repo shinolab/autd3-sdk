@@ -35,7 +35,7 @@ impl EtherCrabLink {
         let timer_resolution = crate::timer::TimerResolutionGuard::new(super::TIMER_RESOLUTION_MS);
         let handle = Handle::try_current().map_err(|_| EtherCrabLinkError::NoTokioRuntime)?;
 
-        let interface = if let Some(interface) = option.interface.name() {
+        let interface = if let Some(interface) = option.iface.name() {
             interface.to_owned()
         } else {
             tracing::info!("no interface specified, looking for AUTD devices");

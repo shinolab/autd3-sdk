@@ -7,7 +7,7 @@ use super::EtherCrabLinkOptionFull;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EtherCrabLinkOption {
-    pub interface: Interface,
+    pub iface: Interface,
     pub sync0_period: Duration,
     pub sync0_shift: Duration,
     pub sync_tolerance: Duration,
@@ -19,7 +19,7 @@ impl EtherCrabLinkOption {
     pub fn safe_default() -> Self {
         let sync0_period = Duration::from_millis(1);
         Self {
-            interface: Interface::Auto,
+            iface: Interface::Auto,
             sync0_period,
             sync0_shift: sync0_period,
             sync_tolerance: Duration::from_micros(1),
@@ -30,7 +30,7 @@ impl EtherCrabLinkOption {
     #[must_use]
     pub fn performance_default() -> Self {
         Self {
-            interface: Interface::Auto,
+            iface: Interface::Auto,
             sync0_period: Duration::from_millis(1),
             sync0_shift: Duration::ZERO,
             sync_tolerance: Duration::from_micros(1),
@@ -55,7 +55,7 @@ impl Default for EtherCrabLinkOption {
 impl From<EtherCrabLinkOption> for EtherCrabLinkOptionFull {
     fn from(opt: EtherCrabLinkOption) -> Self {
         Self {
-            interface: opt.interface,
+            iface: opt.iface,
             timeouts: Timeouts {
                 state_transition: Duration::from_secs(10),
                 pdu: Duration::from_millis(100),
