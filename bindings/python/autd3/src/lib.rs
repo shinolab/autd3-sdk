@@ -18,6 +18,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("MAX_IN_FLIGHT", autd3_rs::MAX_IN_FLIGHT)?;
     m.add_class::<client::Client>()?;
     m.add_class::<client::Checker>()?;
+    m.add_class::<client::Response>()?;
     m.add_class::<client::ResponseFuture>()?;
     m.add_class::<client::LinkStatus>()?;
     m.add_class::<client::FpgaState>()?;

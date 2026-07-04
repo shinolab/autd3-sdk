@@ -78,10 +78,10 @@ async def main() -> None:
     for dg in datagrams:
         for frame in dg:
             if len(pending) >= autd3.MAX_IN_FLIGHT:
-                await pending.popleft()
+                (await pending.popleft()).check()
             pending.append(await client.send(frame))
     while pending:
-        await pending.popleft()
+        (await pending.popleft()).check()
     report("streaming", time.perf_counter() - start)
 
     await client.stop()
