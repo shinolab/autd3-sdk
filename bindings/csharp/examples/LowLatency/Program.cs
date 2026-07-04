@@ -18,9 +18,9 @@ internal static class Program
 
     private static async Task Main()
     {
-        using var geometry = new Geometry(new List<Device> { new Device(Vector3.Zero) });
+        using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
         using var client = await Client.OpenAsync(
-            geometry, EtherCrabLink.Create(), new ClientConfig(lowLatency: EnableLowLatency));
+            geometry, new EtherCrabLinkOption(), new ClientConfig(lowLatency: EnableLowLatency));
 
         Console.WriteLine($"devices: {client.NumDevices}");
 
@@ -30,9 +30,9 @@ internal static class Program
         Pattern.Focus(geometry, target, wavelength, Intensity.Min, patterns);
         using var builder = client.DatagramBuilder();
         builder.Push(new Pattern(patterns));
-        using var datagrams = builder.Build();
+        using var frames = builder.Build();
 
-        var frame = datagrams[0];
+        var frame = frames[0];
         for (var i = 0; i < Warmup; i++)
         {
             await client.SendCheckedAsync(frame);

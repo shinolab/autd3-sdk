@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
@@ -20,17 +21,43 @@ namespace AUTD3
 
     public sealed class LinkStatus
     {
-        public IReadOnlyList<string> DeviceStates { get; }
-        public bool AllOp { get; }
-        public bool AnyLost { get; }
+        public IReadOnlyList<DeviceState> Devices { get; }
         public ulong Recoveries { get; }
 
-        internal LinkStatus(IReadOnlyList<string> deviceStates, bool allOp, bool anyLost, ulong recoveries)
+        internal LinkStatus(IReadOnlyList<DeviceState> devices, ulong recoveries)
         {
-            DeviceStates = deviceStates;
-            AllOp = allOp;
-            AnyLost = anyLost;
+            Devices = devices;
             Recoveries = recoveries;
+        }
+
+        public bool AllOp
+        {
+            get
+            {
+                foreach (var state in Devices)
+                {
+                    if (state != DeviceState.Op)
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+
+        public bool AnyLost
+        {
+            get
+            {
+                foreach (var state in Devices)
+                {
+                    if (state == DeviceState.Lost)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
         }
 
         public override bool Equals(object? obj)
@@ -39,17 +66,13 @@ namespace AUTD3
             {
                 return false;
             }
-            if (AllOp != other.AllOp || AnyLost != other.AnyLost || Recoveries != other.Recoveries)
+            if (Recoveries != other.Recoveries || Devices.Count != other.Devices.Count)
             {
                 return false;
             }
-            if (DeviceStates.Count != other.DeviceStates.Count)
+            for (var i = 0; i < Devices.Count; i++)
             {
-                return false;
-            }
-            for (var i = 0; i < DeviceStates.Count; i++)
-            {
-                if (!string.Equals(DeviceStates[i], other.DeviceStates[i], StringComparison.Ordinal))
+                if (Devices[i] != other.Devices[i])
                 {
                     return false;
                 }
@@ -60,12 +83,10 @@ namespace AUTD3
         public override int GetHashCode()
         {
             var hash = new HashCode();
-            hash.Add(AllOp);
-            hash.Add(AnyLost);
             hash.Add(Recoveries);
-            foreach (var state in DeviceStates)
+            foreach (var state in Devices)
             {
-                hash.Add(state, StringComparer.Ordinal);
+                hash.Add(state);
             }
             return hash.ToHashCode();
         }
@@ -74,6 +95,80 @@ namespace AUTD3
             left is null ? right is null : left.Equals(right);
 
         public static bool operator !=(LinkStatus? left, LinkStatus? right) => !(left == right);
+    }
+
+    public sealed class Checker : IDisposable
+    {
+        private IntPtr _handle;
+
+        internal Checker(IntPtr handle)
+        {
+            _handle = handle;
+        }
+
+        public async Task<LinkStatus> CheckAsync()
+        {
+            var handle = _handle;
+            var status = await AsyncOps.InvokeAsync((cb, ud) =>
+                NativeClient.autd3_checker_check(handle, cb, ud)).ConfigureAwait(false);
+            try
+            {
+                var count = (int)NativeClient.autd3_link_status_num_devices(status);
+                var devices = new List<DeviceState>(count);
+                for (var i = 0; i < count; i++)
+                {
+                    if (!NativeClient.autd3_link_status_device_state(status, (UIntPtr)i, out var kind, out var bits))
+                    {
+                        throw new Autd3Exception("failed to read device state");
+                    }
+                    devices.Add(DeviceState.FromNative(kind, bits));
+                }
+                return new LinkStatus(devices, NativeClient.autd3_link_status_recoveries(status));
+            }
+            finally
+            {
+                NativeClient.autd3_link_status_free(status);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_handle != IntPtr.Zero)
+            {
+                NativeClient.autd3_checker_free(_handle);
+                _handle = IntPtr.Zero;
+            }
+            GC.SuppressFinalize(this);
+        }
+
+        ~Checker()
+        {
+            if (_handle != IntPtr.Zero)
+            {
+                NativeClient.autd3_checker_free(_handle);
+            }
+        }
+    }
+
+    public sealed class Response
+    {
+        private readonly byte[] _data;
+
+        internal Response(byte[] data)
+        {
+            _data = data;
+        }
+
+        public IReadOnlyList<byte> Data => _data;
+
+        public void Check()
+        {
+            var err = new byte[256];
+            if (!NativeClient.autd3_response_check(_data, (UIntPtr)_data.Length, err, (UIntPtr)err.Length))
+            {
+                throw new Autd3Exception(NativeUtil.Utf8(err));
+            }
+        }
     }
 
     public sealed class ResponseToken : IDisposable
@@ -85,17 +180,21 @@ namespace AUTD3
             _handle = handle;
         }
 
-        public Task AwaitAsync()
+        public async Task<Response> AwaitAsync()
         {
             var handle = _handle;
             _handle = IntPtr.Zero;
             if (handle == IntPtr.Zero)
             {
-                return Task.CompletedTask;
+                throw new Autd3Exception("ResponseToken has already been awaited");
             }
             GC.SuppressFinalize(this);
-            return AsyncOps.InvokeAsync((cb, ud) => NativeClient.autd3_response_token_await(handle, cb, ud));
+            var data = await Client.ReadByteArrayAsync((cb, ud) =>
+                NativeClient.autd3_response_token_await(handle, cb, ud)).ConfigureAwait(false);
+            return new Response(data);
         }
+
+        public TaskAwaiter<Response> GetAwaiter() => AwaitAsync().GetAwaiter();
 
         public void Dispose()
         {
@@ -147,6 +246,18 @@ namespace AUTD3
             return new Client(value);
         }
 
+        public static async Task<(Client Client, Checker Checker)> OpenWithCheckerAsync(Geometry geometry, ILink link, ClientConfig config)
+        {
+            var client = await OpenAsync(geometry, link, config).ConfigureAwait(false);
+            var checker = NativeClient.autd3_client_checker(client.Handle);
+            if (checker == IntPtr.Zero)
+            {
+                client.Dispose();
+                throw new Autd3Exception("failed to create checker");
+            }
+            return (client, new Checker(checker));
+        }
+
         public int NumDevices => (int)NativeClient.autd3_client_num_devices(Handle);
 
 
@@ -156,12 +267,12 @@ namespace AUTD3
 
         public Task SendCheckedAsync(Frame frame) =>
             AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_client_send_checked(Handle, frame.Datagrams.Handle, frame.Index, cb, ud));
+                NativeClient.autd3_client_send_checked(Handle, frame.Frames.Handle, frame.Index, cb, ud));
 
         public async Task<ResponseToken> SendAsync(Frame frame)
         {
             var token = await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_client_send(Handle, frame.Datagrams.Handle, frame.Index, cb, ud)).ConfigureAwait(false);
+                NativeClient.autd3_client_send(Handle, frame.Frames.Handle, frame.Index, cb, ud)).ConfigureAwait(false);
             return new ResponseToken(token);
         }
 
@@ -200,7 +311,7 @@ namespace AUTD3
         public Task<byte[]> ReadErrorDetailAsync() =>
             ReadByteArrayAsync((cb, ud) => NativeClient.autd3_client_read_error_detail(Handle, cb, ud));
 
-        private static async Task<byte[]> ReadByteArrayAsync(Action<CompletionCallback, IntPtr> invoke)
+        internal static async Task<byte[]> ReadByteArrayAsync(Action<CompletionCallback, IntPtr> invoke)
         {
             var array = await AsyncOps.InvokeAsync(invoke).ConfigureAwait(false);
             try
@@ -216,30 +327,6 @@ namespace AUTD3
             finally
             {
                 NativeClient.autd3_byte_array_free(array);
-            }
-        }
-
-        public async Task<LinkStatus> CheckStatusAsync()
-        {
-            var status = await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_client_check_status(Handle, cb, ud)).ConfigureAwait(false);
-            try
-            {
-                var count = (int)NativeClient.autd3_link_status_num_devices(status);
-                var states = new List<string>(count);
-                for (var i = 0; i < count; i++)
-                {
-                    states.Add(NativeUtil.PtrToString(NativeClient.autd3_link_status_device_state(status, (UIntPtr)i)));
-                }
-                return new LinkStatus(
-                    states,
-                    NativeClient.autd3_link_status_all_op(status),
-                    NativeClient.autd3_link_status_any_lost(status),
-                    NativeClient.autd3_link_status_recoveries(status));
-            }
-            finally
-            {
-                NativeClient.autd3_link_status_free(status);
             }
         }
 

@@ -8,25 +8,6 @@ namespace AUTD3
         B1 = 1,
     }
 
-    public readonly struct PatternDataType
-    {
-        internal byte Kind { get; }
-        internal byte NumFoci { get; }
-        internal ushort SoundSpeed { get; }
-
-        private PatternDataType(byte kind, byte numFoci, ushort soundSpeed)
-        {
-            Kind = kind;
-            NumFoci = numFoci;
-            SoundSpeed = soundSpeed;
-        }
-
-        public static PatternDataType Raw => new PatternDataType(0, 0, 0);
-
-        public static PatternDataType Foci(byte numFoci, ushort soundSpeed) =>
-            new PatternDataType(1, numFoci, soundSpeed);
-    }
-
     public enum PatternCompression : byte
     {
         PhaseFull = 1,
@@ -85,15 +66,13 @@ namespace AUTD3
         private readonly PatternBank _bank;
         private readonly SamplingConfig _config;
         private readonly uint _size;
-        private readonly PatternDataType _dataType;
         private readonly LoopBehavior _loopBehavior;
 
-        public ConfigPattern(PatternBank bank, SamplingConfig config, uint size, PatternDataType dataType, LoopBehavior? loopBehavior = null)
+        public ConfigPattern(PatternBank bank, SamplingConfig config, uint size, LoopBehavior? loopBehavior = null)
         {
             _bank = bank;
             _config = config;
             _size = size;
-            _dataType = dataType;
             _loopBehavior = loopBehavior ?? LoopBehavior.Infinite;
         }
 
@@ -102,7 +81,40 @@ namespace AUTD3
             var sampling = _config.CreateHandle();
             try
             {
-                return NativePattern.autd3_op_config_pattern((byte)_bank, sampling, _size, _dataType.Kind, _dataType.NumFoci, _dataType.SoundSpeed, _loopBehavior.Rep);
+                return NativePattern.autd3_op_config_pattern((byte)_bank, sampling, _size, _loopBehavior.Rep);
+            }
+            finally
+            {
+                NativeCore.autd3_core_sampling_config_free(sampling);
+            }
+        }
+    }
+
+    public sealed class ConfigFociStm : ICommand
+    {
+        private readonly PatternBank _bank;
+        private readonly SamplingConfig _config;
+        private readonly uint _size;
+        private readonly byte _numFoci;
+        private readonly Velocity _soundSpeed;
+        private readonly LoopBehavior _loopBehavior;
+
+        public ConfigFociStm(PatternBank bank, SamplingConfig config, uint size, byte numFoci, Velocity? soundSpeed = null, LoopBehavior? loopBehavior = null)
+        {
+            _bank = bank;
+            _config = config;
+            _size = size;
+            _numFoci = numFoci;
+            _soundSpeed = soundSpeed ?? Velocity.FromMS(340f);
+            _loopBehavior = loopBehavior ?? LoopBehavior.Infinite;
+        }
+
+        IntPtr ICommand.CreateOp()
+        {
+            var sampling = _config.CreateHandle();
+            try
+            {
+                return NativePattern.autd3_op_config_foci_stm((byte)_bank, sampling, _size, _numFoci, _soundSpeed.MPerS, _loopBehavior.Rep);
             }
             finally
             {

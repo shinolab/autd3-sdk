@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -16,6 +18,10 @@ namespace AUTD3
         public Intensity Intensity { get; }
         public Phase PhaseOffset { get; }
 
+        public FocusOption() : this(intensity: null)
+        {
+        }
+
         public FocusOption(Intensity? intensity = null, Phase? phaseOffset = null)
         {
             Intensity = intensity ?? Intensity.Max;
@@ -31,6 +37,10 @@ namespace AUTD3
         public Intensity Intensity { get; }
         public Phase PhaseOffset { get; }
 
+        public PlaneOption() : this(intensity: null)
+        {
+        }
+
         public PlaneOption(Intensity? intensity = null, Phase? phaseOffset = null)
         {
             Intensity = intensity ?? Intensity.Max;
@@ -45,6 +55,10 @@ namespace AUTD3
     {
         public Intensity Intensity { get; }
         public Phase PhaseOffset { get; }
+
+        public BesselOption() : this(intensity: null)
+        {
+        }
 
         public BesselOption(Intensity? intensity = null, Phase? phaseOffset = null)
         {
@@ -80,16 +94,43 @@ namespace AUTD3
         internal static extern UIntPtr autd3_pattern_buffer_num_devices(IntPtr buffer);
 
         [DllImport(Lib)]
+        internal static extern UIntPtr autd3_pattern_buffer_num_transducers(IntPtr buffer, UIntPtr dev);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_pattern_buffer_get(IntPtr buffer, UIntPtr dev, UIntPtr tr, out EmissionNative @out);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_pattern_buffer_set(IntPtr buffer, UIntPtr dev, UIntPtr tr, EmissionNative emission);
+
+        [DllImport(Lib)]
         internal static extern void autd3_pattern_buffer_free(IntPtr buffer);
 
         [DllImport(Lib)]
         internal static extern int autd3_pattern_focus(IntPtr geometry, float[] target, float wavelengthMm, in PatternOptionNative option, IntPtr buffer);
 
         [DllImport(Lib)]
+        internal static extern int autd3_pattern_focus_device(IntPtr geometry, UIntPtr dev, float[] target, float wavelengthMm, in PatternOptionNative option, [Out] EmissionNative[] dst);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_pattern_focus_transducer(float[] position, float[] target, float wavelengthMm, in PatternOptionNative option, out EmissionNative @out);
+
+        [DllImport(Lib)]
         internal static extern int autd3_pattern_plane(IntPtr geometry, float[] dir, float wavelengthMm, in PatternOptionNative option, IntPtr buffer);
 
         [DllImport(Lib)]
+        internal static extern int autd3_pattern_plane_device(IntPtr geometry, UIntPtr dev, float[] dir, float wavelengthMm, in PatternOptionNative option, [Out] EmissionNative[] dst);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_pattern_plane_transducer(float[] position, float[] dir, float wavelengthMm, in PatternOptionNative option, out EmissionNative @out);
+
+        [DllImport(Lib)]
         internal static extern int autd3_pattern_bessel(IntPtr geometry, float[] apex, float[] dir, float thetaRad, float wavelengthMm, in PatternOptionNative option, IntPtr buffer);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_pattern_bessel_device(IntPtr geometry, UIntPtr dev, float[] apex, float[] dir, float thetaRad, float wavelengthMm, in PatternOptionNative option, [Out] EmissionNative[] dst);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_pattern_bessel_transducer(float[] position, float[] apex, float[] dir, float thetaRad, float wavelengthMm, in PatternOptionNative option, out EmissionNative @out);
 
         [DllImport(Lib)]
         internal static extern int autd3_pattern_uniform(byte phase, byte intensity, IntPtr buffer);
@@ -108,13 +149,57 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_write_pattern_compressed(byte bank, uint index, byte format, IntPtr[] patterns, UIntPtr numPatterns);
 
         [DllImport("autd3capi")]
-        internal static extern IntPtr autd3_op_config_pattern(byte bank, IntPtr samplingConfig, uint size, byte dataTypeKind, byte numFoci, ushort soundSpeed, ushort rep);
+        internal static extern IntPtr autd3_op_config_pattern(byte bank, IntPtr samplingConfig, uint size, ushort rep);
+
+        [DllImport("autd3capi")]
+        internal static extern IntPtr autd3_op_config_foci_stm(byte bank, IntPtr samplingConfig, uint size, byte numFoci, float soundSpeedMPerS, ushort rep);
 
         [DllImport("autd3capi")]
         internal static extern IntPtr autd3_op_change_pattern_bank(byte bank, byte transitionMode, ulong transitionValue);
     }
 
-    public sealed class PatternBuffer : IDisposable
+    public readonly struct DevicePattern : IEnumerable<Emission>
+    {
+        private readonly IntPtr _buffer;
+        private readonly UIntPtr _dev;
+
+        internal DevicePattern(IntPtr buffer, UIntPtr dev)
+        {
+            _buffer = buffer;
+            _dev = dev;
+        }
+
+        public int NumTransducers => (int)NativePattern.autd3_pattern_buffer_num_transducers(_buffer, _dev);
+
+        public Emission this[int tr]
+        {
+            get
+            {
+                if (NativePattern.autd3_pattern_buffer_get(_buffer, _dev, (UIntPtr)tr, out var e) != 0)
+                    throw new ArgumentOutOfRangeException(nameof(tr));
+                return new Emission(new Phase(e.Phase), new Intensity(e.Intensity));
+            }
+            set
+            {
+                var native = new EmissionNative { Phase = value.Phase.Value, Intensity = value.Intensity.Value };
+                if (NativePattern.autd3_pattern_buffer_set(_buffer, _dev, (UIntPtr)tr, native) != 0)
+                    throw new ArgumentOutOfRangeException(nameof(tr));
+            }
+        }
+
+        public IEnumerator<Emission> GetEnumerator()
+        {
+            var count = NumTransducers;
+            for (var i = 0; i < count; i++)
+            {
+                yield return this[i];
+            }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    public sealed class PatternBuffer : IDisposable, IEnumerable<DevicePattern>
     {
         internal const int NumTransducers = 249;
 
@@ -152,6 +237,27 @@ namespace AUTD3
         }
 
         public int NumDevices => (int)NativePattern.autd3_pattern_buffer_num_devices(Handle);
+
+        public DevicePattern this[int dev]
+        {
+            get
+            {
+                if (dev < 0 || dev >= NumDevices)
+                    throw new ArgumentOutOfRangeException(nameof(dev));
+                return new DevicePattern(Handle, (UIntPtr)dev);
+            }
+        }
+
+        public IEnumerator<DevicePattern> GetEnumerator()
+        {
+            var count = NumDevices;
+            for (var i = 0; i < count; i++)
+            {
+                yield return this[i];
+            }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         public void Dispose()
         {
@@ -196,7 +302,7 @@ namespace AUTD3
 
 
         public static Length Wavelength(Velocity soundSpeed) =>
-            new Length(NativePattern.autd3_pattern_wavelength(soundSpeed.MmPerSec));
+            new Length(NativePattern.autd3_pattern_wavelength(soundSpeed.MmPerS));
 
 
         public static void Focus(Geometry geometry, Vector3 target, Length wavelength, FocusOption option, PatternBuffer dst)
@@ -212,6 +318,30 @@ namespace AUTD3
         public static void Focus(Geometry geometry, Vector3 target, Length wavelength, Intensity intensity, PatternBuffer dst) =>
             Focus(geometry, target, wavelength, new FocusOption(intensity), dst);
 
+        public static void FocusDevice(Device device, Vector3 target, Length wavelength, FocusOption option, Emission[] dst)
+        {
+            var native = ToNativeDst(dst);
+            var o = option.ToNative();
+            if (NativePattern.autd3_pattern_focus_device(device.GeometryHandle, device.DeviceIndex,
+                new[] { target.X, target.Y, target.Z }, wavelength.Mm, in o, native) != 0)
+            {
+                throw new Autd3Exception("focus_device failed");
+            }
+            FromNativeDst(native, dst);
+        }
+
+        public static Emission FocusTransducer(Vector3 position, Vector3 target, Length wavelength, FocusOption option)
+        {
+            var o = option.ToNative();
+            if (NativePattern.autd3_pattern_focus_transducer(
+                new[] { position.X, position.Y, position.Z },
+                new[] { target.X, target.Y, target.Z }, wavelength.Mm, in o, out var e) != 0)
+            {
+                throw new Autd3Exception("focus_transducer failed");
+            }
+            return new Emission(new Phase(e.Phase), new Intensity(e.Intensity));
+        }
+
         public static void Plane(Geometry geometry, Vector3 dir, Length wavelength, PlaneOption option, PatternBuffer dst)
         {
             var d = new[] { dir.X, dir.Y, dir.Z };
@@ -220,6 +350,30 @@ namespace AUTD3
             {
                 throw new Autd3Exception("plane failed (buffer device count must match geometry)");
             }
+        }
+
+        public static void PlaneDevice(Device device, Vector3 dir, Length wavelength, PlaneOption option, Emission[] dst)
+        {
+            var native = ToNativeDst(dst);
+            var o = option.ToNative();
+            if (NativePattern.autd3_pattern_plane_device(device.GeometryHandle, device.DeviceIndex,
+                new[] { dir.X, dir.Y, dir.Z }, wavelength.Mm, in o, native) != 0)
+            {
+                throw new Autd3Exception("plane_device failed");
+            }
+            FromNativeDst(native, dst);
+        }
+
+        public static Emission PlaneTransducer(Vector3 position, Vector3 dir, Length wavelength, PlaneOption option)
+        {
+            var o = option.ToNative();
+            if (NativePattern.autd3_pattern_plane_transducer(
+                new[] { position.X, position.Y, position.Z },
+                new[] { dir.X, dir.Y, dir.Z }, wavelength.Mm, in o, out var e) != 0)
+            {
+                throw new Autd3Exception("plane_transducer failed");
+            }
+            return new Emission(new Phase(e.Phase), new Intensity(e.Intensity));
         }
 
         public static void Bessel(Geometry geometry, Vector3 apex, Vector3 dir, Angle theta, Length wavelength, BesselOption option, PatternBuffer dst)
@@ -233,6 +387,32 @@ namespace AUTD3
             }
         }
 
+        public static void BesselDevice(Device device, Vector3 apex, Vector3 dir, Angle theta, Length wavelength, BesselOption option, Emission[] dst)
+        {
+            var native = ToNativeDst(dst);
+            var o = option.ToNative();
+            if (NativePattern.autd3_pattern_bessel_device(device.GeometryHandle, device.DeviceIndex,
+                new[] { apex.X, apex.Y, apex.Z },
+                new[] { dir.X, dir.Y, dir.Z }, theta.Radian, wavelength.Mm, in o, native) != 0)
+            {
+                throw new Autd3Exception("bessel_device failed");
+            }
+            FromNativeDst(native, dst);
+        }
+
+        public static Emission BesselTransducer(Vector3 position, Vector3 apex, Vector3 dir, Angle theta, Length wavelength, BesselOption option)
+        {
+            var o = option.ToNative();
+            if (NativePattern.autd3_pattern_bessel_transducer(
+                new[] { position.X, position.Y, position.Z },
+                new[] { apex.X, apex.Y, apex.Z },
+                new[] { dir.X, dir.Y, dir.Z }, theta.Radian, wavelength.Mm, in o, out var e) != 0)
+            {
+                throw new Autd3Exception("bessel_transducer failed");
+            }
+            return new Emission(new Phase(e.Phase), new Intensity(e.Intensity));
+        }
+
         public static void Uniform(Emission emission, PatternBuffer dst)
         {
             if (NativePattern.autd3_pattern_uniform(emission.Phase.Value, emission.Intensity.Value, dst.Handle) != 0)
@@ -241,7 +421,41 @@ namespace AUTD3
             }
         }
 
+        public static void UniformDevice(Emission emission, Emission[] dst)
+        {
+            for (var i = 0; i < dst.Length; i++)
+            {
+                dst[i] = emission;
+            }
+        }
 
         public static void Null(PatternBuffer dst) => NativePattern.autd3_pattern_null(dst.Handle);
+
+        public static void NullDevice(Emission[] dst)
+        {
+            for (var i = 0; i < dst.Length; i++)
+            {
+                dst[i] = Emission.Null;
+            }
+        }
+
+        public static void NullTransducer(ref Emission dst) => dst = Emission.Null;
+
+        private static EmissionNative[] ToNativeDst(Emission[] dst)
+        {
+            if (dst.Length != Autd3.NumTransducers)
+            {
+                throw new Autd3Exception($"dst requires {Autd3.NumTransducers} emissions");
+            }
+            return new EmissionNative[dst.Length];
+        }
+
+        private static void FromNativeDst(EmissionNative[] native, Emission[] dst)
+        {
+            for (var i = 0; i < dst.Length; i++)
+            {
+                dst[i] = new Emission(new Phase(native[i].Phase), new Intensity(native[i].Intensity));
+            }
+        }
     }
 }

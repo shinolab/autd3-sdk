@@ -10,6 +10,10 @@ namespace AUTD3
         {
             Mm = mm;
         }
+
+        public float M => Mm / 1000f;
+
+        public static Length Millimeters(float mm) => new Length(mm);
     }
 
     public readonly struct Angle
@@ -20,16 +24,32 @@ namespace AUTD3
         {
             Radian = radian;
         }
+
+        public float Degree => Radian * (180f / MathF.PI);
+
+        public static Angle Zero => new Angle(0f);
+
+        public static Angle Pi => new Angle(MathF.PI);
+
+        public static Angle FromRadian(float radian) => new Angle(radian);
+
+        public static Angle FromDegree(float degree) => new Angle(degree * (MathF.PI / 180f));
     }
 
     public readonly struct Velocity
     {
-        public float MmPerSec { get; }
+        public float MmPerS { get; }
 
-        internal Velocity(float mmPerSec)
+        internal Velocity(float mmPerS)
         {
-            MmPerSec = mmPerSec;
+            MmPerS = mmPerS;
         }
+
+        public float MPerS => MmPerS / 1000f;
+
+        public static Velocity FromMmS(float mmPerS) => new Velocity(mmPerS);
+
+        public static Velocity FromMS(float mPerS) => new Velocity(mPerS * 1000f);
     }
 
     public readonly struct Freq
@@ -38,7 +58,6 @@ namespace AUTD3
         {
             FloatExact = 0,
             IntExact = 1,
-            Nearest = 2,
         }
 
         internal FreqMode Mode { get; }
@@ -55,6 +74,42 @@ namespace AUTD3
         public float Hz => HzValue;
 
         internal byte ModeCode => (byte)Mode;
+
+        public static Freq operator +(Freq lhs, Freq rhs) =>
+            lhs.Mode == FreqMode.IntExact && rhs.Mode == FreqMode.IntExact
+                ? new Freq(FreqMode.IntExact, lhs.HzValue + rhs.HzValue, lhs.HzIntValue + rhs.HzIntValue)
+                : new Freq(FreqMode.FloatExact, lhs.HzValue + rhs.HzValue, 0);
+
+        public static Freq operator -(Freq lhs, Freq rhs) =>
+            lhs.Mode == FreqMode.IntExact && rhs.Mode == FreqMode.IntExact
+                ? new Freq(FreqMode.IntExact, lhs.HzValue - rhs.HzValue, lhs.HzIntValue - rhs.HzIntValue)
+                : new Freq(FreqMode.FloatExact, lhs.HzValue - rhs.HzValue, 0);
+
+        public static Freq operator *(Freq lhs, uint rhs) =>
+            lhs.Mode == FreqMode.IntExact
+                ? new Freq(FreqMode.IntExact, lhs.HzValue * rhs, lhs.HzIntValue * rhs)
+                : new Freq(FreqMode.FloatExact, lhs.HzValue * rhs, 0);
+
+        public static Freq operator *(Freq lhs, float rhs) =>
+            new Freq(FreqMode.FloatExact, lhs.HzValue * rhs, 0);
+
+        public static Freq operator /(Freq lhs, uint rhs) =>
+            lhs.Mode == FreqMode.IntExact
+                ? new Freq(FreqMode.IntExact, lhs.HzIntValue / rhs, lhs.HzIntValue / rhs)
+                : new Freq(FreqMode.FloatExact, lhs.HzValue / rhs, 0);
+
+        public static Freq operator /(Freq lhs, float rhs) =>
+            new Freq(FreqMode.FloatExact, lhs.HzValue / rhs, 0);
+    }
+
+    public readonly struct Nearest<T>
+    {
+        public T Value { get; }
+
+        public Nearest(T value)
+        {
+            Value = value;
+        }
     }
 
     public readonly struct LengthUnit
@@ -122,6 +177,8 @@ namespace AUTD3
         public static readonly FreqUnit kHz = new FreqUnit(1000f, 1000u);
         public static readonly SecUnit s = default;
 
-        public static Freq Nearest(Freq freq) => new Freq(Freq.FreqMode.Nearest, freq.Hz, 0);
+        public static Nearest<Freq> Nearest(Freq freq) => new Nearest<Freq>(freq);
+
+        public static Nearest<TimeSpan> Nearest(TimeSpan period) => new Nearest<TimeSpan>(period);
     }
 }

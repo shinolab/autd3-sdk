@@ -13,8 +13,8 @@ namespace AUTD3.Tests
         {
             using var geometry = new Geometry(new[]
             {
-                new Device(Vector3.Zero),
-                new Device(new Vector3(192f, 0f, 0f)),
+                new Autd3(Vector3.Zero),
+                new Autd3(new Vector3(192f, 0f, 0f)),
             });
             Assert.Equal(2, geometry.NumDevices);
         }
@@ -29,7 +29,7 @@ namespace AUTD3.Tests
         [Fact]
         public void FocusFillsBufferForEveryDevice()
         {
-            using var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+            using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
             using var buffer = geometry.PatternBuffer();
             var wavelength = Pattern.Wavelength(340 * m / s);
             Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), wavelength, Intensity.Max, buffer);
@@ -55,13 +55,13 @@ namespace AUTD3.Tests
         [Fact]
         public void SamplingConfigResolvesDivider()
         {
-            Assert.True(SamplingConfig.Freq4k.DivideValue() > 0);
+            Assert.True(SamplingConfig.Freq4k.Divide() > 0);
         }
 
         [Fact]
         public void BuildDatagramsFromCommands()
         {
-            using var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+            using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
             using var patterns = geometry.PatternBuffer();
             Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), Intensity.Max, patterns);
             using var modulation = Modulation.ModulationBuffer();
@@ -71,35 +71,35 @@ namespace AUTD3.Tests
             builder
                 .Push(new Pattern(patterns))
                 .Push(new Modulation(SamplingConfig.Freq4k, modulation));
-            using var datagrams = builder.Build();
+            using var frames = builder.Build();
 
-            Assert.True(datagrams.NumFrames > 0);
+            Assert.True(frames.Length > 0);
 
             var frameCount = 0;
-            foreach (var frame in datagrams)
+            foreach (var frame in frames)
             {
                 _ = frame;
                 frameCount++;
             }
-            Assert.Equal(datagrams.NumFrames, frameCount);
+            Assert.Equal(frames.Length, frameCount);
         }
 
         [Fact]
         public void BuildDatagramsFromLowLevelOps()
         {
-            using var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+            using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
             using var patterns = geometry.PatternBuffer();
             Pattern.Null(patterns);
 
             using var builder = new DatagramBuilder(geometry);
             builder
                 .Push(new WritePatternBuffer(PatternBank.B0, 0, patterns))
-                .Push(new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1, PatternDataType.Raw));
-            using var datagrams = builder.Build();
+                .Push(new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1));
+            using var frames = builder.Build();
 
-            Assert.Equal(2, datagrams.NumFrames);
-            _ = datagrams[0];
-            Assert.Throws<ArgumentOutOfRangeException>(() => datagrams[datagrams.NumFrames]);
+            Assert.Equal(2, frames.Length);
+            _ = frames[0];
+            Assert.Throws<ArgumentOutOfRangeException>(() => frames[frames.Length]);
         }
     }
 }

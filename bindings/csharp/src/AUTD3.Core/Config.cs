@@ -46,7 +46,7 @@ namespace AUTD3
 
         public static TransitionMode SyncIdx => new TransitionMode(0x00, 0);
 
-        public static TransitionMode SysTime(ulong sysTimeNs) => new TransitionMode(0x01, sysTimeNs);
+        public static TransitionMode SysTime(DcSysTime sysTime) => new TransitionMode(0x01, sysTime.SysTime);
 
         public static TransitionMode Gpio(GpioIn gpio) => new TransitionMode(0x02, (byte)gpio);
 

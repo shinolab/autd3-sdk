@@ -2,6 +2,7 @@ using System;
 using AUTD3;
 using Xunit;
 using static AUTD3.Units;
+using AUTD3.Holo;
 
 namespace AUTD3.Tests
 {
@@ -23,13 +24,13 @@ namespace AUTD3.Tests
         [Fact]
         public void FreqNearest()
         {
-            Assert.Equal(200f, Nearest(200 * Hz).Hz);
+            Assert.Equal(200f, Nearest(200 * Hz).Value.Hz);
         }
 
         [Fact]
         public void VelocityNoParentheses()
         {
-            Assert.Equal(340000f, (340 * m / s).MmPerSec);
+            Assert.Equal(340000f, (340 * m / s).MmPerS);
         }
 
         [Fact]
@@ -65,8 +66,8 @@ namespace AUTD3.Tests
         [Fact]
         public void SamplingConfigFromFreqRoundTrips()
         {
-            var config = SamplingConfig.FromFreq(4000 * Hz);
-            Assert.InRange(config.FreqValue().Hz, 3999f, 4001f);
+            var config = new SamplingConfig(4000 * Hz);
+            Assert.InRange(config.Freq().Hz, 3999f, 4001f);
         }
 
         [Fact]

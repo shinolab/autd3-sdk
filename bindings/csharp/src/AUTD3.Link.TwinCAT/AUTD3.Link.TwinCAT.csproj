@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <AssemblyName>AUTD3.Link.Twincat</AssemblyName>
+    <AssemblyName>AUTD3.Link.TwinCAT</AssemblyName>
     <RootNamespace>AUTD3.Link</RootNamespace>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>

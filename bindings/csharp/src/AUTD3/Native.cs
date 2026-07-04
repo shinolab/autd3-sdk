@@ -72,6 +72,10 @@ namespace AUTD3
         internal static extern void autd3_response_token_free(IntPtr token);
 
         [DllImport(Lib)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        internal static extern bool autd3_response_check(byte[] data, UIntPtr len, byte[] outErr, UIntPtr outErrLen);
+
+        [DllImport(Lib)]
         internal static extern void autd3_client_stop(IntPtr client, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib)]
@@ -108,15 +112,13 @@ namespace AUTD3
         internal static extern void autd3_string_array_free(IntPtr array);
 
         [DllImport(Lib)]
-        internal static extern void autd3_client_check_status(IntPtr client, CompletionCallback cb, IntPtr userData);
+        internal static extern IntPtr autd3_client_checker(IntPtr client);
 
         [DllImport(Lib)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_link_status_all_op(IntPtr status);
+        internal static extern void autd3_checker_check(IntPtr checker, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_link_status_any_lost(IntPtr status);
+        internal static extern void autd3_checker_free(IntPtr checker);
 
         [DllImport(Lib)]
         internal static extern ulong autd3_link_status_recoveries(IntPtr status);
@@ -125,7 +127,8 @@ namespace AUTD3
         internal static extern UIntPtr autd3_link_status_num_devices(IntPtr status);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_status_device_state(IntPtr status, UIntPtr index);
+        [return: MarshalAs(UnmanagedType.I1)]
+        internal static extern bool autd3_link_status_device_state(IntPtr status, UIntPtr index, out byte outKind, out byte outBits);
 
         [DllImport(Lib)]
         internal static extern void autd3_link_status_free(IntPtr status);

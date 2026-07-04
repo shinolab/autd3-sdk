@@ -12,9 +12,9 @@ internal static class Program
 {
     private static async Task Main()
     {
-        using var geometry = new Geometry(new List<Device> { new Device(Vector3.Zero) });
+        using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
 
-        using var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        using var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
         var versions = await client.ReadFirmwareVersionAsync();
@@ -36,8 +36,8 @@ internal static class Program
         builder
             .Push(new Pattern(patterns))
             .Push(new Modulation(SamplingConfig.Freq4k, modulation));
-        using var datagrams = builder.Build();
-        foreach (var frame in datagrams)
+        using var frames = builder.Build();
+        foreach (var frame in frames)
         {
             await client.SendCheckedAsync(frame);
         }

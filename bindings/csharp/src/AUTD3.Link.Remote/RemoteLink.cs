@@ -3,30 +3,25 @@ using System.Runtime.InteropServices;
 
 namespace AUTD3.Link
 {
-    public sealed class RemoteLink : ILink
+    public readonly struct RemoteLinkOption : ILink
     {
-        private IntPtr _opener;
+        public string Addr { get; }
+        public TimeSpan? Timeout { get; }
 
-        private RemoteLink(IntPtr opener)
+        public RemoteLinkOption(string addr, TimeSpan? timeout = null)
         {
-            _opener = opener;
+            Addr = addr;
+            Timeout = timeout;
         }
 
-        public static RemoteLink Create(string addr, TimeSpan? timeout = null)
+        IntPtr ILink.TakeOpener()
         {
-            var timeoutNs = (ulong)(timeout?.Ticks * 100 ?? 0);
-            var opener = NativeRemote.autd3_link_remote(addr, timeoutNs);
+            var timeoutNs = (ulong)(Timeout?.Ticks * 100 ?? 0);
+            var opener = NativeRemote.autd3_link_remote(Addr, timeoutNs);
             if (opener == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create remote link (invalid address?)");
             }
-            return new RemoteLink(opener);
-        }
-
-        public IntPtr TakeOpener()
-        {
-            var opener = _opener;
-            _opener = IntPtr.Zero;
             return opener;
         }
     }

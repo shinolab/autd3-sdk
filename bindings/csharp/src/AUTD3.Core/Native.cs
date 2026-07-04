@@ -37,6 +37,9 @@ namespace AUTD3
         internal static extern void autd3_core_device_rotation(IntPtr geometry, UIntPtr dev, [Out] float[] outWijk);
 
         [DllImport(Lib)]
+        internal static extern void autd3_core_device_center(IntPtr geometry, UIntPtr dev, [Out] float[] outXyz);
+
+        [DllImport(Lib)]
         internal static extern void autd3_core_device_direction_x(IntPtr geometry, UIntPtr dev, [Out] float[] outXyz);
 
         [DllImport(Lib)]
@@ -56,12 +59,6 @@ namespace AUTD3
 
         [DllImport(Lib)]
         internal static extern float autd3_core_phase_radian(byte value);
-
-        [DllImport(Lib)]
-        internal static extern IntPtr autd3_core_sampling_config_freq_4k();
-
-        [DllImport(Lib)]
-        internal static extern IntPtr autd3_core_sampling_config_freq_40k();
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_core_sampling_config_divide(ushort divide);
