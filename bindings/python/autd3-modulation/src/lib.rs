@@ -9,7 +9,7 @@ use autd3_rs_modulation::{
     FourierOption as CoreFourierOption, SamplingMode, SineComponent as CoreSineComponent,
     SineOption as CoreSineOption, SquareOption as CoreSquareOption,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 
@@ -89,6 +89,13 @@ pub struct ModulationBuffer {
 
 #[pymethods]
 impl ModulationBuffer {
+    #[new]
+    fn new(length: usize) -> Self {
+        Self {
+            data: vec![0u8; length],
+        }
+    }
+
     #[staticmethod]
     fn from_bytes(data: Vec<u8>) -> Self {
         Self { data }
@@ -96,6 +103,21 @@ impl ModulationBuffer {
 
     fn __len__(&self) -> usize {
         self.data.len()
+    }
+
+    fn __getitem__(&self, index: usize) -> PyResult<u8> {
+        self.data
+            .get(index)
+            .copied()
+            .ok_or_else(|| PyIndexError::new_err("modulation index out of range"))
+    }
+
+    fn __setitem__(&mut self, index: usize, value: u8) -> PyResult<()> {
+        *self
+            .data
+            .get_mut(index)
+            .ok_or_else(|| PyIndexError::new_err("modulation index out of range"))? = value;
+        Ok(())
     }
 
     fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {

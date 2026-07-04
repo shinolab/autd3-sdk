@@ -3,6 +3,8 @@ import numpy as np
 import autd3
 import autd3_pattern as pattern
 from autd3.units import m, s
+from autd3.value import Intensity, Phase, Emission
+from autd3.commands import Pattern
 
 
 def main() -> None:
@@ -12,22 +14,17 @@ def main() -> None:
     wavelength = pattern.wavelength(340 * m / s)
 
     # ANCHOR: api
-    emissions = []
-    for device in geometry:
-        slot = []
-        for pos in device.positions():
+    emissions = geometry.pattern_buffer()
+    for slot, device in zip(emissions, geometry):
+        for t, pos in enumerate(device.positions()):
             dist = float(np.linalg.norm(target - pos))
             phase = round(-dist / wavelength * 256.0) & 0xFF
-            slot.append(
-                autd3.value.Emission(
-                    autd3.value.Phase(phase),
-                    autd3.value.Intensity.MAX,
-                )
+            slot[t] = Emission(
+                Phase(phase),
+                Intensity.MAX,
             )
-        emissions.append(slot)
-    buffer = pattern.PatternBuffer.from_array(emissions)
 
-    autd3.commands.Pattern(buffer)
+    Pattern(emissions)
     # ANCHOR_END: api
 
 
