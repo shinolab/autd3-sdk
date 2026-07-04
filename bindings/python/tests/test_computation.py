@@ -87,6 +87,45 @@ def test_modulation_sine_square_fourier_radiation() -> None:
     assert len(rp) == before
 
 
+def test_custom_pattern_indexing() -> None:
+    geo = geometry()
+    buf = geo.pattern_buffer()
+
+    assert len(buf) == geo.num_devices()
+    for slot, device in zip(buf, geo):
+        assert len(slot) == device.num_transducers()
+        for t in range(len(slot)):
+            slot[t] = autd3.value.Emission(autd3.value.Phase(t & 0xFF), autd3.value.Intensity(0x80))
+
+    slot0 = buf[0]
+    assert slot0[3].phase.value == 3
+    assert slot0[3].intensity.value == 0x80
+
+    with pytest.raises(IndexError):
+        _ = buf[geo.num_devices()]
+    with pytest.raises(IndexError):
+        slot0[len(slot0)] = autd3.value.Emission(autd3.value.Phase(0), autd3.value.Intensity(0))
+
+    autd3.commands.Pattern(buf)
+
+
+def test_custom_modulation_indexing() -> None:
+    buf = modulation.ModulationBuffer(10)
+    assert len(buf) == 10
+    assert all(buf[i] == 0x00 for i in range(len(buf)))
+
+    buf[0] = 0xFF
+    assert buf[0] == 0xFF
+    assert list(buf) == [0xFF, *([0x00] * 9)]
+
+    with pytest.raises(IndexError):
+        _ = buf[10]
+    with pytest.raises(IndexError):
+        buf[10] = 0x01
+
+    autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, buf)
+
+
 def test_holo_algorithms() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340 * m / s)

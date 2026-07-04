@@ -10,9 +10,19 @@ use autd3_rs_pattern::{
     BesselOption as CoreBesselOption, FocusOption as CoreFocusOption,
     PlaneOption as CorePlaneOption,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
+
+fn emission_to_py(py: Python<'_>, emission: Emission) -> PyResult<Py<PyAny>> {
+    let core = py.import("autd3_core")?;
+    let phase = core.getattr("Phase")?.call1((emission.phase.0,))?;
+    let intensity = core.getattr("Intensity")?.call1((emission.intensity.0,))?;
+    Ok(core
+        .getattr("Emission")?
+        .call1((phase, intensity))?
+        .unbind())
+}
 
 fn extract_point(obj: &Bound<'_, PyAny>) -> PyResult<Point3<f32>> {
     let [x, y, z] = obj.extract::<[f32; 3]>().map_err(|_| {
@@ -179,6 +189,16 @@ impl PatternBuffer {
         self.inner.len()
     }
 
+    fn __getitem__(slf: &Bound<'_, Self>, index: usize) -> PyResult<DevicePatternView> {
+        if index >= slf.borrow().inner.len() {
+            return Err(PyIndexError::new_err("device index out of range"));
+        }
+        Ok(DevicePatternView {
+            buffer: slf.clone().unbind(),
+            device: index,
+        })
+    }
+
     fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
         pattern_into_capsule(py, self.inner.clone())
     }
@@ -188,6 +208,38 @@ impl PatternBuffer {
         // SAFETY: `self.inner` lives as long as this `PatternBuffer`, which the caller
         // keeps alive while the borrowed capsule is in use; no destructor frees it.
         unsafe { autd3_python_capsule::pattern_capsule_mut(py, ptr) }
+    }
+}
+
+#[pyclass(name = "DevicePatternView", module = "autd3_pattern")]
+pub struct DevicePatternView {
+    buffer: Py<PatternBuffer>,
+    device: usize,
+}
+
+#[pymethods]
+impl DevicePatternView {
+    fn __len__(&self, py: Python<'_>) -> usize {
+        self.buffer.borrow(py).inner[self.device].len()
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: usize) -> PyResult<Py<PyAny>> {
+        let buf = self.buffer.borrow(py);
+        let slot = &buf.inner[self.device];
+        let emission = *slot
+            .get(index)
+            .ok_or_else(|| PyIndexError::new_err("transducer index out of range"))?;
+        emission_to_py(py, emission)
+    }
+
+    fn __setitem__(&self, py: Python<'_>, index: usize, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        let emission = extract_emission(value)?;
+        let mut buf = self.buffer.borrow_mut(py);
+        let slot = &mut buf.inner[self.device];
+        *slot
+            .get_mut(index)
+            .ok_or_else(|| PyIndexError::new_err("transducer index out of range"))? = emission;
+        Ok(())
     }
 }
 
@@ -288,6 +340,7 @@ fn _read_pattern_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
 #[pymodule]
 fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PatternBuffer>()?;
+    m.add_class::<DevicePatternView>()?;
     m.add_class::<FocusOption>()?;
     m.add_class::<PlaneOption>()?;
     m.add_class::<BesselOption>()?;
