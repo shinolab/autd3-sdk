@@ -1,13 +1,13 @@
 using System.Numerics;
 using AUTD3;
 
-namespace AUTD3.DocSamples.ApiCommandOutputMask;
+namespace DocSamples.ApiCommandOutputMask;
 
 internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         var masks = new bool[geometry.NumDevices][];
         for (var i = 0; i < geometry.NumDevices; i++)

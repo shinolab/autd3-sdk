@@ -1,6 +1,6 @@
 using AUTD3;
 
-namespace AUTD3.DocSamples.ApiCommandGpio;
+namespace DocSamples.ApiCommandGpio;
 
 internal static class Sample
 {

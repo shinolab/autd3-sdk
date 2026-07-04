@@ -6,7 +6,7 @@ using AUTD3;
 using AUTD3.Link;
 using static AUTD3.Units;
 
-namespace AUTD3.DocSamples.TutorialSendModes;
+namespace DocSamples.TutorialSendModes;
 
 internal static class Sample
 {
@@ -15,9 +15,9 @@ internal static class Sample
 
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
 
         var builder = client.DatagramBuilder();
         builder.Push(new SetSilencer());
@@ -89,7 +89,7 @@ internal static class Sample
             {
                 if (pending.Count >= Client.MaxInflight)
                 {
-                    await pending.Dequeue().AwaitAsync();
+                    (await pending.Dequeue()).Check();
                 }
                 pending.Enqueue(await client.SendAsync(frame));
             }
@@ -97,7 +97,7 @@ internal static class Sample
         // Drain the remaining responses.
         while (pending.Count > 0)
         {
-            await pending.Dequeue().AwaitAsync();
+            (await pending.Dequeue()).Check();
         }
         // ANCHOR_END: streaming
     }

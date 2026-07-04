@@ -2,16 +2,17 @@ import asyncio
 
 import numpy as np
 
-import autd3
 import autd3_link_nop as nop
 import autd3_modulation as modulation
 import autd3_pattern as pattern
+from autd3 import Client, ClientConfig
+from autd3.commands import Pattern, SetSilencer
+from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
-from autd3.commands import SetSilencer
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]), autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-    client = await autd3.Client.open(geometry, nop.Nop(), autd3.ClientConfig())
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]), Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    client = await Client.open(geometry, nop.Nop(), ClientConfig())
 
     # ANCHOR: api
     builder = client.datagram_builder()
@@ -29,7 +30,7 @@ async def main() -> None:
 
     # ANCHOR: push_each
     builder = client.datagram_builder()
-    builder.push_each(lambda device: autd3.commands.Pattern(left if device % 2 == 0 else right))
+    builder.push_each(lambda device: Pattern(left if device % 2 == 0 else right))
     frames = builder.build()
     # ANCHOR_END: push_each
 

@@ -3,7 +3,7 @@ using System.Numerics;
 using AUTD3;
 using static AUTD3.Units;
 
-namespace AUTD3.DocSamples.ApiCommandPatternStm;
+namespace DocSamples.ApiCommandPatternStm;
 
 internal static class Sample
 {
@@ -12,7 +12,7 @@ internal static class Sample
 
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         // Compute the Pattern (emission of all transducers) for each sample point on the host.
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
@@ -38,7 +38,7 @@ internal static class Sample
             // ANCHOR_END: option
             ;
         // ANCHOR: api
-        new PatternStm(StmConfig.FromFreq(freq), patterns, option);
+        new PatternStm(new StmConfig(freq), patterns, option);
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
@@ -52,9 +52,8 @@ internal static class Sample
         }
         new ConfigPattern(
             option.Bank,
-            SamplingConfig.FromFreq(patterns.Length * Hz),
+            new SamplingConfig(patterns.Length * Hz),
             (uint)patterns.Length,
-            PatternDataType.Raw,
             option.LoopBehavior
         );
         new ChangePatternBank(

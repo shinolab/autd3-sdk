@@ -2,19 +2,21 @@ import asyncio
 
 import numpy as np
 
-import autd3
 import autd3_link_ethercrab as ethercrab
 import autd3_pattern as pattern
+from autd3 import Client, ClientConfig
+from autd3.commands import Pattern
+from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
-
+from autd3.value import Intensity, PatternBank
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client = await autd3.Client.open(
+    client = await Client.open(
         geometry,
         ethercrab.EtherCrabLinkOption(),
-        autd3.ClientConfig(),
+        ClientConfig(),
     )
 
     wavelength = pattern.wavelength(340 * m / s)
@@ -31,7 +33,7 @@ async def main() -> None:
         pat_a,
     )
     builder = client.datagram_builder()
-    builder.push(autd3.commands.Pattern(pat_a, bank=autd3.value.PatternBank.B0))
+    builder.push(Pattern(pat_a, bank=PatternBank.B0))
     for frame in builder.build():
         await client.send_checked(frame)
 
@@ -47,7 +49,7 @@ async def main() -> None:
         pat_b,
     )
     builder = client.datagram_builder()
-    builder.push(autd3.commands.Pattern(pat_b, bank=autd3.value.PatternBank.B1))
+    builder.push(Pattern(pat_b, bank=PatternBank.B1))
     for frame in builder.build():
         await client.send_checked(frame)
     # ANCHOR_END: switch

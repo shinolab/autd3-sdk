@@ -1,7 +1,7 @@
 using AUTD3;
 using static AUTD3.Units;
 
-namespace AUTD3.DocSamples.ApiComputeModulationSine;
+namespace DocSamples.ApiComputeModulationSine;
 
 internal static class Sample
 {
@@ -11,7 +11,7 @@ internal static class Sample
         var option =
             // ANCHOR: option
             new SineOption(
-                intensity: 0xFF,
+                amplitude: 0xFF,
                 offset: 0x80,
                 phase: 0.0f * rad,
                 clamp: false,

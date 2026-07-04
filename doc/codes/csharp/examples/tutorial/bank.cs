@@ -4,15 +4,15 @@ using AUTD3;
 using AUTD3.Link;
 using static AUTD3.Units;
 
-namespace AUTD3.DocSamples.TutorialBank;
+namespace DocSamples.TutorialBank;
 
 internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 

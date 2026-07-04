@@ -32,8 +32,8 @@ import { excerpt } from "@lib/excerpt";
 <Fragment slot="csharp">
 <Code code={excerpt(csSample, "api")} lang="csharp" />
 
-`new Device(origin, rotation)` は原点位置 (`Vector3`) と姿勢 (`Quaternion`) から 1 台のデバイスを構築する.
-姿勢を省略した `new Device(origin)` もある (`Quaternion.Identity` を使う).
+`new Autd3(origin, rotation)` は原点位置 (`Vector3`) と姿勢 (`Quaternion`) から 1 台のデバイスを構築する.
+姿勢を省略した `new Autd3(origin)` もある (`Quaternion.Identity` を使う).
 </Fragment>
 </CodeTabs>
 
@@ -53,9 +53,6 @@ import { excerpt } from "@lib/excerpt";
 | `pattern_buffer()`   | `Vec<Vec<Emission>>` | Pattern 計算用の出力バッファを確保    |
 | `iter()` / `&geometry` | `Iterator<Item = &Device>`       | 各 `Device` を走査                    |
 | `geometry[i]`        | `&Device`                          | `i` 番目の `Device` を取得            |
-
-Python では座標を返す `center()` は `numpy.ndarray` (shape `(3,)`) を返す.
-そのため `geometry.center() + np.array([0.0, 0.0, 150.0])` のようにそのまま numpy 演算に渡せる.
 
 ## Device
 
@@ -79,9 +76,6 @@ Python では座標を返す `center()` は `numpy.ndarray` (shape `(3,)`) を�
 | `position(i)`        | `Point3<f32>`           | `i` 番目の振動子の位置                        |
 | `direction(i)`       | `UnitVector3<f32>`      | `i` 番目の振動子の方向                        |
 
-Python では座標・方向を返すメソッドは `numpy.ndarray` を返す.
-単一ベクトル (`center`/`position`/`direction`/`x_direction`/`y_direction`/`axial_direction`) は shape `(3,)`, `rotation` は shape `(4,)` (`w, i, j, k`), `positions`/`directions` は shape `(N, 3)` となる.
-
 ## 座標ヘルパ (Rustのみ)
 
 `autd3_rs::geometry` には座標を組み立てる補助関数がある.
@@ -92,4 +86,4 @@ Python では座標・方向を返すメソッドは `numpy.ndarray` を返す.
 | `point(x, y, z)`    | `Point3<f32>`   | 絶対座標の点                                 |
 | `offset(x, y, z)`   | `Vector3<f32>`  | 相対変位ベクトル                             |
 
-Python には長さの単位型が無く座標は mm 単位の素の値で扱うため, これらのヘルパは存在しない. 位置は numpy 配列やタプルで直接渡す.
+Python / C# には長さの単位型が無く座標は mm 単位の素の値で扱うため, これらのヘルパは存在しない.

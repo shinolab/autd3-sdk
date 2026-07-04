@@ -1,6 +1,6 @@
 using AUTD3;
 
-namespace AUTD3.DocSamples.ApiCommandModulation;
+namespace DocSamples.ApiCommandModulation;
 
 internal static class Sample
 {

@@ -1,15 +1,17 @@
 import asyncio
 
-import autd3
 import autd3_link_nop as nop
+from autd3 import Client, ClientConfig
+from autd3.commands import Clear
+from autd3.geometry import Autd3, Geometry
 
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-    client = await autd3.Client.open(geometry, nop.Nop(), autd3.ClientConfig())
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    client = await Client.open(geometry, nop.Nop(), ClientConfig())
 
     builder = client.datagram_builder()
-    builder.push(autd3.commands.Clear())
+    builder.push(Clear())
     frame = next(iter(builder.build()))
 
     # ANCHOR: api

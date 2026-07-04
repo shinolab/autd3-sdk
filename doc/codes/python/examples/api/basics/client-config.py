@@ -1,18 +1,19 @@
 import asyncio
 
-import autd3
 import autd3_link_nop as nop
+from autd3 import Client, ClientConfig, MAX_IN_FLIGHT
+from autd3.geometry import Autd3, Geometry
 
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     link = nop.Nop()
     option = (
         # ANCHOR: config
-        autd3.ClientConfig(
+        ClientConfig(
             timeout_cycles=10,
-            max_inflight=127,
+            max_inflight=MAX_IN_FLIGHT,
             send_interval_cycles=1,
             max_resync_rounds=8,
             low_latency=False,
@@ -24,7 +25,7 @@ async def main() -> None:
         # ANCHOR_END: config
     )
     # ANCHOR: api
-    await autd3.Client.open(geometry, link, option)
+    await Client.open(geometry, link, option)
     # ANCHOR_END: api
 
 

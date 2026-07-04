@@ -2,14 +2,14 @@ using System.Numerics;
 using AUTD3;
 
 // HIDE
-namespace AUTD3.DocSamples.ApiComputePatternUniformExample;
+namespace DocSamples.ApiComputePatternUniformExample;
 
 internal static class Sample
 {
     internal static void Run()
     {
         // HIDE_END
-var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
 var dst = geometry.PatternBuffer();
 

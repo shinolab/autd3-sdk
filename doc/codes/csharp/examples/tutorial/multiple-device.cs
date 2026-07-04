@@ -2,7 +2,7 @@ using System;
 using System.Numerics;
 using AUTD3;
 
-namespace AUTD3.DocSamples.TutorialMultipleDevice;
+namespace DocSamples.TutorialMultipleDevice;
 
 internal static class Sample
 {
@@ -11,9 +11,9 @@ internal static class Sample
         // ANCHOR: translation
         new Geometry(new[]
         {
-            new Device(Vector3.Zero, Quaternion.Identity),
-            new Device(
-                new Vector3(Device.Width, 0.0f, 0.0f),
+            new Autd3(Vector3.Zero, Quaternion.Identity),
+            new Autd3(
+                new Vector3(Autd3.DeviceWidth, 0.0f, 0.0f),
                 Quaternion.Identity
             ),
         });
@@ -22,20 +22,20 @@ internal static class Sample
         // ANCHOR: global
         new Geometry(new[]
         {
-            new Device(
-                new Vector3(-Device.Width, 0.0f, 0.0f),
+            new Autd3(
+                new Vector3(-Autd3.DeviceWidth, 0.0f, 0.0f),
                 Quaternion.Identity
             ),
-            new Device(Vector3.Zero, Quaternion.Identity),
+            new Autd3(Vector3.Zero, Quaternion.Identity),
         });
         // ANCHOR_END: global
 
         // ANCHOR: rotation
         new Geometry(new[]
         {
-            new Device(Vector3.Zero, Quaternion.Identity),
-            new Device(
-                new Vector3(0.0f, 0.0f, Device.Width),
+            new Autd3(Vector3.Zero, Quaternion.Identity),
+            new Autd3(
+                new Vector3(0.0f, 0.0f, Autd3.DeviceWidth),
                 Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2.0f)
             ),
         });

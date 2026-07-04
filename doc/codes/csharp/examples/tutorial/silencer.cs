@@ -2,17 +2,18 @@ using System;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
+using static AUTD3.Units;
 using AUTD3.Link;
 
-namespace AUTD3.DocSamples.TutorialSilencer;
+namespace DocSamples.TutorialSilencer;
 
 internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
 
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var radius = 30.0f;
@@ -28,7 +29,7 @@ internal static class Sample
             }
             var builder = client.DatagramBuilder();
             builder.Push(SetSilencer.Disable());
-            builder.Push(new FociStm(StmConfig.Freq(50.0f), foci, new FociStmOption()));
+            builder.Push(new FociStm(new StmConfig(50.0f * Hz), foci));
             foreach (var frame in builder.Build())
             {
                 await client.SendCheckedAsync(frame);
@@ -47,7 +48,7 @@ internal static class Sample
             }
             var builder = client.DatagramBuilder();
             builder.Push(new SetSilencer());
-            builder.Push(new FociStm(StmConfig.Freq(50.0f), foci, new FociStmOption()));
+            builder.Push(new FociStm(new StmConfig(50.0f * Hz), foci));
             foreach (var frame in builder.Build())
             {
                 await client.SendCheckedAsync(frame);
@@ -70,7 +71,7 @@ internal static class Sample
                 phase: TimeSpan.FromMicroseconds(500),
                 strictMode: true
             )));
-            builder.Push(new FociStm(StmConfig.Freq(50.0f), foci, new FociStmOption()));
+            builder.Push(new FociStm(new StmConfig(50.0f * Hz), foci));
             foreach (var frame in builder.Build())
             {
                 await client.SendCheckedAsync(frame);

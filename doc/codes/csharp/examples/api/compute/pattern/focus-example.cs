@@ -3,14 +3,14 @@ using AUTD3;
 using static AUTD3.Units;
 
 // HIDE
-namespace AUTD3.DocSamples.ApiComputePatternFocusExample;
+namespace DocSamples.ApiComputePatternFocusExample;
 
 internal static class Sample
 {
     internal static void Run()
     {
         // HIDE_END
-var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
 var dst = geometry.PatternBuffer();
 

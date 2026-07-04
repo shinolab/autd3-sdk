@@ -1,14 +1,14 @@
 import numpy as np
 
-import autd3
 import autd3_pattern as pattern
-from autd3.units import m, s
-from autd3.value import Intensity, Phase, Emission
 from autd3.commands import Pattern
+from autd3.geometry import Autd3, Geometry
+from autd3.units import m, s
+from autd3.value import Emission, Intensity, Phase
 
 
 def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
     wavelength = pattern.wavelength(340 * m / s)

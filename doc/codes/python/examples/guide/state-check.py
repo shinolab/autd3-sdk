@@ -1,7 +1,8 @@
 import asyncio
 
-import autd3
 import autd3_link_ethercrab as ethercrab
+from autd3 import Client, ClientConfig
+from autd3.geometry import Autd3, Geometry
 
 # xtask:long-running  # [hide]
 
@@ -9,13 +10,13 @@ CHECK_INTERVAL = 0.1
 
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     # ANCHOR: open
-    client, checker = await autd3.Client.open_with_checker(
+    client, checker = await Client.open_with_checker(
         geometry,
         ethercrab.EtherCrabLinkOption(),
-        autd3.ClientConfig(),
+        ClientConfig(),
     )
     # ANCHOR_END: open
 

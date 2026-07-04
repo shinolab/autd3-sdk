@@ -1,6 +1,6 @@
 using AUTD3.Link;
 
-namespace AUTD3.DocSamples.ApiLinkRemoteClient;
+namespace DocSamples.ApiLinkRemoteClient;
 
 internal static class Sample
 {
@@ -9,7 +9,7 @@ internal static class Sample
         var addr = "127.0.0.1:8080";
 
         // ANCHOR: api
-        RemoteLink.Create(addr);
+        new RemoteLinkOption(addr);
         // ANCHOR_END: api
     }
 }

@@ -1,6 +1,6 @@
 using AUTD3;
 
-namespace AUTD3.DocSamples.ApiCommandClear;
+namespace DocSamples.ApiCommandClear;
 
 internal static class Sample
 {

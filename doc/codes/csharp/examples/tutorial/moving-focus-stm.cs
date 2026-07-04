@@ -1,17 +1,18 @@
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
+using static AUTD3.Units;
 using AUTD3.Link;
 
-namespace AUTD3.DocSamples.TutorialMovingFocusStm;
+namespace DocSamples.TutorialMovingFocusStm;
 
 internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
 
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
 
@@ -22,7 +23,7 @@ internal static class Sample
             new ControlPoints(new[] { new ControlPoint(center + new Vector3(-20.0f, 0.0f, 0.0f)) }),
         };
         var builder = client.DatagramBuilder();
-        builder.Push(new FociStm(StmConfig.Freq(0.5f), points, new FociStmOption()));
+        builder.Push(new FociStm(new StmConfig(0.5f * Hz), points));
         foreach (var frame in builder.Build())
         {
             await client.SendCheckedAsync(frame);

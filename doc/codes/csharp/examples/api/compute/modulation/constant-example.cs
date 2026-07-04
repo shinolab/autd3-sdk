@@ -1,7 +1,7 @@
 using AUTD3;
 
 // HIDE
-namespace AUTD3.DocSamples.ApiComputeModulationConstantExample;
+namespace DocSamples.ApiComputeModulationConstantExample;
 
 internal static class Sample
 {

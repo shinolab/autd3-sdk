@@ -1,6 +1,6 @@
 using AUTD3.Link;
 
-namespace AUTD3.DocSamples.ApiLinkTwincat;
+namespace DocSamples.ApiLinkTwincat;
 
 internal static class Sample
 {
@@ -9,9 +9,9 @@ internal static class Sample
         var addr = "169.254.0.1";
         var amsNetId = "169.254.0.1.1.1";
         // ANCHOR: api
-        TwinCATLink.Local();
+        TwinCATLinkOption.Local();
 
-        TwinCATLink.Remote(addr, amsNetId);
+        TwinCATLinkOption.Remote(addr, amsNetId);
         // ANCHOR_END: api
     }
 }

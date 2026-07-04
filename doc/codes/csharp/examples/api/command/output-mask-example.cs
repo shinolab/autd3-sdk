@@ -2,17 +2,18 @@ using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Link;
+using Nop = AUTD3.Link.Nop;
 
 // HIDE
-namespace AUTD3.DocSamples.ApiCommandOutputMaskExample;
+namespace DocSamples.ApiCommandOutputMaskExample;
 
 internal static class Sample
 {
     internal static async Task Run()
     {
         // HIDE_END
-var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
-var client = await Client.OpenAsync(geometry, NopLink.Create(), new ClientConfig());
+var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
 var masks = new bool[geometry.NumDevices][];
 for (var i = 0; i < geometry.NumDevices; i++)

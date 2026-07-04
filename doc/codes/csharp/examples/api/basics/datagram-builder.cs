@@ -2,16 +2,17 @@ using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Link;
+using Nop = AUTD3.Link.Nop;
 using static AUTD3.Units;
 
-namespace AUTD3.DocSamples.ApiBasicsDatagramBuilder;
+namespace DocSamples.ApiBasicsDatagramBuilder;
 
 internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero), new Device(Vector3.Zero) });
-        var client = await Client.OpenAsync(geometry, NopLink.Create(), new ClientConfig());
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero), new Autd3(Vector3.Zero) });
+        var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
         var option = new FocusOption();
@@ -26,7 +27,7 @@ internal static class Sample
 
         var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(150 * Hz, new SineOption(), modulation);
-
+        {
         // ANCHOR: api
         var builder = client.DatagramBuilder();
         builder.Push(new SetSilencer());
@@ -36,18 +37,20 @@ internal static class Sample
             await client.SendCheckedAsync(frame);
         }
         // ANCHOR_END: api
-
+        }
+        
+        {
         // ANCHOR: push_each
-        var builder2 = client.DatagramBuilder();
-        builder2.PushEach(device => device % 2 == 0
+        var builder = client.DatagramBuilder();
+        builder.PushEach(device => device % 2 == 0
             ? new Pattern(left)
             : new Pattern(right));
-        var frames2 = builder2.Build();
+        var frames = builder.Build();
         // ANCHOR_END: push_each
-
-        foreach (var frame in frames2)
+        foreach (var frame in frames)
         {
             await client.SendCheckedAsync(frame);
+        }
         }
 
         await client.CloseAsync();

@@ -1,24 +1,25 @@
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
+using static AUTD3.Units;
 using AUTD3.Link;
 
-namespace AUTD3.DocSamples.TutorialLoop;
+namespace DocSamples.TutorialLoop;
 
 internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Device(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        var client = await Client.OpenAsync(geometry, EtherCrabLink.Create(), new ClientConfig());
+        var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
 
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
-        var foci = Stm.Circle(center, 30.0f, 20, Vector3.UnitZ, Intensity.Max);
+        var foci = Stm.Circle(center, 30.0f * mm, 20, Vector3.UnitZ, Intensity.Max);
 
         // By default the playback loops infinitely; B0 keeps circling the focus.
         var builder = client.DatagramBuilder();
-        builder.Push(new FociStm(StmConfig.Freq(50.0f), foci, new FociStmOption()));
+        builder.Push(new FociStm(new StmConfig(50.0f * Hz), foci));
         foreach (var frame in builder.Build())
         {
             await client.SendCheckedAsync(frame);
@@ -30,7 +31,7 @@ internal static class Sample
         // different bank, so write to bank B1 instead of the current B0.
         var builder2 = client.DatagramBuilder();
         builder2.Push(new FociStm(
-            StmConfig.Freq(50.0f),
+            new StmConfig(50.0f * Hz),
             foci,
             new FociStmOption(
                 bank: PatternBank.B1,

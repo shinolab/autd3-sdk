@@ -1,7 +1,7 @@
 using System;
 using AUTD3;
 
-namespace AUTD3.DocSamples.ApiCommandSilencer;
+namespace DocSamples.ApiCommandSilencer;
 
 internal static class Sample
 {
