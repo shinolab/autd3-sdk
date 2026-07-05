@@ -16,33 +16,45 @@ function dedent(lines) {
   const min = indents.length ? Math.min(...indents) : 0;
   return lines.map((l) => l.slice(min));
 }
-const anchorRe = /^\s*\/\/\s*ANCHOR(_END)?\s*:/;
-const hideStartRe = /^\s*\/\/\s*HIDE\b/;
-const hideEndRe = /^\s*\/\/\s*HIDE_END\b/;
-const hideLineRe = /\/\/\s*\[hide\]\s*$/;
+// Keep these in sync with the runtime `src/lib/excerpt.ts` so frozen output
+// matches the live render. Both `//` (Rust/C#) and `#` (Python) comment
+// markers are recognized.
+const anchorRe = /^\s*(?:\/\/|#)\s*ANCHOR(_END)?\s*:/;
+const hideStartRe = /^\s*(?:\/\/|#)\s*HIDE\b/;
+const hideEndRe = /^\s*(?:\/\/|#)\s*HIDE_END\b/;
+const hideLineRe = /(?:\/\/|#)\s*\[hide\]\s*$/;
 function clean(lines) {
   const out = [];
+  let seg = [];
   let hiding = false;
+  const flush = () => {
+    if (seg.length) {
+      out.push(...dedent(seg));
+      seg = [];
+    }
+  };
   for (const l of lines) {
     if (hideEndRe.test(l)) {
       hiding = false;
       continue;
     }
     if (hideStartRe.test(l)) {
+      flush();
       hiding = true;
       continue;
     }
     if (hiding) continue;
     if (anchorRe.test(l)) continue;
     if (hideLineRe.test(l)) continue;
-    out.push(l);
+    seg.push(l);
   }
-  return dedent(out).join("\n").replace(/^\n+|\n+$/g, "");
+  flush();
+  return out.join("\n").replace(/^\n+|\n+$/g, "");
 }
 function collectRegions(lines, rawName) {
   const name = escapeRe(rawName);
-  const startRe = new RegExp(`^\\s*//\\s*ANCHOR\\s*:\\s*${name}\\s*$`);
-  const endRe = new RegExp(`^\\s*//\\s*ANCHOR_END\\s*:\\s*${name}\\s*$`);
+  const startRe = new RegExp(`^\\s*(?://|#)\\s*ANCHOR\\s*:\\s*${name}\\s*$`);
+  const endRe = new RegExp(`^\\s*(?://|#)\\s*ANCHOR_END\\s*:\\s*${name}\\s*$`);
   const regions = [];
   let i = 0;
   while (i < lines.length) {

@@ -1,0 +1,42 @@
+---
+title: SetGpioOut
+description: GPIO 出力を制御する SetGpioOut / GpioOut
+sidebar:
+  order: 7
+slug: 0.1.x/api/command/gpio
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetGpioOut` は, デバイスの 4 本の GPIO 出力端子に出力する信号を設定するコマンド.
+
+## API
+
+<CodeTabs rust={"SetGpioOut { outputs };"} python={"SetGpioOut(outputs=outputs)"} csharp={"new SetGpioOut(outputs);"} />
+
+| フィールド | 型             | 説明                      |
+| ---------- | -------------- | ------------------------- |
+| `outputs`  | `[GpioOut; 4]` | 端子 0..3 に割り当てる出力 |
+
+## GpioOut
+
+|         |                                  |
+| ----------------- | ---------------------------------------- |
+| `Off`             | 常に Low (デフォルト)                    |
+| `BaseSignal`      | 超音波の基準信号 (40 kHz)                |
+| `Thermo`          | 温度センサのアサート                     |
+| `ForceFan`        | ForceFan の状態                          |
+| `Sync`            | 同期信号                                 |
+| `ModBank`         | アクティブな Modulation バンク           |
+| `ModIdx(u16)`     | Modulation が指定インデックスのとき High |
+| `PatternBank`     | アクティブな Pattern バンク              |
+| `PatternIdx(u16)` | Pattern が指定インデックスのとき High    |
+| `IsStmMode`   | Stm モード (`size != 1`) のとき High                |
+| `SysTimeEq(u64)`  | システム時刻が指定値に一致したとき High  |
+| `SyncDiff`        | 同期誤差                                 |
+| `PwmOut(u8)`      | 指定振動子の PWM 出力                    |
+| `Direct(bool)`    | 指定した固定値を直接出力                 |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{GpioOut, SetGpioOut};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_nop::Nop;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet client = Client::open(&geometry, Nop, ClientConfig::default()).await?;\n\nlet mut builder = client.datagram_builder();\nbuilder.push(SetGpioOut {\n    outputs: [\n        GpioOut::PatternBank,\n        GpioOut::Thermo,\n        GpioOut::PwmOut(0),\n        GpioOut::Off,\n    ],\n});\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import GpioOut, SetGpioOut\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3_link_nop import Nop\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    client = await Client.open(geometry, Nop(), ClientConfig())\n\n    builder = client.datagram_builder()\n    builder.push(\n        SetGpioOut(\n            outputs=[\n                GpioOut.PatternBank,\n                GpioOut.Thermo,\n                GpioOut.PwmOut(0),\n                GpioOut.Off,\n            ]\n        )\n    )\n    frames = builder.build()\n    for frame in frames:\n        await client.send_checked(frame)\n\n    await client.close()\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing Nop = AUTD3.Link.Nop;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new SetGpioOut(new[]\n{\n    GpioOut.PatternBank,\n    GpioOut.Thermo,\n    GpioOut.PwmOut(0),\n    GpioOut.Off,\n}));\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nawait client.CloseAsync();"} />

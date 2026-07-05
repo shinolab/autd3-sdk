@@ -58,7 +58,9 @@ jobs:
             elif command -v apt-get >/dev/null; then
               apt-get update && apt-get install -y libpcap-dev cmake
             fi
-          args: --release -m ${{ matrix.package }}/Cargo.toml --find-interpreter -o dist
+          args: >-
+            --release -m ${{ matrix.package }}/Cargo.toml --find-interpreter -o dist
+            ${{ (matrix.package == 'autd3-link-ethercrab' || matrix.package == 'autd3-link-soem') && '--auditwheel warn' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.package }}

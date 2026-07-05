@@ -27,7 +27,7 @@ const CS_PACKAGES: &[(&str, &str)] = &[
     ("AUTD3.Modulation", "autd3-ffi-modulation"),
     ("AUTD3.Link.Ethercrab", "autd3-ffi-link-ethercrab"),
     ("AUTD3.Link.Remote", "autd3-ffi-link-remote"),
-    ("AUTD3.Link.Twincat", "autd3-ffi-link-twincat"),
+    ("AUTD3.Link.TwinCAT", "autd3-ffi-link-twincat"),
     ("AUTD3.Link.Nop", "autd3-ffi-link-nop"),
 ];
 const CS_SOEM_PACKAGE: &str = "AUTD3.Link.Soem";

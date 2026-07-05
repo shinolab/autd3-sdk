@@ -1,0 +1,30 @@
+---
+title: WriteFociBuffer
+description: Foci STM 用バッファへの書き込み
+sidebar:
+  order: 18
+slug: 0.1.x/api/command/lowlevel/write-foci-buffer
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`WriteFociBuffer` は, Foci STM 用の焦点列をバンクへ書き込む低レベルコマンド.
+
+## API
+
+<CodeTabs rust={"WriteFociBuffer {\n    bank,\n    index_offset,\n    points,\n};"} python={"WriteFociBuffer(\n    bank=bank,\n    index_offset=index_offset,\n    points=points,\n)"} csharp={"new WriteFociBuffer(\n    bank: bank,\n    indexOffset: indexOffset,\n    points: points\n);"} />
+
+| フィールド     | 型                    | 説明                               |
+| -------------- | --------------------- | ---------------------------------- |
+| `bank`         | `PatternBank`         | 書き込み先バンク                   |
+| `index_offset` | `usize`               | バンク内の書き込み開始インデックス |
+| `points`       | `&[ControlPoints<N>]` | 焦点サンプルの列                   |
+
+`ControlPoints<N>` は `N` 個の焦点 (`ControlPoint`) と振幅を持つ 1 サンプル.
+詳細は [FociStm](/autd3-sdk/0.1.x/api/command/foci-stm/#controlpoint--controlpoints) を参照.
+
+## Example
+
+`WriteFociBuffer` → `ConfigFociStm` → `ChangePatternBank` で焦点列を Foci STM として再生する例 (高レベルの [FociStm](/autd3-sdk/0.1.x/api/command/foci-stm/) と等価).
+
+<CodeTabs rust={"use autd3_rs::commands::{ChangePatternBank, ConfigFociStm, StmConfig, WriteFociBuffer, circle};\nuse autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};\nuse autd3_rs::units::{Hz, m, mm, s};\nuse autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_nop::Nop;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet client = Client::open(&geometry, Nop, ClientConfig::default()).await?;\n\nlet center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);\nlet mut points = Vec::new();\ncircle(\n    center,\n    30.0 * mm,\n    200,\n    Vector3::z_axis(),\n    Intensity::MAX,\n    &mut points,\n);\n\nlet bank = PatternBank::B0;\n\nlet mut builder = client.datagram_builder();\nbuilder.push(WriteFociBuffer {\n    bank,\n    index_offset: 0,\n    points: &points,\n});\nbuilder.push(ConfigFociStm {\n    bank,\n    config: StmConfig::new(1.0 * Hz).into_sampling_config(points.len()),\n    size: points.len(),\n    num_foci: 1,\n    sound_speed: 340.0 * m / s,\n    loop_behavior: LoopBehavior::Infinite,\n});\nbuilder.push(ChangePatternBank {\n    bank,\n    transition_mode: TransitionMode::Immediate,\n});\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\n\nimport numpy as np\n\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import ChangePatternBank, ConfigFociStm, StmConfig, WriteFociBuffer, circle\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import Hz, m, s\nfrom autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode\nfrom autd3_link_nop import Nop\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    client = await Client.open(geometry, Nop(), ClientConfig())\n\n    center = geometry.center() + np.array([0.0, 0.0, 150.0])\n    points = []\n    circle(center, 30.0, 200, [0.0, 0.0, 1.0], Intensity.MAX, points)\n\n    bank = PatternBank.B0\n\n    builder = client.datagram_builder()\n    builder.push(\n        WriteFociBuffer(\n            bank=bank,\n            index_offset=0,\n            points=points,\n        )\n    )\n    builder.push(\n        ConfigFociStm(\n            bank=bank,\n            config=StmConfig(1.0 * Hz).into_sampling_config(len(points)),\n            size=len(points),\n            num_foci=1,\n            sound_speed=340.0 * m / s,\n            loop_behavior=LoopBehavior.Infinite,\n        )\n    )\n    builder.push(\n        ChangePatternBank(\n            bank=bank,\n            transition_mode=TransitionMode.Immediate,\n        )\n    )\n    frames = builder.build()\n    for frame in frames:\n        await client.send_checked(frame)\n\n    await client.close()\n\n\nasyncio.run(main())"} csharp={"using System.Collections.Generic;\nusing System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing Nop = AUTD3.Link.Nop;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());\n\nvar center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);\nvar dst = new List<ControlPoints>();\nStm.Circle(\n    center,\n    30.0f * mm,\n    200,\n    Vector3.UnitZ,\n    Intensity.Max,\n    dst\n);\nvar points = dst.ToArray();\n\nvar bank = PatternBank.B0;\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new WriteFociBuffer(\n    bank: bank,\n    indexOffset: 0,\n    points: points\n));\nbuilder.Push(new ConfigFociStm(\n    bank: bank,\n    config: new SamplingConfig(points.Length * Hz),\n    size: (uint)points.Length,\n    numFoci: 1,\n    soundSpeed: 340.0f * m / s,\n    loopBehavior: LoopBehavior.Infinite\n));\nbuilder.Push(new ChangePatternBank(\n    bank: bank,\n    transitionMode: TransitionMode.Immediate\n));\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nawait client.CloseAsync();"} />

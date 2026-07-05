@@ -11,9 +11,9 @@ pub struct Component {
 pub const COMPONENTS: &[Component] = &[
     Component {
         name: "software",
-        section: "Software",
+        section: "Rust",
         tag_prefix: "v",
-        include_paths: &["crates/**", "tools/**", "examples/**", "bindings/**"],
+        include_paths: &["crates/**", "tools/**", "examples/**", "bindings/ffi/**"],
     },
     Component {
         name: "python",

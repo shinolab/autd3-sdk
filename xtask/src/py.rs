@@ -19,6 +19,8 @@ pub(crate) const MIT_WHEELS: &[&str] = &[
 ];
 const SOEM_WHEEL: &str = "autd3-link-soem";
 
+const NATIVE_LIB_WHEELS: &[&str] = &["autd3-link-ethercrab", SOEM_WHEEL];
+
 #[derive(Subcommand)]
 pub enum PyCmd {
     Build {
@@ -60,12 +62,17 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             crate::license::generate_python(root)?;
             let out = dir.join("target").join("wheels");
             for wheel in wheels(soem) {
+                drop_stale_native_cdylib(&dir, wheel, !debug);
                 let manifest = manifest(wheel);
                 let mut args = vec!["build", "-m", &manifest, "-o"];
                 let out = out.to_string_lossy().into_owned();
                 args.push(&out);
                 if !debug {
                     args.push("--release");
+                }
+                if NATIVE_LIB_WHEELS.contains(&wheel) {
+                    args.push("--auditwheel");
+                    args.push("warn");
                 }
                 maturin(&dir, None, &args)?;
             }
@@ -143,8 +150,28 @@ fn module_name(wheel: &str) -> String {
     wheel.replace('-', "_")
 }
 
+fn drop_stale_native_cdylib(dir: &Path, wheel: &str, release: bool) {
+    if !cfg!(target_os = "linux") || !NATIVE_LIB_WHEELS.contains(&wheel) {
+        return;
+    }
+    let module = module_name(wheel);
+    let profile = if release { "release" } else { "debug" };
+    let target = dir.join("target");
+    for path in [
+        target
+            .join(profile)
+            .join("deps")
+            .join(format!("lib{module}.so")),
+        target.join(profile).join(format!("lib{module}.so")),
+        target.join("maturin").join(format!("lib{module}.so")),
+    ] {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 pub(crate) fn develop(dir: &Path, venv: &Path, wheels: &[&str], release: bool) -> Result<()> {
     for wheel in wheels {
+        drop_stale_native_cdylib(dir, wheel, release);
         let manifest = manifest(wheel);
         let mut args = vec!["develop", "-m", &manifest];
         if release {
@@ -190,8 +217,13 @@ fn maturin(dir: &Path, venv: Option<&Path>, args: &[&str]) -> Result<()> {
     if !on_path("uv") {
         bail!("`uv` is required for the `py` scope (https://docs.astral.sh/uv/)");
     }
+    let from = if cfg!(target_os = "linux") {
+        "maturin[patchelf]>=1.14,<2.0"
+    } else {
+        "maturin>=1.14,<2.0"
+    };
     let mut cmd = Command::new("uv");
-    cmd.args(["tool", "run", "--from", "maturin>=1.14,<2.0", "maturin"])
+    cmd.args(["tool", "run", "--from", from, "maturin"])
         .args(args)
         .current_dir(dir);
     if let Some(venv) = venv {

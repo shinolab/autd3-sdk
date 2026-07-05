@@ -102,9 +102,50 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
                 "node",
                 ["scripts/freeze-version-codes.mjs", slug.as_str()],
                 &doc,
-            )
+            )?;
+            track_frozen_version(&doc, slug)
         }
     }
+}
+
+fn track_frozen_version(doc: &Path, slug: &str) -> Result<()> {
+    let path = doc.join(".gitignore");
+    let text =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+
+    let ignore_root = format!("src/content/docs/{slug}/");
+    let ignore_locale = format!("src/content/docs/*/{slug}/");
+    let unignore_root = format!("!{ignore_root}");
+    let unignore_locale = format!("!{ignore_locale}");
+    let unignore_config = format!("!src/content/versions/{slug}.json");
+
+    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+    lines.retain(|l| {
+        let t = l.trim();
+        t != ignore_root && t != ignore_locale
+    });
+    for line in &mut lines {
+        if line.trim() == "src/content/versions/" {
+            *line = "src/content/versions/*".to_string();
+        }
+    }
+    for line in [unignore_config, unignore_root, unignore_locale] {
+        if !lines.iter().any(|l| l.trim() == line.as_str()) {
+            lines.push(line);
+        }
+    }
+
+    let mut new_text = lines.join("\n");
+    if text.ends_with('\n') {
+        new_text.push('\n');
+    }
+    if new_text == text {
+        println!("doc: {slug} already tracked in {}", path.display());
+        return Ok(());
+    }
+    fs::write(&path, new_text).with_context(|| format!("failed to write {}", path.display()))?;
+    println!("doc: tracked frozen version {slug} in {}", path.display());
+    Ok(())
 }
 
 fn version_slugs(doc: &Path) -> Result<Vec<String>> {
@@ -135,6 +176,22 @@ fn verify_frozen_versions(doc: &Path) -> Result<()> {
     let slugs = version_slugs(doc)?;
     if slugs.is_empty() {
         return Ok(());
+    }
+    let mut missing_config = Vec::new();
+    for slug in &slugs {
+        let rel = format!("src/content/versions/{slug}.json");
+        let tracked = capture("git", &["ls-files", "--error-unmatch", &rel], doc).is_ok();
+        if !tracked {
+            missing_config.push(rel);
+        }
+    }
+    if !missing_config.is_empty() {
+        bail!(
+            "declared version(s) have no committed config file (they are `.gitignore`d):\n  {}\n\
+             these exist locally but are absent on a clean checkout, so CI's `astro build` fails to \
+             read the version config. run `cargo xtask doc freeze-version <slug>` and commit the file.",
+            missing_config.join("\n  ")
+        );
     }
     let Ok(tracked) = capture("git", &["ls-files", "src/content/docs"], doc) else {
         return Ok(());

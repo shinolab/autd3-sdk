@@ -1,0 +1,37 @@
+---
+title: WritePatternCompressed
+description: Pattern バッファへの圧縮書き込み
+sidebar:
+  order: 12.5
+slug: 0.1.x/api/command/lowlevel/write-pattern-compressed
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`WritePatternCompressed` は, [`WritePatternBuffer`](/autd3-sdk/0.1.x/api/command/lowlevel/write-pattern-buffer/) の圧縮版.
+位相情報のみを送ることで 1 フレームに複数 Pattern を書き込む低レベルコマンド.
+強度は最大 (255) で固定される.
+
+## API
+
+<CodeTabs rust={"WritePatternCompressed {\n    bank,\n    index,\n    format,\n    patterns,\n};"} python={"WritePatternCompressed(\n    bank=bank,\n    index=index,\n    format=format,\n    patterns=patterns,\n)"} csharp={"new WritePatternCompressed(\n    bank: bank,\n    index: compressedIndex,\n    format: format,\n    patterns: patterns\n);"} />
+
+| フィールド | 型                                                | 説明                                       |
+| ---------- | ------------------------------------------------- | ------------------------------------------ |
+| `bank`     | `PatternBank`                                     | 書き込み先バンク                           |
+| `index`    | `usize`                                           | バンク内の書き込み開始インデックス         |
+| `format`   | `PatternCompression`                              | 圧縮形式 (下記参照)                      |
+| `patterns` | `[Option<&[Vec<Emission>]>; 4]`     | 書き込む Pattern 列                        |
+
+## PatternCompression
+
+| バリアント  | 1 フレームあたりの Pattern 数 | 説明                                  |
+| ----------- | ----------------------------- | ------------------------------------- |
+| `PhaseFull` | 2                             | 位相を全分解能 (8 bit) で送る        |
+| `PhaseHalf` | 4                             | 位相を半分解能 (4 bit) で送る        |
+
+## Example
+
+`PhaseHalf` で 4 枚の Pattern を 1 コマンドに圧縮して書き込み, `ConfigPattern` + `ChangePatternBank` で STM として再生する例.
+
+<CodeTabs rust={"use autd3_rs::commands::{\n    ChangePatternBank, ConfigPattern, PatternCompression, StmConfig, WritePatternCompressed,\n};\nuse autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{Hz, m, mm, s};\nuse autd3_rs::value::{LoopBehavior, PatternBank, TransitionMode};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_nop::Nop;\nuse autd3_rs_pattern::{FocusOption, focus, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet client = Client::open(&geometry, Nop, ClientConfig::default()).await?;\n\nlet wavelength = wavelength(340.0 * m / s);\nlet patterns = [-30.0f32, -10.0, 10.0, 30.0]\n    .iter()\n    .map(|&x| {\n        let mut buffer = geometry.pattern_buffer();\n        focus(\n            &geometry,\n            geometry.center() + offset(x * mm, 0.0 * mm, 150.0 * mm),\n            wavelength,\n            &FocusOption::default(),\n            &mut buffer,\n        );\n        buffer\n    })\n    .collect::<Vec<_>>();\n\nlet bank = PatternBank::B0;\n\nlet mut builder = client.datagram_builder();\nbuilder.push(WritePatternCompressed {\n    bank,\n    index: 0,\n    format: PatternCompression::PhaseHalf,\n    patterns: [\n        Some(&patterns[0][..]),\n        Some(&patterns[1][..]),\n        Some(&patterns[2][..]),\n        Some(&patterns[3][..]),\n    ],\n});\nbuilder.push(ConfigPattern {\n    bank,\n    config: StmConfig::new(1.0 * Hz).into_sampling_config(patterns.len()),\n    size: patterns.len(),\n    loop_behavior: LoopBehavior::Infinite,\n});\nbuilder.push(ChangePatternBank {\n    bank,\n    transition_mode: TransitionMode::Immediate,\n});\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\n\nimport numpy as np\n\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import ChangePatternBank, ConfigPattern, PatternCompression, StmConfig, WritePatternCompressed\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import Hz, m, s\nfrom autd3.value import LoopBehavior, PatternBank, TransitionMode\nfrom autd3_link_nop import Nop\nfrom autd3_pattern import FocusOption, focus, wavelength\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    client = await Client.open(geometry, Nop(), ClientConfig())\n\n    center = geometry.center() + np.array([0.0, 0.0, 150.0])\n    wl = wavelength(340 * m / s)\n    patterns = []\n    for x in (-30.0, -10.0, 10.0, 30.0):\n        buffer = geometry.pattern_buffer()\n        focus(\n            geometry,\n            center + np.array([x, 0.0, 0.0]),\n            wl,\n            FocusOption(),\n            buffer,\n        )\n        patterns.append(buffer)\n\n    bank = PatternBank.B0\n\n    builder = client.datagram_builder()\n    builder.push(\n        WritePatternCompressed(\n            bank=bank,\n            index=0,\n            format=PatternCompression.PhaseHalf,\n            patterns=patterns,\n        )\n    )\n    builder.push(\n        ConfigPattern(\n            bank=bank,\n            config=StmConfig(1.0 * Hz).into_sampling_config(len(patterns)),\n            size=len(patterns),\n            loop_behavior=LoopBehavior.Infinite,\n        )\n    )\n    builder.push(\n        ChangePatternBank(\n            bank=bank,\n            transition_mode=TransitionMode.Immediate,\n        )\n    )\n    frames = builder.build()\n    for frame in frames:\n        await client.send_checked(frame)\n\n    await client.close()\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing Nop = AUTD3.Link.Nop;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());\n\nvar wavelength = Pattern.Wavelength(340.0f * m / s);\nvar offsets = new[] { -30.0f, -10.0f, 10.0f, 30.0f };\nvar patterns = new PatternBuffer[offsets.Length];\nfor (var i = 0; i < offsets.Length; i++)\n{\n    var buffer = geometry.PatternBuffer();\n    Pattern.Focus(\n        geometry,\n        geometry.Center + new Vector3(offsets[i], 0.0f, 150.0f),\n        wavelength,\n        new FocusOption(),\n        buffer\n    );\n    patterns[i] = buffer;\n}\n\nvar bank = PatternBank.B0;\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new WritePatternCompressed(\n    bank: bank,\n    index: 0,\n    format: PatternCompression.PhaseHalf,\n    patterns: patterns\n));\nbuilder.Push(new ConfigPattern(\n    bank: bank,\n    config: new SamplingConfig(patterns.Length * Hz),\n    size: (uint)patterns.Length,\n    loopBehavior: LoopBehavior.Infinite\n));\nbuilder.Push(new ChangePatternBank(\n    bank: bank,\n    transitionMode: TransitionMode.Immediate\n));\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nawait client.CloseAsync();"} />

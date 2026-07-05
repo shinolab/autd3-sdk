@@ -75,6 +75,20 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
     println!();
     println!("Next (do these manually after reviewing the diff):");
     print_next_steps(component.name);
+    if component.name == "software" {
+        println!();
+        println!(
+            "Optional (minor/major only — start a new doc version series; see README.md > ドキュメントサイト):"
+        );
+        println!("  cargo xtask doc build");
+        println!(
+            "  cargo xtask doc freeze-version <outgoing-slug>   # inlines codes + tracks the snapshot in doc/.gitignore"
+        );
+        println!(
+            "  # then add the new version slug to doc/astro.config.mjs and `git add doc/`"
+        );
+        println!();
+    }
     println!("  git commit -m \"chore: release {tag}\"");
     Ok(())
 }
