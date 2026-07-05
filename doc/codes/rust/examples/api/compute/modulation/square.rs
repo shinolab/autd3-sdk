@@ -6,13 +6,17 @@ use autd3_rs_modulation::{SquareOption, square};
 
 fn main() -> Result<()> {
     let freq = 150 * Hz;
+    let low = u8::MIN;
+    let high = u8::MAX;
+    let duty = 0.5;
+    let sampling_config = SamplingConfig::FREQ_4K;
     let option =
         // ANCHOR: option
         SquareOption {
-            low: u8::MIN,
-            high: u8::MAX,
-            duty: 0.5,
-            sampling_config: SamplingConfig::FREQ_4K,
+            low,
+            high,
+            duty,
+            sampling_config,
         }
         // ANCHOR_END: option
         ;

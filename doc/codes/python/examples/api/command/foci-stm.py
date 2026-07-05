@@ -22,13 +22,17 @@ end = center + np.array([15.0, 0.0, 0.0])
 line(start, end, num_points, intensity, dst)
 # ANCHOR_END: line
 freq = 1.0 * Hz
+bank = PatternBank.B0
+sound_speed = 340 * m / s
+loop_behavior = LoopBehavior.Infinite
+transition_mode = TransitionMode.Immediate
 option = (
     # ANCHOR: option
     FociStmOption(
-        bank=PatternBank.B0,
-        sound_speed=340 * m / s,
-        loop_behavior=LoopBehavior.Infinite,
-        transition_mode=TransitionMode.Immediate,
+        bank,
+        sound_speed,
+        loop_behavior,
+        transition_mode,
     )
     # ANCHOR_END: option
 )

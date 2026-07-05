@@ -12,11 +12,13 @@ apex = geometry.center() + np.array([0.0, 0.0, 150.0])
 direction = np.array([0.0, 0.0, 1.0])
 theta = math.radians(18.0) * rad
 wavelength = calc_wavelength(340 * m / s)
+intensity = Intensity.MAX
+phase_offset = Phase.ZERO
 option = (
     # ANCHOR: option
     BesselOption(
-        intensity=Intensity.MAX,
-        phase_offset=Phase.ZERO,
+        intensity,
+        phase_offset,
     )
     # ANCHOR_END: option
 )

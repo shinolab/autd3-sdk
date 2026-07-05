@@ -4,12 +4,15 @@ use autd3_rs::units::Hz;
 use autd3_rs_modulation::{FourierOption, SineComponent, SineOption, fourier};
 
 fn main() -> Result<()> {
+    let scale_factor = None;
+    let clamp = false;
+    let offset = 0x00;
     let option =
         // ANCHOR: option
         FourierOption {
-            scale_factor: None,
-            clamp: false,
-            offset: 0x00,
+            scale_factor,
+            clamp,
+            offset,
         }
         // ANCHOR_END: option
         ;

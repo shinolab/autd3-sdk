@@ -8,14 +8,19 @@ internal static class Sample
     internal static void Run()
     {
         var freq = 150 * Hz;
+        byte amplitude = 0xFF;
+        byte offset = 0x80;
+        var phase = 0.0f * rad;
+        var clamp = false;
+        var samplingConfig = SamplingConfig.Freq4k;
         var option =
             // ANCHOR: option
             new SineOption(
-                amplitude: 0xFF,
-                offset: 0x80,
-                phase: 0.0f * rad,
-                clamp: false,
-                samplingConfig: SamplingConfig.Freq4k
+                amplitude,
+                offset,
+                phase,
+                clamp,
+                samplingConfig
             )
             // ANCHOR_END: option
             ;

@@ -7,12 +7,15 @@ from autd3_modulation import (
     modulation_buffer,
 )
 
+scale_factor = None
+clamp = False
+offset = 0x00
 option = (
     # ANCHOR: option
     FourierOption(
-        scale_factor=None,
-        clamp=False,
-        offset=0x00,
+        scale_factor,
+        clamp,
+        offset,
     )
     # ANCHOR_END: option
 )

@@ -8,11 +8,13 @@ geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 target = geometry.center() + np.array([0.0, 0.0, 150.0])
 wavelength = calc_wavelength(340 * m / s)
+intensity = Intensity.MAX
+phase_offset = Phase.ZERO
 option = (
     # ANCHOR: option
     FocusOption(
-        intensity=Intensity.MAX,
-        phase_offset=Phase.ZERO,
+        intensity,
+        phase_offset,
     )
     # ANCHOR_END: option
 )

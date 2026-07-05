@@ -28,14 +28,19 @@ foci = [
 ]
 
 wavelength = calc_wavelength(340 * m / s)
+repeat = 100
+constraint = EmissionConstraint.Clamp(0x00, 0xFF)
+directivity = Directivity.Sphere
+backend = NalgebraBackend()
+mask = TransducerMask.AllEnabled
 option = (
     # ANCHOR: option
     GspatOption(
-        repeat=100,
-        constraint=EmissionConstraint.Clamp(0x00, 0xFF),
-        directivity=Directivity.Sphere,
-        backend=NalgebraBackend(),
-        mask=TransducerMask.AllEnabled,
+        repeat,
+        constraint,
+        directivity,
+        backend,
+        mask,
     )
     # ANCHOR_END: option
 )

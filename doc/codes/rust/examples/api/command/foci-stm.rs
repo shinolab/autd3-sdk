@@ -24,13 +24,17 @@ fn main() {
     line(start, end, num_points, intensity, &mut dst);
     // ANCHOR_END: line
     let freq = 1.0 * Hz;
+    let bank = PatternBank::B0;
+    let sound_speed = 340.0 * m / s;
+    let loop_behavior = LoopBehavior::Infinite;
+    let transition_mode = TransitionMode::Immediate;
     let option =
         // ANCHOR: option
         FociStmOption {
-            bank: PatternBank::B0,
-            sound_speed: 340.0 * m / s,
-            loop_behavior: LoopBehavior::Infinite,
-            transition_mode: TransitionMode::Immediate,
+            bank,
+            sound_speed,
+            loop_behavior,
+            transition_mode,
         }
         // ANCHOR_END: option
         ;

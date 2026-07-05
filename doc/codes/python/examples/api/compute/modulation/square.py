@@ -3,13 +3,17 @@ from autd3.value import SamplingConfig
 from autd3_modulation import SquareOption, modulation_buffer, square
 
 freq = 150.0 * Hz
+low = 0x00
+high = 0xFF
+duty = 0.5
+sampling_config = SamplingConfig.FREQ_4K
 option = (
     # ANCHOR: option
     SquareOption(
-        low=0x00,
-        high=0xFF,
-        duty=0.5,
-        sampling_config=SamplingConfig.FREQ_4K,
+        low,
+        high,
+        duty,
+        sampling_config,
     )
     # ANCHOR_END: option
 )

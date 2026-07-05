@@ -26,14 +26,19 @@ fn main() -> Result<()> {
     ];
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
+    let phase_quantization_levels = NonZeroU8::new(16).unwrap();
+    let constraint = EmissionConstraint::Uniform(Intensity::MAX);
+    let directivity = Directivity::Sphere;
+    let objective_func = abs_objective_func;
+    let mask = TransducerMask::AllEnabled;
     let option =
         // ANCHOR: option
         GreedyOption {
-            phase_quantization_levels: NonZeroU8::new(16).unwrap(),
-            constraint: EmissionConstraint::Uniform(Intensity::MAX),
-            directivity: Directivity::Sphere,
-            objective_func: abs_objective_func,
-            mask: TransducerMask::AllEnabled,
+            phase_quantization_levels,
+            constraint,
+            directivity,
+            objective_func,
+            mask,
         }
         // ANCHOR_END: option
         ;

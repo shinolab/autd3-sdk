@@ -27,13 +27,17 @@ foci = [
 ]
 
 wavelength = calc_wavelength(340 * m / s)
+phase_quantization_levels = 16
+constraint = EmissionConstraint.Uniform(0xFF)
+directivity = Directivity.Sphere
+mask = TransducerMask.AllEnabled
 option = (
     # ANCHOR: option
     GreedyOption(
-        phase_quantization_levels=16,
-        constraint=EmissionConstraint.Uniform(0xFF),
-        directivity=Directivity.Sphere,
-        mask=TransducerMask.AllEnabled,
+        phase_quantization_levels,
+        constraint,
+        directivity,
+        mask,
     )
     # ANCHOR_END: option
 )

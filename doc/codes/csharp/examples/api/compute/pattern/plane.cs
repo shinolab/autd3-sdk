@@ -12,11 +12,13 @@ internal static class Sample
 
         var direction = Vector3.UnitZ;
         var wavelength = Pattern.Wavelength(340.0f * m / s);
+        var intensity = Intensity.Max;
+        var phaseOffset = Phase.Zero;
         var option =
             // ANCHOR: option
             new PlaneOption(
-                intensity: Intensity.Max,
-                phaseOffset: Phase.Zero
+                intensity,
+                phaseOffset
             )
             // ANCHOR_END: option
             ;
