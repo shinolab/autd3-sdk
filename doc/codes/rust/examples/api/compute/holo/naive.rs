@@ -24,13 +24,17 @@ fn main() -> Result<()> {
     ];
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
+    let constraint = EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX);
+    let directivity = Directivity::Sphere;
+    let backend = NalgebraBackend;
+    let mask = TransducerMask::AllEnabled;
     let option =
         // ANCHOR: option
         NaiveOption {
-            constraint: EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX),
-            directivity: Directivity::Sphere,
-            backend: NalgebraBackend,
-            mask: TransducerMask::AllEnabled,
+            constraint,
+            directivity,
+            backend,
+            mask,
         }
         // ANCHOR_END: option
         ;

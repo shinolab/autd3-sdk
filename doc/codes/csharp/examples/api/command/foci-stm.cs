@@ -27,13 +27,17 @@ internal static class Sample
         // ANCHOR_END: line
         var points = dst.ToArray();
         var freq = 1.0f * Hz;
+        var bank = PatternBank.B0;
+        var soundSpeed = 340.0f * m / s;
+        var loopBehavior = LoopBehavior.Infinite;
+        var transitionMode = TransitionMode.Immediate;
         var option =
             // ANCHOR: option
             new FociStmOption(
-                bank: PatternBank.B0,
-                soundSpeed: 340.0f * m / s,
-                loopBehavior: LoopBehavior.Infinite,
-                transitionMode: TransitionMode.Immediate
+                bank,
+                soundSpeed,
+                loopBehavior,
+                transitionMode
             )
             // ANCHOR_END: option
             ;

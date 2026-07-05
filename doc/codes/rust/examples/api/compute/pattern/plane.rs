@@ -8,11 +8,13 @@ fn main() {
 
     let direction = Vector3::z_axis();
     let wavelength = wavelength(340.0 * m / s);
+    let intensity = Intensity::MAX;
+    let phase_offset = Phase::ZERO;
     let option =
         // ANCHOR: option
         PlaneOption {
-            intensity: Intensity::MAX,
-            phase_offset: Phase::ZERO,
+            intensity,
+            phase_offset,
         }
         // ANCHOR_END: option
         ;

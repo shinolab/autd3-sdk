@@ -8,11 +8,13 @@ fn main() {
 
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = wavelength(340.0 * m / s);
+    let intensity = Intensity::MAX;
+    let phase_offset = Phase::ZERO;
     let option =
         // ANCHOR: option
         FocusOption {
-            intensity: Intensity::MAX,
-            phase_offset: Phase::ZERO,
+            intensity,
+            phase_offset,
         }
         // ANCHOR_END: option
         ;

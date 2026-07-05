@@ -7,12 +7,15 @@ internal static class Sample
 {
     internal static void Run()
     {
+        float? scaleFactor = null;
+        var clamp = false;
+        byte offset = 0x00;
         var option =
             // ANCHOR: option
             new FourierOption(
-                scaleFactor: null,
-                clamp: false,
-                offset: 0x00
+                scaleFactor,
+                clamp,
+                offset
             )
             // ANCHOR_END: option
             ;

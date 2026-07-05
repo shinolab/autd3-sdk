@@ -36,13 +36,17 @@ fn main() {
         })
         .collect::<Vec<_>>();
     let freq = 1.0 * Hz;
+    let bank = PatternBank::B0;
+    let mode = PatternStmMode::PhaseIntensityFull;
+    let loop_behavior = LoopBehavior::Infinite;
+    let transition_mode = TransitionMode::Immediate;
     let option =
         // ANCHOR: option
         PatternStmOption {
-            bank: PatternBank::B0,
-            mode: PatternStmMode::PhaseIntensityFull,
-            loop_behavior: LoopBehavior::Infinite,
-            transition_mode: TransitionMode::Immediate,
+            bank,
+            mode,
+            loop_behavior,
+            transition_mode,
         }
         // ANCHOR_END: option
         ;

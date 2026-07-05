@@ -12,11 +12,13 @@ internal static class Sample
 
         var target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var wavelength = Pattern.Wavelength(340.0f * m / s);
+        var intensity = Intensity.Max;
+        var phaseOffset = Phase.Zero;
         var option =
             // ANCHOR: option
             new FocusOption(
-                intensity: Intensity.Max,
-                phaseOffset: Phase.Zero
+                intensity,
+                phaseOffset
             )
             // ANCHOR_END: option
             ;

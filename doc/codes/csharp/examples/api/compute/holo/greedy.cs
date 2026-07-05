@@ -21,13 +21,17 @@ internal static class Sample
         };
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
+        byte phaseQuantizationLevels = 16;
+        var constraint = EmissionConstraint.Uniform(Intensity.Max);
+        var directivity = Directivity.Sphere;
+        var mask = TransducerMask.AllEnabled;
         var option =
             // ANCHOR: option
             new GreedyOption(
-                phaseQuantizationLevels: 16,
-                constraint: EmissionConstraint.Uniform(Intensity.Max),
-                directivity: Directivity.Sphere,
-                mask: TransducerMask.AllEnabled
+                phaseQuantizationLevels,
+                constraint,
+                directivity,
+                mask
             )
             // ANCHOR_END: option
             ;

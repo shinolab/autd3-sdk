@@ -30,13 +30,17 @@ for i in range(NUM_POINTS):
     )
     patterns.append(buffer)
 freq = 1.0 * Hz
+bank = PatternBank.B0
+mode = PatternStmMode.PhaseIntensityFull
+loop_behavior = LoopBehavior.Infinite
+transition_mode = TransitionMode.Immediate
 option = (
     # ANCHOR: option
     PatternStmOption(
-        bank=PatternBank.B0,
-        mode=PatternStmMode.PhaseIntensityFull,
-        loop_behavior=LoopBehavior.Infinite,
-        transition_mode=TransitionMode.Immediate,
+        bank,
+        mode,
+        loop_behavior,
+        transition_mode,
     )
     # ANCHOR_END: option
 )

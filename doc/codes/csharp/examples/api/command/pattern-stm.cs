@@ -27,13 +27,17 @@ internal static class Sample
             patterns[i] = buffer;
         }
         var freq = 1.0f * Hz;
+        var bank = PatternBank.B0;
+        var mode = PatternStmMode.PhaseIntensityFull;
+        var loopBehavior = LoopBehavior.Infinite;
+        var transitionMode = TransitionMode.Immediate;
         var option =
             // ANCHOR: option
             new PatternStmOption(
-                bank: PatternBank.B0,
-                mode: PatternStmMode.PhaseIntensityFull,
-                loopBehavior: LoopBehavior.Infinite,
-                transitionMode: TransitionMode.Immediate
+                bank,
+                mode,
+                loopBehavior,
+                transitionMode
             )
             // ANCHOR_END: option
             ;
