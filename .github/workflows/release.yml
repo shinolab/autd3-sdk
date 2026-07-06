@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+      - 'py-v*'
+      - 'cs-v*'
       - 'firmware-v*'
 
 defaults:

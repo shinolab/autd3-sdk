@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args;
 
-use crate::component::{COMPONENTS, Component, detect};
-use crate::util::{capture_lenient, run};
+use crate::component::{COMPONENTS, Component, detect, release_sections};
+use crate::util::capture_lenient;
 
 #[derive(Args)]
 pub struct ChangelogCmd {
@@ -41,21 +41,56 @@ fn scope_args(args: &mut Vec<String>, component: &Component) {
 }
 
 fn write_release_notes(root: &Path, tag: &str, output: Option<&str>) -> Result<()> {
-    let (component, _) =
+    let (primary, _) =
         detect(tag).with_context(|| format!("tag `{tag}` matches no known release component"))?;
 
-    let mut args: Vec<String> = Vec::new();
-    scope_args(&mut args, component);
-    args.push("--tag".into());
-    args.push(tag.to_string());
-    args.push("--latest".into());
-    args.push("--strip".into());
-    args.push("header".into());
-    if let Some(out) = output {
-        args.push("--output".into());
-        args.push(out.to_string());
+    let sections = release_sections(primary);
+    let multi = sections.len() > 1;
+
+    let mut doc = String::new();
+    for section in sections {
+        let mut args: Vec<String> = Vec::new();
+        args.push("--tag-pattern".into());
+        args.push(section.tag_pattern());
+        for path in section.include_paths {
+            args.push("--include-path".into());
+            args.push((*path).to_string());
+        }
+        args.push("--tag".into());
+        args.push(tag.to_string());
+        args.push("--latest".into());
+        args.push("--strip".into());
+        args.push("header".into());
+
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let body = capture_lenient("git-cliff", &refs, root)?;
+        if body.is_empty() {
+            continue;
+        }
+        if multi {
+            doc.push_str("# ");
+            doc.push_str(section.section);
+            doc.push_str("\n\n");
+        }
+        doc.push_str(&body);
+        doc.push_str("\n\n");
     }
-    run("git-cliff", args.iter().map(String::as_str), root)
+
+    let doc = doc.trim_end().to_string();
+    if doc.is_empty() {
+        bail!(
+            "no release notes generated for `{tag}`: git-cliff matched no commits for any section \
+             (is the tag present with full history? `git-cliff` may have failed silently)"
+        );
+    }
+    let doc = doc + "\n";
+    match output {
+        Some(out) => {
+            std::fs::write(root.join(out), doc).with_context(|| format!("writing {out}"))?;
+        }
+        None => print!("{doc}"),
+    }
+    Ok(())
 }
 
 pub fn write_changelog_file(root: &Path, tag: Option<&str>, output: &str) -> Result<()> {
