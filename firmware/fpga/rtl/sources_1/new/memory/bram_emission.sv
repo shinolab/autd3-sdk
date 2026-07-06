@@ -10,7 +10,7 @@ module bram_emission (
     output wire [63:0] doutb
 );
 
-  blk_mem_gen_v8_4_12 #(
+  blk_mem_gen_v8_4_13 #(
       .C_FAMILY("artix7"),
       .C_XDEVICEFAMILY("artix7"),
       .C_ELABORATION_DIR("./"),
