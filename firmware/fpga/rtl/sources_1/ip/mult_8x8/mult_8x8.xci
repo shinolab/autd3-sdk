@@ -3,7 +3,7 @@
   "ip_inst": {
     "xci_name": "mult_8x8",
     "component_reference": "xilinx.com:ip:mult_gen:12.0",
-    "ip_revision": "24",
+    "ip_revision": "25",
     "gen_directory": "../../../../autd3-fpga.gen/sources_1/ip/mult_8x8",
     "parameters": {
       "component_parameters": {
@@ -14,7 +14,7 @@
         "PortAWidth": [ { "value": "8", "value_src": "user", "resolve_type": "user", "format": "long", "usage": "all" } ],
         "PortBType": [ { "value": "Unsigned", "value_src": "user", "resolve_type": "user", "usage": "all" } ],
         "PortBWidth": [ { "value": "8", "value_src": "user", "resolve_type": "user", "format": "long", "usage": "all" } ],
-        "ConstValue": [ { "value": "129", "resolve_type": "user", "enabled": false, "usage": "all" } ],
+        "ConstValue": [ { "value": "129", "resolve_type": "user", "format": "long", "enabled": false, "usage": "all" } ],
         "CcmImp": [ { "value": "Distributed_Memory", "resolve_type": "user", "usage": "all" } ],
         "Multiplier_Construction": [ { "value": "Use_Mults", "value_src": "user", "resolve_type": "user", "usage": "all" } ],
         "OptGoal": [ { "value": "Speed", "value_src": "user", "resolve_type": "user", "usage": "all" } ],
@@ -23,7 +23,7 @@
         "OutputWidthLow": [ { "value": "0", "resolve_type": "user", "format": "long", "enabled": false, "usage": "all" } ],
         "UseRounding": [ { "value": "false", "resolve_type": "user", "format": "bool", "enabled": false, "usage": "all" } ],
         "RoundPoint": [ { "value": "0", "resolve_type": "user", "format": "long", "enabled": false, "usage": "all" } ],
-        "PipeStages": [ { "value": "3", "value_src": "user", "resolve_type": "user", "usage": "all" } ],
+        "PipeStages": [ { "value": "3", "value_src": "user", "resolve_type": "user", "format": "long", "usage": "all" } ],
         "ClockEnable": [ { "value": "false", "resolve_type": "user", "format": "bool", "usage": "all" } ],
         "SyncClear": [ { "value": "false", "resolve_type": "user", "format": "bool", "usage": "all" } ],
         "SclrCePriority": [ { "value": "SCLR_Overrides_CE", "resolve_type": "user", "enabled": false, "usage": "all" } ],
@@ -67,12 +67,12 @@
       },
       "runtime_parameters": {
         "IPCONTEXT": [ { "value": "IP_Flow" } ],
-        "IPREVISION": [ { "value": "24" } ],
+        "IPREVISION": [ { "value": "25" } ],
         "MANAGED": [ { "value": "TRUE" } ],
         "OUTPUTDIR": [ { "value": "../../../../autd3-fpga.gen/sources_1/ip/mult_8x8" } ],
         "SELECTEDSIMMODEL": [ { "value": "" } ],
         "SHAREDDIR": [ { "value": "." } ],
-        "SWVERSION": [ { "value": "2025.2" } ],
+        "SWVERSION": [ { "value": "2026.1" } ],
         "SYNTHESISFLOW": [ { "value": "GLOBAL" } ]
       }
     },
@@ -156,5 +156,5 @@
       }
     }
   },
-  "checksum": "35badd6e"
+  "checksum": "aaaf709b"
 }
