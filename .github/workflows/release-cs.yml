@@ -25,7 +25,7 @@ jobs:
           - os: macos-latest
             rid: osx-arm64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - uses: ./.github/actions/setup-rust
@@ -41,7 +41,7 @@ jobs:
           cp bindings/ffi/target/release/*autd3*.dll native/ 2>/dev/null || true
           cp bindings/ffi/target/release/libautd3*.so native/ 2>/dev/null || true
           cp bindings/ffi/target/release/libautd3*.dylib native/ 2>/dev/null || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.rid }}
           path: native/*
@@ -53,18 +53,18 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - uses: ./.github/actions/setup-rust
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-about
       - name: Download native libs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: bindings/ffi/target/native
       - name: Generate third-party licenses
