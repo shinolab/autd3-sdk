@@ -30,8 +30,8 @@ jobs:
       license: ${{ steps.filter.outputs.license }}
       doc: ${{ steps.filter.outputs.doc }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -223,7 +223,7 @@ jobs:
           esac
       - name: Checkout release head
         if: ${{ steps.chk.outputs.lineage == 'check' }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
