@@ -20,6 +20,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "AUTD3 SDK",
+      favicon: "/favicon.svg",
       expressiveCode: {
         styleOverrides: { codeLineHeight: "1.3" },
       },
@@ -40,6 +41,10 @@ export default defineConfig({
       ],
       customCss: ["./src/styles/math.css", "./src/styles/sidebar.css"],
       head: [
+        {
+          tag: "link",
+          attrs: { rel: "icon", href: "/autd3-sdk/favicon.ico", sizes: "32x32" },
+        },
         {
           tag: "script",
           content:
