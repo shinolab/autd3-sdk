@@ -95,7 +95,7 @@ impl Emulator {
     where
         F: AsyncFnOnce(&mut Recorder) -> Result<(), EmulatorError>,
     {
-        let mut recorder = Recorder::open(&self.geometry, start_ns);
+        let mut recorder = Recorder::new(&self.geometry, start_ns);
         pollster::block_on(f(&mut recorder))?;
         Ok(recorder.into_record())
     }

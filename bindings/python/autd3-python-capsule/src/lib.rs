@@ -107,6 +107,23 @@ mod link {
     use pyo3::types::{PyCapsule, PyCapsuleMethods};
 
     pub const LINK_CAPSULE_NAME: &CStr = c"autd3.link.v1";
+    pub const FRAME_CAPSULE_NAME: &CStr = c"autd3.frame.v1";
+
+    pub fn frame_into_capsule(
+        py: Python<'_>,
+        frames: Arc<Frames>,
+        index: usize,
+    ) -> PyResult<Bound<'_, PyCapsule>> {
+        PyCapsule::new_with_value(py, (frames, index), FRAME_CAPSULE_NAME)
+    }
+
+    pub fn frame_from_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<(Arc<Frames>, usize)> {
+        let ptr: NonNull<c_void> = capsule.pointer_checked(Some(FRAME_CAPSULE_NAME))?;
+        // SAFETY: name-checked above; produced by `frame_into_capsule` storing a
+        // `(Arc<Frames>, usize)`. Same autd3-rs version across wheels.
+        let (frames, index) = unsafe { ptr.cast::<(Arc<Frames>, usize)>().as_ref() };
+        Ok((Arc::clone(frames), *index))
+    }
 
     pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send>>;
 
@@ -183,6 +200,7 @@ mod link {
 
 #[cfg(feature = "client")]
 pub use link::{
-    BoxFuture, ClientBackend, ClientOpener, LINK_CAPSULE_NAME, LinkStatusData, ResponseToken,
-    client_opener, link_into_capsule, take_client_opener,
+    BoxFuture, ClientBackend, ClientOpener, FRAME_CAPSULE_NAME, LINK_CAPSULE_NAME, LinkStatusData,
+    ResponseToken, client_opener, frame_from_capsule, frame_into_capsule, link_into_capsule,
+    take_client_opener,
 };

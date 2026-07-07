@@ -2,7 +2,8 @@ use std::num::NonZeroU16;
 use std::sync::Arc;
 
 use autd3_python_capsule::{
-    DevicePattern, capsule_of, modulation_from_capsule, pattern_from_capsule, to_pyerr,
+    DevicePattern, capsule_of, frame_into_capsule, modulation_from_capsule, pattern_from_capsule,
+    to_pyerr,
 };
 use autd3_rs::commands::{
     ChangeModulationBank as CoreChangeModulationBank, ChangePatternBank as CoreChangePatternBank,
@@ -518,6 +519,13 @@ impl DatagramBuilder {
 pub struct Frame {
     pub(crate) datagrams: Arc<CoreFrames>,
     pub(crate) index: usize,
+}
+
+#[pymethods]
+impl Frame {
+    fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyCapsule>> {
+        frame_into_capsule(py, Arc::clone(&self.datagrams), self.index)
+    }
 }
 
 #[pyclass(name = "Frames", module = "autd3")]
