@@ -45,8 +45,10 @@ fn records_phase_passthrough_with_silencer_disabled() {
         record.end().sys_time(),
         u64::try_from(2 * ULTRASOUND_PERIOD.as_nanos()).unwrap()
     );
-    for tr in 0..Autd3::NUM_TRANSDUCERS {
-        assert_eq!(record.phase_of(tr), &[0x20, 0x20]);
+    let phase = record.phase();
+    assert_eq!(phase.shape(), (Autd3::NUM_TRANSDUCERS, 2));
+    for col in phase.columns() {
+        assert!(col.u8().unwrap().into_no_null_iter().all(|v| v == 0x20));
     }
 }
 

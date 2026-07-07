@@ -7,6 +7,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use polars::prelude::DataFrame;
 use textplots::{Chart, Plot, Shape};
 
 use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
@@ -15,6 +16,13 @@ use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Emission, SamplingConfig};
 
 use autd3_rs_emulator::{ClientApi, Emulator};
+
+fn transducer0(df: &DataFrame) -> Vec<f32> {
+    df.columns()
+        .iter()
+        .map(|c| f32::from(c.u16().unwrap().get(0).unwrap()))
+        .collect()
+}
 
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
@@ -58,14 +66,14 @@ fn main() -> Result<()> {
         record.num_transducers(),
         record.num_samples()
     );
+    let pulse_width_df = record.pulse_width();
     println!("--- phase ---\n{}", record.phase());
-    println!("--- pulse width ---\n{}", record.pulse_width());
+    println!("--- pulse width ---\n{pulse_width_df}");
 
-    let pulse_width: Vec<(f32, f32)> = record
-        .pulse_width_of(0)
-        .iter()
+    let pulse_width: Vec<(f32, f32)> = transducer0(&pulse_width_df)
+        .into_iter()
         .enumerate()
-        .map(|(i, &w)| (i as f32, f32::from(w)))
+        .map(|(i, w)| (i as f32, w))
         .collect();
     println!("pulse width over time (transducer 0, 1 sample = 25 us)");
     Chart::new(220, 50, 0.0, record.num_samples() as f32)
