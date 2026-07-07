@@ -57,9 +57,15 @@ pub struct FpgaEmulator {
     next_sync0: u64,
     sys_time_ns: u64,
     gpio_in: [bool; 4],
+    thermal: bool,
     mod_swapchain: Swapchain,
     pattern_swapchain: Swapchain,
 }
+
+const FPGA_STATE_BIT_THERMAL: u8 = 0;
+const FPGA_STATE_BIT_MOD_BANK: u8 = 1;
+const FPGA_STATE_BIT_PATTERN_BANK: u8 = 2;
+const FPGA_STATE_BIT_PATTERN_MODE: u8 = 3;
 
 impl FpgaEmulator {
     #[must_use]
@@ -85,6 +91,7 @@ impl FpgaEmulator {
             next_sync0: 0,
             sys_time_ns: 0,
             gpio_in: [false; 4],
+            thermal: false,
             mod_swapchain: Swapchain::new(),
             pattern_swapchain: Swapchain::new(),
         }
@@ -140,7 +147,11 @@ impl FpgaEmulator {
         let select = (addr >> 14) & 0x3;
         let a = (addr & 0x3FFF) as usize;
         if select == SELECT_CONTROLLER && (a >> 8) == CNT_SELECT_MAIN {
-            self.controller[a & 0xFF]
+            if a & 0xFF == reg(ffi::ADDR_FPGA_STATE) {
+                u16::from(self.fpga_state())
+            } else {
+                self.controller[a & 0xFF]
+            }
         } else {
             0
         }
@@ -211,8 +222,31 @@ impl FpgaEmulator {
         self.pwe[key & (PWE_TABLE_SIZE - 1)]
     }
 
-    pub fn set_fpga_state(&mut self, state: u8) {
-        self.controller[reg(ffi::ADDR_FPGA_STATE)] = u16::from(state);
+    pub fn set_thermal(&mut self, asserted: bool) {
+        self.thermal = asserted;
+    }
+
+    #[must_use]
+    pub fn fpga_state(&self) -> u8 {
+        let mut state = 0u8;
+        if self.thermal {
+            state |= 1 << FPGA_STATE_BIT_THERMAL;
+        }
+        if self.current_mod_bank() == 1 {
+            state |= 1 << FPGA_STATE_BIT_MOD_BANK;
+        }
+        if self.current_pattern_bank() == 1 {
+            state |= 1 << FPGA_STATE_BIT_PATTERN_BANK;
+        }
+        if self.is_pattern_mode() {
+            state |= 1 << FPGA_STATE_BIT_PATTERN_MODE;
+        }
+        state
+    }
+
+    #[must_use]
+    pub fn is_pattern_mode(&self) -> bool {
+        self.pattern_cycle(self.current_pattern_bank()) == 1
     }
 
     #[must_use]

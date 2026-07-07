@@ -99,10 +99,19 @@ fn output_mask_disables_transducers() {
 }
 
 #[test]
-fn read_fpga_state_returns_register() {
+fn read_fpga_state_reports_thermal_and_default_banks() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
-    device.fpga_mut().set_fpga_state(0x83);
+
+    // Default: banks B0, pattern mode (pattern cycle 1), thermal clear.
     let rx = device.send(&frame(0, Cmd::ReadFpgaState, &[]));
-    assert_eq!(rx.data, 0x83);
+    assert_eq!(rx.data, 0b0000_1000);
+
+    device.fpga_mut().set_thermal(true);
+    let rx = device.send(&frame(1, Cmd::ReadFpgaState, &[]));
+    assert_eq!(rx.data, 0b0000_1001);
+
+    device.fpga_mut().set_thermal(false);
+    let rx = device.send(&frame(2, Cmd::ReadFpgaState, &[]));
+    assert_eq!(rx.data, 0b0000_1000);
 }
