@@ -5,6 +5,7 @@ from autd3_core import Emission, Intensity, Nearest, Phase, SamplingConfig
 from ._autd3 import (
     ControlPoint,
     ControlPoints,
+    DcSysTime,
     GpioIn,
     LoopBehavior,
     ModulationBank,
@@ -16,6 +17,7 @@ from ._autd3 import (
 __all__ = [
     "ControlPoint",
     "ControlPoints",
+    "DcSysTime",
     "Emission",
     "GpioIn",
     "Intensity",

@@ -38,7 +38,7 @@ import { excerpt } from "@lib/excerpt";
 | `PatternBank`     | アクティブな Pattern バンク              |
 | `PatternIdx(u16)` | Pattern が指定インデックスのとき High    |
 | `IsStmMode`   | Stm モード (`size != 1`) のとき High                |
-| `SysTimeEq(u64)`  | システム時刻が指定値に一致したとき High  |
+| `SysTimeEq(DcSysTime)` | システム時刻が指定値に一致したとき High |
 | `SyncDiff`        | 同期誤差                                 |
 | `PwmOut(u8)`      | 指定振動子の PWM 出力                    |
 | `Direct(bool)`    | 指定した固定値を直接出力                 |

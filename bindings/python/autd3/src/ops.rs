@@ -1,4 +1,5 @@
 use core::num::NonZeroU16;
+use core::time::Duration;
 
 use autd3_python_capsule::{
     DevicePattern, capsule_of, modulation_from_capsule, pattern_from_capsule,
@@ -6,7 +7,7 @@ use autd3_python_capsule::{
 use autd3_rs::Velocity;
 use autd3_rs::commands::PatternCompression as CorePatternCompression;
 use autd3_rs::value::{
-    DcSysTime, GpioIn as CoreGpioIn, LoopBehavior as CoreLoopBehavior,
+    DcSysTime as CoreDcSysTime, GpioIn as CoreGpioIn, LoopBehavior as CoreLoopBehavior,
     ModulationBank as CoreModulationBank, PatternBank as CorePatternBank,
     TransitionMode as CoreTransitionMode,
 };
@@ -94,6 +95,55 @@ impl GpioIn {
     }
 }
 
+#[pyclass(name = "DcSysTime", module = "autd3.value", from_py_object)]
+#[derive(Clone, Copy)]
+pub struct DcSysTime(pub(crate) CoreDcSysTime);
+
+#[pymethods]
+impl DcSysTime {
+    #[classattr]
+    #[pyo3(name = "ZERO")]
+    fn zero() -> Self {
+        Self(CoreDcSysTime::ZERO)
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "from_nanos")]
+    fn from_nanos(sys_time_ns: u64) -> Self {
+        Self(CoreDcSysTime::from_nanos(sys_time_ns))
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "now")]
+    fn now() -> Self {
+        Self(CoreDcSysTime::now())
+    }
+
+    #[getter]
+    fn sys_time(&self) -> u64 {
+        self.0.sys_time()
+    }
+
+    fn __add__(&self, duration: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Self(self.0 + extract_duration(duration)?))
+    }
+
+    fn __sub__(&self, duration: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Self(self.0 - extract_duration(duration)?))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("DcSysTime.from_nanos({})", self.0.sys_time())
+    }
+}
+
+fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
+    let nanos = obj.call_method0("as_nanos")?.extract::<u128>()?;
+    u64::try_from(nanos)
+        .map(Duration::from_nanos)
+        .map_err(|_| PyValueError::new_err("duration is out of range"))
+}
+
 #[pyclass(name = "TransitionMode", module = "autd3.value", from_py_object)]
 #[derive(Clone, Copy)]
 pub struct TransitionMode(pub(crate) CoreTransitionMode);
@@ -120,10 +170,8 @@ impl TransitionMode {
 
     #[staticmethod]
     #[pyo3(name = "SysTime")]
-    fn sys_time(sys_time_ns: u64) -> Self {
-        Self(CoreTransitionMode::SysTime(DcSysTime::from_nanos(
-            sys_time_ns,
-        )))
+    fn sys_time(sys_time: DcSysTime) -> Self {
+        Self(CoreTransitionMode::SysTime(sys_time.0))
     }
 
     #[staticmethod]
