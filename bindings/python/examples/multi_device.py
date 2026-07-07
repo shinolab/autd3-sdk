@@ -4,6 +4,7 @@ import asyncio
 
 import autd3
 import autd3_link_ethercrab as ethercrab
+from scipy.spatial.transform import Rotation
 
 
 async def main() -> None:
@@ -12,7 +13,7 @@ async def main() -> None:
             autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
             autd3.geometry.Autd3(
                 origin=(autd3.geometry.Autd3.DEVICE_WIDTH, 0.0, 0.0),
-                rotation=(1.0, 0.0, 0.0, 0.0),
+                rotation=Rotation.identity(),
             ),
         ]
     )
