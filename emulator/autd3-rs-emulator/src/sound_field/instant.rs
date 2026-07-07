@@ -34,6 +34,8 @@ pub struct InstantRecordOption {
     pub sound_speed: f32,
     pub time_step: Duration,
     pub memory_limits_hint_mb: usize,
+    #[cfg(feature = "gpu")]
+    pub gpu: bool,
 }
 
 impl Default for InstantRecordOption {
@@ -42,6 +44,8 @@ impl Default for InstantRecordOption {
             sound_speed: 340e3,
             time_step: Duration::from_micros(1),
             memory_limits_hint_mb: 128,
+            #[cfg(feature = "gpu")]
+            gpu: false,
         }
     }
 }
@@ -158,6 +162,58 @@ impl<'a> Cpu<'a> {
     }
 }
 
+enum ComputeDevice<'a> {
+    Cpu(Cpu<'a>),
+    #[cfg(feature = "gpu")]
+    Gpu(super::instant_gpu::GpuInstant<'a>),
+}
+
+impl ComputeDevice<'_> {
+    fn init(&mut self, cache_size: isize, cursor: &mut isize, rem_frame: &mut usize) {
+        match self {
+            ComputeDevice::Cpu(cpu) => cpu.init(cache_size, cursor, rem_frame),
+            #[cfg(feature = "gpu")]
+            ComputeDevice::Gpu(gpu) => gpu.init(cache_size, cursor, rem_frame),
+        }
+    }
+
+    fn progress(&mut self, cursor: &mut isize) {
+        match self {
+            ComputeDevice::Cpu(cpu) => cpu.progress(cursor),
+            #[cfg(feature = "gpu")]
+            ComputeDevice::Gpu(gpu) => gpu.progress(cursor),
+        }
+    }
+
+    #[cfg_attr(not(feature = "gpu"), allow(clippy::unnecessary_wraps))]
+    fn compute(
+        &mut self,
+        start_time: Duration,
+        time_step: Duration,
+        num_points_in_frame: usize,
+        sound_speed: f32,
+        offset: isize,
+    ) -> Result<&Vec<Vec<f32>>, EmulatorError> {
+        match self {
+            ComputeDevice::Cpu(cpu) => Ok(cpu.compute(
+                start_time,
+                time_step,
+                num_points_in_frame,
+                sound_speed,
+                offset,
+            )),
+            #[cfg(feature = "gpu")]
+            ComputeDevice::Gpu(gpu) => gpu.compute(
+                start_time,
+                time_step,
+                num_points_in_frame,
+                sound_speed,
+                offset,
+            ),
+        }
+    }
+}
+
 pub struct Instant<'a> {
     option: InstantRecordOption,
     cursor: isize,
@@ -170,7 +226,7 @@ pub struct Instant<'a> {
     frame_window_size: usize,
     cache_size: isize,
     num_points_in_frame: usize,
-    cpu: Cpu<'a>,
+    device: ComputeDevice<'a>,
 }
 
 impl Instant<'_> {
@@ -190,7 +246,7 @@ impl Instant<'_> {
             return Err(EmulatorError::NotRecorded);
         }
 
-        self.cpu
+        self.device
             .init(self.cache_size, &mut self.cursor, &mut self.rem_frame);
 
         let time_step = self.option.time_step;
@@ -201,7 +257,7 @@ impl Instant<'_> {
 
         while cur_frame != target {
             let end_frame = if self.rem_frame == 0 {
-                self.cpu.progress(&mut self.cursor);
+                self.device.progress(&mut self.cursor);
                 cur_frame + self.frame_window_size
             } else {
                 cur_frame + self.rem_frame
@@ -219,13 +275,13 @@ impl Instant<'_> {
                 let offset = (self.cursor - self.cache_size) * ULTRASOUND_PERIOD_COUNT as isize;
                 for i in 0..local_frames {
                     let start_time = (cur_frame + i) as u32 * ULTRASOUND_PERIOD;
-                    let field = self.cpu.compute(
+                    let field = self.device.compute(
                         start_time,
                         time_step,
                         self.num_points_in_frame,
                         sound_speed,
                         offset,
-                    );
+                    )?;
                     for (ti, pressure) in field.iter().enumerate() {
                         let t = (start_time + ti as u32 * time_step).as_nanos() as u64;
                         out.push((t, pressure.clone()));
@@ -316,7 +372,31 @@ impl Record {
             .map(crate::record::TransducerRecord::output_ultrasound_iter)
             .collect();
 
-        let cpu = Cpu::new(
+        #[cfg(feature = "gpu")]
+        let device = if option.gpu {
+            ComputeDevice::Gpu(super::instant_gpu::GpuInstant::new(
+                &x,
+                &y,
+                &z,
+                &positions,
+                output_ultrasound,
+                frame_window_size,
+                num_points_in_frame,
+                cache_size,
+            )?)
+        } else {
+            ComputeDevice::Cpu(Cpu::new(
+                &x,
+                &y,
+                &z,
+                &positions,
+                output_ultrasound,
+                frame_window_size,
+                num_points_in_frame,
+            ))
+        };
+        #[cfg(not(feature = "gpu"))]
+        let device = ComputeDevice::Cpu(Cpu::new(
             &x,
             &y,
             &z,
@@ -324,7 +404,7 @@ impl Record {
             output_ultrasound,
             frame_window_size,
             num_points_in_frame,
-        );
+        ));
 
         Ok(Instant {
             option,
@@ -338,7 +418,7 @@ impl Record {
             frame_window_size,
             cache_size,
             num_points_in_frame,
-            cpu,
+            device,
         })
     }
 }

@@ -1,5 +1,9 @@
 mod instant;
+#[cfg(feature = "gpu")]
+mod instant_gpu;
 mod rms;
+#[cfg(feature = "gpu")]
+mod rms_gpu;
 
 pub use instant::{Instant, InstantRecordOption};
 pub use rms::{Rms, RmsRecordOption};

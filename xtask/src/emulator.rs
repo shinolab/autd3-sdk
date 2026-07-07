@@ -7,9 +7,18 @@ use crate::util::run;
 
 #[derive(Subcommand)]
 pub enum EmulatorCmd {
-    Build,
-    Test,
-    Lint,
+    Build {
+        #[arg(long)]
+        gpu: bool,
+    },
+    Test {
+        #[arg(long)]
+        gpu: bool,
+    },
+    Lint {
+        #[arg(long)]
+        gpu: bool,
+    },
     Format {
         #[arg(long)]
         fix: bool,
@@ -27,14 +36,30 @@ pub enum EmulatorCmd {
 
 pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
     let dir = root.join("emulator");
+    let feature_args = |gpu: bool| -> Vec<&str> {
+        if gpu {
+            vec!["--features", "autd3-rs-emulator/gpu"]
+        } else {
+            vec![]
+        }
+    };
     match cmd {
-        EmulatorCmd::Build => run("cargo", ["build", "--workspace", "--all-targets"], &dir),
-        EmulatorCmd::Test => run("cargo", ["test", "--workspace", "--all-targets"], &dir),
-        EmulatorCmd::Lint => run(
-            "cargo",
-            ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"],
-            &dir,
-        ),
+        EmulatorCmd::Build { gpu } => {
+            let mut args = vec!["build", "--workspace", "--all-targets"];
+            args.extend(feature_args(*gpu));
+            run("cargo", args, &dir)
+        }
+        EmulatorCmd::Test { gpu } => {
+            let mut args = vec!["test", "--workspace", "--all-targets"];
+            args.extend(feature_args(*gpu));
+            run("cargo", args, &dir)
+        }
+        EmulatorCmd::Lint { gpu } => {
+            let mut args = vec!["clippy", "--workspace", "--all-targets"];
+            args.extend(feature_args(*gpu));
+            args.extend(["--", "-D", "warnings"]);
+            run("cargo", args, &dir)
+        }
         EmulatorCmd::Format { fix } => {
             let mut args = vec!["fmt", "--all"];
             if !*fix {

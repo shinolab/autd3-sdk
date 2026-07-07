@@ -6,6 +6,11 @@
 // Pass `--no-plot` to skip the Python step. Run with:
 //   cargo xtask emulator example sound_field
 //   cargo xtask emulator example sound_field --no-plot
+//
+// Build with `--features gpu` to compute the field on the GPU (wgpu) instead of
+// the CPU (requires a GPU adapter); the `option.gpu` field below is enabled
+// automatically under that feature:
+//   cargo run -p autd3-rs-emulator-examples --bin sound_field --release --features gpu
 
 use std::fs::File;
 use std::time::Duration;
@@ -63,6 +68,8 @@ fn main() -> Result<()> {
         },
         InstantRecordOption {
             time_step: Duration::from_micros(1),
+            #[cfg(feature = "gpu")]
+            gpu: true,
             ..Default::default()
         },
     )?;
