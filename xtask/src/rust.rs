@@ -50,6 +50,7 @@ fn windows_test_excludes() -> Vec<&'static str> {
             "autd3-rs-patternsoak",
             "autd3-rs-synctune",
             "autd3-rs-examples",
+            "autd3-rs-firmware-test",
         ]
         .iter()
         .flat_map(|pkg| ["--exclude", *pkg])
