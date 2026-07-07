@@ -45,11 +45,6 @@ impl TransducerRecord {
 }
 
 impl Record {
-    #[must_use]
-    pub fn output_voltage_of(&self, transducer: usize) -> Vec<f32> {
-        self.records[transducer].output_voltage()
-    }
-
     #[cfg(feature = "polars")]
     #[must_use]
     pub fn output_voltage(&self) -> DataFrame {

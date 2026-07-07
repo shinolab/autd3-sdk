@@ -83,16 +83,6 @@ impl Record {
         self.records.first().map_or(0, |r| r.pulse_width.len())
     }
 
-    #[must_use]
-    pub fn phase_of(&self, transducer: usize) -> &[u8] {
-        &self.records[transducer].phase
-    }
-
-    #[must_use]
-    pub fn pulse_width_of(&self, transducer: usize) -> &[u16] {
-        &self.records[transducer].pulse_width
-    }
-
     #[cfg(feature = "polars")]
     #[must_use]
     pub fn phase(&self) -> DataFrame {
