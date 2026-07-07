@@ -455,7 +455,7 @@ impl Renderer {
             }
         }
         self.queue.submit([encoder.finish()]);
-        frame.present();
+        self.queue.present(frame);
     }
 
     fn configure_scene(&mut self, positions: &[[f32; 4]]) {
@@ -528,6 +528,7 @@ async fn init_gpu(
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
+            apply_limit_buckets: false,
         })
         .await
         .map_err(|e| format!("request_adapter: {e}"))?;
@@ -553,6 +554,7 @@ async fn init_gpu(
         present_mode: wgpu::PresentMode::Fifo,
         desired_maximum_frame_latency: 2,
         alpha_mode: caps.alpha_modes[0],
+        color_space: wgpu::SurfaceColorSpace::Auto,
         view_formats: vec![],
     };
     surface.configure(&device, &config);
