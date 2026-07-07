@@ -16,6 +16,7 @@ members = [
     "tools/patternsoak",
     "tools/synctune",
     "tools/firmware",
+    "tools/firmware-test",
     "examples",
 ]
 exclude = [

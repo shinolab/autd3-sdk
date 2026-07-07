@@ -37,6 +37,15 @@ pub enum ToolCmd {
         args: Vec<String>,
     },
 
+    FirmwareTest {
+        #[arg(long)]
+        debug: bool,
+        #[arg(long)]
+        no_sudo: bool,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
     Twincat {
         #[command(subcommand)]
         cmd: TwincatCmd,
@@ -95,6 +104,11 @@ pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
             no_sudo,
             args,
         } => run_bin(root, "autd3-rs-synctune", debug, no_sudo, &[], &args),
+        ToolCmd::FirmwareTest {
+            debug,
+            no_sudo,
+            args,
+        } => run_bin(root, "autd3-rs-firmware-test", debug, no_sudo, &[], &args),
         ToolCmd::Twincat { cmd } => run_twincat(root, cmd),
     }
 }
