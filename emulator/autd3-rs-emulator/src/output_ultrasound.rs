@@ -107,11 +107,6 @@ impl OutputUltrasound<'_> {
 }
 
 impl Record {
-    #[must_use]
-    pub fn output_ultrasound_of(&self, transducer: usize) -> Vec<f32> {
-        self.records[transducer].output_ultrasound()
-    }
-
     #[cfg(feature = "polars")]
     #[must_use]
     pub fn output_ultrasound(&self) -> DataFrame {

@@ -6,6 +6,7 @@
 
 use anyhow::Result;
 use autd3_rs::common::ULTRASOUND_PERIOD;
+use polars::prelude::DataFrame;
 use textplots::{Chart, Plot, Shape};
 
 use autd3_rs::commands::{Pattern, SetSilencer};
@@ -16,6 +17,13 @@ use autd3_rs::value::{Emission, Intensity, Phase};
 use autd3_rs_emulator::{ClientApi, Emulator};
 
 const PLOT_SAMPLES: usize = 512 * 30;
+
+fn transducer0(df: &DataFrame) -> Vec<f32> {
+    df.columns()
+        .iter()
+        .map(|c| c.f32().unwrap().get(0).unwrap())
+        .collect()
+}
 
 fn lineplot(title: &str, samples: &[f32]) {
     let points: Vec<(f32, f32)> = samples
@@ -59,11 +67,11 @@ fn main() -> Result<()> {
 
     lineplot(
         "output voltage [V] (transducer 0)",
-        &record.output_voltage_of(0),
+        &transducer0(&record.output_voltage()),
     );
     lineplot(
         "emitted ultrasound [a.u.] (transducer 0)",
-        &record.output_ultrasound_of(0),
+        &transducer0(&record.output_ultrasound()),
     );
     Ok(())
 }
