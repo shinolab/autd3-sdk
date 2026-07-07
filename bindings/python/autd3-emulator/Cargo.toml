@@ -1,0 +1,29 @@
+[package]
+name = "autd3-python-emulator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Python bindings for the hardware-free emulator (drive recording and sound-field computation)."
+
+[lib]
+name = "autd3_emulator"
+crate-type = ["cdylib"]
+
+[dependencies]
+autd3-rs.workspace = true
+autd3-rs-core.workspace = true
+autd3-rs-emulator.workspace = true
+autd3-python-capsule = { workspace = true, features = ["client"] }
+pyo3.workspace = true
+pollster = "0.4.0"
+polars = { version = "0.54.4", default-features = false, features = [
+    "dtype-u8",
+    "dtype-u16",
+    "ipc",
+] }
+
+[lints]
+workspace = true
