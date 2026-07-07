@@ -202,10 +202,14 @@ fn verify_frozen_versions(doc: &Path) -> Result<()> {
         if !matches!(ext, Some("md" | "mdx")) {
             continue;
         }
-        let Some(slug) = slugs.iter().find(|s| rel.split('/').any(|seg| seg == s.as_str())) else {
+        let Some(slug) = slugs
+            .iter()
+            .find(|s| rel.split('/').any(|seg| seg == s.as_str()))
+        else {
             continue;
         };
-        let text = fs::read_to_string(doc.join(rel)).with_context(|| format!("failed to read {rel}"))?;
+        let text =
+            fs::read_to_string(doc.join(rel)).with_context(|| format!("failed to read {rel}"))?;
         if (text.contains("@codes/") && text.contains("?raw")) || text.contains("excerpt(") {
             offenders.push(format!("{rel} (version {slug})"));
         }
@@ -254,7 +258,7 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
     let bindings = root.join("bindings").join("python");
     let venv = ensure_venv(&bindings)?;
     develop(&bindings, &venv, MIT_WHEELS, false)?;
-    pip_install(&bindings, &venv, &["numpy", "scipy"])?;
+    pip_install(&bindings, &venv, &["numpy", "scipy", "polars"])?;
 
     let py_codes = doc.join("codes").join("python");
     let runner = py_codes.join("scripts").join("run_sample.py");
