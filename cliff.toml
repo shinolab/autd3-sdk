@@ -24,10 +24,12 @@ conventional_commits = true
 filter_unconventional = true
 split_commits = false
 commit_parsers = [
-    { message = "^feat", group = "<!-- 0 -->🚀 Features" },
-    { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
-    { message = "^perf", group = "<!-- 2 -->⚡ Performance" },
-    { message = "^revert", group = "<!-- 3 -->◀️ Revert" },
+    { footer = "^BREAKING[ -]CHANGE", group = "<!-- 0 -->💥 Breaking Changes" },
+    { message = "^[a-z]+(\\(.+\\))?!", group = "<!-- 0 -->💥 Breaking Changes" },
+    { message = "^feat", group = "<!-- 1 -->🚀 Features" },
+    { message = "^fix", group = "<!-- 2 -->🐛 Bug Fixes" },
+    { message = "^perf", group = "<!-- 3 -->⚡ Performance" },
+    { message = "^revert", group = "<!-- 4 -->◀️ Revert" },
     { message = "^docs", skip = true },
     { message = "^refactor", skip = true },
     { message = "^test", skip = true },
