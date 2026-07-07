@@ -107,7 +107,7 @@ fn to_gpio_out(g: &Autd3GpioOut) -> GpioOut {
         7 => GpioOut::PatternBank,
         8 => GpioOut::PatternIdx(g.value as u16),
         9 => GpioOut::IsStmMode,
-        10 => GpioOut::SysTimeEq(g.value),
+        10 => GpioOut::SysTimeEq(DcSysTime::from_nanos(g.value)),
         11 => GpioOut::SyncDiff,
         12 => GpioOut::PwmOut(g.value as u8),
         13 => GpioOut::Direct(g.value != 0),
