@@ -32,7 +32,8 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    pub(crate) fn open(geometry: &Geometry, start_ns: u64) -> Self {
+    #[must_use]
+    pub fn new(geometry: &Geometry, start_ns: u64) -> Self {
         let devices: Vec<Device> = geometry
             .iter()
             .map(|d| Device::new(d.positions().len()))
@@ -64,7 +65,8 @@ impl Recorder {
         }
     }
 
-    pub(crate) fn into_record(self) -> Record {
+    #[must_use]
+    pub fn into_record(self) -> Record {
         let records = self
             .records
             .into_iter()

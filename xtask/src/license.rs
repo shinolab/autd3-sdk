@@ -15,6 +15,7 @@ const PY_MIT_WHEELS: &[&str] = &[
     "autd3-link-remote",
     "autd3-link-twincat",
     "autd3-link-nop",
+    "autd3-emulator",
 ];
 const PY_SOEM_WHEEL: &str = "autd3-link-soem";
 

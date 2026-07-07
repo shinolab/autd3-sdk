@@ -16,6 +16,7 @@ pub(crate) const MIT_WHEELS: &[&str] = &[
     "autd3-link-twincat",
     "autd3-link-nop",
     "autd3",
+    "autd3-emulator",
 ];
 const SOEM_WHEEL: &str = "autd3-link-soem";
 
@@ -93,7 +94,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             develop(&dir, &venv, wheels(soem), false)?;
             let python = venv_python(&venv);
             if dir.join("tests").is_dir() {
-                pip_install(&dir, &venv, &["pytest", "numpy", "scipy"])?;
+                pip_install(&dir, &venv, &["pytest", "numpy", "scipy", "polars"])?;
                 run(&python.to_string_lossy(), ["-m", "pytest", "tests"], &dir)
             } else {
                 let imports = wheels(soem)
@@ -112,7 +113,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
         } => {
             let venv = ensure_venv(&dir)?;
             develop(&dir, &venv, MIT_WHEELS, !debug)?;
-            pip_install(&dir, &venv, &["numpy", "scipy"])?;
+            pip_install(&dir, &venv, &["numpy", "scipy", "polars"])?;
             let script = dir.join("examples").join(format!("{name}.py"));
             if !script.is_file() {
                 bail!("example not found: {}", script.display());
@@ -134,6 +135,7 @@ fn wheels(soem: bool) -> &'static [&'static str] {
             "autd3-link-twincat",
             "autd3-link-nop",
             "autd3",
+            "autd3-emulator",
             SOEM_WHEEL,
         ];
         ALL
