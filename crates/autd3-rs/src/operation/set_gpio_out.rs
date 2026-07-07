@@ -1,5 +1,6 @@
 use crate::error::Error;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::value::DcSysTime;
 
 use super::{Distribution, Operation};
 
@@ -20,6 +21,10 @@ const TYPE_DIRECT: u8 = 0xF0;
 
 const VALUE_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
 
+const fn ec_time_to_gpio_sys_time(ec_time_ns: u64) -> u64 {
+    ((ec_time_ns / 3125) << 6) >> 9
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum GpioOut {
     #[default]
@@ -33,7 +38,7 @@ pub enum GpioOut {
     PatternBank,
     PatternIdx(u16),
     IsStmMode,
-    SysTimeEq(u64),
+    SysTimeEq(DcSysTime),
     SyncDiff,
     PwmOut(u8),
     Direct(bool),
@@ -52,7 +57,7 @@ impl GpioOut {
             GpioOut::PatternBank => (TYPE_PATTERN_BANK, 0),
             GpioOut::PatternIdx(idx) => (TYPE_PATTERN_IDX, u64::from(idx)),
             GpioOut::IsStmMode => (TYPE_IS_STM_MODE, 0),
-            GpioOut::SysTimeEq(t) => (TYPE_SYS_TIME_EQ, t),
+            GpioOut::SysTimeEq(t) => (TYPE_SYS_TIME_EQ, ec_time_to_gpio_sys_time(t.sys_time())),
             GpioOut::SyncDiff => (TYPE_SYNC_DIFF, 0),
             GpioOut::PwmOut(tr) => (TYPE_PWM_OUT, u64::from(tr)),
             GpioOut::Direct(on) => (TYPE_DIRECT, u64::from(on)),
@@ -118,6 +123,27 @@ mod tests {
         assert_eq!(
             &out[24..32],
             &((u64::from(TYPE_MOD_IDX) << 56) | 0x1234).to_le_bytes()
+        );
+    }
+
+    #[test]
+    fn sys_time_eq_encodes_scaled_fpga_value() {
+        let ec_time_ns = 0x0123_4567_89AB_CDEFu64;
+        let expected = ((ec_time_ns / 3125) << 6) >> 9;
+        let mut out = [0u8; PAYLOAD_BYTES];
+        SetGpioOut {
+            outputs: [
+                GpioOut::Off,
+                GpioOut::SysTimeEq(DcSysTime::from_nanos(ec_time_ns)),
+                GpioOut::Off,
+                GpioOut::Off,
+            ],
+        }
+        .encode(0, 0, &mut out)
+        .unwrap();
+        assert_eq!(
+            &out[8..16],
+            &((u64::from(TYPE_SYS_TIME_EQ) << 56) | (expected & VALUE_MASK)).to_le_bytes()
         );
     }
 }
