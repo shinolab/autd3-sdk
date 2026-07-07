@@ -88,3 +88,96 @@ fn rms_skip_then_exhaust_errors() {
     rms.next(ULTRASOUND_PERIOD).unwrap();
     assert!(rms.next(ULTRASOUND_PERIOD).is_err());
 }
+
+#[cfg(feature = "gpu")]
+mod gpu {
+    use super::{ULTRASOUND_PERIOD, range, recorded};
+    use autd3_rs_emulator::{EmulatorError, InstantRecordOption, RmsRecordOption};
+    use polars::frame::DataFrame;
+    use std::time::Duration;
+
+    fn is_missing_adapter(e: &EmulatorError) -> bool {
+        matches!(
+            e,
+            EmulatorError::RequestAdapter(_) | EmulatorError::RequestDevice(_)
+        )
+    }
+
+    fn assert_fields_close(cpu: &DataFrame, gpu: &DataFrame) {
+        assert_eq!(cpu.shape(), gpu.shape());
+        for (c, g) in cpu.columns().iter().zip(gpu.columns()) {
+            for (a, b) in c
+                .f32()
+                .unwrap()
+                .into_no_null_iter()
+                .zip(g.f32().unwrap().into_no_null_iter())
+            {
+                approx::assert_abs_diff_eq!(a, b, epsilon = 0.1);
+            }
+        }
+    }
+
+    // A plane close enough that the ultrasound reaches it within the recording.
+    fn near_range() -> autd3_rs_emulator::RangeXY {
+        autd3_rs_emulator::RangeXY {
+            x: -10.0..=10.0,
+            y: -10.0..=10.0,
+            z: 1.0,
+            resolution: 10.0,
+        }
+    }
+
+    #[test]
+    fn rms_gpu_matches_cpu() {
+        let record = recorded();
+        let cpu = record
+            .sound_field(range(), RmsRecordOption::default())
+            .unwrap()
+            .next(ULTRASOUND_PERIOD)
+            .unwrap();
+        let mut gpu = match record.sound_field(
+            range(),
+            RmsRecordOption {
+                gpu: true,
+                ..Default::default()
+            },
+        ) {
+            Ok(g) => g,
+            Err(e) if is_missing_adapter(&e) => {
+                eprintln!("skipping rms_gpu_matches_cpu: no GPU adapter ({e})");
+                return;
+            }
+            Err(e) => panic!("{e}"),
+        };
+        assert_fields_close(&cpu, &gpu.next(ULTRASOUND_PERIOD).unwrap());
+    }
+
+    #[test]
+    fn instant_gpu_matches_cpu() {
+        let record = recorded();
+        let option = InstantRecordOption {
+            time_step: Duration::from_micros(1),
+            ..Default::default()
+        };
+        let cpu = record
+            .sound_field(near_range(), option)
+            .unwrap()
+            .next(ULTRASOUND_PERIOD)
+            .unwrap();
+        let mut gpu = match record.sound_field(
+            near_range(),
+            InstantRecordOption {
+                gpu: true,
+                ..option
+            },
+        ) {
+            Ok(g) => g,
+            Err(e) if is_missing_adapter(&e) => {
+                eprintln!("skipping instant_gpu_matches_cpu: no GPU adapter ({e})");
+                return;
+            }
+            Err(e) => panic!("{e}"),
+        };
+        assert_fields_close(&cpu, &gpu.next(ULTRASOUND_PERIOD).unwrap());
+    }
+}

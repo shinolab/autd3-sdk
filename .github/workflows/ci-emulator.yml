@@ -24,4 +24,6 @@ jobs:
       - name: Format
         run: cargo xtask emulator format
       - run: cargo xtask emulator lint
+      - name: Lint (gpu feature; compile+clippy check, no GPU adapter in CI)
+        run: cargo xtask emulator lint --gpu
       - run: cargo xtask emulator test

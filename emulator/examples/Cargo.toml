@@ -9,6 +9,9 @@ repository.workspace = true
 description = "examples for autd3-rs-emulator."
 publish = false
 
+[features]
+gpu = ["autd3-rs-emulator/gpu"]
+
 [[bin]]
 name = "record_drive"
 path = "src/bin/record_drive.rs"
