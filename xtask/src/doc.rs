@@ -254,7 +254,7 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
     let bindings = root.join("bindings").join("python");
     let venv = ensure_venv(&bindings)?;
     develop(&bindings, &venv, MIT_WHEELS, false)?;
-    pip_install(&bindings, &venv, &["numpy"])?;
+    pip_install(&bindings, &venv, &["numpy", "scipy"])?;
 
     let py_codes = doc.join("codes").join("python");
     let runner = py_codes.join("scripts").join("run_sample.py");

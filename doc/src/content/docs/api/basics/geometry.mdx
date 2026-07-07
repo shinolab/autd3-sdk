@@ -26,8 +26,15 @@ import { excerpt } from "@lib/excerpt";
 <Fragment slot="python">
 <Code code={excerpt(pySample, "api")} lang="python" />
 
-`Autd3([x, y, z], [w, i, j, k])` は原点位置と姿勢から 1 台のデバイスを構築する.
-長さ 3 の位置と長さ 4 のクォータニオン (`w, i, j, k`) を渡す. 原点と姿勢はいずれも必須.
+`Autd3([x, y, z], rotation)` は原点位置と姿勢から 1 台のデバイスを構築する.
+
+姿勢には以下の 3 形式を渡せる.
+
+<Code code={excerpt(pySample, "rotation")} lang="python" />
+
+- クォータニオン: **scalar-first** `[w, i, j, k]`
+- `EulerAngles`: intrinsic なオイラー角
+- scipy の `Rotation`
 </Fragment>
 <Fragment slot="csharp">
 <Code code={excerpt(csSample, "api")} lang="csharp" />
