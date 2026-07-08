@@ -159,13 +159,56 @@ fn mark(name: &str, ok: bool, actual: &str) -> String {
     format!("[{status}] {name}={actual}")
 }
 
-pub fn expect_transition_rejected(label: &str, result: Result<Frames, Error>) {
+pub async fn expect_firmware_ok(ctx: &Ctx<'_>, label: &str, built: Result<Frames, Error>) {
+    let frames = match built {
+        Ok(frames) => frames,
+        Err(e) => {
+            println!("  [FAIL] {label}: rejected client-side before reaching firmware ({e:?})");
+            return;
+        }
+    };
+    for frame in &frames {
+        if let Err(e) = ctx.client.send_checked(frame).await {
+            println!("  [FAIL] {label}: firmware rejected the command ({e:?})");
+            return;
+        }
+    }
+    println!("  [OK] {label}: firmware accepted the command");
+}
+
+pub async fn expect_firmware_error(
+    ctx: &Ctx<'_>,
+    label: &str,
+    built: Result<Frames, Error>,
+    expected: u8,
+) {
+    let frames = match built {
+        Ok(frames) => frames,
+        Err(e) => {
+            println!("  [FAIL] {label}: rejected client-side before reaching firmware ({e:?})");
+            return;
+        }
+    };
+    let mut result = Ok(());
+    for frame in &frames {
+        result = ctx.client.send_checked(frame).await;
+        if result.is_err() {
+            break;
+        }
+    }
     match result {
-        Err(Error::TransitionConstraint { .. }) => {
-            println!("  [OK] {label}: rejected (TransitionConstraint)");
+        Err(Error::DeviceError { code, .. }) if code == expected => {
+            println!("  [OK] {label}: firmware rejected (code={code:#04x})");
+        }
+        Err(Error::DeviceError { device, code }) => {
+            println!(
+                "  [FAIL] {label}: device[{device}] returned code={code:#04x} (expected {expected:#04x})"
+            );
         }
         Err(e) => println!("  [FAIL] {label}: unexpected error {e:?}"),
-        Ok(_) => println!("  [FAIL] {label}: build unexpectedly succeeded"),
+        Ok(()) => {
+            println!("  [FAIL] {label}: firmware accepted the command (expected {expected:#04x})");
+        }
     }
 }
 

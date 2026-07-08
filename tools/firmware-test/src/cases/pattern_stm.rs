@@ -9,8 +9,9 @@ use autd3_rs_modulation::{constant, modulation_buffer};
 use autd3_rs_pattern::null;
 
 use crate::Ctx;
+use crate::cases::ERR_INVALID_TRANSITION_MODE;
 use crate::cases::pattern_util::{
-    change_pattern_bank, change_pattern_bank_sync, expect_transition_rejected, focus_at,
+    change_pattern_bank, change_pattern_bank_sync, expect_firmware_error, focus_at,
     report_fpga_state, write_pattern_stm_bank,
 };
 use crate::io::wait_enter;
@@ -87,32 +88,44 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     change_pattern_bank_sync(ctx, PatternBank::B1).await?;
     wait_enter("The trajectory reverses at the right edge, then stops after one cycle").await;
 
-    println!("transition-mode validation:");
-    expect_transition_rejected("GainSTM infinite loop + SyncIdx", {
-        let mut b = ctx.client.datagram_builder();
-        b.push(SetSilencer::default()).push(PatternStm::new(
-            0.5 * Hz,
-            &patterns,
-            PatternStmOption {
-                loop_behavior: LoopBehavior::Infinite,
-                transition_mode: TransitionMode::SyncIdx,
-                ..PatternStmOption::default()
-            },
-        ));
-        b.build()
-    });
-    expect_transition_rejected("GainSTM finite loop + Immediate", {
-        let mut b = ctx.client.datagram_builder();
-        b.push(SetSilencer::default()).push(PatternStm::new(
-            0.5 * Hz,
-            &patterns,
-            PatternStmOption {
-                loop_behavior: LoopBehavior::ONCE,
-                transition_mode: TransitionMode::Immediate,
-                ..PatternStmOption::default()
-            },
-        ));
-        b.build()
-    });
+    println!("transition-mode validation (firmware):");
+    expect_firmware_error(
+        ctx,
+        "PatternSTM infinite loop + SyncIdx",
+        {
+            let mut b = ctx.client.datagram_builder();
+            b.push(SetSilencer::default()).push(PatternStm::new(
+                0.5 * Hz,
+                &patterns,
+                PatternStmOption {
+                    loop_behavior: LoopBehavior::Infinite,
+                    transition_mode: TransitionMode::SyncIdx,
+                    ..PatternStmOption::default()
+                },
+            ));
+            b.build()
+        },
+        ERR_INVALID_TRANSITION_MODE,
+    )
+    .await;
+    expect_firmware_error(
+        ctx,
+        "PatternSTM finite loop + Immediate",
+        {
+            let mut b = ctx.client.datagram_builder();
+            b.push(SetSilencer::default()).push(PatternStm::new(
+                0.5 * Hz,
+                &patterns,
+                PatternStmOption {
+                    loop_behavior: LoopBehavior::ONCE,
+                    transition_mode: TransitionMode::Immediate,
+                    ..PatternStmOption::default()
+                },
+            ));
+            b.build()
+        },
+        ERR_INVALID_TRANSITION_MODE,
+    )
+    .await;
     Ok(())
 }

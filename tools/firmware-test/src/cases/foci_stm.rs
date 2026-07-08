@@ -13,8 +13,9 @@ use autd3_rs::value::{
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
+use crate::cases::ERR_INVALID_TRANSITION_MODE;
 use crate::cases::pattern_util::{
-    change_pattern_bank, change_pattern_bank_sync, expect_transition_rejected, report_fpga_state,
+    change_pattern_bank, change_pattern_bank_sync, expect_firmware_error, report_fpga_state,
     write_foci_bank,
 };
 use crate::io::wait_enter;
@@ -147,12 +148,12 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ))
     .await;
 
-    transition_asserts(ctx, &foci);
+    transition_asserts(ctx, &foci).await;
     Ok(())
 }
 
-fn transition_asserts(ctx: &Ctx<'_>, foci: &[ControlPoints<1>]) {
-    println!("transition-mode validation:");
+async fn transition_asserts(ctx: &Ctx<'_>, foci: &[ControlPoints<1>]) {
+    println!("transition-mode validation (firmware):");
     let build = |loop_behavior, transition_mode| {
         let mut b = ctx.client.datagram_builder();
         b.push(FociStm::new(
@@ -166,12 +167,18 @@ fn transition_asserts(ctx: &Ctx<'_>, foci: &[ControlPoints<1>]) {
         ));
         b.build()
     };
-    expect_transition_rejected(
+    expect_firmware_error(
+        ctx,
         "FociSTM infinite loop + SyncIdx",
         build(LoopBehavior::Infinite, TransitionMode::SyncIdx),
-    );
-    expect_transition_rejected(
+        ERR_INVALID_TRANSITION_MODE,
+    )
+    .await;
+    expect_firmware_error(
+        ctx,
         "FociSTM finite loop + Immediate",
         build(LoopBehavior::ONCE, TransitionMode::Immediate),
-    );
+        ERR_INVALID_TRANSITION_MODE,
+    )
+    .await;
 }

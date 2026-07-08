@@ -1,3 +1,7 @@
+pub const ERR_INVALID_SILENCER_SETTING: u8 = 0x04;
+pub const ERR_INVALID_TRANSITION_MODE: u8 = 0x05;
+pub const ERR_MISS_TRANSITION_TIME: u8 = 0x06;
+
 pub mod error;
 pub mod foci_stm;
 pub mod force_fan;
