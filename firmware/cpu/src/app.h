@@ -56,6 +56,8 @@ void port_sleep_ms(uint16_t ms);
 void port_fpga_write(uint16_t addr, uint16_t value);
 uint16_t port_fpga_read(uint16_t addr);
 
+void port_memory_barrier(void);
+
 uint64_t port_next_sync0(void);
 
 uint64_t port_dc_sys_time(void);

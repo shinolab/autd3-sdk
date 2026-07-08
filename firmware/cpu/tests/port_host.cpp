@@ -91,6 +91,8 @@ extern "C" uint16_t port_fpga_read(uint16_t addr) {
   return 0;
 }
 
+extern "C" void port_memory_barrier() {}
+
 extern "C" uint64_t port_next_sync0() { return g_next_sync0; }
 
 extern "C" uint64_t port_dc_sys_time() { return g_dc_sys_time; }
