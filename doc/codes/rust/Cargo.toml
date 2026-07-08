@@ -21,6 +21,7 @@ autd3-rs-link-ethercrab = { path = "../../../crates/autd3-rs-link-ethercrab" }
 autd3-rs-link-remote = { path = "../../../crates/autd3-rs-link-remote" }
 autd3-rs-link-twincat = { path = "../../../crates/autd3-rs-link-twincat" }
 ethercrab = "0.7.1"
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 anyhow = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
 
@@ -38,6 +39,10 @@ path = "examples/api/basics/client.rs"
 [[example]]
 name = "api_basics_datagram_builder"
 path = "examples/api/basics/datagram-builder.rs"
+
+[[example]]
+name = "api_basics_dc_sys_time"
+path = "examples/api/basics/dc-sys-time.rs"
 
 [[example]]
 name = "api_basics_geometry"
