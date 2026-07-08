@@ -228,17 +228,21 @@ fn ring_vs(@builtin(vertex_index) vid: u32, @builtin(instance_index) iid: u32) -
     let radius = uni.gizmo_len;
     let thick = radius * 0.012;
 
+    let lx = normalize(uni.u.xyz);
+    let lz = normalize(uni.v.xyz);
+    let ly = normalize(cross(lz, lx));
+
     var e0: vec3<f32>;
     var e1: vec3<f32>;
     if iid == 0u {
-        e0 = vec3<f32>(0.0, 1.0, 0.0);
-        e1 = vec3<f32>(0.0, 0.0, 1.0);
+        e0 = ly;
+        e1 = lz;
     } else if iid == 1u {
-        e0 = vec3<f32>(0.0, 0.0, 1.0);
-        e1 = vec3<f32>(1.0, 0.0, 0.0);
+        e0 = lz;
+        e1 = lx;
     } else {
-        e0 = vec3<f32>(1.0, 0.0, 0.0);
-        e1 = vec3<f32>(0.0, 1.0, 0.0);
+        e0 = lx;
+        e1 = ly;
     }
 
     let seg = vid / 6u;

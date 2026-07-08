@@ -26,6 +26,8 @@ pub struct DeviceState {
     pub stm_freq_div: u16,
     pub stm_cycle: u32,
     pub stm_idx: u32,
+    pub gpio_types: [u8; 4],
+    pub gpio_out: [Vec<u8>; 4],
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

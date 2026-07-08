@@ -47,6 +47,43 @@ fn mod_buffer_points(buffer: &[u8]) -> String {
         .join(" ")
 }
 
+fn gpio_wave_points(wave: &[u8]) -> String {
+    let n = wave.len();
+    if n < 2 {
+        return String::new();
+    }
+    let denom = (n - 1) as f32;
+    wave.iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            let x = i as f32 / denom * 300.0;
+            let y = 55.0 - f32::from(v.min(1)) * 50.0;
+            format!("{x:.1},{y:.1}")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn gpio_type_name(ty: u8) -> &'static str {
+    match ty {
+        0x00 => "None",
+        0x01 => "BaseSignal",
+        0x02 => "Thermo",
+        0x03 => "ForceFan",
+        0x10 => "Sync",
+        0x20 => "ModBank",
+        0x21 => "ModIdx",
+        0x50 => "PatternBank",
+        0x51 => "PatternIdx",
+        0x52 => "IsStmMode",
+        0x60 => "SysTimeEq",
+        0x70 => "SyncDiff",
+        0xE0 => "PwmOut",
+        0xF0 => "Direct",
+        _ => "Unknown",
+    }
+}
+
 #[component]
 fn KvRow(k: String, v: String) -> Element {
     rsx! {
@@ -65,6 +102,15 @@ fn DeviceNode(idx: usize, dev: DeviceState) -> Element {
         "Completion steps"
     };
     let mod_points = mod_buffer_points(&dev.mod_buffer);
+    let gpio: Vec<(usize, &'static str, String)> = (0..4)
+        .map(|i| {
+            (
+                i,
+                gpio_type_name(dev.gpio_types[i]),
+                gpio_wave_points(&dev.gpio_out[i]),
+            )
+        })
+        .collect();
     rsx! {
         details { class: "collapse collapse-arrow bg-base-200 rounded", open: true,
             summary { class: "collapse-title text-sm font-semibold py-2 min-h-0",
@@ -101,6 +147,30 @@ fn DeviceNode(idx: usize, dev: DeviceState) -> Element {
                     KvRow { k: "Freq division", v: dev.stm_freq_div.to_string() }
                     KvRow { k: "Cycle (patterns)", v: dev.stm_cycle.to_string() }
                     KvRow { k: "Index", v: dev.stm_idx.to_string() }
+                }
+                div { class: "font-semibold opacity-70 pt-3 pb-1", "GPIO out" }
+                for (i, name, points) in gpio {
+                    div { class: "py-0.5",
+                        div { class: "flex gap-3 items-center",
+                            span { class: "opacity-60 w-40 shrink-0", "GPIO {i}" }
+                            span { class: "font-mono", "{name}" }
+                        }
+                        if !points.is_empty() {
+                            svg {
+                                class: "w-full text-secondary mt-1 rounded bg-base-100",
+                                height: "60",
+                                "viewBox": "0 0 300 60",
+                                "preserveAspectRatio": "none",
+                                polyline {
+                                    points: "{points}",
+                                    fill: "none",
+                                    stroke: "currentColor",
+                                    "stroke-width": "1.5",
+                                    "vector-effect": "non-scaling-stroke",
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
