@@ -9,8 +9,9 @@ use autd3_rs::value::{LoopBehavior, ModulationBank, Nearest, SamplingConfig, Tra
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
+use crate::cases::ERR_INVALID_TRANSITION_MODE;
 use crate::cases::pattern_util::{
-    change_mod_bank, expect_transition_rejected, focus_at, report_fpga_state, send_pattern_mod,
+    change_mod_bank, expect_firmware_error, focus_at, report_fpga_state, send_pattern_mod,
     write_mod_bank,
 };
 use crate::io::wait_enter;
@@ -92,26 +93,38 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     .await?;
     wait_enter("A reversed sawtooth AM is applied for exactly one waveform").await;
 
-    println!("transition-mode validation:");
+    println!("transition-mode validation (firmware):");
     let mut probe = modulation_buffer();
     constant(0xFF, &mut probe);
-    expect_transition_rejected("modulation infinite loop + SyncIdx", {
-        let mut b = ctx.client.datagram_builder();
-        b.push(SetSilencer::default()).push(Modulation {
-            loop_behavior: LoopBehavior::Infinite,
-            transition_mode: TransitionMode::SyncIdx,
-            ..Modulation::with_bank(ModulationBank::B1, SamplingConfig::FREQ_4K, &probe)
-        });
-        b.build()
-    });
-    expect_transition_rejected("modulation finite loop + Immediate", {
-        let mut b = ctx.client.datagram_builder();
-        b.push(SetSilencer::default()).push(Modulation {
-            loop_behavior: LoopBehavior::ONCE,
-            transition_mode: TransitionMode::Immediate,
-            ..Modulation::with_bank(ModulationBank::B1, SamplingConfig::FREQ_4K, &probe)
-        });
-        b.build()
-    });
+    expect_firmware_error(
+        ctx,
+        "modulation infinite loop + SyncIdx",
+        {
+            let mut b = ctx.client.datagram_builder();
+            b.push(SetSilencer::default()).push(Modulation {
+                loop_behavior: LoopBehavior::Infinite,
+                transition_mode: TransitionMode::SyncIdx,
+                ..Modulation::with_bank(ModulationBank::B1, SamplingConfig::FREQ_4K, &probe)
+            });
+            b.build()
+        },
+        ERR_INVALID_TRANSITION_MODE,
+    )
+    .await;
+    expect_firmware_error(
+        ctx,
+        "modulation finite loop + Immediate",
+        {
+            let mut b = ctx.client.datagram_builder();
+            b.push(SetSilencer::default()).push(Modulation {
+                loop_behavior: LoopBehavior::ONCE,
+                transition_mode: TransitionMode::Immediate,
+                ..Modulation::with_bank(ModulationBank::B1, SamplingConfig::FREQ_4K, &probe)
+            });
+            b.build()
+        },
+        ERR_INVALID_TRANSITION_MODE,
+    )
+    .await;
     Ok(())
 }

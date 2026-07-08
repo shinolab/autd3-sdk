@@ -79,6 +79,7 @@ async fn main() -> Result<()> {
     check("Devices flashed with the latest firmware are connected");
     check("An oscilloscope is attached to the GPIO[0]/GPIO[1] pins of each device");
     check("No output is present on any GPIO pin");
+    check("Client-side validation is disabled: malformed commands are checked by the firmware");
 
     let num_devices = prompt("Number of devices (default 1)")
         .await
@@ -139,7 +140,10 @@ async fn iface_prompt() -> Interface {
 
 async fn run(backend: Backend, num_devices: usize) -> Result<()> {
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
-    let config = ClientConfig::default();
+    let config = ClientConfig {
+        validate_state: false,
+        ..Default::default()
+    };
 
     let client = match backend {
         Backend::Soem { iface } => {
