@@ -1421,6 +1421,22 @@ TEST(Proto, ReadFpgaStateReturnsRegisterByte) {
   EXPECT_EQ(_sTx.data, 0x83);
 }
 
+TEST(Proto, ReadFpgaFwVersionReturnsRegisterBytes) {
+  reset_all();
+  port_test_fpga_set_controller(ADDR_VERSION_NUM_MAJOR, 0x0A);
+  port_test_fpga_set_controller(ADDR_VERSION_NUM_MINOR, 0x0B);
+  port_test_fpga_set_controller(ADDR_VERSION_NUM_PATCH, 0x0C);
+
+  Frame(0, CMD_READ_FPGA_FW_VERSION_MAJOR).deliver();
+  EXPECT_EQ(_sTx.data, 0x0A);
+
+  Frame(1, CMD_READ_FPGA_FW_VERSION_MINOR).deliver();
+  EXPECT_EQ(_sTx.data, 0x0B);
+
+  Frame(2, CMD_READ_FPGA_FW_VERSION_PATCH).deliver();
+  EXPECT_EQ(_sTx.data, 0x0C);
+}
+
 TEST(Proto, ClearResetsForceFan) {
   reset_all();
   make_force_fan(0, 1).deliver();

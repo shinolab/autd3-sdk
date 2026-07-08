@@ -18,7 +18,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::command::Pattern;
 use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
 use crate::error::{Error, PayloadError};
-use crate::firmware_version::FirmwareVersion;
+use crate::firmware_version::{FirmwareVersion, Version};
 use crate::fpga_state::FpgaState;
 use crate::geometry::Autd3;
 use crate::geometry::Geometry;
@@ -254,30 +254,59 @@ impl Client {
     }
 
     pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
-        let major = self
+        let cpu_major = self
             .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
             .await?
             .await?
             .data;
-        let minor = self
+        let cpu_minor = self
             .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadCpuFwVersionMinor))
             .await?
             .await?
             .data;
-        let patch = self
+        let cpu_patch = self
             .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadCpuFwVersionPatch))
             .await?
             .await?
             .data;
-        Ok(major
+        let fpga_major = self
+            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadFpgaFwVersionMajor))
+            .await?
+            .await?
+            .data;
+        let fpga_minor = self
+            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadFpgaFwVersionMinor))
+            .await?
+            .await?
+            .data;
+        let fpga_patch = self
+            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadFpgaFwVersionPatch))
+            .await?
+            .await?
+            .data;
+        Ok(cpu_major
             .into_iter()
-            .zip(minor)
-            .zip(patch)
-            .map(|((major, minor), patch)| FirmwareVersion {
-                major,
-                minor,
-                patch,
-            })
+            .zip(cpu_minor)
+            .zip(cpu_patch)
+            .zip(fpga_major)
+            .zip(fpga_minor)
+            .zip(fpga_patch)
+            .map(
+                |(((((cpu_major, cpu_minor), cpu_patch), fpga_major), fpga_minor), fpga_patch)| {
+                    FirmwareVersion {
+                        cpu: Version {
+                            major: cpu_major,
+                            minor: cpu_minor,
+                            patch: cpu_patch,
+                        },
+                        fpga: Version {
+                            major: fpga_major,
+                            minor: fpga_minor,
+                            patch: fpga_patch,
+                        },
+                    }
+                },
+            )
             .collect())
     }
 
