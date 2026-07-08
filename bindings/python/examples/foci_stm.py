@@ -1,6 +1,6 @@
 """Sweeps a focus around a 30 mm circle at 1 Hz using FociStm.
 
-Run with: cargo xtask py example stm_circle
+Run with: cargo xtask py example foci_stm
 """
 
 import asyncio
@@ -22,12 +22,15 @@ async def main() -> None:
         autd3.ClientConfig(),
     )
 
+    print("devices:", client.num_devices())
+
     center = geometry.center() + np.array([0.0, 0.0, 150.0])
     samples = []
     autd3.commands.circle(center, 30.0, 200, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, samples)
     stm = autd3.commands.FociStm(1.0 * Hz, samples, autd3.commands.FociStmOption())
 
     builder = client.datagram_builder()
+    builder.push(autd3.commands.SetSilencer())
     builder.push(stm)
     for frame in builder.build():
         await client.send_checked(frame)

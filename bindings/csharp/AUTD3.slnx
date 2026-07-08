@@ -18,7 +18,10 @@
     <Project Path="examples/SendModes/SendModes.csproj" />
     <Project Path="examples/MultiDevice/MultiDevice.csproj" />
     <Project Path="examples/Holo/Holo.csproj" />
-    <Project Path="examples/StmCircle/StmCircle.csproj" />
+    <Project Path="examples/FociStm/FociStm.csproj" />
+    <Project Path="examples/PatternStm/PatternStm.csproj" />
+    <Project Path="examples/Group/Group.csproj" />
+    <Project Path="examples/RemoteClient/RemoteClient.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AUTD3.Tests/AUTD3.Tests.csproj" />
