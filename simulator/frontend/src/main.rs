@@ -4,6 +4,7 @@ mod render;
 mod settings;
 mod tabs;
 
+use dioxus::html::Modifiers;
 use dioxus::prelude::*;
 use futures_util::{SinkExt, StreamExt};
 use glam::Vec2;
@@ -302,8 +303,9 @@ fn App() -> Element {
             let el = e.element_coordinates();
             let ndc = to_ndc(el.x, el.y);
             if gizmo_drag() {
+                let snap = e.modifiers().contains(Modifiers::SHIFT);
                 if let Some(r) = renderer.borrow_mut().as_mut() {
-                    match r.update_gizmo_drag(ndc) {
+                    match r.update_gizmo_drag(ndc, snap) {
                         Some(DragUpdate::Translate(c)) => slice_center.set(c),
                         Some(DragUpdate::Rotate(r)) => slice_rot.set(r),
                         None => {}

@@ -16,6 +16,7 @@ const SLICE_HEIGHT_MM: f32 = 260.0;
 const SLICE_BOTTOM_MM: f32 = -10.0;
 const MARKER_SIZE_MM: f32 = 4.5;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+const MSAA_SAMPLES: u32 = 4;
 pub const DEFAULT_BG_RGB: [f32; 3] = [0.467, 0.463, 0.482];
 const DEFAULT_BG: wgpu::Color = wgpu::Color {
     r: DEFAULT_BG_RGB[0] as f64,
@@ -53,6 +54,7 @@ pub struct Renderer {
     bind_group_layout: wgpu::BindGroupLayout,
     uniform_buf: wgpu::Buffer,
     depth_view: wgpu::TextureView,
+    msaa_view: Option<wgpu::TextureView>,
     positions_buf: Option<wgpu::Buffer>,
     directions_buf: Option<wgpu::Buffer>,
     states_buf: Option<wgpu::Buffer>,
@@ -80,6 +82,7 @@ impl Renderer {
             device,
             queue,
             format,
+            sample_count,
         } = init_gpu(canvas, width, height).await?;
 
         let Pipelines {
@@ -88,7 +91,7 @@ impl Renderer {
             marker_pipeline,
             gizmo_pipeline,
             ring_pipeline,
-        } = build_pipelines(&device, format);
+        } = build_pipelines(&device, format, sample_count);
 
         let uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("scene-uniforms"),
@@ -96,7 +99,8 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let depth_view = create_depth(&device, width, height);
+        let depth_view = create_depth(&device, width, height, sample_count);
+        let msaa_view = create_msaa(&device, format, width, height, sample_count);
 
         let mut camera = Camera {
             pos: Vec3::new(0.0, -600.0, 180.0),
@@ -120,6 +124,7 @@ impl Renderer {
             bind_group_layout,
             uniform_buf,
             depth_view,
+            msaa_view,
             positions_buf: None,
             directions_buf: None,
             states_buf: None,
@@ -354,12 +359,13 @@ impl Renderer {
     pub fn pick_gizmo_axis(&self, ndc: Vec2) -> Option<usize> {
         self.bind_group.as_ref()?;
         let (o, rd) = self.camera.ray(ndc, self.aspect);
-        self.gizmo.pick(self.slice_center, o, rd)
+        self.gizmo.pick(self.slice_center, self.slice_rot, o, rd)
     }
 
     pub fn set_hover(&mut self, ndc: Vec2) {
         let (o, rd) = self.camera.ray(ndc, self.aspect);
-        self.gizmo.set_hover(self.slice_center, o, rd);
+        self.gizmo
+            .set_hover(self.slice_center, self.slice_rot, o, rd);
     }
 
     pub fn begin_gizmo_drag(&mut self, axis: usize, ndc: Vec2) {
@@ -368,9 +374,9 @@ impl Renderer {
             .begin_drag(axis, self.slice_center, self.slice_rot, o, rd);
     }
 
-    pub fn update_gizmo_drag(&mut self, ndc: Vec2) -> Option<DragUpdate> {
+    pub fn update_gizmo_drag(&mut self, ndc: Vec2, snap: bool) -> Option<DragUpdate> {
         let (o, rd) = self.camera.ray(ndc, self.aspect);
-        let update = self.gizmo.update_drag(o, rd)?;
+        let update = self.gizmo.update_drag(o, rd, snap)?;
         match &update {
             DragUpdate::Translate(c) => self.slice_center = Vec3::from_array(*c),
             DragUpdate::Rotate(r) => self.slice_rot = Vec3::from_array(*r),
@@ -407,6 +413,10 @@ impl Renderer {
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let (attach_view, resolve_target) = match &self.msaa_view {
+            Some(msaa) => (msaa, Some(&view)),
+            None => (&view, None),
+        };
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -414,8 +424,8 @@ impl Renderer {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("scene-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
+                    view: attach_view,
+                    resolve_target,
                     depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(self.bg),
@@ -512,6 +522,7 @@ struct Gpu {
     device: wgpu::Device,
     queue: wgpu::Queue,
     format: wgpu::TextureFormat,
+    sample_count: u32,
 }
 
 async fn init_gpu(
@@ -546,6 +557,15 @@ async fn init_gpu(
 
     let caps = surface.get_capabilities(&adapter);
     let format = caps.formats[0];
+    let sample_count = if adapter
+        .get_texture_format_features(format)
+        .flags
+        .sample_count_supported(MSAA_SAMPLES)
+    {
+        MSAA_SAMPLES
+    } else {
+        1
+    };
     let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format,
@@ -564,6 +584,7 @@ async fn init_gpu(
         device,
         queue,
         format,
+        sample_count,
     })
 }
 
@@ -575,7 +596,21 @@ struct Pipelines {
     ring_pipeline: wgpu::RenderPipeline,
 }
 
-fn build_pipelines(device: &wgpu::Device, format: wgpu::TextureFormat) -> Pipelines {
+#[derive(Clone, Copy)]
+struct Target {
+    format: wgpu::TextureFormat,
+    sample_count: u32,
+}
+
+fn build_pipelines(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    sample_count: u32,
+) -> Pipelines {
+    let target = Target {
+        format,
+        sample_count,
+    };
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("scene-bgl"),
         entries: &[
@@ -603,7 +638,7 @@ fn build_pipelines(device: &wgpu::Device, format: wgpu::TextureFormat) -> Pipeli
             device,
             &bind_group_layout,
             &shader,
-            format,
+            target,
             "slice_vs",
             "slice_fs",
             true,
@@ -612,7 +647,7 @@ fn build_pipelines(device: &wgpu::Device, format: wgpu::TextureFormat) -> Pipeli
             device,
             &bind_group_layout,
             &shader,
-            format,
+            target,
             "marker_vs",
             "marker_fs",
             true,
@@ -621,7 +656,7 @@ fn build_pipelines(device: &wgpu::Device, format: wgpu::TextureFormat) -> Pipeli
             device,
             &bind_group_layout,
             &shader,
-            format,
+            target,
             "gizmo_vs",
             "gizmo_fs",
             false,
@@ -630,7 +665,7 @@ fn build_pipelines(device: &wgpu::Device, format: wgpu::TextureFormat) -> Pipeli
             device,
             &bind_group_layout,
             &shader,
-            format,
+            target,
             "ring_vs",
             "gizmo_fs",
             false,
@@ -643,7 +678,7 @@ fn build_pipeline(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
     shader: &wgpu::ShaderModule,
-    format: wgpu::TextureFormat,
+    target: Target,
     vs: &str,
     fs: &str,
     depth_test: bool,
@@ -671,7 +706,7 @@ fn build_pipeline(
             module: shader,
             entry_point: Some(fs),
             targets: &[Some(wgpu::ColorTargetState {
-                format,
+                format: target.format,
                 blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             })],
@@ -688,13 +723,22 @@ fn build_pipeline(
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
         }),
-        multisample: wgpu::MultisampleState::default(),
+        multisample: wgpu::MultisampleState {
+            count: target.sample_count,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
         multiview_mask: None,
         cache: None,
     })
 }
 
-fn create_depth(device: &wgpu::Device, width: u32, height: u32) -> wgpu::TextureView {
+fn create_depth(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+    sample_count: u32,
+) -> wgpu::TextureView {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("depth"),
         size: wgpu::Extent3d {
@@ -703,13 +747,40 @@ fn create_depth(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
-        sample_count: 1,
+        sample_count,
         dimension: wgpu::TextureDimension::D2,
         format: DEPTH_FORMAT,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         view_formats: &[],
     });
     texture.create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+fn create_msaa(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    width: u32,
+    height: u32,
+    sample_count: u32,
+) -> Option<wgpu::TextureView> {
+    if sample_count <= 1 {
+        return None;
+    }
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("msaa-color"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    Some(texture.create_view(&wgpu::TextureViewDescriptor::default()))
 }
 
 fn storage_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
