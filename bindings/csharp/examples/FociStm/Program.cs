@@ -1,5 +1,5 @@
-// A focus moving along a circle at 1 Hz using FociSTM.
-// Run with: cargo xtask cs example StmCircle
+// A focus moving along a 30 mm circle at 1 Hz using FociStm.
+// Run with: cargo xtask cs example FociStm
 
 using System;
 using System.Collections.Generic;
@@ -21,17 +21,19 @@ internal static class Program
 
         var center = geometry.Center + new Vector3(0f, 0f, 150f);
         var points = new List<ControlPoints>();
-        Stm.Circle(center, 30f * mm, 50, new Vector3(0f, 0f, 1f), points);
+        Stm.Circle(center, 30f * mm, 200, new Vector3(0f, 0f, 1f), Intensity.Max, points);
 
         using var builder = client.DatagramBuilder();
-        builder.Push(new FociStm(new StmConfig(1 * Hz), points.ToArray()));
+        builder
+            .Push(new SetSilencer())
+            .Push(new FociStm(new StmConfig(1 * Hz), points.ToArray()));
         using var frames = builder.Build();
         foreach (var frame in frames)
         {
             await client.SendCheckedAsync(frame);
         }
 
-        Console.WriteLine("emitting a 1 Hz circular FociSTM (50 points) — press Ctrl+C to stop");
+        Console.WriteLine("sweeping a focus around a 30 mm circle at 1 Hz — press Ctrl+C to stop");
 
         var stop = new TaskCompletionSource();
         Console.CancelKeyPress += (_, e) =>
