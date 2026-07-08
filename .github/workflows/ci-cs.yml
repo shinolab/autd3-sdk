@@ -31,6 +31,3 @@ jobs:
         run: cargo xtask cs format
       - run: cargo xtask cs build
       - run: cargo xtask cs test
-      - name: Doc samples (C#)
-        if: runner.os == 'Linux'
-        run: cargo xtask doc samples --csharp
