@@ -97,6 +97,7 @@ impl Swapchain {
         self.cycle[req_bank] = cycle;
         self.transition_mode = transition_mode;
         self.transition_value = transition_value;
+        self.recompute_cur_idx(sys_time_ns);
     }
 
     pub(crate) fn update(&mut self, gpio_in: [bool; 4], sys_time_ns: u64) {
@@ -143,6 +144,10 @@ impl Swapchain {
                 }
             }
         }
+        self.recompute_cur_idx(sys_time_ns);
+    }
+
+    fn recompute_cur_idx(&mut self, sys_time_ns: u64) {
         let (_, idx) = self.lap_and_idx(self.cur_bank, sys_time_ns);
         let cycle = self.cycle[self.cur_bank].max(1);
         self.cur_idx = if self.stop {
@@ -161,5 +166,32 @@ impl Swapchain {
         let a = ((Self::fpga_sys_time(sys_time_ns) >> 9) / freq_div) as usize;
         let cycle = self.cycle[bank].max(1);
         (a / cycle, a % cycle)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MODE_IMMEDIATE: u8 = 0xFF;
+
+    #[test]
+    fn cur_idx_stays_within_bank_after_switch_from_large_cycle() {
+        let mut sc = Swapchain::new();
+        sc.set(0, REP_INFINITE, 1, 65536, 0, MODE_IMMEDIATE, 0);
+
+        let sys_time = 225_000_000;
+        sc.update([false; 4], sys_time);
+        assert_eq!(0, sc.cur_bank());
+        assert!(sc.cur_idx() > 1024, "expected a large stm index on bank 0");
+
+        sc.set(sys_time, REP_INFINITE, 1, 1, 1, MODE_IMMEDIATE, 0);
+        assert_eq!(1, sc.cur_bank());
+        assert!(
+            sc.cur_idx() < sc.cycle[sc.cur_bank()],
+            "cur_idx {} must stay within the switched-to bank cycle {}",
+            sc.cur_idx(),
+            sc.cycle[sc.cur_bank()]
+        );
     }
 }
