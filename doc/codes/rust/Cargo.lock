@@ -213,6 +213,7 @@ dependencies = [
  "autd3-rs-modulation",
  "autd3-rs-pattern",
  "autd3-rs-pattern-holo",
+ "chrono",
  "ethercrab",
  "tokio",
 ]
