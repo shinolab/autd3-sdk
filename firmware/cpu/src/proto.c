@@ -65,6 +65,12 @@ static uint8_t dispatch(const rx_frame_t* in) {
       return s_proto->fw_version_minor;
     case CMD_READ_CPU_FW_VERSION_PATCH:
       return s_proto->fw_version_patch;
+    case CMD_READ_FPGA_FW_VERSION_MAJOR:
+      return (uint8_t)fpga_read(BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR);
+    case CMD_READ_FPGA_FW_VERSION_MINOR:
+      return (uint8_t)fpga_read(BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MINOR);
+    case CMD_READ_FPGA_FW_VERSION_PATCH:
+      return (uint8_t)fpga_read(BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_PATCH);
     case CMD_READ_ERROR_DETAIL:
       return s_proto->error_detail;
     case CMD_READ_FPGA_STATE:

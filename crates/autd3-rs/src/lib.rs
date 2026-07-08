@@ -26,7 +26,7 @@ pub use autd3_rs_core::{
 pub use client::{Client, ClientConfig, MAX_DEVICES, ResponseFuture};
 pub use core_affinity::CoreId;
 pub use datagram::{Datagram, DatagramBuilder, Frame, Frames};
-pub use firmware_version::FirmwareVersion;
+pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;
 pub use response::Response;
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};

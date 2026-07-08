@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use crate::datagram::Datagram;
 use crate::error::Error;
-use crate::firmware_version::FirmwareVersion;
+use crate::firmware_version::{FirmwareVersion, Version};
 use crate::geometry::{Autd3, Geometry};
 use crate::link::{CycleOutcome, Link};
 use crate::operation::{Operation, XOR_HASH_MAX_DATA_LEN, XorHashCmd};
@@ -39,6 +39,9 @@ struct Slave {
     fw_version_major: u8,
     fw_version_minor: u8,
     fw_version_patch: u8,
+    fpga_version_major: u8,
+    fpga_version_minor: u8,
+    fpga_version_patch: u8,
     error_detail: u8,
     fpga_state: u8,
     drop_next: u32,
@@ -57,6 +60,9 @@ impl Slave {
             fw_version_major: 0,
             fw_version_minor: 0,
             fw_version_patch: 0,
+            fpga_version_major: 0,
+            fpga_version_minor: 0,
+            fpga_version_patch: 0,
             error_detail: 0,
             fpga_state: 0,
             drop_next: 0,
@@ -132,6 +138,9 @@ fn slave_cycle(
         Cmd::ReadCpuFwVersionMajor => slave.fw_version_major,
         Cmd::ReadCpuFwVersionMinor => slave.fw_version_minor,
         Cmd::ReadCpuFwVersionPatch => slave.fw_version_patch,
+        Cmd::ReadFpgaFwVersionMajor => slave.fpga_version_major,
+        Cmd::ReadFpgaFwVersionMinor => slave.fpga_version_minor,
+        Cmd::ReadFpgaFwVersionPatch => slave.fpga_version_patch,
         Cmd::ReadErrorDetail => slave.error_detail,
         Cmd::ReadFpgaState => slave.fpga_state,
         Cmd::WritePatternBuffer
@@ -263,17 +272,27 @@ async fn read_firmware_version_returns_full_triplet() {
         s.fw_version_major = 1;
         s.fw_version_minor = 2;
         s.fw_version_patch = 3;
+        s.fpga_version_major = 4;
+        s.fpga_version_minor = 5;
+        s.fpga_version_patch = 6;
     }
     let v = client.read_firmware_version().await.unwrap();
     assert_eq!(
         v,
         vec![FirmwareVersion {
-            major: 1,
-            minor: 2,
-            patch: 3,
+            cpu: Version {
+                major: 1,
+                minor: 2,
+                patch: 3,
+            },
+            fpga: Version {
+                major: 4,
+                minor: 5,
+                patch: 6,
+            },
         }]
     );
-    assert_eq!(v[0].to_string(), "1.2.3");
+    assert_eq!(v[0].to_string(), "CPU: 1.2.3, FPGA: 4.5.6");
 }
 
 #[tokio::test]
@@ -304,10 +323,16 @@ async fn read_is_exclusive_and_correct_under_concurrent_writes() {
         s0.fw_version_major = 0xA0;
         s0.fw_version_minor = 0xA1;
         s0.fw_version_patch = 0xA2;
+        s0.fpga_version_major = 0xA3;
+        s0.fpga_version_minor = 0xA4;
+        s0.fpga_version_patch = 0xA5;
         let mut s1 = slaves[1].lock().unwrap();
         s1.fw_version_major = 0xB0;
         s1.fw_version_minor = 0xB1;
         s1.fw_version_patch = 0xB2;
+        s1.fpga_version_major = 0xB3;
+        s1.fpga_version_minor = 0xB4;
+        s1.fpga_version_patch = 0xB5;
     }
     let client = Arc::new(
         Client::open(&geometry(2), link, ClientConfig::default())
@@ -328,14 +353,28 @@ async fn read_is_exclusive_and_correct_under_concurrent_writes() {
 
     let expected = vec![
         FirmwareVersion {
-            major: 0xA0,
-            minor: 0xA1,
-            patch: 0xA2,
+            cpu: Version {
+                major: 0xA0,
+                minor: 0xA1,
+                patch: 0xA2,
+            },
+            fpga: Version {
+                major: 0xA3,
+                minor: 0xA4,
+                patch: 0xA5,
+            },
         },
         FirmwareVersion {
-            major: 0xB0,
-            minor: 0xB1,
-            patch: 0xB2,
+            cpu: Version {
+                major: 0xB0,
+                minor: 0xB1,
+                patch: 0xB2,
+            },
+            fpga: Version {
+                major: 0xB3,
+                minor: 0xB4,
+                patch: 0xB5,
+            },
         },
     ];
     for _ in 0..10 {
@@ -848,6 +887,9 @@ async fn commands_still_succeed_with_send_interval_above_one() {
         s.fw_version_major = 0x11;
         s.fw_version_minor = 0x22;
         s.fw_version_patch = 0x33;
+        s.fpga_version_major = 0x44;
+        s.fpga_version_minor = 0x55;
+        s.fpga_version_patch = 0x66;
     }
     let client = Client::open(
         &geometry(1),
@@ -870,9 +912,16 @@ async fn commands_still_succeed_with_send_interval_above_one() {
     assert_eq!(
         v,
         vec![FirmwareVersion {
-            major: 0x11,
-            minor: 0x22,
-            patch: 0x33,
+            cpu: Version {
+                major: 0x11,
+                minor: 0x22,
+                patch: 0x33,
+            },
+            fpga: Version {
+                major: 0x44,
+                minor: 0x55,
+                patch: 0x66,
+            },
         }]
     );
 }

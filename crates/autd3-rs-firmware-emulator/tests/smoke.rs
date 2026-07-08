@@ -37,6 +37,25 @@ fn reads_cpu_firmware_version() {
 }
 
 #[test]
+fn reads_fpga_firmware_version() {
+    let mut device = Device::new(NUM_TRANSDUCERS);
+    let (major, minor, patch) = device.fpga().fpga_version();
+    device.send(&frame(0, Cmd::Reset));
+
+    let rx_major = device.send(&frame(0, Cmd::ReadFpgaFwVersionMajor));
+    assert_eq!(rx_major.ack, Seq::new(0));
+    assert_eq!(u16::from(rx_major.data), major);
+
+    let rx_minor = device.send(&frame(1, Cmd::ReadFpgaFwVersionMinor));
+    assert_eq!(rx_minor.ack, Seq::new(1));
+    assert_eq!(u16::from(rx_minor.data), minor);
+
+    let rx_patch = device.send(&frame(2, Cmd::ReadFpgaFwVersionPatch));
+    assert_eq!(rx_patch.ack, Seq::new(2));
+    assert_eq!(u16::from(rx_patch.data), patch);
+}
+
+#[test]
 fn fpga_reports_version_after_init() {
     let device = Device::new(NUM_TRANSDUCERS);
     assert_eq!(device.fpga().fpga_version(), (0, 1, 0));
