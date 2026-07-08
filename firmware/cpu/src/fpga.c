@@ -17,9 +17,16 @@ uint16_t fpga_read(uint8_t select, uint16_t addr) {
   return port_fpga_read((uint16_t)(((uint16_t)select << 14) | (addr & 0x3FFFu)));
 }
 
+static void fpga_write_switch(uint16_t reg, uint16_t value) {
+  port_memory_barrier();
+  fpga_write(BRAM_SELECT_CONTROLLER, reg, value);
+  port_memory_barrier();
+}
+
 void set_and_wait_update(uint16_t flag) {
   uint16_t persistent = fpga_read(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG);
   fpga_write(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG, (uint16_t)(persistent | flag));
+  port_memory_barrier();
   while ((fpga_read(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG) & flag) != 0u) {
   }
 }
@@ -49,16 +56,16 @@ uint8_t transition_mode_violates_loop(uint16_t rep, uint8_t transition_mode) {
 
 void fpga_write_ram(uint8_t select, uint16_t wr_bank_reg, uint16_t wr_page_reg, uint8_t bank, uint32_t offset,
                     const uint8_t* src, uint16_t len_bytes) {
-  fpga_write(BRAM_SELECT_CONTROLLER, wr_bank_reg, bank);
+  fpga_write_switch(wr_bank_reg, bank);
   uint32_t page = offset / FPGA_PAGE_WORDS;
-  fpga_write(BRAM_SELECT_CONTROLLER, wr_page_reg, (uint16_t)page);
+  fpga_write_switch(wr_page_reg, (uint16_t)page);
   uint16_t n_words = (uint16_t)(((uint32_t)len_bytes + 1u) / 2u);
   for (uint16_t i = 0; i < n_words; i++) {
     uint32_t word_idx = offset + i;
     uint32_t p = word_idx / FPGA_PAGE_WORDS;
     if (p != page) {
       page = p;
-      fpga_write(BRAM_SELECT_CONTROLLER, wr_page_reg, (uint16_t)page);
+      fpga_write_switch(wr_page_reg, (uint16_t)page);
     }
     uint16_t lo = src[2u * i];
     uint16_t hi = ((uint32_t)(2u * i + 1u) < len_bytes) ? src[2u * i + 1u] : 0u;
@@ -102,8 +109,8 @@ void fpga_init(void) {
     fpga_write(BRAM_SELECT_CONTROLLER, (uint16_t)(ADDR_MOD_CYCLE0 + bank), 1u);
     fpga_write(BRAM_SELECT_CONTROLLER, (uint16_t)(ADDR_MOD_FREQ_DIV0 + bank), 0xFFFFu);
     fpga_write(BRAM_SELECT_CONTROLLER, (uint16_t)(ADDR_MOD_REP0 + bank), REP_INFINITE);
-    fpga_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_MEM_WR_BANK, bank);
-    fpga_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_MEM_WR_PAGE, 0u);
+    fpga_write_switch(ADDR_MOD_MEM_WR_BANK, bank);
+    fpga_write_switch(ADDR_MOD_MEM_WR_PAGE, 0u);
     fpga_write(BRAM_SELECT_MOD, 0u, 0xFFFFu);
   }
 
@@ -115,8 +122,8 @@ void fpga_init(void) {
     fpga_write(BRAM_SELECT_CONTROLLER, (uint16_t)(ADDR_PATTERN_CYCLE0 + bank), 0u);
     fpga_write(BRAM_SELECT_CONTROLLER, (uint16_t)(ADDR_PATTERN_FREQ_DIV0 + bank), 0xFFFFu);
     fpga_write(BRAM_SELECT_CONTROLLER, (uint16_t)(ADDR_PATTERN_REP0 + bank), REP_INFINITE);
-    fpga_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_BANK, bank);
-    fpga_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_PAGE, 0u);
+    fpga_write_switch(ADDR_PATTERN_MEM_WR_BANK, bank);
+    fpga_write_switch(ADDR_PATTERN_MEM_WR_PAGE, 0u);
     for (i = 0; i < NUM_TRANSDUCERS; i++) {
       fpga_write(BRAM_SELECT_EMISSION, i, 0u);
     }
