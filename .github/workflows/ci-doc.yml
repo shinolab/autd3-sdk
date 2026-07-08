@@ -13,13 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - uses: ./.github/actions/setup-rust
-      - name: Install pcap
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
       - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: doc/package-lock.json
       - run: cargo xtask doc samples --check
+      - run: cargo xtask doc samples --python
+      - run: cargo xtask doc samples --csharp
       - run: cargo xtask doc build

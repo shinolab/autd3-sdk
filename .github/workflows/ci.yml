@@ -90,9 +90,7 @@ jobs:
               - *shared
               - *xtask-core
               - 'xtask/src/py.rs'
-              - 'xtask/src/doc.rs'
               - 'bindings/python/**'
-              - 'doc/codes/python/**'
               - 'crates/**'
               - 'emulator/**'
               - '.github/workflows/ci-py.yml'
@@ -107,10 +105,8 @@ jobs:
               - *shared
               - *xtask-core
               - 'xtask/src/cs.rs'
-              - 'xtask/src/doc.rs'
               - 'bindings/csharp/**'
               - 'bindings/ffi/**'
-              - 'doc/codes/csharp/**'
               - 'crates/**'
               - '.github/workflows/ci-cs.yml'
             license:
@@ -136,8 +132,13 @@ jobs:
               - *shared
               - *xtask-core
               - 'xtask/src/doc.rs'
+              - 'xtask/src/py.rs'
+              - 'xtask/src/cs.rs'
               - 'doc/**'
               - 'crates/**'
+              - 'bindings/python/**'
+              - 'bindings/csharp/**'
+              - 'bindings/ffi/**'
               - '.github/workflows/ci-doc.yml'
 
   rust:
