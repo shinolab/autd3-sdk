@@ -38,6 +38,23 @@ pub fn SlicePanel() -> Element {
             }
         }
     };
+    let align_plane = {
+        let ctx = ctx.clone();
+        move |rot: [f32; 3]| {
+            for (axis, v) in rot.into_iter().enumerate() {
+                ctx.apply_field(1, axis, v);
+            }
+        }
+    };
+    let align_xy = {
+        let align_plane = align_plane.clone();
+        move |_: Event<MouseData>| align_plane([90.0, 0.0, 0.0])
+    };
+    let align_yz = {
+        let align_plane = align_plane.clone();
+        move |_: Event<MouseData>| align_plane([0.0, 0.0, 90.0])
+    };
+    let align_zx = move |_: Event<MouseData>| align_plane([0.0, 0.0, 0.0]);
     let on_colormap = {
         let renderer = renderer.clone();
         move |e: Event<FormData>| {
@@ -78,6 +95,26 @@ pub fn SlicePanel() -> Element {
                                 class: if gizmo_rotate() { "btn btn-sm btn-primary join-item" } else { "btn btn-sm join-item" },
                                 onclick: move |_| gizmo_rotate.set(true),
                                 "Rotate"
+                            }
+                        }
+                        div { class: "flex items-center gap-2",
+                            span { class: "text-sm opacity-70", "Align" }
+                            div { class: "join",
+                                button {
+                                    class: "btn btn-sm join-item",
+                                    onclick: align_xy,
+                                    "XY"
+                                }
+                                button {
+                                    class: "btn btn-sm join-item",
+                                    onclick: align_yz,
+                                    "YZ"
+                                }
+                                button {
+                                    class: "btn btn-sm join-item",
+                                    onclick: align_zx,
+                                    "ZX"
+                                }
                             }
                         }
                     }

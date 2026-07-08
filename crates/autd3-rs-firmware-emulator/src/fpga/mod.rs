@@ -213,6 +213,16 @@ impl FpgaEmulator {
     }
 
     #[must_use]
+    pub fn is_thermo_asserted(&self) -> bool {
+        self.thermal
+    }
+
+    #[must_use]
+    pub fn sys_time(&self) -> u64 {
+        self.sys_time_ns
+    }
+
+    #[must_use]
     pub fn gpio_out(&self, i: usize) -> u64 {
         self.reg_u64(reg(ffi::ADDR_DEBUG_VALUE0_0) + i * 4)
     }

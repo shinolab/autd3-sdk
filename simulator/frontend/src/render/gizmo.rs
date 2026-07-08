@@ -1,4 +1,4 @@
-use glam::Vec3;
+use glam::{EulerRot, Quat, Vec3};
 
 pub(crate) const RING_SEGMENTS: u32 = 64;
 
@@ -29,6 +29,15 @@ fn ring_basis(axis: usize) -> (Vec3, Vec3) {
     }
 }
 
+fn quat_of(rot: Vec3) -> Quat {
+    Quat::from_euler(
+        EulerRot::XYZ,
+        rot.x.to_radians(),
+        rot.y.to_radians(),
+        rot.z.to_radians(),
+    )
+}
+
 fn axis_param(anchor: Vec3, dir: Vec3, ray_o: Vec3, ray_d: Vec3) -> f32 {
     let delta = anchor - ray_o;
     let dir_dot_ray = dir.dot(ray_d);
@@ -42,15 +51,13 @@ fn axis_param(anchor: Vec3, dir: Vec3, ray_o: Vec3, ray_d: Vec3) -> f32 {
     }
 }
 
-fn ring_angle(center: Vec3, axis: usize, ray_o: Vec3, ray_d: Vec3) -> f32 {
-    let n = axis_unit(axis);
+fn ring_angle(center: Vec3, n: Vec3, e0: Vec3, e1: Vec3, ray_o: Vec3, ray_d: Vec3) -> f32 {
     let denom = ray_d.dot(n);
     if denom.abs() < 1e-6 {
         return 0.0;
     }
     let t = (center - ray_o).dot(n) / denom;
     let hit = ray_o + ray_d * t - center;
-    let (e0, e1) = ring_basis(axis);
     hit.dot(e1).atan2(hit.dot(e0))
 }
 
@@ -62,7 +69,10 @@ pub(crate) struct Gizmo {
     drag: Option<(GizmoMode, usize)>,
     drag_start_center: Vec3,
     drag_start_t: f32,
-    drag_start_rot: Vec3,
+    drag_start_q: Quat,
+    drag_axis: Vec3,
+    drag_ref0: Vec3,
+    drag_ref1: Vec3,
     drag_start_angle: f32,
 }
 
@@ -76,7 +86,10 @@ impl Gizmo {
             drag: None,
             drag_start_center: Vec3::ZERO,
             drag_start_t: 0.0,
-            drag_start_rot: Vec3::ZERO,
+            drag_start_q: Quat::IDENTITY,
+            drag_axis: Vec3::Z,
+            drag_ref0: Vec3::X,
+            drag_ref1: Vec3::Y,
             drag_start_angle: 0.0,
         }
     }
@@ -119,11 +132,12 @@ impl Gizmo {
         best.map(|(axis, _)| axis)
     }
 
-    fn pick_rotate(&self, center: Vec3, o: Vec3, rd: Vec3) -> Option<usize> {
+    fn pick_rotate(&self, center: Vec3, rot: Vec3, o: Vec3, rd: Vec3) -> Option<usize> {
         let tol = self.len * 0.12;
+        let q = quat_of(rot);
         let mut best: Option<(usize, f32)> = None;
         for axis in 0..3 {
-            let n = axis_unit(axis);
+            let n = q * axis_unit(axis);
             let denom = rd.dot(n);
             if denom.abs() < 1e-6 {
                 continue;
@@ -140,18 +154,18 @@ impl Gizmo {
         best.map(|(axis, _)| axis)
     }
 
-    pub(crate) fn pick(&self, center: Vec3, o: Vec3, rd: Vec3) -> Option<usize> {
+    pub(crate) fn pick(&self, center: Vec3, rot: Vec3, o: Vec3, rd: Vec3) -> Option<usize> {
         if !self.visible || self.len <= 0.0 {
             return None;
         }
         match self.mode {
             GizmoMode::Move => self.pick_move(center, o, rd),
-            GizmoMode::Rotate => self.pick_rotate(center, o, rd),
+            GizmoMode::Rotate => self.pick_rotate(center, rot, o, rd),
         }
     }
 
-    pub(crate) fn set_hover(&mut self, center: Vec3, o: Vec3, rd: Vec3) {
-        self.active_axis = self.pick(center, o, rd);
+    pub(crate) fn set_hover(&mut self, center: Vec3, rot: Vec3, o: Vec3, rd: Vec3) {
+        self.active_axis = self.pick(center, rot, o, rd);
     }
 
     pub(crate) fn begin_drag(
@@ -170,13 +184,25 @@ impl Gizmo {
                 self.drag_start_t = axis_param(slice_center, axis_unit(axis), o, rd);
             }
             GizmoMode::Rotate => {
-                self.drag_start_rot = slice_rot;
-                self.drag_start_angle = ring_angle(slice_center, axis, o, rd);
+                let q0 = quat_of(slice_rot);
+                let (r0, r1) = ring_basis(axis);
+                self.drag_start_q = q0;
+                self.drag_axis = q0 * axis_unit(axis);
+                self.drag_ref0 = q0 * r0;
+                self.drag_ref1 = q0 * r1;
+                self.drag_start_angle = ring_angle(
+                    slice_center,
+                    self.drag_axis,
+                    self.drag_ref0,
+                    self.drag_ref1,
+                    o,
+                    rd,
+                );
             }
         }
     }
 
-    pub(crate) fn update_drag(&self, o: Vec3, rd: Vec3) -> Option<DragUpdate> {
+    pub(crate) fn update_drag(&self, o: Vec3, rd: Vec3, snap: bool) -> Option<DragUpdate> {
         let (mode, axis) = self.drag?;
         match mode {
             GizmoMode::Move => {
@@ -186,12 +212,26 @@ impl Gizmo {
                 Some(DragUpdate::Translate(center.to_array()))
             }
             GizmoMode::Rotate => {
-                let delta = (ring_angle(self.drag_start_center, axis, o, rd)
-                    - self.drag_start_angle)
-                    .to_degrees();
-                let mut rot = self.drag_start_rot;
-                rot[axis] = self.drag_start_rot[axis] + delta;
-                Some(DragUpdate::Rotate(rot.to_array()))
+                let angle = ring_angle(
+                    self.drag_start_center,
+                    self.drag_axis,
+                    self.drag_ref0,
+                    self.drag_ref1,
+                    o,
+                    rd,
+                );
+                let mut delta = (angle - self.drag_start_angle).to_degrees();
+                if snap {
+                    delta = (delta / 45.0).round() * 45.0;
+                }
+                let q =
+                    Quat::from_axis_angle(self.drag_axis, delta.to_radians()) * self.drag_start_q;
+                let (rx, ry, rz) = q.to_euler(EulerRot::XYZ);
+                Some(DragUpdate::Rotate([
+                    rx.to_degrees(),
+                    ry.to_degrees(),
+                    rz.to_degrees(),
+                ]))
             }
         }
     }
