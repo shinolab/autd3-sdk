@@ -42,6 +42,7 @@ struct Slave {
     fpga_version_major: u8,
     fpga_version_minor: u8,
     fpga_version_patch: u8,
+    supports_fpga_version: bool,
     error_detail: u8,
     fpga_state: u8,
     drop_next: u32,
@@ -63,6 +64,7 @@ impl Slave {
             fpga_version_major: 0,
             fpga_version_minor: 0,
             fpga_version_patch: 0,
+            supports_fpga_version: true,
             error_detail: 0,
             fpga_state: 0,
             drop_next: 0,
@@ -74,6 +76,7 @@ impl Slave {
     }
 }
 
+const ERR_UNKNOWN_CMD: u8 = 0x01;
 const ERR_INVALID_PAYLOAD: u8 = 0x02;
 const ERR_INVALID_DATA: u8 = 0x03;
 
@@ -138,6 +141,12 @@ fn slave_cycle(
         Cmd::ReadCpuFwVersionMajor => slave.fw_version_major,
         Cmd::ReadCpuFwVersionMinor => slave.fw_version_minor,
         Cmd::ReadCpuFwVersionPatch => slave.fw_version_patch,
+        Cmd::ReadFpgaFwVersionMajor | Cmd::ReadFpgaFwVersionMinor | Cmd::ReadFpgaFwVersionPatch
+            if !slave.supports_fpga_version =>
+        {
+            slave.error_detail = ERR_UNKNOWN_CMD;
+            ERR_UNKNOWN_CMD
+        }
         Cmd::ReadFpgaFwVersionMajor => slave.fpga_version_major,
         Cmd::ReadFpgaFwVersionMinor => slave.fpga_version_minor,
         Cmd::ReadFpgaFwVersionPatch => slave.fpga_version_patch,
@@ -293,6 +302,90 @@ async fn read_firmware_version_returns_full_triplet() {
         }]
     );
     assert_eq!(v[0].to_string(), "CPU: 1.2.3, FPGA: 4.5.6");
+}
+
+#[tokio::test]
+async fn read_firmware_version_reports_unknown_fpga_on_outdated_firmware() {
+    let (client, slave) = open_client().await;
+    {
+        let mut s = slave.lock().unwrap();
+        s.fw_version_major = 0;
+        s.fw_version_minor = 1;
+        s.fw_version_patch = 0;
+        s.supports_fpga_version = false;
+    }
+    let v = client.read_firmware_version().await.unwrap();
+    assert_eq!(
+        v,
+        vec![FirmwareVersion {
+            cpu: Version {
+                major: 0,
+                minor: 1,
+                patch: 0,
+            },
+            fpga: Version::UNKNOWN,
+        }]
+    );
+    assert!(v[0].fpga.is_unknown());
+    assert_eq!(v[0].to_string(), "CPU: 0.1.0, FPGA: unknown");
+}
+
+#[tokio::test]
+async fn read_firmware_version_reports_unknown_fpga_when_error_detail_already_latched() {
+    let (client, slave) = open_client().await;
+    {
+        let mut s = slave.lock().unwrap();
+        s.supports_fpga_version = false;
+        s.error_detail = ERR_UNKNOWN_CMD;
+    }
+    let v = client.read_firmware_version().await.unwrap();
+    assert_eq!(v[0].fpga, Version::UNKNOWN);
+}
+
+#[tokio::test]
+async fn read_firmware_version_keeps_fpga_version_when_unrelated_error_is_latched() {
+    let (client, slave) = open_client().await;
+    {
+        let mut s = slave.lock().unwrap();
+        s.fpga_version_major = 4;
+        s.fpga_version_minor = 5;
+        s.fpga_version_patch = 6;
+        s.error_detail = ERR_INVALID_DATA;
+    }
+    let v = client.read_firmware_version().await.unwrap();
+    assert_eq!(
+        v[0].fpga,
+        Version {
+            major: 4,
+            minor: 5,
+            patch: 6,
+        }
+    );
+}
+
+#[tokio::test]
+async fn read_firmware_version_reports_unknown_fpga_per_device() {
+    let (link, slaves) = slaves_pair(2);
+    {
+        let mut s = slaves[0].lock().unwrap();
+        s.fpga_version_major = 1;
+        s.fpga_version_minor = 2;
+        s.fpga_version_patch = 3;
+    }
+    slaves[1].lock().unwrap().supports_fpga_version = false;
+    let client = Client::open(&geometry(2), link, ClientConfig::default())
+        .await
+        .unwrap();
+    let v = client.read_firmware_version().await.unwrap();
+    assert_eq!(
+        v[0].fpga,
+        Version {
+            major: 1,
+            minor: 2,
+            patch: 3,
+        }
+    );
+    assert_eq!(v[1].fpga, Version::UNKNOWN);
 }
 
 #[tokio::test]
