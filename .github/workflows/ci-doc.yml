@@ -27,6 +27,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: doc/package-lock.json
+      - run: cargo xtask doc check
       - run: cargo xtask doc samples --check
       - run: cargo xtask doc samples --python
       - run: cargo xtask doc samples --csharp
