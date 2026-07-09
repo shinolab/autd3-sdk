@@ -199,7 +199,7 @@ pub struct Response {
 impl Response {
     #[getter]
     fn data(&self) -> Vec<u8> {
-        self.inner.data.clone()
+        self.inner.data().to_vec()
     }
 
     fn check(&self, py: Python<'_>) -> PyResult<()> {

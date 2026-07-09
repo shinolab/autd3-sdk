@@ -1492,7 +1492,7 @@ pub unsafe extern "C" fn autd3_response_token_await(
     let fut = token.0.0;
     runtime().spawn(async move {
         match fut.await {
-            Ok(response) => ctx.ok(into_handle(ByteArray(response.data)).cast()),
+            Ok(response) => ctx.ok(into_handle(ByteArray(response.data().to_vec())).cast()),
             Err(e) => ctx.err(&e.to_string()),
         }
     });
@@ -1510,13 +1510,13 @@ pub unsafe extern "C" fn autd3_response_check(
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> bool {
-    let data = if data.is_null() || len == 0 {
-        Vec::new()
+    let response = if data.is_null() || len == 0 {
+        Response::default()
     } else {
         // SAFETY: the caller guarantees `data` points to `len` readable bytes.
-        unsafe { std::slice::from_raw_parts(data, len) }.to_vec()
+        Response::from_slice(unsafe { std::slice::from_raw_parts(data, len) })
     };
-    match (Response { data }).check() {
+    match response.check() {
         Ok(()) => true,
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
