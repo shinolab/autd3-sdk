@@ -1,0 +1,43 @@
+---
+import Default from "@astrojs/starlight/components/Banner.astro";
+import { latestVersion, pageVersion, versionHref } from "../lib/versions";
+
+const { id, lang, locale } = Astro.locals.starlightRoute;
+
+const version = pageVersion(id, locale);
+const latest = latestVersion();
+const href = versionHref(latest, locale);
+const label = latest.label ?? latest.slug;
+const ja = lang === "ja";
+
+let notice: string | undefined;
+if (version === undefined) {
+  notice = ja
+    ? `これは開発版のドキュメントである. 内容は次のリリースまでに変更される可能性がある. 最新のリリース版は <a href="${href}">${label}</a> を参照.`
+    : `This is the development version of the documentation. It may change before the next release. See <a href="${href}">${label}</a> for the latest release.`;
+} else if (version.slug !== latest.slug) {
+  const current = version.label ?? version.slug;
+  notice = ja
+    ? `これは ${current} 向けのドキュメントである. 最新のリリース版は <a href="${href}">${label}</a> を参照.`
+    : `This content is for ${current}. See <a href="${href}">${label}</a> for the latest release.`;
+}
+---
+
+{notice && <div set:html={notice} />}
+<Default><slot /></Default>
+
+<style>
+  div {
+    background-color: var(--sl-color-orange-low);
+    box-shadow: var(--sl-shadow-sm);
+    color: var(--sl-color-orange-high);
+    line-height: var(--sl-line-height-headings);
+    padding: var(--sl-nav-pad-y) var(--sl-nav-pad-x);
+    text-align: center;
+    text-wrap: balance;
+  }
+
+  div :global(a) {
+    color: var(--sl-color-orange-high);
+  }
+</style>
