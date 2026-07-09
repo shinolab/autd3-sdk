@@ -57,7 +57,7 @@ jobs:
         with:
           tool: cargo-binstall,cargo-about@0.9.0
       - name: Install dioxus-cli
-        run: cargo binstall -y dioxus-cli@0.7.9
+        run: cargo binstall -y dioxus-cli@^0.7 --locked
       - name: Build bundle
         run: cargo xtask console bundle
       - name: Upload bundle
