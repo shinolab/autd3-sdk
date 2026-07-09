@@ -444,6 +444,28 @@ fn bump_csharp_props(path: &Path, version: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn firmware_series(root: &Path) -> Result<String> {
+    let app_h = root.join("firmware/cpu/src/app.h");
+    let text =
+        std::fs::read_to_string(&app_h).with_context(|| format!("reading {}", app_h.display()))?;
+    let major = read_digits_after(&text, "FW_VERSION_MAJOR (")?;
+    let minor = read_digits_after(&text, "FW_VERSION_MINOR (")?;
+
+    let svh = root.join("firmware/fpga/rtl/sources_1/new/headers/params.svh");
+    let text =
+        std::fs::read_to_string(&svh).with_context(|| format!("reading {}", svh.display()))?;
+    let fpga_major = read_digits_after(&text, "VersionNumMajor = 8'd")?;
+    let fpga_minor = read_digits_after(&text, "VersionNumMinor = 8'd")?;
+
+    if (major, minor) != (fpga_major, fpga_minor) {
+        bail!(
+            "CPU firmware version {major}.{minor}.x (app.h) and FPGA firmware version \
+             {fpga_major}.{fpga_minor}.x (params.svh) disagree; run `cargo xtask bump-version firmware <version>`"
+        );
+    }
+    Ok(format!("{major}.{minor}"))
+}
+
 fn bump_firmware(root: &Path, version: &str) -> Result<()> {
     let [major, minor, patch] = version_parts(version)?;
 
@@ -471,7 +493,24 @@ fn bump_firmware(root: &Path, version: &str) -> Result<()> {
     }
     std::fs::write(&svh, text).with_context(|| format!("writing {}", svh.display()))?;
 
-    gen_param(root)
+    gen_param(root)?;
+
+    let pages = crate::doc::rewrite_firmware_series(root, &format!("{major}.{minor}"))?;
+    println!("Updated firmware version in {pages} doc page(s) -> {major}.{minor}.x");
+    Ok(())
+}
+
+fn read_digits_after(content: &str, key: &str) -> Result<u32> {
+    let pos = content
+        .find(key)
+        .with_context(|| format!("`{key}` not found"))?;
+    let start = pos + key.len();
+    let len = content[start..]
+        .find(|c: char| !c.is_ascii_digit())
+        .with_context(|| format!("no digits after `{key}`"))?;
+    content[start..start + len]
+        .parse()
+        .with_context(|| format!("non-numeric value after `{key}`"))
 }
 
 fn bump_digits_after(content: &str, key: &str, new: u32) -> Result<String> {
