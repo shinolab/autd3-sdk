@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
 import { excerpt } from "@lib/excerpt";
 import client from "@codes/rust/examples/api/link/remote_client.rs?raw";
 import pyClient from "@codes/python/examples/api/link/remote_client.py?raw";
@@ -13,12 +14,16 @@ import csClient from "@codes/csharp/examples/api/link/remote_client.cs?raw";
 import server from "@codes/rust/examples/api/link/remote_server.rs?raw";
 
 `RemoteLink` は, AUTD3 デバイスに直接配線された**別ホスト**へ TCP 接続して送受信する Link 実装. 
-`autd3-rs-link-remote` クレートで提供される. AUTD3 を操作したいマシンと実機を配線したマシンが異なる場合に使う.
+AUTD3 を操作したいマシンと実機を配線したマシンが異なる場合に使う.
+
+<Install rust="autd3-rs-link-remote" python="autd3-link-remote" csharp="AUTD3.Link.Remote" />
 
 サーバとクライアントの 2 プロセスで構成する.
 
 - `RemoteServer`: 実機に配線されたホストで動かす. EtherCrab などの実機リンクを駆動し, tx/rx フレームを TCP で中継する. 
 - `RemoteLink`: 操作側のホストで動かす. 
+
+サーバ側のホストには, 実機を駆動する Link のパッケージ ([EtherCrab](/autd3-sdk/api/link/ethercrab/) 等) も併せて追加する.
 
 [`Simulator`](/autd3-sdk/guide/simulator/) への接続も`RemoteLink`で行う (`Simulator` は内部で `RemoteServer` を起動している).
 

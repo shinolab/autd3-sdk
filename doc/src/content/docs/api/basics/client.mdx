@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
 import { excerpt } from "@lib/excerpt";
 import open from "@codes/rust/examples/api/basics/client-config.rs?raw";
 import pyOpen from "@codes/python/examples/api/basics/client-config.py?raw";
@@ -15,6 +16,10 @@ import csOpen from "@codes/csharp/examples/api/basics/client-config.cs?raw";
 import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 `Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
+`Client` を含む基礎・コマンドの API は本体パッケージが提供する.
+実機等への接続には, これとは別に [Link](/autd3-sdk/api/link/) のパッケージが必要.
+
+<Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
 <CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} csharp={excerpt(csOpen, "api")} />
 

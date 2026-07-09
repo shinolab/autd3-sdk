@@ -10,6 +10,19 @@ import CodeTabs from "@components/CodeTabs.astro";
 `Link` は AUTD3 デバイスとの物理的な通信路を抽象化したもの. EtherCAT などの
 通信方式の違いを吸収し, 上位の `Client` からは同一の API で扱えるようにする. 
 
+## パッケージ
+
+Link 実装はそれぞれ独立したパッケージで提供される. 使用する Link のパッケージを依存関係に追加すること. 
+
+| Link | Rust | Python | C# |
+| ---- | ---- | ------ | -- |
+| [TwinCAT](/autd3-sdk/api/link/twincat/) | `autd3-rs-link-twincat` | `autd3-link-twincat` | `AUTD3.Link.TwinCAT` |
+| [EtherCrab](/autd3-sdk/api/link/ethercrab/) | `autd3-rs-link-ethercrab` | `autd3-link-ethercrab` | `AUTD3.Link.Ethercrab` |
+| [SOEM](/autd3-sdk/api/link/soem/) | `autd3-rs-link-soem` | `autd3-link-soem` | `AUTD3.Link.Soem` |
+| [Remote](/autd3-sdk/api/link/remote/) | `autd3-rs-link-remote` | `autd3-link-remote` | `AUTD3.Link.Remote` |
+
+インストール手順は各 Link のページを参照. 
+
 ## 使い方
 
 Link は `Client::open` に Link Option を渡すことで構築する. Option には接続先や

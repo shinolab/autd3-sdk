@@ -1,0 +1,43 @@
+---
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+import { Code } from "astro-expressive-code/components";
+
+interface Props {
+  rust?: string;
+  python?: string;
+  csharp?: string;
+}
+
+const { rust, python, csharp } = Astro.props;
+const packages = (spec: string) => spec.trim().split(/\s+/);
+const perLine = (spec: string, prefix: string) =>
+  packages(spec)
+    .map((name) => `${prefix} ${name}`)
+    .join("\n");
+---
+
+<Aside type="tip" title="インストール">
+  <Tabs syncKey="lang">
+    {
+      rust !== undefined && (
+        <TabItem label="Rust" icon="seti:rust">
+          <Code code={perLine(rust, "cargo add")} lang="sh" />
+        </TabItem>
+      )
+    }
+    {
+      python !== undefined && (
+        <TabItem label="Python" icon="seti:python">
+          <Code code={`pip install ${packages(python).join(" ")}`} lang="sh" />
+        </TabItem>
+      )
+    }
+    {
+      csharp !== undefined && (
+        <TabItem label="C#" icon="seti:c-sharp">
+          <Code code={perLine(csharp, "dotnet add package")} lang="sh" />
+        </TabItem>
+      )
+    }
+  </Tabs>
+</Aside>
