@@ -1,10 +1,14 @@
 mod diagnostics;
 mod error;
+mod join;
 mod link;
+#[cfg(target_os = "linux")]
+mod linux;
 mod option;
 mod state_check;
 mod status;
 mod sync;
+mod timeout;
 mod timer;
 mod transport;
 mod utils;

@@ -1,4 +1,5 @@
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 
 use autd3_rs_core::{DeviceState, LinkStatus};
 use ethercrab::MainDevice;
@@ -16,6 +17,7 @@ pub struct StateChecker {
     states: Vec<DeviceState>,
     recoveries: u64,
     diagnostics: SharedCycleDiagnostics,
+    pdu_timeout: Duration,
 }
 
 impl StateChecker {
@@ -23,6 +25,7 @@ impl StateChecker {
         maindevice: &Arc<MainDevice<'static>>,
         addresses: Vec<u16>,
         diagnostics: SharedCycleDiagnostics,
+        pdu_timeout: Duration,
     ) -> Self {
         Self {
             maindevice: Arc::downgrade(maindevice),
@@ -30,6 +33,7 @@ impl StateChecker {
             recoveries: 0,
             addresses,
             diagnostics,
+            pdu_timeout,
         }
     }
 
@@ -39,52 +43,14 @@ impl StateChecker {
         };
         let was_all_op = self.states.iter().all(|s| *s == DeviceState::Op);
         for (device, &address) in self.addresses.iter().enumerate() {
-            let mut al_status_code = None;
-            let new_state = match read_al_state(&maindevice, address).await {
-                Ok(al) if al.is_op() => DeviceState::Op,
-                Ok(al) => match al.op_recovery_action() {
-                    OpRecoveryAction::AckSafeOpError => {
-                        al_status_code = match read_al_status_code(&maindevice, address).await {
-                            Ok(code) => Some(code),
-                            Err(e) => {
-                                tracing::debug!(device, "failed to read AL status code: {e}");
-                                None
-                            }
-                        };
-                        if let Err(e) =
-                            request_al_state(&maindevice, address, AlState::SAFE_OP_ACK).await
-                        {
-                            tracing::debug!(device, "failed to ack SAFE-OP + ERROR: {e}");
-                        }
-                        DeviceState::SafeOpError
-                    }
-                    OpRecoveryAction::RequestOp => {
-                        al_status_code = match read_al_status_code(&maindevice, address).await {
-                            Ok(code) => Some(code),
-                            Err(e) => {
-                                tracing::debug!(device, "failed to read AL status code: {e}");
-                                None
-                            }
-                        };
-                        if let Err(e) = request_al_state(&maindevice, address, AlState::OP).await {
-                            tracing::debug!(device, "failed to request OP: {e}");
-                        }
-                        DeviceState::SafeOp
-                    }
-                    OpRecoveryAction::None => DeviceState::Other(al.state_bits()),
-                },
-                Err(
-                    e @ (ethercrab::error::Error::Timeout(_)
-                    | ethercrab::error::Error::WorkingCounter { .. }),
-                ) => {
-                    tracing::trace!(device, "AL status read failed: {e}");
-                    DeviceState::Lost
-                }
-                Err(e) => {
-                    tracing::error!(device, "AL status read failed: {e}");
-                    self.states[device]
-                }
-            };
+            let (new_state, al_status_code) = Box::pin(resolve_state(
+                &maindevice,
+                address,
+                device,
+                self.pdu_timeout,
+                self.states[device],
+            ))
+            .await;
             if new_state != self.states[device] {
                 let diagnostics = load_cycle_diagnostics(&self.diagnostics);
                 match new_state {
@@ -130,6 +96,52 @@ impl autd3_rs_core::StateCheck for StateChecker {
     fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Self::Error>> + Send {
         StateChecker::check(self)
     }
+}
+
+async fn resolve_state(
+    maindevice: &MainDevice<'_>,
+    address: u16,
+    device: usize,
+    pdu_timeout: Duration,
+    previous: DeviceState,
+) -> (DeviceState, Option<u16>) {
+    let al = match read_al_state(maindevice, address, pdu_timeout).await {
+        Ok(al) if al.is_op() => return (DeviceState::Op, None),
+        Ok(al) => al,
+        Err(
+            e @ (ethercrab::error::Error::Timeout(_)
+            | ethercrab::error::Error::WorkingCounter { .. }),
+        ) => {
+            tracing::trace!(device, "AL status read failed: {e}");
+            return (DeviceState::Lost, None);
+        }
+        Err(e) => {
+            tracing::error!(device, "AL status read failed: {e}");
+            return (previous, None);
+        }
+    };
+
+    let action = al.op_recovery_action();
+    if action == OpRecoveryAction::None {
+        return (DeviceState::Other(al.state_bits()), None);
+    }
+
+    let al_status_code = match read_al_status_code(maindevice, address, pdu_timeout).await {
+        Ok(code) => Some(code),
+        Err(e) => {
+            tracing::debug!(device, "failed to read AL status code: {e}");
+            None
+        }
+    };
+    let (control, state) = match action {
+        OpRecoveryAction::AckSafeOpError => (AlState::SAFE_OP_ACK, DeviceState::SafeOpError),
+        OpRecoveryAction::RequestOp => (AlState::OP, DeviceState::SafeOp),
+        OpRecoveryAction::None => unreachable!("handled above"),
+    };
+    if let Err(e) = request_al_state(maindevice, address, control, pdu_timeout).await {
+        tracing::debug!(device, "failed to request AL state {control:#06x}: {e}");
+    }
+    (state, al_status_code)
 }
 
 fn log_safe_op_transition(
