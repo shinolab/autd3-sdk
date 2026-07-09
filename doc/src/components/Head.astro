@@ -1,0 +1,10 @@
+---
+import Default from "@astrojs/starlight/components/Head.astro";
+import { pageVersion } from "../lib/versions";
+
+const { id, locale } = Astro.locals.starlightRoute;
+const development = pageVersion(id, locale) === undefined;
+---
+
+<Default><slot /></Default>
+{development && <meta name="robots" content="noindex" />}
