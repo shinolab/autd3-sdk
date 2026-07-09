@@ -9,7 +9,7 @@ use clap::Subcommand;
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
 use crate::py::{MIT_WHEELS, develop, ensure_venv, pip_install, venv_python};
-use crate::util::{capture, on_path, run};
+use crate::util::{capture, on_path, run, run_tool};
 
 const EXPECT_ERROR_MARKER: &str = "# xtask:expect-error";
 const LONG_RUNNING_MARKER: &str = "# xtask:long-running";
@@ -435,5 +435,5 @@ fn npm(doc: &Path, args: &[&str]) -> Result<()> {
     if !on_path("npm") {
         bail!("`npm` is required for the `doc` scope (install Node.js)");
     }
-    run("npm", args.iter().copied(), doc)
+    run_tool("npm", args.iter().copied(), doc)
 }

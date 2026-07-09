@@ -6,7 +6,7 @@ use clap::Subcommand;
 use flate2::read::GzDecoder;
 use tar::Archive;
 
-use crate::util::run;
+use crate::util::{on_path, run, run_tool};
 
 const SOEM_CRATE: &str = "autd3-ffi-link-soem";
 
@@ -158,6 +158,9 @@ fn build(root: &Path, soem: bool, manifest: bool) -> Result<()> {
 }
 
 fn pack(root: &Path, native_dir: Option<&Path>, out: Option<PathBuf>) -> Result<()> {
+    if !on_path("npm") {
+        bail!("`npm` is required for `unity pack` (install Node.js)");
+    }
     let ffi = root.join("bindings").join("ffi");
     let unity_dir = root.join("bindings").join("unity");
     let out_dir = out.unwrap_or_else(|| unity_dir.join("dist"));
@@ -256,7 +259,7 @@ fn stage_package(root: &Path, pkg: &UnityPkg, pkg_dir: &Path) -> Result<()> {
 }
 
 fn npm_pack(pkg_dir: &Path, out_dir: &Path) -> Result<()> {
-    run(
+    run_tool(
         "npm",
         [
             "pack",
