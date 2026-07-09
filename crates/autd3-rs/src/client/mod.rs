@@ -25,7 +25,7 @@ use crate::geometry::Geometry;
 use crate::link::{IntoLink, Link};
 use crate::mirror::FirmwareState;
 use crate::operation::{Clear, Distribution, Synchronize};
-use crate::protocol::Cmd;
+use crate::protocol::{Cmd, DeviceErrorCode};
 use crate::value::Emission;
 
 use pool::SlotPool;
@@ -253,69 +253,65 @@ impl Client {
         Ok(())
     }
 
+    async fn read_broadcast(&self, cmd: Cmd) -> Result<Vec<u8>, Error> {
+        Ok(self
+            .send_broadcast_exclusive(&Datagram::no_payload(cmd))
+            .await?
+            .await?
+            .data)
+    }
+
     pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
-        let cpu_major = self
-            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
-            .await?
-            .await?
-            .data;
-        let cpu_minor = self
-            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadCpuFwVersionMinor))
-            .await?
-            .await?
-            .data;
-        let cpu_patch = self
-            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadCpuFwVersionPatch))
-            .await?
-            .await?
-            .data;
-        let fpga_major = self
-            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadFpgaFwVersionMajor))
-            .await?
-            .await?
-            .data;
-        let fpga_minor = self
-            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadFpgaFwVersionMinor))
-            .await?
-            .await?
-            .data;
-        let fpga_patch = self
-            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadFpgaFwVersionPatch))
-            .await?
-            .await?
-            .data;
-        Ok(cpu_major
-            .into_iter()
-            .zip(cpu_minor)
-            .zip(cpu_patch)
-            .zip(fpga_major)
-            .zip(fpga_minor)
-            .zip(fpga_patch)
-            .map(
-                |(((((cpu_major, cpu_minor), cpu_patch), fpga_major), fpga_minor), fpga_patch)| {
-                    FirmwareVersion {
-                        cpu: Version {
-                            major: cpu_major,
-                            minor: cpu_minor,
-                            patch: cpu_patch,
-                        },
-                        fpga: Version {
-                            major: fpga_major,
-                            minor: fpga_minor,
-                            patch: fpga_patch,
-                        },
+        const UNKNOWN_CMD: u8 = DeviceErrorCode::UnknownCmd as u8;
+
+        let cpu_major = self.read_broadcast(Cmd::ReadCpuFwVersionMajor).await?;
+        let cpu_minor = self.read_broadcast(Cmd::ReadCpuFwVersionMinor).await?;
+        let cpu_patch = self.read_broadcast(Cmd::ReadCpuFwVersionPatch).await?;
+
+        let err_before = self.read_broadcast(Cmd::ReadErrorDetail).await?;
+        let fpga_major = self.read_broadcast(Cmd::ReadFpgaFwVersionMajor).await?;
+        let fpga_minor = self.read_broadcast(Cmd::ReadFpgaFwVersionMinor).await?;
+        let fpga_patch = self.read_broadcast(Cmd::ReadFpgaFwVersionPatch).await?;
+        let err_after = self.read_broadcast(Cmd::ReadErrorDetail).await?;
+
+        Ok((0..cpu_major.len())
+            .map(|i| {
+                let fpga = if err_after[i] == UNKNOWN_CMD {
+                    if err_before[i] == UNKNOWN_CMD {
+                        tracing::warn!(
+                            device = i,
+                            "FPGA firmware version is unknown: {} was already latched before the query, so it cannot be attributed to it",
+                            DeviceErrorCode::UnknownCmd.describe()
+                        );
+                    } else {
+                        tracing::warn!(
+                            device = i,
+                            "FPGA firmware version is unknown: {}",
+                            DeviceErrorCode::UnknownCmd.describe()
+                        );
                     }
-                },
-            )
+                    Version::UNKNOWN
+                } else {
+                    Version {
+                        major: fpga_major[i],
+                        minor: fpga_minor[i],
+                        patch: fpga_patch[i],
+                    }
+                };
+                FirmwareVersion {
+                    cpu: Version {
+                        major: cpu_major[i],
+                        minor: cpu_minor[i],
+                        patch: cpu_patch[i],
+                    },
+                    fpga,
+                }
+            })
             .collect())
     }
 
     pub async fn read_error_detail(&self) -> Result<Vec<u8>, Error> {
-        Ok(self
-            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadErrorDetail))
-            .await?
-            .await?
-            .data)
+        self.read_broadcast(Cmd::ReadErrorDetail).await
     }
 
     pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, Error> {
