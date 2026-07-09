@@ -20,21 +20,43 @@ cargo xtask tool perftest -- --interface enp3s0 --count 10000 --mode streaming
 
 | Flag                  | Description |
 |-----------------------|-------------|
-| `--link <KIND>`       | `ethercrab` (default), `soem`, or `twincat`. |
+| `--link <KIND>`       | `ethercrab` (default), `soem`, `twincat`, or `nop`. |
 | `--interface <NAME>`  | EtherCAT network interface (for `ethercrab` / `soem`). |
-| `--devices <N>`       | Expected device count. Required for `twincat` (no bus scan); a mismatch guard otherwise. |
+| `--devices <N>`       | Expected device count. Required for `twincat` (no bus scan) and `nop`; a mismatch guard otherwise. |
 | `--twincat-remote <IP>` | Connect to a remote TwinCAT host over ADS (requires `--ams-net-id`). Omit for a local TwinCAT runtime. `--link twincat` only. |
 | `--ams-net-id <ID>`   | AMS Net ID of the remote target, e.g. `192.168.0.1.1.1`. `--link twincat` only. |
 | `--count <N>` *or* `--duration <DUR>` | Stop condition. Exactly one is required. |
 | `--data-len <N>`      | Bytes of `data` per `XorHash` command. Default = 620 (Max). |
 | `--sleep-ms <N>`      | Slave-side `port_sleep_ms` to inject before the response. Default = 0. |
-| `--cycle-ms <N>`      | EtherCAT cycle period in milliseconds. Default = 1. |
+| `--cycle-us <N>`      | EtherCAT cycle period in microseconds. Default = 1000. `0` = free-run, `--link nop` only. |
 | `--warmup <N>`        | Drop the first N samples from the summary. Default = 0. |
 | `--csv <PATH>`        | Write every sample's `(index, rtt_ns, status)` to CSV. |
 | `--timeout-cycles <N>`| PDO cycles to wait for an ACK match before raising `Timeout`. Default = 10. |
 | `--mode <MODE>`       | `stop-and-wait` (default) or `streaming`. See below. |
 | `--inflight <N>`      | Pipeline depth in `streaming` mode. Default = 127 (the SEQ-wrap cap). Ignored in `stop-and-wait`. |
 | `--low-latency`       | Request the slave's low-latency (inline ISR) processing mode instead of the default FIFO path. Default: off. |
+
+## Hardware-free runs (`--link nop`)
+
+`--link nop` swaps the EtherCAT bus for the `autd3-rs-link-nop` firmware emulator, so the whole
+client stack — RT thread, slot pool, request-response engine, real CPU firmware C code — runs
+without any hardware. The device count comes from `--devices` instead of a bus scan.
+
+The emulator answers each frame instantly, so the tool paces `cycle()` itself to `--cycle-us`
+(default 1000 µs) to reproduce the timing of a real bus. Pass `--cycle-us 0` to free-run: cycles
+then advance as fast as the CPU allows, which turns a 10,000-sample run into a few tens of
+milliseconds. Latency and throughput numbers are meaningless in free-run mode; allocation counts
+are not.
+
+```sh
+# 1 ms emulated bus — throughput/latency behave like real hardware
+cargo xtask tool perftest --no-sudo -- --link nop --devices 1 --duration 10s --mode streaming
+
+# free-run — fastest way to gather allocation statistics
+cargo xtask tool perftest --mem-profile --no-sudo -- --link nop --devices 1 --count 10000 --cycle-us 0
+```
+
+`--no-sudo` is worth passing: the nop link opens no raw socket, so it needs no privileges.
 
 ## Memory profiling
 
@@ -46,6 +68,9 @@ the report. Use it to check whether the send hot loop allocates.
 ```sh
 cargo xtask tool perftest --mem-profile -- --link soem --devices 1 --count 10000
 ```
+
+Combine it with `--link nop --cycle-us 0` to iterate on allocation tuning without hardware and
+without waiting on the bus clock.
 
 The feature is opt-in so ordinary latency runs keep the plain system allocator and stay unperturbed.
 
