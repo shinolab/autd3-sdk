@@ -243,7 +243,7 @@ fn run_example(
 ) -> Result<()> {
     let python = python.to_string_lossy().into_owned();
     let script = script.to_string_lossy().into_owned();
-    if !no_sudo && cfg!(target_os = "linux") {
+    if !no_sudo && cfg!(unix) {
         let mut sudo_args: Vec<String> = Vec::new();
         if let Ok(log) = std::env::var("RUST_LOG") {
             sudo_args.push(format!("RUST_LOG={log}"));

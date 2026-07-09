@@ -32,7 +32,7 @@ pub fn on_path(name: &str) -> bool {
 
 pub fn run_built_bin(bin: &Path, args: &[String], no_sudo: bool, cwd: &Path) -> Result<()> {
     let bin_str = bin.to_string_lossy().into_owned();
-    let use_sudo = !no_sudo && cfg!(target_os = "linux");
+    let use_sudo = !no_sudo && cfg!(unix);
     if use_sudo {
         let mut sudo_args: Vec<String> = Vec::with_capacity(args.len() + 2);
         if let Ok(log) = std::env::var("RUST_LOG") {

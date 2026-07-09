@@ -220,12 +220,17 @@ fn find_example_exe(project_dir: &Path, config: &str, name: &str) -> Result<Path
 fn run_example(exe: &Path, native: &Path, no_sudo: bool, cwd: &Path) -> Result<()> {
     let exe = exe.to_string_lossy().into_owned();
     let native = native.to_string_lossy().into_owned();
-    if !no_sudo && cfg!(target_os = "linux") {
-        let args = [format!("LD_LIBRARY_PATH={native}"), exe];
+    let lib_path_var = if cfg!(target_os = "macos") {
+        "DYLD_LIBRARY_PATH"
+    } else {
+        "LD_LIBRARY_PATH"
+    };
+    if !no_sudo && cfg!(unix) {
+        let args = [format!("{lib_path_var}={native}"), exe];
         run("sudo", args.iter().map(String::as_str), cwd)
     } else {
         let mut cmd = Command::new(&exe);
-        cmd.current_dir(cwd).env("LD_LIBRARY_PATH", &native);
+        cmd.current_dir(cwd).env(lib_path_var, &native);
         spawn(cmd, "example")
     }
 }
