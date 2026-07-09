@@ -60,17 +60,31 @@ cargo xtask tool perftest --mem-profile --no-sudo -- --link nop --devices 1 --co
 
 ## Memory profiling
 
-Pass `--mem-profile` to xtask to build with the `mem-profile` cargo feature, which swaps in the
-[`stats_alloc`](https://crates.io/crates/stats_alloc) instrumented global allocator and appends a
-process-wide allocation summary (alloc/free/realloc counts, total bytes, and per-send averages) to
-the report. Use it to check whether the send hot loop allocates.
+Pass `--mem-profile` to xtask to build with the `mem-profile` cargo feature, which installs an
+instrumented global allocator and appends a process-wide allocation summary to the report:
+alloc/free/realloc counts, total bytes, per-send averages, and a **histogram of allocation sizes**.
 
 ```sh
-cargo xtask tool perftest --mem-profile -- --link soem --devices 1 --count 10000
+cargo xtask tool perftest --mem-profile -- --link soem --interface enp3s0 --count 10000
 ```
 
-Combine it with `--link nop --cycle-us 0` to iterate on allocation tuning without hardware and
-without waiting on the bus clock.
+The histogram is the useful part. Counts are exact per size below 8192 bytes, sorted by the share
+of bytes they contribute, so a per-send allocation shows up as a row with `per send` ≈ 1.00 and the
+size tells you what it is:
+
+```
+  allocation sizes (largest share of bytes first):
+        size       count    per send    bytes/send
+         456       10000        1.00        456.00   <- BTreeMap<(Instant, usize), Waker> node
+         104       10000        1.00        104.00
+```
+
+Recording starts after the link is open and the handshake is done, so startup allocations are
+excluded; `net bytes` is therefore usually negative (frees of pre-recording allocations).
+
+Works with every link. `--link nop --cycle-us 0` iterates fastest and needs no hardware, but only
+exercises the client; use `--link ethercrab` / `--link soem` with `--interface` to profile a link
+implementation against a real bus.
 
 The feature is opt-in so ordinary latency runs keep the plain system allocator and stay unperturbed.
 
