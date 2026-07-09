@@ -1,0 +1,96 @@
+---
+title: Geometry
+description: The Geometry that represents the physical layout of devices
+sidebar:
+  order: 1
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import sample from "@codes/rust/examples/api/basics/geometry.rs?raw";
+import pySample from "@codes/python/examples/api/basics/geometry.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/geometry.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`Geometry` represents the physical layout (position and rotation) of AUTD3 devices.
+
+<CodeTabs>
+<Fragment slot="rust">
+<Code code={excerpt(sample, "api")} lang="rust" />
+
+`Autd3::new(origin, rotation)` constructs a single device from an origin (`Point3`) and a rotation (`UnitQuaternion`).
+There is also `Autd3::default()`, which uses `Point3::origin()` for the origin and `UnitQuaternion::identity()` for the rotation.
+</Fragment>
+<Fragment slot="python">
+<Code code={excerpt(pySample, "api")} lang="python" />
+
+`Autd3([x, y, z], rotation)` constructs a single device from an origin and a rotation.
+
+The rotation accepts the following 3 forms.
+
+<Code code={excerpt(pySample, "rotation")} lang="python" />
+
+- Quaternion: **scalar-first** `[w, i, j, k]`
+- `EulerAngles`: intrinsic Euler angles
+- scipy's `Rotation`
+</Fragment>
+<Fragment slot="csharp">
+<Code code={excerpt(csSample, "api")} lang="csharp" />
+
+`new Autd3(origin, rotation)` constructs a single device from an origin (`Vector3`) and a rotation (`Quaternion`).
+There is also `new Autd3(origin)`, which omits the rotation (it uses `Quaternion.Identity`).
+</Fragment>
+</CodeTabs>
+
+When multiple devices are passed to `Geometry::new`, device numbers (`idx`) are assigned in order from the first.
+
+## API
+
+Provides retrieval of information about the whole layout and access to each `Device`.
+
+<CodeTabs rust={excerpt(sample, "access")} python={excerpt(pySample, "access")} csharp={excerpt(csSample, "access")} />
+
+| Method                 | Returns                      | Description                          |
+| ---------------------- | ---------------------------- | ------------------------------------ |
+| `num_devices()`        | `usize`                      | Number of devices                    |
+| `num_transducers()`    | `usize`                      | Total number of transducers across all devices |
+| `center()`             | `Point3<f32>`                | Center coordinate of the whole array |
+| `pattern_buffer()`     | `Vec<Vec<Emission>>`         | Allocate an output buffer for Pattern computation |
+| `iter()` / `&geometry` | `Iterator<Item = &Device>`   | Iterate over each `Device`           |
+| `geometry[i]`          | `&Device`                    | Get the `i`-th `Device`              |
+
+## Device
+
+Represents a single device.
+It is obtained via `geometry[i]` or by iterating over `&geometry`.
+The position and normal direction of each transducer, as well as the device's rotation, can be retrieved.
+
+<CodeTabs rust={excerpt(sample, "device")} python={excerpt(pySample, "device")} csharp={excerpt(csSample, "device")} />
+
+| Method               | Returns                 | Description                                   |
+| -------------------- | ----------------------- | --------------------------------------------- |
+| `idx()`              | `usize`                 | Device number within the `Geometry`           |
+| `num_transducers()`  | `usize`                 | Number of transducers                         |
+| `center()`           | `Point3<f32>`           | Device center coordinate                      |
+| `rotation()`         | `UnitQuaternion<f32>`   | Device rotation                               |
+| `x_direction()`      | `UnitVector3<f32>`      | Local x-axis direction                        |
+| `y_direction()`      | `UnitVector3<f32>`      | Local y-axis direction                        |
+| `axial_direction()`  | `UnitVector3<f32>`      | Axial direction (ultrasound emission direction) |
+| `positions()`        | `&[Point3<f32>]`        | Positions of all transducers                  |
+| `directions()`       | `&[UnitVector3<f32>]`   | Normal directions of all transducers          |
+| `position(i)`        | `Point3<f32>`           | Position of the `i`-th transducer             |
+| `direction(i)`       | `UnitVector3<f32>`      | Direction of the `i`-th transducer            |
+
+## Coordinate Helpers (Rust only)
+
+`autd3_rs::geometry` provides auxiliary functions to build coordinates.
+The argument type is `Length`, so a unit can be specified.
+
+| Function            | Returns         | Description                                  |
+| ------------------- | --------------- | -------------------------------------------- |
+| `point(x, y, z)`    | `Point3<f32>`   | An absolute-coordinate point                 |
+| `offset(x, y, z)`   | `Vector3<f32>`  | A relative displacement vector               |
+
+Python / C# have no length-unit type and treat coordinates as raw values in mm, so these helpers do not exist.

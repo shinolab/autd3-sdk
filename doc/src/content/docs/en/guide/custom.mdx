@@ -1,0 +1,38 @@
+---
+title: Custom Patterns and Modulation
+description: How to build arbitrary Emission patterns and AM waveforms directly without helper functions
+sidebar:
+  order: 5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import pattern from "@codes/rust/examples/guide/custom-pattern.rs?raw";
+import pyPattern from "@codes/python/examples/guide/custom-pattern.py?raw";
+import csPattern from "@codes/csharp/examples/guide/custom-pattern.cs?raw";
+import modulation from "@codes/rust/examples/guide/custom-modulation.rs?raw";
+import pyModulation from "@codes/python/examples/guide/custom-modulation.py?raw";
+import csModulation from "@codes/csharp/examples/guide/custom-modulation.cs?raw";
+
+`Pattern` and `Modulation` are commands that send an already-computed buffer directly to the device.
+The [compute helpers](/autd3-sdk/en/api/compute/pattern/) are pre-provided compute helpers.
+By building the buffer directly without going through a helper, arbitrary patterns and modulation can be expressed.
+
+## Custom Pattern
+
+A pattern is a buffer that lays out a `Vec<Emission>` for each device.
+`Geometry::pattern_buffer` allocates the buffer for all devices, and the `Emission` (phase and intensity) of each transducer can be freely set.
+
+The following is an example of manually computing the same single focal point as [`focus`](/autd3-sdk/en/api/compute/pattern/focus/), without using a helper.
+It gives each transducer a phase according to the distance from the transducer to the focal point.
+
+<CodeTabs rust={excerpt(pattern, "api")} python={excerpt(pyPattern, "api")} csharp={excerpt(csPattern, "api")} />
+
+## Custom Modulation
+
+Modulation is a pair of a `&[u8]` buffer representing the AM waveform and a [`SamplingConfig`](/autd3-sdk/en/api/basics/sampling-config/).
+Each element of the buffer represents the amplitude of one sample.
+
+The following is an example of Burst modulation that outputs only the first sample within a period.
+
+<CodeTabs rust={excerpt(modulation, "api")} python={excerpt(pyModulation, "api")} csharp={excerpt(csModulation, "api")} />

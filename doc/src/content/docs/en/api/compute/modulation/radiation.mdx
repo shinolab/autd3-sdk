@@ -1,0 +1,48 @@
+---
+title: radiation_pressure
+description: Modulation that applies radiation pressure correction to an existing modulation waveform
+sidebar:
+  order: 24
+srcPath: crates/autd3-rs-modulation/src/radiation_pressure.rs
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+import sample from "@codes/rust/examples/api/compute/modulation/radiation.rs?raw";
+import pySample from "@codes/python/examples/api/compute/modulation/radiation.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/modulation/radiation-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/modulation/radiation-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/modulation/radiation.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/modulation/radiation-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`radiation_pressure` applies radiation pressure correction to a modulation waveform. It corrects a waveform computed by `sine` or similar.
+
+Acoustic radiation pressure is proportional to the square of the sound pressure.
+Since `sine` and similar functions specify the amplitude of the sound pressure, taking the square root of each sample is necessary when the radiation pressure should match the target waveform.
+`radiation_pressure` performs this correction.
+
+Each sample <Math tex="m" /> is rewritten by the following equation.
+
+<MathBlock tex="m' = \mathrm{round}\!\left(255 \sqrt{\tfrac{m}{255}}\right)" />
+
+<ModulationPlot kind="radiation" fixed="" />
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+### radiation_pressure
+
+| Parameter | Type           | Description                    |
+| ----- | -------------- | ------------------------------ |
+| `src` | `&[u8]`        | modulation waveform before correction |
+| `dst` | `&mut Vec<u8>` | buffer to write the corrected waveform |
+
+There is also `radiation_pressure_inplace`, which rewrites in place.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

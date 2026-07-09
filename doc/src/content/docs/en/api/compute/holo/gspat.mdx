@@ -1,0 +1,51 @@
+---
+title: gspat
+description: Multi-focus optimization by the GS-PAT method
+sidebar:
+  order: 13
+srcPath: crates/autd3-rs-pattern-holo/src/linear_synthesis/gspat.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/holo/gspat.rs?raw";
+import pySample from "@codes/python/examples/api/compute/holo/gspat.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/holo/gspat-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/holo/gspat-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/holo/gspat.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/holo/gspat-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+gspat is an algorithm that speeds up [gs](/autd3-sdk/en/api/compute/holo/gs/).
+The algorithm is based on the paper by Plasencia et al. ([Plasencia et al., 2020](https://doi.org/10.1145/3386569.3392492)).
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Parameter    | Type                   | Description               |
+| ------------ | ---------------------- | ------------------------- |
+| `geometry`   | `&Geometry`            | Device layout             |
+| `foci`       | `&[ControlPoint]`      | Sequence of focal points (position and target amplitude) |
+| `wavelength` | `Length`               | Wavelength                |
+| `option`     | `&GspatOption`         | Additional options (see below) |
+| `dst`        | `&mut [[Emission; _]]` | Output buffer             |
+
+The parameters are the same as [gs](/autd3-sdk/en/api/compute/holo/gs/).
+
+## GspatOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
+
+| Field         | Type                 | Default                   |
+|---------------|----------------------|---------------------------|
+| `repeat`      | `NonZeroUsize`       | `100`                     |
+| `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
+| `directivity` | `Directivity`        | `Sphere`                  |
+| `backend`     | `impl LinAlgBackend` | `NalgebraBackend`         |
+| `mask`        | `TransducerMask`     | `AllEnabled`              |
+
+The options are the same as [gs](/autd3-sdk/en/api/compute/holo/gs/).
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

@@ -1,0 +1,54 @@
+---
+title: square
+description: Modulation that generates a square-wave amplitude modulation
+sidebar:
+  order: 22
+srcPath: crates/autd3-rs-modulation/src/square.rs
+---
+
+import Math from "@components/Math.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+import sample from "@codes/rust/examples/api/compute/modulation/square.rs?raw";
+import pySample from "@codes/python/examples/api/compute/modulation/square.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/modulation/square-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/modulation/square-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/modulation/square.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/modulation/square-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`square` generates a square-wave amplitude modulation. It switches between the two values `high` and `low` at the specified frequency `freq`.
+
+<ModulationPlot kind="square" />
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Parameter | Type            | Description               |
+| --------- | --------------- | ------------------------- |
+| `freq`    | `Freq<u32>` etc.  | modulation frequency    |
+| `option`  | `&SquareOption` | additional options (see below) |
+| `dst`     | `&mut Vec<u8>`  | output buffer             |
+
+`freq` is specified in the same way as [sine](/autd3-sdk/en/api/compute/modulation/sine/).
+
+## SquareOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
+
+| Field             | Type             | Default                   | Description                 |
+| ----------------- | ---------------- | ------------------------- | --------------------------- |
+| `low`             | `u8`             | `u8::MIN`                 | amplitude of the low level  |
+| `high`            | `u8`             | `u8::MAX`                 | amplitude of the high level |
+| `duty`            | `f32`            | `0.5`                     | fraction of the period occupied by `high` |
+| `sampling_config` | `SamplingConfig` | `SamplingConfig::FREQ_4K` | sampling configuration      |
+
+Within one period, the `duty` fraction is `high` and the remainder is `low`.
+
+An error occurs if `duty` is outside the range 0.0 to 1.0.
+Setting `duty` to <Math tex="0" /> makes it always `low`, and setting it to <Math tex="1" /> makes it always `high`.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

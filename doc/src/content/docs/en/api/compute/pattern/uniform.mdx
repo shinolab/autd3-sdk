@@ -1,0 +1,31 @@
+---
+title: uniform
+description: Pattern that gives a uniform emission to all transducers
+sidebar:
+  order: 5
+srcPath: crates/autd3-rs-pattern/src/uniform.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/uniform.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/uniform.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/uniform-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/uniform-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/pattern/uniform.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/pattern/uniform-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`uniform` gives the same phase and amplitude to all transducers.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Parameter  | Type                   | Description                  |
+| ---------- | ---------------------- | ---------------------------- |
+| `emission` | `Emission`             | Phase and amplitude set for all transducers |
+| `dst`      | `&mut [[Emission; _]]` | Output buffer                |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

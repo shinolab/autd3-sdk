@@ -1,0 +1,42 @@
+---
+title: DatagramBuilder
+description: The DatagramBuilder that assembles commands and converts them into Frames
+sidebar:
+  order: 3
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/datagram-builder.rs?raw";
+import pySample from "@codes/python/examples/api/basics/datagram-builder.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/datagram-builder.cs?raw";
+
+`DatagramBuilder` is a struct that accumulates the commands to send and converts them into `Frames`.
+It is obtained via `Client::datagram_builder`.
+
+## API
+
+`push` accumulates commands, and `build` converts them into `Frames`.
+The resulting `Frames` is split into multiple `Frame`s, which are sent one frame at a time with `Client::send` / `send_checked`.
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Method              | Description                                         |
+| ------------------- | -------------------------------------------------- |
+| `push(cmd)`         | Accumulate a command common to all devices         |
+| `push_each(assign)` | Accumulate a different command per device (see below) |
+| `build()`           | Convert the accumulated commands into `Frames`     |
+
+## push_each
+
+`push_each` takes a closure that is called for each device number and assigns a different command per device.
+In Rust it is `FnMut(usize) -> Option<C>`, and in Python it is `Callable[[int], Command | None]`.
+For a device where `None` is returned, nothing is assigned in that step.
+
+<CodeTabs rust={excerpt(sample, "push_each")} python={excerpt(pySample, "push_each")} csharp={excerpt(csSample, "push_each")} />
+
+In Rust, the return values of the closure must all be the same type `C`.
+To mix commands of different types, unify them into a `BoxedCommand` with `Command::boxed`.
+Because Python is dynamically typed, commands of different types can be returned per device as-is (no `boxed`-equivalent operation is needed).
+
+<CodeTabs rust={excerpt(sample, "push_each_boxed")} />

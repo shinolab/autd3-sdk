@@ -43,10 +43,19 @@ export const sidebar = [
     label: "API リファレンス",
     translations: { en: "API Reference" },
     items: [
-      { label: "基礎", items: [{ autogenerate: { directory: "api/basics" } }] },
-      { label: "コマンド", items: [{ autogenerate: { directory: "api/command" } }] },
+      {
+        label: "基礎",
+        translations: { en: "Basics" },
+        items: [{ autogenerate: { directory: "api/basics" } }],
+      },
+      {
+        label: "コマンド",
+        translations: { en: "Commands" },
+        items: [{ autogenerate: { directory: "api/command" } }],
+      },
       {
         label: "計算ヘルパ",
+        translations: { en: "Compute Helpers" },
         items: [{ autogenerate: { directory: "api/compute" } }],
       },
       { label: "Link", items: [{ autogenerate: { directory: "api/link" } }] },

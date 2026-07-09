@@ -1,0 +1,38 @@
+---
+title: ConfigPattern
+description: Configuring the Pattern bank
+sidebar:
+  order: 13
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/bank-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/bank-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`ConfigPattern` is a low-level command that configures the playback parameters of the Pattern bank.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "config")} python={excerpt(pySample, "config")} csharp={excerpt(csSample, "config")} />
+
+| Field       | Type              | Description                                        |
+| ----------- | ----------------- | ------------------------------------------------- |
+| `bank`      | `PatternBank`     | Target bank                                       |
+| `config`    | `SamplingConfig`  | Playback sampling frequency                       |
+| `size`      | `usize`           | Number of samples in the bank. `1` for a static Pattern |
+| `loop_behavior` | `LoopBehavior` | Playback loop count (`Infinite` / `Finite`)      |
+
+
+`loop_behavior` only takes effect when switching to a bank different from the current one via [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+
+## Example
+
+`ConfigPattern` is used within the sequence of writing the buffer with `WritePatternBuffer` and then switching playback with `ChangePatternBank`.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
+

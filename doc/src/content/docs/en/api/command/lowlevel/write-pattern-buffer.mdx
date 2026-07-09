@@ -1,0 +1,35 @@
+---
+title: WritePatternBuffer
+description: Writing to the Pattern buffer
+sidebar:
+  order: 12
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/bank-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/bank-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`WritePatternBuffer` is a low-level command that writes a Pattern (the `Emission` of each transducer) to the specified bank and index.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "write")} python={excerpt(pySample, "write")} csharp={excerpt(csSample, "write")} />
+
+| Field       | Type                             | Description                        |
+| ----------- | -------------------------------- | ---------------------------------- |
+| `bank`      | `PatternBank`                    | Destination bank                   |
+| `index`     | `u16`                            | Destination index for writing within the bank |
+| `emissions` | `&[Vec<Emission>]` | Per-device emission pattern        |
+
+## Example
+
+Multiple low-level commands are sent together in a single datagram.
+The following is an example of playing a single Pattern via `WritePatternBuffer` → `ConfigPattern` → `ChangePatternBank` (equivalent to the high-level [Pattern](/autd3-sdk/en/api/command/pattern/)).
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
+

@@ -1,0 +1,45 @@
+---
+title: ChangeModulationBank
+description: Switching the Modulation bank
+sidebar:
+  order: 17
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/mod-bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/mod-bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/mod-bank-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/mod-bank-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`ChangeModulationBank` is a low-level command that switches the Modulation bank to be played.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "change")} python={excerpt(pySample, "change")} csharp={excerpt(csSample, "change")} />
+
+| Field             | Type             | Description             |
+| ----------------- | ---------------- | ----------------------- |
+| `bank`            | `ModulationBank` | Destination bank        |
+| `transition_mode` | `TransitionMode` | Behavior on switching   |
+
+## TransitionMode
+
+|            |              |
+| -------------------- | --------------------------        |
+| `Immediate`          | Immediate                         |
+| `SyncIdx`            | When the playback index next becomes 0 |
+| `SysTime(DcSysTime)` | At the specified DC system time   |
+| `Gpio(GpioIn)`       | Trigger on the specified GPIO input pin |
+| `Ext`                | Extended mode (automatically switches to the next bank when playback within the bank finishes) |
+
+When switching to the same bank, the `TransitionMode` and `LoopBehavior` settings have no effect.
+For details on bank operation see the [bank switching tutorial](/autd3-sdk/en/getting-started/tutorial/bank/).
+
+## Example
+
+`ChangeModulationBank` is sent after preparing the bank with `WriteModulationBuffer` + `ConfigModulation` to switch the playback target.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

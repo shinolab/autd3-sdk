@@ -1,0 +1,68 @@
+---
+title: Modulation
+description: Command that sends a computed AM waveform to the device
+sidebar:
+  order: 2
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+import sample from "@codes/rust/examples/api/command/modulation.rs?raw";
+import pySample from "@codes/python/examples/api/command/modulation.py?raw";
+import fullSample from "@codes/rust/examples/api/command/modulation-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/modulation-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/modulation.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/modulation-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`Modulation` is a command that sends AM waveform data (`&[u8]`) to the device.
+
+## API
+
+<CodeTabs>
+<Fragment slot="rust">
+<Code code={excerpt(sample, "api")} lang="rust" />
+
+`Modulation::new` sets the destination bank to `ModulationBank::B0`, the loop to `Infinite`, and the transition to `Immediate`.
+To write to another bank, use `Modulation::with_bank(bank, config, data)`.
+To also change the loop count or transition timing, construct it by specifying the fields directly.
+</Fragment>
+<Fragment slot="python">
+<Code code={excerpt(pySample, "api")} lang="python" />
+
+`Modulation` sets the destination bank to `ModulationBank.B0`, the loop to `Infinite`, and the transition to `Immediate` by default.
+To specify another bank, loop count, or transition timing, pass the `bank` / `loop_behavior` / `transition_mode` arguments.
+</Fragment>
+<Fragment slot="csharp">
+<Code code={excerpt(csSample, "api")} lang="csharp" />
+
+`new Modulation(config, data)` sets the destination bank to `ModulationBank.B0`, the loop to `Infinite`, and the transition to `Immediate`.
+To write to another bank, use `new Modulation(bank, config, data)`.
+To also change the loop count or transition timing, pass the `loopBehavior` / `transitionMode` arguments.
+</Fragment>
+</CodeTabs>
+
+| Field             | Type             | Default                     | Description                  |
+| ----------------- | ---------------- | --------------------------- | ---------------------------- |
+| `bank`            | `ModulationBank` | `ModulationBank::B0`        | Bank to write to / play back |
+| `config`          | `SamplingConfig` | —                           | Playback sampling frequency  |
+| `data`            | `&[u8]`          | —                           | AM waveform sample sequence  |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`    | Playback loop count          |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | Transition behavior on bank switching |
+
+`config` is specified with [`SamplingConfig`](/autd3-sdk/en/api/basics/sampling-config/).
+`data` is written to a buffer allocated by `modulation_buffer()`.
+For the behavior of `loop_behavior` / `transition_mode`, see [ChangeModulationBank](/autd3-sdk/en/api/command/lowlevel/change-modulation-bank/).
+
+Several [helper functions](/autd3-sdk/en/api/compute/modulation/) are provided for computing modulation.
+
+## Equivalent Low-Level Commands
+
+`Modulation` internally expands into the three commands [WriteModulationBuffer](/autd3-sdk/en/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/en/api/command/lowlevel/config-modulation/) + [ChangeModulationBank](/autd3-sdk/en/api/command/lowlevel/change-modulation-bank/).
+The following is equivalent to `Modulation { bank, config, data, loop_behavior, transition_mode }`
+
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

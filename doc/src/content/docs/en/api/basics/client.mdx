@@ -1,0 +1,69 @@
+---
+title: Client
+description: The Client that manages connection and transmission to devices
+sidebar:
+  order: 2
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+import { excerpt } from "@lib/excerpt";
+import open from "@codes/rust/examples/api/basics/client-config.rs?raw";
+import pyOpen from "@codes/python/examples/api/basics/client-config.py?raw";
+import methods from "@codes/rust/examples/api/basics/client.rs?raw";
+import pyMethods from "@codes/python/examples/api/basics/client.py?raw";
+import csOpen from "@codes/csharp/examples/api/basics/client-config.cs?raw";
+import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
+
+`Client` is the central object that sends commands and reads state.
+The basic and command APIs, including `Client`, are provided by the main package.
+Connecting to real hardware and the like additionally requires a separate [Link](/autd3-sdk/en/api/link/) package.
+
+<Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
+
+<CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} csharp={excerpt(csOpen, "api")} />
+
+| Parameter  | Type            | Description                    |
+| ---------- | --------------- | ----------------------------- |
+| `geometry` | `&Geometry`     | Physical layout of the devices |
+| `link`     | `impl IntoLink` | Link                          |
+| `config`   | `ClientConfig`  | See below                     |
+
+To continuously monitor the operating state of the link, use `open_with_checker` and drive the returned `Checker`.
+
+## API
+
+<CodeTabs rust={excerpt(methods, "api")} python={excerpt(pyMethods, "api")} csharp={excerpt(csMethods, "api")} />
+
+| Method                    | async | Returns                               | Description                                                |
+| ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
+| `num_devices()`           | —     | `usize`                               | Number of connected devices                                |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device (`FirmwareVersion { cpu, fpga }`) |
+| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
+| `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | Error detail of each device                                |
+| `datagram_builder()`      | —     | `DatagramBuilder`                     | [DatagramBuilder](/autd3-sdk/en/api/basics/datagram-builder/) |
+| `send(frame)`             | ✓     | `Result<ResponseFuture, Error>`       | Enqueue a frame into the send queue. Awaiting the `ResponseFuture` yields the response (`Response`) |
+| `send_checked(frame)`     | ✓     | `Result<(), Error>`                   | Send and confirm the response                              |
+| `stop()`                  | ✓     | `Result<(), Error>`                   | Stop all transducers                                       |
+| `close()`                 | ✓     | `Result<(), Error>`                   | Close the connection                                       |
+
+## ClientConfig
+
+<CodeTabs rust={excerpt(open, "config")} python={excerpt(pyOpen, "config")} csharp={excerpt(csOpen, "config")} />
+
+| Field                  | Type                     | Default | Description                                                |
+| ---------------------- | ------------------------ | ------- | ---------------------------------------------------------- |
+| `timeout_cycles`       | `u32`                    | `10`    | Response-wait timeout (in send cycles)                     |
+| `max_inflight`         | `NonZeroUsize`           | `127`   | Send queue size                                            |
+| `send_interval_cycles` | `NonZeroU32`             | `1`     | Minimum interval between consecutive sends (in cycles)     |
+| `max_resync_rounds`    | `NonZeroU32`             | `8`     | Maximum number of rounds to attempt resynchronization      |
+| `low_latency`          | `bool`                   | `false` | Low-latency mode                                           |
+| `reset_resend_cycles`  | `u32`                    | `2`     | Number of cycles to resend after a reset                   |
+| `rt_priority`          | `Option<ThreadPriority>` | `None`  | Priority of the RT thread (OS default if unspecified)      |
+| `rt_affinity`          | `Option<CoreId>`         | `None`  | CPU affinity of the RT thread (OS default if unspecified)  |
+| `validate_state`       | `bool`                   | `true`  | Enable pre-send validation                                 |
+
+`max_inflight` errors if it exceeds `MAX_IN_FLIGHT (127)`.
+
+Enabling `low_latency` bypasses the receive buffer inside the firmware, improving latency.
+However, this may make operation unstable.

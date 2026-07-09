@@ -1,0 +1,67 @@
+---
+title: PatternStm
+description: STM that switches a host-computed sequence of Patterns at high speed
+sidebar:
+  order: 3
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/pattern-stm.rs?raw";
+import pySample from "@codes/python/examples/api/command/pattern-stm.py?raw";
+import fullSample from "@codes/rust/examples/api/command/pattern-stm-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/pattern-stm-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/pattern-stm.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/pattern-stm-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`PatternStm` provides an STM feature that switches arbitrary sound fields (the emission of each transducer) by a hardware timer.
+Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary Patterns, but its data transfer volume is large.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Parameter  | Type                                  | Description                                          |
+| ---------- | ------------------------------------- | --------------------------------------------------- |
+| `freq`     | `impl Into<StmConfig>`                | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
+| `patterns` | `&[Vec<Vec<Emission>>]` | Sequence of Pattern samples                         |
+| `option`   | `PatternStmOption`                    | Options such as transfer mode, loop, and transition |
+
+Passing a `Freq` / `Duration` to `freq` represents "the frequency/period for one full cycle over all samples".
+A sampling frequency can also be specified.
+
+## PatternStmOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
+
+| Field             | Type             | Default                              | Description                  |
+| ----------------- | ---------------- | ------------------------------------ | ---------------------------- |
+| `bank`            | `PatternBank`    | `PatternBank::B0`                    | Bank to write to / play back |
+| `mode`            | `PatternStmMode` | `PatternStmMode::PhaseIntensityFull` | Transfer format              |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`             | Loop count                   |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate`          | Transition timing on bank switching |
+
+For the behavior of `loop_behavior` and `transition_mode`, see [playback control](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+
+## PatternStmMode
+
+Selects the transfer format of each Pattern. The phase-only and low-resolution formats can reduce the transfer volume.
+
+| Mode                 | Content                                  | 
+| -------------------- | ---------------------------------------- |
+| `PhaseIntensityFull` | Transfer phase and amplitude as-is (default) | 
+| `PhaseFull`          | Transfer phase only. Amplitude fixed at maximum |
+| `PhaseHalf`          | Compress phase to 4 bit and transfer     |
+
+## Equivalent Low-Level Commands
+
+`PatternStm` internally expands into the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/)  (each index) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+The following is equivalent to `PatternStm::new(freq, &patterns, option)`.
+
+When `PatternStmMode` is `PhaseFull` / `PhaseHalf`, [WritePatternCompressed](/autd3-sdk/en/api/command/lowlevel/write-pattern-compressed/) is used instead of `WritePatternBuffer`.
+
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
