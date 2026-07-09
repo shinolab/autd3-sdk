@@ -407,7 +407,43 @@ fn verify_versions(root: &Path, unity_dir: &Path) -> Result<String> {
             "unity version `{version}` must share major.minor with the Cargo workspace version `{cargo}`"
         );
     }
+
+    for pkg in PACKAGES {
+        let path = unity_dir.join(pkg.id).join("package.json");
+        for (dep, req) in package_json_deps(&path)? {
+            if req != version {
+                bail!(
+                    "{}: dependency `{dep}` is pinned to `{req}`, expected `{version}`; npm rejects a package whose sibling dependency is not published",
+                    pkg.id
+                );
+            }
+        }
+    }
     Ok(version)
+}
+
+fn package_json_deps(path: &Path) -> Result<Vec<(String, String)>> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let prefix = format!("\"{PKG_PREFIX}");
+    let mut deps = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if !trimmed.starts_with(&prefix) {
+            continue;
+        }
+        let (name, req) = trimmed
+            .split_once(':')
+            .with_context(|| format!("malformed dependency line in {}: {line}", path.display()))?;
+        deps.push((
+            name.trim().trim_matches('"').to_owned(),
+            req.trim()
+                .trim_end_matches(',')
+                .trim_matches('"')
+                .to_owned(),
+        ));
+    }
+    Ok(deps)
 }
 
 fn package_json_version(path: &Path) -> Result<String> {

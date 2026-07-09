@@ -35,9 +35,3 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
       - run: cargo xtask unity pack
-      - name: Check the tarballs are publishable
-        working-directory: bindings/unity/dist
-        run: |
-          for tgz in *.tgz; do
-            npm publish --dry-run "$tgz"
-          done
