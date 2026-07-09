@@ -6,11 +6,15 @@ sidebar:
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/guide/emulator.rs?raw";
 import pySample from "@codes/python/examples/guide/emulator.py?raw";
 
 `Emulator` は, 実機なしで AUTD3 の駆動データを記録し, そこから音場をオフライン計算するツールである.
+本体とは別のパッケージで提供される (C# 向けのパッケージは提供していない).
+
+<Install rust="autd3-rs-emulator" python="autd3-emulator" />
 
 ## 記録
 
