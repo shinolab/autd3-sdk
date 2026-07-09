@@ -1,0 +1,50 @@
+---
+title: SetGpioOut
+description: SetGpioOut / GpioOut to control the GPIO output
+sidebar:
+  order: 7
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/gpio.rs?raw";
+import pySample from "@codes/python/examples/api/command/gpio.py?raw";
+import fullSample from "@codes/rust/examples/api/command/gpio-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/gpio-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/gpio.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/gpio-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`SetGpioOut` is a command that sets the signals output to the device's 4 GPIO output terminals.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Field     | Type           | Description                        |
+| --------- | -------------- | --------------------------------- |
+| `outputs` | `[GpioOut; 4]` | Outputs assigned to terminals 0..3 |
+
+## GpioOut
+
+|         |                                  |
+| ----------------- | ---------------------------------------- |
+| `Off`             | Always Low (default)                     |
+| `BaseSignal`      | Reference signal of the ultrasound (40 kHz) |
+| `Thermo`          | Temperature sensor assertion             |
+| `ForceFan`        | ForceFan state                           |
+| `Sync`            | Synchronization signal                   |
+| `ModBank`         | Active Modulation bank                    |
+| `ModIdx(u16)`     | High when Modulation is at the specified index |
+| `PatternBank`     | Active Pattern bank                       |
+| `PatternIdx(u16)` | High when Pattern is at the specified index |
+| `IsStmMode`   | High when in Stm mode (`size != 1`)                 |
+| `SysTimeEq(DcSysTime)` | High when the system time matches the specified value |
+| `SyncDiff`        | Synchronization error                    |
+| `PwmOut(u8)`      | PWM output of the specified transducer   |
+| `Direct(bool)`    | Directly output the specified fixed value |
+
+For the `DcSysTime` passed to `SysTimeEq`, see [DcSysTime](/autd3-sdk/en/api/basics/dc-sys-time/).
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

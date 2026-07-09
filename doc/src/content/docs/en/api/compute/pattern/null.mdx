@@ -1,0 +1,30 @@
+---
+title: "null"
+description: Pattern that turns off the output of all transducers
+sidebar:
+  order: 6
+srcPath: crates/autd3-rs-pattern/src/null.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/null.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/null.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/null-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/null-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/pattern/null.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/pattern/null-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`null` sets the amplitude of all transducers to 0 and stops the output.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Parameter | Type                   | Description   |
+| --------- | ---------------------- | ------------- |
+| `dst`     | `&mut [[Emission; _]]` | Output buffer |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

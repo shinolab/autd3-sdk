@@ -1,0 +1,56 @@
+---
+title: Silencing
+description: The Silencer interpolates abrupt phase/intensity changes to suppress audible noise
+sidebar:
+  order: 5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/tutorial/silencer.rs?raw";
+import pySample from "@codes/python/examples/tutorial/silencer.py?raw";
+import csSample from "@codes/csharp/examples/tutorial/silencer.cs?raw";
+
+Moving the focal point quickly or applying AM modulation produces audible noise.
+AUTD3 has a feature called the [Silencer](/autd3-sdk/en/guide/silencer/) that suppresses this.
+The Silencer suppresses audible noise by smoothing abrupt changes in the amplitude / phase data, that is, by interpolating the phase / amplitude changes.
+
+To configure the Silencer, use `SetSilencer`.
+Note that the Silencer is enabled by default.
+To disable it, set the interpolation interval to its minimum (25 µs).
+
+To experience the effect of the Silencer, try running the following code.
+
+:::caution
+Running the following code produces a loud noise, so be careful when running it.
+:::
+
+<CodeTabs rust={excerpt(sample, "disable")} python={excerpt(pySample, "disable")} csharp={excerpt(csSample, "disable")} />
+
+Although the `Silencer` suppresses noise, phase or amplitude values that the user did not specify may be output, or phase or amplitude values that the user did specify may not be output.
+The former is essentially unavoidable, but the latter can sometimes be avoided.
+Specifically, when the interval at which the phase / amplitude changes is known, as with `FociStm` / `PatternStm` or `Modulation`, the latter problem does not occur if the `Silencer`'s interpolation finishes earlier than that interval.
+
+By default, the settings are chosen to avoid the "problem where phase or amplitude values specified by the user are not output" described above.
+The `Silencer` is configured to interpolate over 0.25 ms for amplitude and 1 ms for phase, and it returns an error for sampling rates exceeding this (for example 40 kHz / 25 μs).
+That is, the sampling period of `FociStm` / `PatternStm` must be at least 1 ms, and the sampling period of `Modulation` must be at least 0.25 ms (`Modulation` does not act on phase).
+
+Therefore, for example, the following code has a sampling period of 1/50 Hz/40 = 0.5 ms, so it produces a runtime error.
+
+<CodeTabs rust={excerpt(sample, "err")} python={excerpt(pySample, "err")} csharp={excerpt(csSample, "err")} />
+
+The ways to avoid this error are as follows.
+
+1. Lower the sampling rate.
+    - Setting the number of points to 20 makes the sampling period 1/50 Hz/20 = 1 ms, so no error occurs.
+2. Shorten the `Silencer`'s interpolation period.
+    - By default the interpolation is done over 0.25 ms for amplitude and 1 ms for phase, but this [can be changed](/autd3-sdk/en/api/command/silencer/).
+      For example, setting it to 0.5 ms avoids the error.
+    - However, note that shortening it increases the noise accordingly. Also, setting the interpolation completion time to 25 µs is equivalent to disabling the Silencer.
+
+<CodeTabs rust={excerpt(sample, "workaround")} python={excerpt(pySample, "workaround")} csharp={excerpt(csSample, "workaround")} />
+
+3. Use [`FixedUpdateRate`](/autd3-sdk/en/api/command/silencer/).
+    - When using this, note that phase or amplitude values specified by the user may not be output (the data may move on to the next value before interpolation completes).
+4. Set `strict_mode` of `FixedCompletionTime` to `false`.
+    - This merely ignores the error, so its use is not recommended.

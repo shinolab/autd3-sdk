@@ -9,6 +9,8 @@ interface Props {
 }
 
 const { rust, python, csharp } = Astro.props;
+const { lang } = Astro.locals.starlightRoute;
+const title = lang === "ja" ? "インストール" : "Installation";
 const packages = (spec: string) => spec.trim().split(/\s+/);
 const perLine = (spec: string, prefix: string) =>
   packages(spec)
@@ -16,7 +18,7 @@ const perLine = (spec: string, prefix: string) =>
     .join("\n");
 ---
 
-<Aside type="tip" title="インストール">
+<Aside type="tip" title={title}>
   <Tabs syncKey="lang">
     {
       rust !== undefined && (

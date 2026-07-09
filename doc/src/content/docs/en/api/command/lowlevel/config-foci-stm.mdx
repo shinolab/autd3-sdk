@@ -1,0 +1,38 @@
+---
+title: ConfigFociStm
+description: Configuring the Foci STM bank
+sidebar:
+  order: 19
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/foci-buffer.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/foci-buffer.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/foci-buffer-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/foci-buffer-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/foci-buffer.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/foci-buffer-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`ConfigFociStm` is a low-level command that configures the playback parameters of the Foci STM bank.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "config")} python={excerpt(pySample, "config")} csharp={excerpt(csSample, "config")} />
+
+| Field           | Type             | Description                                        |
+| --------------- | ---------------- | -------------------------------------------------- |
+| `bank`          | `PatternBank`    | Target bank                                        |
+| `config`        | `SamplingConfig` | Playback sampling frequency                        |
+| `size`          | `usize`          | Number of STM samples                              |
+| `num_foci`      | `u8`             | Number of focal points per sample (the N of `ControlPoints<N>`) |
+| `sound_speed`   | `Velocity`       | Sound speed used for focal point computation       |
+| `loop_behavior` | `LoopBehavior`   | Playback loop count (`Infinite` / `Finite`)        |
+
+For the timing at which `loop_behavior` and the transition take effect see [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+
+## Example
+
+`ConfigFociStm` is used within the flow of writing the focal point sequence with `WriteFociBuffer` and then switching playback with `ChangePatternBank`.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

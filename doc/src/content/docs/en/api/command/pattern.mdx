@@ -1,0 +1,59 @@
+---
+title: Pattern
+description: Command that sends a computed Emission pattern to the device
+sidebar:
+  order: 1
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+import sample from "@codes/rust/examples/api/command/pattern.rs?raw";
+import pySample from "@codes/python/examples/api/command/pattern.py?raw";
+import fullSample from "@codes/rust/examples/api/command/pattern-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/pattern-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/pattern.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/pattern-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`Pattern` is a command that sends the `Emission` of each transducer to the device.
+
+## API
+
+<CodeTabs>
+<Fragment slot="rust">
+<Code code={excerpt(sample, "api")} lang="rust" />
+
+`Pattern::new` sets the destination bank to `PatternBank::B0`.
+To write to another bank, use `Pattern::with_bank(bank, emissions)`.
+</Fragment>
+<Fragment slot="python">
+<Code code={excerpt(pySample, "api")} lang="python" />
+
+`Pattern` sets the destination bank to `PatternBank.B0` by default.
+To specify another bank, pass the `bank` argument.
+</Fragment>
+<Fragment slot="csharp">
+<Code code={excerpt(csSample, "api")} lang="csharp" />
+
+`new Pattern(emissions)` sets the destination bank to `PatternBank.B0`.
+To write to another bank, use `new Pattern(bank, emissions)`.
+</Fragment>
+</CodeTabs>
+
+| Field             | Type                             | Default                     | Description                      |
+| ----------------- | -------------------------------- | --------------------------- | -------------------------------- |
+| `bank`            | `PatternBank`                    | `PatternBank::B0`           | Bank to write to / play back     |
+| `emissions`       | `&[Vec<Emission>]` | —                           | Emission pattern per device      |
+
+Several [helper functions](/autd3-sdk/en/api/compute/pattern/) are provided for computing patterns.
+
+## Equivalent Low-Level Commands
+
+`Pattern` internally expands into the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+The following is equivalent to `Pattern { bank, emissions }`.
+
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

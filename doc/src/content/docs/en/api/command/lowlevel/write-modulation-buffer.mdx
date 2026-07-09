@@ -1,0 +1,33 @@
+---
+title: WriteModulationBuffer
+description: Writing to the Modulation buffer
+sidebar:
+  order: 15
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/mod-bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/mod-bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/mod-bank-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/mod-bank-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`WriteModulationBuffer` is a low-level command that writes an AM waveform (`&[u8]`) to the specified bank and offset.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "write")} python={excerpt(pySample, "write")} csharp={excerpt(csSample, "write")} />
+
+| Field      | Type             | Description                        |
+| ---------- | ---------------- | ---------------------------------- |
+| `bank`     | `ModulationBank` | Destination bank                   |
+| `offset`   | `usize`          | Start offset for writing within the bank |
+| `data`     | `&[u8]`          | Sequence of AM waveform samples    |
+
+## Example
+
+An example of playing an AM waveform via `WriteModulationBuffer` → `ConfigModulation` → `ChangeModulationBank` (equivalent to the high-level [Modulation](/autd3-sdk/en/api/command/modulation/)).
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

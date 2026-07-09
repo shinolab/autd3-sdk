@@ -1,0 +1,32 @@
+---
+title: SetPulseWidthTable
+description: SetPulseWidthTable to set the conversion table from intensity to PWM pulse width
+sidebar:
+  order: 9.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/set-pulse-width-table.rs?raw";
+import pySample from "@codes/python/examples/api/command/set-pulse-width-table.py?raw";
+import fullSample from "@codes/rust/examples/api/command/set-pulse-width-table-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/set-pulse-width-table-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/set-pulse-width-table.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/set-pulse-width-table-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`SetPulseWidthTable` is a command that sets the conversion table from intensity (0–255) to the PWM pulse width.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Field   | Type                    | Description                                              |
+| ------- | ----------------------- | ------------------------------------------------------- |
+| `table` | `&[u16; PWE_TABLE_SIZE]` | Pulse width per intensity index (0–255) (256 elements) |
+
+`SetPulseWidthTable::default_table()` returns the default arcsin-shaped table.
+This is a table that makes the output sound pressure (theoretically) linear with respect to intensity.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

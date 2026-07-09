@@ -1,0 +1,30 @@
+---
+title: SetPhaseCorrection
+description: SetPhaseCorrection for per-transducer phase correction
+sidebar:
+  order: 8
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/phase-correction.rs?raw";
+import pySample from "@codes/python/examples/api/command/phase-correction.py?raw";
+import fullSample from "@codes/rust/examples/api/command/phase-correction-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/phase-correction-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/phase-correction.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/phase-correction-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`SetPhaseCorrection` is a command that sets the phase offset added to each transducer.
+The offset set here is added to all subsequent output phases.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Field    | Type            | Description                                    |
+| -------- | --------------- | --------------------------------------------- |
+| `phases` | `&[Vec<Phase>]` | Phase offset table per device. |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

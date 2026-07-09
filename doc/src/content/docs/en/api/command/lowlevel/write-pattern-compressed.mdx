@@ -1,0 +1,43 @@
+---
+title: WritePatternCompressed
+description: Compressed writing to the Pattern buffer
+sidebar:
+  order: 12.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/pattern-compressed-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/pattern-compressed-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/pattern-compressed-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`WritePatternCompressed` is the compressed version of [`WritePatternBuffer`](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/).
+It is a low-level command that writes multiple Patterns into a single frame by sending only the phase information.
+The intensity is fixed at the maximum (255).
+
+## API
+
+<CodeTabs rust={excerpt(sample, "compressed")} python={excerpt(pySample, "compressed")} csharp={excerpt(csSample, "compressed")} />
+
+| Field      | Type                                              | Description                                |
+| ---------- | ------------------------------------------------- | ------------------------------------------ |
+| `bank`     | `PatternBank`                                     | Destination bank                           |
+| `index`    | `usize`                                           | Start index for writing within the bank    |
+| `format`   | `PatternCompression`                              | Compression format (see below)             |
+| `patterns` | `[Option<&[Vec<Emission>]>; 4]`     | Sequence of Patterns to write              |
+
+## PatternCompression
+
+| Variant     | Patterns per frame | Description                           |
+| ----------- | ------------------ | ------------------------------------- |
+| `PhaseFull` | 2                  | Sends the phase at full resolution (8 bit) |
+| `PhaseHalf` | 4                  | Sends the phase at half resolution (4 bit) |
+
+## Example
+
+An example of compressing 4 Patterns into a single command with `PhaseHalf` and playing them as STM with `ConfigPattern` + `ChangePatternBank`.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

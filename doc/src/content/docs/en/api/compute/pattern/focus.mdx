@@ -1,0 +1,46 @@
+---
+title: focus
+description: Pattern that generates a single focal point
+sidebar:
+  order: 2
+srcPath: crates/autd3-rs-pattern/src/focus.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import PatternField from "@components/PatternField.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/focus.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/focus.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/focus-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/focus-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/pattern/focus.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/pattern/focus-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`focus` generates a single focal point.
+
+<PatternField />
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Parameter    | Type            | Description                                |
+| ------------ | --------------- | ------------------------------------------ |
+| `geometry`   | `&Geometry`     | Device layout                              |
+| `target`     | `Point3<f32>`   | Focal point coordinates [mm]               |
+| `wavelength` | `Length`        | Wavelength                                 |
+| `option`     | `&FocusOption`  | Additional options (see below)             |
+| `dst`        | `&mut [[Emission; _]]` | Output buffer                       |
+
+## FocusOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
+
+| Field          | Type        | Default          | Description                        |
+| -------------- | ----------- | ---------------- | ---------------------------------- |
+| `intensity`    | `Intensity` | `Intensity::MAX` | Amplitude of all transducers       |
+| `phase_offset` | `Phase`     | `Phase::ZERO`    | Phase added uniformly to all transducers |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

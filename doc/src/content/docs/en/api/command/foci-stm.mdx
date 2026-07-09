@@ -1,0 +1,95 @@
+---
+title: FociStm
+description: STM that switches a sequence of focal point coordinates at high speed
+sidebar:
+  order: 4
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/foci-stm.rs?raw";
+import pySample from "@codes/python/examples/api/command/foci-stm.py?raw";
+import fullSample from "@codes/rust/examples/api/command/foci-stm-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/foci-stm-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/foci-stm.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/foci-stm-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`FociStm` provides an STM feature that switches single- and multi-focus sound fields by a hardware timer.
+Unlike [`PatternStm`](/autd3-sdk/en/api/command/pattern-stm/), it can only handle focal points, but its data transfer volume is small, so its latency is low.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Parameter | Type                     | Description                                          |
+| --------- | ------------------------ | --------------------------------------------------- |
+| `freq`    | `impl Into<StmConfig>`   | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
+| `points`  | `&[ControlPoints<N>]`    | Sequence of focal point samples                     |
+| `option`  | `FociStmOption`          | Options such as sound speed, loop, and transition   |
+
+Passing a `Freq` / `Duration` to `freq` represents "the frequency/period for one full cycle over all samples".
+A sampling frequency can also be specified.
+
+## ControlPoint / ControlPoints
+
+A single sample is represented by `ControlPoints<N>`. `N` is the number of focal points emitted simultaneously (up to 8).
+
+- `ControlPoint { point, phase_offset }` — focal point coordinate [mm] and phase offset.
+- `ControlPoints<N> { points: [ControlPoint; N], intensity }` — `N` focal points and an amplitude.
+
+## FociStmOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
+
+| Field             | Type             | Default                     | Description                            |
+| ----------------- | ---------------- | --------------------------- | -------------------------------------- |
+| `bank`            | `PatternBank`    | `PatternBank::B0`           | Bank to write to / play back           |
+| `sound_speed`     | `Velocity`       | `340 m/s`                   | Sound speed used for focus computation |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`    | Loop count                             |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | Transition timing on bank switching    |
+
+For the behavior of `loop_behavior` and `transition_mode`, see [playback control](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+
+## Helper Functions
+
+Helper functions are provided to generate typical trajectories.
+
+### circle
+
+<CodeTabs rust={excerpt(sample, "circle")} python={excerpt(pySample, "circle")} csharp={excerpt(csSample, "circle")} />
+
+| Parameter    | Type                         | Description                          |
+| ------------ | ---------------------------- | ------------------------------------ |
+| `center`     | `Point3<f32>`                | Center of the circle [mm]            |
+| `radius`     | `Length`                     | Radius of the circle                 |
+| `num_points` | `usize`                      | Number of points to generate         |
+| `normal`     | `UnitVector3<f32>`           | Normal of the circle plane (unit vector) |
+| `intensity`  | `Intensity`                  | Amplitude of each point              |
+| `dst`        | `&mut Vec<ControlPoints<1>>` | Output buffer                        |
+
+Places `num_points` points at equal intervals on a circle whose normal is `normal`.
+
+### line
+
+<CodeTabs rust={excerpt(sample, "line")} python={excerpt(pySample, "line")} csharp={excerpt(csSample, "line")} />
+
+| Parameter    | Type                         | Description                  |
+| ------------ | ---------------------------- | ---------------------------- |
+| `start`      | `Point3<f32>`                | Start point [mm]             |
+| `end`        | `Point3<f32>`                | End point [mm]               |
+| `num_points` | `usize`                      | Number of points to generate |
+| `intensity`  | `Intensity`                  | Amplitude of each point      |
+| `dst`        | `&mut Vec<ControlPoints<1>>` | Output buffer                |
+
+Places `num_points` points at equal intervals along a line including the start and end points.
+
+## Equivalent Low-Level Commands
+
+`FociStm` internally expands into the three commands [WriteFociBuffer](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+The following is equivalent to `FociStm::new(freq, &points, option)`.
+
+<CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

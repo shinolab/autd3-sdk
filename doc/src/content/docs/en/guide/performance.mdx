@@ -1,0 +1,46 @@
+---
+title: Performance Tips
+description: Practical guidelines for increasing throughput
+sidebar:
+  order: 4
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/tutorial/performance.rs?raw";
+import pySample from "@codes/python/examples/tutorial/performance.py?raw";
+import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
+
+Guidelines for drawing out performance in situations that demand throughput, such as updating the focal point at high frequency.
+
+## Avoid Composite Commands
+
+[Pattern](/autd3-sdk/en/api/command/pattern/) is a composite command that internally sends `WritePatternBuffer` + `ConfigPattern` + `ChangePatternBank` together.
+However, once the [bank](/autd3-sdk/en/getting-started/tutorial/bank/) is set, all that is needed for a per-frame focal point update is rewriting the buffer, that is, only `WritePatternBuffer`.
+
+Set the bank once at the beginning. (You may use `Pattern` for the first time.)
+
+<CodeTabs rust={excerpt(sample, "configure")} python={excerpt(pySample, "configure")} csharp={excerpt(csSample, "configure")} />
+
+In the subsequent hot loop, only `WritePatternBuffer` is sent.
+The amount of command data sent is reduced, increasing throughput accordingly.
+
+<CodeTabs rust={excerpt(sample, "hot_loop")} python={excerpt(pySample, "hot_loop")} csharp={excerpt(csSample, "hot_loop")} />
+
+## Streaming Transmission
+
+The hot loop above uses [streaming](/autd3-sdk/en/getting-started/tutorial/send-modes/), which sends one after another without waiting for a response.
+`send` queues frames, and once `MAX_IN_FLIGHT` is exceeded, the oldest responses are collected.
+Since the round-trip latency is hidden and throughput improves further, choose streaming over stop-and-wait for high-frequency updates.
+
+## Buffer Reuse
+
+To avoid per-frame allocation, reuse buffers.
+
+- The buffer obtained via `pattern_buffer()` can be overwritten every frame as the output destination of the Pattern compute function. Do not recreate it every frame. The hot loops in both languages practice this.
+- In Rust, `Frames` can also be written into the same buffer with `build_into`, avoiding allocation on every `build` (the Rust hot loop above practices this).
+  Python's `Frames` is shared with the send queue, so `build_into` is not provided, and there is no choice but to `build` every frame.
+
+## OS Tuning
+
+The real-time performance of EtherCAT also depends on the OS settings. By adjusting thread priority, CPU affinity, timer precision, and so on, jitter can be suppressed, potentially enabling more stable high-rate transmission.
