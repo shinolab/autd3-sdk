@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use autd3_rs::commands::XorHashCmd;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{
-    Client, ClientConfig, CoreId, Error as ClientError, Link, LinkStats, ResponseFuture,
+    Client, ClientConfig, CoreId, Error as ClientError, IntoLink, Link, LinkStats, ResponseFuture,
     StateCheck, TX_FRAME_BYTES, ThreadPriority, ThreadPriorityValue,
 };
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
@@ -18,6 +18,7 @@ use autd3_rs_link_twincat::{TwinCATLink, TwinCATLinkOption};
 
 use crate::cli::{Cli, LinkKind, Mode};
 use crate::mem::{self, MemProfile};
+use crate::nop::PacedNop;
 use crate::stats::{Sample, SampleStatus};
 
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
@@ -74,7 +75,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
                 .await
                 .context("opening EtherCAT link (ethercrab)")?;
             let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_link(link, cli)).await;
+            let out = Box::pin(run_with_bus_link(link, cli)).await;
             guard.stop().await;
             out
         }
@@ -90,7 +91,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
                 .expect("open task panicked")
                 .context("opening EtherCAT link (SOEM)")?;
             let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_link(link, cli)).await;
+            let out = Box::pin(run_with_bus_link(link, cli)).await;
             guard.stop().await;
             out
         }
@@ -104,22 +105,36 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
                 .expect("open task panicked")
                 .context("opening TwinCAT link")?;
             let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_link(link, cli)).await;
+            let out = Box::pin(run_with_bus_link(link, cli)).await;
             guard.stop().await;
             out
+        }
+        LinkKind::Nop => {
+            let num_devices = cli.devices.expect("--devices validated for --link nop");
+            let link = PacedNop::new(Duration::from_micros(cli.cycle_us));
+            Box::pin(run_with_link(link, num_devices, LinkStats::default(), cli)).await
         }
     }
 }
 
-async fn run_with_link<L: Link>(link: L, cli: &Cli) -> Result<RunOutput> {
+async fn run_with_bus_link<L: Link>(link: L, cli: &Cli) -> Result<RunOutput> {
     let num_devices = link.num_devices();
-    eprintln!("devices: {num_devices}");
     if let Some(expected) = cli.devices
         && num_devices != expected
     {
         anyhow::bail!("expected {expected} device(s) on the bus, found {num_devices}");
     }
     let link_stats = link.stats();
+    run_with_link(link, num_devices, link_stats, cli).await
+}
+
+async fn run_with_link<T: IntoLink>(
+    link: T,
+    num_devices: usize,
+    link_stats: LinkStats,
+    cli: &Cli,
+) -> Result<RunOutput> {
+    eprintln!("devices: {num_devices}");
 
     let max_inflight = match cli.mode {
         Mode::StopAndWait => 1,
@@ -464,7 +479,9 @@ fn estimate_capacity(cli: &Cli) -> usize {
     if let Some(n) = cli.count {
         return usize::try_from(n).unwrap_or(usize::MAX);
     }
-    if let Some(d) = cli.duration {
+    if let Some(d) = cli.duration
+        && cli.cycle_us != 0
+    {
         return (d.as_micros() / u128::from(cli.cycle_us)) as usize;
     }
     0

@@ -285,6 +285,7 @@ dependencies = [
  "anyhow",
  "autd3-rs",
  "autd3-rs-link-ethercrab",
+ "autd3-rs-link-nop",
  "autd3-rs-link-soem",
  "autd3-rs-link-twincat",
  "clap",

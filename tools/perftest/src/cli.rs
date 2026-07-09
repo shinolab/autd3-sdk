@@ -21,6 +21,7 @@ pub enum LinkKind {
     Ethercrab,
     Soem,
     Twincat,
+    Nop,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -104,6 +105,16 @@ impl Cli {
             return Err(
                 "--twincat-remote / --ams-net-id are only valid with --link twincat".to_string(),
             );
+        }
+        if self.link == LinkKind::Nop {
+            if self.devices.is_none() {
+                return Err("--devices is required with --link nop".to_string());
+            }
+            if self.interface.is_some() {
+                return Err("--interface is not valid with --link nop".to_string());
+            }
+        } else if self.cycle_us == 0 {
+            return Err("--cycle-us 0 (free-run) is only valid with --link nop".to_string());
         }
         if let Some(p) = self.rt_priority
             && p > 99
