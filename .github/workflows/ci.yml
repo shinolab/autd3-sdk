@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -35,11 +35,13 @@ jobs:
       - uses: dorny/paths-filter@v4
         id: filter
         with:
+          base: ${{ github.event_name == 'push' && github.ref_name || github.base_ref }}
           filters: |
             shared: &shared
               - '.github/workflows/ci.yml'
               - '.github/actions/setup-rust/**'
             xtask-core: &xtask-core
+              - 'xtask/src/main.rs'
               - 'xtask/src/util.rs'
               - 'xtask/Cargo.toml'
               - 'xtask/Cargo.lock'
@@ -61,6 +63,7 @@ jobs:
               - 'crates/autd3-rs-core/**'
               - 'crates/autd3-rs-firmware-emulator/**'
               - 'crates/autd3-rs-link-remote/**'
+              - 'Cargo.toml'
               - '.cargo/**'
               - '.github/workflows/ci-simulator.yml'
             console:
@@ -79,6 +82,7 @@ jobs:
               - 'crates/autd3-rs/**'
               - 'crates/autd3-rs-core/**'
               - 'crates/autd3-rs-firmware-emulator/**'
+              - 'Cargo.toml'
               - '.cargo/**'
               - '.github/workflows/ci-emulator.yml'
             cpu:
@@ -94,6 +98,7 @@ jobs:
               - 'bindings/python/**'
               - 'crates/**'
               - 'emulator/**'
+              - 'Cargo.toml'
               - '.github/workflows/ci-py.yml'
             ffi:
               - *shared
@@ -101,6 +106,7 @@ jobs:
               - 'xtask/src/ffi.rs'
               - 'bindings/ffi/**'
               - 'crates/**'
+              - 'Cargo.toml'
               - '.github/workflows/ci-ffi.yml'
             cs:
               - *shared
@@ -109,6 +115,7 @@ jobs:
               - 'bindings/csharp/**'
               - 'bindings/ffi/**'
               - 'crates/**'
+              - 'Cargo.toml'
               - '.github/workflows/ci-cs.yml'
             unity:
               - *shared
@@ -119,6 +126,7 @@ jobs:
               - 'bindings/csharp/src/**'
               - 'bindings/ffi/**'
               - 'crates/**'
+              - 'Cargo.toml'
               - 'about.toml'
               - 'about.hbs'
               - '.github/workflows/ci-unity.yml'
@@ -149,9 +157,11 @@ jobs:
               - 'xtask/src/cs.rs'
               - 'doc/**'
               - 'crates/**'
+              - 'emulator/**'
               - 'bindings/python/**'
               - 'bindings/csharp/**'
               - 'bindings/ffi/**'
+              - 'Cargo.toml'
               - '.github/workflows/ci-doc.yml'
 
   rust:

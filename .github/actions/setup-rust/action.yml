@@ -16,6 +16,10 @@ inputs:
     default: |
       .
       xtask
+  shared-key:
+    description: rust-cache shared-key to share one cache across jobs building the same workspaces.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -27,3 +31,4 @@ runs:
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: ${{ inputs.workspaces }}
+        shared-key: ${{ inputs.shared-key }}
