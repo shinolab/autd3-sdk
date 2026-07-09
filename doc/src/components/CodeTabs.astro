@@ -16,10 +16,10 @@ const slots = Astro.slots;
   {
     (rust !== undefined || slots.has("rust")) && (
       <TabItem label="Rust" icon="seti:rust">
-        {slots.has("rust") ? (
-          <slot name="rust" />
-        ) : (
+        {rust !== undefined && !slots.has("rust") ? (
           <Code code={rust} lang="rust" />
+        ) : (
+          <slot name="rust" />
         )}
       </TabItem>
     )
@@ -27,10 +27,10 @@ const slots = Astro.slots;
   {
     (python !== undefined || slots.has("python")) && (
       <TabItem label="Python" icon="seti:python">
-        {slots.has("python") ? (
-          <slot name="python" />
-        ) : (
+        {python !== undefined && !slots.has("python") ? (
           <Code code={python} lang="python" />
+        ) : (
+          <slot name="python" />
         )}
       </TabItem>
     )
@@ -38,10 +38,10 @@ const slots = Astro.slots;
   {
     (csharp !== undefined || slots.has("csharp")) && (
       <TabItem label="C#" icon="seti:c-sharp">
-        {slots.has("csharp") ? (
-          <slot name="csharp" />
-        ) : (
+        {csharp !== undefined && !slots.has("csharp") ? (
           <Code code={csharp} lang="csharp" />
+        ) : (
+          <slot name="csharp" />
         )}
       </TabItem>
     )
