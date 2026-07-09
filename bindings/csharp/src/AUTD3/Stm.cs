@@ -215,11 +215,12 @@ namespace AUTD3
                 for (var j = 0; j < numFoci; j++)
                 {
                     var cp = _points[i].Points[j];
+                    var p = Coords.Point(cp.Point);
                     points[i * numFoci + j] = new Autd3StmControlPointNative
                     {
-                        X = cp.Point.X,
-                        Y = cp.Point.Y,
-                        Z = cp.Point.Z,
+                        X = p.X,
+                        Y = p.Y,
+                        Z = p.Z,
                         PhaseOffset = cp.PhaseOffset.Value,
                     };
                 }
@@ -302,11 +303,12 @@ namespace AUTD3
                 for (var j = 0; j < numFoci; j++)
                 {
                     var cp = _points[i].Points[j];
+                    var p = Coords.Point(cp.Point);
                     points[i * numFoci + j] = new Autd3StmControlPointNative
                     {
-                        X = cp.Point.X,
-                        Y = cp.Point.Y,
-                        Z = cp.Point.Z,
+                        X = p.X,
+                        Y = p.Y,
+                        Z = p.Z,
                         PhaseOffset = cp.PhaseOffset.Value,
                     };
                 }
@@ -322,7 +324,7 @@ namespace AUTD3
             dst.Clear();
             for (var i = 0; i < points.Length; i++)
             {
-                var cp = new ControlPoint(new Vector3(points[i].X, points[i].Y, points[i].Z), new Phase(points[i].PhaseOffset));
+                var cp = new ControlPoint(Coords.FromPointArray(new[] { points[i].X, points[i].Y, points[i].Z }), new Phase(points[i].PhaseOffset));
                 dst.Add(new ControlPoints(new[] { cp }, new Intensity(intensities[i])));
             }
         }
@@ -331,8 +333,8 @@ namespace AUTD3
         {
             var outPoints = new Autd3StmControlPointNative[numPoints];
             var outIntensities = new byte[numPoints];
-            if (NativeStm.autd3_stm_circle(new[] { center.X, center.Y, center.Z }, radius.Mm, (UIntPtr)numPoints,
-                new[] { normal.X, normal.Y, normal.Z }, intensity.Value, outPoints, outIntensities) != 0)
+            if (NativeStm.autd3_stm_circle(Coords.PointArray(center), radius.Mm, (UIntPtr)numPoints,
+                Coords.DirArray(normal), intensity.Value, outPoints, outIntensities) != 0)
             {
                 throw new Autd3Exception("circle failed");
             }
@@ -346,7 +348,7 @@ namespace AUTD3
         {
             var outPoints = new Autd3StmControlPointNative[numPoints];
             var outIntensities = new byte[numPoints];
-            if (NativeStm.autd3_stm_line(new[] { start.X, start.Y, start.Z }, new[] { end.X, end.Y, end.Z }, (UIntPtr)numPoints,
+            if (NativeStm.autd3_stm_line(Coords.PointArray(start), Coords.PointArray(end), (UIntPtr)numPoints,
                 intensity.Value, outPoints, outIntensities) != 0)
             {
                 throw new Autd3Exception("line failed");

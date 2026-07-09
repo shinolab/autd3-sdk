@@ -1,0 +1,13 @@
+{
+  "name": "com.shinolab.autd3.core",
+  "version": "0.1.0",
+  "displayName": "AUTD3 Core",
+  "description": "AUTD3 core types, geometry and units (Unity binding).",
+  "unity": "6000.0",
+  "license": "MIT",
+  "author": {
+    "name": "Shun Suzuki",
+    "url": "https://github.com/shinolab"
+  },
+  "dependencies": {}
+}

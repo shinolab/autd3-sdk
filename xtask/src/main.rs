@@ -15,6 +15,7 @@ mod py;
 mod rust;
 mod simulator;
 mod tool;
+mod unity;
 mod util;
 mod vendor;
 
@@ -37,6 +38,7 @@ use py::{PyCmd, run_py};
 use rust::{RustCmd, run_rust};
 use simulator::{SimulatorCmd, run_simulator};
 use tool::{ToolCmd, run_tool};
+use unity::{UnityCmd, run_unity};
 use util::workspace_root;
 use vendor::{VendorFwCmd, run_vendor_fw};
 
@@ -93,6 +95,10 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: CsCmd,
     },
+    Unity {
+        #[command(subcommand)]
+        cmd: UnityCmd,
+    },
     License {
         #[command(subcommand)]
         cmd: LicenseCmd,
@@ -122,6 +128,7 @@ fn main() -> Result<()> {
         TopCmd::Py { cmd } => run_py(&root, cmd),
         TopCmd::Ffi { cmd } => run_ffi(&root, cmd),
         TopCmd::Cs { cmd } => run_cs(&root, cmd),
+        TopCmd::Unity { cmd } => run_unity(&root, cmd),
         TopCmd::License { cmd } => run_license(&root, &cmd),
         TopCmd::Doc { cmd } => run_doc(&root, &cmd),
         TopCmd::Example(cmd) => run_example(&root, &cmd),

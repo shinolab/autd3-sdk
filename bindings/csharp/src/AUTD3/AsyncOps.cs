@@ -26,6 +26,7 @@ namespace AUTD3
             return tcs.Task;
         }
 
+        [MonoPInvokeCallback(typeof(CompletionCallback))]
         private static void OnComplete(int code, IntPtr value, IntPtr msg, IntPtr userData)
         {
             var handle = GCHandle.FromIntPtr(userData);

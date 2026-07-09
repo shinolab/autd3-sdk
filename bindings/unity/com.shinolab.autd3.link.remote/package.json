@@ -1,0 +1,15 @@
+{
+  "name": "com.shinolab.autd3.link.remote",
+  "version": "0.1.0",
+  "displayName": "AUTD3 Link Remote",
+  "description": "AUTD3 remote transport link (Unity binding).",
+  "unity": "6000.0",
+  "license": "MIT",
+  "author": {
+    "name": "Shun Suzuki",
+    "url": "https://github.com/shinolab"
+  },
+  "dependencies": {
+    "com.shinolab.autd3": "0.1.0"
+  }
+}

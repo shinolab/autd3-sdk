@@ -1,0 +1,12 @@
+# Artifacts staged by `cargo xtask unity build` (regenerated, not committed).
+# Source of truth is bindings/csharp/src (C#) and the committed package.json /
+# *.asmdef / Samples~ in each package directory.
+
+# staged C# sources (top level of each package only; Samples~ stays committed)
+*/*.cs
+
+# generated .meta (deterministic GUIDs from xtask; regenerated on build)
+*/*.meta
+
+# staged native cdylibs and their folder/plugin metas
+*/Plugins/

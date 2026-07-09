@@ -48,6 +48,10 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             bump_csharp_props(&root.join("bindings/csharp/Directory.Build.props"), &full)?;
             println!("Updated C# version -> {full}");
         }
+        "unity" => {
+            let count = bump_unity(root, &core)?;
+            println!("Updated Unity version -> {core} ({count} package.json, incl. sibling deps)");
+        }
         "simulator" => {
             bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
             println!("Updated simulator version -> {core}");
@@ -84,9 +88,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
         println!(
             "  cargo xtask doc freeze-version <outgoing-slug>   # inlines codes + tracks the snapshot in doc/.gitignore"
         );
-        println!(
-            "  # then add the new version slug to doc/astro.config.mjs and `git add doc/`"
-        );
+        println!("  # then add the new version slug to doc/astro.config.mjs and `git add doc/`");
         println!();
     }
     println!("  git commit -m \"chore: release {tag}\"");
@@ -175,6 +177,9 @@ fn print_next_steps(name: &str) {
         }
         "cs" => {
             println!("  git add bindings/csharp/Directory.Build.props CHANGELOG.md");
+        }
+        "unity" => {
+            println!("  git add 'bindings/unity/*/package.json' CHANGELOG.md");
         }
         "simulator" => {
             println!("  cargo xtask simulator build    # refresh simulator/Cargo.lock");
@@ -299,6 +304,59 @@ fn bump_python_pyproject(root: &Path, version: &str) -> Result<()> {
         bail!("no pyproject.toml found under {}", py_root.display());
     }
     Ok(())
+}
+
+fn bump_unity(root: &Path, version: &str) -> Result<usize> {
+    let unity_root = root.join("bindings/unity");
+    let mut dirs: Vec<_> = std::fs::read_dir(&unity_root)
+        .with_context(|| format!("reading {}", unity_root.display()))?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    dirs.sort();
+
+    let mut count = 0usize;
+    for dir in dirs {
+        let path = dir.join("package.json");
+        if !path.is_file() {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        let mut out = String::with_capacity(text.len());
+        for line in text.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("\"version\":") || trimmed.starts_with("\"com.shinolab.autd3") {
+                out.push_str(&replace_json_string_value(line, version));
+            } else {
+                out.push_str(line);
+            }
+            out.push('\n');
+        }
+        std::fs::write(&path, out).with_context(|| format!("writing {}", path.display()))?;
+        count += 1;
+    }
+    if count == 0 {
+        bail!("no package.json found under {}", unity_root.display());
+    }
+    Ok(count)
+}
+
+fn replace_json_string_value(line: &str, new: &str) -> String {
+    let Some(colon) = line.find(':') else {
+        return line.to_string();
+    };
+    let (key, rest) = line.split_at(colon + 1);
+    let Some(open) = rest.find('"') else {
+        return line.to_string();
+    };
+    let after_open = open + 1;
+    let Some(rel_close) = rest[after_open..].find('"') else {
+        return line.to_string();
+    };
+    let close = after_open + rel_close;
+    format!("{key}{}\"{new}\"{}", &rest[..open], &rest[close + 1..])
 }
 
 fn bump_csharp_props(path: &Path, version: &str) -> Result<()> {

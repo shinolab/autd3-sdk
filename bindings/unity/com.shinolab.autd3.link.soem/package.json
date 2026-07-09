@@ -1,0 +1,15 @@
+{
+  "name": "com.shinolab.autd3.link.soem",
+  "version": "0.1.0",
+  "displayName": "AUTD3 Link SOEM (GPL-3.0)",
+  "description": "AUTD3 SOEM EtherCAT link. Statically links SOEM, so this package is GPL-3.0-only.",
+  "unity": "6000.0",
+  "license": "GPL-3.0-only",
+  "author": {
+    "name": "Shun Suzuki",
+    "url": "https://github.com/shinolab"
+  },
+  "dependencies": {
+    "com.shinolab.autd3": "0.1.0"
+  }
+}

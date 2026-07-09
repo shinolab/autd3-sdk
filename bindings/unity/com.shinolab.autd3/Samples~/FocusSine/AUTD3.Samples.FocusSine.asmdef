@@ -1,0 +1,20 @@
+{
+    "name": "AUTD3.Samples.FocusSine",
+    "rootNamespace": "AUTD3.Samples",
+    "references": [
+        "AUTD3",
+        "AUTD3.Core",
+        "AUTD3.Pattern",
+        "AUTD3.Modulation",
+        "AUTD3.Link.Nop"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -259,11 +259,12 @@ namespace AUTD3.Holo
             var native = new HoloControlPointNative[foci.Length];
             for (var i = 0; i < foci.Length; i++)
             {
+                var p = Coords.Point(foci[i].Point);
                 native[i] = new HoloControlPointNative
                 {
-                    X = foci[i].Point.X,
-                    Y = foci[i].Point.Y,
-                    Z = foci[i].Point.Z,
+                    X = p.X,
+                    Y = p.Y,
+                    Z = p.Z,
                     AmplitudePa = foci[i].Amplitude.Pascal,
                 };
             }

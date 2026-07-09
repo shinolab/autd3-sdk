@@ -23,7 +23,7 @@ namespace AUTD3
         public Vector3 Origin { get; }
         public Quaternion Rotation { get; }
 
-        public Autd3(Vector3 origin) : this(origin, Quaternion.Identity)
+        public Autd3(Vector3 origin) : this(origin, Coords.IdentityRotation)
         {
         }
 
@@ -35,15 +35,17 @@ namespace AUTD3
 
         internal NativeCore.Autd3Device ToNative()
         {
+            var o = Coords.Point(Origin);
+            var r = Coords.Rotation(Rotation);
             return new NativeCore.Autd3Device
             {
-                Ox = Origin.X,
-                Oy = Origin.Y,
-                Oz = Origin.Z,
-                Rw = Rotation.W,
-                Rx = Rotation.X,
-                Ry = Rotation.Y,
-                Rz = Rotation.Z,
+                Ox = o.X,
+                Oy = o.Y,
+                Oz = o.Z,
+                Rw = r.W,
+                Rx = r.X,
+                Ry = r.Y,
+                Rz = r.Z,
             };
         }
     }
