@@ -5,8 +5,9 @@ Useful for sanity-checking the firmware ↔ host protocol, comparing kernels/NIC
 
 ## Run
 
-The link uses raw sockets, so on Linux it must be run as root or with `CAP_NET_RAW`.
-The easiest way is through xtask; it builds in release mode and then runs the binary under `sudo`:
+The link uses raw sockets, so it needs privileges: root or `CAP_NET_RAW` on Linux, read/write access to
+`/dev/bpf*` on macOS. The easiest way is through xtask; it builds in release mode and then runs the
+binary under `sudo`:
 
 ```sh
 # 10,000 commands as fast as the bus allows by stop-and-wait manner

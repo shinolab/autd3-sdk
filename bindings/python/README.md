@@ -24,7 +24,7 @@ cargo xtask py develop [--release] [--soem]  # editable-install into .venv
 cargo xtask py lint                          # clippy over the binding workspace
 cargo xtask py format [--fix]                # rustfmt
 cargo xtask py test [--soem]                 # develop + pytest / import smoke
-cargo xtask py example focus_sine            # develop + run examples/focus_sine.py (sudo on Linux)
+cargo xtask py example focus_sine            # develop + run examples/focus_sine.py (sudo on Unix)
 ```
 
 [uv](https://docs.astral.sh/uv/) is required.
