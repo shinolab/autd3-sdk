@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -11,6 +11,7 @@ use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 use crate::py::{MIT_WHEELS, develop, ensure_venv, pip_install, venv_python};
 use crate::util::{capture, on_path, run, run_tool};
 
+const FIRMWARE_MARKER: &str = "Firmware v";
 const EXPECT_ERROR_MARKER: &str = "# xtask:expect-error";
 const LONG_RUNNING_MARKER: &str = "# xtask:long-running";
 const SAMPLE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -77,6 +78,7 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
         }
         DocCmd::Build => {
             verify_frozen_versions(&doc)?;
+            verify_firmware_series(root, &doc)?;
             build_samples(&samples)?;
             npm_install(&doc)?;
             npm(&doc, &["run", "build"])
@@ -91,6 +93,7 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
         }
         DocCmd::Check => {
             verify_frozen_versions(&doc)?;
+            verify_firmware_series(root, &doc)?;
             npm_install(&doc)?;
             npm(&doc, &["run", "check"])
         }
@@ -221,6 +224,115 @@ fn version_slugs(doc: &Path) -> Result<Vec<String>> {
         rest = &after[end + 1..];
     }
     Ok(slugs)
+}
+
+fn live_pages(dir: &Path, slugs: &[String], out: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
+        let path = entry?.path();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_string();
+        if path.is_dir() {
+            if !slugs.contains(&name) {
+                live_pages(&path, slugs, out)?;
+            }
+        } else if matches!(
+            path.extension().and_then(|e| e.to_str()),
+            Some("md" | "mdx")
+        ) {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn firmware_series_spans(text: &str) -> Vec<(usize, usize, String)> {
+    let mut spans = Vec::new();
+    let mut base = 0;
+    while let Some(pos) = text[base..].find(FIRMWARE_MARKER) {
+        let start = base + pos + FIRMWARE_MARKER.len();
+        let len = text[start..]
+            .find(|c: char| !c.is_ascii_digit() && c != '.' && c != 'x')
+            .unwrap_or(text.len() - start);
+        base = start + len;
+        let Some(series) = text[start..base].strip_suffix(".x") else {
+            continue;
+        };
+        if series.split('.').count() == 2 && series.bytes().all(|b| b.is_ascii_digit() || b == b'.')
+        {
+            spans.push((start, base, series.to_string()));
+        }
+    }
+    spans
+}
+
+pub fn rewrite_firmware_series(root: &Path, series: &str) -> Result<usize> {
+    let doc = root.join("doc");
+    let slugs = version_slugs(&doc)?;
+    let mut pages = Vec::new();
+    live_pages(&doc.join("src/content/docs"), &slugs, &mut pages)?;
+
+    let mut count = 0;
+    for page in pages {
+        let text =
+            fs::read_to_string(&page).with_context(|| format!("reading {}", page.display()))?;
+        let spans = firmware_series_spans(&text);
+        if spans.is_empty() {
+            continue;
+        }
+        let mut new = String::with_capacity(text.len());
+        let mut cursor = 0;
+        for (start, end, _) in spans {
+            new.push_str(&text[cursor..start]);
+            new.push_str(series);
+            new.push_str(".x");
+            cursor = end;
+        }
+        new.push_str(&text[cursor..]);
+        if new != text {
+            fs::write(&page, new).with_context(|| format!("writing {}", page.display()))?;
+        }
+        count += 1;
+    }
+    Ok(count)
+}
+
+fn verify_firmware_series(root: &Path, doc: &Path) -> Result<()> {
+    let expected = crate::bump::firmware_series(root)?;
+    let slugs = version_slugs(doc)?;
+    let mut pages = Vec::new();
+    live_pages(&doc.join("src/content/docs"), &slugs, &mut pages)?;
+
+    let mut offenders = Vec::new();
+    let mut found = 0;
+    for page in pages {
+        let text =
+            fs::read_to_string(&page).with_context(|| format!("reading {}", page.display()))?;
+        for (_, _, series) in firmware_series_spans(&text) {
+            found += 1;
+            if series != expected {
+                offenders.push(format!("{}: {FIRMWARE_MARKER}{series}.x", page.display()));
+            }
+        }
+    }
+    if found == 0 {
+        bail!(
+            "no `{FIRMWARE_MARKER}<major>.<minor>.x` marker found in the current docs; the supported \
+             firmware version must be stated (and kept in sync with firmware/cpu/src/app.h)"
+        );
+    }
+    if !offenders.is_empty() {
+        bail!(
+            "docs advertise a firmware version that firmware/cpu/src/app.h does not build \
+             (expected `{FIRMWARE_MARKER}{expected}.x`):\n  {}\n\
+             run `cargo xtask bump-version firmware <version>` (it rewrites these pages), or fix the marker by hand. \
+             frozen version snapshots are exempt: they record the firmware version of their own SDK release.",
+            offenders.join("\n  ")
+        );
+    }
+    Ok(())
 }
 
 fn verify_frozen_versions(doc: &Path) -> Result<()> {
