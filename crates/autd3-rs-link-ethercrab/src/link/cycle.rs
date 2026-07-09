@@ -26,6 +26,7 @@ impl Link for EtherCrabLink {
             &self.transport.maindevice_arc(),
             self.addresses.clone(),
             Arc::clone(&self.diagnostics),
+            self.timeouts.pdu,
         )
     }
 
@@ -58,7 +59,10 @@ impl Link for EtherCrabLink {
         }
 
         let cycle_start = Instant::now();
-        let resp = match self.handle.block_on(group.tx_rx_dc(maindevice)) {
+        let resp = match self
+            .handle
+            .block_on(group.tx_rx_dc(maindevice, self.timeouts.pdu))
+        {
             Ok(resp) => resp,
             Err(
                 e @ (ethercrab::error::Error::Timeout(_)

@@ -1,11 +1,13 @@
 use std::time::Duration;
 
+use ethercrab::error::TimeoutError;
 use ethercrab::subdevice_group::{NoDc, PreOpPdi};
 use ethercrab::{MainDevice, RegisterAddress};
 use futures_util::future::join_all;
 
 use crate::error::EtherCrabLinkError;
 use crate::link::Groups;
+use crate::timeout::with_timeout;
 use crate::timer;
 
 const CHECK_INTERVAL: Duration = Duration::from_millis(10);
@@ -46,6 +48,7 @@ pub(crate) async fn wait_for_align(
     maindevice: &MainDevice<'_>,
     sync_tolerance: Duration,
     sync_timeout: Duration,
+    pdu_timeout: Duration,
 ) -> Result<(), EtherCrabLinkError> {
     tracing::info!(
         ?sync_tolerance,
@@ -57,12 +60,13 @@ pub(crate) async fn wait_for_align(
     let start = std::time::Instant::now();
     let mut last_check = start;
     loop {
-        for result in join_all(
-            group
-                .groups
-                .iter()
-                .map(|g| g.tx_rx_sync_system_time(maindevice)),
-        )
+        for result in join_all(group.groups.iter().map(|g| {
+            with_timeout(
+                pdu_timeout,
+                TimeoutError::Pdu,
+                g.tx_rx_sync_system_time(maindevice),
+            )
+        }))
         .await
         {
             result?;
@@ -78,9 +82,12 @@ pub(crate) async fn wait_for_align(
                 .flat_map(|g| g.iter(maindevice))
                 .zip(averages.iter_mut())
             {
-                let diff_ns = match subdevice
-                    .register_read::<u32>(RegisterAddress::DcSystemTimeDifference)
-                    .await
+                let diff_ns = match with_timeout(
+                    pdu_timeout,
+                    TimeoutError::Pdu,
+                    subdevice.register_read::<u32>(RegisterAddress::DcSystemTimeDifference),
+                )
+                .await
                 {
                     Ok(raw) => system_time_difference_ns(raw),
                     Err(ethercrab::error::Error::WorkingCounter { .. }) => 0.0,

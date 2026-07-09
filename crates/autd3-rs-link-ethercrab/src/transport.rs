@@ -49,6 +49,13 @@ struct TxRxWorker {
     done: std::sync::mpsc::Receiver<()>,
 }
 
+// The upstream unix tx/rx task allocates a fresh MTU-sized receive buffer on
+// every poll, so Linux uses our own task with a reusable buffer instead.
+#[cfg(target_os = "linux")]
+use crate::linux::tx_rx_task;
+#[cfg(all(unix, not(target_os = "linux")))]
+use ethercrab::std::tx_rx_task;
+
 #[cfg(not(target_os = "windows"))]
 impl TxRxWorker {
     fn spawn(
@@ -57,7 +64,11 @@ impl TxRxWorker {
         pdu_tx: PduTx<'static>,
         pdu_rx: PduRx<'static>,
     ) -> Result<Self, EtherCrabLinkError> {
-        let tx_rx_fut = ethercrab::std::tx_rx_task(interface, pdu_tx, pdu_rx)?;
+        // `AsyncFd` registers with the runtime's IO driver on construction.
+        let tx_rx_fut = {
+            let _entered = handle.enter();
+            tx_rx_task(interface, pdu_tx, pdu_rx)?
+        };
         let (done_tx, done_rx) = std::sync::mpsc::channel();
         handle.spawn(async move {
             if let Err(e) = tx_rx_fut.await {
