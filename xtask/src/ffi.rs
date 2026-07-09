@@ -22,16 +22,16 @@ pub enum FfiCmd {
     },
 }
 
-pub fn run_ffi(root: &Path, cmd: FfiCmd) -> Result<()> {
+pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
     let dir = root.join("bindings").join("ffi");
     match cmd {
         FfiCmd::Build { debug, soem } => {
             let mut args = vec!["build", "--workspace"];
-            if !soem {
+            if !*soem {
                 args.push("--exclude");
                 args.push(SOEM_CRATE);
             }
-            if !debug {
+            if !*debug {
                 args.push("--release");
             }
             run("cargo", args, &dir)
@@ -41,6 +41,6 @@ pub fn run_ffi(root: &Path, cmd: FfiCmd) -> Result<()> {
             args.extend(["--", "-D", "warnings"]);
             run("cargo", args, &dir)
         }
-        FfiCmd::Format { fix } => cargo_fmt_packages(&dir, fix),
+        FfiCmd::Format { fix } => cargo_fmt_packages(&dir, *fix),
     }
 }

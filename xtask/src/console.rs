@@ -33,12 +33,12 @@ pub enum ConsoleCmd {
     },
 }
 
-pub fn run_console(root: &Path, cmd: ConsoleCmd) -> Result<()> {
+pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
     let dir = root.join("console");
     match cmd {
         ConsoleCmd::Build { debug } => {
             let mut args = vec!["build"];
-            if !debug {
+            if !*debug {
                 args.push("--release");
             }
             run("cargo", args, &dir)
@@ -50,7 +50,7 @@ pub fn run_console(root: &Path, cmd: ConsoleCmd) -> Result<()> {
         ),
         ConsoleCmd::Format { fix } => {
             let mut args = vec!["fmt", "--all"];
-            if !fix {
+            if !*fix {
                 args.push("--");
                 args.push("--check");
             }
@@ -58,12 +58,12 @@ pub fn run_console(root: &Path, cmd: ConsoleCmd) -> Result<()> {
         }
         ConsoleCmd::Run { debug } => {
             let mut args = vec!["run"];
-            if !debug {
+            if !*debug {
                 args.push("--release");
             }
             run("cargo", args, &dir)
         }
-        ConsoleCmd::Bundle { debug } => bundle(root, &dir, debug),
+        ConsoleCmd::Bundle { debug } => bundle(root, &dir, *debug),
     }
 }
 

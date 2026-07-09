@@ -37,14 +37,11 @@ fn write(root: &Path, args: &WriteArgs) -> Result<()> {
         ["build", "-p", "autd3-firmware", "--release"],
         root,
     )?;
-    let bin = root
-        .join("target")
-        .join("release")
-        .join(if cfg!(windows) {
-            "autd3-firmware.exe"
-        } else {
-            "autd3-firmware"
-        });
+    let bin = root.join("target").join("release").join(if cfg!(windows) {
+        "autd3-firmware.exe"
+    } else {
+        "autd3-firmware"
+    });
 
     let mut cli_args: Vec<String> = Vec::new();
     if let Some(version) = &args.version {
