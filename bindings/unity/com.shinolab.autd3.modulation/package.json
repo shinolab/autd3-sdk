@@ -1,0 +1,15 @@
+{
+  "name": "com.shinolab.autd3.modulation",
+  "version": "0.1.0",
+  "displayName": "AUTD3 Modulation",
+  "description": "AUTD3 amplitude modulation waveforms (Unity binding).",
+  "unity": "6000.0",
+  "license": "MIT",
+  "author": {
+    "name": "Shun Suzuki",
+    "url": "https://github.com/shinolab"
+  },
+  "dependencies": {
+    "com.shinolab.autd3.core": "0.1.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "com.shinolab.autd3.link.nop",
+  "version": "0.1.0",
+  "displayName": "AUTD3 Link Nop",
+  "description": "AUTD3 no-op link for testing (Unity binding).",
+  "unity": "6000.0",
+  "license": "MIT",
+  "author": {
+    "name": "Shun Suzuki",
+    "url": "https://github.com/shinolab"
+  },
+  "dependencies": {
+    "com.shinolab.autd3": "0.1.0"
+  }
+}

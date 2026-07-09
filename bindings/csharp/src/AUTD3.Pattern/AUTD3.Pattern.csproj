@@ -11,9 +11,6 @@
     <ProjectReference Include="../AUTD3.Core/AUTD3.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <InternalsVisibleTo Include="AUTD3" />
-    <InternalsVisibleTo Include="AUTD3.Pattern.Holo" />
-  </ItemGroup>
+  <!-- InternalsVisibleTo lives in AssemblyInfo.cs so Unity (asmdef, no csproj) gets it too. -->
 
 </Project>
