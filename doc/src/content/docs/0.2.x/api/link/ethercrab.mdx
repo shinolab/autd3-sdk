@@ -13,7 +13,8 @@ import Install from "@components/Install.astro";
 
 <Install rust="autd3-rs-link-ethercrab" python="autd3-link-ethercrab" csharp="AUTD3.Link.Ethercrab" />
 
-Ethernet の raw socket を扱うため, Linux/macOS では実行に root 権限 (または `CAP_NET_RAW`) が必要.
+Ethernet の raw socket を扱うため, Linux では実行に root 権限 (または `CAP_NET_RAW`) が必要.
+macOS では `/dev/bpf*` への読み書き権限が必要で, 通常は root 権限で実行する.
 Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mode」でインストールする必要がある.
 
 ## API
