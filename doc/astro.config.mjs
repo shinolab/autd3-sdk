@@ -37,6 +37,8 @@ export default defineConfig({
       components: {
         Sidebar: "./src/components/Sidebar.astro",
         PageTitle: "./src/components/PageTitle.astro",
+        Banner: "./src/components/Banner.astro",
+        Head: "./src/components/Head.astro",
       },
       locales: {
         root: { label: "日本語", lang: "ja" },
@@ -67,6 +69,7 @@ export default defineConfig({
       ],
       plugins: [
         starlightVersions({
+          current: { label: "git" },
           versions: [{ slug: "0.2.x" }, { slug: "0.1.x" }],
         }),
       ],
