@@ -316,6 +316,7 @@ fn bump_unity(root: &Path, version: &str) -> Result<usize> {
         .collect();
     dirs.sort();
 
+    let dep_prefix = format!("\"{}", crate::unity::PKG_PREFIX);
     let mut count = 0usize;
     for dir in dirs {
         let path = dir.join("package.json");
@@ -327,7 +328,7 @@ fn bump_unity(root: &Path, version: &str) -> Result<usize> {
         let mut out = String::with_capacity(text.len());
         for line in text.lines() {
             let trimmed = line.trim_start();
-            if trimmed.starts_with("\"version\":") || trimmed.starts_with("\"com.shinolab.autd3") {
+            if trimmed.starts_with("\"version\":") || trimmed.starts_with(dep_prefix.as_str()) {
                 out.push_str(&replace_json_string_value(line, version));
             } else {
                 out.push_str(line);

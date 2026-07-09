@@ -1,0 +1,120 @@
+name: release-unity
+
+on:
+  push:
+    tags:
+      - 'unity-v*'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  native:
+    name: native (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+          - os: macos-latest
+            rid: osx-arm64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+      - name: Install system deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
+      - name: Build native cdylibs
+        working-directory: bindings/ffi
+        run: cargo build --workspace --release
+      - name: Collect native libs
+        run: |
+          mkdir -p native
+          cp bindings/ffi/target/release/*autd3*.dll native/ 2>/dev/null || true
+          cp bindings/ffi/target/release/libautd3*.so native/ 2>/dev/null || true
+          cp bindings/ffi/target/release/libautd3*.dylib native/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.rid }}
+          path: native/*
+
+  release:
+    name: release-unity
+    needs: native
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.0,git-cliff
+      - name: Download native libs
+        uses: actions/download-artifact@v8
+        with:
+          path: bindings/ffi/target/native
+      - name: Pack
+        run: cargo xtask unity pack --native-dir bindings/ffi/target/native
+      - name: Generate release notes
+        run: cargo xtask changelog --tag "${GITHUB_REF_NAME}" --release-notes --output RELEASE_NOTES.md
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}"
+          --title "${GITHUB_REF_NAME}"
+          --notes-file RELEASE_NOTES.md
+          bindings/unity/dist/*.tgz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unity-tarballs
+          path: bindings/unity/dist/*.tgz
+
+  npm:
+    name: npm publish
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - uses: actions/download-artifact@v8
+        with:
+          name: unity-tarballs
+          path: dist
+      - name: Publish
+        working-directory: dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#unity-v}"
+          for tgz in *.tgz; do
+            name="${tgz%-${version}.tgz}"
+            if [ "$name" = "$tgz" ]; then
+              echo "::error::$tgz does not match the tag version ${version}"
+              exit 1
+            fi
+            if npm view "${name}@${version}" version >/dev/null 2>&1; then
+              echo "${name}@${version} is already published; skipping"
+              continue
+            fi
+            npm publish "$tgz" --access public
+          done

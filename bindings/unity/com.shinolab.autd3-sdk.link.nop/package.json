@@ -1,5 +1,5 @@
 {
-  "name": "com.shinolab.autd3.link.nop",
+  "name": "com.shinolab.autd3-sdk.link.nop",
   "version": "0.1.0",
   "displayName": "AUTD3 Link Nop",
   "description": "AUTD3 no-op link for testing (Unity binding).",
@@ -10,6 +10,6 @@
     "url": "https://github.com/shinolab"
   },
   "dependencies": {
-    "com.shinolab.autd3": "0.1.0"
+    "com.shinolab.autd3-sdk": "0.1.0"
   }
 }

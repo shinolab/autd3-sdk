@@ -1,0 +1,38 @@
+name: ci-unity
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  unity:
+    name: unity (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.0
+      - name: Install system deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
+      - run: cargo xtask unity pack
+      - name: Check the tarballs are publishable
+        working-directory: bindings/unity/dist
+        run: |
+          for tgz in *.tgz; do
+            npm publish --dry-run "$tgz"
+          done
