@@ -52,7 +52,7 @@ fn spawn_state_check<C: StateCheck>(mut checker: C, interval: Duration) -> State
         let stop = Arc::clone(&stop);
         async move {
             while !stop.load(Ordering::Relaxed) {
-                if Box::pin(checker.check()).await.is_err() {
+                if checker.check().await.is_err() {
                     break;
                 }
                 tokio::time::sleep(interval).await;
@@ -179,7 +179,6 @@ async fn run_with_link<T: IntoLink>(
         data: build_zero_xor_data(cli.data_len),
     };
 
-    let recorder = mem::start();
     let output = match cli.mode {
         Mode::StopAndWait => run_stop_and_wait(&client, cli, &xor_cmd, shutdown, &link_stats).await,
         Mode::Streaming => {
@@ -189,9 +188,7 @@ async fn run_with_link<T: IntoLink>(
 
     let _ = client.close().await;
 
-    let mut output = output?;
-    output.mem = mem::profile(recorder, output.samples.len() as u64);
-    Ok(output)
+    output
 }
 
 async fn run_stop_and_wait(
@@ -212,6 +209,7 @@ async fn run_stop_and_wait(
     let mut index: u64 = 0;
     let mut progress = Progress::new(cli);
 
+    let recorder = mem::start();
     let start = Instant::now();
     loop {
         if shutdown.load(Ordering::Relaxed) {
@@ -264,6 +262,7 @@ async fn run_stop_and_wait(
 
     progress.finish();
 
+    let mem = mem::profile(recorder, samples.len() as u64);
     Ok(RunOutput {
         samples,
         warmup: cli.warmup,
@@ -271,7 +270,7 @@ async fn run_stop_and_wait(
         frame_bytes: TX_FRAME_BYTES,
         stale_cycles: link_stats.stale_cycles(),
         lost_cycles: link_stats.lost_cycles(),
-        mem: None,
+        mem,
     })
 }
 
@@ -296,6 +295,7 @@ async fn run_streaming(
     let mut sample_index: u64 = 0;
     let mut progress = Progress::new(cli);
 
+    let recorder = mem::start();
     let start = Instant::now();
     loop {
         if shutdown.load(Ordering::Relaxed) {
@@ -354,6 +354,7 @@ async fn run_streaming(
 
     progress.finish();
 
+    let mem = mem::profile(recorder, samples.len() as u64);
     Ok(RunOutput {
         samples,
         warmup: cli.warmup,
@@ -361,7 +362,7 @@ async fn run_streaming(
         frame_bytes: TX_FRAME_BYTES,
         stale_cycles: link_stats.stale_cycles(),
         lost_cycles: link_stats.lost_cycles(),
-        mem: None,
+        mem,
     })
 }
 
@@ -382,6 +383,23 @@ fn streaming_need_send(cli: &Cli, sends_issued: u64, start: Instant) -> bool {
         return false;
     }
     true
+}
+
+struct Counters {
+    ok: u64,
+    timeouts: u64,
+    device_errors: u64,
+    link_errors: u64,
+}
+
+impl std::fmt::Display for Counters {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ok={} timeout={} dev_err={} link_err={}    ",
+            self.ok, self.timeouts, self.device_errors, self.link_errors
+        )
+    }
 }
 
 struct Progress {
@@ -429,17 +447,27 @@ impl Progress {
     }
 
     fn render(&mut self, elapsed: Duration) {
-        let progress_field = if let Some(total) = self.count_total {
-            format!("{:>8}/{total}", self.completed)
-        } else if let Some(total) = self.duration_total {
-            format!("{:>6.1}/{:.1}s", elapsed.as_secs_f64(), total.as_secs_f64())
-        } else {
-            format!("{:>8} ({:.1}s)", self.completed, elapsed.as_secs_f64())
+        let tail = Counters {
+            ok: self.ok,
+            timeouts: self.timeouts,
+            device_errors: self.device_errors,
+            link_errors: self.link_errors,
         };
-        eprint!(
-            "\r[{progress_field}] ok={} timeout={} dev_err={} link_err={}    ",
-            self.ok, self.timeouts, self.device_errors, self.link_errors,
-        );
+        if let Some(total) = self.count_total {
+            eprint!("\r[{:>8}/{total}] {tail}", self.completed);
+        } else if let Some(total) = self.duration_total {
+            eprint!(
+                "\r[{:>6.1}/{:.1}s] {tail}",
+                elapsed.as_secs_f64(),
+                total.as_secs_f64()
+            );
+        } else {
+            eprint!(
+                "\r[{:>8} ({:.1}s)] {tail}",
+                self.completed,
+                elapsed.as_secs_f64()
+            );
+        }
         let _ = std::io::Write::flush(&mut std::io::stderr());
         self.rendered_once = true;
     }
