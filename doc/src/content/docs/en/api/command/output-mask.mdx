@@ -1,0 +1,29 @@
+---
+title: SetOutputMask
+description: SetOutputMask to toggle output enable/disable
+sidebar:
+  order: 9
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/output-mask.rs?raw";
+import pySample from "@codes/python/examples/api/command/output-mask.py?raw";
+import fullSample from "@codes/rust/examples/api/command/output-mask-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/output-mask-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/output-mask.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/output-mask-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`SetOutputMask` is a command that toggles output enable/disable per transducer.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Field   | Type           | Description                                                    |
+| ------- | -------------- | ------------------------------------------------------------- |
+| `masks` | `&[Vec<bool>]` | Output mask per device (output when `true`). |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

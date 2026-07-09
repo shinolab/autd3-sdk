@@ -1,0 +1,62 @@
+---
+title: fourier
+description: Modulation that generates an amplitude modulation synthesized from multiple sine waves
+sidebar:
+  order: 23
+srcPath: crates/autd3-rs-modulation/src/fourier.rs
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/modulation/fourier.rs?raw";
+import pySample from "@codes/python/examples/api/compute/modulation/fourier.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/modulation/fourier-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/modulation/fourier-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/modulation/fourier.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/modulation/fourier-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`fourier` generates an amplitude modulation synthesized from multiple sine-wave components. Each component is computed in the same way as [sine](/autd3-sdk/en/api/compute/modulation/sine/), and they are summed into a single waveform.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Parameter    | Type                  | Description               |
+| ------------ | --------------------- | ------------------------- |
+| `components` | `&[SineComponent<S>]` | array of sine-wave components to synthesize |
+| `option`     | `&FourierOption`      | additional options (see below) |
+| `dst`        | `&mut Vec<u8>`        | output buffer             |
+
+Each `SineComponent` is a pair of a frequency `freq` and a `SineOption`.
+The `sampling_config` of all components must be identical, otherwise an error occurs.
+The length of the synthesized waveform is the least common multiple of the periods of the components.
+
+Each sample is the sum of all components multiplied by a scale <Math tex="s" /> (`scale_factor`), plus an offset <Math tex="b" /> (`offset`).
+
+<MathBlock tex="m_i = s \sum_{k} m^{(k)}_i + b" />
+
+## SineComponent
+
+| Field      | Type           | Description             |
+| ---------- | -------------- | ----------------------- |
+| `freq`     | `Freq<u32>` etc. | frequency of the component |
+| `option`   | `SineOption`   | per-component sine Option |
+
+<CodeTabs rust={excerpt(sample, "components")} python={excerpt(pySample, "components")} csharp={excerpt(csSample, "components")} />
+
+## FourierOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
+
+| Field          | Type          | Default    | Description                                               |
+| -------------- | ------------- | ---------- | --------------------------------------------------------- |
+| `scale_factor` | `Option<f32>` | `None`     | scale applied to the synthesized value. If `None`, the reciprocal of the number of components |
+| `clamp`        | `bool`        | `false`    | whether to clamp out-of-range values to [0, 255]          |
+| `offset`       | `u8`          | `0`        | DC offset added after synthesis                           |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
+

@@ -1,0 +1,50 @@
+---
+title: naive
+description: Multi-focus optimization by single-step back-propagation
+sidebar:
+  order: 11
+srcPath: crates/autd3-rs-pattern-holo/src/linear_synthesis/naive.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/holo/naive.rs?raw";
+import pySample from "@codes/python/examples/api/compute/holo/naive.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/holo/naive-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/holo/naive-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/holo/naive.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/holo/naive-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+The Naive method is an algorithm that applies back-propagation to the target sound pressure vector.
+It does not iterate and is fast, but it does not correct for interference between focal points, so a weak sound field may be generated.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Parameter    | Type                   | Description               |
+| ------------ | ---------------------- | ------------------------- |
+| `geometry`   | `&Geometry`            | Device layout             |
+| `foci`       | `&[ControlPoint]`      | Sequence of focal points (position and target amplitude) |
+| `wavelength` | `Length`               | Wavelength                |
+| `option`     | `&NaiveOption`         | Additional options (see below) |
+| `dst`        | `&mut [[Emission; _]]` | Output buffer             |
+
+For the common elements (`ControlPoint` / `TransducerMask` / `LinAlgBackend`, etc.), see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
+
+## NaiveOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
+
+| Field         | Type                 | Default                   |
+|---------------|----------------------|---------------------------|
+| `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
+| `directivity` | `Directivity`        | `Sphere`                  |
+| `backend`     | `impl LinAlgBackend` | `NalgebraBackend`         |
+| `mask`        | `TransducerMask`     | `AllEnabled`              |
+
+For the meaning of each field, see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

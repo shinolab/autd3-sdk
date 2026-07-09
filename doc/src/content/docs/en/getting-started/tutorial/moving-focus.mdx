@@ -1,0 +1,41 @@
+---
+title: Moving the Focal Point
+description: How to move the focal point over time (software control / STM)
+sidebar:
+  order: 4
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import software from "@codes/rust/examples/tutorial/moving-focus-software.rs?raw";
+import pySoftware from "@codes/python/examples/tutorial/moving-focus-software.py?raw";
+import stm from "@codes/rust/examples/tutorial/moving-focus-stm.rs?raw";
+import pyStm from "@codes/python/examples/tutorial/moving-focus-stm.py?raw";
+import csSoftware from "@codes/csharp/examples/tutorial/moving-focus-software.cs?raw";
+import csStm from "@codes/csharp/examples/tutorial/moving-focus-stm.cs?raw";
+
+## Software control
+
+In AUTD3, a `Pattern` is overwritten each time it is sent.
+Therefore, running code like the following moves the focal position roughly once per second.
+
+<CodeTabs rust={excerpt(software, ["loop"])} python={excerpt(pySoftware, ["loop"])} csharp={excerpt(csSoftware, ["loop"])} />
+
+The code above controls the timing in software.
+Its accuracy depends on the OS and the execution environment, so if higher-precision control is needed, using `FociStm` / `PatternStm` is recommended.
+
+## Hardware control with FociStm
+
+The code that achieves behavior equivalent to the above using [`FociStm`](/autd3-sdk/en/api/command/foci-stm/) is as follows.
+
+<CodeTabs rust={excerpt(stm, "stm")} python={excerpt(pyStm, "stm")} csharp={excerpt(csStm, "stm")} />
+
+Because `FociStm` / `PatternStm` loops inside the AUTD3 device, no software loop is needed, and it automatically loops infinitely after being sent.
+In addition, the timing is controlled by the timer built into the AUTD3 device, so it is highly accurate and can be specified with a resolution as fine as 25 µs.
+However, due to constraints of this timer, there are [frequencies that cannot be output](/autd3-sdk/en/api/basics/sampling-config/#internal-representation).
+
+The switching timing of `FociStm` / `PatternStm` is specified by the frequency or period of one loop.
+That is, in this case two focal points make 0.5 Hz (2 s), so each focal point is output for 1 s.
+Note that by using [`SamplingConfig`](/autd3-sdk/en/api/basics/sampling-config/), the frequency or period can be specified as the sampling frequency, that is per focal point, rather than per loop.
+
+To switch an arbitrary Pattern rather than just a focal point, use [`PatternStm`](/autd3-sdk/en/api/command/pattern-stm/) instead of `FociStm`.

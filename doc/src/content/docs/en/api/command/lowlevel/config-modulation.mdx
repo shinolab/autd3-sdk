@@ -1,0 +1,36 @@
+---
+title: ConfigModulation
+description: Configuring the Modulation bank
+sidebar:
+  order: 16
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/mod-bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/mod-bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/mod-bank-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/mod-bank-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`ConfigModulation` is a low-level command that configures the playback parameters of the Modulation bank.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "config")} python={excerpt(pySample, "config")} csharp={excerpt(csSample, "config")} />
+
+| Field      | Type             | Description                                        |
+| ---------- | ---------------- | -------------------------------------------------- |
+| `bank`     | `ModulationBank` | Target bank                                        |
+| `config`   | `SamplingConfig` | Playback sampling frequency                        |
+| `size`     | `usize`          | Number of samples (must match `data.len()`)        |
+| `loop_behavior` | `LoopBehavior` | Playback loop count (`Infinite` / `Finite`)       |
+
+For the timing at which `loop_behavior` and the transition take effect see [ChangeModulationBank](/autd3-sdk/en/api/command/lowlevel/change-modulation-bank/).
+
+## Example
+
+`ConfigModulation` is used within the flow of writing the waveform with `WriteModulationBuffer` and then switching playback with `ChangeModulationBank`.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

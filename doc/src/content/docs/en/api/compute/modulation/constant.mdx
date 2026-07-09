@@ -1,0 +1,31 @@
+---
+title: constant
+description: Modulation with constant amplitude (no modulation)
+sidebar:
+  order: 20.5
+srcPath: crates/autd3-rs-modulation/src/constant.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/modulation/constant.rs?raw";
+import pySample from "@codes/python/examples/api/compute/modulation/constant.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/modulation/constant-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/modulation/constant-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/modulation/constant.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/modulation/constant-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`constant` generates a modulation that outputs a constant amplitude (effectively no modulation).
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Parameter   | Type           | Description            |
+| ----------- | -------------- | ---------------------- |
+| `intensity` | `u8`           | amplitude coefficient  |
+| `dst`       | `&mut Vec<u8>` | output buffer          |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

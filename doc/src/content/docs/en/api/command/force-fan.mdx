@@ -1,0 +1,32 @@
+---
+title: ForceFan
+description: ForceFan to force the fan on
+sidebar:
+  order: 6
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/command/force-fan.rs?raw";
+import pySample from "@codes/python/examples/api/command/force-fan.py?raw";
+import fullSample from "@codes/rust/examples/api/command/force-fan-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/force-fan-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/force-fan.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/force-fan-example.cs?raw";
+
+`ForceFan` is a command that forcibly turns the cooling fan on.
+
+:::caution
+It cannot be forcibly turned off.
+:::
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Field   | Type   | Description                         |
+| ------- | ------ | ----------------------------------- |
+| `value` | `bool` | Force the fan on when `true`        |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

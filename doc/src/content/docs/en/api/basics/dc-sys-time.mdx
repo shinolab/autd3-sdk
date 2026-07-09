@@ -1,0 +1,53 @@
+---
+title: DcSysTime
+description: The API and arithmetic of DcSysTime, the synchronized time on the EtherCAT distributed clock
+sidebar:
+  order: 5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/dc-sys-time.rs?raw";
+import pySample from "@codes/python/examples/api/basics/dc-sys-time.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/dc-sys-time.cs?raw";
+
+`DcSysTime` is a type representing a time on the **EtherCAT distributed clock (Distributed Clock, DC)**.
+It is used with [`TransitionMode::SysTime`](/autd3-sdk/en/getting-started/tutorial/loop/), [`GpioOut::SysTimeEq`](/autd3-sdk/en/api/command/gpio/), and the like.
+
+In EtherCAT, there is a clock synchronized across all slaves (the distributed clock), and each device operates in sync with it.
+This time is a 64-bit counter in ns units, counted from 2000-01-01 00:00:00 (UTC).
+
+## Construction
+
+`DcSysTime` is constructed from the current time, a UTC datetime, or raw ns.
+
+<CodeTabs rust={excerpt(sample, "construct")} python={excerpt(pySample, "construct")} csharp={excerpt(csSample, "construct")} />
+
+| Operation               | Description                                                    |
+| ----------------------- | ------------------------------------------------------------- |
+| `ZERO`                  | Epoch (2000-01-01 00:00:00 UTC)                               |
+| `now()`                 | Current time of the host                                      |
+| `from_nanos(ns)`        | Construct from ns elapsed since the epoch                     |
+| `from_utc(utc)`         | Construct from a UTC datetime                                 |
+| `sys_time()`            | ns elapsed since the epoch                                    |
+| `to_utc()`              | Convert to a UTC datetime                                     |
+
+:::note
+The Python version does not have `from_utc` / `to_utc`.
+:::
+
+## Arithmetic
+
+`DcSysTime` defines operations that add and subtract time differences.
+
+<CodeTabs rust={excerpt(sample, "ops")} python={excerpt(pySample, "ops")} csharp={excerpt(csSample, "ops")} />
+
+| Operation                     | Result       | Description                              |
+| ----------------------------- | ------------ | ---------------------------------------- |
+| `DcSysTime + Duration`        | `DcSysTime`  | Add the specified duration               |
+| `DcSysTime - Duration`        | `DcSysTime`  | Subtract the specified duration          |
+| `DcSysTime - DcSysTime`       | `Duration`   | Difference between two times (Rust only) |
+| Comparison (`<` / `>` / `==`, etc.) | `bool` | Comparison (Rust / C# only)              |
+
+Rust uses `core::time::Duration` for `Duration`, C# uses `TimeSpan`, and Python uses `autd3.Duration`.
+Python provides only addition and subtraction (applying a time difference via `+` / `-`); it does not have computing a time difference or comparison.

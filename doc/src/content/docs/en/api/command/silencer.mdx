@@ -1,0 +1,50 @@
+---
+title: SetSilencer
+description: SetSilencer that suppresses noise by interpolating abrupt changes in phase and intensity
+sidebar:
+  order: 5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/command/silencer.rs?raw";
+import pySample from "@codes/python/examples/api/command/silencer.py?raw";
+import fullSample from "@codes/rust/examples/api/command/silencer-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/silencer-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/silencer.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/silencer-example.cs?raw";
+
+`SetSilencer` is a command that configures a `Silencer`, which linearly interpolates abrupt changes in phase and intensity to suppress output noise.
+
+There are two interpolation methods: `FixedCompletionTime`, which specifies the interpolation completion time, and `FixedUpdateRate`, which specifies the update amount per interpolation step.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+`SetSilencer::default()` is equivalent to passing the default of `FixedCompletionTime`.
+`SetSilencer::disable()` disables interpolation by the `Silencer` (equivalent to completing interpolation in 25 μs).
+
+## FixedCompletionTime
+
+Specifies the completion time until the target value is reached.
+Each update step is in units of the ultrasound period (25 µs), and it is an error if the specified time is not an integer multiple of it.
+
+| Field         | Type       | Default   | Description                                              |
+| ------------- | ---------- | --------- | -------------------------------------------------------- |
+| `intensity`   | `Duration` | `250 µs`  | Completion time until the intensity reaches the target   |
+| `phase`       | `Duration` | `1000 µs` | Completion time until the phase reaches the target       |
+| `strict_mode` | `bool`     | `true`    | Whether to error when the completion time does not fit within the modulation/STM sampling period |
+
+## FixedUpdateRate
+
+Fixes the update amount per interpolation step (every 25 μs).
+
+| Field       | Type         | Description                        |
+| ----------- | ------------ | --------------------------------- |
+| `intensity` | `NonZeroU16` | Update amount of intensity per step |
+| `phase`     | `NonZeroU16` | Update amount of phase per step     |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
