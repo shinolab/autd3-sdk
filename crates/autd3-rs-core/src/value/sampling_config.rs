@@ -235,10 +235,19 @@ mod tests {
 
     #[test]
     fn partial_eq() {
-        assert!(SamplingConfig::FREQ_40K == SamplingConfig::new(NonZeroU16::MIN));
-        assert!(SamplingConfig::FREQ_40K == SamplingConfig::new(40. * kHz));
-        assert!(SamplingConfig::FREQ_40K == SamplingConfig::new(Duration::from_micros(25)));
-        assert!(SamplingConfig::new(41. * kHz) != SamplingConfig::new(41. * kHz));
+        assert_eq!(
+            SamplingConfig::FREQ_40K,
+            SamplingConfig::new(NonZeroU16::MIN)
+        );
+        assert_eq!(SamplingConfig::FREQ_40K, SamplingConfig::new(40. * kHz));
+        assert_eq!(
+            SamplingConfig::FREQ_40K,
+            SamplingConfig::new(Duration::from_micros(25))
+        );
+        assert_ne!(
+            SamplingConfig::new(41. * kHz),
+            SamplingConfig::new(41. * kHz)
+        );
     }
 
     #[test]
