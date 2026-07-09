@@ -1,0 +1,46 @@
+---
+title: 送信モード
+description: stop-and-wait と streaming の使い分け
+sidebar:
+  order: 9
+slug: 0.2.x/getting-started/tutorial/send-modes
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`DatagramBuilder::build` で得た `Frames` は複数の`Frame`に分かれうる.
+`Frame`の送信方法は 2 つあり, 確実性とスループットがトレードオフになる.
+
+以下では, 焦点を円周上で動かす例で 2 つの送信方法を比較する.
+あらかじめ移動先となる焦点位置を `targets` として用意しておく.
+
+<CodeTabs rust={"// Prepare 1000 focus points along a circle 150 mm above the array center.\nlet center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);\nlet targets: Vec<Point3<f32>> = (0..NUM_POINTS)\n    .map(|i| {\n        let theta = 2.0 * PI * i as f32 / NUM_POINTS as f32;\n        center\n            + offset(\n                RADIUS_MM * theta.cos() * mm,\n                RADIUS_MM * theta.sin() * mm,\n                0.0 * mm,\n            )\n    })\n    .collect();"} python={"# Prepare 1000 focus points along a circle 150 mm above the array center.\ncenter = geometry.center() + np.array([0.0, 0.0, 150.0])\ntargets = [\n    center\n    + np.array(\n        [\n            RADIUS_MM * math.cos(2.0 * math.pi * i / NUM_POINTS),\n            RADIUS_MM * math.sin(2.0 * math.pi * i / NUM_POINTS),\n            0.0,\n        ]\n    )\n    for i in range(NUM_POINTS)\n]"} csharp={"// Prepare 1000 focus points along a circle 150 mm above the array center.\nvar center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);\nvar targets = new Vector3[NumPoints];\nfor (var i = 0; i < NumPoints; i++)\n{\n    var theta = 2.0f * MathF.PI * i / NumPoints;\n    targets[i] = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0.0f);\n}"} />
+
+## stop-and-wait
+
+1 フレームごとに応答を待ってから次を送る方式.
+`send_checked` を使う.
+各更新が確実に反映されたことを確認してから次へ進むため確実だが, 毎フレームで往復のレイテンシがかかるためスループットは低い.
+
+<CodeTabs rust={"let mut patterns = geometry.pattern_buffer();\nfor &target in targets {\n    autd3_rs_pattern::focus(\n        geometry,\n        target,\n        wavelength,\n        &autd3_rs_pattern::FocusOption::default(),\n        &mut patterns,\n    );\n    let mut builder = client.datagram_builder();\n    builder.push(Pattern::new(&patterns));\n    for frame in &builder.build()? {\n        client.send_checked(frame).await?;\n    }\n}"} python={"patterns = geometry.pattern_buffer()\nfor target in targets:\n    pattern.focus(\n        geometry,\n        target,\n        wavelength,\n        pattern.FocusOption(),\n        patterns,\n    )\n    builder = client.datagram_builder()\n    builder.push(Pattern(patterns))\n    for frame in builder.build():\n        await client.send_checked(frame)"} csharp={"var patterns = geometry.PatternBuffer();\nforeach (var target in targets)\n{\n    Pattern.Focus(\n        geometry,\n        target,\n        wavelength,\n        new FocusOption(),\n        patterns\n    );\n    var builder = client.DatagramBuilder();\n    builder.Push(new Pattern(patterns));\n    foreach (var frame in builder.Build())\n    {\n        await client.SendCheckedAsync(frame);\n    }\n}"} />
+
+## streaming
+
+応答を待たずに次々と送り, 後で応答をまとめて回収する方式.
+`send` はフレームをキューに積んだ時点で `ResponseFuture` を返し, その `ResponseFuture` を await するとデバイスの応答 (`Response`) が得られる.
+`Response` は `check` でデバイスエラーの有無を検証できる.
+送信キューの最大サイズは `MAX_IN_FLIGHT (127)`.
+`ResponseFuture` を FIFO で保持し, キューが埋まったら最古の応答を回収する.
+1 フレームごとに応答を待たないため, スループットが高い.
+
+<CodeTabs rust={"let mut patterns = geometry.pattern_buffer();\nlet mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(MAX_IN_FLIGHT);\nfor &target in targets {\n    autd3_rs_pattern::focus(\n        geometry,\n        target,\n        wavelength,\n        &autd3_rs_pattern::FocusOption::default(),\n        &mut patterns,\n    );\n    let mut builder = client.datagram_builder();\n    builder.push(Pattern::new(&patterns));\n    for frame in &builder.build()? {\n        if pending.len() >= MAX_IN_FLIGHT {\n            pending.pop_front().expect(\"non-empty\").await?.check()?;\n        }\n        pending.push_back(client.send(frame).await?);\n    }\n}\n// Drain the remaining responses.\nwhile let Some(fut) = pending.pop_front() {\n    fut.await?.check()?;\n}"} python={"patterns = geometry.pattern_buffer()\npending = collections.deque()\nfor target in targets:\n    pattern.focus(\n        geometry,\n        target,\n        wavelength,\n        pattern.FocusOption(),\n        patterns,\n    )\n    builder = client.datagram_builder()\n    builder.push(Pattern(patterns))\n    for frame in builder.build():\n        if len(pending) >= MAX_IN_FLIGHT:\n            (await pending.popleft()).check()\n        pending.append(await client.send(frame))\n# Drain the remaining responses.\nwhile pending:\n    (await pending.popleft()).check()"} csharp={"var patterns = geometry.PatternBuffer();\nvar pending = new Queue<ResponseToken>();\nforeach (var target in targets)\n{\n    Pattern.Focus(\n        geometry,\n        target,\n        wavelength,\n        new FocusOption(),\n        patterns\n    );\n    var builder = client.DatagramBuilder();\n    builder.Push(new Pattern(patterns));\n    foreach (var frame in builder.Build())\n    {\n        if (pending.Count >= Client.MaxInflight)\n        {\n            (await pending.Dequeue()).Check();\n        }\n        pending.Enqueue(await client.SendAsync(frame));\n    }\n}\n// Drain the remaining responses.\nwhile (pending.Count > 0)\n{\n    (await pending.Dequeue()).Check();\n}"} />
+
+:::note
+上記のコードはシンプルにするために, どちらも複合コマンドである [`Pattern`](/autd3-sdk/0.2.x/api/command/pattern/) を使っているが, これは内部で3つの低レベルコマンドに分解される.
+単に出力音場を書き換えるだけであれば, 低レベルコマンドの [`WritePatternBuffer`](/autd3-sdk/0.2.x/api/command/lowlevel/write-pattern-buffer/) を使うべきである.
+上記のコードは, 低レベルコマンドを使う場合にくらべて, スループットが3分の1になっている.
+:::
+
+初期化や設定など, 確実に 1 つずつ反映させたいコマンドは stop-and-wait.
+焦点を高頻度で更新するなど, スループットが重要な場面では streaming を使う.
+`send` / `send_checked` の詳細は [Client](/autd3-sdk/0.2.x/api/basics/client/) を参照.

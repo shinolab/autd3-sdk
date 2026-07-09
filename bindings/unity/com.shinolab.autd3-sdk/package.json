@@ -1,6 +1,6 @@
 {
   "name": "com.shinolab.autd3-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "AUTD3",
   "description": "AUTD3 client, datagrams and STM (Unity binding).",
   "unity": "6000.0",
@@ -10,9 +10,9 @@
     "url": "https://github.com/shinolab"
   },
   "dependencies": {
-    "com.shinolab.autd3-sdk.core": "0.1.0",
-    "com.shinolab.autd3-sdk.pattern": "0.1.0",
-    "com.shinolab.autd3-sdk.modulation": "0.1.0"
+    "com.shinolab.autd3-sdk.core": "0.2.0",
+    "com.shinolab.autd3-sdk.pattern": "0.2.0",
+    "com.shinolab.autd3-sdk.modulation": "0.2.0"
   },
   "samples": [
     {

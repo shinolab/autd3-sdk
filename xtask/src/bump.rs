@@ -9,6 +9,8 @@ use crate::component::{COMPONENTS, Component, detect};
 use crate::cpu::gen_param;
 use crate::util::capture;
 
+const DOC_COMPONENT: &str = "doc";
+
 #[derive(Args)]
 pub struct BumpVersionCmd {
     component: Option<String>,
@@ -20,6 +22,9 @@ pub struct BumpVersionCmd {
 }
 
 pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
+    if cmd.component.as_deref() == Some(DOC_COMPONENT) {
+        return bump_doc(root, cmd.version.as_deref());
+    }
     let component = resolve_component(root, cmd.component.as_deref())?;
     let raw = match cmd.version.as_deref() {
         Some(v) => v.to_string(),
@@ -37,7 +42,12 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             bump_python_pyproject(root, &core)?;
             bump_csharp_props(&root.join("bindings/csharp/Directory.Build.props"), &core)?;
             bump_cargo_toml(&root.join("emulator/Cargo.toml"), &core)?;
-            println!("Updated software version -> {core} (crates, ffi, python, csharp, emulator)");
+            bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
+            bump_package_version(&root.join("console/Cargo.toml"), &core)?;
+            println!(
+                "Updated software version -> {core} (crates, ffi, python, csharp, emulator, simulator, console)"
+            );
+            bump_unity_series(root, &core)?;
         }
         "python" => {
             bump_cargo_toml(&root.join("bindings/python/Cargo.toml"), &core)?;
@@ -72,7 +82,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
     if cmd.no_changelog {
         println!("Skipped CHANGELOG.md (--no-changelog).");
     } else {
-        write_changelog_file(root, Some(&tag), "CHANGELOG.md")?;
+        write_changelog_file(root, "CHANGELOG.md")?;
         println!("Generated CHANGELOG.md for {tag}");
     }
 
@@ -82,16 +92,49 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
     if component.name == "software" {
         println!();
         println!(
-            "Optional (minor/major only — start a new doc version series; see README.md > ドキュメントサイト):"
+            "Then, to freeze the outgoing doc version series (no-op on a patch release; see README.md > ドキュメントサイト):"
         );
-        println!("  cargo xtask doc build");
-        println!(
-            "  cargo xtask doc freeze-version <outgoing-slug>   # inlines codes + tracks the snapshot in doc/.gitignore"
-        );
-        println!("  # then add the new version slug to doc/astro.config.mjs and `git add doc/`");
+        println!("  cargo xtask bump-version doc");
         println!();
     }
     println!("  git commit -m \"chore: release {tag}\"");
+    Ok(())
+}
+
+fn bump_doc(root: &Path, version: Option<&str>) -> Result<()> {
+    let software = COMPONENTS
+        .iter()
+        .find(|c| c.name == "software")
+        .context("missing `software` component")?;
+    let raw = match version {
+        Some(v) => v.to_string(),
+        None => version_from_branch(root, software)?,
+    };
+    let (core, _) = parse_version(&raw, false)?;
+    let mut parts = core.split('.');
+    let (Some(major), Some(minor), Some(patch)) = (parts.next(), parts.next(), parts.next()) else {
+        bail!("invalid version `{core}`");
+    };
+    if patch != "0" {
+        println!(
+            "Skipped doc: {core} is a patch release; the {major}.{minor}.x series is still the live one."
+        );
+        return Ok(());
+    }
+
+    let slug = format!("{major}.{minor}.x");
+    if !crate::doc::add_version(root, &slug)? {
+        return Ok(());
+    }
+
+    println!();
+    println!("Next (do these manually after reviewing the diff):");
+    println!(
+        "  git add doc/astro.config.mjs doc/.gitignore doc/src/content/versions/{slug}.json   # the guard requires a tracked config"
+    );
+    println!("  cargo xtask doc build                    # generates doc/src/content/docs/{slug}/");
+    println!("  cargo xtask doc freeze-version {slug}    # inlines codes + tracks the snapshot");
+    println!("  git add doc/");
     Ok(())
 }
 
@@ -101,6 +144,7 @@ fn resolve_component(root: &Path, name: Option<&str>) -> Result<&'static Compone
             let known = COMPONENTS
                 .iter()
                 .map(|c| c.name)
+                .chain([DOC_COMPONENT])
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("unknown component `{name}` (known: {known})")
@@ -165,8 +209,10 @@ fn print_next_steps(name: &str) {
             println!("  cargo xtask ffi build          # refresh bindings/ffi/Cargo.lock");
             println!("  cargo xtask py build           # refresh bindings/python/Cargo.lock");
             println!("  cargo xtask emulator build     # refresh emulator/Cargo.lock");
+            println!("  cargo xtask simulator build    # refresh simulator/Cargo.lock");
+            println!("  cargo xtask console build      # refresh console/Cargo.lock");
             println!(
-                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props emulator/Cargo.toml emulator/Cargo.lock"
+                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props emulator/Cargo.toml emulator/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock 'bindings/unity/*/package.json'"
             );
         }
         "python" => {
@@ -196,6 +242,26 @@ fn print_next_steps(name: &str) {
         }
         _ => {}
     }
+}
+
+fn bump_unity_series(root: &Path, core: &str) -> Result<()> {
+    let unity = COMPONENTS
+        .iter()
+        .find(|c| c.name == "unity")
+        .context("missing `unity` component")?;
+    let current = unity.current_version(root)?;
+    let [major, minor, _] = version_parts(core)?;
+    let [cur_major, cur_minor, _] = version_parts(&current)?;
+    if (major, minor) == (cur_major, cur_minor) {
+        println!(
+            "Kept Unity version {current} ({major}.{minor} series unchanged; npm patch is self-driven)"
+        );
+        return Ok(());
+    }
+    let version = format!("{major}.{minor}.0");
+    let count = bump_unity(root, &version)?;
+    println!("Updated Unity version -> {version} ({count} package.json, incl. sibling deps)");
+    Ok(())
 }
 
 fn version_parts(version: &str) -> Result<[u32; 3]> {

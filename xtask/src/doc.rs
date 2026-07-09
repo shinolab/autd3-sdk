@@ -108,32 +108,71 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
     }
 }
 
-fn track_frozen_version(doc: &Path, slug: &str) -> Result<()> {
-    let path = doc.join(".gitignore");
+pub fn add_version(root: &Path, slug: &str) -> Result<bool> {
+    let doc = root.join("doc");
+    if version_slugs(&doc)?.iter().any(|s| s == slug) {
+        println!("doc: version {slug} is already declared in astro.config.mjs");
+        return Ok(false);
+    }
+    if !on_path("node") {
+        bail!("`node` is required to write the version config");
+    }
+    declare_version_slug(&doc, slug)?;
+    run("node", ["scripts/version-config.mjs", slug], &doc)?;
+    edit_gitignore(&doc, slug, |lines, slug| {
+        unignore_version_config(lines, slug);
+    })?;
+    Ok(true)
+}
+
+fn declare_version_slug(doc: &Path, slug: &str) -> Result<()> {
+    let path = doc.join("astro.config.mjs");
     let text =
         fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let key = text
+        .find("versions:")
+        .context("`versions:` not found in astro.config.mjs")?;
+    let open = key
+        + text[key..]
+            .find('[')
+            .context("`versions:` is not followed by an array in astro.config.mjs")?;
+    let rest = &text[open + 1..];
+    let entry = if rest.trim_start().starts_with(']') {
+        format!("{{ slug: \"{slug}\" }}")
+    } else {
+        format!("{{ slug: \"{slug}\" }}, ")
+    };
+    let new_text = format!("{}{entry}{rest}", &text[..=open]);
+    fs::write(&path, new_text).with_context(|| format!("failed to write {}", path.display()))?;
+    println!("doc: declared version {slug} in {}", path.display());
+    Ok(())
+}
 
-    let ignore_root = format!("src/content/docs/{slug}/");
-    let ignore_locale = format!("src/content/docs/*/{slug}/");
-    let unignore_root = format!("!{ignore_root}");
-    let unignore_locale = format!("!{ignore_locale}");
-    let unignore_config = format!("!src/content/versions/{slug}.json");
-
-    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
-    lines.retain(|l| {
-        let t = l.trim();
-        t != ignore_root && t != ignore_locale
-    });
-    for line in &mut lines {
+fn unignore_version_config(lines: &mut Vec<String>, slug: &str) {
+    for line in &mut *lines {
         if line.trim() == "src/content/versions/" {
             *line = "src/content/versions/*".to_string();
         }
     }
-    for line in [unignore_config, unignore_root, unignore_locale] {
-        if !lines.iter().any(|l| l.trim() == line.as_str()) {
-            lines.push(line);
-        }
+    push_unique(lines, format!("!src/content/versions/{slug}.json"));
+}
+
+fn push_unique(lines: &mut Vec<String>, line: String) {
+    if !lines.iter().any(|l| l.trim() == line.as_str()) {
+        lines.push(line);
     }
+}
+
+fn edit_gitignore(
+    doc: &Path,
+    slug: &str,
+    edit: impl FnOnce(&mut Vec<String>, &str),
+) -> Result<bool> {
+    let path = doc.join(".gitignore");
+    let text =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+    edit(&mut lines, slug);
 
     let mut new_text = lines.join("\n");
     if text.ends_with('\n') {
@@ -141,11 +180,26 @@ fn track_frozen_version(doc: &Path, slug: &str) -> Result<()> {
     }
     if new_text == text {
         println!("doc: {slug} already tracked in {}", path.display());
-        return Ok(());
+        return Ok(false);
     }
     fs::write(&path, new_text).with_context(|| format!("failed to write {}", path.display()))?;
-    println!("doc: tracked frozen version {slug} in {}", path.display());
-    Ok(())
+    println!("doc: tracked {slug} in {}", path.display());
+    Ok(true)
+}
+
+fn track_frozen_version(doc: &Path, slug: &str) -> Result<()> {
+    edit_gitignore(doc, slug, |lines, slug| {
+        let ignore_root = format!("src/content/docs/{slug}/");
+        let ignore_locale = format!("src/content/docs/*/{slug}/");
+        lines.retain(|l| {
+            let t = l.trim();
+            t != ignore_root && t != ignore_locale
+        });
+        unignore_version_config(lines, slug);
+        push_unique(lines, format!("!{ignore_root}"));
+        push_unique(lines, format!("!{ignore_locale}"));
+    })
+    .map(|_| ())
 }
 
 fn version_slugs(doc: &Path) -> Result<Vec<String>> {

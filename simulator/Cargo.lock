@@ -40,7 +40,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "nalgebra",
@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-firmware-emulator"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
  "bindgen",
@@ -60,7 +60,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-remote"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
  "thiserror",
@@ -69,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-simulator"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "autd3-rs-core",
@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-simulator-protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
 ]

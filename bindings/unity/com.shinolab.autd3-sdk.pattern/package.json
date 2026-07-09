@@ -1,6 +1,6 @@
 {
   "name": "com.shinolab.autd3-sdk.pattern",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "AUTD3 Pattern",
   "description": "AUTD3 emission patterns: Focus, Plane, Bessel (Unity binding).",
   "unity": "6000.0",
@@ -10,6 +10,6 @@
     "url": "https://github.com/shinolab"
   },
   "dependencies": {
-    "com.shinolab.autd3-sdk.core": "0.1.0"
+    "com.shinolab.autd3-sdk.core": "0.2.0"
   }
 }

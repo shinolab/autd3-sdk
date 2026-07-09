@@ -1,0 +1,42 @@
+---
+title: radiation_pressure
+description: 既存の変調波形に放射圧補正を適用する Modulation
+sidebar:
+  order: 24
+srcPath: crates/autd3-rs-modulation/src/radiation_pressure.rs
+slug: 0.2.x/api/compute/modulation/radiation
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+
+`radiation_pressure` は変調波形に放射圧補正を適用する. `sine` などで計算した波形に対して補正をかける.
+
+音響放射圧は音圧の 2 乗に比例する.
+`sine` などが指定するのは音圧の振幅なので, 放射圧を目的の波形に合わせたい場合は各サンプルの平方根を取る必要がある.
+`radiation_pressure` はこの補正を行う.
+
+各サンプル <Math tex="m" /> は次式で書き換えられる.
+
+<MathBlock tex="m' = \mathrm{round}\!\left(255 \sqrt{\tfrac{m}{255}}\right)" />
+
+<ModulationPlot kind="radiation" fixed="" />
+
+## API
+
+<CodeTabs rust={"radiation_pressure(&src, &mut dst);"} python={"radiation_pressure(src, dst)"} csharp={"Modulation.RadiationPressure(src, dst);"} />
+
+### radiation\_pressure
+
+| 引数  | 型             | 説明                           |
+| ----- | -------------- | ------------------------------ |
+| `src` | `&[u8]`        | 補正前の変調波形               |
+| `dst` | `&mut Vec<u8>` | 補正後の波形を書き出すバッファ |
+
+in-placeに書き換える `radiation_pressure_inplace` もある.
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::units::Hz;\nuse autd3_rs_modulation::{SineOption, radiation_pressure, sine};\n\nlet mut src = Vec::new();\nsine(150 * Hz, &SineOption::default(), &mut src)?;\n\nlet mut dst = Vec::new();\n\nradiation_pressure(&src, &mut dst);"} python={"from autd3.units import Hz\nfrom autd3_modulation import SineOption, modulation_buffer, radiation_pressure, sine\n\nsrc = modulation_buffer()\nsine(150 * Hz, SineOption(), src)\n\ndst = modulation_buffer()\n\nradiation_pressure(src, dst)"} csharp={"using AUTD3;\nusing static AUTD3.Units;\n\nvar src = Modulation.ModulationBuffer();\nModulation.Sine(150 * Hz, new SineOption(), src);\n\nvar dst = Modulation.ModulationBuffer();\n\nModulation.RadiationPressure(src, dst);"} />

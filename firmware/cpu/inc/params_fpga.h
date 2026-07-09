@@ -10,7 +10,7 @@
 #define FUNC_DYNAMIC_FREQ_BIT (1)
 #define FUNC_EMULATOR_BIT (7)
 #define VERSION_NUM_MAJOR (0x0)
-#define VERSION_NUM_MINOR (0x1)
+#define VERSION_NUM_MINOR (0x2)
 #define VERSION_NUM_PATCH (0x0)
 
 #define CTL_FLAG_BIT_MOD_SET (0)
