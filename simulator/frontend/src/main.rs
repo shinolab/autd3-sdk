@@ -22,6 +22,8 @@ use crate::settings::Settings;
 use crate::tabs::Tab;
 
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
+const FAVICON_SVG: Asset = asset!("/assets/favicon.svg");
+const FAVICON_ICO: Asset = asset!("/assets/favicon.ico");
 const CANVAS_W: f32 = 800.0;
 const CANVAS_H: f32 = 600.0;
 
@@ -348,6 +350,8 @@ fn App() -> Element {
     let on_root_up = move |_: Event<MouseData>| num_drag.set(None);
 
     rsx! {
+        document::Link { rel: "icon", href: FAVICON_SVG, r#type: "image/svg+xml" }
+        document::Link { rel: "icon", href: FAVICON_ICO, sizes: "32x32" }
         document::Stylesheet { href: TAILWIND_CSS }
         div {
             class: "min-h-screen bg-base-200 text-base-content",
