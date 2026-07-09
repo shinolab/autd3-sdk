@@ -7,6 +7,9 @@ defaults:
   run:
     shell: bash
 
+env:
+  CARGO_PROFILE_DEV_DEBUG: '0'
+
 jobs:
   py:
     name: py (${{ matrix.os }})
@@ -22,6 +25,9 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           components: rustfmt, clippy
+          workspaces: |
+            bindings/python
+            xtask
       - name: Install system deps
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
