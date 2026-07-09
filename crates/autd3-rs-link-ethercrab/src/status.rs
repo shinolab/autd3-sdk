@@ -1,4 +1,9 @@
+use std::time::Duration;
+
+use ethercrab::error::TimeoutError;
 use ethercrab::{Command, MainDevice, RegisterAddress};
+
+use crate::timeout::with_timeout;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OpRecoveryAction {
@@ -50,31 +55,44 @@ impl AlState {
 pub(crate) async fn read_al_state(
     maindevice: &MainDevice<'_>,
     address: u16,
+    pdu_timeout: Duration,
 ) -> Result<AlState, ethercrab::error::Error> {
-    Command::fprd(address, RegisterAddress::AlStatus.into())
-        .receive::<u16>(maindevice)
-        .await
-        .map(AlState)
+    with_timeout(
+        pdu_timeout,
+        TimeoutError::Pdu,
+        Command::fprd(address, RegisterAddress::AlStatus.into()).receive::<u16>(maindevice),
+    )
+    .await
+    .map(AlState)
 }
 
 pub(crate) async fn read_al_status_code(
     maindevice: &MainDevice<'_>,
     address: u16,
+    pdu_timeout: Duration,
 ) -> Result<u16, ethercrab::error::Error> {
-    Command::fprd(address, RegisterAddress::AlStatusCode.into())
-        .receive::<u16>(maindevice)
-        .await
+    with_timeout(
+        pdu_timeout,
+        TimeoutError::Pdu,
+        Command::fprd(address, RegisterAddress::AlStatusCode.into()).receive::<u16>(maindevice),
+    )
+    .await
 }
 
 pub(crate) async fn request_al_state(
     maindevice: &MainDevice<'_>,
     address: u16,
     control: u16,
+    pdu_timeout: Duration,
 ) -> Result<(), ethercrab::error::Error> {
-    Command::fpwr(address, RegisterAddress::AlControl.into())
-        .send_receive::<u16>(maindevice, control)
-        .await
-        .map(|_: u16| ())
+    with_timeout(
+        pdu_timeout,
+        TimeoutError::Pdu,
+        Command::fpwr(address, RegisterAddress::AlControl.into())
+            .send_receive::<u16>(maindevice, control),
+    )
+    .await
+    .map(|_: u16| ())
 }
 
 pub(crate) const fn al_status_code_str(code: u16) -> &'static str {

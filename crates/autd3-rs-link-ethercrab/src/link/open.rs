@@ -1,14 +1,16 @@
 use std::future::Future;
 use std::time::{Duration, Instant};
 
+use ethercrab::error::TimeoutError;
 use ethercrab::std::ethercat_now;
 use ethercrab::subdevice_group::{HasDc, NoDc, Op, PreOp, SafeOp};
-use ethercrab::{Command, DcSync, MainDevice, RegisterAddress};
+use ethercrab::{Command, DcSync, MainDevice, RegisterAddress, RetryBehaviour};
 use tokio::runtime::Handle;
 
 use crate::diagnostics::new_shared_cycle_diagnostics;
 use crate::error::EtherCrabLinkError;
 use crate::option::EtherCrabLinkOptionFull;
+use crate::timeout::{with_timeout, without_pdu_timer};
 use crate::timer;
 use crate::transport::Transport;
 use crate::{sync, utils};
@@ -17,6 +19,12 @@ use super::{
     EtherCrabLink, GRACEFUL_SHUTDOWN_TIMEOUT, GROUP_SUBDEVICES, Groups, MAX_GROUPS, MAX_SUBDEVICES,
     OP_WAIT_TIMEOUT, OP_WARMUP_CYCLES, OP_WKC_STABLE_CYCLES, SUBDEVICE_NAME, SubGroup,
 };
+
+// With ethercrab's per-PDU timer disarmed, these bound the multi-PDU operations
+// that would otherwise wait forever on a lost frame. They are hang guards, not
+// deadlines: a healthy bus finishes well inside them.
+const ENUMERATION_TIMEOUT: Duration = Duration::from_secs(30);
+const TRANSITION_TIMEOUT_FACTOR: u32 = 2;
 
 pub(super) struct Reached {
     pub(super) group: Groups<Op, HasDc>,
@@ -44,12 +52,20 @@ impl EtherCrabLink {
             interface
         };
 
+        if option.main_device_config.retry_behaviour != RetryBehaviour::None {
+            tracing::warn!(
+                "MainDeviceConfig::retry_behaviour has no effect: retries are driven by \
+                 ethercrab's own PDU timer, which this link disarms to keep the bus cycle \
+                 allocation-free",
+            );
+        }
+
         let diagnostics = new_shared_cycle_diagnostics();
         tracing::info!("starting EtherCAT tx/rx task on {interface}");
         let transport = Transport::open(
             &handle,
             &interface,
-            option.timeouts,
+            without_pdu_timer(option.timeouts),
             option.main_device_config,
         )?;
         let Reached {
@@ -68,6 +84,7 @@ impl EtherCrabLink {
             num_devices,
             expected_wkc,
             rx_was_valid: true,
+            timeouts: option.timeouts,
             stats: autd3_rs_core::LinkStats::default(),
             diagnostics,
             _timer_resolution: timer_resolution,
@@ -75,8 +92,16 @@ impl EtherCrabLink {
     }
 
     pub async fn close(mut self) -> Result<(), EtherCrabLinkError> {
+        let state_transition = self.timeouts.state_transition;
         match self.group.take() {
-            Some(group) => Box::pin(shutdown(group, self.transport.maindevice())).await,
+            Some(group) => {
+                Box::pin(shutdown(
+                    group,
+                    self.transport.maindevice(),
+                    state_transition,
+                ))
+                .await
+            }
             None => Ok(()),
         }
     }
@@ -99,10 +124,11 @@ impl Drop for EtherCrabLink {
             );
             return;
         }
+        let state_transition = self.timeouts.state_transition;
         let maindevice = self.transport.maindevice();
         match self.handle.block_on(Box::pin(run_with_timeout(
             GRACEFUL_SHUTDOWN_TIMEOUT,
-            shutdown(group, maindevice),
+            shutdown(group, maindevice, state_transition),
         ))) {
             Ok(Ok(())) => {}
             Ok(Err(e)) => tracing::warn!("graceful shutdown failed: {e}"),
@@ -116,13 +142,43 @@ impl Drop for EtherCrabLink {
 async fn shutdown(
     group: Groups<Op, HasDc>,
     maindevice: &MainDevice<'static>,
+    state_transition: Duration,
 ) -> Result<(), EtherCrabLinkError> {
     tracing::info!("transitioning devices to INIT");
-    let group = Box::pin(group.transform(|g| g.into_safe_op(maindevice))).await?;
-    let group = Box::pin(group.transform(|g| g.into_pre_op(maindevice))).await?;
-    let _ = Box::pin(group.transform(|g| g.into_init(maindevice))).await?;
+    let group = transition(
+        state_transition,
+        group.transform(|g| g.into_safe_op(maindevice)),
+    )
+    .await?;
+    let group = transition(
+        state_transition,
+        group.transform(|g| g.into_pre_op(maindevice)),
+    )
+    .await?;
+    let _ = transition(
+        state_transition,
+        group.transform(|g| g.into_init(maindevice)),
+    )
+    .await?;
     tracing::info!("all devices are in INIT");
     Ok(())
+}
+
+// ethercrab applies `state_transition` to the state wait alone, so the surrounding
+// PDU writes need headroom on top of it.
+async fn transition<T, F>(
+    state_transition: Duration,
+    future: F,
+) -> Result<T, ethercrab::error::Error>
+where
+    F: Future<Output = Result<T, ethercrab::error::Error>>,
+{
+    Box::pin(with_timeout(
+        state_transition.saturating_mul(TRANSITION_TIMEOUT_FACTOR),
+        TimeoutError::StateTransition,
+        future,
+    ))
+    .await
 }
 
 async fn run_with_timeout<F>(
@@ -135,26 +191,51 @@ where
     tokio::time::timeout(timeout, future).await
 }
 
-async fn try_reach_op(
+// Bus enumeration reads every subdevice's EEPROM, so it is far slower than a
+// single PDU. Probe the bus first to keep "wrong interface" failing fast, and
+// leave enumeration itself only a coarse guard against a lost PDU wedging it.
+async fn probe_bus(
     maindevice: &MainDevice<'static>,
-    option: &EtherCrabLinkOptionFull,
-    interface: &str,
-) -> Result<Reached, EtherCrabLinkError> {
+    pdu_timeout: Duration,
+) -> Result<(), EtherCrabLinkError> {
+    with_timeout(
+        pdu_timeout,
+        TimeoutError::Pdu,
+        Command::brd(RegisterAddress::AlStatus.into())
+            .ignore_wkc()
+            .receive::<u16>(maindevice),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn enumerate(
+    maindevice: &MainDevice<'static>,
+    pdu_timeout: Duration,
+) -> Result<Groups<PreOp, NoDc>, EtherCrabLinkError> {
     #[derive(Default)]
     struct GroupsArray {
         groups: [SubGroup<PreOp, NoDc>; MAX_GROUPS],
     }
+    Box::pin(probe_bus(maindevice, pdu_timeout)).await?;
+
+    let started = Instant::now();
     let mut idx = 0usize;
-    let groups = Box::pin(maindevice.init::<MAX_SUBDEVICES, _>(
-        ethercat_now,
-        GroupsArray::default(),
-        |array: &GroupsArray, _subdevice| {
-            let group = &array.groups[idx / GROUP_SUBDEVICES];
-            idx += 1;
-            Ok(group)
-        },
+    let groups = Box::pin(with_timeout(
+        ENUMERATION_TIMEOUT,
+        TimeoutError::Pdu,
+        maindevice.init::<MAX_SUBDEVICES, _>(
+            ethercat_now,
+            GroupsArray::default(),
+            |array: &GroupsArray, _subdevice| {
+                let group = &array.groups[idx / GROUP_SUBDEVICES];
+                idx += 1;
+                Ok(group)
+            },
+        ),
     ))
     .await?;
+    tracing::debug!(elapsed = ?started.elapsed(), "bus enumeration finished");
     let groups = Groups {
         groups: groups
             .groups
@@ -178,6 +259,17 @@ async fn try_reach_op(
             });
         }
     }
+    Ok(groups)
+}
+
+async fn try_reach_op(
+    maindevice: &MainDevice<'static>,
+    option: &EtherCrabLinkOptionFull,
+    interface: &str,
+) -> Result<Reached, EtherCrabLinkError> {
+    let pdu_timeout = option.timeouts.pdu;
+    let state_transition = option.timeouts.state_transition;
+    let groups = Box::pin(enumerate(maindevice, pdu_timeout)).await?;
     let num_devices = groups.num_devices();
     tracing::info!("found {num_devices} AUTD device(s) on {interface}");
 
@@ -191,34 +283,49 @@ async fn try_reach_op(
     }
 
     tracing::info!("moving into PRE-OP with PDI");
-    let group = Box::pin(groups.transform(|g| g.into_pre_op_pdi(maindevice))).await?;
+    let group = transition(
+        state_transition,
+        groups.transform(|g| g.into_pre_op_pdi(maindevice)),
+    )
+    .await?;
 
     sync::wait_for_align(
         &group,
         maindevice,
         option.sync_tolerance,
         option.sync_timeout,
+        pdu_timeout,
     )
     .await?;
 
     tracing::info!(sync0_period = ?option.dc_configuration.sync0_period, "configuring Sync0");
-    let group =
-        Box::pin(group.transform(|g| g.configure_dc_sync(maindevice, option.dc_configuration)))
-            .await?;
+    let group = transition(
+        state_transition,
+        group.transform(|g| g.configure_dc_sync(maindevice, option.dc_configuration)),
+    )
+    .await?;
 
-    let group = Box::pin(group.transform(|g| g.into_safe_op(maindevice))).await?;
+    let group = transition(
+        state_transition,
+        group.transform(|g| g.into_safe_op(maindevice)),
+    )
+    .await?;
     tracing::info!("all devices are in SAFE-OP");
 
     tracing::info!(
         cycles = OP_WARMUP_CYCLES,
         "warming up DC before requesting OP"
     );
-    Box::pin(warmup_dc(&group, maindevice)).await?;
+    Box::pin(warmup_dc(&group, maindevice, pdu_timeout)).await?;
 
-    let group = Box::pin(group.transform(|g| g.request_into_op(maindevice))).await?;
+    let group = transition(
+        state_transition,
+        group.transform(|g| g.request_into_op(maindevice)),
+    )
+    .await?;
     tracing::info!("requested OP, waiting for all devices");
 
-    let expected_wkc = wait_for_op(&group, maindevice).await?;
+    let expected_wkc = wait_for_op(&group, maindevice, pdu_timeout).await?;
     let addresses: Vec<u16> = group
         .groups
         .iter()
@@ -237,10 +344,11 @@ async fn try_reach_op(
 async fn warmup_dc(
     group: &Groups<SafeOp, HasDc>,
     maindevice: &MainDevice<'_>,
+    pdu_timeout: Duration,
 ) -> Result<(), EtherCrabLinkError> {
     for _ in 0..OP_WARMUP_CYCLES {
         let cycle_start = Instant::now();
-        let resp = group.tx_rx_dc(maindevice).await?;
+        let resp = group.tx_rx_dc(maindevice, pdu_timeout).await?;
         timer::async_sleep_until(cycle_start + resp.next_cycle_wait).await;
     }
     Ok(())
@@ -249,6 +357,7 @@ async fn warmup_dc(
 async fn wait_for_op(
     group: &Groups<Op, HasDc>,
     maindevice: &MainDevice<'_>,
+    pdu_timeout: Duration,
 ) -> Result<u16, EtherCrabLinkError> {
     let op_requested = Instant::now();
     let op_deadline = op_requested + OP_WAIT_TIMEOUT;
@@ -257,7 +366,7 @@ async fn wait_for_op(
     let mut last_log = op_requested;
     loop {
         let cycle_start = Instant::now();
-        let resp = group.tx_rx_dc(maindevice).await?;
+        let resp = group.tx_rx_dc(maindevice, pdu_timeout).await?;
         if last_log.elapsed() >= Duration::from_secs(1) {
             last_log = cycle_start;
             tracing::info!(
@@ -297,14 +406,18 @@ async fn wait_for_op(
                 elapsed = ?op_requested.elapsed(),
                 "timeout waiting for OP: devices did not reach OP within {OP_WAIT_TIMEOUT:?}",
             );
-            log_al_status(group, maindevice).await;
+            log_al_status(group, maindevice, pdu_timeout).await;
             return Err(EtherCrabLinkError::OpTimeout);
         }
         timer::async_sleep_until(cycle_start + resp.next_cycle_wait).await;
     }
 }
 
-async fn log_al_status(group: &Groups<Op, HasDc>, maindevice: &MainDevice<'_>) {
+async fn log_al_status(
+    group: &Groups<Op, HasDc>,
+    maindevice: &MainDevice<'_>,
+    pdu_timeout: Duration,
+) {
     let addresses: Vec<u16> = group
         .groups
         .iter()
@@ -312,12 +425,18 @@ async fn log_al_status(group: &Groups<Op, HasDc>, maindevice: &MainDevice<'_>) {
         .map(|subdevice| subdevice.configured_address())
         .collect();
     for (index, address) in addresses.into_iter().enumerate() {
-        let status = Command::fprd(address, RegisterAddress::AlStatus.into())
-            .receive::<u16>(maindevice)
-            .await;
-        let code = Command::fprd(address, RegisterAddress::AlStatusCode.into())
-            .receive::<u16>(maindevice)
-            .await;
+        let status = with_timeout(
+            pdu_timeout,
+            TimeoutError::Pdu,
+            Command::fprd(address, RegisterAddress::AlStatus.into()).receive::<u16>(maindevice),
+        )
+        .await;
+        let code = with_timeout(
+            pdu_timeout,
+            TimeoutError::Pdu,
+            Command::fprd(address, RegisterAddress::AlStatusCode.into()).receive::<u16>(maindevice),
+        )
+        .await;
         if let (Ok(status), Ok(code)) = (status, code) {
             tracing::error!(
                 index,

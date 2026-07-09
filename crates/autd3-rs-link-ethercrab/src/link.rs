@@ -5,13 +5,16 @@ use std::future::Future;
 use std::time::{Duration, Instant};
 
 use autd3_rs_core::{RX_FRAME_BYTES, TX_FRAME_BYTES};
+use ethercrab::error::TimeoutError;
 use ethercrab::subdevice_group::{HasDc, HasPdi, NoDc, Op, PreOp};
-use ethercrab::{DefaultLock, MainDevice, SubDeviceGroup};
+use ethercrab::{DefaultLock, MainDevice, SubDeviceGroup, Timeouts};
 use futures_util::future::join_all;
 use tokio::runtime::Handle;
 
 use crate::diagnostics::SharedCycleDiagnostics;
+use crate::join::join_bounded;
 use crate::option::{EtherCrabLinkOption, EtherCrabLinkOptionFull};
+use crate::timeout::with_timeout;
 use crate::transport::Transport;
 
 pub(crate) const MAX_SUBDEVICES: usize = 32;
@@ -69,8 +72,22 @@ impl<S: HasPdi> Groups<S, HasDc> {
     pub(crate) async fn tx_rx_dc(
         &self,
         maindevice: &MainDevice<'_>,
+        pdu_timeout: Duration,
     ) -> Result<AggregatedResponse, ethercrab::error::Error> {
-        let responses = join_all(self.groups.iter().map(|g| g.tx_rx_dc(maindevice))).await;
+        with_timeout(
+            pdu_timeout,
+            TimeoutError::Pdu,
+            self.tx_rx_dc_inner(maindevice),
+        )
+        .await
+    }
+
+    async fn tx_rx_dc_inner(
+        &self,
+        maindevice: &MainDevice<'_>,
+    ) -> Result<AggregatedResponse, ethercrab::error::Error> {
+        let responses =
+            join_bounded::<MAX_GROUPS, _>(self.groups.iter().map(|g| g.tx_rx_dc(maindevice))).await;
         let mut agg = AggregatedResponse {
             working_counter: 0,
             all_op: true,
@@ -79,7 +96,7 @@ impl<S: HasPdi> Groups<S, HasDc> {
             cycle_start_offset: Duration::ZERO,
         };
         let mut first = true;
-        for response in responses {
+        for response in responses.into_iter().flatten() {
             let response = response?;
             agg.working_counter = agg.working_counter.saturating_add(response.working_counter);
             agg.all_op &= response.all_op();
@@ -129,6 +146,7 @@ pub struct EtherCrabLink {
     num_devices: usize,
     expected_wkc: u16,
     rx_was_valid: bool,
+    timeouts: Timeouts,
     stats: autd3_rs_core::LinkStats,
     diagnostics: SharedCycleDiagnostics,
     _timer_resolution: crate::timer::TimerResolutionGuard,
