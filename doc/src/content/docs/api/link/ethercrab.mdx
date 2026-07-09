@@ -6,13 +6,15 @@ sidebar:
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
 import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/api/link/ethercrab.rs?raw";
 import pySample from "@codes/python/examples/api/link/ethercrab.py?raw";
 import csSample from "@codes/csharp/examples/api/link/ethercrab.cs?raw";
 
 `EtherCrabLink` は Rust 製の EtherCAT マスタ [EtherCrab](https://github.com/ethercrab-rs/ethercrab) を用いた Link 実装. 
-`autd3-rs-link-ethercrab` クレートで提供される.
+
+<Install rust="autd3-rs-link-ethercrab" python="autd3-link-ethercrab" csharp="AUTD3.Link.Ethercrab" />
 
 Ethernet の raw socket を扱うため, Linux/macOS では実行に root 権限 (または `CAP_NET_RAW`) が必要.
 Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mode」でインストールする必要がある.
