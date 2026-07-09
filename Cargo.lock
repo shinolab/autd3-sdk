@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-firmware"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
  "core_affinity",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "approx",
  "chrono",
@@ -140,7 +140,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-examples"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
@@ -155,7 +155,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-firmware-emulator"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
  "bindgen",
@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-firmware-test"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
@@ -180,7 +180,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-ethercrab"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
  "cc",
@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-nop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
  "autd3-rs-firmware-emulator",
@@ -203,7 +203,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-remote"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autd3-rs",
  "autd3-rs-core",
@@ -215,7 +215,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-soem"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
  "bindgen",
@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-twincat"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ads",
  "autd3-rs-core",
@@ -239,14 +239,14 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-modulation"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
 ]
 
 [[package]]
 name = "autd3-rs-pattern"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
  "criterion 0.8.2",
@@ -254,7 +254,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern-holo"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "approx",
  "autd3-rs-core",
@@ -266,7 +266,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-patternsoak"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
@@ -280,7 +280,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-perftest"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
@@ -296,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-synctune"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "autd3-rs",

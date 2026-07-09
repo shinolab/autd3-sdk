@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
@@ -27,17 +28,44 @@ pub fn run_changelog(root: &Path, cmd: &ChangelogCmd) -> Result<()> {
         write_release_notes(root, tag, cmd.output.as_deref())
     } else {
         let output = cmd.output.clone().unwrap_or_else(|| "CHANGELOG.md".into());
-        write_changelog_file(root, cmd.tag.as_deref(), &output)
+        write_changelog_file(root, &output)
     }
 }
 
-fn scope_args(args: &mut Vec<String>, component: &Component) {
+fn scope_args(args: &mut Vec<String>, component: &Component, root: &Path) -> Result<()> {
     args.push("--tag-pattern".into());
     args.push(component.tag_pattern());
-    for path in component.include_paths {
-        args.push("--include-path".into());
-        args.push((*path).to_string());
+    for sha in unrelated_commits(root, component)? {
+        args.push("--skip-commit".into());
+        args.push(sha);
     }
+    Ok(())
+}
+
+fn unrelated_commits(root: &Path, component: &Component) -> Result<Vec<String>> {
+    let all = capture("git", &["rev-list", "HEAD"], root)?;
+    let specs: Vec<String> = component
+        .include_paths
+        .iter()
+        .map(|p| format!(":(glob){p}"))
+        .collect();
+    let mut args: Vec<&str> = vec!["rev-list", "--full-history", "HEAD", "--"];
+    args.extend(specs.iter().map(String::as_str));
+    let scoped = capture("git", &args, root)?;
+    let kept: HashSet<&str> = scoped.lines().collect();
+    Ok(all
+        .lines()
+        .filter(|sha| !kept.contains(sha))
+        .map(str::to_string)
+        .collect())
+}
+
+fn strip_tag_prefixes(body: &str, component: &Component) -> String {
+    let mut body = body.to_string();
+    for prefix in component.tag_prefixes() {
+        body = body.replace(&format!("## [{prefix}"), "## [");
+    }
+    body
 }
 
 fn write_release_notes(root: &Path, tag: &str, output: Option<&str>) -> Result<()> {
@@ -63,12 +91,7 @@ fn write_release_notes(root: &Path, tag: &str, output: Option<&str>) -> Result<(
     let mut doc = String::new();
     for section in sections {
         let mut args: Vec<String> = Vec::new();
-        args.push("--tag-pattern".into());
-        args.push(section.tag_pattern());
-        for path in section.include_paths {
-            args.push("--include-path".into());
-            args.push((*path).to_string());
-        }
+        scope_args(&mut args, section, root)?;
         args.push("--tag".into());
         args.push(tag.to_string());
         args.push("--latest".into());
@@ -85,7 +108,7 @@ fn write_release_notes(root: &Path, tag: &str, output: Option<&str>) -> Result<(
             doc.push_str(section.section);
             doc.push_str("\n\n");
         }
-        doc.push_str(&body);
+        doc.push_str(&strip_tag_prefixes(&body, section));
         doc.push_str("\n\n");
     }
 
@@ -106,20 +129,16 @@ fn write_release_notes(root: &Path, tag: &str, output: Option<&str>) -> Result<(
     Ok(())
 }
 
-pub fn write_changelog_file(root: &Path, tag: Option<&str>, output: &str) -> Result<()> {
-    let tagged = tag.and_then(detect).map(|(c, _)| c.name);
-
+pub fn write_changelog_file(root: &Path, output: &str) -> Result<()> {
     let mut doc = String::from("# Changelog\n");
     for component in COMPONENTS {
         let mut args: Vec<String> = Vec::new();
-        scope_args(&mut args, component);
+        scope_args(&mut args, component, root)?;
         args.push("--strip".into());
         args.push("header".into());
-        if tagged == Some(component.name)
-            && let Some(tag) = tag
-        {
+        if let Some(tag) = component.pending_tag(root)? {
             args.push("--tag".into());
-            args.push(tag.to_string());
+            args.push(tag);
         }
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
         let body = capture_lenient("git-cliff", &refs, root)?;
@@ -130,7 +149,7 @@ pub fn write_changelog_file(root: &Path, tag: Option<&str>, output: &str) -> Res
         if body.is_empty() {
             doc.push_str("_No releases yet._\n");
         } else {
-            doc.push_str(&body);
+            doc.push_str(&strip_tag_prefixes(&body, component));
             doc.push('\n');
         }
     }

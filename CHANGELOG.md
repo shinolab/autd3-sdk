@@ -2,7 +2,25 @@
 
 # Rust
 
-## [0.1.0] - 2026-07-05
+## [0.2.0] - 2026-07-09
+
+### 💥 Breaking Changes
+
+- [**breaking**] Scale GpioOut::SysTimeEq to FPGA time units and take DcSysTime
+- [**breaking**] Read FPGA firmware version alongside CPU in read_firmware_version
+- [**breaking**] Remove Autd3Unity and fix core to the right-handed/mm canonical frame
+
+### 🚀 Features
+
+- Decode modulation/pattern bank and STM mode from FPGA state
+- *(simulator)* Add GPIO output display, MSAA, and slice rotation controls
+
+### 🐛 Bug Fixes
+
+- Recompute swapchain index on bank switch to avoid emulator out-of-bounds panic
+- Treat ERR_UNKNOWN_CMD as unknown FPGA firmware version
+
+## [0.1.0] - 2026-07-06
 
 ### 🚀 Features
 
@@ -57,6 +75,19 @@
 
 # Python
 
+## [0.2.0] - 2026-07-09
+
+### 💥 Breaking Changes
+
+- [**breaking**] Scale GpioOut::SysTimeEq to FPGA time units and take DcSysTime
+
+### 🚀 Features
+
+- *(py)* Accept EulerAngles and scipy Rotation for Autd3 rotation
+- Add Python bindings for the emulator
+
+## [0.1.0] - 2026-07-06
+
 ### 🚀 Features
 
 - *(python)* Add PyO3 bindings for autd3-rs
@@ -81,6 +112,18 @@
 
 # C#
 
+## [0.2.0] - 2026-07-09
+
+### 💥 Breaking Changes
+
+- [**breaking**] Scale GpioOut::SysTimeEq to FPGA time units and take DcSysTime
+
+### 🚀 Features
+
+- Add Unity bindings with per-crate UPM packages and coordinate boundary conversion
+
+## [0.1.0] - 2026-07-06
+
 ### 🚀 Features
 
 - *(csharp)* Add C# bindings for autd3-rs
@@ -101,7 +144,29 @@
 - *(cs)* Fix C# binding API drift from autd3-rs
 - *(cs)* Put bank first in Pattern/Modulation constructors to match Rust
 
+# Unity
+
+## [0.2.0] - 2026-07-09
+
+### 🚀 Features
+
+- Add Unity bindings with per-crate UPM packages and coordinate boundary conversion
+
+## [0.1.0] - 2026-07-06
+
 # Simulator
+
+## [0.2.0] - 2026-07-09
+
+### 🚀 Features
+
+- *(simulator)* Add GPIO output display, MSAA, and slice rotation controls
+
+### 📦 Dependencies
+
+- *(deps)* Bump wgpu from 29.0.3 to 30.0.0 in /simulator/frontend
+
+## [0.1.0] - 2026-07-06
 
 ### 🚀 Features
 
@@ -110,11 +175,25 @@
 
 # Console
 
+## [0.1.0] - 2026-07-06
+
 ### 🚀 Features
 
 - Derive simulator device count from client geometry
 
 # Firmware
+
+## [0.2.0] - 2026-07-09
+
+### 💥 Breaking Changes
+
+- [**breaking**] Read FPGA firmware version alongside CPU in read_firmware_version
+
+### 🐛 Bug Fixes
+
+- *(firmware)* Add memory barrier around FPGA BRAM destination-register switches
+
+## [0.1.0] - 2026-07-06
 
 ### 🚀 Features
 

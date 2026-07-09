@@ -7,7 +7,7 @@ name = "autd3-core"
 description = "Python bindings for autd3-rs-core (geometry, value types, error)."
 requires-python = ">=3.10"
 license = "MIT"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = ["numpy"]
 
 [tool.maturin]

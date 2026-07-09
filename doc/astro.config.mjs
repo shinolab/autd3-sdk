@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import starlightVersions from "starlight-versions";
+import { sidebar } from "./src/sidebar.mjs";
 
 // https://astro.build/config
 export default defineConfig({
@@ -66,75 +67,10 @@ export default defineConfig({
       ],
       plugins: [
         starlightVersions({
-          versions: [{ slug: "0.1.x" }],
+          versions: [{ slug: "0.2.x" }, { slug: "0.1.x" }],
         }),
       ],
-      sidebar: [
-        { label: "はじめに", translations: { en: "Introduction" }, link: "/" },
-        {
-          label: "Getting Started",
-          items: [
-            {
-              label: "セットアップ",
-              translations: { en: "Setup" },
-              items: [
-                { label: "概要", translations: { en: "Overview" }, link: "/getting-started/setup/" },
-                { label: "ハードウェア", translations: { en: "Hardware" }, link: "/getting-started/setup/hardware/" },
-                { label: "ファームウェア", translations: { en: "Firmware" }, link: "/getting-started/setup/firmware/" },
-                { label: "ソフトウェア", translations: { en: "Software" }, link: "/getting-started/setup/software/" },
-              ],
-            },
-            {
-              label: "TwinCAT のインストール",
-              translations: { en: "Installing TwinCAT" },
-              link: "/getting-started/twincat/",
-            },
-            {
-              label: "チュートリアル",
-              translations: { en: "Tutorial" },
-              items: [{ autogenerate: { directory: "getting-started/tutorial" } }],
-            },
-          ],
-        },
-        {
-          label: "ガイド",
-          translations: { en: "Guide" },
-          items: [
-            { autogenerate: { directory: "guide" } },
-            {
-              label: "ハードウェア",
-              translations: { en: "Hardware" },
-              items: [{ autogenerate: { directory: "hardware" } }],
-            },
-          ],
-        },
-        {
-          label: "API リファレンス",
-          translations: { en: "API Reference" },
-          items: [
-            { label: "基礎", items: [{ autogenerate: { directory: "api/basics" } }] },
-            { label: "コマンド", items: [{ autogenerate: { directory: "api/command" } }] },
-            {
-              label: "計算ヘルパ",
-              items: [{ autogenerate: { directory: "api/compute" } }],
-            },
-            { label: "Link", items: [{ autogenerate: { directory: "api/link" } }] },
-          ],
-        },
-        {
-          label: "その他",
-          translations: { en: "Misc" },
-          items: [
-            { autogenerate: { directory: "misc" } },
-            {
-              label: "リリースノート",
-              translations: { en: "Release Notes" },
-              link: "https://github.com/shinolab/autd3-sdk/blob/main/CHANGELOG.md",
-              attrs: { target: "_blank", rel: "noopener" },
-            },
-          ],
-        },
-      ],
+      sidebar,
     }),
   ],
 });
