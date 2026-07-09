@@ -66,6 +66,35 @@ pub fn print_mem(m: &MemProfile) {
         per_send(m.bytes_allocated),
     );
     println!("  net bytes     : {net_bytes:>12}");
+
+    if m.top_sizes.is_empty() && m.large_count == 0 {
+        return;
+    }
+    println!();
+    println!("  allocation sizes (largest share of bytes first):");
+    println!(
+        "    {:>8}  {:>10}  {:>10}  {:>12}",
+        "size", "count", "per send", "bytes/send"
+    );
+    for bucket in &m.top_sizes {
+        let bytes = bucket.size as u64 * bucket.count;
+        println!(
+            "    {:>8}  {:>10}  {:>10.2}  {:>12.2}",
+            bucket.size,
+            bucket.count,
+            per_send(bucket.count),
+            per_send(bytes),
+        );
+    }
+    if m.large_count > 0 {
+        println!(
+            "    {:>8}  {:>10}  {:>10.2}  {:>12.2}",
+            ">=8192",
+            m.large_count,
+            per_send(m.large_count),
+            per_send(m.large_bytes),
+        );
+    }
 }
 
 pub fn write_csv(path: &Path, samples: &[Sample]) -> std::io::Result<()> {
