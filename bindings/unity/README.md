@@ -8,21 +8,22 @@ matching native cdylib. Minimum Unity version is **6 (6000.x)**.
 
 ```
 bindings/unity/
-  com.shinolab.autd3.core/          # AUTD3.Core   (autd3_core)
-  com.shinolab.autd3/               # AUTD3        (autd3capi), has Samples~/FocusSine
-  com.shinolab.autd3.pattern/       # AUTD3.Pattern
-  com.shinolab.autd3.pattern.holo/  # AUTD3.Pattern.Holo
-  com.shinolab.autd3.modulation/    # AUTD3.Modulation
-  com.shinolab.autd3.link.ethercrab/
-  com.shinolab.autd3.link.nop/
-  com.shinolab.autd3.link.remote/
-  com.shinolab.autd3.link.twincat/
-  com.shinolab.autd3.link.soem/     # GPL-3.0-only (opt-in; statically links SOEM)
+  com.shinolab.autd3-sdk.core/          # AUTD3.Core   (autd3_core)
+  com.shinolab.autd3-sdk/               # AUTD3        (autd3capi), has Samples~/FocusSine
+  com.shinolab.autd3-sdk.pattern/       # AUTD3.Pattern
+  com.shinolab.autd3-sdk.pattern.holo/  # AUTD3.Pattern.Holo
+  com.shinolab.autd3-sdk.modulation/    # AUTD3.Modulation
+  com.shinolab.autd3-sdk.link.ethercrab/
+  com.shinolab.autd3-sdk.link.nop/
+  com.shinolab.autd3-sdk.link.remote/
+  com.shinolab.autd3-sdk.link.twincat/
+  com.shinolab.autd3-sdk.link.soem/     # GPL-3.0-only (opt-in; statically links SOEM)
 ```
 
-Each package directory commits only `package.json`, `<Assembly>.asmdef`, `csc.rsp` and (for the
-client) `Samples~/`. The C# sources, native cdylibs under `Plugins/` and all `.meta` files are
-staged by `cargo xtask unity build` and are **git-ignored** (do not edit them in place).
+Each package directory commits only `package.json`, `<Assembly>.asmdef`, `csc.rsp`, `README.md`
+and (for the client) `Samples~/`. The C# sources, native cdylibs under `Plugins/`, the license
+notices and all `.meta` files are staged by `cargo xtask unity build` / `unity pack` and are
+**git-ignored** (do not edit them in place).
 
 ## Why each package ships a `csc.rsp`
 
@@ -48,18 +49,51 @@ compiler argument, so the file must contain flags only.
 csproj `<InternalsVisibleTo>` items, because Unity compiles via the `.asmdef` and never reads
 the csproj.
 
+## Install from npmjs
+
+The packages are published to the public npm registry. Add the scoped registry and the packages
+you need to your Unity project's `Packages/manifest.json`; sibling AUTD3 packages are resolved
+from the registry automatically.
+
+```json
+{
+  "scopedRegistries": [
+    { "name": "npmjs", "url": "https://registry.npmjs.org", "scopes": ["com.shinolab"] }
+  ],
+  "dependencies": {
+    "com.shinolab.autd3-sdk": "0.1.0",
+    "com.shinolab.autd3-sdk.link.ethercrab": "0.1.0"
+  }
+}
+```
+
+Packages served from `registry.npmjs.org` do **not** appear in the Package Manager's
+*My Registries* tab. Unity's package listing calls the legacy `/-/all` route, which npmjs does
+not implement. This affects listing only, not resolution: edit the manifest as above, or use
+**+ → Add package by name**.
+
+Versions are plain three-component SemVer and are kept in lockstep across all ten packages. The
+`major.minor` pair matches the SDK release the packages were built from; the patch component
+advances independently so that binding-only fixes can ship without an SDK release.
+
 ## Building the packages
 
 ```bash
 cargo xtask unity build            # stage sources + host cdylib + deterministic .meta
 cargo xtask unity build --soem     # also build/stage the GPL SOEM link
 cargo xtask unity build --manifest # also print manifest.json file: entries
+cargo xtask unity pack             # + license notices, then `npm pack` into dist/
 ```
 
 `unity build` does **not** require the Unity Editor. It builds the FFI cdylibs for the host
 platform and stages them into each package's `Plugins/<rid>/`.
 
-## Local install (before OpenUPM publish)
+`unity pack` additionally generates the license notices, runs `npm pack` per package and then
+unpacks each tarball to check it really carries the sources, `.meta` files and cdylibs. Pass
+`--native-dir <dir>` with `win-x64/`, `linux-x64/` and `osx-arm64/` subdirectories (as the
+release workflow does) to ship all three RIDs instead of only the host's.
+
+## Local install (`file:` references)
 
 Add every package to your Unity project's `Packages/manifest.json` as a `file:` reference
 (`cargo xtask unity build --manifest` prints these):
@@ -67,11 +101,11 @@ Add every package to your Unity project's `Packages/manifest.json` as a `file:` 
 ```json
 {
   "dependencies": {
-    "com.shinolab.autd3.core": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3.core",
-    "com.shinolab.autd3": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3",
-    "com.shinolab.autd3.pattern": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3.pattern",
-    "com.shinolab.autd3.modulation": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3.modulation",
-    "com.shinolab.autd3.link.nop": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3.link.nop"
+    "com.shinolab.autd3-sdk.core": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk.core",
+    "com.shinolab.autd3-sdk": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk",
+    "com.shinolab.autd3-sdk.pattern": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk.pattern",
+    "com.shinolab.autd3-sdk.modulation": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk.modulation",
+    "com.shinolab.autd3-sdk.link.nop": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk.link.nop"
   }
 }
 ```
@@ -80,7 +114,7 @@ Direct `file:` references take priority over registry resolution, so sibling dep
 satisfied as long as every referenced package is listed. Run `cargo xtask unity build` before
 opening the project so the sources, cdylibs and `.meta` exist.
 
-The `Focus Sine` sample (client package) additionally needs `com.shinolab.autd3.link.nop`.
+The `Focus Sine` sample (client package) additionally needs `com.shinolab.autd3-sdk.link.nop`.
 
 ## Coordinate system
 
@@ -103,4 +137,4 @@ written fully qualified as `new AUTD3.Link.Nop()`.
   not validated yet.
 - On Linux, EtherCAT raw sockets need `CAP_NET_RAW`; setting that on the Editor is impractical,
   so real-hardware use is primarily Windows (TwinCAT / ethercrab + Npcap).
-- `com.shinolab.autd3.link.soem` is GPL-3.0-only. Installing it makes the resulting build GPL.
+- `com.shinolab.autd3-sdk.link.soem` is GPL-3.0-only. Installing it makes the resulting build GPL.

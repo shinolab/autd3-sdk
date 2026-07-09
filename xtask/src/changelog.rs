@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::component::{COMPONENTS, Component, detect, release_sections};
-use crate::util::capture_lenient;
+use crate::util::{capture, capture_lenient};
 
 #[derive(Args)]
 pub struct ChangelogCmd {
@@ -43,6 +43,19 @@ fn scope_args(args: &mut Vec<String>, component: &Component) {
 fn write_release_notes(root: &Path, tag: &str, output: Option<&str>) -> Result<()> {
     let (primary, _) =
         detect(tag).with_context(|| format!("tag `{tag}` matches no known release component"))?;
+
+    if capture(
+        "git",
+        &["rev-parse", "-q", "--verify", &format!("refs/tags/{tag}")],
+        root,
+    )
+    .is_err()
+    {
+        bail!(
+            "tag `{tag}` does not exist in this repository; release notes would silently describe \
+             the previous release (create the tag first, or fetch tags with `fetch-depth: 0`)"
+        );
+    }
 
     let sections = release_sections(primary);
     let multi = sections.len() > 1;

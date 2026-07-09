@@ -1,5 +1,5 @@
 {
-  "name": "com.shinolab.autd3.pattern.holo",
+  "name": "com.shinolab.autd3-sdk.pattern.holo",
   "version": "0.1.0",
   "displayName": "AUTD3 Pattern Holo",
   "description": "AUTD3 multi-focus holographic patterns (Unity binding).",
@@ -10,6 +10,6 @@
     "url": "https://github.com/shinolab"
   },
   "dependencies": {
-    "com.shinolab.autd3.pattern": "0.1.0"
+    "com.shinolab.autd3-sdk.pattern": "0.1.0"
   }
 }

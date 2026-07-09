@@ -27,6 +27,7 @@ jobs:
       py: ${{ steps.filter.outputs.py }}
       ffi: ${{ steps.filter.outputs.ffi }}
       cs: ${{ steps.filter.outputs.cs }}
+      unity: ${{ steps.filter.outputs.unity }}
       license: ${{ steps.filter.outputs.license }}
       doc: ${{ steps.filter.outputs.doc }}
     steps:
@@ -109,6 +110,18 @@ jobs:
               - 'bindings/ffi/**'
               - 'crates/**'
               - '.github/workflows/ci-cs.yml'
+            unity:
+              - *shared
+              - *xtask-core
+              - 'xtask/src/unity.rs'
+              - 'xtask/src/license.rs'
+              - 'bindings/unity/**'
+              - 'bindings/csharp/src/**'
+              - 'bindings/ffi/**'
+              - 'crates/**'
+              - 'about.toml'
+              - 'about.hbs'
+              - '.github/workflows/ci-unity.yml'
             license:
               - *shared
               - *xtask-core
@@ -189,6 +202,12 @@ jobs:
     if: ${{ needs.changes.outputs.cs == 'true' }}
     uses: ./.github/workflows/ci-cs.yml
 
+  unity:
+    name: unity
+    needs: changes
+    if: ${{ needs.changes.outputs.unity == 'true' }}
+    uses: ./.github/workflows/ci-unity.yml
+
   license:
     name: license
     needs: changes
@@ -246,7 +265,7 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [rust, simulator, console, emulator, cpu, py, ffi, cs, license, doc, guard]
+    needs: [rust, simulator, console, emulator, cpu, py, ffi, cs, unity, license, doc, guard]
     runs-on: ubuntu-latest
     steps:
       - name: Verify no job failed
@@ -259,6 +278,7 @@ jobs:
             || [ "${{ needs.py.result }}" = "failure" ] \
             || [ "${{ needs.ffi.result }}" = "failure" ] \
             || [ "${{ needs.cs.result }}" = "failure" ] \
+            || [ "${{ needs.unity.result }}" = "failure" ] \
             || [ "${{ needs.license.result }}" = "failure" ] \
             || [ "${{ needs.doc.result }}" = "failure" ] \
             || [ "${{ needs.guard.result }}" != "success" ]; then

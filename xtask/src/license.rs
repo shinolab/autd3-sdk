@@ -19,7 +19,6 @@ const PY_MIT_WHEELS: &[&str] = &[
 ];
 const PY_SOEM_WHEEL: &str = "autd3-link-soem";
 
-// C# package directory -> the FFI crate whose cdylib that package ships.
 const CS_PACKAGES: &[(&str, &str)] = &[
     ("AUTD3.Core", "autd3-ffi-core"),
     ("AUTD3", "autd3-ffi"),
@@ -34,6 +33,31 @@ const CS_PACKAGES: &[(&str, &str)] = &[
 const CS_SOEM_PACKAGE: &str = "AUTD3.Link.Soem";
 const CS_SOEM_CRATE: &str = "autd3-ffi-link-soem";
 
+const UNITY_PACKAGES: &[(&str, &str)] = &[
+    ("com.shinolab.autd3-sdk.core", "autd3-ffi-core"),
+    ("com.shinolab.autd3-sdk", "autd3-ffi"),
+    ("com.shinolab.autd3-sdk.pattern", "autd3-ffi-pattern"),
+    (
+        "com.shinolab.autd3-sdk.pattern.holo",
+        "autd3-ffi-pattern-holo",
+    ),
+    ("com.shinolab.autd3-sdk.modulation", "autd3-ffi-modulation"),
+    (
+        "com.shinolab.autd3-sdk.link.ethercrab",
+        "autd3-ffi-link-ethercrab",
+    ),
+    (
+        "com.shinolab.autd3-sdk.link.remote",
+        "autd3-ffi-link-remote",
+    ),
+    (
+        "com.shinolab.autd3-sdk.link.twincat",
+        "autd3-ffi-link-twincat",
+    ),
+    ("com.shinolab.autd3-sdk.link.nop", "autd3-ffi-link-nop"),
+];
+const UNITY_SOEM_PACKAGE: &str = "com.shinolab.autd3-sdk.link.soem";
+
 const DENY_WORKSPACES: &[&str] = &[
     ".",
     "console",
@@ -45,12 +69,16 @@ const DENY_WORKSPACES: &[&str] = &[
 
 const THIRD_PARTY: &str = "THIRD-PARTY-LICENSES.md";
 
+fn soem_notice(license_file: &str) -> String {
+    SOEM_NOTICE.replace("{LICENSE_FILE}", license_file)
+}
+
 const SOEM_NOTICE: &str = "\
 # NOTICE — SOEM (GPL-3.0-only)
 
 This artifact statically links the Simple Open EtherCAT Master (SOEM) C library
 and is therefore distributed under the **GNU General Public License v3.0 only**.
-The full license text is provided alongside this file as `COPYING`.
+The full license text is provided alongside this file as `{LICENSE_FILE}`.
 
 ## SOEM copyright
 
@@ -88,6 +116,7 @@ pub enum GenTarget {
     All,
     Python,
     Csharp,
+    Unity,
     Console,
     Simulator,
 }
@@ -104,11 +133,13 @@ fn generate(root: &Path, target: GenTarget) -> Result<()> {
         GenTarget::All => {
             generate_python(root)?;
             generate_csharp(root)?;
+            generate_unity(root)?;
             generate_console(root)?;
             generate_simulator(root)?;
         }
         GenTarget::Python => generate_python(root)?,
         GenTarget::Csharp => generate_csharp(root)?,
+        GenTarget::Unity => generate_unity(root)?,
         GenTarget::Console => generate_console(root)?,
         GenTarget::Simulator => generate_simulator(root)?,
     }
@@ -141,8 +172,6 @@ fn ensure_about() -> Result<()> {
     Ok(())
 }
 
-// One THIRD-PARTY per wheel so each ships exactly its own deps (keeps GPL out of
-// the MIT wheels). Called by `cargo xtask py build` so wheels are always current.
 pub fn generate_python(root: &Path) -> Result<()> {
     ensure_about()?;
     let mit_license = root.join("LICENSE");
@@ -157,12 +186,10 @@ pub fn generate_python(root: &Path) -> Result<()> {
     let dir = py.join(PY_SOEM_WHEEL);
     about(root, &dir.join("Cargo.toml"), &dir.join(THIRD_PARTY))?;
     copy(&gpl_license, &dir.join("LICENSE"))?;
-    write(SOEM_NOTICE, &dir.join("NOTICE"))?;
+    write(&soem_notice("LICENSE"), &dir.join("NOTICE"))?;
     Ok(())
 }
 
-// One THIRD-PARTY per package, generated from the FFI crate whose cdylib that
-// package ships. soem additionally carries GPLv3 + NOTICE.
 pub fn generate_csharp(root: &Path) -> Result<()> {
     ensure_about()?;
     let gpl_license = root.join("crates/autd3-rs-link-soem/COPYING");
@@ -184,11 +211,37 @@ pub fn generate_csharp(root: &Path) -> Result<()> {
         &dir.join(THIRD_PARTY),
     )?;
     copy(&gpl_license, &dir.join("COPYING"))?;
-    write(SOEM_NOTICE, &dir.join("NOTICE"))?;
+    write(&soem_notice("COPYING"), &dir.join("NOTICE"))?;
     Ok(())
 }
 
-// Single crate, no copyleft / native deps. Called by `cargo xtask console bundle`.
+pub fn generate_unity(root: &Path) -> Result<()> {
+    ensure_about()?;
+    let mit_license = root.join("LICENSE");
+    let gpl_license = root.join("crates/autd3-rs-link-soem/COPYING");
+
+    let ffi = root.join("bindings/ffi");
+    let unity = root.join("bindings/unity");
+    for (pkg, krate) in UNITY_PACKAGES {
+        let dir = unity.join(pkg);
+        about(
+            root,
+            &ffi.join(krate).join("Cargo.toml"),
+            &dir.join(THIRD_PARTY),
+        )?;
+        copy(&mit_license, &dir.join("LICENSE.md"))?;
+    }
+    let dir = unity.join(UNITY_SOEM_PACKAGE);
+    about(
+        root,
+        &ffi.join(CS_SOEM_CRATE).join("Cargo.toml"),
+        &dir.join(THIRD_PARTY),
+    )?;
+    copy(&gpl_license, &dir.join("LICENSE.md"))?;
+    write(&soem_notice("LICENSE.md"), &dir.join("NOTICE"))?;
+    Ok(())
+}
+
 pub fn generate_console(root: &Path) -> Result<()> {
     ensure_about()?;
     let console = root.join("console");
