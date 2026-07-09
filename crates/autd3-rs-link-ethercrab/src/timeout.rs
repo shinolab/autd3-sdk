@@ -31,9 +31,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::future::Future;
-    use std::pin::Pin;
-    use std::task::{Context, Waker};
     use std::time::{Duration, Instant};
 
     use ethercrab::Timeouts;
@@ -50,6 +47,10 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn an_async_io_timer_with_an_infinite_duration_stays_pending() {
+        use std::future::Future;
+        use std::pin::Pin;
+        use std::task::{Context, Waker};
+
         let mut timer = async_io::Timer::after(Duration::MAX);
         let mut cx = Context::from_waker(Waker::noop());
         assert!(Pin::new(&mut timer).poll(&mut cx).is_pending());
