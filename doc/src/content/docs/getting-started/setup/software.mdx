@@ -8,6 +8,7 @@ sidebar:
 import CodeTabs from "@components/CodeTabs.astro";
 
 AUTD3 SDK は Rust で実装され, Python / C# 向けのバインディングも提供される.
+[Unity](#unity) 向けパッケージも提供される.
 各言語で提供されるパッケージは以下の通り.
 
 <CodeTabs>
@@ -47,3 +48,54 @@ AUTD3 SDK は Rust で実装され, Python / C# 向けのバインディング�
 - [AUTD3.Link.TwinCAT](https://www.nuget.org/packages/AUTD3.Link.TwinCAT/): TwinCAT ベースの Link
 </Fragment>
 </CodeTabs>
+
+## Unity
+
+Unity向けのパッケージは npm レジストリ ([npmjs](https://www.npmjs.com/package/com.shinolab.autd3-sdk)) で配布される.
+
+サポートされるUnity のバージョンは 6 (6000.x) 以降である.
+
+- [com.shinolab.autd3-sdk](https://www.npmjs.com/package/com.shinolab.autd3-sdk): クライアント本体
+- [com.shinolab.autd3-sdk.core](https://www.npmjs.com/package/com.shinolab.autd3-sdk.core): 基盤層
+- [com.shinolab.autd3-sdk.pattern](https://www.npmjs.com/package/com.shinolab.autd3-sdk.pattern): パターン計算 (単一焦点等)
+- [com.shinolab.autd3-sdk.pattern.holo](https://www.npmjs.com/package/com.shinolab.autd3-sdk.pattern.holo): 多焦点最適化
+- [com.shinolab.autd3-sdk.modulation](https://www.npmjs.com/package/com.shinolab.autd3-sdk.modulation): AM 変調計算
+- [com.shinolab.autd3-sdk.link.ethercrab](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.ethercrab): EtherCrab ベースの Link
+- [com.shinolab.autd3-sdk.link.soem](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.soem): SOEM ベースの Link ([GPL-3.0-only](/autd3-sdk/misc/license/))
+- [com.shinolab.autd3-sdk.link.remote](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.remote): リモート接続用の Link
+- [com.shinolab.autd3-sdk.link.twincat](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.twincat): TwinCAT ベースの Link
+- [com.shinolab.autd3-sdk.link.nop](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.nop): 何もしない Link (テスト用)
+
+### インストール
+
+Unity プロジェクトの `Packages/manifest.json` に scoped registry と必要なパッケージを追加する.
+
+```json
+{
+  "scopedRegistries": [
+    { 
+        "name": "npmjs",
+        "url": "https://registry.npmjs.org", 
+        "scopes": ["com.shinolab"]
+    }
+  ],
+  "dependencies": {
+    "com.shinolab.autd3-sdk": "0.2.0",
+    "com.shinolab.autd3-sdk.pattern": "0.2.0",
+    "com.shinolab.autd3-sdk.modulation": "0.2.0",
+    "com.shinolab.autd3-sdk.link.ethercrab": "0.2.0"
+  }
+}
+```
+
+GUIから行う場合は, **Edit → Project Settings → Package Manager → Scoped Registries** で 以下のレジストリを追加する.
+
+- Name: `npmjs`  
+- URL: `https://registry.npmjs.org`  
+- Scope(s): `com.shinolab`
+
+その後, **Window → Package Manager → My registries → npmjs** から必要なパッケージを追加する.
+
+:::note
+Unity版のAPIは左手系かつ単位がメートルになっている
+:::
