@@ -65,18 +65,18 @@ pub enum SimulatorCmd {
     },
 }
 
-pub fn run_simulator(root: &Path, cmd: SimulatorCmd) -> Result<()> {
+pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
     let sim = root.join("simulator");
     let frontend = sim.join("frontend");
     match cmd {
         SimulatorCmd::Build { debug } => {
             crate::license::generate_simulator(root)?;
             let mut args = vec!["build"];
-            if !debug {
+            if !*debug {
                 args.push("--release");
             }
             run("cargo", args, &sim)?;
-            build_frontend(&frontend, debug)
+            build_frontend(&frontend, *debug)
         }
         SimulatorCmd::Lint => {
             run(
@@ -108,7 +108,7 @@ pub fn run_simulator(root: &Path, cmd: SimulatorCmd) -> Result<()> {
         }
         SimulatorCmd::Format { fix } => {
             let mut args = vec!["fmt", "--all"];
-            if !fix {
+            if !*fix {
                 args.push("--");
                 args.push("--check");
             }
@@ -121,7 +121,15 @@ pub fn run_simulator(root: &Path, cmd: SimulatorCmd) -> Result<()> {
             skip_web_build,
             port,
             link_port,
-        } => run_serve(&sim, &frontend, debug, open, skip_web_build, port, link_port),
+        } => run_serve(
+            &sim,
+            &frontend,
+            *debug,
+            *open,
+            *skip_web_build,
+            *port,
+            *link_port,
+        ),
     }
 }
 

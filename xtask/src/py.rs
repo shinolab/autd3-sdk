@@ -71,7 +71,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
                 if !debug {
                     args.push("--release");
                 }
-                if NATIVE_LIB_WHEELS.contains(&wheel) {
+                if NATIVE_LIB_WHEELS.contains(wheel) {
                     args.push("--auditwheel");
                     args.push("warn");
                 }
