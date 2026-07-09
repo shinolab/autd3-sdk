@@ -1,5 +1,5 @@
 {
-  "name": "com.shinolab.autd3.link.remote",
+  "name": "com.shinolab.autd3-sdk.link.remote",
   "version": "0.1.0",
   "displayName": "AUTD3 Link Remote",
   "description": "AUTD3 remote transport link (Unity binding).",
@@ -10,6 +10,6 @@
     "url": "https://github.com/shinolab"
   },
   "dependencies": {
-    "com.shinolab.autd3": "0.1.0"
+    "com.shinolab.autd3-sdk": "0.1.0"
   }
 }
