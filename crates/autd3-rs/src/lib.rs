@@ -17,8 +17,8 @@ pub use autd3_rs_core::value::{
 };
 
 pub use autd3_rs_core::{
-    Angle, Autd3, Autd3Unity, BankLoop, Cmd, ConstStateChecker, CycleOutcome, Device, DeviceState,
-    Error, FirmwareState, Freq, Geometry, Interface, IntoLink, Length, Link, LinkStats, LinkStatus,
+    Angle, Autd3, BankLoop, Cmd, ConstStateChecker, CycleOutcome, Device, DeviceState, Error,
+    FirmwareState, Freq, Geometry, Interface, IntoLink, Length, Link, LinkStats, LinkStatus,
     MAX_IN_FLIGHT, PAYLOAD_BYTES, Point3, Quaternion, RX_FRAME_BYTES, RxFrame, Seq, SilencerAxis,
     SilencerGuardState, SilencerViolation, StateCheck, TX_FRAME_BYTES, TransitionGuardState,
     TransitionViolation, TxFrame, UnitQuaternion, UnitVector3, Vector3, Velocity, offset, point,

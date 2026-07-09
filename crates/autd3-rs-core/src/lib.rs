@@ -11,8 +11,8 @@ pub use common::units;
 pub use common::{Angle, Freq, Length, Velocity};
 pub use error::Error;
 pub use geometry::{
-    Autd3, Autd3Unity, Device, Geometry, Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3,
-    offset, point,
+    Autd3, Device, Geometry, Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3, offset,
+    point,
 };
 pub use link::{
     ConstStateChecker, CycleOutcome, DeviceState, Interface, IntoLink, Link, LinkStats, LinkStatus,
