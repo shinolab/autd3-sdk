@@ -1,9 +1,7 @@
 mod autd3;
-mod autd3_unity;
 mod device;
 
 pub use autd3::Autd3;
-pub use autd3_unity::Autd3Unity;
 pub use device::Device;
 pub use nalgebra::{Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3};
 
