@@ -91,6 +91,7 @@ pub fn run_simulator(root: &Path, cmd: SimulatorCmd) -> Result<()> {
                 ],
                 &sim,
             )?;
+            ensure_css(&frontend)?;
             run(
                 "cargo",
                 [
@@ -124,6 +125,16 @@ pub fn run_simulator(root: &Path, cmd: SimulatorCmd) -> Result<()> {
     }
 }
 
+fn ensure_css(frontend: &Path) -> Result<()> {
+    if !on_path("npm") {
+        bail!("`npm` not found on PATH (needed to build Tailwind/daisyUI CSS).");
+    }
+    if !frontend.join("node_modules").is_dir() {
+        run_tool("npm", ["install"], frontend)?;
+    }
+    run_tool("npm", ["run", "css"], frontend)
+}
+
 fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
     if !on_path("dx") {
         bail!(
@@ -131,13 +142,7 @@ fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
              `cargo install dioxus-cli@^0.7`."
         );
     }
-    if !on_path("npm") {
-        bail!("`npm` not found on PATH (needed to build Tailwind/daisyUI CSS).");
-    }
-    if !frontend.join("node_modules").is_dir() {
-        run_tool("npm", ["install"], frontend)?;
-    }
-    run_tool("npm", ["run", "css"], frontend)?;
+    ensure_css(frontend)?;
     let mut dx_args = vec!["build", "--platform", "web"];
     if !debug {
         dx_args.extend(["--release", "--debug-symbols", "false"]);
