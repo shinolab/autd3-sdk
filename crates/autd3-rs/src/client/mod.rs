@@ -1,13 +1,13 @@
+mod completion;
 mod config;
 mod pool;
-mod response_future;
 mod rt;
 
 #[cfg(test)]
 mod tests;
 
+pub use completion::ResponseFuture;
 pub use config::{ClientConfig, MAX_DEVICES};
-pub use response_future::ResponseFuture;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, PoisonError};
@@ -28,6 +28,7 @@ use crate::operation::{Clear, Distribution, Synchronize};
 use crate::protocol::{Cmd, DeviceErrorCode};
 use crate::value::Emission;
 
+use completion::CompletionPool;
 use pool::SlotPool;
 use rt::CmdMessage;
 
@@ -35,6 +36,7 @@ pub struct Client {
     cmd_tx: mpsc::Sender<CmdMessage>,
     num_devices: usize,
     pool: Arc<SlotPool>,
+    completions: Arc<CompletionPool>,
     join: std::sync::Mutex<Option<JoinHandle<()>>>,
     closed: Arc<AtomicBool>,
     mirror: Arc<std::sync::Mutex<Mirror>>,
@@ -87,6 +89,7 @@ impl Client {
 
         let checker = link.state_checker();
         let pool = SlotPool::new(num_devices, config.max_inflight.get());
+        let completions = CompletionPool::new(config.max_inflight.get());
 
         let (cmd_tx, cmd_rx) = mpsc::channel::<CmdMessage>(1);
         let (hs_done_tx, hs_done_rx) = oneshot::channel::<Result<(), String>>();
@@ -107,6 +110,7 @@ impl Client {
                     cmd_tx,
                     num_devices,
                     pool,
+                    completions,
                     join: std::sync::Mutex::new(Some(join)),
                     closed,
                     mirror: Arc::new(std::sync::Mutex::new(Mirror::Desynced)),
@@ -217,7 +221,7 @@ impl Client {
     }
 
     async fn dispatch(&self, slot: pool::Slot, exclusive: bool) -> Result<ResponseFuture, Error> {
-        let (response_tx, response_rx) = oneshot::channel();
+        let (response_tx, response_rx) = self.completions.channel();
         if let Err(e) = self
             .cmd_tx
             .send(CmdMessage {
@@ -230,7 +234,7 @@ impl Client {
             self.pool.release(e.0.frame);
             return Err(Error::RtClosed);
         }
-        Ok(ResponseFuture { rx: response_rx })
+        Ok(response_rx)
     }
 
     async fn synchronize(&self) -> Result<(), Error> {
@@ -258,7 +262,8 @@ impl Client {
             .send_broadcast_exclusive(&Datagram::no_payload(cmd))
             .await?
             .await?
-            .data)
+            .data()
+            .to_vec())
     }
 
     pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
@@ -319,9 +324,9 @@ impl Client {
             .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadFpgaState))
             .await?
             .await?
-            .data
-            .into_iter()
-            .map(FpgaState)
+            .data()
+            .iter()
+            .map(|&state| FpgaState(state))
             .collect())
     }
 

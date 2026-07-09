@@ -507,7 +507,7 @@ async fn multi_device_per_device_payloads_yield_per_device_results() {
         .await
         .unwrap();
     let resp = fut.await.unwrap();
-    assert_eq!(resp.data, vec![0, ERR_INVALID_DATA]);
+    assert_eq!(resp.data(), [0, ERR_INVALID_DATA]);
 }
 
 #[tokio::test]
@@ -568,8 +568,8 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
     }
     for f in futs {
         assert_eq!(
-            f.await.unwrap().data,
-            vec![0xB0, 0xB1],
+            f.await.unwrap().data(),
+            [0xB0, 0xB1],
             "resync must recover as success with per-device data"
         );
     }
@@ -672,8 +672,8 @@ async fn two_stage_await_resolves_in_order() {
         .unwrap();
     let r1 = f1.await.unwrap();
     let r2 = f2.await.unwrap();
-    assert_eq!(r1.data, vec![0xAA]);
-    assert_eq!(r2.data, vec![0xBB]);
+    assert_eq!(r1.data(), [0xAA]);
+    assert_eq!(r2.data(), [0xBB]);
 }
 
 #[tokio::test]
@@ -701,10 +701,10 @@ async fn pipeline_continues_after_device_error_in_the_middle() {
         .await
         .unwrap();
 
-    assert_eq!(f1.await.unwrap().data, vec![0x42]);
+    assert_eq!(f1.await.unwrap().data(), [0x42]);
     let mid = f2.await.unwrap();
-    assert_eq!(mid.data, vec![ERR_INVALID_DATA]);
-    assert_eq!(f3.await.unwrap().data, vec![0x42]);
+    assert_eq!(mid.data(), [ERR_INVALID_DATA]);
+    assert_eq!(f3.await.unwrap().data(), [0x42]);
 }
 
 #[tokio::test]
@@ -741,8 +741,8 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
     }
     for f in futs {
         assert_eq!(
-            f.await.unwrap().data,
-            vec![0xAB],
+            f.await.unwrap().data(),
+            [0xAB],
             "resync must recover as success"
         );
     }
@@ -842,8 +842,8 @@ async fn inflight_held_across_stale_recovers_without_reset() {
         .await
         .unwrap();
     assert_eq!(
-        fut.await.unwrap().data,
-        vec![0xAB],
+        fut.await.unwrap().data(),
+        [0xAB],
         "held in-flight must recover after the stale burst, not time out"
     );
     let s = slave.lock().unwrap();
@@ -894,8 +894,8 @@ async fn streaming_holds_window_across_stale_and_recovers() {
     }
     for f in futs {
         assert_eq!(
-            f.await.unwrap().data,
-            vec![0xAB],
+            f.await.unwrap().data(),
+            [0xAB],
             "every held in-flight must recover after the stale burst"
         );
     }
@@ -917,8 +917,8 @@ async fn frozen_ahead_desync_recovers_via_reset_resync() {
         .await
         .unwrap();
     assert_eq!(
-        fut.await.unwrap().data,
-        vec![0xCD],
+        fut.await.unwrap().data(),
+        [0xCD],
         "Reset re-sync must recover the desync instead of waiting for SEQ wraparound"
     );
     assert!(

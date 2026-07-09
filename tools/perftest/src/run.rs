@@ -319,7 +319,7 @@ async fn run_streaming(
         let res = entry.fut.await;
         let rtt = entry.sent_at.elapsed();
         let status = match res {
-            Ok(resp) => match resp.data.iter().find(|&&d| d != 0) {
+            Ok(resp) => match resp.data().iter().find(|&&d| d != 0) {
                 None => SampleStatus::Ok,
                 Some(&code) => SampleStatus::DeviceError(code),
             },

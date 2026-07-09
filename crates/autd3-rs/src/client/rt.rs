@@ -11,12 +11,13 @@ use crate::protocol::{
 };
 use crate::response::Response;
 
+use super::completion::CompletionSender;
 use super::config::{ClientConfig, MAX_DEVICES};
 use super::pool::{Slot, SlotPool};
 
 pub(super) struct CmdMessage {
     pub(super) frame: Slot,
-    pub(super) response_tx: oneshot::Sender<Result<Response, Error>>,
+    pub(super) response_tx: CompletionSender,
     pub(super) exclusive: bool,
 }
 
@@ -26,7 +27,7 @@ struct InFlight {
     acked: u128,
     age: u32,
     exclusive: bool,
-    response_tx: oneshot::Sender<Result<Response, Error>>,
+    response_tx: CompletionSender,
 }
 
 fn stage_frame(seq: Seq, frame: &Slot, tx_bufs: &mut [[u8; TX_FRAME_BYTES]]) {
@@ -327,11 +328,11 @@ impl<L: Link> RtThread<L> {
             Err(e) => {
                 let msg = format!("link cycle failed: {e}");
                 if let Some(held) = self.held_exclusive.take() {
-                    let _ = held.response_tx.send(Err(Error::Link(msg.clone())));
+                    held.response_tx.send(Err(Error::Link(msg.clone())));
                     self.pool.release(held.frame);
                 }
                 for entry in self.pending.drain(..) {
-                    let _ = entry.response_tx.send(Err(Error::Link(msg.clone())));
+                    entry.response_tx.send(Err(Error::Link(msg.clone())));
                     self.pool.release(entry.frame);
                 }
                 Err(())
@@ -405,9 +406,9 @@ impl<L: Link> RtThread<L> {
             .is_some_and(|entry| entry.acked == self.all_acked)
         {
             let entry = self.pending.pop_front().expect("just checked");
-            let _ = entry.response_tx.send(Ok(Response {
-                data: entry.frame.data().to_vec(),
-            }));
+            entry
+                .response_tx
+                .send(Ok(Response::from_slice(entry.frame.data())));
             self.pool.release(entry.frame);
             progressed = true;
         }
@@ -418,7 +419,7 @@ impl<L: Link> RtThread<L> {
 
     fn fail_pending_timeout(&mut self) {
         for entry in self.pending.drain(..) {
-            let _ = entry.response_tx.send(Err(Error::Timeout {
+            entry.response_tx.send(Err(Error::Timeout {
                 cycles: self.config.timeout_cycles,
             }));
             self.pool.release(entry.frame);
@@ -427,15 +428,15 @@ impl<L: Link> RtThread<L> {
 
     fn teardown(&mut self) {
         if let Some(msg) = self.held_exclusive.take() {
-            let _ = msg.response_tx.send(Err(Error::RtClosed));
+            msg.response_tx.send(Err(Error::RtClosed));
             self.pool.release(msg.frame);
         }
         for entry in self.pending.drain(..) {
-            let _ = entry.response_tx.send(Err(Error::RtClosed));
+            entry.response_tx.send(Err(Error::RtClosed));
             self.pool.release(entry.frame);
         }
         while let Ok(msg) = self.cmd_rx.try_recv() {
-            let _ = msg.response_tx.send(Err(Error::RtClosed));
+            msg.response_tx.send(Err(Error::RtClosed));
             self.pool.release(msg.frame);
         }
     }
