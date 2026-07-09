@@ -50,10 +50,12 @@ struct TxRxWorker {
 }
 
 // The upstream unix tx/rx task allocates a fresh MTU-sized receive buffer on
-// every poll, so Linux uses our own task with a reusable buffer instead.
+// every poll, so Linux and macOS use our own task with a reusable buffer instead.
 #[cfg(target_os = "linux")]
 use crate::linux::tx_rx_task;
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(target_os = "macos")]
+use crate::macos::tx_rx_task;
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
 use ethercrab::std::tx_rx_task;
 
 #[cfg(not(target_os = "windows"))]

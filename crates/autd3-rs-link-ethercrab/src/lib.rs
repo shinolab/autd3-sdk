@@ -4,6 +4,8 @@ mod join;
 mod link;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
 mod option;
 mod state_check;
 mod status;
