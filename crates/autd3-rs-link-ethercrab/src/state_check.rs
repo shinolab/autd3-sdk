@@ -43,13 +43,13 @@ impl StateChecker {
         };
         let was_all_op = self.states.iter().all(|s| *s == DeviceState::Op);
         for (device, &address) in self.addresses.iter().enumerate() {
-            let (new_state, al_status_code) = Box::pin(resolve_state(
+            let (new_state, al_status_code) = resolve_state(
                 &maindevice,
                 address,
                 device,
                 self.pdu_timeout,
                 self.states[device],
-            ))
+            )
             .await;
             if new_state != self.states[device] {
                 let diagnostics = load_cycle_diagnostics(&self.diagnostics);
