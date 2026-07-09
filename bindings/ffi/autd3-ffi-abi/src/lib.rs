@@ -89,15 +89,18 @@ mod client {
                     match merged.as_mut() {
                         None => merged = Some(response),
                         Some(m) => {
-                            m.data.iter_mut().zip(response.data).for_each(|(m, d)| {
-                                if *m == 0 {
-                                    *m = d;
-                                }
-                            });
+                            m.data_mut()
+                                .iter_mut()
+                                .zip(response.data().iter().copied())
+                                .for_each(|(m, d)| {
+                                    if *m == 0 {
+                                        *m = d;
+                                    }
+                                });
                         }
                     }
                 }
-                Ok(merged.unwrap_or(Response { data: Vec::new() }))
+                Ok(merged.unwrap_or_default())
             }))
         }
     }
