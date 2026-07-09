@@ -1,6 +1,6 @@
 use autd3_rs_core::link::{CycleOutcome, Link};
 use autd3_rs_core::protocol::{Cmd, RX_FRAME_BYTES, Seq, TX_FRAME_BYTES, TxFrame};
-use autd3_rs_firmware_emulator::{Audit, Device};
+use autd3_rs_firmware_emulator::{Audit, Device, cpu_fw_version, fpga_fw_version};
 
 const NUM_TRANSDUCERS: usize = 249;
 
@@ -20,20 +20,21 @@ fn reset_acks_with_sentinel() {
 
 #[test]
 fn reads_cpu_firmware_version() {
+    let (expected_major, expected_minor, expected_patch) = cpu_fw_version();
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset));
 
     let major = device.send(&frame(0, Cmd::ReadCpuFwVersionMajor));
     assert_eq!(major.ack, Seq::new(0));
-    assert_eq!(major.data, 0);
+    assert_eq!(major.data, expected_major);
 
     let minor = device.send(&frame(1, Cmd::ReadCpuFwVersionMinor));
     assert_eq!(minor.ack, Seq::new(1));
-    assert_eq!(minor.data, 1);
+    assert_eq!(minor.data, expected_minor);
 
     let patch = device.send(&frame(2, Cmd::ReadCpuFwVersionPatch));
     assert_eq!(patch.ack, Seq::new(2));
-    assert_eq!(patch.data, 0);
+    assert_eq!(patch.data, expected_patch);
 }
 
 #[test]
@@ -58,7 +59,7 @@ fn reads_fpga_firmware_version() {
 #[test]
 fn fpga_reports_version_after_init() {
     let device = Device::new(NUM_TRANSDUCERS);
-    assert_eq!(device.fpga().fpga_version(), (0, 1, 0));
+    assert_eq!(device.fpga().fpga_version(), fpga_fw_version());
 }
 
 #[test]
