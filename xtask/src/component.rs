@@ -33,6 +33,13 @@ pub const COMPONENTS: &[Component] = &[
         also_shipped_by: &["v"],
     },
     Component {
+        name: "unity",
+        section: "Unity",
+        tag_prefix: "unity-v",
+        include_paths: &["bindings/unity/**"],
+        also_shipped_by: &["cs-v", "v"],
+    },
+    Component {
         name: "simulator",
         section: "Simulator",
         tag_prefix: "simulator-v",

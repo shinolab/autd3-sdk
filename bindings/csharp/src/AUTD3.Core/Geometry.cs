@@ -36,7 +36,7 @@ namespace AUTD3
             {
                 var xyz = new float[3];
                 NativeCore.autd3_core_geometry_center(Handle, xyz);
-                return new Vector3(xyz[0], xyz[1], xyz[2]);
+                return Coords.FromPointArray(xyz);
             }
         }
 
@@ -97,7 +97,7 @@ namespace AUTD3
             {
                 var wijk = new float[4];
                 NativeCore.autd3_core_device_rotation(_geometry, _dev, wijk);
-                return new Quaternion(wijk[1], wijk[2], wijk[3], wijk[0]);
+                return Coords.FromRotation(new System.Numerics.Quaternion(wijk[1], wijk[2], wijk[3], wijk[0]));
             }
         }
 
@@ -107,7 +107,7 @@ namespace AUTD3
             {
                 var xyz = new float[3];
                 NativeCore.autd3_core_device_center(_geometry, _dev, xyz);
-                return new Vector3(xyz[0], xyz[1], xyz[2]);
+                return Coords.FromPointArray(xyz);
             }
         }
 
@@ -122,7 +122,7 @@ namespace AUTD3
             var xyz = new float[3];
             if (NativeCore.autd3_core_transducer_position(_geometry, _dev, (UIntPtr)tr, xyz) != 0)
                 throw new ArgumentOutOfRangeException(nameof(tr));
-            return new Vector3(xyz[0], xyz[1], xyz[2]);
+            return Coords.FromPointArray(xyz);
         }
 
         public Vector3 Direction(int tr)
@@ -130,7 +130,7 @@ namespace AUTD3
             var xyz = new float[3];
             if (NativeCore.autd3_core_transducer_direction(_geometry, _dev, (UIntPtr)tr, xyz) != 0)
                 throw new ArgumentOutOfRangeException(nameof(tr));
-            return new Vector3(xyz[0], xyz[1], xyz[2]);
+            return Coords.FromDirArray(xyz);
         }
 
         public Vector3[] Positions
@@ -161,7 +161,7 @@ namespace AUTD3
         {
             var xyz = new float[3];
             native(_geometry, _dev, xyz);
-            return new Vector3(xyz[0], xyz[1], xyz[2]);
+            return Coords.FromDirArray(xyz);
         }
     }
 }

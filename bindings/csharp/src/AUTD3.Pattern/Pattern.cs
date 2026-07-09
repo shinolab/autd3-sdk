@@ -311,7 +311,7 @@ namespace AUTD3
 
         public static void Focus(Geometry geometry, Vector3 target, Length wavelength, FocusOption option, PatternBuffer dst)
         {
-            var t = new[] { target.X, target.Y, target.Z };
+            var t = Coords.PointArray(target);
             var o = option.ToNative();
             if (NativePattern.autd3_pattern_focus(geometry.Handle, t, wavelength.Mm, in o, dst.Handle) != 0)
             {
@@ -327,7 +327,7 @@ namespace AUTD3
             var native = ToNativeDst(dst);
             var o = option.ToNative();
             if (NativePattern.autd3_pattern_focus_device(device.GeometryHandle, device.DeviceIndex,
-                new[] { target.X, target.Y, target.Z }, wavelength.Mm, in o, native) != 0)
+                Coords.PointArray(target), wavelength.Mm, in o, native) != 0)
             {
                 throw new Autd3Exception("focus_device failed");
             }
@@ -338,8 +338,8 @@ namespace AUTD3
         {
             var o = option.ToNative();
             if (NativePattern.autd3_pattern_focus_transducer(
-                new[] { position.X, position.Y, position.Z },
-                new[] { target.X, target.Y, target.Z }, wavelength.Mm, in o, out var e) != 0)
+                Coords.PointArray(position),
+                Coords.PointArray(target), wavelength.Mm, in o, out var e) != 0)
             {
                 throw new Autd3Exception("focus_transducer failed");
             }
@@ -348,7 +348,7 @@ namespace AUTD3
 
         public static void Plane(Geometry geometry, Vector3 dir, Length wavelength, PlaneOption option, PatternBuffer dst)
         {
-            var d = new[] { dir.X, dir.Y, dir.Z };
+            var d = Coords.DirArray(dir);
             var o = option.ToNative();
             if (NativePattern.autd3_pattern_plane(geometry.Handle, d, wavelength.Mm, in o, dst.Handle) != 0)
             {
@@ -361,7 +361,7 @@ namespace AUTD3
             var native = ToNativeDst(dst);
             var o = option.ToNative();
             if (NativePattern.autd3_pattern_plane_device(device.GeometryHandle, device.DeviceIndex,
-                new[] { dir.X, dir.Y, dir.Z }, wavelength.Mm, in o, native) != 0)
+                Coords.DirArray(dir), wavelength.Mm, in o, native) != 0)
             {
                 throw new Autd3Exception("plane_device failed");
             }
@@ -372,8 +372,8 @@ namespace AUTD3
         {
             var o = option.ToNative();
             if (NativePattern.autd3_pattern_plane_transducer(
-                new[] { position.X, position.Y, position.Z },
-                new[] { dir.X, dir.Y, dir.Z }, wavelength.Mm, in o, out var e) != 0)
+                Coords.PointArray(position),
+                Coords.DirArray(dir), wavelength.Mm, in o, out var e) != 0)
             {
                 throw new Autd3Exception("plane_transducer failed");
             }
@@ -382,8 +382,8 @@ namespace AUTD3
 
         public static void Bessel(Geometry geometry, Vector3 apex, Vector3 dir, Angle theta, Length wavelength, BesselOption option, PatternBuffer dst)
         {
-            var a = new[] { apex.X, apex.Y, apex.Z };
-            var d = new[] { dir.X, dir.Y, dir.Z };
+            var a = Coords.PointArray(apex);
+            var d = Coords.DirArray(dir);
             var o = option.ToNative();
             if (NativePattern.autd3_pattern_bessel(geometry.Handle, a, d, theta.Radian, wavelength.Mm, in o, dst.Handle) != 0)
             {
@@ -396,8 +396,8 @@ namespace AUTD3
             var native = ToNativeDst(dst);
             var o = option.ToNative();
             if (NativePattern.autd3_pattern_bessel_device(device.GeometryHandle, device.DeviceIndex,
-                new[] { apex.X, apex.Y, apex.Z },
-                new[] { dir.X, dir.Y, dir.Z }, theta.Radian, wavelength.Mm, in o, native) != 0)
+                Coords.PointArray(apex),
+                Coords.DirArray(dir), theta.Radian, wavelength.Mm, in o, native) != 0)
             {
                 throw new Autd3Exception("bessel_device failed");
             }
@@ -408,9 +408,9 @@ namespace AUTD3
         {
             var o = option.ToNative();
             if (NativePattern.autd3_pattern_bessel_transducer(
-                new[] { position.X, position.Y, position.Z },
-                new[] { apex.X, apex.Y, apex.Z },
-                new[] { dir.X, dir.Y, dir.Z }, theta.Radian, wavelength.Mm, in o, out var e) != 0)
+                Coords.PointArray(position),
+                Coords.PointArray(apex),
+                Coords.DirArray(dir), theta.Radian, wavelength.Mm, in o, out var e) != 0)
             {
                 throw new Autd3Exception("bessel_transducer failed");
             }
