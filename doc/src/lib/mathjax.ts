@@ -69,16 +69,53 @@ const packages = [
   "textmacros",
 ];
 
+const macros: Record<string, string | [string, number]> = {
+  SI: ["{#1\\,\\mathrm{#2}}", 2],
+  rme: "\\mathrm{e}",
+  im: "\\mathrm{i}",
+  bzero: "\\boldsymbol{0}",
+  bone: "\\boldsymbol{1}",
+  ba: "\\boldsymbol{a}",
+  boldf: "\\boldsymbol{f}",
+  bk: "\\boldsymbol{k}",
+  bp: "\\boldsymbol{p}",
+  bq: "\\boldsymbol{q}",
+  br: "\\boldsymbol{r}",
+  bu: "\\boldsymbol{u}",
+  bv: "\\boldsymbol{v}",
+  bx: "\\boldsymbol{x}",
+  by: "\\boldsymbol{y}",
+  bz: "\\boldsymbol{z}",
+  bS: "\\boldsymbol{S}",
+  bgamma: "\\boldsymbol{\\gamma}",
+  btheta: "\\boldsymbol{\\theta}",
+  bphi: "\\boldsymbol{\\phi}",
+  bpsi: "\\boldsymbol{\\psi}",
+  bxi: "\\boldsymbol{\\xi}",
+  trans: "^\\mathsf{T}",
+  hermite: "^\\dagger",
+  ufreq: "\\SI{40}{kHz}",
+  clkf: "\\SI{10.24}{MHz}",
+  sinc: "\\mathrm{sinc}",
+  diag: "\\mathrm{diag}",
+  diff: ["\\frac{\\mathrm{d}#1}{\\mathrm{d}#2}", 2],
+  pdiff: ["\\frac{\\partial#1}{\\partial#2}", 2],
+  pdiffs: ["\\frac{\\partial^2#1}{\\partial#2^2}", 2],
+};
+
 const adaptor = liteAdaptor();
 RegisterHTMLHandler(adaptor);
 
-const tex = new TeX({ packages });
+const tex = new TeX({ packages, macros });
 const svg = new SVG({
   fontCache: "none",
   fontData: MathJaxNewcmFont,
   linebreaks: { inline: false },
 });
 const doc = mathjax.document("", { InputJax: tex, OutputJax: svg });
+
+mathjax.asyncLoad = (name: string) => import(/* @vite-ignore */ name);
+await (svg as unknown as { font: { loadDynamicFiles(): Promise<unknown> } }).font.loadDynamicFiles();
 
 export function renderTeX(source: string, display: boolean): string {
   const node = doc.convert(source, { display });

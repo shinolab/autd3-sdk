@@ -1,0 +1,96 @@
+---
+title: FPGA ファームウェア
+description: AUTD3 の FPGA ファームウェアの概要と信号生成の流れ
+sidebar:
+  order: 0
+---
+
+import Mermaid from "@components/Mermaid.astro";
+import Math from "@components/Math.astro";
+
+以下では, FPGA のファームウェアについて説明する.
+対象は Firmware v0.2.x である.
+
+ソースは `firmware/fpga/rtl/sources_1/new/` 以下にあり, SystemVerilog で記述されている.
+
+## 開発環境構築
+
+FPGA の開発には Vivado 2026.1 を使用している.
+ML Edition は無料 (要登録) なので各自インストールされたい.
+インストール時に Design Tools の "Vivado" と Device の "Artix-7", 及び, Cable Drivers (Configuration をするなら) をインストールすること.
+Vitis は必要ない.
+
+FPGA に関する作業はすべて `autd3-sdk/` ディレクトリ内で `cargo xtask` 経由で実行する.
+
+```bash
+cargo xtask fpga project        # Vivado プロジェクト生成
+cargo xtask fpga build          # 合成 → 実装 → bitstream → autd3-fpga.mcs
+cargo xtask fpga build --force  # bitstream があっても合成からやり直す
+cargo xtask fpga flash          # build → configuration
+cargo xtask fpga clean
+```
+
+`cargo xtask fpga project` を実行すると `autd3-fpga.xpr` が生成されるので, GUI で作業したい場合はこれを Vivado で開けばよい.
+
+`cargo xtask fpga build` は bitstream からコンフィグレーションファイル (`.mcs`) を生成する.
+bitstream がない場合は合成, 実装を行う.
+合成からやり直したい場合は `--force` を付ける.
+
+:::note
+`vivado` コマンドや tcl コマンドの使い方は AMD の User's Guide ([UG835](https://docs.amd.com/r/en-US/ug835-vivado-tcl-commands), [UG910](https://docs.amd.com/r/en-US/ug910-vivado-getting-started)) を参照されたい.
+:::
+
+## クロック
+
+FPGA には <Math tex="\SI{25.6}{MHz}" /> の水晶振動子 (`MRCC_25P6M`) が接続されている.
+これを Mixed-Mode Clock Manager で <Math tex="\SI{20.48}{MHz}" /> に変換したものを **メインクロック** として使用する.
+以下, 単に「メインクロック」と書いた場合はこれを指す.
+
+CPU ボードとのバス (`CPU_CKIO`) は <Math tex="\SI{75}{MHz}" /> の別クロックドメインである.
+
+## 信号生成の流れ
+
+FPGA における信号生成の流れを以下に示す.
+なお, あくまで概念図なので実際の実装とは都合により異なる.
+
+<Mermaid
+  title="FPGA 内部の概要図"
+  code={`flowchart LR
+  SYNC["Synchronizer"]
+  TCG["Time Count Generator"]
+  EM["Emission"]
+  MOD["Modulation"]
+  PC["Phase Correction"]
+  SIL["Silencer"]
+  PWE["Pulse Width Encoder"]
+  PWM["PWM"]
+  OUT(["PWM_OUT"])
+  SYNC -- SYS_TIME --> TCG
+  TCG -- UPDATE --> EM
+  SYNC -- SYS_TIME --> EM
+  SYNC -- SYS_TIME --> MOD
+  TCG -- TIME_CNT --> PWM
+  EM -- Intensity --> MOD
+  EM -- Phase --> PC
+  MOD --> SIL
+  PC --> SIL
+  SIL --> PWE
+  PWE --> PWM
+  PWM --> OUT`}
+/>
+
+CPU から送られてきたデータはすべて `Memory` モジュール内の Block RAM (BRAM) に格納される.
+
+`Emission` モジュールは一定のサンプリングレートで振動子毎の強度/位相データを BRAM からサンプリングする.
+その後, 強度データは `Modulation` モジュール内で変調データと掛け合わされる.
+続けて, 強度データは `Silencer` モジュールにより静音化処理 (急峻な変化を抑える処理) が施され, `Pulse Width Encoder` モジュールでパルス幅に変換され, 最後に `PWM` モジュールに渡される.
+位相データは `Phase Correction` モジュールにより固定の位相が加算された後, `Silencer` モジュールに渡され, 最後に `PWM` モジュールに渡される.
+`PWM` モジュールがパルス幅/位相データから Pulse Width Modulation (PWM) 波形を生成する.
+
+超音波の 1 周期 (<Math tex="\SI{40}{kHz}" />, メインクロック 512 周期) ごとに `Time Count Generator` が `UPDATE` をアサートし, これが上記パイプラインの起点となる.
+`Emission` から `PWM` までの各モジュールは, `DIN_VALID` がアサートされている間に 249 個の振動子分のデータが順番に流れてくることを前提としたパイプライン処理を行う.
+
+このほか, デバッグ用に内部状態を GPIO ピンへ出力する `GPIO Output` モジュールと, CPU から書き込まれた設定値を読み出して各モジュールへ配る `Controller` モジュールがある.
+
+以下に, 各モジュールの解説をしていく.
+なお, 説明の都合上, 信号の流れる順とは異なる順序で説明する.

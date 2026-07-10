@@ -1,0 +1,50 @@
+---
+title: Pulse Width Encoder
+description: 強度をパルス幅へ変換する Pulse Width Encoder モジュール
+sidebar:
+  order: 3
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+
+| Name            | In/Out | Width | Description                   |
+| --------------- | ------ | ----- | ----------------------------- |
+| CLK             | In     | 1     | メインクロック                |
+| PWE_TABLE_BUS   | In     | -     | メモリバス                    |
+| DIN_VALID       | In     | 1     | 強度/位相データ有効フラグ     |
+| INTENSITY_IN    | In     | 8     | 強度                          |
+| PHASE_IN        | In     | 8     | 位相                          |
+| PULSE_WIDTH_OUT | Out    | 9     | パルス幅                      |
+| PHASE_OUT       | Out    | 8     | 位相                          |
+| DOUT_VALID      | Out    | 1     | パルス幅/位相データ有効フラグ |
+
+このモジュールは, 強度をパルス幅に変換する.
+強度 <Math tex="A" /> とパルス幅 <Math tex="D" /> の関係は, 理想的には
+
+<MathBlock tex={String.raw`
+A \propto \sin\left(\pi \frac{D}{T}\right)
+`} />
+
+となる.
+ここで, <Math tex="T" /> は周期である.
+このモジュールはこれの逆変換を行うためのモジュールである.
+
+:::note
+最初からパルス幅を使用しないのは, 強度に AM 変調をかけるためである.
+:::
+
+ただし, 上記は理想的な変換であり, 現実とは異なる可能性がある.
+そのため, このモジュールでは, 強度をインデックス, パルス幅を値とする書き込み可能なテーブルを利用している.
+このテーブルを書き換えることで, 任意の変換を実現する事ができる.
+デフォルトでは, 上記の理想的な変換を行うテーブルが用意されている.
+
+テーブルの実体は 256 語の BRAM (`BRAM_PWE_TABLE`) であり, `Memory` モジュールが保持する.
+
+このモジュールの処理もパイプライン的に行われる.
+入力として, `DIN_VALID` は 249 クロックの間 1 であり, その間 `INTENSITY_IN`, `PHASE_IN` から強度/位相データが順番に流れてくることを想定している.
+処理が終わったら, `DOUT_VALID` を 1 とし, 順次 `PULSE_WIDTH_OUT`, `PHASE_OUT` からパルス幅/位相データを流す.
+
+:::note
+位相に関しては何も処理しないが, ディレイを入れてパルス幅データと歩調を揃えている.
+:::
