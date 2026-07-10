@@ -35,6 +35,7 @@ export default defineConfig({
         },
       },
       components: {
+        Header: "./src/components/Header.astro",
         Sidebar: "./src/components/Sidebar.astro",
         PageTitle: "./src/components/PageTitle.astro",
         Banner: "./src/components/Banner.astro",
@@ -51,7 +52,7 @@ export default defineConfig({
           href: "https://github.com/shinolab/autd3-sdk",
         },
       ],
-      customCss: ["./src/styles/math.css", "./src/styles/sidebar.css"],
+      customCss: ["./src/styles/math.css", "./src/styles/sidebar.css", "./src/styles/nav.css"],
       head: [
         {
           tag: "link",

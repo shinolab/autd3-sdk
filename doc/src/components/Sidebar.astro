@@ -2,12 +2,25 @@
 import MobileMenuFooter from "virtual:starlight/components/MobileMenuFooter";
 import SidebarPersister from "@astrojs/starlight/components/SidebarPersister.astro";
 import SidebarSublist from "./SidebarSublist.astro";
+import { sectionOfHref, sectionOfId } from "../lib/sections";
 
-const { sidebar } = Astro.locals.starlightRoute;
+const { sidebar, id, locale } = Astro.locals.starlightRoute;
+const current = sectionOfId(id, locale);
+
+function entrySection(entry: any): string | undefined {
+  if (entry.type === "link") return sectionOfHref(entry.href, locale);
+  for (const child of entry.entries) {
+    const section = entrySection(child);
+    if (section) return section;
+  }
+  return undefined;
+}
+
+const sublist = sidebar.filter((entry) => (entrySection(entry) ?? "users") === current);
 ---
 
 <SidebarPersister>
-  <SidebarSublist sublist={sidebar} />
+  <SidebarSublist sublist={sublist} />
 </SidebarPersister>
 
 <div class="md:sl-hidden">

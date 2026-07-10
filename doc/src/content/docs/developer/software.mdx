@@ -1,0 +1,85 @@
+---
+title: ソフトウェア
+description: クライアントライブラリのクレート構成とバインディングの方針
+---
+
+import Mermaid from "@components/Mermaid.astro";
+
+クライアントライブラリは Rust で実装されており, 各言語バインディングはそれを包む形で提供される.
+
+## クレート構成
+
+<Mermaid
+  title="クレート依存関係"
+  code={`flowchart BT
+  CORE["autd3-rs-core"]
+  RS["autd3-rs"]
+  PAT["autd3-rs-pattern"]
+  HOLO["autd3-rs-pattern-holo"]
+  MOD["autd3-rs-modulation"]
+  LINK["autd3-rs-link-*"]
+  EMU["autd3-rs-firmware-emulator"]
+  RS --> CORE
+  PAT --> CORE
+  MOD --> CORE
+  LINK --> CORE
+  EMU --> CORE
+  HOLO --> PAT`}
+/>
+
+| クレート                     | 役割                                                                 |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `autd3-rs-core`              | 基盤層. geometry / value / params / protocol / error と `Link` 抽象.   |
+| `autd3-rs`                   | クライアント本体 (tokio 非同期). `core` を再エクスポートするファサードも兼ねる. |
+| `autd3-rs-pattern`           | Emission パターン計算 (焦点合成等).                                   |
+| `autd3-rs-pattern-holo`      | 多焦点音場再構成. 理論は[理論と考察](/autd3-sdk/theory/holo/)を参照.  |
+| `autd3-rs-modulation`        | AM 波形計算.                                                          |
+| `autd3-rs-link-ethercrab`    | ethercrab ベースの EtherCAT Link 実装.                                |
+| `autd3-rs-link-soem`         | SOEM ベースの EtherCAT Link 実装 (GPL-3.0).                           |
+| `autd3-rs-link-twincat`      | EtherCAT マスタを TwinCAT に委譲する Link 実装 (Windows 専用).        |
+| `autd3-rs-link-remote`       | ネットワーク越しに別ホストの Link を駆動する Link 実装.               |
+| `autd3-rs-link-nop`          | 何もしない Link 実装 (テスト・ドキュメント用).                        |
+| `autd3-rs-firmware-emulator` | 実 CPU ファームウェア (C) と Rust による FPGA エミュレータをリンクする. |
+
+## スレッドモデル
+
+EtherCAT マスタが要求する定周期処理と, ユーザーの非同期 API を分離している.
+
+<Mermaid
+  title="スレッドモデル"
+  code={`flowchart LR
+  U["ユーザースレッド (tokio)"]
+  RT["RT スレッド (定周期 EtherCAT)"]
+  U -- "mpsc: コマンド" --> RT
+  RT -- "oneshot: 完了通知" --> U`}
+/>
+
+- **RT スレッド**: EtherCAT マスタが要求する定周期で動作する. tokio ランタイム外で独立して動き, レイテンシを最小化する.
+- **ユーザースレッド**: tokio 上で動作する. `.await` で RT スレッドの完了通知を待つ.
+
+`Link` トレイトの `cycle(tx, rx)` が 1 サイクル分の PDO 送受信を担う.
+`EtherCrabLink` / `SoemLink` はホスト自身が EtherCAT マスタとなり raw socket で PDO を直接回す.
+`TwinCATLink` は EtherCAT マスタを TwinCAT の RT カーネルに委譲する.
+
+## バインディング
+
+| 言語       | 方式             | 備考                                                       |
+| ---------- | ---------------- | ---------------------------------------------------------- |
+| Rust       | -                | 本体.                                                      |
+| Python     | PyO3 + maturin   | C FFI を経由せず Rust API を直接ラップする.                |
+| C# / Unity | C FFI + P/Invoke | `bindings/ffi/` の cdylib 群を参照する.                    |
+
+`bindings/ffi/` は言語中立な C ABI の cdylib 群であり, クレート毎に分かれている.
+不透明ハンドルと共有 ABI 契約は `autd3-ffi-abi` が定義する.
+
+## ビルド
+
+開発タスクはすべて `cargo xtask` で実行する.
+
+```bash
+cargo xtask rust build   # ワークスペース全体ビルド
+cargo xtask rust test    # 全テスト
+cargo xtask rust lint    # clippy --all-targets -- -D warnings
+cargo xtask rust format  # rustfmt --check
+```
+

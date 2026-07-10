@@ -1,0 +1,38 @@
+---
+import { getCollection } from "astro:content";
+import { SECTIONS, sectionHref, sectionOfId } from "../lib/sections";
+import { pageVersion } from "../lib/versions";
+
+const { id, lang, locale } = Astro.locals.starlightRoute;
+const version = pageVersion(id, locale);
+const current = sectionOfId(id, locale);
+
+const ids = (await getCollection("docs")).map((entry) => entry.id);
+
+function exists(segment: string): boolean {
+  if (segment === "") return true;
+  const prefix = [version?.slug, segment].filter(Boolean).join("/");
+  return ids.some((id) => id === prefix || id.startsWith(`${prefix}/`));
+}
+
+const ja = lang === "ja";
+const tabs = SECTIONS.filter((section) => exists(section.segment)).map((section) => ({
+  label: ja ? section.label : section.labelEn,
+  href: sectionHref(section, locale, version?.slug),
+  current: section.key === current,
+}));
+---
+
+<nav class="autd-section-tabs" aria-label={ja ? "マニュアル" : "Manuals"}>
+  <ul>
+    {
+      tabs.map((tab) => (
+        <li>
+          <a href={tab.href} aria-current={tab.current ? "page" : undefined}>
+            {tab.label}
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</nav>

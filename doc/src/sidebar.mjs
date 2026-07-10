@@ -1,6 +1,4 @@
-// Kept dependency-free so `scripts/version-config.mjs` can import it under bare
-// node (astro/starlight ship TypeScript entrypoints that node cannot load).
-export const sidebar = [
+const usersManual = [
   { label: "はじめに", translations: { en: "Introduction" }, link: "/" },
   {
     label: "Getting Started",
@@ -75,3 +73,29 @@ export const sidebar = [
     ],
   },
 ];
+
+const developerManual = [
+  { label: "概要", link: "/developer/" },
+  {
+    label: "FPGA ファームウェア",
+    items: [{ autogenerate: { directory: "developer/fpga" } }],
+  },
+  { label: "CPU ファームウェア", link: "/developer/cpu/" },
+  { label: "ソフトウェア", link: "/developer/software/" },
+];
+
+const theory = [
+  { label: "概要", link: "/theory/" },
+  { label: "PWM", link: "/theory/pwm/" },
+  { label: "フェーズドアレイについて", link: "/theory/phased-array/" },
+  { label: "フェーズドアレイの線形性", link: "/theory/linearity/" },
+  { label: "分解能に関する考察", link: "/theory/resolution/" },
+  {
+    label: "多焦点音場再構成",
+    items: [{ autogenerate: { directory: "theory/holo" } }],
+  },
+  { label: "複数周波数の応用", link: "/theory/multi-freq/" },
+  { label: "音響放射圧", link: "/theory/radiation-pressure/" },
+];
+
+export const sidebar = [...usersManual, ...developerManual, ...theory];
