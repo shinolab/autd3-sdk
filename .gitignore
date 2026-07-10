@@ -3,3 +3,8 @@
 /simulator/target
 /firmware/cpu/tests/build
 /firmware/cpu/build
+/firmware/dist
+
+*.jou
+*.log
+

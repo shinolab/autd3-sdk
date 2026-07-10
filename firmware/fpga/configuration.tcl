@@ -1,7 +1,9 @@
-set project_directory [file dirname [info script]]
-set bit_file_path [file join $project_directory "autd3-fpga.runs/impl_alter_def/top.bit"]
-set mcs_file_path [file join $project_directory "top.mcs"]
-write_cfgmem -format mcs -size 16 -interface SPIx4 -loadbit "up 0x00000000 $bit_file_path" -force -file "$mcs_file_path"
+set project_directory [file normalize [file dirname [info script]]]
+set mcs_file_path [file join $project_directory "autd3-fpga.mcs"]
+
+if {![file exists $mcs_file_path]} {
+    error "$mcs_file_path not found; run `cargo xtask fpga build` first"
+}
 
 open_hw_manager
 connect_hw_server -allow_non_jtag
