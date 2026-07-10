@@ -1,6 +1,6 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Subcommand;
 
 use crate::util::{run, run_built_bin};
@@ -8,6 +8,14 @@ use crate::util::{run, run_built_bin};
 #[derive(Subcommand)]
 pub enum FirmwareCmd {
     Write(WriteArgs),
+
+    Bundle(BundleArgs),
+}
+
+#[derive(clap::Args)]
+pub struct BundleArgs {
+    #[arg(long)]
+    force: bool,
 }
 
 #[derive(clap::Args)]
@@ -28,7 +36,48 @@ pub struct WriteArgs {
 pub fn run_firmware(root: &Path, cmd: FirmwareCmd) -> Result<()> {
     match cmd {
         FirmwareCmd::Write(args) => write(root, &args),
+        FirmwareCmd::Bundle(args) => bundle(root, &args),
     }
+}
+
+fn bundle(root: &Path, args: &BundleArgs) -> Result<()> {
+    crate::bump::firmware_series(root)?;
+    let component = crate::component::COMPONENTS
+        .iter()
+        .find(|c| c.name == "firmware")
+        .context("no `firmware` component")?;
+    let version = component.current_version(root)?;
+
+    let cpu = crate::cpu::cpu_build(root)?;
+    let fpga = crate::fpga::fpga_build(root, args.force)?;
+
+    let stem = format!("autd3-sdk-firmware-v{version}");
+    let dist = root.join("firmware/dist");
+    std::fs::create_dir_all(&dist).with_context(|| format!("creating {}", dist.display()))?;
+    let archive = dist.join(format!("{stem}.zip"));
+    write_zip(
+        &archive,
+        &[(format!("{stem}.bin"), cpu), (format!("{stem}.mcs"), fpga)],
+    )?;
+
+    println!("firmware bundle: {}", archive.display());
+    Ok(())
+}
+
+fn write_zip(archive: &Path, entries: &[(String, PathBuf)]) -> Result<()> {
+    let file = std::fs::File::create(archive)
+        .with_context(|| format!("creating {}", archive.display()))?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for (name, path) in entries {
+        zip.start_file(name.clone(), options)?;
+        let mut src =
+            std::fs::File::open(path).with_context(|| format!("opening {}", path.display()))?;
+        std::io::copy(&mut src, &mut zip).with_context(|| format!("adding {name}"))?;
+    }
+    zip.finish()?;
+    Ok(())
 }
 
 fn write(root: &Path, args: &WriteArgs) -> Result<()> {

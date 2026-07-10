@@ -94,7 +94,7 @@ fn cpu_flash(root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn cpu_build(root: &Path) -> Result<PathBuf> {
+pub fn cpu_build(root: &Path) -> Result<PathBuf> {
     gen_param(root)?;
 
     let prefix = std::env::var("CROSS_COMPILE").unwrap_or_else(|_| "arm-none-eabi-".to_string());
