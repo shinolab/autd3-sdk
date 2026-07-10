@@ -274,6 +274,7 @@ dependencies = [
  "autd3-rs",
  "autd3-rs-link-ethercrab",
  "autd3-rs-link-soem",
+ "autd3-rs-link-twincat",
  "clap",
  "humantime",
  "tokio",
