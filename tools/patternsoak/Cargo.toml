@@ -17,6 +17,7 @@ path = "src/main.rs"
 autd3-rs.workspace = true
 autd3-rs-link-ethercrab.workspace = true
 autd3-rs-link-soem.workspace = true
+autd3-rs-link-twincat.workspace = true
 clap.workspace = true
 humantime.workspace = true
 anyhow.workspace = true

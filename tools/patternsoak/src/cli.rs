@@ -1,7 +1,9 @@
+use std::net::IpAddr;
 use std::num::NonZeroU32;
 use std::time::Duration;
 
 use autd3_rs::MAX_IN_FLIGHT;
+use autd3_rs_link_twincat::AmsNetId;
 use clap::{Parser, ValueEnum};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -9,6 +11,7 @@ pub enum LinkKind {
     #[default]
     Ethercrab,
     Soem,
+    Twincat,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -47,6 +50,10 @@ pub struct Cli {
     pub send_interval_cycles: NonZeroU32,
     #[arg(long, default_value_t = NonZeroU32::new(8).unwrap())]
     pub max_resync_rounds: NonZeroU32,
+    #[arg(long)]
+    pub twincat_remote: Option<IpAddr>,
+    #[arg(long)]
+    pub ams_net_id: Option<AmsNetId>,
 }
 
 impl Cli {
@@ -56,6 +63,18 @@ impl Cli {
                 "--inflight {} must be in 1..={MAX_IN_FLIGHT}",
                 self.inflight,
             ));
+        }
+        if self.link == LinkKind::Twincat {
+            if self.twincat_remote.is_some() && self.ams_net_id.is_none() {
+                return Err("--ams-net-id is required when --twincat-remote is set".to_string());
+            }
+            if self.interface.is_some() {
+                return Err("--interface is not valid with --link twincat".to_string());
+            }
+        } else if self.twincat_remote.is_some() || self.ams_net_id.is_some() {
+            return Err(
+                "--twincat-remote / --ams-net-id are only valid with --link twincat".to_string(),
+            );
         }
         Ok(())
     }
