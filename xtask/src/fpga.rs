@@ -1,15 +1,25 @@
-use std::path::Path;
-#[cfg(windows)]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::util::{on_path, run};
 
+const PROJECT_NAME: &str = "autd3-fpga";
+
 #[derive(Subcommand)]
 pub enum FpgaCmd {
-    Build,
+    Project,
+
+    Build {
+        #[arg(long)]
+        force: bool,
+    },
+
+    Flash {
+        #[arg(long)]
+        force: bool,
+    },
 
     Clean,
 }
@@ -17,18 +27,65 @@ pub enum FpgaCmd {
 pub fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
     let fpga_dir = root.join("firmware/fpga");
     match cmd {
-        FpgaCmd::Build => fpga_build(&fpga_dir),
+        FpgaCmd::Project => fpga_project(&fpga_dir),
+        FpgaCmd::Build { force } => fpga_build(root, *force).map(|_| ()),
+        FpgaCmd::Flash { force } => fpga_flash(root, *force),
         FpgaCmd::Clean => fpga_clean(&fpga_dir),
     }
 }
 
-fn fpga_build(fpga_dir: &Path) -> Result<()> {
+fn fpga_project(fpga_dir: &Path) -> Result<()> {
     let vivado = resolve_vivado()?;
     run(
         &vivado,
         ["-mode", "batch", "-source", "proj_gen.tcl"],
         fpga_dir,
     )
+}
+
+pub fn fpga_build(root: &Path, force: bool) -> Result<PathBuf> {
+    let fpga_dir = root.join("firmware/fpga");
+    let vivado = resolve_vivado()?;
+
+    if !fpga_dir.join(format!("{PROJECT_NAME}.xpr")).exists() {
+        fpga_project(&fpga_dir)?;
+    }
+
+    let jobs = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    let mut args = vec![
+        "-mode".to_string(),
+        "batch".to_string(),
+        "-source".to_string(),
+        "build.tcl".to_string(),
+        "-tclargs".to_string(),
+        jobs.to_string(),
+    ];
+    if force {
+        args.push("force".to_string());
+    }
+    run(&vivado, args, &fpga_dir)?;
+
+    let mcs = fpga_dir.join(format!("{PROJECT_NAME}.mcs"));
+    if !mcs.is_file() {
+        bail!("Vivado finished but {} was not created", mcs.display());
+    }
+    println!("fpga built: {}", mcs.display());
+    Ok(mcs)
+}
+
+fn fpga_flash(root: &Path, force: bool) -> Result<()> {
+    let mcs = fpga_build(root, force)?;
+    let vivado = resolve_vivado()?;
+    let fpga_dir = root.join("firmware/fpga");
+    println!("Make sure the configuration cable is connected and the AUTD3 power is on.");
+    run(
+        &vivado,
+        ["-mode", "batch", "-source", "configuration.tcl"],
+        &fpga_dir,
+    )
+    .context("Vivado failed. Make sure the AUTD3 is connected and powered on.")?;
+    println!("flash complete: {}", mcs.display());
+    Ok(())
 }
 
 pub fn resolve_vivado() -> Result<String> {
