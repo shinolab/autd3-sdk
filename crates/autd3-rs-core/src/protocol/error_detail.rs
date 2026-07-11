@@ -8,6 +8,8 @@ pub enum DeviceErrorCode {
     InvalidSilencerSetting = 0x04,
     InvalidTransitionMode = 0x05,
     MissTransitionTime = 0x06,
+    FpgaTimeout = 0x07,
+    SyncNotReady = 0x08,
 }
 
 impl DeviceErrorCode {
@@ -21,6 +23,8 @@ impl DeviceErrorCode {
             Self::InvalidSilencerSetting => "invalid silencer setting",
             Self::InvalidTransitionMode => "invalid transition mode for the target loop behavior",
             Self::MissTransitionTime => "sys-time transition is too close to now (would be missed)",
+            Self::FpgaTimeout => "FPGA did not acknowledge a register update in time",
+            Self::SyncNotReady => "EtherCAT DC is not configured (no SYNC0 time available)",
         }
     }
 }
@@ -37,6 +41,8 @@ impl TryFrom<u8> for DeviceErrorCode {
             0x04 => Ok(Self::InvalidSilencerSetting),
             0x05 => Ok(Self::InvalidTransitionMode),
             0x06 => Ok(Self::MissTransitionTime),
+            0x07 => Ok(Self::FpgaTimeout),
+            0x08 => Ok(Self::SyncNotReady),
             other => Err(other),
         }
     }
@@ -64,6 +70,8 @@ mod tests {
             DeviceErrorCode::InvalidSilencerSetting,
             DeviceErrorCode::InvalidTransitionMode,
             DeviceErrorCode::MissTransitionTime,
+            DeviceErrorCode::FpgaTimeout,
+            DeviceErrorCode::SyncNotReady,
         ] {
             assert_eq!(DeviceErrorCode::try_from(c as u8), Ok(c));
         }
