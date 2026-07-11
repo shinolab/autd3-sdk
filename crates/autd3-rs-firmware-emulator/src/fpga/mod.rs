@@ -158,7 +158,7 @@ impl FpgaEmulator {
     }
 
     pub(crate) fn next_sync0(&mut self) -> u64 {
-        self.next_sync0
+        self.next_sync0.max(self.sys_time_ns + 500_000)
     }
 
     pub(crate) fn dc_sys_time(&mut self) -> u64 {
