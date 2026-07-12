@@ -10,6 +10,7 @@ pub enum DeviceErrorCode {
     MissTransitionTime = 0x06,
     FpgaTimeout = 0x07,
     SyncNotReady = 0x08,
+    InvalidSync0Cycle = 0x09,
 }
 
 impl DeviceErrorCode {
@@ -25,6 +26,9 @@ impl DeviceErrorCode {
             Self::MissTransitionTime => "sys-time transition is too close to now (would be missed)",
             Self::FpgaTimeout => "FPGA did not acknowledge a register update in time",
             Self::SyncNotReady => "EtherCAT DC is not configured (no SYNC0 time available)",
+            Self::InvalidSync0Cycle => {
+                "invalid Sync0 cycle time (master's DC config missing or not a multiple of 500us)"
+            }
         }
     }
 }
@@ -43,6 +47,7 @@ impl TryFrom<u8> for DeviceErrorCode {
             0x06 => Ok(Self::MissTransitionTime),
             0x07 => Ok(Self::FpgaTimeout),
             0x08 => Ok(Self::SyncNotReady),
+            0x09 => Ok(Self::InvalidSync0Cycle),
             other => Err(other),
         }
     }
@@ -72,6 +77,7 @@ mod tests {
             DeviceErrorCode::MissTransitionTime,
             DeviceErrorCode::FpgaTimeout,
             DeviceErrorCode::SyncNotReady,
+            DeviceErrorCode::InvalidSync0Cycle,
         ] {
             assert_eq!(DeviceErrorCode::try_from(c as u8), Ok(c));
         }

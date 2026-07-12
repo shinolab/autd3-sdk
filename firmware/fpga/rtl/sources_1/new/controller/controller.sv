@@ -115,9 +115,11 @@ module controller (
     REQ_ECAT_SYNC_TIME_1,
     REQ_ECAT_SYNC_TIME_2,
     REQ_ECAT_SYNC_TIME_3_RD_ECAT_SYNC_TIME_0,
-    RD_ECAT_SYNC_TIME_1,
-    RD_ECAT_SYNC_TIME_2,
+    REQ_ECAT_SYNC_CYCLE_0_RD_ECAT_SYNC_TIME_1,
+    REQ_ECAT_SYNC_CYCLE_1_RD_ECAT_SYNC_TIME_2,
     RD_ECAT_SYNC_TIME_3,
+    RD_ECAT_SYNC_CYCLE_0,
+    RD_ECAT_SYNC_CYCLE_1,
     SYNC_CLR_UPDATE_SETTINGS_BIT
   } state_t;
 
@@ -572,24 +574,34 @@ module controller (
       REQ_ECAT_SYNC_TIME_3_RD_ECAT_SYNC_TIME_0: begin
         addr <= params::ADDR_ECAT_SYNC_TIME_3;
         SYNC_SETTINGS.ECAT_SYNC_TIME[15:0] <= dout;
-        state <= RD_ECAT_SYNC_TIME_1;
+        state <= REQ_ECAT_SYNC_CYCLE_0_RD_ECAT_SYNC_TIME_1;
       end
-      RD_ECAT_SYNC_TIME_1: begin
+      REQ_ECAT_SYNC_CYCLE_0_RD_ECAT_SYNC_TIME_1: begin
+        addr <= params::ADDR_ECAT_SYNC_CYCLE_0;
         SYNC_SETTINGS.ECAT_SYNC_TIME[31:16] <= dout;
-        we <= 1'b1;
-        addr <= params::ADDR_CTL_FLAG;
-        din <= ctl_flags;
-        state <= RD_ECAT_SYNC_TIME_2;
+        state <= REQ_ECAT_SYNC_CYCLE_1_RD_ECAT_SYNC_TIME_2;
       end
-      RD_ECAT_SYNC_TIME_2: begin
+      REQ_ECAT_SYNC_CYCLE_1_RD_ECAT_SYNC_TIME_2: begin
+        addr <= params::ADDR_ECAT_SYNC_CYCLE_1;
         SYNC_SETTINGS.ECAT_SYNC_TIME[47:32] <= dout;
-        we <= 1'b1;
-        addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
         state <= RD_ECAT_SYNC_TIME_3;
       end
       RD_ECAT_SYNC_TIME_3: begin
         SYNC_SETTINGS.ECAT_SYNC_TIME[63:48] <= dout;
+        we <= 1'b1;
+        addr <= params::ADDR_CTL_FLAG;
+        din <= ctl_flags;
+        state <= RD_ECAT_SYNC_CYCLE_0;
+      end
+      RD_ECAT_SYNC_CYCLE_0: begin
+        SYNC_SETTINGS.ECAT_SYNC_CYCLE[15:0] <= dout;
+        we <= 1'b1;
+        addr <= params::ADDR_FPGA_STATE;
+        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        state <= RD_ECAT_SYNC_CYCLE_1;
+      end
+      RD_ECAT_SYNC_CYCLE_1: begin
+        SYNC_SETTINGS.ECAT_SYNC_CYCLE[31:16] <= dout;
         SYNC_SETTINGS.UPDATE <= 1'b1;
         we <= 1'b0;
         addr <= params::ADDR_CTL_FLAG;
@@ -648,6 +660,7 @@ module controller (
     DEBUG_SETTINGS.VALUE[3] = {params::GPIO_O_TYPE_NONE, 56'd0};
     SYNC_SETTINGS.UPDATE = 1'b0;
     SYNC_SETTINGS.ECAT_SYNC_TIME = 64'd0;
+    SYNC_SETTINGS.ECAT_SYNC_CYCLE = 32'd0;
   end
 
 endmodule

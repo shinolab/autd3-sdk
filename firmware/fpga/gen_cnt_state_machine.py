@@ -112,6 +112,9 @@ sync_params = Params(
     "SYNC",
     [
         Param("ECAT_SYNC_TIME", 64, "ECAT_SYNC_TIME", 0),
+        # Sync0 period in 20.48MHz system-time ticks (ns * 64 / 3125), computed
+        # by the CPU. The FPGA just accumulates it each Sync0.
+        Param("ECAT_SYNC_CYCLE", 32, "ECAT_SYNC_CYCLE", 0),
     ],
 )
 

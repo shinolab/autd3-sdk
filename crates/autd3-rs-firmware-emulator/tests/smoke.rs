@@ -1,6 +1,10 @@
 use autd3_rs_core::link::{CycleOutcome, Link};
-use autd3_rs_core::protocol::{Cmd, RX_FRAME_BYTES, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, RX_FRAME_BYTES, Seq, TX_FRAME_BYTES, TxFrame};
 use autd3_rs_firmware_emulator::{Audit, Device, cpu_fw_version, fpga_fw_version};
+
+// ADDR_ECAT_SYNC_CYCLE_0 in the controller BRAM (params.svh); the firmware writes
+// the Sync0 cycle time here in 20.48MHz ticks (low word).
+const ADDR_ECAT_SYNC_CYCLE_0: u16 = 0x14;
 
 const NUM_TRANSDUCERS: usize = 249;
 
@@ -66,6 +70,40 @@ fn fpga_reports_version_after_init() {
 fn init_enables_all_outputs_by_default() {
     let device = Device::new(NUM_TRANSDUCERS);
     assert!((0..NUM_TRANSDUCERS).all(|i| device.fpga().output_mask_enabled(i)));
+}
+
+#[test]
+fn synchronize_reads_sync0_cycle_from_esc_register() {
+    let mut device = Device::new(NUM_TRANSDUCERS);
+    device.send(&frame(0, Cmd::Reset));
+
+    // Default emulated Sync0 cycle is 1ms -> 20480 ticks.
+    let rx = device.send(&frame(0, Cmd::Synchronize));
+    assert_eq!(rx.ack, Seq::new(0));
+    assert_eq!(rx.data, DeviceErrorCode::None as u8);
+    assert_eq!(device.fpga().controller_reg(ADDR_ECAT_SYNC_CYCLE_0), 20480);
+
+    // 2ms -> 40960 ticks.
+    device.fpga_mut().set_sync0_cycle_ns(2_000_000);
+    let rx = device.send(&frame(1, Cmd::Synchronize));
+    assert_eq!(rx.data, DeviceErrorCode::None as u8);
+    assert_eq!(device.fpga().controller_reg(ADDR_ECAT_SYNC_CYCLE_0), 40960);
+}
+
+#[test]
+fn synchronize_rejects_invalid_sync0_cycle() {
+    let mut device = Device::new(NUM_TRANSDUCERS);
+    device.send(&frame(0, Cmd::Reset));
+
+    // 0 = single shot mode / master did not configure DC.
+    device.fpga_mut().set_sync0_cycle_ns(0);
+    let rx = device.send(&frame(0, Cmd::Synchronize));
+    assert_eq!(rx.data, DeviceErrorCode::InvalidSync0Cycle as u8);
+
+    // Not a multiple of 500us.
+    device.fpga_mut().set_sync0_cycle_ns(750_000);
+    let rx = device.send(&frame(1, Cmd::Synchronize));
+    assert_eq!(rx.data, DeviceErrorCode::InvalidSync0Cycle as u8);
 }
 
 #[test]

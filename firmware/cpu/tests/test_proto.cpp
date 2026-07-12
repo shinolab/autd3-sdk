@@ -16,6 +16,7 @@ void port_test_fpga_reset();
 void port_test_fpga_set_latch_stuck(uint8_t stuck);
 void port_test_set_next_sync0(uint64_t t);
 void port_test_set_dc_sys_time(uint64_t t);
+void port_test_set_sync0_cycle_ns(uint32_t t);
 uint16_t port_test_fpga_ctl(uint16_t addr);
 uint16_t port_test_fpga_phase_corr(uint16_t idx);
 uint16_t port_test_fpga_output_mask(uint16_t idx);
@@ -1342,6 +1343,7 @@ TEST(Proto, BootBringsFpgaToLegacyClearBaseline) {
 TEST(Proto, SynchronizeWritesNextSync0AndLatches) {
   reset_all();
   port_test_set_next_sync0(0x1122334455667788ULL);
+  port_test_set_sync0_cycle_ns(1000000);  // 1ms -> N=2
 
   Frame(0, CMD_SYNCHRONIZE).deliver();
 
@@ -1351,6 +1353,8 @@ TEST(Proto, SynchronizeWritesNextSync0AndLatches) {
   EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_TIME_0 + 1), 0x5566);
   EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_TIME_0 + 2), 0x3344);
   EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_TIME_0 + 3), 0x1122);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_CYCLE_0), 20480) << "1ms = 20480 ticks (low word)";
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_CYCLE_1), 0) << "high word";
   EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_SYNC_SET), 1u);
   EXPECT_EQ(port_test_fpga_ctl(ADDR_CTL_FLAG) & CTL_FLAG_SYNC_SET, 0);
 }
@@ -1366,6 +1370,51 @@ TEST(Proto, SynchronizeReturnsSyncNotReadyWhenDcUnset) {
 
   Frame(1, CMD_READ_ERROR_DETAIL).deliver();
   EXPECT_EQ(_sTx.data, ERR_SYNC_NOT_READY);
+}
+
+TEST(Proto, SynchronizeWritesSync0CycleFromEscRegister) {
+  reset_all();
+  port_test_set_next_sync0(0x10);
+  port_test_set_sync0_cycle_ns(2000000);  // 2ms -> 40960 ticks
+
+  Frame(0, CMD_SYNCHRONIZE).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_CYCLE_0), 40960);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_CYCLE_1), 0);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_SYNC_SET), 1u);
+}
+
+TEST(Proto, SynchronizeRejectsSingleShotSync0) {
+  reset_all();
+  port_test_set_sync0_cycle_ns(0);  // 0 = single shot mode / DC not configured
+
+  Frame(0, CMD_SYNCHRONIZE).deliver();
+
+  EXPECT_EQ(_sTx.data, ERR_INVALID_SYNC0_CYCLE);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_SYNC_SET), 0u) << "rejected sync must not latch";
+}
+
+TEST(Proto, SynchronizeRejectsNonMultipleOf500us) {
+  reset_all();
+  port_test_set_sync0_cycle_ns(750000);  // not a multiple of 500us
+
+  Frame(0, CMD_SYNCHRONIZE).deliver();
+
+  EXPECT_EQ(_sTx.data, ERR_INVALID_SYNC0_CYCLE);
+  EXPECT_EQ(port_test_fpga_latch_count(CTL_FLAG_SYNC_SET), 0u);
+}
+
+TEST(Proto, SynchronizeWritesBothCycleWordsForLargeCycle) {
+  reset_all();
+  port_test_set_next_sync0(0x10);
+  port_test_set_sync0_cycle_ns(3500000);  // 7 * 500us -> 71680 ticks = 0x11800
+
+  Frame(0, CMD_SYNCHRONIZE).deliver();
+
+  EXPECT_EQ(_sTx.data, 0);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_CYCLE_0), 0x1800);
+  EXPECT_EQ(port_test_fpga_ctl(ADDR_ECAT_SYNC_CYCLE_1), 0x1);
 }
 
 TEST(Proto, SetAndWaitUpdateTimesOutWhenLatchStuck) {

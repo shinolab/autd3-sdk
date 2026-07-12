@@ -54,6 +54,11 @@ extern "C" fn port_dc_sys_time() -> u64 {
 }
 
 #[unsafe(no_mangle)]
+extern "C" fn port_sync0_cycle_ns() -> u32 {
+    with_active(FpgaEmulator::sync0_cycle_ns)
+}
+
+#[unsafe(no_mangle)]
 extern "C" fn port_sleep_ms(_ms: u16) {}
 
 #[unsafe(no_mangle)]
