@@ -10,7 +10,7 @@ extern "C" {
 #include "cmd/silencer.h"
 #include "proto.h"
 
-extern tx_frame_t _sTx;
+extern volatile tx_frame_t _sTx;
 
 #define FIFO_MASK (FIFO_DEPTH - 1u)
 #define FIFO_CAPACITY (FIFO_DEPTH - 1u)
