@@ -11,6 +11,14 @@ module sim_synchronizer ();
   logic [56:0] SYS_TIME_WO_SYNC, SYS_TIME_p50_WO_SYNC, SYS_TIME_m50_WO_SYNC;
   logic signed [64:0] diff_p50, diff_m50;
 
+  logic signed [13:0] SYNC_TIME_DIFF, SYNC_TIME_DIFF_p50, SYNC_TIME_DIFF_m50;
+
+  // steady-state bound on |sync_time_diff|. the 14-bit field saturates at 8192;
+  // under +-50ppm drift the closed loop keeps the residual to a few ticks, so a
+  // margin well below saturation catches both loss-of-lock and future saturation
+  // regressions.
+  localparam int DiffBound = 64;
+
   logic ECAT_SYNC;
 
   logic set;
@@ -49,7 +57,8 @@ module sim_synchronizer ();
       .ECAT_SYNC(ECAT_SYNC),
       .SYS_TIME(SYS_TIME),
       .SYNC(),
-      .SKIP_ONE_ASSERT()
+      .SKIP_ONE_ASSERT(),
+      .SYNC_TIME_DIFF(SYNC_TIME_DIFF)
   );
 
   synchronizer synchronizer_p50 (
@@ -58,7 +67,8 @@ module sim_synchronizer ();
       .ECAT_SYNC(ECAT_SYNC),
       .SYS_TIME(SYS_TIME_p50),
       .SYNC(),
-      .SKIP_ONE_ASSERT()
+      .SKIP_ONE_ASSERT(),
+      .SYNC_TIME_DIFF(SYNC_TIME_DIFF_p50)
   );
 
   synchronizer synchronizer_m50 (
@@ -67,7 +77,8 @@ module sim_synchronizer ();
       .ECAT_SYNC(ECAT_SYNC),
       .SYS_TIME(SYS_TIME_m50),
       .SYNC(),
-      .SKIP_ONE_ASSERT()
+      .SKIP_ONE_ASSERT(),
+      .SYNC_TIME_DIFF(SYNC_TIME_DIFF_m50)
   );
 
   task sync();
@@ -103,8 +114,29 @@ module sim_synchronizer ();
 
     sync();
 
-    #1000000000;
+    // allow the closed loop to settle after the initial coarse sync
+    repeat (8) @(negedge ECAT_SYNC);
 
+    for (int i = 0; i < 30; i++) begin
+      @(negedge ECAT_SYNC);
+      if ((SYNC_TIME_DIFF > DiffBound) || (SYNC_TIME_DIFF < -DiffBound)) begin
+        $error("%s:%d: nominal sync_time_diff out of range: %0d", `__FILE__, `__LINE__,
+               SYNC_TIME_DIFF);
+        $finish();
+      end
+      if ((SYNC_TIME_DIFF_p50 > DiffBound) || (SYNC_TIME_DIFF_p50 < -DiffBound)) begin
+        $error("%s:%d: +50ppm sync_time_diff out of range: %0d", `__FILE__, `__LINE__,
+               SYNC_TIME_DIFF_p50);
+        $finish();
+      end
+      if ((SYNC_TIME_DIFF_m50 > DiffBound) || (SYNC_TIME_DIFF_m50 < -DiffBound)) begin
+        $error("%s:%d: -50ppm sync_time_diff out of range: %0d", `__FILE__, `__LINE__,
+               SYNC_TIME_DIFF_m50);
+        $finish();
+      end
+    end
+
+    $display("OK! sim_synchronizer");
     $finish();
   end
 

@@ -172,7 +172,6 @@ module sim_emission_foci ();
     $readmemh("sin.txt", sin_table);
     $readmemh("atan.txt", atan_table);
 
-    sim_helper_random.init();
 
     cycle_buf[0] = SIZE;
     cycle_buf[1] = SIZE / 4;

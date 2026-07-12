@@ -25,6 +25,11 @@ module sim_helper_bram #(
   assign memory_bus.BRAM_ADDR = CPU_ADDR[14:1];
   assign memory_bus.DATA_IN = CPU_DATA;
 
+  logic cpu_rd = 1'b0;
+  logic cpu_rdwr = 1'b0;
+  assign memory_bus.RD   = cpu_rd;
+  assign memory_bus.RDWR = cpu_rdwr;
+
   task automatic bram_write(input logic [1:0] select, input logic [13:0] addr,
                             input logic [15:0] data_in);
     @(posedge CPU_CKIO);
@@ -43,6 +48,25 @@ module sim_helper_bram #(
 
   task automatic write_cnt(logic [7:0] addr, logic [15:0] data);
     bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_MAIN, addr}, data);
+  endtask
+
+  task automatic bram_read(input logic [1:0] select, input logic [13:0] addr,
+                           output logic [15:0] data_out);
+    @(posedge CPU_CKIO);
+    bram_addr <= {select, addr};
+    CPU_CN <= 0;
+    bus_data_reg <= 16'bzzzzzzzzzzzzzzzz;
+    cpu_rd <= 1'b1;
+    cpu_rdwr <= 1'b1;
+    repeat (4) @(posedge CPU_CKIO);
+    data_out = memory_bus.CPU_DATA;
+    @(negedge CPU_CKIO);
+    cpu_rd   <= 1'b0;
+    cpu_rdwr <= 1'b0;
+  endtask
+
+  task automatic read_cnt(input logic [7:0] addr, output logic [15:0] data_out);
+    bram_read(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_MAIN, addr}, data_out);
   endtask
 
   task automatic write_phase_corr(input logic [7:0] value[256]);

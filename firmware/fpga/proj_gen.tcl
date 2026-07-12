@@ -113,8 +113,8 @@ set file_list [glob -nocomplain -join rtl/sim_1/new/* *.sv]
 foreach sim_file_path $file_list {
   add_sim_file sim_1 xil_defaultlib $sim_file_path
 }
-set_property -name {xsim.compile.tcl.pre} -value [file join $project_directory "rtl/sim_1/new/rand.tcl"] -objects [get_filesets sim_1]
 set_property -name {xsim.simulate.runtime} -value {all} -objects [get_filesets sim_1]
+set_property -name {xsim.simulate.xsim.more_options} -value {-sv_seed random} -objects [get_filesets sim_1]
 
 add_files -fileset sim_1 -norecurse [file join $project_directory "rtl/sim_1/new/emission/atan.txt"]
 add_files -fileset sim_1 -norecurse [file join $project_directory "rtl/sim_1/new/emission/sin.txt"]

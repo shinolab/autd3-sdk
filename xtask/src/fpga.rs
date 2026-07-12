@@ -21,6 +21,11 @@ pub enum FpgaCmd {
         force: bool,
     },
 
+    Sim {
+        #[arg(long)]
+        tb: Option<String>,
+    },
+
     Clean,
 }
 
@@ -30,8 +35,30 @@ pub fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
         FpgaCmd::Project => fpga_project(&fpga_dir),
         FpgaCmd::Build { force } => fpga_build(root, *force).map(|_| ()),
         FpgaCmd::Flash { force } => fpga_flash(root, *force),
+        FpgaCmd::Sim { tb } => fpga_sim(&fpga_dir, tb.as_deref()),
         FpgaCmd::Clean => fpga_clean(&fpga_dir),
     }
+}
+
+fn fpga_sim(fpga_dir: &Path, tb: Option<&str>) -> Result<()> {
+    let vivado = resolve_vivado()?;
+
+    if !fpga_dir.join(format!("{PROJECT_NAME}.xpr")).exists() {
+        fpga_project(fpga_dir)?;
+    }
+
+    let mut args = vec![
+        "-mode".to_string(),
+        "batch".to_string(),
+        "-source".to_string(),
+        "sim.tcl".to_string(),
+    ];
+    if let Some(tb) = tb {
+        args.push("-tclargs".to_string());
+        args.extend(tb.split_whitespace().map(str::to_string));
+    }
+    run(&vivado, args, fpga_dir)
+        .context("xsim reported testbench failures (see the SUMMARY table above)")
 }
 
 fn fpga_project(fpga_dir: &Path) -> Result<()> {
