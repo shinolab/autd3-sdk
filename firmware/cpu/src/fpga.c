@@ -23,12 +23,18 @@ static void fpga_write_switch(uint16_t reg, uint16_t value) {
   port_memory_barrier();
 }
 
-void set_and_wait_update(uint16_t flag) {
+uint8_t set_and_wait_update(uint16_t flag) {
+  uint32_t max_polls =
+      (app_mode() == MODE_LOW_LATENCY) ? FPGA_WAIT_UPDATE_MAX_POLLS_INLINE : FPGA_WAIT_UPDATE_MAX_POLLS;
   uint16_t persistent = fpga_read(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG);
   fpga_write(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG, (uint16_t)(persistent | flag));
   port_memory_barrier();
-  while ((fpga_read(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG) & flag) != 0u) {
+  for (uint32_t i = 0; i < max_polls; i++) {
+    if ((fpga_read(BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG) & flag) == 0u) {
+      return ERR_NONE;
+    }
   }
+  return ERR_FPGA_TIMEOUT;
 }
 
 void fpga_write_u64(uint16_t addr, uint64_t value) {
@@ -89,7 +95,7 @@ static const uint8_t ASIN_TABLE[PWE_TABLE_SIZE] = {
     0xb4, 0xb6, 0xb7, 0xb9, 0xba, 0xbc, 0xbd, 0xbf, 0xc1, 0xc2, 0xc4, 0xc6, 0xc8, 0xca, 0xcc, 0xce, 0xd0, 0xd2, 0xd5,
     0xd7, 0xda, 0xdd, 0xe0, 0xe3, 0xe7, 0xec, 0xf2, 0x00};
 
-void fpga_init(void) {
+uint8_t fpga_init(void) {
   uint16_t i;
   uint8_t bank;
 
@@ -145,10 +151,12 @@ void fpga_init(void) {
     fpga_write(BRAM_SELECT_CONTROLLER, (uint16_t)(ADDR_DEBUG_VALUE0_0 + i), 0u);
   }
 
-  set_and_wait_update(CTL_FLAG_MOD_SET);
-  set_and_wait_update(CTL_FLAG_PATTERN_SET);
-  set_and_wait_update(CTL_FLAG_SILENCER_SET);
-  set_and_wait_update(CTL_FLAG_DEBUG_SET);
+  uint8_t err = ERR_NONE;
+  if (set_and_wait_update(CTL_FLAG_MOD_SET) != ERR_NONE) err = ERR_FPGA_TIMEOUT;
+  if (set_and_wait_update(CTL_FLAG_PATTERN_SET) != ERR_NONE) err = ERR_FPGA_TIMEOUT;
+  if (set_and_wait_update(CTL_FLAG_SILENCER_SET) != ERR_NONE) err = ERR_FPGA_TIMEOUT;
+  if (set_and_wait_update(CTL_FLAG_DEBUG_SET) != ERR_NONE) err = ERR_FPGA_TIMEOUT;
+  return err;
 }
 
 #ifdef __cplusplus

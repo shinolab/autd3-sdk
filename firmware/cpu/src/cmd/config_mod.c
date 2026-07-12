@@ -22,8 +22,7 @@ uint8_t config_mod_handle(const uint8_t* payload) {
   fpga_write(BRAM_SELECT_CONTROLLER, (uint16_t)(ADDR_MOD_FREQ_DIV0 + p->bank), p->divider);
   fpga_write(BRAM_SELECT_CONTROLLER, (uint16_t)(ADDR_MOD_REP0 + p->bank), p->rep);
   silencer_note_mod_div(p->bank, p->divider);
-  set_and_wait_update(CTL_FLAG_MOD_SET);
-  return ERR_NONE;
+  return set_and_wait_update(CTL_FLAG_MOD_SET);
 }
 
 #ifdef __cplusplus
