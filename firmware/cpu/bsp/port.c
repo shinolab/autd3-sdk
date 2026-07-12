@@ -63,3 +63,7 @@ uint64_t port_next_sync0(void) {
 uint64_t port_dc_sys_time(void) {
   return read_dc_u64(&ECATC_DC_SYS_TIME_LO, &ECATC_DC_SYS_TIME_HI);
 }
+
+uint32_t port_sync0_cycle_ns(void) {
+  return ECATC_DC_SYNC0_CYC_TIME;
+}
