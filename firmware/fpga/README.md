@@ -17,6 +17,19 @@ cargo xtask fpga clean
 `build` generates the project first if it is missing, and reuses
 `autd3-fpga.runs/impl_alter_def/top.bit` when it already exists (only `write_cfgmem` runs).
 
+## Simulation
+
+```bash
+cargo xtask fpga sim                 # run every testbench in rtl/sim_1/ and report pass/fail
+cargo xtask fpga sim --tb sim_mem_cnt  # run a single testbench (module name)
+```
+
+`sim` generates the Vivado project first if it is missing, then drives `xsim`
+(`sim.tcl`) over the testbenches (module name == file name, `sim_helper_*` excluded).
+A testbench passes when its simulation reaches `$finish` with no `ASSERT_EQ` failure;
+a `SUMMARY` table is printed and the command exits non-zero if any testbench fails.
+Vivado (`xsim`) is required, so `sim` is a local-only task and is not part of CI.
+
 
 # Author
 

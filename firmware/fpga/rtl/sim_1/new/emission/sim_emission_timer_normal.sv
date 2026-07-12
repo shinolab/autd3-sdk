@@ -34,7 +34,6 @@ module sim_emission_timer_normal ();
   );
 
   initial begin
-    sim_helper_random.init();
 
     pattern_settings.REQ_RD_BANK = 1'b0;
     pattern_settings.CYCLE[0] = 0;

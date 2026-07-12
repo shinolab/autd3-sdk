@@ -101,7 +101,6 @@ module sim_silencer_fixed_completion_steps ();
       phase_buf[i] = 0;
       intensity_buf[i] = 0;
     end
-    sim_helper_random.init();
 
     @(posedge locked);
 

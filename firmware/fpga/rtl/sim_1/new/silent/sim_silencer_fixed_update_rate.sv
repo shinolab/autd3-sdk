@@ -91,7 +91,6 @@ module sim_silencer_fixed_update_rate ();
     silencer_settings.UPDATE_RATE_PHASE = 0;
     phase = 0;
     intensity = 0;
-    sim_helper_random.init();
 
     @(posedge locked);
 

@@ -15,6 +15,7 @@ module sim_pulse_width_encoder ();
   modulation_bus_if mod_bus ();
   emission_bus_if emission_bus ();
   pwe_table_bus_if pwe_table_bus ();
+  output_mask_bus_if output_mask_bus ();
 
   logic CLK;
   logic locked;
@@ -31,6 +32,7 @@ module sim_pulse_width_encoder ();
       .MEM_BUS(sim_helper_bram.memory_bus.bram_port),
       .CNT_BUS(cnt_bus.in_port),
       .PHASE_CORR_BUS(phase_corr_bus.in_port),
+      .OUTPUT_MASK_BUS(output_mask_bus.in_port),
       .MOD_BUS(mod_bus.in_port),
       .EMISSION_BUS(emission_bus.in_port),
       .PWE_TABLE_BUS(pwe_table_bus.in_port)
@@ -112,7 +114,6 @@ module sim_pulse_width_encoder ();
   logic [7:0] phase_tmp[DEPTH];
   initial begin
     din_valid = 0;
-    sim_helper_random.init();
 
     @(posedge locked);
 

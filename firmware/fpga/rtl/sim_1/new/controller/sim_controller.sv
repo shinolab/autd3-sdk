@@ -16,6 +16,7 @@ module sim_controller ();
   modulation_bus_if mod_bus ();
   emission_bus_if emission_bus ();
   pwe_table_bus_if pwe_table_bus ();
+  output_mask_bus_if output_mask_bus ();
 
   memory memory (
       .CLK(CLK),
@@ -23,6 +24,7 @@ module sim_controller ();
       .MEM_BUS(sim_helper_bram.memory_bus.bram_port),
       .CNT_BUS(cnt_bus.in_port),
       .PHASE_CORR_BUS(phase_corr_bus.in_port),
+      .OUTPUT_MASK_BUS(output_mask_bus.in_port),
       .MOD_BUS(mod_bus.in_port),
       .EMISSION_BUS(emission_bus.in_port),
       .PWE_TABLE_BUS(pwe_table_bus.in_port)
@@ -36,6 +38,10 @@ module sim_controller ();
   );
 
   logic thermo;
+  logic pattern_bank;
+  logic mod_bank;
+  logic [15:0] pattern_cycle;
+  logic gpio_in[4];
   settings::mod_settings_t mod_settings;
   settings::pattern_settings_t pattern_settings;
   settings::silencer_settings_t silencer_settings;
@@ -46,13 +52,17 @@ module sim_controller ();
   controller controller (
       .CLK(CLK),
       .THERMO(thermo),
+      .PATTERN_BANK(pattern_bank),
+      .MOD_BANK(mod_bank),
+      .PATTERN_CYCLE(pattern_cycle),
       .cnt_bus(cnt_bus.out_port),
       .MOD_SETTINGS(mod_settings),
       .PATTERN_SETTINGS(pattern_settings),
       .SILENCER_SETTINGS(silencer_settings),
       .SYNC_SETTINGS(sync_settings),
       .DEBUG_SETTINGS(debug_settings),
-      .FORCE_FAN(FORCE_FAN)
+      .FORCE_FAN(FORCE_FAN),
+      .GPIO_IN(gpio_in)
   );
 
   settings::mod_settings_t mod_settings_in;
@@ -61,8 +71,14 @@ module sim_controller ();
   settings::sync_settings_t sync_settings_in;
   settings::debug_settings_t debug_settings_in;
 
+  logic [15:0] fpga_state;
+
   initial begin
-    sim_helper_random.init();
+
+    thermo = 1'b1;
+    mod_bank = 1'b1;
+    pattern_bank = 1'b0;
+    pattern_cycle = 16'd5;
 
     mod_settings_in.UPDATE = 1'b1;
     mod_settings_in.REQ_RD_BANK = sim_helper_random.range(1'b1, 0);
@@ -137,6 +153,9 @@ module sim_controller ();
 
     @(posedge sync_settings.UPDATE);
     `ASSERT_EQ(sync_settings_in, sync_settings);
+
+    sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, fpga_state);
+    `ASSERT_EQ({8'h00, 1'h0, 3'h0, pattern_cycle == '0, pattern_bank, mod_bank, thermo}, fpga_state);
 
     $display("OK! sim_controller");
     $finish();
