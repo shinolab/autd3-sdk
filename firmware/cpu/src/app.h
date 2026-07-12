@@ -59,6 +59,8 @@ uint64_t port_next_sync0(void);
 
 uint64_t port_dc_sys_time(void);
 
+uint32_t port_sync0_cycle_ns(void);
+
 #ifdef __cplusplus
 }
 #endif

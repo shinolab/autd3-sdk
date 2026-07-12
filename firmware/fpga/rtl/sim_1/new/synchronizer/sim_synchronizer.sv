@@ -26,6 +26,8 @@ module sim_synchronizer ();
   settings::sync_settings_t SYNC_SETTINGS;
   assign SYNC_SETTINGS.UPDATE = set;
   assign SYNC_SETTINGS.ECAT_SYNC_TIME = ecat_sync_time;
+  // ECAT_SYNC_CYCLE_TICKS is the 500us multiple N; the CPU writes N * 10240 ticks.
+  assign SYNC_SETTINGS.ECAT_SYNC_CYCLE = 32'd10240 * ECAT_SYNC_CYCLE_TICKS;
 
   assign diff_p50 = SYS_TIME_p50 - SYS_TIME;
   assign diff_m50 = SYS_TIME_m50 - SYS_TIME;

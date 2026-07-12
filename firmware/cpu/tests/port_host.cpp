@@ -41,6 +41,7 @@ uint32_t g_latch_count[16];
 uint64_t g_next_sync0 = 0;
 uint64_t g_dc_sys_time = 0;
 bool g_latch_stuck = false;
+uint32_t g_sync0_cycle_ns = 1000000;
 
 void write_controller(uint32_t a, uint16_t value) {
   switch (a >> 8) {
@@ -108,11 +109,15 @@ extern "C" uint64_t port_next_sync0() { return g_next_sync0; }
 
 extern "C" uint64_t port_dc_sys_time() { return g_dc_sys_time; }
 
+extern "C" uint32_t port_sync0_cycle_ns() { return g_sync0_cycle_ns; }
+
 extern "C" void port_test_fpga_set_controller(uint16_t addr, uint16_t value) { g_ctl[addr & 0xFF] = value; }
 
 extern "C" void port_test_set_next_sync0(uint64_t t) { g_next_sync0 = t; }
 
 extern "C" void port_test_set_dc_sys_time(uint64_t t) { g_dc_sys_time = t; }
+
+extern "C" void port_test_set_sync0_cycle_ns(uint32_t t) { g_sync0_cycle_ns = t; }
 
 extern "C" void port_test_fpga_reset() {
   std::memset(g_ctl, 0, sizeof(g_ctl));
@@ -125,6 +130,7 @@ extern "C" void port_test_fpga_reset() {
   g_next_sync0 = 0;
   g_dc_sys_time = 0;
   g_latch_stuck = false;
+  g_sync0_cycle_ns = 1000000;
 }
 
 extern "C" void port_test_fpga_set_latch_stuck(uint8_t stuck) { g_latch_stuck = stuck != 0; }

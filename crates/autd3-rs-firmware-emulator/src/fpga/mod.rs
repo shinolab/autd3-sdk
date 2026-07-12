@@ -55,6 +55,7 @@ pub struct FpgaEmulator {
     em_ram: Vec<Box<[u16]>>,
     latch_count: [u32; 16],
     next_sync0: u64,
+    sync0_cycle_ns: u32,
     sys_time_ns: u64,
     gpio_in: [bool; 4],
     thermal: bool,
@@ -89,6 +90,7 @@ impl FpgaEmulator {
                 .collect(),
             latch_count: [0; 16],
             next_sync0: 0,
+            sync0_cycle_ns: 1_000_000,
             sys_time_ns: 0,
             gpio_in: [false; 4],
             thermal: false,
@@ -165,6 +167,10 @@ impl FpgaEmulator {
         self.sys_time_ns
     }
 
+    pub(crate) fn sync0_cycle_ns(&mut self) -> u32 {
+        self.sync0_cycle_ns
+    }
+
     fn reg_u64(&self, base: usize) -> u64 {
         (0..4)
             .map(|i| u64::from(self.controller[base + i]) << (16 * i))
@@ -201,6 +207,10 @@ impl FpgaEmulator {
 
     pub fn set_next_sync0(&mut self, sys_time_ns: u64) {
         self.next_sync0 = sys_time_ns;
+    }
+
+    pub fn set_sync0_cycle_ns(&mut self, sync0_cycle_ns: u32) {
+        self.sync0_cycle_ns = sync0_cycle_ns;
     }
 
     pub fn set_gpio_in(&mut self, gpio_in: [bool; 4]) {

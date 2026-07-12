@@ -10,10 +10,14 @@ module synchronizer (
 );
 
   localparam int AddSubLatency = 5;
-  localparam bit [14:0] EcatSyncCntBase = 14'd10240;  // 500us * 20.48MHz
 
   logic [63:0] ecat_sync_time;
+  // Ticks between two consecutive Sync0 pulses, computed by the CPU.
+  logic [31:0] ecat_sync_cycle;
   logic [56:0] sync_time;
+
+  logic [56:0] cycle_ticks;
+  assign cycle_ticks = {25'd0, ecat_sync_cycle};
 
   logic [2:0] sync_tri;
   logic sync;
@@ -25,7 +29,6 @@ module synchronizer (
   logic [$clog2(AddSubLatency+1)-1:0] diff_cnt;
   logic [$clog2(AddSubLatency+1)-1:0] next_cnt;
   logic set;
-  logic [14:0] next_sync_cnt;
 
   logic [56:0] a_diff, b_diff;
   logic signed [57:0] s_diff;
@@ -66,24 +69,30 @@ module synchronizer (
     end else if (SYNC_SETTINGS.UPDATE) begin
       set <= 1'b1;
       ecat_sync_time <= SYNC_SETTINGS.ECAT_SYNC_TIME;
+      ecat_sync_cycle <= SYNC_SETTINGS.ECAT_SYNC_CYCLE;
     end
   end
 
   always_ff @(posedge CLK) begin
     if (sync) begin
+      // Advance the expected time for the next Sync0 by exactly one cycle.
+      // N is known from the CPU (ECAT_SYNC_CYCLE), so a single add replaces the
+      // former free-running estimation of N from the pulse interval.
+      b_next   <= cycle_ticks;
+      next_cnt <= 0;
       if (set) begin
         sys_time <= sync_time + 1;
         a_diff <= '0;
         b_diff <= '0;
-        next_sync_time <= sync_time;
+        a_next <= sync_time;
         sync_time_diff <= '0;
       end else begin
         a_diff   <= next_sync_time;
         b_diff   <= sys_time;
+        a_next   <= next_sync_time;
         sys_time <= sys_time + 1;
       end
       diff_cnt <= '0;
-      next_sync_cnt <= {1'b0, EcatSyncCntBase[13:1]};
       skip_one_assert <= 1'b0;
     end else begin
       if (diff_cnt == AddSubLatency + 1) begin
@@ -110,21 +119,13 @@ module synchronizer (
         skip_one_assert <= 1'b0;
       end
 
-      if (next_sync_cnt == EcatSyncCntBase - 1) begin
-        next_sync_cnt <= 0;
-        a_next <= next_sync_time;
-        b_next <= {47'd0, EcatSyncCntBase};
-        next_cnt <= 0;
+      if (next_cnt == AddSubLatency + 1) begin
+        next_cnt <= next_cnt;
+      end else if (next_cnt == AddSubLatency) begin
+        next_sync_time <= s_next;
+        next_cnt <= next_cnt + 1;
       end else begin
-        if (next_cnt == AddSubLatency + 1) begin
-          next_cnt <= next_cnt;
-        end else if (next_cnt == AddSubLatency) begin
-          next_sync_time <= s_next;
-          next_cnt <= next_cnt + 1;
-        end else begin
-          next_cnt <= next_cnt + 1;
-        end
-        next_sync_cnt <= next_sync_cnt + 1;
+        next_cnt <= next_cnt + 1;
       end
     end
   end
