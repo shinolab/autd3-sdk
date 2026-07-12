@@ -10,14 +10,6 @@
 extern "C" {
 #endif
 
-typedef int bool_t;
-#ifndef true
-#define true (1)
-#endif
-#ifndef false
-#define false (0)
-#endif
-
 #define FW_VERSION_MAJOR (0)
 #define FW_VERSION_MINOR (2)
 #define FW_VERSION_PATCH (0)
@@ -31,6 +23,9 @@ typedef struct {
   rx_frame_t fifo[FIFO_DEPTH];
   volatile uint16_t fifo_head;
   volatile uint16_t fifo_tail;
+  volatile uint16_t fifo_flush_head;
+  volatile uint16_t fifo_flush_gen;
+  volatile uint16_t fifo_flush_seen;
 } app_state_t;
 
 void app_set_state(app_state_t* state);
@@ -41,6 +36,7 @@ void init_app(void);
 void recv_ethercat(const uint8_t* frame);
 
 void app_process_pending(void);
+uint8_t app_process_one(void);
 
 void app_set_mode(uint8_t mode);
 uint8_t app_mode(void);
@@ -50,6 +46,7 @@ void proto_set_fw_version(uint8_t major, uint8_t minor, uint8_t patch);
 void proto_set_error_detail(uint8_t code);
 uint8_t proto_expected_seq(void);
 void proto_handle_frame(const rx_frame_t* in, tx_frame_t* out);
+void proto_apply_reset(tx_frame_t* out);
 
 void port_sleep_ms(uint16_t ms);
 

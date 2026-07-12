@@ -116,12 +116,20 @@ static uint8_t dispatch(const rx_frame_t* in) {
   }
 }
 
+void proto_apply_reset(tx_frame_t* out) {
+  s_proto->expected_seq = 0;
+  s_proto->ack = 0xFF;
+  s_proto->data = 0;
+  out->ack = 0xFF;
+  out->data = 0;
+}
+
 void proto_handle_frame(const rx_frame_t* in, tx_frame_t* out) {
   if (in->cmd == CMD_RESET) {
-    s_proto->expected_seq = 0;
-    s_proto->ack = 0xFF;
-    s_proto->data = 0;
-  } else if (in->seq == s_proto->expected_seq) {
+    proto_apply_reset(out);
+    return;
+  }
+  if (in->seq == s_proto->expected_seq) {
     s_proto->ack = in->seq;
     s_proto->expected_seq = (uint8_t)(s_proto->expected_seq + 1u);
     s_proto->data = dispatch(in);
