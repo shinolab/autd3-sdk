@@ -6,7 +6,6 @@
 #define RZT1_REG8(addr) (*(volatile uint8_t*)(addr))
 #define RZT1_REG16(addr) (*(volatile uint16_t*)(addr))
 #define RZT1_REG32(addr) (*(volatile uint32_t*)(addr))
-#define RZT1_REG64(addr) (*(volatile uint64_t*)(addr))
 
 /* ---- System control (clock generator, low power) ---- */
 
@@ -127,7 +126,9 @@
 
 /* ---- EtherCAT slave controller (distributed clocks) ---- */
 
-#define ECATC_DC_SYS_TIME RZT1_REG64(0xA00D0910u)
-#define ECATC_DC_CYC_START_TIME RZT1_REG64(0xA00D0990u)
+#define ECATC_DC_SYS_TIME_LO RZT1_REG32(0xA00D0910u)
+#define ECATC_DC_SYS_TIME_HI RZT1_REG32(0xA00D0914u)
+#define ECATC_DC_CYC_START_TIME_LO RZT1_REG32(0xA00D0990u)
+#define ECATC_DC_CYC_START_TIME_HI RZT1_REG32(0xA00D0994u)
 
 #endif /* RZT1_REGS_H_ */

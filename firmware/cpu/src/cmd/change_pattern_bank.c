@@ -30,8 +30,7 @@ uint8_t change_pattern_bank_handle(const uint8_t* payload) {
   fpga_write_change_bank(ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_TRANSITION_MODE, ADDR_PATTERN_TRANSITION_VALUE_0,
                          p->bank, p->transition_mode, p->transition_value);
   silencer_note_pattern_bank(p->bank);
-  set_and_wait_update(CTL_FLAG_PATTERN_SET);
-  return ERR_NONE;
+  return set_and_wait_update(CTL_FLAG_PATTERN_SET);
 }
 
 #ifdef __cplusplus
