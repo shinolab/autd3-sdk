@@ -45,8 +45,8 @@ void proto_init(void);
 void proto_set_fw_version(uint8_t major, uint8_t minor, uint8_t patch);
 void proto_set_error_detail(uint8_t code);
 uint8_t proto_expected_seq(void);
-void proto_handle_frame(const rx_frame_t* in, tx_frame_t* out);
-void proto_apply_reset(tx_frame_t* out);
+void proto_handle_frame(const rx_frame_t* in, volatile tx_frame_t* out);
+void proto_apply_reset(volatile tx_frame_t* out);
 
 void port_sleep_ms(uint16_t ms);
 
