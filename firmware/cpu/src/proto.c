@@ -116,15 +116,15 @@ static uint8_t dispatch(const rx_frame_t* in) {
   }
 }
 
-void proto_apply_reset(tx_frame_t* out) {
+void proto_apply_reset(volatile tx_frame_t* out) {
   s_proto->expected_seq = 0;
   s_proto->ack = 0xFF;
   s_proto->data = 0;
-  out->ack = 0xFF;
   out->data = 0;
+  out->ack = 0xFF;
 }
 
-void proto_handle_frame(const rx_frame_t* in, tx_frame_t* out) {
+void proto_handle_frame(const rx_frame_t* in, volatile tx_frame_t* out) {
   if (in->cmd == CMD_RESET) {
     proto_apply_reset(out);
     return;
@@ -135,8 +135,8 @@ void proto_handle_frame(const rx_frame_t* in, tx_frame_t* out) {
     s_proto->data = dispatch(in);
   }
 
-  out->ack = s_proto->ack;
   out->data = s_proto->data;
+  out->ack = s_proto->ack;
 }
 
 #ifdef __cplusplus
