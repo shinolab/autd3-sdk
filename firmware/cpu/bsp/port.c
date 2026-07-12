@@ -9,8 +9,22 @@
 #define MICROSECONDS (NANOSECONDS * 1000)
 #define MILLISECONDS (MICROSECONDS * 1000)
 
+#define PORT_SYNC0_MAX_POLLS (1000000u)
+
 void port_sleep_ms(uint16_t ms) {
   vTaskDelay(pdMS_TO_TICKS(ms));
+}
+
+static uint64_t read_dc_u64(volatile uint32_t *lo, volatile uint32_t *hi) {
+  uint32_t high = *hi;
+  for (;;) {
+    uint32_t low = *lo;
+    uint32_t high2 = *hi;
+    if (high == high2) {
+      return ((uint64_t)high << 32) | (uint64_t)low;
+    }
+    high = high2;
+  }
 }
 
 void port_fpga_write(uint16_t addr, uint16_t value) {
@@ -28,15 +42,24 @@ void port_memory_barrier(void) {
 }
 
 uint64_t port_next_sync0(void) {
-  volatile uint64_t next_sync0 = ECATC_DC_CYC_START_TIME;
-  volatile uint64_t sys_time = ECATC_DC_SYS_TIME;
-  while (next_sync0 < sys_time + 250 * MICROSECONDS) {
-    sys_time = ECATC_DC_SYS_TIME;
-    if (sys_time > next_sync0) next_sync0 = ECATC_DC_CYC_START_TIME;
+  uint64_t next_sync0 = read_dc_u64(&ECATC_DC_CYC_START_TIME_LO, &ECATC_DC_CYC_START_TIME_HI);
+  if (next_sync0 == 0u) {
+    return 0u;
+  }
+  uint64_t sys_time = read_dc_u64(&ECATC_DC_SYS_TIME_LO, &ECATC_DC_SYS_TIME_HI);
+  uint32_t guard = 0u;
+  while (next_sync0 < sys_time + 250u * MICROSECONDS) {
+    if (++guard > PORT_SYNC0_MAX_POLLS) {
+      return 0u;
+    }
+    sys_time = read_dc_u64(&ECATC_DC_SYS_TIME_LO, &ECATC_DC_SYS_TIME_HI);
+    if (sys_time > next_sync0) {
+      next_sync0 = read_dc_u64(&ECATC_DC_CYC_START_TIME_LO, &ECATC_DC_CYC_START_TIME_HI);
+    }
   }
   return next_sync0;
 }
 
 uint64_t port_dc_sys_time(void) {
-  return ECATC_DC_SYS_TIME;
+  return read_dc_u64(&ECATC_DC_SYS_TIME_LO, &ECATC_DC_SYS_TIME_HI);
 }

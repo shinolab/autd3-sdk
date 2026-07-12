@@ -11,9 +11,9 @@ extern "C" {
 #include "proto.h"
 
 uint8_t clear_handle(void) {
-  fpga_init();
+  uint8_t err = fpga_init();
   silencer_guard_init();
-  return ERR_NONE;
+  return err;
 }
 
 #ifdef __cplusplus

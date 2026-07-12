@@ -21,14 +21,15 @@ static app_state_t* s_app = &s_default_app;
 void app_set_state(app_state_t* state) { s_app = state; }
 
 void init_app(void) {
+  s_app->mode = MODE_FIFO;
   proto_init();
-  fpga_init();
+  uint8_t fpga_err = fpga_init();
+  if (fpga_err != ERR_NONE) proto_set_error_detail(fpga_err);
   silencer_guard_init();
   _sTx.ack = 0xFF;
   _sTx.data = 0;
   s_app->last_seq = 0xFF;
   s_app->last_cmd = 0xFF;
-  s_app->mode = MODE_FIFO;
   s_app->fifo_head = 0;
   s_app->fifo_tail = 0;
   s_app->fifo_flush_head = 0;

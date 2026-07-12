@@ -30,8 +30,7 @@ uint8_t change_mod_bank_handle(const uint8_t* payload) {
   fpga_write_change_bank(ADDR_MOD_REQ_RD_BANK, ADDR_MOD_TRANSITION_MODE, ADDR_MOD_TRANSITION_VALUE_0, p->bank,
                          p->transition_mode, p->transition_value);
   silencer_note_mod_bank(p->bank);
-  set_and_wait_update(CTL_FLAG_MOD_SET);
-  return ERR_NONE;
+  return set_and_wait_update(CTL_FLAG_MOD_SET);
 }
 
 #ifdef __cplusplus

@@ -18,8 +18,7 @@ uint8_t gpio_out_handle(const uint8_t* payload) {
     const uint16_t hi = data[2u * i + 1u];
     fpga_write(BRAM_SELECT_CONTROLLER, (uint16_t)(ADDR_DEBUG_VALUE0_0 + i), (uint16_t)(lo | (hi << 8)));
   }
-  set_and_wait_update(CTL_FLAG_DEBUG_SET);
-  return ERR_NONE;
+  return set_and_wait_update(CTL_FLAG_DEBUG_SET);
 }
 
 #ifdef __cplusplus

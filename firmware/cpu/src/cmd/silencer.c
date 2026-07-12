@@ -81,8 +81,7 @@ uint8_t silencer_handle(const uint8_t* payload) {
   fpga_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, p->completion_steps_intensity);
   fpga_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_COMPLETION_STEPS_PHASE, p->completion_steps_phase);
   fpga_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_FLAG, p->flag);
-  set_and_wait_update(CTL_FLAG_SILENCER_SET);
-  return ERR_NONE;
+  return set_and_wait_update(CTL_FLAG_SILENCER_SET);
 }
 
 #ifdef __cplusplus
