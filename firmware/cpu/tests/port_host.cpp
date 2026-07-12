@@ -6,15 +6,25 @@ extern "C" {
 #include "proto.h"
 }
 
-tx_frame_t _sTx = tx_frame_t{};
+volatile tx_frame_t _sTx = tx_frame_t{};
 
 static uint32_t g_total_sleep_ms = 0;
+static void (*g_sleep_hook)() = nullptr;
 
-extern "C" void port_sleep_ms(uint16_t ms) { g_total_sleep_ms += ms; }
+extern "C" void port_sleep_ms(uint16_t ms) {
+  g_total_sleep_ms += ms;
+  if (g_sleep_hook != nullptr) {
+    void (*hook)() = g_sleep_hook;
+    g_sleep_hook = nullptr;
+    hook();
+  }
+}
 
 extern "C" uint32_t port_test_total_sleep_ms() { return g_total_sleep_ms; }
 
 extern "C" void port_test_reset_sleep() { g_total_sleep_ms = 0; }
+
+extern "C" void port_test_set_sleep_hook(void (*hook)()) { g_sleep_hook = hook; }
 
 namespace {
 constexpr uint32_t kModWords = MOD_BUFFER_SAMPLES / 2;
@@ -30,6 +40,7 @@ uint16_t g_em_ram[NUM_BANKS][EMISSION_RAM_WORDS];
 uint32_t g_latch_count[16];
 uint64_t g_next_sync0 = 0;
 uint64_t g_dc_sys_time = 0;
+bool g_latch_stuck = false;
 
 void write_controller(uint32_t a, uint16_t value) {
   switch (a >> 8) {
@@ -38,7 +49,7 @@ void write_controller(uint32_t a, uint16_t value) {
         for (int bit = 0; bit < 16; ++bit) {
           if ((value & kLatchMask & (1u << bit)) != 0) ++g_latch_count[bit];
         }
-        g_ctl[ADDR_CTL_FLAG] = value & ~kLatchMask;
+        g_ctl[ADDR_CTL_FLAG] = g_latch_stuck ? value : static_cast<uint16_t>(value & ~kLatchMask);
       } else {
         g_ctl[a & 0xFF] = value;
       }
@@ -113,7 +124,10 @@ extern "C" void port_test_fpga_reset() {
   std::memset(g_latch_count, 0, sizeof(g_latch_count));
   g_next_sync0 = 0;
   g_dc_sys_time = 0;
+  g_latch_stuck = false;
 }
+
+extern "C" void port_test_fpga_set_latch_stuck(uint8_t stuck) { g_latch_stuck = stuck != 0; }
 
 extern "C" uint16_t port_test_fpga_ctl(uint16_t addr) { return g_ctl[addr & 0xFF]; }
 
