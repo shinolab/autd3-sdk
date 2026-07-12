@@ -55,7 +55,6 @@ module sim_mod_timer ();
   endtask
 
   initial begin
-    sim_helper_random.init();
 
     update_settings = 1'b0;
     mod_settings.REQ_RD_BANK = 1'b0;

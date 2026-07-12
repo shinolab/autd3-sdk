@@ -55,7 +55,6 @@ module sim_emission_timer ();
   endtask
 
   initial begin
-    sim_helper_random.init();
 
     update_settings = 1'b0;
     pattern_settings.REQ_RD_BANK = 1'b0;

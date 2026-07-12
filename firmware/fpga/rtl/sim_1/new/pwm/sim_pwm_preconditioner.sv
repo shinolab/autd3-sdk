@@ -152,7 +152,6 @@ module sim_pwm_preconditioner ();
     join
 
     // at random
-    sim_helper_random.init();
     for (int i = 0; i < 5000; i++) begin
       $display("Check start @%d", i);
       fork

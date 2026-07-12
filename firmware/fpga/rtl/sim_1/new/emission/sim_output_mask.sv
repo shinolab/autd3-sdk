@@ -131,7 +131,6 @@ module sim_output_mask ();
   endtask
 
   initial begin
-    sim_helper_random.init();
 
     cycle_buf[0] = SIZE;
     cycle_buf[1] = SIZE / 4;
