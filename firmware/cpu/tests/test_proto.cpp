@@ -1378,7 +1378,7 @@ TEST(Proto, PhaseCorrPacksBytesIntoWords) {
 
 TEST(Proto, OutputMaskWritesWords) {
   reset_all();
-  std::vector<uint16_t> words(OUTPUT_MASK_USED_WORDS);
+  std::vector<uint16_t> words(OUTPUT_MASK_WORDS);
   for (size_t i = 0; i < words.size(); ++i) words[i] = static_cast<uint16_t>(0x1000 + i);
   make_output_mask(0, words).deliver();
   EXPECT_EQ(_sTx.data, 0);

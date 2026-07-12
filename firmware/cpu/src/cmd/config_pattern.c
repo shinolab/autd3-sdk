@@ -12,7 +12,7 @@ extern "C" {
 
 uint8_t config_pattern_handle(const uint8_t* payload) {
   const config_pattern_payload_t* p = (const config_pattern_payload_t*)payload;
-  int invalid = (p->bank >= NUM_BANKS) || (p->type > EMISSION_TYPE_RAW) || (p->divider == 0u) || (p->size == 0u);
+  uint8_t invalid = (p->bank >= NUM_BANKS) || (p->type > EMISSION_TYPE_RAW) || (p->divider == 0u) || (p->size == 0u);
   if (!invalid) {
     if (p->type == EMISSION_TYPE_RAW) {
       invalid = p->size > EMISSION_MAX_INDICES;
