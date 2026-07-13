@@ -1,6 +1,9 @@
 mod camera;
 mod gizmo;
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use bytemuck::{Pod, Zeroable};
 use glam::{EulerRot, Quat, Vec2, Vec3};
 use wgpu::util::DeviceExt;
@@ -96,6 +99,7 @@ pub struct Renderer {
     show_markers: bool,
     bg: wgpu::Color,
 
+    geometry_key: Option<u64>,
     axis_range: [(f32, f32); 3],
     slice_center: Vec3,
     slice_rot: Vec3,
@@ -195,6 +199,7 @@ impl Renderer {
             num_trans: 0,
             show_markers: true,
             bg: DEFAULT_BG,
+            geometry_key: None,
             axis_range: [(0.0, 0.0); 3],
             slice_center: Vec3::ZERO,
             slice_rot: Vec3::ZERO,
@@ -302,7 +307,13 @@ impl Renderer {
         self.directions_buf = Some(directions_buf);
         self.states_buf = Some(states_buf);
 
-        self.configure_scene(positions);
+        // Every client that connects re-sends the geometry, so the slice and the camera are only
+        // reset when the layout actually changed — reconnecting must not throw away the user's view.
+        let key = geometry_key(positions, directions);
+        if self.geometry_key != Some(key) {
+            self.geometry_key = Some(key);
+            self.configure_scene(positions);
+        }
     }
 
     pub fn set_states(&self, states: &[[f32; 4]]) {
@@ -736,6 +747,13 @@ struct Gpu {
     device: wgpu::Device,
     queue: wgpu::Queue,
     sample_count: u32,
+}
+
+fn geometry_key(positions: &[[f32; 4]], directions: &[[f32; 4]]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    bytemuck::cast_slice::<_, u8>(positions).hash(&mut hasher);
+    bytemuck::cast_slice::<_, u8>(directions).hash(&mut hasher);
+    hasher.finish()
 }
 
 fn backing_size(canvas: &web_sys::HtmlCanvasElement) -> (u32, u32) {
