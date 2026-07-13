@@ -23,8 +23,12 @@ const MAX_DPR: f64 = 2.0;
 // bounded to keep the attachments around 128 MB even on a maximised HiDPI window.
 const MAX_PIXELS: f64 = 4.0e6;
 const FIELD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-const FIELD_TEXELS_PER_MM: f32 = 2.0;
-const FIELD_MAX_DIM: u32 = 1024;
+pub const FIELD_TEXELS_PER_MM: f32 = 2.0;
+pub const FIELD_MAX_DIM: u32 = 1024;
+pub const SLICE_MIN_MM: f32 = 1.0;
+pub const SLICE_MAX_MM: f32 = 1024.0;
+pub const RESOLUTION_MIN: f32 = 0.25;
+pub const RESOLUTION_MAX: f32 = 8.0;
 const FIELD_WORKGROUP: u32 = 8;
 const SCENE_STAGES: wgpu::ShaderStages =
     wgpu::ShaderStages::VERTEX_FRAGMENT.union(wgpu::ShaderStages::COMPUTE);
@@ -95,6 +99,8 @@ pub struct Renderer {
     axis_range: [(f32, f32); 3],
     slice_center: Vec3,
     slice_rot: Vec3,
+    slice_size: Vec2,
+    texels_per_mm: f32,
     gizmo: Gizmo,
 }
 
@@ -192,6 +198,8 @@ impl Renderer {
             axis_range: [(0.0, 0.0); 3],
             slice_center: Vec3::ZERO,
             slice_rot: Vec3::ZERO,
+            slice_size: Vec2::ZERO,
+            texels_per_mm: FIELD_TEXELS_PER_MM,
             gizmo: Gizmo::new(),
         })
     }
@@ -419,6 +427,32 @@ impl Renderer {
         }
     }
 
+    pub fn set_slice_size(&mut self, axis: usize, value: f32) {
+        let value = value.clamp(SLICE_MIN_MM, SLICE_MAX_MM);
+        match axis {
+            0 => self.slice_size.x = value,
+            1 => self.slice_size.y = value,
+            _ => return,
+        }
+        self.apply_slice();
+        self.create_field();
+    }
+
+    pub fn set_slice_resolution(&mut self, texels_per_mm: f32) {
+        self.texels_per_mm = texels_per_mm.clamp(RESOLUTION_MIN, RESOLUTION_MAX);
+        self.create_field();
+    }
+
+    #[must_use]
+    pub fn slice_size(&self) -> [f32; 2] {
+        self.slice_size.to_array()
+    }
+
+    #[must_use]
+    pub fn field_dims(&self) -> [u32; 2] {
+        [self.uniforms.slice_w, self.uniforms.slice_h]
+    }
+
     #[must_use]
     pub fn slice_center(&self) -> [f32; 3] {
         self.slice_center.to_array()
@@ -444,11 +478,15 @@ impl Renderer {
     }
 
     fn create_field(&mut self) {
-        let width = self.axis_range[0].1 - self.axis_range[0].0;
-        let height = self.axis_range[2].1 - self.axis_range[2].0;
-        let to_dim =
-            |mm: f32| -> u32 { ((mm * FIELD_TEXELS_PER_MM) as u32).clamp(1, FIELD_MAX_DIM) };
-        let (width, height) = (to_dim(width), to_dim(height));
+        // Both axes share one scale factor so that hitting FIELD_MAX_DIM lowers the resolution
+        // isotropically instead of squashing the texels of the longer axis.
+        let wanted = self.slice_size * self.texels_per_mm;
+        let cap = f32::from(u16::try_from(FIELD_MAX_DIM).unwrap_or(u16::MAX));
+        let scale = (cap / wanted.x.max(1.0))
+            .min(cap / wanted.y.max(1.0))
+            .min(1.0);
+        let to_dim = |v: f32| -> u32 { ((v * scale) as u32).clamp(1, FIELD_MAX_DIM) };
+        let (width, height) = (to_dim(wanted.x), to_dim(wanted.y));
         self.uniforms.slice_w = width;
         self.uniforms.slice_h = height;
 
@@ -498,11 +536,9 @@ impl Renderer {
     }
 
     fn apply_slice(&mut self) {
-        let width = self.axis_range[0].1 - self.axis_range[0].0;
-        let height = self.axis_range[2].1 - self.axis_range[2].0;
         let rot = self.rotation();
-        let u = rot * (Vec3::X * width);
-        let v = rot * (Vec3::Z * height);
+        let u = rot * (Vec3::X * self.slice_size.x);
+        let v = rot * (Vec3::Z * self.slice_size.y);
         let origin = self.slice_center - u * 0.5 - v * 0.5;
         self.uniforms.origin = origin.extend(0.0).to_array();
         self.uniforms.u = u.extend(0.0).to_array();
@@ -660,6 +696,10 @@ impl Renderer {
             (SLICE_BOTTOM_MM, SLICE_BOTTOM_MM + SLICE_HEIGHT_MM),
         ];
         self.slice_rot = Vec3::ZERO;
+        self.slice_size = Vec2::new(
+            (self.axis_range[0].1 - self.axis_range[0].0).clamp(SLICE_MIN_MM, SLICE_MAX_MM),
+            (self.axis_range[2].1 - self.axis_range[2].0).clamp(SLICE_MIN_MM, SLICE_MAX_MM),
+        );
         self.slice_center = Vec3::new(
             (self.axis_range[0].0 + self.axis_range[0].1) * 0.5,
             (self.axis_range[1].0 + self.axis_range[1].1) * 0.5,
