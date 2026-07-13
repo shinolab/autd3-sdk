@@ -8,17 +8,18 @@ sidebar:
 import Math from "@components/Math.astro";
 import MathBlock from "@components/MathBlock.astro";
 
-| Name              | In/Out | Width | Description                |
-| ----------------- | ------ | ----- | -------------------------- |
-| CLK               | In     | 1     | メインクロック             |
-| SYNC_SETTINGS     | In     | -     |                            |
-| ├─ UPDATE         | In     | 1     | 同期フラグ                 |
-| └─ ECAT_SYNC_TIME | In     | 64    | 同期 EtherCAT 時刻         |
-| ECAT_SYNC         | In     | 1     | EtherCAT Sync0 信号        |
-| SYS_TIME          | Out    | 57    | システム時刻               |
-| SYNC              | Out    | 1     | Sync0 検出フラグ           |
-| SKIP_ONE_ASSERT   | Out    | 1     | 1 飛ばしアサート           |
-| SYNC_TIME_DIFF    | Out    | 14    | 補正残量 (符号あり)        |
+| Name               | In/Out | Width | Description                          |
+| ------------------ | ------ | ----- | ------------------------------------ |
+| CLK                | In     | 1     | メインクロック                       |
+| SYNC_SETTINGS      | In     | -     |                                      |
+| ├─ UPDATE          | In     | 1     | 同期フラグ                           |
+| ├─ ECAT_SYNC_TIME  | In     | 64    | 同期 EtherCAT 時刻                   |
+| └─ ECAT_SYNC_CYCLE | In     | 32    | Sync0 の発火周期 (`SYS_TIME` 単位)   |
+| ECAT_SYNC          | In     | 1     | EtherCAT Sync0 信号                  |
+| SYS_TIME           | Out    | 57    | システム時刻                         |
+| SYNC               | Out    | 1     | Sync0 検出フラグ                     |
+| SKIP_ONE_ASSERT    | Out    | 1     | 1 飛ばしアサート                     |
+| SYNC_TIME_DIFF     | Out    | 14    | 補正残量 (符号あり)                  |
 
 Synchronizer はすべてのデバイスで同期した時刻 `SYS_TIME` を生成するモジュールである.
 超音波出力, Modulation, Emission 等はすべてこの `SYS_TIME` を時刻の基準にしている.
@@ -31,6 +32,7 @@ Synchronizer はすべてのデバイスで同期した時刻 `SYS_TIME` を生�
 - FPGA からは EtherCAT スレーブ (CPU ボード) のレジスタに書き込まれているシステム時刻に直接アクセスできない.
 - EtherCAT スレーブは一定の周期で Sync0 信号 (`ECAT_SYNC`) をアサートできる. この信号の発火はシステム時刻を参照しているので, すべてのデバイスで同期している.
 - Sync0 信号が発火する周期は <Math tex="\SI{500}{us}" /> の整数倍である.
+- この周期はマスタが ESC の DC レジスタ `0x09A0` に設定する. CPU ファームウェアはこれを読み出し, `SYS_TIME` の単位に変換して `ECAT_SYNC_CYCLE` として FPGA に渡す (詳細は [CPU ファームウェア](/autd3-sdk/developer/cpu/) を参照).
 
 なお, `SYS_TIME` は EtherCAT のシステム時刻に同期しているが, その単位は <Math tex="1/\SI{20.48}{MHz}" /> で, <Math tex="\SI{57}{bit}" /> となっている.
 
@@ -68,65 +70,25 @@ Synchronizer はすべてのデバイスで同期した時刻 `SYS_TIME` を生�
 しかし, 実際には FPGA のクロックを生成する水晶振動子には個体差があるため, `SYS_TIME` は徐々にずれていってしまう.
 定期的に上記と同様のことを行って補正してもいいが, それは大変なので, Sync0 信号が周期的かつ同期的に発火するという性質を用いた別の補正方法を採用している.
 
-まずは, Sync0 信号が <Math tex="\SI{500}{us}" /> の間隔で発火する場合を考えよう.
-この場合, Sync0 信号が発火した際, `SYS_TIME` は前回 Sync0 信号が発火したときの値に <Math tex="\SI{20.48}{MHz} \times \SI{500}{us} = 10240" /> を足した値になっているはずである.
-したがって, Sync0 信号が発火した際に, この本来あるべき値と実際の値を比較して補正できる.
-
-Sync0 信号が <Math tex="\SI{500}{us}\times N, N=2,3,..." /> の間隔で発火する場合は, <Math tex="N" /> を推定する必要がある[^1].
-これは, Sync0 信号の発火タイミングから推定できる.
-Sync0 信号の発火タイミングで, カウンタ <Math tex="n" /> を <Math tex="n=\SI{20.48}{MHz} \times \SI{500}{us}/2 = 5120" /> で初期化した後, これをメインクロックでカウントアップする.
-そして, 次に Sync0 信号の発火タイミングで <Math tex="N" /> を
+Sync0 信号が発火した際, `SYS_TIME` は前回 Sync0 信号が発火したときの値に, Sync0 の発火周期を足した値になっているはずである.
+この周期は `ECAT_SYNC_CYCLE` として CPU から与えられているので, Sync0 が発火するたびに次に期待される時刻を
 
 <MathBlock tex={String.raw`
-N = \left\lfloor \frac{n}{10240} \right\rfloor
+\text{next\_sync\_time} \mathrel{+}= \text{ECAT\_SYNC\_CYCLE}
 `} />
 
-で推定する.
-この推定が正しくなる条件を求めてみる.
-FPGA の実際のクロック周波数が <Math tex="\SI{20.48}{MHz} \times (1 \pm \delta), (\delta \ge 0)" /> であるとすると,
+と更新すればよい.
+Sync0 信号が発火した際に, この本来あるべき値と実際の `SYS_TIME` の差を取れば, 補正すべき量が求まる.
 
-<MathBlock tex={String.raw`
-\left\lfloor \frac{n}{10240} \right\rfloor = \left\lfloor N + \frac{1}{2} \pm N\delta \right\rfloor
-`} />
-
-となる.
-これが正しく <Math tex="N" /> になるためには,
-
-<MathBlock tex={String.raw`
-0 \le \frac{1}{2} \pm N\delta < 1
-`} />
-
-から,
-
-<MathBlock tex={String.raw`
-N < \frac{1}{2\delta}
-`} />
-
-を満たせば良い (十分条件. なお, <Math tex="\delta=0" /> の場合は常に満たされる).
-AUTD3 デバイスで使用している水晶振動子 (SG-8002CE-25.6M-PCB-L2, EPSON) の周波数は <Math tex="\SI{25.6}{MHz}" />, トレランスは <Math tex="\pm\SI{50}{ppm}" /> である.
-これから生成されるクロックを, FPGA 内蔵の Mixed-Mode Clock Manager (MMCM) で変換したものをメインクロックとして使用している.
-トレランスは不変と仮定すると[^tolerance], <Math tex="\delta" /> の最大値は <Math tex="\delta = \SI{50}{ppm}" /> となる.
-このときの条件は,
-
-<MathBlock tex={String.raw`
-N < 10000
-`} />
-
-である.
-実際には, 10 台ほどのデバイスを接続したとしても <Math tex="N=3,4" /> で動作するので, この条件は常に満たされると考えて問題ない.
-
-さて, `SYS_TIME` の補正は, `SYS_TIME` が基準より進んでいる場合 (即ち, 水晶振動子の周波数が基準より高い場合) は `SYS_TIME` のインクリメントを止め, `SYS_TIME` が遅れている場合 (即ち, 水晶振動子の周波数が基準より低い場合) は `SYS_TIME` を <Math tex="+2" /> することにより実行する.
+`SYS_TIME` の補正は, `SYS_TIME` が基準より進んでいる場合 (即ち, 水晶振動子の周波数が基準より高い場合) は `SYS_TIME` のインクリメントを止め, `SYS_TIME` が遅れている場合 (即ち, 水晶振動子の周波数が基準より低い場合) は `SYS_TIME` を <Math tex="+2" /> することにより実行する.
 そのため, `SYS_TIME` は逆戻りすることはないが, 一つ飛ばしでカウントアップされる可能性がある.
 一つ飛ばしが発生した際は `SKIP_ONE_ASSERT` をアサートする.
 
 補正の残量は `SYNC_TIME_DIFF` として出力され, デバッグ用に [GPIO Output](/autd3-sdk/developer/fpga/gpio-output/) から観測できる.
 
 :::note
-`SYS_TIME` の補正を Sync0 信号が発火した後すぐ集中的に行うと, <Math tex="1/(\SI{500}{us}\times N) = \SI{2/N}{kHz}" /> の周期的な操作に由来するノイズが生じる.
+`SYS_TIME` の補正を Sync0 信号が発火した後すぐ集中的に行うと, Sync0 の発火周期に由来する周期的なノイズが生じる.
+発火周期を <Math tex="\SI{500}{us} \times N" /> とすると, その周波数は <Math tex="1/(\SI{500}{us}\times N) = \SI{2/N}{kHz}" /> である.
 特によく使われる <Math tex="N=1" />--<Math tex="4" /> あたりの周波数はヒトの聴覚が比較的敏感な周波数でもあるので, このノイズは避けたいところではある.
 この補正タイミングを疑似乱数を用いてバラすことでこれを避けることもできるが, 実装してみたところこのノイズはそもそもほぼ聞こえず, 効果は薄かったので, 現在はこのような処理は行っていない.
 :::
-
-[^1]: ソフトウェアから指定すればいいだけの話だが, TwinCAT を使用する場合, この <Math tex="N" /> を (クライアント側から) 取得する方法がなかった.
-
-[^tolerance]: これが正しいかは確かめてはいない. また, MMCM の精度やジッター等は無視しているが, 後に明らかになるように, かなり余裕があるので問題ないだろう.

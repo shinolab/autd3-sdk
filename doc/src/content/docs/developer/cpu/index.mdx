@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
 import Mermaid from "@components/Mermaid.astro";
 
 CPU ボード (AP-RZT-01, Alpha Project) は Renesas RZ/T1 (Arm Cortex-R4F) を搭載しており, EtherCAT スレーブとして動作する.
@@ -112,6 +113,9 @@ FIFO が満杯の場合, フレームは捨てられる.
 | `0x04` | `ERR_INVALID_SILENCER_SETTING` | Silencer の設定が厳格モードの条件を満たさない |
 | `0x05` | `ERR_INVALID_TRANSITION_MODE`  | 遷移モードと繰り返し回数の組み合わせが不正 |
 | `0x06` | `ERR_MISS_TRANSITION_TIME`     | `SysTime` 遷移の指定時刻が近すぎる・過去である |
+| `0x07` | `ERR_FPGA_TIMEOUT`             | FPGA が制御フラグを期限内にクリアしない     |
+| `0x08` | `ERR_SYNC_NOT_READY`           | EtherCAT の DC が未設定で Sync0 時刻が読めない |
+| `0x09` | `ERR_INVALID_SYNC0_CYCLE`      | Sync0 周期が未設定, または <Math tex="\SI{500}{us}" /> の整数倍でない |
 
 ## FPGA への書き込み
 
@@ -124,9 +128,6 @@ FPGA は CS1 空間 (`0x44000000`) にマップされた <Math tex="\SI{16}{bit}
 :::caution
 FPGA 側の「書き込み先を切り替えるレジスタ」(`MOD_MEM_WR_BANK` / `MOD_MEM_WR_PAGE` / `PATTERN_MEM_WR_BANK` / `PATTERN_MEM_WR_PAGE`) は BRAM と違いラッチされない.
 そのため, これらを書き換える前後ではメモリバリア (`port_memory_barrier`, `dmb` 命令) が必要である.
-`fpga_write_switch` がこの規約を実装しており, `fpga_write_ram` と `fpga_init` から使われる.
-
-一方, BRAM への通常の書き込み (位相補正・出力マスク・PWE テーブル・デバッグ値) や, 制御フラグを介するラッチモデルの設定 (`config_*` / `change_*_bank`) にはバリアは不要である.
 :::
 
 設定値の反映は制御フラグ経由のハンドシェイクで行う.
@@ -136,8 +137,17 @@ FPGA 側の「書き込み先を切り替えるレジスタ」(`MOD_MEM_WR_BANK`
 
 `CMD_SYNCHRONIZE` は以下を行う.
 
-1. `port_next_sync0()` で次に Sync0 が発火する EtherCAT システム時刻を読み出す. 現在時刻がそれに近すぎる (<Math tex="\SI{250}{us}" /> 未満) 場合は次の発火まで待つ.
-1. その時刻を `ADDR_ECAT_SYNC_TIME_*` へ書き込む.
+1. Sync0 の発火周期を読み出す
+1. 周期を検証する. <Math tex="0" /> ( DC が設定されてない ) や <Math tex="\SI{500}{us}" /> の整数倍でない場合は `ERR_INVALID_SYNC0_CYCLE` を返す
+1. 周期を FPGA内部の`SYS_TIME` の単位 (<Math tex="\SI{20.48}{MHz}" />) へ変換する
+
+    <MathBlock tex={String.raw`
+    \text{cycle\_ticks} = \text{cycle\_ns} \times \frac{\SI{20.48}{MHz}}{\SI{1}{GHz}} = 64 \times \frac{\text{cycle\_ns}}{3125}
+    `} />
+
+1. 次に Sync0 が発火する EtherCAT システム時刻を読み出す. 現在時刻がそれに近すぎる (<Math tex="\SI{250}{us}" /> 未満) 場合は次の発火まで待つ.
+    - DC が未設定で時刻が読めない場合は `ERR_SYNC_NOT_READY` を返す
+1. その時刻を `ADDR_ECAT_SYNC_TIME_*` へ, 変換した周期を `ADDR_ECAT_SYNC_CYCLE_*` へ書き込む.
 1. `SYNC_SET` フラグを立て, FPGA の [Synchronizer](/autd3-sdk/developer/fpga/synchronizer/) が `SYS_TIME` をセットするのを待つ.
 
 ## バンク遷移の検証
