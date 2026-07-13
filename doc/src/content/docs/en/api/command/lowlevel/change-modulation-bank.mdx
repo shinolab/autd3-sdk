@@ -31,9 +31,12 @@ import { excerpt } from "@lib/excerpt";
 | -------------------- | --------------------------        |
 | `Immediate`          | Immediate                         |
 | `SyncIdx`            | When the playback index next becomes 0 |
-| `SysTime(DcSysTime)` | At the specified DC system time   |
+| `SysTime(DcSysTime, margin)` | At the specified DC system time (`margin` is optional, see below) |
 | `Gpio(GpioIn)`       | Trigger on the specified GPIO input pin |
 | `Ext`                | Extended mode (automatically switches to the next bank when playback within the bank finishes) |
+
+`SysTime` rejects a time earlier than "now + margin" with a `MISS_TRANSITION_TIME` error, because the FPGA may miss a transition whose time is too close.
+The margin defaults to 10 ms.
 
 See [GPIO pins](/autd3-sdk/en/hardware/gpio/) for details on `Gpio(GpioIn)`.
 

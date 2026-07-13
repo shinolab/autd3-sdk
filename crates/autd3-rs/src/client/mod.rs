@@ -15,18 +15,16 @@ use std::thread::JoinHandle;
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::command::Pattern;
 use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::{FirmwareVersion, Version};
 use crate::fpga_state::FpgaState;
-use crate::geometry::Autd3;
 use crate::geometry::Geometry;
 use crate::link::{IntoLink, Link};
 use crate::mirror::FirmwareState;
 use crate::operation::{Clear, Distribution, Synchronize};
 use crate::protocol::{Cmd, DeviceErrorCode};
-use crate::value::Emission;
+use crate::telemetry::{FpgaFunctions, Telemetry};
 
 use completion::CompletionPool;
 use pool::SlotPool;
@@ -246,20 +244,24 @@ impl Client {
     }
 
     pub async fn stop(&self) -> Result<(), Error> {
-        let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; self.num_devices];
-        let datagrams = self
-            .datagram_builder()
-            .push(Pattern::new(&patterns))
-            .build()?;
-        for frame in &datagrams {
-            self.send_checked(frame).await?;
+        let result = self
+            .send_broadcast(&Datagram::no_payload(Cmd::Stop))
+            .await?
+            .await?
+            .check();
+        if result.is_err() {
+            self.mark_desynced();
         }
-        Ok(())
+        result
     }
 
     async fn read_broadcast(&self, cmd: Cmd) -> Result<Vec<u8>, Error> {
+        self.read_broadcast_with(&Datagram::no_payload(cmd)).await
+    }
+
+    async fn read_broadcast_with(&self, datagram: &Datagram) -> Result<Vec<u8>, Error> {
         Ok(self
-            .send_broadcast_exclusive(&Datagram::no_payload(cmd))
+            .send_broadcast_exclusive(datagram)
             .await?
             .await?
             .data()
@@ -321,12 +323,48 @@ impl Client {
 
     pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, Error> {
         Ok(self
-            .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadFpgaState))
+            .read_broadcast(Cmd::ReadFpgaState)
             .await?
-            .await?
-            .data()
+            .into_iter()
+            .map(FpgaState)
+            .collect())
+    }
+
+    pub async fn read_telemetry(&self, counter: Telemetry) -> Result<Vec<u8>, Error> {
+        let mut datagram = Datagram::no_payload(Cmd::ReadTelemetry);
+        datagram.payload[0] = counter.as_u8();
+        self.read_broadcast_with(&datagram).await
+    }
+
+    pub async fn read_fpga_functions(&self) -> Result<Vec<FpgaFunctions>, Error> {
+        const UNKNOWN_CMD: u8 = DeviceErrorCode::UnknownCmd as u8;
+
+        let err_before = self.read_broadcast(Cmd::ReadErrorDetail).await?;
+        let functions = self.read_broadcast(Cmd::ReadFpgaFunctions).await?;
+        let err_after = self.read_broadcast(Cmd::ReadErrorDetail).await?;
+
+        Ok(functions
             .iter()
-            .map(|&state| FpgaState(state))
+            .enumerate()
+            .map(|(device, &bits)| {
+                if err_after[device] != UNKNOWN_CMD {
+                    return FpgaFunctions(bits);
+                }
+                if err_before[device] == UNKNOWN_CMD {
+                    tracing::warn!(
+                        device,
+                        "FPGA function bits are unknown: {} was already latched before the query, so it cannot be attributed to it",
+                        DeviceErrorCode::UnknownCmd.describe()
+                    );
+                } else {
+                    tracing::warn!(
+                        device,
+                        "FPGA function bits are unknown: {}",
+                        DeviceErrorCode::UnknownCmd.describe()
+                    );
+                }
+                FpgaFunctions::UNKNOWN
+            })
             .collect())
     }
 

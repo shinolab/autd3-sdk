@@ -135,6 +135,6 @@ namespace AUTD3
         }
 
         IntPtr ICommand.CreateOp() =>
-            NativePattern.autd3_op_change_pattern_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value);
+            NativePattern.autd3_op_change_pattern_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value, _transitionMode.MarginNs);
     }
 }

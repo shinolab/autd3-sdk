@@ -25,4 +25,8 @@ impl Port for FpgaEmulator {
     fn sync0_cycle_ns(&mut self) -> u32 {
         FpgaEmulator::sync0_cycle_ns(self)
     }
+
+    fn al_status_code(&mut self) -> u16 {
+        FpgaEmulator::al_status_code(self)
+    }
 }

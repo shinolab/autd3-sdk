@@ -29,6 +29,13 @@ impl Operation for ChangeModulationBank {
         out[0] = self.bank.as_u8();
         out[1] = self.transition_mode.as_u8();
         out[2..10].copy_from_slice(&self.transition_mode.value().to_le_bytes());
+        out[10..14].copy_from_slice(
+            &self
+                .transition_mode
+                .margin_ns()
+                .map_err(Error::InvalidPayload)?
+                .to_le_bytes(),
+        );
         Ok(Cmd::ChangeModulationBank)
     }
 
@@ -74,7 +81,10 @@ mod tests {
 
         let (_cmd, payload) = encode(ChangeModulationBank {
             bank: ModulationBank::B0,
-            transition_mode: TransitionMode::SysTime(DcSysTime::from_nanos(0x0123_4567_89AB_CDEF)),
+            transition_mode: TransitionMode::SysTime {
+                time: DcSysTime::from_nanos(0x0123_4567_89AB_CDEF),
+                margin: None,
+            },
         });
 
         assert_eq!(payload[1], 0x01);

@@ -18,7 +18,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_config_modulation(byte bank, IntPtr samplingConfig, uint size, ushort rep);
 
         [DllImport("autd3capi")]
-        internal static extern IntPtr autd3_op_change_modulation_bank(byte bank, byte transitionMode, ulong transitionValue);
+        internal static extern IntPtr autd3_op_change_modulation_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
     }
 
     public sealed class WriteModulationBuffer : ICommand
@@ -79,6 +79,6 @@ namespace AUTD3
         }
 
         IntPtr ICommand.CreateOp() =>
-            NativeModulationOp.autd3_op_change_modulation_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value);
+            NativeModulationOp.autd3_op_change_modulation_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value, _transitionMode.MarginNs);
     }
 }

@@ -66,7 +66,7 @@ mod client {
     use std::pin::Pin;
     use std::sync::Arc;
 
-    use autd3_rs::{ClientConfig, Frames, Response, ResponseFuture};
+    use autd3_rs::{ClientConfig, Frames, Response, ResponseFuture, Telemetry};
     use autd3_rs_core::link::DeviceState;
     use autd3_rs_core::{Error, Geometry};
 
@@ -114,6 +114,8 @@ mod client {
         fn read_firmware_version(&self) -> BoxFuture<Vec<String>>;
         fn read_fpga_state(&self) -> BoxFuture<Vec<u8>>;
         fn read_error_detail(&self) -> BoxFuture<Vec<u8>>;
+        fn read_telemetry(&self, counter: Telemetry) -> BoxFuture<Vec<u8>>;
+        fn read_fpga_functions(&self) -> BoxFuture<Vec<u8>>;
 
         fn send(
             &self,

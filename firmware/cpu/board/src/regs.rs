@@ -152,6 +152,7 @@ pub(crate) const MPC_PH6PFS: usize = 0xA000_028E;
 pub(crate) const MPC_PH7PFS: usize = 0xA000_028F;
 pub(crate) const MPC_PK0PFS: usize = 0xA000_0298;
 
+pub(crate) const ECATC_AL_STATUS_CODE: usize = 0xA00D_0134;
 pub(crate) const ECATC_DC_SYS_TIME_LO: usize = 0xA00D_0910;
 pub(crate) const ECATC_DC_SYS_TIME_HI: usize = 0xA00D_0914;
 pub(crate) const ECATC_DC_CYC_START_TIME_LO: usize = 0xA00D_0990;

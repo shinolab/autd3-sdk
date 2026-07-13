@@ -77,7 +77,7 @@ namespace AUTD3
         internal static extern int autd3_modulation_radiation_pressure_inplace(IntPtr buffer);
 
         [DllImport("autd3capi")]
-        internal static extern IntPtr autd3_op_modulation(byte bank, IntPtr samplingConfig, IntPtr modulationBuffer, ushort loopRep, byte transitionMode, ulong transitionValue);
+        internal static extern IntPtr autd3_op_modulation(byte bank, IntPtr samplingConfig, IntPtr modulationBuffer, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
     }
 
     public sealed class ModulationBuffer : IDisposable, IEnumerable<byte>
@@ -271,7 +271,7 @@ namespace AUTD3
             try
             {
                 return NativeModulation.autd3_op_modulation(
-                    (byte)_bank, sampling, _buffer.Handle, _loopBehavior.Rep, _transitionMode.Mode, _transitionMode.Value);
+                    (byte)_bank, sampling, _buffer.Handle, _loopBehavior.Rep, _transitionMode.Mode, _transitionMode.Value, _transitionMode.MarginNs);
             }
             finally
             {

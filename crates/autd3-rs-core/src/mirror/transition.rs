@@ -24,7 +24,12 @@ impl BankLoop {
             }
             BankLoop::Finite => matches!(
                 mode,
-                TransitionMode::SyncIdx | TransitionMode::SysTime(_) | TransitionMode::Gpio(_)
+                TransitionMode::SyncIdx
+                    | TransitionMode::SysTime {
+                        time: _,
+                        margin: None
+                    }
+                    | TransitionMode::Gpio(_)
             ),
         }
     }
@@ -108,14 +113,20 @@ mod tests {
         assert!(BankLoop::Infinite.accepts(TransitionMode::Immediate));
         assert!(BankLoop::Infinite.accepts(TransitionMode::Ext));
         assert!(!BankLoop::Infinite.accepts(TransitionMode::SyncIdx));
-        assert!(!BankLoop::Infinite.accepts(TransitionMode::SysTime(DcSysTime::from_nanos(0))));
+        assert!(!BankLoop::Infinite.accepts(TransitionMode::SysTime {
+            time: DcSysTime::from_nanos(0),
+            margin: None
+        }));
         assert!(!BankLoop::Infinite.accepts(TransitionMode::Gpio(GpioIn::I0)));
     }
 
     #[test]
     fn finite_accepts_only_timed_modes() {
         assert!(BankLoop::Finite.accepts(TransitionMode::SyncIdx));
-        assert!(BankLoop::Finite.accepts(TransitionMode::SysTime(DcSysTime::from_nanos(0))));
+        assert!(BankLoop::Finite.accepts(TransitionMode::SysTime {
+            time: DcSysTime::from_nanos(0),
+            margin: None
+        }));
         assert!(BankLoop::Finite.accepts(TransitionMode::Gpio(GpioIn::I0)));
         assert!(!BankLoop::Finite.accepts(TransitionMode::Immediate));
         assert!(!BankLoop::Finite.accepts(TransitionMode::Ext));

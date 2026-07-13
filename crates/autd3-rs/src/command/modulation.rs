@@ -116,7 +116,10 @@ mod tests {
         let data = vec![0x80u8; 4];
         let mut b = DatagramBuilder::new(1);
         b.push(Modulation {
-            transition_mode: TransitionMode::SysTime(DcSysTime::from_nanos(0xDEAD_BEEF)),
+            transition_mode: TransitionMode::SysTime {
+                time: DcSysTime::from_nanos(0xDEAD_BEEF),
+                margin: None,
+            },
             ..Modulation::new(SamplingConfig::FREQ_4K, &data)
         });
         let datagrams = b.build().unwrap();

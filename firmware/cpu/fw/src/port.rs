@@ -12,4 +12,6 @@ pub trait Port {
     fn dc_sys_time(&mut self) -> u64;
 
     fn sync0_cycle_ns(&mut self) -> u32;
+
+    fn al_status_code(&mut self) -> u16;
 }

@@ -29,6 +29,13 @@ impl Operation for ChangePatternBank {
         out[0] = self.bank.as_u8();
         out[1] = self.transition_mode.as_u8();
         out[2..10].copy_from_slice(&self.transition_mode.value().to_le_bytes());
+        out[10..14].copy_from_slice(
+            &self
+                .transition_mode
+                .margin_ns()
+                .map_err(Error::InvalidPayload)?
+                .to_le_bytes(),
+        );
         Ok(Cmd::ChangePatternBank)
     }
 
@@ -77,7 +84,10 @@ mod tests {
 
         let (_cmd, payload) = encode(ChangePatternBank {
             bank: PatternBank::B0,
-            transition_mode: TransitionMode::SysTime(DcSysTime::from_nanos(0x0123_4567_89AB_CDEF)),
+            transition_mode: TransitionMode::SysTime {
+                time: DcSysTime::from_nanos(0x0123_4567_89AB_CDEF),
+                margin: None,
+            },
         });
 
         assert_eq!(payload[0], 0);
@@ -96,5 +106,53 @@ mod tests {
 
         assert_eq!(payload[1], 0x02);
         assert_eq!(&payload[2..10], &2u64.to_le_bytes());
+    }
+
+    #[test]
+    fn change_pattern_bank_encodes_sys_time_margin() {
+        use core::time::Duration;
+
+        use crate::value::DcSysTime;
+
+        let (_cmd, payload) = encode(ChangePatternBank {
+            bank: PatternBank::B0,
+            transition_mode: TransitionMode::SysTime {
+                time: DcSysTime::ZERO,
+                margin: Some(Duration::from_millis(1)),
+            },
+        });
+        assert_eq!(&payload[10..14], &1_000_000u32.to_le_bytes());
+
+        let (_cmd, payload) = encode(ChangePatternBank {
+            bank: PatternBank::B0,
+            transition_mode: TransitionMode::SysTime {
+                time: DcSysTime::ZERO,
+                margin: None,
+            },
+        });
+        assert_eq!(&payload[10..14], &0u32.to_le_bytes());
+    }
+
+    #[test]
+    fn change_pattern_bank_rejects_margin_beyond_u32_nanos() {
+        use core::time::Duration;
+
+        use crate::value::DcSysTime;
+
+        let mut out = [0u8; PAYLOAD_BYTES];
+        let err = ChangePatternBank {
+            bank: PatternBank::B0,
+            transition_mode: TransitionMode::SysTime {
+                time: DcSysTime::ZERO,
+                margin: Some(Duration::from_secs(5)),
+            },
+        }
+        .encode(0, 0, &mut out)
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            Error::InvalidPayload(crate::error::PayloadError::TransitionMarginOutOfRange(_))
+        ));
     }
 }
