@@ -1,19 +1,21 @@
 mod cases;
+mod cli;
 mod io;
 
-use std::net::SocketAddr;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
+use clap::Parser;
 
 use autd3_rs::commands::Command;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::link::Interface;
 use autd3_rs::{Client, ClientConfig, DatagramBuilder};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 use autd3_rs_link_remote::RemoteLinkOption;
 use autd3_rs_link_soem::SoemLinkOption;
 use autd3_rs_link_twincat::TwinCATLinkOption;
 
+use crate::cli::{Cli, LinkKind};
 use crate::io::{check, prompt, wait_enter};
 
 pub struct Ctx<'a> {
@@ -76,93 +78,53 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
+    let cli = Cli::parse();
+    if let Err(msg) = cli.validate() {
+        anyhow::bail!(msg);
+    }
+
     check("Devices flashed with the latest firmware are connected");
     check("An oscilloscope is attached to the GPIO[0]/GPIO[1] pins of each device");
     check("No output is present on any GPIO pin");
     check("Client-side validation is disabled: malformed commands are checked by the firmware");
 
-    let num_devices = prompt("Number of devices (default 1)")
-        .await
-        .trim()
-        .parse::<usize>()
-        .unwrap_or(1)
-        .max(1);
-
-    let backend = select_backend().await;
-    run(backend, num_devices).await
+    run(&cli).await
 }
 
-enum Backend {
-    Soem { iface: Interface },
-    EtherCrab { iface: Interface },
-    Twincat,
-    Remote { addr: SocketAddr },
-}
-
-async fn select_backend() -> Backend {
-    println!("[0]: SOEM");
-    println!("[1]: EtherCrab");
-    println!("[2]: TwinCAT (local)");
-    println!("[3]: Remote");
-    let sel = prompt("Select a link (default SOEM)")
-        .await
-        .trim()
-        .parse::<usize>()
-        .unwrap_or(0);
-    match sel {
-        1 => Backend::EtherCrab {
-            iface: iface_prompt().await,
-        },
-        2 => Backend::Twincat,
-        3 => {
-            let raw = prompt("Server address (default 127.0.0.1:8080)").await;
-            let addr = raw
-                .trim()
-                .parse::<SocketAddr>()
-                .unwrap_or_else(|_| "127.0.0.1:8080".parse().expect("valid default addr"));
-            Backend::Remote { addr }
-        }
-        _ => Backend::Soem {
-            iface: iface_prompt().await,
-        },
-    }
-}
-
-async fn iface_prompt() -> Interface {
-    let raw = prompt("Network interface name (blank for auto-select)").await;
-    let name = raw.trim();
-    if name.is_empty() {
-        Interface::Auto
-    } else {
-        Interface::from(name)
-    }
-}
-
-async fn run(backend: Backend, num_devices: usize) -> Result<()> {
-    let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
+async fn run(cli: &Cli) -> Result<()> {
+    let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()).collect());
     let config = ClientConfig {
         validate_state: false,
         ..Default::default()
     };
 
-    let client = match backend {
-        Backend::Soem { iface } => {
+    let sync0_period = Duration::from_micros(cli.cycle_us);
+    let client = match cli.link {
+        LinkKind::Soem => {
             let option = SoemLinkOption {
-                iface,
+                iface: cli.interface.clone().into(),
+                sync0_period,
                 ..Default::default()
             };
             Client::open(&geometry, option, config).await
         }
-        Backend::EtherCrab { iface } => {
+        LinkKind::Ethercrab => {
             let option = EtherCrabLinkOption {
-                iface,
+                iface: cli.interface.clone().into(),
+                sync0_period,
                 ..Default::default()
             };
             Client::open(&geometry, option, config).await
         }
-        Backend::Twincat => Client::open(&geometry, TwinCATLinkOption::local(), config).await,
-        Backend::Remote { addr } => {
-            Client::open(&geometry, RemoteLinkOption::new(addr), config).await
+        LinkKind::Twincat => {
+            let option = match (cli.twincat_remote, cli.ams_net_id) {
+                (Some(addr), Some(ams_net_id)) => TwinCATLinkOption::remote(addr, ams_net_id),
+                _ => TwinCATLinkOption::local(),
+            };
+            Client::open(&geometry, option, config).await
+        }
+        LinkKind::Remote => {
+            Client::open(&geometry, RemoteLinkOption::new(cli.remote_addr), config).await
         }
     }
     .context("opening link / client handshake")?;
