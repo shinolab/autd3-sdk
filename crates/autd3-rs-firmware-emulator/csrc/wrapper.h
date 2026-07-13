@@ -1,5 +1,0 @@
-#include "app.h"
-#include "emu_glue.h"
-#include "fpga.h"
-#include "params_fpga.h"
-#include "proto.h"

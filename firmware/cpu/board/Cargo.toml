@@ -1,0 +1,32 @@
+[package]
+name = "autd3-cpu"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.96"
+license = "MIT"
+authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
+repository = "https://github.com/shinolab/autd3-sdk"
+description = "AUTD3 CPU board firmware (RZ/T1 R7S910018, Cortex-R4F). Links against the proprietary platform.o boot layer."
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+autd3-cpu-fw = { path = "../fw" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+lto = true
+codegen-units = 1
+
+[lints.rust]
+warnings = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }

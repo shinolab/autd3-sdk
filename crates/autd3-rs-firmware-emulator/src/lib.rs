@@ -1,11 +1,13 @@
+include!(concat!(env!("OUT_DIR"), "/fw_root.rs"));
+
 mod audit;
 mod device;
-mod ffi;
-mod fpga;
-mod port;
-mod version;
+mod emu_fpga;
+mod emu_port;
+mod emu_version;
+mod fw;
 
 pub use audit::Audit;
 pub use device::Device;
-pub use fpga::{FpgaEmulator, SilencerEmulator};
-pub use version::{cpu_fw_version, fpga_fw_version};
+pub use emu_fpga::{FpgaEmulator, SilencerEmulator};
+pub use emu_version::{cpu_fw_version, fpga_fw_version};

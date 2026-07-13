@@ -14,8 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-rust
-      - name: Install C toolchain
-        run: sudo apt-get update && sudo apt-get install -y clang-tidy clang-format cmake
+      - name: Install the bare-metal Rust target
+        run: rustup target add armv7r-none-eabi
+      - name: Install the Arm GNU toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
       - run: cargo xtask cpu format
       - run: cargo xtask cpu lint
       - run: cargo xtask cpu test
+      - run: cargo xtask cpu build
+      - name: Verify the committed params.rs is up to date
+        run: git diff --exit-code firmware/cpu/fw/src/params.rs

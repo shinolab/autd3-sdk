@@ -320,12 +320,12 @@ fn verify_firmware_series(root: &Path, doc: &Path) -> Result<()> {
     if found == 0 {
         bail!(
             "no `{FIRMWARE_MARKER}<major>.<minor>.x` marker found in the current docs; the supported \
-             firmware version must be stated (and kept in sync with firmware/cpu/src/app.h)"
+             firmware version must be stated (and kept in sync with firmware/cpu/fw/src/version.rs)"
         );
     }
     if !offenders.is_empty() {
         bail!(
-            "docs advertise a firmware version that firmware/cpu/src/app.h does not build \
+            "docs advertise a firmware version that firmware/cpu/fw/src/version.rs does not build \
              (expected `{FIRMWARE_MARKER}{expected}.x`):\n  {}\n\
              run `cargo xtask bump-version firmware <version>` (it rewrites these pages), or fix the marker by hand. \
              frozen version snapshots are exempt: they record the firmware version of their own SDK release.",
