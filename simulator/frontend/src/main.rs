@@ -84,6 +84,8 @@ fn App() -> Element {
     let mut slice_center = ctx.slice_center;
     let mut slice_rot = ctx.slice_rot;
     let mut slice_bounds = ctx.slice_bounds;
+    let mut slice_size = ctx.slice_size;
+    let mut field_dims = ctx.field_dims;
     let mut cam_pos = ctx.cam_pos;
     let mut cam_rot = ctx.cam_rot;
     let mut device_states = ctx.device_states;
@@ -102,6 +104,7 @@ fn App() -> Element {
     let near = ctx.near;
     let far = ctx.far;
     let move_speed = ctx.move_speed;
+    let slice_res = ctx.slice_res;
     use_effect(move || {
         Settings {
             max_pressure: max_pressure(),
@@ -118,6 +121,7 @@ fn App() -> Element {
             near: near(),
             far: far(),
             move_speed: move_speed(),
+            slice_resolution: slice_res(),
         }
         .save();
     });
@@ -188,6 +192,7 @@ fn App() -> Element {
                         r.set_near(saved.near);
                         r.set_far(saved.far);
                         r.set_move_speed(saved.move_speed);
+                        r.set_slice_resolution(saved.slice_resolution);
                         *renderer.borrow_mut() = Some(r);
                     }
                     Err(e) => error.set(Some(e)),
@@ -222,6 +227,8 @@ fn App() -> Element {
                                 slice_center.set(r.slice_center());
                                 slice_rot.set(r.slice_rot());
                                 slice_bounds.set(r.axis_bounds());
+                                slice_size.set(r.slice_size());
+                                field_dims.set(r.field_dims());
                                 cam_pos.set(r.camera_pos());
                                 cam_rot.set(r.camera_rot());
                             }

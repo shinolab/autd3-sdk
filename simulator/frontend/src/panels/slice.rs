@@ -1,7 +1,8 @@
 use dioxus::prelude::*;
 
-use super::common::NumField;
-use crate::context::Ctx;
+use super::common::{NumField, PlainNum};
+use crate::context::{Ctx, SharedRenderer};
+use crate::render::{RESOLUTION_MAX, RESOLUTION_MIN, SLICE_MAX_MM, SLICE_MIN_MM};
 
 #[component]
 pub fn SlicePanel() -> Element {
@@ -14,6 +15,35 @@ pub fn SlicePanel() -> Element {
     let slice_center = ctx.slice_center;
     let slice_rot = ctx.slice_rot;
     let slice_bounds = ctx.slice_bounds;
+    let mut slice_size = ctx.slice_size;
+    let mut slice_res = ctx.slice_res;
+    let mut field_dims = ctx.field_dims;
+
+    let size_handler = |renderer: SharedRenderer, axis: usize| {
+        move |e: Event<FormData>| {
+            if let Ok(v) = e.parsed::<f32>()
+                && let Some(r) = renderer.borrow_mut().as_mut()
+            {
+                r.set_slice_size(axis, v);
+                slice_size.set(r.slice_size());
+                field_dims.set(r.field_dims());
+            }
+        }
+    };
+    let on_slice_w = size_handler(renderer.clone(), 0);
+    let on_slice_h = size_handler(renderer.clone(), 1);
+    let on_slice_res = {
+        let renderer = renderer.clone();
+        move |e: Event<FormData>| {
+            if let Ok(v) = e.parsed::<f32>() {
+                slice_res.set(v.clamp(RESOLUTION_MIN, RESOLUTION_MAX));
+                if let Some(r) = renderer.borrow_mut().as_mut() {
+                    r.set_slice_resolution(v);
+                    field_dims.set(r.field_dims());
+                }
+            }
+        }
+    };
 
     let on_slice_x = ctx.field_handler(0, 0);
     let on_slice_y = ctx.field_handler(0, 1);
@@ -69,7 +99,10 @@ pub fn SlicePanel() -> Element {
     let [cx, cy, cz] = slice_center();
     let [rx, ry, rz] = slice_rot();
     let [(x_lo, x_hi), (y_lo, y_hi), (z_lo, z_hi)] = slice_bounds();
+    let [sw, sh] = slice_size();
+    let [fw, fh] = field_dims();
     let pressure_label = format!("Max pressure: {:.0} Pa", max_pressure());
+    let field_label = format!("Field texture: {fw} x {fh} px");
 
     rsx! {
         div { class: "px-6 pt-4",
@@ -130,6 +163,20 @@ pub fn SlicePanel() -> Element {
                             NumField { label: "RX", accent: "text-error", min: -180.0, max: 180.0, step: "1", value: format!("{rx:.1}"), onchange: on_slice_rx, onmousedown: on_num_down_rx }
                             NumField { label: "RY", accent: "text-success", min: -180.0, max: 180.0, step: "1", value: format!("{ry:.1}"), onchange: on_slice_ry, onmousedown: on_num_down_ry }
                             NumField { label: "RZ", accent: "text-info", min: -180.0, max: 180.0, step: "1", value: format!("{rz:.1}"), onchange: on_slice_rz, onmousedown: on_num_down_rz }
+                        }
+                    }
+                    div { class: "grid grid-cols-1 gap-6 sm:grid-cols-2",
+                        div { class: "flex flex-col gap-3",
+                            div { class: "text-sm font-semibold opacity-70", "Size (mm)" }
+                            div { class: "grid grid-cols-2 gap-3",
+                                PlainNum { label: "Width", min: SLICE_MIN_MM, max: SLICE_MAX_MM, step: "1", value: format!("{sw:.0}"), onchange: on_slice_w }
+                                PlainNum { label: "Height", min: SLICE_MIN_MM, max: SLICE_MAX_MM, step: "1", value: format!("{sh:.0}"), onchange: on_slice_h }
+                            }
+                        }
+                        div { class: "flex flex-col gap-3",
+                            div { class: "text-sm font-semibold opacity-70", "Resolution" }
+                            PlainNum { label: "Texels per mm", min: RESOLUTION_MIN, max: RESOLUTION_MAX, step: "0.25", value: format!("{:.2}", slice_res()), onchange: on_slice_res }
+                            div { class: "text-xs opacity-60", "{field_label}" }
                         }
                     }
                     div { class: "grid grid-cols-1 gap-4 sm:grid-cols-2",

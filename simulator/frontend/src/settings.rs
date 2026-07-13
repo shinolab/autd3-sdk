@@ -19,6 +19,7 @@ pub struct Settings {
     pub near: f32,
     pub far: f32,
     pub move_speed: f32,
+    pub slice_resolution: f32,
 }
 
 impl Default for Settings {
@@ -38,6 +39,7 @@ impl Default for Settings {
             near: 1.0,
             far: 5000.0,
             move_speed: 6.0,
+            slice_resolution: crate::render::FIELD_TEXELS_PER_MM,
         }
     }
 }
