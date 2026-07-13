@@ -10,6 +10,7 @@ updates:
       - "/console"
       - "/bindings/ffi"
       - "/bindings/python"
+      - "/firmware/cpu/board"
     schedule:
       interval: weekly
     target-branch: develop

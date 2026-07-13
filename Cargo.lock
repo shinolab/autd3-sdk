@@ -102,6 +102,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-cpu-fw"
+version = "0.2.0"
+
+[[package]]
 name = "autd3-firmware"
 version = "0.2.0"
 dependencies = [
@@ -158,8 +162,6 @@ name = "autd3-rs-firmware-emulator"
 version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
- "bindgen",
- "cc",
 ]
 
 [[package]]

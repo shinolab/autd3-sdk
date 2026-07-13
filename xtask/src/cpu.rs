@@ -27,7 +27,9 @@ pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
     }
 }
 
-const CPU_TARGET_FLAGS: &[&str] = &[
+pub const CPU_TARGET: &str = "armv7r-none-eabi";
+
+const CPU_LINK_FLAGS: &[&str] = &[
     "-mcpu=cortex-r4f",
     "-march=armv7-r",
     "-marm",
@@ -37,15 +39,9 @@ const CPU_TARGET_FLAGS: &[&str] = &[
     "-mfpu=vfpv3",
 ];
 
-const CPU_C_FLAGS: &[&str] = &[
-    "-std=gnu11",
-    "-O0",
-    "-fmessage-length=0",
-    "-fsigned-char",
-    "-fno-exceptions",
-    "-fno-unwind-tables",
-    "-fno-asynchronous-unwind-tables",
-];
+fn board_dir(root: &Path) -> PathBuf {
+    root.join("firmware/cpu/board")
+}
 
 fn cpu_flash(root: &Path) -> Result<()> {
     let bin = cpu_build(root)?;
@@ -118,43 +114,42 @@ pub fn cpu_build(root: &Path) -> Result<PathBuf> {
     }
     let linker_script = cpu_dir.join("platform/autd3-cpu.ld");
     let build_dir = cpu_dir.join("build");
-    let obj_dir = build_dir.join("obj");
-    std::fs::create_dir_all(&obj_dir).with_context(|| format!("creating {}", obj_dir.display()))?;
+    std::fs::create_dir_all(&build_dir)
+        .with_context(|| format!("creating {}", build_dir.display()))?;
 
-    let sources = collect_build_sources(&cpu_dir)?;
-
-    let inc_flags = [
-        format!("-I{}", cpu_dir.join("inc").display()),
-        format!("-I{}", cpu_dir.join("src").display()),
-        format!("-I{}", cpu_dir.join("bsp").display()),
-    ];
-
-    let mut objects = Vec::new();
-    for src in &sources {
-        objects.push(compile_source(&cc, root, src, &obj_dir, &inc_flags)?);
+    let board = board_dir(root);
+    run("cargo", ["build", "--release"], &board).context(
+        "building the firmware staticlib failed \
+         (is the target installed? `rustup target add armv7r-none-eabi`)",
+    )?;
+    let staticlib = board
+        .join("target")
+        .join(CPU_TARGET)
+        .join("release/libautd3_cpu.a");
+    if !staticlib.exists() {
+        bail!("{} not found after cargo build", staticlib.display());
     }
 
     let elf = build_dir.join("autd3-cpu.x");
     let map_flag = format!("-Wl,-Map={}", build_dir.join("autd3-cpu.map").display());
     let script_flag = format!("-T{}", linker_script.display());
     let platform_str = platform_obj.to_string_lossy().into_owned();
+    let staticlib_str = staticlib.to_string_lossy().into_owned();
     let elf_str = elf.to_string_lossy().into_owned();
-    let object_strs: Vec<String> = objects
-        .iter()
-        .map(|o| o.to_string_lossy().into_owned())
-        .collect();
     let mut args: Vec<&str> = Vec::new();
-    args.extend(CPU_TARGET_FLAGS);
+    args.extend(CPU_LINK_FLAGS);
     args.extend([
         "-nostartfiles",
         "--specs=nosys.specs",
         &script_flag,
         &map_flag,
         "-Wl,--no-warn-rwx-segments",
+        "-Wl,-z,noexecstack",
         &platform_str,
+        &staticlib_str,
+        "-o",
+        &elf_str,
     ]);
-    args.extend(object_strs.iter().map(String::as_str));
-    args.extend(["-o", &elf_str]);
     run(&cc, args, root)?;
 
     let bin = build_dir.join("autd3-cpu.bin");
@@ -169,150 +164,47 @@ pub fn cpu_build(root: &Path) -> Result<PathBuf> {
     Ok(bin)
 }
 
-fn collect_build_sources(cpu_dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut bsp_sources = Vec::new();
-    collect_c_files(&cpu_dir.join("bsp"), &mut bsp_sources)?;
-    bsp_sources.retain(|p| p.extension().and_then(|e| e.to_str()) == Some("c"));
-    bsp_sources.sort();
-
-    let mut app_sources = Vec::new();
-    collect_c_files(&cpu_dir.join("src"), &mut app_sources)?;
-    app_sources.retain(|p| p.extension().and_then(|e| e.to_str()) == Some("c"));
-    app_sources.sort();
-    if app_sources.is_empty() {
-        bail!("no C sources found under firmware/cpu/src");
-    }
-
-    let mut sources = Vec::new();
-    sources.extend(bsp_sources);
-    sources.extend(app_sources);
-    Ok(sources)
-}
-
-fn compile_source(
-    cc: &str,
-    root: &Path,
-    src: &Path,
-    obj_dir: &Path,
-    inc_flags: &[String],
-) -> Result<PathBuf> {
-    let rel = src.strip_prefix(root).unwrap_or(src);
-    let obj = obj_dir.join(rel).with_extension("o");
-    if let Some(parent) = obj.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("creating {}", parent.display()))?;
-    }
-    let src_str = src.to_string_lossy().into_owned();
-    let obj_str = obj.to_string_lossy().into_owned();
-    let is_asm = src.extension().and_then(|e| e.to_str()) == Some("S");
-    let mut args: Vec<&str> = Vec::new();
-    args.extend(CPU_TARGET_FLAGS);
-    if is_asm {
-        args.extend(["-x", "assembler-with-cpp"]);
-    } else {
-        args.extend(CPU_C_FLAGS);
-    }
-    args.extend(inc_flags.iter().map(String::as_str));
-    args.extend(["-c", &src_str, "-o", &obj_str]);
-    run(cc, args, root)?;
-    Ok(obj)
-}
-
-pub(crate) fn gen_param(root: &Path) -> Result<()> {
+pub fn gen_param(root: &Path) -> Result<()> {
     run("python3", ["gen_param.py"], &root.join("firmware/cpu"))
 }
 
 fn cpu_test(root: &Path) -> Result<()> {
     gen_param(root)?;
-
-    let tests_dir = root.join("firmware/cpu/tests");
-    let build_dir = tests_dir.join("build");
-    let build_arg = format!("-B{}", build_dir.display());
-    let source_arg = format!("-S{}", tests_dir.display());
-    let build_dir_str = build_dir.to_string_lossy().into_owned();
-
-    run("cmake", [source_arg.as_str(), build_arg.as_str()], root)?;
-    run(
-        "cmake",
-        ["--build", build_dir_str.as_str(), "--parallel"],
-        root,
-    )?;
-    run(
-        "ctest",
-        ["--test-dir", build_dir_str.as_str(), "--output-on-failure"],
-        root,
-    )
+    run("cargo", ["test", "-p", "autd3-cpu-fw"], root)
 }
 
 fn cpu_lint(root: &Path) -> Result<()> {
-    let files = collect_cpu_sources(root)?;
-    if files.is_empty() {
-        bail!("no C sources found under firmware/cpu/{{src,inc}}");
-    }
-
-    let inc = root.join("firmware/cpu/inc");
-    let src = root.join("firmware/cpu/src");
-    let inc_flag = format!("-I{}", inc.display());
-    let src_flag = format!("-I{}", src.display());
-
-    let mut args: Vec<String> = Vec::new();
-    args.push("--warnings-as-errors=*".to_string());
-    args.push("--quiet".to_string());
-    for f in &files {
-        args.push(f.to_string_lossy().into_owned());
-    }
-    args.push("--".to_string());
-    args.push("-std=c11".to_string());
-    args.push(inc_flag);
-    args.push(src_flag);
-
-    run("clang-tidy", args.iter().map(String::as_str), root)
+    gen_param(root)?;
+    run(
+        "cargo",
+        [
+            "clippy",
+            "-p",
+            "autd3-cpu-fw",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ],
+        root,
+    )?;
+    run(
+        "cargo",
+        ["clippy", "--release", "--", "-D", "warnings"],
+        &board_dir(root),
+    )
 }
 
 fn cpu_format(root: &Path, fix: bool) -> Result<()> {
-    let files = collect_cpu_sources(root)?;
-    if files.is_empty() {
-        bail!("no C sources found under firmware/cpu/{{src,inc}}");
+    let mut args = vec!["fmt", "-p", "autd3-cpu-fw"];
+    if !fix {
+        args.extend(["--", "--check"]);
     }
+    run("cargo", args, root)?;
 
-    let mut args: Vec<String> = Vec::new();
-    args.push("--style=file".to_string());
-    if fix {
-        args.push("-i".to_string());
-    } else {
-        args.push("--dry-run".to_string());
-        args.push("-Werror".to_string());
+    let mut board_args = vec!["fmt"];
+    if !fix {
+        board_args.extend(["--", "--check"]);
     }
-    for f in &files {
-        args.push(f.to_string_lossy().into_owned());
-    }
-
-    run("clang-format", args.iter().map(String::as_str), root)
-}
-
-fn collect_cpu_sources(root: &Path) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    for dir in ["firmware/cpu/src", "firmware/cpu/inc"] {
-        collect_c_files(&root.join(dir), &mut files)?;
-    }
-    files.sort();
-    Ok(files)
-}
-
-fn collect_c_files(path: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
-    let entries = std::fs::read_dir(path).with_context(|| format!("reading {}", path.display()))?;
-    for entry in entries {
-        let p = entry?.path();
-        if p.is_dir() {
-            collect_c_files(&p, files)?;
-            continue;
-        }
-        let Some(ext) = p.extension().and_then(|e| e.to_str()) else {
-            continue;
-        };
-        if matches!(ext, "c" | "h") {
-            files.push(p);
-        }
-    }
-    Ok(())
+    run("cargo", board_args, &board_dir(root))
 }

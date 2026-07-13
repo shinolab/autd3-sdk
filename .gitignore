@@ -1,8 +1,8 @@
 /target
 /xtask/target
 /simulator/target
-/firmware/cpu/tests/build
 /firmware/cpu/build
+/firmware/cpu/board/target
 /firmware/dist
 
 *.jou

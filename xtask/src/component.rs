@@ -73,7 +73,7 @@ pub const COMPONENTS: &[Component] = &[
         tag_prefix: "firmware-v",
         include_paths: &["firmware/**"],
         also_shipped_by: &[],
-        version_file: "firmware/cpu/src/app.h",
+        version_file: "firmware/cpu/fw/src/version.rs",
     },
 ];
 
@@ -97,9 +97,9 @@ impl Component {
             "cs" => between(&text, "<Version>", "</Version>"),
             "unity" => after_quoted(&text, "\"version\":"),
             "firmware" => {
-                let major = digits_after(&text, "FW_VERSION_MAJOR (");
-                let minor = digits_after(&text, "FW_VERSION_MINOR (");
-                let patch = digits_after(&text, "FW_VERSION_PATCH (");
+                let major = digits_after(&text, "FW_VERSION_MAJOR: u8 = ");
+                let minor = digits_after(&text, "FW_VERSION_MINOR: u8 = ");
+                let patch = digits_after(&text, "FW_VERSION_PATCH: u8 = ");
                 match (major, minor, patch) {
                     (Some(a), Some(b), Some(c)) => Some(format!("{a}.{b}.{c}")),
                     _ => None,
