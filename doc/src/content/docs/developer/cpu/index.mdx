@@ -12,7 +12,14 @@ import Mermaid from "@components/Mermaid.astro";
 CPU ボード (AP-RZT-01, Alpha Project) は Renesas RZ/T1 (Arm Cortex-R4F) を搭載しており, EtherCAT スレーブとして動作する.
 これの役割は, EtherCAT の PDO で受け取ったフレームを解釈し, FPGA 内の BRAM へ書き込むことである.
 
-ソースは `firmware/cpu/` 以下にあり, C で記述されている.
+ソースは `firmware/cpu/` 以下にあり, `no_std` Rust で記述されている.
+2 つのクレートに分かれている.
+
+- `fw/` (`autd3-cpu-fw`): プロトコル解釈・コマンド処理・FPGA 書き込みなどの可搬ロジック.
+  ハードウェアには `Port` trait 越しにのみアクセスし, `unsafe` を含まない.
+  ホストテストと `autd3-rs-firmware-emulator` からも同じコードが使われる.
+- `board/` (`autd3-cpu`): 実機ターゲット (armv7r-none-eabi) の staticlib.
+  レジスタ定義・BSP・`Port` trait の実機実装・C-ABI エクスポート・panic handler を持ち, `unsafe` はここに閉じ込める.
 
 ## 開発環境構築
 
@@ -21,20 +28,20 @@ CPU ファームウェアに関する作業はすべて `autd3-sdk/` ディレ�
 ```bash
 cargo xtask cpu build         # 実機用 .bin を生成
 cargo xtask cpu flash         # build 後, J-Link で実機へ書き込む
-cargo xtask cpu test          # ホスト上の単体テスト (CMake + ctest)
-cargo xtask cpu lint          # clang-tidy
-cargo xtask cpu format        # clang-format --dry-run -Werror
-cargo xtask cpu format --fix  # clang-format -i
+cargo xtask cpu test          # ホスト上の単体テスト (cargo test -p autd3-cpu-fw)
+cargo xtask cpu lint          # clippy (fw + board)
+cargo xtask cpu format        # rustfmt --check (fw + board)
+cargo xtask cpu format --fix  # rustfmt 実書き換え
 ```
 
 ### 必要なツール
 
 | 用途           | ツール                                              |
 | -------------- | --------------------------------------------------- |
-| 実機ビルド     | Arm GNU Toolchain (`arm-none-eabi-gcc`, `arm-none-eabi-objcopy`) |
+| 実機ビルド     | Rust ツールチェイン + `rustup target add armv7r-none-eabi`, Arm GNU Toolchain (`arm-none-eabi-gcc`, `arm-none-eabi-objcopy`) |
 | 実機書き込み   | J-Link Commander (`JLinkExe`)                       |
-| ホストテスト   | CMake, C++ コンパイラ                               |
-| lint / format  | `clang-tidy`, `clang-format`                        |
+| ホストテスト   | Rust ツールチェイン (`cargo test`)                  |
+| lint / format  | `clippy`, `rustfmt`                                 |
 
 `arm-none-eabi-` 以外のプレフィックスを使う場合は環境変数 `CROSS_COMPILE` で上書きできる.
 `JLinkExe` が PATH に無い場合は環境変数 `JLINK` でパスを指定できる.
@@ -43,12 +50,13 @@ cargo xtask cpu format --fix  # clang-format -i
 
 `cargo xtask cpu build` は以下を行う.
 
-1. `gen_param.py` で FPGA の `params.svh` から `inc/params_fpga.h` を生成する.
-1. `bsp/` / `src/` の C ソースを Cortex-R4F 向けにコンパイルする.
-1. `platform/autd3-platform.o` とリンカスクリプト `platform/autd3-cpu.ld` を用いてリンクする.
+1. `gen_param.py` で FPGA の `params.svh` から `fw/src/params.rs` を生成する.
+1. `board/` を `armv7r-none-eabi` ターゲットの staticlib (`libautd3_cpu.a`) としてビルドする.
+1. `arm-none-eabi-gcc` で `platform/autd3-platform.o` とリンカスクリプト `platform/autd3-cpu.ld` を用いてリンクする.
 1. `objcopy` で `build/autd3-cpu.bin` を生成する.
 
 `platform/autd3-platform.o` は EtherCAT スレーブコントローラの初期化などを含む非公開コードのビルド済みオブジェクトである.
+両者の C-ABI 境界 (`init_app` / `recv_ethercat` / `app_process_pending` / `bsp_*`) は `board/src/lib.rs` の `#[unsafe(no_mangle)]` エクスポートが実装する.
 
 ### 実機書き込み
 
@@ -57,9 +65,9 @@ cargo xtask cpu format --fix  # clang-format -i
 
 ### ホストテスト
 
-`src/` は `bsp/port.c` が提供する `port_*` 関数以外のハードウェア依存を持たない.
-`cargo xtask cpu test` では `tests/port_host.cpp` がこれらをスタブで置き換え, FPGA への書き込みを記録する.
-`tests/test_proto.cpp` がプロトコル層 (`proto_handle_frame`) の振る舞いを検証する.
+`fw/` は `Port` trait (`fpga_write` / `fpga_read` / `memory_barrier` / `sleep_ms` など) 以外のハードウェア依存を持たない.
+`cargo xtask cpu test` では `fw/src/tests/mock.rs` の `MockPort` がこれを置き換え, FPGA への書き込みを記録する.
+`fw/src/tests/` がプロトコル層 (`Cpu::recv_ethercat` / `Cpu::process_one`) の振る舞いを検証する.
 
 ## フレーム処理
 
@@ -84,7 +92,7 @@ EtherCAT の 1 サイクルにつき, マスタからスレーブへ 626 byte, �
   MODE{"mode"}
   FIFO[("FIFO (深さ 8)")]
   MAIN["app_process_pending (メインループ)"]
-  HANDLE["proto_handle_frame"]
+  HANDLE["handle_frame"]
   RX --> MODE
   MODE -- "MODE_LOW_LATENCY" --> HANDLE
   MODE -- "MODE_FIFO" --> FIFO
@@ -101,7 +109,7 @@ FIFO が満杯の場合, フレームは捨てられる.
 
 ## エラー通知
 
-`proto_handle_frame` はコマンドを実行し, エラーがあればエラーコードをラッチする.
+`handle_frame` はコマンドを実行し, エラーがあればエラーコードをラッチする.
 ラッチされたコードは `CMD_READ_ERROR_DETAIL` で読み出せる.
 
 | コード | 名前                           | 意味                                       |
@@ -120,14 +128,14 @@ FIFO が満杯の場合, フレームは捨てられる.
 ## FPGA への書き込み
 
 FPGA は CS1 空間 (`0x44000000`) にマップされた <Math tex="\SI{16}{bit}" /> 幅のメモリとして見える.
-`port_fpga_write` / `port_fpga_read` がこの領域への `volatile` アクセスを担う.
+`Port` trait の `fpga_write` / `fpga_read` (実機実装は `board/src/port.rs` の `HwPort`) がこの領域への volatile アクセスを担う.
 
-`fpga_write(select, addr, value)` は `select` (BRAM 選択, 2 bit) と `addr` (14 bit) を連結してアドレスを作る.
+`fpga::write(select, addr, value)` は `select` (BRAM 選択, 2 bit) と `addr` (14 bit) を連結してアドレスを作る.
 詳細は [Memory](/autd3-sdk/developer/fpga/memory/) を参照されたい.
 
 :::caution
 FPGA 側の「書き込み先を切り替えるレジスタ」(`MOD_MEM_WR_BANK` / `MOD_MEM_WR_PAGE` / `PATTERN_MEM_WR_BANK` / `PATTERN_MEM_WR_PAGE`) は BRAM と違いラッチされない.
-そのため, これらを書き換える前後ではメモリバリア (`port_memory_barrier`, `dmb` 命令) が必要である.
+そのため, これらを書き換える前後ではメモリバリア (`Port::memory_barrier`, `dmb` 命令) が必要である.
 :::
 
 設定値の反映は制御フラグ経由のハンドシェイクで行う.
