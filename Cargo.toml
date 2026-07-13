@@ -12,6 +12,7 @@ members = [
     "crates/autd3-rs-link-soem",
     "crates/autd3-rs-link-twincat",
     "crates/autd3-rs-modulation",
+    "firmware/cpu/fw",
     "tools/perftest",
     "tools/patternsoak",
     "tools/synctune",
@@ -21,6 +22,7 @@ members = [
 ]
 exclude = [
     "xtask",
+    "firmware/cpu/board",
     "bindings/python",
     "bindings/ffi",
     "simulator",

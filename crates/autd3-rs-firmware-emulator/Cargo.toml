@@ -6,18 +6,15 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Software emulator of the AUTD3 device firmware (real C CPU firmware + Rust FPGA emulator) for running tests without hardware."
-# The C firmware lives outside this crate; `cargo xtask vendor-fw` copies it
-# into `vendor/cpu/` so a published package is self-contained. `build.rs` falls
-# back to the in-repo firmware when no vendored copy is present.
-include = ["src/**", "csrc/**", "vendor/**", "build.rs", "Cargo.toml"]
+description = "Software emulator of the AUTD3 device firmware (the real CPU firmware sources + a Rust FPGA emulator) for running tests without hardware."
+# The firmware sources live outside this crate and are compiled into it (the
+# `autd3-cpu-fw` crate is not published). `cargo xtask vendor-fw` copies them into
+# `vendor/cpu-fw/` so a published package is self-contained; `build.rs` falls back
+# to the in-repo firmware when no vendored copy is present.
+include = ["src/**", "vendor/**", "build.rs", "Cargo.toml"]
 
 [dependencies]
 autd3-rs-core.workspace = true
-
-[build-dependencies]
-cc = "1.2.65"
-bindgen = "0.72.1"
 
 [lints]
 workspace = true

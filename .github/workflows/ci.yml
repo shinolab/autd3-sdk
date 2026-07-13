@@ -49,6 +49,7 @@ jobs:
               - *shared
               - 'xtask/**'
               - 'crates/**'
+              - 'firmware/cpu/fw/**'
               - 'tools/**'
               - 'examples/**'
               - 'Cargo.toml'
@@ -82,6 +83,7 @@ jobs:
               - 'crates/autd3-rs/**'
               - 'crates/autd3-rs-core/**'
               - 'crates/autd3-rs-firmware-emulator/**'
+              - 'firmware/cpu/fw/**'
               - 'Cargo.toml'
               - '.cargo/**'
               - '.github/workflows/ci-emulator.yml'
@@ -90,6 +92,7 @@ jobs:
               - *xtask-core
               - 'xtask/src/cpu.rs'
               - 'firmware/cpu/**'
+              - 'firmware/fpga/rtl/sources_1/new/headers/params.svh'
               - '.github/workflows/ci-cpu.yml'
             py:
               - *shared
@@ -157,7 +160,7 @@ jobs:
               - 'xtask/src/cs.rs'
               - 'xtask/src/bump.rs'
               - 'doc/**'
-              - 'firmware/cpu/src/app.h'
+              - 'firmware/cpu/fw/src/version.rs'
               - 'firmware/fpga/rtl/sources_1/new/headers/params.svh'
               - 'crates/**'
               - 'emulator/**'

@@ -9,17 +9,17 @@ const EMULATOR_CRATE: &str = "crates/autd3-rs-firmware-emulator";
 pub struct VendorFwCmd {}
 
 pub fn run_vendor_fw(root: &Path, _cmd: &VendorFwCmd) -> Result<()> {
-    let src = root.join("firmware/cpu");
-    let dst = root.join(EMULATOR_CRATE).join("vendor/cpu");
+    crate::cpu::gen_param(root)?;
+
+    let src = root.join("firmware/cpu/fw/src");
+    let dst = root.join(EMULATOR_CRATE).join("vendor/cpu-fw");
 
     if dst.exists() {
         std::fs::remove_dir_all(&dst)
             .with_context(|| format!("failed to clear {}", dst.display()))?;
     }
-    for sub in ["inc", "src"] {
-        copy_dir(&src.join(sub), &dst.join(sub))?;
-    }
-    println!("Vendored firmware/cpu -> {}", dst.display());
+    copy_dir(&src, &dst)?;
+    println!("Vendored firmware/cpu/fw/src -> {}", dst.display());
     Ok(())
 }
 
@@ -30,7 +30,12 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
     {
         let entry = entry?;
         let path = entry.path();
-        let to = dst.join(entry.file_name());
+        let name = entry.file_name();
+        // The firmware's own unit tests are not part of the emulator build.
+        if name == "tests" {
+            continue;
+        }
+        let to = dst.join(&name);
         if path.is_dir() {
             copy_dir(&path, &to)?;
         } else {

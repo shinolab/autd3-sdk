@@ -1,116 +1,56 @@
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-const FW_SOURCES: &[&str] = &[
-    "app.c",
-    "proto.c",
-    "fpga.c",
-    "cmd/xor_hash.c",
-    "cmd/write_pattern.c",
-    "cmd/write_pattern_compressed.c",
-    "cmd/write_mod.c",
-    "cmd/config_mod.c",
-    "cmd/config_pattern.c",
-    "cmd/change_mod_bank.c",
-    "cmd/change_pattern_bank.c",
-    "cmd/clear.c",
-    "cmd/sync.c",
-    "cmd/set_mode.c",
-    "cmd/silencer.c",
-    "cmd/force_fan.c",
-    "cmd/gpio_in.c",
-    "cmd/phase_corr.c",
-    "cmd/output_mask.c",
-    "cmd/pwe.c",
-    "cmd/gpio_out.c",
+// The firmware modules are compiled *into* this crate rather than depended on:
+// `autd3-cpu-fw` is not published to crates.io, so a path dependency would make
+// this crate unpublishable. In-repo builds always use the canonical
+// `firmware/cpu/fw/src`; `cargo xtask vendor-fw` copies it into `vendor/cpu-fw/`
+// only as the packaging fallback so the published crate is self-contained.
+const FW_MODULES: &[(&str, &str)] = &[
+    ("params", "params.rs"),
+    ("version", "version.rs"),
+    ("proto", "proto.rs"),
+    ("port", "port.rs"),
+    ("fpga", "fpga.rs"),
+    ("cmd", "cmd/mod.rs"),
+    ("app", "app.rs"),
 ];
 
 fn main() {
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
-    let vendored = manifest.join("vendor/cpu");
-    let fw = if vendored.join("inc").is_dir() {
-        vendored
+    let vendored = manifest.join("vendor/cpu-fw");
+    let in_repo = manifest.join("../../firmware/cpu/fw/src");
+    let fw = if in_repo.join("lib.rs").is_file() {
+        in_repo
     } else {
-        let sibling = manifest.join("../../firmware/cpu");
         assert!(
-            sibling.join("inc").is_dir(),
-            "firmware sources not found: expected a vendored copy at {} or the in-repo \
-             firmware at {}. Run `cargo xtask vendor-fw` before packaging.",
-            manifest.join("vendor/cpu").display(),
-            sibling.display(),
+            vendored.join("lib.rs").is_file(),
+            "firmware sources not found: expected the in-repo firmware at {} or a vendored \
+             copy at {}. Run `cargo xtask vendor-fw` before packaging.",
+            in_repo.display(),
+            vendored.display(),
         );
-        sibling
+        vendored
     };
-    let fw_inc = fw.join("inc");
-    let fw_src = fw.join("src");
-    let csrc = manifest.join("csrc");
 
-    let mut build = cc::Build::new();
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        match find_windows_clang() {
-            Some(clang) => build.compiler(clang),
-            None => build.compiler("clang"),
-        };
+    let mut root = String::new();
+    for (name, file) in FW_MODULES {
+        let path = fw.join(file);
+        assert!(path.is_file(), "missing firmware source {}", path.display());
+        writeln!(
+            root,
+            "#[allow(dead_code, clippy::all, clippy::pedantic)]\n\
+             #[path = {:?}]\n\
+             pub(crate) mod {name};",
+            path.to_string_lossy(),
+        )
+        .unwrap();
     }
-    build
-        .std("c11")
-        .include(&fw_inc)
-        .include(&fw_src)
-        .include(&csrc);
-    for s in FW_SOURCES {
-        build.file(fw_src.join(s));
-    }
-    build.file(csrc.join("emu_glue.c"));
-    build.compile("autd3_fw_emu");
+    std::fs::write(out.join("fw_root.rs"), root).expect("failed to write fw_root.rs");
 
-    let bindings = bindgen::Builder::default()
-        .header(csrc.join("wrapper.h").to_str().unwrap())
-        .clang_arg(format!("-I{}", fw_inc.display()))
-        .clang_arg(format!("-I{}", fw_src.display()))
-        .clang_arg(format!("-I{}", csrc.display()))
-        .blocklist_function("port_.*")
-        .use_core()
-        .layout_tests(false)
-        .generate()
-        .expect("failed to generate firmware bindings");
-    bindings
-        .write_to_file(out.join("bindings.rs"))
-        .expect("failed to write firmware bindings");
-
-    rerun_if_changed(&csrc);
-    rerun_if_changed(&fw_inc);
-    rerun_if_changed(&fw_src);
-}
-
-fn find_windows_clang() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("CLANG_PATH") {
-        let path = PathBuf::from(path);
-        if path.is_file() {
-            return Some(path);
-        }
-        let candidate = path.join("clang.exe");
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    if let Some(dir) = std::env::var_os("LIBCLANG_PATH") {
-        let dir = PathBuf::from(dir);
-        for candidate in [dir.join("clang.exe"), dir.join("../bin/clang.exe")] {
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    for var in ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"] {
-        if let Some(program_files) = std::env::var_os(var) {
-            let candidate = PathBuf::from(program_files).join("LLVM/bin/clang.exe");
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    None
+    rerun_if_changed(&fw);
 }
 
 fn rerun_if_changed(dir: &Path) {

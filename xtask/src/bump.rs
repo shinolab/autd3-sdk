@@ -73,7 +73,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
         "firmware" => {
             bump_firmware(root, &core)?;
             println!(
-                "Updated firmware version (app.h + params.svh, regenerated params_fpga.h) -> {core}"
+                "Updated firmware version (fw/src/version.rs + params.svh, regenerated params.rs) -> {core}"
             );
         }
         other => bail!("no version-bump implementation for component `{other}`"),
@@ -237,7 +237,7 @@ fn print_next_steps(name: &str) {
         }
         "firmware" => {
             println!(
-                "  git add firmware/cpu/src/app.h firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/inc/params_fpga.h CHANGELOG.md"
+                "  git add firmware/cpu/fw/src/version.rs firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/fw/src/params.rs CHANGELOG.md"
             );
         }
         _ => {}
@@ -445,11 +445,11 @@ fn bump_csharp_props(path: &Path, version: &str) -> Result<()> {
 }
 
 pub fn firmware_series(root: &Path) -> Result<String> {
-    let app_h = root.join("firmware/cpu/src/app.h");
-    let text =
-        std::fs::read_to_string(&app_h).with_context(|| format!("reading {}", app_h.display()))?;
-    let major = read_digits_after(&text, "FW_VERSION_MAJOR (")?;
-    let minor = read_digits_after(&text, "FW_VERSION_MINOR (")?;
+    let fw_lib = root.join("firmware/cpu/fw/src/version.rs");
+    let text = std::fs::read_to_string(&fw_lib)
+        .with_context(|| format!("reading {}", fw_lib.display()))?;
+    let major = read_digits_after(&text, "FW_VERSION_MAJOR: u8 = ")?;
+    let minor = read_digits_after(&text, "FW_VERSION_MINOR: u8 = ")?;
 
     let svh = root.join("firmware/fpga/rtl/sources_1/new/headers/params.svh");
     let text =
@@ -459,7 +459,7 @@ pub fn firmware_series(root: &Path) -> Result<String> {
 
     if (major, minor) != (fpga_major, fpga_minor) {
         bail!(
-            "CPU firmware version {major}.{minor}.x (app.h) and FPGA firmware version \
+            "CPU firmware version {major}.{minor}.x (fw/src/version.rs) and FPGA firmware version \
              {fpga_major}.{fpga_minor}.x (params.svh) disagree; run `cargo xtask bump-version firmware <version>`"
         );
     }
@@ -469,17 +469,17 @@ pub fn firmware_series(root: &Path) -> Result<String> {
 fn bump_firmware(root: &Path, version: &str) -> Result<()> {
     let [major, minor, patch] = version_parts(version)?;
 
-    let app_h = root.join("firmware/cpu/src/app.h");
-    let mut text =
-        std::fs::read_to_string(&app_h).with_context(|| format!("reading {}", app_h.display()))?;
+    let fw_lib = root.join("firmware/cpu/fw/src/version.rs");
+    let mut text = std::fs::read_to_string(&fw_lib)
+        .with_context(|| format!("reading {}", fw_lib.display()))?;
     for (key, val) in [
-        ("FW_VERSION_MAJOR (", major),
-        ("FW_VERSION_MINOR (", minor),
-        ("FW_VERSION_PATCH (", patch),
+        ("FW_VERSION_MAJOR: u8 = ", major),
+        ("FW_VERSION_MINOR: u8 = ", minor),
+        ("FW_VERSION_PATCH: u8 = ", patch),
     ] {
         text = bump_digits_after(&text, key, val)?;
     }
-    std::fs::write(&app_h, text).with_context(|| format!("writing {}", app_h.display()))?;
+    std::fs::write(&fw_lib, text).with_context(|| format!("writing {}", fw_lib.display()))?;
 
     let svh = root.join("firmware/fpga/rtl/sources_1/new/headers/params.svh");
     let mut text =

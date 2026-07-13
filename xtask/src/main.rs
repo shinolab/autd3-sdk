@@ -129,11 +129,11 @@ fn main() -> Result<()> {
         TopCmd::Ffi { cmd } => run_ffi(&root, &cmd),
         TopCmd::Cs { cmd } => run_cs(&root, cmd),
         TopCmd::Unity { cmd } => run_unity(&root, cmd),
+        TopCmd::VendorFw(cmd) => run_vendor_fw(&root, &cmd),
         TopCmd::License { cmd } => run_license(&root, &cmd),
         TopCmd::Doc { cmd } => run_doc(&root, &cmd),
         TopCmd::Example(cmd) => run_example(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),
-        TopCmd::VendorFw(cmd) => run_vendor_fw(&root, &cmd),
     }
 }
