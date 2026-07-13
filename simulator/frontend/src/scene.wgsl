@@ -11,12 +11,18 @@ struct Uniforms {
     colormap: u32,
     gizmo_len: f32,
     active_axis: i32,
+    slice_w: u32,
+    slice_h: u32,
 };
 
 @group(0) @binding(0) var<uniform> uni: Uniforms;
 @group(0) @binding(1) var<storage, read> positions: array<vec4<f32>>;
 @group(0) @binding(2) var<storage, read> states: array<vec4<f32>>;
 @group(0) @binding(3) var<storage, read> directions: array<vec4<f32>>;
+
+@group(1) @binding(0) var field_out: texture_storage_2d<rgba8unorm, write>;
+@group(1) @binding(1) var field_tex: texture_2d<f32>;
+@group(1) @binding(2) var field_samp: sampler;
 
 const PI: f32 = 3.14159265358979;
 const ULTRASOUND_FREQ: f32 = 40000.0;
@@ -58,9 +64,37 @@ fn colormap(x: f32) -> vec3<f32> {
     return inferno(x);
 }
 
+// The acoustic field is evaluated once per slice texel in `field_cs` and stored in a texture whose
+// size follows the slice's physical extent, so its cost is independent of the viewport resolution.
+@compute @workgroup_size(8, 8, 1)
+fn field_cs(@builtin(global_invocation_id) id: vec3<u32>) {
+    if id.x >= uni.slice_w || id.y >= uni.slice_h {
+        return;
+    }
+    let texel = vec2<f32>(f32(id.x) + 0.5, f32(id.y) + 0.5);
+    let uv = texel / vec2<f32>(f32(uni.slice_w), f32(uni.slice_h));
+    let world = uni.origin.xyz + uni.u.xyz * uv.x + uni.v.xyz * uv.y;
+
+    let wavenum = 2.0 * PI * ULTRASOUND_FREQ / uni.sound_speed;
+    var re = 0.0;
+    var im = 0.0;
+    for (var i = 0u; i < uni.num_trans; i = i + 1u) {
+        let d = distance(positions[i].xyz, world);
+        let amp = states[i].x;
+        let phase = states[i].y;
+        let en = states[i].z;
+        let a = en * P0 * amp / d;
+        let p = -phase - wavenum * d;
+        re = re + a * cos(p);
+        im = im + a * sin(p);
+    }
+    let t = sqrt(re * re + im * im) / uni.max_pressure;
+    textureStore(field_out, vec2<i32>(i32(id.x), i32(id.y)), vec4<f32>(colormap(t), 1.0));
+}
+
 struct SliceOut {
     @builtin(position) clip: vec4<f32>,
-    @location(0) world: vec3<f32>,
+    @location(0) uv: vec2<f32>,
 };
 
 @vertex
@@ -77,27 +111,13 @@ fn slice_vs(@builtin(vertex_index) vid: u32) -> SliceOut {
     let world = uni.origin.xyz + uni.u.xyz * uv.x + uni.v.xyz * uv.y;
     var out: SliceOut;
     out.clip = uni.view_proj * vec4<f32>(world, 1.0);
-    out.world = world;
+    out.uv = uv;
     return out;
 }
 
 @fragment
 fn slice_fs(vtx: SliceOut) -> @location(0) vec4<f32> {
-    let wavenum = 2.0 * PI * ULTRASOUND_FREQ / uni.sound_speed;
-    var re = 0.0;
-    var im = 0.0;
-    for (var i = 0u; i < uni.num_trans; i = i + 1u) {
-        let d = distance(positions[i].xyz, vtx.world);
-        let amp = states[i].x;
-        let phase = states[i].y;
-        let en = states[i].z;
-        let a = en * P0 * amp / d;
-        let p = -phase - wavenum * d;
-        re = re + a * cos(p);
-        im = im + a * sin(p);
-    }
-    let t = sqrt(re * re + im * im) / uni.max_pressure;
-    return vec4<f32>(colormap(t), 1.0);
+    return textureSample(field_tex, field_samp, vtx.uv);
 }
 
 struct MarkerOut {
