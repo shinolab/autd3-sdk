@@ -116,24 +116,17 @@ pub fn cpu_build(root: &Path) -> Result<PathBuf> {
             platform_obj.display()
         );
     }
-    let freertos_dir = cpu_dir.join("FreeRTOS-Kernel");
-    let freertos_port_dir = freertos_dir.join("portable/GCC/ARM_CRx_No_GIC");
-    if !freertos_dir.join("tasks.c").exists() {
-        bail!("FreeRTOS-Kernel submodule not checked out (run: git submodule update --init)");
-    }
     let linker_script = cpu_dir.join("platform/autd3-cpu.ld");
     let build_dir = cpu_dir.join("build");
     let obj_dir = build_dir.join("obj");
     std::fs::create_dir_all(&obj_dir).with_context(|| format!("creating {}", obj_dir.display()))?;
 
-    let sources = collect_build_sources(&cpu_dir, &freertos_dir, &freertos_port_dir)?;
+    let sources = collect_build_sources(&cpu_dir)?;
 
     let inc_flags = [
         format!("-I{}", cpu_dir.join("inc").display()),
         format!("-I{}", cpu_dir.join("src").display()),
         format!("-I{}", cpu_dir.join("bsp").display()),
-        format!("-I{}", freertos_dir.join("include").display()),
-        format!("-I{}", freertos_port_dir.display()),
     ];
 
     let mut objects = Vec::new();
@@ -176,24 +169,11 @@ pub fn cpu_build(root: &Path) -> Result<PathBuf> {
     Ok(bin)
 }
 
-fn collect_build_sources(
-    cpu_dir: &Path,
-    freertos_dir: &Path,
-    freertos_port_dir: &Path,
-) -> Result<Vec<PathBuf>> {
+fn collect_build_sources(cpu_dir: &Path) -> Result<Vec<PathBuf>> {
     let mut bsp_sources = Vec::new();
     collect_c_files(&cpu_dir.join("bsp"), &mut bsp_sources)?;
     bsp_sources.retain(|p| p.extension().and_then(|e| e.to_str()) == Some("c"));
     bsp_sources.sort();
-
-    let freertos_sources = [
-        freertos_dir.join("list.c"),
-        freertos_dir.join("queue.c"),
-        freertos_dir.join("tasks.c"),
-        freertos_dir.join("portable/MemMang/heap_1.c"),
-        freertos_port_dir.join("port.c"),
-        freertos_port_dir.join("portASM.S"),
-    ];
 
     let mut app_sources = Vec::new();
     collect_c_files(&cpu_dir.join("src"), &mut app_sources)?;
@@ -205,7 +185,6 @@ fn collect_build_sources(
 
     let mut sources = Vec::new();
     sources.extend(bsp_sources);
-    sources.extend(freertos_sources);
     sources.extend(app_sources);
     Ok(sources)
 }
