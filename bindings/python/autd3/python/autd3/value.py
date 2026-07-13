@@ -11,6 +11,7 @@ from ._autd3 import (
     ModulationBank,
     PatternBank,
     PulseWidth,
+    Telemetry,
     TransitionMode,
 )
 
@@ -28,5 +29,6 @@ __all__ = [
     "Phase",
     "PulseWidth",
     "SamplingConfig",
+    "Telemetry",
     "TransitionMode",
 ]

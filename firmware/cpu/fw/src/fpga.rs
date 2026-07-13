@@ -21,6 +21,15 @@ pub const TRANSITION_MODE_IMMEDIATE: u8 = 0xFF;
 pub const REP_INFINITE: u16 = 0xFFFF;
 pub const SYS_TIME_TRANSITION_MARGIN_NS: u64 = 10_000_000;
 
+#[must_use]
+pub fn sys_time_margin_ns(margin_ns: u32) -> u64 {
+    if margin_ns == 0 {
+        SYS_TIME_TRANSITION_MARGIN_NS
+    } else {
+        u64::from(margin_ns)
+    }
+}
+
 pub const PWE_TABLE_SIZE: usize = 256;
 pub const SILENCER_DEFAULT_UPDATE_RATE: u16 = 256;
 pub const SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY: u16 = 10;

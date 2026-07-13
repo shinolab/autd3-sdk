@@ -155,7 +155,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_config_foci_stm(byte bank, IntPtr samplingConfig, uint size, byte numFoci, float soundSpeedMPerS, ushort rep);
 
         [DllImport("autd3capi")]
-        internal static extern IntPtr autd3_op_change_pattern_bank(byte bank, byte transitionMode, ulong transitionValue);
+        internal static extern IntPtr autd3_op_change_pattern_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
     }
 
     public readonly struct DevicePattern : IEnumerable<Emission>

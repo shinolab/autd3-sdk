@@ -44,13 +44,13 @@ namespace AUTD3
         internal static extern void autd3_stm_config_free(IntPtr config);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_op_foci_stm(IntPtr config, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue);
+        internal static extern IntPtr autd3_op_foci_stm(IntPtr config, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint indexOffset, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] patterns, UIntPtr numPatterns, byte bank, byte mode, ushort loopRep, byte transitionMode, ulong transitionValue);
+        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] patterns, UIntPtr numPatterns, byte bank, byte mode, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
         [DllImport(Lib)]
         internal static extern int autd3_stm_circle(float[] center, float radiusMm, UIntPtr numPoints, float[] normal, byte intensity, Autd3StmControlPointNative[] outPoints, byte[] outIntensities);
@@ -229,7 +229,7 @@ namespace AUTD3
             try
             {
                 return NativeStm.autd3_op_foci_stm(configHandle, points, (UIntPtr)_points.Length, numFoci, intensities,
-                    (byte)_option.Bank, _option.SoundSpeed.MPerS, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value);
+                    (byte)_option.Bank, _option.SoundSpeed.MPerS, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value, _option.TransitionMode.MarginNs);
             }
             finally
             {
@@ -262,7 +262,7 @@ namespace AUTD3
             try
             {
                 return NativeStm.autd3_op_pattern_stm(configHandle, handles, (UIntPtr)handles.Length,
-                    (byte)_option.Bank, (byte)_option.Mode, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value);
+                    (byte)_option.Bank, (byte)_option.Mode, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value, _option.TransitionMode.MarginNs);
             }
             finally
             {

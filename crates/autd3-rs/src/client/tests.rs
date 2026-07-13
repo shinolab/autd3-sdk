@@ -45,6 +45,10 @@ struct Slave {
     supports_fpga_version: bool,
     error_detail: u8,
     fpga_state: u8,
+    fpga_functions: u8,
+    supports_fpga_functions: bool,
+    telemetry: [u8; 6],
+    muted: bool,
     drop_next: u32,
     stale_for_next: u32,
     sent_log: Vec<(u8, Cmd)>,
@@ -67,6 +71,10 @@ impl Slave {
             supports_fpga_version: true,
             error_detail: 0,
             fpga_state: 0,
+            fpga_functions: 0,
+            supports_fpga_functions: true,
+            telemetry: [0; 6],
+            muted: false,
             drop_next: 0,
             stale_for_next: 0,
             sent_log: Vec::new(),
@@ -118,6 +126,15 @@ fn slave_cycle(
         return true;
     }
 
+    if parsed.cmd == Cmd::Stop {
+        slave.muted = true;
+        slave.expected_seq = parsed.seq.get().wrapping_add(1);
+        slave.ack = parsed.seq.get();
+        slave.data = 0;
+        *rx = [slave.ack, slave.data];
+        return true;
+    }
+
     if slave.stale_for_next > 0 {
         slave.stale_for_next -= 1;
         *rx = [slave.ack, slave.data];
@@ -152,6 +169,19 @@ fn slave_cycle(
         Cmd::ReadFpgaFwVersionPatch => slave.fpga_version_patch,
         Cmd::ReadErrorDetail => slave.error_detail,
         Cmd::ReadFpgaState => slave.fpga_state,
+        Cmd::ReadFpgaFunctions if !slave.supports_fpga_functions => {
+            slave.error_detail = ERR_UNKNOWN_CMD;
+            ERR_UNKNOWN_CMD
+        }
+        Cmd::ReadFpgaFunctions => slave.fpga_functions,
+        Cmd::ReadTelemetry => {
+            if let Some(&value) = slave.telemetry.get(parsed.payload[0] as usize) {
+                value
+            } else {
+                slave.error_detail = ERR_INVALID_PAYLOAD;
+                ERR_INVALID_PAYLOAD
+            }
+        }
         Cmd::WritePatternBuffer
         | Cmd::WritePatternCompressed
         | Cmd::WriteModulationBuffer
@@ -161,7 +191,6 @@ fn slave_cycle(
         | Cmd::ChangeModulationBank
         | Cmd::SetSilencer
         | Cmd::SetPhaseCorrection
-        | Cmd::SetOutputMask
         | Cmd::SetPulseWidthTable
         | Cmd::EmulateGpioIn
         | Cmd::SetGpioOut
@@ -169,11 +198,15 @@ fn slave_cycle(
         | Cmd::Synchronize
         | Cmd::Clear
         | Cmd::Nop => 0,
+        Cmd::SetOutputMask => {
+            slave.muted = parsed.payload[..2] == [0, 0];
+            0
+        }
         Cmd::SetMode => {
             slave.mode = parsed.payload[0];
             0
         }
-        Cmd::Reset => unreachable!(),
+        Cmd::Reset | Cmd::Stop => unreachable!(),
     };
     slave.ack = parsed.seq.get();
     slave.data = data;
@@ -1314,4 +1347,74 @@ async fn separate_builders_share_committed_mirror_state() {
         loop_behavior: LoopBehavior::Infinite,
     });
     assert!(matches!(b2.build(), Err(Error::SilencerConstraint { .. })));
+}
+
+#[tokio::test]
+async fn stop_mutes_via_the_stop_command() {
+    let (client, slave) = open_client().await;
+
+    client.stop().await.unwrap();
+
+    let s = slave.lock().unwrap();
+    assert!(s.muted);
+    assert!(s.sent_log.iter().any(|(_, cmd)| *cmd == Cmd::Stop));
+}
+
+#[tokio::test]
+async fn stop_resyncs_seq_and_lets_later_frames_through() {
+    let (client, slave) = open_client().await;
+
+    client.stop().await.unwrap();
+    client.read_error_detail().await.unwrap();
+
+    let s = slave.lock().unwrap();
+    assert_eq!(s.ack, s.expected_seq.wrapping_sub(1));
+}
+
+#[tokio::test]
+async fn read_telemetry_returns_selected_counter() {
+    use crate::telemetry::Telemetry;
+
+    let (client, slave) = open_client().await;
+    slave.lock().unwrap().telemetry[Telemetry::FifoDrop.as_u8() as usize] = 7;
+    slave.lock().unwrap().telemetry[Telemetry::Failsafe.as_u8() as usize] = 3;
+
+    assert_eq!(
+        client.read_telemetry(Telemetry::FifoDrop).await.unwrap(),
+        vec![7]
+    );
+    assert_eq!(
+        client.read_telemetry(Telemetry::Failsafe).await.unwrap(),
+        vec![3]
+    );
+}
+
+#[tokio::test]
+async fn read_fpga_functions_returns_bits() {
+    use crate::telemetry::FpgaFunctions;
+
+    let (client, slave) = open_client().await;
+    slave.lock().unwrap().fpga_functions = 0xA5;
+
+    assert_eq!(
+        client.read_fpga_functions().await.unwrap(),
+        vec![FpgaFunctions(0xA5)]
+    );
+}
+
+#[tokio::test]
+async fn read_fpga_functions_reports_unknown_on_outdated_firmware() {
+    use crate::telemetry::FpgaFunctions;
+
+    let (client, slave) = open_client().await;
+    {
+        let mut s = slave.lock().unwrap();
+        s.supports_fpga_functions = false;
+        s.fpga_functions = 0xA5;
+    }
+
+    assert_eq!(
+        client.read_fpga_functions().await.unwrap(),
+        vec![FpgaFunctions::UNKNOWN]
+    );
 }

@@ -169,9 +169,12 @@ impl TransitionMode {
     }
 
     #[staticmethod]
-    #[pyo3(name = "SysTime")]
-    fn sys_time(sys_time: DcSysTime) -> Self {
-        Self(CoreTransitionMode::SysTime(sys_time.0))
+    #[pyo3(name = "SysTime", signature = (sys_time, margin = None))]
+    fn sys_time(sys_time: DcSysTime, margin: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        Ok(Self(CoreTransitionMode::SysTime {
+            time: sys_time.0,
+            margin: margin.map(extract_duration).transpose()?,
+        }))
     }
 
     #[staticmethod]
@@ -458,5 +461,52 @@ impl ChangeModulationBank {
             bank: bank.0,
             transition_mode: transition_mode.map_or(CoreTransitionMode::default(), |t| t.0),
         }
+    }
+}
+
+#[pyclass(name = "Telemetry", module = "autd3.value", eq, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Telemetry(pub(crate) autd3_rs::Telemetry);
+
+#[pymethods]
+impl Telemetry {
+    #[classattr]
+    #[pyo3(name = "FifoDrop")]
+    fn fifo_drop() -> Self {
+        Self(autd3_rs::Telemetry::FifoDrop)
+    }
+
+    #[classattr]
+    #[pyo3(name = "Dedup")]
+    fn dedup() -> Self {
+        Self(autd3_rs::Telemetry::Dedup)
+    }
+
+    #[classattr]
+    #[pyo3(name = "SeqMismatch")]
+    fn seq_mismatch() -> Self {
+        Self(autd3_rs::Telemetry::SeqMismatch)
+    }
+
+    #[classattr]
+    #[pyo3(name = "DispatchError")]
+    fn dispatch_error() -> Self {
+        Self(autd3_rs::Telemetry::DispatchError)
+    }
+
+    #[classattr]
+    #[pyo3(name = "Processed")]
+    fn processed() -> Self {
+        Self(autd3_rs::Telemetry::Processed)
+    }
+
+    #[classattr]
+    #[pyo3(name = "Failsafe")]
+    fn failsafe() -> Self {
+        Self(autd3_rs::Telemetry::Failsafe)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("Telemetry.{:?}", self.0)
     }
 }

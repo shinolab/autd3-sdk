@@ -1,7 +1,7 @@
 use zerocopy::FromBytes;
 
 use crate::app::Cpu;
-use crate::fpga::{self, SYS_TIME_TRANSITION_MARGIN_NS, transition_mode_violates_loop};
+use crate::fpga::{self, sys_time_margin_ns, transition_mode_violates_loop};
 use crate::params::{
     ADDR_MOD_REP0, ADDR_MOD_REQ_RD_BANK, ADDR_MOD_TRANSITION_MODE, ADDR_MOD_TRANSITION_VALUE_0,
     BRAM_SELECT_CONTROLLER, CTL_FLAG_MOD_SET, NUM_BANKS, TRANSITION_MODE_SYS_TIME,
@@ -20,6 +20,7 @@ impl Cpu {
         let bank = p.bank;
         let transition_mode = p.transition_mode;
         let transition_value = p.transition_value.get();
+        let margin_ns = sys_time_margin_ns(p.margin_ns.get());
 
         if usize::from(bank) >= NUM_BANKS {
             return ERR_INVALID_PAYLOAD;
@@ -36,7 +37,7 @@ impl Cpu {
             return ERR_INVALID_TRANSITION_MODE;
         }
         if transition_mode == TRANSITION_MODE_SYS_TIME
-            && transition_value < port.dc_sys_time() + SYS_TIME_TRANSITION_MARGIN_NS
+            && transition_value < port.dc_sys_time() + margin_ns
         {
             return ERR_MISS_TRANSITION_TIME;
         }

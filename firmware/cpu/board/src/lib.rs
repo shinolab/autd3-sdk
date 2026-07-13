@@ -25,14 +25,16 @@ unsafe extern "C" {
 struct StaticCpu(Cpu);
 
 // SAFETY: this single-core firmware has exactly two execution contexts: the EtherCAT
-// host-interface ISR (`recv_ethercat`) and the main loop (`init_app` / `app_process_pending`),
-// and an ISR is sequenced with the code it preempts. All `Cpu` state that both contexts
-// touch is atomic (`tx`, `expected_seq`, mode/dedup flags, and the FIFO indices, whose
-// stores publish the slot contents with Release/Acquire). The `Cell` state (FIFO slots,
-// dispatch bookkeeping) is only accessed by the SPSC owner of the slot or by the single
+// host-interface ISR (`recv_ethercat`) and the main loop (`init_app` / `app_process_pending` /
+// `app_tick_1ms`), and an ISR is sequenced with the code it preempts. All `Cpu` state that both
+// contexts touch is atomic (`tx`, `expected_seq`, mode/dedup flags, the telemetry counters, the
+// preempt record published by the flush generation, and the FIFO indices, whose stores publish
+// the slot contents with Release/Acquire). The `Cell` state (FIFO slots, dispatch bookkeeping,
+// the failsafe tick counter) is only accessed by the SPSC owner of the slot or by the single
 // context that may dispatch at a time (inline dispatch requires an empty ring; the frame
-// consumed by the main loop stays unconsumed until its dispatch returns). `Cpu` exposes
-// no `&mut self` API, so no exclusive reference is ever formed.
+// consumed by the main loop stays unconsumed until its dispatch returns; `tick_1ms` runs in the
+// main loop, sequentially with `app_process_pending`). `Cpu` exposes no `&mut self` API, so no
+// exclusive reference is ever formed.
 unsafe impl Sync for StaticCpu {}
 
 static CPU: StaticCpu = StaticCpu(Cpu::new());
@@ -64,6 +66,13 @@ pub extern "C" fn recv_ethercat(frame: *const u8) {
 pub extern "C" fn app_process_pending() {
     while CPU.0.process_one(&mut HwPort) {
         publish_tx(CPU.0.tx());
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn app_tick() {
+    for _ in 0..bsp::timer::elapsed_ms() {
+        CPU.0.tick_1ms(&mut HwPort);
     }
 }
 

@@ -6,6 +6,7 @@ pub enum Cmd {
     SetMode = 0x02,
     Clear = 0x03,
     Nop = 0x04,
+    Stop = 0x05,
 
     WritePatternBuffer = 0x10,
     ConfigPattern = 0x11,
@@ -35,6 +36,8 @@ pub enum Cmd {
     ReadFpgaFwVersionMinor = 0xE5,
     ReadFpgaFwVersionPatch = 0xE6,
     ReadFpgaState = 0xE7,
+    ReadTelemetry = 0xE8,
+    ReadFpgaFunctions = 0xE9,
 
     XorHash = 0xF0,
 }
@@ -56,6 +59,7 @@ impl TryFrom<u8> for Cmd {
             0x02 => Ok(Self::SetMode),
             0x03 => Ok(Self::Clear),
             0x04 => Ok(Self::Nop),
+            0x05 => Ok(Self::Stop),
             0x10 => Ok(Self::WritePatternBuffer),
             0x11 => Ok(Self::ConfigPattern),
             0x12 => Ok(Self::ChangePatternBank),
@@ -78,6 +82,8 @@ impl TryFrom<u8> for Cmd {
             0xE5 => Ok(Self::ReadFpgaFwVersionMinor),
             0xE6 => Ok(Self::ReadFpgaFwVersionPatch),
             0xE7 => Ok(Self::ReadFpgaState),
+            0xE8 => Ok(Self::ReadTelemetry),
+            0xE9 => Ok(Self::ReadFpgaFunctions),
             0xF0 => Ok(Self::XorHash),
             other => Err(other),
         }
@@ -96,6 +102,7 @@ mod tests {
             Cmd::SetMode,
             Cmd::Clear,
             Cmd::Nop,
+            Cmd::Stop,
             Cmd::WritePatternBuffer,
             Cmd::ConfigPattern,
             Cmd::ChangePatternBank,
@@ -118,6 +125,8 @@ mod tests {
             Cmd::ReadFpgaFwVersionMinor,
             Cmd::ReadFpgaFwVersionPatch,
             Cmd::ReadFpgaState,
+            Cmd::ReadTelemetry,
+            Cmd::ReadFpgaFunctions,
             Cmd::XorHash,
         ] {
             assert_eq!(Cmd::try_from(c.as_u8()), Ok(c));

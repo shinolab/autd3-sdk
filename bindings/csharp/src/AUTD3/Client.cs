@@ -311,6 +311,12 @@ namespace AUTD3
         public Task<byte[]> ReadErrorDetailAsync() =>
             ReadByteArrayAsync((cb, ud) => NativeClient.autd3_client_read_error_detail(Handle, cb, ud));
 
+        public Task<byte[]> ReadTelemetryAsync(Telemetry counter) =>
+            ReadByteArrayAsync((cb, ud) => NativeClient.autd3_client_read_telemetry(Handle, (byte)counter, cb, ud));
+
+        public Task<byte[]> ReadFpgaFunctionsAsync() =>
+            ReadByteArrayAsync((cb, ud) => NativeClient.autd3_client_read_fpga_functions(Handle, cb, ud));
+
         internal static async Task<byte[]> ReadByteArrayAsync(Action<CompletionCallback, IntPtr> invoke)
         {
             var array = await AsyncOps.InvokeAsync(invoke).ConfigureAwait(false);
