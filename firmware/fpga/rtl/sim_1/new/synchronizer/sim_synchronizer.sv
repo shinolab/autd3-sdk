@@ -13,11 +13,26 @@ module sim_synchronizer ();
 
   logic signed [13:0] SYNC_TIME_DIFF, SYNC_TIME_DIFF_p50, SYNC_TIME_DIFF_m50;
 
+  // the -50ppm instance lags, so its corrections are +2 steps flagged by
+  // SKIP_ONE_ASSERT; record where in the Sync0 period each one lands.
+  logic SKIP_ONE_ASSERT_m50;
+  logic [2:0] sync_tri_m50 = '0;
+  int period_pos_m50 = 0;
+  int corr_total = 0;
+  int corr_in_burst_window = 0;
+  logic measuring = 1'b0;
+
   // steady-state bound on |sync_time_diff|. the 14-bit field saturates at 8192;
   // under +-50ppm drift the closed loop keeps the residual to a few ticks, so a
   // margin well below saturation catches both loss-of-lock and future saturation
   // regressions.
   localparam int DiffBound = 64;
+
+  // spread-spectrum regression check: a burst implementation drains the whole
+  // diff within ~|diff|+6 clocks of the Sync0 edge, so all corrections would land
+  // in this window; with xorshift-randomized intervals (mean 3125 clocks) only a
+  // few percent do.
+  localparam int BurstWindow = 256;
 
   logic ECAT_SYNC;
 
@@ -79,9 +94,19 @@ module sim_synchronizer ();
       .ECAT_SYNC(ECAT_SYNC),
       .SYS_TIME(SYS_TIME_m50),
       .SYNC(),
-      .SKIP_ONE_ASSERT(),
+      .SKIP_ONE_ASSERT(SKIP_ONE_ASSERT_m50),
       .SYNC_TIME_DIFF(SYNC_TIME_DIFF_m50)
   );
+
+  always @(posedge CLK_m50) begin
+    sync_tri_m50 <= {sync_tri_m50[1:0], ECAT_SYNC};
+    if (sync_tri_m50 == 3'b011) period_pos_m50 <= 0;
+    else period_pos_m50 <= period_pos_m50 + 1;
+    if (measuring & SKIP_ONE_ASSERT_m50) begin
+      corr_total <= corr_total + 1;
+      if (period_pos_m50 < BurstWindow) corr_in_burst_window <= corr_in_burst_window + 1;
+    end
+  end
 
   task sync();
     @(posedge ECAT_SYNC);
@@ -119,24 +144,39 @@ module sim_synchronizer ();
     // allow the closed loop to settle after the initial coarse sync
     repeat (8) @(negedge ECAT_SYNC);
 
+    measuring = 1;
     for (int i = 0; i < 30; i++) begin
       @(negedge ECAT_SYNC);
       if ((SYNC_TIME_DIFF > DiffBound) || (SYNC_TIME_DIFF < -DiffBound)) begin
-        $error("%s:%d: nominal sync_time_diff out of range: %0d", `__FILE__, `__LINE__,
-               SYNC_TIME_DIFF);
+        $error("%s:%d: nominal sync_time_diff: expected is within +-%0d, but actual is %0d",
+               `__FILE__, `__LINE__, DiffBound, SYNC_TIME_DIFF);
         $finish();
       end
       if ((SYNC_TIME_DIFF_p50 > DiffBound) || (SYNC_TIME_DIFF_p50 < -DiffBound)) begin
-        $error("%s:%d: +50ppm sync_time_diff out of range: %0d", `__FILE__, `__LINE__,
-               SYNC_TIME_DIFF_p50);
+        $error("%s:%d: +50ppm sync_time_diff: expected is within +-%0d, but actual is %0d",
+               `__FILE__, `__LINE__, DiffBound, SYNC_TIME_DIFF_p50);
         $finish();
       end
       if ((SYNC_TIME_DIFF_m50 > DiffBound) || (SYNC_TIME_DIFF_m50 < -DiffBound)) begin
-        $error("%s:%d: -50ppm sync_time_diff out of range: %0d", `__FILE__, `__LINE__,
-               SYNC_TIME_DIFF_m50);
+        $error("%s:%d: -50ppm sync_time_diff: expected is within +-%0d, but actual is %0d",
+               `__FILE__, `__LINE__, DiffBound, SYNC_TIME_DIFF_m50);
         $finish();
       end
     end
+
+    if (corr_total == 0) begin
+      $error("%s:%d: -50ppm corrections: expected is > 0, but actual is %0d", `__FILE__,
+             `__LINE__, corr_total);
+      $finish();
+    end
+    if (2 * corr_in_burst_window >= corr_total) begin
+      $error(
+          "%s:%d: corrections clustered right after Sync0: expected is < %0d in the first %0d clks, but actual is %0d",
+          `__FILE__, `__LINE__, (corr_total + 1) / 2, BurstWindow, corr_in_burst_window);
+      $finish();
+    end
+    $display("corrections: %0d total, %0d within %0d clks of Sync0", corr_total,
+             corr_in_burst_window, BurstWindow);
 
     $display("OK! sim_synchronizer");
     $finish();
