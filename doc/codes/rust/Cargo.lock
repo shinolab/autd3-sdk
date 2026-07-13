@@ -272,6 +272,7 @@ dependencies = [
  "cc",
  "ethercrab",
  "futures-util",
+ "libc",
  "pcap",
  "thiserror 2.0.18",
  "thread-priority",
