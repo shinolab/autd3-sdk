@@ -1,3 +1,5 @@
+use zerocopy::FromBytes;
+
 use crate::app::Cpu;
 use crate::fpga;
 use crate::params::{
@@ -7,21 +9,21 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{
-    EM_CONFIG_OFFSET_BANK, EM_CONFIG_OFFSET_DIVIDER, EM_CONFIG_OFFSET_NUM_FOCI,
-    EM_CONFIG_OFFSET_REP, EM_CONFIG_OFFSET_SIZE, EM_CONFIG_OFFSET_SOUND_SPEED,
-    EM_CONFIG_OFFSET_TYPE, ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING, MAX_FOCI_TOTAL,
-    read_u16, read_u32,
+    ConfigPatternPayload, ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING, MAX_FOCI_TOTAL,
 };
 
 impl Cpu {
     pub(crate) fn config_pattern<P: Port>(&self, port: &mut P, payload: &[u8]) -> u8 {
-        let bank = payload[EM_CONFIG_OFFSET_BANK];
-        let emission_type = payload[EM_CONFIG_OFFSET_TYPE];
-        let divider = read_u16(payload, EM_CONFIG_OFFSET_DIVIDER);
-        let size = read_u32(payload, EM_CONFIG_OFFSET_SIZE);
-        let num_foci = payload[EM_CONFIG_OFFSET_NUM_FOCI];
-        let sound_speed = read_u16(payload, EM_CONFIG_OFFSET_SOUND_SPEED);
-        let rep = read_u16(payload, EM_CONFIG_OFFSET_REP);
+        let Ok((p, _)) = ConfigPatternPayload::ref_from_prefix(payload) else {
+            return ERR_INVALID_PAYLOAD;
+        };
+        let bank = p.bank;
+        let emission_type = p.emission_type;
+        let divider = p.divider.get();
+        let size = p.size.get();
+        let num_foci = p.num_foci;
+        let sound_speed = p.sound_speed.get();
+        let rep = p.rep.get();
 
         let mut invalid = usize::from(bank) >= NUM_BANKS
             || emission_type > EMISSION_TYPE_RAW

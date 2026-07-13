@@ -1,5 +1,7 @@
 use core::cell::Cell;
 
+use zerocopy::FromBytes;
+
 use crate::app::Cpu;
 use crate::fpga;
 use crate::fpga::{
@@ -12,10 +14,7 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{
-    ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING, SILENCER_FLAG_STRICT_MODE,
-    SILENCER_OFFSET_COMPLETION_STEPS_INTENSITY, SILENCER_OFFSET_COMPLETION_STEPS_PHASE,
-    SILENCER_OFFSET_FLAG, SILENCER_OFFSET_UPDATE_RATE_INTENSITY, SILENCER_OFFSET_UPDATE_RATE_PHASE,
-    read_u16,
+    ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING, SILENCER_FLAG_STRICT_MODE, SilencerPayload,
 };
 
 pub(crate) struct SilencerGuard {
@@ -93,12 +92,14 @@ impl SilencerGuard {
 
 impl Cpu {
     pub(crate) fn set_silencer<P: Port>(&self, port: &mut P, payload: &[u8]) -> u8 {
-        let flag = payload[SILENCER_OFFSET_FLAG];
-        let update_rate_intensity = read_u16(payload, SILENCER_OFFSET_UPDATE_RATE_INTENSITY);
-        let update_rate_phase = read_u16(payload, SILENCER_OFFSET_UPDATE_RATE_PHASE);
-        let completion_steps_intensity =
-            read_u16(payload, SILENCER_OFFSET_COMPLETION_STEPS_INTENSITY);
-        let completion_steps_phase = read_u16(payload, SILENCER_OFFSET_COMPLETION_STEPS_PHASE);
+        let Ok((p, _)) = SilencerPayload::ref_from_prefix(payload) else {
+            return ERR_INVALID_PAYLOAD;
+        };
+        let flag = p.flag;
+        let update_rate_intensity = p.update_rate_intensity.get();
+        let update_rate_phase = p.update_rate_phase.get();
+        let completion_steps_intensity = p.completion_steps_intensity.get();
+        let completion_steps_phase = p.completion_steps_phase.get();
 
         if (flag & SILENCER_FLAG_FIXED_UPDATE_RATE_MODE) != 0 {
             if update_rate_intensity == 0 || update_rate_phase == 0 {

@@ -11,5 +11,8 @@ description = "Portable logic of the AUTD3 CPU board firmware (protocol, FPGA ac
 # instead of depending on this crate.
 publish = false
 
+[dependencies]
+zerocopy.workspace = true
+
 [lints]
 workspace = true

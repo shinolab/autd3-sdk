@@ -15,6 +15,7 @@ include = ["src/**", "vendor/**", "build.rs", "Cargo.toml"]
 
 [dependencies]
 autd3-rs-core.workspace = true
+zerocopy.workspace = true
 
 [lints]
 workspace = true
