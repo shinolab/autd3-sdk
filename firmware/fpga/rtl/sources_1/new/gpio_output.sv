@@ -59,7 +59,7 @@ module gpio_output #(
       params::GPIO_O_TYPE_PATTERN_IDX: begin
         debug_signal = PATTERN_IDX == value[15:0];
       end
-      params::GPIO_O_TYPE_IS_PATTERN_MODE: begin
+      params::GPIO_O_TYPE_IS_STM_MODE: begin
         debug_signal = PATTERN_CYCLE != '0;
       end
       params::GPIO_O_TYPE_SYS_TIME_EQ: begin
