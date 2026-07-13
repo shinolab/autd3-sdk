@@ -1,3 +1,5 @@
+use zerocopy::FromBytes;
+
 use crate::app::Cpu;
 use crate::fpga::{self, SYS_TIME_TRANSITION_MARGIN_NS, transition_mode_violates_loop};
 use crate::params::{
@@ -6,16 +8,18 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{
-    CHANGE_BANK_OFFSET_BANK, CHANGE_BANK_OFFSET_TRANSITION_MODE,
-    CHANGE_BANK_OFFSET_TRANSITION_VALUE, ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING,
-    ERR_INVALID_TRANSITION_MODE, ERR_MISS_TRANSITION_TIME, read_u64,
+    ChangeBankPayload, ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING,
+    ERR_INVALID_TRANSITION_MODE, ERR_MISS_TRANSITION_TIME,
 };
 
 impl Cpu {
     pub(crate) fn change_mod_bank<P: Port>(&self, port: &mut P, payload: &[u8]) -> u8 {
-        let bank = payload[CHANGE_BANK_OFFSET_BANK];
-        let transition_mode = payload[CHANGE_BANK_OFFSET_TRANSITION_MODE];
-        let transition_value = read_u64(payload, CHANGE_BANK_OFFSET_TRANSITION_VALUE);
+        let Ok((p, _)) = ChangeBankPayload::ref_from_prefix(payload) else {
+            return ERR_INVALID_PAYLOAD;
+        };
+        let bank = p.bank;
+        let transition_mode = p.transition_mode;
+        let transition_value = p.transition_value.get();
 
         if usize::from(bank) >= NUM_BANKS {
             return ERR_INVALID_PAYLOAD;

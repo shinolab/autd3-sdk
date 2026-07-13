@@ -1,3 +1,5 @@
+use zerocopy::FromBytes;
+
 use crate::app::Cpu;
 use crate::fpga;
 use crate::params::{
@@ -6,16 +8,18 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{
-    ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING, MOD_BUFFER_SAMPLES, MOD_CONFIG_OFFSET_BANK,
-    MOD_CONFIG_OFFSET_DIVIDER, MOD_CONFIG_OFFSET_REP, MOD_CONFIG_OFFSET_SIZE, read_u16, read_u32,
+    ConfigModPayload, ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING, MOD_BUFFER_SAMPLES,
 };
 
 impl Cpu {
     pub(crate) fn config_mod<P: Port>(&self, port: &mut P, payload: &[u8]) -> u8 {
-        let bank = payload[MOD_CONFIG_OFFSET_BANK];
-        let divider = read_u16(payload, MOD_CONFIG_OFFSET_DIVIDER);
-        let size = read_u32(payload, MOD_CONFIG_OFFSET_SIZE);
-        let rep = read_u16(payload, MOD_CONFIG_OFFSET_REP);
+        let Ok((p, _)) = ConfigModPayload::ref_from_prefix(payload) else {
+            return ERR_INVALID_PAYLOAD;
+        };
+        let bank = p.bank;
+        let divider = p.divider.get();
+        let size = p.size.get();
+        let rep = p.rep.get();
 
         if usize::from(bank) >= NUM_BANKS || divider == 0 || size == 0 || size > MOD_BUFFER_SAMPLES
         {

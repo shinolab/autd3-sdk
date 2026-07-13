@@ -1,5 +1,9 @@
 use core::cell::Cell;
+use core::mem::{offset_of, size_of};
 use core::sync::atomic::AtomicU8;
+
+use zerocopy::little_endian::{U16, U32, U64};
+use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned};
 
 pub const RX_FRAME_BYTES: usize = 626;
 pub const PAYLOAD_BYTES: usize = 624;
@@ -198,28 +202,143 @@ impl ProtoState {
     }
 }
 
-pub(crate) fn read_u16(payload: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes([payload[offset], payload[offset + 1]])
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct WritePatternPayload {
+    pub bank: u8,
+    _reserved: u8,
+    pub offset: U32,
+    pub data_len: U16,
+    pub data: [u8; EM_WRITE_MAX_DATA_LEN],
 }
 
-pub(crate) fn read_u32(payload: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes([
-        payload[offset],
-        payload[offset + 1],
-        payload[offset + 2],
-        payload[offset + 3],
-    ])
+const _: () = assert!(size_of::<WritePatternPayload>() == PAYLOAD_BYTES);
+const _: () = assert!(offset_of!(WritePatternPayload, bank) == EM_WRITE_OFFSET_BANK);
+const _: () = assert!(offset_of!(WritePatternPayload, offset) == EM_WRITE_OFFSET_OFFSET);
+const _: () = assert!(offset_of!(WritePatternPayload, data_len) == EM_WRITE_OFFSET_DATA_LEN);
+const _: () = assert!(offset_of!(WritePatternPayload, data) == EM_WRITE_OFFSET_DATA);
+
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct WritePatternCompressedPayload {
+    pub bank: u8,
+    pub format: u8,
+    pub count: u8,
+    _reserved: u8,
+    pub offset: U32,
+    pub data: [u8; crate::params::NUM_TRANSDUCERS * 2],
 }
 
-pub(crate) fn read_u64(payload: &[u8], offset: usize) -> u64 {
-    u64::from_le_bytes([
-        payload[offset],
-        payload[offset + 1],
-        payload[offset + 2],
-        payload[offset + 3],
-        payload[offset + 4],
-        payload[offset + 5],
-        payload[offset + 6],
-        payload[offset + 7],
-    ])
+const _: () = assert!(offset_of!(WritePatternCompressedPayload, bank) == EM_COMPRESSED_OFFSET_BANK);
+const _: () =
+    assert!(offset_of!(WritePatternCompressedPayload, format) == EM_COMPRESSED_OFFSET_FORMAT);
+const _: () =
+    assert!(offset_of!(WritePatternCompressedPayload, count) == EM_COMPRESSED_OFFSET_COUNT);
+const _: () =
+    assert!(offset_of!(WritePatternCompressedPayload, offset) == EM_COMPRESSED_OFFSET_OFFSET);
+const _: () = assert!(offset_of!(WritePatternCompressedPayload, data) == EM_COMPRESSED_OFFSET_DATA);
+
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct WriteModPayload {
+    pub bank: u8,
+    _reserved: u8,
+    pub offset: U32,
+    pub data_len: U16,
+    pub data: [u8; MOD_WRITE_MAX_DATA_LEN],
 }
+
+const _: () = assert!(size_of::<WriteModPayload>() == PAYLOAD_BYTES);
+const _: () = assert!(offset_of!(WriteModPayload, bank) == MOD_WRITE_OFFSET_BANK);
+const _: () = assert!(offset_of!(WriteModPayload, offset) == MOD_WRITE_OFFSET_OFFSET);
+const _: () = assert!(offset_of!(WriteModPayload, data_len) == MOD_WRITE_OFFSET_DATA_LEN);
+const _: () = assert!(offset_of!(WriteModPayload, data) == MOD_WRITE_OFFSET_DATA);
+
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct ConfigModPayload {
+    pub bank: u8,
+    _reserved: u8,
+    pub divider: U16,
+    pub size: U32,
+    pub rep: U16,
+}
+
+const _: () = assert!(offset_of!(ConfigModPayload, bank) == MOD_CONFIG_OFFSET_BANK);
+const _: () = assert!(offset_of!(ConfigModPayload, divider) == MOD_CONFIG_OFFSET_DIVIDER);
+const _: () = assert!(offset_of!(ConfigModPayload, size) == MOD_CONFIG_OFFSET_SIZE);
+const _: () = assert!(offset_of!(ConfigModPayload, rep) == MOD_CONFIG_OFFSET_REP);
+
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct ConfigPatternPayload {
+    pub bank: u8,
+    pub emission_type: u8,
+    pub divider: U16,
+    pub size: U32,
+    pub num_foci: u8,
+    _reserved: u8,
+    pub sound_speed: U16,
+    pub rep: U16,
+}
+
+const _: () = assert!(offset_of!(ConfigPatternPayload, bank) == EM_CONFIG_OFFSET_BANK);
+const _: () = assert!(offset_of!(ConfigPatternPayload, emission_type) == EM_CONFIG_OFFSET_TYPE);
+const _: () = assert!(offset_of!(ConfigPatternPayload, divider) == EM_CONFIG_OFFSET_DIVIDER);
+const _: () = assert!(offset_of!(ConfigPatternPayload, size) == EM_CONFIG_OFFSET_SIZE);
+const _: () = assert!(offset_of!(ConfigPatternPayload, num_foci) == EM_CONFIG_OFFSET_NUM_FOCI);
+const _: () =
+    assert!(offset_of!(ConfigPatternPayload, sound_speed) == EM_CONFIG_OFFSET_SOUND_SPEED);
+const _: () = assert!(offset_of!(ConfigPatternPayload, rep) == EM_CONFIG_OFFSET_REP);
+
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct ChangeBankPayload {
+    pub bank: u8,
+    pub transition_mode: u8,
+    pub transition_value: U64,
+}
+
+const _: () = assert!(offset_of!(ChangeBankPayload, bank) == CHANGE_BANK_OFFSET_BANK);
+const _: () =
+    assert!(offset_of!(ChangeBankPayload, transition_mode) == CHANGE_BANK_OFFSET_TRANSITION_MODE);
+const _: () =
+    assert!(offset_of!(ChangeBankPayload, transition_value) == CHANGE_BANK_OFFSET_TRANSITION_VALUE);
+
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct SilencerPayload {
+    pub flag: u8,
+    _reserved: u8,
+    pub update_rate_intensity: U16,
+    pub update_rate_phase: U16,
+    pub completion_steps_intensity: U16,
+    pub completion_steps_phase: U16,
+}
+
+const _: () = assert!(offset_of!(SilencerPayload, flag) == SILENCER_OFFSET_FLAG);
+const _: () = assert!(
+    offset_of!(SilencerPayload, update_rate_intensity) == SILENCER_OFFSET_UPDATE_RATE_INTENSITY
+);
+const _: () =
+    assert!(offset_of!(SilencerPayload, update_rate_phase) == SILENCER_OFFSET_UPDATE_RATE_PHASE);
+const _: () = assert!(
+    offset_of!(SilencerPayload, completion_steps_intensity)
+        == SILENCER_OFFSET_COMPLETION_STEPS_INTENSITY
+);
+const _: () = assert!(
+    offset_of!(SilencerPayload, completion_steps_phase) == SILENCER_OFFSET_COMPLETION_STEPS_PHASE
+);
+
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct XorHashPayload {
+    pub sleep_ms: U16,
+    pub data_len: U16,
+    pub data: [u8; XOR_HASH_MAX_DATA_LEN],
+}
+
+const _: () = assert!(size_of::<XorHashPayload>() == PAYLOAD_BYTES);
+const _: () = assert!(offset_of!(XorHashPayload, sleep_ms) == XOR_HASH_OFFSET_SLEEP_MS);
+const _: () = assert!(offset_of!(XorHashPayload, data_len) == XOR_HASH_OFFSET_DATA_LEN);
+const _: () = assert!(offset_of!(XorHashPayload, data) == XOR_HASH_OFFSET_DATA);
