@@ -56,10 +56,10 @@ module main #(
   logic signed [13:0] sync_time_diff;
 
   logic gpio_in[4];
-  assign gpio_in[0] = GPIO_IN_HARD[0] | gpio_in_soft[0];
-  assign gpio_in[1] = GPIO_IN_HARD[1] | gpio_in_soft[1];
-  assign gpio_in[2] = GPIO_IN_HARD[2] | gpio_in_soft[2];
-  assign gpio_in[3] = GPIO_IN_HARD[3] | gpio_in_soft[3];
+  assign gpio_in[0] = ~GPIO_IN_HARD[0] | gpio_in_soft[0];
+  assign gpio_in[1] = ~GPIO_IN_HARD[1] | gpio_in_soft[1];
+  assign gpio_in[2] = ~GPIO_IN_HARD[2] | gpio_in_soft[2];
+  assign gpio_in[3] = ~GPIO_IN_HARD[3] | gpio_in_soft[3];
 
   clk_wiz clk_wiz (
       .clk_in1(MRCC_25P6M),
