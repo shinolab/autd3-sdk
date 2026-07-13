@@ -39,6 +39,12 @@ const LATCH_MASK: u16 = (ffi::CTL_FLAG_MOD_SET
 
 const CTL_FLAG_MOD_SET: u16 = ffi::CTL_FLAG_MOD_SET as u16;
 const CTL_FLAG_PATTERN_SET: u16 = ffi::CTL_FLAG_PATTERN_SET as u16;
+const CTL_FLAG_GPIO_IN: [u16; 4] = [
+    ffi::CTL_FLAG_GPIO_IN_0 as u16,
+    ffi::CTL_FLAG_GPIO_IN_1 as u16,
+    ffi::CTL_FLAG_GPIO_IN_2 as u16,
+    ffi::CTL_FLAG_GPIO_IN_3 as u16,
+];
 const SILENCER_FIXED_UPDATE_RATE_MODE: u16 = ffi::SILENCER_FLAG_FIXED_UPDATE_RATE_MODE as u16;
 
 const fn reg(a: u32) -> usize {
@@ -199,10 +205,16 @@ impl FpgaEmulator {
             .set(self.sys_time_ns, rep, freq_div, cycle, req, mode, value);
     }
 
+    fn effective_gpio_in(&self) -> [bool; 4] {
+        let ctl = self.controller[reg(ffi::ADDR_CTL_FLAG)];
+        core::array::from_fn(|i| self.gpio_in[i] || ctl & CTL_FLAG_GPIO_IN[i] != 0)
+    }
+
     pub fn update_with_sys_time(&mut self, sys_time_ns: u64) {
         self.sys_time_ns = sys_time_ns;
-        self.mod_swapchain.update(self.gpio_in, sys_time_ns);
-        self.pattern_swapchain.update(self.gpio_in, sys_time_ns);
+        let gpio_in = self.effective_gpio_in();
+        self.mod_swapchain.update(gpio_in, sys_time_ns);
+        self.pattern_swapchain.update(gpio_in, sys_time_ns);
     }
 
     pub fn set_next_sync0(&mut self, sys_time_ns: u64) {

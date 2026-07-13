@@ -163,3 +163,64 @@ fn sys_time_transition_within_margin_is_rejected() {
         "transition at least a margin ahead is accepted"
     );
 }
+
+#[test]
+fn gpio_transition_waits_for_emulated_gpio_in() {
+    const TRANSITION_MODE_GPIO: u8 = 0x02;
+    const GPIO_IN_PIN: u64 = 0;
+
+    let samples: [u8; 4] = [10, 20, 30, 40];
+    let bank = 1u8;
+
+    let mut write = vec![bank, 0];
+    write.extend_from_slice(&0u32.to_le_bytes());
+    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
+    write.extend_from_slice(&samples);
+
+    let mut config = vec![bank, 0];
+    config.extend_from_slice(&1u16.to_le_bytes());
+    config.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+    config.extend_from_slice(&1u16.to_le_bytes());
+
+    let mut change = vec![bank, TRANSITION_MODE_GPIO];
+    change.extend_from_slice(&GPIO_IN_PIN.to_le_bytes());
+
+    let mut device = Device::new(NUM_TRANSDUCERS);
+    device.send(&frame(0, Cmd::Reset, &[]));
+    device.send(&frame(0, Cmd::WriteModulationBuffer, &write));
+    device.send(&frame(1, Cmd::ConfigModulation, &config));
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ChangeModulationBank, &change))
+            .data,
+        0
+    );
+
+    for i in 1..8u64 {
+        device
+            .fpga_mut()
+            .update_with_sys_time(i * ULTRASOUND_PERIOD_NS);
+    }
+    assert_eq!(
+        0,
+        device.fpga().current_mod_bank(),
+        "GPIO-in is low: the bank must not switch"
+    );
+
+    assert_eq!(
+        device
+            .send(&frame(3, Cmd::EmulateGpioIn, &[1 << GPIO_IN_PIN]))
+            .data,
+        0
+    );
+    for i in 8..16u64 {
+        device
+            .fpga_mut()
+            .update_with_sys_time(i * ULTRASOUND_PERIOD_NS);
+    }
+    assert_eq!(
+        bank as usize,
+        device.fpga().current_mod_bank(),
+        "EmulateGpioIn asserted the pin: the bank must switch"
+    );
+}
