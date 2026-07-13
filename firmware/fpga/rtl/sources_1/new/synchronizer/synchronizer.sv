@@ -11,8 +11,11 @@ module synchronizer (
 
   localparam int AddSubLatency = 5;
 
+  localparam int AdjustCntBase = 3125;
+  localparam int AdjustCntRange = 4096;
+  localparam int AdjustCntOffset = AdjustCntBase - AdjustCntRange / 2;
+
   logic [63:0] ecat_sync_time;
-  // Ticks between two consecutive Sync0 pulses, computed by the CPU.
   logic [31:0] ecat_sync_cycle;
   logic [56:0] sync_time;
 
@@ -37,6 +40,15 @@ module synchronizer (
   logic skip_one_assert;
   assign SKIP_ONE_ASSERT = skip_one_assert;
   assign SYNC_TIME_DIFF  = sync_time_diff;
+
+  logic [31:0] xor_x = 32'd123456789;
+  logic [31:0] xor_y = 32'd362436069;
+  logic [31:0] xor_z = 32'd521288629;
+  logic [31:0] xor_w = 32'd88675123;
+  logic [31:0] xor_t;
+
+  logic [12:0] adjust_cnt = '0;
+  logic [12:0] adjust_cnt_cyc = 13'(AdjustCntBase);
 
   ec_time_to_sys_time ec_time_to_sys_time (
       .CLK(CLK),
@@ -75,9 +87,6 @@ module synchronizer (
 
   always_ff @(posedge CLK) begin
     if (sync) begin
-      // Advance the expected time for the next Sync0 by exactly one cycle.
-      // N is known from the CPU (ECAT_SYNC_CYCLE), so a single add replaces the
-      // former free-running estimation of N from the pulse interval.
       b_next   <= cycle_ticks;
       next_cnt <= 0;
       if (set) begin
@@ -96,7 +105,7 @@ module synchronizer (
       skip_one_assert <= 1'b0;
     end else begin
       if (diff_cnt == AddSubLatency + 1) begin
-        if (sync_time_diff == '0) begin
+        if ((adjust_cnt != '0) || (sync_time_diff == '0)) begin
           sys_time <= sys_time + 1;
           skip_one_assert <= 1'b0;
         end else if (sync_time_diff < 14'sd0) begin
@@ -129,6 +138,20 @@ module synchronizer (
       end
     end
   end
+
+  always_ff @(posedge CLK) begin
+    if (adjust_cnt == '0) begin
+      xor_t <= xor_x ^ {xor_x[20:0], 11'd0};
+    end else if (adjust_cnt == adjust_cnt_cyc) begin
+      xor_x <= xor_y;
+      xor_y <= xor_z;
+      xor_z <= xor_w;
+      xor_w <= (xor_w ^ {19'd0, xor_w[31:19]}) ^ (xor_t ^ {8'd0, xor_t[31:8]});
+      adjust_cnt_cyc <= {1'b0, xor_w[11:0]} + 13'(AdjustCntOffset);
+    end
+  end
+
+  always_ff @(posedge CLK) adjust_cnt <= adjust_cnt == adjust_cnt_cyc ? '0 : adjust_cnt + 1;
 
   always_ff @(posedge CLK) sync_tri <= {sync_tri[1:0], ECAT_SYNC};
 
