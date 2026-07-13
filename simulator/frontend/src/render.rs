@@ -17,6 +17,17 @@ const SLICE_BOTTOM_MM: f32 = -10.0;
 const MARKER_SIZE_MM: f32 = 4.5;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const MSAA_SAMPLES: u32 = 4;
+const MAX_DIM: u32 = 4096;
+const MAX_DPR: f64 = 2.0;
+// 4x MSAA colour + 4x MSAA Depth32Float cost 32 B per pixel of surface, so the backing store is
+// bounded to keep the attachments around 128 MB even on a maximised HiDPI window.
+const MAX_PIXELS: f64 = 4.0e6;
+const FIELD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+const FIELD_TEXELS_PER_MM: f32 = 2.0;
+const FIELD_MAX_DIM: u32 = 1024;
+const FIELD_WORKGROUP: u32 = 8;
+const SCENE_STAGES: wgpu::ShaderStages =
+    wgpu::ShaderStages::VERTEX_FRAGMENT.union(wgpu::ShaderStages::COMPUTE);
 pub const DEFAULT_BG_RGB: [f32; 3] = [0.467, 0.463, 0.482];
 const DEFAULT_BG: wgpu::Color = wgpu::Color {
     r: DEFAULT_BG_RGB[0] as f64,
@@ -40,25 +51,39 @@ struct SceneUniforms {
     colormap: u32,
     gizmo_len: f32,
     active_axis: i32,
-    _pad: u32,
+    slice_w: u32,
+    slice_h: u32,
+    _pad: [u32; 3],
 }
 
 pub struct Renderer {
+    canvas: web_sys::HtmlCanvasElement,
     surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+    sample_count: u32,
     device: wgpu::Device,
     queue: wgpu::Queue,
     slice_pipeline: wgpu::RenderPipeline,
     marker_pipeline: wgpu::RenderPipeline,
     gizmo_pipeline: wgpu::RenderPipeline,
     ring_pipeline: wgpu::RenderPipeline,
+    field_pipeline: wgpu::ComputePipeline,
     bind_group_layout: wgpu::BindGroupLayout,
+    field_compute_layout: wgpu::BindGroupLayout,
+    field_render_layout: wgpu::BindGroupLayout,
+    field_sampler: wgpu::Sampler,
     uniform_buf: wgpu::Buffer,
+    depth_tex: wgpu::Texture,
     depth_view: wgpu::TextureView,
+    msaa_tex: Option<wgpu::Texture>,
     msaa_view: Option<wgpu::TextureView>,
+    field_tex: Option<wgpu::Texture>,
     positions_buf: Option<wgpu::Buffer>,
     directions_buf: Option<wgpu::Buffer>,
     states_buf: Option<wgpu::Buffer>,
     bind_group: Option<wgpu::BindGroup>,
+    field_compute_bg: Option<wgpu::BindGroup>,
+    field_render_bg: Option<wgpu::BindGroup>,
     uniforms: SceneUniforms,
     camera: Camera,
     initial_camera: Camera,
@@ -75,23 +100,38 @@ pub struct Renderer {
 
 impl Renderer {
     pub async fn new(canvas: web_sys::HtmlCanvasElement) -> Result<Self, String> {
-        let width = canvas.width().max(1);
-        let height = canvas.height().max(1);
+        let (width, height) = backing_size(&canvas);
+        canvas.set_width(width);
+        canvas.set_height(height);
         let Gpu {
             surface,
+            config,
             device,
             queue,
-            format,
             sample_count,
-        } = init_gpu(canvas, width, height).await?;
+        } = init_gpu(canvas.clone(), width, height).await?;
+        let format = config.format;
 
         let Pipelines {
             bind_group_layout,
+            field_compute_layout,
+            field_render_layout,
             slice_pipeline,
             marker_pipeline,
             gizmo_pipeline,
             ring_pipeline,
+            field_pipeline,
         } = build_pipelines(&device, format, sample_count);
+
+        let field_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("field-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
 
         let uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("scene-uniforms"),
@@ -99,8 +139,9 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let depth_view = create_depth(&device, width, height, sample_count);
-        let msaa_view = create_msaa(&device, format, width, height, sample_count);
+        let (depth_tex, depth_view) = create_depth(&device, width, height, sample_count);
+        let (msaa_tex, msaa_view) = create_msaa(&device, format, width, height, sample_count)
+            .map_or((None, None), |(t, v)| (Some(t), Some(v)));
 
         let mut camera = Camera {
             pos: Vec3::new(0.0, -600.0, 180.0),
@@ -114,21 +155,33 @@ impl Renderer {
         };
         camera.aim_at_pivot();
         Ok(Self {
+            canvas,
             surface,
+            config,
+            sample_count,
             device,
             queue,
             slice_pipeline,
             marker_pipeline,
             gizmo_pipeline,
             ring_pipeline,
+            field_pipeline,
             bind_group_layout,
+            field_compute_layout,
+            field_render_layout,
+            field_sampler,
             uniform_buf,
+            depth_tex,
             depth_view,
+            msaa_tex,
             msaa_view,
+            field_tex: None,
             positions_buf: None,
             directions_buf: None,
             states_buf: None,
             bind_group: None,
+            field_compute_bg: None,
+            field_render_bg: None,
             uniforms: SceneUniforms::zeroed(),
             camera,
             initial_camera: camera,
@@ -141,6 +194,52 @@ impl Renderer {
             slice_rot: Vec3::ZERO,
             gizmo: Gizmo::new(),
         })
+    }
+
+    pub fn sync_size(&mut self) {
+        let (width, height) = backing_size(&self.canvas);
+        if width == self.config.width && height == self.config.height {
+            return;
+        }
+        self.canvas.set_width(width);
+        self.canvas.set_height(height);
+        self.config.width = width;
+        self.config.height = height;
+        self.surface.configure(&self.device, &self.config);
+
+        // `Drop for WebTexture` is a no-op on the WebGPU backend: dropping a texture only releases
+        // the JS handle and leaves the GPU memory to the browser's GC. Without an explicit destroy,
+        // every resize leaks a full-size depth+MSAA pair until the device reports
+        // "Not enough memory left" and every later texture comes back invalid.
+        self.depth_tex.destroy();
+        if let Some(msaa) = &self.msaa_tex {
+            msaa.destroy();
+        }
+        let (depth_tex, depth_view) = create_depth(&self.device, width, height, self.sample_count);
+        self.depth_tex = depth_tex;
+        self.depth_view = depth_view;
+        let (msaa_tex, msaa_view) = create_msaa(
+            &self.device,
+            self.config.format,
+            width,
+            height,
+            self.sample_count,
+        )
+        .map_or((None, None), |(t, v)| (Some(t), Some(v)));
+        self.msaa_tex = msaa_tex;
+        self.msaa_view = msaa_view;
+
+        self.aspect = width as f32 / height as f32;
+    }
+
+    #[must_use]
+    pub fn to_ndc(&self, x: f64, y: f64) -> Vec2 {
+        let width = f64::from(self.canvas.client_width().max(1));
+        let height = f64::from(self.canvas.client_height().max(1));
+        Vec2::new(
+            (x / width * 2.0 - 1.0) as f32,
+            (1.0 - y / height * 2.0) as f32,
+        )
     }
 
     pub fn set_geometry(&mut self, positions: &[[f32; 4]], directions: &[[f32; 4]]) {
@@ -344,6 +443,60 @@ impl Renderer {
         )
     }
 
+    fn create_field(&mut self) {
+        let width = self.axis_range[0].1 - self.axis_range[0].0;
+        let height = self.axis_range[2].1 - self.axis_range[2].0;
+        let to_dim =
+            |mm: f32| -> u32 { ((mm * FIELD_TEXELS_PER_MM) as u32).clamp(1, FIELD_MAX_DIM) };
+        let (width, height) = (to_dim(width), to_dim(height));
+        self.uniforms.slice_w = width;
+        self.uniforms.slice_h = height;
+
+        if let Some(old) = &self.field_tex {
+            old.destroy();
+        }
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("field"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: FIELD_FORMAT,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        // The storage view (compute writes) and the sampled view (slice reads) are kept in separate
+        // bind groups: a single one would put both usages in the same pass usage scope and conflict.
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.field_compute_bg = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("field-compute-bg"),
+            layout: &self.field_compute_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            }],
+        }));
+        self.field_render_bg = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("field-render-bg"),
+            layout: &self.field_render_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.field_sampler),
+                },
+            ],
+        }));
+        self.field_tex = Some(texture);
+    }
+
     fn apply_slice(&mut self) {
         let width = self.axis_range[0].1 - self.axis_range[0].0;
         let height = self.axis_range[2].1 - self.axis_range[2].0;
@@ -390,7 +543,11 @@ impl Renderer {
     }
 
     pub fn render(&mut self) {
-        let Some(bind_group) = &self.bind_group else {
+        let (Some(bind_group), Some(field_compute_bg), Some(field_render_bg)) = (
+            &self.bind_group,
+            &self.field_compute_bg,
+            &self.field_render_bg,
+        ) else {
             return;
         };
 
@@ -421,6 +578,20 @@ impl Renderer {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("field-pass"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.field_pipeline);
+            cpass.set_bind_group(0, bind_group, &[]);
+            cpass.set_bind_group(1, field_compute_bg, &[]);
+            cpass.dispatch_workgroups(
+                self.uniforms.slice_w.div_ceil(FIELD_WORKGROUP),
+                self.uniforms.slice_h.div_ceil(FIELD_WORKGROUP),
+                1,
+            );
+        }
+        {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("scene-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -445,6 +616,7 @@ impl Renderer {
                 multiview_mask: None,
             });
             rpass.set_bind_group(0, bind_group, &[]);
+            rpass.set_bind_group(1, field_render_bg, &[]);
             rpass.set_pipeline(&self.slice_pipeline);
             rpass.draw(0..6, 0..1);
             if self.show_markers {
@@ -494,6 +666,7 @@ impl Renderer {
             (self.axis_range[2].0 + self.axis_range[2].1) * 0.5,
         );
         self.apply_slice();
+        self.create_field();
 
         if self.uniforms.sound_speed == 0.0 {
             self.uniforms.sound_speed = SOUND_SPEED_MM_S;
@@ -519,10 +692,24 @@ impl Renderer {
 
 struct Gpu {
     surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    format: wgpu::TextureFormat,
     sample_count: u32,
+}
+
+fn backing_size(canvas: &web_sys::HtmlCanvasElement) -> (u32, u32) {
+    let dpr = web_sys::window().map_or(1.0, |w| w.device_pixel_ratio());
+    let dpr = if dpr.is_finite() {
+        dpr.clamp(1.0, MAX_DPR)
+    } else {
+        1.0
+    };
+    let width = f64::from(canvas.client_width().max(1)) * dpr;
+    let height = f64::from(canvas.client_height().max(1)) * dpr;
+    let scale = (MAX_PIXELS / (width * height)).sqrt().min(1.0);
+    let to_dim = |px: f64| -> u32 { ((px * scale).round() as u32).clamp(1, MAX_DIM) };
+    (to_dim(width), to_dim(height))
 }
 
 async fn init_gpu(
@@ -581,19 +768,22 @@ async fn init_gpu(
 
     Ok(Gpu {
         surface,
+        config,
         device,
         queue,
-        format,
         sample_count,
     })
 }
 
 struct Pipelines {
     bind_group_layout: wgpu::BindGroupLayout,
+    field_compute_layout: wgpu::BindGroupLayout,
+    field_render_layout: wgpu::BindGroupLayout,
     slice_pipeline: wgpu::RenderPipeline,
     marker_pipeline: wgpu::RenderPipeline,
     gizmo_pipeline: wgpu::RenderPipeline,
     ring_pipeline: wgpu::RenderPipeline,
+    field_pipeline: wgpu::ComputePipeline,
 }
 
 #[derive(Clone, Copy)]
@@ -616,7 +806,7 @@ fn build_pipelines(
         entries: &[
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                visibility: SCENE_STAGES,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -629,23 +819,66 @@ fn build_pipelines(
             storage_entry(3),
         ],
     });
+    let field_compute_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("field-compute-bgl"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::StorageTexture {
+                access: wgpu::StorageTextureAccess::WriteOnly,
+                format: FIELD_FORMAT,
+                view_dimension: wgpu::TextureViewDimension::D2,
+            },
+            count: None,
+        }],
+    });
+    let field_render_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("field-render-bgl"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("scene-shader"),
         source: wgpu::ShaderSource::Wgsl(include_str!("scene.wgsl").into()),
     });
+    let layouts = [&bind_group_layout, &field_render_layout];
+    let field_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("field_cs"),
+        layout: Some(
+            &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("field-pl"),
+                bind_group_layouts: &[Some(&bind_group_layout), Some(&field_compute_layout)],
+                immediate_size: 0,
+            }),
+        ),
+        module: &shader,
+        entry_point: Some("field_cs"),
+        compilation_options: wgpu::PipelineCompilationOptions::default(),
+        cache: None,
+    });
     Pipelines {
         slice_pipeline: build_pipeline(
-            device,
-            &bind_group_layout,
-            &shader,
-            target,
-            "slice_vs",
-            "slice_fs",
-            true,
+            device, &layouts, &shader, target, "slice_vs", "slice_fs", true,
         ),
         marker_pipeline: build_pipeline(
             device,
-            &bind_group_layout,
+            &layouts,
             &shader,
             target,
             "marker_vs",
@@ -653,30 +886,21 @@ fn build_pipelines(
             true,
         ),
         gizmo_pipeline: build_pipeline(
-            device,
-            &bind_group_layout,
-            &shader,
-            target,
-            "gizmo_vs",
-            "gizmo_fs",
-            false,
+            device, &layouts, &shader, target, "gizmo_vs", "gizmo_fs", false,
         ),
         ring_pipeline: build_pipeline(
-            device,
-            &bind_group_layout,
-            &shader,
-            target,
-            "ring_vs",
-            "gizmo_fs",
-            false,
+            device, &layouts, &shader, target, "ring_vs", "gizmo_fs", false,
         ),
+        field_pipeline,
         bind_group_layout,
+        field_compute_layout,
+        field_render_layout,
     }
 }
 
 fn build_pipeline(
     device: &wgpu::Device,
-    bind_group_layout: &wgpu::BindGroupLayout,
+    bind_group_layouts: &[&wgpu::BindGroupLayout; 2],
     shader: &wgpu::ShaderModule,
     target: Target,
     vs: &str,
@@ -685,7 +909,7 @@ fn build_pipeline(
 ) -> wgpu::RenderPipeline {
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("scene-pl"),
-        bind_group_layouts: &[Some(bind_group_layout)],
+        bind_group_layouts: &[Some(bind_group_layouts[0]), Some(bind_group_layouts[1])],
         immediate_size: 0,
     });
     let (depth_write, depth_compare) = if depth_test {
@@ -738,7 +962,7 @@ fn create_depth(
     width: u32,
     height: u32,
     sample_count: u32,
-) -> wgpu::TextureView {
+) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("depth"),
         size: wgpu::Extent3d {
@@ -753,7 +977,8 @@ fn create_depth(
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         view_formats: &[],
     });
-    texture.create_view(&wgpu::TextureViewDescriptor::default())
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
 }
 
 fn create_msaa(
@@ -762,7 +987,7 @@ fn create_msaa(
     width: u32,
     height: u32,
     sample_count: u32,
-) -> Option<wgpu::TextureView> {
+) -> Option<(wgpu::Texture, wgpu::TextureView)> {
     if sample_count <= 1 {
         return None;
     }
@@ -780,13 +1005,14 @@ fn create_msaa(
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         view_formats: &[],
     });
-    Some(texture.create_view(&wgpu::TextureViewDescriptor::default()))
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    Some((texture, view))
 }
 
 fn storage_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
-        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+        visibility: SCENE_STAGES,
         ty: wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Storage { read_only: true },
             has_dynamic_offset: false,

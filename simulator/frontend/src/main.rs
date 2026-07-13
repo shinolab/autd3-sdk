@@ -7,7 +7,6 @@ mod tabs;
 use dioxus::html::Modifiers;
 use dioxus::prelude::*;
 use futures_util::{SinkExt, StreamExt};
-use glam::Vec2;
 use gloo_net::websocket::{Message, futures::WebSocket};
 use wasm_bindgen::JsCast;
 
@@ -24,15 +23,6 @@ use crate::tabs::Tab;
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const FAVICON_SVG: Asset = asset!("/assets/favicon.svg");
 const FAVICON_ICO: Asset = asset!("/assets/favicon.ico");
-const CANVAS_W: f32 = 800.0;
-const CANVAS_H: f32 = 600.0;
-
-fn to_ndc(x: f64, y: f64) -> Vec2 {
-    Vec2::new(
-        x as f32 / CANVAS_W * 2.0 - 1.0,
-        1.0 - y as f32 / CANVAS_H * 2.0,
-    )
-}
 
 fn ws_url() -> String {
     let location = web_sys::window().expect("no window").location();
@@ -208,6 +198,7 @@ fn App() -> Element {
                     wasm_bindgen_futures::spawn_local(async move {
                         loop {
                             if let Some(r) = renderer.borrow_mut().as_mut() {
+                                r.sync_size();
                                 r.render();
                             }
                             gloo_timers::future::TimeoutFuture::new(33).await;
@@ -262,13 +253,13 @@ fn App() -> Element {
         let renderer = renderer.clone();
         move |e: Event<MouseData>| {
             let el = e.element_coordinates();
-            let ndc = to_ndc(el.x, el.y);
             let mut on_gizmo = false;
-            if let Some(r) = renderer.borrow_mut().as_mut()
-                && let Some(axis) = r.pick_gizmo_axis(ndc)
-            {
-                r.begin_gizmo_drag(axis, ndc);
-                on_gizmo = true;
+            if let Some(r) = renderer.borrow_mut().as_mut() {
+                let ndc = r.to_ndc(el.x, el.y);
+                if let Some(axis) = r.pick_gizmo_axis(ndc) {
+                    r.begin_gizmo_drag(axis, ndc);
+                    on_gizmo = true;
+                }
             }
             if on_gizmo {
                 gizmo_drag.set(true);
@@ -303,10 +294,10 @@ fn App() -> Element {
         let renderer = renderer.clone();
         move |e: Event<MouseData>| {
             let el = e.element_coordinates();
-            let ndc = to_ndc(el.x, el.y);
             if gizmo_drag() {
                 let snap = e.modifiers().contains(Modifiers::SHIFT);
                 if let Some(r) = renderer.borrow_mut().as_mut() {
+                    let ndc = r.to_ndc(el.x, el.y);
                     match r.update_gizmo_drag(ndc, snap) {
                         Some(DragUpdate::Translate(c)) => slice_center.set(c),
                         Some(DragUpdate::Rotate(r)) => slice_rot.set(r),
@@ -323,6 +314,7 @@ fn App() -> Element {
                     cam_rot.set(r.camera_rot());
                 }
             } else if let Some(r) = renderer.borrow_mut().as_mut() {
+                let ndc = r.to_ndc(el.x, el.y);
                 r.set_hover(ndc);
             }
         }
@@ -354,10 +346,10 @@ fn App() -> Element {
         document::Link { rel: "icon", href: FAVICON_ICO, sizes: "32x32" }
         document::Stylesheet { href: TAILWIND_CSS }
         div {
-            class: "min-h-screen bg-base-200 text-base-content",
+            class: "flex h-screen flex-col overflow-hidden bg-base-200 text-base-content",
             onmousemove: on_root_move,
             onmouseup: on_root_up,
-            div { class: "navbar bg-base-100 shadow gap-2",
+            div { class: "navbar shrink-0 bg-base-100 shadow gap-2",
                 div { class: "px-2 text-lg font-semibold", "AUTD3 Simulator" }
                 div { role: "tablist", class: "tabs tabs-boxed flex-1",
                     for tab in Tab::ALL {
@@ -378,24 +370,24 @@ fn App() -> Element {
                 }
             }
             if let Some(message) = error() {
-                div { class: "mx-6 mt-4 alert alert-error", "{message}" }
+                div { class: "mx-6 mt-4 shrink-0 alert alert-error", "{message}" }
             }
-            match active_tab() {
-                Tab::Slice => rsx! { SlicePanel {} },
-                Tab::Camera => rsx! { CameraPanel {} },
-                Tab::Field => rsx! { EnvironmentPanel {} },
-                Tab::State => rsx! { StatePanel {} },
-                Tab::Settings => rsx! { SettingsPanel {} },
-                Tab::About => rsx! { AboutPanel {} },
-                Tab::Home => rsx! {},
+            div { class: "max-h-[45vh] shrink-0 overflow-y-auto",
+                match active_tab() {
+                    Tab::Slice => rsx! { SlicePanel {} },
+                    Tab::Camera => rsx! { CameraPanel {} },
+                    Tab::Field => rsx! { EnvironmentPanel {} },
+                    Tab::State => rsx! { StatePanel {} },
+                    Tab::Settings => rsx! { SettingsPanel {} },
+                    Tab::About => rsx! { AboutPanel {} },
+                    Tab::Home => rsx! {},
+                }
             }
-            div { class: "px-6 py-6",
-                div { class: "flex justify-center rounded border border-base-300 bg-base-200 p-4",
+            div { class: "min-h-0 flex-1 px-6 py-6",
+                div { class: "h-full rounded border border-base-300 bg-base-200 p-4",
                     canvas {
                         id: "field",
-                        width: "800",
-                        height: "600",
-                        class: "rounded shadow cursor-grab",
+                        class: "block size-full rounded shadow cursor-grab",
                         onmousedown: on_down,
                         onmouseup: on_up,
                         onmouseleave: on_leave,
