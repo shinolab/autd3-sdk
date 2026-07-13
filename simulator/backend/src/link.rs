@@ -1,10 +1,10 @@
 use core::convert::Infallible;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
 use autd3_rs_core::link::{ConstStateChecker, CycleOutcome, Link};
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES};
+use autd3_rs_core::value::DcSysTime;
 use autd3_rs_firmware_emulator::Device as EmuDevice;
 use autd3_rs_simulator_protocol::{DeviceState, TransState};
 
@@ -19,7 +19,6 @@ pub struct EmulatorLink {
     states: SharedStates,
     device_states: SharedDeviceStates,
     control: Arc<ControlState>,
-    start: Instant,
 }
 
 impl EmulatorLink {
@@ -35,7 +34,6 @@ impl EmulatorLink {
             states,
             device_states,
             control,
-            start: Instant::now(),
         }
     }
 }
@@ -57,7 +55,7 @@ impl Link for EmulatorLink {
         tx: &[[u8; TX_FRAME_BYTES]],
         rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Self::Error> {
-        let sys_time_ns = u64::try_from(self.start.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        let sys_time_ns = DcSysTime::now().sys_time();
         for ((device, t), r) in self.devices.iter_mut().zip(tx).zip(rx) {
             device.fpga_mut().update_with_sys_time(sys_time_ns);
             device.send(t).write_to(r);

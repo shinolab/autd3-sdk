@@ -1,8 +1,8 @@
 use std::future::Future;
 use std::time::{Duration, Instant};
 
+use autd3_rs_core::value::DcSysTime;
 use ethercrab::error::TimeoutError;
-use ethercrab::std::ethercat_now;
 use ethercrab::subdevice_group::{HasDc, NoDc, Op, PreOp, SafeOp};
 use ethercrab::{Command, DcSync, MainDevice, RegisterAddress, RetryBehaviour};
 use tokio::runtime::Handle;
@@ -213,6 +213,10 @@ async fn enumerate(
     maindevice: &MainDevice<'static>,
     pdu_timeout: Duration,
 ) -> Result<Groups<PreOp, NoDc>, EtherCrabLinkError> {
+    fn ethercat_now() -> u64 {
+        DcSysTime::now().sys_time()
+    }
+
     #[derive(Default)]
     struct GroupsArray {
         groups: [SubGroup<PreOp, NoDc>; MAX_GROUPS],
