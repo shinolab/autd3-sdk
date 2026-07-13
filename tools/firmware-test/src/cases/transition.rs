@@ -92,16 +92,13 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
         LoopBehavior::ONCE,
     )
     .await?;
+    change_bank(ctx, PatternBank::B1, TransitionMode::Gpio(GpioIn::I0)).await?;
     wait_enter("Press Enter when the focus reaches the device's left edge").await;
     ctx.send(EmulateGpioIn {
         values: [true, false, false, false],
     })
     .await?;
-    change_bank(ctx, PatternBank::B1, TransitionMode::Gpio(GpioIn::I0)).await?;
-    wait_enter(
-        "On the GPIO-in I0 trigger the trajectory jumps to the right edge, runs in reverse, then stops",
-    )
-    .await;
+    wait_enter("The trajectory jumps to the right edge, runs in reverse, then stops").await;
     ctx.send(EmulateGpioIn {
         values: [false, false, false, false],
     })
