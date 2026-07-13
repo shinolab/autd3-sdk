@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod firmware_version;
 pub mod fpga_state;
+pub mod telemetry;
 pub mod tuning;
 
 mod client;
@@ -29,5 +30,6 @@ pub use datagram::{Datagram, DatagramBuilder, Frame, Frames};
 pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;
 pub use response::Response;
+pub use telemetry::{FpgaFunctions, Telemetry};
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
 pub use tuning::PerfTuning;

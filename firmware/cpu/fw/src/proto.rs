@@ -18,6 +18,7 @@ pub const CMD_SYNCHRONIZE: u8 = 0x01;
 pub const CMD_SET_MODE: u8 = 0x02;
 pub const CMD_CLEAR: u8 = 0x03;
 pub const CMD_NOP: u8 = 0x04;
+pub const CMD_STOP: u8 = 0x05;
 pub const CMD_WRITE_PATTERN_BUFFER: u8 = 0x10;
 pub const CMD_CONFIG_PATTERN: u8 = 0x11;
 pub const CMD_CHANGE_PATTERN_BANK: u8 = 0x12;
@@ -40,6 +41,8 @@ pub const CMD_READ_FPGA_FW_VERSION_MAJOR: u8 = 0xE4;
 pub const CMD_READ_FPGA_FW_VERSION_MINOR: u8 = 0xE5;
 pub const CMD_READ_FPGA_FW_VERSION_PATCH: u8 = 0xE6;
 pub const CMD_READ_FPGA_STATE: u8 = 0xE7;
+pub const CMD_READ_TELEMETRY: u8 = 0xE8;
+pub const CMD_READ_FPGA_FUNCTIONS: u8 = 0xE9;
 pub const CMD_XOR_HASH: u8 = 0xF0;
 
 pub const MOD_BUFFER_SAMPLES: u32 = 65536;
@@ -85,6 +88,7 @@ pub const EM_CONFIG_OFFSET_REP: usize = 12;
 pub const CHANGE_BANK_OFFSET_BANK: usize = 0;
 pub const CHANGE_BANK_OFFSET_TRANSITION_MODE: usize = 1;
 pub const CHANGE_BANK_OFFSET_TRANSITION_VALUE: usize = 2;
+pub const CHANGE_BANK_OFFSET_MARGIN_NS: usize = 10;
 
 pub const SILENCER_OFFSET_FLAG: usize = 0;
 pub const SILENCER_OFFSET_UPDATE_RATE_INTENSITY: usize = 2;
@@ -125,6 +129,20 @@ pub const MODE_FIFO: u8 = 0x00;
 pub const MODE_LOW_LATENCY: u8 = 0x01;
 
 pub const SET_MODE_OFFSET_MODE: usize = 0;
+
+pub const READ_TELEMETRY_OFFSET_COUNTER_ID: usize = 0;
+
+pub const TELEMETRY_FIFO_DROP: u8 = 0x00;
+pub const TELEMETRY_DEDUP: u8 = 0x01;
+pub const TELEMETRY_SEQ_MISMATCH: u8 = 0x02;
+pub const TELEMETRY_DISPATCH_ERROR: u8 = 0x03;
+pub const TELEMETRY_PROCESSED: u8 = 0x04;
+pub const TELEMETRY_FAILSAFE: u8 = 0x05;
+pub const TELEMETRY_COUNT: usize = 6;
+
+pub const AL_STATUS_CODE_SYNC_ERROR: u16 = 0x001A;
+pub const AL_STATUS_CODE_SM_WATCHDOG: u16 = 0x001B;
+pub const FAILSAFE_TICKS: u16 = 500;
 
 pub const XOR_HASH_OFFSET_SLEEP_MS: usize = 0;
 pub const XOR_HASH_OFFSET_DATA_LEN: usize = 2;
@@ -297,6 +315,7 @@ pub struct ChangeBankPayload {
     pub bank: u8,
     pub transition_mode: u8,
     pub transition_value: U64,
+    pub margin_ns: U32,
 }
 
 const _: () = assert!(offset_of!(ChangeBankPayload, bank) == CHANGE_BANK_OFFSET_BANK);
@@ -304,6 +323,16 @@ const _: () =
     assert!(offset_of!(ChangeBankPayload, transition_mode) == CHANGE_BANK_OFFSET_TRANSITION_MODE);
 const _: () =
     assert!(offset_of!(ChangeBankPayload, transition_value) == CHANGE_BANK_OFFSET_TRANSITION_VALUE);
+const _: () = assert!(offset_of!(ChangeBankPayload, margin_ns) == CHANGE_BANK_OFFSET_MARGIN_NS);
+
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct ReadTelemetryPayload {
+    pub counter_id: u8,
+}
+
+const _: () =
+    assert!(offset_of!(ReadTelemetryPayload, counter_id) == READ_TELEMETRY_OFFSET_COUNTER_ID);
 
 #[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]

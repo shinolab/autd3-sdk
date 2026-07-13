@@ -115,6 +115,9 @@ pub enum PayloadError {
     #[error("silencer completion time {0:?} is out of range (1..=65535 ultrasound periods)")]
     SilencerCompletionTimeOutOfRange(core::time::Duration),
 
+    #[error("transition margin {0:?} is out of range (0..=4294967295 ns)")]
+    TransitionMarginOutOfRange(core::time::Duration),
+
     #[error("pattern size must be >= 1")]
     PatternSizeZero,
 

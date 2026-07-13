@@ -367,8 +367,7 @@ name = "autd3-rs-firmware-emulator"
 version = "0.2.0"
 dependencies = [
  "autd3-rs-core",
- "bindgen",
- "cc",
+ "zerocopy 0.8.52",
 ]
 
 [[package]]

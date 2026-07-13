@@ -129,7 +129,10 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
             let mut b = ctx.client.datagram_builder();
             b.push(ChangePatternBank {
                 bank: PatternBank::B1,
-                transition_mode: TransitionMode::SysTime(DcSysTime::from_nanos(0)),
+                transition_mode: TransitionMode::SysTime {
+                    time: DcSysTime::from_nanos(0),
+                    margin: None,
+                },
             });
             b.build()
         },

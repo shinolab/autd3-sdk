@@ -1,5 +1,5 @@
 use core::cell::Cell;
-use core::sync::atomic::{AtomicU8, AtomicU16, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering};
 
 use crate::cmd;
 use crate::fpga;
@@ -9,15 +9,18 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{
-    CMD_CHANGE_MOD_BANK, CMD_CHANGE_PATTERN_BANK, CMD_CLEAR, CMD_CONFIG_MOD, CMD_CONFIG_PATTERN,
-    CMD_EMULATE_GPIO_IN, CMD_FORCE_FAN, CMD_NOP, CMD_READ_CPU_FW_VERSION_MAJOR,
-    CMD_READ_CPU_FW_VERSION_MINOR, CMD_READ_CPU_FW_VERSION_PATCH, CMD_READ_ERROR_DETAIL,
+    AL_STATUS_CODE_SM_WATCHDOG, AL_STATUS_CODE_SYNC_ERROR, CMD_CHANGE_MOD_BANK,
+    CMD_CHANGE_PATTERN_BANK, CMD_CLEAR, CMD_CONFIG_MOD, CMD_CONFIG_PATTERN, CMD_EMULATE_GPIO_IN,
+    CMD_FORCE_FAN, CMD_NOP, CMD_READ_CPU_FW_VERSION_MAJOR, CMD_READ_CPU_FW_VERSION_MINOR,
+    CMD_READ_CPU_FW_VERSION_PATCH, CMD_READ_ERROR_DETAIL, CMD_READ_FPGA_FUNCTIONS,
     CMD_READ_FPGA_FW_VERSION_MAJOR, CMD_READ_FPGA_FW_VERSION_MINOR, CMD_READ_FPGA_FW_VERSION_PATCH,
-    CMD_READ_FPGA_STATE, CMD_RESET, CMD_SET_GPIO_OUT, CMD_SET_MODE, CMD_SET_OUTPUT_MASK,
-    CMD_SET_PHASE_CORR, CMD_SET_PWE, CMD_SET_SILENCER, CMD_SYNCHRONIZE, CMD_WRITE_MOD_BUFFER,
-    CMD_WRITE_PATTERN_BUFFER, CMD_WRITE_PATTERN_COMPRESSED, CMD_XOR_HASH, ERR_NONE,
-    ERR_UNKNOWN_CMD, MODE_FIFO, MODE_LOW_LATENCY, ProtoState, RxFrame, TxFrame,
-    WIRE_RX_FRAME_BYTES,
+    CMD_READ_FPGA_STATE, CMD_READ_TELEMETRY, CMD_RESET, CMD_SET_GPIO_OUT, CMD_SET_MODE,
+    CMD_SET_OUTPUT_MASK, CMD_SET_PHASE_CORR, CMD_SET_PWE, CMD_SET_SILENCER, CMD_STOP,
+    CMD_SYNCHRONIZE, CMD_WRITE_MOD_BUFFER, CMD_WRITE_PATTERN_BUFFER, CMD_WRITE_PATTERN_COMPRESSED,
+    CMD_XOR_HASH, ERR_INVALID_PAYLOAD, ERR_NONE, ERR_UNKNOWN_CMD, FAILSAFE_TICKS, MODE_FIFO,
+    MODE_LOW_LATENCY, ProtoState, READ_TELEMETRY_OFFSET_COUNTER_ID, RxFrame, TELEMETRY_COUNT,
+    TELEMETRY_DEDUP, TELEMETRY_DISPATCH_ERROR, TELEMETRY_FAILSAFE, TELEMETRY_FIFO_DROP,
+    TELEMETRY_PROCESSED, TELEMETRY_SEQ_MISMATCH, TxFrame, WIRE_RX_FRAME_BYTES,
 };
 
 pub const FIFO_DEPTH: u16 = 8;
@@ -34,6 +37,11 @@ pub struct Cpu {
     fifo_flush_head: AtomicU16,
     fifo_flush_gen: AtomicU16,
     fifo_flush_seen: AtomicU16,
+    preempt_tx: AtomicU16,
+    preempt_expected: AtomicU8,
+    preempt_mute: AtomicBool,
+    telemetry: [AtomicU8; TELEMETRY_COUNT],
+    al_err_ticks: Cell<u16>,
     proto: ProtoState,
     pub(crate) silencer: cmd::silencer::SilencerGuard,
     tx: AtomicU16,
@@ -62,6 +70,11 @@ impl Cpu {
             fifo_flush_head: AtomicU16::new(0),
             fifo_flush_gen: AtomicU16::new(0),
             fifo_flush_seen: AtomicU16::new(0),
+            preempt_tx: AtomicU16::new(0),
+            preempt_expected: AtomicU8::new(0),
+            preempt_mute: AtomicBool::new(false),
+            telemetry: [const { AtomicU8::new(0) }; TELEMETRY_COUNT],
+            al_err_ticks: Cell::new(0),
             proto: ProtoState::new(),
             silencer: cmd::silencer::SilencerGuard::new(),
             tx: AtomicU16::new(0),
@@ -76,6 +89,7 @@ impl Cpu {
             self.proto.error_detail.set(fpga_err);
         }
         self.silencer.init();
+        self.reset_telemetry();
         self.tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
         self.last_seq.store(0xFF, Ordering::Relaxed);
         self.last_cmd.store(0xFF, Ordering::Relaxed);
@@ -84,6 +98,39 @@ impl Cpu {
         self.fifo_flush_head.store(0, Ordering::Relaxed);
         self.fifo_flush_gen.store(0, Ordering::Relaxed);
         self.fifo_flush_seen.store(0, Ordering::Relaxed);
+        self.preempt_tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
+        self.preempt_expected.store(0, Ordering::Relaxed);
+        self.preempt_mute.store(false, Ordering::Relaxed);
+    }
+
+    pub(crate) fn reset_telemetry(&self) {
+        for counter in &self.telemetry {
+            counter.store(0, Ordering::Relaxed);
+        }
+        self.al_err_ticks.set(0);
+    }
+
+    fn bump(&self, id: u8) {
+        self.telemetry[id as usize].fetch_add(1, Ordering::Relaxed);
+    }
+
+    #[must_use]
+    pub fn telemetry(&self, id: u8) -> u8 {
+        self.telemetry[id as usize].load(Ordering::Relaxed)
+    }
+
+    pub fn tick_1ms<P: Port>(&self, port: &mut P) {
+        let code = port.al_status_code();
+        if code != AL_STATUS_CODE_SYNC_ERROR && code != AL_STATUS_CODE_SM_WATCHDOG {
+            self.al_err_ticks.set(0);
+            return;
+        }
+        let ticks = self.al_err_ticks.get().saturating_add(1);
+        self.al_err_ticks.set(ticks);
+        if ticks == FAILSAFE_TICKS {
+            cmd::stop::mute(port);
+            self.bump(TELEMETRY_FAILSAFE);
+        }
     }
 
     #[must_use]
@@ -127,11 +174,24 @@ impl Cpu {
         if seq == self.last_seq.load(Ordering::Relaxed)
             && cmd == self.last_cmd.load(Ordering::Relaxed)
         {
+            self.bump(TELEMETRY_DEDUP);
             return;
         }
 
         let head = self.fifo_head.load(Ordering::Relaxed);
-        if cmd == CMD_RESET {
+        let preempt = cmd == CMD_RESET || cmd == CMD_STOP;
+        if preempt {
+            if cmd == CMD_RESET {
+                self.preempt_tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
+                self.preempt_expected.store(0, Ordering::Relaxed);
+                self.preempt_mute.store(false, Ordering::Relaxed);
+            } else {
+                self.preempt_tx
+                    .store(pack_tx(seq, ERR_NONE), Ordering::Relaxed);
+                self.preempt_expected
+                    .store(seq.wrapping_add(1), Ordering::Relaxed);
+                self.preempt_mute.store(true, Ordering::Relaxed);
+            }
             self.fifo_flush_head.store(head, Ordering::Relaxed);
             self.fifo_flush_gen.store(
                 self.fifo_flush_gen.load(Ordering::Relaxed).wrapping_add(1),
@@ -140,7 +200,7 @@ impl Cpu {
         }
 
         let tail = self.fifo_tail.load(Ordering::Acquire);
-        let inline_ok = cmd == CMD_RESET || (self.mode() == MODE_LOW_LATENCY && tail == head);
+        let inline_ok = preempt || (self.mode() == MODE_LOW_LATENCY && tail == head);
         if inline_ok {
             self.handle_frame(port, &RxFrame::from_wire(frame));
             self.last_seq.store(seq, Ordering::Relaxed);
@@ -149,6 +209,7 @@ impl Cpu {
         }
 
         if head.wrapping_sub(tail) >= FIFO_CAPACITY {
+            self.bump(TELEMETRY_FIFO_DROP);
             return;
         }
         self.fifo[(head & FIFO_MASK) as usize].set(RxFrame::from_wire(frame));
@@ -175,8 +236,8 @@ impl Cpu {
         self.handle_frame(port, &in_frame);
         self.fifo_tail
             .store(tail.wrapping_add(1), Ordering::Release);
-        if self.fifo_flush_gen.load(Ordering::Relaxed) != flush_gen {
-            self.apply_reset();
+        if self.fifo_flush_gen.load(Ordering::Acquire) != flush_gen {
+            self.apply_preempt(port);
         }
         true
     }
@@ -185,14 +246,21 @@ impl Cpu {
         while self.process_one(port) {}
     }
 
-    fn apply_reset(&self) {
-        self.proto.expected_seq.store(0, Ordering::Relaxed);
-        self.tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
+    fn apply_preempt<P: Port>(&self, port: &mut P) {
+        if self.preempt_mute.load(Ordering::Relaxed) {
+            cmd::stop::mute(port);
+        }
+        self.proto.expected_seq.store(
+            self.preempt_expected.load(Ordering::Relaxed),
+            Ordering::Relaxed,
+        );
+        self.tx
+            .store(self.preempt_tx.load(Ordering::Relaxed), Ordering::Relaxed);
     }
 
     fn handle_frame<P: Port>(&self, port: &mut P, in_frame: &RxFrame) {
-        if in_frame.cmd == CMD_RESET {
-            self.apply_reset();
+        if in_frame.cmd == CMD_RESET || in_frame.cmd == CMD_STOP {
+            self.apply_preempt(port);
             return;
         }
         if in_frame.seq == self.proto.expected_seq.load(Ordering::Relaxed) {
@@ -202,14 +270,26 @@ impl Cpu {
             let data = self.dispatch(port, in_frame);
             self.tx
                 .store(pack_tx(in_frame.seq, data), Ordering::Relaxed);
+            self.bump(TELEMETRY_PROCESSED);
+        } else {
+            self.bump(TELEMETRY_SEQ_MISMATCH);
         }
     }
 
     fn latch_error(&self, data: u8) -> u8 {
         if data != ERR_NONE {
             self.proto.error_detail.set(data);
+            self.bump(TELEMETRY_DISPATCH_ERROR);
         }
         data
+    }
+
+    fn read_telemetry(&self, payload: &[u8]) -> u8 {
+        let id = payload[READ_TELEMETRY_OFFSET_COUNTER_ID];
+        if usize::from(id) >= TELEMETRY_COUNT {
+            return self.latch_error(ERR_INVALID_PAYLOAD);
+        }
+        self.telemetry(id)
     }
 
     fn dispatch<P: Port>(&self, port: &mut P, in_frame: &RxFrame) -> u8 {
@@ -231,6 +311,11 @@ impl Cpu {
             CMD_READ_ERROR_DETAIL => return self.proto.error_detail.get(),
             CMD_READ_FPGA_STATE => {
                 return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_FPGA_STATE) as u8;
+            }
+            CMD_READ_TELEMETRY => return self.read_telemetry(payload),
+            CMD_READ_FPGA_FUNCTIONS => {
+                return (fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR) >> 8)
+                    as u8;
             }
             CMD_WRITE_PATTERN_BUFFER => cmd::write_pattern::handle(port, payload),
             CMD_WRITE_PATTERN_COMPRESSED => cmd::write_pattern_compressed::handle(port, payload),

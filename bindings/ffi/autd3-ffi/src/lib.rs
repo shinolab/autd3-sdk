@@ -7,7 +7,7 @@ use autd3_ffi_abi::{
     CheckerBackend, ClientBackend, ClientOpener, CompletionCallback, CompletionCtx, DevicePattern,
     ModulationBuffer, PatternBuffer, ResponseTokenData, drop_handle, into_handle,
 };
-use autd3_rs::DeviceState;
+use autd3_rs::{DeviceState, Telemetry};
 use autd3_rs::commands::{
     BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
     ConfigModulation, ConfigPattern, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
@@ -78,9 +78,24 @@ fn to_gpio_in(v: u8) -> GpioIn {
     }
 }
 
-fn to_transition_mode(mode: u8, value: u64) -> TransitionMode {
+fn to_telemetry(counter: u8) -> Option<Telemetry> {
+    match counter {
+        0x00 => Some(Telemetry::FifoDrop),
+        0x01 => Some(Telemetry::Dedup),
+        0x02 => Some(Telemetry::SeqMismatch),
+        0x03 => Some(Telemetry::DispatchError),
+        0x04 => Some(Telemetry::Processed),
+        0x05 => Some(Telemetry::Failsafe),
+        _ => None,
+    }
+}
+
+fn to_transition_mode(mode: u8, value: u64, margin_ns: u32) -> TransitionMode {
     match mode {
-        0x01 => TransitionMode::SysTime(DcSysTime::from_nanos(value)),
+        0x01 => TransitionMode::SysTime {
+            time: DcSysTime::from_nanos(value),
+            margin: (margin_ns != 0).then(|| Duration::from_nanos(u64::from(margin_ns))),
+        },
         #[allow(clippy::cast_possible_truncation)]
         0x02 => TransitionMode::Gpio(to_gpio_in(value as u8)),
         0xF0 => TransitionMode::Ext,
@@ -480,6 +495,7 @@ pub unsafe extern "C" fn autd3_op_modulation(
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
+    transition_margin_ns: u32,
 ) -> *mut Pending {
     if sampling_config.is_null() || modulation_buffer.is_null() {
         return std::ptr::null_mut();
@@ -494,7 +510,7 @@ pub unsafe extern "C" fn autd3_op_modulation(
         data,
         bank: to_modulation_bank(bank),
         loop_behavior: rep_to_loop_behavior(loop_rep),
-        transition_mode: to_transition_mode(transition_mode, transition_value),
+        transition_mode: to_transition_mode(transition_mode, transition_value, transition_margin_ns),
     })
 }
 
@@ -628,10 +644,11 @@ pub extern "C" fn autd3_op_change_pattern_bank(
     bank: u8,
     transition_mode: u8,
     transition_value: u64,
+    transition_margin_ns: u32,
 ) -> *mut Pending {
     into_handle(Pending::ChangePatternBank {
         bank: to_pattern_bank(bank),
-        transition_mode: to_transition_mode(transition_mode, transition_value),
+        transition_mode: to_transition_mode(transition_mode, transition_value, transition_margin_ns),
     })
 }
 
@@ -676,10 +693,11 @@ pub extern "C" fn autd3_op_change_modulation_bank(
     bank: u8,
     transition_mode: u8,
     transition_value: u64,
+    transition_margin_ns: u32,
 ) -> *mut Pending {
     into_handle(Pending::ChangeModulationBank {
         bank: to_modulation_bank(bank),
-        transition_mode: to_transition_mode(transition_mode, transition_value),
+        transition_mode: to_transition_mode(transition_mode, transition_value, transition_margin_ns),
     })
 }
 
@@ -860,6 +878,7 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
+    transition_margin_ns: u32,
 ) -> *mut Pending {
     if config.is_null() || points.is_null() || intensities.is_null() || num_foci == 0 {
         return std::ptr::null_mut();
@@ -893,7 +912,7 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
         bank: to_pattern_bank(bank),
         sound_speed: sound_speed_m_s,
         loop_behavior: rep_to_loop_behavior(loop_rep),
-        transition_mode: to_transition_mode(transition_mode, transition_value),
+        transition_mode: to_transition_mode(transition_mode, transition_value, transition_margin_ns),
     })
 }
 
@@ -907,6 +926,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
+    transition_margin_ns: u32,
 ) -> *mut Pending {
     if config.is_null() || patterns.is_null() {
         return std::ptr::null_mut();
@@ -923,7 +943,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
         bank: to_pattern_bank(bank),
         mode: to_pattern_stm_mode(mode),
         loop_behavior: rep_to_loop_behavior(loop_rep),
-        transition_mode: to_transition_mode(transition_mode, transition_value),
+        transition_mode: to_transition_mode(transition_mode, transition_value, transition_margin_ns),
     })
 }
 
@@ -1562,6 +1582,53 @@ pub unsafe extern "C" fn autd3_client_read_fpga_state(
     runtime().spawn(async move {
         match fut.await {
             Ok(states) => ctx.ok(into_handle(ByteArray(states)).cast()),
+            Err(e) => ctx.err(&e.to_string()),
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_read_telemetry(
+    client: *const ClientHandle,
+    counter: u8,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) {
+    let ctx = CompletionCtx::new(cb, user_data);
+    if client.is_null() {
+        ctx.err("null client");
+        return;
+    }
+    let Some(counter) = to_telemetry(counter) else {
+        ctx.err("unknown telemetry counter");
+        return;
+    };
+
+    let fut = unsafe { &*client }.0.read_telemetry(counter);
+    runtime().spawn(async move {
+        match fut.await {
+            Ok(values) => ctx.ok(into_handle(ByteArray(values)).cast()),
+            Err(e) => ctx.err(&e.to_string()),
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_read_fpga_functions(
+    client: *const ClientHandle,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) {
+    let ctx = CompletionCtx::new(cb, user_data);
+    if client.is_null() {
+        ctx.err("null client");
+        return;
+    }
+
+    let fut = unsafe { &*client }.0.read_fpga_functions();
+    runtime().spawn(async move {
+        match fut.await {
+            Ok(functions) => ctx.ok(into_handle(ByteArray(functions)).cast()),
             Err(e) => ctx.err(&e.to_string()),
         }
     });

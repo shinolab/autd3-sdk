@@ -33,6 +33,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ops::GpioIn>()?;
     m.add_class::<ops::DcSysTime>()?;
     m.add_class::<ops::TransitionMode>()?;
+    m.add_class::<ops::Telemetry>()?;
     m.add_class::<ops::LoopBehavior>()?;
     m.add_class::<ops::WritePatternBuffer>()?;
     m.add_class::<ops::PatternCompression>()?;

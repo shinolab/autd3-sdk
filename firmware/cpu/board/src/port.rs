@@ -4,8 +4,8 @@ use autd3_cpu_fw::Port;
 
 use crate::bsp;
 use crate::regs::{
-    ECATC_DC_CYC_START_TIME_HI, ECATC_DC_CYC_START_TIME_LO, ECATC_DC_SYNC0_CYC_TIME,
-    ECATC_DC_SYS_TIME_HI, ECATC_DC_SYS_TIME_LO, read32,
+    ECATC_AL_STATUS_CODE, ECATC_DC_CYC_START_TIME_HI, ECATC_DC_CYC_START_TIME_LO,
+    ECATC_DC_SYNC0_CYC_TIME, ECATC_DC_SYS_TIME_HI, ECATC_DC_SYS_TIME_LO, read16, read32,
 };
 
 const FPGA_BASE: usize = 0x4400_0000;
@@ -81,5 +81,9 @@ impl Port for HwPort {
 
     fn sync0_cycle_ns(&mut self) -> u32 {
         read32(ECATC_DC_SYNC0_CYC_TIME)
+    }
+
+    fn al_status_code(&mut self) -> u16 {
+        read16(ECATC_AL_STATUS_CODE)
     }
 }

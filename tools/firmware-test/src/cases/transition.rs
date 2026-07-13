@@ -75,7 +75,15 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     .await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
     let at = DcSysTime::from_nanos(DcSysTime::now().sys_time() + 2_000_000_000);
-    change_bank(ctx, PatternBank::B1, TransitionMode::SysTime(at)).await?;
+    change_bank(
+        ctx,
+        PatternBank::B1,
+        TransitionMode::SysTime {
+            time: at,
+            margin: None,
+        },
+    )
+    .await?;
     wait_enter(
         "~2 s later the trajectory jumps to the right edge, runs in reverse, then stops after one cycle",
     )

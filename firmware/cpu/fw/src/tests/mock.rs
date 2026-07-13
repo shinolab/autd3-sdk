@@ -45,6 +45,9 @@ impl Port for NullPort {
     fn sync0_cycle_ns(&mut self) -> u32 {
         0
     }
+    fn al_status_code(&mut self) -> u16 {
+        0
+    }
 }
 
 pub(crate) struct MockPort {
@@ -59,8 +62,9 @@ pub(crate) struct MockPort {
     pub next_sync0: u64,
     pub dc_sys_time: u64,
     pub sync0_cycle_ns: u32,
+    pub al_status_code: u16,
     pub latch_stuck: bool,
-    isr_reset: Option<Rc<Cpu>>,
+    isr_frame: Option<(Rc<Cpu>, u8, u8)>,
 }
 
 impl MockPort {
@@ -77,8 +81,9 @@ impl MockPort {
             next_sync0: 0,
             dc_sys_time: 0,
             sync0_cycle_ns: 1_000_000,
+            al_status_code: 0,
             latch_stuck: false,
-            isr_reset: None,
+            isr_frame: None,
         }
     }
 
@@ -150,11 +155,12 @@ impl Port for MockPort {
     fn sleep_ms(&mut self, ms: u16) {
         self.total_sleep_ms += u32::from(ms);
 
-        let Some(cpu) = self.isr_reset.take() else {
+        let Some((cpu, seq, cmd)) = self.isr_frame.take() else {
             return;
         };
         let mut wire = [0u8; WIRE_RX_FRAME_BYTES];
-        wire[1] = CMD_RESET;
+        wire[0] = seq;
+        wire[1] = cmd;
         cpu.recv_ethercat(&mut NullPort, &wire);
     }
 
@@ -168,6 +174,10 @@ impl Port for MockPort {
 
     fn sync0_cycle_ns(&mut self) -> u32 {
         self.sync0_cycle_ns
+    }
+
+    fn al_status_code(&mut self) -> u16 {
+        self.al_status_code
     }
 }
 
@@ -279,6 +289,24 @@ impl Harness {
     }
 
     pub(crate) fn arm_isr_reset(&mut self) {
-        self.port.isr_reset = Some(Rc::clone(&self.cpu));
+        self.arm_isr_frame(0, CMD_RESET);
+    }
+
+    pub(crate) fn arm_isr_frame(&mut self, seq: u8, cmd: u8) {
+        self.port.isr_frame = Some((Rc::clone(&self.cpu), seq, cmd));
+    }
+
+    pub(crate) fn telemetry(&self, id: u8) -> u8 {
+        self.cpu.telemetry(id)
+    }
+
+    pub(crate) fn output_mask(&self, idx: usize) -> u16 {
+        self.port.output_mask[idx]
+    }
+
+    pub(crate) fn tick_1ms(&mut self, count: u32) {
+        for _ in 0..count {
+            self.cpu.tick_1ms(&mut self.port);
+        }
     }
 }
