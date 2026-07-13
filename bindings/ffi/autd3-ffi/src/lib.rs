@@ -7,7 +7,6 @@ use autd3_ffi_abi::{
     CheckerBackend, ClientBackend, ClientOpener, CompletionCallback, CompletionCtx, DevicePattern,
     ModulationBuffer, PatternBuffer, ResponseTokenData, drop_handle, into_handle,
 };
-use autd3_rs::{DeviceState, Telemetry};
 use autd3_rs::commands::{
     BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
     ConfigModulation, ConfigPattern, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
@@ -28,6 +27,7 @@ use autd3_rs::{
     Frames, Geometry, Length, Point3, PulseWidth, Response, ThreadPriority, ThreadPriorityValue,
     UnitVector3, Vector3, Velocity,
 };
+use autd3_rs::{DeviceState, Telemetry};
 use tokio::runtime::{Builder, Runtime};
 
 fn runtime() -> &'static Runtime {
@@ -510,7 +510,11 @@ pub unsafe extern "C" fn autd3_op_modulation(
         data,
         bank: to_modulation_bank(bank),
         loop_behavior: rep_to_loop_behavior(loop_rep),
-        transition_mode: to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        transition_mode: to_transition_mode(
+            transition_mode,
+            transition_value,
+            transition_margin_ns,
+        ),
     })
 }
 
@@ -648,7 +652,11 @@ pub extern "C" fn autd3_op_change_pattern_bank(
 ) -> *mut Pending {
     into_handle(Pending::ChangePatternBank {
         bank: to_pattern_bank(bank),
-        transition_mode: to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        transition_mode: to_transition_mode(
+            transition_mode,
+            transition_value,
+            transition_margin_ns,
+        ),
     })
 }
 
@@ -697,7 +705,11 @@ pub extern "C" fn autd3_op_change_modulation_bank(
 ) -> *mut Pending {
     into_handle(Pending::ChangeModulationBank {
         bank: to_modulation_bank(bank),
-        transition_mode: to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        transition_mode: to_transition_mode(
+            transition_mode,
+            transition_value,
+            transition_margin_ns,
+        ),
     })
 }
 
@@ -912,7 +924,11 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
         bank: to_pattern_bank(bank),
         sound_speed: sound_speed_m_s,
         loop_behavior: rep_to_loop_behavior(loop_rep),
-        transition_mode: to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        transition_mode: to_transition_mode(
+            transition_mode,
+            transition_value,
+            transition_margin_ns,
+        ),
     })
 }
 
@@ -943,7 +959,11 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
         bank: to_pattern_bank(bank),
         mode: to_pattern_stm_mode(mode),
         loop_behavior: rep_to_loop_behavior(loop_rep),
-        transition_mode: to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        transition_mode: to_transition_mode(
+            transition_mode,
+            transition_value,
+            transition_margin_ns,
+        ),
     })
 }
 
