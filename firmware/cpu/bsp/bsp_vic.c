@@ -17,6 +17,10 @@ void bsp_vic_init(void) {
   VIC_IEC9 = 0xFFFFFFFFu;
 }
 
+/* Interrupts are masked from reset (startup.S leaves CPSR.I set) and stay
+ * masked until the application has installed its handlers. */
+void bsp_irq_enable(void) { __asm__ volatile("cpsie i" ::: "memory"); }
+
 void bsp_vic_install(uint32_t intno, uint32_t priority, void (*handler)(void)) {
   if ((intno == 0u) || (intno > 31u)) {
     for (;;) {

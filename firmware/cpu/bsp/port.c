@@ -1,8 +1,7 @@
 #include <stdint.h>
 
-#include "FreeRTOS.h"
+#include "bsp.h"
 #include "rzt1_regs.h"
-#include "task.h"
 
 #define FPGA_BASE (0x44000000) /* CS1 FPGA address */
 
@@ -12,7 +11,7 @@
 
 #define PORT_SYNC0_MAX_POLLS (1000000u)
 
-void port_sleep_ms(uint16_t ms) { vTaskDelay(pdMS_TO_TICKS(ms)); }
+void port_sleep_ms(uint16_t ms) { bsp_delay_ms(ms); }
 
 static uint64_t read_dc_u64(volatile uint32_t* lo, volatile uint32_t* hi) {
   for (;;) {

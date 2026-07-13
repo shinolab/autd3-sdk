@@ -44,7 +44,7 @@ cargo xtask cpu format --fix  # clang-format -i
 `cargo xtask cpu build` は以下を行う.
 
 1. `gen_param.py` で FPGA の `params.svh` から `inc/params_fpga.h` を生成する.
-1. `bsp/` / FreeRTOS / `src/` の C ソースを Cortex-R4F 向けにコンパイルする.
+1. `bsp/` / `src/` の C ソースを Cortex-R4F 向けにコンパイルする.
 1. `platform/autd3-platform.o` とリンカスクリプト `platform/autd3-cpu.ld` を用いてリンクする.
 1. `objcopy` で `build/autd3-cpu.bin` を生成する.
 
