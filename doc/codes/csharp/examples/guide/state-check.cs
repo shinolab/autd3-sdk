@@ -8,6 +8,8 @@ namespace DocSamples.GuideStateCheck;
 
 internal static class Sample
 {
+    private static readonly TimeSpan CheckInterval = TimeSpan.FromMilliseconds(100);
+
     internal static async Task Run()
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
@@ -36,7 +38,7 @@ internal static class Sample
                     Console.WriteLine($"all operational: {status.AllOp}, any lost: {status.AnyLost}, recoveries: {status.Recoveries}");
                     last = status;
                 }
-                await Task.Delay(TimeSpan.FromMilliseconds(100));
+                await Task.Delay(CheckInterval);
             }
             // ANCHOR_END: poll
         }

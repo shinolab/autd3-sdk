@@ -4,7 +4,7 @@ import numpy as np
 
 import autd3_link_ethercrab as ethercrab
 from autd3 import Client, ClientConfig
-from autd3.commands import FixedCompletionTime, FociStm, FociStmOption, SetSilencer, StmConfig
+from autd3.commands import FixedCompletionTime, FociStm, FociStmOption, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz
 from autd3.value import ControlPoint, ControlPoints, Intensity
@@ -35,7 +35,7 @@ async def main() -> None:
     builder.push(SetSilencer.disable())
     builder.push(
         FociStm(
-            StmConfig(50.0 * Hz),
+            50.0 * Hz,
             foci,
             FociStmOption(),
         )
@@ -54,7 +54,7 @@ async def main() -> None:
     builder.push(SetSilencer())
     builder.push(
         FociStm(
-            StmConfig(50.0 * Hz),
+            50.0 * Hz,
             foci,
             FociStmOption(),
         )
@@ -79,7 +79,7 @@ async def main() -> None:
             )
         )
     )
-    builder.push(FociStm(StmConfig(50.0 * Hz), foci, FociStmOption()))
+    builder.push(FociStm(50.0 * Hz, foci, FociStmOption()))
     for frame in builder.build():
         await client.send_checked(frame)
     # ANCHOR_END: workaround

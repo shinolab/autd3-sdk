@@ -6,7 +6,7 @@ import autd3_link_ethercrab as ethercrab
 import autd3_modulation as modulation
 import autd3_pattern as pattern
 from autd3 import Client, ClientConfig
-from autd3.commands import FociStm, FociStmOption, Pattern, SetSilencer, StmConfig
+from autd3.commands import Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 

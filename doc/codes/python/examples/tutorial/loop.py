@@ -4,7 +4,7 @@ import numpy as np
 
 import autd3_link_ethercrab as ethercrab
 from autd3 import Client, ClientConfig
-from autd3.commands import FociStm, FociStmOption, StmConfig, circle
+from autd3.commands import FociStm, FociStmOption, circle
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz
 from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
@@ -26,7 +26,7 @@ async def main() -> None:
     # ANCHOR: infinite
     # By default the playback loops infinitely; B0 keeps circling the focus.
     builder = client.datagram_builder()
-    builder.push(FociStm(StmConfig(50.0 * Hz), foci, FociStmOption()))
+    builder.push(FociStm(50.0 * Hz, foci, FociStmOption()))
     for frame in builder.build():
         await client.send_checked(frame)
     # ANCHOR_END: infinite
@@ -38,7 +38,7 @@ async def main() -> None:
     builder = client.datagram_builder()
     builder.push(
         FociStm(
-            StmConfig(50.0 * Hz),
+            50.0 * Hz,
             foci,
             FociStmOption(
                 loop_behavior=LoopBehavior.Finite(3),
