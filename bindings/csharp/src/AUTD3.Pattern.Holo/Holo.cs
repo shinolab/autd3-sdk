@@ -14,7 +14,7 @@ namespace AUTD3.Holo
     {
         internal const float AbsoluteThresholdOfHearing = 20e-6f;
 
-        internal float Pascal { get; }
+        public float Pascal { get; }
 
         private Amplitude(float pascal)
         {

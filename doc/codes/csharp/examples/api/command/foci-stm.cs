@@ -42,7 +42,7 @@ internal static class Sample
             // ANCHOR_END: option
             ;
         // ANCHOR: api
-        new FociStm(new StmConfig(freq), points, option);
+        new FociStm(freq, points, option);
         // ANCHOR_END: api
 
         byte numFoci = 1;

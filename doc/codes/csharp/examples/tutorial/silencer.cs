@@ -29,7 +29,7 @@ internal static class Sample
             }
             var builder = client.DatagramBuilder();
             builder.Push(SetSilencer.Disable());
-            builder.Push(new FociStm(new StmConfig(50.0f * Hz), foci));
+            builder.Push(new FociStm(50.0f * Hz, foci));
             foreach (var frame in builder.Build())
             {
                 await client.SendCheckedAsync(frame);
@@ -48,7 +48,7 @@ internal static class Sample
             }
             var builder = client.DatagramBuilder();
             builder.Push(new SetSilencer());
-            builder.Push(new FociStm(new StmConfig(50.0f * Hz), foci));
+            builder.Push(new FociStm(50.0f * Hz, foci));
             foreach (var frame in builder.Build())
             {
                 await client.SendCheckedAsync(frame);
@@ -71,7 +71,7 @@ internal static class Sample
                 phase: TimeSpan.FromMicroseconds(500),
                 strictMode: true
             )));
-            builder.Push(new FociStm(new StmConfig(50.0f * Hz), foci));
+            builder.Push(new FociStm(50.0f * Hz, foci));
             foreach (var frame in builder.Build())
             {
                 await client.SendCheckedAsync(frame);

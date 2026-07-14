@@ -26,7 +26,7 @@ internal static class Program
         using var builder = client.DatagramBuilder();
         builder
             .Push(new SetSilencer())
-            .Push(new FociStm(new StmConfig(1 * Hz), points.ToArray()));
+            .Push(new FociStm(1 * Hz, points.ToArray()));
         using var frames = builder.Build();
         foreach (var frame in frames)
         {

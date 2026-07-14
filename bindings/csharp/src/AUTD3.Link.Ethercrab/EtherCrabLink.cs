@@ -20,6 +20,30 @@ namespace AUTD3.Link
             SyncTimeout = syncTimeout;
         }
 
+        public static EtherCrabLinkOption SafeDefault(Interface? iface = null) =>
+            FromValues(iface, NativeEthercrab.autd3_link_ethercrab_option_safe_default);
+
+        public static EtherCrabLinkOption PerformanceDefault(Interface? iface = null) =>
+            FromValues(iface, NativeEthercrab.autd3_link_ethercrab_option_performance_default);
+
+        private delegate int PresetFn(out EtherCrabLinkOptionValues values);
+
+        private static EtherCrabLinkOption FromValues(Interface? iface, PresetFn preset)
+        {
+            if (preset(out var values) != 0)
+            {
+                throw new Autd3Exception("failed to get ethercrab link option preset");
+            }
+            return new EtherCrabLinkOption(
+                iface,
+                ToTimeSpan(values.Sync0PeriodNs),
+                ToTimeSpan(values.Sync0ShiftNs),
+                ToTimeSpan(values.SyncToleranceNs),
+                ToTimeSpan(values.SyncTimeoutNs));
+        }
+
+        private static TimeSpan ToTimeSpan(ulong ns) => TimeSpan.FromTicks((long)(ns / 100));
+
         IntPtr ILink.TakeOpener()
         {
             var opener = NativeEthercrab.autd3_link_ethercrab(
@@ -36,9 +60,24 @@ namespace AUTD3.Link
         }
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct EtherCrabLinkOptionValues
+    {
+        public ulong Sync0PeriodNs;
+        public ulong Sync0ShiftNs;
+        public ulong SyncToleranceNs;
+        public ulong SyncTimeoutNs;
+    }
+
     internal static class NativeEthercrab
     {
         private const string Lib = "autd3_link_ethercrab";
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_ethercrab_option_safe_default(out EtherCrabLinkOptionValues @out);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_ethercrab_option_performance_default(out EtherCrabLinkOptionValues @out);
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_link_ethercrab(

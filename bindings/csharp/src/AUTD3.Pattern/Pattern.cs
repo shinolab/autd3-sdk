@@ -156,6 +156,9 @@ namespace AUTD3
 
         [DllImport("autd3capi")]
         internal static extern IntPtr autd3_op_change_pattern_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+
+        [DllImport("autd3capi")]
+        internal static extern UIntPtr autd3_pattern_compression_per_frame(byte format);
     }
 
     public readonly struct DevicePattern : IEnumerable<Emission>

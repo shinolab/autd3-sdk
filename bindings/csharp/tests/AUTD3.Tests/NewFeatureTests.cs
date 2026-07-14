@@ -169,7 +169,7 @@ namespace AUTD3.Tests
             var points = new List<ControlPoints>();
             Stm.Circle(geometry.Center + new Vector3(0f, 0f, 150f), 30f * mm, 4, new Vector3(0f, 0f, 1f), points);
             using var builder = new DatagramBuilder(geometry);
-            builder.Push(new FociStm(new StmConfig(1 * Hz), points.ToArray()));
+            builder.Push(new FociStm(1 * Hz, points.ToArray()));
             using var frames = builder.Build();
             Assert.True(frames.Length > 0);
         }

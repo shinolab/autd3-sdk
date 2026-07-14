@@ -91,6 +91,8 @@ namespace AUTD3
 
         public int NumTransducers => (int)NativeCore.autd3_core_device_num_transducers(_geometry, _dev);
 
+        public bool IsEmpty => NumTransducers == 0;
+
         public Quaternion Rotation
         {
             get

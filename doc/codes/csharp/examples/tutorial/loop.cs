@@ -23,7 +23,7 @@ internal static class Sample
         // By default the playback loops infinitely; B0 keeps circling the focus.
         {
         var b = client.DatagramBuilder();
-        b.Push(new FociStm(new StmConfig(50.0f * Hz), foci));
+        b.Push(new FociStm(50.0f * Hz, foci));
         foreach (var frame in b.Build())
         {
             await client.SendCheckedAsync(frame);
@@ -36,7 +36,7 @@ internal static class Sample
         // different bank, so write to bank B1 instead of the current B0.
         var builder = client.DatagramBuilder();
         builder.Push(new FociStm(
-            new StmConfig(50.0f * Hz),
+            50.0f * Hz,
             foci,
             new FociStmOption(
                 bank: PatternBank.B1,

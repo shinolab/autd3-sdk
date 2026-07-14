@@ -12,7 +12,7 @@ namespace AUTD3
 
     public readonly struct LoopBehavior
     {
-        internal ushort Rep { get; }
+        public ushort Rep { get; }
 
         private LoopBehavior(ushort rep)
         {

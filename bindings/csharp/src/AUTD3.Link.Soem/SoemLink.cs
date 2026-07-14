@@ -20,6 +20,30 @@ namespace AUTD3.Link
             SyncTimeout = syncTimeout;
         }
 
+        public static SoemLinkOption SafeDefault(Interface? iface = null) =>
+            FromValues(iface, NativeSoem.autd3_link_soem_option_safe_default);
+
+        public static SoemLinkOption PerformanceDefault(Interface? iface = null) =>
+            FromValues(iface, NativeSoem.autd3_link_soem_option_performance_default);
+
+        private delegate int PresetFn(out SoemLinkOptionValues values);
+
+        private static SoemLinkOption FromValues(Interface? iface, PresetFn preset)
+        {
+            if (preset(out var values) != 0)
+            {
+                throw new Autd3Exception("failed to get soem link option preset");
+            }
+            return new SoemLinkOption(
+                iface,
+                ToTimeSpan(values.Sync0PeriodNs),
+                ToTimeSpan(values.Sync0ShiftNs),
+                ToTimeSpan(values.SyncToleranceNs),
+                ToTimeSpan(values.SyncTimeoutNs));
+        }
+
+        private static TimeSpan ToTimeSpan(ulong ns) => TimeSpan.FromTicks((long)(ns / 100));
+
         IntPtr ILink.TakeOpener()
         {
             var opener = NativeSoem.autd3_link_soem(
@@ -36,9 +60,24 @@ namespace AUTD3.Link
         }
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct SoemLinkOptionValues
+    {
+        public ulong Sync0PeriodNs;
+        public ulong Sync0ShiftNs;
+        public ulong SyncToleranceNs;
+        public ulong SyncTimeoutNs;
+    }
+
     internal static class NativeSoem
     {
         private const string Lib = "autd3_link_soem";
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_safe_default(out SoemLinkOptionValues @out);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_performance_default(out SoemLinkOptionValues @out);
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_link_soem(
