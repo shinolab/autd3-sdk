@@ -56,7 +56,7 @@ internal static class Sample
         }
         new ConfigPattern(
             bank: option.Bank,
-            config: new SamplingConfig(patterns.Length * Hz),
+            config: new StmConfig(freq).IntoSamplingConfig(patterns.Length),
             size: (uint)patterns.Length,
             loopBehavior: option.LoopBehavior
         );

@@ -33,6 +33,16 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void StmConfigIntoSamplingConfig()
+        {
+            Assert.Equal(100, new StmConfig(100.0f * Hz).IntoSamplingConfig(4).Divide());
+            Assert.Equal(10, new StmConfig(TimeSpan.FromMilliseconds(1)).IntoSamplingConfig(4).Divide());
+            Assert.Equal(10, new StmConfig(SamplingConfig.Freq4k).IntoSamplingConfig(7).Divide());
+            Assert.True(new StmConfig(Nearest(4001.0f * Hz)).IntoSamplingConfig(1).Divide() > 0);
+            Assert.Throws<Autd3Exception>(() => new StmConfig(4001.0f * Hz).IntoSamplingConfig(1));
+        }
+
+        [Fact]
         public void GeometryIterationAndDeviceCenter()
         {
             using var geometry = new Geometry(new[]
