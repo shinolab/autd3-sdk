@@ -54,7 +54,7 @@ internal static class Sample
         );
         new ConfigFociStm(
             bank: option.Bank,
-            config: new SamplingConfig(points.Length * Hz),
+            config: new StmConfig(freq).IntoSamplingConfig(points.Length),
             size: (uint)points.Length,
             numFoci: numFoci,
             soundSpeed: option.SoundSpeed,

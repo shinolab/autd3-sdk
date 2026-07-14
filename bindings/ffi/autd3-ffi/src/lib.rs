@@ -242,6 +242,26 @@ pub extern "C" fn autd3_stm_config_sampling(divide: u16) -> *mut StmConfig {
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_stm_config_into_sampling_config(
+    config: *const StmConfig,
+    size: usize,
+    out: *mut u16,
+) -> i32 {
+    if config.is_null() || out.is_null() {
+        return -1;
+    }
+
+    // SAFETY: the caller guarantees `config` points to a valid StmConfig handle.
+    let Ok(value) = unsafe { *config }.into_sampling_config(size).divide() else {
+        return -1;
+    };
+
+    // SAFETY: the caller guarantees `out` points to a writable u16.
+    unsafe { *out = value };
+    0
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_stm_config_free(config: *mut StmConfig) {
     unsafe { drop_handle(config) }
 }
