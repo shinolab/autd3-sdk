@@ -11,7 +11,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-fw"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "zerocopy",
 ]

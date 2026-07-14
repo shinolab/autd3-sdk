@@ -1,0 +1,50 @@
+---
+title: DcSysTime
+description: EtherCAT 分散クロック上の同期時刻 DcSysTime の API と演算
+sidebar:
+  order: 5
+slug: 0.3.x/api/basics/dc-sys-time
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`DcSysTime` は, **EtherCAT 分散クロック (Distributed Clock, DC)** 上の時刻を表す型.
+[`TransitionMode::SysTime`](/autd3-sdk/0.3.x/getting-started/tutorial/loop/) や [`GpioOut::SysTimeEq`](/autd3-sdk/0.3.x/api/command/gpio/) などで用いる.
+
+EtherCAT では, 全スレーブで同期したクロック (分散クロック) があり, 各デバイスはこれに同期して動作する.
+この時刻は 64 bitの ns 単位のカウンタで, 2000年1月1日 00:00:00 (UTC) から数える.
+
+## 構築
+
+`DcSysTime` は現在時刻, UTC 日時, または生の ns から構築する.
+
+<CodeTabs rust={"let epoch = DcSysTime::ZERO;\nlet now = DcSysTime::now();\nlet at = DcSysTime::from_utc(Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap()).unwrap();\nlet raw = DcSysTime::from_nanos(1_000_000_000);\nlet ns: u64 = now.sys_time();\nlet utc = now.to_utc();"} python={"epoch = DcSysTime.ZERO\nnow = DcSysTime.now()\nraw = DcSysTime.from_nanos(1_000_000_000)\nns = now.sys_time"} csharp={"var epoch = DcSysTime.Zero; \nvar now = DcSysTime.Now();\nvar at = DcSysTime.FromUtc(new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));\nvar raw = DcSysTime.FromNanos(1_000_000_000);\nulong ns = now.SysTime;\nDateTime utc = now.ToUtc();"} />
+
+| 操作                    | 説明                                                          |
+| ----------------------- | ------------------------------------------------------------- |
+| `ZERO`                  | エポック (2000-01-01 00:00:00 UTC)                            |
+| `now()`                 | ホストの現在時刻                                              |
+| `from_nanos(ns)`        | エポックからの経過 ns から構築                                |
+| `from_utc(utc)`         | UTC 日時から構築                                              |
+| `sys_time()`            | エポックからの経過 ns                                         |
+| `to_utc()`              | UTC 日時へ変換                                                |
+
+:::note
+Python 版は `from_utc` / `to_utc` を持たない.
+:::
+
+## 演算
+
+`DcSysTime` には時間差を加減算する演算が定義されている.
+
+<CodeTabs rust={"let future = DcSysTime::now() + Duration::from_millis(100);\nlet past = future - Duration::from_millis(50);\nlet elapsed: Duration = future - past;\nlet is_after: bool = future > past; // true"} python={"future = DcSysTime.now() + Duration.from_millis(100)\npast = future - Duration.from_millis(50)"} csharp={"var future = DcSysTime.Now() + TimeSpan.FromMilliseconds(100);\nvar past = future - TimeSpan.FromMilliseconds(50);\nbool isAfter = future > past; // true"} />
+
+| 演算                          | 結果         | 説明                                     |
+| ----------------------------- | ------------ | ---------------------------------------- |
+| `DcSysTime + Duration`        | `DcSysTime`  | 指定時間の加算                           |
+| `DcSysTime - Duration`        | `DcSysTime`  | 指定時間の減算                           |
+| `DcSysTime - DcSysTime`       | `Duration`   | 2 時刻の差 (Rust のみ)                   |
+| 比較 (`<` / `>` / `==` など)  | `bool`       | 比較 (Rust / C# のみ)                    |
+
+Rust の `Duration` は `core::time::Duration`, C# は `TimeSpan`, Python は `autd3.Duration` を用いる.
+Python は加減算 (`+` / `-` による時間差の適用) のみを提供し, 時刻差の算出や比較は持たない.
