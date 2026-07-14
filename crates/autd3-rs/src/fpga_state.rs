@@ -4,6 +4,9 @@ const BIT_THERMAL_ASSERT: u8 = 0;
 const BIT_MOD_BANK: u8 = 1;
 const BIT_PATTERN_BANK: u8 = 2;
 const BIT_PATTERN_MODE: u8 = 3;
+const BIT_PATTERN_STOPPED: u8 = 4;
+const BIT_MOD_STOPPED: u8 = 5;
+const BIT_TRANSITION_PENDING: u8 = 6;
 const BIT_READS_ENABLED: u8 = 7;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -46,6 +49,21 @@ impl FpgaState {
     #[must_use]
     pub const fn is_stm_mode(self) -> bool {
         !self.is_pattern_mode()
+    }
+
+    #[must_use]
+    pub const fn is_pattern_stopped(self) -> bool {
+        self.0 & (1 << BIT_PATTERN_STOPPED) != 0
+    }
+
+    #[must_use]
+    pub const fn is_mod_stopped(self) -> bool {
+        self.0 & (1 << BIT_MOD_STOPPED) != 0
+    }
+
+    #[must_use]
+    pub const fn is_transition_pending(self) -> bool {
+        self.0 & (1 << BIT_TRANSITION_PENDING) != 0
     }
 
     #[must_use]
@@ -97,6 +115,24 @@ mod tests {
     }
 
     #[test]
+    fn is_pattern_stopped() {
+        assert!(!FpgaState(0b0000_0000).is_pattern_stopped());
+        assert!(FpgaState(0b0001_0000).is_pattern_stopped());
+    }
+
+    #[test]
+    fn is_mod_stopped() {
+        assert!(!FpgaState(0b0000_0000).is_mod_stopped());
+        assert!(FpgaState(0b0010_0000).is_mod_stopped());
+    }
+
+    #[test]
+    fn is_transition_pending() {
+        assert!(!FpgaState(0b0000_0000).is_transition_pending());
+        assert!(FpgaState(0b0100_0000).is_transition_pending());
+    }
+
+    #[test]
     fn reads_enabled() {
         assert!(!FpgaState(0b0000_0000).reads_enabled());
         assert!(FpgaState(0b1000_0000).reads_enabled());
@@ -109,10 +145,13 @@ mod tests {
 
     #[test]
     fn decodes_each_bit_independently() {
-        let state = FpgaState(0b0000_1110);
+        let state = FpgaState(0b0101_1110);
         assert!(!state.is_thermal_asserted());
         assert_eq!(ModulationBank::B1, state.current_mod_bank());
         assert_eq!(PatternBank::B1, state.current_pattern_bank());
         assert!(state.is_pattern_mode());
+        assert!(state.is_pattern_stopped());
+        assert!(!state.is_mod_stopped());
+        assert!(state.is_transition_pending());
     }
 }

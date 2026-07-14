@@ -74,6 +74,9 @@ const FPGA_STATE_BIT_THERMAL: u8 = 0;
 const FPGA_STATE_BIT_MOD_BANK: u8 = 1;
 const FPGA_STATE_BIT_PATTERN_BANK: u8 = 2;
 const FPGA_STATE_BIT_PATTERN_MODE: u8 = 3;
+const FPGA_STATE_BIT_PATTERN_STOPPED: u8 = 4;
+const FPGA_STATE_BIT_MOD_STOPPED: u8 = 5;
+const FPGA_STATE_BIT_TRANSITION_PENDING: u8 = 6;
 
 impl FpgaEmulator {
     #[must_use]
@@ -282,6 +285,15 @@ impl FpgaEmulator {
         }
         if self.is_pattern_mode() {
             state |= 1 << FPGA_STATE_BIT_PATTERN_MODE;
+        }
+        if self.pattern_swapchain.stopped() {
+            state |= 1 << FPGA_STATE_BIT_PATTERN_STOPPED;
+        }
+        if self.mod_swapchain.stopped() {
+            state |= 1 << FPGA_STATE_BIT_MOD_STOPPED;
+        }
+        if self.pattern_swapchain.transition_pending() || self.mod_swapchain.transition_pending() {
+            state |= 1 << FPGA_STATE_BIT_TRANSITION_PENDING;
         }
         state
     }
