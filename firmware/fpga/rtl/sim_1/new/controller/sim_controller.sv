@@ -20,7 +20,6 @@ module sim_controller ();
 
   memory memory (
       .CLK(CLK),
-      .MRCC_25P6M(MRCC_25P6M),
       .MEM_BUS(sim_helper_bram.memory_bus.bram_port),
       .CNT_BUS(cnt_bus.in_port),
       .PHASE_CORR_BUS(phase_corr_bus.in_port),
@@ -31,7 +30,6 @@ module sim_controller ();
   );
 
   sim_helper_clk sim_helper_clk (
-      .MRCC_25P6M(MRCC_25P6M),
       .CLK(CLK),
       .LOCKED(locked),
       .SYS_TIME()
@@ -41,6 +39,9 @@ module sim_controller ();
   logic pattern_bank;
   logic mod_bank;
   logic [15:0] pattern_cycle;
+  logic pattern_stopped;
+  logic mod_stopped;
+  logic transition_pending;
   logic gpio_in[4];
   settings::mod_settings_t mod_settings;
   settings::pattern_settings_t pattern_settings;
@@ -55,6 +56,9 @@ module sim_controller ();
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
       .PATTERN_CYCLE(pattern_cycle),
+      .PATTERN_STOPPED(pattern_stopped),
+      .MOD_STOPPED(mod_stopped),
+      .TRANSITION_PENDING(transition_pending),
       .cnt_bus(cnt_bus.out_port),
       .MOD_SETTINGS(mod_settings),
       .PATTERN_SETTINGS(pattern_settings),
@@ -79,6 +83,9 @@ module sim_controller ();
     mod_bank = 1'b1;
     pattern_bank = 1'b0;
     pattern_cycle = 16'd5;
+    pattern_stopped = 1'b1;
+    mod_stopped = 1'b0;
+    transition_pending = 1'b1;
 
     mod_settings_in.UPDATE = 1'b1;
     mod_settings_in.REQ_RD_BANK = sim_helper_random.range(1'b1, 0);
@@ -117,6 +124,7 @@ module sim_controller ();
 
     sync_settings_in.UPDATE = 1'b1;
     sync_settings_in.ECAT_SYNC_TIME = sim_helper_random.range(64'hFFFFFFFFFFFFFFFF, 0);
+    sync_settings_in.ECAT_SYNC_CYCLE = sim_helper_random.range(32'hFFFFFFFF, 0);
 
     debug_settings_in.UPDATE = 1'b1;
     debug_settings_in.VALUE[0] = sim_helper_random.range(64'hFFFF, 0);
@@ -155,7 +163,9 @@ module sim_controller ();
     `ASSERT_EQ(sync_settings_in, sync_settings);
 
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, fpga_state);
-    `ASSERT_EQ({8'h00, 1'h0, 3'h0, pattern_cycle == '0, pattern_bank, mod_bank, thermo}, fpga_state);
+    `ASSERT_EQ(
+        {8'h00, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
+        fpga_state);
 
     $display("OK! sim_controller");
     $finish();

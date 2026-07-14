@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module emission_raw #(
     parameter int DEPTH = 249
 ) (
@@ -86,3 +87,4 @@ module emission_raw #(
   end
 
 endmodule
+`default_nettype wire

@@ -4,9 +4,8 @@ module sim_synchronizer ();
   localparam int ECAT_SYNC_BASE = 500000;  // 500 us
   localparam logic [15:0] ECAT_SYNC_CYCLE_TICKS = 4;
 
-  logic CLK_25P6M, CLK_25P6M_p50, CLK_25P6M_m50;
-
   logic CLK, CLK_p50, CLK_m50;
+  logic lock, lock_p50, lock_m50;
   logic [56:0] SYS_TIME, SYS_TIME_p50, SYS_TIME_m50;
   logic [56:0] SYS_TIME_WO_SYNC, SYS_TIME_p50_WO_SYNC, SYS_TIME_m50_WO_SYNC;
   logic signed [64:0] diff_p50, diff_m50;
@@ -35,6 +34,7 @@ module sim_synchronizer ();
   localparam int BurstWindow = 256;
 
   logic ECAT_SYNC;
+  logic ecat_sync_en = 1'b1;
 
   logic set;
   logic [63:0] ecat_sync_time;  // [ns]
@@ -46,27 +46,6 @@ module sim_synchronizer ();
 
   assign diff_p50 = SYS_TIME_p50 - SYS_TIME;
   assign diff_m50 = SYS_TIME_m50 - SYS_TIME;
-
-  clk_wiz clk_wiz (
-      .clk_in1(CLK_25P6M),
-      .clk_out1(CLK),
-      .reset(),
-      .locked(lock)
-  );
-
-  clk_wiz clk_wiz_p50 (
-      .clk_in1(CLK_25P6M_p50),
-      .clk_out1(CLK_p50),
-      .reset(),
-      .locked(lock_p50)
-  );
-
-  clk_wiz clk_wiz_m50 (
-      .clk_in1(CLK_25P6M_m50),
-      .clk_out1(CLK_m50),
-      .reset(),
-      .locked(lock_m50)
-  );
 
   synchronizer synchronizer (
       .CLK(CLK),
@@ -125,9 +104,19 @@ module sim_synchronizer ();
   endtask
 
   initial begin
-    CLK_25P6M = 1;
-    CLK_25P6M_p50 = 1;
-    CLK_25P6M_m50 = 1;
+    CLK = 1;
+    CLK_p50 = 1;
+    CLK_m50 = 1;
+    lock = 0;
+    lock_p50 = 0;
+    lock_m50 = 0;
+    #500;
+    lock = 1;
+    lock_p50 = 1;
+    lock_m50 = 1;
+  end
+
+  initial begin
     SYS_TIME = 0;
     SYS_TIME_p50 = 0;
     SYS_TIME_m50 = 0;
@@ -178,49 +167,82 @@ module sim_synchronizer ();
     $display("corrections: %0d total, %0d within %0d clks of Sync0", corr_total,
              corr_in_burst_window, BurstWindow);
 
+    // ---- saturation: suppress Sync0 pulses so the recomputed diff far exceeds
+    // the 14-bit range; it must clamp to -8191 instead of aliasing (the old
+    // truncation folded ~ -4 * 40960 ticks into a near-zero or -8192 value)
+    measuring = 0;
+    ecat_sync_en = 0;
+    #(3 * ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS);
+    ecat_sync_en = 1;
+    @(posedge ECAT_SYNC);
+    repeat (32) @(posedge CLK);
+    if (!((SYNC_TIME_DIFF <= -14'sd8180) && (SYNC_TIME_DIFF >= -14'sd8191))) begin
+      $error("%s:%d: nominal saturated diff: expected is in [-8191, -8180], but actual is %0d",
+             `__FILE__, `__LINE__, SYNC_TIME_DIFF);
+      $finish();
+    end
+    repeat (32) @(posedge CLK_m50);
+    if (!((SYNC_TIME_DIFF_m50 <= -14'sd8180) && (SYNC_TIME_DIFF_m50 >= -14'sd8191))) begin
+      $error("%s:%d: -50ppm saturated diff: expected is in [-8191, -8180], but actual is %0d",
+             `__FILE__, `__LINE__, SYNC_TIME_DIFF_m50);
+      $finish();
+    end
+
+    // ---- update-vs-Sync0 race: re-arm the sync settings so close to a Sync0
+    // edge that the ec_time -> sys_time conversion cannot settle in time. The
+    // edge must be skipped and compensated with one full period, so the loop
+    // is back within bounds a couple of periods later.
+    @(posedge ECAT_SYNC);
+    #(ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS - 2000);
+    ecat_sync_time = ECAT_SYNC_BASE * 7;
+    set = 1;
+    @(posedge CLK);
+    @(posedge CLK_p50);
+    @(posedge CLK_m50);
+    set = 0;
+
+    repeat (2) @(negedge ECAT_SYNC);
+    for (int i = 0; i < 4; i++) begin
+      @(negedge ECAT_SYNC);
+      if ((SYNC_TIME_DIFF > DiffBound) || (SYNC_TIME_DIFF < -DiffBound)) begin
+        $error(
+            "%s:%d: nominal sync_time_diff after racing update: expected is within +-%0d, but actual is %0d",
+            `__FILE__, `__LINE__, DiffBound, SYNC_TIME_DIFF);
+        $finish();
+      end
+      if ((SYNC_TIME_DIFF_p50 > DiffBound) || (SYNC_TIME_DIFF_p50 < -DiffBound)) begin
+        $error(
+            "%s:%d: +50ppm sync_time_diff after racing update: expected is within +-%0d, but actual is %0d",
+            `__FILE__, `__LINE__, DiffBound, SYNC_TIME_DIFF_p50);
+        $finish();
+      end
+      if ((SYNC_TIME_DIFF_m50 > DiffBound) || (SYNC_TIME_DIFF_m50 < -DiffBound)) begin
+        $error(
+            "%s:%d: -50ppm sync_time_diff after racing update: expected is within +-%0d, but actual is %0d",
+            `__FILE__, `__LINE__, DiffBound, SYNC_TIME_DIFF_m50);
+        $finish();
+      end
+    end
+
     $display("OK! sim_synchronizer");
     $finish();
   end
 
-  // (1 + 1) / (39.062ns * 1 + 39.063ns * 1) = 25.6MHz
-  always begin
-    #19.531 CLK_25P6M = ~CLK_25P6M;
-    #19.531 CLK_25P6M = ~CLK_25P6M;
-    #19.531 CLK_25P6M = ~CLK_25P6M;
-    #19.532 CLK_25P6M = ~CLK_25P6M;
-  end
+  // 20.48MHz-domain clocks driven directly (no 25.6MHz source / MMCM model;
+  // those only multiply the event count of the event-driven simulator).
+  // nominal: half period 24.414ns (+2.6ppm vs ideal 24.4140625ns — negligible
+  // because every check is relative between instances / the correction loop)
+  always #24.414 CLK = ~CLK;
 
-  // (10940 + 9061) / (39.061ns * 10940 + 39.060ns * 9061) = 25.6MHz + 50ppm
-  always begin
-    for (int i = 0; i < 9061; i++) begin
-      #19.530 CLK_25P6M_p50 = ~CLK_25P6M_p50;
-      #19.530 CLK_25P6M_p50 = ~CLK_25P6M_p50;
-      #19.530 CLK_25P6M_p50 = ~CLK_25P6M_p50;
-      #19.531 CLK_25P6M_p50 = ~CLK_25P6M_p50;
-    end
-    for (int i = 0; i < 10940 - 9061; i++) begin
-      #19.530 CLK_25P6M_p50 = ~CLK_25P6M_p50;
-      #19.531 CLK_25P6M_p50 = ~CLK_25P6M_p50;
-    end
-  end
+  // half period 24.413ns = nominal - 41ppm period = +41ppm frequency
+  always #24.413 CLK_p50 = ~CLK_p50;
 
-  // (9064 + 10935) / (39.065ns * 9064 +  39.064ns * 10935) = 25.6MHz - 50ppm
-  always begin
-    for (int i = 0; i < 9064; i++) begin
-      #19.532 CLK_25P6M_m50 = ~CLK_25P6M_m50;
-      #19.533 CLK_25P6M_m50 = ~CLK_25P6M_m50;
-      #19.532 CLK_25P6M_m50 = ~CLK_25P6M_m50;
-      #19.532 CLK_25P6M_m50 = ~CLK_25P6M_m50;
-    end
-    for (int i = 0; i < 10935 - 9064; i++) begin
-      #19.532 CLK_25P6M_m50 = ~CLK_25P6M_m50;
-      #19.533 CLK_25P6M_m50 = ~CLK_25P6M_m50;
-    end
-  end
+  // half period 24.415ns = nominal + 41ppm period = -41ppm frequency
+  always #24.415 CLK_m50 = ~CLK_m50;
 
   always begin
     #800 ECAT_SYNC = 0;
-    #(ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS - 800) ECAT_SYNC = 1;
+    #(ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS - 800) ECAT_SYNC = ecat_sync_en;
   end
 
   always @(posedge CLK) SYS_TIME_WO_SYNC <= SYS_TIME_WO_SYNC + 1;

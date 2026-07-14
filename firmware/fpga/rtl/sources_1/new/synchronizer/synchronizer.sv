@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module synchronizer (
     input wire CLK,
     input wire settings::sync_settings_t SYNC_SETTINGS,
@@ -15,23 +16,36 @@ module synchronizer (
   localparam int AdjustCntRange = 4096;
   localparam int AdjustCntOffset = AdjustCntBase - AdjustCntRange / 2;
 
-  logic [63:0] ecat_sync_time;
-  logic [31:0] ecat_sync_cycle;
+  localparam logic signed [57:0] DiffMax = 58'sd8191;
+
+  logic [63:0] ecat_sync_time = '0;
+  logic [31:0] ecat_sync_cycle = '0;
   logic [56:0] sync_time;
 
   logic [56:0] cycle_ticks;
   assign cycle_ticks = {25'd0, ecat_sync_cycle};
 
-  logic [2:0] sync_tri;
+  (* ASYNC_REG = "true" *) logic [2:0] sync_tri = '0;
   logic sync;
   assign SYNC = sync;
 
-  logic [56:0] sys_time;
-  logic [56:0] next_sync_time;
-  logic signed [13:0] sync_time_diff;
-  logic [$clog2(AddSubLatency+1)-1:0] diff_cnt;
-  logic [$clog2(AddSubLatency+1)-1:0] next_cnt;
-  logic set;
+  logic [56:0] sys_time = '0;
+  logic [56:0] next_sync_time = '0;
+  logic signed [13:0] sync_time_diff = '0;
+  logic [$clog2(AddSubLatency+1)-1:0] diff_cnt = '0;
+  logic [$clog2(AddSubLatency+1)-1:0] next_cnt = '0;
+  logic set = 1'b0;
+
+  // While `set` is armed but the ec_time -> sys_time conversion of the new
+  // ECAT_SYNC_TIME has not settled yet, Sync0 pulses must not load the stale
+  // conversion result. Each skipped pulse instead accumulates one Sync0
+  // period into `pending_offset` so that a later load still snaps to the
+  // correct pulse time.
+  logic conv_settling = 1'b0;
+  logic conv_settle_cnt = 1'b0;
+  logic sync_time_dout_valid;
+  logic [56:0] pending_offset = '0;
+  logic [56:0] sync_time_adj = '0;
 
   logic [56:0] a_diff, b_diff;
   logic signed [57:0] s_diff;
@@ -55,7 +69,7 @@ module synchronizer (
       .EC_TIME(ecat_sync_time),
       .DIN_VALID(1'b1),
       .SYS_TIME(sync_time),
-      .DOUT_VALID()
+      .DOUT_VALID(sync_time_dout_valid)
   );
 
   sub57_57 sub_diff (
@@ -72,28 +86,45 @@ module synchronizer (
       .S  (s_next)
   );
 
-  assign sync = sync_tri == 3'b011;
+  assign sync = sync_tri[2:1] == 2'b01;
   assign SYS_TIME = sys_time;
 
   always_ff @(posedge CLK) begin
-    if (set & sync) begin
-      set <= 1'b0;
-    end else if (SYNC_SETTINGS.UPDATE) begin
+    if (SYNC_SETTINGS.UPDATE) begin
       set <= 1'b1;
+      conv_settling <= 1'b1;
+      conv_settle_cnt <= 1'b0;
+      pending_offset <= '0;
       ecat_sync_time <= SYNC_SETTINGS.ECAT_SYNC_TIME;
       ecat_sync_cycle <= SYNC_SETTINGS.ECAT_SYNC_CYCLE;
+    end else begin
+      // The first DOUT_VALID after UPDATE may belong to a conversion that
+      // sampled the old ECAT_SYNC_TIME; the second one is guaranteed fresh.
+      if (conv_settling & sync_time_dout_valid) begin
+        conv_settle_cnt <= 1'b1;
+        if (conv_settle_cnt) conv_settling <= 1'b0;
+      end
+      if (sync & set) begin
+        if (conv_settling) begin
+          pending_offset <= pending_offset + cycle_ticks;
+        end else begin
+          set <= 1'b0;
+        end
+      end
     end
   end
+
+  always_ff @(posedge CLK) sync_time_adj <= sync_time + pending_offset;
 
   always_ff @(posedge CLK) begin
     if (sync) begin
       b_next   <= cycle_ticks;
       next_cnt <= 0;
-      if (set) begin
-        sys_time <= sync_time + 1;
+      if (set & ~conv_settling) begin
+        sys_time <= sync_time_adj + 1;
         a_diff <= '0;
         b_diff <= '0;
-        a_next <= sync_time;
+        a_next <= sync_time_adj;
         sync_time_diff <= '0;
       end else begin
         a_diff   <= next_sync_time;
@@ -118,7 +149,7 @@ module synchronizer (
           sync_time_diff <= sync_time_diff - 1;
         end
       end else if (diff_cnt == AddSubLatency) begin
-        sync_time_diff <= {s_diff[57], s_diff[12:0]};
+        sync_time_diff <= saturate_diff(s_diff);
         diff_cnt <= diff_cnt + 1;
         sys_time <= sys_time + 1;
         skip_one_assert <= 1'b0;
@@ -155,5 +186,15 @@ module synchronizer (
 
   always_ff @(posedge CLK) sync_tri <= {sync_tri[1:0], ECAT_SYNC};
 
+  function automatic logic signed [13:0] saturate_diff(input logic signed [57:0] diff);
+    if (diff > DiffMax) begin
+      saturate_diff = 14'sd8191;
+    end else if (diff < -DiffMax) begin
+      saturate_diff = -14'sd8191;
+    end else begin
+      saturate_diff = 14'(diff);
+    end
+  endfunction
 
 endmodule
+`default_nettype wire

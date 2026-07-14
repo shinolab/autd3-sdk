@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module pulse_width_encoder #(
     parameter int DEPTH = 249
 ) (
@@ -63,3 +64,4 @@ module pulse_width_encoder #(
   end
 
 endmodule
+`default_nettype wire

@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 interface cnt_bus_if ();
 
   logic WE;
@@ -10,3 +11,4 @@ interface cnt_bus_if ();
   modport out_port(output WE, output ADDR, output DIN, input DOUT);
 
 endinterface
+`default_nettype wire

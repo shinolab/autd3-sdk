@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 interface emission_bus_if ();
 
   logic [15:0] ADDR;
@@ -18,3 +19,4 @@ interface emission_bus_if ();
   modport out_focus_port(output FOCUS_IDX, input VALUE);
 
 endinterface
+`default_nettype wire

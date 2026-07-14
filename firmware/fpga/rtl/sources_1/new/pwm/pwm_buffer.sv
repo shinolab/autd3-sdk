@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module pwm_buffer (
     input var CLK,
     input var UPDATE,
@@ -22,3 +23,4 @@ module pwm_buffer (
   end
 
 endmodule
+`default_nettype wire

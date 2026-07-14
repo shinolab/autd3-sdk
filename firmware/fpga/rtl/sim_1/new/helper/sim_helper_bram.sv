@@ -30,8 +30,11 @@ module sim_helper_bram #(
   assign memory_bus.RD   = cpu_rd;
   assign memory_bus.RDWR = cpu_rdwr;
 
+  logic bus_active = 1'b0;
+
   task automatic bram_write(input logic [1:0] select, input logic [13:0] addr,
                             input logic [15:0] data_in);
+    bus_active = 1'b1;
     @(posedge CPU_CKIO);
     bram_addr <= {select, addr};
     CPU_CN <= 0;
@@ -44,6 +47,10 @@ module sim_helper_bram #(
 
     @(negedge CPU_CKIO);
     CPU_WE0_N <= 1;
+    // let memory.sv's we-edge shift register observe the deasserted strobe
+    // before the gated bus clock stops
+    repeat (3) @(posedge CPU_CKIO);
+    bus_active = 1'b0;
   endtask
 
   task automatic write_cnt(logic [7:0] addr, logic [15:0] data);
@@ -52,6 +59,7 @@ module sim_helper_bram #(
 
   task automatic bram_read(input logic [1:0] select, input logic [13:0] addr,
                            output logic [15:0] data_out);
+    bus_active = 1'b1;
     @(posedge CPU_CKIO);
     bram_addr <= {select, addr};
     CPU_CN <= 0;
@@ -63,6 +71,7 @@ module sim_helper_bram #(
     @(negedge CPU_CKIO);
     cpu_rd   <= 1'b0;
     cpu_rdwr <= 1'b0;
+    bus_active = 1'b0;
   endtask
 
   task automatic read_cnt(input logic [7:0] addr, output logic [15:0] data_out);
@@ -229,6 +238,8 @@ module sim_helper_bram #(
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_TIME_1, settings.ECAT_SYNC_TIME[31:16]);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_TIME_2, settings.ECAT_SYNC_TIME[47:32]);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_TIME_3, settings.ECAT_SYNC_TIME[63:48]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_CYCLE_0, settings.ECAT_SYNC_CYCLE[15:0]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_CYCLE_1, settings.ECAT_SYNC_CYCLE[31:16]);
   endtask
 
   task automatic write_debug_settings(input settings::debug_settings_t settings);
@@ -256,7 +267,12 @@ module sim_helper_bram #(
     CPU_CKIO  = 1'b0;
   end
 
-  //  always #6.65 CPU_CKIO = ~CPU_CKIO;
-  always #0.1 CPU_CKIO = ~CPU_CKIO;  // to speed up simulation
+  // fast bus clock, but only while a transaction is in flight: a free-running
+  // #0.1 clock floods the event-driven simulator with ~200x more events than
+  // the 20.48MHz main clock and dominates the runtime of every testbench
+  always begin
+    wait (bus_active);
+    #0.1 CPU_CKIO = ~CPU_CKIO;
+  end
 
 endmodule

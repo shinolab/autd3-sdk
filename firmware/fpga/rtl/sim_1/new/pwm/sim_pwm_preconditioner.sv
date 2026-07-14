@@ -6,7 +6,6 @@ module sim_pwm_preconditioner ();
   logic CLK;
   logic locked;
   sim_helper_clk sim_helper_clk (
-      .MRCC_25P6M(),
       .CLK(CLK),
       .LOCKED(locked),
       .SYS_TIME()
