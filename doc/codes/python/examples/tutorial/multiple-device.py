@@ -19,7 +19,7 @@ def main() -> None:
     Geometry(
         [
             Autd3(
-                origin=(Autd3.DEVICE_WIDTH, 0.0, 0.0),
+                origin=(-Autd3.DEVICE_WIDTH, 0.0, 0.0),
                 rotation=(1.0, 0.0, 0.0, 0.0),
             ),
             Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
