@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-module sim_emission_timer_normal ();
+module sim_swapchain_timer_normal ();
 
   `include "define.vh"
 
@@ -10,7 +10,6 @@ module sim_emission_timer_normal ();
   logic locked;
   logic [56:0] sys_time;
   sim_helper_clk sim_helper_clk (
-      .MRCC_25P6M(),
       .CLK(CLK),
       .LOCKED(locked),
       .SYS_TIME(sys_time)
@@ -23,7 +22,7 @@ module sim_emission_timer_normal ();
   logic update_settings;
   logic [15:0] idx[params::NumBanks];
 
-  emission_timer emission_timer (
+  swapchain_timer swapchain_timer (
       .CLK(CLK),
       .UPDATE_SETTINGS_IN(update_settings),
       .SYS_TIME(sys_time),
@@ -64,7 +63,7 @@ module sim_emission_timer_normal ();
       end
     end
 
-    $display("OK! sim_emission_timer_normal");
+    $display("OK! sim_swapchain_timer_normal");
     $finish();
   end
 

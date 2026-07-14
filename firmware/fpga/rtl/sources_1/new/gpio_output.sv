@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module gpio_output #(
     parameter int DEPTH = 249
 ) (
@@ -69,7 +70,7 @@ module gpio_output #(
         debug_signal = SYNC_TIME_DIFF != 14'sd0;
       end
       params::GPIO_O_TYPE_PWM_OUT: begin
-        debug_signal = PWM_OUT[value[7:0]];
+        debug_signal = PWM_OUT[(value[7:0] < 8'(DEPTH)) ? value[7:0] : 8'(DEPTH - 1)];
       end
       params::GPIO_O_TYPE_DIRECT: begin
         debug_signal = value[0];
@@ -81,3 +82,4 @@ module gpio_output #(
   endfunction
 
 endmodule
+`default_nettype wire

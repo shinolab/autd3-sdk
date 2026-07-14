@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module emission_focus #(
     parameter int DEPTH = 249,
     parameter string MODE = "NearestEven"
@@ -219,3 +220,4 @@ module emission_focus #(
   end
 
 endmodule
+`default_nettype wire

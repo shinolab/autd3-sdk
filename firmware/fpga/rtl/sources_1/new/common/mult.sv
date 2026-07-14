@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module mult #(
     parameter int WIDTH_A = 16,
     parameter int WIDTH_B = 16
@@ -24,3 +25,4 @@ module mult #(
   );
 
 endmodule
+`default_nettype wire

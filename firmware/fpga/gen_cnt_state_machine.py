@@ -191,12 +191,16 @@ all_states: dict[str, list[State]] = dict(
 with pathlib.Path.open(path, "w") as f:
     f.writelines(
         f"""`timescale 1ns / 1ps
+`default_nettype none
 module controller (
     input wire CLK,
     input wire THERMO,
     input wire PATTERN_BANK,
     input wire MOD_BANK,
     input wire [15:0] PATTERN_CYCLE,
+    input wire PATTERN_STOPPED,
+    input wire MOD_STOPPED,
+    input wire TRANSITION_PENDING,
     cnt_bus_if.out_port cnt_bus,
     output var settings::mod_settings_t MOD_SETTINGS,
     output var settings::pattern_settings_t PATTERN_SETTINGS,
@@ -210,7 +214,7 @@ module controller (
   localparam bit [7:0] FunctionBits = (1'b0 << params::FuncDynamicFreqBit)
                                       | (1'b0 << params::FuncEmulatorBit);
 
-  logic [15:0] ctl_flags;
+  logic [15:0] ctl_flags = '0;
 
   logic we;
   logic [7:0]  addr;
@@ -227,6 +231,20 @@ module controller (
   assign GPIO_IN[1] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_1];
   assign GPIO_IN[2] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_2];
   assign GPIO_IN[3] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_3];
+
+  function automatic logic [15:0] fpga_state_din();
+    return {{
+      8'h00,
+      1'h0  /* reserved */,
+      TRANSITION_PENDING,
+      MOD_STOPPED,
+      PATTERN_STOPPED,
+      PATTERN_CYCLE == '0,
+      PATTERN_BANK,
+      MOD_BANK,
+      THERMO
+    }};
+  endfunction
 
   typedef enum logic [{int(math.ceil(math.log2(8 + len(list(chain.from_iterable(all_states.values()))))))-1}:0] {{
     REQ_WR_VER_PATCH,
@@ -284,7 +302,7 @@ module controller (
       WAIT_0: begin
         we   <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din  <= {8'h00, 1'h0 /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din  <= fpga_state_din();
 
        """,
     )
@@ -358,7 +376,7 @@ module controller (
                     """
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din  <= {8'h00, 1'h0 /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};""",
+        din  <= fpga_state_din();""",
                 )
 
             if i == len(states) - 2:
@@ -380,7 +398,7 @@ module controller (
                     f"""
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din  <= {{8'h00, 1'h0 /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO}};
+        din  <= fpga_state_din();
         ctl_flags <= dout;
         {name}_SETTINGS.UPDATE <= 1'b0;
         state <= WAIT_1;""",
@@ -430,6 +448,7 @@ module controller (
     f.writelines(
         """
 endmodule
+`default_nettype wire
 """,
     )
 

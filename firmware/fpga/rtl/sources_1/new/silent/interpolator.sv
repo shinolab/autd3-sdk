@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module interpolator #(
     parameter int DEPTH = 249
 ) (
@@ -115,3 +116,4 @@ module interpolator #(
   end
 
 endmodule
+`default_nettype wire

@@ -20,7 +20,6 @@ module sim_cpu_readback ();
 
   memory memory (
       .CLK(CLK),
-      .MRCC_25P6M(MRCC_25P6M),
       .MEM_BUS(sim_helper_bram.memory_bus.bram_port),
       .CNT_BUS(cnt_bus.in_port),
       .PHASE_CORR_BUS(phase_corr_bus.in_port),
@@ -31,7 +30,6 @@ module sim_cpu_readback ();
   );
 
   sim_helper_clk sim_helper_clk (
-      .MRCC_25P6M(MRCC_25P6M),
       .CLK(CLK),
       .LOCKED(locked),
       .SYS_TIME()
@@ -41,6 +39,9 @@ module sim_cpu_readback ();
   logic pattern_bank;
   logic mod_bank;
   logic [15:0] pattern_cycle;
+  logic pattern_stopped;
+  logic mod_stopped;
+  logic transition_pending;
   logic gpio_in[4];
   settings::mod_settings_t mod_settings;
   settings::pattern_settings_t pattern_settings;
@@ -55,6 +56,9 @@ module sim_cpu_readback ();
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
       .PATTERN_CYCLE(pattern_cycle),
+      .PATTERN_STOPPED(pattern_stopped),
+      .MOD_STOPPED(mod_stopped),
+      .TRANSITION_PENDING(transition_pending),
       .cnt_bus(cnt_bus.out_port),
       .MOD_SETTINGS(mod_settings),
       .PATTERN_SETTINGS(pattern_settings),
@@ -73,6 +77,9 @@ module sim_cpu_readback ();
     mod_bank = 1'b0;
     pattern_bank = 1'b1;
     pattern_cycle = 16'd0;
+    pattern_stopped = 1'b0;
+    mod_stopped = 1'b1;
+    transition_pending = 1'b0;
 
     @(posedge locked);
 
@@ -89,7 +96,9 @@ module sim_cpu_readback ();
     `ASSERT_EQ({8'h00, params::VersionNumPatch}, value);
 
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
-    `ASSERT_EQ({8'h00, 1'h0, 3'h0, pattern_cycle == '0, pattern_bank, mod_bank, thermo}, value);
+    `ASSERT_EQ(
+        {8'h00, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
+        value);
 
     $display("OK! sim_cpu_readback");
     $finish();

@@ -30,7 +30,9 @@ package params;
   } ctl_flag_bit_t;
 
   typedef enum int {
-    //
+    FPGA_STATE_BIT_PATTERN_STOPPED = 4,
+    FPGA_STATE_BIT_MOD_STOPPED = 5,
+    FPGA_STATE_BIT_TRANSITION_PENDING = 6,
     FPGA_STATE_BIT_READS_FPGA_STATE_ENABLED = 7
   } fpga_state_bit_t;
 

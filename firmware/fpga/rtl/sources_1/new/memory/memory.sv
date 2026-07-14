@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module memory (
     input wire CLK,
-    input wire MRCC_25P6M,
     memory_bus_if.bram_port MEM_BUS,
     cnt_bus_if.in_port CNT_BUS,
     phase_corr_bus_if.in_port PHASE_CORR_BUS,
@@ -132,8 +132,8 @@ module memory (
   logic [15:0] mod_idx;
   logic [7:0] mod_value[NumBanks];
 
-  logic mod_mem_wr_bank;
-  logic mod_mem_wr_page;
+  logic mod_mem_wr_bank = 1'b0;
+  logic mod_mem_wr_page = 1'b0;
 
   assign mod_idx = MOD_BUS.IDX;
   assign MOD_BUS.VALUE = mod_value[MOD_BUS.BANK];
@@ -161,8 +161,8 @@ module memory (
   logic [15:0] pattern_idx;
   logic [63:0] emission_value[NumBanks];
 
-  logic pattern_mem_wr_bank;
-  logic [3:0] pattern_mem_wr_page;
+  logic pattern_mem_wr_bank = 1'b0;
+  logic [3:0] pattern_mem_wr_page = '0;
 
   assign pattern_idx = EMISSION_BUS.ADDR;
   assign EMISSION_BUS.VALUE = emission_value[EMISSION_BUS.BANK];
@@ -197,3 +197,4 @@ module memory (
   end
 
 endmodule
+`default_nettype wire

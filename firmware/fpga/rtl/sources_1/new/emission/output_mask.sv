@@ -1,3 +1,4 @@
+`default_nettype none
 module output_mask #(
     parameter int DEPTH = 249
 ) (
@@ -66,3 +67,4 @@ module output_mask #(
   always_ff @(posedge CLK) intensity_in <= INTENSITY_IN;
 
 endmodule
+`default_nettype wire

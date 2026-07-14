@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module focus_calc #(
     parameter string MODE = "NearestEven"
 ) (
@@ -132,3 +133,4 @@ module focus_calc #(
   );
 
 endmodule
+`default_nettype wire

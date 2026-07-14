@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module emission #(
     parameter int DEPTH = 249,
     parameter string MODE = "NearestEven"
@@ -15,6 +16,8 @@ module emission #(
     output wire [7:0] PHASE,
     output wire DOUT_VALID,
     input wire GPIO_IN[4],
+    output wire STOP,
+    output wire TRANSITION_PENDING,
     output wire [15:0] DEBUG_IDX,
     output wire DEBUG_BANK,
     output wire [15:0] DEBUG_CYCLE
@@ -51,7 +54,7 @@ module emission #(
   assign DEBUG_CYCLE = cycle;
 
   logic [15:0] timer_idx[params::NumBanks];
-  emission_timer emission_timer (
+  swapchain_timer swapchain_timer (
       .CLK(CLK),
       .UPDATE_SETTINGS_IN(PATTERN_SETTINGS.UPDATE),
       .SYS_TIME(SYS_TIME),
@@ -64,7 +67,7 @@ module emission #(
   logic [15:0] swapchain_idx[params::NumBanks];
   logic swapchain_bank;
   logic swapchain_stop;
-  emission_swapchain emission_swapchain (
+  swapchain swapchain (
       .CLK(CLK),
       .SYS_TIME(SYS_TIME),
       .UPDATE_SETTINGS(update_settings),
@@ -76,9 +79,12 @@ module emission #(
       .SYNC_IDX(timer_idx),
       .GPIO_IN(GPIO_IN),
       .STOP(swapchain_stop),
+      .TRANSITION_PENDING(TRANSITION_PENDING),
       .BANK(swapchain_bank),
       .IDX(swapchain_idx)
   );
+
+  assign STOP = swapchain_stop;
 
   emission_raw #(
       .DEPTH(DEPTH)
@@ -137,3 +143,4 @@ module emission #(
   );
 
 endmodule
+`default_nettype wire

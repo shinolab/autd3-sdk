@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 interface pwe_table_bus_if ();
 
   logic [7:0] IDX;
@@ -8,3 +9,4 @@ interface pwe_table_bus_if ();
   modport out_port(output IDX, input VALUE);
 
 endinterface
+`default_nettype wire

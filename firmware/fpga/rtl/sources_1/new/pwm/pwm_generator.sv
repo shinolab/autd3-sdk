@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module pwm_generator (
     input wire CLK,
     input wire [8:0] TIME_CNT,
@@ -26,3 +27,4 @@ module pwm_generator (
   end
 
 endmodule
+`default_nettype wire

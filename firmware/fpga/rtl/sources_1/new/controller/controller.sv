@@ -1,10 +1,14 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module controller (
     input wire CLK,
     input wire THERMO,
     input wire PATTERN_BANK,
     input wire MOD_BANK,
     input wire [15:0] PATTERN_CYCLE,
+    input wire PATTERN_STOPPED,
+    input wire MOD_STOPPED,
+    input wire TRANSITION_PENDING,
     cnt_bus_if.out_port cnt_bus,
     output var settings::mod_settings_t MOD_SETTINGS,
     output var settings::pattern_settings_t PATTERN_SETTINGS,
@@ -17,7 +21,7 @@ module controller (
 
   localparam bit [7:0] FunctionBits = (1'b0 << params::FuncDynamicFreqBit) | (1'b0 << params::FuncEmulatorBit);
 
-  logic [15:0] ctl_flags;
+  logic [15:0] ctl_flags = '0;
 
   logic we;
   logic [7:0] addr;
@@ -34,6 +38,10 @@ module controller (
   assign GPIO_IN[1] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_1];
   assign GPIO_IN[2] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_2];
   assign GPIO_IN[3] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_3];
+
+  function automatic logic [15:0] fpga_state_din();
+    return {8'h00, 1'h0  /* reserved */, TRANSITION_PENDING, MOD_STOPPED, PATTERN_STOPPED, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+  endfunction
 
   typedef enum logic [6:0] {
     REQ_WR_VER_PATCH,
@@ -163,7 +171,7 @@ module controller (
       WAIT_0: begin
         we   <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din  <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din  <= fpga_state_din();
 
         if (ctl_flags[params::CTL_FLAG_BIT_MOD_SET]) begin
           ctl_flags <= ctl_flags & ~(1 << params::CTL_FLAG_BIT_MOD_SET);
@@ -260,7 +268,7 @@ module controller (
         MOD_SETTINGS.REP[0] <= dout;
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din <= fpga_state_din();
         state <= RD_MOD_REP1;
       end
       RD_MOD_REP1: begin
@@ -273,7 +281,7 @@ module controller (
       MOD_CLR_UPDATE_SETTINGS_BIT: begin
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din <= fpga_state_din();
         ctl_flags <= dout;
         MOD_SETTINGS.UPDATE <= 1'b0;
         state <= WAIT_1;
@@ -378,7 +386,7 @@ module controller (
         PATTERN_SETTINGS.NUM_FOCI[0] <= dout[7:0];
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din <= fpga_state_din();
         state <= RD_PATTERN_NUM_FOCI1;
       end
       RD_PATTERN_NUM_FOCI1: begin
@@ -391,7 +399,7 @@ module controller (
       PATTERN_CLR_UPDATE_SETTINGS_BIT: begin
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din <= fpga_state_din();
         ctl_flags <= dout;
         PATTERN_SETTINGS.UPDATE <= 1'b0;
         state <= WAIT_1;
@@ -431,7 +439,7 @@ module controller (
         SILENCER_SETTINGS.COMPLETION_STEPS_INTENSITY <= dout;
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din <= fpga_state_din();
         state <= RD_SILENCER_COMPLETION_STEPS_PHASE;
       end
       RD_SILENCER_COMPLETION_STEPS_PHASE: begin
@@ -444,7 +452,7 @@ module controller (
       SILENCER_CLR_UPDATE_SETTINGS_BIT: begin
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din <= fpga_state_din();
         ctl_flags <= dout;
         SILENCER_SETTINGS.UPDATE <= 1'b0;
         state <= WAIT_1;
@@ -539,7 +547,7 @@ module controller (
         DEBUG_SETTINGS.VALUE[3][47:32] <= dout;
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din <= fpga_state_din();
         state <= RD_DEBUG_VALUE3_3;
       end
       RD_DEBUG_VALUE3_3: begin
@@ -552,7 +560,7 @@ module controller (
       DEBUG_CLR_UPDATE_SETTINGS_BIT: begin
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din <= fpga_state_din();
         ctl_flags <= dout;
         DEBUG_SETTINGS.UPDATE <= 1'b0;
         state <= WAIT_1;
@@ -597,7 +605,7 @@ module controller (
         SYNC_SETTINGS.ECAT_SYNC_CYCLE[15:0] <= dout;
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din <= fpga_state_din();
         state <= RD_ECAT_SYNC_CYCLE_1;
       end
       RD_ECAT_SYNC_CYCLE_1: begin
@@ -610,7 +618,7 @@ module controller (
       SYNC_CLR_UPDATE_SETTINGS_BIT: begin
         we <= 1'b1;
         addr <= params::ADDR_FPGA_STATE;
-        din <= {8'h00, 1'h0  /* reserved */, 3'h0, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+        din <= fpga_state_din();
         ctl_flags <= dout;
         SYNC_SETTINGS.UPDATE <= 1'b0;
         state <= WAIT_1;
@@ -664,3 +672,4 @@ module controller (
   end
 
 endmodule
+`default_nettype wire

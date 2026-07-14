@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module main #(
     parameter int DEPTH = 249
 ) (
@@ -29,6 +30,7 @@ module main #(
   logic clk;
 
   logic [56:0] sys_time;
+  logic sync;
   logic skip_one_assert;
 
   logic [8:0] time_cnt;
@@ -50,16 +52,25 @@ module main #(
   logic [15:0] pattern_idx;
   logic pattern_bank;
   logic [15:0] pattern_cycle;
+  logic pattern_stopped;
+  logic pattern_transition_pending;
   logic mod_bank;
   logic [15:0] mod_idx;
+  logic mod_stopped;
+  logic mod_transition_pending;
   logic gpio_in_soft[4];
   logic signed [13:0] sync_time_diff;
 
+  (* ASYNC_REG = "true" *) logic gpio_in_hard_meta[4] = '{1'b0, 1'b0, 1'b0, 1'b0};
+  (* ASYNC_REG = "true" *) logic gpio_in_hard_sync[4] = '{1'b0, 1'b0, 1'b0, 1'b0};
   logic gpio_in[4];
-  assign gpio_in[0] = ~GPIO_IN_HARD[0] | gpio_in_soft[0];
-  assign gpio_in[1] = ~GPIO_IN_HARD[1] | gpio_in_soft[1];
-  assign gpio_in[2] = ~GPIO_IN_HARD[2] | gpio_in_soft[2];
-  assign gpio_in[3] = ~GPIO_IN_HARD[3] | gpio_in_soft[3];
+  for (genvar i = 0; i < 4; i++) begin : gen_gpio_in_cdc
+    always_ff @(posedge clk) begin
+      gpio_in_hard_meta[i] <= ~GPIO_IN_HARD[i];
+      gpio_in_hard_sync[i] <= gpio_in_hard_meta[i];
+    end
+    assign gpio_in[i] = gpio_in_hard_sync[i] | gpio_in_soft[i];
+  end
 
   clk_wiz clk_wiz (
       .clk_in1(MRCC_25P6M),
@@ -69,7 +80,6 @@ module main #(
   );
 
   memory memory (
-      .MRCC_25P6M(MRCC_25P6M),
       .CLK(clk),
       .MEM_BUS(MEM_BUS),
       .CNT_BUS(cnt_bus.in_port),
@@ -86,6 +96,9 @@ module main #(
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
       .PATTERN_CYCLE(pattern_cycle),
+      .PATTERN_STOPPED(pattern_stopped),
+      .MOD_STOPPED(mod_stopped),
+      .TRANSITION_PENDING(pattern_transition_pending | mod_transition_pending),
       .cnt_bus(cnt_bus.out_port),
       .MOD_SETTINGS(mod_settings),
       .PATTERN_SETTINGS(pattern_settings),
@@ -106,9 +119,7 @@ module main #(
       .SYNC_TIME_DIFF(sync_time_diff)
   );
 
-  time_cnt_generator #(
-      .DEPTH(DEPTH)
-  ) time_cnt_generator (
+  time_cnt_generator time_cnt_generator (
       .CLK(clk),
       .SYS_TIME(sys_time),
       .SKIP_ONE_ASSERT(skip_one_assert),
@@ -130,6 +141,8 @@ module main #(
       .INTENSITY(intensity),
       .PHASE(phase),
       .GPIO_IN(gpio_in),
+      .STOP(pattern_stopped),
+      .TRANSITION_PENDING(pattern_transition_pending),
       .DOUT_VALID(dout_valid),
       .DEBUG_IDX(pattern_idx),
       .DEBUG_BANK(pattern_bank),
@@ -151,6 +164,8 @@ module main #(
       .MOD_BUS(mod_bus.out_port),
       .PHASE_CORR_BUS(phase_corr_bus.out_port),
       .GPIO_IN(gpio_in),
+      .STOP(mod_stopped),
+      .TRANSITION_PENDING(mod_transition_pending),
       .DEBUG_IDX(mod_idx),
       .DEBUG_BANK(mod_bank),
       .DEBUG_STOP()
@@ -216,3 +231,4 @@ module main #(
   );
 
 endmodule
+`default_nettype wire
