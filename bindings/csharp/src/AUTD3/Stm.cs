@@ -41,6 +41,9 @@ namespace AUTD3
         internal static extern IntPtr autd3_stm_config_sampling(ushort divide);
 
         [DllImport(Lib)]
+        internal static extern int autd3_stm_config_into_sampling_config(IntPtr config, UIntPtr size, out ushort @out);
+
+        [DllImport(Lib)]
         internal static extern void autd3_stm_config_free(IntPtr config);
 
         [DllImport(Lib)]
@@ -99,6 +102,23 @@ namespace AUTD3
 
         public StmConfig(SamplingConfig sampling) : this(ConfigKind.Sampling, 0f, sampling)
         {
+        }
+
+        public SamplingConfig IntoSamplingConfig(int size)
+        {
+            var handle = CreateHandle();
+            try
+            {
+                if (NativeStm.autd3_stm_config_into_sampling_config(handle, (UIntPtr)Math.Max(size, 1), out var divide) != 0)
+                {
+                    throw new Autd3Exception("stm config cannot be resolved to a sampling config");
+                }
+                return new SamplingConfig(divide);
+            }
+            finally
+            {
+                NativeStm.autd3_stm_config_free(handle);
+            }
         }
 
         internal IntPtr CreateHandle()
