@@ -1,5 +1,6 @@
 `timescale 1ns / 1ps
-module emission_timer (
+`default_nettype none
+module swapchain_timer (
     input wire CLK,
     input wire UPDATE_SETTINGS_IN,
     input wire [56:0] SYS_TIME,
@@ -10,10 +11,11 @@ module emission_timer (
 );
 
   localparam int DivLatency = 51;
-  localparam int TotalLetency = 1 + 2 * DivLatency + 8 + 1;
+  localparam int TotalLatency = 1 + 2 * DivLatency + 8 + 1;
 
   logic update_settings;
-  logic [$clog2(TotalLetency)-1:0] cnt;
+  logic update_pending = 1'b0;
+  logic [$clog2(TotalLatency)-1:0] cnt;
 
   typedef enum logic {
     IDLE,
@@ -22,23 +24,26 @@ module emission_timer (
 
   state_t state = IDLE;
 
+  logic load_settings;
+  assign load_settings = (state == IDLE) & (UPDATE_SETTINGS_IN | update_pending);
+
   assign UPDATE_SETTINGS_OUT = update_settings;
 
-  for (genvar i = 0; i < params::NumBanks; i++) begin : gen_emission_timer_idx
+  for (genvar i = 0; i < params::NumBanks; i++) begin : gen_swapchain_timer_idx
     logic [15:0] freq_div;
     logic [16:0] cycle;
     logic [47:0] quo;
     logic [23:0] _unused_rem;
     logic [47:0] _unused_quo;
-    logic idx_dout_valid;
     logic [23:0] rem;
+    logic idx_dout_valid;
     logic [15:0] idx;
 
     assign IDX[i] = idx;
 
     always_ff @(posedge CLK) begin
       idx <= (idx_dout_valid) ? rem[15:0] : idx;
-      if ((state == IDLE) & UPDATE_SETTINGS_IN) begin
+      if (load_settings) begin
         freq_div <= FREQ_DIV[i];
         cycle <= CYCLE[i] + 1;
       end
@@ -73,11 +78,15 @@ module emission_timer (
       IDLE: begin
         update_settings <= 1'b0;
         cnt <= '0;
-        state <= UPDATE_SETTINGS_IN ? LOAD : state;
+        if (UPDATE_SETTINGS_IN | update_pending) begin
+          update_pending <= 1'b0;
+          state <= LOAD;
+        end
       end
       LOAD: begin
+        update_pending <= update_pending | UPDATE_SETTINGS_IN;
         cnt <= cnt + 1;
-        if (cnt == TotalLetency) begin
+        if (cnt == TotalLatency) begin
           update_settings <= 1'b1;
           state <= IDLE;
         end
@@ -87,3 +96,4 @@ module emission_timer (
   end
 
 endmodule
+`default_nettype wire

@@ -38,7 +38,6 @@ module sim_emission_foci ();
 
   memory memory (
       .CLK(CLK),
-      .MRCC_25P6M(MRCC_25P6M),
       .MEM_BUS(sim_helper_bram.memory_bus.bram_port),
       .CNT_BUS(cnt_bus.in_port),
       .PHASE_CORR_BUS(phase_corr_bus.in_port),
@@ -49,7 +48,6 @@ module sim_emission_foci ();
   );
 
   sim_helper_clk sim_helper_clk (
-      .MRCC_25P6M(MRCC_25P6M),
       .CLK(CLK),
       .LOCKED(locked),
       .SYS_TIME(SYS_TIME)

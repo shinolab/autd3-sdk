@@ -1,5 +1,6 @@
 `timescale 1ns / 1ps
-module emission_swapchain (
+`default_nettype none
+module swapchain (
     input wire CLK,
     input wire [56:0] SYS_TIME,
     input wire UPDATE_SETTINGS,
@@ -11,6 +12,7 @@ module emission_swapchain (
     input wire [15:0] SYNC_IDX[params::NumBanks],
     input wire GPIO_IN[4],
     output wire STOP,
+    output wire TRANSITION_PENDING,
     output wire BANK,
     output wire [15:0] IDX[params::NumBanks]
 );
@@ -30,9 +32,6 @@ module emission_swapchain (
 
   logic signed [57:0] time_diff;
 
-  assign BANK = bank;
-  assign STOP = stop;
-
   typedef enum logic {
     IDX_MODE_SYNC_IDX,
     IDX_MODE_TIC
@@ -46,6 +45,10 @@ module emission_swapchain (
 
   idx_mode_t idx_mode = IDX_MODE_SYNC_IDX;
   state_t state = INFINITE_LOOP;
+
+  assign BANK = bank;
+  assign STOP = stop;
+  assign TRANSITION_PENDING = state == WAIT_START;
 
   logic [$clog2(Latency)-1:0] addsub_latency;
   logic wait_transition;
@@ -66,7 +69,7 @@ module emission_swapchain (
       .S  (time_diff)
   );
 
-  for (genvar i = 0; i < params::NumBanks; i++) begin : gen_emission_swapchain
+  for (genvar i = 0; i < params::NumBanks; i++) begin : gen_swapchain
     always_ff @(posedge CLK) idx_old[i] <= SYNC_IDX[i];
     assign idx_changed[i] = idx_old[i] != SYNC_IDX[i];
     assign IDX[i] = (idx_mode == IDX_MODE_SYNC_IDX) ? idx_old[i] : tic_idx[i];
@@ -123,7 +126,7 @@ module emission_swapchain (
               end
             end
             params::TRANSITION_MODE_GPIO: begin
-              if (idx_changed[req_bank] && GPIO_IN[TRANSITION_VALUE]) begin
+              if (idx_changed[req_bank] && GPIO_IN[TRANSITION_VALUE[1:0]]) begin
                 stop <= 1'b0;
                 loop_cnt <= '0;
                 bank <= req_bank;
@@ -136,17 +139,15 @@ module emission_swapchain (
           endcase
         end
         INFINITE_LOOP: begin
-          if (ext_mode) begin
-            if (idx_changed[bank] & (SYNC_IDX[bank] == '0)) begin
-              bank <= ~bank;
-            end
+          if (ext_mode && idx_changed[bank] && (SYNC_IDX[bank] == '0)) begin
+            bank <= ~bank;
           end
           state <= INFINITE_LOOP;
         end
         FINITE_LOOP: begin
           case (idx_mode)
             IDX_MODE_SYNC_IDX: begin
-              if (idx_changed[bank] & (SYNC_IDX[bank] == '0)) begin
+              if (idx_changed[bank] && (SYNC_IDX[bank] == '0)) begin
                 if (loop_cnt == rep) begin
                   stop <= 1'b1;
                 end else begin
@@ -177,3 +178,4 @@ module emission_swapchain (
   end
 
 endmodule
+`default_nettype wire

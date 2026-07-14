@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 interface output_mask_bus_if ();
 
   logic BANK;
@@ -8,3 +9,4 @@ interface output_mask_bus_if ();
   modport out_port(output BANK, input VALUE);
 
 endinterface
+`default_nettype wire

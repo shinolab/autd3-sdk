@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module pwm_preconditioner #(
     parameter int DEPTH = 249
 ) (
@@ -72,3 +73,4 @@ module pwm_preconditioner #(
   end
 
 endmodule
+`default_nettype wire

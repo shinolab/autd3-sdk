@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module phase_correction #(
     parameter int DEPTH = 249
 ) (
@@ -96,3 +97,4 @@ module phase_correction #(
   end
 
 endmodule
+`default_nettype wire

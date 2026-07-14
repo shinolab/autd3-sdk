@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module modulation_multiplier #(
     parameter int DEPTH = 249
 ) (
@@ -106,3 +107,4 @@ module modulation_multiplier #(
   endfunction
 
 endmodule
+`default_nettype wire

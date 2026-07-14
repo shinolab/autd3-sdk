@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 interface memory_bus_if ();
 
   logic BUS_CLK;
@@ -26,3 +27,4 @@ interface memory_bus_if ();
   );
 
 endinterface
+`default_nettype wire

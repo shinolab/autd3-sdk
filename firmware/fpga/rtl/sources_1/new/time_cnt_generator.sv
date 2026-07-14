@@ -1,7 +1,6 @@
 `timescale 1ns / 1ps
-module time_cnt_generator #(
-    parameter int DEPTH = 249
-) (
+`default_nettype none
+module time_cnt_generator (
     input wire CLK,
     input wire [56:0] SYS_TIME,
     input wire SKIP_ONE_ASSERT,
@@ -25,3 +24,4 @@ module time_cnt_generator #(
   end
 
 endmodule
+`default_nettype wire

@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module ec_time_to_sys_time (
     input wire CLK,
     input wire [63:0] EC_TIME,
@@ -81,3 +82,4 @@ module ec_time_to_sys_time (
   end
 
 endmodule
+`default_nettype wire

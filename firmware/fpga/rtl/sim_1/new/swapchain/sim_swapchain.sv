@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-module sim_emission_swapchain ();
+module sim_swapchain ();
 
   `include "define.vh"
 
@@ -10,7 +10,6 @@ module sim_emission_swapchain ();
   logic locked;
   logic [56:0] SYS_TIME;
   sim_helper_clk sim_helper_clk (
-      .MRCC_25P6M(),
       .CLK(CLK),
       .LOCKED(locked),
       .SYS_TIME(SYS_TIME)
@@ -27,8 +26,9 @@ module sim_emission_swapchain ();
   logic [15:0] idx[params::NumBanks];
   logic bank;
   logic stop;
+  logic transition_pending;
 
-  emission_swapchain emission_swapchain (
+  swapchain swapchain (
       .CLK(CLK),
       .SYS_TIME(SYS_TIME),
       .UPDATE_SETTINGS(update_settings),
@@ -41,6 +41,7 @@ module sim_emission_swapchain ();
       .GPIO_IN(gpio_in),
       .BANK(bank),
       .STOP(stop),
+      .TRANSITION_PENDING(transition_pending),
       .IDX(idx)
   );
 
@@ -59,6 +60,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(0, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
     `ASSERT_EQ(0, idx[0]);
     `ASSERT_EQ(0, idx[1]);
   endtask
@@ -97,6 +99,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(1, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
     `ASSERT_EQ(1, idx[0]);
     `ASSERT_EQ(1, idx[1]);
 
@@ -111,6 +114,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(1, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(1, transition_pending);
     `ASSERT_EQ(1, idx[0]);
     `ASSERT_EQ(1, idx[1]);
 
@@ -122,6 +126,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(1, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(1, transition_pending);
     `ASSERT_EQ(2, idx[0]);
     `ASSERT_EQ(2, idx[1]);
 
@@ -132,6 +137,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(0, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
     `ASSERT_EQ(0, idx[0]);
     `ASSERT_EQ(2, idx[1]);
 
@@ -165,6 +171,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(0, bank);
     `ASSERT_EQ(1, stop);
+    `ASSERT_EQ(1, transition_pending);
     `ASSERT_EQ(0, idx[0]);
     `ASSERT_EQ(2, idx[1]);
 
@@ -175,6 +182,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(1, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
     `ASSERT_EQ(0, idx[0]);
     `ASSERT_EQ(0, idx[1]);
 
@@ -228,6 +236,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(1, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
     `ASSERT_EQ(0, idx[0]);
     `ASSERT_EQ(0, idx[1]);
   endtask
@@ -281,6 +290,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(1, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(1, transition_pending);
     `ASSERT_EQ(1, idx[0]);
     `ASSERT_EQ(1, idx[1]);
 
@@ -291,6 +301,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(0, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
     `ASSERT_EQ(0, idx[0]);
 
     // Index change
@@ -332,6 +343,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(0, bank);
     `ASSERT_EQ(1, stop);
+    `ASSERT_EQ(1, transition_pending);
     `ASSERT_EQ(0, idx[0]);
 
     // Index change, change bank
@@ -341,6 +353,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(1, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
     `ASSERT_EQ(0, idx[1]);
 
     // Index change
@@ -465,6 +478,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(1, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(1, transition_pending);
     `ASSERT_EQ(sync_idx[1], idx[1]);
 
     // wait
@@ -481,6 +495,7 @@ module sim_emission_swapchain ();
     @(negedge CLK);
     `ASSERT_EQ(0, bank);
     `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
     `ASSERT_EQ(0, idx[0]);
 
     // Index change
@@ -752,7 +767,7 @@ module sim_emission_swapchain ();
 
     reset();
 
-    $display("OK! sim_emission_swapchain");
+    $display("OK! sim_swapchain");
     $finish();
   end
 

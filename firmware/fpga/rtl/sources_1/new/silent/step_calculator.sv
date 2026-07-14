@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module step_calculator #(
     parameter int DEPTH = 249
 ) (
@@ -168,3 +169,4 @@ module step_calculator #(
   end
 
 endmodule
+`default_nettype wire

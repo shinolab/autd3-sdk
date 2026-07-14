@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module bram_emission (
     input wire clka,
     input wire ena,
@@ -153,3 +154,4 @@ module bram_emission (
   );
 
 endmodule
+`default_nettype wire

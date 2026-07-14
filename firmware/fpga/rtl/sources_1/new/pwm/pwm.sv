@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module pwm #(
     parameter int DEPTH = 249
 ) (
@@ -47,3 +48,4 @@ module pwm #(
   end
 
 endmodule
+`default_nettype wire

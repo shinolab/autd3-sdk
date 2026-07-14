@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module addsub #(
     parameter int WIDTH = 16
 ) (
@@ -26,3 +27,4 @@ module addsub #(
   );
 
 endmodule
+`default_nettype wire

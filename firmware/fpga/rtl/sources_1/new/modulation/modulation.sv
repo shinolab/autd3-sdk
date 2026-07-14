@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module modulation #(
     parameter int DEPTH = 249
 ) (
@@ -14,13 +15,19 @@ module modulation #(
     modulation_bus_if.out_port MOD_BUS,
     phase_corr_bus_if.out_port PHASE_CORR_BUS,
     input wire GPIO_IN[4],
+    output wire STOP,
+    output wire TRANSITION_PENDING,
     output wire [15:0] DEBUG_IDX,
     output wire DEBUG_BANK,
     output wire DEBUG_STOP
 );
 
+  logic update_settings;
+  logic stop;
+  logic bank;
+
   logic [15:0] sync_idx[params::NumBanks];
-  modulation_timer modulation_timer (
+  swapchain_timer swapchain_timer (
       .CLK(CLK),
       .UPDATE_SETTINGS_IN(MOD_SETTINGS.UPDATE),
       .SYS_TIME(SYS_TIME),
@@ -31,7 +38,7 @@ module modulation #(
   );
 
   logic [15:0] idx[params::NumBanks];
-  modulation_swapchain modulation_swapchain (
+  swapchain swapchain (
       .CLK(CLK),
       .SYS_TIME(SYS_TIME),
       .UPDATE_SETTINGS(update_settings),
@@ -43,9 +50,12 @@ module modulation #(
       .SYNC_IDX(sync_idx),
       .GPIO_IN(GPIO_IN),
       .STOP(stop),
+      .TRANSITION_PENDING(TRANSITION_PENDING),
       .BANK(bank),
       .IDX(idx)
   );
+
+  assign STOP = stop;
 
   modulation_multiplier #(
       .DEPTH(DEPTH)
@@ -77,3 +87,4 @@ module modulation #(
   );
 
 endmodule
+`default_nettype wire

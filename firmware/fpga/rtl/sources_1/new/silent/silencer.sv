@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module silencer #(
     parameter int DEPTH = 249
 ) (
@@ -75,3 +76,4 @@ module silencer #(
   );
 
 endmodule
+`default_nettype wire

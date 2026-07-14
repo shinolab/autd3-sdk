@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module delay_fifo #(
     parameter int WIDTH = 8,
     parameter int DEPTH = 16
@@ -17,3 +18,4 @@ module delay_fifo #(
   end
 
 endmodule
+`default_nettype wire

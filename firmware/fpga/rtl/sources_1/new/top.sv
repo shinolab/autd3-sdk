@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 module top (
     input wire [16:1] CPU_ADDR,
     inout tri [15:0] CPU_DATA,
@@ -62,3 +63,4 @@ module top (
   endfunction
 
 endmodule
+`default_nettype wire
