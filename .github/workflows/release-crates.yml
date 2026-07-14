@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'rust-v*'
 
 defaults:
   run:
@@ -26,8 +27,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
       - name: Vendor the firmware sources for self-contained packaging
         run: cargo xtask vendor-fw
-      - name: Verify the vendored emulator package assembles
-        run: cargo package -p autd3-rs-firmware-emulator --no-verify --allow-dirty
+      - name: Verify the vendored packages assemble
+        run: cargo package --workspace --no-verify --allow-dirty
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
       - name: Publish workspace to crates.io
