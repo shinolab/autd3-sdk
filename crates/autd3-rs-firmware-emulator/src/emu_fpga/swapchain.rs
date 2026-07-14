@@ -51,7 +51,7 @@ impl Swapchain {
             stop: false,
             ext_mode: false,
             ext_last_lap: 0,
-            state: State::WaitStart,
+            state: State::InfiniteLoop,
         }
     }
 
@@ -61,6 +61,14 @@ impl Swapchain {
 
     pub(crate) fn cur_idx(&self) -> usize {
         self.cur_idx
+    }
+
+    pub(crate) fn stopped(&self) -> bool {
+        self.stop
+    }
+
+    pub(crate) fn transition_pending(&self) -> bool {
+        self.state == State::WaitStart
     }
 
     #[allow(clippy::too_many_arguments)]
