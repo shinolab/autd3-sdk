@@ -28,6 +28,14 @@ def test_unit_dsl() -> None:
     assert (np.pi * rad).degree == pytest.approx(180.0)
 
     assert (2.5 * kPa).as_pascal == pytest.approx(2500.0)
+
+
+def test_phase_from_angle() -> None:
+    assert autd3.value.Phase(np.pi * rad).value == 128
+    assert autd3.value.Phase(180 * deg).value == 128
+    assert autd3.value.Phase(0x80).value == 0x80
+    with pytest.raises(ValueError):
+        autd3.value.Phase("invalid")
     assert (2500.0 * Pa) == (2.5 * kPa)
     assert (121.5 * dB).as_pascal == pytest.approx(23.77, abs=1e-2)
     assert (23.77 * Pa).as_spl == pytest.approx(121.5, abs=1e-2)

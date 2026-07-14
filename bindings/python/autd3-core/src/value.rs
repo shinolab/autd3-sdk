@@ -10,6 +10,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::error::to_pyerr;
+use crate::units::Angle;
 
 #[pyclass(name = "Intensity", module = "autd3_core", from_py_object)]
 #[derive(Clone)]
@@ -59,8 +60,16 @@ pub struct Phase(pub CorePhase);
 #[pymethods]
 impl Phase {
     #[new]
-    fn new(value: u8) -> Self {
-        Self(CorePhase(value))
+    fn new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(v) = value.extract::<u8>() {
+            return Ok(Self(CorePhase(v)));
+        }
+        if let Ok(angle) = value.cast::<Angle>() {
+            return Ok(Self(CorePhase::from(angle.borrow().0)));
+        }
+        Err(PyValueError::new_err(
+            "Phase expects an int (0-255) or an Angle (e.g. 0.5 * pi * rad)",
+        ))
     }
 
     #[classattr]
