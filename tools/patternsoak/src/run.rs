@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use autd3_rs::commands::{ConfigPattern, WritePatternBuffer};
+use autd3_rs::commands::{ConfigPattern, GpioOut, SetGpioOut, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
@@ -140,6 +140,11 @@ async fn run_with_link<L: Link>(link: L, cli: &Cli) -> Result<()> {
         .await
         .context("initial ConfigPattern")?;
 
+    send_set_gpio_out_once(&client)
+        .await
+        .context("initial SetGpioOut")?;
+    eprintln!("GPIO[0]: BaseSignal (probe it to check inter-device sync)");
+
     let shutdown = Arc::new(AtomicBool::new(false));
     spawn_signal_listener(Arc::clone(&shutdown));
 
@@ -160,6 +165,23 @@ async fn send_config_pattern_once(client: &Client) -> Result<()> {
         config: SamplingConfig::FREQ_4K,
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
+    });
+    let frames = builder.build()?;
+    for frame in &frames {
+        client.send_checked(frame).await?;
+    }
+    Ok(())
+}
+
+async fn send_set_gpio_out_once(client: &Client) -> Result<()> {
+    let mut builder = client.datagram_builder();
+    builder.push(SetGpioOut {
+        outputs: [
+            GpioOut::BaseSignal,
+            GpioOut::Off,
+            GpioOut::Off,
+            GpioOut::Off,
+        ],
     });
     let frames = builder.build()?;
     for frame in &frames {
