@@ -48,6 +48,7 @@ const CASE_NAMES: &[&str] = &[
     "GPIO",
     "Error",
     "Output Mask",
+    "FPGA State",
 ];
 
 async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
@@ -64,6 +65,7 @@ async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
         9 => cases::gpio::run(ctx).await,
         10 => cases::error::run(ctx).await,
         11 => cases::output_mask::run(ctx).await,
+        12 => cases::fpga_state::run(ctx).await,
         _ => Ok(()),
     }
 }
@@ -179,7 +181,7 @@ async fn run_session(client: &Client, geometry: &Geometry) {
         Ok(states) => {
             for (i, s) in states.iter().enumerate() {
                 println!(
-                    "  device[{i}] fpga state: raw={:#04x} thermal={} mod_bank={:?} pattern_bank={:?} mode={} reads_enabled={}",
+                    "  device[{i}] fpga state: raw={:#04x} thermal={} mod_bank={:?} pattern_bank={:?} mode={} pattern_stopped={} mod_stopped={} transition_pending={} reads_enabled={}",
                     s.raw(),
                     s.is_thermal_asserted(),
                     s.current_mod_bank(),
@@ -189,6 +191,9 @@ async fn run_session(client: &Client, geometry: &Geometry) {
                     } else {
                         "stm"
                     },
+                    s.is_pattern_stopped(),
+                    s.is_mod_stopped(),
+                    s.is_transition_pending(),
                     s.reads_enabled(),
                 );
             }

@@ -5,6 +5,7 @@ pub const ERR_MISS_TRANSITION_TIME: u8 = 0x06;
 pub mod error;
 pub mod foci_stm;
 pub mod force_fan;
+pub mod fpga_state;
 pub mod gpio;
 pub mod modulation;
 pub mod output_mask;
