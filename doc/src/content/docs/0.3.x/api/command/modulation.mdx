@@ -1,0 +1,64 @@
+---
+title: Modulation
+description: 計算した AM 波形をデバイスへ送るコマンド
+sidebar:
+  order: 2
+slug: 0.3.x/api/command/modulation
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+
+`Modulation` は, AM 波形データ (`&[u8]`) をデバイスへ送るコマンド.
+
+## API
+
+<CodeTabs>
+  <Fragment slot="rust">
+    <Code code={"Modulation::new(config, &data);\n\nModulation::with_bank(bank, config, &data);\n\nModulation {\n    bank,\n    config,\n    data: &data,\n    loop_behavior,\n    transition_mode,\n};"} lang="rust" />
+
+    `Modulation::new` は書き込み先バンクを `ModulationBank::B0`, ループを `Infinite`, 遷移を `Immediate` とする.
+    別バンクへ書く場合は `Modulation::with_bank(bank, config, data)` を使う.
+    ループ回数や遷移タイミングも変えたい場合は, フィールドを直接指定して構築する.
+  </Fragment>
+
+  <Fragment slot="python">
+    <Code code={"Modulation(config, data)\n\nModulation(\n    bank=bank,\n    config=config,\n    data=data,\n    loop_behavior=loop_behavior,\n    transition_mode=transition_mode,\n)"} lang="python" />
+
+    `Modulation` は書き込み先バンクをデフォルトで `ModulationBank.B0`, ループを `Infinite`, 遷移を `Immediate` とする.
+    別バンク・ループ回数・遷移タイミングを指定したい場合は, `bank` / `loop_behavior` / `transition_mode` 引数を渡す.
+  </Fragment>
+
+  <Fragment slot="csharp">
+    <Code code={"new Modulation(config, data);\n\nnew Modulation(bank, config, data);\n\nnew Modulation(\n    bank: bank,\n    config: config,\n    data: data,\n    loopBehavior: loopBehavior,\n    transitionMode: transitionMode\n);"} lang="csharp" />
+
+    `new Modulation(config, data)` は書き込み先バンクを `ModulationBank.B0`, ループを `Infinite`, 遷移を `Immediate` とする.
+    別バンクへ書く場合は `new Modulation(bank, config, data)` を使う.
+    ループ回数や遷移タイミングも変えたい場合は, `loopBehavior` / `transitionMode` 引数を渡す.
+  </Fragment>
+</CodeTabs>
+
+| フィールド        | 型               | デフォルト                  | 説明                         |
+| ----------------- | ---------------- | --------------------------- | ---------------------------- |
+| `bank`            | `ModulationBank` | `ModulationBank::B0`        | 書き込み先・再生対象のバンク |
+| `config`          | `SamplingConfig` | —                           | 再生サンプリング周波数       |
+| `data`            | `&[u8]`          | —                           | AM 波形サンプル列            |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`    | 再生ループ回数               |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | バンク切替時の遷移挙動       |
+
+`config` は [`SamplingConfig`](/autd3-sdk/0.3.x/api/basics/sampling-config/) で指定する.
+`data` は `modulation_buffer()` で確保したバッファへ書き込む.
+`loop_behavior` / `transition_mode` の挙動は [ChangeModulationBank](/autd3-sdk/0.3.x/api/command/lowlevel/change-modulation-bank/) を参照.
+
+modulation の計算には幾つかの[ヘルパ関数](/autd3-sdk/0.3.x/api/compute/modulation/)が用意されている.
+
+## 等価な低レベルコマンド
+
+`Modulation` は内部で [WriteModulationBuffer](/autd3-sdk/0.3.x/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/0.3.x/api/command/lowlevel/config-modulation/) + [ChangeModulationBank](/autd3-sdk/0.3.x/api/command/lowlevel/change-modulation-bank/) の 3 つへ展開される.
+以下は `Modulation { bank, config, data, loop_behavior, transition_mode }` と等価な組み合わせである
+
+<CodeTabs rust={"WriteModulationBuffer {\n    bank,\n    offset: 0,\n    data: &data,\n};\nConfigModulation {\n    bank,\n    config,\n    size: data.len(),\n    loop_behavior,\n};\nChangeModulationBank {\n    bank,\n    transition_mode,\n};"} python={"WriteModulationBuffer(\n    bank=bank,\n    offset=0,\n    data=data,\n)\nConfigModulation(\n    bank=bank,\n    config=config,\n    size=len(data),\n    loop_behavior=loop_behavior,\n)\nChangeModulationBank(\n    bank=bank,\n    transition_mode=transition_mode,\n)"} csharp={"new WriteModulationBuffer(\n    bank: bank,\n    offset: 0,\n    data: data\n);\nnew ConfigModulation(\n    bank: bank,\n    config: config,\n    size: (uint)data.Length,\n    loopBehavior: loopBehavior\n);\nnew ChangeModulationBank(\n    bank: bank,\n    transitionMode: transitionMode\n);"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::Modulation;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::units::Hz;\nuse autd3_rs::value::SamplingConfig;\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_nop::Nop;\nuse autd3_rs_modulation::{SineOption, modulation_buffer, sine};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet client = Client::open(&geometry, Nop, ClientConfig::default()).await?;\n\nlet mut data = modulation_buffer();\nsine(150 * Hz, &SineOption::default(), &mut data)?;\n\nlet mut builder = client.datagram_builder();\nbuilder.push(Modulation::new(SamplingConfig::FREQ_4K, &data));\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import Modulation\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import Hz\nfrom autd3.value import SamplingConfig\nfrom autd3_link_nop import Nop\nfrom autd3_modulation import SineOption, modulation_buffer, sine\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    client = await Client.open(geometry, Nop(), ClientConfig())\n\n    data = modulation_buffer()\n    sine(150.0 * Hz, SineOption(), data)\n\n    builder = client.datagram_builder()\n    builder.push(Modulation(SamplingConfig.FREQ_4K, data))\n    frames = builder.build()\n    for frame in frames:\n        await client.send_checked(frame)\n\n    await client.close()\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing Nop = AUTD3.Link.Nop;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());\n\nvar data = Modulation.ModulationBuffer();\nModulation.Sine(150 * Hz, new SineOption(), data);\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new Modulation(SamplingConfig.Freq4k, data));\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nawait client.CloseAsync();"} />

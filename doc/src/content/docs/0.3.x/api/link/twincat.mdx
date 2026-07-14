@@ -1,0 +1,31 @@
+---
+title: TwinCAT
+description: Windows/TwinCAT 環境向けの Link
+sidebar:
+  order: 1
+slug: 0.3.x/api/link/twincat
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`TwinCATLink` は, Windows 上の [TwinCAT](https://www.beckhoff.com/) を EtherCAT マスタとして利用する Link 実装.
+
+<Install rust="autd3-rs-link-twincat" python="autd3-link-twincat" csharp="AUTD3.Link.TwinCAT" />
+
+TwinCAT がセットアップ済みの Windows 環境で使用する.
+TwinCAT のセットアップ手順は [TwinCAT のインストール](/autd3-sdk/0.3.x/getting-started/twincat/) を参照すること.
+
+ローカルの TwinCAT に接続する構成と, ADS 経由でリモートの TwinCAT サーバへ接続する構成がある.
+
+## API
+
+<CodeTabs rust={"TwinCATLinkOption::local();\n\nTwinCATLinkOption::remote(addr, ams_net_id);"} python={"TwinCATLinkOption.local()\n\nTwinCATLinkOption.remote(addr, ams_net_id)"} csharp={"TwinCATLinkOption.Local();\n\nTwinCATLinkOption.Remote(addr, amsNetId);"} />
+
+| 引数         | 型         | 説明                                       |
+| ------------ | ---------- | ------------------------------------------ |
+| `addr`       | `IpAddr`   | リモート TwinCAT サーバの IP アドレス      |
+| `ams_net_id` | `AmsNetId` | リモート TwinCAT サーバの AMS Net ID       |
+
+タイムアウトを指定するには`*_with_timeouts`を使用する.
+デフォルトはタイムアウトなし.

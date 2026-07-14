@@ -1,0 +1,28 @@
+---
+title: Time Count Generator
+description: SYS_TIME から超音波周期カウンタと周期トリガを生成するモジュール
+sidebar:
+  order: 9
+slug: 0.3.x/developer/fpga/time-cnt-generator
+---
+
+import Math from "@components/Math.astro";
+
+| Name            | In/Out | Width | Description                                            |
+| --------------- | ------ | ----- | ------------------------------------------------------ |
+| CLK             | In     | 1     | メインクロック                                         |
+| SYS\_TIME        | In     | 57    | システム時刻                                           |
+| SKIP\_ONE\_ASSERT | In     | 1     | [Synchronizer](/autd3-sdk/0.3.x/developer/fpga/synchronizer/) 参照 |
+| TIME\_CNT        | Out    | 9     | 9 bit カウンタ                                         |
+| UPDATE          | Out    | 1     | 超音波周期トリガ                                       |
+
+このモジュールは, 同期システム時刻 `SYS_TIME` から, 離散時刻 <Math tex="t = 0, 1, ..., 511" /> (`TIME_CNT`) と超音波周波数で発火する `UPDATE` を生成する.
+`SYS_TIME` はメインクロックでカウントアップされる <Math tex="\SI{57}{bit}" /> 符号なし整数カウンタである.
+`SYS_TIME` の値は, 全デバイス間で同期しているため, <Math tex="t" /> も必然的に全てのデバイスの全振動子で同期する.
+`SYS_TIME` に関しては, [Synchronizer](/autd3-sdk/0.3.x/developer/fpga/synchronizer/) を参照されたい.
+
+`TIME_CNT` の生成には, `SYS_TIME` の下位 9 bit をそのまま使用する.
+また, `UPDATE` は基本的に `TIME_CNT` が特定の値のときだけ <Math tex="1" /> とすれば良い.
+ただし, `SYS_TIME` は補正のために, 値が 1 飛ばしでインクリメント (すなわち前回の値 <Math tex="+2" />) される, または, インクリメントされない可能性があるため, 単純に `UPDATE` は `TIME_CNT` が <Math tex="0" /> のときに <Math tex="1" /> のようにすることができない.
+そのため, `UPDATE` がアサートされるのは, `TIME_CNT` が <Math tex="0" /> またぐタイミング, としている.
+すなわち, `UPDATE` がアサートされたクロックの次のクロックから新しい周期が始まるようになっている.

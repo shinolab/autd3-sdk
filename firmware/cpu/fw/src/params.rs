@@ -8,7 +8,7 @@ pub const NUM_FOCI_MAX: u8 = 8;
 pub const FUNC_DYNAMIC_FREQ_BIT: u16 = 1;
 pub const FUNC_EMULATOR_BIT: u16 = 7;
 pub const VERSION_NUM_MAJOR: u8 = 0x0;
-pub const VERSION_NUM_MINOR: u8 = 0x2;
+pub const VERSION_NUM_MINOR: u8 = 0x3;
 pub const VERSION_NUM_PATCH: u8 = 0x0;
 
 pub const CTL_FLAG_BIT_MOD_SET: u16 = 0;

@@ -12,3 +12,6 @@ src/content/versions/*
 !src/content/versions/0.2.x.json
 !src/content/docs/0.2.x/
 !src/content/docs/*/0.2.x/
+!src/content/versions/0.3.x.json
+!src/content/docs/0.3.x/
+!src/content/docs/*/0.3.x/

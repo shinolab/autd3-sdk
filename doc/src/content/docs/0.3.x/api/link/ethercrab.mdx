@@ -1,0 +1,42 @@
+---
+title: EtherCrab
+description: Rust 製 EtherCAT マスタ EtherCrab を用いた標準の Link
+sidebar:
+  order: 2
+slug: 0.3.x/api/link/ethercrab
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`EtherCrabLink` は Rust 製の EtherCAT マスタ [EtherCrab](https://github.com/ethercrab-rs/ethercrab) を用いた Link 実装.
+
+<Install rust="autd3-rs-link-ethercrab" python="autd3-link-ethercrab" csharp="AUTD3.Link.Ethercrab" />
+
+Ethernet の raw socket を扱うため, Linux/macOS では実行に root 権限 (または `CAP_NET_RAW`) が必要.
+Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mode」でインストールする必要がある.
+
+## API
+
+<CodeTabs rust={"EtherCrabLinkOption {\n    iface,\n    sync0_period,\n    sync0_shift,\n    sync_tolerance,\n    sync_timeout,\n};"} python={"ethercrab.EtherCrabLinkOption(\n    iface,\n    sync0_period,\n    sync0_shift,\n    sync_tolerance,\n    sync_timeout,\n)"} csharp={"new EtherCrabLinkOption(\n    iface,\n    sync0Period,\n    sync0Shift,\n    syncTolerance,\n    syncTimeout\n);"} />
+
+| フィールド       | 型         | 説明                                                                            |
+| ---------------- | ---------- | ------------------------------------------------------------------------------- |
+| `iface`          | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
+| `sync0_period`   | `Duration` | SYNC0 信号の周期                                                                |
+| `sync0_shift`    | `Duration` | SYNC0 信号のシフト量                                                            |
+| `sync_tolerance` | `Duration` | 同期完了とみなす許容誤差                                                        |
+| `sync_timeout`   | `Duration` | 同期完了を待つタイムアウト                                                      |
+
+EtherCrabの設定をフルに行う `EtherCrabLinkOptionFull` も用意されてい (Rustのみ).
+
+<CodeTabs rust={"EtherCrabLinkOptionFull {\n    iface,\n    timeouts,\n    main_device_config,\n    dc_configuration,\n    sync_tolerance,\n    sync_timeout,\n};"} />
+
+| フィールド            | 型                                                                                                       | 説明                                                                            |
+| --------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `iface`               | `Interface`                                                                                              | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
+| `timeouts`            | [`ethercrab::Timeouts`](https://docs.rs/ethercrab/0.7.1/ethercrab/struct.Timeouts.html)                  | EtherCrab のドキュメントを参照                                                  |
+| `main_device_config`  | [`ethercrab::MainDeviceConfig`](https://docs.rs/ethercrab/0.7.1/ethercrab/struct.MainDeviceConfig.html)  | EtherCrab のドキュメントを参照                                                  |
+| `dc_configuration`    | [`ethercrab::subdevice_group::DcConfiguration`](https://docs.rs/ethercrab/0.7.1/ethercrab/subdevice_group/struct.DcConfiguration.html) | EtherCrab のドキュメントを参照                                  |
+| `sync_tolerance`      | `Duration`                                                                                               | 同期完了とみなす許容誤差                                                        |
+| `sync_timeout`        | `Duration`                                                                                               | 同期完了を待つタイムアウト                                                      |

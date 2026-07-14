@@ -1,0 +1,30 @@
+---
+title: Link
+description: Link that abstracts the physical communication path with AUTD3 devices
+sidebar:
+  order: 0
+slug: en/0.3.x/api/link
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Link` is an abstraction of the physical communication path with AUTD3 devices. It absorbs the differences between communication methods such as EtherCAT so that the higher-level `Client` can handle them through the same API.
+
+## Packages
+
+Each Link implementation is provided as an independent package. Add the package of the Link you use as a dependency.
+
+| Link | Rust | Python | C# |
+| ---- | ---- | ------ | -- |
+| [TwinCAT](/autd3-sdk/en/0.3.x/api/link/twincat/) | `autd3-rs-link-twincat` | `autd3-link-twincat` | `AUTD3.Link.TwinCAT` |
+| [EtherCrab](/autd3-sdk/en/0.3.x/api/link/ethercrab/) | `autd3-rs-link-ethercrab` | `autd3-link-ethercrab` | `AUTD3.Link.Ethercrab` |
+| [SOEM](/autd3-sdk/en/0.3.x/api/link/soem/) | `autd3-rs-link-soem` | `autd3-link-soem` | `AUTD3.Link.Soem` |
+| [Remote](/autd3-sdk/en/0.3.x/api/link/remote/) | `autd3-rs-link-remote` | `autd3-link-remote` | `AUTD3.Link.Remote` |
+
+See each Link's page for installation instructions.
+
+## Usage
+
+A Link is constructed by passing a Link Option to `Client::open`. The Option specifies the connection target, synchronization parameters, and so on.
+
+The send/receive interface seen from the `Client` is common across Link implementations. Therefore, swapping the link does not require changing the higher-level code.

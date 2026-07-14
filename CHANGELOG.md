@@ -2,6 +2,33 @@
 
 # Rust
 
+## [0.3.0] - 2026-07-14
+
+### 💥 Breaking Changes
+
+- [**breaking**] Make the EtherCrab bus cycle allocation-free
+- [**breaking**] Make the client send path allocation-free
+- [**breaking**] Add CPU emergency stop, EtherCAT-loss failsafe and receive telemetry
+
+### 🚀 Features
+
+- Derive Sync0 cycle from the ESC register instead of estimating it in the FPGA
+- *(csharp)* Add StmConfig.IntoSamplingConfig
+- Expose pattern/mod stop and transition-pending bits in FpgaState
+- *(csharp)* Add link option presets, PatternCompression.PerFrame, Device.IsEmpty and implicit StmConfig conversions
+
+### 🐛 Bug Fixes
+
+- *(emulator)* Keep next_sync0 ahead of the emulated sys time
+- Map ERR_FPGA_TIMEOUT/ERR_SYNC_NOT_READY in the client error detail
+- Use DcSysTime::now() as the EtherCAT system time source
+- *(gpio)* Respect EmulateGpioIn in TransitionMode::Gpio
+
+### ⚡ Performance
+
+- *(ethercrab)* Stop boxing the per-device state-check future
+- *(ethercrab)* Make the macOS bus cycle allocation-free
+
 ## [0.2.0] - 2026-07-09
 
 ### 💥 Breaking Changes
@@ -75,6 +102,23 @@
 
 # Python
 
+## [0.3.0] - 2026-07-14
+
+### 💥 Breaking Changes
+
+- [**breaking**] Make the EtherCrab bus cycle allocation-free
+- [**breaking**] Make the client send path allocation-free
+- [**breaking**] Add CPU emergency stop, EtherCAT-loss failsafe and receive telemetry
+
+### 🚀 Features
+
+- Expose pattern/mod stop and transition-pending bits in FpgaState
+- *(python)* Accept an Angle in Phase
+
+### 📦 Dependencies
+
+- *(deps)* Bump pollster from 0.4.0 to 1.0.1 in /bindings/python
+
 ## [0.2.0] - 2026-07-09
 
 ### 💥 Breaking Changes
@@ -111,6 +155,18 @@
 - *(py)* Return Response from awaited send instead of implicit check
 
 # C#
+
+## [0.3.0] - 2026-07-14
+
+### 💥 Breaking Changes
+
+- [**breaking**] Add CPU emergency stop, EtherCAT-loss failsafe and receive telemetry
+
+### 🚀 Features
+
+- *(csharp)* Add StmConfig.IntoSamplingConfig
+- Expose pattern/mod stop and transition-pending bits in FpgaState
+- *(csharp)* Add link option presets, PatternCompression.PerFrame, Device.IsEmpty and implicit StmConfig conversions
 
 ## [0.2.0] - 2026-07-09
 
@@ -156,6 +212,18 @@
 
 # Simulator
 
+## [0.3.0] - 2026-07-14
+
+### 🚀 Features
+
+- *(simulator)* Make the field canvas follow the window size
+- *(simulator)* Add slice size and resolution controls
+
+### 🐛 Bug Fixes
+
+- Use DcSysTime::now() as the EtherCAT system time source
+- *(simulator)* Keep the slice and camera when a client reconnects
+
 ## [0.2.0] - 2026-07-09
 
 ### 🚀 Features
@@ -182,6 +250,28 @@
 - Derive simulator device count from client geometry
 
 # Firmware
+
+## [0.3.0] - 2026-07-14
+
+### 💥 Breaking Changes
+
+- [**breaking**] Add CPU emergency stop, EtherCAT-loss failsafe and receive telemetry
+
+### 🚀 Features
+
+- Ship prebuilt CPU platform object for standalone firmware builds
+- Derive Sync0 cycle from the ESC register instead of estimating it in the FPGA
+- Expose pattern/mod stop and transition-pending bits in FpgaState
+
+### 🐛 Bug Fixes
+
+- *(cpu)* Make the Reset FIFO flush race-free with a generation counter
+- *(cpu)* Write tx frame data before ack and qualify _sTx volatile
+- *(cpu)* Bound bsp/FPGA waits and fix DC reads; add ERR_FPGA_TIMEOUT/ERR_SYNC_NOT_READY
+- *(cpu)* Avoid torn 64-bit DC register reads in port.c
+- *(gpio)* Respect EmulateGpioIn in TransitionMode::Gpio
+- *(fpga)* Spread SYS_TIME correction timing to avoid Sync0-periodic noise
+- *(fpga)* Saturate sync_time_diff, guard sync-update race and timer/CDC windows
 
 ## [0.2.0] - 2026-07-09
 

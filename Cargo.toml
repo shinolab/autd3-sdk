@@ -30,7 +30,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -81,17 +81,17 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
     "env-filter",
 ] }
 
-autd3-rs = { version = "0.2.0", path = "crates/autd3-rs" }
-autd3-rs-core = { version = "0.2.0", path = "crates/autd3-rs-core" }
-autd3-rs-firmware-emulator = { version = "0.2.0", path = "crates/autd3-rs-firmware-emulator" }
-autd3-rs-pattern = { version = "0.2.0", path = "crates/autd3-rs-pattern" }
-autd3-rs-pattern-holo = { version = "0.2.0", path = "crates/autd3-rs-pattern-holo" }
-autd3-rs-link-ethercrab = { version = "0.2.0", path = "crates/autd3-rs-link-ethercrab" }
-autd3-rs-link-nop = { version = "0.2.0", path = "crates/autd3-rs-link-nop" }
-autd3-rs-link-remote = { version = "0.2.0", path = "crates/autd3-rs-link-remote" }
-autd3-rs-link-soem = { version = "0.2.0", path = "crates/autd3-rs-link-soem" }
-autd3-rs-link-twincat = { version = "0.2.0", path = "crates/autd3-rs-link-twincat" }
-autd3-rs-modulation = { version = "0.2.0", path = "crates/autd3-rs-modulation" }
+autd3-rs = { version = "0.3.0", path = "crates/autd3-rs" }
+autd3-rs-core = { version = "0.3.0", path = "crates/autd3-rs-core" }
+autd3-rs-firmware-emulator = { version = "0.3.0", path = "crates/autd3-rs-firmware-emulator" }
+autd3-rs-pattern = { version = "0.3.0", path = "crates/autd3-rs-pattern" }
+autd3-rs-pattern-holo = { version = "0.3.0", path = "crates/autd3-rs-pattern-holo" }
+autd3-rs-link-ethercrab = { version = "0.3.0", path = "crates/autd3-rs-link-ethercrab" }
+autd3-rs-link-nop = { version = "0.3.0", path = "crates/autd3-rs-link-nop" }
+autd3-rs-link-remote = { version = "0.3.0", path = "crates/autd3-rs-link-remote" }
+autd3-rs-link-soem = { version = "0.3.0", path = "crates/autd3-rs-link-soem" }
+autd3-rs-link-twincat = { version = "0.3.0", path = "crates/autd3-rs-link-twincat" }
+autd3-rs-modulation = { version = "0.3.0", path = "crates/autd3-rs-modulation" }
 
 [workspace.lints.rust]
 warnings = "deny"
