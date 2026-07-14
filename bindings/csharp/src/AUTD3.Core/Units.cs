@@ -54,15 +54,15 @@ namespace AUTD3
 
     public readonly struct Freq
     {
-        internal enum FreqMode : byte
+        public enum FreqMode : byte
         {
             FloatExact = 0,
             IntExact = 1,
         }
 
-        internal FreqMode Mode { get; }
+        public FreqMode Mode { get; }
         internal float HzValue { get; }
-        internal uint HzIntValue { get; }
+        public uint HzIntValue { get; }
 
         internal Freq(FreqMode mode, float hz, uint hzInt)
         {

@@ -251,3 +251,46 @@ pub unsafe extern "C" fn autd3_link_soem(
     });
     into_handle(opener)
 }
+
+#[repr(C)]
+pub struct Autd3SoemLinkOptionValues {
+    pub sync0_period_ns: u64,
+    pub sync0_shift_ns: u64,
+    pub sync_tolerance_ns: u64,
+    pub sync_timeout_ns: u64,
+}
+
+fn to_ns(d: Duration) -> u64 {
+    u64::try_from(d.as_nanos()).unwrap_or(u64::MAX)
+}
+
+unsafe fn write_option(option: &CoreOption, out: *mut Autd3SoemLinkOptionValues) -> i32 {
+    if out.is_null() {
+        return -1;
+    }
+
+    // SAFETY: the caller guarantees `out` points to a writable Autd3SoemLinkOptionValues.
+    unsafe {
+        *out = Autd3SoemLinkOptionValues {
+            sync0_period_ns: to_ns(option.sync0_period),
+            sync0_shift_ns: to_ns(option.sync0_shift),
+            sync_tolerance_ns: to_ns(option.sync_tolerance),
+            sync_timeout_ns: to_ns(option.sync_timeout),
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_soem_option_safe_default(
+    out: *mut Autd3SoemLinkOptionValues,
+) -> i32 {
+    unsafe { write_option(&CoreOption::safe_default(), out) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_soem_option_performance_default(
+    out: *mut Autd3SoemLinkOptionValues,
+) -> i32 {
+    unsafe { write_option(&CoreOption::performance_default(), out) }
+}

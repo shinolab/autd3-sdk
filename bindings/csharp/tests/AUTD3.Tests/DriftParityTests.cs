@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using AUTD3;
 using Xunit;
 using static AUTD3.Units;
@@ -30,6 +31,17 @@ namespace AUTD3.Tests
             _ = new StmConfig(TimeSpan.FromSeconds(1));
             _ = new StmConfig(Nearest(TimeSpan.FromSeconds(1)));
             _ = new StmConfig(SamplingConfig.Freq4k);
+
+            StmConfig fromFreq = 1 * Hz;
+            StmConfig fromNearestFreq = Nearest(1.5f * Hz);
+            StmConfig fromPeriod = TimeSpan.FromSeconds(1);
+            StmConfig fromNearestPeriod = Nearest(TimeSpan.FromSeconds(1));
+            StmConfig fromSampling = SamplingConfig.Freq4k;
+            Assert.Equal(40000, fromFreq.IntoSamplingConfig(1).Divide());
+            Assert.True(fromNearestFreq.IntoSamplingConfig(1).Divide() > 0);
+            Assert.Equal(40000, fromPeriod.IntoSamplingConfig(1).Divide());
+            Assert.True(fromNearestPeriod.IntoSamplingConfig(1).Divide() > 0);
+            Assert.Equal(10, fromSampling.IntoSamplingConfig(1).Divide());
         }
 
         [Fact]
@@ -40,6 +52,39 @@ namespace AUTD3.Tests
             Assert.Equal(10, new StmConfig(SamplingConfig.Freq4k).IntoSamplingConfig(7).Divide());
             Assert.True(new StmConfig(Nearest(4001.0f * Hz)).IntoSamplingConfig(1).Divide() > 0);
             Assert.Throws<Autd3Exception>(() => new StmConfig(4001.0f * Hz).IntoSamplingConfig(1));
+        }
+
+        [Fact]
+        public void EtherCrabLinkOptionPresets()
+        {
+            // the ethercrab cdylib imports wpcap/Packet, which CI's Windows runner has no Npcap for
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return;
+            }
+
+            var safe = AUTD3.Link.EtherCrabLinkOption.SafeDefault();
+            Assert.Equal(TimeSpan.FromMilliseconds(1), safe.Sync0Period);
+            Assert.Equal(safe.Sync0Period, safe.Sync0Shift);
+            Assert.Equal(TimeSpan.FromSeconds(10), safe.SyncTimeout);
+
+            var perf = AUTD3.Link.EtherCrabLinkOption.PerformanceDefault();
+            Assert.Equal(TimeSpan.FromMilliseconds(1), perf.Sync0Period);
+            Assert.Equal(TimeSpan.Zero, perf.Sync0Shift);
+        }
+
+        [Fact]
+        public void PatternCompressionPerFrame()
+        {
+            Assert.Equal(2, PatternCompression.PhaseFull.PerFrame());
+            Assert.Equal(4, PatternCompression.PhaseHalf.PerFrame());
+        }
+
+        [Fact]
+        public void DeviceIsEmpty()
+        {
+            using var geometry = SingleDevice();
+            Assert.False(geometry[0].IsEmpty);
         }
 
         [Fact]

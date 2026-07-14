@@ -37,7 +37,7 @@ for (var i = 0; i < 200; i++)
 
 var builder = client.DatagramBuilder();
 builder.Push(new PatternStm(
-    new StmConfig(1.0f * Hz),
+    1.0f * Hz,
     patterns,
     new PatternStmOption(
         bank: PatternBank.B0,

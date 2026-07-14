@@ -40,7 +40,7 @@ internal static class Program
             using var builder = client.DatagramBuilder();
             builder
                 .Push(new SetSilencer())
-                .Push(new PatternStm(new StmConfig(1 * Hz), patterns.ToArray(),
+                .Push(new PatternStm(1 * Hz, patterns.ToArray(),
                     new PatternStmOption(mode: PatternStmMode.PhaseFull)));
             using var frames = builder.Build();
             foreach (var frame in frames)

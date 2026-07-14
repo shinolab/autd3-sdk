@@ -42,7 +42,7 @@ internal static class Sample
             // ANCHOR_END: option
             ;
         // ANCHOR: api
-        new PatternStm(new StmConfig(freq), patterns, option);
+        new PatternStm(freq, patterns, option);
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
