@@ -1,5 +1,10 @@
 {
   "name": "com.shinolab.autd3-sdk.link.nop",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shinolab/autd3-sdk.git",
+    "directory": "bindings/unity/com.shinolab.autd3-sdk.link.nop"
+  },
   "version": "0.3.0",
   "displayName": "AUTD3 Link Nop",
   "description": "AUTD3 no-op link for testing (Unity binding).",
