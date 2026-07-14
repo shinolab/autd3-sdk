@@ -51,15 +51,30 @@ impl FpgaState {
         self.0.is_thermal_asserted()
     }
 
+    fn is_pattern_stopped(&self) -> bool {
+        self.0.is_pattern_stopped()
+    }
+
+    fn is_mod_stopped(&self) -> bool {
+        self.0.is_mod_stopped()
+    }
+
+    fn is_transition_pending(&self) -> bool {
+        self.0.is_transition_pending()
+    }
+
     fn reads_enabled(&self) -> bool {
         self.0.reads_enabled()
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "FpgaState(raw=0x{:02X}, thermal_asserted={}, reads_enabled={})",
+            "FpgaState(raw=0x{:02X}, thermal_asserted={}, pattern_stopped={}, mod_stopped={}, transition_pending={}, reads_enabled={})",
             self.0.raw(),
             self.0.is_thermal_asserted(),
+            self.0.is_pattern_stopped(),
+            self.0.is_mod_stopped(),
+            self.0.is_transition_pending(),
             self.0.reads_enabled()
         )
     }

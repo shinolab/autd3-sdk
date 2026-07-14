@@ -16,6 +16,9 @@ namespace AUTD3
         }
 
         public bool IsThermalAsserted => (Raw & (1 << 0)) != 0;
+        public bool IsPatternStopped => (Raw & (1 << 4)) != 0;
+        public bool IsModStopped => (Raw & (1 << 5)) != 0;
+        public bool IsTransitionPending => (Raw & (1 << 6)) != 0;
         public bool ReadsEnabled => (Raw & (1 << 7)) != 0;
     }
 
