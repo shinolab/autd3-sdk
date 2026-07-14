@@ -1,5 +1,10 @@
 {
   "name": "com.shinolab.autd3-sdk.link.remote",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shinolab/autd3-sdk.git",
+    "directory": "bindings/unity/com.shinolab.autd3-sdk.link.remote"
+  },
   "version": "0.3.0",
   "displayName": "AUTD3 Link Remote",
   "description": "AUTD3 remote transport link (Unity binding).",

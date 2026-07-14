@@ -1,5 +1,10 @@
 {
   "name": "com.shinolab.autd3-sdk.modulation",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shinolab/autd3-sdk.git",
+    "directory": "bindings/unity/com.shinolab.autd3-sdk.modulation"
+  },
   "version": "0.3.0",
   "displayName": "AUTD3 Modulation",
   "description": "AUTD3 amplitude modulation waveforms (Unity binding).",
