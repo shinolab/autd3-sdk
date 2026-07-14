@@ -624,6 +624,11 @@ pub unsafe extern "C" fn autd3_op_write_pattern_compressed(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn autd3_pattern_compression_per_frame(format: u8) -> usize {
+    to_pattern_compression(format).per_frame()
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_config_pattern(
     bank: u8,
     sampling_config: *const SamplingConfig,

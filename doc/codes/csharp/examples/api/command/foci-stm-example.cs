@@ -31,7 +31,7 @@ var points = dst.ToArray();
 
 var builder = client.DatagramBuilder();
 builder.Push(new FociStm(
-    new StmConfig(1.0f * Hz),
+    1.0f * Hz,
     points,
     new FociStmOption(
         bank: PatternBank.B0,

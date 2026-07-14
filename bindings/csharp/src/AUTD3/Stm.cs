@@ -104,6 +104,16 @@ namespace AUTD3
         {
         }
 
+        public static implicit operator StmConfig(Freq freq) => new StmConfig(freq);
+
+        public static implicit operator StmConfig(Nearest<Freq> freq) => new StmConfig(freq);
+
+        public static implicit operator StmConfig(TimeSpan period) => new StmConfig(period);
+
+        public static implicit operator StmConfig(Nearest<TimeSpan> period) => new StmConfig(period);
+
+        public static implicit operator StmConfig(SamplingConfig sampling) => new StmConfig(sampling);
+
         public SamplingConfig IntoSamplingConfig(int size)
         {
             var handle = CreateHandle();

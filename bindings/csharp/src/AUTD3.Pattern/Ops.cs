@@ -14,6 +14,12 @@ namespace AUTD3
         PhaseHalf = 2,
     }
 
+    public static class PatternCompressionExt
+    {
+        public static int PerFrame(this PatternCompression format) =>
+            (int)NativePattern.autd3_pattern_compression_per_frame((byte)format);
+    }
+
     public sealed class WritePatternCompressed : ICommand
     {
         private readonly PatternBank _bank;
