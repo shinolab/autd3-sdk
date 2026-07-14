@@ -3,6 +3,9 @@
 A CLI tool that sends `WritePatternBuffer` continuously over a real EtherCAT link for an extended period,
 to confirm the CPU board stays healthy under a sustained stream of pattern writes.
 
+On start-up it also issues `SetGpioOut` so that GPIO[0] of every device outputs `BaseSignal`. Probing GPIO[0]
+across devices with an oscilloscope shows whether they are still synchronized during the soak.
+
 ## Run
 
 The `ethercrab` and `soem` links use raw sockets, so they need privileges: root or `CAP_NET_RAW` on Linux,
