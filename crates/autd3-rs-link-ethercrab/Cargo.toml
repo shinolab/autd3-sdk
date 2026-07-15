@@ -11,8 +11,8 @@ description = "EtherCrab-backed Link implementation for autd3-rs."
 [dependencies]
 autd3-rs-core.workspace = true
 thiserror.workspace = true
-ethercrab.workspace = true
-futures-util.workspace = true
+ethercrab = { version = "0.7.1", default-features = false, features = ["std"] }
+futures-util = { version = "0.3.32", default-features = false, features = ["alloc"] }
 tokio = { workspace = true, features = ["sync", "time", "macros", "rt", "net"] }
 pcap = { version = "2.4.0", default-features = false }
 tracing = { workspace = true, features = ["log"] }
