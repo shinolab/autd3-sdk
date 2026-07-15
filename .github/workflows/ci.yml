@@ -30,6 +30,7 @@ jobs:
       unity: ${{ steps.filter.outputs.unity }}
       license: ${{ steps.filter.outputs.license }}
       doc: ${{ steps.filter.outputs.doc }}
+      doc-samples: ${{ steps.filter.outputs.doc-samples }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -169,6 +170,20 @@ jobs:
               - 'bindings/ffi/**'
               - 'Cargo.toml'
               - '.github/workflows/ci-doc.yml'
+            doc-samples:
+              - *shared
+              - *xtask-core
+              - 'xtask/src/doc.rs'
+              - 'xtask/src/py.rs'
+              - 'xtask/src/cs.rs'
+              - 'doc/codes/**'
+              - 'crates/**'
+              - 'emulator/**'
+              - 'bindings/python/**'
+              - 'bindings/csharp/**'
+              - 'bindings/ffi/**'
+              - 'Cargo.toml'
+              - '.github/workflows/ci-doc.yml'
 
   rust:
     name: rust
@@ -234,9 +249,12 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.doc == 'true' }}
     uses: ./.github/workflows/ci-doc.yml
+    with:
+      samples: ${{ needs.changes.outputs.doc-samples == 'true' }}
 
   guard:
     name: guard-main-source
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check source branch
@@ -297,7 +315,8 @@ jobs:
             || [ "${{ needs.unity.result }}" = "failure" ] \
             || [ "${{ needs.license.result }}" = "failure" ] \
             || [ "${{ needs.doc.result }}" = "failure" ] \
-            || [ "${{ needs.guard.result }}" != "success" ]; then
+            || [ "${{ needs.guard.result }}" = "failure" ] \
+            || [ "${{ needs.guard.result }}" = "cancelled" ]; then
             echo "A required job failed."
             exit 1
           fi

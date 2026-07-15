@@ -32,3 +32,4 @@ runs:
       with:
         workspaces: ${{ inputs.workspaces }}
         shared-key: ${{ inputs.shared-key }}
+        save-if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}

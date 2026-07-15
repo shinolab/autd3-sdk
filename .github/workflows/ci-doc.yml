@@ -2,6 +2,12 @@ name: ci-doc
 
 on:
   workflow_call:
+    inputs:
+      samples:
+        description: Build and run the doc samples (Rust/Python/C#).
+        type: boolean
+        required: false
+        default: true
 
 defaults:
   run:
@@ -11,8 +17,25 @@ env:
   CARGO_PROFILE_DEV_DEBUG: '0'
 
 jobs:
-  doc:
-    name: doc
+  site:
+    name: site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-rust
+        with:
+          workspaces: xtask
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: doc/package-lock.json
+      - run: cargo xtask doc check
+      - run: cargo xtask doc build --no-samples
+
+  samples:
+    name: samples
+    if: ${{ inputs.samples }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -21,23 +44,14 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           workspaces: |
-            .
-            xtask
+            doc/codes/rust
             bindings/python
-            bindings/ffi
+            xtask
       - name: Install system deps
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: doc/package-lock.json
-      - run: cargo xtask doc check
       - run: cargo xtask doc samples --check
-      - run: cargo xtask doc samples --python
-      - run: cargo xtask doc samples --csharp
-      - run: cargo xtask doc build
+      - run: cargo xtask doc samples

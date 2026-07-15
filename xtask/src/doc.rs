@@ -20,7 +20,11 @@ const LONG_RUNNING_TIMEOUT: Duration = Duration::from_secs(8);
 #[derive(Subcommand)]
 pub enum DocCmd {
     /// Build the static site into `doc/dist/`
-    Build,
+    Build {
+        /// Skip compiling the Rust samples
+        #[arg(long)]
+        no_samples: bool,
+    },
     /// Run the Astro dev server
     Serve {
         /// Open the site in a browser
@@ -81,10 +85,12 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
             }
             Ok(())
         }
-        DocCmd::Build => {
+        DocCmd::Build { no_samples } => {
             verify_frozen_versions(&doc)?;
             verify_firmware_series(root, &doc)?;
-            build_samples(&samples)?;
+            if !*no_samples {
+                build_samples(&samples)?;
+            }
             npm_install(&doc)?;
             npm(&doc, &["run", "build"])
         }
