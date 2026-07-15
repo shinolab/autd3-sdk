@@ -11,7 +11,7 @@ description = "Multi-focus hologram optimization (Naive/GS/GSPAT) for autd3-rs."
 [dependencies]
 autd3-rs-core.workspace = true
 nalgebra.workspace = true
-rand.workspace = true
+rand = { version = "0.10.1", default-features = false, features = ["std", "thread_rng"] }
 thiserror.workspace = true
 
 [dev-dependencies]
