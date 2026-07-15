@@ -3,10 +3,10 @@ AUTD3 SDK
 </h1>
 
 <p align="center">
-Airborne Ultrasound Tactile Display (AUTD) is a midair haptic device that can remotely produce tactile sensation on a human skin surface without wearing devices.
+Airborne Ultrasound Tactile Display (AUTD) is a midair haptic device that remotely produces tactile sensations on human skin without the user wearing any device.
 Please see <a href="https://hapislab.org/en/airborne-ultrasound-tactile-display">our laboratory homepage</a> for more details on AUTD.
-This repository contains the client libraries, firmware, and tools to drive AUTD version 3 devices.
-This cross-platform SDK supports Windows, macOS, and Linux (including Single Board Computers such as Raspberry Pi).
+This repository contains the client libraries, firmware, and tools to drive AUTD version 3 (AUTD3) devices.
+This cross-platform SDK supports Windows, macOS, and Linux (including single-board computers such as the Raspberry Pi).
 </p>
 
 ## Documents
@@ -24,13 +24,14 @@ This repository is a monorepo. See the README in each subfolder for details.
   - [`bindings/ffi/`](./bindings/ffi): C API bindings
   - [`bindings/python/`](./bindings/python): Python bindings [![autd3](https://img.shields.io/pypi/v/autd3?label=autd3)](https://pypi.org/project/autd3/)
   - [`bindings/csharp/`](./bindings/csharp): C# bindings [![AUTD3](https://img.shields.io/nuget/vpre/AUTD3?label=AUTD3)](https://www.nuget.org/packages/AUTD3)
+  - [`bindings/unity/`](./bindings/unity): Unity bindings [![com.shinolab.autd3-sdk](https://img.shields.io/npm/v/com.shinolab.autd3-sdk?label=com.shinolab.autd3-sdk)](https://www.npmjs.com/package/com.shinolab.autd3-sdk)
 - Firmware
   - [`firmware/cpu/`](./firmware/cpu): CPU firmware
   - [`firmware/fpga/`](./firmware/fpga): FPGA firmware
 - Applications
   - [`simulator/`](./simulator): Sound field simulator
   - [`console/`](./console): GUI console
-  - [`tools/`](./tools): Auxiliary CLI tools ([`perftest`](./tools/perftest), [`patternsoak`](./tools/patternsoak), [`twincat-cli`](./tools/twincat-cli))
+  - [`tools/`](./tools): Auxiliary CLI tools
 - [`examples/`](./examples): Usage examples
 - [`doc/`](./doc): Documentation site sources
 
@@ -43,7 +44,7 @@ If you use this SDK in your research, please consider including the following ci
 
 ## License
 
-This SDK is licensed under the [MIT license](./LICENSE), except for [`crates/autd3-rs-link-soem`](./crates/autd3-rs-link-soem) and its bindings ([`bindings/ffi/autd3-ffi-link-soem`](./bindings/ffi/autd3-ffi-link-soem), [`bindings/python/autd3-link-soem`](./bindings/python/autd3-link-soem), and [`bindings/csharp/src/AUTD3.Link.Soem`](./bindings/csharp/src/AUTD3.Link.Soem)), which statically link [SOEM](https://github.com/OpenEtherCATsociety/SOEM) and are licensed under GPL-3.0-only.
+This SDK is licensed under the [MIT license](./LICENSE), except for [`crates/autd3-rs-link-soem`](./crates/autd3-rs-link-soem) and its bindings ([`bindings/ffi/autd3-ffi-link-soem`](./bindings/ffi/autd3-ffi-link-soem), [`bindings/python/autd3-link-soem`](./bindings/python/autd3-link-soem), [`bindings/csharp/src/AUTD3.Link.Soem`](./bindings/csharp/src/AUTD3.Link.Soem), and [`bindings/unity/com.shinolab.autd3-sdk.link.soem`](./bindings/unity/com.shinolab.autd3-sdk.link.soem)), which statically link [SOEM](https://github.com/OpenEtherCATsociety/SOEM) and are licensed under GPL-3.0-only.
 
 ## Author
 
