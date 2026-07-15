@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 
 use crate::util::run;
@@ -24,29 +24,53 @@ const CS_NATIVE: &[(&str, &str)] = &[
 
 const RIDS: &[&str] = &["win-x64", "linux-x64", "osx-arm64"];
 
+const PCAP_TRAIT: &str = "Category!=Pcap";
+
 #[derive(Subcommand)]
 pub enum CsCmd {
+    /// Build the C# solution
     Build {
+        /// Build the Debug configuration instead of Release
         #[arg(long)]
         debug: bool,
     },
+    /// Pack the NuGet packages (native libs from `--native-dir`, host RID otherwise)
     Pack {
+        /// Directory holding the per-RID native libraries (defaults to `bindings/ffi/target/native`)
         #[arg(long)]
         native_dir: Option<PathBuf>,
+        /// Directory to write the `.nupkg` files to
         #[arg(short, long)]
         out: Option<PathBuf>,
     },
-    Test,
+    /// Build the FFI cdylibs and run the C# tests against them
+    Test {
+        /// Skip the tests that need a pcap runtime
+        #[arg(long)]
+        no_pcap: bool,
+        /// Also build the SOEM cdylib (opt-in: it is GPL-3.0-only)
+        #[arg(long)]
+        soem: bool,
+    },
+    /// `dotnet format` the C# solution
     Format {
+        /// Rewrite the files instead of only checking them
         #[arg(long)]
         fix: bool,
     },
+    /// Build and run a C# example from `bindings/csharp/examples/`
     Example {
+        /// Example project name
         name: String,
+        /// Build the Debug configuration instead of Release
         #[arg(long)]
         debug: bool,
+        /// Do not wrap the run in `sudo`
         #[arg(long)]
         no_sudo: bool,
+        /// Also build the SOEM cdylib (opt-in: it is GPL-3.0-only)
+        #[arg(long)]
+        soem: bool,
     },
 }
 
@@ -58,19 +82,23 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             run("dotnet", ["build", SOLUTION, "-c", config], &dir)
         }
         CsCmd::Pack { native_dir, out } => pack(root, native_dir, out),
-        CsCmd::Test => {
-            let native = build_ffi(root)?;
+        CsCmd::Test { no_pcap, soem } => {
+            let native = build_ffi(root, soem)?;
+            let filter: &[&str] = if no_pcap {
+                &["--filter", PCAP_TRAIT]
+            } else {
+                &[]
+            };
             if cfg!(target_os = "windows") {
                 run("dotnet", ["build", SOLUTION, "-c", "Debug"], &dir)?;
                 stage_native_libs(&native, &dir)?;
-                run(
-                    "dotnet",
-                    ["test", SOLUTION, "-c", "Debug", "--no-build"],
-                    &dir,
-                )
+                let mut args = vec!["test", SOLUTION, "-c", "Debug", "--no-build"];
+                args.extend(filter);
+                run("dotnet", args, &dir)
             } else {
                 let mut cmd = Command::new("dotnet");
                 cmd.args(["test", SOLUTION, "-c", "Debug"])
+                    .args(filter)
                     .current_dir(&dir);
                 set_native_lib_path(&mut cmd, &native);
                 spawn(cmd, "dotnet")
@@ -87,8 +115,9 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             name,
             debug,
             no_sudo,
+            soem,
         } => {
-            let native = build_ffi(root)?;
+            let native = build_ffi(root, soem)?;
             let config = if debug { "Debug" } else { "Release" };
             let project_dir = dir.join("examples").join(&name);
             let project = project_dir.join(format!("{name}.csproj"));
@@ -194,13 +223,15 @@ fn host_rid() -> Result<&'static str> {
     })
 }
 
-fn build_ffi(root: &Path) -> Result<PathBuf> {
+fn build_ffi(root: &Path, soem: bool) -> Result<PathBuf> {
     let ffi = root.join("bindings").join("ffi");
-    run(
-        "cargo",
-        ["build", "--workspace", "--exclude", SOEM_CRATE, "--release"],
-        &ffi,
-    )?;
+    let mut args = vec!["build", "--workspace"];
+    if !soem {
+        args.push("--exclude");
+        args.push(SOEM_CRATE);
+    }
+    args.push("--release");
+    run("cargo", args, &ffi)?;
     Ok(ffi.join("target").join("release"))
 }
 

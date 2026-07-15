@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 
 use crate::util::{on_path, run};
@@ -9,23 +9,27 @@ const PROJECT_NAME: &str = "autd3-fpga";
 
 #[derive(Subcommand)]
 pub enum FpgaCmd {
+    /// Generate the Vivado project
     Project,
-
+    /// Synthesize, implement, and write the bitstream / `autd3-fpga.mcs`
     Build {
+        /// Re-synthesize even when a bitstream already exists
         #[arg(long)]
         force: bool,
     },
-
+    /// Build, then configure the SPI flash of the device
     Flash {
+        /// Re-synthesize even when a bitstream already exists
         #[arg(long)]
         force: bool,
     },
-
+    /// Run the Vivado simulation testbenches
     Sim {
+        /// Only run this testbench (all of them if omitted)
         #[arg(long)]
         tb: Option<String>,
     },
-
+    /// Remove the Vivado project and its build outputs
     Clean,
 }
 
@@ -131,8 +135,8 @@ pub fn resolve_vivado() -> Result<String> {
 
 #[cfg(windows)]
 fn find_vivado_windows() -> Option<String> {
-    use winreg::RegKey;
     use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
 
     const NEEDLES: [&str; 4] = [
         "Vivado",

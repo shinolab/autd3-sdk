@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 
 use crate::util::{on_path, run, run_built_bin, run_tool};
@@ -38,28 +38,35 @@ pub fn build_backend_and_frontend(root: &Path, debug: bool) -> Result<(PathBuf, 
 
 #[derive(Subcommand)]
 pub enum SimulatorCmd {
-    /// Build the backend workspace and the browser frontend bundle.
+    /// Build the backend workspace and the browser frontend bundle
     Build {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
     },
-    /// Clippy the backend workspace and the (wasm) frontend.
+    /// Clippy the backend workspace and the (wasm) frontend
     Lint,
-    /// Rustfmt the backend workspace and the frontend (check by default).
+    /// Rustfmt the backend workspace and the frontend
     Format {
+        /// Rewrite the files instead of only checking them
         #[arg(long)]
         fix: bool,
     },
-    /// Build the frontend and run the backend serving it.
+    /// Build the frontend and run the backend serving it
     Run {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Open the simulator in a browser
         #[arg(long)]
         open: bool,
+        /// Reuse the already built frontend bundle
         #[arg(long)]
         skip_web_build: bool,
+        /// Port the frontend is served on
         #[arg(long, default_value_t = 8081)]
         port: u16,
+        /// Port the client Link connects to
         #[arg(long, default_value_t = 8080)]
         link_port: u16,
     },
@@ -145,10 +152,7 @@ fn ensure_css(frontend: &Path) -> Result<()> {
 
 fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
     if !on_path("dx") {
-        bail!(
-            "`dx` (dioxus-cli) not found on PATH. Install it with \
-             `cargo install dioxus-cli@^0.7`."
-        );
+        bail!("`dx` (dioxus-cli) not found on PATH.");
     }
     ensure_css(frontend)?;
     let mut dx_args = vec!["build", "--platform", "web"];

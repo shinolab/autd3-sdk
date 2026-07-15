@@ -1,17 +1,23 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 
 use crate::util::{on_path, run};
 
 #[derive(Subcommand)]
 pub enum CpuCmd {
+    /// Build `board` and link it with `platform/autd3-platform.o` into the flashable `.bin`
     Build,
+    /// Build, then write the `.bin` to the device with J-Link
     Flash,
+    /// Run the portable firmware logic (`autd3-cpu-fw`) tests on the host
     Test,
+    /// Clippy the firmware
     Lint,
+    /// Rustfmt the firmware
     Format {
+        /// Rewrite the files instead of only checking them
         #[arg(long)]
         fix: bool,
     },

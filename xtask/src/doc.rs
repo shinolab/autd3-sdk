@@ -4,11 +4,11 @@ use std::process::{Child, Command};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Subcommand;
-use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
+use toml_edit::{value, ArrayOfTables, DocumentMut, Item, Table};
 
-use crate::py::{MIT_WHEELS, develop, ensure_venv, pip_install, venv_python};
+use crate::py::{develop, ensure_venv, pip_install, venv_python, MIT_WHEELS};
 use crate::util::{capture, on_path, run, run_tool};
 
 const FIRMWARE_MARKER: &str = "Firmware v";
@@ -19,26 +19,31 @@ const LONG_RUNNING_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Subcommand)]
 pub enum DocCmd {
+    /// Build the static site into `doc/dist/`
     Build,
+    /// Run the Astro dev server
     Serve {
+        /// Open the site in a browser
         #[arg(long)]
         open: bool,
     },
+    /// Compile the Rust and C# samples and run the Python ones
     Samples {
-        /// Only detect drift in the example list (no rewrite, no build).
+        /// Only detect drift in the example list (no rewrite, no build)
         #[arg(long)]
         check: bool,
-        /// Only run the Python samples (skip the Rust compile).
+        /// Only run the Python samples
         #[arg(long)]
         python: bool,
-        /// Only compile the C# samples (skip the Rust compile).
+        /// Only compile the C# samples
         #[arg(long)]
         csharp: bool,
     },
+    /// Type-check the site without building it
     Check,
-    /// Inline a version snapshot's code examples to drop its `@codes` dependency.
+    /// Inline a version snapshot's code examples to drop its `@codes` dependency
     FreezeVersion {
-        /// Target version slug (e.g. 0.1.x).
+        /// Target version slug (e.g. 0.1.x)
         slug: String,
     },
 }

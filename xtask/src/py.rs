@@ -24,33 +24,49 @@ const NATIVE_LIB_WHEELS: &[&str] = &["autd3-link-ethercrab", SOEM_WHEEL];
 
 #[derive(Subcommand)]
 pub enum PyCmd {
+    /// Build the wheels into `bindings/python/target/wheels`
     Build {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Also build the SOEM wheel (opt-in: it is GPL-3.0-only)
         #[arg(long)]
         soem: bool,
     },
+    /// Install the wheels into the local venv in editable mode
     Develop {
+        /// Build the release profile instead of dev
         #[arg(long)]
         release: bool,
+        /// Also install the SOEM wheel (opt-in: it is GPL-3.0-only)
         #[arg(long)]
         soem: bool,
     },
+    /// Clippy the Python binding workspace
     Lint,
+    /// Rustfmt the Python binding workspace
     Format {
+        /// Rewrite the files instead of only checking them
         #[arg(long)]
         fix: bool,
     },
+    /// Install the wheels into the local venv and run pytest
     Test {
+        /// Also install and exercise the SOEM wheel (opt-in: it is GPL-3.0-only)
         #[arg(long)]
         soem: bool,
     },
+    /// Run a Python example from `bindings/python/examples/`
     Example {
+        /// Example script name (without `.py`)
         name: String,
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Do not wrap the run in `sudo`
         #[arg(long)]
         no_sudo: bool,
+        /// Arguments forwarded to the example
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -71,7 +87,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
                 if !debug {
                     args.push("--release");
                 }
-                if NATIVE_LIB_WHEELS.contains(wheel) {
+                if NATIVE_LIB_WHEELS.contains(&wheel) {
                     args.push("--auditwheel");
                     args.push("warn");
                 }
@@ -81,7 +97,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
         }
         PyCmd::Develop { release, soem } => {
             let venv = ensure_venv(&dir)?;
-            develop(&dir, &venv, wheels(soem), release)
+            develop(&dir, &venv, &wheels(soem), release)
         }
         PyCmd::Lint => {
             let mut args = vec!["clippy", "--workspace", "--all-targets"];
@@ -91,7 +107,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
         PyCmd::Format { fix } => cargo_fmt_packages(&dir, fix),
         PyCmd::Test { soem } => {
             let venv = ensure_venv(&dir)?;
-            develop(&dir, &venv, wheels(soem), false)?;
+            develop(&dir, &venv, &wheels(soem), false)?;
             let python = venv_python(&venv);
             if dir.join("tests").is_dir() {
                 pip_install(&dir, &venv, &["pytest", "numpy", "scipy", "polars"])?;
@@ -123,24 +139,13 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
     }
 }
 
-fn wheels(soem: bool) -> &'static [&'static str] {
+fn wheels(soem: bool) -> Vec<&'static str> {
     if soem {
-        const ALL: &[&str] = &[
-            "autd3-core",
-            "autd3-pattern",
-            "autd3-pattern-holo",
-            "autd3-modulation",
-            "autd3-link-ethercrab",
-            "autd3-link-remote",
-            "autd3-link-twincat",
-            "autd3-link-nop",
-            "autd3",
-            "autd3-emulator",
-            SOEM_WHEEL,
-        ];
-        ALL
+        let mut wheels = MIT_WHEELS.to_vec();
+        wheels.push(SOEM_WHEEL);
+        wheels
     } else {
-        MIT_WHEELS
+        MIT_WHEELS.to_vec()
     }
 }
 
