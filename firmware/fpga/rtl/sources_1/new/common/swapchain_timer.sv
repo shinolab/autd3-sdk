@@ -10,12 +10,8 @@ module swapchain_timer (
     output wire UPDATE_SETTINGS_OUT
 );
 
-  localparam int DivLatency = 51;
-  localparam int TotalLatency = 1 + 2 * DivLatency + 8 + 1;
-
-  logic update_settings;
+  logic update_settings = 1'b0;
   logic update_pending = 1'b0;
-  logic [$clog2(TotalLatency)-1:0] cnt;
 
   typedef enum logic {
     IDLE,
@@ -24,8 +20,15 @@ module swapchain_timer (
 
   state_t state = IDLE;
 
-  logic load_settings;
+  logic   load_settings;
   assign load_settings = (state == IDLE) & (UPDATE_SETTINGS_IN | update_pending);
+
+
+  logic marker = 1'b0;
+  always_ff @(posedge CLK) if (load_settings) marker <= ~marker;
+
+  logic idx_dout_valid[params::NumBanks];
+  logic out_marker[params::NumBanks];
 
   assign UPDATE_SETTINGS_OUT = update_settings;
 
@@ -36,13 +39,13 @@ module swapchain_timer (
     logic [23:0] _unused_rem;
     logic [47:0] _unused_quo;
     logic [23:0] rem;
-    logic idx_dout_valid;
+    logic cnt_marker;
     logic [15:0] idx;
 
     assign IDX[i] = idx;
 
     always_ff @(posedge CLK) begin
-      idx <= (idx_dout_valid) ? rem[15:0] : idx;
+      idx <= (idx_dout_valid[i]) ? rem[15:0] : idx;
       if (load_settings) begin
         freq_div <= FREQ_DIV[i];
         cycle <= CYCLE[i] + 1;
@@ -52,32 +55,37 @@ module swapchain_timer (
     div_48_24 div_cnt (
         .s_axis_dividend_tdata(SYS_TIME[56:9]),
         .s_axis_dividend_tvalid(1'b1),
+        .s_axis_dividend_tuser(marker),
         .s_axis_dividend_tready(),
         .s_axis_divisor_tdata({8'd0, freq_div}),
         .s_axis_divisor_tvalid(1'b1),
         .s_axis_divisor_tready(),
         .aclk(CLK),
         .m_axis_dout_tdata({quo, _unused_rem}),
+        .m_axis_dout_tuser(cnt_marker),
         .m_axis_dout_tvalid()
     );
     div_48_24 div_idx (
         .s_axis_dividend_tdata(quo),
         .s_axis_dividend_tvalid(1'b1),
+        .s_axis_dividend_tuser(cnt_marker),
         .s_axis_dividend_tready(),
         .s_axis_divisor_tdata({7'd0, cycle}),
         .s_axis_divisor_tvalid(1'b1),
         .s_axis_divisor_tready(),
         .aclk(CLK),
         .m_axis_dout_tdata({_unused_quo, rem}),
-        .m_axis_dout_tvalid(idx_dout_valid)
+        .m_axis_dout_tuser(out_marker[i]),
+        .m_axis_dout_tvalid(idx_dout_valid[i])
     );
   end
+
+  logic marker_captured = 1'b0;
 
   always_ff @(posedge CLK) begin
     case (state)
       IDLE: begin
         update_settings <= 1'b0;
-        cnt <= '0;
         if (UPDATE_SETTINGS_IN | update_pending) begin
           update_pending <= 1'b0;
           state <= LOAD;
@@ -85,8 +93,8 @@ module swapchain_timer (
       end
       LOAD: begin
         update_pending <= update_pending | UPDATE_SETTINGS_IN;
-        cnt <= cnt + 1;
-        if (cnt == TotalLatency) begin
+        if (idx_dout_valid[0] && (out_marker[0] != marker_captured)) begin
+          marker_captured <= out_marker[0];
           update_settings <= 1'b1;
           state <= IDLE;
         end
