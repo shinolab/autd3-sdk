@@ -62,7 +62,7 @@ jobs:
           node-version: '24'
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-about@0.9.0,git-cliff
+          tool: cargo-about,git-cliff
       - name: Download native libs
         uses: actions/download-artifact@v8
         with:
