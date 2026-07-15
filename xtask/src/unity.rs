@@ -98,19 +98,27 @@ const PACKAGES: &[UnityPkg] = &[
 
 #[derive(Subcommand)]
 pub enum UnityCmd {
+    /// Stage the C# sources and the host-RID native libs into the UPM packages
     Build {
+        /// Also build the SOEM native lib (opt-in: it is GPL-3.0-only)
         #[arg(long)]
         soem: bool,
+        /// Also write a `Packages/manifest.json` snippet for the staged packages
         #[arg(long)]
         manifest: bool,
     },
+    /// Pack the UPM packages into `bindings/unity/dist/` and verify the tarballs
     Pack {
+        /// Directory holding the per-RID native libraries; the host RID only if omitted
         #[arg(long)]
         native_dir: Option<PathBuf>,
+        /// Directory to write the `.tgz` files to
         #[arg(short, long)]
         out: Option<PathBuf>,
     },
+    /// Run the Unity Test Framework tests
     Test {
+        /// Path to the Unity Editor executable
         #[arg(long)]
         unity_editor: Option<PathBuf>,
     },
@@ -589,7 +597,6 @@ fn resolve_managed_dir(unity_editor: Option<PathBuf>) -> Result<PathBuf> {
         .context(
             "Unity Editor path required: pass --unity-editor <editor-root> or set AUTD3_UNITY_EDITOR",
         )?;
-    // Accept either an editor root or a direct Managed/UnityEngine directory.
     for candidate in [
         editor.join("Data").join("Managed").join("UnityEngine"),
         editor.join("Contents").join("Managed").join("UnityEngine"),

@@ -1,11 +1,11 @@
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Args;
-use toml_edit::{DocumentMut, Item, Value, value};
+use toml_edit::{value, DocumentMut, Item, Value};
 
 use crate::changelog::write_changelog_file;
-use crate::component::{COMPONENTS, Component, detect};
+use crate::component::{detect, Component, COMPONENTS};
 use crate::cpu::gen_param;
 use crate::util::capture;
 
@@ -13,10 +13,11 @@ const DOC_COMPONENT: &str = "doc";
 
 #[derive(Args)]
 pub struct BumpVersionCmd {
+    /// Component to bump: software, python, cs, unity, simulator, console, firmware, or doc
     component: Option<String>,
-
+    /// Version to bump to
     version: Option<String>,
-
+    /// Leave CHANGELOG.md untouched
     #[arg(long)]
     no_changelog: bool,
 }
@@ -91,9 +92,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
     print_next_steps(component.name);
     if component.name == "software" {
         println!();
-        println!(
-            "Then, to freeze the outgoing doc version series (no-op on a patch release; see README.md > ドキュメントサイト):"
-        );
+        println!("Then, to freeze the outgoing doc version series");
         println!("  cargo xtask bump-version doc");
         println!();
     }

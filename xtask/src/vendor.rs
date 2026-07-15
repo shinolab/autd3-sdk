@@ -31,7 +31,6 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
         let entry = entry?;
         let path = entry.path();
         let name = entry.file_name();
-        // The firmware's own unit tests are not part of the emulator build.
         if name == "tests" {
             continue;
         }

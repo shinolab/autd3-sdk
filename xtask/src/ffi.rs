@@ -9,14 +9,20 @@ const SOEM_CRATE: &str = "autd3-ffi-link-soem";
 
 #[derive(Subcommand)]
 pub enum FfiCmd {
+    /// Build the C ABI cdylibs
     Build {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Also build the SOEM cdylib (opt-in: it is GPL-3.0-only)
         #[arg(long)]
         soem: bool,
     },
+    /// Clippy the FFI workspace
     Lint,
+    /// Rustfmt the FFI workspace
     Format {
+        /// Rewrite the files instead of only checking them
         #[arg(long)]
         fix: bool,
     },

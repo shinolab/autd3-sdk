@@ -7,28 +7,31 @@ use crate::util::{run, run_built_bin};
 
 #[derive(Subcommand)]
 pub enum FirmwareCmd {
+    /// Download a released firmware bundle and write it to the device (J-Link / Vivado)
     Write(WriteArgs),
-
+    /// Build the CPU and FPGA firmware and zip them into `firmware/dist/`
     Bundle(BundleArgs),
 }
 
 #[derive(clap::Args)]
 pub struct BundleArgs {
+    /// Re-synthesize the FPGA even when a bitstream already exists
     #[arg(long)]
     force: bool,
 }
 
 #[derive(clap::Args)]
 pub struct WriteArgs {
+    /// Firmware version to write (e.g. 1.2.3)
     #[arg(long)]
     version: Option<String>,
-
+    /// What to write: `both` (default), `cpu`, or `fpga`
     #[arg(long)]
     target: Option<String>,
-
+    /// Re-download the bundle even when it is already cached
     #[arg(long)]
     force_download: bool,
-
+    /// List the available firmware versions and exit
     #[arg(long)]
     list: bool,
 }

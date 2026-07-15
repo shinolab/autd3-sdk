@@ -9,25 +9,29 @@ use crate::util::run;
 
 #[derive(Subcommand)]
 pub enum ConsoleCmd {
-    /// Build the console workspace.
+    /// Build the console workspace
     Build {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
     },
-    /// Clippy the console workspace.
+    /// Clippy the console workspace
     Lint,
-    /// Rustfmt the console workspace (check by default).
+    /// Rustfmt the console workspace
     Format {
+        /// Rewrite the files instead of only checking them
         #[arg(long)]
         fix: bool,
     },
-    /// Build and run the console GUI.
+    /// Build and run the console GUI
     Run {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
     },
-    /// Build console + simulator (+ twincat on Windows) and produce a distributable archive.
+    /// Build console + simulator (+ twincat on Windows) and produce a distributable archive
     Bundle {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
     },

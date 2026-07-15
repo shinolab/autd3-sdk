@@ -7,28 +7,41 @@ use crate::util::run;
 
 #[derive(Subcommand)]
 pub enum EmulatorCmd {
+    /// Build the emulator workspace
     Build {
+        /// Enable the GPU-accelerated field computation
         #[arg(long)]
         gpu: bool,
     },
+    /// Run the emulator workspace tests
     Test {
+        /// Enable the GPU-accelerated field computation
         #[arg(long)]
         gpu: bool,
     },
+    /// Clippy the emulator workspace
     Lint {
+        /// Enable the GPU-accelerated field computation
         #[arg(long)]
         gpu: bool,
     },
+    /// Rustfmt the emulator workspace
     Format {
+        /// Rewrite the files instead of only checking them
         #[arg(long)]
         fix: bool,
     },
+    /// Build and run an emulator example
     Example {
+        /// Example binary name
         name: String,
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Do not plot the computed field
         #[arg(long)]
         no_plot: bool,
+        /// Arguments forwarded to the example
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },

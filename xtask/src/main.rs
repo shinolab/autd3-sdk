@@ -6,7 +6,6 @@ mod cpu;
 mod cs;
 mod doc;
 mod emulator;
-mod example;
 mod ffi;
 mod firmware;
 mod fpga;
@@ -29,7 +28,6 @@ use cpu::{CpuCmd, run_cpu};
 use cs::{CsCmd, run_cs};
 use doc::{DocCmd, run_doc};
 use emulator::{EmulatorCmd, run_emulator};
-use example::{ExampleCmd, run_example};
 use ffi::{FfiCmd, run_ffi};
 use firmware::{FirmwareCmd, run_firmware};
 use fpga::{FpgaCmd, run_fpga};
@@ -43,7 +41,7 @@ use util::workspace_root;
 use vendor::{VendorFwCmd, run_vendor_fw};
 
 #[derive(Parser)]
-#[command(name = "xtask", about = "autd3-rs dev task runner")]
+#[command(name = "xtask", about = "autd3-sdk dev task runner")]
 struct Cli {
     #[command(subcommand)]
     cmd: TopCmd,
@@ -51,65 +49,81 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum TopCmd {
+    /// The Rust client workspace (`crates/`).
     Rust {
         #[command(subcommand)]
         cmd: RustCmd,
     },
+    /// The CPU firmware (`firmware/cpu/`, no_std Rust).
     Cpu {
         #[command(subcommand)]
         cmd: CpuCmd,
     },
+    /// The auxiliary tools (`tools/`).
     Tool {
         #[command(subcommand)]
         cmd: ToolCmd,
     },
+    /// The sound-field simulator (`simulator/`).
     Simulator {
         #[command(subcommand)]
         cmd: SimulatorCmd,
     },
+    /// The GUI console (`console/`).
     Console {
         #[command(subcommand)]
         cmd: ConsoleCmd,
     },
+    /// The firmware emulator (`emulator/`).
     Emulator {
         #[command(subcommand)]
         cmd: EmulatorCmd,
     },
+    /// The FPGA firmware (`firmware/fpga/`, Vivado required).
     Fpga {
         #[command(subcommand)]
         cmd: FpgaCmd,
     },
+    /// The firmware distribution: bundle a release zip, write it to a device.
     Firmware {
         #[command(subcommand)]
         cmd: FirmwareCmd,
     },
+    /// The Python bindings (`bindings/python/`).
     Py {
         #[command(subcommand)]
         cmd: PyCmd,
     },
+    /// The C ABI layer every binding is built on (`bindings/ffi/`).
     Ffi {
         #[command(subcommand)]
         cmd: FfiCmd,
     },
+    /// The C# bindings (`bindings/csharp/`).
     Cs {
         #[command(subcommand)]
         cmd: CsCmd,
     },
+    /// The Unity UPM packages (`bindings/unity/`).
     Unity {
         #[command(subcommand)]
         cmd: UnityCmd,
     },
+    /// The third-party license notices shipped with the distributed artifacts.
     License {
         #[command(subcommand)]
         cmd: LicenseCmd,
     },
+    /// The documentation site (`doc/`).
     Doc {
         #[command(subcommand)]
         cmd: DocCmd,
     },
-    Example(ExampleCmd),
+    /// Generate CHANGELOG.md / release notes with git-cliff.
     Changelog(ChangelogCmd),
+    /// Bump a component's version and regenerate CHANGELOG.md (no git operations).
     BumpVersion(BumpVersionCmd),
+    /// Copy `firmware/cpu/fw/src` into the emulator's vendor directory.
     VendorFw(VendorFwCmd),
 }
 
@@ -132,7 +146,6 @@ fn main() -> Result<()> {
         TopCmd::VendorFw(cmd) => run_vendor_fw(&root, &cmd),
         TopCmd::License { cmd } => run_license(&root, &cmd),
         TopCmd::Doc { cmd } => run_doc(&root, &cmd),
-        TopCmd::Example(cmd) => run_example(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),
     }

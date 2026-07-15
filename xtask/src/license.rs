@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::{Subcommand, ValueEnum};
 
 use crate::util::{on_path, run};
@@ -104,10 +104,13 @@ in the autd3-sdk repository at the release tag.
 
 #[derive(Subcommand)]
 pub enum LicenseCmd {
+    /// Generate the third-party license notices with cargo-about
     Generate {
+        /// Artifact to generate the notices for
         #[arg(value_enum, default_value_t = GenTarget::All)]
         target: GenTarget,
     },
+    /// Check the dependency licenses of every workspace with cargo-deny
     Check,
 }
 
@@ -149,7 +152,7 @@ fn generate(root: &Path, target: GenTarget) -> Result<()> {
 
 fn check(root: &Path) -> Result<()> {
     if !on_path("cargo-deny") {
-        bail!("`cargo-deny` is required (cargo install --locked cargo-deny@0.19.9)");
+        bail!("`cargo-deny` is required");
     }
     let config = root.join("deny.toml");
     let config = config.to_string_lossy().into_owned();
@@ -167,7 +170,7 @@ fn check(root: &Path) -> Result<()> {
 
 fn ensure_about() -> Result<()> {
     if !on_path("cargo-about") {
-        bail!("`cargo-about` is required (cargo install --locked cargo-about@0.9.0)");
+        bail!("`cargo-about` is required");
     }
     Ok(())
 }

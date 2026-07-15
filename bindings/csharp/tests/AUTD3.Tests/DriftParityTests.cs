@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using AUTD3;
 using Xunit;
 using static AUTD3.Units;
@@ -55,14 +54,9 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        [Trait("Category", "Pcap")]
         public void EtherCrabLinkOptionPresets()
         {
-            // the ethercrab cdylib imports wpcap/Packet, which CI's Windows runner has no Npcap for
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                return;
-            }
-
             var safe = AUTD3.Link.EtherCrabLinkOption.SafeDefault();
             Assert.Equal(TimeSpan.FromMilliseconds(1), safe.Sync0Period);
             Assert.Equal(safe.Sync0Period, safe.Sync0Shift);

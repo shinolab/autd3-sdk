@@ -9,43 +9,58 @@ use crate::util::{on_path, run, run_built_bin};
 
 #[derive(Subcommand)]
 pub enum ToolCmd {
+    /// Measure the EtherCAT link performance with the XorHash command
     Perftest {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Do not wrap the run in `sudo`
         #[arg(long)]
         no_sudo: bool,
+        /// Enable the `mem-profile` feature (allocation size histogram)
         #[arg(long)]
         mem_profile: bool,
+        /// Arguments forwarded to the tool
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Soak-test frame reception by streaming WritePatternBuffer at the CPU board
     Patternsoak {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Do not wrap the run in `sudo`
         #[arg(long)]
         no_sudo: bool,
+        /// Arguments forwarded to the tool
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-
+    /// Measure the EtherCAT link stability (OP-state retention) and auto-tune sync0_period / sync0_shift
     Synctune {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Do not wrap the run in `sudo`
         #[arg(long)]
         no_sudo: bool,
+        /// Arguments forwarded to the tool
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-
+    /// Run the interactive firmware acceptance tests against a real device
     FirmwareTest {
+        /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Do not wrap the run in `sudo`
         #[arg(long)]
         no_sudo: bool,
+        /// Arguments forwarded to the tool
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-
+    /// Set up TwinCAT (Windows only: .NET Framework 4.8 + the TwinCAT XAE COM API)
     Twincat {
         #[command(subcommand)]
         cmd: TwincatCmd,
@@ -54,30 +69,42 @@ pub enum ToolCmd {
 
 #[derive(Subcommand)]
 pub enum TwincatCmd {
+    /// Generate the TwinCAT project and activate its configuration
     Run {
+        /// Build the Debug configuration instead of Release
         #[arg(long)]
         debug: bool,
+        /// Arguments forwarded to twincat-cli
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
+    /// Open the generated TwinCAT project in the XAE Shell
     Open {
+        /// Build the Debug configuration instead of Release
         #[arg(long)]
         debug: bool,
+        /// Arguments forwarded to twincat-cli
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
+    /// Diagnose the TwinCAT installation and the AUTD3 ESI/adapter setup
     Doctor {
+        /// Build the Debug configuration instead of Release
         #[arg(long)]
         debug: bool,
+        /// Arguments forwarded to twincat-cli
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
+    /// Install the AUTD3 ESI file into the TwinCAT installation
     InstallEsi {
+        /// Build the Debug configuration instead of Release
         #[arg(long)]
         debug: bool,
+        /// Arguments forwarded to twincat-cli
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -195,7 +222,6 @@ fn generate_twincat_licenses(dir: &Path) {
         );
         return;
     }
-    // Export per-package license texts into a scratch dir, then assemble one file.
     let export = dir.join("obj").join("license-texts");
     let _ = std::fs::remove_dir_all(&export);
     if std::fs::create_dir_all(&export).is_err() {

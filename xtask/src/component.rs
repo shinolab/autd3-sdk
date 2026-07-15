@@ -6,15 +6,10 @@ use crate::util::capture;
 
 pub struct Component {
     pub name: &'static str,
-
     pub section: &'static str,
-
     pub tag_prefix: &'static str,
-
     pub include_paths: &'static [&'static str],
-
     pub also_shipped_by: &'static [&'static str],
-
     pub version_file: &'static str,
 }
 

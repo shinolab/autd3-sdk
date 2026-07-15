@@ -24,3 +24,4 @@ warnings = "deny"
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+doc_markdown = "allow"

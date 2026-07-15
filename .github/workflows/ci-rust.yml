@@ -29,4 +29,4 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo xtask rust format
       - run: cargo xtask rust lint
-      - run: cargo xtask rust test
+      - run: cargo xtask rust test ${{ runner.os == 'Windows' && '--no-pcap' || '' }}
