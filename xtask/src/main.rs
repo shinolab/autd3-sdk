@@ -18,7 +18,6 @@ mod simulator;
 mod tool;
 mod unity;
 mod util;
-mod vendor;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -40,7 +39,6 @@ use simulator::{SimulatorCmd, run_simulator};
 use tool::{ToolCmd, run_tool};
 use unity::{UnityCmd, run_unity};
 use util::workspace_root;
-use vendor::{VendorFwCmd, run_vendor_fw};
 
 #[derive(Parser)]
 #[command(name = "xtask", about = "autd3-sdk dev task runner")]
@@ -125,8 +123,6 @@ enum TopCmd {
     Changelog(ChangelogCmd),
     /// Bump a component's version and regenerate CHANGELOG.md (no git operations).
     BumpVersion(BumpVersionCmd),
-    /// Copy `firmware/cpu/fw/src` into the emulator's vendor directory.
-    VendorFw(VendorFwCmd),
 }
 
 fn main() -> Result<()> {
@@ -145,7 +141,6 @@ fn main() -> Result<()> {
         TopCmd::Ffi { cmd } => run_ffi(&root, &cmd),
         TopCmd::Cs { cmd } => run_cs(&root, cmd),
         TopCmd::Unity { cmd } => run_unity(&root, cmd),
-        TopCmd::VendorFw(cmd) => run_vendor_fw(&root, &cmd),
         TopCmd::License { cmd } => run_license(&root, &cmd),
         TopCmd::Doc { cmd } => run_doc(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),

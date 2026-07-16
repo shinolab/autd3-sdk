@@ -1,5 +1,5 @@
 use crate::emu_fpga::FpgaEmulator;
-use crate::port::Port;
+use autd3_cpu_fw::Port;
 
 impl Port for FpgaEmulator {
     fn fpga_write(&mut self, addr: u16, value: u16) {

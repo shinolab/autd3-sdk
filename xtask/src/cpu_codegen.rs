@@ -7,7 +7,7 @@ use crate::util::run;
 
 const PARAMS_SVH_REL: &str = "firmware/fpga/rtl/sources_1/new/headers/params.svh";
 const FW_OUT_REL: &str = "firmware/cpu/fw/src/params.rs";
-const WIRE_OUT_REL: &str = "crates/autd3-cpu-wire/src/params.rs";
+const WIRE_OUT_REL: &str = "firmware/cpu/wire/src/params.rs";
 
 const FW_INTERNAL_PREFIXES: &[&str] = &[
     "ADDR_",
