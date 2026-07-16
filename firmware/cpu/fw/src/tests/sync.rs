@@ -3,9 +3,8 @@ use crate::params::{
     ADDR_MOD_CYCLE0, CTL_FLAG_SYNC_SET,
 };
 use crate::proto::{
-    CMD_CLEAR, CMD_READ_ERROR_DETAIL, CMD_RESET, CMD_SYNCHRONIZE, ERR_FPGA_TIMEOUT,
-    ERR_INVALID_SYNC0_CYCLE, ERR_SYNC_NOT_READY, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES,
-    WIRE_RX_FRAME_BYTES, WIRE_RX_GAP_END, WIRE_RX_GAP_START,
+    Cmd, Error, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES, WIRE_RX_FRAME_BYTES,
+    WIRE_RX_GAP_END, WIRE_RX_GAP_START,
 };
 use crate::tests::builders::{config_mod, write_mod_buffer, write_pattern_buffer};
 use crate::tests::mock::{Frame, Harness};
@@ -16,7 +15,7 @@ fn synchronize_writes_next_sync0_and_latches() {
     h.port.next_sync0 = 0x1122_3344_5566_7788;
     h.port.sync0_cycle_ns = 1_000_000;
 
-    h.deliver(&Frame::new(0, CMD_SYNCHRONIZE));
+    h.deliver(&Frame::new(0, Cmd::Synchronize));
 
     assert_eq!(h.ack(), 0);
     assert_eq!(h.data(), 0);
@@ -35,13 +34,13 @@ fn synchronize_returns_sync_not_ready_when_dc_unset() {
     let mut h = Harness::new();
     h.port.next_sync0 = 0;
 
-    h.deliver(&Frame::new(0, CMD_SYNCHRONIZE));
-    assert_eq!(h.data(), ERR_SYNC_NOT_READY);
+    h.deliver(&Frame::new(0, Cmd::Synchronize));
+    assert_eq!(h.data(), Error::SyncNotReady as u8);
     assert_eq!(h.ctl(ADDR_ECAT_SYNC_TIME_0), 0);
     assert_eq!(h.latch_count(CTL_FLAG_SYNC_SET), 0);
 
-    h.deliver(&Frame::new(1, CMD_READ_ERROR_DETAIL));
-    assert_eq!(h.data(), ERR_SYNC_NOT_READY);
+    h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
+    assert_eq!(h.data(), Error::SyncNotReady as u8);
 }
 
 #[test]
@@ -50,7 +49,7 @@ fn synchronize_writes_sync0_cycle_from_esc_register() {
     h.port.next_sync0 = 0x10;
     h.port.sync0_cycle_ns = 2_000_000;
 
-    h.deliver(&Frame::new(0, CMD_SYNCHRONIZE));
+    h.deliver(&Frame::new(0, Cmd::Synchronize));
 
     assert_eq!(h.data(), 0);
     assert_eq!(h.ctl(ADDR_ECAT_SYNC_CYCLE_0), 40960);
@@ -63,9 +62,9 @@ fn synchronize_rejects_single_shot_sync0() {
     let mut h = Harness::new();
     h.port.sync0_cycle_ns = 0;
 
-    h.deliver(&Frame::new(0, CMD_SYNCHRONIZE));
+    h.deliver(&Frame::new(0, Cmd::Synchronize));
 
-    assert_eq!(h.data(), ERR_INVALID_SYNC0_CYCLE);
+    assert_eq!(h.data(), Error::InvalidSync0Cycle as u8);
     assert_eq!(h.latch_count(CTL_FLAG_SYNC_SET), 0);
 }
 
@@ -74,9 +73,9 @@ fn synchronize_rejects_non_multiple_of500us() {
     let mut h = Harness::new();
     h.port.sync0_cycle_ns = 750_000;
 
-    h.deliver(&Frame::new(0, CMD_SYNCHRONIZE));
+    h.deliver(&Frame::new(0, Cmd::Synchronize));
 
-    assert_eq!(h.data(), ERR_INVALID_SYNC0_CYCLE);
+    assert_eq!(h.data(), Error::InvalidSync0Cycle as u8);
     assert_eq!(h.latch_count(CTL_FLAG_SYNC_SET), 0);
 }
 
@@ -86,7 +85,7 @@ fn synchronize_writes_both_cycle_words_for_large_cycle() {
     h.port.next_sync0 = 0x10;
     h.port.sync0_cycle_ns = 3_500_000;
 
-    h.deliver(&Frame::new(0, CMD_SYNCHRONIZE));
+    h.deliver(&Frame::new(0, Cmd::Synchronize));
 
     assert_eq!(h.data(), 0);
     assert_eq!(h.ctl(ADDR_ECAT_SYNC_CYCLE_0), 0x1800);
@@ -99,11 +98,11 @@ fn set_and_wait_update_times_out_when_latch_stuck() {
     h.port.latch_stuck = true;
 
     h.port.next_sync0 = 0x1122_3344_5566_7788;
-    h.deliver(&Frame::new(0, CMD_SYNCHRONIZE));
-    assert_eq!(h.data(), ERR_FPGA_TIMEOUT);
+    h.deliver(&Frame::new(0, Cmd::Synchronize));
+    assert_eq!(h.data(), Error::FpgaTimeout as u8);
 
-    h.deliver(&Frame::new(1, CMD_READ_ERROR_DETAIL));
-    assert_eq!(h.data(), ERR_FPGA_TIMEOUT);
+    h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
+    assert_eq!(h.data(), Error::FpgaTimeout as u8);
 
     h.port.latch_stuck = false;
 }
@@ -115,8 +114,8 @@ fn fpga_init_latch_timeout_is_latched_into_error_detail() {
     h.init();
     h.port.latch_stuck = false;
 
-    h.deliver(&Frame::new(0, CMD_READ_ERROR_DETAIL));
-    assert_eq!(h.data(), ERR_FPGA_TIMEOUT);
+    h.deliver(&Frame::new(0, Cmd::ReadErrorDetail));
+    assert_eq!(h.data(), Error::FpgaTimeout as u8);
 }
 
 #[test]
@@ -124,8 +123,8 @@ fn clear_reports_fpga_timeout_when_latch_stuck() {
     let mut h = Harness::new();
     h.port.latch_stuck = true;
 
-    h.deliver(&Frame::new(0, CMD_CLEAR));
-    assert_eq!(h.data(), ERR_FPGA_TIMEOUT);
+    h.deliver(&Frame::new(0, Cmd::Clear));
+    assert_eq!(h.data(), Error::FpgaTimeout as u8);
 
     h.port.latch_stuck = false;
 }
@@ -139,7 +138,7 @@ fn fpga_state_survives_reset() {
     h.deliver(&config_mod(2, 1, 5, 256));
     assert_eq!(h.data(), 0);
 
-    h.deliver(&Frame::new(99, CMD_RESET));
+    h.deliver(&Frame::new(99, Cmd::Reset));
     assert_eq!(h.expected_seq(), 0);
 
     assert_eq!(h.emission_word(0, 0), 0x5A5A);

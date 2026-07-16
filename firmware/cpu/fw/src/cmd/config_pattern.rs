@@ -1,49 +1,75 @@
-use zerocopy::FromBytes;
+use core::mem::offset_of;
+
+use zerocopy::little_endian::{U16, U32};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use crate::app::Cpu;
-use crate::fpga;
+use crate::fpga::{self, EmissionType};
 use crate::params::{
     ADDR_PATTERN_CYCLE0, ADDR_PATTERN_FREQ_DIV0, ADDR_PATTERN_MODE0, ADDR_PATTERN_NUM_FOCI0,
     ADDR_PATTERN_REP0, ADDR_PATTERN_SOUND_SPEED0, BRAM_SELECT_CONTROLLER, CTL_FLAG_PATTERN_SET,
-    EMISSION_MAX_INDICES, EMISSION_TYPE_RAW, NUM_BANKS, NUM_FOCI_MAX,
+    EMISSION_MAX_INDICES, NUM_BANKS, NUM_FOCI_MAX,
 };
 use crate::port::Port;
-use crate::proto::{
-    ConfigPatternPayload, ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING, MAX_FOCI_TOTAL,
-};
+use crate::proto::{Error, MAX_FOCI_TOTAL};
+
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct ConfigPatternPayload {
+    pub bank: u8,
+    pub emission_type: u8,
+    pub divider: U16,
+    pub size: U32,
+    pub num_foci: u8,
+    _reserved: u8,
+    pub sound_speed: U16,
+    pub rep: U16,
+}
+
+const _: () = assert!(offset_of!(ConfigPatternPayload, bank) == 0);
+const _: () = assert!(offset_of!(ConfigPatternPayload, emission_type) == 1);
+const _: () = assert!(offset_of!(ConfigPatternPayload, divider) == 2);
+const _: () = assert!(offset_of!(ConfigPatternPayload, size) == 4);
+const _: () = assert!(offset_of!(ConfigPatternPayload, num_foci) == 8);
+const _: () = assert!(offset_of!(ConfigPatternPayload, sound_speed) == 10);
+const _: () = assert!(offset_of!(ConfigPatternPayload, rep) == 12);
 
 impl Cpu {
-    pub(crate) fn config_pattern<P: Port>(&self, port: &mut P, payload: &[u8]) -> u8 {
+    pub(crate) fn config_pattern<P: Port>(
+        &self,
+        port: &mut P,
+        payload: &[u8],
+    ) -> Result<(), Error> {
         let Ok((p, _)) = ConfigPatternPayload::ref_from_prefix(payload) else {
-            return ERR_INVALID_PAYLOAD;
+            return Err(Error::InvalidPayload);
         };
         let bank = p.bank;
-        let emission_type = p.emission_type;
         let divider = p.divider.get();
         let size = p.size.get();
         let num_foci = p.num_foci;
         let sound_speed = p.sound_speed.get();
         let rep = p.rep.get();
 
-        let mut invalid = usize::from(bank) >= NUM_BANKS
-            || emission_type > EMISSION_TYPE_RAW
-            || divider == 0
-            || size == 0;
+        let Some(emission_type) = EmissionType::from_u8(p.emission_type) else {
+            return Err(Error::InvalidPayload);
+        };
+        let mut invalid = usize::from(bank) >= NUM_BANKS || divider == 0 || size == 0;
         if !invalid {
-            invalid = if emission_type == EMISSION_TYPE_RAW {
-                size > EMISSION_MAX_INDICES
-            } else {
-                num_foci == 0
-                    || num_foci > NUM_FOCI_MAX
-                    || size > MAX_FOCI_TOTAL / u32::from(num_foci)
-                    || sound_speed == 0
+            invalid = match emission_type {
+                EmissionType::Raw => size > EMISSION_MAX_INDICES,
+                EmissionType::Foci => {
+                    num_foci == 0
+                        || num_foci > NUM_FOCI_MAX
+                        || size > MAX_FOCI_TOTAL / u32::from(num_foci)
+                        || sound_speed == 0
+                }
             };
         }
         if invalid {
-            return ERR_INVALID_PAYLOAD;
+            return Err(Error::InvalidPayload);
         }
         if self.silencer.violates_pattern_div(divider) {
-            return ERR_INVALID_SILENCER_SETTING;
+            return Err(Error::InvalidSilencerSetting);
         }
 
         let bank_offset = u16::from(bank);
@@ -51,7 +77,7 @@ impl Cpu {
             port,
             BRAM_SELECT_CONTROLLER,
             ADDR_PATTERN_MODE0 + bank_offset,
-            u16::from(emission_type),
+            emission_type as u16,
         );
         fpga::write(
             port,

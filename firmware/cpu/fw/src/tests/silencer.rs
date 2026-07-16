@@ -1,4 +1,5 @@
-use crate::fpga::{PHASE_CORR_WORDS, PWE_TABLE_SIZE, REP_INFINITE, TRANSITION_MODE_IMMEDIATE};
+use crate::cmd::silencer::SILENCER_FLAG_STRICT_MODE;
+use crate::fpga::{PHASE_CORR_WORDS, PWE_TABLE_SIZE, REP_INFINITE, TransitionMode};
 use crate::params::{
     ADDR_CTL_FLAG, ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_REP0, ADDR_MOD_REQ_RD_BANK,
     ADDR_PATTERN_CYCLE0, ADDR_PATTERN_FREQ_DIV0, ADDR_PATTERN_MODE0, ADDR_PATTERN_REP0,
@@ -8,10 +9,7 @@ use crate::params::{
     CTL_FLAG_SYNC_SET, EMISSION_TYPE_RAW, NUM_BANKS, NUM_TRANSDUCERS,
     SILENCER_FLAG_FIXED_UPDATE_RATE_MODE,
 };
-use crate::proto::{
-    CMD_CLEAR, ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING, OUTPUT_MASK_WORDS,
-    SILENCER_FLAG_STRICT_MODE,
-};
+use crate::proto::{Cmd, Error, OUTPUT_MASK_WORDS};
 use crate::tests::builders::{change_mod_bank, config_mod, config_pattern, set_silencer};
 use crate::tests::mock::{Frame, Harness};
 
@@ -66,9 +64,9 @@ fn set_silencer_rejects_zero_completion_steps_in_steps_mode() {
     let mut h = Harness::new();
 
     h.deliver(&set_silencer(0, 0, 256, 256, 0, 7));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
     h.deliver(&set_silencer(1, 0, 256, 256, 5, 0));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
     assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_PHASE), 40);
@@ -86,7 +84,7 @@ fn set_silencer_rejects_zero_update_rate_in_rate_mode() {
         10,
         40,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
     h.deliver(&set_silencer(
         1,
         SILENCER_FLAG_FIXED_UPDATE_RATE_MODE,
@@ -95,7 +93,7 @@ fn set_silencer_rejects_zero_update_rate_in_rate_mode() {
         10,
         40,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 256);
     assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_PHASE), 256);
@@ -126,7 +124,7 @@ fn strict_silencer_rejects_too_fast_mod_config() {
     assert_eq!(h.data(), 0);
 
     h.deliver(&config_mod(1, 0, 9, 100));
-    assert_eq!(h.data(), ERR_INVALID_SILENCER_SETTING);
+    assert_eq!(h.data(), Error::InvalidSilencerSetting as u8);
     assert_eq!(h.ctl(ADDR_MOD_FREQ_DIV0), 0xFFFF);
 
     h.deliver(&config_mod(2, 0, 10, 100));
@@ -148,7 +146,7 @@ fn strict_silencer_rejects_too_fast_pattern_config() {
     assert_eq!(h.data(), 0);
 
     h.deliver(&config_pattern(1, 0, EMISSION_TYPE_RAW, 20, 1, 0, 0));
-    assert_eq!(h.data(), ERR_INVALID_SILENCER_SETTING);
+    assert_eq!(h.data(), Error::InvalidSilencerSetting as u8);
     assert_eq!(h.ctl(ADDR_PATTERN_FREQ_DIV0), 0xFFFF);
 
     h.deliver(&config_pattern(2, 0, EMISSION_TYPE_RAW, 40, 1, 0, 0));
@@ -174,7 +172,7 @@ fn strict_silencer_rejected_when_active_sampling_too_fast() {
     assert_eq!(h.data(), 0);
 
     h.deliver(&set_silencer(1, SILENCER_FLAG_STRICT_MODE, 256, 256, 8, 40));
-    assert_eq!(h.data(), ERR_INVALID_SILENCER_SETTING);
+    assert_eq!(h.data(), Error::InvalidSilencerSetting as u8);
     assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
     assert_eq!(h.ctl(ADDR_SILENCER_FLAG), 0);
 }
@@ -222,8 +220,8 @@ fn strict_silencer_rejects_switch_to_too_fast_bank() {
     ));
     assert_eq!(h.data(), 0);
 
-    h.deliver(&change_mod_bank(2, 1, TRANSITION_MODE_IMMEDIATE, 0));
-    assert_eq!(h.data(), ERR_INVALID_SILENCER_SETTING);
+    h.deliver(&change_mod_bank(2, 1, TransitionMode::Immediate, 0));
+    assert_eq!(h.data(), Error::InvalidSilencerSetting as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 }
 
@@ -241,9 +239,9 @@ fn clear_releases_strict_silencer_guard() {
     assert_eq!(h.data(), 0);
 
     h.deliver(&config_mod(1, 0, 5, 100));
-    assert_eq!(h.data(), ERR_INVALID_SILENCER_SETTING);
+    assert_eq!(h.data(), Error::InvalidSilencerSetting as u8);
 
-    h.deliver(&Frame::new(2, CMD_CLEAR));
+    h.deliver(&Frame::new(2, Cmd::Clear));
     assert_eq!(h.data(), 0);
 
     h.deliver(&config_mod(3, 0, 5, 100));
@@ -265,10 +263,10 @@ fn clear_restores_silencer_and_bank_baseline() {
     assert_eq!(h.data(), 0);
     h.deliver(&config_mod(1, 1, 50, 100));
     assert_eq!(h.data(), 0);
-    h.deliver(&change_mod_bank(2, 1, TRANSITION_MODE_IMMEDIATE, 0));
+    h.deliver(&change_mod_bank(2, 1, TransitionMode::Immediate, 0));
     assert_eq!(h.data(), 0);
 
-    h.deliver(&Frame::new(3, CMD_CLEAR));
+    h.deliver(&Frame::new(3, Cmd::Clear));
     assert_eq!(h.data(), 0);
 
     assert_eq!(h.ctl(ADDR_SILENCER_FLAG), 0);

@@ -1,6 +1,7 @@
 use std::vec;
 use std::vec::Vec;
 
+use crate::cmd::silencer::SILENCER_FLAG_STRICT_MODE;
 use crate::fpga::PWE_TABLE_SIZE;
 use crate::params::{
     ADDR_CTL_FLAG, ADDR_DEBUG_VALUE0_0, ADDR_FPGA_STATE, ADDR_VERSION_NUM_MAJOR,
@@ -8,11 +9,7 @@ use crate::params::{
     CTL_FLAG_GPIO_IN_0, CTL_FLAG_GPIO_IN_1, CTL_FLAG_GPIO_IN_2, CTL_FLAG_GPIO_IN_3,
     NUM_TRANSDUCERS,
 };
-use crate::proto::{
-    CMD_CLEAR, CMD_READ_FPGA_FW_VERSION_MAJOR, CMD_READ_FPGA_FW_VERSION_MINOR,
-    CMD_READ_FPGA_FW_VERSION_PATCH, CMD_READ_FPGA_STATE, ERR_INVALID_PAYLOAD, OUTPUT_MASK_WORDS,
-    SILENCER_FLAG_STRICT_MODE,
-};
+use crate::proto::{Cmd, Error, OUTPUT_MASK_WORDS};
 use crate::tests::builders::{
     force_fan, gpio_in, gpio_out, output_mask, phase_corr, pwe, set_silencer,
 };
@@ -38,7 +35,7 @@ fn force_fan_sets_and_clears_persistent_bit() {
 fn force_fan_rejects_out_of_range() {
     let mut h = Harness::new();
     h.deliver(&force_fan(0, 2));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 }
 
 #[test]
@@ -68,7 +65,7 @@ fn emulate_gpio_in_maps_bits() {
 fn emulate_gpio_in_rejects_out_of_range() {
     let mut h = Harness::new();
     h.deliver(&gpio_in(0, 0x10));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 }
 
 #[test]
@@ -136,7 +133,7 @@ fn gpio_out_writes_debug_values_and_latches() {
 fn read_fpga_state_returns_register_byte() {
     let mut h = Harness::new();
     h.set_ctl(ADDR_FPGA_STATE, 0x83);
-    h.deliver(&Frame::new(0, CMD_READ_FPGA_STATE));
+    h.deliver(&Frame::new(0, Cmd::ReadFpgaState));
     assert_eq!(h.data(), 0x83);
 }
 
@@ -147,13 +144,13 @@ fn read_fpga_fw_version_returns_register_bytes() {
     h.set_ctl(ADDR_VERSION_NUM_MINOR, 0x0B);
     h.set_ctl(ADDR_VERSION_NUM_PATCH, 0x0C);
 
-    h.deliver(&Frame::new(0, CMD_READ_FPGA_FW_VERSION_MAJOR));
+    h.deliver(&Frame::new(0, Cmd::ReadFpgaFwVersionMajor));
     assert_eq!(h.data(), 0x0A);
 
-    h.deliver(&Frame::new(1, CMD_READ_FPGA_FW_VERSION_MINOR));
+    h.deliver(&Frame::new(1, Cmd::ReadFpgaFwVersionMinor));
     assert_eq!(h.data(), 0x0B);
 
-    h.deliver(&Frame::new(2, CMD_READ_FPGA_FW_VERSION_PATCH));
+    h.deliver(&Frame::new(2, Cmd::ReadFpgaFwVersionPatch));
     assert_eq!(h.data(), 0x0C);
 }
 
@@ -161,6 +158,6 @@ fn read_fpga_fw_version_returns_register_bytes() {
 fn clear_resets_force_fan() {
     let mut h = Harness::new();
     h.deliver(&force_fan(0, 1));
-    h.deliver(&Frame::new(1, CMD_CLEAR));
+    h.deliver(&Frame::new(1, Cmd::Clear));
     assert_eq!(h.ctl(ADDR_CTL_FLAG) & CTL_FLAG_FORCE_FAN, 0);
 }

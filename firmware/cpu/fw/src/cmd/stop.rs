@@ -1,9 +1,9 @@
 use crate::fpga;
 use crate::params::{BRAM_CNT_SELECT_OUTPUT_MASK, BRAM_SELECT_CONTROLLER};
 use crate::port::Port;
-use crate::proto::{ERR_NONE, OUTPUT_MASK_WORDS};
+use crate::proto::OUTPUT_MASK_WORDS;
 
-pub(crate) fn mute<P: Port>(port: &mut P) -> u8 {
+pub(crate) fn mute<P: Port>(port: &mut P) {
     for j in 0..OUTPUT_MASK_WORDS {
         fpga::write(
             port,
@@ -12,5 +12,4 @@ pub(crate) fn mute<P: Port>(port: &mut P) -> u8 {
             0,
         );
     }
-    ERR_NONE
 }

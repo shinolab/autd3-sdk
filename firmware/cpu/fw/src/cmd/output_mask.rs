@@ -1,18 +1,33 @@
+use core::mem::{offset_of, size_of};
+
+use zerocopy::little_endian::U16;
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+
 use crate::fpga;
 use crate::params::{BRAM_CNT_SELECT_OUTPUT_MASK, BRAM_SELECT_CONTROLLER};
 use crate::port::Port;
-use crate::proto::{ERR_NONE, OUTPUT_MASK_OFFSET_DATA, OUTPUT_MASK_WORDS};
+use crate::proto::{Error, OUTPUT_MASK_WORDS, PAYLOAD_BYTES};
 
-pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> u8 {
-    let data = &payload[OUTPUT_MASK_OFFSET_DATA..];
-    for j in 0..OUTPUT_MASK_WORDS {
-        let value = u16::from_le_bytes([data[2 * j], data[2 * j + 1]]);
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct OutputMaskPayload {
+    pub data: [U16; OUTPUT_MASK_WORDS],
+}
+
+const _: () = assert!(size_of::<OutputMaskPayload>() <= PAYLOAD_BYTES);
+const _: () = assert!(offset_of!(OutputMaskPayload, data) == 0);
+
+pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
+    let Ok((p, _)) = OutputMaskPayload::ref_from_prefix(payload) else {
+        return Err(Error::InvalidPayload);
+    };
+    for (j, value) in p.data.iter().enumerate() {
         fpga::write(
             port,
             BRAM_SELECT_CONTROLLER,
             (u16::from(BRAM_CNT_SELECT_OUTPUT_MASK) << 8) | j as u16,
-            value,
+            value.get(),
         );
     }
-    ERR_NONE
+    Ok(())
 }

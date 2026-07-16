@@ -1,4 +1,7 @@
-use zerocopy::FromBytes;
+use core::mem::offset_of;
+
+use zerocopy::little_endian::{U16, U32};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use crate::app::Cpu;
 use crate::fpga;
@@ -7,14 +10,27 @@ use crate::params::{
     NUM_BANKS,
 };
 use crate::port::Port;
-use crate::proto::{
-    ConfigModPayload, ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING, MOD_BUFFER_SAMPLES,
-};
+use crate::proto::{Error, MOD_BUFFER_SAMPLES};
+
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct ConfigModPayload {
+    pub bank: u8,
+    _reserved: u8,
+    pub divider: U16,
+    pub size: U32,
+    pub rep: U16,
+}
+
+const _: () = assert!(offset_of!(ConfigModPayload, bank) == 0);
+const _: () = assert!(offset_of!(ConfigModPayload, divider) == 2);
+const _: () = assert!(offset_of!(ConfigModPayload, size) == 4);
+const _: () = assert!(offset_of!(ConfigModPayload, rep) == 8);
 
 impl Cpu {
-    pub(crate) fn config_mod<P: Port>(&self, port: &mut P, payload: &[u8]) -> u8 {
+    pub(crate) fn config_mod<P: Port>(&self, port: &mut P, payload: &[u8]) -> Result<(), Error> {
         let Ok((p, _)) = ConfigModPayload::ref_from_prefix(payload) else {
-            return ERR_INVALID_PAYLOAD;
+            return Err(Error::InvalidPayload);
         };
         let bank = p.bank;
         let divider = p.divider.get();
@@ -23,10 +39,10 @@ impl Cpu {
 
         if usize::from(bank) >= NUM_BANKS || divider == 0 || size == 0 || size > MOD_BUFFER_SAMPLES
         {
-            return ERR_INVALID_PAYLOAD;
+            return Err(Error::InvalidPayload);
         }
         if self.silencer.violates_mod_div(divider) {
-            return ERR_INVALID_SILENCER_SETTING;
+            return Err(Error::InvalidSilencerSetting);
         }
 
         let bank_offset = u16::from(bank);

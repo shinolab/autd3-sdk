@@ -3,6 +3,8 @@ use std::rc::Rc;
 use std::vec;
 use std::vec::Vec;
 
+use zerocopy::{Immutable, IntoBytes};
+
 use crate::app::Cpu;
 use crate::fpga::PWE_TABLE_SIZE;
 use crate::params::{
@@ -14,7 +16,7 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{
-    CMD_RESET, EMISSION_RAM_WORDS, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS, PAYLOAD_BYTES,
+    Cmd, EMISSION_RAM_WORDS, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS, PAYLOAD_BYTES, Telemetry,
     WIRE_RX_FRAME_BYTES, WIRE_RX_GAP_END, WIRE_RX_GAP_START,
 };
 
@@ -188,7 +190,11 @@ pub(crate) struct Frame {
 }
 
 impl Frame {
-    pub(crate) fn new(seq: u8, cmd: u8) -> Self {
+    pub(crate) fn new(seq: u8, cmd: Cmd) -> Self {
+        Self::raw(seq, cmd as u8)
+    }
+
+    pub(crate) fn raw(seq: u8, cmd: u8) -> Self {
         Self {
             seq,
             cmd,
@@ -196,23 +202,11 @@ impl Frame {
         }
     }
 
-    pub(crate) fn payload(&mut self) -> &mut [u8; PAYLOAD_BYTES] {
-        &mut self.payload
-    }
-
-    pub(crate) fn put_u16(&mut self, offset: usize, value: u16) -> &mut Self {
-        self.payload[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
-        self
-    }
-
-    pub(crate) fn put_u32(&mut self, offset: usize, value: u32) -> &mut Self {
-        self.payload[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-        self
-    }
-
-    pub(crate) fn put_u64(&mut self, offset: usize, value: u64) -> &mut Self {
-        self.payload[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
-        self
+    pub(crate) fn from_payload<P: IntoBytes + Immutable>(seq: u8, cmd: Cmd, payload: &P) -> Self {
+        let mut f = Self::new(seq, cmd);
+        let bytes = payload.as_bytes();
+        f.payload[..bytes.len()].copy_from_slice(bytes);
+        f
     }
 
     pub(crate) fn wire(&self) -> Box<[u8; WIRE_RX_FRAME_BYTES]> {
@@ -289,14 +283,14 @@ impl Harness {
     }
 
     pub(crate) fn arm_isr_reset(&mut self) {
-        self.arm_isr_frame(0, CMD_RESET);
+        self.arm_isr_frame(0, Cmd::Reset);
     }
 
-    pub(crate) fn arm_isr_frame(&mut self, seq: u8, cmd: u8) {
-        self.port.isr_frame = Some((Rc::clone(&self.cpu), seq, cmd));
+    pub(crate) fn arm_isr_frame(&mut self, seq: u8, cmd: Cmd) {
+        self.port.isr_frame = Some((Rc::clone(&self.cpu), seq, cmd as u8));
     }
 
-    pub(crate) fn telemetry(&self, id: u8) -> u8 {
+    pub(crate) fn telemetry(&self, id: Telemetry) -> u8 {
         self.cpu.telemetry(id)
     }
 

@@ -1,52 +1,62 @@
-use crate::fpga::REP_INFINITE;
-use crate::proto::{
-    CHANGE_BANK_OFFSET_BANK, CHANGE_BANK_OFFSET_MARGIN_NS, CHANGE_BANK_OFFSET_TRANSITION_MODE,
-    CHANGE_BANK_OFFSET_TRANSITION_VALUE, CMD_CHANGE_MOD_BANK, CMD_CHANGE_PATTERN_BANK,
-    CMD_CONFIG_MOD, CMD_CONFIG_PATTERN, CMD_EMULATE_GPIO_IN, CMD_FORCE_FAN, CMD_SET_GPIO_OUT,
-    CMD_SET_OUTPUT_MASK, CMD_SET_PHASE_CORR, CMD_SET_PWE, CMD_SET_SILENCER, CMD_WRITE_MOD_BUFFER,
-    CMD_WRITE_PATTERN_BUFFER, CMD_WRITE_PATTERN_COMPRESSED, CMD_XOR_HASH,
-    EM_COMPRESSED_OFFSET_BANK, EM_COMPRESSED_OFFSET_COUNT, EM_COMPRESSED_OFFSET_DATA,
-    EM_COMPRESSED_OFFSET_FORMAT, EM_COMPRESSED_OFFSET_OFFSET, EM_CONFIG_OFFSET_BANK,
-    EM_CONFIG_OFFSET_DIVIDER, EM_CONFIG_OFFSET_NUM_FOCI, EM_CONFIG_OFFSET_REP,
-    EM_CONFIG_OFFSET_SIZE, EM_CONFIG_OFFSET_SOUND_SPEED, EM_CONFIG_OFFSET_TYPE,
-    EM_WRITE_OFFSET_BANK, EM_WRITE_OFFSET_DATA, EM_WRITE_OFFSET_DATA_LEN, EM_WRITE_OFFSET_OFFSET,
-    FORCE_FAN_OFFSET_VALUE, GPIO_IN_OFFSET_FLAG, GPIO_OUT_OFFSET_DATA, MOD_CONFIG_OFFSET_BANK,
-    MOD_CONFIG_OFFSET_DIVIDER, MOD_CONFIG_OFFSET_REP, MOD_CONFIG_OFFSET_SIZE,
-    MOD_WRITE_OFFSET_BANK, MOD_WRITE_OFFSET_DATA, MOD_WRITE_OFFSET_DATA_LEN,
-    MOD_WRITE_OFFSET_OFFSET, OUTPUT_MASK_OFFSET_DATA, PHASE_CORR_OFFSET_DATA, PWE_OFFSET_DATA,
-    SILENCER_OFFSET_COMPLETION_STEPS_INTENSITY, SILENCER_OFFSET_COMPLETION_STEPS_PHASE,
-    SILENCER_OFFSET_FLAG, SILENCER_OFFSET_UPDATE_RATE_INTENSITY, SILENCER_OFFSET_UPDATE_RATE_PHASE,
-    XOR_HASH_OFFSET_DATA, XOR_HASH_OFFSET_DATA_LEN, XOR_HASH_OFFSET_SLEEP_MS,
-};
+use zerocopy::FromZeros;
+use zerocopy::little_endian::{U16, U32, U64};
+
+use crate::cmd::change_mod_bank::ChangeModBankPayload;
+use crate::cmd::change_pattern_bank::ChangePatternBankPayload;
+use crate::cmd::config_mod::ConfigModPayload;
+use crate::cmd::config_pattern::ConfigPatternPayload;
+use crate::cmd::force_fan::ForceFanPayload;
+use crate::cmd::gpio_in::GpioInPayload;
+use crate::cmd::gpio_out::GpioOutPayload;
+use crate::cmd::output_mask::OutputMaskPayload;
+use crate::cmd::phase_corr::PhaseCorrPayload;
+use crate::cmd::pwe::PwePayload;
+use crate::cmd::silencer::SilencerPayload;
+use crate::cmd::write_mod::WriteModPayload;
+use crate::cmd::write_pattern::WritePatternPayload;
+use crate::cmd::write_pattern_compressed::WritePatternCompressedPayload;
+use crate::cmd::xor_hash::XorHashPayload;
+use crate::fpga::{REP_INFINITE, TransitionMode};
+use crate::proto::Cmd;
 use crate::tests::mock::Frame;
 
 pub(crate) fn xor_hash_ok(seq: u8, sleep_ms: u16, data: &[u8]) -> Frame {
-    let mut f = Frame::new(seq, CMD_XOR_HASH);
-    f.put_u16(XOR_HASH_OFFSET_SLEEP_MS, sleep_ms);
-    let checksum = data.iter().fold(0u8, |h, b| h ^ b);
-    f.put_u16(XOR_HASH_OFFSET_DATA_LEN, (data.len() + 1) as u16);
-    f.payload()[XOR_HASH_OFFSET_DATA..XOR_HASH_OFFSET_DATA + data.len()].copy_from_slice(data);
-    f.payload()[XOR_HASH_OFFSET_DATA + data.len()] = checksum;
-    f
+    let mut p = XorHashPayload::new_zeroed();
+    p.sleep_ms = U16::new(sleep_ms);
+    p.data_len = U16::new((data.len() + 1) as u16);
+    p.data[..data.len()].copy_from_slice(data);
+    p.data[data.len()] = data.iter().fold(0u8, |h, b| h ^ b);
+    Frame::from_payload(seq, Cmd::XorHash, &p)
 }
 
 pub(crate) fn xor_hash_bad(seq: u8, data: &[u8]) -> Frame {
-    let mut f = Frame::new(seq, CMD_XOR_HASH);
-    f.put_u16(XOR_HASH_OFFSET_SLEEP_MS, 0);
-    f.put_u16(XOR_HASH_OFFSET_DATA_LEN, data.len() as u16);
-    f.payload()[XOR_HASH_OFFSET_DATA..XOR_HASH_OFFSET_DATA + data.len()].copy_from_slice(data);
-    f
+    let mut p = XorHashPayload::new_zeroed();
+    p.data_len = U16::new(data.len() as u16);
+    p.data[..data.len()].copy_from_slice(data);
+    Frame::from_payload(seq, Cmd::XorHash, &p)
+}
+
+pub(crate) fn xor_hash_corrupted(seq: u8, sleep_ms: u16, data: &[u8]) -> Frame {
+    // Build a well-formed frame (checksum appended) then flip a data byte so the
+    // running xor no longer cancels to zero.
+    let mut p = XorHashPayload::new_zeroed();
+    p.sleep_ms = U16::new(sleep_ms);
+    p.data_len = U16::new((data.len() + 1) as u16);
+    p.data[..data.len()].copy_from_slice(data);
+    p.data[data.len()] = data.iter().fold(0u8, |h, b| h ^ b);
+    p.data[0] ^= 0xFF;
+    Frame::from_payload(seq, Cmd::XorHash, &p)
 }
 
 pub(crate) fn write_pattern_buffer(seq: u8, bank: u8, offset_words: u32, words: &[u16]) -> Frame {
-    let mut f = Frame::new(seq, CMD_WRITE_PATTERN_BUFFER);
-    f.payload()[EM_WRITE_OFFSET_BANK] = bank;
-    f.put_u32(EM_WRITE_OFFSET_OFFSET, offset_words);
-    f.put_u16(EM_WRITE_OFFSET_DATA_LEN, (words.len() * 2) as u16);
+    let mut p = WritePatternPayload::new_zeroed();
+    p.bank = bank;
+    p.offset = U32::new(offset_words);
+    p.data_len = U16::new((words.len() * 2) as u16);
     for (i, w) in words.iter().enumerate() {
-        f.put_u16(EM_WRITE_OFFSET_DATA + 2 * i, *w);
+        p.data[2 * i..2 * i + 2].copy_from_slice(&w.to_le_bytes());
     }
-    f
+    Frame::from_payload(seq, Cmd::WritePatternBuffer, &p)
 }
 
 pub(crate) fn write_pattern_compressed(
@@ -57,24 +67,24 @@ pub(crate) fn write_pattern_compressed(
     count: u8,
     words: &[u16],
 ) -> Frame {
-    let mut f = Frame::new(seq, CMD_WRITE_PATTERN_COMPRESSED);
-    f.payload()[EM_COMPRESSED_OFFSET_BANK] = bank;
-    f.payload()[EM_COMPRESSED_OFFSET_FORMAT] = format;
-    f.payload()[EM_COMPRESSED_OFFSET_COUNT] = count;
-    f.put_u32(EM_COMPRESSED_OFFSET_OFFSET, offset_words);
+    let mut p = WritePatternCompressedPayload::new_zeroed();
+    p.bank = bank;
+    p.format = format;
+    p.count = count;
+    p.offset = U32::new(offset_words);
     for (i, w) in words.iter().enumerate() {
-        f.put_u16(EM_COMPRESSED_OFFSET_DATA + 2 * i, *w);
+        p.data[2 * i..2 * i + 2].copy_from_slice(&w.to_le_bytes());
     }
-    f
+    Frame::from_payload(seq, Cmd::WritePatternCompressed, &p)
 }
 
 pub(crate) fn write_mod_buffer(seq: u8, bank: u8, offset: u32, data: &[u8]) -> Frame {
-    let mut f = Frame::new(seq, CMD_WRITE_MOD_BUFFER);
-    f.payload()[MOD_WRITE_OFFSET_BANK] = bank;
-    f.put_u32(MOD_WRITE_OFFSET_OFFSET, offset);
-    f.put_u16(MOD_WRITE_OFFSET_DATA_LEN, data.len() as u16);
-    f.payload()[MOD_WRITE_OFFSET_DATA..MOD_WRITE_OFFSET_DATA + data.len()].copy_from_slice(data);
-    f
+    let mut p = WriteModPayload::new_zeroed();
+    p.bank = bank;
+    p.offset = U32::new(offset);
+    p.data_len = U16::new(data.len() as u16);
+    p.data[..data.len()].copy_from_slice(data);
+    Frame::from_payload(seq, Cmd::WriteModBuffer, &p)
 }
 
 pub(crate) fn config_mod(seq: u8, bank: u8, divider: u16, size: u32) -> Frame {
@@ -82,12 +92,12 @@ pub(crate) fn config_mod(seq: u8, bank: u8, divider: u16, size: u32) -> Frame {
 }
 
 pub(crate) fn config_mod_rep(seq: u8, bank: u8, divider: u16, size: u32, rep: u16) -> Frame {
-    let mut f = Frame::new(seq, CMD_CONFIG_MOD);
-    f.payload()[MOD_CONFIG_OFFSET_BANK] = bank;
-    f.put_u16(MOD_CONFIG_OFFSET_DIVIDER, divider);
-    f.put_u32(MOD_CONFIG_OFFSET_SIZE, size);
-    f.put_u16(MOD_CONFIG_OFFSET_REP, rep);
-    f
+    let mut p = ConfigModPayload::new_zeroed();
+    p.bank = bank;
+    p.divider = U16::new(divider);
+    p.size = U32::new(size);
+    p.rep = U16::new(rep);
+    Frame::from_payload(seq, Cmd::ConfigMod, &p)
 }
 
 pub(crate) fn config_pattern(
@@ -122,46 +132,52 @@ pub(crate) fn config_pattern_rep(
     sound_speed: u16,
     rep: u16,
 ) -> Frame {
-    let mut f = Frame::new(seq, CMD_CONFIG_PATTERN);
-    f.payload()[EM_CONFIG_OFFSET_BANK] = bank;
-    f.payload()[EM_CONFIG_OFFSET_TYPE] = emission_type;
-    f.put_u16(EM_CONFIG_OFFSET_DIVIDER, divider);
-    f.put_u32(EM_CONFIG_OFFSET_SIZE, size);
-    f.payload()[EM_CONFIG_OFFSET_NUM_FOCI] = num_foci;
-    f.put_u16(EM_CONFIG_OFFSET_SOUND_SPEED, sound_speed);
-    f.put_u16(EM_CONFIG_OFFSET_REP, rep);
-    f
+    let mut p = ConfigPatternPayload::new_zeroed();
+    p.bank = bank;
+    p.emission_type = emission_type;
+    p.divider = U16::new(divider);
+    p.size = U32::new(size);
+    p.num_foci = num_foci;
+    p.sound_speed = U16::new(sound_speed);
+    p.rep = U16::new(rep);
+    Frame::from_payload(seq, Cmd::ConfigPattern, &p)
 }
 
 pub(crate) fn change_pattern_bank(
     seq: u8,
     bank: u8,
-    transition_mode: u8,
+    transition_mode: TransitionMode,
     transition_value: u64,
 ) -> Frame {
-    let mut f = Frame::new(seq, CMD_CHANGE_PATTERN_BANK);
-    f.payload()[CHANGE_BANK_OFFSET_BANK] = bank;
-    f.payload()[CHANGE_BANK_OFFSET_TRANSITION_MODE] = transition_mode;
-    f.put_u64(CHANGE_BANK_OFFSET_TRANSITION_VALUE, transition_value);
-    f
+    let mut p = ChangePatternBankPayload::new_zeroed();
+    p.bank = bank;
+    p.transition_mode = transition_mode as u8;
+    p.transition_value = U64::new(transition_value);
+    Frame::from_payload(seq, Cmd::ChangePatternBank, &p)
 }
 
 pub(crate) fn change_mod_bank(
     seq: u8,
     bank: u8,
-    transition_mode: u8,
+    transition_mode: TransitionMode,
     transition_value: u64,
 ) -> Frame {
-    let mut f = Frame::new(seq, CMD_CHANGE_MOD_BANK);
-    f.payload()[CHANGE_BANK_OFFSET_BANK] = bank;
-    f.payload()[CHANGE_BANK_OFFSET_TRANSITION_MODE] = transition_mode;
-    f.put_u64(CHANGE_BANK_OFFSET_TRANSITION_VALUE, transition_value);
-    f
+    change_mod_bank_with_margin(seq, bank, transition_mode, transition_value, 0)
 }
 
-pub(crate) fn with_margin(mut f: Frame, margin_ns: u32) -> Frame {
-    f.put_u32(CHANGE_BANK_OFFSET_MARGIN_NS, margin_ns);
-    f
+pub(crate) fn change_mod_bank_with_margin(
+    seq: u8,
+    bank: u8,
+    transition_mode: TransitionMode,
+    transition_value: u64,
+    margin_ns: u32,
+) -> Frame {
+    let mut p = ChangeModBankPayload::new_zeroed();
+    p.bank = bank;
+    p.transition_mode = transition_mode as u8;
+    p.transition_value = U64::new(transition_value);
+    p.margin_ns = U32::new(margin_ns);
+    Frame::from_payload(seq, Cmd::ChangeModBank, &p)
 }
 
 pub(crate) fn set_silencer(
@@ -172,60 +188,53 @@ pub(crate) fn set_silencer(
     completion_steps_intensity: u16,
     completion_steps_phase: u16,
 ) -> Frame {
-    let mut f = Frame::new(seq, CMD_SET_SILENCER);
-    f.payload()[SILENCER_OFFSET_FLAG] = flag;
-    f.put_u16(SILENCER_OFFSET_UPDATE_RATE_INTENSITY, update_rate_intensity);
-    f.put_u16(SILENCER_OFFSET_UPDATE_RATE_PHASE, update_rate_phase);
-    f.put_u16(
-        SILENCER_OFFSET_COMPLETION_STEPS_INTENSITY,
-        completion_steps_intensity,
-    );
-    f.put_u16(
-        SILENCER_OFFSET_COMPLETION_STEPS_PHASE,
-        completion_steps_phase,
-    );
-    f
+    let mut p = SilencerPayload::new_zeroed();
+    p.flag = flag;
+    p.update_rate_intensity = U16::new(update_rate_intensity);
+    p.update_rate_phase = U16::new(update_rate_phase);
+    p.completion_steps_intensity = U16::new(completion_steps_intensity);
+    p.completion_steps_phase = U16::new(completion_steps_phase);
+    Frame::from_payload(seq, Cmd::SetSilencer, &p)
 }
 
 pub(crate) fn force_fan(seq: u8, value: u8) -> Frame {
-    let mut f = Frame::new(seq, CMD_FORCE_FAN);
-    f.payload()[FORCE_FAN_OFFSET_VALUE] = value;
-    f
+    let mut p = ForceFanPayload::new_zeroed();
+    p.value = value;
+    Frame::from_payload(seq, Cmd::ForceFan, &p)
 }
 
 pub(crate) fn gpio_in(seq: u8, flag: u8) -> Frame {
-    let mut f = Frame::new(seq, CMD_EMULATE_GPIO_IN);
-    f.payload()[GPIO_IN_OFFSET_FLAG] = flag;
-    f
+    let mut p = GpioInPayload::new_zeroed();
+    p.flag = flag;
+    Frame::from_payload(seq, Cmd::EmulateGpioIn, &p)
 }
 
 pub(crate) fn phase_corr(seq: u8, phases: &[u8]) -> Frame {
-    let mut f = Frame::new(seq, CMD_SET_PHASE_CORR);
-    f.payload()[PHASE_CORR_OFFSET_DATA..PHASE_CORR_OFFSET_DATA + phases.len()]
-        .copy_from_slice(phases);
-    f
+    let mut p = PhaseCorrPayload::new_zeroed();
+    p.data[..phases.len()].copy_from_slice(phases);
+    Frame::from_payload(seq, Cmd::SetPhaseCorr, &p)
 }
 
 pub(crate) fn output_mask(seq: u8, words: &[u16]) -> Frame {
-    let mut f = Frame::new(seq, CMD_SET_OUTPUT_MASK);
+    let mut p = OutputMaskPayload::new_zeroed();
     for (i, w) in words.iter().enumerate() {
-        f.put_u16(OUTPUT_MASK_OFFSET_DATA + 2 * i, *w);
+        p.data[i] = U16::new(*w);
     }
-    f
+    Frame::from_payload(seq, Cmd::SetOutputMask, &p)
 }
 
 pub(crate) fn pwe(seq: u8, table: &[u16]) -> Frame {
-    let mut f = Frame::new(seq, CMD_SET_PWE);
+    let mut p = PwePayload::new_zeroed();
     for (i, w) in table.iter().enumerate() {
-        f.put_u16(PWE_OFFSET_DATA + 2 * i, *w);
+        p.table[i] = U16::new(*w);
     }
-    f
+    Frame::from_payload(seq, Cmd::SetPwe, &p)
 }
 
 pub(crate) fn gpio_out(seq: u8, values: &[u64]) -> Frame {
-    let mut f = Frame::new(seq, CMD_SET_GPIO_OUT);
+    let mut p = GpioOutPayload::new_zeroed();
     for (i, v) in values.iter().enumerate() {
-        f.put_u64(GPIO_OUT_OFFSET_DATA + 8 * i, *v);
+        p.values[i] = U64::new(*v);
     }
-    f
+    Frame::from_payload(seq, Cmd::SetGpioOut, &p)
 }
