@@ -39,7 +39,6 @@ jobs:
           base: ${{ github.event_name == 'push' && github.ref_name || github.base_ref }}
           filters: |
             shared: &shared
-              - '.github/workflows/ci.yml'
               - '.github/actions/setup-rust/**'
             xtask-core: &xtask-core
               - 'xtask/src/util.rs'
