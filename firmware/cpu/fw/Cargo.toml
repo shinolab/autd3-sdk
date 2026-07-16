@@ -6,9 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Portable logic of the AUTD3 CPU board firmware (protocol, FPGA access, commands). no_std, hardware access behind the Port trait."
-# Not published: `autd3-rs-firmware-emulator` vendors these sources (cargo xtask vendor-fw)
-# instead of depending on this crate.
+description = "Portable logic of the AUTD3 CPU board firmware (protocol, FPGA access, commands)."
 publish = false
 
 [dependencies]

@@ -6,7 +6,7 @@ rust-version = "1.96"
 license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"
-description = "AUTD3 CPU board firmware (RZ/T1 R7S910018, Cortex-R4F). Links against the proprietary platform.o boot layer."
+description = "AUTD3 CPU board firmware (RZ/T1 R7S910018, Cortex-R4F)."
 publish = false
 
 [lib]
