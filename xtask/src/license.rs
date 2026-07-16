@@ -161,7 +161,7 @@ fn check(root: &Path) -> Result<()> {
         println!("== cargo-deny check licenses: {} ==", dir.display());
         run(
             "cargo",
-            ["deny", "check", "--config", &config, "licenses"],
+            ["deny", "--config", &config, "check", "licenses"],
             &dir,
         )?;
     }

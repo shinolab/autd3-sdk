@@ -17,6 +17,7 @@ allow = [
     "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.8
+unused-allowed-license = "allow"
 
 exceptions = [
     { name = "autd3-rs-link-soem", allow = ["GPL-3.0-only"] },
