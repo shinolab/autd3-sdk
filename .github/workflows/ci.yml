@@ -33,9 +33,12 @@ jobs:
       doc-samples: ${{ steps.filter.outputs.doc-samples }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: dorny/paths-filter@v4
         id: filter
         with:
+          token: ''
           base: ${{ github.event_name == 'push' && github.ref_name || github.base_ref }}
           filters: |
             shared: &shared
@@ -297,25 +300,29 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [rust, simulator, console, emulator, cpu, py, ffi, cs, unity, license, doc, guard]
+    needs: [changes, rust, simulator, console, emulator, cpu, py, ffi, cs, unity, license, doc, guard]
     runs-on: ubuntu-latest
     steps:
-      - name: Verify no job failed
+      - name: Verify detect-changes succeeded
         run: |
-          if [ "${{ needs.rust.result }}" = "failure" ] \
-            || [ "${{ needs.simulator.result }}" = "failure" ] \
-            || [ "${{ needs.console.result }}" = "failure" ] \
-            || [ "${{ needs.emulator.result }}" = "failure" ] \
-            || [ "${{ needs.cpu.result }}" = "failure" ] \
-            || [ "${{ needs.py.result }}" = "failure" ] \
-            || [ "${{ needs.ffi.result }}" = "failure" ] \
-            || [ "${{ needs.cs.result }}" = "failure" ] \
-            || [ "${{ needs.unity.result }}" = "failure" ] \
-            || [ "${{ needs.license.result }}" = "failure" ] \
-            || [ "${{ needs.doc.result }}" = "failure" ] \
-            || [ "${{ needs.guard.result }}" = "failure" ] \
-            || [ "${{ needs.guard.result }}" = "cancelled" ]; then
-            echo "A required job failed."
+          if [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "::error::detect-changes did not succeed (result: ${{ needs.changes.result }}); scope filtering is untrustworthy."
             exit 1
           fi
+      - name: Verify no required job failed or was cancelled
+        env:
+          RESULTS: >-
+            ${{ needs.rust.result }} ${{ needs.simulator.result }}
+            ${{ needs.console.result }} ${{ needs.emulator.result }}
+            ${{ needs.cpu.result }} ${{ needs.py.result }}
+            ${{ needs.ffi.result }} ${{ needs.cs.result }}
+            ${{ needs.unity.result }} ${{ needs.license.result }}
+            ${{ needs.doc.result }} ${{ needs.guard.result }}
+        run: |
+          for r in $RESULTS; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "::error::A required job failed or was cancelled (result: $r)."
+              exit 1
+            fi
+          done
           echo "All required jobs passed or were skipped."
