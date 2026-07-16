@@ -11,6 +11,8 @@ use crate::util::capture;
 
 const DOC_COMPONENT: &str = "doc";
 
+const FIRMWARE_VERSIONED_CRATES: &[&str] = &["autd3-cpu-wire", "autd3-cpu-fw"];
+
 #[derive(Args)]
 pub struct BumpVersionCmd {
     /// Component to bump: software, python, cs, unity, simulator, console, firmware, or doc
@@ -74,7 +76,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
         "firmware" => {
             bump_firmware(root, &core)?;
             println!(
-                "Updated firmware version (fw/src/version.rs + params.svh, regenerated params.rs) -> {core}"
+                "Updated firmware version (fw/wire/board Cargo.toml + params.svh, regenerated params.rs) -> {core}"
             );
         }
         other => bail!("no version-bump implementation for component `{other}`"),
@@ -235,8 +237,10 @@ fn print_next_steps(name: &str) {
             println!("  git add console/Cargo.toml console/Cargo.lock CHANGELOG.md");
         }
         "firmware" => {
+            println!("  cargo xtask rust build         # refresh Cargo.lock");
+            println!("  cargo xtask cpu build          # refresh firmware/cpu/board/Cargo.lock");
             println!(
-                "  git add firmware/cpu/fw/src/version.rs firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/fw/src/params.rs CHANGELOG.md"
+                "  git add firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/fw/src/params.rs firmware/cpu/fw/Cargo.toml firmware/cpu/wire/Cargo.toml firmware/cpu/board/Cargo.toml firmware/cpu/board/Cargo.lock Cargo.toml Cargo.lock CHANGELOG.md"
             );
         }
         _ => {}
@@ -298,7 +302,8 @@ fn bump_cargo_toml(path: &Path, version: &str) -> Result<()> {
         .and_then(Item::as_table_like_mut)
     {
         for (key, item) in deps.iter_mut() {
-            if !key.get().starts_with("autd3-") {
+            let name = key.get();
+            if !name.starts_with("autd3-") || FIRMWARE_VERSIONED_CRATES.contains(&name) {
                 continue;
             }
             if let Some(inline) = item.as_inline_table_mut() {
@@ -326,6 +331,31 @@ fn bump_package_version(path: &Path, version: &str) -> Result<()> {
         .and_then(Item::as_table_like_mut)
         .with_context(|| format!("missing [package] table in {}", path.display()))?;
     package.insert("version", value(version));
+    std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
+    Ok(())
+}
+
+fn bump_workspace_dep_version(path: &Path, dep: &str, version: &str) -> Result<()> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let mut doc: DocumentMut = text
+        .parse()
+        .with_context(|| format!("parsing {}", path.display()))?;
+    let item = doc
+        .get_mut("workspace")
+        .and_then(|w| w.get_mut("dependencies"))
+        .and_then(Item::as_table_like_mut)
+        .and_then(|deps| deps.get_mut(dep))
+        .with_context(|| {
+            format!(
+                "missing [workspace.dependencies] `{dep}` in {}",
+                path.display()
+            )
+        })?;
+    let inline = item
+        .as_inline_table_mut()
+        .with_context(|| format!("workspace dependency `{dep}` is not an inline table"))?;
+    inline.insert("version", Value::from(version));
     std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
     Ok(())
 }
@@ -443,12 +473,22 @@ fn bump_csharp_props(path: &Path, version: &str) -> Result<()> {
     Ok(())
 }
 
+fn package_version(path: &Path) -> Result<String> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let doc: DocumentMut = text
+        .parse()
+        .with_context(|| format!("parsing {}", path.display()))?;
+    doc.get("package")
+        .and_then(|p| p.get("version"))
+        .and_then(Item::as_str)
+        .map(str::to_string)
+        .with_context(|| format!("missing [package].version in {}", path.display()))
+}
+
 pub fn firmware_series(root: &Path) -> Result<String> {
-    let fw_lib = root.join("firmware/cpu/fw/src/version.rs");
-    let text = std::fs::read_to_string(&fw_lib)
-        .with_context(|| format!("reading {}", fw_lib.display()))?;
-    let major = read_digits_after(&text, "FW_VERSION_MAJOR: u8 = ")?;
-    let minor = read_digits_after(&text, "FW_VERSION_MINOR: u8 = ")?;
+    let version = package_version(&root.join("firmware/cpu/fw/Cargo.toml"))?;
+    let [major, minor, _] = version_parts(&version)?;
 
     let svh = root.join("firmware/fpga/rtl/sources_1/new/headers/params.svh");
     let text =
@@ -458,8 +498,8 @@ pub fn firmware_series(root: &Path) -> Result<String> {
 
     if (major, minor) != (fpga_major, fpga_minor) {
         bail!(
-            "CPU firmware version {major}.{minor}.x (fw/src/version.rs) and FPGA firmware version \
-             {fpga_major}.{fpga_minor}.x (params.svh) disagree; run `cargo xtask bump-version firmware <version>`"
+            "CPU firmware version {major}.{minor}.x (firmware/cpu/fw/Cargo.toml) and FPGA firmware \
+             version {fpga_major}.{fpga_minor}.x (params.svh) disagree; run `cargo xtask bump-version firmware <version>`"
         );
     }
     Ok(format!("{major}.{minor}"))
@@ -467,18 +507,6 @@ pub fn firmware_series(root: &Path) -> Result<String> {
 
 fn bump_firmware(root: &Path, version: &str) -> Result<()> {
     let [major, minor, patch] = version_parts(version)?;
-
-    let fw_lib = root.join("firmware/cpu/fw/src/version.rs");
-    let mut text = std::fs::read_to_string(&fw_lib)
-        .with_context(|| format!("reading {}", fw_lib.display()))?;
-    for (key, val) in [
-        ("FW_VERSION_MAJOR: u8 = ", major),
-        ("FW_VERSION_MINOR: u8 = ", minor),
-        ("FW_VERSION_PATCH: u8 = ", patch),
-    ] {
-        text = bump_digits_after(&text, key, val)?;
-    }
-    std::fs::write(&fw_lib, text).with_context(|| format!("writing {}", fw_lib.display()))?;
 
     let svh = root.join("firmware/fpga/rtl/sources_1/new/headers/params.svh");
     let mut text =
@@ -493,6 +521,13 @@ fn bump_firmware(root: &Path, version: &str) -> Result<()> {
     std::fs::write(&svh, text).with_context(|| format!("writing {}", svh.display()))?;
 
     gen_param(root)?;
+
+    bump_package_version(&root.join("firmware/cpu/fw/Cargo.toml"), version)?;
+    bump_package_version(&root.join("firmware/cpu/wire/Cargo.toml"), version)?;
+    bump_package_version(&root.join("firmware/cpu/board/Cargo.toml"), version)?;
+    for dep in FIRMWARE_VERSIONED_CRATES {
+        bump_workspace_dep_version(&root.join("Cargo.toml"), dep, version)?;
+    }
 
     let pages = crate::doc::rewrite_firmware_series(root, &format!("{major}.{minor}"))?;
     println!("Updated firmware version in {pages} doc page(s) -> {major}.{minor}.x");

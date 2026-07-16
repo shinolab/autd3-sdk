@@ -39,9 +39,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "autd3-cpu-fw"
+version = "0.3.0"
+dependencies = [
+ "autd3-cpu-wire",
+ "zerocopy",
+]
+
+[[package]]
+name = "autd3-cpu-wire"
+version = "0.3.0"
+dependencies = [
+ "zerocopy",
+]
+
+[[package]]
 name = "autd3-rs-core"
 version = "0.3.0"
 dependencies = [
+ "autd3-cpu-wire",
  "chrono",
  "nalgebra",
  "thiserror",
@@ -53,8 +69,8 @@ dependencies = [
 name = "autd3-rs-firmware-emulator"
 version = "0.3.0"
 dependencies = [
+ "autd3-cpu-fw",
  "autd3-rs-core",
- "zerocopy",
 ]
 
 [[package]]

@@ -68,7 +68,7 @@ pub const COMPONENTS: &[Component] = &[
         tag_prefix: "firmware-v",
         include_paths: &["firmware/**"],
         also_shipped_by: &[],
-        version_file: "firmware/cpu/fw/src/version.rs",
+        version_file: "firmware/cpu/fw/Cargo.toml",
     },
 ];
 
@@ -91,15 +91,6 @@ impl Component {
         let version = match self.name {
             "cs" => between(&text, "<Version>", "</Version>"),
             "unity" => after_quoted(&text, "\"version\":"),
-            "firmware" => {
-                let major = digits_after(&text, "FW_VERSION_MAJOR: u8 = ");
-                let minor = digits_after(&text, "FW_VERSION_MINOR: u8 = ");
-                let patch = digits_after(&text, "FW_VERSION_PATCH: u8 = ");
-                match (major, minor, patch) {
-                    (Some(a), Some(b), Some(c)) => Some(format!("{a}.{b}.{c}")),
-                    _ => None,
-                }
-            }
             _ => toml_version(&text),
         };
         version.with_context(|| format!("no version found in {}", file.display()))
@@ -145,15 +136,6 @@ fn after_quoted(text: &str, key: &str) -> Option<String> {
     let rest = rest.strip_prefix('"')?;
     let end = rest.find('"')?;
     Some(rest[..end].to_string())
-}
-
-fn digits_after(text: &str, key: &str) -> Option<String> {
-    let start = text.find(key)? + key.len();
-    let digits: String = text[start..]
-        .chars()
-        .take_while(char::is_ascii_digit)
-        .collect();
-    (!digits.is_empty()).then_some(digits)
 }
 
 pub fn release_sections(primary: &'static Component) -> Vec<&'static Component> {

@@ -2,7 +2,6 @@
 resolver = "3"
 members = [
     "crates/autd3-rs",
-    "crates/autd3-cpu-wire",
     "crates/autd3-rs-core",
     "crates/autd3-rs-firmware-emulator",
     "crates/autd3-rs-pattern",
@@ -13,6 +12,7 @@ members = [
     "crates/autd3-rs-link-soem",
     "crates/autd3-rs-link-twincat",
     "crates/autd3-rs-modulation",
+    "firmware/cpu/wire",
     "firmware/cpu/fw",
     "tools/perftest",
     "tools/patternsoak",
@@ -68,7 +68,8 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 ] }
 
 autd3-rs = { version = "0.3.0", path = "crates/autd3-rs" }
-autd3-cpu-wire = { version = "0.3.0", path = "crates/autd3-cpu-wire" }
+autd3-cpu-wire = { version = "0.3.0", path = "firmware/cpu/wire" }
+autd3-cpu-fw = { version = "0.3.0", path = "firmware/cpu/fw" }
 autd3-rs-core = { version = "0.3.0", path = "crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { version = "0.3.0", path = "crates/autd3-rs-firmware-emulator" }
 autd3-rs-pattern = { version = "0.3.0", path = "crates/autd3-rs-pattern" }

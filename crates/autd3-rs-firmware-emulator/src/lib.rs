@@ -1,5 +1,3 @@
-include!(concat!(env!("OUT_DIR"), "/fw_root.rs"));
-
 mod audit;
 mod device;
 mod emu_fpga;

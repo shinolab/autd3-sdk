@@ -1,8 +1,8 @@
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, RxFrame, TX_FRAME_BYTES};
 
-use crate::app::Cpu;
 use crate::emu_fpga::FpgaEmulator;
 use crate::fw;
+use autd3_cpu_fw::Cpu;
 
 const WIRE_GAP_START: usize = fw::WIRE_RX_GAP_START;
 const WIRE_RX_FRAME_BYTES: usize = fw::WIRE_RX_FRAME_BYTES;
