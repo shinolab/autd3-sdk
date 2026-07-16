@@ -50,7 +50,7 @@ cargo xtask cpu format --fix  # rustfmt 実書き換え
 
 `cargo xtask cpu build` は以下を行う.
 
-1. `gen_param.py` で FPGA の `params.svh` から `fw/src/params.rs` を生成する.
+1. `cargo xtask cpu gen-param` で FPGA の `params.svh` から `fw/src/params.rs` を生成する.
 1. `board/` を `armv7r-none-eabi` ターゲットの staticlib (`libautd3_cpu.a`) としてビルドする.
 1. `arm-none-eabi-gcc` で `platform/autd3-platform.o` とリンカスクリプト `platform/autd3-cpu.ld` を用いてリンクする.
 1. `objcopy` で `build/autd3-cpu.bin` を生成する.
