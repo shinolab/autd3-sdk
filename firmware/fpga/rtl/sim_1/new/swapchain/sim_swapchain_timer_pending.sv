@@ -4,7 +4,6 @@ module sim_swapchain_timer_pending ();
   `include "define.vh"
 
   localparam int DEPTH = 249;
-  // must match swapchain_timer.sv
   localparam int DivLatency = 51;
   localparam int TotalLatency = 1 + 2 * DivLatency + 8 + 1;
 
