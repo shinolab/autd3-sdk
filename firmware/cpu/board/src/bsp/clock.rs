@@ -24,7 +24,6 @@ pub(crate) fn init() {
 
     write32(SYSTEM_PLL1CR2, 1);
     for _ in 0..PLL1_STABILIZE_LOOPS {
-        // SAFETY: `nop` has no operands and no memory effects; it only burns a cycle.
         unsafe { asm!("nop", options(nomem, nostack, preserves_flags)) };
     }
 

@@ -1,31 +1,24 @@
 pub(crate) fn read8(addr: usize) -> u8 {
-    // SAFETY: `addr` is one of the fixed RZ/T1 MMIO addresses defined in this module.
-    // They are always mapped, byte-accessible and have no Rust object aliasing them.
     unsafe { (addr as *const u8).read_volatile() }
 }
 
 pub(crate) fn write8(addr: usize, value: u8) {
-    // SAFETY: see `read8`.
     unsafe { (addr as *mut u8).write_volatile(value) }
 }
 
 pub(crate) fn read16(addr: usize) -> u16 {
-    // SAFETY: see `read8`; these registers are 16-bit accessible and 2-byte aligned.
     unsafe { (addr as *const u16).read_volatile() }
 }
 
 pub(crate) fn write16(addr: usize, value: u16) {
-    // SAFETY: see `read16`.
     unsafe { (addr as *mut u16).write_volatile(value) }
 }
 
 pub(crate) fn read32(addr: usize) -> u32 {
-    // SAFETY: see `read8`; these registers are 32-bit accessible and 4-byte aligned.
     unsafe { (addr as *const u32).read_volatile() }
 }
 
 pub(crate) fn write32(addr: usize, value: u32) {
-    // SAFETY: see `read32`.
     unsafe { (addr as *mut u32).write_volatile(value) }
 }
 

@@ -9,9 +9,6 @@ pub(crate) fn init() {
 }
 
 pub(crate) fn irq_enable() {
-    // SAFETY: `cpsie i` only unmasks IRQs on the current core. The application installs
-    // its handlers before calling this, and the `memory` clobber keeps prior stores from
-    // being sunk past the unmask.
     unsafe { asm!("cpsie i", options(nostack, preserves_flags)) };
 }
 

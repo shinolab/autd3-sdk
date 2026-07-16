@@ -29,9 +29,6 @@ pub(crate) struct HwPort;
 
 impl Port for HwPort {
     fn fpga_write(&mut self, addr: u16, value: u16) {
-        // SAFETY: the FPGA is mapped at CS1 (`FPGA_BASE`) as a 16-bit bus. `addr` is a
-        // 16-bit word index, so the access stays inside the 128 KiB aperture and is
-        // naturally aligned.
         unsafe {
             (FPGA_BASE as *mut u16)
                 .add(addr as usize)
@@ -40,14 +37,10 @@ impl Port for HwPort {
     }
 
     fn fpga_read(&mut self, addr: u16) -> u16 {
-        // SAFETY: see `fpga_write`.
         unsafe { (FPGA_BASE as *const u16).add(addr as usize).read_volatile() }
     }
 
     fn memory_barrier(&mut self) {
-        // SAFETY: `dmb` has no operands. The implicit memory clobber prevents the compiler
-        // from moving FPGA accesses across the barrier, which the bank/page switch
-        // sequences depend on.
         unsafe { asm!("dmb", options(nostack, preserves_flags)) };
     }
 
