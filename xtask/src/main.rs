@@ -3,6 +3,7 @@ mod changelog;
 mod component;
 mod console;
 mod cpu;
+mod cpu_codegen;
 mod cs;
 mod doc;
 mod emulator;

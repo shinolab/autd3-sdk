@@ -13,6 +13,8 @@ pub enum CpuCmd {
     Flash,
     /// Run the portable firmware logic (`autd3-cpu-fw`) tests on the host
     Test,
+    /// Regenerate `fw/src/params.rs` from the FPGA `params.svh`
+    GenParam,
     /// Clippy the firmware
     Lint,
     /// Rustfmt the firmware
@@ -28,6 +30,7 @@ pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
         CpuCmd::Build => cpu_build(root).map(|_| ()),
         CpuCmd::Flash => cpu_flash(root),
         CpuCmd::Test => cpu_test(root),
+        CpuCmd::GenParam => gen_param(root),
         CpuCmd::Lint => cpu_lint(root),
         CpuCmd::Format { fix } => cpu_format(root, *fix),
     }
@@ -171,7 +174,7 @@ pub fn cpu_build(root: &Path) -> Result<PathBuf> {
 }
 
 pub fn gen_param(root: &Path) -> Result<()> {
-    run("python3", ["gen_param.py"], &root.join("firmware/cpu"))
+    crate::cpu_codegen::gen_param(root)
 }
 
 fn cpu_test(root: &Path) -> Result<()> {
