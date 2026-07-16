@@ -41,7 +41,7 @@ fn main() {
         assert!(path.is_file(), "missing firmware source {}", path.display());
         writeln!(
             root,
-            "#[allow(dead_code, clippy::all, clippy::pedantic)]\n\
+            "#[allow(dead_code, unused_imports, clippy::all, clippy::pedantic)]\n\
              #[path = {:?}]\n\
              pub(crate) mod {name};",
             path.to_string_lossy(),

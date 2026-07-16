@@ -3,18 +3,10 @@ use crate::params::{FOCUS_WORDS, MAX_FOCI_TOTAL};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{ControlPoints, PatternBank};
 
-use super::{Distribution, MAX_FOCI_PER_FRAME, Operation, WRITE_HEADER_BYTES};
-
-use zerocopy::{FromBytes, IntoBytes, KnownLayout, little_endian};
-
-#[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout)]
-struct WriteHeader {
-    bank: u8,
-    _reserved: u8,
-    offset: little_endian::U32,
-    len: little_endian::U16,
-}
+use super::{Distribution, MAX_FOCI_PER_FRAME, Operation};
+use autd3_cpu_wire::payload::WritePatternPayload;
+use zerocopy::FromBytes;
+use zerocopy::little_endian::{U16, U32};
 
 #[derive(Clone, Debug)]
 pub struct WriteFociBuffer<'a, const N: usize> {
@@ -59,15 +51,14 @@ impl<const N: usize> Operation for WriteFociBuffer<'_, N> {
         let word_offset = u32::try_from((base + start) * FOCUS_WORDS).expect("bounded by capacity");
         let len = u16::try_from(chunk_len * FOCUS_WORDS * 2).expect("bounded by frame");
 
-        let (header, _) =
-            WriteHeader::mut_from_prefix(&mut out[..]).expect("WriteHeader fits the payload");
-        header.bank = self.bank.as_u8();
-        header.offset = word_offset.into();
-        header.len = len.into();
-        for (dst, k) in out[WRITE_HEADER_BYTES..]
-            .chunks_exact_mut(8)
-            .zip(start..start + chunk_len)
-        {
+        let (h, rest) = WritePatternPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *h = WritePatternPayload {
+            bank: self.bank.as_u8(),
+            reserved: 0,
+            offset: U32::new(word_offset),
+            data_len: U16::new(len),
+        };
+        for (dst, k) in rest.chunks_exact_mut(8).zip(start..start + chunk_len) {
             let focus = self.points[k / N].focus(k % N);
             dst.copy_from_slice(&focus.encode()?.to_le_bytes());
         }
@@ -79,6 +70,7 @@ impl<const N: usize> Operation for WriteFociBuffer<'_, N> {
 mod tests {
     use super::*;
     use crate::geometry::Point3;
+    use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
 
     fn encode<const N: usize>(
         op: &WriteFociBuffer<'_, N>,

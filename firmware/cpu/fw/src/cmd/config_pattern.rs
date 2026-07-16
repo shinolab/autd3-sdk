@@ -1,7 +1,6 @@
-use core::mem::offset_of;
+use zerocopy::FromBytes;
 
-use zerocopy::little_endian::{U16, U32};
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+pub use autd3_cpu_wire::payload::ConfigPatternPayload;
 
 use crate::app::Cpu;
 use crate::fpga::{self, EmissionType};
@@ -12,27 +11,6 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{Error, MAX_FOCI_TOTAL};
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct ConfigPatternPayload {
-    pub bank: u8,
-    pub emission_type: u8,
-    pub divider: U16,
-    pub size: U32,
-    pub num_foci: u8,
-    _reserved: u8,
-    pub sound_speed: U16,
-    pub rep: U16,
-}
-
-const _: () = assert!(offset_of!(ConfigPatternPayload, bank) == 0);
-const _: () = assert!(offset_of!(ConfigPatternPayload, emission_type) == 1);
-const _: () = assert!(offset_of!(ConfigPatternPayload, divider) == 2);
-const _: () = assert!(offset_of!(ConfigPatternPayload, size) == 4);
-const _: () = assert!(offset_of!(ConfigPatternPayload, num_foci) == 8);
-const _: () = assert!(offset_of!(ConfigPatternPayload, sound_speed) == 10);
-const _: () = assert!(offset_of!(ConfigPatternPayload, rep) == 12);
 
 impl Cpu {
     pub(crate) fn config_pattern<P: Port>(

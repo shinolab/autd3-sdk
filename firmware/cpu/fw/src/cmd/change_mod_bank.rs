@@ -1,7 +1,6 @@
-use core::mem::offset_of;
+use zerocopy::FromBytes;
 
-use zerocopy::little_endian::{U32, U64};
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+pub use autd3_cpu_wire::payload::ChangeModBankPayload;
 
 use crate::app::Cpu;
 use crate::fpga::{self, TransitionMode, sys_time_margin_ns, transition_mode_violates_loop};
@@ -11,20 +10,6 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::Error;
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct ChangeModBankPayload {
-    pub bank: u8,
-    pub transition_mode: u8,
-    pub transition_value: U64,
-    pub margin_ns: U32,
-}
-
-const _: () = assert!(offset_of!(ChangeModBankPayload, bank) == 0);
-const _: () = assert!(offset_of!(ChangeModBankPayload, transition_mode) == 1);
-const _: () = assert!(offset_of!(ChangeModBankPayload, transition_value) == 2);
-const _: () = assert!(offset_of!(ChangeModBankPayload, margin_ns) == 10);
 
 impl Cpu {
     pub(crate) fn change_mod_bank<P: Port>(

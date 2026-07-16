@@ -14,6 +14,7 @@ description = "Software emulator of the AUTD3 device firmware (the real CPU firm
 include = ["src/**", "vendor/**", "build.rs", "Cargo.toml"]
 
 [dependencies]
+autd3-cpu-wire.workspace = true
 autd3-rs-core.workspace = true
 zerocopy.workspace = true
 

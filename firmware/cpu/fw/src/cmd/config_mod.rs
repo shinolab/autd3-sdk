@@ -1,7 +1,6 @@
-use core::mem::offset_of;
+use zerocopy::FromBytes;
 
-use zerocopy::little_endian::{U16, U32};
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+pub use autd3_cpu_wire::payload::ConfigModPayload;
 
 use crate::app::Cpu;
 use crate::fpga;
@@ -11,21 +10,6 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{Error, MOD_BUFFER_SAMPLES};
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct ConfigModPayload {
-    pub bank: u8,
-    _reserved: u8,
-    pub divider: U16,
-    pub size: U32,
-    pub rep: U16,
-}
-
-const _: () = assert!(offset_of!(ConfigModPayload, bank) == 0);
-const _: () = assert!(offset_of!(ConfigModPayload, divider) == 2);
-const _: () = assert!(offset_of!(ConfigModPayload, size) == 4);
-const _: () = assert!(offset_of!(ConfigModPayload, rep) == 8);
 
 impl Cpu {
     pub(crate) fn config_mod<P: Port>(&self, port: &mut P, payload: &[u8]) -> Result<(), Error> {

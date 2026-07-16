@@ -1,6 +1,10 @@
 use core::num::NonZeroU16;
 use core::time::Duration;
 
+use autd3_cpu_wire::payload::SilencerPayload;
+use zerocopy::FromBytes;
+use zerocopy::little_endian::U16;
+
 use crate::common::{ULTRASOUND_FREQ, ULTRASOUND_PERIOD};
 use crate::error::{Error, PayloadError};
 use crate::mirror::FirmwareState;
@@ -23,11 +27,15 @@ fn write_payload(
     completion_steps_intensity: u16,
     completion_steps_phase: u16,
 ) {
-    out[0] = flag;
-    out[2..4].copy_from_slice(&update_rate_intensity.to_le_bytes());
-    out[4..6].copy_from_slice(&update_rate_phase.to_le_bytes());
-    out[6..8].copy_from_slice(&completion_steps_intensity.to_le_bytes());
-    out[8..10].copy_from_slice(&completion_steps_phase.to_le_bytes());
+    let (p, _) = SilencerPayload::mut_from_prefix(&mut out[..]).unwrap();
+    *p = SilencerPayload {
+        flag,
+        reserved: 0,
+        update_rate_intensity: U16::new(update_rate_intensity),
+        update_rate_phase: U16::new(update_rate_phase),
+        completion_steps_intensity: U16::new(completion_steps_intensity),
+        completion_steps_phase: U16::new(completion_steps_phase),
+    };
 }
 
 fn completion_time_to_steps(value: Duration) -> Result<u16, Error> {

@@ -8,7 +8,7 @@ pub struct Autd3 {
 }
 
 impl Autd3 {
-    pub const NUM_TRANSDUCERS: usize = 249;
+    pub const NUM_TRANSDUCERS: usize = autd3_cpu_wire::params::NUM_TRANSDUCERS;
     pub const GRID_X: u32 = 18;
     pub const GRID_Y: u32 = 14;
     pub const PITCH_MM: f32 = 10.16;

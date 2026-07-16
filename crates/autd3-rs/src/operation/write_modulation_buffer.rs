@@ -3,18 +3,10 @@ use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::ModulationBank;
 
-use super::{Distribution, Operation, WRITE_HEADER_BYTES, WRITE_MAX_DATA_LEN};
-
-use zerocopy::{FromBytes, IntoBytes, KnownLayout, little_endian};
-
-#[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout)]
-struct WriteHeader {
-    bank: u8,
-    _reserved: u8,
-    offset: little_endian::U32,
-    len: little_endian::U16,
-}
+use super::{Distribution, Operation, WRITE_MAX_DATA_LEN};
+use autd3_cpu_wire::payload::WriteModPayload;
+use zerocopy::FromBytes;
+use zerocopy::little_endian::{U16, U32};
 
 #[derive(Clone, Copy, Debug)]
 pub struct WriteModulationBuffer<'a> {
@@ -64,12 +56,14 @@ impl Operation for WriteModulationBuffer<'_> {
         let offset = u32::try_from(self.offset + start).expect("bounded by MOD_BUFFER_SAMPLES");
         let len = u16::try_from(chunk.len()).expect("bounded by WRITE_MAX_DATA_LEN");
 
-        let (header, _) =
-            WriteHeader::mut_from_prefix(&mut out[..]).expect("WriteHeader fits the payload");
-        header.bank = self.bank.as_u8();
-        header.offset = offset.into();
-        header.len = len.into();
-        out[WRITE_HEADER_BYTES..WRITE_HEADER_BYTES + chunk.len()].copy_from_slice(chunk);
+        let (h, rest) = WriteModPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *h = WriteModPayload {
+            bank: self.bank.as_u8(),
+            reserved: 0,
+            offset: U32::new(offset),
+            data_len: U16::new(len),
+        };
+        rest[..chunk.len()].copy_from_slice(chunk);
         Ok(Cmd::WriteModulationBuffer)
     }
 }
@@ -77,6 +71,7 @@ impl Operation for WriteModulationBuffer<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
 
     fn encode(op: &WriteModulationBuffer, frame: usize) -> Result<[u8; PAYLOAD_BYTES], Error> {
         let mut out = [0u8; PAYLOAD_BYTES];

@@ -1,3 +1,7 @@
+use autd3_cpu_wire::payload::ConfigModPayload;
+use zerocopy::FromBytes;
+use zerocopy::little_endian::{U16, U32};
+
 use crate::error::{Error, PayloadError};
 use crate::mirror::FirmwareState;
 use crate::params::MOD_BUFFER_SAMPLES;
@@ -41,14 +45,14 @@ impl Operation for ConfigModulation {
                 },
             ));
         }
-        out[0] = self.bank.as_u8();
-        out[2..4].copy_from_slice(&divider.to_le_bytes());
-        out[4..8].copy_from_slice(
-            &u32::try_from(self.size)
-                .expect("bounded by MOD_BUFFER_SAMPLES")
-                .to_le_bytes(),
-        );
-        out[8..10].copy_from_slice(&self.loop_behavior.rep().to_le_bytes());
+        let (p, _) = ConfigModPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *p = ConfigModPayload {
+            bank: self.bank.as_u8(),
+            reserved: 0,
+            divider: U16::new(divider),
+            size: U32::new(u32::try_from(self.size).expect("bounded by MOD_BUFFER_SAMPLES")),
+            rep: U16::new(self.loop_behavior.rep()),
+        };
         Ok(Cmd::ConfigModulation)
     }
 

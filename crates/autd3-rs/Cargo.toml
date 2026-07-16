@@ -9,6 +9,7 @@ repository.workspace = true
 description = "Core async client library for the AUTD3 phased-array kit."
 
 [dependencies]
+autd3-cpu-wire.workspace = true
 autd3-rs-core.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 zerocopy.workspace = true

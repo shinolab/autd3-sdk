@@ -1,6 +1,6 @@
-use core::mem::offset_of;
+use zerocopy::FromBytes;
 
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+pub use autd3_cpu_wire::payload::GpioInPayload;
 
 use crate::fpga;
 use crate::params::{
@@ -11,14 +11,6 @@ use crate::port::Port;
 use crate::proto::Error;
 
 pub const GPIO_IN_FLAG_MASK: u8 = 0x0F;
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct GpioInPayload {
-    pub flag: u8,
-}
-
-const _: () = assert!(offset_of!(GpioInPayload, flag) == 0);
 
 const GPIO_IN_MASK: u16 =
     CTL_FLAG_GPIO_IN_0 | CTL_FLAG_GPIO_IN_1 | CTL_FLAG_GPIO_IN_2 | CTL_FLAG_GPIO_IN_3;

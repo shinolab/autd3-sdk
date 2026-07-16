@@ -40,9 +40,10 @@ pub use write_pattern_compressed::{
 };
 pub use xor_hash::{XOR_HASH_MAX_DATA_LEN, XorHashCmd};
 
+pub use autd3_cpu_wire::layout::{MAX_FOCI_PER_FRAME, WRITE_MAX_DATA_LEN};
+
 use crate::error::Error;
 use crate::mirror::FirmwareState;
-use crate::params::FOCUS_WORDS;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 pub(crate) fn silencer_constraint(
@@ -114,9 +115,3 @@ impl<T: Operation + ?Sized> Operation for &T {
         (**self).reflect(device, state)
     }
 }
-
-pub const WRITE_HEADER_BYTES: usize = 8;
-
-pub const WRITE_MAX_DATA_LEN: usize = PAYLOAD_BYTES - WRITE_HEADER_BYTES;
-
-pub const MAX_FOCI_PER_FRAME: usize = WRITE_MAX_DATA_LEN / (FOCUS_WORDS * 2);

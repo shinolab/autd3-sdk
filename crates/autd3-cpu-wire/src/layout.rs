@@ -1,0 +1,19 @@
+use crate::frame::PAYLOAD_BYTES;
+use crate::params::{EMISSION_MAX_INDICES, NUM_TRANSDUCERS};
+
+pub const MOD_BUFFER_SAMPLES: usize = 65536;
+pub const EMISSION_SLOT_WORDS: usize = 256;
+pub const FOCUS_WORDS: usize = 4;
+pub const EMISSION_RAM_WORDS: usize = EMISSION_SLOT_WORDS * EMISSION_MAX_INDICES as usize;
+pub const MAX_FOCI_TOTAL: usize = EMISSION_RAM_WORDS / FOCUS_WORDS;
+
+pub const OUTPUT_MASK_WORDS: usize = NUM_TRANSDUCERS.div_ceil(16);
+pub const PWE_TABLE_SIZE: usize = 256;
+pub const GPIO_OUT_NUM: usize = 4;
+
+pub const WRITE_HEADER_BYTES: usize = 8;
+pub const WRITE_MAX_DATA_LEN: usize = PAYLOAD_BYTES - WRITE_HEADER_BYTES;
+pub const MAX_FOCI_PER_FRAME: usize = WRITE_MAX_DATA_LEN / (FOCUS_WORDS * 2);
+
+pub const XOR_HASH_HEADER_BYTES: usize = 4;
+pub const XOR_HASH_MAX_DATA_LEN: usize = PAYLOAD_BYTES - XOR_HASH_HEADER_BYTES;

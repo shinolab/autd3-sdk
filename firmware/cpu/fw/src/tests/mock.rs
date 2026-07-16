@@ -202,10 +202,26 @@ impl Frame {
         }
     }
 
-    pub(crate) fn from_payload<P: IntoBytes + Immutable>(seq: u8, cmd: Cmd, payload: &P) -> Self {
+    pub(crate) fn from_payload<P: IntoBytes + Immutable + ?Sized>(
+        seq: u8,
+        cmd: Cmd,
+        payload: &P,
+    ) -> Self {
         let mut f = Self::new(seq, cmd);
         let bytes = payload.as_bytes();
         f.payload[..bytes.len()].copy_from_slice(bytes);
+        f
+    }
+
+    pub(crate) fn from_parts<H: IntoBytes + Immutable>(
+        seq: u8,
+        cmd: Cmd,
+        header: &H,
+        data: &[u8],
+    ) -> Self {
+        let mut f = Self::from_payload(seq, cmd, header);
+        let h = core::mem::size_of::<H>();
+        f.payload[h..h + data.len()].copy_from_slice(data);
         f
     }
 

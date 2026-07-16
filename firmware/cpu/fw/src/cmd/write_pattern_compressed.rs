@@ -1,7 +1,6 @@
-use core::mem::{offset_of, size_of};
+use zerocopy::FromBytes;
 
-use zerocopy::little_endian::U32;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+pub use autd3_cpu_wire::payload::WritePatternCompressedPayload;
 
 use crate::fpga;
 use crate::params::{
@@ -9,7 +8,7 @@ use crate::params::{
     NUM_TRANSDUCERS,
 };
 use crate::port::Port;
-use crate::proto::{EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, Error, PAYLOAD_BYTES, wire_enum};
+use crate::proto::{EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, Error, wire_enum};
 
 wire_enum! {
     pub enum PatternFormat {
@@ -18,26 +17,8 @@ wire_enum! {
     }
 }
 
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct WritePatternCompressedPayload {
-    pub bank: u8,
-    pub format: u8,
-    pub count: u8,
-    _reserved: u8,
-    pub offset: U32,
-    pub data: [u8; NUM_TRANSDUCERS * 2],
-}
-
-const _: () = assert!(size_of::<WritePatternCompressedPayload>() <= PAYLOAD_BYTES);
-const _: () = assert!(offset_of!(WritePatternCompressedPayload, bank) == 0);
-const _: () = assert!(offset_of!(WritePatternCompressedPayload, format) == 1);
-const _: () = assert!(offset_of!(WritePatternCompressedPayload, count) == 2);
-const _: () = assert!(offset_of!(WritePatternCompressedPayload, offset) == 4);
-const _: () = assert!(offset_of!(WritePatternCompressedPayload, data) == 8);
-
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
-    let Ok((p, _)) = WritePatternCompressedPayload::ref_from_prefix(payload) else {
+    let Ok((p, rest)) = WritePatternCompressedPayload::ref_from_prefix(payload) else {
         return Err(Error::InvalidPayload);
     };
     let offset = p.offset.get();
@@ -62,7 +43,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
     let mut slot = [0u8; 2 * NUM_TRANSDUCERS];
     for g in 0..p.count {
         for t in 0..NUM_TRANSDUCERS {
-            let w = u16::from_le_bytes([p.data[2 * t], p.data[2 * t + 1]]);
+            let w = u16::from_le_bytes([rest[2 * t], rest[2 * t + 1]]);
             let phase = match format {
                 PatternFormat::PhaseFull => (w >> (8 * u16::from(g))) as u8,
                 PatternFormat::PhaseHalf => {

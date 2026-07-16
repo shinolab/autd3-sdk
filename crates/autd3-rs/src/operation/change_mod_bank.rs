@@ -1,3 +1,7 @@
+use autd3_cpu_wire::payload::ChangeModBankPayload;
+use zerocopy::FromBytes;
+use zerocopy::little_endian::{U32, U64};
+
 use crate::error::Error;
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -26,16 +30,17 @@ impl Operation for ChangeModulationBank {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        out[0] = self.bank.as_u8();
-        out[1] = self.transition_mode.as_u8();
-        out[2..10].copy_from_slice(&self.transition_mode.value().to_le_bytes());
-        out[10..14].copy_from_slice(
-            &self
-                .transition_mode
-                .margin_ns()
-                .map_err(Error::InvalidPayload)?
-                .to_le_bytes(),
-        );
+        let margin_ns = self
+            .transition_mode
+            .margin_ns()
+            .map_err(Error::InvalidPayload)?;
+        let (p, _) = ChangeModBankPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *p = ChangeModBankPayload {
+            bank: self.bank.as_u8(),
+            transition_mode: self.transition_mode.as_u8(),
+            transition_value: U64::new(self.transition_mode.value()),
+            margin_ns: U32::new(margin_ns),
+        };
         Ok(Cmd::ChangeModulationBank)
     }
 

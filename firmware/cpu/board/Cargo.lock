@@ -13,6 +13,14 @@ dependencies = [
 name = "autd3-cpu-fw"
 version = "0.3.0"
 dependencies = [
+ "autd3-cpu-wire",
+ "zerocopy",
+]
+
+[[package]]
+name = "autd3-cpu-wire"
+version = "0.3.0"
+dependencies = [
  "zerocopy",
 ]
 

@@ -1,24 +1,12 @@
-use core::mem::{offset_of, size_of};
+use zerocopy::FromBytes;
 
-use zerocopy::little_endian::U64;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+pub use autd3_cpu_wire::payload::GpioOutPayload;
 
 use crate::app::Cpu;
 use crate::fpga;
 use crate::params::{ADDR_DEBUG_VALUE0_0, CTL_FLAG_DEBUG_SET};
 use crate::port::Port;
-use crate::proto::{Error, PAYLOAD_BYTES};
-
-pub const GPIO_OUT_NUM: usize = 4;
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct GpioOutPayload {
-    pub values: [U64; GPIO_OUT_NUM],
-}
-
-const _: () = assert!(size_of::<GpioOutPayload>() <= PAYLOAD_BYTES);
-const _: () = assert!(offset_of!(GpioOutPayload, values) == 0);
+use crate::proto::Error;
 
 impl Cpu {
     pub(crate) fn gpio_out<P: Port>(&self, port: &mut P, payload: &[u8]) -> Result<(), Error> {

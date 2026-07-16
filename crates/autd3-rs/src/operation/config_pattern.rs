@@ -1,3 +1,8 @@
+use autd3_cpu_wire::params::{EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW};
+use autd3_cpu_wire::payload::ConfigPatternPayload;
+use zerocopy::FromBytes;
+use zerocopy::little_endian::{U16, U32};
+
 use crate::Velocity;
 use crate::error::{Error, PayloadError};
 use crate::mirror::FirmwareState;
@@ -75,13 +80,17 @@ impl Operation for ConfigPattern {
             }));
         }
         let size = u32::try_from(self.size).expect("bounded by capacity checks");
-        out[0] = self.bank.as_u8();
-        out[1] = 1;
-        out[2..4].copy_from_slice(&divider.to_le_bytes());
-        out[4..8].copy_from_slice(&size.to_le_bytes());
-        out[8] = 0;
-        out[10..12].copy_from_slice(&0u16.to_le_bytes());
-        out[12..14].copy_from_slice(&self.loop_behavior.rep().to_le_bytes());
+        let (p, _) = ConfigPatternPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *p = ConfigPatternPayload {
+            bank: self.bank.as_u8(),
+            emission_type: EMISSION_TYPE_RAW,
+            divider: U16::new(divider),
+            size: U32::new(size),
+            num_foci: 0,
+            reserved: 0,
+            sound_speed: U16::new(0),
+            rep: U16::new(self.loop_behavior.rep()),
+        };
         Ok(Cmd::ConfigPattern)
     }
 
@@ -128,13 +137,17 @@ impl Operation for ConfigFociStm {
             return Err(Error::InvalidPayload(PayloadError::SoundSpeedZero));
         }
         let size = u32::try_from(self.size).expect("bounded by capacity checks");
-        out[0] = self.bank.as_u8();
-        out[1] = 0;
-        out[2..4].copy_from_slice(&divider.to_le_bytes());
-        out[4..8].copy_from_slice(&size.to_le_bytes());
-        out[8] = self.num_foci;
-        out[10..12].copy_from_slice(&sound_speed.to_le_bytes());
-        out[12..14].copy_from_slice(&self.loop_behavior.rep().to_le_bytes());
+        let (p, _) = ConfigPatternPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *p = ConfigPatternPayload {
+            bank: self.bank.as_u8(),
+            emission_type: EMISSION_TYPE_FOCI,
+            divider: U16::new(divider),
+            size: U32::new(size),
+            num_foci: self.num_foci,
+            reserved: 0,
+            sound_speed: U16::new(sound_speed),
+            rep: U16::new(self.loop_behavior.rep()),
+        };
         Ok(Cmd::ConfigPattern)
     }
 
