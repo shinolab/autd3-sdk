@@ -163,9 +163,7 @@ module sim_controller ();
     `ASSERT_EQ(sync_settings_in, sync_settings);
 
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, fpga_state);
-    `ASSERT_EQ(
-        {8'h00, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
-        fpga_state);
+    `ASSERT_EQ({8'h00, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo}, fpga_state);
 
     $display("OK! sim_controller");
     $finish();

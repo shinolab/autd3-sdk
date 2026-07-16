@@ -154,8 +154,7 @@ module sim_output_mask ();
           phase_buf[bank][i][j] = sim_helper_random.range(8'hFF, 0);
         end
       end
-      sim_helper_bram.write_emission_raw_intensity_phase(bank, intensity_buf[bank],
-                                                     phase_buf[bank], cycle_buf[bank]);
+      sim_helper_bram.write_emission_raw_intensity_phase(bank, intensity_buf[bank], phase_buf[bank], cycle_buf[bank]);
       for (int i = 0; i < DEPTH; i++) begin
         output_mask_buf[bank][i] = sim_helper_random.range(1'b1, 1'b0);
       end

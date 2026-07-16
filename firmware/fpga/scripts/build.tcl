@@ -1,4 +1,4 @@
-set project_directory [file normalize [file dirname [info script]]]
+set project_directory [file normalize [file join [file dirname [info script]] ..]]
 set project_name      "autd3-fpga"
 set synth_run         "synth_alter"
 set impl_run          "impl_alter_def"

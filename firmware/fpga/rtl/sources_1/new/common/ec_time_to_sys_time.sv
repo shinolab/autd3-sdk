@@ -9,8 +9,13 @@ module ec_time_to_sys_time (
 );
   // This module converts the 1ns unit time of EtherCAT to the 1/20.48MHz unit time.
   // That is, SYS_TIME = EC_TIME * 20.48MHz / 1GHz = EC_TIME * 64 / 3125.
-  // The number of bits required for SYS_TIME is 64 + log2(64 / 3125) = 58.4, but for simplification, it is truncated to 57 bits.
-  // This means that this firmware works fine only until 2000/1/1 (EtherCAT reference time) + (2^57 - 1) / 20.48MHz ~ 2220, but it is practically no problem.
+  //
+  // The number of bits strictly required is 64 + log2(64 / 3125) = 58.4 (i.e. 59 bits), but SYS_TIME is truncated to 57 bits for some reasons:
+  // - SYS_TIME[8:0]  (9 bits): sub-sample position within one 40kHz base cycle (20.48MHz / 512 = 40kHz).
+  // - SYS_TIME[56:9] (48 bits): number of elapsed 40kHz (25us) periods. This is fed as the dividend of the div_48_24 STM/modulation index dividers (swapchain_timer).
+  // 48 is the smallest byte-aligned width whose range comfortably overshoots any realistic uptime, chosen to keep the dividers minimal.
+  // The 48-bit period field also matches the byte-packed transition-time / SysTimeEq fields sent by the CPU.
+  // Therefore, this firmware works correctly only until 2000/1/1 (EtherCAT reference time) + (2^57 - 1) / 20.48MHz ~ 2223, which is practically no problem.
 
   logic [56:0] sys_time;
 

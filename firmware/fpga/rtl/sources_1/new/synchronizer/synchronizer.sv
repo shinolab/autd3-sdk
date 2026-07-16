@@ -36,11 +36,6 @@ module synchronizer (
   logic [$clog2(AddSubLatency+1)-1:0] next_cnt = '0;
   logic set = 1'b0;
 
-  // While `set` is armed but the ec_time -> sys_time conversion of the new
-  // ECAT_SYNC_TIME has not settled yet, Sync0 pulses must not load the stale
-  // conversion result. Each skipped pulse instead accumulates one Sync0
-  // period into `pending_offset` so that a later load still snaps to the
-  // correct pulse time.
   logic conv_settling = 1'b0;
   logic conv_settle_cnt = 1'b0;
   logic sync_time_dout_valid;
@@ -98,8 +93,6 @@ module synchronizer (
       ecat_sync_time <= SYNC_SETTINGS.ECAT_SYNC_TIME;
       ecat_sync_cycle <= SYNC_SETTINGS.ECAT_SYNC_CYCLE;
     end else begin
-      // The first DOUT_VALID after UPDATE may belong to a conversion that
-      // sampled the old ECAT_SYNC_TIME; the second one is guaranteed fresh.
       if (conv_settling & sync_time_dout_valid) begin
         conv_settle_cnt <= 1'b1;
         if (conv_settle_cnt) conv_settling <= 1'b0;

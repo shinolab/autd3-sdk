@@ -148,8 +148,7 @@ module sim_emission_raw ();
           phase_buf[bank][i][j] = sim_helper_random.range(8'hFF, 0);
         end
       end
-      sim_helper_bram.write_emission_raw_intensity_phase(bank, intensity_buf[bank],
-                                                     phase_buf[bank], cycle_buf[bank]);
+      sim_helper_bram.write_emission_raw_intensity_phase(bank, intensity_buf[bank], phase_buf[bank], cycle_buf[bank]);
     end
 
     $display("memory initialized");

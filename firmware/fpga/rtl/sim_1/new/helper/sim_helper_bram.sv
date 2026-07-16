@@ -32,8 +32,7 @@ module sim_helper_bram #(
 
   logic bus_active = 1'b0;
 
-  task automatic bram_write(input logic [1:0] select, input logic [13:0] addr,
-                            input logic [15:0] data_in);
+  task automatic bram_write(input logic [1:0] select, input logic [13:0] addr, input logic [15:0] data_in);
     bus_active = 1'b1;
     @(posedge CPU_CKIO);
     bram_addr <= {select, addr};
@@ -47,8 +46,7 @@ module sim_helper_bram #(
 
     @(negedge CPU_CKIO);
     CPU_WE0_N <= 1;
-    // let memory.sv's we-edge shift register observe the deasserted strobe
-    // before the gated bus clock stops
+
     repeat (3) @(posedge CPU_CKIO);
     bus_active = 1'b0;
   endtask
@@ -57,8 +55,7 @@ module sim_helper_bram #(
     bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_MAIN, addr}, data);
   endtask
 
-  task automatic bram_read(input logic [1:0] select, input logic [13:0] addr,
-                           output logic [15:0] data_out);
+  task automatic bram_read(input logic [1:0] select, input logic [13:0] addr, output logic [15:0] data_out);
     bus_active = 1'b1;
     @(posedge CPU_CKIO);
     bram_addr <= {select, addr};
@@ -80,44 +77,27 @@ module sim_helper_bram #(
 
   task automatic write_phase_corr(input logic [7:0] value[256]);
     for (int i = 0; i < 128; i++) begin
-      bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_PHASE_CORR, i[7:0]}, {
-                 value[2*i+1], value[2*i]});
+      bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_PHASE_CORR, i[7:0]}, {value[2*i+1], value[2*i]});
     end
   endtask
 
   task automatic write_output_mask(input logic bank, input logic [255:0] value);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd0}
-               }, value[15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd1}
-               }, value[31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd2}
-               }, value[47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd3}
-               }, value[63:48]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd4}
-               }, value[79:64]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd5}
-               }, value[95:80]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd6}
-               }, value[111:96]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd7}
-               }, value[127:112]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd8}
-               }, value[143:128]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd9}
-               }, value[159:144]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd10}
-               }, value[175:160]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd11}
-               }, value[191:176]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd12}
-               }, value[207:192]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd13}
-               }, value[223:208]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd14}
-               }, value[239:224]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd15}
-               }, value[255:240]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd0}}, value[15:0]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd1}}, value[31:16]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd2}}, value[47:32]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd3}}, value[63:48]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd4}}, value[79:64]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd5}}, value[95:80]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd6}}, value[111:96]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd7}}, value[127:112]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd8}}, value[143:128]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd9}}, value[159:144]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd10}}, value[175:160]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd11}}, value[191:176]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd12}}, value[207:192]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd13}}, value[223:208]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd14}}, value[239:224]);
+    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd15}}, value[255:240]);
   endtask
 
   task automatic write_pwe_table(input logic [8:0] value[256]);
@@ -139,9 +119,8 @@ module sim_helper_bram #(
     end
   endtask
 
-  task automatic write_emission_raw_intensity_phase(input logic bank,
-                                                input logic [7:0] intensity[][DEPTH],
-                                                input logic [7:0] phase[][DEPTH], int cnt);
+  task automatic write_emission_raw_intensity_phase(input logic bank, input logic [7:0] intensity[][DEPTH], input logic [7:0] phase[][DEPTH],
+                                                    int cnt);
     logic [5:0] offset = 0;
     logic [3:0] page = 0;
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_BANK, {15'h000, bank});
@@ -160,9 +139,8 @@ module sim_helper_bram #(
     end
   endtask
 
-  task automatic write_emission_focus(input logic bank, input logic signed [17:0] x[],
-                                 input logic signed [17:0] y[], input logic signed [17:0] z[],
-                                 input logic [7:0] intensity_and_offsets[], input int cnt);
+  task automatic write_emission_focus(input logic bank, input logic signed [17:0] x[], input logic signed [17:0] y[], input logic signed [17:0] z[],
+                                      input logic [7:0] intensity_and_offsets[], input int cnt);
     logic [3:0] page = 0;
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_BANK, {15'h000, bank});
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
@@ -181,14 +159,10 @@ module sim_helper_bram #(
   task automatic write_mod_settings(input settings::mod_settings_t settings);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_REQ_RD_BANK, settings.REQ_RD_BANK);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_MODE, settings.TRANSITION_MODE);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_0,
-               settings.TRANSITION_VALUE[15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_1,
-               settings.TRANSITION_VALUE[31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_2,
-               settings.TRANSITION_VALUE[47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_3,
-               settings.TRANSITION_VALUE[63:48]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_0, settings.TRANSITION_VALUE[15:0]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_1, settings.TRANSITION_VALUE[31:16]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_2, settings.TRANSITION_VALUE[47:32]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_3, settings.TRANSITION_VALUE[63:48]);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_CYCLE0, settings.CYCLE[0]);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_FREQ_DIV0, settings.FREQ_DIV[0]);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_CYCLE1, settings.CYCLE[1]);
@@ -202,14 +176,10 @@ module sim_helper_bram #(
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MODE1, settings.MODE[1]);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_REQ_RD_BANK, settings.REQ_RD_BANK);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_MODE, settings.TRANSITION_MODE);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_0,
-               settings.TRANSITION_VALUE[15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_1,
-               settings.TRANSITION_VALUE[31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_2,
-               settings.TRANSITION_VALUE[47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_3,
-               settings.TRANSITION_VALUE[63:48]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_0, settings.TRANSITION_VALUE[15:0]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_1, settings.TRANSITION_VALUE[31:16]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_2, settings.TRANSITION_VALUE[47:32]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_3, settings.TRANSITION_VALUE[63:48]);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_CYCLE0, settings.CYCLE[0]);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_FREQ_DIV0, settings.FREQ_DIV[0]);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_CYCLE1, settings.CYCLE[1]);
@@ -224,13 +194,10 @@ module sim_helper_bram #(
 
   task automatic write_silencer_settings(input settings::silencer_settings_t settings);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_FLAG, settings.FLAG);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_UPDATE_RATE_INTENSITY,
-               settings.UPDATE_RATE_INTENSITY);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_UPDATE_RATE_INTENSITY, settings.UPDATE_RATE_INTENSITY);
     bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_UPDATE_RATE_PHASE, settings.UPDATE_RATE_PHASE);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
-               settings.COMPLETION_STEPS_INTENSITY);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_COMPLETION_STEPS_PHASE,
-               settings.COMPLETION_STEPS_PHASE);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, settings.COMPLETION_STEPS_INTENSITY);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_COMPLETION_STEPS_PHASE, settings.COMPLETION_STEPS_PHASE);
   endtask
 
   task automatic write_sync_settings(input settings::sync_settings_t settings);
@@ -267,9 +234,6 @@ module sim_helper_bram #(
     CPU_CKIO  = 1'b0;
   end
 
-  // fast bus clock, but only while a transaction is in flight: a free-running
-  // #0.1 clock floods the event-driven simulator with ~200x more events than
-  // the 20.48MHz main clock and dominates the runtime of every testbench
   always begin
     wait (bus_active);
     #0.1 CPU_CKIO = ~CPU_CKIO;

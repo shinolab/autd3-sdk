@@ -71,7 +71,7 @@ module modulation_multiplier #(
         if (DIN_VALID) begin
           stop <= STOP;
           if (~STOP) begin
-            idx <=    IDX[BANK];
+            idx  <= IDX[BANK];
             bank <= BANK;
           end
           state <= WAIT_MOD_LOAD_0;

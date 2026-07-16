@@ -1,4 +1,4 @@
-set project_directory [file normalize [file dirname [info script]]]
+set project_directory [file normalize [file join [file dirname [info script]] ..]]
 set mcs_file_path [file join $project_directory "autd3-fpga.mcs"]
 
 if {![file exists $mcs_file_path]} {

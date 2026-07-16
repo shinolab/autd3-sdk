@@ -201,9 +201,8 @@ module sim_emission_foci ();
           intensity_and_offsets_buf[bank][i*NumFoci+k] = sim_helper_random.range(8'hFF, 0);
         end
       end
-      sim_helper_bram.write_emission_focus(bank, focus_x[bank], focus_y[bank], focus_z[bank],
-                                      intensity_and_offsets_buf[bank],
-                                      cycle_buf[bank] * NumFoci);
+      sim_helper_bram.write_emission_focus(bank, focus_x[bank], focus_y[bank], focus_z[bank], intensity_and_offsets_buf[bank],
+                                           cycle_buf[bank] * NumFoci);
     end
     $display("memory initialized");
 
