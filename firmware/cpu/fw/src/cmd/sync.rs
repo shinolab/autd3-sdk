@@ -5,22 +5,22 @@ use crate::params::{
     CTL_FLAG_SYNC_SET,
 };
 use crate::port::Port;
-use crate::proto::{ERR_INVALID_SYNC0_CYCLE, ERR_SYNC_NOT_READY};
+use crate::proto::Error;
 
 const SYNC0_CYCLE_BASE_NS: u32 = 500_000;
 const SYS_TIME_NS_PER_TICK: u32 = 3125;
 
 impl Cpu {
-    pub(crate) fn sync<P: Port>(&self, port: &mut P) -> u8 {
+    pub(crate) fn sync<P: Port>(&self, port: &mut P) -> Result<(), Error> {
         let cycle_ns = port.sync0_cycle_ns();
         if cycle_ns == 0 || !cycle_ns.is_multiple_of(SYNC0_CYCLE_BASE_NS) {
-            return ERR_INVALID_SYNC0_CYCLE;
+            return Err(Error::InvalidSync0Cycle);
         }
         let cycle_ticks = (cycle_ns / SYS_TIME_NS_PER_TICK) * 64;
 
         let next_sync0 = port.next_sync0();
         if next_sync0 == 0 {
-            return ERR_SYNC_NOT_READY;
+            return Err(Error::SyncNotReady);
         }
         fpga::write_u64(port, ADDR_ECAT_SYNC_TIME_0, next_sync0);
         fpga::write(

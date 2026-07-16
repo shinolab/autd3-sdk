@@ -1,17 +1,37 @@
-use zerocopy::FromBytes;
+use core::mem::{offset_of, size_of};
+
+use zerocopy::little_endian::{U16, U32};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use crate::fpga;
 use crate::params::{
     ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, BRAM_SELECT_EMISSION, NUM_BANKS,
 };
 use crate::port::Port;
-use crate::proto::{
-    EM_WRITE_MAX_DATA_LEN, EMISSION_RAM_WORDS, ERR_INVALID_PAYLOAD, ERR_NONE, WritePatternPayload,
-};
+use crate::proto::{EMISSION_RAM_WORDS, Error, PAYLOAD_BYTES};
 
-pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> u8 {
+pub const EM_WRITE_MAX_DATA_LEN: usize = PAYLOAD_BYTES - 8;
+
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct WritePatternPayload {
+    pub bank: u8,
+    _reserved: u8,
+    pub offset: U32,
+    pub data_len: U16,
+    pub data: [u8; EM_WRITE_MAX_DATA_LEN],
+}
+
+const _: () = assert!(size_of::<WritePatternPayload>() == PAYLOAD_BYTES);
+const _: () = assert!(offset_of!(WritePatternPayload, bank) == 0);
+const _: () = assert!(offset_of!(WritePatternPayload, offset) == 2);
+const _: () = assert!(offset_of!(WritePatternPayload, data_len) == 6);
+const _: () = assert!(offset_of!(WritePatternPayload, data) == 8);
+const _: () = assert!(crate::params::NUM_TRANSDUCERS * 2 <= EM_WRITE_MAX_DATA_LEN);
+
+pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let Ok(p) = WritePatternPayload::ref_from_bytes(payload) else {
-        return ERR_INVALID_PAYLOAD;
+        return Err(Error::InvalidPayload);
     };
     let offset = p.offset.get();
     let data_len = p.data_len.get();
@@ -22,7 +42,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> u8 {
         || offset > EMISSION_RAM_WORDS
         || u32::from(data_len / 2) > EMISSION_RAM_WORDS - offset
     {
-        return ERR_INVALID_PAYLOAD;
+        return Err(Error::InvalidPayload);
     }
 
     fpga::write_ram(
@@ -34,5 +54,5 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> u8 {
         offset,
         &p.data[..usize::from(data_len)],
     );
-    ERR_NONE
+    Ok(())
 }

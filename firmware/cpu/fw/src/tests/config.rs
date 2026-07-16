@@ -1,17 +1,13 @@
-use crate::fpga::{REP_INFINITE, SYS_TIME_TRANSITION_MARGIN_NS, TRANSITION_MODE_IMMEDIATE};
+use crate::fpga::{REP_INFINITE, SYS_TIME_TRANSITION_MARGIN_NS, TransitionMode};
 use crate::params::{
     ADDR_CTL_FLAG, ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_REP0, ADDR_MOD_REQ_RD_BANK,
     ADDR_MOD_TRANSITION_MODE, ADDR_PATTERN_CYCLE0, ADDR_PATTERN_FREQ_DIV0, ADDR_PATTERN_MODE0,
     ADDR_PATTERN_NUM_FOCI0, ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_SOUND_SPEED0,
     ADDR_PATTERN_TRANSITION_MODE, ADDR_PATTERN_TRANSITION_VALUE_0, CTL_FLAG_MOD_SET,
     CTL_FLAG_PATTERN_SET, EMISSION_MAX_INDICES, EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW, NUM_BANKS,
-    NUM_FOCI_MAX, TRANSITION_MODE_EXT, TRANSITION_MODE_GPIO, TRANSITION_MODE_SYNC_IDX,
-    TRANSITION_MODE_SYS_TIME,
+    NUM_FOCI_MAX,
 };
-use crate::proto::{
-    ERR_INVALID_PAYLOAD, ERR_INVALID_TRANSITION_MODE, ERR_MISS_TRANSITION_TIME, MAX_FOCI_TOTAL,
-    MOD_BUFFER_SAMPLES,
-};
+use crate::proto::{Error, MAX_FOCI_TOTAL, MOD_BUFFER_SAMPLES};
 use crate::tests::builders::{
     change_mod_bank, change_pattern_bank, config_mod, config_mod_rep, config_pattern,
     config_pattern_rep,
@@ -36,7 +32,7 @@ fn config_mod_writes_playback_registers_and_latches() {
     assert_eq!(h.ctl(ADDR_MOD_REP0 + 1), REP_INFINITE);
     assert_eq!(
         h.ctl(ADDR_MOD_TRANSITION_MODE),
-        u16::from(TRANSITION_MODE_SYNC_IDX)
+        TransitionMode::SyncIdx as u16
     );
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
     assert_eq!(h.latch_count(CTL_FLAG_MOD_SET), latches_at_boot + 1);
@@ -60,13 +56,13 @@ fn config_mod_rejects_invalid_fields_and_leaves_registers_untouched() {
     assert_eq!(h.data(), 0);
 
     h.deliver(&config_mod(1, invalid_bank(), 1, 1));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
     h.deliver(&config_mod(2, 0, 0, 1));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
     h.deliver(&config_mod(3, 0, 1, 0));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
     h.deliver(&config_mod(4, 0, 1, MOD_BUFFER_SAMPLES + 1));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     assert_eq!(h.ctl(ADDR_MOD_CYCLE0 + 1), 99);
     assert_eq!(h.ctl(ADDR_MOD_FREQ_DIV0 + 1), 2);
@@ -105,7 +101,7 @@ fn config_pattern_raw_writes_registers_and_latches() {
     assert_eq!(h.ctl(ADDR_PATTERN_REP0), REP_INFINITE);
     assert_eq!(
         h.ctl(ADDR_PATTERN_TRANSITION_MODE),
-        u16::from(TRANSITION_MODE_SYNC_IDX)
+        TransitionMode::SyncIdx as u16
     );
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
     assert_eq!(h.ctl(ADDR_CTL_FLAG) & CTL_FLAG_PATTERN_SET, 0);
@@ -159,10 +155,10 @@ fn config_pattern_rejects_invalid_raw_fields() {
         0,
         0,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&config_pattern(1, 0, 2, 1, 1, 0, 0));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     assert_eq!(h.ctl(ADDR_PATTERN_CYCLE0), 0);
 }
@@ -172,7 +168,7 @@ fn config_pattern_rejects_invalid_foci_fields() {
     let mut h = Harness::new();
 
     h.deliver(&config_pattern(0, 0, EMISSION_TYPE_FOCI, 1, 1, 0, 340));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
     h.deliver(&config_pattern(
         1,
         0,
@@ -182,7 +178,7 @@ fn config_pattern_rejects_invalid_foci_fields() {
         NUM_FOCI_MAX + 1,
         340,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&config_pattern(
         2,
@@ -193,10 +189,10 @@ fn config_pattern_rejects_invalid_foci_fields() {
         8,
         340,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&config_pattern(3, 0, EMISSION_TYPE_FOCI, 1, 1, 1, 0));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&config_pattern(
         4,
@@ -215,12 +211,12 @@ fn change_pattern_bank_writes_transition_and_req_bank_and_latches() {
     let mut h = Harness::new();
     let latches_at_boot = h.latch_count(CTL_FLAG_PATTERN_SET);
 
-    h.deliver(&change_pattern_bank(0, 1, TRANSITION_MODE_IMMEDIATE, 0));
+    h.deliver(&change_pattern_bank(0, 1, TransitionMode::Immediate, 0));
 
     assert_eq!(h.data(), 0);
     assert_eq!(
         h.ctl(ADDR_PATTERN_TRANSITION_MODE),
-        u16::from(TRANSITION_MODE_IMMEDIATE)
+        TransitionMode::Immediate as u16
     );
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
     assert_eq!(h.latch_count(CTL_FLAG_PATTERN_SET), latches_at_boot + 1);
@@ -246,14 +242,14 @@ fn change_pattern_bank_writes_transition_value() {
     h.deliver(&change_pattern_bank(
         1,
         0,
-        TRANSITION_MODE_SYS_TIME,
+        TransitionMode::SysTime,
         0x0123_4567_89AB_CDEF,
     ));
 
     assert_eq!(h.data(), 0);
     assert_eq!(
         h.ctl(ADDR_PATTERN_TRANSITION_MODE),
-        u16::from(TRANSITION_MODE_SYS_TIME)
+        TransitionMode::SysTime as u16
     );
     assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_VALUE_0), 0xCDEF);
     assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_VALUE_0 + 1), 0x89AB);
@@ -267,10 +263,10 @@ fn change_pattern_bank_rejects_invalid_bank() {
     h.deliver(&change_pattern_bank(
         0,
         invalid_bank(),
-        TRANSITION_MODE_IMMEDIATE,
+        TransitionMode::Immediate,
         0,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 }
 
@@ -279,12 +275,12 @@ fn change_mod_bank_writes_transition_and_req_bank_and_latches() {
     let mut h = Harness::new();
     let latches_at_boot = h.latch_count(CTL_FLAG_MOD_SET);
 
-    h.deliver(&change_mod_bank(0, 1, TRANSITION_MODE_IMMEDIATE, 0));
+    h.deliver(&change_mod_bank(0, 1, TransitionMode::Immediate, 0));
 
     assert_eq!(h.data(), 0);
     assert_eq!(
         h.ctl(ADDR_MOD_TRANSITION_MODE),
-        u16::from(TRANSITION_MODE_IMMEDIATE)
+        TransitionMode::Immediate as u16
     );
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 1);
     assert_eq!(h.latch_count(CTL_FLAG_MOD_SET), latches_at_boot + 1);
@@ -297,10 +293,10 @@ fn change_mod_bank_rejects_invalid_bank() {
     h.deliver(&change_mod_bank(
         0,
         invalid_bank(),
-        TRANSITION_MODE_IMMEDIATE,
+        TransitionMode::Immediate,
         0,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 }
 
@@ -308,11 +304,11 @@ fn change_mod_bank_rejects_invalid_bank() {
 fn change_mod_bank_rejects_timed_transition_on_infinite_loop() {
     let mut h = Harness::new();
 
-    h.deliver(&change_mod_bank(0, 1, TRANSITION_MODE_SYNC_IDX, 0));
-    assert_eq!(h.data(), ERR_INVALID_TRANSITION_MODE);
+    h.deliver(&change_mod_bank(0, 1, TransitionMode::SyncIdx, 0));
+    assert_eq!(h.data(), Error::InvalidTransitionMode as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
-    h.deliver(&change_mod_bank(1, 1, TRANSITION_MODE_EXT, 0));
+    h.deliver(&change_mod_bank(1, 1, TransitionMode::Ext, 0));
     assert_eq!(h.data(), 0);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 1);
 }
@@ -323,11 +319,11 @@ fn change_mod_bank_rejects_immediate_transition_on_finite_loop() {
     h.deliver(&config_mod_rep(0, 1, 10, 100, 4));
     assert_eq!(h.data(), 0);
 
-    h.deliver(&change_mod_bank(1, 1, TRANSITION_MODE_IMMEDIATE, 0));
-    assert_eq!(h.data(), ERR_INVALID_TRANSITION_MODE);
+    h.deliver(&change_mod_bank(1, 1, TransitionMode::Immediate, 0));
+    assert_eq!(h.data(), Error::InvalidTransitionMode as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
-    h.deliver(&change_mod_bank(2, 1, TRANSITION_MODE_GPIO, 1));
+    h.deliver(&change_mod_bank(2, 1, TransitionMode::Gpio, 1));
     assert_eq!(h.data(), 0);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 1);
 }
@@ -336,11 +332,11 @@ fn change_mod_bank_rejects_immediate_transition_on_finite_loop() {
 fn change_pattern_bank_rejects_timed_transition_on_infinite_loop() {
     let mut h = Harness::new();
 
-    h.deliver(&change_pattern_bank(0, 1, TRANSITION_MODE_GPIO, 0));
-    assert_eq!(h.data(), ERR_INVALID_TRANSITION_MODE);
+    h.deliver(&change_pattern_bank(0, 1, TransitionMode::Gpio, 0));
+    assert_eq!(h.data(), Error::InvalidTransitionMode as u8);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 
-    h.deliver(&change_pattern_bank(1, 1, TRANSITION_MODE_IMMEDIATE, 0));
+    h.deliver(&change_pattern_bank(1, 1, TransitionMode::Immediate, 0));
     assert_eq!(h.data(), 0);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
 }
@@ -360,11 +356,11 @@ fn change_pattern_bank_rejects_immediate_transition_on_finite_loop() {
     ));
     assert_eq!(h.data(), 0);
 
-    h.deliver(&change_pattern_bank(1, 1, TRANSITION_MODE_EXT, 0));
-    assert_eq!(h.data(), ERR_INVALID_TRANSITION_MODE);
+    h.deliver(&change_pattern_bank(1, 1, TransitionMode::Ext, 0));
+    assert_eq!(h.data(), Error::InvalidTransitionMode as u8);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 
-    h.deliver(&change_pattern_bank(2, 1, TRANSITION_MODE_SYNC_IDX, 0));
+    h.deliver(&change_pattern_bank(2, 1, TransitionMode::SyncIdx, 0));
     assert_eq!(h.data(), 0);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
 }
@@ -379,16 +375,16 @@ fn change_mod_bank_rejects_sys_time_transition_within_margin() {
     h.deliver(&change_mod_bank(
         1,
         1,
-        TRANSITION_MODE_SYS_TIME,
+        TransitionMode::SysTime,
         1_000_000_000 + SYS_TIME_TRANSITION_MARGIN_NS - 1,
     ));
-    assert_eq!(h.data(), ERR_MISS_TRANSITION_TIME);
+    assert_eq!(h.data(), Error::MissTransitionTime as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
     h.deliver(&change_mod_bank(
         2,
         1,
-        TRANSITION_MODE_SYS_TIME,
+        TransitionMode::SysTime,
         1_000_000_000 + SYS_TIME_TRANSITION_MARGIN_NS,
     ));
     assert_eq!(h.data(), 0);
@@ -414,16 +410,16 @@ fn change_pattern_bank_rejects_sys_time_transition_within_margin() {
     h.deliver(&change_pattern_bank(
         1,
         1,
-        TRANSITION_MODE_SYS_TIME,
+        TransitionMode::SysTime,
         2_000_000_000,
     ));
-    assert_eq!(h.data(), ERR_MISS_TRANSITION_TIME);
+    assert_eq!(h.data(), Error::MissTransitionTime as u8);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 
     h.deliver(&change_pattern_bank(
         2,
         1,
-        TRANSITION_MODE_SYS_TIME,
+        TransitionMode::SysTime,
         2_000_000_000 + SYS_TIME_TRANSITION_MARGIN_NS + 1,
     ));
     assert_eq!(h.data(), 0);

@@ -8,16 +8,32 @@ use crate::params::{
     ADDR_SILENCER_FLAG, ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE,
     BRAM_CNT_SELECT_OUTPUT_MASK, BRAM_CNT_SELECT_PHASE_CORR, BRAM_SELECT_CONTROLLER,
     BRAM_SELECT_EMISSION, BRAM_SELECT_MOD, BRAM_SELECT_PWE_TABLE, CTL_FLAG_DEBUG_SET,
-    CTL_FLAG_MOD_SET, CTL_FLAG_PATTERN_SET, CTL_FLAG_SILENCER_SET, EMISSION_TYPE_RAW, NUM_BANKS,
-    NUM_TRANSDUCERS, TRANSITION_MODE_EXT, TRANSITION_MODE_GPIO, TRANSITION_MODE_SYNC_IDX,
-    TRANSITION_MODE_SYS_TIME,
+    CTL_FLAG_MOD_SET, CTL_FLAG_PATTERN_SET, CTL_FLAG_SILENCER_SET, EMISSION_TYPE_FOCI,
+    EMISSION_TYPE_RAW, NUM_BANKS, NUM_TRANSDUCERS, TRANSITION_MODE_EXT, TRANSITION_MODE_GPIO,
+    TRANSITION_MODE_SYNC_IDX, TRANSITION_MODE_SYS_TIME,
 };
 use crate::port::Port;
-use crate::proto::{ERR_FPGA_TIMEOUT, ERR_NONE, MODE_LOW_LATENCY, OUTPUT_MASK_WORDS};
+use crate::proto::{Error, Mode, OUTPUT_MASK_WORDS, wire_enum};
 
 pub const FPGA_PAGE_WORDS: u32 = 16384;
 
-pub const TRANSITION_MODE_IMMEDIATE: u8 = 0xFF;
+wire_enum! {
+    pub enum TransitionMode {
+        SyncIdx = TRANSITION_MODE_SYNC_IDX,
+        SysTime = TRANSITION_MODE_SYS_TIME,
+        Gpio = TRANSITION_MODE_GPIO,
+        Ext = TRANSITION_MODE_EXT,
+        Immediate = 0xFF,
+    }
+}
+
+wire_enum! {
+    pub enum EmissionType {
+        Foci = EMISSION_TYPE_FOCI,
+        Raw = EMISSION_TYPE_RAW,
+    }
+}
+
 pub const REP_INFINITE: u16 = 0xFFFF;
 pub const SYS_TIME_TRANSITION_MARGIN_NS: u64 = 10_000_000;
 
@@ -54,11 +70,10 @@ fn write_switch<P: Port>(port: &mut P, reg: u16, value: u16) {
     port.memory_barrier();
 }
 
-pub fn set_and_wait_update<P: Port>(port: &mut P, mode: u8, flag: u16) -> u8 {
-    let max_polls = if mode == MODE_LOW_LATENCY {
-        FPGA_WAIT_UPDATE_MAX_POLLS_INLINE
-    } else {
-        FPGA_WAIT_UPDATE_MAX_POLLS
+pub fn set_and_wait_update<P: Port>(port: &mut P, mode: Mode, flag: u16) -> Result<(), Error> {
+    let max_polls = match mode {
+        Mode::LowLatency => FPGA_WAIT_UPDATE_MAX_POLLS_INLINE,
+        Mode::Fifo => FPGA_WAIT_UPDATE_MAX_POLLS,
     };
     let persistent = read(port, BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG);
     write(
@@ -70,10 +85,10 @@ pub fn set_and_wait_update<P: Port>(port: &mut P, mode: u8, flag: u16) -> u8 {
     port.memory_barrier();
     for _ in 0..max_polls {
         if (read(port, BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG) & flag) == 0 {
-            return ERR_NONE;
+            return Ok(());
         }
     }
-    ERR_FPGA_TIMEOUT
+    Err(Error::FpgaTimeout)
 }
 
 pub fn write_u64<P: Port>(port: &mut P, addr: u16, value: u64) {
@@ -93,14 +108,14 @@ pub fn write_change_bank<P: Port>(
     transition_mode_addr: u16,
     transition_value_addr: u16,
     bank: u8,
-    transition_mode: u8,
+    transition_mode: TransitionMode,
     transition_value: u64,
 ) {
     write(
         port,
         BRAM_SELECT_CONTROLLER,
         transition_mode_addr,
-        u16::from(transition_mode),
+        transition_mode as u16,
     );
     write_u64(port, transition_value_addr, transition_value);
     write(
@@ -112,16 +127,16 @@ pub fn write_change_bank<P: Port>(
 }
 
 #[must_use]
-pub fn transition_mode_violates_loop(rep: u16, transition_mode: u8) -> bool {
+pub fn transition_mode_violates_loop(rep: u16, transition_mode: TransitionMode) -> bool {
     if rep == REP_INFINITE {
         !matches!(
             transition_mode,
-            TRANSITION_MODE_IMMEDIATE | TRANSITION_MODE_EXT
+            TransitionMode::Immediate | TransitionMode::Ext
         )
     } else {
         !matches!(
             transition_mode,
-            TRANSITION_MODE_SYNC_IDX | TRANSITION_MODE_SYS_TIME | TRANSITION_MODE_GPIO
+            TransitionMode::SyncIdx | TransitionMode::SysTime | TransitionMode::Gpio
         )
     }
 }
@@ -213,7 +228,7 @@ fn init_mod<P: Port>(port: &mut P) {
         port,
         BRAM_SELECT_CONTROLLER,
         ADDR_MOD_TRANSITION_MODE,
-        u16::from(TRANSITION_MODE_SYNC_IDX),
+        TransitionMode::SyncIdx as u16,
     );
     write_u64(port, ADDR_MOD_TRANSITION_VALUE_0, 0);
     write(port, BRAM_SELECT_CONTROLLER, ADDR_MOD_REQ_RD_BANK, 0);
@@ -242,7 +257,7 @@ fn init_pattern<P: Port>(port: &mut P) {
         port,
         BRAM_SELECT_CONTROLLER,
         ADDR_PATTERN_TRANSITION_MODE,
-        u16::from(TRANSITION_MODE_SYNC_IDX),
+        TransitionMode::SyncIdx as u16,
     );
     write_u64(port, ADDR_PATTERN_TRANSITION_VALUE_0, 0);
     write(port, BRAM_SELECT_CONTROLLER, ADDR_PATTERN_REQ_RD_BANK, 0);
@@ -251,7 +266,7 @@ fn init_pattern<P: Port>(port: &mut P) {
             port,
             BRAM_SELECT_CONTROLLER,
             ADDR_PATTERN_MODE0 + bank,
-            u16::from(EMISSION_TYPE_RAW),
+            EmissionType::Raw as u16,
         );
         write(port, BRAM_SELECT_CONTROLLER, ADDR_PATTERN_CYCLE0 + bank, 0);
         write(
@@ -307,23 +322,23 @@ fn init_tables<P: Port>(port: &mut P) {
     }
 }
 
-pub fn init<P: Port>(port: &mut P, mode: u8) -> u8 {
+pub fn init<P: Port>(port: &mut P, mode: Mode) -> Result<(), Error> {
     write(port, BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG, 0);
     init_silencer(port);
     init_mod(port);
     init_pattern(port);
     init_tables(port);
 
-    let mut err = ERR_NONE;
+    let mut result = Ok(());
     for flag in [
         CTL_FLAG_MOD_SET,
         CTL_FLAG_PATTERN_SET,
         CTL_FLAG_SILENCER_SET,
         CTL_FLAG_DEBUG_SET,
     ] {
-        if set_and_wait_update(port, mode, flag) != ERR_NONE {
-            err = ERR_FPGA_TIMEOUT;
+        if set_and_wait_update(port, mode, flag).is_err() {
+            result = Err(Error::FpgaTimeout);
         }
     }
-    err
+    result
 }

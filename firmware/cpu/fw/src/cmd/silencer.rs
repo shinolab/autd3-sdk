@@ -1,6 +1,8 @@
 use core::cell::Cell;
+use core::mem::offset_of;
 
-use zerocopy::FromBytes;
+use zerocopy::little_endian::U16;
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use crate::app::Cpu;
 use crate::fpga;
@@ -13,9 +15,27 @@ use crate::params::{
     BRAM_SELECT_CONTROLLER, CTL_FLAG_SILENCER_SET, NUM_BANKS, SILENCER_FLAG_FIXED_UPDATE_RATE_MODE,
 };
 use crate::port::Port;
-use crate::proto::{
-    ERR_INVALID_PAYLOAD, ERR_INVALID_SILENCER_SETTING, SILENCER_FLAG_STRICT_MODE, SilencerPayload,
-};
+use crate::proto::Error;
+
+pub const SILENCER_FLAG_BIT_STRICT_MODE: u8 = 1;
+pub const SILENCER_FLAG_STRICT_MODE: u8 = 1 << SILENCER_FLAG_BIT_STRICT_MODE;
+
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct SilencerPayload {
+    pub flag: u8,
+    _reserved: u8,
+    pub update_rate_intensity: U16,
+    pub update_rate_phase: U16,
+    pub completion_steps_intensity: U16,
+    pub completion_steps_phase: U16,
+}
+
+const _: () = assert!(offset_of!(SilencerPayload, flag) == 0);
+const _: () = assert!(offset_of!(SilencerPayload, update_rate_intensity) == 2);
+const _: () = assert!(offset_of!(SilencerPayload, update_rate_phase) == 4);
+const _: () = assert!(offset_of!(SilencerPayload, completion_steps_intensity) == 6);
+const _: () = assert!(offset_of!(SilencerPayload, completion_steps_phase) == 8);
 
 pub(crate) struct SilencerGuard {
     strict_mode: Cell<bool>,
@@ -91,9 +111,9 @@ impl SilencerGuard {
 }
 
 impl Cpu {
-    pub(crate) fn set_silencer<P: Port>(&self, port: &mut P, payload: &[u8]) -> u8 {
+    pub(crate) fn set_silencer<P: Port>(&self, port: &mut P, payload: &[u8]) -> Result<(), Error> {
         let Ok((p, _)) = SilencerPayload::ref_from_prefix(payload) else {
-            return ERR_INVALID_PAYLOAD;
+            return Err(Error::InvalidPayload);
         };
         let flag = p.flag;
         let update_rate_intensity = p.update_rate_intensity.get();
@@ -103,12 +123,12 @@ impl Cpu {
 
         if (flag & SILENCER_FLAG_FIXED_UPDATE_RATE_MODE) != 0 {
             if update_rate_intensity == 0 || update_rate_phase == 0 {
-                return ERR_INVALID_PAYLOAD;
+                return Err(Error::InvalidPayload);
             }
             self.silencer.strict_mode.set(false);
         } else {
             if completion_steps_intensity == 0 || completion_steps_phase == 0 {
-                return ERR_INVALID_PAYLOAD;
+                return Err(Error::InvalidPayload);
             }
             if (flag & SILENCER_FLAG_STRICT_MODE) != 0 {
                 let mod_div =
@@ -119,7 +139,7 @@ impl Cpu {
                     || pattern_div < completion_steps_intensity
                     || pattern_div < completion_steps_phase
                 {
-                    return ERR_INVALID_SILENCER_SETTING;
+                    return Err(Error::InvalidSilencerSetting);
                 }
                 self.silencer.strict_mode.set(true);
             } else {

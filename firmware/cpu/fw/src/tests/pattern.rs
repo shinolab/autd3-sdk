@@ -3,13 +3,13 @@ use std::vec::Vec;
 
 use crate::fpga::FPGA_PAGE_WORDS;
 use crate::params::{ADDR_MOD_MEM_WR_PAGE, ADDR_PATTERN_MEM_WR_PAGE, NUM_BANKS, NUM_TRANSDUCERS};
-use crate::proto::{
-    CMD_READ_ERROR_DETAIL, CMD_WRITE_MOD_BUFFER, CMD_WRITE_PATTERN_BUFFER, EM_WRITE_MAX_DATA_LEN,
-    EM_WRITE_OFFSET_BANK, EM_WRITE_OFFSET_DATA_LEN, EM_WRITE_OFFSET_OFFSET, EMISSION_RAM_WORDS,
-    EMISSION_SLOT_WORDS, ERR_INVALID_PAYLOAD, MOD_BUFFER_SAMPLES, MOD_WRITE_MAX_DATA_LEN,
-    MOD_WRITE_OFFSET_BANK, MOD_WRITE_OFFSET_DATA_LEN, MOD_WRITE_OFFSET_OFFSET,
-    WRITE_PATTERN_FORMAT_PHASE_FULL, WRITE_PATTERN_FORMAT_PHASE_HALF,
-};
+use zerocopy::FromZeros;
+use zerocopy::little_endian::U16;
+
+use crate::cmd::write_mod::{MOD_WRITE_MAX_DATA_LEN, WriteModPayload};
+use crate::cmd::write_pattern::{EM_WRITE_MAX_DATA_LEN, WritePatternPayload};
+use crate::cmd::write_pattern_compressed::PatternFormat;
+use crate::proto::{Cmd, EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, Error, MOD_BUFFER_SAMPLES};
 use crate::tests::builders::{write_mod_buffer, write_pattern_buffer, write_pattern_compressed};
 use crate::tests::mock::{Frame, Harness};
 
@@ -85,24 +85,17 @@ fn write_pattern_buffer_rejects_invalid_payloads() {
     let mut h = Harness::new();
 
     h.deliver(&write_pattern_buffer(0, bad_bank(), 0, &[0x0001]));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
-    let mut f = Frame::new(1, CMD_WRITE_PATTERN_BUFFER);
-    f.payload()[EM_WRITE_OFFSET_BANK] = 0;
-    f.put_u32(EM_WRITE_OFFSET_OFFSET, 0);
-    f.put_u16(EM_WRITE_OFFSET_DATA_LEN, 3);
-    h.deliver(&f);
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    let mut odd = WritePatternPayload::new_zeroed();
+    odd.data_len = U16::new(3);
+    h.deliver(&Frame::from_payload(1, Cmd::WritePatternBuffer, &odd));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
-    let mut g = Frame::new(2, CMD_WRITE_PATTERN_BUFFER);
-    g.payload()[EM_WRITE_OFFSET_BANK] = 0;
-    g.put_u32(EM_WRITE_OFFSET_OFFSET, 0);
-    g.put_u16(
-        EM_WRITE_OFFSET_DATA_LEN,
-        u16::try_from(EM_WRITE_MAX_DATA_LEN + 2).unwrap(),
-    );
-    h.deliver(&g);
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    let mut too_long = WritePatternPayload::new_zeroed();
+    too_long.data_len = U16::new(u16::try_from(EM_WRITE_MAX_DATA_LEN + 2).unwrap());
+    h.deliver(&Frame::from_payload(2, Cmd::WritePatternBuffer, &too_long));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_buffer(
         3,
@@ -110,7 +103,7 @@ fn write_pattern_buffer_rejects_invalid_payloads() {
         EMISSION_RAM_WORDS - 1,
         &[0x0001, 0x0002],
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
     assert_eq!(h.emission_word(0, EMISSION_RAM_WORDS as usize - 1), 0);
 }
 
@@ -131,7 +124,7 @@ fn write_pattern_compressed_phase_full_decompresses_two_indices() {
         0,
         1,
         slot,
-        WRITE_PATTERN_FORMAT_PHASE_FULL,
+        PatternFormat::PhaseFull as u8,
         2,
         &words,
     ));
@@ -158,7 +151,7 @@ fn write_pattern_compressed_phase_full_partial_count_writes_single_slot() {
         0,
         0,
         slot,
-        WRITE_PATTERN_FORMAT_PHASE_FULL,
+        PatternFormat::PhaseFull as u8,
         1,
         &words,
     ));
@@ -190,7 +183,7 @@ fn write_pattern_compressed_phase_half_decompresses_four_indices() {
         0,
         0,
         slot,
-        WRITE_PATTERN_FORMAT_PHASE_HALF,
+        PatternFormat::PhaseHalf as u8,
         4,
         &words,
     ));
@@ -215,50 +208,50 @@ fn write_pattern_compressed_rejects_invalid_payloads() {
     let full = vec![0x1234_u16; NUM_TRANSDUCERS];
 
     h.deliver(&write_pattern_compressed(0, 0, 0, 0, 1, &full));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_compressed(1, 0, 0, 3, 1, &full));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_compressed(
         2,
         0,
         0,
-        WRITE_PATTERN_FORMAT_PHASE_FULL,
+        PatternFormat::PhaseFull as u8,
         0,
         &full,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_compressed(
         3,
         0,
         0,
-        WRITE_PATTERN_FORMAT_PHASE_FULL,
+        PatternFormat::PhaseFull as u8,
         3,
         &full,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_compressed(
         4,
         0,
         0,
-        WRITE_PATTERN_FORMAT_PHASE_HALF,
+        PatternFormat::PhaseHalf as u8,
         5,
         &full,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_compressed(
         5,
         0,
         EMISSION_RAM_WORDS - EMISSION_SLOT_WORDS,
-        WRITE_PATTERN_FORMAT_PHASE_FULL,
+        PatternFormat::PhaseFull as u8,
         2,
         &full,
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 }
 
 #[test]
@@ -332,22 +325,17 @@ fn write_mod_buffer_rejects_invalid_payloads() {
     let mut h = Harness::new();
 
     h.deliver(&write_mod_buffer(0, bad_bank(), 0, &[0x01]));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
-    h.deliver(&Frame::new(1, CMD_READ_ERROR_DETAIL));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&write_mod_buffer(2, 0, 1, &[0x01, 0x02]));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
-    let mut f = Frame::new(3, CMD_WRITE_MOD_BUFFER);
-    f.payload()[MOD_WRITE_OFFSET_BANK] = 0;
-    f.put_u32(MOD_WRITE_OFFSET_OFFSET, 0);
-    f.put_u16(
-        MOD_WRITE_OFFSET_DATA_LEN,
-        u16::try_from(MOD_WRITE_MAX_DATA_LEN + 1).unwrap(),
-    );
-    h.deliver(&f);
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    let mut too_long = WriteModPayload::new_zeroed();
+    too_long.data_len = U16::new(u16::try_from(MOD_WRITE_MAX_DATA_LEN + 1).unwrap());
+    h.deliver(&Frame::from_payload(3, Cmd::WriteModBuffer, &too_long));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&write_mod_buffer(
         4,
@@ -355,6 +343,6 @@ fn write_mod_buffer_rejects_invalid_payloads() {
         MOD_BUFFER_SAMPLES - 2,
         &[0x01, 0x02, 0x03],
     ));
-    assert_eq!(h.data(), ERR_INVALID_PAYLOAD);
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
     assert_eq!(h.mod_word(0, MOD_BUFFER_SAMPLES as usize / 2 - 1), 0);
 }
