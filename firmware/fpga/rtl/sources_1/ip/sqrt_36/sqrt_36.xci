@@ -20,8 +20,8 @@
         "Precision": [ { "value": "0", "resolve_type": "user", "format": "long", "usage": "all" } ],
         "Coarse_Rotation": [ { "value": "false", "value_src": "user", "resolve_type": "user", "format": "bool", "usage": "all" } ],
         "Compensation_Scaling": [ { "value": "No_Scale_Compensation", "resolve_type": "user", "usage": "all" } ],
-        "cartesian_has_tuser": [ { "value": "false", "resolve_type": "user", "format": "bool", "usage": "all" } ],
-        "cartesian_tuser_width": [ { "value": "1", "resolve_type": "user", "format": "long", "usage": "all" } ],
+        "cartesian_has_tuser": [ { "value": "true", "value_src": "user", "resolve_type": "user", "format": "bool", "usage": "all" } ],
+        "cartesian_tuser_width": [ { "value": "1", "value_src": "user", "resolve_type": "user", "format": "long", "usage": "all" } ],
         "cartesian_has_tlast": [ { "value": "false", "resolve_type": "user", "format": "bool", "usage": "all" } ],
         "phase_has_tuser": [ { "value": "false", "resolve_type": "user", "format": "bool", "usage": "all" } ],
         "phase_tuser_width": [ { "value": "1", "resolve_type": "user", "format": "long", "usage": "all" } ],
@@ -58,7 +58,7 @@
         "C_HAS_S_AXIS_PHASE_TLAST": [ { "value": "0", "resolve_type": "generated", "format": "long", "usage": "all" } ],
         "C_S_AXIS_PHASE_TDATA_WIDTH": [ { "value": "40", "resolve_type": "generated", "format": "long", "usage": "all" } ],
         "C_S_AXIS_PHASE_TUSER_WIDTH": [ { "value": "1", "resolve_type": "generated", "format": "long", "usage": "all" } ],
-        "C_HAS_S_AXIS_CARTESIAN_TUSER": [ { "value": "0", "resolve_type": "generated", "format": "long", "usage": "all" } ],
+        "C_HAS_S_AXIS_CARTESIAN_TUSER": [ { "value": "1", "resolve_type": "generated", "format": "long", "usage": "all" } ],
         "C_HAS_S_AXIS_CARTESIAN_TLAST": [ { "value": "0", "resolve_type": "generated", "format": "long", "usage": "all" } ],
         "C_S_AXIS_CARTESIAN_TDATA_WIDTH": [ { "value": "40", "resolve_type": "generated", "format": "long", "usage": "all" } ],
         "C_S_AXIS_CARTESIAN_TUSER_WIDTH": [ { "value": "1", "resolve_type": "generated", "format": "long", "usage": "all" } ],
@@ -94,8 +94,10 @@
       "ports": {
         "aclk": [ { "direction": "in", "driver_value": "0x1" } ],
         "s_axis_cartesian_tvalid": [ { "direction": "in", "driver_value": "0x0" } ],
+        "s_axis_cartesian_tuser": [ { "direction": "in", "size_left": "0", "size_right": "0", "driver_value": "0" } ],
         "s_axis_cartesian_tdata": [ { "direction": "in", "size_left": "39", "size_right": "0", "driver_value": "0" } ],
         "m_axis_dout_tvalid": [ { "direction": "out", "driver_value": "0x0" } ],
+        "m_axis_dout_tuser": [ { "direction": "out", "size_left": "0", "size_right": "0", "driver_value": "0" } ],
         "m_axis_dout_tdata": [ { "direction": "out", "size_left": "23", "size_right": "0", "driver_value": "0" } ]
       },
       "interfaces": {
@@ -107,7 +109,7 @@
             "TDATA_NUM_BYTES": [ { "value": "5", "value_src": "auto", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
             "TDEST_WIDTH": [ { "value": "0", "value_src": "constant", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
             "TID_WIDTH": [ { "value": "0", "value_src": "constant", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
-            "TUSER_WIDTH": [ { "value": "0", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
+            "TUSER_WIDTH": [ { "value": "1", "value_src": "auto", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
             "HAS_TREADY": [ { "value": "0", "value_src": "auto", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
             "HAS_TSTRB": [ { "value": "0", "value_src": "constant", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
             "HAS_TKEEP": [ { "value": "0", "value_src": "constant", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
@@ -120,6 +122,7 @@
           },
           "port_maps": {
             "TDATA": [ { "physical_name": "s_axis_cartesian_tdata" } ],
+            "TUSER": [ { "physical_name": "s_axis_cartesian_tuser" } ],
             "TVALID": [ { "physical_name": "s_axis_cartesian_tvalid" } ]
           }
         },
@@ -167,7 +170,7 @@
             "TDATA_NUM_BYTES": [ { "value": "3", "value_src": "auto", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
             "TDEST_WIDTH": [ { "value": "0", "value_src": "constant", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
             "TID_WIDTH": [ { "value": "0", "value_src": "constant", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
-            "TUSER_WIDTH": [ { "value": "0", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
+            "TUSER_WIDTH": [ { "value": "1", "value_src": "auto", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
             "HAS_TREADY": [ { "value": "0", "value_src": "auto", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
             "HAS_TSTRB": [ { "value": "0", "value_src": "constant", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
             "HAS_TKEEP": [ { "value": "0", "value_src": "constant", "resolve_type": "generated", "format": "long", "is_ips_inferred": true, "is_static_object": false } ],
@@ -180,11 +183,12 @@
           },
           "port_maps": {
             "TDATA": [ { "physical_name": "m_axis_dout_tdata" } ],
+            "TUSER": [ { "physical_name": "m_axis_dout_tuser" } ],
             "TVALID": [ { "physical_name": "m_axis_dout_tvalid" } ]
           }
         }
       }
     }
   },
-  "checksum": "0e9cefe4"
+  "checksum": "fd04d8dc"
 }

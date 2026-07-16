@@ -4,6 +4,7 @@ module focus_calc #(
     parameter string MODE = "NearestEven"
 ) (
     input wire CLK,
+    input wire DIN_VALID,
     input wire signed [17:0] FOCUS_X,
     input wire signed [17:0] FOCUS_Y,
     input wire signed [17:0] FOCUS_Z,
@@ -12,7 +13,8 @@ module focus_calc #(
     input wire [15:0] SOUND_SPEED,
     input wire [7:0] OFFSET,
     output wire [7:0] SIN,
-    output wire [7:0] COS
+    output wire [7:0] COS,
+    output wire DOUT_VALID
 );
   logic signed [17:0] dx, dy;
   logic [35:0] dx2, dy2, dz2, dxy2, d2;
@@ -20,6 +22,22 @@ module focus_calc #(
 
   logic [31:0] quo;
   logic [15:0] _unused_rem;
+
+  localparam int FrontLatency = 2 + 3 + 2 + 2;  // addsub_x, mult_x, addsub_xy2, addsub_xyz2
+  logic front_valid;
+  logic sqrt_valid;
+  logic dout_valid;
+
+  delay_fifo #(
+      .WIDTH(1),
+      .DEPTH(FrontLatency)
+  ) fifo_front (
+      .CLK (CLK),
+      .DIN (DIN_VALID),
+      .DOUT(front_valid)
+  );
+
+  assign DOUT_VALID = dout_valid;
 
   addsub #(
       .WIDTH(18)
@@ -95,29 +113,39 @@ module focus_calc #(
     sqrt_36 sqrt_36 (
         .aclk(CLK),
         .s_axis_cartesian_tvalid(1'b1),
+        .s_axis_cartesian_tuser(front_valid),
         .s_axis_cartesian_tdata({4'd0, d2}),
         .m_axis_dout_tvalid(),
+        .m_axis_dout_tuser(sqrt_valid),
         .m_axis_dout_tdata(sqrt_dout)
     );
   end else if (MODE == "TRUNC") begin
     logic [23:0] sqrt_dout_buf;
+    logic sqrt_valid_buf;
     sqrt_36_trunc sqrt_36_trunc (
         .aclk(CLK),
         .s_axis_cartesian_tvalid(1'b1),
+        .s_axis_cartesian_tuser(front_valid),
         .s_axis_cartesian_tdata({4'd0, d2}),
         .m_axis_dout_tvalid(),
+        .m_axis_dout_tuser(sqrt_valid_buf),
         .m_axis_dout_tdata(sqrt_dout_buf)
     );
-    always_ff @(posedge CLK) sqrt_dout <= sqrt_dout_buf;
+    always_ff @(posedge CLK) begin
+      sqrt_dout  <= sqrt_dout_buf;
+      sqrt_valid <= sqrt_valid_buf;
+    end
   end
 
   div_32_16 div_32_16_quo (
       .s_axis_dividend_tdata({sqrt_dout[17:0], 14'd0}),
       .s_axis_dividend_tvalid(1'b1),
+      .s_axis_dividend_tuser(sqrt_valid),
       .s_axis_divisor_tdata(SOUND_SPEED),
       .s_axis_divisor_tvalid(1'b1),
       .aclk(CLK),
       .m_axis_dout_tdata({quo, _unused_rem}),
+      .m_axis_dout_tuser(dout_valid),
       .m_axis_dout_tvalid()
   );
 
