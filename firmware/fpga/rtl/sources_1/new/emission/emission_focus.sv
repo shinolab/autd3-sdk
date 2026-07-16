@@ -15,7 +15,10 @@ module emission_focus #(
     output wire DOUT_VALID
 );
 
-  localparam int CalcLatency = 68;
+  localparam int AdderLatency = 3;  // sin_01, sin_0123, sin_acc
+  localparam int BackLatency = 3;  // atan_key, BRAM_ATAN read, phase_out
+
+  logic first_din, focus_dout_valid, adder_valid, div_valid, first_ready;
 
   logic [15:0] base_idx, idx;
   logic [63:0] data_out;
@@ -27,11 +30,10 @@ module emission_focus #(
   logic signed [15:0] trans_x, trans_y;
 
   logic [7:0] num_foci;
-  logic signed [17:0]
-      focus_x[params::NumFociMax], focus_y[params::NumFociMax], focus_z[params::NumFociMax];
+  logic signed [17:0] focus_x[params::NumFociMax], focus_y[params::NumFociMax], focus_z[params::NumFociMax];
   logic [7:0] intensity_or_offset[params::NumFociMax];
 
-  logic [$clog2(params::NumFociMax+CalcLatency)-1:0] cnt;
+  logic [7:0] cnt;
   logic [$clog2(DEPTH)-1:0] output_cnt;
 
   logic [7:0] cos[params::NumFociMax];
@@ -115,7 +117,7 @@ module emission_focus #(
       WAIT_CALC: begin
         cnt <= cnt + 1;
         tr_idx <= tr_idx + 1;
-        if (cnt == params::NumFociMax - 1 + CalcLatency) begin
+        if (first_ready) begin
           output_cnt <= '0;
           state <= OUTPUT;
         end
@@ -137,6 +139,7 @@ module emission_focus #(
       .MODE(MODE)
   ) focus_calc_0 (
       .CLK(CLK),
+      .DIN_VALID(first_din),
       .FOCUS_X(focus_x[0]),
       .FOCUS_Y(focus_y[0]),
       .FOCUS_Z(focus_z[0]),
@@ -145,13 +148,15 @@ module emission_focus #(
       .SOUND_SPEED(SOUND_SPEED),
       .OFFSET(8'd0),
       .SIN(sin[0]),
-      .COS(cos[0])
+      .COS(cos[0]),
+      .DOUT_VALID(focus_dout_valid)
   );
   for (genvar i = 1; i < params::NumFociMax; i++) begin : gen_focus_calc
     focus_calc #(
         .MODE(MODE)
     ) focus_calc (
         .CLK(CLK),
+        .DIN_VALID(1'b0),
         .FOCUS_X(focus_x[i]),
         .FOCUS_Y(focus_y[i]),
         .FOCUS_Z(focus_z[i]),
@@ -160,7 +165,8 @@ module emission_focus #(
         .SOUND_SPEED(SOUND_SPEED),
         .OFFSET(intensity_or_offset[i]),
         .SIN(sin[i]),
-        .COS(cos[i])
+        .COS(cos[i]),
+        .DOUT_VALID()
     );
   end
 
@@ -176,20 +182,44 @@ module emission_focus #(
   div_16_8 div_16_8_sin (
       .s_axis_dividend_tdata({5'd0, sin_acc}),
       .s_axis_dividend_tvalid(1'b1),
+      .s_axis_dividend_tuser(adder_valid),
       .s_axis_divisor_tdata(num_foci),
       .s_axis_divisor_tvalid(1'b1),
       .aclk(CLK),
       .m_axis_dout_tdata({_sin_quo_unuse, sin_ave, _sin_rem_unuse}),
+      .m_axis_dout_tuser(div_valid),
       .m_axis_dout_tvalid()
   );
   div_16_8 div_16_8_cos (
       .s_axis_dividend_tdata({5'd0, cos_acc}),
       .s_axis_dividend_tvalid(1'b1),
+      .s_axis_dividend_tuser(1'b0),
       .s_axis_divisor_tdata(num_foci),
       .s_axis_divisor_tvalid(1'b1),
       .aclk(CLK),
       .m_axis_dout_tdata({_cos_quo_unuse, cos_ave, _cos_rem_unuse}),
+      .m_axis_dout_tuser(),
       .m_axis_dout_tvalid()
+  );
+
+  assign first_din = (state == INPUT_FOCUS) & (cnt == params::NumFociMax - 1);
+
+  delay_fifo #(
+      .WIDTH(1),
+      .DEPTH(AdderLatency)
+  ) fifo_adder (
+      .CLK (CLK),
+      .DIN (focus_dout_valid),
+      .DOUT(adder_valid)
+  );
+
+  delay_fifo #(
+      .WIDTH(1),
+      .DEPTH(BackLatency)
+  ) fifo_back (
+      .CLK (CLK),
+      .DIN (div_valid),
+      .DOUT(first_ready)
   );
 
   logic [13:0] atan_key;
