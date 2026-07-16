@@ -185,8 +185,7 @@ module sim_emission_focus ();
         focus_z[bank][i] = sim_helper_random.range(131071, -131072);
         intensity_buf[bank][i] = sim_helper_random.range(8'hFF, 0);
       end
-      sim_helper_bram.write_emission_focus(bank, focus_x[bank], focus_y[bank], focus_z[bank],
-                                      intensity_buf[bank], cycle_buf[bank]);
+      sim_helper_bram.write_emission_focus(bank, focus_x[bank], focus_y[bank], focus_z[bank], intensity_buf[bank], cycle_buf[bank]);
     end
     $display("memory initialized");
 

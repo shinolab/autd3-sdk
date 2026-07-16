@@ -1,11 +1,9 @@
 *
 !.gitignore
+!README.md
 !/rtl/
 !/rtl/**/*
-
-!README.md
-!/*.ps1
-!/*.tcl
-!*.coe
-!commit_ips.py
-!gen_cnt_state_machine.py
+!/scripts/
+!/scripts/*.tcl
+!/coe/
+!/coe/*.coe

@@ -68,7 +68,7 @@ module sim_mem_mod ();
 
   initial begin
 
-    idx = 0;
+    idx  = 0;
     bank = 0;
 
     @(posedge locked);

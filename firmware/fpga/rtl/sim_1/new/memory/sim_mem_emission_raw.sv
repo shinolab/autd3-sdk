@@ -79,7 +79,7 @@ module sim_mem_emission_raw ();
 
   initial begin
 
-    idx = 0;
+    idx  = 0;
     addr = 0;
     bank = 0;
 

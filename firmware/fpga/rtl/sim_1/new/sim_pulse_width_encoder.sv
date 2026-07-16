@@ -127,7 +127,6 @@ module sim_pulse_width_encoder ();
       i += DEPTH;
     end
 
-    // config bram
     for (int i = 0; i < TABLE_SIZE; i++) begin
       pwe_table[i] = sim_helper_random.range(9'h1FF, 0);
     end

@@ -9,6 +9,7 @@ mod emulator;
 mod ffi;
 mod firmware;
 mod fpga;
+mod fpga_codegen;
 mod license;
 mod py;
 mod rust;

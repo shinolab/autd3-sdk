@@ -86,7 +86,7 @@ module sim_mem_emission_foci ();
 
   initial begin
 
-    idx = 0;
+    idx  = 0;
     bank = 0;
 
     @(posedge locked);
@@ -98,8 +98,7 @@ module sim_mem_emission_foci ();
         z_buf[s][i] = sim_helper_random.range(17'h1FFFF, 0);
         intensity_or_offsets_buf[s][i] = sim_helper_random.range(8'hFF, 0);
       end
-      sim_helper_bram.write_emission_focus(s, x_buf[s], y_buf[s], z_buf[s], intensity_or_offsets_buf[s],
-                                      SIZE);
+      sim_helper_bram.write_emission_focus(s, x_buf[s], y_buf[s], z_buf[s], intensity_or_offsets_buf[s], SIZE);
     end
     $display("memory initialized");
 

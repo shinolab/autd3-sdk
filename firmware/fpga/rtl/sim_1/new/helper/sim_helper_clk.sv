@@ -16,7 +16,7 @@ module sim_helper_clk (
   initial begin
     clk = '0;
     locked = '0;
-    sys_time = 1;  // start with 1 to to prevent `time_cnt_generator::UPDATE` from being asserted
+    sys_time = 1;
     #500 locked = '1;
   end
 
