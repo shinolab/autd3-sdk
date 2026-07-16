@@ -42,7 +42,6 @@ jobs:
               - '.github/workflows/ci.yml'
               - '.github/actions/setup-rust/**'
             xtask-core: &xtask-core
-              - 'xtask/src/main.rs'
               - 'xtask/src/util.rs'
               - 'xtask/Cargo.toml'
               - 'xtask/Cargo.lock'
