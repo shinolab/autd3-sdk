@@ -37,8 +37,6 @@ pub(crate) fn xor_hash_bad(seq: u8, data: &[u8]) -> Frame {
 }
 
 pub(crate) fn xor_hash_corrupted(seq: u8, sleep_ms: u16, data: &[u8]) -> Frame {
-    // Build a well-formed frame (checksum appended) then flip a data byte so the
-    // running xor no longer cancels to zero.
     let mut p = XorHashPayload::new_zeroed();
     p.sleep_ms = U16::new(sleep_ms);
     p.data_len = U16::new((data.len() + 1) as u16);
