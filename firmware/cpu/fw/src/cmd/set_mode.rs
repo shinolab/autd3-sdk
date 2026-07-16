@@ -1,17 +1,9 @@
-use core::mem::offset_of;
+use zerocopy::FromBytes;
 
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+pub use autd3_cpu_wire::payload::SetModePayload;
 
 use crate::app::Cpu;
 use crate::proto::{Error, Mode};
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct SetModePayload {
-    pub mode: u8,
-}
-
-const _: () = assert!(offset_of!(SetModePayload, mode) == 0);
 
 impl Cpu {
     pub(crate) fn set_mode_cmd(&self, payload: &[u8]) -> Result<(), Error> {

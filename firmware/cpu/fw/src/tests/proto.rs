@@ -1,4 +1,3 @@
-use zerocopy::FromZeros;
 use zerocopy::little_endian::U16;
 
 use crate::cmd::xor_hash::{XOR_HASH_MAX_DATA_LEN, XorHashPayload};
@@ -181,8 +180,10 @@ fn xor_hash_sleep_is_forwarded_to_port_hook() {
 fn xor_hash_too_large_data_len_returns_err_invalid_payload() {
     let mut h = Harness::new();
 
-    let mut p = XorHashPayload::new_zeroed();
-    p.data_len = U16::new(u16::try_from(XOR_HASH_MAX_DATA_LEN + 1).unwrap());
+    let p = XorHashPayload {
+        sleep_ms: U16::new(0),
+        data_len: U16::new(u16::try_from(XOR_HASH_MAX_DATA_LEN + 1).unwrap()),
+    };
     h.deliver(&Frame::from_payload(0, Cmd::XorHash, &p));
 
     assert_eq!(h.ack(), 0);

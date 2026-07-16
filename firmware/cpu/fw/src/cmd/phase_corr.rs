@@ -1,20 +1,11 @@
-use core::mem::{offset_of, size_of};
+use zerocopy::FromBytes;
 
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+pub use autd3_cpu_wire::payload::PhaseCorrPayload;
 
 use crate::fpga::{self, PHASE_CORR_WORDS};
 use crate::params::{BRAM_CNT_SELECT_PHASE_CORR, BRAM_SELECT_CONTROLLER, NUM_TRANSDUCERS};
 use crate::port::Port;
-use crate::proto::{Error, PAYLOAD_BYTES};
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct PhaseCorrPayload {
-    pub data: [u8; NUM_TRANSDUCERS],
-}
-
-const _: () = assert!(size_of::<PhaseCorrPayload>() <= PAYLOAD_BYTES);
-const _: () = assert!(offset_of!(PhaseCorrPayload, data) == 0);
+use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let Ok((p, _)) = PhaseCorrPayload::ref_from_prefix(payload) else {

@@ -1,0 +1,15 @@
+[package]
+name = "autd3-cpu-wire"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Shared wire-protocol contract (command opcodes, error codes, frame layout) for the AUTD3 CPU firmware and its clients."
+
+[dependencies]
+zerocopy.workspace = true
+
+[lints]
+workspace = true

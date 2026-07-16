@@ -105,6 +105,14 @@ dependencies = [
 name = "autd3-cpu-fw"
 version = "0.3.0"
 dependencies = [
+ "autd3-cpu-wire",
+ "zerocopy 0.8.52",
+]
+
+[[package]]
+name = "autd3-cpu-wire"
+version = "0.3.0"
+dependencies = [
  "zerocopy 0.8.52",
 ]
 
@@ -124,6 +132,7 @@ dependencies = [
 name = "autd3-rs"
 version = "0.3.0"
 dependencies = [
+ "autd3-cpu-wire",
  "autd3-rs-core",
  "core_affinity",
  "thread-priority",
@@ -138,6 +147,7 @@ name = "autd3-rs-core"
 version = "0.3.0"
 dependencies = [
  "approx",
+ "autd3-cpu-wire",
  "chrono",
  "nalgebra",
  "thiserror 2.0.18",
@@ -164,6 +174,7 @@ dependencies = [
 name = "autd3-rs-firmware-emulator"
 version = "0.3.0"
 dependencies = [
+ "autd3-cpu-wire",
  "autd3-rs-core",
  "zerocopy 0.8.52",
 ]

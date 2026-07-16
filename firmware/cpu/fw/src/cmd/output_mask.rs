@@ -1,21 +1,11 @@
-use core::mem::{offset_of, size_of};
+use zerocopy::FromBytes;
 
-use zerocopy::little_endian::U16;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+pub use autd3_cpu_wire::payload::OutputMaskPayload;
 
 use crate::fpga;
 use crate::params::{BRAM_CNT_SELECT_OUTPUT_MASK, BRAM_SELECT_CONTROLLER};
 use crate::port::Port;
-use crate::proto::{Error, OUTPUT_MASK_WORDS, PAYLOAD_BYTES};
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct OutputMaskPayload {
-    pub data: [U16; OUTPUT_MASK_WORDS],
-}
-
-const _: () = assert!(size_of::<OutputMaskPayload>() <= PAYLOAD_BYTES);
-const _: () = assert!(offset_of!(OutputMaskPayload, data) == 0);
+use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let Ok((p, _)) = OutputMaskPayload::ref_from_prefix(payload) else {

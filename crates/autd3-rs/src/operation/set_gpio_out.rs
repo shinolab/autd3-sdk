@@ -1,23 +1,22 @@
+use autd3_cpu_wire::payload::GpioOutPayload;
+use zerocopy::FromBytes;
+use zerocopy::little_endian::U64;
+
 use crate::error::Error;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::DcSysTime;
 
 use super::{Distribution, Operation};
 
-const TYPE_NONE: u8 = 0x00;
-const TYPE_BASE_SIG: u8 = 0x01;
-const TYPE_THERMO: u8 = 0x02;
-const TYPE_FORCE_FAN: u8 = 0x03;
-const TYPE_SYNC: u8 = 0x10;
-const TYPE_MOD_BANK: u8 = 0x20;
-const TYPE_MOD_IDX: u8 = 0x21;
-const TYPE_PATTERN_BANK: u8 = 0x50;
-const TYPE_PATTERN_IDX: u8 = 0x51;
-const TYPE_IS_STM_MODE: u8 = 0x52;
-const TYPE_SYS_TIME_EQ: u8 = 0x60;
-const TYPE_SYNC_DIFF: u8 = 0x70;
-const TYPE_PWM_OUT: u8 = 0xE0;
-const TYPE_DIRECT: u8 = 0xF0;
+use autd3_cpu_wire::params::{
+    GPIO_O_TYPE_BASE_SIG as TYPE_BASE_SIG, GPIO_O_TYPE_DIRECT as TYPE_DIRECT,
+    GPIO_O_TYPE_FORCE_FAN as TYPE_FORCE_FAN, GPIO_O_TYPE_IS_STM_MODE as TYPE_IS_STM_MODE,
+    GPIO_O_TYPE_MOD_BANK as TYPE_MOD_BANK, GPIO_O_TYPE_MOD_IDX as TYPE_MOD_IDX,
+    GPIO_O_TYPE_NONE as TYPE_NONE, GPIO_O_TYPE_PATTERN_BANK as TYPE_PATTERN_BANK,
+    GPIO_O_TYPE_PATTERN_IDX as TYPE_PATTERN_IDX, GPIO_O_TYPE_PWM_OUT as TYPE_PWM_OUT,
+    GPIO_O_TYPE_SYNC as TYPE_SYNC, GPIO_O_TYPE_SYNC_DIFF as TYPE_SYNC_DIFF,
+    GPIO_O_TYPE_SYS_TIME_EQ as TYPE_SYS_TIME_EQ, GPIO_O_TYPE_THERMO as TYPE_THERMO,
+};
 
 const VALUE_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
 
@@ -86,9 +85,10 @@ impl Operation for SetGpioOut {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        for (i, output) in self.outputs.iter().enumerate() {
-            out[8 * i..8 * i + 8].copy_from_slice(&output.encode().to_le_bytes());
-        }
+        let (p, _) = GpioOutPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *p = GpioOutPayload {
+            values: core::array::from_fn(|i| U64::new(self.outputs[i].encode())),
+        };
         Ok(Cmd::SetGpioOut)
     }
 }

@@ -5,18 +5,9 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Emission, PatternBank};
 
 use super::{Distribution, Operation};
-
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian};
-
-#[repr(C)]
-#[derive(FromBytes, IntoBytes, Immutable, KnownLayout)]
-struct PatternPayload {
-    bank: u8,
-    _reserved: u8,
-    offset: little_endian::U32,
-    len: little_endian::U16,
-    emissions: [Emission; Autd3::NUM_TRANSDUCERS],
-}
+use autd3_cpu_wire::payload::WritePatternPayload;
+use zerocopy::little_endian::{U16, U32};
+use zerocopy::{FromBytes, IntoBytes};
 
 #[derive(Clone, Copy, Debug)]
 pub struct WritePatternBuffer<'a> {
@@ -69,12 +60,15 @@ impl Operation for WritePatternBuffer<'_> {
         let offset =
             u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");
         let len = u16::try_from(Autd3::NUM_TRANSDUCERS * 2).expect("fits one frame");
-        let (frame, _) =
-            PatternPayload::mut_from_prefix(&mut out[..]).expect("PatternPayload fits the payload");
-        frame.bank = self.bank.as_u8();
-        frame.offset = offset.into();
-        frame.len = len.into();
-        frame.emissions.copy_from_slice(emissions);
+        let bytes = emissions.as_bytes();
+        let (h, rest) = WritePatternPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *h = WritePatternPayload {
+            bank: self.bank.as_u8(),
+            reserved: 0,
+            offset: U32::new(offset),
+            data_len: U16::new(len),
+        };
+        rest[..bytes.len()].copy_from_slice(bytes);
         Ok(Cmd::WritePatternBuffer)
     }
 }
@@ -82,8 +76,8 @@ impl Operation for WritePatternBuffer<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::operation::WRITE_HEADER_BYTES;
     use crate::value::{Intensity, Phase};
+    use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
 
     #[test]
     fn write_pattern_lays_out_slot_words() {

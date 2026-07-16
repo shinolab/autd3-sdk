@@ -10,6 +10,7 @@ description = "Portable logic of the AUTD3 CPU board firmware (protocol, FPGA ac
 publish = false
 
 [dependencies]
+autd3-cpu-wire.workspace = true
 zerocopy.workspace = true
 
 [lints]

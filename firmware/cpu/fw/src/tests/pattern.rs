@@ -3,8 +3,7 @@ use std::vec::Vec;
 
 use crate::fpga::FPGA_PAGE_WORDS;
 use crate::params::{ADDR_MOD_MEM_WR_PAGE, ADDR_PATTERN_MEM_WR_PAGE, NUM_BANKS, NUM_TRANSDUCERS};
-use zerocopy::FromZeros;
-use zerocopy::little_endian::U16;
+use zerocopy::little_endian::{U16, U32};
 
 use crate::cmd::write_mod::{MOD_WRITE_MAX_DATA_LEN, WriteModPayload};
 use crate::cmd::write_pattern::{EM_WRITE_MAX_DATA_LEN, WritePatternPayload};
@@ -87,13 +86,21 @@ fn write_pattern_buffer_rejects_invalid_payloads() {
     h.deliver(&write_pattern_buffer(0, bad_bank(), 0, &[0x0001]));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 
-    let mut odd = WritePatternPayload::new_zeroed();
-    odd.data_len = U16::new(3);
+    let odd = WritePatternPayload {
+        bank: 0,
+        reserved: 0,
+        offset: U32::new(0),
+        data_len: U16::new(3),
+    };
     h.deliver(&Frame::from_payload(1, Cmd::WritePatternBuffer, &odd));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 
-    let mut too_long = WritePatternPayload::new_zeroed();
-    too_long.data_len = U16::new(u16::try_from(EM_WRITE_MAX_DATA_LEN + 2).unwrap());
+    let too_long = WritePatternPayload {
+        bank: 0,
+        reserved: 0,
+        offset: U32::new(0),
+        data_len: U16::new(u16::try_from(EM_WRITE_MAX_DATA_LEN + 2).unwrap()),
+    };
     h.deliver(&Frame::from_payload(2, Cmd::WritePatternBuffer, &too_long));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 
@@ -332,9 +339,17 @@ fn write_mod_buffer_rejects_invalid_payloads() {
     h.deliver(&write_mod_buffer(2, 0, 1, &[0x01, 0x02]));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 
-    let mut too_long = WriteModPayload::new_zeroed();
-    too_long.data_len = U16::new(u16::try_from(MOD_WRITE_MAX_DATA_LEN + 1).unwrap());
-    h.deliver(&Frame::from_payload(3, Cmd::WriteModBuffer, &too_long));
+    let too_long = WriteModPayload {
+        bank: 0,
+        reserved: 0,
+        offset: U32::new(0),
+        data_len: U16::new(u16::try_from(MOD_WRITE_MAX_DATA_LEN + 1).unwrap()),
+    };
+    h.deliver(&Frame::from_payload(
+        3,
+        Cmd::WriteModulationBuffer,
+        &too_long,
+    ));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&write_mod_buffer(

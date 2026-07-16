@@ -1,8 +1,8 @@
 use core::cell::Cell;
-use core::mem::offset_of;
 
-use zerocopy::little_endian::U16;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy::FromBytes;
+
+pub use autd3_cpu_wire::payload::SilencerPayload;
 
 use crate::app::Cpu;
 use crate::fpga;
@@ -19,23 +19,6 @@ use crate::proto::Error;
 
 pub const SILENCER_FLAG_BIT_STRICT_MODE: u8 = 1;
 pub const SILENCER_FLAG_STRICT_MODE: u8 = 1 << SILENCER_FLAG_BIT_STRICT_MODE;
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct SilencerPayload {
-    pub flag: u8,
-    _reserved: u8,
-    pub update_rate_intensity: U16,
-    pub update_rate_phase: U16,
-    pub completion_steps_intensity: U16,
-    pub completion_steps_phase: U16,
-}
-
-const _: () = assert!(offset_of!(SilencerPayload, flag) == 0);
-const _: () = assert!(offset_of!(SilencerPayload, update_rate_intensity) == 2);
-const _: () = assert!(offset_of!(SilencerPayload, update_rate_phase) == 4);
-const _: () = assert!(offset_of!(SilencerPayload, completion_steps_intensity) == 6);
-const _: () = assert!(offset_of!(SilencerPayload, completion_steps_phase) == 8);
 
 pub(crate) struct SilencerGuard {
     strict_mode: Cell<bool>,

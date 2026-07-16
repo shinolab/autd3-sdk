@@ -20,41 +20,52 @@ use crate::fpga::{REP_INFINITE, TransitionMode};
 use crate::proto::Cmd;
 use crate::tests::mock::Frame;
 
+fn words_to_bytes(words: &[u16]) -> std::vec::Vec<u8> {
+    words.iter().flat_map(|w| w.to_le_bytes()).collect()
+}
+
 pub(crate) fn xor_hash_ok(seq: u8, sleep_ms: u16, data: &[u8]) -> Frame {
-    let mut p = XorHashPayload::new_zeroed();
-    p.sleep_ms = U16::new(sleep_ms);
-    p.data_len = U16::new((data.len() + 1) as u16);
-    p.data[..data.len()].copy_from_slice(data);
-    p.data[data.len()] = data.iter().fold(0u8, |h, b| h ^ b);
-    Frame::from_payload(seq, Cmd::XorHash, &p)
+    let header = XorHashPayload {
+        sleep_ms: U16::new(sleep_ms),
+        data_len: U16::new((data.len() + 1) as u16),
+    };
+    let mut payload = data.to_vec();
+    payload.push(data.iter().fold(0u8, |h, b| h ^ b));
+    Frame::from_parts(seq, Cmd::XorHash, &header, &payload)
 }
 
 pub(crate) fn xor_hash_bad(seq: u8, data: &[u8]) -> Frame {
-    let mut p = XorHashPayload::new_zeroed();
-    p.data_len = U16::new(data.len() as u16);
-    p.data[..data.len()].copy_from_slice(data);
-    Frame::from_payload(seq, Cmd::XorHash, &p)
+    let header = XorHashPayload {
+        sleep_ms: U16::new(0),
+        data_len: U16::new(data.len() as u16),
+    };
+    Frame::from_parts(seq, Cmd::XorHash, &header, data)
 }
 
 pub(crate) fn xor_hash_corrupted(seq: u8, sleep_ms: u16, data: &[u8]) -> Frame {
-    let mut p = XorHashPayload::new_zeroed();
-    p.sleep_ms = U16::new(sleep_ms);
-    p.data_len = U16::new((data.len() + 1) as u16);
-    p.data[..data.len()].copy_from_slice(data);
-    p.data[data.len()] = data.iter().fold(0u8, |h, b| h ^ b);
-    p.data[0] ^= 0xFF;
-    Frame::from_payload(seq, Cmd::XorHash, &p)
+    let header = XorHashPayload {
+        sleep_ms: U16::new(sleep_ms),
+        data_len: U16::new((data.len() + 1) as u16),
+    };
+    let mut payload = data.to_vec();
+    payload.push(data.iter().fold(0u8, |h, b| h ^ b));
+    payload[0] ^= 0xFF;
+    Frame::from_parts(seq, Cmd::XorHash, &header, &payload)
 }
 
 pub(crate) fn write_pattern_buffer(seq: u8, bank: u8, offset_words: u32, words: &[u16]) -> Frame {
-    let mut p = WritePatternPayload::new_zeroed();
-    p.bank = bank;
-    p.offset = U32::new(offset_words);
-    p.data_len = U16::new((words.len() * 2) as u16);
-    for (i, w) in words.iter().enumerate() {
-        p.data[2 * i..2 * i + 2].copy_from_slice(&w.to_le_bytes());
-    }
-    Frame::from_payload(seq, Cmd::WritePatternBuffer, &p)
+    let header = WritePatternPayload {
+        bank,
+        reserved: 0,
+        offset: U32::new(offset_words),
+        data_len: U16::new((words.len() * 2) as u16),
+    };
+    Frame::from_parts(
+        seq,
+        Cmd::WritePatternBuffer,
+        &header,
+        &words_to_bytes(words),
+    )
 }
 
 pub(crate) fn write_pattern_compressed(
@@ -65,24 +76,29 @@ pub(crate) fn write_pattern_compressed(
     count: u8,
     words: &[u16],
 ) -> Frame {
-    let mut p = WritePatternCompressedPayload::new_zeroed();
-    p.bank = bank;
-    p.format = format;
-    p.count = count;
-    p.offset = U32::new(offset_words);
-    for (i, w) in words.iter().enumerate() {
-        p.data[2 * i..2 * i + 2].copy_from_slice(&w.to_le_bytes());
-    }
-    Frame::from_payload(seq, Cmd::WritePatternCompressed, &p)
+    let header = WritePatternCompressedPayload {
+        bank,
+        format,
+        count,
+        reserved: 0,
+        offset: U32::new(offset_words),
+    };
+    Frame::from_parts(
+        seq,
+        Cmd::WritePatternCompressed,
+        &header,
+        &words_to_bytes(words),
+    )
 }
 
 pub(crate) fn write_mod_buffer(seq: u8, bank: u8, offset: u32, data: &[u8]) -> Frame {
-    let mut p = WriteModPayload::new_zeroed();
-    p.bank = bank;
-    p.offset = U32::new(offset);
-    p.data_len = U16::new(data.len() as u16);
-    p.data[..data.len()].copy_from_slice(data);
-    Frame::from_payload(seq, Cmd::WriteModBuffer, &p)
+    let header = WriteModPayload {
+        bank,
+        reserved: 0,
+        offset: U32::new(offset),
+        data_len: U16::new(data.len() as u16),
+    };
+    Frame::from_parts(seq, Cmd::WriteModulationBuffer, &header, data)
 }
 
 pub(crate) fn config_mod(seq: u8, bank: u8, divider: u16, size: u32) -> Frame {
@@ -95,7 +111,7 @@ pub(crate) fn config_mod_rep(seq: u8, bank: u8, divider: u16, size: u32, rep: u1
     p.divider = U16::new(divider);
     p.size = U32::new(size);
     p.rep = U16::new(rep);
-    Frame::from_payload(seq, Cmd::ConfigMod, &p)
+    Frame::from_payload(seq, Cmd::ConfigModulation, &p)
 }
 
 pub(crate) fn config_pattern(
@@ -175,7 +191,7 @@ pub(crate) fn change_mod_bank_with_margin(
     p.transition_mode = transition_mode as u8;
     p.transition_value = U64::new(transition_value);
     p.margin_ns = U32::new(margin_ns);
-    Frame::from_payload(seq, Cmd::ChangeModBank, &p)
+    Frame::from_payload(seq, Cmd::ChangeModulationBank, &p)
 }
 
 pub(crate) fn set_silencer(
@@ -210,7 +226,7 @@ pub(crate) fn gpio_in(seq: u8, flag: u8) -> Frame {
 pub(crate) fn phase_corr(seq: u8, phases: &[u8]) -> Frame {
     let mut p = PhaseCorrPayload::new_zeroed();
     p.data[..phases.len()].copy_from_slice(phases);
-    Frame::from_payload(seq, Cmd::SetPhaseCorr, &p)
+    Frame::from_payload(seq, Cmd::SetPhaseCorrection, &p)
 }
 
 pub(crate) fn output_mask(seq: u8, words: &[u16]) -> Frame {
@@ -226,7 +242,7 @@ pub(crate) fn pwe(seq: u8, table: &[u16]) -> Frame {
     for (i, w) in table.iter().enumerate() {
         p.table[i] = U16::new(*w);
     }
-    Frame::from_payload(seq, Cmd::SetPwe, &p)
+    Frame::from_payload(seq, Cmd::SetPulseWidthTable, &p)
 }
 
 pub(crate) fn gpio_out(seq: u8, values: &[u64]) -> Frame {

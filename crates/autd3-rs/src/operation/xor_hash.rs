@@ -1,11 +1,13 @@
+use autd3_cpu_wire::payload::XorHashPayload;
+use zerocopy::FromBytes;
+use zerocopy::little_endian::U16;
+
 use crate::error::{Error, PayloadError};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 use super::{Distribution, Operation};
 
-pub const XOR_HASH_HEADER_BYTES: usize = 4;
-
-pub const XOR_HASH_MAX_DATA_LEN: usize = PAYLOAD_BYTES - XOR_HASH_HEADER_BYTES;
+pub use autd3_cpu_wire::layout::XOR_HASH_MAX_DATA_LEN;
 
 #[derive(Clone, Debug)]
 pub struct XorHashCmd {
@@ -53,10 +55,12 @@ impl Operation for XorHashCmd {
         }
         let data_len = u16::try_from(self.data.len()).expect("bounded by XOR_HASH_MAX_DATA_LEN");
 
-        out[0..2].copy_from_slice(&self.sleep_ms.to_le_bytes());
-        out[2..4].copy_from_slice(&data_len.to_le_bytes());
-        out[XOR_HASH_HEADER_BYTES..XOR_HASH_HEADER_BYTES + self.data.len()]
-            .copy_from_slice(&self.data);
+        let (h, rest) = XorHashPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *h = XorHashPayload {
+            sleep_ms: U16::new(self.sleep_ms),
+            data_len: U16::new(data_len),
+        };
+        rest[..self.data.len()].copy_from_slice(&self.data);
         Ok(Cmd::XorHash)
     }
 }

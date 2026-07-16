@@ -1,8 +1,9 @@
 use core::cell::Cell;
-use core::mem::offset_of;
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering};
 
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy::FromBytes;
+
+pub use autd3_cpu_wire::payload::ReadTelemetryPayload;
 
 use crate::cmd;
 use crate::fpga;
@@ -15,14 +16,6 @@ use crate::proto::{
     AL_STATUS_CODE_SM_WATCHDOG, AL_STATUS_CODE_SYNC_ERROR, Cmd, Error, FAILSAFE_TICKS, Mode,
     ProtoState, RxFrame, Telemetry, TxFrame, WIRE_RX_FRAME_BYTES,
 };
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct ReadTelemetryPayload {
-    pub counter_id: u8,
-}
-
-const _: () = assert!(offset_of!(ReadTelemetryPayload, counter_id) == 0);
 
 pub const FIFO_DEPTH: u16 = 8;
 const FIFO_MASK: u16 = FIFO_DEPTH - 1;
@@ -325,15 +318,15 @@ impl Cpu {
             }
             Cmd::WritePatternBuffer => cmd::write_pattern::handle(port, payload),
             Cmd::WritePatternCompressed => cmd::write_pattern_compressed::handle(port, payload),
-            Cmd::WriteModBuffer => cmd::write_mod::handle(port, payload),
-            Cmd::ConfigMod => self.config_mod(port, payload),
+            Cmd::WriteModulationBuffer => cmd::write_mod::handle(port, payload),
+            Cmd::ConfigModulation => self.config_mod(port, payload),
             Cmd::ConfigPattern => self.config_pattern(port, payload),
-            Cmd::ChangeModBank => self.change_mod_bank(port, payload),
+            Cmd::ChangeModulationBank => self.change_mod_bank(port, payload),
             Cmd::ChangePatternBank => self.change_pattern_bank(port, payload),
             Cmd::SetSilencer => self.set_silencer(port, payload),
-            Cmd::SetPhaseCorr => cmd::phase_corr::handle(port, payload),
+            Cmd::SetPhaseCorrection => cmd::phase_corr::handle(port, payload),
             Cmd::SetOutputMask => cmd::output_mask::handle(port, payload),
-            Cmd::SetPwe => cmd::pwe::handle(port, payload),
+            Cmd::SetPulseWidthTable => cmd::pwe::handle(port, payload),
             Cmd::EmulateGpioIn => cmd::gpio_in::handle(port, payload),
             Cmd::SetGpioOut => self.gpio_out(port, payload),
             Cmd::ForceFan => cmd::force_fan::handle(port, payload),

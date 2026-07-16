@@ -1,21 +1,11 @@
-use core::mem::{offset_of, size_of};
+use zerocopy::FromBytes;
 
-use zerocopy::little_endian::U16;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+pub use autd3_cpu_wire::payload::PwePayload;
 
-use crate::fpga::{self, PWE_TABLE_SIZE};
+use crate::fpga;
 use crate::params::BRAM_SELECT_PWE_TABLE;
 use crate::port::Port;
-use crate::proto::{Error, PAYLOAD_BYTES};
-
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct PwePayload {
-    pub table: [U16; PWE_TABLE_SIZE],
-}
-
-const _: () = assert!(size_of::<PwePayload>() <= PAYLOAD_BYTES);
-const _: () = assert!(offset_of!(PwePayload, table) == 0);
+use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let Ok((p, _)) = PwePayload::ref_from_prefix(payload) else {

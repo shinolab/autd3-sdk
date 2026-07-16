@@ -20,10 +20,10 @@ impl TransitionMode {
     #[must_use]
     pub const fn as_u8(self) -> u8 {
         match self {
-            TransitionMode::SyncIdx => 0x00,
-            TransitionMode::SysTime { .. } => 0x01,
-            TransitionMode::Gpio(_) => 0x02,
-            TransitionMode::Ext => 0xF0,
+            TransitionMode::SyncIdx => autd3_cpu_wire::params::TRANSITION_MODE_SYNC_IDX,
+            TransitionMode::SysTime { .. } => autd3_cpu_wire::params::TRANSITION_MODE_SYS_TIME,
+            TransitionMode::Gpio(_) => autd3_cpu_wire::params::TRANSITION_MODE_GPIO,
+            TransitionMode::Ext => autd3_cpu_wire::params::TRANSITION_MODE_EXT,
             TransitionMode::Immediate => 0xFF,
         }
     }

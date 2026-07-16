@@ -5,8 +5,9 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Emission, PatternBank};
 
 use super::{Distribution, Operation};
-
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian};
+use autd3_cpu_wire::payload::WritePatternCompressedPayload;
+use zerocopy::FromBytes;
+use zerocopy::little_endian::U32;
 
 pub const PATTERN_MAX_PER_FRAME: usize = 4;
 
@@ -31,17 +32,6 @@ impl PatternCompression {
             PatternCompression::PhaseHalf => 2,
         }
     }
-}
-
-#[repr(C)]
-#[derive(FromBytes, IntoBytes, Immutable, KnownLayout)]
-struct CompressedPayload {
-    bank: u8,
-    format: u8,
-    count: u8,
-    _reserved: u8,
-    offset: little_endian::U32,
-    words: [little_endian::U16; Autd3::NUM_TRANSDUCERS],
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -99,14 +89,17 @@ impl Operation for WritePatternCompressed<'_> {
         }
         let offset =
             u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");
-        let (frame, _) = CompressedPayload::mut_from_prefix(&mut out[..])
-            .expect("CompressedPayload fits the payload");
-        frame.bank = self.bank.as_u8();
-        frame.format = self.format.as_u8();
-        frame.count = u8::try_from(count).expect("count <= PATTERN_MAX_PER_FRAME");
-        frame.offset = offset.into();
-        for (t, word) in frame.words.iter_mut().enumerate() {
-            *word = self.pack_word(device, t).into();
+        let (h, rest) = WritePatternCompressedPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *h = WritePatternCompressedPayload {
+            bank: self.bank.as_u8(),
+            format: self.format.as_u8(),
+            count: u8::try_from(count).expect("count <= PATTERN_MAX_PER_FRAME"),
+            reserved: 0,
+            offset: U32::new(offset),
+        };
+        for t in 0..Autd3::NUM_TRANSDUCERS {
+            let word = self.pack_word(device, t);
+            rest[2 * t..2 * t + 2].copy_from_slice(&word.to_le_bytes());
         }
         Ok(Cmd::WritePatternCompressed)
     }
@@ -138,8 +131,8 @@ impl WritePatternCompressed<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::operation::WRITE_HEADER_BYTES;
     use crate::value::{Intensity, Phase};
+    use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
 
     #[test]
     fn phase_full_packs_two_phases_per_word() {
