@@ -11,14 +11,14 @@ module step_calculator #(
     input var [7:0] PHASE,
     output var [15:0] UPDATE_RATE_INTENSITY,
     output var [15:0] UPDATE_RATE_PHASE,
+    output var [7:0] INTENSITY_OUT,
+    output var [7:0] PHASE_OUT,
     output var DOUT_VALID
 );
 
   `include "define.vh"
 
-  localparam int DivLatency = 18;
-
-  `RAM
+`RAM
   logic [15:0] current_target_mem[256] = '{256{16'h0000}};
   `RAM
   logic [7:0] diff_mem_i[256] = '{256{8'h00}};
@@ -34,13 +34,21 @@ module step_calculator #(
   logic [7:0] output_cnt, cnt;
   logic reset_in_i, reset_out_i;
   logic reset_in_p, reset_out_p;
+  logic first_in, first_out;
+  logic _unused_first_p;
   logic [7:0] diff_tmp_i, diff_i;
   logic [7:0] diff_tmp_p, diff_p;
   logic [15:0] step_quo_i, step_rem_i;
   logic [15:0] step_quo_p, step_rem_p;
 
+  logic [7:0] intensity_d1, intensity_din, intensity_q, intensity_out;
+  logic [7:0] phase_d1, phase_din, phase_q, phase_out;
+
   logic dout_valid = 0;
   logic [15:0] update_rate_i, update_rate_p;
+
+  assign INTENSITY_OUT = intensity_out;
+  assign PHASE_OUT = phase_out;
 
   assign current_i = current_target_mem[cnt][15:8];
   assign current_p = current_target_mem[cnt][7:0];
@@ -52,30 +60,25 @@ module step_calculator #(
   div_16_16 div_i (
       .s_axis_dividend_tdata({diff_i, 8'h00}),
       .s_axis_dividend_tvalid(1'b1),
+      .s_axis_dividend_tuser({intensity_din, first_in, reset_in_i}),
       .s_axis_divisor_tdata(COMPLETION_STEPS_INTENSITY),
       .s_axis_divisor_tvalid(1'b1),
       .aclk(CLK),
       .m_axis_dout_tdata({step_quo_i, step_rem_i}),
+      .m_axis_dout_tuser({intensity_q, first_out, reset_out_i}),
       .m_axis_dout_tvalid()
   );
 
   div_16_16 div_p (
       .s_axis_dividend_tdata({diff_p, 8'h00}),
       .s_axis_dividend_tvalid(1'b1),
+      .s_axis_dividend_tuser({phase_din, 1'b0, reset_in_p}),
       .s_axis_divisor_tdata(COMPLETION_STEPS_PHASE),
       .s_axis_divisor_tvalid(1'b1),
       .aclk(CLK),
       .m_axis_dout_tdata({step_quo_p, step_rem_p}),
+      .m_axis_dout_tuser({phase_q, _unused_first_p, reset_out_p}),
       .m_axis_dout_tvalid()
-  );
-
-  delay_fifo #(
-      .WIDTH(2),
-      .DEPTH(DivLatency)
-  ) fifo_reset (
-      .CLK (CLK),
-      .DIN ({reset_in_i, reset_in_p}),
-      .DOUT({reset_out_i, reset_out_p})
   );
 
   typedef enum logic [1:0] {
@@ -95,6 +98,15 @@ module step_calculator #(
   always_ff @(posedge CLK) begin
     diff_tmp_i <= (INTENSITY < current_i) ? current_i - INTENSITY : INTENSITY - current_i;
     diff_tmp_p <= (PHASE < current_p) ? current_p - PHASE : PHASE - current_p;
+
+    first_in <= (state == IDLE) & DIN_VALID;
+
+    intensity_d1 <= INTENSITY;
+    intensity_din <= intensity_d1;
+    phase_d1 <= PHASE;
+    phase_din <= phase_d1;
+    intensity_out <= intensity_q;
+    phase_out <= phase_q;
 
     // diff_mem's index is shifted by 1
     if ((cnt == 8'd0) || (cnt == DEPTH + 1) || (diff_tmp_i == 8'd0)) begin
@@ -152,7 +164,7 @@ module step_calculator #(
       end
       WAIT_CALC: begin
         cnt <= cnt + 1;
-        if (cnt == DivLatency + 1) begin
+        if (first_out) begin
           state <= OUTPUT;
         end
       end
