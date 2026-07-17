@@ -3,6 +3,7 @@
 #[cfg(feature = "polars")]
 use polars::frame::DataFrame;
 
+use crate::raw::RawFrame;
 use crate::record::{OUTPUT_VOLTAGE, Record, TransducerRecord, ULTRASOUND_PERIOD_COUNT};
 
 impl TransducerRecord {
@@ -45,15 +46,20 @@ impl TransducerRecord {
 }
 
 impl Record {
-    #[cfg(feature = "polars")]
     #[must_use]
-    pub fn output_voltage(&self) -> DataFrame {
+    pub fn output_voltage_raw(&self) -> RawFrame {
         let per_tr: Vec<Vec<f32>> = self
             .records
             .iter()
             .map(TransducerRecord::output_voltage)
             .collect();
-        crate::record::output_df("voltage[V]", self.records.len(), &per_tr)
+        crate::record::output_raw("voltage[V]", self.records.len(), &per_tr)
+    }
+
+    #[cfg(feature = "polars")]
+    #[must_use]
+    pub fn output_voltage(&self) -> DataFrame {
+        self.output_voltage_raw().into_polars()
     }
 }
 

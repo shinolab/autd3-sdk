@@ -19,11 +19,7 @@ autd3-rs-emulator.workspace = true
 autd3-python-capsule = { workspace = true, features = ["client"] }
 pyo3.workspace = true
 pollster = "1.0.1"
-polars = { version = "0.54.4", default-features = false, features = [
-    "dtype-u8",
-    "dtype-u16",
-    "ipc",
-] }
+bytemuck.workspace = true
 
 [lints]
 workspace = true

@@ -14,16 +14,13 @@ use autd3_rs_core::geometry::Point3;
 use rayon::prelude::*;
 
 #[cfg(feature = "polars")]
-use polars::df;
-#[cfg(feature = "polars")]
 use polars::frame::DataFrame;
-#[cfg(feature = "polars")]
-use polars::prelude::Column;
 
 use crate::aabb::{aabb_max_dist, aabb_min_dist};
 use crate::error::EmulatorError;
 use crate::output_ultrasound::OutputUltrasound;
 use crate::range::Range;
+use crate::raw::{RawColumn, RawFrame};
 use crate::record::{Record, T4010A1_AMPLITUDE, TS, ULTRASOUND_PERIOD_COUNT};
 use crate::sound_field::{SoundFieldOption, distances};
 
@@ -299,26 +296,37 @@ impl Instant<'_> {
         Ok(self)
     }
 
-    #[cfg(feature = "polars")]
     #[must_use]
-    pub fn observe_points(&self) -> DataFrame {
-        df!(
-            "x[mm]" => &self.x,
-            "y[mm]" => &self.y,
-            "z[mm]" => &self.z,
-        )
-        .unwrap()
+    pub fn observe_points_raw(&self) -> RawFrame {
+        RawFrame {
+            rows: self.x.len(),
+            columns: vec![
+                ("x[mm]".to_string(), RawColumn::F32(self.x.clone())),
+                ("y[mm]".to_string(), RawColumn::F32(self.y.clone())),
+                ("z[mm]".to_string(), RawColumn::F32(self.z.clone())),
+            ],
+        }
     }
 
-    #[cfg(feature = "polars")]
-    pub fn next(&mut self, duration: Duration) -> Result<DataFrame, EmulatorError> {
+    pub fn next_raw(&mut self, duration: Duration) -> Result<RawFrame, EmulatorError> {
         let rows = self.x.len();
         let columns = self
             .advance(duration, false)?
             .into_iter()
-            .map(|(t, pressure)| Column::new(format!("p[Pa]@{t}[ns]").into(), pressure.as_slice()))
+            .map(|(t, pressure)| (format!("p[Pa]@{t}[ns]"), RawColumn::F32(pressure)))
             .collect::<Vec<_>>();
-        Ok(DataFrame::new(rows, columns).unwrap())
+        Ok(RawFrame { rows, columns })
+    }
+
+    #[cfg(feature = "polars")]
+    #[must_use]
+    pub fn observe_points(&self) -> DataFrame {
+        self.observe_points_raw().into_polars()
+    }
+
+    #[cfg(feature = "polars")]
+    pub fn next(&mut self, duration: Duration) -> Result<DataFrame, EmulatorError> {
+        Ok(self.next_raw(duration)?.into_polars())
     }
 }
 

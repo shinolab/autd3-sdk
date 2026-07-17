@@ -4,6 +4,7 @@ mod error;
 mod output_ultrasound;
 mod output_voltage;
 mod range;
+mod raw;
 mod record;
 mod recorder;
 mod sound_field;
@@ -15,14 +16,13 @@ pub use range::{
     Range, RangeX, RangeXY, RangeXYZ, RangeXZ, RangeXZY, RangeY, RangeYX, RangeYXZ, RangeYZ,
     RangeYZX, RangeZ, RangeZX, RangeZXY, RangeZY, RangeZYX,
 };
+pub use raw::{RawColumn, RawFrame};
 pub use record::Record;
 pub use recorder::Recorder;
 pub use sound_field::{Instant, InstantRecordOption, Rms, RmsRecordOption, SoundFieldOption};
 
 use autd3_rs_core::geometry::Geometry;
 
-#[cfg(feature = "polars")]
-use polars::df;
 #[cfg(feature = "polars")]
 use polars::frame::DataFrame;
 
@@ -45,10 +45,9 @@ impl Emulator {
         &mut self.geometry
     }
 
-    #[cfg(feature = "polars")]
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
-    pub fn transducer_table(&self) -> DataFrame {
+    pub fn transducer_table_raw(&self) -> RawFrame {
         let n = self.geometry.num_transducers();
         let mut dev_idx = Vec::with_capacity(n);
         let mut tr_idx = Vec::with_capacity(n);
@@ -71,17 +70,25 @@ impl Emulator {
                 nz.push(d.z);
             }
         }
-        df!(
-            "dev_idx" => &dev_idx,
-            "tr_idx" => &tr_idx,
-            "x[mm]" => &x,
-            "y[mm]" => &y,
-            "z[mm]" => &z,
-            "nx" => &nx,
-            "ny" => &ny,
-            "nz" => &nz,
-        )
-        .unwrap()
+        RawFrame {
+            rows: n,
+            columns: vec![
+                ("dev_idx".to_string(), RawColumn::U16(dev_idx)),
+                ("tr_idx".to_string(), RawColumn::U8(tr_idx)),
+                ("x[mm]".to_string(), RawColumn::F32(x)),
+                ("y[mm]".to_string(), RawColumn::F32(y)),
+                ("z[mm]".to_string(), RawColumn::F32(z)),
+                ("nx".to_string(), RawColumn::F32(nx)),
+                ("ny".to_string(), RawColumn::F32(ny)),
+                ("nz".to_string(), RawColumn::F32(nz)),
+            ],
+        }
+    }
+
+    #[cfg(feature = "polars")]
+    #[must_use]
+    pub fn transducer_table(&self) -> DataFrame {
+        self.transducer_table_raw().into_polars()
     }
 
     pub fn record<F>(&self, f: F) -> Result<Record, EmulatorError>

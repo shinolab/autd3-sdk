@@ -12,8 +12,8 @@ pub(crate) const T4010A1_AMPLITUDE: f32 = 275.574_25 * 200.0;
 
 #[cfg(feature = "polars")]
 use polars::frame::DataFrame;
-#[cfg(feature = "polars")]
-use polars::prelude::Column;
+
+use crate::raw::{RawColumn, RawFrame};
 
 pub(crate) struct TransducerRecord {
     pub(crate) pulse_width: Vec<u16>,
@@ -32,16 +32,15 @@ fn sample_time_ns(col: usize) -> u64 {
     col as u64 * ULTRASOUND_PERIOD.as_nanos() as u64
 }
 
-#[cfg(feature = "polars")]
-pub(crate) fn output_df(label: &str, rows: usize, per_tr: &[Vec<f32>]) -> DataFrame {
+pub(crate) fn output_raw(label: &str, rows: usize, per_tr: &[Vec<f32>]) -> RawFrame {
     let cols = per_tr.first().map_or(0, Vec::len);
     let columns = (0..cols)
         .map(|c| {
             let data: Vec<f32> = (0..rows).map(|r| per_tr[r][c]).collect();
-            Column::new(format!("{label}@{c}[25us/512]").into(), data.as_slice())
+            (format!("{label}@{c}[25us/512]"), RawColumn::F32(data))
         })
         .collect::<Vec<_>>();
-    DataFrame::new(rows, columns).unwrap()
+    RawFrame { rows, columns }
 }
 
 impl Record {
@@ -83,23 +82,21 @@ impl Record {
         self.records.first().map_or(0, |r| r.pulse_width.len())
     }
 
-    #[cfg(feature = "polars")]
     #[must_use]
-    pub fn phase(&self) -> DataFrame {
+    pub fn phase_raw(&self) -> RawFrame {
         let rows = self.num_transducers();
         let columns = (0..self.num_samples())
             .map(|col| {
                 let t = sample_time_ns(col);
                 let data: Vec<u8> = (0..rows).map(|row| self.records[row].phase[col]).collect();
-                Column::new(format!("phase@{t}[ns]").into(), data.as_slice())
+                (format!("phase@{t}[ns]"), RawColumn::U8(data))
             })
             .collect::<Vec<_>>();
-        DataFrame::new(rows, columns).unwrap()
+        RawFrame { rows, columns }
     }
 
-    #[cfg(feature = "polars")]
     #[must_use]
-    pub fn pulse_width(&self) -> DataFrame {
+    pub fn pulse_width_raw(&self) -> RawFrame {
         let rows = self.num_transducers();
         let columns = (0..self.num_samples())
             .map(|col| {
@@ -107,9 +104,21 @@ impl Record {
                 let data: Vec<u16> = (0..rows)
                     .map(|row| self.records[row].pulse_width[col])
                     .collect();
-                Column::new(format!("pulse_width@{t}[ns]").into(), data.as_slice())
+                (format!("pulse_width@{t}[ns]"), RawColumn::U16(data))
             })
             .collect::<Vec<_>>();
-        DataFrame::new(rows, columns).unwrap()
+        RawFrame { rows, columns }
+    }
+
+    #[cfg(feature = "polars")]
+    #[must_use]
+    pub fn phase(&self) -> DataFrame {
+        self.phase_raw().into_polars()
+    }
+
+    #[cfg(feature = "polars")]
+    #[must_use]
+    pub fn pulse_width(&self) -> DataFrame {
+        self.pulse_width_raw().into_polars()
     }
 }

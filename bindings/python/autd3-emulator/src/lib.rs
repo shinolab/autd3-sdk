@@ -1,22 +1,18 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use autd3_python_capsule::{
-    capsule_of, frame_from_capsule, geometry_from_capsule, to_pyerr, to_pyerr_gil,
-};
+use autd3_python_capsule::{capsule_of, frame_from_capsule, geometry_from_capsule, to_pyerr_gil};
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_emulator::{
     ClientApi, Emulator as CoreEmulator, Instant as CoreInstant,
     InstantRecordOption as CoreInstantOption, Range as RangeTrait, RangeX as CoreRangeX,
     RangeXY as CoreRangeXY, RangeXYZ as CoreRangeXYZ, RangeXZ as CoreRangeXZ, RangeY as CoreRangeY,
-    RangeYZ as CoreRangeYZ, RangeZ as CoreRangeZ, Record as CoreRecord, Recorder as CoreRecorder,
-    Rms as CoreRms, RmsRecordOption as CoreRmsOption,
+    RangeYZ as CoreRangeYZ, RangeZ as CoreRangeZ, RawColumn, RawFrame, Record as CoreRecord,
+    Recorder as CoreRecorder, Rms as CoreRms, RmsRecordOption as CoreRmsOption,
 };
-use polars::frame::DataFrame;
-use polars::prelude::{IpcWriter, SerWriter};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict};
 
 fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
     let nanos = obj.call_method0("as_nanos")?.extract::<u128>()?;
@@ -25,14 +21,18 @@ fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
         .map_err(|_| PyValueError::new_err("duration is out of range"))
 }
 
-fn df_to_polars(py: Python<'_>, mut df: DataFrame) -> PyResult<Bound<'_, PyAny>> {
-    let mut buf = Vec::new();
-    IpcWriter::new(&mut buf)
-        .finish(&mut df)
-        .map_err(|e| to_pyerr(py, e))?;
-    let bytes = PyBytes::new(py, &buf);
-    let reader = py.import("io")?.getattr("BytesIO")?.call1((bytes,))?;
-    py.import("polars")?.call_method1("read_ipc", (reader,))
+fn raw_to_polars(py: Python<'_>, frame: RawFrame) -> PyResult<Bound<'_, PyAny>> {
+    let frombuffer = py.import("numpy")?.getattr("frombuffer")?;
+    let data = PyDict::new(py);
+    for (name, col) in frame.columns {
+        let (bytes, dtype) = match col {
+            RawColumn::U8(v) => (PyBytes::new(py, &v), "uint8"),
+            RawColumn::U16(v) => (PyBytes::new(py, bytemuck::cast_slice(&v)), "uint16"),
+            RawColumn::F32(v) => (PyBytes::new(py, bytemuck::cast_slice(&v)), "float32"),
+        };
+        data.set_item(name, frombuffer.call1((bytes, dtype))?)?;
+    }
+    py.import("polars")?.getattr("DataFrame")?.call1((data,))
 }
 
 enum AnyRange {
@@ -342,7 +342,7 @@ pub struct Rms {
 #[pymethods]
 impl Rms {
     fn observe_points<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        df_to_polars(py, self.inner.observe_points())
+        raw_to_polars(py, self.inner.observe_points_raw())
     }
 
     fn next<'py>(
@@ -351,8 +351,8 @@ impl Rms {
         duration: &Bound<'_, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let d = extract_duration(duration)?;
-        let df = self.inner.next(d).map_err(to_pyerr_gil)?;
-        df_to_polars(py, df)
+        let frame = self.inner.next_raw(d).map_err(to_pyerr_gil)?;
+        raw_to_polars(py, frame)
     }
 
     fn skip(&mut self, duration: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -373,7 +373,7 @@ pub struct Instant {
 #[pymethods]
 impl Instant {
     fn observe_points<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        df_to_polars(py, self.inner.observe_points())
+        raw_to_polars(py, self.inner.observe_points_raw())
     }
 
     fn next<'py>(
@@ -382,8 +382,8 @@ impl Instant {
         duration: &Bound<'_, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let d = extract_duration(duration)?;
-        let df = self.inner.next(d).map_err(to_pyerr_gil)?;
-        df_to_polars(py, df)
+        let frame = self.inner.next_raw(d).map_err(to_pyerr_gil)?;
+        raw_to_polars(py, frame)
     }
 
     fn skip(&mut self, duration: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -409,19 +409,19 @@ impl Record {
     }
 
     fn phase<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        df_to_polars(py, self.inner.phase())
+        raw_to_polars(py, self.inner.phase_raw())
     }
 
     fn pulse_width<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        df_to_polars(py, self.inner.pulse_width())
+        raw_to_polars(py, self.inner.pulse_width_raw())
     }
 
     fn output_voltage<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        df_to_polars(py, self.inner.output_voltage())
+        raw_to_polars(py, self.inner.output_voltage_raw())
     }
 
     fn output_ultrasound<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        df_to_polars(py, self.inner.output_ultrasound())
+        raw_to_polars(py, self.inner.output_ultrasound_raw())
     }
 
     fn sound_field(
@@ -559,9 +559,9 @@ impl Emulator {
     }
 
     fn transducer_table<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        df_to_polars(
+        raw_to_polars(
             py,
-            CoreEmulator::new(self.geometry.clone()).transducer_table(),
+            CoreEmulator::new(self.geometry.clone()).transducer_table_raw(),
         )
     }
 

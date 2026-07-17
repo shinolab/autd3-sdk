@@ -9,14 +9,11 @@ use autd3_rs_core::value::Phase;
 use rayon::prelude::*;
 
 #[cfg(feature = "polars")]
-use polars::df;
-#[cfg(feature = "polars")]
 use polars::frame::DataFrame;
-#[cfg(feature = "polars")]
-use polars::prelude::Column;
 
 use crate::error::EmulatorError;
 use crate::range::Range;
+use crate::raw::{RawColumn, RawFrame};
 use crate::record::{Record, T4010A1_AMPLITUDE, ULTRASOUND_PERIOD_COUNT};
 use crate::sound_field::{SoundFieldOption, distances};
 
@@ -116,19 +113,19 @@ impl Rms {
         Ok(self)
     }
 
-    #[cfg(feature = "polars")]
     #[must_use]
-    pub fn observe_points(&self) -> DataFrame {
-        df!(
-            "x[mm]" => &self.x,
-            "y[mm]" => &self.y,
-            "z[mm]" => &self.z,
-        )
-        .unwrap()
+    pub fn observe_points_raw(&self) -> RawFrame {
+        RawFrame {
+            rows: self.x.len(),
+            columns: vec![
+                ("x[mm]".to_string(), RawColumn::F32(self.x.clone())),
+                ("y[mm]".to_string(), RawColumn::F32(self.y.clone())),
+                ("z[mm]".to_string(), RawColumn::F32(self.z.clone())),
+            ],
+        }
     }
 
-    #[cfg(feature = "polars")]
-    pub fn next(&mut self, duration: Duration) -> Result<DataFrame, EmulatorError> {
+    pub fn next_raw(&mut self, duration: Duration) -> Result<RawFrame, EmulatorError> {
         let num_frames = self.advance(duration)?;
         let wavenumber = 2.0 * PI * ULTRASOUND_FREQ_HZ as f32 / self.option.sound_speed;
         let rows = self.x.len();
@@ -137,14 +134,22 @@ impl Rms {
                 let frame = self.cursor + i;
                 let t = (frame as u32 * ULTRASOUND_PERIOD).as_nanos() as u64;
                 let rms = self.device.compute(frame, wavenumber)?;
-                Ok(Column::new(
-                    format!("rms[Pa]@{t}[ns]").into(),
-                    rms.as_slice(),
-                ))
+                Ok((format!("rms[Pa]@{t}[ns]"), RawColumn::F32(rms)))
             })
             .collect::<Result<Vec<_>, EmulatorError>>()?;
         self.cursor += num_frames;
-        Ok(DataFrame::new(rows, columns).unwrap())
+        Ok(RawFrame { rows, columns })
+    }
+
+    #[cfg(feature = "polars")]
+    #[must_use]
+    pub fn observe_points(&self) -> DataFrame {
+        self.observe_points_raw().into_polars()
+    }
+
+    #[cfg(feature = "polars")]
+    pub fn next(&mut self, duration: Duration) -> Result<DataFrame, EmulatorError> {
+        Ok(self.next_raw(duration)?.into_polars())
     }
 }
 
