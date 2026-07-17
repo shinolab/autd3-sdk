@@ -8,13 +8,13 @@ use anyhow::{Context, Result};
 use autd3_rs::commands::XorHashCmd;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{
-    Client, ClientConfig, CoreId, Error as ClientError, Frames, Link, ResponseFuture, StateCheck,
-    ThreadPriority, ThreadPriorityValue,
+    Client, ClientConfig, CoreId, Error as ClientError, Frames, Link, ResponseFuture,
+    RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
 };
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
 
-use crate::cli::{Common, LinkKind, Mode};
+use crate::cli::{Common, LinkKind, Mode, RtPolicy};
 use crate::grid::Candidate;
 use crate::monitor::{CandidateResult, CandidateStatus, LoadStats, OpAccumulator};
 
@@ -159,6 +159,11 @@ fn client_config(common: &Common, max_inflight: usize) -> ClientConfig {
                 ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),
             )
         }),
+        rt_policy: match common.rt_policy {
+            RtPolicy::Normal => RtSchedulePolicy::Normal,
+            RtPolicy::Fifo => RtSchedulePolicy::Fifo,
+            RtPolicy::RoundRobin => RtSchedulePolicy::RoundRobin,
+        },
         rt_affinity: common.rt_core.map(|id| CoreId { id }),
         validate_state: false,
     }

@@ -9,7 +9,8 @@ use autd3_rs::commands::{ConfigPattern, GpioOut, SetGpioOut, WritePatternBuffer}
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
-    Client, ClientConfig, Error as ClientError, Frames, Link, ResponseFuture, StateCheck,
+    Client, ClientConfig, Error as ClientError, Frames, Link, ResponseFuture, RtSchedulePolicy,
+    StateCheck,
 };
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
@@ -121,6 +122,7 @@ async fn run_with_link<L: Link>(link: L, cli: &Cli) -> Result<()> {
             low_latency: cli.low_latency,
             reset_resend_cycles: 2,
             rt_priority: None,
+            rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: false,
         },

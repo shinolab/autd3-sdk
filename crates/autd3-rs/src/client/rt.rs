@@ -12,7 +12,7 @@ use crate::protocol::{
 use crate::response::Response;
 
 use super::completion::CompletionSender;
-use super::config::{ClientConfig, MAX_DEVICES};
+use super::config::{ClientConfig, MAX_DEVICES, RtSchedulePolicy};
 use super::pool::{Slot, SlotPool};
 
 pub(super) struct CmdMessage {
@@ -101,11 +101,43 @@ impl ResyncState {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn set_rt_priority(
+    priority: thread_priority::ThreadPriority,
+    policy: RtSchedulePolicy,
+) -> Result<(), thread_priority::Error> {
+    use thread_priority::{
+        RealtimeThreadSchedulePolicy, ThreadSchedulePolicy, set_thread_priority_and_policy,
+        thread_native_id,
+    };
+    let policy = match policy {
+        RtSchedulePolicy::Normal => return thread_priority::set_current_thread_priority(priority),
+        RtSchedulePolicy::Fifo => {
+            ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::Fifo)
+        }
+        RtSchedulePolicy::RoundRobin => {
+            ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::RoundRobin)
+        }
+    };
+    set_thread_priority_and_policy(thread_native_id(), priority, policy)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn set_rt_priority(
+    priority: thread_priority::ThreadPriority,
+    _policy: RtSchedulePolicy,
+) -> Result<(), thread_priority::Error> {
+    thread_priority::set_current_thread_priority(priority)
+}
+
 fn apply_thread_tuning(config: &ClientConfig) {
-    if let Some(priority) = config.rt_priority
-        && let Err(e) = thread_priority::set_current_thread_priority(priority)
-    {
-        tracing::warn!("failed to set RT thread priority: {e:?}");
+    if let Some(priority) = config.rt_priority {
+        match set_rt_priority(priority, config.rt_policy) {
+            Ok(()) => {
+                tracing::debug!(?priority, policy = ?config.rt_policy, "applied RT thread scheduling");
+            }
+            Err(e) => tracing::warn!("failed to set RT thread priority: {e:?}"),
+        }
     }
     if let Some(core) = config.rt_affinity
         && !core_affinity::set_for_current(core)

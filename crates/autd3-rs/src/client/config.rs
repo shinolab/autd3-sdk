@@ -8,6 +8,14 @@ use crate::protocol::MAX_IN_FLIGHT;
 
 pub const MAX_DEVICES: usize = 128;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RtSchedulePolicy {
+    Normal,
+    #[default]
+    Fifo,
+    RoundRobin,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct ClientConfig {
     pub timeout_cycles: u32,
@@ -17,6 +25,7 @@ pub struct ClientConfig {
     pub low_latency: bool,
     pub reset_resend_cycles: u32,
     pub rt_priority: Option<ThreadPriority>,
+    pub rt_policy: RtSchedulePolicy,
     pub rt_affinity: Option<CoreId>,
     pub validate_state: bool,
 }
@@ -31,6 +40,7 @@ impl Default for ClientConfig {
             low_latency: false,
             reset_resend_cycles: 2,
             rt_priority: None,
+            rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
         }

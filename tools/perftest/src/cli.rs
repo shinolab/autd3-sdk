@@ -24,6 +24,14 @@ pub enum LinkKind {
     Nop,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum RtPolicy {
+    Normal,
+    #[default]
+    Fifo,
+    RoundRobin,
+}
+
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "autd3-rs-perftest",
@@ -73,6 +81,8 @@ pub struct Cli {
     pub no_win_perf_tune: bool,
     #[arg(long)]
     pub rt_priority: Option<u8>,
+    #[arg(long, value_enum, default_value_t = RtPolicy::Fifo)]
+    pub rt_policy: RtPolicy,
     #[arg(long)]
     pub rt_core: Option<usize>,
 }

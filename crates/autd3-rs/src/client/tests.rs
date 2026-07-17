@@ -14,7 +14,7 @@ use crate::protocol::{
     TxFrame,
 };
 
-use super::{Client, ClientConfig};
+use super::{Client, ClientConfig, RtSchedulePolicy};
 
 fn geometry(n: usize) -> Geometry {
     Geometry::new((0..n).map(|_| Autd3::default()).collect())
@@ -582,6 +582,7 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
             low_latency: false,
             reset_resend_cycles: 2,
             rt_priority: None,
+            rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
         },
@@ -755,6 +756,7 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
             low_latency: false,
             reset_resend_cycles: 2,
             rt_priority: None,
+            rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
         },
@@ -796,6 +798,7 @@ async fn dead_link_gives_up_whole_window_in_bounded_time() {
             low_latency: false,
             reset_resend_cycles: 2,
             rt_priority: None,
+            rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
         },
@@ -908,6 +911,7 @@ async fn streaming_holds_window_across_stale_and_recovers() {
             low_latency: false,
             reset_resend_cycles: 2,
             rt_priority: None,
+            rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
         },
@@ -990,6 +994,7 @@ async fn open_rejects_oversize_max_inflight() {
             low_latency: false,
             reset_resend_cycles: 2,
             rt_priority: None,
+            rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
         },
@@ -1028,6 +1033,7 @@ async fn commands_still_succeed_with_send_interval_above_one() {
             low_latency: false,
             reset_resend_cycles: 2,
             rt_priority: None,
+            rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
         },

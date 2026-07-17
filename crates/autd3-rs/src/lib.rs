@@ -24,7 +24,7 @@ pub use autd3_rs_core::{
     SilencerGuardState, SilencerViolation, StateCheck, TX_FRAME_BYTES, TransitionGuardState,
     TransitionViolation, TxFrame, UnitQuaternion, UnitVector3, Vector3, Velocity, offset, point,
 };
-pub use client::{Client, ClientConfig, MAX_DEVICES, ResponseFuture};
+pub use client::{Client, ClientConfig, MAX_DEVICES, ResponseFuture, RtSchedulePolicy};
 pub use core_affinity::CoreId;
 pub use datagram::{Datagram, DatagramBuilder, Frame, Frames};
 pub use firmware_version::{FirmwareVersion, Version};
