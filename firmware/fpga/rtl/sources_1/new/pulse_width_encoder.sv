@@ -39,6 +39,7 @@ module pulse_width_encoder #(
   );
 
   assign PWE_TABLE_BUS.IDX = addr;
+  assign PWE_TABLE_BUS.RD_EN = DIN_VALID | (state == RUN);
   assign dout = PWE_TABLE_BUS.VALUE;
 
   assign PULSE_WIDTH_OUT = dout;

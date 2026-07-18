@@ -57,6 +57,7 @@ module phase_correction #(
   );
 
   assign PHASE_CORR_BUS.IDX = addr;
+  assign PHASE_CORR_BUS.RD_EN = (state != IDLE);
   assign dout = PHASE_CORR_BUS.VALUE;
 
   assign DOUT_VALID = dout_valid;
