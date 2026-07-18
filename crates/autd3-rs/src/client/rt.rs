@@ -11,8 +11,10 @@ use crate::protocol::{
 };
 use crate::response::Response;
 
+use autd3_rs_core::RtSchedulePolicy;
+
 use super::completion::CompletionSender;
-use super::config::{ClientConfig, MAX_DEVICES, RtSchedulePolicy};
+use super::config::{ClientConfig, MAX_DEVICES};
 use super::pool::{Slot, SlotPool};
 
 pub(super) struct CmdMessage {
@@ -101,7 +103,7 @@ impl ResyncState {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn set_rt_priority(
     priority: thread_priority::ThreadPriority,
     policy: RtSchedulePolicy,
@@ -122,7 +124,7 @@ fn set_rt_priority(
     set_thread_priority_and_policy(thread_native_id(), priority, policy)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(target_os = "linux"))]
 fn set_rt_priority(
     priority: thread_priority::ThreadPriority,
     _policy: RtSchedulePolicy,

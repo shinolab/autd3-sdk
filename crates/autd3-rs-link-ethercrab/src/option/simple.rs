@@ -4,6 +4,9 @@ use autd3_rs_core::Interface;
 use ethercrab::{MainDeviceConfig, RetryBehaviour, Timeouts, subdevice_group::DcConfiguration};
 
 use super::EtherCrabLinkOptionFull;
+use crate::rt::{RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
+
+const PERFORMANCE_TX_RX_PRIORITY: u8 = 99;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EtherCrabLinkOption {
@@ -27,8 +30,7 @@ impl EtherCrabLinkOption {
         }
     }
 
-    #[must_use]
-    pub fn performance_default() -> Self {
+    fn performance_base() -> Self {
         Self {
             iface: Interface::Auto,
             sync0_period: Duration::from_millis(1),
@@ -36,6 +38,17 @@ impl EtherCrabLinkOption {
             sync_tolerance: Duration::from_micros(1),
             sync_timeout: Duration::from_secs(10),
         }
+    }
+
+    #[must_use]
+    pub fn performance_default() -> EtherCrabLinkOptionFull {
+        let mut full: EtherCrabLinkOptionFull = Self::performance_base().into();
+        full.tx_rx_priority = Some(ThreadPriority::Crossplatform(
+            ThreadPriorityValue::try_from(PERFORMANCE_TX_RX_PRIORITY)
+                .expect("0..=99 is a valid thread priority"),
+        ));
+        full.tx_rx_policy = RtSchedulePolicy::Fifo;
+        full
     }
 }
 
@@ -47,7 +60,7 @@ impl Default for EtherCrabLinkOption {
         }
         #[cfg(not(target_os = "windows"))]
         {
-            Self::performance_default()
+            Self::performance_base()
         }
     }
 }
@@ -73,6 +86,9 @@ impl From<EtherCrabLinkOption> for EtherCrabLinkOptionFull {
             },
             sync_tolerance: opt.sync_tolerance,
             sync_timeout: opt.sync_timeout,
+            tx_rx_priority: None,
+            tx_rx_policy: autd3_rs_core::RtSchedulePolicy::default(),
+            tx_rx_affinity: None,
         }
     }
 }
@@ -89,10 +105,17 @@ mod tests {
     }
 
     #[test]
-    fn performance_default_uses_zero_shift() {
+    fn performance_default_uses_zero_shift_and_rt_pump() {
         let opt = EtherCrabLinkOption::performance_default();
-        assert_eq!(opt.sync0_period, Duration::from_millis(1));
-        assert_eq!(opt.sync0_shift, Duration::ZERO);
+        assert_eq!(opt.dc_configuration.sync0_period, Duration::from_millis(1));
+        assert_eq!(opt.dc_configuration.sync0_shift, Duration::ZERO);
+        assert_eq!(
+            opt.tx_rx_priority,
+            Some(ThreadPriority::Crossplatform(
+                ThreadPriorityValue::try_from(PERFORMANCE_TX_RX_PRIORITY).unwrap()
+            ))
+        );
+        assert_eq!(opt.tx_rx_policy, RtSchedulePolicy::Fifo);
     }
 
     #[test]
@@ -105,7 +128,7 @@ mod tests {
         #[cfg(not(target_os = "windows"))]
         assert_eq!(
             EtherCrabLinkOption::default(),
-            EtherCrabLinkOption::performance_default()
+            EtherCrabLinkOption::performance_base()
         );
     }
 }

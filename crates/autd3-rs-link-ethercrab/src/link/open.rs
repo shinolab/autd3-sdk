@@ -63,10 +63,14 @@ impl EtherCrabLink {
         let diagnostics = new_shared_cycle_diagnostics();
         tracing::info!("starting EtherCAT tx/rx task on {interface}");
         let transport = Transport::open(
-            &handle,
             &interface,
             without_pdu_timer(option.timeouts),
             option.main_device_config,
+            crate::transport::PumpTuning {
+                priority: option.tx_rx_priority,
+                policy: option.tx_rx_policy,
+                affinity: option.tx_rx_affinity,
+            },
         )?;
         let Reached {
             group,

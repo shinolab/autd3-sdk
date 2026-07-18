@@ -10,7 +10,9 @@ description = "EtherCrab-backed Link implementation for autd3-rs."
 
 [dependencies]
 autd3-rs-core.workspace = true
+core_affinity.workspace = true
 thiserror.workspace = true
+thread-priority.workspace = true
 ethercrab = { version = "0.7.1", default-features = false, features = ["std"] }
 futures-util = { version = "0.3.32", default-features = false, features = ["alloc"] }
 tokio = { workspace = true, features = ["sync", "time", "macros", "rt", "net"] }
@@ -19,9 +21,6 @@ tracing = { workspace = true, features = ["log"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 libc = "0.2.186"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-thread-priority.workspace = true
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 cc = "1.2.65"

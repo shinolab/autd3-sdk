@@ -246,8 +246,15 @@ impl EtherCrabLinkOption {
 
     #[staticmethod]
     fn performance_default() -> Self {
+        let full = CoreOption::performance_default();
         Self {
-            inner: CoreOption::performance_default(),
+            inner: CoreOption {
+                iface: full.iface,
+                sync0_period: full.dc_configuration.sync0_period,
+                sync0_shift: full.dc_configuration.sync0_shift,
+                sync_tolerance: full.sync_tolerance,
+                sync_timeout: full.sync_timeout,
+            },
         }
     }
 

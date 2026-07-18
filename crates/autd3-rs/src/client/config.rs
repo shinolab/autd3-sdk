@@ -1,5 +1,6 @@
 use std::num::{NonZeroU32, NonZeroUsize};
 
+use autd3_rs_core::RtSchedulePolicy;
 use core_affinity::CoreId;
 use thread_priority::ThreadPriority;
 
@@ -7,14 +8,6 @@ use crate::error::{Error, PayloadError};
 use crate::protocol::MAX_IN_FLIGHT;
 
 pub const MAX_DEVICES: usize = 128;
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum RtSchedulePolicy {
-    Normal,
-    #[default]
-    Fifo,
-    RoundRobin,
-}
 
 #[derive(Clone, Copy, Debug)]
 pub struct ClientConfig {

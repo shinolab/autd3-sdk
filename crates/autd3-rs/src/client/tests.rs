@@ -14,7 +14,8 @@ use crate::protocol::{
     TxFrame,
 };
 
-use super::{Client, ClientConfig, RtSchedulePolicy};
+use super::{Client, ClientConfig};
+use crate::RtSchedulePolicy;
 
 fn geometry(n: usize) -> Geometry {
     Geometry::new((0..n).map(|_| Autd3::default()).collect())

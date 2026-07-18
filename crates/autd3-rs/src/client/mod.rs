@@ -7,7 +7,7 @@ mod rt;
 mod tests;
 
 pub use completion::ResponseFuture;
-pub use config::{ClientConfig, MAX_DEVICES, RtSchedulePolicy};
+pub use config::{ClientConfig, MAX_DEVICES};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, PoisonError};

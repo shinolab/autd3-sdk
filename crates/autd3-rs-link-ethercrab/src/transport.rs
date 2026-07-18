@@ -1,15 +1,22 @@
 use std::sync::Arc;
 
 use ethercrab::{MainDevice, MainDeviceConfig, PduLoop, PduRx, PduStorage, PduTx, Timeouts};
-use tokio::runtime::Handle;
 
 use crate::error::EtherCrabLinkError;
+use crate::rt::{CoreId, RtSchedulePolicy, ThreadPriority};
 
 const ETHERNET_PDU_CAPACITY: usize = 1486;
 const MAX_PDU_DATA: usize = PduStorage::element_size(ETHERNET_PDU_CAPACITY);
 const MAX_FRAMES: usize = 32;
 
 const TX_RX_EXIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PumpTuning {
+    pub(crate) priority: Option<ThreadPriority>,
+    pub(crate) policy: RtSchedulePolicy,
+    pub(crate) affinity: Option<CoreId>,
+}
 
 struct PduStorageWrapper {
     ptr: *mut PduStorage<MAX_FRAMES, MAX_PDU_DATA>,
@@ -46,11 +53,10 @@ impl Drop for PduStorageWrapper {
 
 #[cfg(not(target_os = "windows"))]
 struct TxRxWorker {
+    handle: Option<std::thread::JoinHandle<()>>,
     done: std::sync::mpsc::Receiver<()>,
 }
 
-// The upstream unix tx/rx task allocates a fresh MTU-sized receive buffer on
-// every poll, so Linux and macOS use our own task with a reusable buffer instead.
 #[cfg(target_os = "linux")]
 use crate::linux::tx_rx_task;
 #[cfg(target_os = "macos")]
@@ -61,28 +67,74 @@ use ethercrab::std::tx_rx_task;
 #[cfg(not(target_os = "windows"))]
 impl TxRxWorker {
     fn spawn(
-        handle: &Handle,
         interface: &str,
         pdu_tx: PduTx<'static>,
         pdu_rx: PduRx<'static>,
+        tuning: PumpTuning,
     ) -> Result<Self, EtherCrabLinkError> {
-        // `AsyncFd` registers with the runtime's IO driver on construction.
-        let tx_rx_fut = {
-            let _entered = handle.enter();
-            tx_rx_task(interface, pdu_tx, pdu_rx)?
-        };
+        let interface = interface.to_owned();
+        let (ready_tx, ready_rx) =
+            std::sync::mpsc::sync_channel::<Result<(), EtherCrabLinkError>>(1);
         let (done_tx, done_rx) = std::sync::mpsc::channel();
-        handle.spawn(async move {
-            if let Err(e) = tx_rx_fut.await {
-                tracing::error!("tx/rx task exited: {e}");
+        let thread = std::thread::Builder::new()
+            .name("autd3-ethercat-txrx".to_owned())
+            .spawn(move || {
+                crate::rt::apply_thread_tuning(tuning.priority, tuning.policy, tuning.affinity);
+                let runtime = match tokio::runtime::Builder::new_current_thread()
+                    .enable_io()
+                    .enable_time()
+                    .build()
+                {
+                    Ok(runtime) => runtime,
+                    Err(e) => {
+                        let _ = ready_tx.send(Err(EtherCrabLinkError::Io(e)));
+                        return;
+                    }
+                };
+                runtime.block_on(async move {
+                    // `AsyncFd` registers with this runtime's IO driver on construction.
+                    let tx_rx_fut = match tx_rx_task(&interface, pdu_tx, pdu_rx) {
+                        Ok(fut) => {
+                            let _ = ready_tx.send(Ok(()));
+                            fut
+                        }
+                        Err(e) => {
+                            let _ = ready_tx.send(Err(EtherCrabLinkError::Io(e)));
+                            return;
+                        }
+                    };
+                    if let Err(e) = tx_rx_fut.await {
+                        tracing::error!("tx/rx task exited: {e}");
+                    }
+                });
+                let _ = done_tx.send(());
+            })
+            .map_err(EtherCrabLinkError::Io)?;
+
+        match ready_rx.recv() {
+            Ok(Ok(())) => Ok(Self {
+                handle: Some(thread),
+                done: done_rx,
+            }),
+            Ok(Err(e)) => {
+                let _ = thread.join();
+                Err(e)
             }
-            let _ = done_tx.send(());
-        });
-        Ok(Self { done: done_rx })
+            Err(_) => {
+                let _ = thread.join();
+                Err(EtherCrabLinkError::Io(std::io::Error::other(
+                    "tx/rx worker terminated before becoming ready",
+                )))
+            }
+        }
     }
 
     fn shutdown(&mut self) -> bool {
-        self.done.recv_timeout(TX_RX_EXIT_TIMEOUT).is_ok()
+        let stopped = self.done.recv_timeout(TX_RX_EXIT_TIMEOUT).is_ok();
+        if stopped && let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+        stopped
     }
 }
 
@@ -96,10 +148,10 @@ struct TxRxWorker {
 #[cfg(target_os = "windows")]
 impl TxRxWorker {
     fn spawn(
-        _handle: &Handle,
         interface: &str,
         pdu_tx: PduTx<'static>,
         pdu_rx: PduRx<'static>,
+        tuning: PumpTuning,
     ) -> Result<Self, EtherCrabLinkError> {
         let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let interface = interface.to_owned();
@@ -109,7 +161,7 @@ impl TxRxWorker {
             let running = Arc::clone(&running);
             move || {
                 if let Err(e) = crate::windows::tx_rx_task_blocking(
-                    &interface, pdu_tx, pdu_rx, &running, &ready_tx,
+                    &interface, pdu_tx, pdu_rx, &running, &ready_tx, tuning,
                 ) {
                     tracing::error!("tx/rx task exited: {e}");
                 }
@@ -158,10 +210,10 @@ pub(crate) struct Transport {
 
 impl Transport {
     pub(crate) fn open(
-        handle: &Handle,
         interface: &str,
         timeouts: Timeouts,
         config: MainDeviceConfig,
+        tuning: PumpTuning,
     ) -> Result<Self, EtherCrabLinkError> {
         let pdu_storage = PduStorageWrapper::new();
         let (pdu_tx, pdu_rx, pdu_loop) = pdu_storage
@@ -169,7 +221,7 @@ impl Transport {
             .map_err(|()| EtherCrabLinkError::PduStorage)?;
         let maindevice = MainDevice::new(pdu_loop, timeouts, config);
 
-        let worker = TxRxWorker::spawn(handle, interface, pdu_tx, pdu_rx)?;
+        let worker = TxRxWorker::spawn(interface, pdu_tx, pdu_rx, tuning)?;
 
         Ok(Self {
             maindevice: Some(Arc::new(maindevice)),
