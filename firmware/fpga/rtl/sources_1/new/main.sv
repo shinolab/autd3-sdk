@@ -60,6 +60,7 @@ module main #(
   logic mod_transition_pending;
   logic gpio_in_soft[4];
   logic signed [13:0] sync_time_diff;
+  logic [7:0] sync_resync_count;
 
   (* ASYNC_REG = "true" *) logic gpio_in_hard_meta[4] = '{1'b0, 1'b0, 1'b0, 1'b0};
   (* ASYNC_REG = "true" *) logic gpio_in_hard_sync[4] = '{1'b0, 1'b0, 1'b0, 1'b0};
@@ -106,6 +107,7 @@ module main #(
       .PATTERN_STOPPED(pattern_stopped),
       .MOD_STOPPED(mod_stopped),
       .TRANSITION_PENDING(pattern_transition_pending | mod_transition_pending),
+      .SYNC_RESYNC_COUNT(sync_resync_count),
       .cnt_bus(cnt_bus.out_port),
       .MOD_SETTINGS(mod_settings),
       .PATTERN_SETTINGS(pattern_settings),
@@ -123,7 +125,8 @@ module main #(
       .SYS_TIME(sys_time),
       .SYNC(sync),
       .SKIP_ONE_ASSERT(skip_one_assert),
-      .SYNC_TIME_DIFF(sync_time_diff)
+      .SYNC_TIME_DIFF(sync_time_diff),
+      .SYNC_RESYNC_COUNT(sync_resync_count)
   );
 
   time_cnt_generator time_cnt_generator (

@@ -13,6 +13,7 @@ use crate::protocol::{
     Cmd, MAX_IN_FLIGHT, MODE_FIFO, MODE_LOW_LATENCY, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES,
     TxFrame,
 };
+use crate::telemetry::Telemetry;
 
 use super::{Client, ClientConfig};
 use crate::RtSchedulePolicy;
@@ -49,6 +50,7 @@ struct Slave {
     fpga_functions: u8,
     supports_fpga_functions: bool,
     telemetry: [u8; 6],
+    sync_resync_count: u8,
     muted: bool,
     drop_next: u32,
     stale_for_next: u32,
@@ -75,6 +77,7 @@ impl Slave {
             fpga_functions: 0,
             supports_fpga_functions: true,
             telemetry: [0; 6],
+            sync_resync_count: 0,
             muted: false,
             drop_next: 0,
             stale_for_next: 0,
@@ -175,6 +178,9 @@ fn slave_cycle(
             ERR_UNKNOWN_CMD
         }
         Cmd::ReadFpgaFunctions => slave.fpga_functions,
+        Cmd::ReadTelemetry if parsed.payload[0] == Telemetry::SyncResync.as_u8() => {
+            slave.sync_resync_count
+        }
         Cmd::ReadTelemetry => {
             if let Some(&value) = slave.telemetry.get(parsed.payload[0] as usize) {
                 value
@@ -1380,8 +1386,6 @@ async fn stop_resyncs_seq_and_lets_later_frames_through() {
 
 #[tokio::test]
 async fn read_telemetry_returns_selected_counter() {
-    use crate::telemetry::Telemetry;
-
     let (client, slave) = open_client().await;
     slave.lock().unwrap().telemetry[Telemetry::FifoDrop.as_u8() as usize] = 7;
     slave.lock().unwrap().telemetry[Telemetry::Failsafe.as_u8() as usize] = 3;
@@ -1393,6 +1397,17 @@ async fn read_telemetry_returns_selected_counter() {
     assert_eq!(
         client.read_telemetry(Telemetry::Failsafe).await.unwrap(),
         vec![3]
+    );
+}
+
+#[tokio::test]
+async fn read_telemetry_returns_sync_resync_count() {
+    let (client, slave) = open_client().await;
+    slave.lock().unwrap().sync_resync_count = 5;
+
+    assert_eq!(
+        client.read_telemetry(Telemetry::SyncResync).await.unwrap(),
+        vec![5]
     );
 }
 

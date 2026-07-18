@@ -9,6 +9,7 @@ module controller (
     input wire PATTERN_STOPPED,
     input wire MOD_STOPPED,
     input wire TRANSITION_PENDING,
+    input wire [7:0] SYNC_RESYNC_COUNT,
     cnt_bus_if.out_port cnt_bus,
     output var settings::mod_settings_t MOD_SETTINGS,
     output var settings::pattern_settings_t PATTERN_SETTINGS,
@@ -40,7 +41,9 @@ module controller (
   assign GPIO_IN[3] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_3];
 
   function automatic logic [15:0] fpga_state_din();
-    return {8'h00, 1'h0  /* reserved */, TRANSITION_PENDING, MOD_STOPPED, PATTERN_STOPPED, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO};
+    return {
+      SYNC_RESYNC_COUNT, 1'h0  /* reserved */, TRANSITION_PENDING, MOD_STOPPED, PATTERN_STOPPED, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO
+    };
   endfunction
 
   typedef enum logic [6:0] {

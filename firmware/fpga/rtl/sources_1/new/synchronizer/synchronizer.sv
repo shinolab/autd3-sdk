@@ -7,7 +7,8 @@ module synchronizer (
     output var [56:0] SYS_TIME,
     output var SYNC,
     output var SKIP_ONE_ASSERT,
-    output var signed [13:0] SYNC_TIME_DIFF
+    output var signed [13:0] SYNC_TIME_DIFF,
+    output var [7:0] SYNC_RESYNC_COUNT
 );
 
   localparam int AddSubLatency = 5;
@@ -48,6 +49,10 @@ module synchronizer (
 
   logic diff_overflow;
   assign diff_overflow = (s_diff > DiffMax) || (s_diff < -DiffMax);
+
+  logic [7:0] resync_count = '0;
+  assign SYNC_RESYNC_COUNT = resync_count;
+  logic locked = 1'b0;
 
   logic skip_one_assert;
   assign SKIP_ONE_ASSERT = skip_one_assert;
@@ -122,6 +127,8 @@ module synchronizer (
         b_diff <= '0;
         a_next <= sync_time_adj;
         sync_time_diff <= '0;
+        locked <= 1'b1;
+        resync_count <= '0;
       end else begin
         a_diff   <= next_sync_time;
         b_diff   <= sys_time;
@@ -146,6 +153,7 @@ module synchronizer (
         end
       end else if (diff_cnt == AddSubLatency) begin
         sync_time_diff <= diff_overflow ? 14'sd0 : saturate_diff(s_diff);
+        if (locked && diff_overflow && (resync_count != 8'hFF)) resync_count <= resync_count + 8'd1;
         diff_cnt <= diff_cnt + 1;
         sys_time <= sys_time + 1;
         skip_one_assert <= 1'b0;
