@@ -30,6 +30,8 @@ module controller (
   logic [15:0] din;
   logic [15:0] dout;
 
+  logic [15:0] fpga_state_prev = 16'hFFFF;
+
   assign cnt_bus.WE = we;
   assign cnt_bus.ADDR = addr;
   assign cnt_bus.DIN = din;
@@ -141,6 +143,7 @@ module controller (
     if (!ENABLE) begin
       state <= REQ_WR_VER_PATCH;
       we <= 1'b0;
+      fpga_state_prev <= 16'hFFFF;
     end else
       case (state)
         REQ_WR_VER_PATCH: begin
@@ -177,9 +180,14 @@ module controller (
         end
 
         WAIT_0: begin
-          we   <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
-          din  <= fpga_state_din();
+          if (fpga_state_din() != fpga_state_prev) begin
+            we <= 1'b1;
+            din <= fpga_state_din();
+            fpga_state_prev <= fpga_state_din();
+          end else begin
+            we <= 1'b0;
+          end
 
           if (ctl_flags[params::CTL_FLAG_BIT_MOD_SET]) begin
             ctl_flags <= ctl_flags & ~(1 << params::CTL_FLAG_BIT_MOD_SET);
@@ -277,6 +285,7 @@ module controller (
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
+          fpga_state_prev <= fpga_state_din();
           state <= RD_MOD_REP1;
         end
         RD_MOD_REP1: begin
@@ -290,6 +299,7 @@ module controller (
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
+          fpga_state_prev <= fpga_state_din();
           ctl_flags <= dout;
           MOD_SETTINGS.UPDATE <= 1'b0;
           state <= WAIT_1;
@@ -395,6 +405,7 @@ module controller (
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
+          fpga_state_prev <= fpga_state_din();
           state <= RD_PATTERN_NUM_FOCI1;
         end
         RD_PATTERN_NUM_FOCI1: begin
@@ -408,6 +419,7 @@ module controller (
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
+          fpga_state_prev <= fpga_state_din();
           ctl_flags <= dout;
           PATTERN_SETTINGS.UPDATE <= 1'b0;
           state <= WAIT_1;
@@ -448,6 +460,7 @@ module controller (
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
+          fpga_state_prev <= fpga_state_din();
           state <= RD_SILENCER_COMPLETION_STEPS_PHASE;
         end
         RD_SILENCER_COMPLETION_STEPS_PHASE: begin
@@ -461,6 +474,7 @@ module controller (
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
+          fpga_state_prev <= fpga_state_din();
           ctl_flags <= dout;
           SILENCER_SETTINGS.UPDATE <= 1'b0;
           state <= WAIT_1;
@@ -556,6 +570,7 @@ module controller (
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
+          fpga_state_prev <= fpga_state_din();
           state <= RD_DEBUG_VALUE3_3;
         end
         RD_DEBUG_VALUE3_3: begin
@@ -569,6 +584,7 @@ module controller (
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
+          fpga_state_prev <= fpga_state_din();
           ctl_flags <= dout;
           DEBUG_SETTINGS.UPDATE <= 1'b0;
           state <= WAIT_1;
@@ -614,6 +630,7 @@ module controller (
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
+          fpga_state_prev <= fpga_state_din();
           state <= RD_ECAT_SYNC_CYCLE_1;
         end
         RD_ECAT_SYNC_CYCLE_1: begin
@@ -627,6 +644,7 @@ module controller (
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
+          fpga_state_prev <= fpga_state_din();
           ctl_flags <= dout;
           SYNC_SETTINGS.UPDATE <= 1'b0;
           state <= WAIT_1;
