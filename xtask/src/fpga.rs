@@ -31,6 +31,18 @@ pub enum FpgaCmd {
         #[arg(long)]
         tb: Option<String>,
     },
+    /// Measure power with switching activity captured from a testbench (SAIF)
+    Power {
+        /// Testbench to drive the measured scope
+        #[arg(long, default_value = "sim_emission_focus")]
+        tb: String,
+        /// Instance inside the testbench to log, and its path in the implemented netlist
+        #[arg(long, default_value = "emission")]
+        scope: String,
+        /// Implementation run holding `top_routed.dcp` (auto-detected if omitted)
+        #[arg(long)]
+        impl_run: Option<String>,
+    },
     /// Format the RTL sources with `verible-verilog-format`
     Format {
         /// Rewrite the files instead of only checking them
@@ -52,6 +64,11 @@ pub fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
         FpgaCmd::Build { force } => fpga_build(root, *force).map(|_| ()),
         FpgaCmd::Flash { force } => fpga_flash(root, *force),
         FpgaCmd::Sim { tb } => fpga_sim(&fpga_dir, tb.as_deref()),
+        FpgaCmd::Power {
+            tb,
+            scope,
+            impl_run,
+        } => fpga_power(&fpga_dir, tb, scope, impl_run.as_deref()),
         FpgaCmd::Format { fix } => fpga_format(&fpga_dir, *fix),
         FpgaCmd::GenController => crate::fpga_codegen::gen_controller(&fpga_dir),
         FpgaCmd::CommitIps => fpga_commit_ips(&fpga_dir),
@@ -80,6 +97,79 @@ fn fpga_sim(fpga_dir: &Path, tb: Option<&str>) -> Result<()> {
         .context("xsim reported testbench failures (see the SUMMARY table above)")
 }
 
+fn routed_impl_run(fpga_dir: &Path) -> Result<String> {
+    let runs_dir = fpga_dir.join(format!("{PROJECT_NAME}.runs"));
+    let mut candidates = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&runs_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.join("top_routed.dcp").exists() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if path.join("top.bit").exists() {
+                return Ok(name);
+            }
+            candidates.push(name);
+        }
+    }
+    match candidates.len() {
+        0 => bail!(
+            "no implementation run with top_routed.dcp under {}. \
+             Run `cargo xtask fpga build` first.",
+            runs_dir.display()
+        ),
+        1 => Ok(candidates.remove(0)),
+        _ => {
+            candidates.sort();
+            bail!(
+                "several implementation runs have top_routed.dcp but none produced a \
+                 bitstream: {}. Pass --impl-run to pick one.",
+                candidates.join(", ")
+            )
+        }
+    }
+}
+
+fn fpga_power(fpga_dir: &Path, tb: &str, scope: &str, impl_run: Option<&str>) -> Result<()> {
+    let vivado = resolve_vivado()?;
+
+    if !fpga_dir.join(format!("{PROJECT_NAME}.xpr")).exists() {
+        fpga_project(fpga_dir)?;
+    }
+
+    let impl_run = match impl_run {
+        Some(run) => {
+            let dcp = fpga_dir
+                .join(format!("{PROJECT_NAME}.runs"))
+                .join(run)
+                .join("top_routed.dcp");
+            if !dcp.exists() {
+                bail!("{} not found", dcp.display());
+            }
+            run.to_string()
+        }
+        None => routed_impl_run(fpga_dir)?,
+    };
+    println!("using implementation run: {impl_run}");
+
+    run(
+        &vivado,
+        vec![
+            "-mode".to_string(),
+            "batch".to_string(),
+            "-source".to_string(),
+            "scripts/power.tcl".to_string(),
+            "-tclargs".to_string(),
+            tb.to_string(),
+            scope.to_string(),
+            impl_run,
+        ],
+        fpga_dir,
+    )
+    .context("power measurement failed (see the log above)")
+}
+
 fn fpga_format(fpga_dir: &Path, fix: bool) -> Result<()> {
     if !on_path("verible-verilog-format") {
         bail!(
@@ -103,7 +193,6 @@ fn fpga_format(fpga_dir: &Path, fix: bool) -> Result<()> {
             .context("verible-verilog-format failed");
     }
 
-    // `--verify` only accepts a single file, so check them one by one.
     let mut unformatted = 0usize;
     for file in &files {
         let args = [VERIBLE_COLUMN_LIMIT, "--verify", &file.to_string_lossy()];
@@ -112,9 +201,7 @@ fn fpga_format(fpga_dir: &Path, fix: bool) -> Result<()> {
         }
     }
     if unformatted > 0 {
-        bail!(
-            "{unformatted} RTL source(s) are not formatted; run `cargo xtask fpga format --fix`"
-        );
+        bail!("{unformatted} RTL source(s) are not formatted; run `cargo xtask fpga format --fix`");
     }
     Ok(())
 }
