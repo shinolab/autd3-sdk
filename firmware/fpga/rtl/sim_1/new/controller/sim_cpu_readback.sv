@@ -53,6 +53,7 @@ module sim_cpu_readback ();
 
   controller controller (
       .CLK(CLK),
+      .ENABLE(locked),
       .THERMO(thermo),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
@@ -99,7 +100,8 @@ module sim_cpu_readback ();
     `ASSERT_EQ({8'h00, params::VersionNumPatch}, value);
 
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
-    `ASSERT_EQ({sync_resync_count, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo}, value);
+    `ASSERT_EQ({sync_resync_count, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
+               value);
 
     $display("OK! sim_cpu_readback");
     $finish();

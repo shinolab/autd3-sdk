@@ -28,6 +28,7 @@ module main #(
   settings::debug_settings_t debug_settings;
 
   logic clk;
+  logic locked;
 
   logic [56:0] sys_time;
   logic sync;
@@ -84,8 +85,15 @@ module main #(
       .clk_in1(MRCC_25P6M),
       .clk_out1(clk),
       .reset(RESET),
-      .locked()
+      .locked(locked)
   );
+
+  (* ASYNC_REG = "true" *)logic locked_meta = 1'b0;
+  (* ASYNC_REG = "true" *)logic locked_sync = 1'b0;
+  always_ff @(posedge clk) begin
+    locked_meta <= locked;
+    locked_sync <= locked_meta;
+  end
 
   memory memory (
       .CLK(clk),
@@ -100,6 +108,7 @@ module main #(
 
   controller controller (
       .CLK(clk),
+      .ENABLE(locked_sync),
       .THERMO(thermo_sync),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
