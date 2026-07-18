@@ -28,6 +28,10 @@ module top (
     assign XDCR_OUT[cvt_uid(i)+1] = PWM_OUT[i];
   end
 
+  assign XDCR_OUT[20] = 1'b0;
+  assign XDCR_OUT[21] = 1'b0;
+  assign XDCR_OUT[35] = 1'b0;
+
   memory_bus_if memory_bus ();
   assign memory_bus.BUS_CLK = CPU_CKIO;
   assign memory_bus.EN = ~CPU_CS1_N;
