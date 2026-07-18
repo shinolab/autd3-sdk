@@ -42,6 +42,7 @@ module sim_mem_pwe_table ();
   logic [8:0] value;
 
   assign pwe_table_bus.out_port.IDX = idx;
+  assign pwe_table_bus.out_port.RD_EN = 1'b1;
   assign value = pwe_table_bus.out_port.VALUE;
 
   task automatic progress();

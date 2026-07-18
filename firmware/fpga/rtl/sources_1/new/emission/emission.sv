@@ -34,6 +34,7 @@ module emission #(
   assign EMISSION_BUS.MODE = mode;
   assign EMISSION_BUS.BANK = bank;
   assign OUTPUT_MASK_BUS.BANK = bank;
+  assign OUTPUT_MASK_BUS.RD_EN = EMISSION_BUS.RD_EN;
 
   logic update_settings;
   logic [7:0] intensity_raw;
@@ -105,6 +106,7 @@ module emission #(
       .CLK(CLK),
       .START(start),
       .IDX(idx),
+      .ATAN_EN(mode == params::EMISSION_TYPE_FOCI),
       .EMISSION_BUS(EMISSION_BUS_FOCUS),
       .SOUND_SPEED(sound_speed),
       .NUM_FOCI(num_foci),

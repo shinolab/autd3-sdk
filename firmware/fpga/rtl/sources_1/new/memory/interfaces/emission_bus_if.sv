@@ -19,7 +19,7 @@ interface emission_bus_if ();
   assign RD_EN = MODE ? RAW_RD_EN : FOCUS_RD_EN;
 
   modport in_port(input ADDR, output VALUE, input BANK, input RD_EN);
-  modport emission_port(output MODE, output BANK);
+  modport emission_port(output MODE, output BANK, input RD_EN);
   modport out_raw_port(output RAW_IDX, output RAW_ADDR, input VALUE, output RAW_RD_EN);
   modport out_focus_port(output FOCUS_IDX, input VALUE, output FOCUS_RD_EN);
 

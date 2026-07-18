@@ -7,6 +7,7 @@ module emission_focus #(
     input wire CLK,
     input wire START,
     input wire [15:0] IDX,
+    input wire ATAN_EN,
     emission_bus_if.out_focus_port EMISSION_BUS,
     input wire [15:0] SOUND_SPEED,
     input wire [7:0] NUM_FOCI,
@@ -224,9 +225,12 @@ module emission_focus #(
   );
 
   logic [13:0] atan_key;
-  logic [ 7:0] phase;
+  logic [7:0] phase;
+  logic atan_ena;
+  assign atan_ena = ATAN_EN & (state != IDLE);
   BRAM_ATAN bram_atan (
       .clka (CLK),
+      .ena  (atan_ena),
       .addra(atan_key),
       .douta(phase)
   );
