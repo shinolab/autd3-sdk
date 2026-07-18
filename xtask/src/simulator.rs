@@ -114,13 +114,19 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
             )
         }
         SimulatorCmd::Format { fix } => {
-            let mut args = vec!["fmt", "--all"];
-            if !*fix {
-                args.push("--");
-                args.push("--check");
-            }
-            run("cargo", args.clone(), &sim)?;
-            run("cargo", args, &frontend)
+            let check: &[&str] = if *fix { &[] } else { &["--", "--check"] };
+            let mut sim_args = vec![
+                "fmt",
+                "-p",
+                "autd3-rs-simulator",
+                "-p",
+                "autd3-rs-simulator-protocol",
+            ];
+            sim_args.extend_from_slice(check);
+            run("cargo", sim_args, &sim)?;
+            let mut frontend_args = vec!["fmt", "-p", "autd3-rs-simulator-frontend"];
+            frontend_args.extend_from_slice(check);
+            run("cargo", frontend_args, &frontend)
         }
         SimulatorCmd::Run {
             debug,
