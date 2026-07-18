@@ -72,6 +72,13 @@ module main #(
     assign gpio_in[i] = gpio_in_hard_sync[i] | gpio_in_soft[i];
   end
 
+  (* ASYNC_REG = "true" *)logic thermo_meta = 1'b0;
+  (* ASYNC_REG = "true" *)logic thermo_sync = 1'b0;
+  always_ff @(posedge clk) begin
+    thermo_meta <= THERMO;
+    thermo_sync <= thermo_meta;
+  end
+
   clk_wiz clk_wiz (
       .clk_in1(MRCC_25P6M),
       .clk_out1(clk),
@@ -92,7 +99,7 @@ module main #(
 
   controller controller (
       .CLK(clk),
-      .THERMO(THERMO),
+      .THERMO(thermo_sync),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
       .PATTERN_CYCLE(pattern_cycle),
@@ -219,7 +226,7 @@ module main #(
       .SYS_TIME(sys_time),
       .SYNC_TIME_DIFF(sync_time_diff),
       .PWM_OUT(PWM_OUT),
-      .THERMO(THERMO),
+      .THERMO(thermo_sync),
       .FORCE_FAN(FORCE_FAN),
       .SYNC(sync),
       .PATTERN_BANK(pattern_bank),
