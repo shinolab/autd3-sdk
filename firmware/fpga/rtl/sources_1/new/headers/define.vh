@@ -6,10 +6,10 @@
 `ifdef USE_DIST_RAM
   $error();
 `else
-  `define RAM (*rom_style = "block"*)
+  `define RAM (*ram_style = "block"*)
 `endif
 `elsif USE_DIST_RAM
-  `define RAM (*rom_style = "distributed"*)
+  `define RAM (*ram_style = "distributed"*)
 `else
   `define RAM
 `endif
