@@ -62,7 +62,7 @@ module synchronizer (
   ec_time_to_sys_time ec_time_to_sys_time (
       .CLK(CLK),
       .EC_TIME(ecat_sync_time),
-      .DIN_VALID(1'b1),
+      .DIN_VALID(set),
       .SYS_TIME(sync_time),
       .DOUT_VALID(sync_time_dout_valid)
   );
