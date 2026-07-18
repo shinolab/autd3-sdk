@@ -1,8 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
 module emission_focus #(
-    parameter int DEPTH = 249,
-    parameter string MODE = "NearestEven"
+    parameter int DEPTH = 249
 ) (
     input wire CLK,
     input wire START,
@@ -137,9 +136,7 @@ module emission_focus #(
     endcase
   end
 
-  focus_calc #(
-      .MODE(MODE)
-  ) focus_calc_0 (
+  focus_calc focus_calc_0 (
       .CLK(CLK),
       .DIN_VALID(first_din),
       .FOCUS_X(focus_x[0]),
@@ -156,9 +153,7 @@ module emission_focus #(
   for (genvar i = 1; i < params::NumFociMax; i++) begin : gen_focus_calc
     logic active;
     assign active = num_foci > 8'(i);
-    focus_calc #(
-        .MODE(MODE)
-    ) focus_calc (
+    focus_calc focus_calc (
         .CLK(CLK),
         .DIN_VALID(1'b0),
         .FOCUS_X(focus_x[i]),
