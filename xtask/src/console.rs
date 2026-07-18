@@ -53,7 +53,7 @@ pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
             &dir,
         ),
         ConsoleCmd::Format { fix } => {
-            let mut args = vec!["fmt", "--all"];
+            let mut args = vec!["fmt", "-p", "autd3-console"];
             if !*fix {
                 args.push("--");
                 args.push("--check");

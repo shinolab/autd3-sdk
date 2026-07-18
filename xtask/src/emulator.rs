@@ -74,7 +74,13 @@ pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
             run("cargo", args, &dir)
         }
         EmulatorCmd::Format { fix } => {
-            let mut args = vec!["fmt", "--all"];
+            let mut args = vec![
+                "fmt",
+                "-p",
+                "autd3-rs-emulator",
+                "-p",
+                "autd3-rs-emulator-examples",
+            ];
             if !*fix {
                 args.push("--");
                 args.push("--check");
