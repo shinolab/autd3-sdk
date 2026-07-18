@@ -63,8 +63,7 @@ module sim_emission_focus ();
   );
 
   emission #(
-      .DEPTH(DEPTH),
-      .MODE ("TRUNC")
+      .DEPTH(DEPTH)
   ) emission (
       .CLK(CLK),
       .SYS_TIME(SYS_TIME),

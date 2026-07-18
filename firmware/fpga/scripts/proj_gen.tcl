@@ -94,8 +94,6 @@ set file_list [glob -nocomplain -join rtl/sources_1/ip/* *.xci]
 foreach xci_file_path $file_list {
   import_ip $xci_file_path
 }
-set_property used_in_implementation false [get_files [file join $project_directory "autd3-fpga.srcs/sources_1/ip/sqrt_36_trunc/sqrt_36_trunc.xci"]]
-set_property used_in_synthesis false [get_files [file join $project_directory "autd3-fpga.srcs/sources_1/ip/sqrt_36_trunc/sqrt_36_trunc.xci"]]
 
 proc add_sim_file {fileset_name library_name file_name} {
     set file    [file normalize $file_name]

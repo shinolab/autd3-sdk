@@ -64,8 +64,7 @@ module sim_emission_foci ();
   );
 
   emission #(
-      .DEPTH(DEPTH),
-      .MODE ("TRUNC")
+      .DEPTH(DEPTH)
   ) emission (
       .CLK(CLK),
       .SYS_TIME(SYS_TIME),

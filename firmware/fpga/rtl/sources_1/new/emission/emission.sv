@@ -1,8 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
 module emission #(
-    parameter int DEPTH = 249,
-    parameter string MODE = "NearestEven"
+    parameter int DEPTH = 249
 ) (
     input wire CLK,
     input wire [56:0] SYS_TIME,
@@ -100,8 +99,7 @@ module emission #(
   );
 
   emission_focus #(
-      .DEPTH(DEPTH),
-      .MODE (MODE)
+      .DEPTH(DEPTH)
   ) emission_focus (
       .CLK(CLK),
       .START(start),
