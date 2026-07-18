@@ -3,10 +3,10 @@ mod grid;
 mod monitor;
 mod report;
 mod run;
+mod snippet;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
 
 use anyhow::Result;
 use autd3_rs::PerfTuning;
@@ -72,12 +72,15 @@ async fn main() -> Result<()> {
 
 async fn run_measure(args: &MeasureArgs, shutdown: &Arc<AtomicBool>) -> Result<()> {
     let cand = Candidate {
-        period: Duration::from_micros(args.cycle_us),
+        period: args.sync0_period,
         shift_percent: args.shift_percent,
     };
     eprintln!(
         "measuring period={}us shift={}% (warmup={:?}, dwell={:?})...",
-        args.cycle_us, args.shift_percent, args.common.warmup, args.common.dwell,
+        args.sync0_period.as_micros(),
+        args.shift_percent,
+        args.common.warmup,
+        args.common.dwell,
     );
     let result = Box::pin(measure_candidate(&args.common, cand, shutdown)).await?;
     report::print_measure(&result, &args.common);
@@ -89,12 +92,12 @@ async fn run_tune(args: &TuneArgs, shutdown: &Arc<AtomicBool>) -> Result<()> {
     let cands = candidates(args);
     let total = cands.len();
     eprintln!(
-        "tuning {} candidate(s): period {}..={}us step {}, shift {}..={}% step {} \
+        "tuning {} candidate(s): period {}..={}us step {}us, shift {}..={}% step {} \
 (warmup={:?}, dwell={:?} each)",
         total,
-        args.period_min,
-        args.period_max,
-        args.period_step,
+        args.period_min.as_micros(),
+        args.period_max.as_micros(),
+        args.period_step.as_micros(),
         args.shift_min,
         args.shift_max,
         args.shift_step,

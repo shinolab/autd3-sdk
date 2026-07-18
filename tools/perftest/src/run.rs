@@ -67,8 +67,8 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
         LinkKind::Ethercrab => {
             let link_cfg = EtherCrabLinkOption {
                 iface: cli.interface.clone().into(),
-                sync0_period: Duration::from_micros(cli.cycle_us),
-                sync0_shift: sync0_shift(cli.cycle_us, cli.shift_percent),
+                sync0_period: cli.sync0_period,
+                sync0_shift: sync0_shift(cli.sync0_period, cli.shift_percent),
                 ..Default::default()
             };
             let link = Box::pin(EtherCrabLink::open(link_cfg))
@@ -82,8 +82,8 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
         LinkKind::Soem => {
             let link_cfg = SoemLinkOption {
                 iface: cli.interface.clone().into(),
-                sync0_period: Duration::from_micros(cli.cycle_us),
-                sync0_shift: sync0_shift(cli.cycle_us, cli.shift_percent),
+                sync0_period: cli.sync0_period,
+                sync0_shift: sync0_shift(cli.sync0_period, cli.shift_percent),
                 ..Default::default()
             };
             let link = tokio::task::spawn_blocking(move || SoemLink::open(link_cfg))
@@ -111,7 +111,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
         }
         LinkKind::Nop => {
             let num_devices = cli.devices.expect("--devices validated for --link nop");
-            let link = PacedNop::new(Duration::from_micros(cli.cycle_us));
+            let link = PacedNop::new(cli.sync0_period);
             Box::pin(run_with_link(link, num_devices, LinkStats::default(), cli)).await
         }
     }
@@ -138,7 +138,7 @@ async fn run_with_link<T: IntoLink>(
 
     let max_inflight = match cli.mode {
         Mode::StopAndWait => 1,
-        Mode::Streaming => cli.inflight.max(1),
+        Mode::Streaming => cli.max_inflight.max(1),
     };
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
     let client = Box::pin(Client::open(
@@ -161,7 +161,7 @@ async fn run_with_link<T: IntoLink>(
                 RtPolicy::Fifo => RtSchedulePolicy::Fifo,
                 RtPolicy::RoundRobin => RtSchedulePolicy::RoundRobin,
             },
-            rt_affinity: cli.rt_core.map(|id| CoreId { id }),
+            rt_affinity: cli.rt_affinity.map(|id| CoreId { id }),
             validate_state: false,
         },
     ))
@@ -484,8 +484,8 @@ impl Progress {
     }
 }
 
-fn sync0_shift(cycle_us: u64, shift_percent: u8) -> Duration {
-    let nanos = u128::from(cycle_us) * 1000 * u128::from(shift_percent) / 100;
+fn sync0_shift(period: Duration, shift_percent: u8) -> Duration {
+    let nanos = period.as_nanos() * u128::from(shift_percent) / 100;
     Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
 }
 
@@ -513,9 +513,9 @@ fn estimate_capacity(cli: &Cli) -> usize {
         return usize::try_from(n).unwrap_or(usize::MAX);
     }
     if let Some(d) = cli.duration
-        && cli.cycle_us != 0
+        && let Some(cycles) = d.as_micros().checked_div(cli.sync0_period.as_micros())
     {
-        return (d.as_micros() / u128::from(cli.cycle_us)) as usize;
+        return cycles as usize;
     }
     0
 }

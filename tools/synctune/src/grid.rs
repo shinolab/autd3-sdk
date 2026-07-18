@@ -38,7 +38,12 @@ pub fn inclusive_range(min: u64, max: u64, step: u64) -> Vec<u64> {
 
 #[must_use]
 pub fn candidates(args: &TuneArgs) -> Vec<Candidate> {
-    let periods = inclusive_range(args.period_min, args.period_max, args.period_step);
+    let micros = |d: Duration| u64::try_from(d.as_micros()).unwrap_or(u64::MAX);
+    let periods = inclusive_range(
+        micros(args.period_min),
+        micros(args.period_max),
+        micros(args.period_step),
+    );
     let shifts = inclusive_range(
         u64::from(args.shift_min),
         u64::from(args.shift_max),

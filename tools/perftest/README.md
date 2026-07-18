@@ -29,13 +29,19 @@ cargo xtask tool perftest -- --interface enp3s0 --count 10000 --mode streaming
 | `--count <N>` *or* `--duration <DUR>` | Stop condition. Exactly one is required. |
 | `--data-len <N>`      | Bytes of `data` per `XorHash` command. Default = 620 (Max). |
 | `--sleep-ms <N>`      | Slave-side `port_sleep_ms` to inject before the response. Default = 0. |
-| `--cycle-us <N>`      | EtherCAT cycle period in microseconds. Default = 1000. `0` = free-run, `--link nop` only. |
+| `--sync0-period <DUR>` | SYNC0 / EtherCAT cycle period, e.g. `1ms` / `500us` (`*LinkOption.sync0_period`). Default = `1ms`. `0ms` = free-run, `--link nop` only. |
+| `--shift-percent <N>` | SYNC0 shift as a percent of the period (`*LinkOption.sync0_shift = period * percent`). Default = 0. |
 | `--warmup <N>`        | Drop the first N samples from the summary. Default = 0. |
 | `--csv <PATH>`        | Write every sample's `(index, rtt_ns, status)` to CSV. |
-| `--timeout-cycles <N>`| PDO cycles to wait for an ACK match before raising `Timeout`. Default = 10. |
+| `--timeout-cycles <N>`| PDO cycles to wait for an ACK match before raising `Timeout` (`ClientConfig.timeout_cycles`). Default = 10. |
 | `--mode <MODE>`       | `stop-and-wait` (default) or `streaming`. See below. |
-| `--inflight <N>`      | Pipeline depth in `streaming` mode. Default = 127 (the SEQ-wrap cap). Ignored in `stop-and-wait`. |
-| `--low-latency`       | Request the slave's low-latency (inline ISR) processing mode instead of the default FIFO path. Default: off. |
+| `--max-inflight <N>`  | Pipeline depth in `streaming` mode (`ClientConfig.max_inflight`). Default = 127 (the SEQ-wrap cap). Ignored in `stop-and-wait`. Alias: `--inflight`. |
+| `--low-latency`       | Request the slave's low-latency (inline ISR) processing mode instead of the default FIFO path (`ClientConfig.low_latency`). Default: off. |
+| `--rt-priority <N>` / `--rt-policy <P>` / `--rt-affinity <CORE>` | RT thread scheduling (`ClientConfig.rt_priority` / `rt_policy` / `rt_affinity`). `--rt-affinity` alias: `--rt-core`. |
+
+Each flag notes the `EtherCrabLinkOption` / `SoemLinkOption` / `ClientConfig` field it drives, and after every run
+the tool prints a copy-pasteable `=== reproduce this configuration in your app ===` Rust snippet that reconstructs
+the exact link option + `ClientConfig` used, so a good perftest result maps straight into application code.
 
 ## Hardware-free runs (`--link nop`)
 
@@ -43,8 +49,8 @@ cargo xtask tool perftest -- --interface enp3s0 --count 10000 --mode streaming
 client stack — RT thread, slot pool, request-response engine, real CPU firmware C code — runs
 without any hardware. The device count comes from `--devices` instead of a bus scan.
 
-The emulator answers each frame instantly, so the tool paces `cycle()` itself to `--cycle-us`
-(default 1000 µs) to reproduce the timing of a real bus. Pass `--cycle-us 0` to free-run: cycles
+The emulator answers each frame instantly, so the tool paces `cycle()` itself to `--sync0-period`
+(default 1000 µs) to reproduce the timing of a real bus. Pass `--sync0-period 0ms` to free-run: cycles
 then advance as fast as the CPU allows, which turns a 10,000-sample run into a few tens of
 milliseconds. Latency and throughput numbers are meaningless in free-run mode; allocation counts
 are not.
@@ -54,7 +60,7 @@ are not.
 cargo xtask tool perftest --no-sudo -- --link nop --devices 1 --duration 10s --mode streaming
 
 # free-run — fastest way to gather allocation statistics
-cargo xtask tool perftest --mem-profile --no-sudo -- --link nop --devices 1 --count 10000 --cycle-us 0
+cargo xtask tool perftest --mem-profile --no-sudo -- --link nop --devices 1 --count 10000 --sync0-period 0ms
 ```
 
 `--no-sudo` is worth passing: the nop link opens no raw socket, so it needs no privileges.
@@ -83,7 +89,7 @@ size tells you what it is:
 Recording starts after the link is open and the handshake is done, so startup allocations are
 excluded; `net bytes` is therefore usually negative (frees of pre-recording allocations).
 
-Works with every link. `--link nop --cycle-us 0` iterates fastest and needs no hardware, but only
+Works with every link. `--link nop --sync0-period 0ms` iterates fastest and needs no hardware, but only
 exercises the client; use `--link ethercrab` / `--link soem` with `--interface` to profile a link
 implementation against a real bus.
 
