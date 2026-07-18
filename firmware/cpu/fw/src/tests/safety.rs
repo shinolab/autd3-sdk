@@ -2,7 +2,7 @@ use std::vec::Vec;
 
 use crate::FIFO_DEPTH;
 use crate::fpga::TransitionMode;
-use crate::params::{ADDR_MOD_REQ_RD_BANK, ADDR_VERSION_NUM_MAJOR};
+use crate::params::{ADDR_FPGA_STATE, ADDR_MOD_REQ_RD_BANK, ADDR_VERSION_NUM_MAJOR};
 use zerocopy::FromZeros;
 
 use crate::app::ReadTelemetryPayload;
@@ -203,8 +203,16 @@ fn read_telemetry_returns_counter_value() {
 #[test]
 fn read_telemetry_rejects_unknown_counter() {
     let mut h = Harness::new();
-    h.deliver(&read_telemetry(0, Telemetry::COUNT as u8));
+    h.deliver(&read_telemetry(0, 0xFF));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
+}
+
+#[test]
+fn read_telemetry_sync_resync_returns_fpga_state_high_byte() {
+    let mut h = Harness::new();
+    h.set_ctl(ADDR_FPGA_STATE, 0x2A83);
+    h.deliver(&read_telemetry(0, Telemetry::SyncResync as u8));
+    assert_eq!(h.data(), 0x2A);
 }
 
 #[test]

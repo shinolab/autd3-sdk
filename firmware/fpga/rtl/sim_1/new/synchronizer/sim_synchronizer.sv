@@ -12,6 +12,8 @@ module sim_synchronizer ();
 
   logic signed [13:0] SYNC_TIME_DIFF, SYNC_TIME_DIFF_p50, SYNC_TIME_DIFF_m50;
 
+  logic [7:0] SYNC_RESYNC_COUNT;
+
   logic SKIP_ONE_ASSERT_m50;
   logic [2:0] sync_tri_m50 = '0;
   int period_pos_m50 = 0;
@@ -43,7 +45,8 @@ module sim_synchronizer ();
       .SYS_TIME(SYS_TIME),
       .SYNC(),
       .SKIP_ONE_ASSERT(),
-      .SYNC_TIME_DIFF(SYNC_TIME_DIFF)
+      .SYNC_TIME_DIFF(SYNC_TIME_DIFF),
+      .SYNC_RESYNC_COUNT(SYNC_RESYNC_COUNT)
   );
 
   synchronizer synchronizer_p50 (
@@ -172,6 +175,12 @@ module sim_synchronizer ();
 
     measuring = 0;
 
+    // Nominal operation must never trip the hard-resync path.
+    if (SYNC_RESYNC_COUNT != 8'd0) begin
+      $error("%s:%d: resync_count before anomalies: expected is 0, but actual is %0d", `__FILE__, `__LINE__, SYNC_RESYNC_COUNT);
+      $finish();
+    end
+
     // A single dropped Sync0 pulse must not leave sync_time_diff saturated forever:
     // sys_time free-runs, so the missing edge is a period slip and the synchronizer
     // hard-rebuilds next_sync_time on the first edge back, converging to ~0.
@@ -181,6 +190,11 @@ module sim_synchronizer ();
     ecat_sync_en = 1;
     repeat (2) @(negedge ECAT_SYNC);
     check_diff_converged("after dropped Sync0");
+    // Exactly one slip -> exactly one hard-resync counted.
+    if (SYNC_RESYNC_COUNT != 8'd1) begin
+      $error("%s:%d: resync_count after dropped Sync0: expected is 1, but actual is %0d", `__FILE__, `__LINE__, SYNC_RESYNC_COUNT);
+      $finish();
+    end
 
     // A single spurious Sync0 edge is an over-count; it must also resync to ~0.
     @(negedge ECAT_SYNC);
@@ -191,6 +205,11 @@ module sim_synchronizer ();
     release ECAT_SYNC;
     repeat (3) @(negedge ECAT_SYNC);
     check_diff_converged("after spurious Sync0");
+    // The spurious edge (and the now-early real edge) trip further resyncs.
+    if (SYNC_RESYNC_COUNT <= 8'd1) begin
+      $error("%s:%d: resync_count after spurious Sync0: expected is > 1, but actual is %0d", `__FILE__, `__LINE__, SYNC_RESYNC_COUNT);
+      $finish();
+    end
 
     @(posedge ECAT_SYNC);
     #(ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS - 2000);
@@ -203,6 +222,11 @@ module sim_synchronizer ();
 
     repeat (2) @(negedge ECAT_SYNC);
     check_diff_converged("after racing update");
+    // Synchronize re-establishes the time base, so the slip count starts a fresh epoch.
+    if (SYNC_RESYNC_COUNT != 8'd0) begin
+      $error("%s:%d: resync_count after racing update: expected is 0, but actual is %0d", `__FILE__, `__LINE__, SYNC_RESYNC_COUNT);
+      $finish();
+    end
 
     $display("OK! sim_synchronizer");
     $finish();

@@ -6,6 +6,7 @@ crate::wire_enum! {
         DispatchError = 0x03,
         Processed = 0x04,
         Failsafe = 0x05,
+        SyncResync = 0x06,
     }
 }
 

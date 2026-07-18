@@ -279,11 +279,14 @@ impl Cpu {
         err as u8
     }
 
-    fn read_telemetry(&self, payload: &[u8]) -> u8 {
+    fn read_telemetry<P: Port>(&self, port: &mut P, payload: &[u8]) -> u8 {
         let Ok((p, _)) = ReadTelemetryPayload::ref_from_prefix(payload) else {
             return self.latch_error(Error::InvalidPayload);
         };
         match Telemetry::from_u8(p.counter_id) {
+            Some(Telemetry::SyncResync) => {
+                (fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_FPGA_STATE) >> 8) as u8
+            }
             Some(id) => self.telemetry(id),
             None => self.latch_error(Error::InvalidPayload),
         }
@@ -311,7 +314,7 @@ impl Cpu {
             Cmd::ReadFpgaState => {
                 return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_FPGA_STATE) as u8;
             }
-            Cmd::ReadTelemetry => return self.read_telemetry(payload),
+            Cmd::ReadTelemetry => return self.read_telemetry(port, payload),
             Cmd::ReadFpgaFunctions => {
                 return (fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR) >> 8)
                     as u8;
