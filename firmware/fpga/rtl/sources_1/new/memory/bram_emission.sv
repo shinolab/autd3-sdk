@@ -7,6 +7,7 @@ module bram_emission (
     input wire [17:0] addra,
     input wire [15:0] dina,
     input wire clkb,
+    input wire enb,
     input wire [15:0] addrb,
     output wire [63:0] doutb
 );
@@ -50,7 +51,7 @@ module bram_emission (
       .C_RST_PRIORITY_B("CE"),
       .C_RSTRAM_B(0),
       .C_INITB_VAL("0"),
-      .C_HAS_ENB(0),
+      .C_HAS_ENB(1),
       .C_HAS_REGCEB(0),
       .C_USE_BYTE_WEB(0),
       .C_WEB_WIDTH(1),
@@ -98,7 +99,7 @@ module bram_emission (
       .douta(),
       .clkb(clkb),
       .rstb('0),
-      .enb('0),
+      .enb(enb),
       .regceb('0),
       .web('0),
       .addrb(addrb),

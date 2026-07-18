@@ -42,6 +42,7 @@ module sim_mem_mod ();
 
   assign mod_bus.out_port.IDX = idx;
   assign mod_bus.out_port.BANK = bank;
+  assign mod_bus.out_port.RD_EN = 1'b1;
   assign value = mod_bus.out_port.VALUE;
 
   logic [7:0] mod_buf[params::NumBanks][SIZE];

@@ -43,6 +43,7 @@ module sim_mem_emission_foci ();
   assign emission_bus.emission_port.MODE = params::EMISSION_TYPE_FOCI;
   assign emission_bus.emission_port.BANK = bank;
   assign emission_bus.out_focus_port.FOCUS_IDX = idx;
+  assign emission_bus.out_focus_port.FOCUS_RD_EN = 1'b1;
   assign value = emission_bus.out_focus_port.VALUE;
 
   logic [17:0] x, y, z;

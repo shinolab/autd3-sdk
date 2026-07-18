@@ -64,6 +64,8 @@ module modulation_multiplier #(
 
   state_t state = IDLE;
 
+  assign MOD_BUS.RD_EN = (state != IDLE);
+
   always_ff @(posedge CLK) begin
     case (state)
       IDLE: begin
