@@ -7,6 +7,12 @@ open_project [file join $project_directory "$project_name.xpr"]
 set_property -name {xsim.compile.tcl.pre} -value {} -objects [get_filesets sim_1]
 set_property -name {xsim.simulate.xsim.more_options} -value {-sv_seed random} -objects [get_filesets sim_1]
 
+# power.tcl sets these to capture a SAIF and they persist in the .xpr. A scope left over from
+# it does not exist in most testbenches, which makes them stop before $finish.
+set_property -name {xsim.simulate.saif_scope} -value {} -objects [get_filesets sim_1]
+set_property -name {xsim.simulate.saif} -value {} -objects [get_filesets sim_1]
+set_property -name {xsim.simulate.saif_all_signals} -value {false} -objects [get_filesets sim_1]
+
 proc collect_tbs {project_directory} {
     set files [concat \
         [glob -nocomplain [file join $project_directory rtl/sim_1/new/sim_*.sv]] \
