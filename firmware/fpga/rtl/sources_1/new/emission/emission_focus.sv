@@ -154,6 +154,8 @@ module emission_focus #(
       .DOUT_VALID(focus_dout_valid)
   );
   for (genvar i = 1; i < params::NumFociMax; i++) begin : gen_focus_calc
+    logic active;
+    assign active = num_foci > 8'(i);
     focus_calc #(
         .MODE(MODE)
     ) focus_calc (
@@ -162,8 +164,8 @@ module emission_focus #(
         .FOCUS_X(focus_x[i]),
         .FOCUS_Y(focus_y[i]),
         .FOCUS_Z(focus_z[i]),
-        .TRANS_X(trans_x),
-        .TRANS_Y(trans_y),
+        .TRANS_X(active ? trans_x : '0),
+        .TRANS_Y(active ? trans_y : '0),
         .SOUND_SPEED(SOUND_SPEED),
         .OFFSET(intensity_or_offset[i]),
         .SIN(sin[i]),
