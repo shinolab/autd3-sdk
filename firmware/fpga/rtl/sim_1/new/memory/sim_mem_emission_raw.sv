@@ -45,6 +45,7 @@ module sim_mem_emission_raw ();
   assign emission_bus.emission_port.BANK = bank;
   assign emission_bus.out_raw_port.RAW_IDX = idx;
   assign emission_bus.out_raw_port.RAW_ADDR = addr;
+  assign emission_bus.out_raw_port.RAW_RD_EN = 1'b1;
   assign value = emission_bus.out_raw_port.VALUE;
 
   logic [7:0] phase_buf[params::NumBanks][SIZE][DEPTH];

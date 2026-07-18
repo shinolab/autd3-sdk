@@ -74,6 +74,7 @@ module emission_focus #(
   );
 
   assign EMISSION_BUS.FOCUS_IDX = idx;
+  assign EMISSION_BUS.FOCUS_RD_EN = (state == WAIT_MEM_LOAD_0) | (state == WAIT_MEM_LOAD_1) | (state == WAIT_MEM_LOAD_2) | (state == INPUT_FOCUS);
   assign data_out = EMISSION_BUS.VALUE;
 
   always_ff @(posedge CLK) begin

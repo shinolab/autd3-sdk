@@ -128,6 +128,7 @@ module memory (
 
   ///////////////////////////// Modulator /////////////////////////////
   logic mod_en[NumBanks];
+  logic mod_rd_en[NumBanks];
 
   logic [15:0] mod_idx;
   logic [7:0] mod_value[NumBanks];
@@ -139,6 +140,7 @@ module memory (
   assign MOD_BUS.VALUE = mod_value[MOD_BUS.BANK];
   for (genvar i = 0; i < NumBanks; i++) begin : gen_mod_bram
     assign mod_en[i] = (select == BRAM_SELECT_MOD) & en & (mod_mem_wr_bank == i);
+    assign mod_rd_en[i] = MOD_BUS.RD_EN & (MOD_BUS.BANK == i);
     BRAM_MOD mod_bram (
         .clka (bus_clk),
         .ena  (mod_en[i]),
@@ -147,6 +149,7 @@ module memory (
         .dina (data_in),
         .douta(),
         .clkb (CLK),
+        .enb  (mod_rd_en[i]),
         .web  ('0),
         .addrb(mod_idx),
         .dinb ('0),
@@ -157,6 +160,7 @@ module memory (
 
   /////////////////////////////    EMISSION   /////////////////////////////
   logic emission_en[NumBanks];
+  logic emission_rd_en[NumBanks];
 
   logic [15:0] pattern_idx;
   logic [63:0] emission_value[NumBanks];
@@ -168,6 +172,7 @@ module memory (
   assign EMISSION_BUS.VALUE = emission_value[EMISSION_BUS.BANK];
   for (genvar i = 0; i < NumBanks; i++) begin : gen_emission_bram
     assign emission_en[i] = (select == BRAM_SELECT_EMISSION) & en & (pattern_mem_wr_bank == i);
+    assign emission_rd_en[i] = EMISSION_BUS.RD_EN & (EMISSION_BUS.BANK == i);
     bram_emission emission_bram (
         .clka (bus_clk),
         .ena  (emission_en[i]),
@@ -175,6 +180,7 @@ module memory (
         .addra({pattern_mem_wr_page, addr}),
         .dina (data_in),
         .clkb (CLK),
+        .enb  (emission_rd_en[i]),
         .addrb(pattern_idx),
         .doutb(emission_value[i])
     );

@@ -32,6 +32,7 @@ module emission_raw #(
 
   assign EMISSION_BUS.RAW_IDX = IDX[9:0];
   assign EMISSION_BUS.RAW_ADDR = addr;
+  assign EMISSION_BUS.RAW_RD_EN = (state != WAITING);
   assign data_out = EMISSION_BUS.VALUE;
 
   assign INTENSITY = intensity;
