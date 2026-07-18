@@ -27,6 +27,13 @@ module swapchain_timer (
   logic marker = 1'b0;
   always_ff @(posedge CLK) if (load_settings) marker <= ~marker;
 
+  logic [47:0] period;
+  logic [47:0] period_prev = '0;
+  logic kick;
+  assign period = SYS_TIME[56:9];
+  assign kick   = period != period_prev;
+  always_ff @(posedge CLK) period_prev <= period;
+
   logic idx_dout_valid[params::NumBanks];
   logic out_marker[params::NumBanks];
 
@@ -40,7 +47,14 @@ module swapchain_timer (
     logic [47:0] _unused_quo;
     logic [23:0] rem;
     logic cnt_marker;
-    logic [15:0] idx;
+    logic cnt_dout_valid;
+    logic cnt_req = 1'b0;
+    logic cnt_tready;
+    logic [47:0] quo_held;
+    logic marker_held;
+    logic idx_req = 1'b0;
+    logic idx_tready;
+    logic [15:0] idx = '0;
 
     assign IDX[i] = idx;
 
@@ -52,24 +66,39 @@ module swapchain_timer (
       end
     end
 
+    always_ff @(posedge CLK) begin
+      if (kick) cnt_req <= 1'b1;
+      else if (cnt_req & cnt_tready) cnt_req <= 1'b0;
+    end
+
+    always_ff @(posedge CLK) begin
+      if (cnt_dout_valid) begin
+        quo_held <= quo;
+        marker_held <= cnt_marker;
+        idx_req <= 1'b1;
+      end else if (idx_req & idx_tready) begin
+        idx_req <= 1'b0;
+      end
+    end
+
     div_48_24 div_cnt (
-        .s_axis_dividend_tdata(SYS_TIME[56:9]),
-        .s_axis_dividend_tvalid(1'b1),
+        .s_axis_dividend_tdata(period),
+        .s_axis_dividend_tvalid(cnt_req),
         .s_axis_dividend_tuser(marker),
-        .s_axis_dividend_tready(),
+        .s_axis_dividend_tready(cnt_tready),
         .s_axis_divisor_tdata({8'd0, freq_div}),
         .s_axis_divisor_tvalid(1'b1),
         .s_axis_divisor_tready(),
         .aclk(CLK),
         .m_axis_dout_tdata({quo, _unused_rem}),
         .m_axis_dout_tuser(cnt_marker),
-        .m_axis_dout_tvalid()
+        .m_axis_dout_tvalid(cnt_dout_valid)
     );
     div_48_24 div_idx (
-        .s_axis_dividend_tdata(quo),
-        .s_axis_dividend_tvalid(1'b1),
-        .s_axis_dividend_tuser(cnt_marker),
-        .s_axis_dividend_tready(),
+        .s_axis_dividend_tdata(quo_held),
+        .s_axis_dividend_tvalid(idx_req),
+        .s_axis_dividend_tuser(marker_held),
+        .s_axis_dividend_tready(idx_tready),
         .s_axis_divisor_tdata({7'd0, cycle}),
         .s_axis_divisor_tvalid(1'b1),
         .s_axis_divisor_tready(),
