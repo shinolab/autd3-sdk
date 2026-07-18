@@ -14,11 +14,7 @@ module pwm_preconditioner #(
 
   `include "define.vh"
 
-  logic [8:0] rise[DEPTH], fall[DEPTH];
-
-  `RAM
   logic [8:0] rise_buf[DEPTH];
-  `RAM
   logic [8:0] fall_buf[DEPTH];
 
   logic [8:0] s_rise, s_fall;
@@ -28,8 +24,8 @@ module pwm_preconditioner #(
   logic dout_valid;
 
   assign DOUT_VALID = dout_valid;
-  assign RISE = rise;
-  assign FALL = fall;
+  assign RISE = rise_buf;
+  assign FALL = fall_buf;
 
   typedef enum logic [1:0] {
     IDLE,
@@ -63,13 +59,6 @@ module pwm_preconditioner #(
       end
       default: state <= IDLE;
     endcase
-  end
-
-  always_ff @(posedge CLK) begin
-    if (state == DONE) begin
-      rise <= rise_buf;
-      fall <= fall_buf;
-    end
   end
 
 endmodule
