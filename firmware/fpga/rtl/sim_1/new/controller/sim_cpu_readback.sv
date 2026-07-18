@@ -42,6 +42,7 @@ module sim_cpu_readback ();
   logic pattern_stopped;
   logic mod_stopped;
   logic transition_pending;
+  logic [7:0] sync_resync_count;
   logic gpio_in[4];
   settings::mod_settings_t mod_settings;
   settings::pattern_settings_t pattern_settings;
@@ -59,6 +60,7 @@ module sim_cpu_readback ();
       .PATTERN_STOPPED(pattern_stopped),
       .MOD_STOPPED(mod_stopped),
       .TRANSITION_PENDING(transition_pending),
+      .SYNC_RESYNC_COUNT(sync_resync_count),
       .cnt_bus(cnt_bus.out_port),
       .MOD_SETTINGS(mod_settings),
       .PATTERN_SETTINGS(pattern_settings),
@@ -80,6 +82,7 @@ module sim_cpu_readback ();
     pattern_stopped = 1'b0;
     mod_stopped = 1'b1;
     transition_pending = 1'b0;
+    sync_resync_count = 8'd3;
 
     @(posedge locked);
 
@@ -96,7 +99,7 @@ module sim_cpu_readback ();
     `ASSERT_EQ({8'h00, params::VersionNumPatch}, value);
 
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
-    `ASSERT_EQ({8'h00, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo}, value);
+    `ASSERT_EQ({sync_resync_count, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo}, value);
 
     $display("OK! sim_cpu_readback");
     $finish();
