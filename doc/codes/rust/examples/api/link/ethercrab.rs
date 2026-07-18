@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{Client, ClientConfig, Interface};
-use autd3_rs_link_ethercrab::{EtherCrabLinkOption, EtherCrabLinkOptionFull};
+use autd3_rs_link_ethercrab::{EtherCrabLinkOption, EtherCrabLinkOptionFull, RtSchedulePolicy};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -40,6 +40,9 @@ async fn main() -> Result<()> {
         sync0_period,
         sync0_shift,
     };
+    let tx_rx_priority = None;
+    let tx_rx_policy = RtSchedulePolicy::Fifo;
+    let tx_rx_affinity = None;
     // ANCHOR: api_full
     EtherCrabLinkOptionFull {
         iface,
@@ -48,6 +51,9 @@ async fn main() -> Result<()> {
         dc_configuration,
         sync_tolerance,
         sync_timeout,
+        tx_rx_priority,
+        tx_rx_policy,
+        tx_rx_affinity,
     };
     // ANCHOR_END: api_full
 

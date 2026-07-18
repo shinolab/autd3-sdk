@@ -59,11 +59,13 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 | `max_resync_rounds`    | `NonZeroU32`             | `8`     | Maximum number of rounds to attempt resynchronization      |
 | `low_latency`          | `bool`                   | `false` | Low-latency mode                                           |
 | `reset_resend_cycles`  | `u32`                    | `2`     | Number of cycles to resend after a reset                   |
-| `rt_priority`          | `Option<ThreadPriority>` | `None`  | Priority of the RT thread (OS default if unspecified)      |
-| `rt_affinity`          | `Option<CoreId>`         | `None`  | CPU affinity of the RT thread (OS default if unspecified)  |
+| `rt_priority`          | `Option<ThreadPriority>` | `None`  | Priority of the RT thread (OS default if unspecified) |
+| `rt_policy`            | `RtSchedulePolicy`       | `Fifo`  | Scheduling policy used when `rt_priority` is set: `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
+| `rt_affinity`          | `Option<CoreId>`         | `None`  | CPU core affinity of the RT thread (OS default if unspecified) |
 | `validate_state`       | `bool`                   | `true`  | Enable pre-send validation                                 |
 
 `max_inflight` errors if it exceeds `MAX_IN_FLIGHT (127)`.
 
 Enabling `low_latency` bypasses the receive buffer inside the firmware, improving latency.
 However, this may make operation unstable.
+
