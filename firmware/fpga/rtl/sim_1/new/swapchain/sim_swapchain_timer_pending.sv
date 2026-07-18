@@ -5,7 +5,8 @@ module sim_swapchain_timer_pending ();
 
   localparam int DEPTH = 249;
   localparam int DivLatency = 51;
-  localparam int TotalLatency = 1 + 2 * DivLatency + 8 + 1;
+  localparam int KickPeriod = 512;
+  localparam int TotalLatency = 1 + KickPeriod + 2 * DivLatency + 8 + 1;
 
   logic CLK;
   logic locked;
