@@ -46,6 +46,9 @@ module synchronizer (
   logic signed [57:0] s_diff;
   logic [56:0] a_next = 0, b_next, s_next;
 
+  logic diff_overflow;
+  assign diff_overflow = (s_diff > DiffMax) || (s_diff < -DiffMax);
+
   logic skip_one_assert;
   assign SKIP_ONE_ASSERT = skip_one_assert;
   assign SYNC_TIME_DIFF  = sync_time_diff;
@@ -142,7 +145,7 @@ module synchronizer (
           sync_time_diff <= sync_time_diff - 1;
         end
       end else if (diff_cnt == AddSubLatency) begin
-        sync_time_diff <= saturate_diff(s_diff);
+        sync_time_diff <= diff_overflow ? 14'sd0 : saturate_diff(s_diff);
         diff_cnt <= diff_cnt + 1;
         sys_time <= sys_time + 1;
         skip_one_assert <= 1'b0;
@@ -155,7 +158,7 @@ module synchronizer (
       if (next_cnt == AddSubLatency + 1) begin
         next_cnt <= next_cnt;
       end else if (next_cnt == AddSubLatency) begin
-        next_sync_time <= s_next;
+        next_sync_time <= diff_overflow ? (sys_time + cycle_ticks) : s_next;
         next_cnt <= next_cnt + 1;
       end else begin
         next_cnt <= next_cnt + 1;
