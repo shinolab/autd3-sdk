@@ -24,8 +24,8 @@ use autd3_rs::value::{
 };
 use autd3_rs::{
     ClientConfig, ControlPoint, ControlPoints, CoreId, DatagramBuilder as CoreDatagramBuilder,
-    Frames, Geometry, Length, Point3, PulseWidth, Response, ThreadPriority, ThreadPriorityValue,
-    UnitVector3, Vector3, Velocity,
+    Frames, Geometry, Length, Point3, PulseWidth, Response, RtSchedulePolicy, ThreadPriority,
+    ThreadPriorityValue, UnitVector3, Vector3, Velocity,
 };
 use autd3_rs::{DeviceState, Telemetry};
 use tokio::runtime::{Builder, Runtime};
@@ -376,6 +376,7 @@ pub extern "C" fn autd3_client_config_new(
         max_resync_rounds,
         reset_resend_cycles,
         rt_priority,
+        rt_policy: RtSchedulePolicy::default(),
         rt_affinity,
         validate_state,
     })

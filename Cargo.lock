@@ -202,6 +202,7 @@ dependencies = [
  "async-io",
  "autd3-rs-core",
  "cc",
+ "core_affinity",
  "ethercrab",
  "futures-util",
  "libc",

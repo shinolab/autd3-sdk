@@ -1,12 +1,10 @@
 use ethercrab::{MainDeviceConfig, Timeouts, std::ethercat_now};
-use tokio::runtime::Handle;
 
 use crate::error::EtherCrabLinkError;
 use crate::link::{DETECT_PDI_LEN, MAX_SUBDEVICES, SUBDEVICE_NAME};
-use crate::transport::Transport;
+use crate::transport::{PumpTuning, Transport};
 
 pub async fn lookup_autd() -> Result<String, EtherCrabLinkError> {
-    let handle = Handle::try_current().map_err(|_| EtherCrabLinkError::NoTokioRuntime)?;
     let devices = pcap::Device::list()?;
 
     tracing::debug!("found {} network interfaces", devices.len());
@@ -27,10 +25,10 @@ pub async fn lookup_autd() -> Result<String, EtherCrabLinkError> {
         }
 
         let Ok(transport) = Transport::open(
-            &handle,
             &interface.name,
             Timeouts::default(),
             MainDeviceConfig::default(),
+            PumpTuning::default(),
         ) else {
             tracing::trace!("failed to open transport on {}", interface.name);
             continue;

@@ -1,5 +1,6 @@
 use std::num::{NonZeroU32, NonZeroUsize};
 
+use autd3_rs_core::RtSchedulePolicy;
 use core_affinity::CoreId;
 use thread_priority::ThreadPriority;
 
@@ -17,6 +18,7 @@ pub struct ClientConfig {
     pub low_latency: bool,
     pub reset_resend_cycles: u32,
     pub rt_priority: Option<ThreadPriority>,
+    pub rt_policy: RtSchedulePolicy,
     pub rt_affinity: Option<CoreId>,
     pub validate_state: bool,
 }
@@ -31,6 +33,7 @@ impl Default for ClientConfig {
             low_latency: false,
             reset_resend_cycles: 2,
             rt_priority: None,
+            rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
         }

@@ -9,14 +9,14 @@ use autd3_rs::commands::XorHashCmd;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, IntoLink, Link, LinkStats, ResponseFuture,
-    StateCheck, TX_FRAME_BYTES, ThreadPriority, ThreadPriorityValue,
+    RtSchedulePolicy, StateCheck, TX_FRAME_BYTES, ThreadPriority, ThreadPriorityValue,
 };
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 
 use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
 use autd3_rs_link_twincat::{TwinCATLink, TwinCATLinkOption};
 
-use crate::cli::{Cli, LinkKind, Mode};
+use crate::cli::{Cli, LinkKind, Mode, RtPolicy};
 use crate::mem::{self, MemProfile};
 use crate::nop::PacedNop;
 use crate::stats::{Sample, SampleStatus};
@@ -156,6 +156,11 @@ async fn run_with_link<T: IntoLink>(
                     ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),
                 )
             }),
+            rt_policy: match cli.rt_policy {
+                RtPolicy::Normal => RtSchedulePolicy::Normal,
+                RtPolicy::Fifo => RtSchedulePolicy::Fifo,
+                RtPolicy::RoundRobin => RtSchedulePolicy::RoundRobin,
+            },
             rt_affinity: cli.rt_core.map(|id| CoreId { id }),
             validate_state: false,
         },

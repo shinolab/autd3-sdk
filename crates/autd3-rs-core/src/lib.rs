@@ -5,7 +5,10 @@ pub mod link;
 pub mod mirror;
 pub mod params;
 pub mod protocol;
+pub mod rt;
 pub mod value;
+
+pub use rt::RtSchedulePolicy;
 
 pub use common::units;
 pub use common::{Angle, Freq, Length, Velocity};

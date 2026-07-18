@@ -3,6 +3,8 @@ use std::time::Duration;
 use autd3_rs_core::Interface;
 use ethercrab::{MainDeviceConfig, Timeouts, subdevice_group::DcConfiguration};
 
+use crate::rt::{CoreId, RtSchedulePolicy, ThreadPriority};
+
 use super::EtherCrabLinkOption;
 
 #[derive(Clone, Debug)]
@@ -13,6 +15,9 @@ pub struct EtherCrabLinkOptionFull {
     pub dc_configuration: DcConfiguration,
     pub sync_tolerance: Duration,
     pub sync_timeout: Duration,
+    pub tx_rx_priority: Option<ThreadPriority>,
+    pub tx_rx_policy: RtSchedulePolicy,
+    pub tx_rx_affinity: Option<CoreId>,
 }
 
 impl EtherCrabLinkOptionFull {
@@ -23,7 +28,7 @@ impl EtherCrabLinkOptionFull {
 
     #[must_use]
     pub fn performance_default() -> Self {
-        EtherCrabLinkOption::performance_default().into()
+        EtherCrabLinkOption::performance_default()
     }
 }
 
@@ -61,6 +66,9 @@ impl PartialEq for EtherCrabLinkOptionFull {
             && sync0_shift == other.dc_configuration.sync0_shift
             && self.sync_tolerance == other.sync_tolerance
             && self.sync_timeout == other.sync_timeout
+            && self.tx_rx_priority == other.tx_rx_priority
+            && self.tx_rx_policy == other.tx_rx_policy
+            && self.tx_rx_affinity == other.tx_rx_affinity
     }
 }
 
@@ -81,9 +89,11 @@ mod tests {
     }
 
     #[test]
-    fn performance_default_uses_zero_shift() {
+    fn performance_default_uses_zero_shift_and_rt_pump() {
         let opt = EtherCrabLinkOptionFull::performance_default();
         assert_eq!(opt.dc_configuration.sync0_period, Duration::from_millis(1));
         assert_eq!(opt.dc_configuration.sync0_shift, Duration::ZERO);
+        assert!(opt.tx_rx_priority.is_some());
+        assert_eq!(opt.tx_rx_policy, RtSchedulePolicy::Fifo);
     }
 }

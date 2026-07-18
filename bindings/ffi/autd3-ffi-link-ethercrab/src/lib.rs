@@ -293,5 +293,14 @@ pub unsafe extern "C" fn autd3_link_ethercrab_option_safe_default(
 pub unsafe extern "C" fn autd3_link_ethercrab_option_performance_default(
     out: *mut Autd3EtherCrabLinkOptionValues,
 ) -> i32 {
-    unsafe { write_option(&CoreOption::performance_default(), out) }
+    let full = CoreOption::performance_default();
+    unsafe {
+        *out = Autd3EtherCrabLinkOptionValues {
+            sync0_period_ns: to_ns(full.dc_configuration.sync0_period),
+            sync0_shift_ns: to_ns(full.dc_configuration.sync0_shift),
+            sync_tolerance_ns: to_ns(full.sync_tolerance),
+            sync_timeout_ns: to_ns(full.sync_timeout),
+        };
+    }
+    0
 }
