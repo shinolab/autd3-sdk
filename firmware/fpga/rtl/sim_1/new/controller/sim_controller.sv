@@ -53,6 +53,7 @@ module sim_controller ();
 
   controller controller (
       .CLK(CLK),
+      .ENABLE(locked),
       .THERMO(thermo),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
@@ -70,6 +71,12 @@ module sim_controller ();
       .FORCE_FAN(FORCE_FAN),
       .GPIO_IN(gpio_in)
   );
+
+  always @(posedge CLK) begin
+    if (!locked) begin
+      `ASSERT_EQ(1'b0, cnt_bus.WE);
+    end
+  end
 
   settings::mod_settings_t mod_settings_in;
   settings::pattern_settings_t pattern_settings_in;
@@ -166,7 +173,8 @@ module sim_controller ();
     `ASSERT_EQ(sync_settings_in, sync_settings);
 
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, fpga_state);
-    `ASSERT_EQ({sync_resync_count, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo}, fpga_state);
+    `ASSERT_EQ({sync_resync_count, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
+               fpga_state);
 
     $display("OK! sim_controller");
     $finish();
