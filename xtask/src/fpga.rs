@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::util::{on_path, run};
@@ -42,6 +42,9 @@ pub enum FpgaCmd {
         /// Implementation run holding `top_routed.dcp` (auto-detected if omitted)
         #[arg(long)]
         impl_run: Option<String>,
+        /// Reuse the SAIF from a previous run instead of re-simulating
+        #[arg(long)]
+        reuse: bool,
     },
     /// Format the RTL sources with `verible-verilog-format`
     Format {
@@ -68,7 +71,8 @@ pub fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
             tb,
             scope,
             impl_run,
-        } => fpga_power(&fpga_dir, tb, scope, impl_run.as_deref()),
+            reuse,
+        } => fpga_power(&fpga_dir, tb, scope, impl_run.as_deref(), *reuse),
         FpgaCmd::Format { fix } => fpga_format(&fpga_dir, *fix),
         FpgaCmd::GenController => crate::fpga_codegen::gen_controller(&fpga_dir),
         FpgaCmd::CommitIps => fpga_commit_ips(&fpga_dir),
@@ -131,7 +135,13 @@ fn routed_impl_run(fpga_dir: &Path) -> Result<String> {
     }
 }
 
-fn fpga_power(fpga_dir: &Path, tb: &str, scope: &str, impl_run: Option<&str>) -> Result<()> {
+fn fpga_power(
+    fpga_dir: &Path,
+    tb: &str,
+    scope: &str,
+    impl_run: Option<&str>,
+    reuse: bool,
+) -> Result<()> {
     let vivado = resolve_vivado()?;
 
     if !fpga_dir.join(format!("{PROJECT_NAME}.xpr")).exists() {
@@ -153,21 +163,143 @@ fn fpga_power(fpga_dir: &Path, tb: &str, scope: &str, impl_run: Option<&str>) ->
     };
     println!("using implementation run: {impl_run}");
 
-    run(
-        &vivado,
-        vec![
-            "-mode".to_string(),
-            "batch".to_string(),
-            "-source".to_string(),
-            "scripts/power.tcl".to_string(),
-            "-tclargs".to_string(),
-            tb.to_string(),
-            scope.to_string(),
-            impl_run,
-        ],
-        fpga_dir,
-    )
-    .context("power measurement failed (see the log above)")
+    let mut args = vec![
+        "-mode".to_string(),
+        "batch".to_string(),
+        "-source".to_string(),
+        "scripts/power.tcl".to_string(),
+        "-tclargs".to_string(),
+        tb.to_string(),
+        scope.to_string(),
+        impl_run,
+    ];
+    if reuse {
+        args.push("reuse".to_string());
+    }
+    run(&vivado, args, fpga_dir).context("power measurement failed (see the log above)")?;
+
+    let saif = fpga_dir
+        .join(format!("{PROJECT_NAME}.sim"))
+        .join("sim_1/behav/xsim/power.saif");
+    summarize_saif_tc(&saif, scope)
+}
+
+struct SaifNode {
+    path: String,
+    depth: usize,
+    tc: u64,
+}
+
+fn summarize_saif_tc(saif: &Path, scope: &str) -> Result<()> {
+    let text = std::fs::read_to_string(saif)
+        .with_context(|| format!("cannot read SAIF at {}", saif.display()))?;
+
+    let mut nodes: Vec<SaifNode> = Vec::new();
+    let mut stack: Vec<(usize, usize)> = Vec::new(); // (node index, paren depth at open)
+    let mut names: Vec<String> = Vec::new();
+    let mut paren_depth = 0usize;
+
+    let spaced = text.replace('(', " ( ").replace(')', " ) ");
+    let tokens: Vec<&str> = spaced.split_whitespace().collect();
+    let mut i = 0;
+    while i < tokens.len() {
+        match tokens[i] {
+            "(" => paren_depth += 1,
+            ")" => {
+                paren_depth = paren_depth.saturating_sub(1);
+                while let Some(&(_, open)) = stack.last() {
+                    if open > paren_depth {
+                        stack.pop();
+                        names.pop();
+                    } else {
+                        break;
+                    }
+                }
+            }
+            "INSTANCE" if i + 1 < tokens.len() => {
+                let name = tokens[i + 1];
+                names.push(name.to_string());
+                let path = names.join("/");
+                nodes.push(SaifNode {
+                    path,
+                    depth: names.len(),
+                    tc: 0,
+                });
+                stack.push((nodes.len() - 1, paren_depth));
+                i += 1;
+            }
+            "TC" if i + 1 < tokens.len() => {
+                if let Ok(n) = tokens[i + 1].parse::<u64>() {
+                    for &(idx, _) in &stack {
+                        nodes[idx].tc += n;
+                    }
+                }
+                i += 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let Some(root) = nodes
+        .iter()
+        .find(|n| n.path.rsplit('/').next() == Some(scope))
+    else {
+        bail!("scope instance '{scope}' not found in {}", saif.display());
+    };
+    let root_prefix = format!("{}/", root.path);
+    let root_depth = root.depth;
+    let root_tc = root.tc;
+
+    println!();
+    println!("==================== SAIF toggle-count (TC) summary ====================");
+    println!(
+        "scope '{scope}' subtree total: {} toggles",
+        thousands(root_tc)
+    );
+    println!("(raw switching activity — use this for before/after comparison,");
+    println!(" report_power above is Low-confidence because IP internals are unannotated)");
+    println!();
+
+    let mut rows: Vec<&SaifNode> = nodes
+        .iter()
+        .filter(|n| n.path.starts_with(&root_prefix) && n.depth <= root_depth + 3)
+        .collect();
+    rows.sort_by(|a, b| b.tc.cmp(&a.tc).then(a.path.cmp(&b.path)));
+
+    let width = rows.iter().map(|n| n.path.len()).max().unwrap_or(0).min(70);
+    let limit = 30usize;
+    for n in rows.iter().take(limit) {
+        let rel = n.path.strip_prefix(&root_prefix).unwrap_or(&n.path);
+        let permille: u128 = if root_tc == 0 {
+            0
+        } else {
+            u128::from(n.tc) * 1000 / u128::from(root_tc)
+        };
+        println!(
+            "  {rel:<width$}  {:>14}  {:>3}.{}%",
+            thousands(n.tc),
+            permille / 10,
+            permille % 10
+        );
+    }
+    if rows.len() > limit {
+        println!("  ... {} more instances omitted", rows.len() - limit);
+    }
+    Ok(())
+}
+
+fn thousands(n: u64) -> String {
+    let s = n.to_string();
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len() + s.len() / 3);
+    for (i, b) in bytes.iter().enumerate() {
+        if i > 0 && (bytes.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(*b as char);
+    }
+    out
 }
 
 fn fpga_format(fpga_dir: &Path, fix: bool) -> Result<()> {
@@ -295,8 +427,8 @@ pub fn resolve_vivado() -> Result<String> {
 
 #[cfg(windows)]
 fn find_vivado_windows() -> Option<String> {
-    use winreg::enums::HKEY_LOCAL_MACHINE;
     use winreg::RegKey;
+    use winreg::enums::HKEY_LOCAL_MACHINE;
 
     const NEEDLES: [&str; 4] = [
         "Vivado",
