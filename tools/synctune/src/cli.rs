@@ -47,10 +47,19 @@ pub struct MeasureArgs {
     #[command(flatten)]
     pub common: Common,
 
-    #[arg(long, default_value_t = 1000)]
-    pub cycle_us: u64,
+    #[arg(
+        long = "sync0-period",
+        value_parser = humantime::parse_duration,
+        default_value = "1ms",
+        help = "SYNC0 / EtherCAT cycle period, e.g. 1ms / 500us (maps to *LinkOption.sync0_period)."
+    )]
+    pub sync0_period: Duration,
 
-    #[arg(long, default_value_t = 0)]
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "SYNC0 shift as a percent of the period (maps to *LinkOption.sync0_shift = period * percent)."
+    )]
     pub shift_percent: u8,
 }
 
@@ -59,14 +68,14 @@ pub struct TuneArgs {
     #[command(flatten)]
     pub common: Common,
 
-    #[arg(long, default_value_t = 1000)]
-    pub period_min: u64,
+    #[arg(long, value_parser = humantime::parse_duration, default_value = "1ms")]
+    pub period_min: Duration,
 
-    #[arg(long, default_value_t = 2000)]
-    pub period_max: u64,
+    #[arg(long, value_parser = humantime::parse_duration, default_value = "2ms")]
+    pub period_max: Duration,
 
-    #[arg(long, default_value_t = 1000)]
-    pub period_step: u64,
+    #[arg(long, value_parser = humantime::parse_duration, default_value = "1ms")]
+    pub period_step: Duration,
 
     #[arg(long, default_value_t = 0)]
     pub shift_min: u8,
@@ -82,7 +91,11 @@ pub struct TuneArgs {
 pub struct Common {
     #[arg(long, value_enum, default_value_t = LinkKind::Ethercrab)]
     pub link: LinkKind,
-    #[arg(long, default_value = None)]
+    #[arg(
+        long,
+        default_value = None,
+        help = "EtherCAT network interface (maps to *LinkOption.iface)."
+    )]
     pub interface: Option<String>,
 
     #[arg(long)]
@@ -90,28 +103,45 @@ pub struct Common {
 
     #[arg(long, value_enum, default_value_t = Mode::Streaming)]
     pub mode: Mode,
-    #[arg(long, default_value_t = MAX_IN_FLIGHT)]
-    pub inflight: usize,
+    #[arg(
+        long = "max-inflight",
+        alias = "inflight",
+        default_value_t = MAX_IN_FLIGHT,
+        help = "Pipeline depth in streaming mode (maps to ClientConfig.max_inflight)."
+    )]
+    pub max_inflight: usize,
     #[arg(long, default_value_t = XOR_HASH_MAX_DATA_LEN)]
     pub data_len: usize,
     #[arg(long, default_value_t = 0)]
     pub sleep_ms: u16,
-    #[arg(long, default_value_t = 10)]
+    #[arg(
+        long,
+        default_value_t = 10,
+        help = "maps to ClientConfig.timeout_cycles"
+    )]
     pub timeout_cycles: u32,
-    #[arg(long, default_value_t = NonZeroU32::new(1).unwrap())]
+    #[arg(long, default_value_t = NonZeroU32::new(1).unwrap(), help = "maps to ClientConfig.send_interval_cycles")]
     pub send_interval_cycles: NonZeroU32,
-    #[arg(long, default_value_t = NonZeroU32::new(8).unwrap())]
+    #[arg(long, default_value_t = NonZeroU32::new(8).unwrap(), help = "maps to ClientConfig.max_resync_rounds")]
     pub max_resync_rounds: NonZeroU32,
-    #[arg(long, default_value_t = false)]
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "maps to ClientConfig.low_latency"
+    )]
     pub low_latency: bool,
     #[arg(long, default_value_t = false)]
     pub no_win_perf_tune: bool,
-    #[arg(long)]
+    #[arg(long, help = "maps to ClientConfig.rt_priority (0..=99)")]
     pub rt_priority: Option<u8>,
-    #[arg(long, value_enum, default_value_t = RtPolicy::Fifo)]
+    #[arg(long, value_enum, default_value_t = RtPolicy::Fifo, help = "maps to ClientConfig.rt_policy")]
     pub rt_policy: RtPolicy,
-    #[arg(long)]
-    pub rt_core: Option<usize>,
+    #[arg(
+        long = "rt-affinity",
+        alias = "rt-core",
+        help = "Pin the RT thread to this CPU core (maps to ClientConfig.rt_affinity)."
+    )]
+    pub rt_affinity: Option<usize>,
 
     #[arg(long, value_parser = humantime::parse_duration, default_value = "30s")]
     pub dwell: Duration,
@@ -134,10 +164,12 @@ impl Common {
                 self.data_len,
             ));
         }
-        if self.mode == Mode::Streaming && (self.inflight == 0 || self.inflight > MAX_IN_FLIGHT) {
+        if self.mode == Mode::Streaming
+            && (self.max_inflight == 0 || self.max_inflight > MAX_IN_FLIGHT)
+        {
             return Err(format!(
-                "--inflight {} must be in 1..={MAX_IN_FLIGHT}",
-                self.inflight,
+                "--max-inflight {} must be in 1..={MAX_IN_FLIGHT}",
+                self.max_inflight,
             ));
         }
         if let Some(p) = self.rt_priority
@@ -158,8 +190,8 @@ impl Common {
 impl MeasureArgs {
     pub fn validate(&self) -> Result<(), String> {
         self.common.validate()?;
-        if self.cycle_us == 0 {
-            return Err("--cycle-us must be greater than zero".to_string());
+        if self.sync0_period.is_zero() {
+            return Err("--sync0-period must be greater than zero".to_string());
         }
         if self.shift_percent > 100 {
             return Err(format!(
@@ -174,16 +206,16 @@ impl MeasureArgs {
 impl TuneArgs {
     pub fn validate(&self) -> Result<(), String> {
         self.common.validate()?;
-        if self.period_min == 0 {
+        if self.period_min.is_zero() {
             return Err("--period-min must be greater than zero".to_string());
         }
         if self.period_min > self.period_max {
             return Err(format!(
-                "--period-min {} must be <= --period-max {}",
+                "--period-min {:?} must be <= --period-max {:?}",
                 self.period_min, self.period_max
             ));
         }
-        if self.period_step == 0 {
+        if self.period_step.is_zero() {
             return Err("--period-step must be greater than zero".to_string());
         }
         if self.shift_max > 100 {

@@ -3,6 +3,7 @@ mod mem;
 mod nop;
 mod report;
 mod run;
+mod snippet;
 mod stats;
 
 use anyhow::Result;
@@ -74,6 +75,8 @@ async fn main() -> Result<()> {
             println!("\nCSV written: {}", path.display());
         }
     }
+
+    snippet::print(&cli);
 
     Ok(())
 }

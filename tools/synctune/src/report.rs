@@ -38,7 +38,7 @@ fn perftest_command(common: &Common, period_us: u128, shift_percent: u8) -> Stri
         .map_or_else(String::new, |d| format!(" --devices {d}"));
     format!(
         "cargo xtask tool perftest -- --link {link} --mode {mode} \
---cycle-us {period_us} --shift-percent {shift_percent}{iface}{devices} --duration 60s"
+--sync0-period {period_us}us --shift-percent {shift_percent}{iface}{devices} --duration 60s"
     )
 }
 
@@ -85,6 +85,7 @@ pub fn print_measure(r: &CandidateResult, common: &Common) {
         "\nload-test with perftest:\n  {}",
         perftest_command(common, micros(r.period), r.shift_percent),
     );
+    crate::snippet::print(common, r.period, r.shift);
 }
 
 pub fn print_table(results: &[CandidateResult], best: Option<usize>) {
@@ -138,7 +139,7 @@ pub fn print_best(results: &[CandidateResult], best: Option<usize>, common: &Com
                 r.op_ratio() * 100.0,
             );
             println!(
-                "  reproduce with: measure --cycle-us {} --shift-percent {}",
+                "  reproduce with: measure --sync0-period {}us --shift-percent {}",
                 micros(r.period),
                 r.shift_percent,
             );
@@ -147,6 +148,7 @@ pub fn print_best(results: &[CandidateResult], best: Option<usize>, common: &Com
                 perftest_command(common, micros(r.period), r.shift_percent),
             );
             println!("  (tie-break: higher op_ratio, fewer drops, lower shift, lower period)");
+            crate::snippet::print(common, r.period, r.shift);
         }
         None => println!("\nbest: none (no candidate produced measurable samples)"),
     }

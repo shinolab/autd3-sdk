@@ -87,7 +87,7 @@ async fn measure_with_link<L: Link>(
 
     let max_inflight = match common.mode {
         Mode::StopAndWait => 1,
-        Mode::Streaming => common.inflight.max(1),
+        Mode::Streaming => common.max_inflight.max(1),
     };
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
     let client = match Box::pin(Client::open(
@@ -164,7 +164,7 @@ fn client_config(common: &Common, max_inflight: usize) -> ClientConfig {
             RtPolicy::Fifo => RtSchedulePolicy::Fifo,
             RtPolicy::RoundRobin => RtSchedulePolicy::RoundRobin,
         },
-        rt_affinity: common.rt_core.map(|id| CoreId { id }),
+        rt_affinity: common.rt_affinity.map(|id| CoreId { id }),
         validate_state: false,
     }
 }
