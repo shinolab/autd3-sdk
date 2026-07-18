@@ -92,6 +92,27 @@ module sim_synchronizer ();
     SYS_TIME_m50_WO_SYNC <= SYS_TIME_m50;
   endtask
 
+  task check_diff_converged(input string label);
+    for (int i = 0; i < 4; i++) begin
+      @(negedge ECAT_SYNC);
+      if ((SYNC_TIME_DIFF > DiffBound) || (SYNC_TIME_DIFF < -DiffBound)) begin
+        $error("%s:%d: nominal sync_time_diff %s: expected is within +-%0d, but actual is %0d", `__FILE__, `__LINE__, label, DiffBound,
+               SYNC_TIME_DIFF);
+        $finish();
+      end
+      if ((SYNC_TIME_DIFF_p50 > DiffBound) || (SYNC_TIME_DIFF_p50 < -DiffBound)) begin
+        $error("%s:%d: +50ppm sync_time_diff %s: expected is within +-%0d, but actual is %0d", `__FILE__, `__LINE__, label, DiffBound,
+               SYNC_TIME_DIFF_p50);
+        $finish();
+      end
+      if ((SYNC_TIME_DIFF_m50 > DiffBound) || (SYNC_TIME_DIFF_m50 < -DiffBound)) begin
+        $error("%s:%d: -50ppm sync_time_diff %s: expected is within +-%0d, but actual is %0d", `__FILE__, `__LINE__, label, DiffBound,
+               SYNC_TIME_DIFF_m50);
+        $finish();
+      end
+    end
+  endtask
+
   initial begin
     CLK = 1;
     CLK_p50 = 1;
@@ -150,20 +171,26 @@ module sim_synchronizer ();
     $display("corrections: %0d total, %0d within %0d clks of Sync0", corr_total, corr_in_burst_window, BurstWindow);
 
     measuring = 0;
+
+    // A single dropped Sync0 pulse must not leave sync_time_diff saturated forever:
+    // sys_time free-runs, so the missing edge is a period slip and the synchronizer
+    // hard-rebuilds next_sync_time on the first edge back, converging to ~0.
+    @(negedge ECAT_SYNC);
     ecat_sync_en = 0;
-    #(3 * ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS);
+    #(ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS);
     ecat_sync_en = 1;
-    @(posedge ECAT_SYNC);
-    repeat (32) @(posedge CLK);
-    if (!((SYNC_TIME_DIFF <= -14'sd8180) && (SYNC_TIME_DIFF >= -14'sd8191))) begin
-      $error("%s:%d: nominal saturated diff: expected is in [-8191, -8180], but actual is %0d", `__FILE__, `__LINE__, SYNC_TIME_DIFF);
-      $finish();
-    end
-    repeat (32) @(posedge CLK_m50);
-    if (!((SYNC_TIME_DIFF_m50 <= -14'sd8180) && (SYNC_TIME_DIFF_m50 >= -14'sd8191))) begin
-      $error("%s:%d: -50ppm saturated diff: expected is in [-8191, -8180], but actual is %0d", `__FILE__, `__LINE__, SYNC_TIME_DIFF_m50);
-      $finish();
-    end
+    repeat (2) @(negedge ECAT_SYNC);
+    check_diff_converged("after dropped Sync0");
+
+    // A single spurious Sync0 edge is an over-count; it must also resync to ~0.
+    @(negedge ECAT_SYNC);
+    #(ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS / 2);
+    force ECAT_SYNC = 1;
+    #800;
+    force ECAT_SYNC = 0;
+    release ECAT_SYNC;
+    repeat (3) @(negedge ECAT_SYNC);
+    check_diff_converged("after spurious Sync0");
 
     @(posedge ECAT_SYNC);
     #(ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS - 2000);
@@ -175,24 +202,7 @@ module sim_synchronizer ();
     set = 0;
 
     repeat (2) @(negedge ECAT_SYNC);
-    for (int i = 0; i < 4; i++) begin
-      @(negedge ECAT_SYNC);
-      if ((SYNC_TIME_DIFF > DiffBound) || (SYNC_TIME_DIFF < -DiffBound)) begin
-        $error("%s:%d: nominal sync_time_diff after racing update: expected is within +-%0d, but actual is %0d", `__FILE__, `__LINE__, DiffBound,
-               SYNC_TIME_DIFF);
-        $finish();
-      end
-      if ((SYNC_TIME_DIFF_p50 > DiffBound) || (SYNC_TIME_DIFF_p50 < -DiffBound)) begin
-        $error("%s:%d: +50ppm sync_time_diff after racing update: expected is within +-%0d, but actual is %0d", `__FILE__, `__LINE__, DiffBound,
-               SYNC_TIME_DIFF_p50);
-        $finish();
-      end
-      if ((SYNC_TIME_DIFF_m50 > DiffBound) || (SYNC_TIME_DIFF_m50 < -DiffBound)) begin
-        $error("%s:%d: -50ppm sync_time_diff after racing update: expected is within +-%0d, but actual is %0d", `__FILE__, `__LINE__, DiffBound,
-               SYNC_TIME_DIFF_m50);
-        $finish();
-      end
-    end
+    check_diff_converged("after racing update");
 
     $display("OK! sim_synchronizer");
     $finish();
