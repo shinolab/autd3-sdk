@@ -174,13 +174,6 @@ impl Client {
         })
     }
 
-    fn read_fpga_functions<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let backend = Arc::clone(&self.backend);
-        future_into_py(py, async move {
-            backend.read_fpga_functions().await.map_err(to_pyerr_gil)
-        })
-    }
-
     fn send<'py>(&self, py: Python<'py>, frame: PyRef<'_, Frame>) -> PyResult<Bound<'py, PyAny>> {
         let backend = Arc::clone(&self.backend);
         let datagrams = Arc::clone(&frame.datagrams);

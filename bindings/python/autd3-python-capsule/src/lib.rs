@@ -163,7 +163,6 @@ mod link {
         fn read_fpga_state(&self) -> BoxFuture<Vec<u8>>;
         fn read_error_detail(&self) -> BoxFuture<Vec<u8>>;
         fn read_telemetry(&self, counter: autd3_rs::Telemetry) -> BoxFuture<Vec<u8>>;
-        fn read_fpga_functions(&self) -> BoxFuture<Vec<u8>>;
         fn send(&self, datagrams: Arc<Frames>, index: usize) -> BoxFuture<ResponseToken>;
         fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()>;
         fn check_status(&self) -> BoxFuture<LinkStatusData>;

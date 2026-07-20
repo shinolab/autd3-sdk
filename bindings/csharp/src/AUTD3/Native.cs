@@ -97,9 +97,6 @@ namespace AUTD3
         internal static extern void autd3_client_read_telemetry(IntPtr client, byte counter, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib)]
-        internal static extern void autd3_client_read_fpga_functions(IntPtr client, CompletionCallback cb, IntPtr userData);
-
-        [DllImport(Lib)]
         internal static extern UIntPtr autd3_byte_array_len(IntPtr array);
 
         [DllImport(Lib)]

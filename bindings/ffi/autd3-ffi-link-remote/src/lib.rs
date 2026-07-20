@@ -82,24 +82,6 @@ impl ClientBackend for RemoteBackend {
         })
     }
 
-    fn read_fpga_functions(&self) -> BoxFuture<Vec<u8>> {
-        let client = Arc::clone(&self.client);
-        Box::pin(async move {
-            link_runtime()
-                .spawn(async move {
-                    let functions = client.read_fpga_functions().await?;
-                    Ok::<Vec<u8>, Error>(
-                        functions
-                            .into_iter()
-                            .map(autd3_rs::FpgaFunctions::raw)
-                            .collect(),
-                    )
-                })
-                .await
-                .map_err(join_err)?
-        })
-    }
-
     fn send(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<ResponseTokenData> {
         let client = Arc::clone(&self.client);
         Box::pin(async move {

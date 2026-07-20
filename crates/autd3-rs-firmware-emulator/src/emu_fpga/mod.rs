@@ -83,7 +83,8 @@ impl FpgaEmulator {
     pub(crate) fn new(num_transducers: usize) -> Self {
         let mut controller = Box::new([0u16; 256]);
 
-        controller[reg(fw::ADDR_VERSION_NUM_MAJOR)] = fw::VERSION_NUM_MAJOR as u16;
+        controller[reg(fw::ADDR_VERSION_NUM_MAJOR)] =
+            ((1u16 << fw::FUNC_EMULATOR_BIT) << 8) | fw::VERSION_NUM_MAJOR as u16;
         controller[reg(fw::ADDR_VERSION_NUM_MINOR)] = fw::VERSION_NUM_MINOR as u16;
         controller[reg(fw::ADDR_VERSION_NUM_PATCH)] = fw::VERSION_NUM_PATCH as u16;
         Self {
@@ -394,7 +395,7 @@ impl FpgaEmulator {
     #[must_use]
     pub fn fpga_version(&self) -> (u16, u16, u16) {
         (
-            self.controller[reg(fw::ADDR_VERSION_NUM_MAJOR)],
+            self.controller[reg(fw::ADDR_VERSION_NUM_MAJOR)] & 0xFF,
             self.controller[reg(fw::ADDR_VERSION_NUM_MINOR)],
             self.controller[reg(fw::ADDR_VERSION_NUM_PATCH)],
         )
@@ -510,6 +511,13 @@ mod tests {
 
     fn write(fpga: &mut FpgaEmulator, addr: u16, value: u16) {
         fpga.write(addr, value);
+    }
+
+    #[test]
+    fn functions_byte_has_emulator_bit() {
+        let fpga = FpgaEmulator::new(249);
+        let functions = (fpga.read(fw::ADDR_VERSION_NUM_MAJOR) >> 8) as u8;
+        assert_ne!(functions & (1 << fw::FUNC_EMULATOR_BIT), 0);
     }
 
     #[test]

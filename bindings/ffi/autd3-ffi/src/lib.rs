@@ -1660,27 +1660,6 @@ pub unsafe extern "C" fn autd3_client_read_telemetry(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_read_fpga_functions(
-    client: *const ClientHandle,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
-        ctx.err("null client");
-        return;
-    }
-
-    let fut = unsafe { &*client }.0.read_fpga_functions();
-    runtime().spawn(async move {
-        match fut.await {
-            Ok(functions) => ctx.ok(into_handle(ByteArray(functions)).cast()),
-            Err(e) => ctx.err(&e.to_string()),
-        }
-    });
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_read_error_detail(
     client: *const ClientHandle,
     cb: CompletionCallback,
