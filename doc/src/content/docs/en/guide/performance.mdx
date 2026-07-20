@@ -44,3 +44,15 @@ To avoid per-frame allocation, reuse buffers.
 ## OS Tuning
 
 The real-time performance of EtherCAT also depends on the OS settings. By adjusting thread priority, CPU affinity, timer precision, and so on, jitter can be suppressed, potentially enabling more stable high-rate transmission.
+
+These can be set as `rt_priority` / `rt_policy` / `rt_affinity` of `ClientConfig`, and `sync0_period` / `sync0_shift` of the Link Option.
+The appropriate values differ by environment, so it is best to measure and decide.
+
+## Measurement Tools
+
+The repository provides tools for measuring and tuning performance.
+
+- `cargo xtask tool perftest`: measures throughput and latency.
+- `cargo xtask tool synctune`: measures synchronization stability and searches for the optimal parameters.
+
+See each tool's `--help` for details.
