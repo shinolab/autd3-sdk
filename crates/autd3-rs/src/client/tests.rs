@@ -339,8 +339,10 @@ async fn read_firmware_version_returns_full_triplet() {
                 minor: 5,
                 patch: 6,
             },
+            function_bits: 0,
         }]
     );
+    assert!(!v[0].is_emulator());
     assert_eq!(v[0].to_string(), "CPU: 1.2.3, FPGA: 4.5.6");
 }
 
@@ -364,6 +366,7 @@ async fn read_firmware_version_reports_unknown_fpga_on_outdated_firmware() {
                 patch: 0,
             },
             fpga: Version::UNKNOWN,
+            function_bits: 0,
         }]
     );
     assert!(v[0].fpga.is_unknown());
@@ -496,6 +499,7 @@ async fn read_is_exclusive_and_correct_under_concurrent_writes() {
                 minor: 0xA4,
                 patch: 0xA5,
             },
+            function_bits: 0,
         },
         FirmwareVersion {
             cpu: Version {
@@ -508,6 +512,7 @@ async fn read_is_exclusive_and_correct_under_concurrent_writes() {
                 minor: 0xB4,
                 patch: 0xB5,
             },
+            function_bits: 0,
         },
     ];
     for _ in 0..10 {
@@ -1061,6 +1066,7 @@ async fn commands_still_succeed_with_send_interval_above_one() {
                 minor: 0x55,
                 patch: 0x66,
             },
+            function_bits: 0,
         }]
     );
 }
@@ -1412,31 +1418,40 @@ async fn read_telemetry_returns_sync_resync_count() {
 }
 
 #[tokio::test]
-async fn read_fpga_functions_returns_bits() {
-    use crate::telemetry::FpgaFunctions;
-
-    let (client, slave) = open_client().await;
-    slave.lock().unwrap().fpga_functions = 0xA5;
-
-    assert_eq!(
-        client.read_fpga_functions().await.unwrap(),
-        vec![FpgaFunctions(0xA5)]
-    );
-}
-
-#[tokio::test]
-async fn read_fpga_functions_reports_unknown_on_outdated_firmware() {
-    use crate::telemetry::FpgaFunctions;
-
+async fn read_firmware_version_reports_emulator_bit() {
     let (client, slave) = open_client().await;
     {
         let mut s = slave.lock().unwrap();
-        s.supports_fpga_functions = false;
-        s.fpga_functions = 0xA5;
+        s.fpga_version_major = 4;
+        s.fpga_version_minor = 5;
+        s.fpga_version_patch = 6;
+        s.fpga_functions = 1 << 7;
     }
 
-    assert_eq!(
-        client.read_fpga_functions().await.unwrap(),
-        vec![FpgaFunctions::UNKNOWN]
-    );
+    let v = client.read_firmware_version().await.unwrap();
+    assert!(v[0].is_emulator());
+    assert_eq!(v[0].to_string(), "CPU: 0.0.0, FPGA: 4.5.6 [Emulator]");
+}
+
+#[tokio::test]
+async fn read_firmware_version_without_emulator_bit_is_not_emulator() {
+    let (client, slave) = open_client().await;
+    slave.lock().unwrap().fpga_functions = 0x7F;
+
+    let v = client.read_firmware_version().await.unwrap();
+    assert!(!v[0].is_emulator());
+    assert!(!v[0].to_string().contains("[Emulator]"));
+}
+
+#[tokio::test]
+async fn read_firmware_version_ignores_emulator_bit_when_fpga_unknown() {
+    let (client, slave) = open_client().await;
+    {
+        let mut s = slave.lock().unwrap();
+        s.supports_fpga_version = false;
+        s.fpga_functions = 1 << 7;
+    }
+
+    let v = client.read_firmware_version().await.unwrap();
+    assert!(!v[0].is_emulator());
 }

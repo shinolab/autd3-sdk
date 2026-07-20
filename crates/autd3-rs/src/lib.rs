@@ -31,6 +31,6 @@ pub use datagram::{Datagram, DatagramBuilder, Frame, Frames};
 pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;
 pub use response::Response;
-pub use telemetry::{FpgaFunctions, Telemetry};
+pub use telemetry::Telemetry;
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
 pub use tuning::PerfTuning;

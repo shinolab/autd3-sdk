@@ -24,7 +24,7 @@ use crate::link::{IntoLink, Link};
 use crate::mirror::FirmwareState;
 use crate::operation::{Clear, Distribution, Synchronize};
 use crate::protocol::{Cmd, DeviceErrorCode};
-use crate::telemetry::{FpgaFunctions, Telemetry};
+use crate::telemetry::Telemetry;
 
 use completion::CompletionPool;
 use pool::SlotPool;
@@ -279,11 +279,12 @@ impl Client {
         let fpga_major = self.read_broadcast(Cmd::ReadFpgaFwVersionMajor).await?;
         let fpga_minor = self.read_broadcast(Cmd::ReadFpgaFwVersionMinor).await?;
         let fpga_patch = self.read_broadcast(Cmd::ReadFpgaFwVersionPatch).await?;
+        let fpga_functions = self.read_broadcast(Cmd::ReadFpgaFunctions).await?;
         let err_after = self.read_broadcast(Cmd::ReadErrorDetail).await?;
 
         Ok((0..cpu_major.len())
             .map(|i| {
-                let fpga = if err_after[i] == UNKNOWN_CMD {
+                let (fpga, function_bits) = if err_after[i] == UNKNOWN_CMD {
                     if err_before[i] == UNKNOWN_CMD {
                         tracing::warn!(
                             device = i,
@@ -297,13 +298,16 @@ impl Client {
                             DeviceErrorCode::UnknownCmd.describe()
                         );
                     }
-                    Version::UNKNOWN
+                    (Version::UNKNOWN, 0)
                 } else {
-                    Version {
-                        major: fpga_major[i],
-                        minor: fpga_minor[i],
-                        patch: fpga_patch[i],
-                    }
+                    (
+                        Version {
+                            major: fpga_major[i],
+                            minor: fpga_minor[i],
+                            patch: fpga_patch[i],
+                        },
+                        fpga_functions[i],
+                    )
                 };
                 FirmwareVersion {
                     cpu: Version {
@@ -312,6 +316,7 @@ impl Client {
                         patch: cpu_patch[i],
                     },
                     fpga,
+                    function_bits,
                 }
             })
             .collect())
@@ -334,38 +339,6 @@ impl Client {
         let mut datagram = Datagram::no_payload(Cmd::ReadTelemetry);
         datagram.payload[0] = counter.as_u8();
         self.read_broadcast_with(&datagram).await
-    }
-
-    pub async fn read_fpga_functions(&self) -> Result<Vec<FpgaFunctions>, Error> {
-        const UNKNOWN_CMD: u8 = DeviceErrorCode::UnknownCmd as u8;
-
-        let err_before = self.read_broadcast(Cmd::ReadErrorDetail).await?;
-        let functions = self.read_broadcast(Cmd::ReadFpgaFunctions).await?;
-        let err_after = self.read_broadcast(Cmd::ReadErrorDetail).await?;
-
-        Ok(functions
-            .iter()
-            .enumerate()
-            .map(|(device, &bits)| {
-                if err_after[device] != UNKNOWN_CMD {
-                    return FpgaFunctions(bits);
-                }
-                if err_before[device] == UNKNOWN_CMD {
-                    tracing::warn!(
-                        device,
-                        "FPGA function bits are unknown: {} was already latched before the query, so it cannot be attributed to it",
-                        DeviceErrorCode::UnknownCmd.describe()
-                    );
-                } else {
-                    tracing::warn!(
-                        device,
-                        "FPGA function bits are unknown: {}",
-                        DeviceErrorCode::UnknownCmd.describe()
-                    );
-                }
-                FpgaFunctions::UNKNOWN
-            })
-            .collect())
     }
 
     pub async fn close(&self) -> Result<(), Error> {
