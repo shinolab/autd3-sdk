@@ -181,7 +181,7 @@ impl Swapchain {
 mod tests {
     use super::*;
 
-    const MODE_IMMEDIATE: u8 = 0xFF;
+    const MODE_IMMEDIATE: u8 = fw::TRANSITION_MODE_IMMEDIATE;
 
     #[test]
     fn cur_idx_stays_within_bank_after_switch_from_large_cycle() {

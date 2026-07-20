@@ -2,7 +2,7 @@ pub const ULTRASOUND_FREQ_HZ: u32 = 40_000;
 
 pub const NUM_BANKS: usize = autd3_cpu_wire::params::NUM_BANKS;
 
-pub const MOD_BUFFER_SAMPLES: usize = 65536;
+pub const MOD_BUFFER_SAMPLES: usize = autd3_cpu_wire::params::MOD_BUFFER_SAMPLES;
 
 pub const EMISSION_SLOT_WORDS: usize = 256;
 pub const EMISSION_MAX_INDICES: usize = autd3_cpu_wire::params::EMISSION_MAX_INDICES as usize;

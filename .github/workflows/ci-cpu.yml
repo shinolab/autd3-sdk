@@ -23,4 +23,4 @@ jobs:
       - run: cargo xtask cpu test
       - run: cargo xtask cpu build
       - name: Verify the committed params.rs is up to date
-        run: git diff --exit-code firmware/cpu/fw/src/params.rs
+        run: git diff --exit-code firmware/cpu/fw/src/params.rs firmware/cpu/wire/src/params.rs
