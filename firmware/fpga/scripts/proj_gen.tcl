@@ -121,6 +121,9 @@ set_msg_config -id {Synth 8-7080} -new_severity {ADVISORY}
 set_msg_config -id {Synth 8-7129} -new_severity {ADVISORY}
 set_msg_config -id {Synth 8-5640} -new_severity {ADVISORY}
 # set_msg_config -id {Synth 8-5858} -new_severity {ADVISORY}
+set_msg_config -id {Synth 8-3917} -new_severity {ADVISORY}
+set_msg_config -id {Synth 8-13157} -new_severity {ADVISORY}
+set_msg_config -id {Project 1-5713} -new_severity {ADVISORY}
 
 set_property top top [get_filesets sources_1]
 set_property top sim_synchronizer [get_filesets sim_1]
