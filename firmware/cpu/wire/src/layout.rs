@@ -1,14 +1,14 @@
 use crate::frame::PAYLOAD_BYTES;
 use crate::params::{EMISSION_MAX_INDICES, NUM_TRANSDUCERS};
 
-pub const MOD_BUFFER_SAMPLES: usize = 65536;
+pub use crate::params::{MOD_BUFFER_SAMPLES, PWE_TABLE_SIZE};
+
 pub const EMISSION_SLOT_WORDS: usize = 256;
 pub const FOCUS_WORDS: usize = 4;
 pub const EMISSION_RAM_WORDS: usize = EMISSION_SLOT_WORDS * EMISSION_MAX_INDICES as usize;
 pub const MAX_FOCI_TOTAL: usize = EMISSION_RAM_WORDS / FOCUS_WORDS;
 
 pub const OUTPUT_MASK_WORDS: usize = NUM_TRANSDUCERS.div_ceil(16);
-pub const PWE_TABLE_SIZE: usize = 256;
 pub const GPIO_OUT_NUM: usize = 4;
 
 pub const WRITE_HEADER_BYTES: usize = 8;

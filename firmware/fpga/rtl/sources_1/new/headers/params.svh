@@ -53,7 +53,8 @@ package params;
     TRANSITION_MODE_SYNC_IDX = 8'h00,
     TRANSITION_MODE_SYS_TIME = 8'h01,
     TRANSITION_MODE_GPIO = 8'h02,
-    TRANSITION_MODE_EXT = 8'hF0
+    TRANSITION_MODE_EXT = 8'hF0,
+    TRANSITION_MODE_IMMEDIATE = 8'hFF
   } transition_mode_t;
 
   typedef enum logic {
