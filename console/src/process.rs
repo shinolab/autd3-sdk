@@ -12,11 +12,13 @@ pub struct ManagedProcess {
 
 impl ManagedProcess {
     pub fn spawn(program: &Path, args: &[String]) -> std::io::Result<Self> {
-        let mut child = Command::new(program)
+        let mut command = Command::new(program);
+        command
             .args(args)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+            .stderr(Stdio::piped());
+        no_window(&mut command);
+        let mut child = command.spawn()?;
         let (tx, rx) = channel();
         if let Some(stdout) = child.stdout.take() {
             spawn_reader(stdout, tx.clone());
@@ -73,6 +75,16 @@ impl Drop for ManagedProcess {
         let _ = self.child.wait();
     }
 }
+
+#[cfg(windows)]
+pub fn no_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+pub fn no_window(_command: &mut Command) {}
 
 fn exit_marker(status: ExitStatus) -> String {
     match status.code() {
