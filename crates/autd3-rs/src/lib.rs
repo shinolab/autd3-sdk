@@ -15,19 +15,15 @@ mod stm;
 pub use autd3_rs_core::{common, geometry, link, mirror, params, protocol, units, value};
 pub use error::{Error, PayloadError};
 
-pub use autd3_rs_core::value::{
-    ControlPoint, ControlPoints, PULSE_WIDTH_PERIOD, PulseWidth, PulseWidthError,
-};
+pub use autd3_rs_core::value::{ControlPoint, ControlPoints, PulseWidth, PulseWidthError};
 
 pub use autd3_rs_core::{
-    Angle, Autd3, BankLoop, Cmd, ConstStateChecker, CycleOutcome, Device, DeviceState, EncodeError,
-    FirmwareState, Freq, Geometry, Interface, IntoLink, Length, Link, LinkError, LinkStats,
-    LinkStatus, MAX_IN_FLIGHT, PAYLOAD_BYTES, Point3, Quaternion, RX_FRAME_BYTES, RtSchedulePolicy,
-    RxFrame, Seq, SilencerAxis, SilencerGuardState, SilencerViolation, StateCheck, TX_FRAME_BYTES,
-    TransitionGuardState, TransitionViolation, TxFrame, UnitQuaternion, UnitVector3, Vector3,
+    Angle, Autd3, ConstStateChecker, CycleOutcome, Device, DeviceState, EncodeError, Freq,
+    Geometry, Interface, IntoLink, Length, Link, LinkError, LinkStats, LinkStatus, MAX_IN_FLIGHT,
+    Point3, Quaternion, RtSchedulePolicy, StateCheck, UnitQuaternion, UnitVector3, Vector3,
     Velocity, offset, point,
 };
-pub use client::{Client, ClientConfig, MAX_DEVICES, ResponseFuture};
+pub use client::{Client, ClientConfig, ResponseFuture};
 pub use core_affinity::CoreId;
 pub use datagram::{Datagram, DatagramBuilder, Frame, Frames};
 pub use firmware_version::{FirmwareVersion, Version};

@@ -1095,7 +1095,7 @@ async fn build_rejects_too_fast_pattern_under_strict_silencer() {
             sampling_div,
         } => {
             assert_eq!(device, 0);
-            assert_eq!(axis, crate::SilencerAxis::Intensity);
+            assert_eq!(axis, crate::mirror::SilencerAxis::Intensity);
             assert_eq!(completion_steps, 10);
             assert_eq!(sampling_div, 1);
         }
@@ -1127,7 +1127,7 @@ async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
     assert!(matches!(
         builder.build().unwrap_err(),
         Error::SilencerConstraint {
-            axis: crate::SilencerAxis::Intensity,
+            axis: crate::mirror::SilencerAxis::Intensity,
             completion_steps: 8,
             sampling_div: 5,
             ..
@@ -1228,7 +1228,7 @@ async fn build_rejects_transition_mode_incompatible_with_loop() {
             Error::TransitionConstraint {
                 device: 0,
                 transition_mode: TransitionMode::Immediate,
-                bank_loop: crate::BankLoop::Finite,
+                bank_loop: crate::mirror::BankLoop::Finite,
             }
         ),
         "finite loop must reject an immediate transition"
@@ -1270,7 +1270,7 @@ async fn build_rejects_timed_transition_on_infinite_loop() {
         matches!(
             builder.build().unwrap_err(),
             Error::TransitionConstraint {
-                bank_loop: crate::BankLoop::Infinite,
+                bank_loop: crate::mirror::BankLoop::Infinite,
                 ..
             }
         ),

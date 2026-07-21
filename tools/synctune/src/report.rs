@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::time::Duration;
 
-use autd3_rs::TX_FRAME_BYTES;
+use autd3_rs::protocol::TX_FRAME_BYTES;
 use clap::ValueEnum;
 
 use crate::cli::Common;
