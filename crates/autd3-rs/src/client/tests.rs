@@ -9,11 +9,10 @@ use crate::firmware_version::{FirmwareVersion, Version};
 use crate::geometry::{Autd3, Geometry};
 use crate::link::{CycleOutcome, Link};
 use crate::operation::{Operation, XOR_HASH_MAX_DATA_LEN, XorHashCmd};
-use crate::protocol::{
-    Cmd, MAX_IN_FLIGHT, MODE_FIFO, MODE_LOW_LATENCY, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES,
-    TxFrame,
-};
+use crate::protocol::{Cmd, MAX_IN_FLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
+
 use crate::telemetry::Telemetry;
+use autd3_cpu_wire::Mode;
 
 use super::{Client, ClientConfig};
 use crate::RtSchedulePolicy;
@@ -83,7 +82,7 @@ impl Slave {
             stale_for_next: 0,
             sent_log: Vec::new(),
             xor_hash_total_sleep_ms: 0,
-            mode: MODE_FIFO,
+            mode: Mode::Fifo.as_u8(),
         }
     }
 }
@@ -659,7 +658,11 @@ async fn low_latency_handshake_switches_slave_mode_and_continues_traffic() {
     let client = Client::open(&geometry(1), link, config).await.unwrap();
     {
         let s = slave.lock().unwrap();
-        assert_eq!(s.mode, MODE_LOW_LATENCY, "slave must switch to low-latency");
+        assert_eq!(
+            s.mode,
+            Mode::LowLatency.as_u8(),
+            "slave must switch to low-latency"
+        );
         assert!(s.sent_log.contains(&(0, Cmd::SetMode)));
         assert_eq!(s.expected_seq, 3);
     }
@@ -674,7 +677,7 @@ async fn default_config_leaves_slave_in_fifo_mode() {
     let (_client, slave) = open_client().await;
     tokio::time::sleep(Duration::from_millis(20)).await;
     let s = slave.lock().unwrap();
-    assert_eq!(s.mode, MODE_FIFO);
+    assert_eq!(s.mode, Mode::Fifo.as_u8());
     assert!(!s.sent_log.iter().any(|(_, cmd)| *cmd == Cmd::SetMode));
 }
 
