@@ -3,8 +3,6 @@
 // Firmware-internal FPGA register map.
 
 pub use autd3_cpu_wire::params::*;
-pub const FUNC_DYNAMIC_FREQ_BIT: u16 = 1;
-pub const FUNC_EMULATOR_BIT: u16 = 7;
 
 pub const CTL_FLAG_BIT_MOD_SET: u16 = 0;
 pub const CTL_FLAG_MOD_SET: u16 = 1 << CTL_FLAG_BIT_MOD_SET;
@@ -26,13 +24,6 @@ pub const CTL_FLAG_BIT_GPIO_IN_3: u16 = 11;
 pub const CTL_FLAG_GPIO_IN_3: u16 = 1 << CTL_FLAG_BIT_GPIO_IN_3;
 pub const CTL_FLAG_BIT_FORCE_FAN: u16 = 13;
 pub const CTL_FLAG_FORCE_FAN: u16 = 1 << CTL_FLAG_BIT_FORCE_FAN;
-
-pub const FPGA_STATE_BIT_PATTERN_STOPPED: u16 = 4;
-pub const FPGA_STATE_PATTERN_STOPPED: u16 = 1 << FPGA_STATE_BIT_PATTERN_STOPPED;
-pub const FPGA_STATE_BIT_MOD_STOPPED: u16 = 5;
-pub const FPGA_STATE_MOD_STOPPED: u16 = 1 << FPGA_STATE_BIT_MOD_STOPPED;
-pub const FPGA_STATE_BIT_TRANSITION_PENDING: u16 = 6;
-pub const FPGA_STATE_TRANSITION_PENDING: u16 = 1 << FPGA_STATE_BIT_TRANSITION_PENDING;
 
 pub const BRAM_SELECT_CONTROLLER: u8 = 0x0;
 pub const BRAM_SELECT_MOD: u8 = 0x1;

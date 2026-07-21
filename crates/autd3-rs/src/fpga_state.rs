@@ -1,13 +1,9 @@
+use autd3_cpu_wire::params::{
+    FPGA_STATE_BIT_MOD_BANK, FPGA_STATE_BIT_MOD_STOPPED, FPGA_STATE_BIT_PATTERN_BANK,
+    FPGA_STATE_BIT_PATTERN_MODE, FPGA_STATE_BIT_PATTERN_STOPPED, FPGA_STATE_BIT_READS_ENABLED,
+    FPGA_STATE_BIT_THERMAL_ASSERT, FPGA_STATE_BIT_TRANSITION_PENDING,
+};
 use autd3_rs_core::value::{ModulationBank, PatternBank};
-
-const BIT_THERMAL_ASSERT: u8 = 0;
-const BIT_MOD_BANK: u8 = 1;
-const BIT_PATTERN_BANK: u8 = 2;
-const BIT_PATTERN_MODE: u8 = 3;
-const BIT_PATTERN_STOPPED: u8 = 4;
-const BIT_MOD_STOPPED: u8 = 5;
-const BIT_TRANSITION_PENDING: u8 = 6;
-const BIT_READS_ENABLED: u8 = 7;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct FpgaState(pub u8);
@@ -20,12 +16,12 @@ impl FpgaState {
 
     #[must_use]
     pub const fn is_thermal_asserted(self) -> bool {
-        self.0 & (1 << BIT_THERMAL_ASSERT) != 0
+        self.0 & (1 << FPGA_STATE_BIT_THERMAL_ASSERT) != 0
     }
 
     #[must_use]
     pub const fn current_mod_bank(self) -> ModulationBank {
-        if self.0 & (1 << BIT_MOD_BANK) != 0 {
+        if self.0 & (1 << FPGA_STATE_BIT_MOD_BANK) != 0 {
             ModulationBank::B1
         } else {
             ModulationBank::B0
@@ -34,7 +30,7 @@ impl FpgaState {
 
     #[must_use]
     pub const fn current_pattern_bank(self) -> PatternBank {
-        if self.0 & (1 << BIT_PATTERN_BANK) != 0 {
+        if self.0 & (1 << FPGA_STATE_BIT_PATTERN_BANK) != 0 {
             PatternBank::B1
         } else {
             PatternBank::B0
@@ -43,7 +39,7 @@ impl FpgaState {
 
     #[must_use]
     pub const fn is_pattern_mode(self) -> bool {
-        self.0 & (1 << BIT_PATTERN_MODE) != 0
+        self.0 & (1 << FPGA_STATE_BIT_PATTERN_MODE) != 0
     }
 
     #[must_use]
@@ -53,22 +49,22 @@ impl FpgaState {
 
     #[must_use]
     pub const fn is_pattern_stopped(self) -> bool {
-        self.0 & (1 << BIT_PATTERN_STOPPED) != 0
+        self.0 & (1 << FPGA_STATE_BIT_PATTERN_STOPPED) != 0
     }
 
     #[must_use]
     pub const fn is_mod_stopped(self) -> bool {
-        self.0 & (1 << BIT_MOD_STOPPED) != 0
+        self.0 & (1 << FPGA_STATE_BIT_MOD_STOPPED) != 0
     }
 
     #[must_use]
     pub const fn is_transition_pending(self) -> bool {
-        self.0 & (1 << BIT_TRANSITION_PENDING) != 0
+        self.0 & (1 << FPGA_STATE_BIT_TRANSITION_PENDING) != 0
     }
 
     #[must_use]
     pub const fn reads_enabled(self) -> bool {
-        self.0 & (1 << BIT_READS_ENABLED) != 0
+        self.0 & (1 << FPGA_STATE_BIT_READS_ENABLED) != 0
     }
 }
 

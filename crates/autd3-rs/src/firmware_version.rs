@@ -1,6 +1,6 @@
 use core::fmt;
 
-const EMULATOR_BIT: u8 = 7;
+use autd3_cpu_wire::params::FUNC_EMULATOR_BIT;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Version {
@@ -38,7 +38,7 @@ pub struct FirmwareVersion {
 impl FirmwareVersion {
     #[must_use]
     pub const fn is_emulator(&self) -> bool {
-        self.function_bits & (1 << EMULATOR_BIT) != 0
+        self.function_bits & (1 << FUNC_EMULATOR_BIT) != 0
     }
 }
 
