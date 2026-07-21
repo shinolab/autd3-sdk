@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::params::NUM_BANKS;
 
 pub const SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY: u16 = 10;
@@ -8,13 +9,6 @@ pub const FREQ_DIV_NO_LIMIT: u16 = 0xFFFF;
 pub enum SilencerAxis {
     Intensity,
     Phase,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SilencerViolation {
-    pub axis: SilencerAxis,
-    pub completion_steps: u16,
-    pub sampling_div: u16,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,73 +36,80 @@ impl SilencerGuardState {
         }
     }
 
-    pub fn check_mod_div(&self, div: u16) -> Result<(), SilencerViolation> {
+    pub fn check_mod_div(&self, device: usize, div: u16) -> Result<(), Error> {
         if self.strict_mode && div < self.completion_intensity {
-            return Err(SilencerViolation {
-                axis: SilencerAxis::Intensity,
-                completion_steps: self.completion_intensity,
-                sampling_div: div,
-            });
+            return Err(violation(
+                device,
+                SilencerAxis::Intensity,
+                self.completion_intensity,
+                div,
+            ));
         }
         Ok(())
     }
 
-    pub fn check_pattern_div(&self, div: u16) -> Result<(), SilencerViolation> {
+    pub fn check_pattern_div(&self, device: usize, div: u16) -> Result<(), Error> {
         if !self.strict_mode {
             return Ok(());
         }
         if div < self.completion_intensity {
-            return Err(SilencerViolation {
-                axis: SilencerAxis::Intensity,
-                completion_steps: self.completion_intensity,
-                sampling_div: div,
-            });
+            return Err(violation(
+                device,
+                SilencerAxis::Intensity,
+                self.completion_intensity,
+                div,
+            ));
         }
         if div < self.completion_phase {
-            return Err(SilencerViolation {
-                axis: SilencerAxis::Phase,
-                completion_steps: self.completion_phase,
-                sampling_div: div,
-            });
+            return Err(violation(
+                device,
+                SilencerAxis::Phase,
+                self.completion_phase,
+                div,
+            ));
         }
         Ok(())
     }
 
-    pub fn check_mod_bank(&self, bank: u8) -> Result<(), SilencerViolation> {
-        self.check_mod_div(self.mod_freq_div[usize::from(bank)])
+    pub fn check_mod_bank(&self, device: usize, bank: u8) -> Result<(), Error> {
+        self.check_mod_div(device, self.mod_freq_div[usize::from(bank)])
     }
 
-    pub fn check_pattern_bank(&self, bank: u8) -> Result<(), SilencerViolation> {
-        self.check_pattern_div(self.pattern_freq_div[usize::from(bank)])
+    pub fn check_pattern_bank(&self, device: usize, bank: u8) -> Result<(), Error> {
+        self.check_pattern_div(device, self.pattern_freq_div[usize::from(bank)])
     }
 
     pub fn check_set_strict(
         &self,
+        device: usize,
         completion_intensity: u16,
         completion_phase: u16,
-    ) -> Result<(), SilencerViolation> {
+    ) -> Result<(), Error> {
         let mod_div = self.mod_freq_div[usize::from(self.mod_bank)];
         let pattern_div = self.pattern_freq_div[usize::from(self.pattern_bank)];
         if mod_div < completion_intensity {
-            return Err(SilencerViolation {
-                axis: SilencerAxis::Intensity,
-                completion_steps: completion_intensity,
-                sampling_div: mod_div,
-            });
+            return Err(violation(
+                device,
+                SilencerAxis::Intensity,
+                completion_intensity,
+                mod_div,
+            ));
         }
         if pattern_div < completion_intensity {
-            return Err(SilencerViolation {
-                axis: SilencerAxis::Intensity,
-                completion_steps: completion_intensity,
-                sampling_div: pattern_div,
-            });
+            return Err(violation(
+                device,
+                SilencerAxis::Intensity,
+                completion_intensity,
+                pattern_div,
+            ));
         }
         if pattern_div < completion_phase {
-            return Err(SilencerViolation {
-                axis: SilencerAxis::Phase,
-                completion_steps: completion_phase,
-                sampling_div: pattern_div,
-            });
+            return Err(violation(
+                device,
+                SilencerAxis::Phase,
+                completion_phase,
+                pattern_div,
+            ));
         }
         Ok(())
     }
@@ -145,6 +146,15 @@ impl SilencerGuardState {
     }
 }
 
+fn violation(device: usize, axis: SilencerAxis, completion_steps: u16, sampling_div: u16) -> Error {
+    Error::SilencerConstraint {
+        device,
+        axis,
+        completion_steps,
+        sampling_div,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,52 +175,60 @@ mod tests {
     fn non_strict_never_violates() {
         let mut g = SilencerGuardState::boot_default();
         g.apply_completion(256, 256, false);
-        assert!(g.check_mod_div(1).is_ok());
-        assert!(g.check_pattern_div(1).is_ok());
+        assert!(g.check_mod_div(0, 1).is_ok());
+        assert!(g.check_pattern_div(0, 1).is_ok());
     }
 
     #[test]
     fn strict_mod_div_rejects_below_intensity() {
         let mut g = SilencerGuardState::boot_default();
         g.apply_completion(10, 40, true);
-        assert_eq!(
-            g.check_mod_div(9),
-            Err(SilencerViolation {
+        assert!(matches!(
+            g.check_mod_div(3, 9),
+            Err(Error::SilencerConstraint {
+                device: 3,
                 axis: SilencerAxis::Intensity,
                 completion_steps: 10,
                 sampling_div: 9,
             })
-        );
-        assert!(g.check_mod_div(10).is_ok(), "equal is allowed");
+        ));
+        assert!(g.check_mod_div(0, 10).is_ok(), "equal is allowed");
     }
 
     #[test]
     fn strict_pattern_div_checks_intensity_then_phase() {
         let mut g = SilencerGuardState::boot_default();
         g.apply_completion(10, 40, true);
-        assert_eq!(
-            g.check_pattern_div(9).map_err(|v| v.axis),
-            Err(SilencerAxis::Intensity)
-        );
-        assert_eq!(
-            g.check_pattern_div(20).map_err(|v| v.axis),
-            Err(SilencerAxis::Phase)
-        );
-        assert!(g.check_pattern_div(40).is_ok());
+        assert!(matches!(
+            g.check_pattern_div(0, 9),
+            Err(Error::SilencerConstraint {
+                axis: SilencerAxis::Intensity,
+                ..
+            })
+        ));
+        assert!(matches!(
+            g.check_pattern_div(0, 20),
+            Err(Error::SilencerConstraint {
+                axis: SilencerAxis::Phase,
+                ..
+            })
+        ));
+        assert!(g.check_pattern_div(0, 40).is_ok());
     }
 
     #[test]
     fn set_strict_checks_active_banks() {
         let mut g = SilencerGuardState::boot_default();
         g.note_mod_div(0, 5);
-        assert_eq!(
-            g.check_set_strict(8, 40),
-            Err(SilencerViolation {
+        assert!(matches!(
+            g.check_set_strict(1, 8, 40),
+            Err(Error::SilencerConstraint {
+                device: 1,
                 axis: SilencerAxis::Intensity,
                 completion_steps: 8,
                 sampling_div: 5,
             })
-        );
+        ));
     }
 
     #[test]
@@ -218,8 +236,8 @@ mod tests {
         let mut g = SilencerGuardState::boot_default();
         g.note_mod_div(1, 5);
         g.apply_completion(10, 40, true);
-        assert!(g.check_mod_bank(0).is_ok(), "bank 0 still no-limit");
-        assert!(g.check_mod_bank(1).is_err(), "bank 1 sampling too fast");
+        assert!(g.check_mod_bank(0, 0).is_ok(), "bank 0 still no-limit");
+        assert!(g.check_mod_bank(0, 1).is_err(), "bank 1 sampling too fast");
     }
 
     #[test]
@@ -227,6 +245,6 @@ mod tests {
         let mut g = SilencerGuardState::boot_default();
         g.apply_completion(10, 40, true);
         g.release();
-        assert!(g.check_mod_div(1).is_ok());
+        assert!(g.check_mod_div(0, 1).is_ok());
     }
 }

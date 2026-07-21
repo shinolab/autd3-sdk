@@ -13,7 +13,7 @@ use crate::value::{
     ControlPoints, Emission, LoopBehavior, PatternBank, SamplingConfig, TransitionMode,
 };
 
-use super::{Distribution, Operation, silencer_constraint, transition_constraint};
+use super::{Distribution, Operation};
 
 pub(crate) const PATTERN_FUSED_HEADER_BYTES: usize =
     core::mem::size_of::<WritePatternFusedPayload>();
@@ -52,18 +52,14 @@ fn reflect_fused(
 ) -> Result<(), Error> {
     let divider = config.divide()?;
     let bank = bank.as_u8();
-    if let Err(v) = state.silencer.check_pattern_div(divider) {
-        return Err(silencer_constraint(device, v));
-    }
+    state.silencer.check_pattern_div(device, divider)?;
     state.silencer.note_pattern_div(bank, divider);
     state.transition.note_pattern_loop(bank, loop_behavior);
 
-    if let Err(v) = state.silencer.check_pattern_bank(bank) {
-        return Err(silencer_constraint(device, v));
-    }
-    if let Err(v) = state.transition.check_pattern_bank(bank, transition_mode) {
-        return Err(transition_constraint(device, v));
-    }
+    state.silencer.check_pattern_bank(device, bank)?;
+    state
+        .transition
+        .check_pattern_bank(device, bank, transition_mode)?;
     state.silencer.note_pattern_bank(bank);
     Ok(())
 }

@@ -2,6 +2,7 @@ pub mod commands;
 pub mod error;
 pub mod firmware_version;
 pub mod fpga_state;
+pub mod mirror;
 pub mod telemetry;
 pub mod tuning;
 
@@ -9,7 +10,7 @@ mod client;
 mod datagram;
 mod response;
 
-pub use autd3_rs_core::{common, geometry, link, mirror, params, protocol, units, value};
+pub use autd3_rs_core::{common, geometry, link, params, protocol, units, value};
 pub use error::{Error, PayloadError};
 
 pub use autd3_rs_core::value::{ControlPoint, ControlPoints, PulseWidth, PulseWidthError};

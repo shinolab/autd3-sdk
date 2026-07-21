@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::params::NUM_BANKS;
 use crate::value::{LoopBehavior, TransitionMode};
 
@@ -36,12 +37,6 @@ impl BankLoop {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TransitionViolation {
-    pub transition_mode: TransitionMode,
-    pub bank_loop: BankLoop,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TransitionGuardState {
     pub mod_loop: [BankLoop; NUM_BANKS],
     pub pattern_loop: [BankLoop; NUM_BANKS],
@@ -66,26 +61,29 @@ impl TransitionGuardState {
 
     pub fn check_mod_bank(
         &self,
+        device: usize,
         bank: u8,
         mode: TransitionMode,
-    ) -> Result<(), TransitionViolation> {
-        check(self.mod_loop[usize::from(bank)], mode)
+    ) -> Result<(), Error> {
+        check(device, self.mod_loop[usize::from(bank)], mode)
     }
 
     pub fn check_pattern_bank(
         &self,
+        device: usize,
         bank: u8,
         mode: TransitionMode,
-    ) -> Result<(), TransitionViolation> {
-        check(self.pattern_loop[usize::from(bank)], mode)
+    ) -> Result<(), Error> {
+        check(device, self.pattern_loop[usize::from(bank)], mode)
     }
 }
 
-fn check(bank_loop: BankLoop, mode: TransitionMode) -> Result<(), TransitionViolation> {
+fn check(device: usize, bank_loop: BankLoop, mode: TransitionMode) -> Result<(), Error> {
     if bank_loop.accepts(mode) {
         Ok(())
     } else {
-        Err(TransitionViolation {
+        Err(Error::TransitionConstraint {
+            device,
             transition_mode: mode,
             bank_loop,
         })
@@ -137,15 +135,16 @@ mod tests {
         let mut g = TransitionGuardState::boot_default();
         g.note_mod_loop(1, LoopBehavior::Finite(NonZeroU16::new(5).unwrap()));
 
-        assert!(g.check_mod_bank(0, TransitionMode::Immediate).is_ok());
-        assert_eq!(
-            g.check_mod_bank(1, TransitionMode::Immediate),
-            Err(TransitionViolation {
+        assert!(g.check_mod_bank(0, 0, TransitionMode::Immediate).is_ok());
+        assert!(matches!(
+            g.check_mod_bank(2, 1, TransitionMode::Immediate),
+            Err(Error::TransitionConstraint {
+                device: 2,
                 transition_mode: TransitionMode::Immediate,
                 bank_loop: BankLoop::Finite,
             })
-        );
-        assert!(g.check_mod_bank(1, TransitionMode::SyncIdx).is_ok());
+        ));
+        assert!(g.check_mod_bank(0, 1, TransitionMode::SyncIdx).is_ok());
     }
 
     #[test]
@@ -155,11 +154,11 @@ mod tests {
         g.note_pattern_loop(1, INFINITE);
 
         assert!(
-            g.check_pattern_bank(0, TransitionMode::Gpio(GpioIn::I1))
+            g.check_pattern_bank(0, 0, TransitionMode::Gpio(GpioIn::I1))
                 .is_ok()
         );
-        assert!(g.check_pattern_bank(0, TransitionMode::Ext).is_err());
-        assert!(g.check_pattern_bank(1, TransitionMode::Ext).is_ok());
-        assert!(g.check_pattern_bank(1, TransitionMode::SyncIdx).is_err());
+        assert!(g.check_pattern_bank(0, 0, TransitionMode::Ext).is_err());
+        assert!(g.check_pattern_bank(0, 1, TransitionMode::Ext).is_ok());
+        assert!(g.check_pattern_bank(0, 1, TransitionMode::SyncIdx).is_err());
     }
 }

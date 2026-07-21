@@ -3,9 +3,9 @@ mod transition;
 
 pub use silencer::{
     FREQ_DIV_NO_LIMIT, SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY,
-    SILENCER_DEFAULT_COMPLETION_STEPS_PHASE, SilencerAxis, SilencerGuardState, SilencerViolation,
+    SILENCER_DEFAULT_COMPLETION_STEPS_PHASE, SilencerAxis, SilencerGuardState,
 };
-pub use transition::{BankLoop, TransitionGuardState, TransitionViolation};
+pub use transition::{BankLoop, TransitionGuardState};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FirmwareState {
