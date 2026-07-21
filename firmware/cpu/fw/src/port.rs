@@ -5,8 +5,6 @@ pub trait Port {
 
     fn memory_barrier(&mut self);
 
-    fn sleep_ms(&mut self, ms: u16);
-
     fn next_sync0(&mut self) -> u64;
 
     fn dc_sys_time(&mut self) -> u64;

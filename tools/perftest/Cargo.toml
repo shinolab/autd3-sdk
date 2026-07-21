@@ -7,7 +7,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 publish = false
-description = "CLI tool for measuring EtherCAT-link performance using the XorHash command."
+description = "CLI tool for measuring EtherCAT-link performance."
 
 [[bin]]
 name = "autd3-rs-perftest"

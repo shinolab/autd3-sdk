@@ -32,7 +32,6 @@ crate::wire_enum! {
         ReadFpgaState = 0xE7,
         ReadTelemetry = 0xE8,
         ReadFpgaFunctions = 0xE9,
-        XorHash = 0xF0,
     }
 }
 

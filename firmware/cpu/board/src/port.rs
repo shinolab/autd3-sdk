@@ -2,7 +2,6 @@ use core::arch::asm;
 
 use autd3_cpu_fw::Port;
 
-use crate::bsp;
 use crate::regs::{
     ECATC_AL_STATUS_CODE, ECATC_DC_CYC_START_TIME_HI, ECATC_DC_CYC_START_TIME_LO,
     ECATC_DC_SYNC0_CYC_TIME, ECATC_DC_SYS_TIME_HI, ECATC_DC_SYS_TIME_LO, read16, read32,
@@ -42,10 +41,6 @@ impl Port for HwPort {
 
     fn memory_barrier(&mut self) {
         unsafe { asm!("dmb", options(nostack, preserves_flags)) };
-    }
-
-    fn sleep_ms(&mut self, ms: u16) {
-        bsp::timer::delay_ms(ms);
     }
 
     fn next_sync0(&mut self) -> u64 {

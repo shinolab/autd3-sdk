@@ -37,7 +37,6 @@ impl Port for NullPort {
         0
     }
     fn memory_barrier(&mut self) {}
-    fn sleep_ms(&mut self, _ms: u16) {}
     fn next_sync0(&mut self) -> u64 {
         0
     }
@@ -60,7 +59,6 @@ pub(crate) struct MockPort {
     pub mod_ram: Vec<Vec<u16>>,
     pub em_ram: Vec<Vec<u16>>,
     pub latch_count: [u32; 16],
-    pub total_sleep_ms: u32,
     pub next_sync0: u64,
     pub dc_sys_time: u64,
     pub sync0_cycle_ns: u32,
@@ -79,7 +77,6 @@ impl MockPort {
             mod_ram: vec![vec![0; MOD_RAM_WORDS]; NUM_BANKS],
             em_ram: vec![vec![0; EM_RAM_WORDS]; NUM_BANKS],
             latch_count: [0; 16],
-            total_sleep_ms: 0,
             next_sync0: 0,
             dc_sys_time: 0,
             sync0_cycle_ns: 1_000_000,
@@ -120,10 +117,21 @@ impl MockPort {
             _ => {}
         }
     }
+
+    fn fire_isr_frame(&mut self) {
+        let Some((cpu, seq, cmd)) = self.isr_frame.take() else {
+            return;
+        };
+        let mut wire = [0u8; WIRE_RX_FRAME_BYTES];
+        wire[0] = seq;
+        wire[1] = cmd;
+        cpu.recv_ethercat(&mut NullPort, &wire);
+    }
 }
 
 impl Port for MockPort {
     fn fpga_write(&mut self, addr: u16, value: u16) {
+        self.fire_isr_frame();
         let select = ((addr >> 14) & 0x3) as u8;
         let a = addr & 0x3FFF;
         match select {
@@ -153,18 +161,6 @@ impl Port for MockPort {
     }
 
     fn memory_barrier(&mut self) {}
-
-    fn sleep_ms(&mut self, ms: u16) {
-        self.total_sleep_ms += u32::from(ms);
-
-        let Some((cpu, seq, cmd)) = self.isr_frame.take() else {
-            return;
-        };
-        let mut wire = [0u8; WIRE_RX_FRAME_BYTES];
-        wire[0] = seq;
-        wire[1] = cmd;
-        cpu.recv_ethercat(&mut NullPort, &wire);
-    }
 
     fn next_sync0(&mut self) -> u64 {
         self.next_sync0

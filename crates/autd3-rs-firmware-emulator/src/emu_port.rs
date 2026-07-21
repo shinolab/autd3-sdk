@@ -12,8 +12,6 @@ impl Port for FpgaEmulator {
 
     fn memory_barrier(&mut self) {}
 
-    fn sleep_ms(&mut self, _ms: u16) {}
-
     fn next_sync0(&mut self) -> u64 {
         FpgaEmulator::next_sync0(self)
     }

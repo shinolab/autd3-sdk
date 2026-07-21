@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use autd3_rs::MAX_IN_FLIGHT;
-use autd3_rs::commands::XOR_HASH_MAX_DATA_LEN;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -110,10 +109,6 @@ pub struct Common {
         help = "Pipeline depth in streaming mode (maps to ClientConfig.max_inflight)."
     )]
     pub max_inflight: usize,
-    #[arg(long, default_value_t = XOR_HASH_MAX_DATA_LEN)]
-    pub data_len: usize,
-    #[arg(long, default_value_t = 0)]
-    pub sleep_ms: u16,
     #[arg(
         long,
         default_value_t = 10,
@@ -158,12 +153,6 @@ pub struct Common {
 
 impl Common {
     pub fn validate(&self) -> Result<(), String> {
-        if self.data_len > XOR_HASH_MAX_DATA_LEN {
-            return Err(format!(
-                "--data-len {} exceeds XOR_HASH_MAX_DATA_LEN ({XOR_HASH_MAX_DATA_LEN})",
-                self.data_len,
-            ));
-        }
         if self.mode == Mode::Streaming
             && (self.max_inflight == 0 || self.max_inflight > MAX_IN_FLIGHT)
         {

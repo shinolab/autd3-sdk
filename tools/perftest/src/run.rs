@@ -5,19 +5,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use autd3_rs::commands::XorHashCmd;
+use autd3_rs::commands::{ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::TX_FRAME_BYTES;
+use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
-    Client, ClientConfig, CoreId, Error as ClientError, IntoLink, Link, LinkStats, ResponseFuture,
-    RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
+    Client, ClientConfig, CoreId, Error as ClientError, Frames, IntoLink, Link, LinkStats,
+    ResponseFuture, RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
 };
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 
 use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
 use autd3_rs_link_twincat::{TwinCATLink, TwinCATLinkOption};
 
-use crate::cli::{Cli, LinkKind, Mode, RtPolicy};
+use crate::cli::{Cli, Command, LinkKind, Mode, RtPolicy};
 use crate::mem::{self, MemProfile};
 use crate::nop::PacedNop;
 use crate::stats::{Sample, SampleStatus};
@@ -27,12 +28,139 @@ const STATE_CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
 pub struct RunOutput {
     pub samples: Vec<Sample>,
+    pub sends: u64,
+    pub stopped_on_error: Option<(u64, SampleStatus)>,
     pub warmup: u64,
     pub elapsed: Duration,
     pub frame_bytes: usize,
     pub stale_cycles: u64,
     pub lost_cycles: u64,
     pub mem: Option<MemProfile>,
+}
+
+struct Sender {
+    command: Command,
+    frames: Frames,
+    emissions: Vec<Vec<Emission>>,
+    tick: u8,
+}
+
+impl Sender {
+    fn new(client: &Client, geometry: &Geometry, cli: &Cli) -> Result<Self> {
+        let mut sender = Self {
+            command: cli.command,
+            frames: Frames::default(),
+            emissions: if cli.command.is_pattern() {
+                geometry.pattern_buffer()
+            } else {
+                Vec::new()
+            },
+            tick: 0,
+        };
+        if cli.command == Command::Nop {
+            let mut builder = client.datagram_builder();
+            builder.push(Nop);
+            builder
+                .build_into(&mut sender.frames)
+                .context("building Nop frame")?;
+        }
+        Ok(sender)
+    }
+
+    fn prepare(&mut self, client: &Client) -> Result<()> {
+        if self.command == Command::Nop {
+            return Ok(());
+        }
+        fill_emissions(&mut self.emissions, self.tick);
+        self.tick = self.tick.wrapping_add(1);
+
+        let mut builder = client.datagram_builder();
+        if self.command == Command::Pattern {
+            builder.push(Pattern::with_bank(PatternBank::B0, &self.emissions));
+        } else {
+            builder.push(WritePatternBuffer {
+                bank: PatternBank::B0,
+                index: 0,
+                emissions: &self.emissions,
+            });
+        }
+        builder
+            .build_into(&mut self.frames)
+            .context("encoding pattern write")?;
+        Ok(())
+    }
+}
+
+fn fill_emissions(emissions: &mut [Vec<Emission>], tick: u8) {
+    for device in emissions {
+        let mut phase = tick;
+        for e in device.iter_mut() {
+            e.phase = Phase(phase);
+            e.intensity = Intensity::MIN;
+            phase = phase.wrapping_add(1);
+        }
+    }
+}
+
+async fn send_config_pattern_once(client: &Client) -> Result<()> {
+    let mut builder = client.datagram_builder();
+    builder.push(ConfigPattern {
+        bank: PatternBank::B0,
+        config: SamplingConfig::FREQ_4K,
+        size: 1,
+        loop_behavior: LoopBehavior::Infinite,
+    });
+    for frame in &builder.build()? {
+        client.send_checked(frame).await?;
+    }
+    Ok(())
+}
+
+async fn send_set_gpio_out_once(client: &Client) -> Result<()> {
+    let mut builder = client.datagram_builder();
+    builder.push(SetGpioOut {
+        outputs: [
+            GpioOut::BaseSignal,
+            GpioOut::Off,
+            GpioOut::Off,
+            GpioOut::Off,
+        ],
+    });
+    for frame in &builder.build()? {
+        client.send_checked(frame).await?;
+    }
+    Ok(())
+}
+
+struct Recorder {
+    samples: Vec<Sample>,
+    limit: Option<u64>,
+    sends: u64,
+}
+
+impl Recorder {
+    fn new(cli: &Cli) -> Self {
+        let limit = (cli.max_samples != 0).then_some(cli.max_samples);
+        let cap = match (estimate_capacity(cli), limit) {
+            (n, Some(limit)) => n.min(usize::try_from(limit).unwrap_or(usize::MAX)),
+            (n, None) => n,
+        };
+        Self {
+            samples: Vec::with_capacity(cap),
+            limit,
+            sends: 0,
+        }
+    }
+
+    fn push(&mut self, sample: Sample) {
+        self.sends += 1;
+        if self
+            .limit
+            .is_none_or(|limit| (self.samples.len() as u64) < limit)
+        {
+            self.samples.push(sample);
+        }
+    }
 }
 
 struct StateCheckGuard {
@@ -177,18 +305,27 @@ async fn run_with_link<T: IntoLink>(
         eprintln!("device[{i}] firmware version: {fw}");
     }
 
+    if cli.command.is_pattern() {
+        send_config_pattern_once(&client)
+            .await
+            .context("initial ConfigPattern")?;
+    }
+    if cli.gpio_base_signal {
+        send_set_gpio_out_once(&client)
+            .await
+            .context("initial SetGpioOut")?;
+        eprintln!("GPIO[0]: BaseSignal (probe it to check inter-device sync)");
+    }
+
     let shutdown = Arc::new(AtomicBool::new(false));
     spawn_signal_listener(Arc::clone(&shutdown));
 
-    let xor_cmd = XorHashCmd {
-        sleep_ms: cli.sleep_ms,
-        data: build_zero_xor_data(cli.data_len),
-    };
+    let sender = Sender::new(&client, &geometry, cli)?;
 
     let output = match cli.mode {
-        Mode::StopAndWait => run_stop_and_wait(&client, cli, &xor_cmd, shutdown, &link_stats).await,
+        Mode::StopAndWait => run_stop_and_wait(&client, cli, sender, shutdown, &link_stats).await,
         Mode::Streaming => {
-            run_streaming(&client, cli, &xor_cmd, shutdown, max_inflight, &link_stats).await
+            run_streaming(&client, cli, sender, shutdown, max_inflight, &link_stats).await
         }
     };
 
@@ -200,22 +337,16 @@ async fn run_with_link<T: IntoLink>(
 async fn run_stop_and_wait(
     client: &Client,
     cli: &Cli,
-    xor_cmd: &XorHashCmd,
+    mut sender: Sender,
     shutdown: Arc<AtomicBool>,
     link_stats: &LinkStats,
 ) -> Result<RunOutput> {
-    let datagrams = client
-        .datagram_builder()
-        .push(xor_cmd)
-        .build()
-        .context("building XorHash frame")?;
-
-    let cap = estimate_capacity(cli);
-    let mut samples = Vec::with_capacity(cap);
+    let mut recorded = Recorder::new(cli);
     let mut index: u64 = 0;
+    let mut stopped_on_error = None;
     let mut progress = Progress::new(cli);
 
-    let recorder = mem::start();
+    let mem_recorder = mem::start();
     let start = Instant::now();
     loop {
         if shutdown.load(Ordering::Relaxed) {
@@ -232,9 +363,10 @@ async fn run_stop_and_wait(
             break;
         }
 
+        sender.prepare(client)?;
         let t0 = Instant::now();
         let res = client
-            .send_checked(datagrams.frame(0).expect("one frame"))
+            .send_checked(sender.frames.frame(0).expect("one frame"))
             .await;
         let rtt = t0.elapsed();
 
@@ -264,16 +396,22 @@ async fn run_stop_and_wait(
             }
         };
 
-        samples.push(Sample { index, rtt, status });
-        index += 1;
+        recorded.push(Sample { index, rtt, status });
         progress.observe(status, start.elapsed());
+        if cli.stop_on_error && status != SampleStatus::Ok {
+            stopped_on_error = Some((index, status));
+            break;
+        }
+        index += 1;
     }
 
     progress.finish();
 
-    let mem = mem::profile(recorder, samples.len() as u64);
+    let mem = mem::profile(mem_recorder, recorded.sends);
     Ok(RunOutput {
-        samples,
+        samples: recorded.samples,
+        sends: recorded.sends,
+        stopped_on_error,
         warmup: cli.warmup,
         elapsed: start.elapsed(),
         frame_bytes: TX_FRAME_BYTES,
@@ -286,25 +424,19 @@ async fn run_stop_and_wait(
 async fn run_streaming(
     client: &Client,
     cli: &Cli,
-    xor_cmd: &XorHashCmd,
+    mut sender: Sender,
     shutdown: Arc<AtomicBool>,
     max_inflight: usize,
     link_stats: &LinkStats,
 ) -> Result<RunOutput> {
-    let datagrams = client
-        .datagram_builder()
-        .push(xor_cmd)
-        .build()
-        .context("building XorHash frame")?;
-
-    let cap = estimate_capacity(cli);
-    let mut samples: Vec<Sample> = Vec::with_capacity(cap);
+    let mut recorded = Recorder::new(cli);
     let mut pending: VecDeque<PendingFuture> = VecDeque::with_capacity(max_inflight);
     let mut sends_issued: u64 = 0;
     let mut sample_index: u64 = 0;
+    let mut stopped_on_error = None;
     let mut progress = Progress::new(cli);
 
-    let recorder = mem::start();
+    let mem_recorder = mem::start();
     let start = Instant::now();
     loop {
         if shutdown.load(Ordering::Relaxed) {
@@ -313,8 +445,11 @@ async fn run_streaming(
         let need_send = streaming_need_send(cli, sends_issued, start);
 
         if need_send && pending.len() < max_inflight {
+            sender.prepare(client)?;
             let sent_at = Instant::now();
-            let fut = client.send(datagrams.frame(0).expect("one frame")).await?;
+            let fut = client
+                .send(sender.frames.frame(0).expect("one frame"))
+                .await?;
             pending.push_back(PendingFuture { sent_at, fut });
             sends_issued += 1;
             continue;
@@ -355,20 +490,26 @@ async fn run_streaming(
                 SampleStatus::LinkError
             }
         };
-        samples.push(Sample {
+        recorded.push(Sample {
             index: sample_index,
             rtt,
             status,
         });
-        sample_index += 1;
         progress.observe(status, start.elapsed());
+        if cli.stop_on_error && status != SampleStatus::Ok {
+            stopped_on_error = Some((sample_index, status));
+            break;
+        }
+        sample_index += 1;
     }
 
     progress.finish();
 
-    let mem = mem::profile(recorder, samples.len() as u64);
+    let mem = mem::profile(mem_recorder, recorded.sends);
     Ok(RunOutput {
-        samples,
+        samples: recorded.samples,
+        sends: recorded.sends,
+        stopped_on_error,
         warmup: cli.warmup,
         elapsed: start.elapsed(),
         frame_bytes: TX_FRAME_BYTES,
@@ -494,16 +635,6 @@ impl Progress {
 fn sync0_shift(period: Duration, shift_percent: u8) -> Duration {
     let nanos = period.as_nanos() * u128::from(shift_percent) / 100;
     Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
-}
-
-fn build_zero_xor_data(len: usize) -> Vec<u8> {
-    if len == 0 {
-        return Vec::new();
-    }
-    let mut data = vec![0xA5u8; len];
-    let acc = data[..len - 1].iter().fold(0u8, |acc, b| acc ^ *b);
-    data[len - 1] = acc;
-    data
 }
 
 fn spawn_signal_listener(flag: Arc<AtomicBool>) {

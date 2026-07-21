@@ -9,7 +9,7 @@ use crate::util::{on_path, run, run_built_bin};
 
 #[derive(Subcommand)]
 pub enum ToolCmd {
-    /// Measure the EtherCAT link performance with the XorHash command
+    /// Measure the EtherCAT link performance
     Perftest {
         /// Build the dev profile instead of release
         #[arg(long)]
@@ -20,18 +20,6 @@ pub enum ToolCmd {
         /// Enable the `mem-profile` feature (allocation size histogram)
         #[arg(long)]
         mem_profile: bool,
-        /// Arguments forwarded to the tool
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-    /// Soak-test frame reception by streaming WritePatternBuffer at the CPU board
-    Patternsoak {
-        /// Build the dev profile instead of release
-        #[arg(long)]
-        debug: bool,
-        /// Do not wrap the run in `sudo`
-        #[arg(long)]
-        no_sudo: bool,
         /// Arguments forwarded to the tool
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -121,11 +109,6 @@ pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
             let features: &[&str] = if mem_profile { &["mem-profile"] } else { &[] };
             run_bin(root, "autd3-rs-perftest", debug, no_sudo, features, &args)
         }
-        ToolCmd::Patternsoak {
-            debug,
-            no_sudo,
-            args,
-        } => run_bin(root, "autd3-rs-patternsoak", debug, no_sudo, &[], &args),
         ToolCmd::Synctune {
             debug,
             no_sudo,

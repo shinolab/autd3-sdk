@@ -11,8 +11,7 @@ pub use operation::{
     Distribution, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, ForceFan, GpioOut, Nop,
     Operation, PWE_TABLE_SIZE, PatternCompression, SetGpioOut, SetOutputMask, SetPhaseCorrection,
     SetPulseWidthTable, SetSilencer, SilencerConfig, Synchronize, WriteFociBuffer,
-    WriteModulationBuffer, WritePatternBuffer, WritePatternCompressed, XOR_HASH_MAX_DATA_LEN,
-    XorHashCmd,
+    WriteModulationBuffer, WritePatternBuffer, WritePatternCompressed,
 };
 pub use stm::{
     FociStm, FociStmOption, PatternStm, PatternStmMode, PatternStmOption, StmConfig, circle, line,

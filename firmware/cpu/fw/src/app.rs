@@ -295,7 +295,6 @@ impl Cpu {
     fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> u8 {
         let result = match cmd {
             Cmd::Reset | Cmd::Stop | Cmd::Nop => Ok(()),
-            Cmd::XorHash => cmd::xor_hash::handle(port, payload),
             Cmd::ReadCpuFwVersionMajor => return self.proto.fw_version_major.get(),
             Cmd::ReadCpuFwVersionMinor => return self.proto.fw_version_minor.get(),
             Cmd::ReadCpuFwVersionPatch => return self.proto.fw_version_patch.get(),

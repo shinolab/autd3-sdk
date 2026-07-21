@@ -18,7 +18,6 @@ mod write_modulation_fused;
 mod write_pattern_buffer;
 mod write_pattern_compressed;
 mod write_pattern_fused;
-mod xor_hash;
 
 pub use change_mod_bank::ChangeModulationBank;
 pub use change_pattern_bank::ChangePatternBank;
@@ -42,7 +41,6 @@ pub use write_pattern_compressed::{
     PATTERN_MAX_PER_FRAME, PatternCompression, WritePatternCompressed,
 };
 pub use write_pattern_fused::{WriteFociStmFused, WritePatternFused};
-pub use xor_hash::{XOR_HASH_MAX_DATA_LEN, XorHashCmd};
 
 pub use autd3_cpu_wire::layout::{
     MAX_FOCI_PER_FRAME, MOD_FUSED_MAX_DATA_LEN, PATTERN_FUSED_MAX_DATA_LEN,

@@ -5,8 +5,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use autd3_rs::commands::XorHashCmd;
+use autd3_rs::commands::{ConfigPattern, Pattern};
 use autd3_rs::geometry::{Autd3, Geometry};
+use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, Frames, Link, ResponseFuture,
     RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
@@ -133,7 +134,16 @@ async fn measure_with_link<L: Link>(
         })
     };
 
-    let load = run_load(&client, common, max_inflight, start, total, shutdown).await;
+    let load = run_load(
+        &client,
+        &geometry,
+        common,
+        max_inflight,
+        start,
+        total,
+        shutdown,
+    )
+    .await;
 
     let acc = monitor.await.expect("monitor task panicked");
     let _ = client.close().await;
@@ -171,21 +181,23 @@ fn client_config(common: &Common, max_inflight: usize) -> ClientConfig {
 
 async fn run_load(
     client: &Client,
+    geometry: &Geometry,
     common: &Common,
     max_inflight: usize,
     start: Instant,
     total: Duration,
     shutdown: &Arc<AtomicBool>,
 ) -> Result<LoadStats> {
-    let xor_cmd = XorHashCmd {
-        sleep_ms: common.sleep_ms,
-        data: build_zero_xor_data(common.data_len),
-    };
+    send_config_pattern_once(client)
+        .await
+        .context("initial ConfigPattern")?;
+    let mut emissions = geometry.pattern_buffer();
+    fill_emissions(&mut emissions);
     let frames = client
         .datagram_builder()
-        .push(&xor_cmd)
+        .push(Pattern::with_bank(PatternBank::B0, &emissions))
         .build()
-        .context("building XorHash frame")?;
+        .context("building Pattern frame")?;
 
     let warmup = common.warmup;
     match common.mode {
@@ -301,12 +313,27 @@ async fn load_streaming(
     Ok(acc.finish(start.elapsed()))
 }
 
-fn build_zero_xor_data(len: usize) -> Vec<u8> {
-    if len == 0 {
-        return Vec::new();
+async fn send_config_pattern_once(client: &Client) -> Result<()> {
+    let mut builder = client.datagram_builder();
+    builder.push(ConfigPattern {
+        bank: PatternBank::B0,
+        config: SamplingConfig::FREQ_4K,
+        size: 1,
+        loop_behavior: LoopBehavior::Infinite,
+    });
+    for frame in &builder.build()? {
+        client.send_checked(frame).await?;
     }
-    let mut data = vec![0xA5u8; len];
-    let acc = data[..len - 1].iter().fold(0u8, |acc, b| acc ^ *b);
-    data[len - 1] = acc;
-    data
+    Ok(())
+}
+
+fn fill_emissions(emissions: &mut [Vec<Emission>]) {
+    for device in emissions {
+        let mut phase = 0u8;
+        for e in device.iter_mut() {
+            e.phase = Phase(phase);
+            e.intensity = Intensity::MIN;
+            phase = phase.wrapping_add(1);
+        }
+    }
 }
