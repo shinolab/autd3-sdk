@@ -6,10 +6,12 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::error::Error;
 use crate::link::{CycleOutcome, Link};
-use crate::protocol::{
-    Cmd, MODE_LOW_LATENCY, RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame,
-};
+use crate::protocol::{Cmd, RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
 use crate::response::Response;
+
+use autd3_cpu_wire::Mode;
+use autd3_cpu_wire::payload::SetModePayload;
+use zerocopy::FromBytes;
 
 use autd3_rs_core::RtSchedulePolicy;
 
@@ -258,7 +260,8 @@ impl<L: Link> RtThread<L> {
 
     fn negotiate_low_latency(&mut self) -> Result<Seq, String> {
         let mut frame = TxFrame::new(Seq::ZERO, Cmd::SetMode);
-        frame.payload[0] = MODE_LOW_LATENCY;
+        let (p, _) = SetModePayload::mut_from_prefix(&mut frame.payload).unwrap();
+        p.mode = Mode::LowLatency.as_u8();
         for buf in &mut self.tx_bufs {
             frame.write_to(buf);
         }

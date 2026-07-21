@@ -11,6 +11,3 @@ pub use seq::Seq;
 pub use tx_frame::TxFrame;
 
 pub const MAX_IN_FLIGHT: usize = 127;
-
-pub const MODE_FIFO: u8 = autd3_cpu_wire::Mode::Fifo as u8;
-pub const MODE_LOW_LATENCY: u8 = autd3_cpu_wire::Mode::LowLatency as u8;
