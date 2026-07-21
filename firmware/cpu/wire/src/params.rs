@@ -5,6 +5,8 @@
 pub const NUM_TRANSDUCERS: usize = 249;
 pub const NUM_BANKS: usize = 2;
 pub const EMISSION_MAX_INDICES: u32 = 1024;
+pub const EMISSION_SLOT_WORDS: usize = 256;
+pub const FOCUS_WORDS: usize = 4;
 pub const NUM_FOCI_MAX: u8 = 8;
 pub const VERSION_NUM_MAJOR: u8 = 0x0;
 pub const VERSION_NUM_MINOR: u8 = 0x3;
@@ -36,3 +38,6 @@ pub const GPIO_O_TYPE_DIRECT: u8 = 0xF0;
 
 pub const MOD_BUFFER_SAMPLES: usize = 65536;
 pub const PWE_TABLE_SIZE: usize = 256;
+
+pub const FOCUS_TR_X_MAX: i32 = 6909;
+pub const FOCUS_TR_Y_MAX: i32 = 5283;

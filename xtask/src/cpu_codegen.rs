@@ -9,6 +9,7 @@ const PARAMS_SVH_REL: &str = "firmware/fpga/rtl/sources_1/new/headers/params.svh
 const FW_OUT_REL: &str = "firmware/cpu/fw/src/params.rs";
 const WIRE_OUT_REL: &str = "firmware/cpu/wire/src/params.rs";
 const IP_DIR_REL: &str = "firmware/fpga/rtl/sources_1/ip";
+const TR_COE_REL: &str = "firmware/fpga/coe/tr.coe";
 
 struct IpConst {
     name: &'static str,
@@ -54,7 +55,11 @@ struct Enum {
 }
 
 fn rust_type(name: &str) -> &'static str {
-    if name == "NUM_TRANSDUCERS" || name == "NUM_BANKS" {
+    if name == "NUM_TRANSDUCERS"
+        || name == "NUM_BANKS"
+        || name == "EMISSION_SLOT_WORDS"
+        || name == "FOCUS_WORDS"
+    {
         "usize"
     } else if name == "EMISSION_MAX_INDICES" {
         "u32"
@@ -295,6 +300,40 @@ fn emit_ip(out: &mut String, c: &Const) {
     let _ = writeln!(out, "pub const {}: usize = {};", c.name, c.value);
 }
 
+fn read_tr_bounds(root: &Path) -> Result<Vec<Const>> {
+    let path = root.join(TR_COE_REL);
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let vector = text
+        .split_once("memory_initialization_vector")
+        .map_or("", |(_, rest)| rest);
+    let mut x_max: u32 = 0;
+    let mut y_max: u32 = 0;
+    for tok in vector.split(|c: char| !c.is_ascii_hexdigit()) {
+        if tok.len() != 8 {
+            continue;
+        }
+        if let Ok(word) = u32::from_str_radix(tok, 16) {
+            x_max = x_max.max(word >> 16);
+            y_max = y_max.max(word & 0xFFFF);
+        }
+    }
+    Ok(vec![
+        Const {
+            name: "FOCUS_TR_X_MAX".to_string(),
+            value: x_max.to_string(),
+        },
+        Const {
+            name: "FOCUS_TR_Y_MAX".to_string(),
+            value: y_max.to_string(),
+        },
+    ])
+}
+
+fn emit_tr(out: &mut String, c: &Const) {
+    let _ = writeln!(out, "pub const {}: i32 = {};", c.name, c.value);
+}
+
 fn emit(out: &mut String, c: &Const) {
     let _ = writeln!(
         out,
@@ -315,7 +354,7 @@ fn emit_bit_mask(out: &mut String, c: &Const) {
     );
 }
 
-fn generate(text: &str, ip_consts: &[Const]) -> (String, String) {
+fn generate(text: &str, ip_consts: &[Const], tr_consts: &[Const]) -> (String, String) {
     let (consts, enums) = parse(text);
 
     let header = |src: &str, kind: &str| {
@@ -365,6 +404,12 @@ fn generate(text: &str, ip_consts: &[Const]) -> (String, String) {
             emit_ip(&mut wire, c);
         }
     }
+    if !tr_consts.is_empty() {
+        wire.push('\n');
+        for c in tr_consts {
+            emit_tr(&mut wire, c);
+        }
+    }
     (wire, fw)
 }
 
@@ -374,7 +419,8 @@ pub fn gen_param(root: &Path) -> Result<()> {
         .with_context(|| format!("failed to read {}", svh.display()))?;
 
     let ip_consts = read_ip_consts(root)?;
-    let (wire_src, fw_src) = generate(&text, &ip_consts);
+    let tr_consts = read_tr_bounds(root)?;
+    let (wire_src, fw_src) = generate(&text, &ip_consts, &tr_consts);
     for (rel, src) in [(WIRE_OUT_REL, wire_src), (FW_OUT_REL, fw_src)] {
         let out = root.join(rel);
         std::fs::write(&out, src).with_context(|| format!("failed to write {}", out.display()))?;

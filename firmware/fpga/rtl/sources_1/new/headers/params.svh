@@ -4,7 +4,9 @@ package params;
   localparam int NumBanks = 2;
 
   localparam int EmissionMaxIndices = 1024;
-  localparam int EmissionWrAddrWidth = $clog2(EmissionMaxIndices * 256);
+  localparam int EmissionSlotWords = 256;
+  localparam int FocusWords = 4;
+  localparam int EmissionWrAddrWidth = $clog2(EmissionMaxIndices * EmissionSlotWords);
   localparam int EmissionRdAddrWidth = $clog2(EmissionMaxIndices * 64);
   localparam int NumFociMax = 8;
 
