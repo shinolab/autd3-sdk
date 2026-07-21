@@ -32,18 +32,17 @@ impl<const N: usize> Operation for WriteFociBuffer<'_, N> {
     ) -> Result<Cmd, Error> {
         let total = self.points.len() * N;
         if total == 0 {
-            return Err(Error::InvalidPayload(PayloadError::FociEmpty));
+            return Err(PayloadError::FociEmpty.into());
         }
         let base = self.index_offset * N;
         let end = base + total;
         if end > MAX_FOCI_TOTAL {
-            return Err(Error::InvalidPayload(
-                PayloadError::FociWriteExceedsCapacity {
-                    offset: base,
-                    end,
-                    capacity: MAX_FOCI_TOTAL,
-                },
-            ));
+            return Err(PayloadError::FociWriteExceedsCapacity {
+                offset: base,
+                end,
+                capacity: MAX_FOCI_TOTAL,
+            }
+            .into());
         }
 
         let start = frame * MAX_FOCI_PER_FRAME;

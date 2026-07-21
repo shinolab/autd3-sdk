@@ -32,30 +32,27 @@ impl Operation for WritePatternBuffer<'_> {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         if device >= self.emissions.len() {
-            return Err(Error::InvalidPayload(
-                PayloadError::EmissionsDeviceOutOfRange {
-                    device,
-                    len: self.emissions.len(),
-                },
-            ));
+            return Err(PayloadError::EmissionsDeviceOutOfRange {
+                device,
+                len: self.emissions.len(),
+            }
+            .into());
         }
         if self.index >= EMISSION_MAX_INDICES {
-            return Err(Error::InvalidPayload(
-                PayloadError::PatternIndexOutOfRange {
-                    index: self.index,
-                    max: EMISSION_MAX_INDICES,
-                },
-            ));
+            return Err(PayloadError::PatternIndexOutOfRange {
+                index: self.index,
+                max: EMISSION_MAX_INDICES,
+            }
+            .into());
         }
         let emissions = &self.emissions[device];
         if emissions.len() != Autd3::NUM_TRANSDUCERS {
-            return Err(Error::InvalidPayload(
-                PayloadError::TransducerCountMismatch {
-                    device,
-                    got: emissions.len(),
-                    expected: Autd3::NUM_TRANSDUCERS,
-                },
-            ));
+            return Err(PayloadError::TransducerCountMismatch {
+                device,
+                got: emissions.len(),
+                expected: Autd3::NUM_TRANSDUCERS,
+            }
+            .into());
         }
         let offset =
             u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");

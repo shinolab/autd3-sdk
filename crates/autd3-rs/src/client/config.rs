@@ -43,9 +43,7 @@ impl Default for ClientConfig {
 impl ClientConfig {
     pub(super) fn validate(self) -> Result<Self, Error> {
         if self.max_inflight.get() > MAX_IN_FLIGHT {
-            return Err(Error::InvalidPayload(PayloadError::MaxInFlightTooLarge {
-                max: MAX_IN_FLIGHT,
-            }));
+            return Err(PayloadError::MaxInFlightTooLarge { max: MAX_IN_FLIGHT }.into());
         }
         Ok(self)
     }

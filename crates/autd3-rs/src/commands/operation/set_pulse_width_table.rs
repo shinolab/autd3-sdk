@@ -2,7 +2,7 @@ use autd3_cpu_wire::payload::PwePayload;
 use zerocopy::FromBytes;
 use zerocopy::little_endian::U16;
 
-use crate::error::{Error, PayloadError};
+use crate::error::Error;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PULSE_WIDTH_PERIOD, PulseWidth};
 
@@ -45,9 +45,7 @@ impl Operation for SetPulseWidthTable<'_> {
     ) -> Result<Cmd, Error> {
         let (p, _) = PwePayload::mut_from_prefix(&mut out[..]).unwrap();
         for (dst, &v) in p.table.iter_mut().zip(self.table.iter()) {
-            let pulse_width = v
-                .pulse_width()
-                .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))?;
+            let pulse_width = v.pulse_width()?;
             *dst = U16::new(pulse_width);
         }
         Ok(Cmd::SetPulseWidthTable)

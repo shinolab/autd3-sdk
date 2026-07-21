@@ -51,6 +51,15 @@ impl From<LinkError> for Error {
     }
 }
 
+impl<E> From<E> for Error
+where
+    E: Into<PayloadError>,
+{
+    fn from(value: E) -> Self {
+        Error::InvalidPayload(value.into())
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Error)]
 pub enum PayloadError {
     #[error("max_inflight must be <= {max}")]

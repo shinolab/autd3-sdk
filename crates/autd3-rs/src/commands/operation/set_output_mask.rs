@@ -24,20 +24,20 @@ impl Operation for SetOutputMask<'_> {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        let mask = self.masks.get(device).ok_or(Error::InvalidPayload(
-            PayloadError::EmissionsDeviceOutOfRange {
+        let mask = self
+            .masks
+            .get(device)
+            .ok_or(PayloadError::EmissionsDeviceOutOfRange {
                 device,
                 len: self.masks.len(),
-            },
-        ))?;
+            })?;
         if mask.len() != Autd3::NUM_TRANSDUCERS {
-            return Err(Error::InvalidPayload(
-                PayloadError::TransducerCountMismatch {
-                    device,
-                    got: mask.len(),
-                    expected: Autd3::NUM_TRANSDUCERS,
-                },
-            ));
+            return Err(PayloadError::TransducerCountMismatch {
+                device,
+                got: mask.len(),
+                expected: Autd3::NUM_TRANSDUCERS,
+            }
+            .into());
         }
         mask.chunks(8)
             .zip(out.iter_mut())

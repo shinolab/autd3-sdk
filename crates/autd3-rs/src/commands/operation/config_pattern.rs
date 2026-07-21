@@ -30,12 +30,6 @@ pub struct ConfigFociStm {
     pub loop_behavior: LoopBehavior,
 }
 
-fn divider_of(config: SamplingConfig) -> Result<u16, Error> {
-    config
-        .divide()
-        .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))
-}
-
 fn reflect_pattern(
     config: SamplingConfig,
     bank: PatternBank,
@@ -43,7 +37,7 @@ fn reflect_pattern(
     device: usize,
     state: &mut FirmwareState,
 ) -> Result<(), Error> {
-    let divider = divider_of(config)?;
+    let divider = config.divide()?;
     if let Err(v) = state.silencer.check_pattern_div(divider) {
         return Err(silencer_constraint(device, v));
     }
@@ -69,15 +63,16 @@ impl Operation for ConfigPattern {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        let divider = divider_of(self.config)?;
+        let divider = self.config.divide()?;
         if self.size == 0 {
-            return Err(Error::InvalidPayload(PayloadError::PatternSizeZero));
+            return Err(PayloadError::PatternSizeZero.into());
         }
         if self.size > EMISSION_MAX_INDICES {
-            return Err(Error::InvalidPayload(PayloadError::StmSizeOutOfRange {
+            return Err(PayloadError::StmSizeOutOfRange {
                 size: self.size,
                 max: EMISSION_MAX_INDICES,
-            }));
+            }
+            .into());
         }
         let size = u32::try_from(self.size).expect("bounded by capacity checks");
         let (p, _) = ConfigPatternPayload::mut_from_prefix(&mut out[..]).unwrap();
@@ -115,26 +110,28 @@ impl Operation for ConfigFociStm {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        let divider = divider_of(self.config)?;
+        let divider = self.config.divide()?;
         if self.size == 0 {
-            return Err(Error::InvalidPayload(PayloadError::PatternSizeZero));
+            return Err(PayloadError::PatternSizeZero.into());
         }
         if self.num_foci == 0 || self.num_foci > NUM_FOCI_MAX {
-            return Err(Error::InvalidPayload(PayloadError::NumFociOutOfRange {
+            return Err(PayloadError::NumFociOutOfRange {
                 num_foci: self.num_foci,
                 max: NUM_FOCI_MAX,
-            }));
+            }
+            .into());
         }
         if self.size > MAX_FOCI_TOTAL / usize::from(self.num_foci) {
-            return Err(Error::InvalidPayload(PayloadError::StmFociExceedCapacity {
+            return Err(PayloadError::StmFociExceedCapacity {
                 size: self.size,
                 num_foci: self.num_foci,
                 capacity: MAX_FOCI_TOTAL,
-            }));
+            }
+            .into());
         }
         let sound_speed = (self.sound_speed.m_s() * 64.0).round() as u16;
         if sound_speed == 0 {
-            return Err(Error::InvalidPayload(PayloadError::SoundSpeedZero));
+            return Err(PayloadError::SoundSpeedZero.into());
         }
         let size = u32::try_from(self.size).expect("bounded by capacity checks");
         let (p, _) = ConfigPatternPayload::mut_from_prefix(&mut out[..]).unwrap();

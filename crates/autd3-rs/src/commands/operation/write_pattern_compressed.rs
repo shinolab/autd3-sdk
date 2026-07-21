@@ -60,31 +60,28 @@ impl Operation for WritePatternCompressed<'_> {
         let count = self.count();
         let dev_len = self.patterns[0].map_or(0, <[_]>::len);
         if device >= dev_len {
-            return Err(Error::InvalidPayload(
-                PayloadError::EmissionsDeviceOutOfRange {
-                    device,
-                    len: dev_len,
-                },
-            ));
+            return Err(PayloadError::EmissionsDeviceOutOfRange {
+                device,
+                len: dev_len,
+            }
+            .into());
         }
         let last_index = self.index + count.max(1) - 1;
         if last_index >= EMISSION_MAX_INDICES {
-            return Err(Error::InvalidPayload(
-                PayloadError::PatternIndexOutOfRange {
-                    index: last_index,
-                    max: EMISSION_MAX_INDICES,
-                },
-            ));
+            return Err(PayloadError::PatternIndexOutOfRange {
+                index: last_index,
+                max: EMISSION_MAX_INDICES,
+            }
+            .into());
         }
         for pattern in self.patterns.iter().flatten() {
             if pattern[device].len() != Autd3::NUM_TRANSDUCERS {
-                return Err(Error::InvalidPayload(
-                    PayloadError::TransducerCountMismatch {
-                        device,
-                        got: pattern[device].len(),
-                        expected: Autd3::NUM_TRANSDUCERS,
-                    },
-                ));
+                return Err(PayloadError::TransducerCountMismatch {
+                    device,
+                    got: pattern[device].len(),
+                    expected: Autd3::NUM_TRANSDUCERS,
+                }
+                .into());
             }
         }
         let offset =
