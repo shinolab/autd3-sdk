@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
-use autd3_rs::{CycleOutcome, Geometry, IntoLink, Link, LinkError, RX_FRAME_BYTES, TX_FRAME_BYTES};
+use autd3_rs::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES};
+use autd3_rs::{CycleOutcome, Geometry, IntoLink, Link, LinkError};
 use autd3_rs_link_nop::Nop;
 
 type Emulator = <Nop as IntoLink>::Link;

@@ -7,9 +7,10 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use autd3_rs::commands::XorHashCmd;
 use autd3_rs::geometry::{Autd3, Geometry};
+use autd3_rs::protocol::TX_FRAME_BYTES;
 use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, IntoLink, Link, LinkStats, ResponseFuture,
-    RtSchedulePolicy, StateCheck, TX_FRAME_BYTES, ThreadPriority, ThreadPriorityValue,
+    RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
 };
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 
