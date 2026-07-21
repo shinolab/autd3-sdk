@@ -77,7 +77,7 @@ module swapchain (
 
   always_ff @(posedge CLK) begin
     if (UPDATE_SETTINGS) begin
-      if (REP[REQ_RD_BANK] == 16'hFFFF) begin
+      if (REP[REQ_RD_BANK] == params::RepInfinite) begin
         stop <= 1'b0;
         bank <= REQ_RD_BANK;
         idx_mode <= IDX_MODE_SYNC_IDX;

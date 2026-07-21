@@ -1,4 +1,4 @@
-pub const ULTRASOUND_FREQ_HZ: u32 = 40_000;
+pub use autd3_cpu_wire::params::{FPGA_CLK_FREQ_HZ, REP_INFINITE, ULTRASOUND_FREQ_HZ};
 
 pub const NUM_BANKS: usize = autd3_cpu_wire::params::NUM_BANKS;
 

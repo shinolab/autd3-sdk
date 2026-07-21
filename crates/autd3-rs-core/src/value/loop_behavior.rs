@@ -1,6 +1,6 @@
 use core::num::NonZeroU16;
 
-const REP_INFINITE: u16 = 0xFFFF;
+use crate::params::REP_INFINITE;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum LoopBehavior {

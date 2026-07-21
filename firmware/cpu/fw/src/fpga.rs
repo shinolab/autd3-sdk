@@ -1,4 +1,3 @@
-pub use crate::params::PWE_TABLE_SIZE;
 use crate::params::{
     ADDR_CTL_FLAG, ADDR_DEBUG_VALUE0_0, ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_MEM_WR_BANK,
     ADDR_MOD_MEM_WR_PAGE, ADDR_MOD_REP0, ADDR_MOD_REQ_RD_BANK, ADDR_MOD_TRANSITION_MODE,
@@ -13,6 +12,7 @@ use crate::params::{
     EMISSION_TYPE_RAW, NUM_BANKS, NUM_TRANSDUCERS, TRANSITION_MODE_EXT, TRANSITION_MODE_GPIO,
     TRANSITION_MODE_IMMEDIATE, TRANSITION_MODE_SYNC_IDX, TRANSITION_MODE_SYS_TIME,
 };
+pub use crate::params::{PWE_TABLE_SIZE, REP_INFINITE};
 use crate::port::Port;
 use crate::proto::{Error, Mode, OUTPUT_MASK_WORDS, wire_enum};
 
@@ -35,7 +35,6 @@ wire_enum! {
     }
 }
 
-pub const REP_INFINITE: u16 = 0xFFFF;
 pub const SYS_TIME_TRANSITION_MARGIN_NS: u64 = 10_000_000;
 
 #[must_use]
