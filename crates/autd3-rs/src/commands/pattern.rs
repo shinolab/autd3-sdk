@@ -1,6 +1,6 @@
 use super::Command;
+use crate::commands::operation::{ChangePatternBank, ConfigPattern, WritePatternBuffer};
 use crate::datagram::DatagramBuilder;
-use crate::operation::{ChangePatternBank, ConfigPattern, WritePatternBuffer};
 use crate::value::{Emission, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 use core::num::NonZeroU16;
 

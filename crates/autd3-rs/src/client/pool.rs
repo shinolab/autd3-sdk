@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use tokio::sync::Semaphore;
 
-use crate::operation::Distribution;
+use crate::commands::operation::Distribution;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 pub(super) struct Slot {

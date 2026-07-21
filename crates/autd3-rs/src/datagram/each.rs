@@ -1,6 +1,6 @@
+use crate::commands::operation::{Distribution, Nop, Operation};
 use crate::error::Error;
 use crate::mirror::FirmwareState;
-use crate::operation::{Distribution, Nop, Operation};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 pub(crate) fn each_slot_frames(devices: &[Vec<Box<dyn Operation + '_>>]) -> Vec<usize> {

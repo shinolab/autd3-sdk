@@ -1,8 +1,8 @@
 use std::sync::PoisonError;
 
-use crate::command::Command;
+use crate::commands::Command;
+use crate::commands::operation::Operation;
 use crate::error::Error;
-use crate::operation::Operation;
 
 use super::each::{EachOwned, each_reflect, each_slot_frames};
 use super::frame::Frames;

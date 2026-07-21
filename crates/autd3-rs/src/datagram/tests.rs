@@ -1,10 +1,10 @@
 use super::*;
-use crate::command::{Command, Pattern};
-use crate::error::Error;
-use crate::geometry::Autd3;
-use crate::operation::{
+use crate::commands::operation::{
     ConfigModulation, ConfigPattern, Distribution, Operation, WritePatternBuffer,
 };
+use crate::commands::{Command, Pattern};
+use crate::error::Error;
+use crate::geometry::Autd3;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Emission, LoopBehavior, ModulationBank, PatternBank, SamplingConfig};
 

@@ -1,11 +1,24 @@
 mod modulation;
+pub(crate) mod operation;
 mod pattern;
+pub(crate) mod stm;
 
 pub use modulation::Modulation;
 pub use pattern::Pattern;
 
+pub use operation::{
+    ChangeModulationBank, ChangePatternBank, Clear, ConfigFociStm, ConfigModulation, ConfigPattern,
+    Distribution, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, ForceFan, GpioOut, Nop,
+    Operation, PWE_TABLE_SIZE, PatternCompression, SetGpioOut, SetOutputMask, SetPhaseCorrection,
+    SetPulseWidthTable, SetSilencer, SilencerConfig, Synchronize, WriteFociBuffer,
+    WriteModulationBuffer, WritePatternBuffer, WritePatternCompressed, XOR_HASH_MAX_DATA_LEN,
+    XorHashCmd,
+};
+pub use stm::{
+    FociStm, FociStmOption, PatternStm, PatternStmMode, PatternStmOption, StmConfig, circle, line,
+};
+
 use crate::datagram::DatagramBuilder;
-use crate::operation::Operation;
 
 pub trait Command<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>);

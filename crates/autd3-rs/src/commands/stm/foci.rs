@@ -1,8 +1,8 @@
 use super::StmConfig;
 use crate::Velocity;
-use crate::command::Command;
+use crate::commands::Command;
+use crate::commands::operation::{ChangePatternBank, ConfigFociStm, WriteFociBuffer};
 use crate::datagram::DatagramBuilder;
-use crate::operation::{ChangePatternBank, ConfigFociStm, WriteFociBuffer};
 use crate::value::{ControlPoints, LoopBehavior, PatternBank, TransitionMode};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -78,8 +78,8 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::operation::MAX_FOCI_PER_FRAME;
     use crate::geometry::Point3;
-    use crate::operation::MAX_FOCI_PER_FRAME;
     use crate::protocol::Cmd;
     use crate::value::{Intensity, Phase, SamplingConfig};
     use core::num::NonZeroU16;

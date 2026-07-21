@@ -1,10 +1,10 @@
 use super::StmConfig;
-use crate::command::Command;
-use crate::datagram::DatagramBuilder;
-use crate::operation::{
+use crate::commands::Command;
+use crate::commands::operation::{
     ChangePatternBank, ConfigPattern, PATTERN_MAX_PER_FRAME, PatternCompression,
     WritePatternBuffer, WritePatternCompressed,
 };
+use crate::datagram::DatagramBuilder;
 use crate::value::{Emission, LoopBehavior, PatternBank, TransitionMode};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
