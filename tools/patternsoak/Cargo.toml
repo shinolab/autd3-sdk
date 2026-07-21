@@ -7,7 +7,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 publish = false
-description = "CLI tool that continuously sends WritePatternBuffer to soak-test the CPU board against frame-reception faults."
+description = "CLI tool that continuously sends pattern writes to soak-test the CPU board against frame-reception faults."
 
 [[bin]]
 name = "autd3-rs-patternsoak"

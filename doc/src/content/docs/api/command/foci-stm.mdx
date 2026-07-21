@@ -85,7 +85,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## 等価な低レベルコマンド
 
-`FociStm` は内部で [WriteFociBuffer](/autd3-sdk/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/api/command/lowlevel/config-foci-stm/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
+`FociStm` は [WriteFociBuffer](/autd3-sdk/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/api/command/lowlevel/config-foci-stm/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つと等価である. データが 1 フレームに収まる場合は融合して 1 フレームで送られ, 収まらない場合は上記の 3 コマンドに展開される.
 以下は `FociStm::new(freq, &points, option)` と等価な組み合わせである.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

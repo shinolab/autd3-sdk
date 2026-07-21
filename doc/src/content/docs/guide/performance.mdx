@@ -13,17 +13,19 @@ import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
 
 高頻度に焦点を更新するなど, スループットが要求される場面で性能を引き出すための指針.
 
-## 複合コマンドを避ける
+## 複合コマンドと低レベルコマンド
 
-[Pattern](/autd3-sdk/api/command/pattern/) は内部で `WritePatternBuffer` + `ConfigPattern` + `ChangePatternBank` をまとめて送る複合コマンド.
-だが, いったん [バンク](/autd3-sdk/getting-started/tutorial/bank/)を設定してしまえば, 毎フレームの焦点更新で必要なのはバッファの書き換え, すなわち `WritePatternBuffer` だけである. 
+[Pattern](/autd3-sdk/api/command/pattern/) はバッファ書き込み・再生設定・バンク切替をまとめて行う複合コマンドだが, これらは 1 フレームに融合して送られる.
+そのためフレーム数は低レベルコマンド 1 つと同じであり, 単に焦点を更新するだけなら `Pattern` をそのまま高頻度で送ってよい. 
+
+ただし, [バンク](/autd3-sdk/getting-started/tutorial/bank/)を設定してしまえば, 毎フレームの焦点更新で必要なのはバッファの書き換え, すなわち `WritePatternBuffer` だけである.
+`WritePatternBuffer` のみを送ると, 毎フレームの再生設定とバンク切替を省けるため, デバイス側の 1 フレームあたりの処理が軽くなる. 
 
 最初に一度だけバンクを設定しておく. (最初は`Pattern`を使っても良い.)
 
 <CodeTabs rust={excerpt(sample, "configure")} python={excerpt(pySample, "configure")} csharp={excerpt(csSample, "configure")} />
 
-以降のホットループでは `WritePatternBuffer` のみを送る.
-送信するコマンド量が減り, そのぶんスループットが上がる. 
+以降のホットループでは `WritePatternBuffer` のみを送る. 
 
 <CodeTabs rust={excerpt(sample, "hot_loop")} python={excerpt(pySample, "hot_loop")} csharp={excerpt(csSample, "hot_loop")} />
 

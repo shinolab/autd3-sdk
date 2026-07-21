@@ -13,17 +13,19 @@ import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
 
 Guidelines for drawing out performance in situations that demand throughput, such as updating the focal point at high frequency.
 
-## Avoid Composite Commands
+## Composite Commands and Low-Level Commands
 
-[Pattern](/autd3-sdk/en/api/command/pattern/) is a composite command that internally sends `WritePatternBuffer` + `ConfigPattern` + `ChangePatternBank` together.
+[Pattern](/autd3-sdk/en/api/command/pattern/) is a composite command that performs the buffer write, the playback configuration and the bank switch together, but these are fused into a single frame.
+It therefore costs the same number of frames as one low-level command, so for a plain focal point update you may send `Pattern` itself at high frequency.
+
 However, once the [bank](/autd3-sdk/en/getting-started/tutorial/bank/) is set, all that is needed for a per-frame focal point update is rewriting the buffer, that is, only `WritePatternBuffer`.
+Sending only `WritePatternBuffer` skips the per-frame playback configuration and bank switch, making the per-frame work on the device lighter.
 
 Set the bank once at the beginning. (You may use `Pattern` for the first time.)
 
 <CodeTabs rust={excerpt(sample, "configure")} python={excerpt(pySample, "configure")} csharp={excerpt(csSample, "configure")} />
 
 In the subsequent hot loop, only `WritePatternBuffer` is sent.
-The amount of command data sent is reduced, increasing throughput accordingly.
 
 <CodeTabs rust={excerpt(sample, "hot_loop")} python={excerpt(pySample, "hot_loop")} csharp={excerpt(csSample, "hot_loop")} />
 

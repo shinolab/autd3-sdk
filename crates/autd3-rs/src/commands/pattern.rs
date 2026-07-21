@@ -1,5 +1,5 @@
 use super::Command;
-use crate::commands::operation::{ChangePatternBank, ConfigPattern, WritePatternBuffer};
+use crate::commands::operation::WritePatternFused;
 use crate::datagram::DatagramBuilder;
 use crate::value::{Emission, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 use core::num::NonZeroU16;
@@ -24,22 +24,13 @@ impl<'a> Pattern<'a> {
 
 impl<'a> Command<'a> for Pattern<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
-        builder
-            .push(WritePatternBuffer {
-                bank: self.bank,
-                index: 0,
-                emissions: self.emissions,
-            })
-            .push(ConfigPattern {
-                bank: self.bank,
-                config: SamplingConfig::new(NonZeroU16::MAX),
-                size: 1,
-                loop_behavior: LoopBehavior::Infinite,
-            })
-            .push(ChangePatternBank {
-                bank: self.bank,
-                transition_mode: TransitionMode::Immediate,
-            });
+        builder.push(WritePatternFused {
+            bank: self.bank,
+            emissions: self.emissions,
+            config: SamplingConfig::new(NonZeroU16::MAX),
+            loop_behavior: LoopBehavior::Infinite,
+            transition_mode: TransitionMode::Immediate,
+        });
     }
 }
 
@@ -51,27 +42,21 @@ mod tests {
     use crate::protocol::Cmd;
 
     #[test]
-    fn pattern_expands_to_write_config_then_change_bank() {
+    fn pattern_expands_to_a_single_fused_frame() {
         let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
         let mut b = DatagramBuilder::new(2);
         b.push(Pattern::new(&patterns));
         let datagrams = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 3);
-        assert_eq!(
-            datagrams.frame(0).unwrap().datagrams()[0].cmd,
-            Cmd::WritePatternBuffer
-        );
-        let cfg = datagrams.frame(1).unwrap();
-        assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
-        assert_eq!(
-            &cfg.datagrams()[0].payload[2..4],
-            &FREQ_DIV_NO_LIMIT.to_le_bytes()
-        );
+        assert_eq!(datagrams.len(), 1, "write+config+change fused into 1 frame");
 
-        let chg = datagrams.frame(2).unwrap();
-        assert_eq!(chg.datagrams()[0].cmd, Cmd::ChangePatternBank);
-        assert_eq!(chg.datagrams()[0].payload[0], 0, "bank B0");
-        assert_eq!(chg.datagrams()[0].payload[1], 0xFF, "IMMEDIATE");
+        let f = datagrams.frame(0).unwrap();
+        let payload = &f.datagrams()[0].payload;
+        assert_eq!(f.datagrams()[0].cmd, Cmd::WritePatternFused);
+        assert_eq!(payload[0], 0, "bank B0");
+        assert_eq!(&payload[2..4], &FREQ_DIV_NO_LIMIT.to_le_bytes());
+        assert_eq!(&payload[4..8], &1u32.to_le_bytes(), "size = 1 index");
+        assert_eq!(payload[9], 0xFF, "IMMEDIATE");
+        assert_eq!(&payload[12..14], &0xFFFFu16.to_le_bytes(), "infinite rep");
     }
 }

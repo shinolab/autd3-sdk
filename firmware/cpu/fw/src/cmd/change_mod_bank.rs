@@ -20,9 +20,25 @@ impl Cpu {
         let Ok((p, _)) = ChangeModBankPayload::ref_from_prefix(payload) else {
             return Err(Error::InvalidPayload);
         };
-        let bank = p.bank;
-        let transition_value = p.transition_value.get();
-        let margin_ns = sys_time_margin_ns(p.margin_ns.get());
+        self.write_mod_change_regs(
+            port,
+            p.bank,
+            p.transition_mode,
+            p.transition_value.get(),
+            p.margin_ns.get(),
+        )?;
+        self.set_and_wait_update(port, CTL_FLAG_MOD_SET)
+    }
+
+    pub(crate) fn write_mod_change_regs<P: Port>(
+        &self,
+        port: &mut P,
+        bank: u8,
+        transition_mode: u8,
+        transition_value: u64,
+        margin_ns_raw: u32,
+    ) -> Result<(), Error> {
+        let margin_ns = sys_time_margin_ns(margin_ns_raw);
 
         if usize::from(bank) >= NUM_BANKS {
             return Err(Error::InvalidPayload);
@@ -35,7 +51,7 @@ impl Cpu {
             BRAM_SELECT_CONTROLLER,
             ADDR_MOD_REP0 + u16::from(bank),
         );
-        let Some(transition_mode) = TransitionMode::from_u8(p.transition_mode) else {
+        let Some(transition_mode) = TransitionMode::from_u8(transition_mode) else {
             return Err(Error::InvalidTransitionMode);
         };
         if transition_mode_violates_loop(rep, transition_mode) {
@@ -57,6 +73,6 @@ impl Cpu {
             transition_value,
         );
         self.silencer.note_mod_bank(bank);
-        self.set_and_wait_update(port, CTL_FLAG_MOD_SET)
+        Ok(())
     }
 }

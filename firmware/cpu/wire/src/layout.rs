@@ -13,5 +13,14 @@ pub const WRITE_HEADER_BYTES: usize = 8;
 pub const WRITE_MAX_DATA_LEN: usize = PAYLOAD_BYTES - WRITE_HEADER_BYTES;
 pub const MAX_FOCI_PER_FRAME: usize = WRITE_MAX_DATA_LEN / (FOCUS_WORDS * 2);
 
+pub const PATTERN_FUSED_HEADER_BYTES: usize =
+    core::mem::size_of::<crate::payload::WritePatternFusedPayload>();
+pub const PATTERN_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - PATTERN_FUSED_HEADER_BYTES;
+pub const PATTERN_FUSED_MAX_FOCI_PER_FRAME: usize = PATTERN_FUSED_MAX_DATA_LEN / (FOCUS_WORDS * 2);
+
+pub const MOD_FUSED_HEADER_BYTES: usize =
+    core::mem::size_of::<crate::payload::WriteModulationFusedPayload>();
+pub const MOD_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - MOD_FUSED_HEADER_BYTES;
+
 pub const XOR_HASH_HEADER_BYTES: usize = 4;
 pub const XOR_HASH_MAX_DATA_LEN: usize = PAYLOAD_BYTES - XOR_HASH_HEADER_BYTES;

@@ -38,11 +38,6 @@ import csSample from "@codes/csharp/examples/tutorial/send-modes.cs?raw";
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
-:::note
-上記のコードはシンプルにするために, どちらも複合コマンドである [`Pattern`](/autd3-sdk/api/command/pattern/) を使っているが, これは内部で3つの低レベルコマンドに分解される.
-単に出力音場を書き換えるだけであれば, 低レベルコマンドの [`WritePatternBuffer`](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) を使うべきである.
-上記のコードは, 低レベルコマンドを使う場合にくらべて, スループットが3分の1になっている. 
-:::
 
 初期化や設定など, 確実に 1 つずつ反映させたいコマンドは stop-and-wait.
 焦点を高頻度で更新するなど, スループットが重要な場面では streaming を使う.

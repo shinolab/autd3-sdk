@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use autd3_rs::commands::{ConfigPattern, GpioOut, SetGpioOut, WritePatternBuffer};
+use autd3_rs::commands::{ConfigPattern, GpioOut, Pattern, SetGpioOut, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
@@ -150,7 +150,15 @@ async fn run_with_link<L: Link>(link: L, cli: &Cli) -> Result<()> {
     let shutdown = Arc::new(AtomicBool::new(false));
     spawn_signal_listener(Arc::clone(&shutdown));
 
-    eprintln!("sending WritePatternBuffer continuously — press Ctrl+C to stop");
+    if cli.fused {
+        eprintln!(
+            "sending Pattern (fused write+config+bank-change, latches CTL_FLAG per frame) continuously — press Ctrl+C to stop"
+        );
+    } else {
+        eprintln!(
+            "sending WritePatternBuffer (no CTL_FLAG latch) continuously — press Ctrl+C to stop"
+        );
+    }
     let result = match cli.mode {
         Mode::StopAndWait => soak_stop_and_wait(&client, &geometry, cli, shutdown).await,
         Mode::Streaming => soak_streaming(&client, &geometry, cli, shutdown, max_inflight).await,
@@ -211,7 +219,7 @@ async fn soak_stop_and_wait(
         }
 
         fill_emissions(&mut emissions, tick);
-        encode_write(client, &emissions, &mut frames)?;
+        encode_write(client, cli, &emissions, &mut frames)?;
         let res = client
             .send_checked(frames.frame(0).expect("one frame"))
             .await;
@@ -259,7 +267,7 @@ async fn soak_streaming(
 
         if need_send && pending.len() < max_inflight {
             fill_emissions(&mut emissions, tick);
-            encode_write(client, &emissions, &mut frames)?;
+            encode_write(client, cli, &emissions, &mut frames)?;
             let fut = client.send(frames.frame(0).expect("one frame")).await?;
             pending.push_back(fut);
             sends_issued += 1;
@@ -308,16 +316,25 @@ fn should_stop(shutdown: &AtomicBool, cli: &Cli, issued: u64, start: Instant) ->
     false
 }
 
-fn encode_write(client: &Client, emissions: &[Vec<Emission>], frames: &mut Frames) -> Result<()> {
+fn encode_write(
+    client: &Client,
+    cli: &Cli,
+    emissions: &[Vec<Emission>],
+    frames: &mut Frames,
+) -> Result<()> {
     let mut builder = client.datagram_builder();
-    builder.push(WritePatternBuffer {
-        bank: PatternBank::B0,
-        index: 0,
-        emissions,
-    });
+    if cli.fused {
+        builder.push(Pattern::with_bank(PatternBank::B0, emissions));
+    } else {
+        builder.push(WritePatternBuffer {
+            bank: PatternBank::B0,
+            index: 0,
+            emissions,
+        });
+    }
     builder
         .build_into(frames)
-        .context("encoding WritePatternBuffer")?;
+        .context("encoding pattern write")?;
     Ok(())
 }
 

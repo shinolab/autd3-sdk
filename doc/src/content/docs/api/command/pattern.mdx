@@ -49,7 +49,7 @@ patternの計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/patte
 
 ## 等価な低レベルコマンド
 
-`Pattern` は内部で [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
+`Pattern` は [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つと等価であり, これらは 1 フレームに融合して送られる.
 以下は `Pattern { bank, emissions }` と等価な組み合わせである.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

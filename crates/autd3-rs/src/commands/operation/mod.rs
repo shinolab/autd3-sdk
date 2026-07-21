@@ -14,8 +14,10 @@ mod set_silencer;
 mod synchronize;
 mod write_foci_buffer;
 mod write_modulation_buffer;
+mod write_modulation_fused;
 mod write_pattern_buffer;
 mod write_pattern_compressed;
+mod write_pattern_fused;
 mod xor_hash;
 
 pub use change_mod_bank::ChangeModulationBank;
@@ -34,13 +36,18 @@ pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, Silenc
 pub use synchronize::Synchronize;
 pub use write_foci_buffer::WriteFociBuffer;
 pub use write_modulation_buffer::WriteModulationBuffer;
+pub use write_modulation_fused::WriteModulationFused;
 pub use write_pattern_buffer::WritePatternBuffer;
 pub use write_pattern_compressed::{
     PATTERN_MAX_PER_FRAME, PatternCompression, WritePatternCompressed,
 };
+pub use write_pattern_fused::{WriteFociStmFused, WritePatternFused};
 pub use xor_hash::{XOR_HASH_MAX_DATA_LEN, XorHashCmd};
 
-pub use autd3_cpu_wire::layout::{MAX_FOCI_PER_FRAME, WRITE_MAX_DATA_LEN};
+pub use autd3_cpu_wire::layout::{
+    MAX_FOCI_PER_FRAME, MOD_FUSED_MAX_DATA_LEN, PATTERN_FUSED_MAX_DATA_LEN,
+    PATTERN_FUSED_MAX_FOCI_PER_FRAME, WRITE_MAX_DATA_LEN,
+};
 
 use crate::error::Error;
 use crate::mirror::FirmwareState;

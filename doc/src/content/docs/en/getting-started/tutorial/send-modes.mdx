@@ -38,12 +38,6 @@ Because it does not wait for a response on every frame, throughput is high.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
-:::note
-For simplicity, both of the above snippets use [`Pattern`](/autd3-sdk/en/api/command/pattern/), a composite command, but internally this decomposes into three low-level commands.
-If you merely want to rewrite the output sound field, you should use the low-level command [`WritePatternBuffer`](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/).
-Compared with using the low-level command, the above code has one third the throughput.
-:::
-
 For commands that must be applied reliably one at a time, such as initialization and configuration, use stop-and-wait.
 For situations where throughput matters, such as updating the focal point at high frequency, use streaming.
 For details on `send` / `send_checked`, refer to [Client](/autd3-sdk/en/api/basics/client/).
