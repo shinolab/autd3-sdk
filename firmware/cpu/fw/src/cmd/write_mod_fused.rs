@@ -1,6 +1,5 @@
 use zerocopy::FromBytes;
 
-pub use autd3_cpu_wire::layout::MOD_FUSED_MAX_DATA_LEN;
 pub use autd3_cpu_wire::payload::WriteModulationFusedPayload;
 
 use crate::app::Cpu;
@@ -9,7 +8,10 @@ use crate::params::{
     ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE, BRAM_SELECT_MOD, CTL_FLAG_MOD_SET, NUM_BANKS,
 };
 use crate::port::Port;
-use crate::proto::{Error, MOD_BUFFER_SAMPLES};
+use crate::proto::{Error, MOD_BUFFER_SAMPLES, PAYLOAD_BYTES};
+
+const MOD_FUSED_MAX_DATA_LEN: usize =
+    PAYLOAD_BYTES - core::mem::size_of::<WriteModulationFusedPayload>();
 
 impl Cpu {
     pub(crate) fn write_mod_fused<P: Port>(

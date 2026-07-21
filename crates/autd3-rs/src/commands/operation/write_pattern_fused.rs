@@ -13,10 +13,13 @@ use crate::value::{
     ControlPoints, Emission, LoopBehavior, PatternBank, SamplingConfig, TransitionMode,
 };
 
-use super::{
-    Distribution, Operation, PATTERN_FUSED_MAX_DATA_LEN, PATTERN_FUSED_MAX_FOCI_PER_FRAME,
-    silencer_constraint, transition_constraint,
-};
+use super::{Distribution, Operation, silencer_constraint, transition_constraint};
+
+pub(crate) const PATTERN_FUSED_HEADER_BYTES: usize =
+    core::mem::size_of::<WritePatternFusedPayload>();
+const PATTERN_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - PATTERN_FUSED_HEADER_BYTES;
+pub(crate) const PATTERN_FUSED_MAX_FOCI_PER_FRAME: usize =
+    PATTERN_FUSED_MAX_DATA_LEN / (FOCUS_WORDS * 2);
 
 const _: () = assert!(Autd3::NUM_TRANSDUCERS * 2 <= PATTERN_FUSED_MAX_DATA_LEN);
 
@@ -238,7 +241,6 @@ mod tests {
     use super::*;
     use crate::geometry::Point3;
     use crate::value::{ControlPoint, Focus, Intensity, Phase};
-    use autd3_cpu_wire::layout::PATTERN_FUSED_HEADER_BYTES;
     use core::num::NonZeroU16;
 
     #[test]

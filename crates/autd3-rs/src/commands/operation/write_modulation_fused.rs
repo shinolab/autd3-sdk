@@ -8,9 +8,10 @@ use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 
-use super::{
-    Distribution, MOD_FUSED_MAX_DATA_LEN, Operation, silencer_constraint, transition_constraint,
-};
+use super::{Distribution, Operation, silencer_constraint, transition_constraint};
+
+const MOD_FUSED_HEADER_BYTES: usize = core::mem::size_of::<WriteModulationFusedPayload>();
+pub(crate) const MOD_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - MOD_FUSED_HEADER_BYTES;
 
 #[derive(Clone, Copy, Debug)]
 pub struct WriteModulationFused<'a> {
@@ -111,7 +112,6 @@ impl Operation for WriteModulationFused<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use autd3_cpu_wire::layout::MOD_FUSED_HEADER_BYTES;
     use core::num::NonZeroU16;
 
     #[test]

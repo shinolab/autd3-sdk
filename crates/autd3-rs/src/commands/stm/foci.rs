@@ -99,8 +99,9 @@ mod tests {
 
     use crate::value::{ControlPoint, Focus};
 
-    use crate::commands::operation::PATTERN_FUSED_MAX_FOCI_PER_FRAME;
-    use autd3_cpu_wire::layout::PATTERN_FUSED_HEADER_BYTES as FH;
+    use crate::commands::operation::{
+        PATTERN_FUSED_HEADER_BYTES as FH, PATTERN_FUSED_MAX_FOCI_PER_FRAME,
+    };
 
     fn fused_payload<const N: usize>(stm: FociStm<'_, N>) -> [u8; crate::protocol::PAYLOAD_BYTES] {
         let mut b = DatagramBuilder::new(1);
