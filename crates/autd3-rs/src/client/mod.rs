@@ -15,6 +15,9 @@ use std::thread::JoinHandle;
 
 use tokio::sync::{mpsc, oneshot};
 
+use autd3_cpu_wire::payload::ReadTelemetryPayload;
+use zerocopy::FromBytes;
+
 use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::{FirmwareVersion, Version};
@@ -337,7 +340,8 @@ impl Client {
 
     pub async fn read_telemetry(&self, counter: Telemetry) -> Result<Vec<u8>, Error> {
         let mut datagram = Datagram::no_payload(Cmd::ReadTelemetry);
-        datagram.payload[0] = counter.as_u8();
+        let (p, _) = ReadTelemetryPayload::mut_from_prefix(&mut datagram.payload).unwrap();
+        p.counter_id = counter.as_u8();
         self.read_broadcast_with(&datagram).await
     }
 
