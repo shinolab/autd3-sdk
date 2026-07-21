@@ -4,9 +4,10 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use autd3_rs::MAX_IN_FLIGHT;
-use autd3_rs::commands::XOR_HASH_MAX_DATA_LEN;
 use autd3_rs_link_twincat::AmsNetId;
 use clap::{ArgGroup, Parser, ValueEnum};
+
+pub const DEFAULT_MAX_SAMPLES: u64 = 1_000_000;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
@@ -25,6 +26,20 @@ pub enum LinkKind {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum Command {
+    Nop,
+    WritePatternBuffer,
+    #[default]
+    Pattern,
+}
+
+impl Command {
+    pub const fn is_pattern(self) -> bool {
+        matches!(self, Self::WritePatternBuffer | Self::Pattern)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum RtPolicy {
     Normal,
     #[default]
@@ -36,11 +51,20 @@ pub enum RtPolicy {
 #[command(
     name = "autd3-rs-perftest",
     about,
-    group(ArgGroup::new("stop").args(["count", "duration"]).required(true).multiple(false))
+    group(ArgGroup::new("stop").args(["count", "duration"]).multiple(false))
 )]
 pub struct Cli {
     #[arg(long, value_enum, default_value_t = LinkKind::Ethercrab)]
     pub link: LinkKind,
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = Command::Pattern,
+        help = "Command to measure. nop touches no FPGA register (pure link path), \
+                write-pattern-buffer writes FPGA RAM without latching, \
+                pattern is the fused write+config+bank-change that latches CTL_FLAG once per frame."
+    )]
+    pub command: Command,
     #[arg(
         long,
         default_value = None,
@@ -49,10 +73,6 @@ pub struct Cli {
     pub interface: Option<String>,
     #[arg(long)]
     pub devices: Option<usize>,
-    #[arg(long, default_value_t = XOR_HASH_MAX_DATA_LEN)]
-    pub data_len: usize,
-    #[arg(long, default_value_t = 0)]
-    pub sleep_ms: u16,
     #[arg(
         long = "sync0-period",
         value_parser = humantime::parse_duration,
@@ -72,6 +92,26 @@ pub struct Cli {
     pub duration: Option<Duration>,
     #[arg(long, default_value_t = 0)]
     pub warmup: u64,
+    #[arg(
+        long,
+        default_value_t = DEFAULT_MAX_SAMPLES,
+        help = "Cap on retained per-send samples (0 = unlimited). Sends continue past the cap \
+                but are no longer recorded, so an unbounded run has bounded memory."
+    )]
+    pub max_samples: u64,
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Emit BaseSignal on GPIO[0] to probe inter-device sync on a scope"
+    )]
+    pub gpio_base_signal: bool,
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Stop at the first failed send and exit non-zero (soak testing). \
+                The summary is still printed."
+    )]
+    pub stop_on_error: bool,
     #[arg(long)]
     pub csv: Option<PathBuf>,
     #[arg(
@@ -119,12 +159,6 @@ pub struct Cli {
 
 impl Cli {
     pub fn validate(&self) -> Result<(), String> {
-        if self.data_len > XOR_HASH_MAX_DATA_LEN {
-            return Err(format!(
-                "--data-len {} exceeds XOR_HASH_MAX_DATA_LEN ({XOR_HASH_MAX_DATA_LEN})",
-                self.data_len,
-            ));
-        }
         if self.mode == Mode::Streaming
             && (self.max_inflight == 0 || self.max_inflight > MAX_IN_FLIGHT)
         {

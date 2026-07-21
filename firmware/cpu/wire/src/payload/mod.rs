@@ -16,7 +16,6 @@ mod write_mod_fused;
 mod write_pattern;
 mod write_pattern_compressed;
 mod write_pattern_fused;
-mod xor_hash;
 
 pub use change_mod_bank::ChangeModBankPayload;
 pub use change_pattern_bank::ChangePatternBankPayload;
@@ -36,4 +35,3 @@ pub use write_mod_fused::WriteModulationFusedPayload;
 pub use write_pattern::WritePatternPayload;
 pub use write_pattern_compressed::WritePatternCompressedPayload;
 pub use write_pattern_fused::WritePatternFusedPayload;
-pub use xor_hash::XorHashPayload;

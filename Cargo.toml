@@ -15,7 +15,6 @@ members = [
     "firmware/cpu/wire",
     "firmware/cpu/fw",
     "tools/perftest",
-    "tools/patternsoak",
     "tools/synctune",
     "tools/firmware",
     "tools/firmware-test",
@@ -92,3 +91,4 @@ module_name_repetitions = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 cast_precision_loss = "allow"
+struct_excessive_bools = "allow"

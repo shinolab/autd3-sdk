@@ -287,21 +287,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "autd3-rs-patternsoak"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "autd3-rs",
- "autd3-rs-link-ethercrab",
- "autd3-rs-link-soem",
- "autd3-rs-link-twincat",
- "clap",
- "humantime",
- "tokio",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "autd3-rs-perftest"
 version = "0.3.0"
 dependencies = [

@@ -17,42 +17,12 @@ use crate::cmd::write_mod_fused::WriteModulationFusedPayload;
 use crate::cmd::write_pattern::WritePatternPayload;
 use crate::cmd::write_pattern_compressed::WritePatternCompressedPayload;
 use crate::cmd::write_pattern_fused::WritePatternFusedPayload;
-use crate::cmd::xor_hash::XorHashPayload;
 use crate::fpga::{REP_INFINITE, TransitionMode};
 use crate::proto::Cmd;
 use crate::tests::mock::Frame;
 
 fn words_to_bytes(words: &[u16]) -> std::vec::Vec<u8> {
     words.iter().flat_map(|w| w.to_le_bytes()).collect()
-}
-
-pub(crate) fn xor_hash_ok(seq: u8, sleep_ms: u16, data: &[u8]) -> Frame {
-    let header = XorHashPayload {
-        sleep_ms: U16::new(sleep_ms),
-        data_len: U16::new((data.len() + 1) as u16),
-    };
-    let mut payload = data.to_vec();
-    payload.push(data.iter().fold(0u8, |h, b| h ^ b));
-    Frame::from_parts(seq, Cmd::XorHash, &header, &payload)
-}
-
-pub(crate) fn xor_hash_bad(seq: u8, data: &[u8]) -> Frame {
-    let header = XorHashPayload {
-        sleep_ms: U16::new(0),
-        data_len: U16::new(data.len() as u16),
-    };
-    Frame::from_parts(seq, Cmd::XorHash, &header, data)
-}
-
-pub(crate) fn xor_hash_corrupted(seq: u8, sleep_ms: u16, data: &[u8]) -> Frame {
-    let header = XorHashPayload {
-        sleep_ms: U16::new(sleep_ms),
-        data_len: U16::new((data.len() + 1) as u16),
-    };
-    let mut payload = data.to_vec();
-    payload.push(data.iter().fold(0u8, |h, b| h ^ b));
-    payload[0] ^= 0xFF;
-    Frame::from_parts(seq, Cmd::XorHash, &header, &payload)
 }
 
 pub(crate) fn write_pattern_buffer(seq: u8, bank: u8, offset_words: u32, words: &[u16]) -> Frame {

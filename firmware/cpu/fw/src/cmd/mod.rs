@@ -18,4 +18,3 @@ pub(crate) mod write_mod_fused;
 pub(crate) mod write_pattern;
 pub(crate) mod write_pattern_compressed;
 pub(crate) mod write_pattern_fused;
-pub(crate) mod xor_hash;

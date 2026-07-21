@@ -21,6 +21,3 @@ pub const PATTERN_FUSED_MAX_FOCI_PER_FRAME: usize = PATTERN_FUSED_MAX_DATA_LEN /
 pub const MOD_FUSED_HEADER_BYTES: usize =
     core::mem::size_of::<crate::payload::WriteModulationFusedPayload>();
 pub const MOD_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - MOD_FUSED_HEADER_BYTES;
-
-pub const XOR_HASH_HEADER_BYTES: usize = 4;
-pub const XOR_HASH_MAX_DATA_LEN: usize = PAYLOAD_BYTES - XOR_HASH_HEADER_BYTES;

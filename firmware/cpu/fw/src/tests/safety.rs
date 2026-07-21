@@ -11,7 +11,7 @@ use crate::proto::{
     OUTPUT_MASK_WORDS, Telemetry,
 };
 use crate::tests::builders::{
-    change_mod_bank_with_margin, config_mod_rep, force_fan, output_mask, xor_hash_ok,
+    change_mod_bank_with_margin, config_mod_rep, force_fan, output_mask, write_pattern_buffer,
 };
 use crate::tests::mock::{Frame, Harness};
 
@@ -51,8 +51,8 @@ fn stop_is_processed_inline_and_flushes_queue_in_fifo_mode() {
     let mut h = Harness::new();
     unmute(&mut h, 0);
 
-    h.deliver_no_drain(&xor_hash_ok(1, 0, &[]));
-    h.deliver_no_drain(&xor_hash_ok(2, 0, &[]));
+    h.deliver_no_drain(&Frame::new(1, Cmd::Nop));
+    h.deliver_no_drain(&Frame::new(2, Cmd::Nop));
 
     h.deliver_no_drain(&Frame::new(3, Cmd::Stop));
     assert_muted(&h);
@@ -62,7 +62,7 @@ fn stop_is_processed_inline_and_flushes_queue_in_fifo_mode() {
     assert!(!h.process_one());
     assert_eq!(h.expected_seq(), 4);
 
-    h.deliver(&xor_hash_ok(4, 0, &[0x11]));
+    h.deliver(&Frame::new(4, Cmd::Nop));
     assert_eq!(h.ack(), 4);
     assert_eq!(h.expected_seq(), 5);
 }
@@ -72,7 +72,7 @@ fn stop_during_drain_reapplies_mute_and_proto_state() {
     let mut h = Harness::new();
     unmute(&mut h, 0);
 
-    h.deliver_no_drain(&xor_hash_ok(1, 1, &[0x5A]));
+    h.deliver_no_drain(&write_pattern_buffer(1, 0, 0, &[0x5A5A]));
     h.arm_isr_frame(9, Cmd::Stop);
 
     assert!(h.process_one());
@@ -149,15 +149,15 @@ fn failsafe_counter_resets_when_error_clears() {
 #[test]
 fn telemetry_counts_processed_frames() {
     let mut h = Harness::new();
-    h.deliver(&xor_hash_ok(0, 0, &[]));
-    h.deliver(&xor_hash_ok(1, 0, &[]));
+    h.deliver(&Frame::new(0, Cmd::Nop));
+    h.deliver(&Frame::new(1, Cmd::Nop));
     assert_eq!(h.telemetry(Telemetry::Processed), 2);
 }
 
 #[test]
 fn telemetry_counts_dedup_hits() {
     let mut h = Harness::new();
-    let f = xor_hash_ok(0, 0, &[]);
+    let f = Frame::new(0, Cmd::Nop);
     h.deliver(&f);
     h.deliver(&f);
     assert_eq!(h.telemetry(Telemetry::Dedup), 1);
@@ -167,7 +167,7 @@ fn telemetry_counts_dedup_hits() {
 #[test]
 fn telemetry_counts_seq_mismatch() {
     let mut h = Harness::new();
-    h.deliver(&xor_hash_ok(5, 0, &[]));
+    h.deliver(&Frame::new(5, Cmd::Nop));
     assert_eq!(h.telemetry(Telemetry::SeqMismatch), 1);
     assert_eq!(h.telemetry(Telemetry::Processed), 0);
 }
@@ -186,7 +186,7 @@ fn telemetry_counts_fifo_drops() {
 
     let capacity = u8::try_from(FIFO_DEPTH - 1).unwrap();
     for i in 0..=capacity {
-        h.deliver_no_drain(&xor_hash_ok(i, 0, &[]));
+        h.deliver_no_drain(&Frame::new(i, Cmd::Nop));
     }
     assert_eq!(h.telemetry(Telemetry::FifoDrop), 1);
 }

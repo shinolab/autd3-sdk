@@ -51,6 +51,8 @@ async fn main() -> Result<()> {
     let output = Box::pin(run(&cli)).await?;
     let RunOutput {
         samples,
+        sends,
+        stopped_on_error,
         warmup,
         elapsed,
         frame_bytes,
@@ -59,7 +61,17 @@ async fn main() -> Result<()> {
         mem,
     } = output;
 
-    let drop = usize::try_from(warmup).unwrap_or(samples.len());
+    if sends > samples.len() as u64 {
+        eprintln!(
+            "warning: recorded only the first {} of {sends} sends (--max-samples); \
+             the summary and CSV cover that prefix only",
+            samples.len(),
+        );
+    }
+
+    let drop = usize::try_from(warmup)
+        .unwrap_or(samples.len())
+        .min(samples.len());
     let measured = &samples[drop..];
 
     let summary = Summary::from_samples(measured, frame_bytes, elapsed, stale_cycles, lost_cycles);
@@ -77,6 +89,10 @@ async fn main() -> Result<()> {
     }
 
     snippet::print(&cli);
+
+    if let Some((index, status)) = stopped_on_error {
+        anyhow::bail!("stopped at send #{index}: {status:?} (--stop-on-error)");
+    }
 
     Ok(())
 }

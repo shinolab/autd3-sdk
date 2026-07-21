@@ -1,7 +1,19 @@
 # autd3-rs-perftest
 
-A CLI tool that streams `XorHash` commands over a real EtherCAT link and reports latency/throughput statistics.
+A CLI tool that streams commands over a real EtherCAT link and reports latency/throughput statistics.
 Useful for sanity-checking the firmware ↔ host protocol, comparing kernels/NICs, and watching for regressions in `autd3-rs`'s request-response engine.
+
+`--command` selects what is sent, which isolates where the time goes:
+
+| `--command`            | FPGA RAM write | CTL flag latch | measures |
+|------------------------|----------------|----------------|----------|
+| `nop`                  | no             | no             | the link path only; the firmware acks without touching a single FPGA register |
+| `write-pattern-buffer` | yes            | no             | link + FPGA RAM streaming |
+| `pattern` (default)    | yes            | once per frame | the production path: the fused write+config+bank-change |
+
+Every frame is the same size on the wire regardless of command, and the fused `pattern` is a single
+frame, so all three are directly comparable frame-for-frame. The differences are the FPGA RAM write
+and the per-frame latch.
 
 ## Run
 
@@ -15,6 +27,9 @@ cargo xtask tool perftest -- --interface enp3s0 --count 10000
 
 # Pipelined streaming run — measures the 1-frame-per-cycle ceiling
 cargo xtask tool perftest -- --interface enp3s0 --count 10000 --mode streaming
+
+# Isolate the link path from the FPGA write
+cargo xtask tool perftest -- --interface enp3s0 --count 10000 --command nop
 ```
 
 ## Arguments
@@ -22,13 +37,15 @@ cargo xtask tool perftest -- --interface enp3s0 --count 10000 --mode streaming
 | Flag                  | Description |
 |-----------------------|-------------|
 | `--link <KIND>`       | `ethercrab` (default), `soem`, `twincat`, or `nop`. |
+| `--command <CMD>`     | `pattern` (default), `write-pattern-buffer`, or `nop`. See the table above. |
 | `--interface <NAME>`  | EtherCAT network interface (for `ethercrab` / `soem`). |
 | `--devices <N>`       | Expected device count. Required for `twincat` (no bus scan) and `nop`; a mismatch guard otherwise. |
 | `--twincat-remote <IP>` | Connect to a remote TwinCAT host over ADS (requires `--ams-net-id`). Omit for a local TwinCAT runtime. `--link twincat` only. |
 | `--ams-net-id <ID>`   | AMS Net ID of the remote target, e.g. `192.168.0.1.1.1`. `--link twincat` only. |
-| `--count <N>` *or* `--duration <DUR>` | Stop condition. Exactly one is required. |
-| `--data-len <N>`      | Bytes of `data` per `XorHash` command. Default = 620 (Max). |
-| `--sleep-ms <N>`      | Slave-side `port_sleep_ms` to inject before the response. Default = 0. |
+| `--count <N>` *or* `--duration <DUR>` | Stop condition; at most one. With neither, the run continues until Ctrl+C. |
+| `--max-samples <N>`   | Cap on retained per-send samples, so an unbounded run has bounded memory. Sends continue past the cap but are no longer recorded, and the summary/CSV then cover that prefix only (a warning says so). Default = 1000000, `0` = unlimited. |
+| `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
+| `--gpio-base-signal`  | Emit `BaseSignal` on GPIO[0] of every device at start-up. Probing GPIO[0] across devices with an oscilloscope shows whether they stay synchronized during the run. Default: off. |
 | `--sync0-period <DUR>` | SYNC0 / EtherCAT cycle period, e.g. `1ms` / `500us` (`*LinkOption.sync0_period`). Default = `1ms`. `0ms` = free-run, `--link nop` only. |
 | `--shift-percent <N>` | SYNC0 shift as a percent of the period (`*LinkOption.sync0_shift = period * percent`). Default = 0. |
 | `--warmup <N>`        | Drop the first N samples from the summary. Default = 0. |
@@ -42,6 +59,24 @@ cargo xtask tool perftest -- --interface enp3s0 --count 10000 --mode streaming
 Each flag notes the `EtherCrabLinkOption` / `SoemLinkOption` / `ClientConfig` field it drives, and after every run
 the tool prints a copy-pasteable `=== reproduce this configuration in your app ===` Rust snippet that reconstructs
 the exact link option + `ClientConfig` used, so a good perftest result maps straight into application code.
+
+## Soak testing
+
+Omitting both `--count` and `--duration` runs until Ctrl+C, which turns the tool into a soak test for the
+CPU board's frame reception. `--stop-on-error` halts at the first bad send so the failure is not buried in
+hours of output, and `--gpio-base-signal` gives an oscilloscope something to watch inter-device sync on.
+
+`--command pattern --low-latency` is the harshest combination: the fused command latches `CTL_FLAG` once per
+frame, so the firmware's `set_and_wait_update` spin runs inline in the EtherCAT ISR every cycle. Use
+`--command write-pattern-buffer` to keep the FPGA RAM traffic but drop the latch.
+
+```sh
+# Hammer the fused write until Ctrl+C, stopping at the first error
+cargo xtask tool perftest -- --interface enp3s0 --stop-on-error --gpio-base-signal
+
+# Same, with the per-frame latch running inside the EtherCAT ISR
+cargo xtask tool perftest -- --interface enp3s0 --low-latency --stop-on-error
+```
 
 ## Hardware-free runs (`--link nop`)
 
@@ -99,14 +134,14 @@ The feature is opt-in so ordinary latency runs keep the plain system allocator a
 
 ### `stop-and-wait` (default)
 
-Drives `Controller::xor_hash` one command at a time, waiting for each ACK before sending the next.
+Sends the selected command one at a time, waiting for each ACK before sending the next.
 Mirrors the only mode the public client API supports.
 Per-sample `rtt` is the full request-response round-trip — the sum of "queue into PDI", "slave processes", "slave Rx returns", "host observes ACK" — typically 4 PDO cycles at a 1 ms cycle.
 Throughput is `1 / rtt` (~ 250 cmd/s on a 1 ms cycle).
 
 ### `streaming`
 
-Bypasses the `Controller` after the startup handshake and drives the link directly: each PDO cycle either queues a fresh `XorHash` (when the in-flight window has room) or just advances the cycle stream so the slave's `ACK` can catch up. 
+Bypasses the `Controller` after the startup handshake and drives the link directly: each PDO cycle either queues a fresh command (when the in-flight window has room) or just advances the cycle stream so the slave's `ACK` can catch up. 
 Used for measuring the protocol's theoretical ceiling of one frame per cycle (~ 1000 cmd/s on a 1 ms cycle), well above what the production `Controller` API can deliver.
 
 Per-sample `rtt` is the *individual* request's send-to-ACK latency — still ~5 cycles on a healthy link, the same as stop-and-wait.

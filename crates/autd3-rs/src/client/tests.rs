@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 
-use crate::commands::operation::{Operation, XOR_HASH_MAX_DATA_LEN, XorHashCmd};
+use crate::commands::operation::{Distribution, Nop, Operation};
 use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::firmware_version::{FirmwareVersion, Version};
@@ -21,12 +21,46 @@ fn geometry(n: usize) -> Geometry {
     Geometry::new((0..n).map(|_| Autd3::default()).collect())
 }
 
-async fn xor_hash(client: &Client, cmd: &XorHashCmd) -> Result<(), Error> {
-    let datagrams = client.datagram_builder().push(cmd).build()?;
+const FAIL_MARKER: u8 = 0xAA;
+
+struct FailingCmd;
+
+impl Operation for FailingCmd {
+    fn frames(&self) -> usize {
+        1
+    }
+
+    fn distribution(&self) -> Distribution {
+        Distribution::Broadcast
+    }
+
+    fn encode(
+        &self,
+        _device: usize,
+        _frame: usize,
+        out: &mut [u8; PAYLOAD_BYTES],
+    ) -> Result<Cmd, Error> {
+        out[0] = FAIL_MARKER;
+        Ok(Cmd::Nop)
+    }
+}
+
+fn failing_payload() -> [u8; PAYLOAD_BYTES] {
+    let mut p = [0u8; PAYLOAD_BYTES];
+    p[0] = FAIL_MARKER;
+    p
+}
+
+async fn send_op<O: Operation + 'static>(client: &Client, op: O) -> Result<(), Error> {
+    let datagrams = client.datagram_builder().push(op).build()?;
     for frame in &datagrams {
         client.send_checked(frame).await?;
     }
     Ok(())
+}
+
+async fn send_nop(client: &Client) -> Result<(), Error> {
+    send_op(client, Nop).await
 }
 
 struct LoopbackLink {
@@ -54,7 +88,6 @@ struct Slave {
     drop_next: u32,
     stale_for_next: u32,
     sent_log: Vec<(u8, Cmd)>,
-    xor_hash_total_sleep_ms: u32,
     mode: u8,
 }
 
@@ -81,7 +114,6 @@ impl Slave {
             drop_next: 0,
             stale_for_next: 0,
             sent_log: Vec::new(),
-            xor_hash_total_sleep_ms: 0,
             mode: Mode::Fifo.as_u8(),
         }
     }
@@ -91,21 +123,8 @@ const ERR_UNKNOWN_CMD: u8 = 0x01;
 const ERR_INVALID_PAYLOAD: u8 = 0x02;
 const ERR_INVALID_DATA: u8 = 0x03;
 
-fn handle_xor_hash(payload: &[u8; PAYLOAD_BYTES], slave: &mut Slave) -> u8 {
-    let sleep_ms = u16::from_le_bytes([payload[0], payload[1]]);
-    let data_len = u16::from_le_bytes([payload[2], payload[3]]) as usize;
-    if data_len > XOR_HASH_MAX_DATA_LEN {
-        slave.error_detail = ERR_INVALID_PAYLOAD;
-        return ERR_INVALID_PAYLOAD;
-    }
-    slave.xor_hash_total_sleep_ms = slave
-        .xor_hash_total_sleep_ms
-        .saturating_add(u32::from(sleep_ms));
-    let mut h: u8 = 0;
-    for b in &payload[4..4 + data_len] {
-        h ^= *b;
-    }
-    if h != 0 {
+fn handle_nop(payload: &[u8; PAYLOAD_BYTES], slave: &mut Slave) -> u8 {
+    if payload[0] == FAIL_MARKER {
         slave.error_detail = ERR_INVALID_DATA;
         ERR_INVALID_DATA
     } else {
@@ -157,7 +176,7 @@ fn slave_cycle(
 
     slave.expected_seq = slave.expected_seq.wrapping_add(1);
     let data = match parsed.cmd {
-        Cmd::XorHash => handle_xor_hash(&parsed.payload, slave),
+        Cmd::Nop => handle_nop(&parsed.payload, slave),
         Cmd::ReadCpuFwVersionMajor => slave.fw_version_major,
         Cmd::ReadCpuFwVersionMinor => slave.fw_version_minor,
         Cmd::ReadCpuFwVersionPatch => slave.fw_version_patch,
@@ -204,8 +223,7 @@ fn slave_cycle(
         | Cmd::SetGpioOut
         | Cmd::ForceFan
         | Cmd::Synchronize
-        | Cmd::Clear
-        | Cmd::Nop => 0,
+        | Cmd::Clear => 0,
         Cmd::SetOutputMask => {
             slave.muted = parsed.payload[..2] == [0, 0];
             0
@@ -274,26 +292,20 @@ async fn open_client() -> (Client, Arc<StdMutex<Slave>>) {
 }
 
 #[tokio::test]
-async fn xor_hash_with_checksum_returns_ok() {
+async fn successful_send_advances_seq_and_leaves_no_error() {
     let (client, slave) = open_client().await;
-    let cmd = XorHashCmd::with_checksum(3, vec![0x01, 0x02, 0x04, 0x08]);
-    xor_hash(&client, &cmd).await.unwrap();
+    send_nop(&client).await.unwrap();
 
     let s = slave.lock().unwrap();
     assert_eq!(s.ack, 2);
     assert_eq!(s.expected_seq, 3);
-    assert_eq!(s.xor_hash_total_sleep_ms, 3);
     assert_eq!(s.error_detail, 0);
 }
 
 #[tokio::test]
-async fn xor_hash_with_non_zero_xor_returns_device_error() {
+async fn device_reported_error_becomes_device_error() {
     let (client, _slave) = open_client().await;
-    let cmd = XorHashCmd {
-        sleep_ms: 0,
-        data: vec![0xAA],
-    };
-    let err = xor_hash(&client, &cmd).await.unwrap_err();
+    let err = send_op(&client, FailingCmd).await.unwrap_err();
     match err {
         Error::DeviceError { device, code } => {
             assert_eq!(device, 0);
@@ -301,17 +313,6 @@ async fn xor_hash_with_non_zero_xor_returns_device_error() {
         }
         other => panic!("expected DeviceError, got {other:?}"),
     }
-}
-
-#[tokio::test]
-async fn xor_hash_rejects_oversize_data_locally() {
-    let (client, _slave) = open_client().await;
-    let cmd = XorHashCmd {
-        sleep_ms: 0,
-        data: vec![0; XOR_HASH_MAX_DATA_LEN + 1],
-    };
-    let err = xor_hash(&client, &cmd).await.unwrap_err();
-    assert!(matches!(err, Error::InvalidPayload(_)));
 }
 
 #[tokio::test]
@@ -441,13 +442,9 @@ async fn read_error_detail_returns_error_code() {
 }
 
 #[tokio::test]
-async fn xor_hash_error_is_observable_via_read_error_detail() {
+async fn device_error_is_observable_via_read_error_detail() {
     let (client, _slave) = open_client().await;
-    let bad = XorHashCmd {
-        sleep_ms: 0,
-        data: vec![0xAA],
-    };
-    let _ = xor_hash(&client, &bad).await;
+    let _ = send_op(&client, FailingCmd).await;
     let detail = client.read_error_detail().await.unwrap();
     assert_eq!(detail, vec![ERR_INVALID_DATA]);
 }
@@ -481,9 +478,7 @@ async fn read_is_exclusive_and_correct_under_concurrent_writes() {
         let client = Arc::clone(&client);
         tokio::spawn(async move {
             for _ in 0..50 {
-                xor_hash(&client, &XorHashCmd::with_checksum(0, vec![0x01, 0x02]))
-                    .await
-                    .unwrap();
+                send_nop(&client).await.unwrap();
             }
         })
     };
@@ -529,24 +524,17 @@ async fn multi_device_per_device_payloads_yield_per_device_results() {
         .await
         .unwrap();
 
-    let mut ok_payload = [0u8; PAYLOAD_BYTES];
-    XorHashCmd::with_checksum(0, vec![0x01, 0x02])
-        .encode(0, 0, &mut ok_payload)
-        .unwrap();
     let ok = Datagram {
-        cmd: Cmd::XorHash,
-        payload: ok_payload,
+        cmd: Cmd::Nop,
+        payload: [0u8; PAYLOAD_BYTES],
     };
-
-    let mut bad_payload = [0u8; PAYLOAD_BYTES];
-    bad_payload[2] = 1;
-    bad_payload[4] = 0xAA;
+    let bad_payload = failing_payload();
 
     let fut = client
         .send_datagrams(&[
             ok,
             Datagram {
-                cmd: Cmd::XorHash,
+                cmd: Cmd::Nop,
                 payload: bad_payload,
             },
         ])
@@ -557,16 +545,12 @@ async fn multi_device_per_device_payloads_yield_per_device_results() {
 }
 
 #[tokio::test]
-async fn multi_device_xor_hash_reports_failing_device_index() {
+async fn multi_device_send_reports_failing_device_index() {
     let (link, slaves) = slaves_pair(2);
     let client = Client::open(&geometry(2), link, ClientConfig::default())
         .await
         .unwrap();
-    let bad = XorHashCmd {
-        sleep_ms: 0,
-        data: vec![0xAA],
-    };
-    let err = xor_hash(&client, &bad).await.unwrap_err();
+    let err = send_op(&client, FailingCmd).await.unwrap_err();
     match err {
         Error::DeviceError { device, code } => {
             assert_eq!(device, 0);
@@ -668,9 +652,7 @@ async fn low_latency_handshake_switches_slave_mode_and_continues_traffic() {
         assert!(s.sent_log.contains(&(0, Cmd::SetMode)));
         assert_eq!(s.expected_seq, 3);
     }
-    xor_hash(&client, &XorHashCmd::with_checksum(0, vec![]))
-        .await
-        .unwrap();
+    send_nop(&client).await.unwrap();
     assert_eq!(slave.lock().unwrap().expected_seq, 4);
 }
 
@@ -699,9 +681,7 @@ async fn handshake_resets_slave_proto_state() {
         assert_eq!(s.expected_seq, 2);
         assert_eq!(s.ack, 1);
     }
-    xor_hash(&client, &XorHashCmd::with_checksum(0, vec![]))
-        .await
-        .unwrap();
+    send_nop(&client).await.unwrap();
     assert_eq!(slave.lock().unwrap().expected_seq, 3);
 }
 
@@ -732,9 +712,7 @@ async fn pipeline_continues_after_device_error_in_the_middle() {
     let (client, slave) = open_client().await;
     slave.lock().unwrap().fw_version_major = 0x42;
 
-    let mut bad_payload = [0u8; PAYLOAD_BYTES];
-    bad_payload[2] = 1;
-    bad_payload[4] = 0xAA;
+    let bad_payload = failing_payload();
 
     let f1 = client
         .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
@@ -742,7 +720,7 @@ async fn pipeline_continues_after_device_error_in_the_middle() {
         .unwrap();
     let f2 = client
         .send_broadcast(&Datagram {
-            cmd: Cmd::XorHash,
+            cmd: Cmd::Nop,
             payload: bad_payload,
         })
         .await
@@ -850,9 +828,7 @@ async fn stale_cycles_block_false_positive_ack_match() {
         s.data = 0;
         s.stale_for_next = u32::MAX;
     }
-    let err = xor_hash(&client, &XorHashCmd::with_checksum(0, vec![]))
-        .await
-        .unwrap_err();
+    let err = send_nop(&client).await.unwrap_err();
     match err {
         Error::Timeout { cycles } => assert_eq!(cycles, 10),
         other => panic!("expected Timeout, got {other:?}"),
@@ -863,9 +839,9 @@ async fn stale_cycles_block_false_positive_ack_match() {
 async fn recovers_after_transient_stale_cycles() {
     let (client, slave) = open_client().await;
     slave.lock().unwrap().stale_for_next = 3;
-    xor_hash(&client, &XorHashCmd::with_checksum(0, vec![]))
+    send_nop(&client)
         .await
-        .expect("xor_hash should recover after the stale burst");
+        .expect("send should recover after the stale burst");
     let s = slave.lock().unwrap();
     assert_eq!(s.expected_seq, 3);
     assert_eq!(s.ack, 2);
@@ -1195,9 +1171,7 @@ async fn desync_after_send_failure_stops_precheck() {
 
     slave.lock().unwrap().stale_for_next = u32::MAX;
     assert!(matches!(
-        xor_hash(&client, &XorHashCmd::with_checksum(0, vec![]))
-            .await
-            .unwrap_err(),
+        send_nop(&client).await.unwrap_err(),
         Error::Timeout { .. }
     ));
 

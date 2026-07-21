@@ -91,9 +91,6 @@ pub enum PayloadError {
         capacity: usize,
     },
 
-    #[error("xor_hash data too large: max {max} bytes, got {len}")]
-    XorHashDataTooLarge { len: usize, max: usize },
-
     #[error("silencer completion time {0:?} must be a multiple of the ultrasound period")]
     SilencerCompletionTimeNotMultiple(core::time::Duration),
 
