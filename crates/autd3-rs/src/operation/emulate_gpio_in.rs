@@ -23,13 +23,12 @@ impl Operation for EmulateGpioIn {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        let mut flag = 0u8;
-        for (bit, &on) in self.values.iter().enumerate() {
-            if on {
-                flag |= 1 << bit;
-            }
-        }
-        out[0] = flag;
+        out[0] = self
+            .values
+            .iter()
+            .enumerate()
+            .filter(|&(_, &on)| on)
+            .fold(0u8, |acc, (bit, _)| acc | (1 << bit));
         Ok(Cmd::EmulateGpioIn)
     }
 }

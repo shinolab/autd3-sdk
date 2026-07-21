@@ -43,16 +43,21 @@ pub(crate) fn make_propagation_matrix<B: LinAlgBackend>(
     let wavenumber = 2.0 * PI / wavelength.mm();
     let m = foci.len();
     let n = mask.num_enabled(geometry);
-    let mut data = Vec::with_capacity(m * n);
-    for (d, dev) in geometry.iter().enumerate() {
-        for (t, (&pos, &dir)) in dev.positions().iter().zip(dev.directions()).enumerate() {
-            if mask.is_enabled(d, t) {
-                for f in foci {
-                    data.push(propagate(pos, dir, f.point, wavenumber, directivity));
-                }
-            }
-        }
-    }
+    let data = geometry
+        .iter()
+        .enumerate()
+        .flat_map(|(d, dev)| {
+            dev.positions()
+                .iter()
+                .zip(dev.directions())
+                .enumerate()
+                .filter(move |&(t, _)| mask.is_enabled(d, t))
+                .flat_map(move |(_, (&pos, &dir))| {
+                    foci.iter()
+                        .map(move |f| propagate(pos, dir, f.point, wavenumber, directivity))
+                })
+        })
+        .collect();
     backend.make_matrix(m, n, data)
 }
 

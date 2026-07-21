@@ -39,12 +39,12 @@ pub fn square<S: Into<SamplingMode>>(
 
     dst.clear();
     dst.reserve(n);
-    for i in 0..rep {
+    dst.extend((0..rep).flat_map(|i| {
         let size = ((n as u64 + i) / rep) as usize;
         let n_high = (size as f32 * option.duty) as usize;
-        dst.extend(core::iter::repeat_n(option.high, n_high));
-        dst.extend(core::iter::repeat_n(option.low, size - n_high));
-    }
+        core::iter::repeat_n(option.high, n_high)
+            .chain(core::iter::repeat_n(option.low, size - n_high))
+    }));
     Ok(())
 }
 

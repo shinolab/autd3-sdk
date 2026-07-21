@@ -214,17 +214,15 @@ impl<'a> DatagramBuilder<'a> {
         F: FnMut(usize) -> Option<C>,
     {
         let num_devices = self.num_devices;
-        let mut new_devices: Vec<Vec<Box<dyn Operation + 'a>>> = Vec::with_capacity(num_devices);
-        for device in 0..num_devices {
-            match assign(device) {
-                Some(cmd) => {
+        let new_devices: Vec<Vec<Box<dyn Operation + 'a>>> = (0..num_devices)
+            .map(|device| {
+                assign(device).map_or_else(Vec::new, |cmd| {
                     let mut sub = DatagramBuilder::new(num_devices);
                     cmd.expand(&mut sub);
-                    new_devices.push(sub.take_ops());
-                }
-                None => new_devices.push(Vec::new()),
-            }
-        }
+                    sub.take_ops()
+                })
+            })
+            .collect();
 
         let fuse = matches!(
             self.ops.last(),
