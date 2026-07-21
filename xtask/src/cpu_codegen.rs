@@ -17,6 +17,9 @@ struct IpConst {
     elem_bits: u64,
 }
 
+const CLK_WIZ_IP: &str = "clk_wiz";
+const CLK_OUT_FREQ_KEY: &str = "CLKOUT1_REQUESTED_OUT_FREQ";
+
 const IP_CONSTS: &[IpConst] = &[
     IpConst {
         name: "MOD_BUFFER_SAMPLES",
@@ -61,7 +64,7 @@ fn rust_type(name: &str) -> &'static str {
         || name == "FOCUS_WORDS"
     {
         "usize"
-    } else if name == "EMISSION_MAX_INDICES" {
+    } else if name == "EMISSION_MAX_INDICES" || name == "ULTRASOUND_FREQ_HZ" {
         "u32"
     } else if name == "NUM_FOCI_MAX"
         || name.starts_with("VERSION_NUM_")
@@ -74,7 +77,6 @@ fn rust_type(name: &str) -> &'static str {
     {
         "u8"
     } else {
-        // ADDR_* and everything else default to u16.
         "u16"
     }
 }
@@ -107,8 +109,21 @@ fn is_float(v: &str) -> bool {
         .any(|k| b[..k].iter().all(u8::is_ascii_digit) && b[k + 1..].iter().all(u8::is_ascii_digit))
 }
 
-/// Convert a SystemVerilog sized literal to a Rust hex literal, honoring the base
-/// prefix (`'b`/`'h`/`'d`). Plain decimals are passed through.
+fn group_decimal(s: &str) -> String {
+    let (sign, digits) = s.strip_prefix('-').map_or(("", s), |d| ("-", d));
+    if digits.len() <= 5 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i != 0 && (digits.len() - i) % 3 == 0 {
+            out.push('_');
+        }
+        out.push(c);
+    }
+    format!("{sign}{out}")
+}
+
 fn to_value(value: &str) -> String {
     if let Some((size, rest)) = value.split_once('\'') {
         if !size.is_empty() && size.bytes().all(|b| b.is_ascii_digit()) && rest.len() >= 2 {
@@ -127,12 +142,10 @@ fn to_value(value: &str) -> String {
         }
         return value.to_string();
     }
-    value.to_string()
+    group_decimal(value)
 }
 
-/// `CamelCase` -> `UPPER_SNAKE_CASE`, matching the legacy `gen_param.py` heuristic.
 fn to_upper(name: &str) -> String {
-    // (.)([A-Z][a-z]+) -> \1_\2
     let chars: Vec<char> = name.chars().collect();
     let mut s1 = String::new();
     let mut i = 0;
@@ -156,7 +169,6 @@ fn to_upper(name: &str) -> String {
         }
     }
 
-    // ([a-z0-9])([A-Z]) -> \1_\2
     let chars: Vec<char> = s1.chars().collect();
     let mut s2 = String::new();
     let mut i = 0;
@@ -263,7 +275,7 @@ fn parse(text: &str) -> (Vec<Const>, Vec<Enum>) {
     (consts, enums)
 }
 
-fn xci_uint(text: &str, key: &str) -> Option<u64> {
+fn xci_value_str<'a>(text: &'a str, key: &str) -> Option<&'a str> {
     let key_tok = format!("\"{key}\"");
     let start = text.find(&key_tok)? + key_tok.len();
     let after = &text[start..];
@@ -271,7 +283,45 @@ fn xci_uint(text: &str, key: &str) -> Option<u64> {
     let after = &after[vpos..];
     let q1 = after.find('"')?;
     let q2 = after[q1 + 1..].find('"')? + q1 + 1;
-    after[q1 + 1..q2].parse::<u64>().ok()
+    Some(&after[q1 + 1..q2])
+}
+
+fn xci_uint(text: &str, key: &str) -> Option<u64> {
+    xci_value_str(text, key)?.parse::<u64>().ok()
+}
+
+fn mhz_to_hz(s: &str) -> Option<u64> {
+    let (int, frac) = s.split_once('.').unwrap_or((s, ""));
+    if int.is_empty() || !int.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if frac.len() > 6 || !frac.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let scale = 10u64.pow(6 - frac.len() as u32);
+    let frac_hz = if frac.is_empty() {
+        0
+    } else {
+        frac.parse::<u64>().ok()? * scale
+    };
+    Some(int.parse::<u64>().ok()? * 1_000_000 + frac_hz)
+}
+
+fn read_clk_consts(root: &Path) -> Result<Vec<Const>> {
+    let xci = root
+        .join(IP_DIR_REL)
+        .join(CLK_WIZ_IP)
+        .join(format!("{CLK_WIZ_IP}.xci"));
+    let text =
+        std::fs::read_to_string(&xci).with_context(|| format!("failed to read {}", xci.display()))?;
+    let mhz = xci_value_str(&text, CLK_OUT_FREQ_KEY)
+        .with_context(|| format!("missing {CLK_OUT_FREQ_KEY} in {}", xci.display()))?;
+    let hz = mhz_to_hz(mhz)
+        .with_context(|| format!("cannot parse {CLK_OUT_FREQ_KEY}={mhz:?} in {}", xci.display()))?;
+    Ok(vec![Const {
+        name: "FPGA_CLK_FREQ_HZ".to_string(),
+        value: hz.to_string(),
+    }])
 }
 
 fn read_ip_consts(root: &Path) -> Result<Vec<Const>> {
@@ -297,7 +347,12 @@ fn read_ip_consts(root: &Path) -> Result<Vec<Const>> {
 }
 
 fn emit_ip(out: &mut String, c: &Const) {
-    let _ = writeln!(out, "pub const {}: usize = {};", c.name, c.value);
+    let _ = writeln!(
+        out,
+        "pub const {}: usize = {};",
+        c.name,
+        group_decimal(&c.value)
+    );
 }
 
 fn read_tr_bounds(root: &Path) -> Result<Vec<Const>> {
@@ -331,7 +386,21 @@ fn read_tr_bounds(root: &Path) -> Result<Vec<Const>> {
 }
 
 fn emit_tr(out: &mut String, c: &Const) {
-    let _ = writeln!(out, "pub const {}: i32 = {};", c.name, c.value);
+    let _ = writeln!(
+        out,
+        "pub const {}: i32 = {};",
+        c.name,
+        group_decimal(&c.value)
+    );
+}
+
+fn emit_clk(out: &mut String, c: &Const) {
+    let _ = writeln!(
+        out,
+        "pub const {}: u32 = {};",
+        c.name,
+        group_decimal(&c.value)
+    );
 }
 
 fn emit(out: &mut String, c: &Const) {
@@ -354,7 +423,12 @@ fn emit_bit_mask(out: &mut String, c: &Const) {
     );
 }
 
-fn generate(text: &str, ip_consts: &[Const], tr_consts: &[Const]) -> (String, String) {
+fn generate(
+    text: &str,
+    ip_consts: &[Const],
+    tr_consts: &[Const],
+    clk_consts: &[Const],
+) -> (String, String) {
     let (consts, enums) = parse(text);
 
     let header = |src: &str, kind: &str| {
@@ -363,7 +437,7 @@ fn generate(text: &str, ip_consts: &[Const], tr_consts: &[Const]) -> (String, St
         )
     };
     let mut wire = header(
-        &format!("{PARAMS_SVH_REL} and the BRAM IP .xci files"),
+        &format!("{PARAMS_SVH_REL} and the IP .xci files"),
         "Client-facing wire constants shared with the firmware.",
     );
     let mut fw = header(PARAMS_SVH_REL, "Firmware-internal FPGA register map.");
@@ -410,6 +484,12 @@ fn generate(text: &str, ip_consts: &[Const], tr_consts: &[Const]) -> (String, St
             emit_tr(&mut wire, c);
         }
     }
+    if !clk_consts.is_empty() {
+        wire.push('\n');
+        for c in clk_consts {
+            emit_clk(&mut wire, c);
+        }
+    }
     (wire, fw)
 }
 
@@ -420,7 +500,8 @@ pub fn gen_param(root: &Path) -> Result<()> {
 
     let ip_consts = read_ip_consts(root)?;
     let tr_consts = read_tr_bounds(root)?;
-    let (wire_src, fw_src) = generate(&text, &ip_consts, &tr_consts);
+    let clk_consts = read_clk_consts(root)?;
+    let (wire_src, fw_src) = generate(&text, &ip_consts, &tr_consts, &clk_consts);
     for (rel, src) in [(WIRE_OUT_REL, wire_src), (FW_OUT_REL, fw_src)] {
         let out = root.join(rel);
         std::fs::write(&out, src).with_context(|| format!("failed to write {}", out.display()))?;

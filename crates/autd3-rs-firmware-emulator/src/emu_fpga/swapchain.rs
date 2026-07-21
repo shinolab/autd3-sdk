@@ -1,8 +1,8 @@
 use crate::fw;
 
-const FPGA_MAIN_CLK_FREQ: u64 = 20_480_000;
+const FPGA_MAIN_CLK_FREQ: u32 = fw::FPGA_CLK_FREQ_HZ;
 const NUM_BANKS: usize = fw::NUM_BANKS;
-const REP_INFINITE: u16 = 0xFFFF;
+const REP_INFINITE: u16 = fw::REP_INFINITE;
 
 const MODE_SYNC_IDX: u8 = fw::TRANSITION_MODE_SYNC_IDX;
 const MODE_SYS_TIME: u8 = fw::TRANSITION_MODE_SYS_TIME;

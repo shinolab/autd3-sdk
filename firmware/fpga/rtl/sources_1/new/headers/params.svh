@@ -10,6 +10,9 @@ package params;
   localparam int EmissionRdAddrWidth = $clog2(EmissionMaxIndices * 64);
   localparam int NumFociMax = 8;
 
+  localparam int UltrasoundFreqHz = 40000;
+  localparam bit [15:0] RepInfinite = 16'hFFFF;
+
   localparam int FuncDynamicFreqBit = 1;
   localparam int FuncEmulatorBit = 7;  // reserved
 
