@@ -1,10 +1,8 @@
 use crate::frame::PAYLOAD_BYTES;
 use crate::params::{EMISSION_MAX_INDICES, NUM_TRANSDUCERS};
 
-pub use crate::params::{MOD_BUFFER_SAMPLES, PWE_TABLE_SIZE};
+pub use crate::params::{EMISSION_SLOT_WORDS, FOCUS_WORDS, MOD_BUFFER_SAMPLES, PWE_TABLE_SIZE};
 
-pub const EMISSION_SLOT_WORDS: usize = 256;
-pub const FOCUS_WORDS: usize = 4;
 pub const EMISSION_RAM_WORDS: usize = EMISSION_SLOT_WORDS * EMISSION_MAX_INDICES as usize;
 pub const MAX_FOCI_TOTAL: usize = EMISSION_RAM_WORDS / FOCUS_WORDS;
 
