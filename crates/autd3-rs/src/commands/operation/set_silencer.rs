@@ -10,7 +10,7 @@ use crate::error::{Error, PayloadError};
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation, silencer_constraint};
+use super::{Distribution, Operation};
 
 const FLAG_FIXED_UPDATE_RATE: u8 = 1 << 0;
 const FLAG_STRICT_MODE: u8 = 1 << 1;
@@ -104,10 +104,8 @@ impl SilencerConfig for FixedCompletionTime {
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
         let intensity = completion_time_to_steps(self.intensity)?;
         let phase = completion_time_to_steps(self.phase)?;
-        if self.strict_mode
-            && let Err(v) = state.silencer.check_set_strict(intensity, phase)
-        {
-            return Err(silencer_constraint(device, v));
+        if self.strict_mode {
+            state.silencer.check_set_strict(device, intensity, phase)?;
         }
         state
             .silencer

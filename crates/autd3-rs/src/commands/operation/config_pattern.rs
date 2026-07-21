@@ -10,7 +10,7 @@ use crate::params::{EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
-use super::{Distribution, Operation, silencer_constraint};
+use super::{Distribution, Operation};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigPattern {
@@ -38,9 +38,7 @@ fn reflect_pattern(
     state: &mut FirmwareState,
 ) -> Result<(), Error> {
     let divider = config.divide()?;
-    if let Err(v) = state.silencer.check_pattern_div(divider) {
-        return Err(silencer_constraint(device, v));
-    }
+    state.silencer.check_pattern_div(device, divider)?;
     state.silencer.note_pattern_div(bank.as_u8(), divider);
     state
         .transition

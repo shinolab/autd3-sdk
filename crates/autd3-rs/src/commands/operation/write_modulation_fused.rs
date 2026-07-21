@@ -8,7 +8,7 @@ use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 
-use super::{Distribution, Operation, silencer_constraint, transition_constraint};
+use super::{Distribution, Operation};
 
 const MOD_FUSED_HEADER_BYTES: usize = core::mem::size_of::<WriteModulationFusedPayload>();
 pub(crate) const MOD_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - MOD_FUSED_HEADER_BYTES;
@@ -84,18 +84,14 @@ impl Operation for WriteModulationFused<'_> {
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
         let divider = self.config.divide()?;
         let bank = self.bank.as_u8();
-        if let Err(v) = state.silencer.check_mod_div(divider) {
-            return Err(silencer_constraint(device, v));
-        }
+        state.silencer.check_mod_div(device, divider)?;
         state.silencer.note_mod_div(bank, divider);
         state.transition.note_mod_loop(bank, self.loop_behavior);
 
-        if let Err(v) = state.silencer.check_mod_bank(bank) {
-            return Err(silencer_constraint(device, v));
-        }
-        if let Err(v) = state.transition.check_mod_bank(bank, self.transition_mode) {
-            return Err(transition_constraint(device, v));
-        }
+        state.silencer.check_mod_bank(device, bank)?;
+        state
+            .transition
+            .check_mod_bank(device, bank, self.transition_mode)?;
         state.silencer.note_mod_bank(bank);
         Ok(())
     }

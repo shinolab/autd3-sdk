@@ -1,8 +1,9 @@
 use thiserror::Error;
 
 use autd3_rs_core::error::{EncodeError, LinkError};
-use autd3_rs_core::mirror::{BankLoop, SilencerAxis};
 use autd3_rs_core::protocol::describe_device_error;
+
+use crate::mirror::{BankLoop, SilencerAxis};
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError, TransitionMode};
 
 #[derive(Debug, Error)]

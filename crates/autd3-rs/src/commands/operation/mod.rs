@@ -55,29 +55,6 @@ use crate::error::Error;
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-pub(crate) fn silencer_constraint(
-    device: usize,
-    violation: autd3_rs_core::SilencerViolation,
-) -> Error {
-    Error::SilencerConstraint {
-        device,
-        axis: violation.axis,
-        completion_steps: violation.completion_steps,
-        sampling_div: violation.sampling_div,
-    }
-}
-
-pub(crate) fn transition_constraint(
-    device: usize,
-    violation: autd3_rs_core::TransitionViolation,
-) -> Error {
-    Error::TransitionConstraint {
-        device,
-        transition_mode: violation.transition_mode,
-        bank_loop: violation.bank_loop,
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Distribution {
     Broadcast,

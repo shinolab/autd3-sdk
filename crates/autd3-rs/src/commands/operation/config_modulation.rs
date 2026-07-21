@@ -8,7 +8,7 @@ use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
 
-use super::{Distribution, Operation, silencer_constraint};
+use super::{Distribution, Operation};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigModulation {
@@ -54,9 +54,7 @@ impl Operation for ConfigModulation {
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
         let divider = self.config.divide()?;
-        if let Err(v) = state.silencer.check_mod_div(divider) {
-            return Err(silencer_constraint(device, v));
-        }
+        state.silencer.check_mod_div(device, divider)?;
         state.silencer.note_mod_div(self.bank.as_u8(), divider);
         state
             .transition
