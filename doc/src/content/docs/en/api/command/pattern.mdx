@@ -49,7 +49,7 @@ Several [helper functions](/autd3-sdk/en/api/compute/pattern/) are provided for 
 
 ## Equivalent Low-Level Commands
 
-`Pattern` internally expands into the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+`Pattern` is equivalent to the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/), which are fused into a single frame.
 The following is equivalent to `Pattern { bank, emissions }`.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

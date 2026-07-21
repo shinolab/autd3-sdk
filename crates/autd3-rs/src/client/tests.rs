@@ -190,7 +190,9 @@ fn slave_cycle(
         }
         Cmd::WritePatternBuffer
         | Cmd::WritePatternCompressed
+        | Cmd::WritePatternFused
         | Cmd::WriteModulationBuffer
+        | Cmd::WriteModulationFused
         | Cmd::ConfigModulation
         | Cmd::ConfigPattern
         | Cmd::ChangePatternBank

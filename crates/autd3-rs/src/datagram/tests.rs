@@ -114,11 +114,9 @@ fn push_each_accepts_heterogeneous_boxed_commands() {
     });
     let frames = b.build().unwrap();
 
-    assert_eq!(frames.len(), 3);
-    assert_eq!(cmd_at(&frames, 0, 0), Cmd::WritePatternBuffer);
+    assert_eq!(frames.len(), 1, "both commands are single-frame");
+    assert_eq!(cmd_at(&frames, 0, 0), Cmd::WritePatternFused);
     assert_eq!(cmd_at(&frames, 0, 1), Cmd::ConfigModulation);
-    assert_eq!(cmd_at(&frames, 1, 1), Cmd::Nop);
-    assert_eq!(cmd_at(&frames, 2, 1), Cmd::Nop);
 }
 
 #[test]

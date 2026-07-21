@@ -321,7 +321,9 @@ impl Cpu {
             }
             Cmd::WritePatternBuffer => cmd::write_pattern::handle(port, payload),
             Cmd::WritePatternCompressed => cmd::write_pattern_compressed::handle(port, payload),
+            Cmd::WritePatternFused => self.write_pattern_fused(port, payload),
             Cmd::WriteModulationBuffer => cmd::write_mod::handle(port, payload),
+            Cmd::WriteModulationFused => self.write_mod_fused(port, payload),
             Cmd::ConfigModulation => self.config_mod(port, payload),
             Cmd::ConfigPattern => self.config_pattern(port, payload),
             Cmd::ChangeModulationBank => self.change_mod_bank(port, payload),

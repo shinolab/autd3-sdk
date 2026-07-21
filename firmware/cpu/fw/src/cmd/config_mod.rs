@@ -16,11 +16,18 @@ impl Cpu {
         let Ok((p, _)) = ConfigModPayload::ref_from_prefix(payload) else {
             return Err(Error::InvalidPayload);
         };
-        let bank = p.bank;
-        let divider = p.divider.get();
-        let size = p.size.get();
-        let rep = p.rep.get();
+        self.write_mod_config_regs(port, p.bank, p.divider.get(), p.size.get(), p.rep.get())?;
+        self.set_and_wait_update(port, CTL_FLAG_MOD_SET)
+    }
 
+    pub(crate) fn write_mod_config_regs<P: Port>(
+        &self,
+        port: &mut P,
+        bank: u8,
+        divider: u16,
+        size: u32,
+        rep: u16,
+    ) -> Result<(), Error> {
         if usize::from(bank) >= NUM_BANKS || divider == 0 || size == 0 || size > MOD_BUFFER_SAMPLES
         {
             return Err(Error::InvalidPayload);
@@ -49,6 +56,6 @@ impl Cpu {
             rep,
         );
         self.silencer.note_mod_div(bank, divider);
-        self.set_and_wait_update(port, CTL_FLAG_MOD_SET)
+        Ok(())
     }
 }

@@ -4,6 +4,7 @@ mod mock;
 mod config;
 mod control;
 mod fifo;
+mod fused;
 mod pattern;
 mod proto;
 mod safety;

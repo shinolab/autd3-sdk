@@ -21,14 +21,32 @@ impl Cpu {
         let Ok((p, _)) = ConfigPatternPayload::ref_from_prefix(payload) else {
             return Err(Error::InvalidPayload);
         };
-        let bank = p.bank;
-        let divider = p.divider.get();
-        let size = p.size.get();
-        let num_foci = p.num_foci;
-        let sound_speed = p.sound_speed.get();
-        let rep = p.rep.get();
+        self.write_pattern_config_regs(
+            port,
+            p.bank,
+            p.emission_type,
+            p.divider.get(),
+            p.size.get(),
+            p.num_foci,
+            p.sound_speed.get(),
+            p.rep.get(),
+        )?;
+        self.set_and_wait_update(port, CTL_FLAG_PATTERN_SET)
+    }
 
-        let Some(emission_type) = EmissionType::from_u8(p.emission_type) else {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn write_pattern_config_regs<P: Port>(
+        &self,
+        port: &mut P,
+        bank: u8,
+        emission_type: u8,
+        divider: u16,
+        size: u32,
+        num_foci: u8,
+        sound_speed: u16,
+        rep: u16,
+    ) -> Result<(), Error> {
+        let Some(emission_type) = EmissionType::from_u8(emission_type) else {
             return Err(Error::InvalidPayload);
         };
         let mut invalid = usize::from(bank) >= NUM_BANKS || divider == 0 || size == 0;
@@ -88,6 +106,6 @@ impl Cpu {
             rep,
         );
         self.silencer.note_pattern_div(bank, divider);
-        self.set_and_wait_update(port, CTL_FLAG_PATTERN_SET)
+        Ok(())
     }
 }

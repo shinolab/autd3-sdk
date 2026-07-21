@@ -44,6 +44,13 @@ pub struct Cli {
     pub stop_on_error: bool,
     #[arg(long, default_value_t = false)]
     pub low_latency: bool,
+    /// Hammer the fused `Pattern` command instead of `WritePatternBuffer`.
+    ///
+    /// `WritePatternBuffer` never latches a CTL flag, so it cannot exercise the
+    /// `set_and_wait_update` spin. The fused command latches once per frame,
+    /// which under `--low-latency` happens inline in the `EtherCAT` ISR.
+    #[arg(long, default_value_t = false)]
+    pub fused: bool,
     #[arg(long, default_value_t = 10)]
     pub timeout_cycles: u32,
     #[arg(long, default_value_t = NonZeroU32::new(1).unwrap())]

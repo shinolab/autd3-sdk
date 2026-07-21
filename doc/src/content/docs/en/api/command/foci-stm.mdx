@@ -85,7 +85,7 @@ Places `num_points` points at equal intervals along a line including the start a
 
 ## Equivalent Low-Level Commands
 
-`FociStm` internally expands into the three commands [WriteFociBuffer](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+`FociStm` is equivalent to the three commands [WriteFociBuffer](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/). When the data fits in a single frame it is fused and sent as one frame; otherwise it expands into the three commands above.
 The following is equivalent to `FociStm::new(freq, &points, option)`.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

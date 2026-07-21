@@ -58,7 +58,7 @@ modulation の計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/m
 
 ## 等価な低レベルコマンド
 
-`Modulation` は内部で [WriteModulationBuffer](/autd3-sdk/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/api/command/lowlevel/config-modulation/) + [ChangeModulationBank](/autd3-sdk/api/command/lowlevel/change-modulation-bank/) の 3 つへ展開される.
+`Modulation` は [WriteModulationBuffer](/autd3-sdk/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/api/command/lowlevel/config-modulation/) + [ChangeModulationBank](/autd3-sdk/api/command/lowlevel/change-modulation-bank/) の 3 つと等価である. データが 1 フレームに収まる場合は融合して 1 フレームで送られ, 収まらない場合は上記の 3 コマンドに展開される.
 以下は `Modulation { bank, config, data, loop_behavior, transition_mode }` と等価な組み合わせである
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
