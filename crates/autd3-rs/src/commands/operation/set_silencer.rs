@@ -42,18 +42,13 @@ fn completion_time_to_steps(value: Duration) -> Result<u16, Error> {
     const NANOSEC: u128 = 1_000_000_000;
     let v = value.as_nanos() * u128::from(ULTRASOUND_FREQ.hz());
     if !v.is_multiple_of(NANOSEC) {
-        return Err(Error::InvalidPayload(
-            PayloadError::SilencerCompletionTimeNotMultiple(value),
-        ));
+        return Err(PayloadError::SilencerCompletionTimeNotMultiple(value).into());
     }
     let steps = v / NANOSEC;
     if steps == 0 {
-        return Err(Error::InvalidPayload(
-            PayloadError::SilencerCompletionTimeOutOfRange(value),
-        ));
+        return Err(PayloadError::SilencerCompletionTimeOutOfRange(value).into());
     }
-    u16::try_from(steps)
-        .map_err(|_| Error::InvalidPayload(PayloadError::SilencerCompletionTimeOutOfRange(value)))
+    u16::try_from(steps).map_err(|_| PayloadError::SilencerCompletionTimeOutOfRange(value).into())
 }
 
 mod sealed {

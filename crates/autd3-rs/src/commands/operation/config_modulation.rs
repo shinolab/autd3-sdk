@@ -33,17 +33,13 @@ impl Operation for ConfigModulation {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        let divider = self
-            .config
-            .divide()
-            .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))?;
+        let divider = self.config.divide()?;
         if self.size == 0 || self.size > MOD_BUFFER_SAMPLES {
-            return Err(Error::InvalidPayload(
-                PayloadError::ModulationSizeOutOfRange {
-                    size: self.size,
-                    max: MOD_BUFFER_SAMPLES,
-                },
-            ));
+            return Err(PayloadError::ModulationSizeOutOfRange {
+                size: self.size,
+                max: MOD_BUFFER_SAMPLES,
+            }
+            .into());
         }
         let (p, _) = ConfigModPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = ConfigModPayload {
@@ -57,10 +53,7 @@ impl Operation for ConfigModulation {
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        let divider = self
-            .config
-            .divide()
-            .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))?;
+        let divider = self.config.divide()?;
         if let Err(v) = state.silencer.check_mod_div(divider) {
             return Err(silencer_constraint(device, v));
         }

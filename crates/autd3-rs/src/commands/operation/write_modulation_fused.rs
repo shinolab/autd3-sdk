@@ -45,29 +45,24 @@ impl Operation for WriteModulationFused<'_> {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         if self.data.is_empty() {
-            return Err(Error::InvalidPayload(PayloadError::ModulationDataEmpty));
+            return Err(PayloadError::ModulationDataEmpty.into());
         }
         if self.data.len() > MOD_FUSED_MAX_DATA_LEN {
-            return Err(Error::InvalidPayload(
-                PayloadError::ModulationWriteExceedsCapacity {
-                    offset: 0,
-                    end: self.data.len(),
-                    capacity: MOD_FUSED_MAX_DATA_LEN,
-                },
-            ));
+            return Err(PayloadError::ModulationWriteExceedsCapacity {
+                offset: 0,
+                end: self.data.len(),
+                capacity: MOD_FUSED_MAX_DATA_LEN,
+            }
+            .into());
         }
         if self.data.len() > MOD_BUFFER_SAMPLES {
-            return Err(Error::InvalidPayload(
-                PayloadError::ModulationSizeOutOfRange {
-                    size: self.data.len(),
-                    max: MOD_BUFFER_SAMPLES,
-                },
-            ));
+            return Err(PayloadError::ModulationSizeOutOfRange {
+                size: self.data.len(),
+                max: MOD_BUFFER_SAMPLES,
+            }
+            .into());
         }
-        let divider = self
-            .config
-            .divide()
-            .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))?;
+        let divider = self.config.divide()?;
         let margin_ns = self.transition_mode.margin_ns()?;
         let len = u16::try_from(self.data.len()).expect("bounded by MOD_FUSED_MAX_DATA_LEN");
 
@@ -87,10 +82,7 @@ impl Operation for WriteModulationFused<'_> {
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        let divider = self
-            .config
-            .divide()
-            .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))?;
+        let divider = self.config.divide()?;
         let bank = self.bank.as_u8();
         if let Err(v) = state.silencer.check_mod_div(divider) {
             return Err(silencer_constraint(device, v));

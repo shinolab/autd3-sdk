@@ -42,12 +42,6 @@ pub struct WriteFociStmFused<'a, const N: usize> {
     pub transition_mode: TransitionMode,
 }
 
-fn divider_of(config: SamplingConfig) -> Result<u16, Error> {
-    config
-        .divide()
-        .map_err(|e| Error::InvalidPayload(PayloadError::from(e)))
-}
-
 fn reflect_fused(
     config: SamplingConfig,
     bank: PatternBank,
@@ -56,7 +50,7 @@ fn reflect_fused(
     device: usize,
     state: &mut FirmwareState,
 ) -> Result<(), Error> {
-    let divider = divider_of(config)?;
+    let divider = config.divide()?;
     let bank = bank.as_u8();
     if let Err(v) = state.silencer.check_pattern_div(divider) {
         return Err(silencer_constraint(device, v));
@@ -90,24 +84,22 @@ impl Operation for WritePatternFused<'_> {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         if device >= self.emissions.len() {
-            return Err(Error::InvalidPayload(
-                PayloadError::EmissionsDeviceOutOfRange {
-                    device,
-                    len: self.emissions.len(),
-                },
-            ));
+            return Err(PayloadError::EmissionsDeviceOutOfRange {
+                device,
+                len: self.emissions.len(),
+            }
+            .into());
         }
         let emissions = &self.emissions[device];
         if emissions.len() != Autd3::NUM_TRANSDUCERS {
-            return Err(Error::InvalidPayload(
-                PayloadError::TransducerCountMismatch {
-                    device,
-                    got: emissions.len(),
-                    expected: Autd3::NUM_TRANSDUCERS,
-                },
-            ));
+            return Err(PayloadError::TransducerCountMismatch {
+                device,
+                got: emissions.len(),
+                expected: Autd3::NUM_TRANSDUCERS,
+            }
+            .into());
         }
-        let divider = divider_of(self.config)?;
+        let divider = self.config.divide()?;
         let margin_ns = self.transition_mode.margin_ns()?;
         let bytes = emissions.as_bytes();
         let data_len = u16::try_from(bytes.len()).expect("bounded by NUM_TRANSDUCERS");
@@ -168,36 +160,37 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
     ) -> Result<Cmd, Error> {
         let size = self.points.len();
         if size == 0 {
-            return Err(Error::InvalidPayload(PayloadError::FociEmpty));
+            return Err(PayloadError::FociEmpty.into());
         }
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
         if num_foci == 0 || num_foci > NUM_FOCI_MAX {
-            return Err(Error::InvalidPayload(PayloadError::NumFociOutOfRange {
+            return Err(PayloadError::NumFociOutOfRange {
                 num_foci,
                 max: NUM_FOCI_MAX,
-            }));
+            }
+            .into());
         }
         let total = size * N;
         if total > PATTERN_FUSED_MAX_FOCI_PER_FRAME {
-            return Err(Error::InvalidPayload(
-                PayloadError::FociWriteExceedsCapacity {
-                    offset: 0,
-                    end: total,
-                    capacity: PATTERN_FUSED_MAX_FOCI_PER_FRAME,
-                },
-            ));
+            return Err(PayloadError::FociWriteExceedsCapacity {
+                offset: 0,
+                end: total,
+                capacity: PATTERN_FUSED_MAX_FOCI_PER_FRAME,
+            }
+            .into());
         }
         if size > MAX_FOCI_TOTAL / usize::from(num_foci) {
-            return Err(Error::InvalidPayload(PayloadError::StmFociExceedCapacity {
+            return Err(PayloadError::StmFociExceedCapacity {
                 size,
                 num_foci,
                 capacity: MAX_FOCI_TOTAL,
-            }));
+            }
+            .into());
         }
-        let divider = divider_of(self.config)?;
+        let divider = self.config.divide()?;
         let sound_speed = (self.sound_speed.m_s() * 64.0).round() as u16;
         if sound_speed == 0 {
-            return Err(Error::InvalidPayload(PayloadError::SoundSpeedZero));
+            return Err(PayloadError::SoundSpeedZero.into());
         }
         let margin_ns = self.transition_mode.margin_ns()?;
         let data_len = u16::try_from(total * FOCUS_WORDS * 2).expect("bounded by frame");

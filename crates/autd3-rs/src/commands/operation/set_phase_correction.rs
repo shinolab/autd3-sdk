@@ -25,20 +25,20 @@ impl Operation for SetPhaseCorrection<'_> {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        let phases = self.phases.get(device).ok_or(Error::InvalidPayload(
-            PayloadError::EmissionsDeviceOutOfRange {
+        let phases = self
+            .phases
+            .get(device)
+            .ok_or(PayloadError::EmissionsDeviceOutOfRange {
                 device,
                 len: self.phases.len(),
-            },
-        ))?;
+            })?;
         if phases.len() != Autd3::NUM_TRANSDUCERS {
-            return Err(Error::InvalidPayload(
-                PayloadError::TransducerCountMismatch {
-                    device,
-                    got: phases.len(),
-                    expected: Autd3::NUM_TRANSDUCERS,
-                },
-            ));
+            return Err(PayloadError::TransducerCountMismatch {
+                device,
+                got: phases.len(),
+                expected: Autd3::NUM_TRANSDUCERS,
+            }
+            .into());
         }
         out.iter_mut()
             .zip(phases)

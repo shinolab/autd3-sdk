@@ -31,24 +31,22 @@ impl Operation for WriteModulationBuffer<'_> {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         if self.data.is_empty() {
-            return Err(Error::InvalidPayload(PayloadError::ModulationDataEmpty));
+            return Err(PayloadError::ModulationDataEmpty.into());
         }
         if !self.offset.is_multiple_of(2) {
-            return Err(Error::InvalidPayload(
-                PayloadError::ModulationOffsetNotEven {
-                    offset: self.offset,
-                },
-            ));
+            return Err(PayloadError::ModulationOffsetNotEven {
+                offset: self.offset,
+            }
+            .into());
         }
         let end = self.offset + self.data.len();
         if end > MOD_BUFFER_SAMPLES {
-            return Err(Error::InvalidPayload(
-                PayloadError::ModulationWriteExceedsCapacity {
-                    offset: self.offset,
-                    end,
-                    capacity: MOD_BUFFER_SAMPLES,
-                },
-            ));
+            return Err(PayloadError::ModulationWriteExceedsCapacity {
+                offset: self.offset,
+                end,
+                capacity: MOD_BUFFER_SAMPLES,
+            }
+            .into());
         }
 
         let start = frame * WRITE_MAX_DATA_LEN;

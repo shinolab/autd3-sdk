@@ -74,18 +74,18 @@ impl Client {
         let link = link.into_link(geometry).await?;
         let num_devices = link.num_devices();
         if num_devices == 0 || num_devices > MAX_DEVICES {
-            return Err(Error::InvalidPayload(PayloadError::DeviceCountOutOfRange {
+            return Err(PayloadError::DeviceCountOutOfRange {
                 got: num_devices,
                 max: MAX_DEVICES,
-            }));
+            }
+            .into());
         }
         if geometry.num_devices() != num_devices {
-            return Err(Error::InvalidPayload(
-                PayloadError::GeometryDeviceMismatch {
-                    geometry: geometry.num_devices(),
-                    link: num_devices,
-                },
-            ));
+            return Err(PayloadError::GeometryDeviceMismatch {
+                geometry: geometry.num_devices(),
+                link: num_devices,
+            }
+            .into());
         }
 
         let checker = link.state_checker();
@@ -170,10 +170,11 @@ impl Client {
 
     async fn send_datagrams(&self, datagrams: &[Datagram]) -> Result<ResponseFuture, Error> {
         if datagrams.len() != self.num_devices {
-            return Err(Error::InvalidPayload(PayloadError::DatagramCountMismatch {
+            return Err(PayloadError::DatagramCountMismatch {
                 expected: self.num_devices,
                 got: datagrams.len(),
-            }));
+            }
+            .into());
         }
         let mut slot = self.pool.acquire().await;
         slot.reset(Distribution::PerDevice);
