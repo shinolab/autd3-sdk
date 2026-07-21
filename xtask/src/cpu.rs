@@ -8,9 +8,17 @@ use crate::util::{on_path, run};
 #[derive(Subcommand)]
 pub enum CpuCmd {
     /// Build `board` and link it with `platform/autd3-platform.o` into the flashable `.bin`
-    Build,
+    Build {
+        /// Toggle PORTA pin 5 around the EtherCAT ISR frame handler so its width can be scoped
+        #[arg(long)]
+        isr_probe: bool,
+    },
     /// Build, then write the `.bin` to the device with J-Link
-    Flash,
+    Flash {
+        /// Toggle PORTA pin 5 around the EtherCAT ISR frame handler so its width can be scoped
+        #[arg(long)]
+        isr_probe: bool,
+    },
     /// Run the portable firmware logic (`autd3-cpu-fw`) tests on the host
     Test,
     /// Regenerate `fw/src/params.rs` from the FPGA `params.svh`
@@ -27,8 +35,8 @@ pub enum CpuCmd {
 
 pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
     match cmd {
-        CpuCmd::Build => cpu_build(root).map(|_| ()),
-        CpuCmd::Flash => cpu_flash(root),
+        CpuCmd::Build { isr_probe } => cpu_build(root, *isr_probe).map(|_| ()),
+        CpuCmd::Flash { isr_probe } => cpu_flash(root, *isr_probe),
         CpuCmd::Test => cpu_test(root),
         CpuCmd::GenParam => gen_param(root),
         CpuCmd::Lint => cpu_lint(root),
@@ -52,8 +60,8 @@ fn board_dir(root: &Path) -> PathBuf {
     root.join("firmware/cpu/board")
 }
 
-fn cpu_flash(root: &Path) -> Result<()> {
-    let bin = cpu_build(root)?;
+fn cpu_flash(root: &Path, isr_probe: bool) -> Result<()> {
+    let bin = cpu_build(root, isr_probe)?;
 
     let jlink = match std::env::var("JLINK") {
         Ok(v) if !v.is_empty() => v,
@@ -99,7 +107,7 @@ fn cpu_flash(root: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn cpu_build(root: &Path) -> Result<PathBuf> {
+pub fn cpu_build(root: &Path, isr_probe: bool) -> Result<PathBuf> {
     gen_param(root)?;
 
     let prefix = std::env::var("CROSS_COMPILE").unwrap_or_else(|_| "arm-none-eabi-".to_string());
@@ -127,7 +135,12 @@ pub fn cpu_build(root: &Path) -> Result<PathBuf> {
         .with_context(|| format!("creating {}", build_dir.display()))?;
 
     let board = board_dir(root);
-    run("cargo", ["build", "--release"], &board).context(
+    let mut build_args = vec!["build", "--release"];
+    if isr_probe {
+        build_args.push("--features");
+        build_args.push("isr-probe");
+    }
+    run("cargo", build_args, &board).context(
         "building the firmware staticlib failed \
          (is the target installed? `rustup target add armv7r-none-eabi`)",
     )?;

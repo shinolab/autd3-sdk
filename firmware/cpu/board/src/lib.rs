@@ -41,9 +41,13 @@ pub extern "C" fn init_app() {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn recv_ethercat(frame: *const u8) {
+    #[cfg(feature = "isr-probe")]
+    bsp::io::isr_probe_high();
     let frame = unsafe { &*(frame.cast::<[u8; WIRE_RX_FRAME_BYTES]>()) };
     CPU.0.recv_ethercat(&mut HwPort, frame);
     publish_tx(CPU.0.tx());
+    #[cfg(feature = "isr-probe")]
+    bsp::io::isr_probe_low();
 }
 
 #[unsafe(no_mangle)]

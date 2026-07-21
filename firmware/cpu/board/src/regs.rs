@@ -82,6 +82,8 @@ pub(crate) const CMT0_CMCR_CMIE: u16 = 1 << 6;
 
 pub(crate) const PORT5_PDR: usize = 0xA000_000A;
 pub(crate) const PORTA_PDR: usize = 0xA000_0014;
+#[cfg(feature = "isr-probe")]
+pub(crate) const PORTA_PODR: usize = 0xA000_004A;
 pub(crate) const PORTF_PDR: usize = 0xA000_001E;
 pub(crate) const PORTN_PDR: usize = 0xA000_002C;
 pub(crate) const PORTN_PODR: usize = 0xA000_0056;

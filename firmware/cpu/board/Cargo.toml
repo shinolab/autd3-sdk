@@ -12,6 +12,9 @@ publish = false
 [lib]
 crate-type = ["staticlib"]
 
+[features]
+isr-probe = []
+
 [dependencies]
 autd3-cpu-fw = { path = "../fw" }
 
