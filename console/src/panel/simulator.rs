@@ -135,6 +135,9 @@ fn open_url(url: &str) -> std::io::Result<()> {
     } else {
         ("xdg-open", &[url])
     };
-    std::process::Command::new(program).args(args).spawn()?;
+    let mut command = std::process::Command::new(program);
+    command.args(args);
+    crate::process::no_window(&mut command);
+    command.spawn()?;
     Ok(())
 }
