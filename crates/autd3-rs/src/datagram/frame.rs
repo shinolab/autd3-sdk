@@ -1,5 +1,5 @@
+use crate::commands::operation::{Distribution, Operation};
 use crate::error::Error;
-use crate::operation::{Distribution, Operation};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 use super::each::{each_encode, each_slot_frames};

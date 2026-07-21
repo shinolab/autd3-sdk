@@ -3,12 +3,12 @@ use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 
+use crate::commands::operation::{Operation, XOR_HASH_MAX_DATA_LEN, XorHashCmd};
 use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::firmware_version::{FirmwareVersion, Version};
 use crate::geometry::{Autd3, Geometry};
 use crate::link::{CycleOutcome, Link};
-use crate::operation::{Operation, XOR_HASH_MAX_DATA_LEN, XorHashCmd};
 use crate::protocol::{Cmd, MAX_IN_FLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
 
 use crate::telemetry::Telemetry;
@@ -1076,7 +1076,7 @@ async fn commands_still_succeed_with_send_interval_above_one() {
 
 #[tokio::test]
 async fn build_rejects_too_fast_pattern_under_strict_silencer() {
-    use crate::operation::{ConfigPattern, SetSilencer};
+    use crate::commands::operation::{ConfigPattern, SetSilencer};
     use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
     let (client, _slave) = open_client().await;
@@ -1105,8 +1105,8 @@ async fn build_rejects_too_fast_pattern_under_strict_silencer() {
 
 #[tokio::test]
 async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
+    use crate::commands::operation::{ConfigModulation, FixedCompletionTime, SetSilencer};
     use crate::common::ULTRASOUND_PERIOD;
-    use crate::operation::{ConfigModulation, FixedCompletionTime, SetSilencer};
     use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
     use core::num::NonZeroU16;
 
@@ -1137,7 +1137,7 @@ async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
 
 #[tokio::test]
 async fn opt_out_disables_precheck() {
-    use crate::operation::{ConfigPattern, SetSilencer};
+    use crate::commands::operation::{ConfigPattern, SetSilencer};
     use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
     let (link, _slave) = slave_pair();
@@ -1161,7 +1161,7 @@ async fn opt_out_disables_precheck() {
 
 #[tokio::test]
 async fn desync_after_send_failure_stops_precheck() {
-    use crate::operation::{ConfigPattern, SetSilencer};
+    use crate::commands::operation::{ConfigPattern, SetSilencer};
     use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
     let too_fast = |client: &Client| {
@@ -1207,7 +1207,7 @@ async fn desync_after_send_failure_stops_precheck() {
 
 #[tokio::test]
 async fn build_rejects_transition_mode_incompatible_with_loop() {
-    use crate::command::Modulation;
+    use crate::commands::Modulation;
     use crate::value::{LoopBehavior, SamplingConfig, TransitionMode};
     use core::num::NonZeroU16;
 
@@ -1248,8 +1248,8 @@ async fn build_rejects_transition_mode_incompatible_with_loop() {
 
 #[tokio::test]
 async fn build_rejects_timed_transition_on_infinite_loop() {
+    use crate::commands::stm::{FociStm, FociStmOption};
     use crate::geometry::Point3;
-    use crate::stm::{FociStm, FociStmOption};
     use crate::value::{ControlPoints, GpioIn, LoopBehavior, SamplingConfig, TransitionMode};
 
     let points = [ControlPoints::from(Point3::new(0.0, 0.0, 150.0))];
@@ -1291,7 +1291,7 @@ async fn build_rejects_timed_transition_on_infinite_loop() {
 
 #[tokio::test]
 async fn transition_precheck_opts_out_with_validate_state() {
-    use crate::command::Modulation;
+    use crate::commands::Modulation;
     use crate::value::{LoopBehavior, SamplingConfig, TransitionMode};
     use core::num::NonZeroU16;
 
@@ -1317,7 +1317,7 @@ async fn transition_precheck_opts_out_with_validate_state() {
 
 #[tokio::test]
 async fn build_rejects_per_device_group_under_strict_silencer() {
-    use crate::operation::{ConfigModulation, SetSilencer};
+    use crate::commands::operation::{ConfigModulation, SetSilencer};
     use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
     use core::num::NonZeroU16;
 
@@ -1352,7 +1352,7 @@ async fn build_rejects_per_device_group_under_strict_silencer() {
 
 #[tokio::test]
 async fn separate_builders_share_committed_mirror_state() {
-    use crate::operation::{ConfigPattern, SetSilencer};
+    use crate::commands::operation::{ConfigPattern, SetSilencer};
     use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
     let (client, _slave) = open_client().await;

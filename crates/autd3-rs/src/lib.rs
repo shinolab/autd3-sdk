@@ -6,11 +6,8 @@ pub mod telemetry;
 pub mod tuning;
 
 mod client;
-mod command;
 mod datagram;
-mod operation;
 mod response;
-mod stm;
 
 pub use autd3_rs_core::{common, geometry, link, mirror, params, protocol, units, value};
 pub use error::{Error, PayloadError};

@@ -1,6 +1,6 @@
 use super::Command;
+use crate::commands::operation::{ChangeModulationBank, ConfigModulation, WriteModulationBuffer};
 use crate::datagram::DatagramBuilder;
-use crate::operation::{ChangeModulationBank, ConfigModulation, WriteModulationBuffer};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 
 #[derive(Clone, Copy, Debug)]

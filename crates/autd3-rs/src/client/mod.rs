@@ -18,6 +18,7 @@ use tokio::sync::{mpsc, oneshot};
 use autd3_cpu_wire::payload::ReadTelemetryPayload;
 use zerocopy::FromBytes;
 
+use crate::commands::operation::{Clear, Distribution, Synchronize};
 use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::{FirmwareVersion, Version};
@@ -25,7 +26,6 @@ use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
 use crate::link::{IntoLink, Link};
 use crate::mirror::FirmwareState;
-use crate::operation::{Clear, Distribution, Synchronize};
 use crate::protocol::{Cmd, DeviceErrorCode};
 use crate::telemetry::Telemetry;
 
