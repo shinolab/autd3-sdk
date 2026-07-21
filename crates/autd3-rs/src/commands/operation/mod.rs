@@ -42,9 +42,13 @@ pub use write_pattern_compressed::{
 };
 pub use write_pattern_fused::{WriteFociStmFused, WritePatternFused};
 
-pub use autd3_cpu_wire::layout::{
-    MAX_FOCI_PER_FRAME, MOD_FUSED_MAX_DATA_LEN, PATTERN_FUSED_MAX_DATA_LEN,
-    PATTERN_FUSED_MAX_FOCI_PER_FRAME, WRITE_MAX_DATA_LEN,
+pub use autd3_cpu_wire::layout::{MAX_FOCI_PER_FRAME, WRITE_MAX_DATA_LEN};
+
+#[cfg(test)]
+pub(crate) use write_modulation_fused::MOD_FUSED_MAX_DATA_LEN;
+#[cfg(test)]
+pub(crate) use write_pattern_fused::{
+    PATTERN_FUSED_HEADER_BYTES, PATTERN_FUSED_MAX_FOCI_PER_FRAME,
 };
 
 use crate::error::Error;

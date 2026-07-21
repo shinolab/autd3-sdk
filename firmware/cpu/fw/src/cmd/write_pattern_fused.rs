@@ -1,6 +1,5 @@
 use zerocopy::FromBytes;
 
-pub use autd3_cpu_wire::layout::PATTERN_FUSED_MAX_DATA_LEN;
 pub use autd3_cpu_wire::payload::WritePatternFusedPayload;
 
 use crate::app::Cpu;
@@ -10,7 +9,10 @@ use crate::params::{
     NUM_BANKS,
 };
 use crate::port::Port;
-use crate::proto::{EMISSION_RAM_WORDS, Error};
+use crate::proto::{EMISSION_RAM_WORDS, Error, PAYLOAD_BYTES};
+
+const PATTERN_FUSED_MAX_DATA_LEN: usize =
+    PAYLOAD_BYTES - core::mem::size_of::<WritePatternFusedPayload>();
 
 impl Cpu {
     pub(crate) fn write_pattern_fused<P: Port>(
