@@ -46,7 +46,10 @@ impl Geometry {
 
     #[must_use]
     pub fn pattern_buffer(&self) -> Vec<Vec<Emission>> {
-        vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; self.num_devices()]
+        self.devices
+            .iter()
+            .map(|d| vec![Emission::default(); d.num_transducers()])
+            .collect()
     }
 
     #[must_use]
