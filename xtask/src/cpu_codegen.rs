@@ -39,8 +39,6 @@ const FW_INTERNAL_PREFIXES: &[&str] = &[
     "BRAM_CNT_SELECT_",
     "CTL_FLAG_",
     "SILENCER_FLAG_",
-    "FPGA_STATE_",
-    "FUNC_",
 ];
 
 fn is_fw_internal(name: &str) -> bool {

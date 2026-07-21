@@ -44,9 +44,16 @@ module controller (
   assign GPIO_IN[3] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_3];
 
   function automatic logic [15:0] fpga_state_din();
-    return {
-      SYNC_RESYNC_COUNT, 1'h0  /* reserved */, TRANSITION_PENDING, MOD_STOPPED, PATTERN_STOPPED, PATTERN_CYCLE == '0, PATTERN_BANK, MOD_BANK, THERMO
-    };
+    logic [15:0] s = '0;
+    s[params::FPGA_STATE_BIT_THERMAL_ASSERT] = THERMO;
+    s[params::FPGA_STATE_BIT_MOD_BANK] = MOD_BANK;
+    s[params::FPGA_STATE_BIT_PATTERN_BANK] = PATTERN_BANK;
+    s[params::FPGA_STATE_BIT_PATTERN_MODE] = PATTERN_CYCLE == '0;
+    s[params::FPGA_STATE_BIT_PATTERN_STOPPED] = PATTERN_STOPPED;
+    s[params::FPGA_STATE_BIT_MOD_STOPPED] = MOD_STOPPED;
+    s[params::FPGA_STATE_BIT_TRANSITION_PENDING] = TRANSITION_PENDING;
+    s[15:8] = SYNC_RESYNC_COUNT;
+    return s;
   endfunction
 
   typedef enum logic [6:0] {
