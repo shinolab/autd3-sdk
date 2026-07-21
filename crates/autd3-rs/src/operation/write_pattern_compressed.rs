@@ -97,10 +97,10 @@ impl Operation for WritePatternCompressed<'_> {
             reserved: 0,
             offset: U32::new(offset),
         };
-        for t in 0..Autd3::NUM_TRANSDUCERS {
-            let word = self.pack_word(device, t);
-            rest[2 * t..2 * t + 2].copy_from_slice(&word.to_le_bytes());
-        }
+        rest.chunks_exact_mut(2)
+            .take(Autd3::NUM_TRANSDUCERS)
+            .enumerate()
+            .for_each(|(t, dst)| dst.copy_from_slice(&self.pack_word(device, t).to_le_bytes()));
         Ok(Cmd::WritePatternCompressed)
     }
 }

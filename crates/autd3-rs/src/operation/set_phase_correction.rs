@@ -40,9 +40,9 @@ impl Operation for SetPhaseCorrection<'_> {
                 },
             ));
         }
-        for (i, phase) in phases.iter().enumerate() {
-            out[i] = phase.0;
-        }
+        out.iter_mut()
+            .zip(phases)
+            .for_each(|(dst, phase)| *dst = phase.0);
         Ok(Cmd::SetPhaseCorrection)
     }
 }

@@ -39,11 +39,15 @@ impl Operation for SetOutputMask<'_> {
                 },
             ));
         }
-        for (i, &on) in mask.iter().enumerate() {
-            if on {
-                out[i / 8] |= 1 << (i % 8);
-            }
-        }
+        mask.chunks(8)
+            .zip(out.iter_mut())
+            .for_each(|(chunk, byte)| {
+                *byte = chunk
+                    .iter()
+                    .enumerate()
+                    .filter(|&(_, &on)| on)
+                    .fold(0u8, |acc, (j, _)| acc | (1 << j));
+            });
         Ok(Cmd::SetOutputMask)
     }
 }

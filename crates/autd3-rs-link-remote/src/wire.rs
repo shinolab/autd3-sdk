@@ -15,15 +15,17 @@ pub(crate) fn encode_geometry(devices: &[DeviceLayout]) -> Vec<u8> {
     let total: usize = devices.iter().map(|d| d.transducers.len()).sum();
     let mut out = Vec::with_capacity(4 + devices.len() * 4 + total * LAYOUT_BYTES);
     out.extend_from_slice(&num_devices.to_le_bytes());
-    for dev in devices {
+    out.extend(devices.iter().flat_map(|dev| {
         let n = u32::try_from(dev.transducers.len()).unwrap_or(u32::MAX);
-        out.extend_from_slice(&n.to_le_bytes());
-        for t in &dev.transducers {
-            for v in t.pos.iter().chain(t.dir.iter()) {
-                out.extend_from_slice(&v.to_le_bytes());
-            }
-        }
-    }
+        n.to_le_bytes()
+            .into_iter()
+            .chain(dev.transducers.iter().flat_map(|t| {
+                t.pos
+                    .iter()
+                    .chain(t.dir.iter())
+                    .flat_map(|v| v.to_le_bytes())
+            }))
+    }));
     out
 }
 

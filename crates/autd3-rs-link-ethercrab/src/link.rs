@@ -52,10 +52,10 @@ impl<S, DC> Groups<S, DC> {
     where
         Fut: Future<Output = Result<SubGroup<S2, DC2>, E>>,
     {
-        let mut groups = Vec::with_capacity(self.groups.len());
-        for result in join_all(self.groups.into_iter().map(f)).await {
-            groups.push(result?);
-        }
+        let groups = join_all(self.groups.into_iter().map(f))
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, E>>()?;
         Ok(Groups { groups })
     }
 }

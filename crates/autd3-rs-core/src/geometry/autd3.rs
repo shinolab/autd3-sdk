@@ -34,24 +34,16 @@ impl Default for Autd3 {
 impl From<Autd3> for Device {
     fn from(a: Autd3) -> Device {
         let direction = a.rotation * Vector3::z_axis();
-        let mut positions = Vec::with_capacity(Autd3::NUM_TRANSDUCERS);
-        let mut directions = Vec::with_capacity(Autd3::NUM_TRANSDUCERS);
-        for y in 0..Autd3::GRID_Y {
-            for x in 0..Autd3::GRID_X {
-                if !is_missing_transducer(x, y) {
-                    positions.push(
-                        a.origin
-                            + a.rotation
-                                * Vector3::new(
-                                    x as f32 * Autd3::PITCH_MM,
-                                    y as f32 * Autd3::PITCH_MM,
-                                    0.0,
-                                ),
-                    );
-                    directions.push(direction);
-                }
-            }
-        }
+        let (positions, directions): (Vec<_>, Vec<_>) = (0..Autd3::GRID_Y)
+            .flat_map(|y| (0..Autd3::GRID_X).map(move |x| (x, y)))
+            .filter(|&(x, y)| !is_missing_transducer(x, y))
+            .map(|(x, y)| {
+                let position = a.origin
+                    + a.rotation
+                        * Vector3::new(x as f32 * Autd3::PITCH_MM, y as f32 * Autd3::PITCH_MM, 0.0);
+                (position, direction)
+            })
+            .unzip();
         debug_assert_eq!(positions.len(), Autd3::NUM_TRANSDUCERS);
         Device::new(a.rotation, positions, directions)
     }

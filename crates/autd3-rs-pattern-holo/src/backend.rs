@@ -42,14 +42,13 @@ impl LinAlgBackend for NalgebraBackend {
     fn back_prop(&self, g: &Self::Matrix) -> Self::Matrix {
         let m = g.nrows();
         let n = g.ncols();
-        let mut data = Vec::with_capacity(m * n);
-        for i in 0..m {
-            let denom: f32 = (0..n).map(|j| g[(i, j)].norm_sqr()).sum();
-            let x = Complex::new(1.0 / denom, 0.0);
-            for j in 0..n {
-                data.push(g[(i, j)].conj() * x);
-            }
-        }
+        let data = (0..m)
+            .flat_map(|i| {
+                let denom: f32 = (0..n).map(|j| g[(i, j)].norm_sqr()).sum();
+                let x = Complex::new(1.0 / denom, 0.0);
+                (0..n).map(move |j| g[(i, j)].conj() * x)
+            })
+            .collect();
         DMatrix::from_vec(n, m, data)
     }
 
