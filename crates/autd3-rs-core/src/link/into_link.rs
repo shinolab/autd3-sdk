@@ -7,13 +7,13 @@ pub trait IntoLink: Send {
     fn into_link(
         self,
         geometry: &Geometry,
-    ) -> impl Future<Output = Result<Self::Link, crate::Error>> + Send;
+    ) -> impl Future<Output = Result<Self::Link, crate::error::LinkError>> + Send;
 }
 
 impl<L: Link> IntoLink for L {
     type Link = L;
 
-    async fn into_link(self, _geometry: &Geometry) -> Result<L, crate::Error> {
+    async fn into_link(self, _geometry: &Geometry) -> Result<L, crate::error::LinkError> {
         Ok(self)
     }
 }

@@ -30,10 +30,7 @@ impl Operation for ChangeModulationBank {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        let margin_ns = self
-            .transition_mode
-            .margin_ns()
-            .map_err(Error::InvalidPayload)?;
+        let margin_ns = self.transition_mode.margin_ns()?;
         let (p, _) = ChangeModBankPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = ChangeModBankPayload {
             bank: self.bank.as_u8(),

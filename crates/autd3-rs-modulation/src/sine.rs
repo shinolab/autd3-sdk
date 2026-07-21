@@ -7,9 +7,9 @@
 use core::f32::consts::PI;
 
 use autd3_rs_core::common::Angle;
-use autd3_rs_core::error::{Error, PayloadError};
 use autd3_rs_core::value::SamplingConfig;
 
+use crate::error::ModulationError;
 use crate::sampling_mode::SamplingMode;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -36,11 +36,10 @@ impl Default for SineOption {
 pub(crate) fn sine_raw<S: Into<SamplingMode>>(
     freq: S,
     option: &SineOption,
-) -> Result<Vec<f32>, Error> {
+) -> Result<Vec<f32>, ModulationError> {
     let mode: SamplingMode = freq.into();
     let (n, rep) = mode.validate(option.sampling_config)?;
-    let n =
-        usize::try_from(n).map_err(|_| Error::InvalidPayload(PayloadError::SampleCountOverflow))?;
+    let n = usize::try_from(n).map_err(|_| ModulationError::SampleCountOverflow)?;
 
     let amplitude = f32::from(option.amplitude);
     let offset = f32::from(option.offset);
@@ -58,7 +57,7 @@ pub fn sine<S: Into<SamplingMode>>(
     freq: S,
     option: &SineOption,
     dst: &mut Vec<u8>,
-) -> Result<(), Error> {
+) -> Result<(), ModulationError> {
     let raw = sine_raw(freq, option)?;
 
     dst.clear();
@@ -76,7 +75,7 @@ pub fn sine<S: Into<SamplingMode>>(
         });
     }
     if out_of_range {
-        return Err(Error::InvalidPayload(PayloadError::SineValueOutOfRange));
+        return Err(ModulationError::SineValueOutOfRange);
     }
     Ok(())
 }

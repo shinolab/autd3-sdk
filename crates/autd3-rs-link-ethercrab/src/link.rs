@@ -117,7 +117,7 @@ impl autd3_rs_core::IntoLink for EtherCrabLinkOption {
     async fn into_link(
         self,
         geometry: &autd3_rs_core::Geometry,
-    ) -> Result<EtherCrabLink, autd3_rs_core::Error> {
+    ) -> Result<EtherCrabLink, autd3_rs_core::error::LinkError> {
         EtherCrabLinkOptionFull::from(self)
             .into_link(geometry)
             .await
@@ -130,10 +130,10 @@ impl autd3_rs_core::IntoLink for EtherCrabLinkOptionFull {
     async fn into_link(
         self,
         _geometry: &autd3_rs_core::Geometry,
-    ) -> Result<EtherCrabLink, autd3_rs_core::Error> {
+    ) -> Result<EtherCrabLink, autd3_rs_core::error::LinkError> {
         Box::pin(EtherCrabLink::open(self))
             .await
-            .map_err(|e| autd3_rs_core::Error::Link(e.to_string()))
+            .map_err(|e| autd3_rs_core::error::LinkError(e.to_string()))
     }
 }
 

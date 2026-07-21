@@ -5,9 +5,10 @@
 )]
 
 use autd3_rs_core::common::{Freq, ULTRASOUND_FREQ};
-use autd3_rs_core::error::{Error, PayloadError};
 use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
 use autd3_rs_core::value::{Nearest, SamplingConfig, is_integer};
+
+use crate::error::ModulationError;
 
 fn gcd(mut a: u64, mut b: u64) -> u64 {
     while b != 0 {
@@ -16,10 +17,6 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
         a = t;
     }
     a
-}
-
-fn cfg_err(e: autd3_rs_core::value::SamplingConfigError) -> Error {
-    Error::InvalidPayload(PayloadError::SamplingConfig(e))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -49,7 +46,7 @@ impl From<Nearest<Freq<f32>>> for SamplingMode {
 
 impl SamplingMode {
     // Returns `(n, rep)`: `n` samples span `rep` full periods of the waveform.
-    pub(crate) fn validate(self, config: SamplingConfig) -> Result<(u64, u64), Error> {
+    pub(crate) fn validate(self, config: SamplingConfig) -> Result<(u64, u64), ModulationError> {
         match self {
             SamplingMode::ExactFreq(freq) => Self::validate_exact(freq, config),
             SamplingMode::ExactFreqFloat(freq) => Self::validate_exact_f(freq, config),
@@ -57,40 +54,44 @@ impl SamplingMode {
         }
     }
 
-    fn validate_exact(freq: Freq<u32>, config: SamplingConfig) -> Result<(u64, u64), Error> {
-        let nyquist = config.freq().map_err(cfg_err)?.hz() / 2.;
+    fn validate_exact(
+        freq: Freq<u32>,
+        config: SamplingConfig,
+    ) -> Result<(u64, u64), ModulationError> {
+        let nyquist = config.freq()?.hz() / 2.;
         if freq.hz() as f32 >= nyquist {
-            return Err(Error::InvalidPayload(PayloadError::FrequencyAboveNyquist {
+            return Err(ModulationError::FrequencyAboveNyquist {
                 hz: f64::from(freq.hz()),
                 nyquist,
-            }));
+            });
         }
         if freq.hz() == 0 {
-            return Err(Error::InvalidPayload(PayloadError::FrequencyZero));
+            return Err(ModulationError::FrequencyZero);
         }
-        let fd = u64::from(freq.hz()) * u64::from(config.divide().map_err(cfg_err)?);
+        let fd = u64::from(freq.hz()) * u64::from(config.divide()?);
         let fs = u64::from(ULTRASOUND_FREQ.hz());
         let k = gcd(fs, fd);
         Ok((fs / k, fd / k))
     }
 
-    fn validate_exact_f(freq: Freq<f32>, config: SamplingConfig) -> Result<(u64, u64), Error> {
+    fn validate_exact_f(
+        freq: Freq<f32>,
+        config: SamplingConfig,
+    ) -> Result<(u64, u64), ModulationError> {
         if freq.hz() < 0. || freq.hz().is_nan() {
-            return Err(Error::InvalidPayload(PayloadError::FrequencyNotPositive {
-                hz: freq.hz(),
-            }));
+            return Err(ModulationError::FrequencyNotPositive { hz: freq.hz() });
         }
         if freq.hz() == 0. {
-            return Err(Error::InvalidPayload(PayloadError::FrequencyZero));
+            return Err(ModulationError::FrequencyZero);
         }
-        let nyquist = config.freq().map_err(cfg_err)?.hz() / 2.;
+        let nyquist = config.freq()?.hz() / 2.;
         if freq.hz() >= nyquist {
-            return Err(Error::InvalidPayload(PayloadError::FrequencyAboveNyquist {
+            return Err(ModulationError::FrequencyAboveNyquist {
                 hz: f64::from(freq.hz()),
                 nyquist,
-            }));
+            });
         }
-        let fd = f64::from(freq.hz()) * f64::from(config.divide().map_err(cfg_err)?);
+        let fd = f64::from(freq.hz()) * f64::from(config.divide()?);
         let fs = u64::from(ULTRASOUND_FREQ.hz());
         ((f64::from(ULTRASOUND_FREQ.hz()) / fd).floor() as u32..=MOD_BUFFER_SAMPLES as u32)
             .find_map(|n| {
@@ -103,18 +104,19 @@ impl SamplingMode {
                 }
                 Some((u64::from(n), fnd / fs))
             })
-            .ok_or_else(|| {
-                Error::InvalidPayload(PayloadError::FrequencyNotRepresentable { hz: freq.hz() })
-            })
+            .ok_or(ModulationError::FrequencyNotRepresentable { hz: freq.hz() })
     }
 
-    fn validate_nearest(freq: Freq<f32>, config: SamplingConfig) -> Result<(u64, u64), Error> {
-        let cfg_freq = config.freq().map_err(cfg_err)?.hz();
+    fn validate_nearest(
+        freq: Freq<f32>,
+        config: SamplingConfig,
+    ) -> Result<(u64, u64), ModulationError> {
+        let cfg_freq = config.freq()?.hz();
         let freq_min = cfg_freq / MOD_BUFFER_SAMPLES as f32;
         let freq_max = cfg_freq / 2.;
         let freq = freq.hz().clamp(freq_min, freq_max);
         if freq.is_nan() {
-            return Err(Error::InvalidPayload(PayloadError::FrequencyNaN));
+            return Err(ModulationError::FrequencyNaN);
         }
         Ok(((cfg_freq / freq).round() as u64, 1))
     }

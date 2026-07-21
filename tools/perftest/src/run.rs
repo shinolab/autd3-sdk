@@ -248,6 +248,9 @@ async fn run_stop_and_wait(
             Err(ClientError::InvalidPayload(e)) => {
                 anyhow::bail!("payload rejected by the local encoder: {e}");
             }
+            Err(ClientError::Encode(e)) => {
+                anyhow::bail!("value rejected by the local encoder: {e}");
+            }
             Err(e @ ClientError::SilencerConstraint { .. }) => {
                 anyhow::bail!("rejected by the local silencer precheck: {e}");
             }
@@ -336,6 +339,9 @@ async fn run_streaming(
             Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),
             Err(ClientError::InvalidPayload(e)) => {
                 anyhow::bail!("payload rejected by the local encoder: {e}");
+            }
+            Err(ClientError::Encode(e)) => {
+                anyhow::bail!("value rejected by the local encoder: {e}");
             }
             Err(e @ ClientError::SilencerConstraint { .. }) => {
                 anyhow::bail!("rejected by the local silencer precheck: {e}");

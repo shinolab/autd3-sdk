@@ -66,9 +66,10 @@ mod client {
     use std::pin::Pin;
     use std::sync::Arc;
 
+    use autd3_rs::Error;
     use autd3_rs::{ClientConfig, Frames, Response, ResponseFuture, Telemetry};
+    use autd3_rs_core::Geometry;
     use autd3_rs_core::link::DeviceState;
-    use autd3_rs_core::{Error, Geometry};
 
     pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send>>;
 

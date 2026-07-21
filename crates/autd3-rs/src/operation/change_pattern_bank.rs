@@ -30,10 +30,7 @@ impl Operation for ChangePatternBank {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        let margin_ns = self
-            .transition_mode
-            .margin_ns()
-            .map_err(Error::InvalidPayload)?;
+        let margin_ns = self.transition_mode.margin_ns()?;
         let (p, _) = ChangePatternBankPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = ChangePatternBankPayload {
             bank: self.bank.as_u8(),
@@ -157,7 +154,7 @@ mod tests {
 
         assert!(matches!(
             err,
-            Error::InvalidPayload(crate::error::PayloadError::TransitionMarginOutOfRange(_))
+            Error::Encode(crate::EncodeError::TransitionMarginOutOfRange(_))
         ));
     }
 }

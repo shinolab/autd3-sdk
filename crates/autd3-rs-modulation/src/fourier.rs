@@ -1,7 +1,6 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
-use autd3_rs_core::error::{Error, PayloadError};
-
+use crate::error::ModulationError;
 use crate::sampling_mode::SamplingMode;
 use crate::sine::{SineOption, sine_raw};
 
@@ -35,24 +34,22 @@ pub fn fourier<S: Into<SamplingMode> + Copy>(
     components: &[SineComponent<S>],
     option: &FourierOption,
     dst: &mut Vec<u8>,
-) -> Result<(), Error> {
+) -> Result<(), ModulationError> {
     let Some(first) = components.first() else {
-        return Err(Error::InvalidPayload(PayloadError::FourierComponentsEmpty));
+        return Err(ModulationError::FourierComponentsEmpty);
     };
     let sampling_config = first.option.sampling_config;
     if components
         .iter()
         .any(|c| c.option.sampling_config != sampling_config)
     {
-        return Err(Error::InvalidPayload(
-            PayloadError::FourierSamplingConfigMismatch,
-        ));
+        return Err(ModulationError::FourierSamplingConfigMismatch);
     }
 
     let buffers = components
         .iter()
         .map(|c| sine_raw(c.freq, &c.option))
-        .collect::<Result<Vec<_>, Error>>()?;
+        .collect::<Result<Vec<_>, ModulationError>>()?;
 
     let scale = option.scale_factor.unwrap_or(1.0 / buffers.len() as f32);
     let offset = f32::from(option.offset);
@@ -80,7 +77,7 @@ pub fn fourier<S: Into<SamplingMode> + Copy>(
         });
     }
     if out_of_range {
-        return Err(Error::InvalidPayload(PayloadError::FourierValueOutOfRange));
+        return Err(ModulationError::FourierValueOutOfRange);
     }
     Ok(())
 }

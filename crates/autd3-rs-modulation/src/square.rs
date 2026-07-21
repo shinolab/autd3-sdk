@@ -1,8 +1,8 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
-use autd3_rs_core::error::{Error, PayloadError};
 use autd3_rs_core::value::SamplingConfig;
 
+use crate::error::ModulationError;
 use crate::sampling_mode::SamplingMode;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -28,17 +28,14 @@ pub fn square<S: Into<SamplingMode>>(
     freq: S,
     option: &SquareOption,
     dst: &mut Vec<u8>,
-) -> Result<(), Error> {
+) -> Result<(), ModulationError> {
     if !(0.0..=1.0).contains(&option.duty) {
-        return Err(Error::InvalidPayload(PayloadError::DutyOutOfRange {
-            duty: option.duty,
-        }));
+        return Err(ModulationError::DutyOutOfRange { duty: option.duty });
     }
 
     let mode: SamplingMode = freq.into();
     let (n, rep) = mode.validate(option.sampling_config)?;
-    let n =
-        usize::try_from(n).map_err(|_| Error::InvalidPayload(PayloadError::SampleCountOverflow))?;
+    let n = usize::try_from(n).map_err(|_| ModulationError::SampleCountOverflow)?;
 
     dst.clear();
     dst.reserve(n);
