@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use autd3_rs::{CycleOutcome, Error, Geometry, IntoLink, Link, RX_FRAME_BYTES, TX_FRAME_BYTES};
+use autd3_rs::{CycleOutcome, Geometry, IntoLink, Link, LinkError, RX_FRAME_BYTES, TX_FRAME_BYTES};
 use autd3_rs_link_nop::Nop;
 
 type Emulator = <Nop as IntoLink>::Link;
@@ -18,7 +18,7 @@ impl PacedNop {
 impl IntoLink for PacedNop {
     type Link = Paced;
 
-    async fn into_link(self, geometry: &Geometry) -> Result<Paced, Error> {
+    async fn into_link(self, geometry: &Geometry) -> Result<Paced, LinkError> {
         Ok(Paced {
             inner: Nop.into_link(geometry).await?,
             period: self.period,

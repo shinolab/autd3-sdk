@@ -1,7 +1,7 @@
 use core::time::Duration;
 
 use super::{DcSysTime, GpioIn};
-use crate::error::PayloadError;
+use crate::error::EncodeError;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum TransitionMode {
@@ -37,7 +37,7 @@ impl TransitionMode {
         }
     }
 
-    pub fn margin_ns(self) -> Result<u32, PayloadError> {
+    pub fn margin_ns(self) -> Result<u32, EncodeError> {
         let TransitionMode::SysTime {
             margin: Some(margin),
             ..
@@ -46,7 +46,7 @@ impl TransitionMode {
             return Ok(0);
         };
         u32::try_from(margin.as_nanos())
-            .map_err(|_| PayloadError::TransitionMarginOutOfRange(margin))
+            .map_err(|_| EncodeError::TransitionMarginOutOfRange(margin))
     }
 }
 
@@ -97,7 +97,7 @@ mod tests {
                 margin: Some(Duration::from_secs(5)),
             }
             .margin_ns(),
-            Err(PayloadError::TransitionMarginOutOfRange(
+            Err(EncodeError::TransitionMarginOutOfRange(
                 Duration::from_secs(5)
             ))
         );

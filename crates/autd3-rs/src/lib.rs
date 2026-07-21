@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod error;
 pub mod firmware_version;
 pub mod fpga_state;
 pub mod telemetry;
@@ -11,17 +12,18 @@ mod operation;
 mod response;
 mod stm;
 
-pub use autd3_rs_core::{common, error, geometry, link, mirror, params, protocol, units, value};
+pub use autd3_rs_core::{common, geometry, link, mirror, params, protocol, units, value};
+pub use error::{Error, PayloadError};
 
 pub use autd3_rs_core::value::{
     ControlPoint, ControlPoints, PULSE_WIDTH_PERIOD, PulseWidth, PulseWidthError,
 };
 
 pub use autd3_rs_core::{
-    Angle, Autd3, BankLoop, Cmd, ConstStateChecker, CycleOutcome, Device, DeviceState, Error,
-    FirmwareState, Freq, Geometry, Interface, IntoLink, Length, Link, LinkStats, LinkStatus,
-    MAX_IN_FLIGHT, PAYLOAD_BYTES, Point3, Quaternion, RX_FRAME_BYTES, RtSchedulePolicy, RxFrame,
-    Seq, SilencerAxis, SilencerGuardState, SilencerViolation, StateCheck, TX_FRAME_BYTES,
+    Angle, Autd3, BankLoop, Cmd, ConstStateChecker, CycleOutcome, Device, DeviceState, EncodeError,
+    FirmwareState, Freq, Geometry, Interface, IntoLink, Length, Link, LinkError, LinkStats,
+    LinkStatus, MAX_IN_FLIGHT, PAYLOAD_BYTES, Point3, Quaternion, RX_FRAME_BYTES, RtSchedulePolicy,
+    RxFrame, Seq, SilencerAxis, SilencerGuardState, SilencerViolation, StateCheck, TX_FRAME_BYTES,
     TransitionGuardState, TransitionViolation, TxFrame, UnitQuaternion, UnitVector3, Vector3,
     Velocity, offset, point,
 };

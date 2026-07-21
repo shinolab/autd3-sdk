@@ -5,8 +5,8 @@ use std::time::Duration;
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, link_into_capsule,
 };
+use autd3_rs::Error;
 use autd3_rs::{Client, ConstStateChecker, Frames, StateCheck};
-use autd3_rs_core::Error;
 use autd3_rs_link_remote::RemoteLinkOption as CoreOption;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

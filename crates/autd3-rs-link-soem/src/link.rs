@@ -25,7 +25,7 @@ impl autd3_rs_core::IntoLink for crate::option::SoemLinkOption {
     async fn into_link(
         self,
         geometry: &autd3_rs_core::Geometry,
-    ) -> Result<SoemLink, autd3_rs_core::Error> {
+    ) -> Result<SoemLink, autd3_rs_core::error::LinkError> {
         SoemLinkOptionFull::from(self).into_link(geometry).await
     }
 }
@@ -36,11 +36,11 @@ impl autd3_rs_core::IntoLink for SoemLinkOptionFull {
     async fn into_link(
         self,
         _geometry: &autd3_rs_core::Geometry,
-    ) -> Result<SoemLink, autd3_rs_core::Error> {
+    ) -> Result<SoemLink, autd3_rs_core::error::LinkError> {
         tokio::task::spawn_blocking(move || SoemLink::open(self))
             .await
-            .map_err(|e| autd3_rs_core::Error::Link(format!("link open task panicked: {e}")))?
-            .map_err(|e| autd3_rs_core::Error::Link(e.to_string()))
+            .map_err(|e| autd3_rs_core::error::LinkError(format!("link open task panicked: {e}")))?
+            .map_err(|e| autd3_rs_core::error::LinkError(e.to_string()))
     }
 }
 

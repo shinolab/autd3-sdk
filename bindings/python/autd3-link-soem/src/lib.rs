@@ -4,8 +4,9 @@ use std::time::Duration;
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, link_into_capsule,
 };
+use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_core::{Error, Interface};
+use autd3_rs_core::Interface;
 use autd3_rs_link_soem::{SoemLinkOption as CoreOption, StateChecker};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;

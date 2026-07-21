@@ -1,4 +1,4 @@
-use crate::error::{Error, PayloadError};
+use crate::error::EncodeError;
 use crate::params::{
     FOCUS_COORD_MAX_X, FOCUS_COORD_MAX_Y, FOCUS_COORD_MAX_Z, FOCUS_COORD_MIN_X, FOCUS_COORD_MIN_Y,
     FOCUS_COORD_MIN_Z,
@@ -13,19 +13,19 @@ pub struct Focus {
 }
 
 impl Focus {
-    pub fn encode(self) -> Result<u64, Error> {
+    pub fn encode(self) -> Result<u64, EncodeError> {
         for (name, v, min, max) in [
             ("x", self.x, FOCUS_COORD_MIN_X, FOCUS_COORD_MAX_X),
             ("y", self.y, FOCUS_COORD_MIN_Y, FOCUS_COORD_MAX_Y),
             ("z", self.z, FOCUS_COORD_MIN_Z, FOCUS_COORD_MAX_Z),
         ] {
             if !(min..=max).contains(&v) {
-                return Err(Error::InvalidPayload(PayloadError::FocusOutOfRange {
+                return Err(EncodeError::FocusOutOfRange {
                     axis: name,
                     value: v,
                     min,
                     max,
-                }));
+                });
             }
         }
         let mask = |v: i32| u64::from(u32::from_le_bytes(v.to_le_bytes())) & 0x3_FFFF;

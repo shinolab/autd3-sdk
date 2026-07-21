@@ -135,6 +135,7 @@ dependencies = [
  "autd3-cpu-wire",
  "autd3-rs-core",
  "core_affinity",
+ "thiserror 2.0.18",
  "thread-priority",
  "tokio",
  "tracing",
@@ -262,6 +263,7 @@ name = "autd3-rs-modulation"
 version = "0.3.0"
 dependencies = [
  "autd3-rs-core",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

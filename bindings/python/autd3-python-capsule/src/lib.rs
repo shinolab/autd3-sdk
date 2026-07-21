@@ -100,8 +100,9 @@ mod link {
     use std::ptr::NonNull;
     use std::sync::Arc;
 
+    use autd3_rs::Error;
     use autd3_rs::{ClientConfig, Frames, Response, ResponseFuture};
-    use autd3_rs_core::{Error, Geometry};
+    use autd3_rs_core::Geometry;
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
     use pyo3::types::{PyCapsule, PyCapsuleMethods};

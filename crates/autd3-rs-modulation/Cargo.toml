@@ -10,6 +10,7 @@ description = "Amplitude-modulation waveform utilities for autd3-rs (sine, etc.)
 
 [dependencies]
 autd3-rs-core.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

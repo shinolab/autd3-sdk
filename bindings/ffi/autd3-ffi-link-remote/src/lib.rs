@@ -6,8 +6,9 @@ use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
     client_opener, into_handle,
 };
+use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_core::{ConstStateChecker, Error, StateCheck};
+use autd3_rs_core::{ConstStateChecker, StateCheck};
 use autd3_rs_link_remote::RemoteLinkOption;
 use tokio::sync::Mutex;
 

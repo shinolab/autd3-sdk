@@ -138,7 +138,7 @@ mod tests {
                 },
                 0
             ),
-            Err(Error::InvalidPayload(_))
+            Err(Error::Encode(_))
         ));
 
         let two = [ControlPoints::from(Point3::origin()); 2];

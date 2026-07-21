@@ -7,8 +7,9 @@ use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
     client_opener, into_handle,
 };
+use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_core::{Error, StateCheck};
+use autd3_rs_core::StateCheck;
 use autd3_rs_link_twincat::{AmsNetId, Timeouts, TwinCATLinkOption, TwinCATStateChecker};
 use tokio::sync::Mutex;
 
