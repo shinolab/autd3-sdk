@@ -50,7 +50,11 @@ impl Operation for WritePatternCompressed<'_> {
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let count = self.count();
         if count == 0 {
-            return Err(PayloadError::PatternSizeZero.into());
+            return Err(PayloadError::PatternSizeTooSmall {
+                size: count,
+                min: 1,
+            }
+            .into());
         }
         let last_index = self.index + count - 1;
         if last_index >= EMISSION_MAX_INDICES {

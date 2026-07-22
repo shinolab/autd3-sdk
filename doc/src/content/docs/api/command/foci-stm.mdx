@@ -24,7 +24,7 @@ import { excerpt } from "@lib/excerpt";
 | 引数      | 型                       | 説明                                       |
 | --------- | ------------------------ | ------------------------------------------ |
 | `freq`    | `impl Into<StmConfig>`   | 再生レート (`Freq` / `Duration` / `SamplingConfig`)  |
-| `points`  | `&[ControlPoints<N>]`    | 焦点サンプルの列                           |
+| `points`  | `&[ControlPoints<N>]`    | 焦点サンプルの列 (2 サンプル以上)          |
 | `option`  | `FociStmOption`          | 音速・ループ・遷移などのオプション         |
 
 `freq` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.

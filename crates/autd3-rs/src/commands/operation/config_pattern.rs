@@ -7,11 +7,11 @@ use crate::Velocity;
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::mirror::FirmwareState;
-use crate::params::{EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
+use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, check_index_advance};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigPattern {
@@ -54,16 +54,15 @@ impl Operation for ConfigPattern {
 
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let divider = self.config.divide()?;
-        if self.size == 0 {
-            return Err(PayloadError::PatternSizeZero.into());
-        }
-        if self.size > EMISSION_MAX_INDICES {
+        if self.size == 0 || self.size > EMISSION_MAX_INDICES {
             return Err(PayloadError::StmSizeOutOfRange {
                 size: self.size,
+                min: 1,
                 max: EMISSION_MAX_INDICES,
             }
             .into());
         }
+        check_index_advance(self.size, self.loop_behavior)?;
         let size = u32::try_from(self.size).expect("bounded by capacity checks");
         let (p, _) = ConfigPatternPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = ConfigPatternPayload {
@@ -92,8 +91,12 @@ impl Operation for ConfigFociStm {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let divider = self.config.divide()?;
-        if self.size == 0 {
-            return Err(PayloadError::PatternSizeZero.into());
+        if self.size < BUFFER_SIZE_MIN {
+            return Err(PayloadError::PatternSizeTooSmall {
+                size: self.size,
+                min: BUFFER_SIZE_MIN,
+            }
+            .into());
         }
         if self.num_foci == 0 || self.num_foci > NUM_FOCI_MAX {
             return Err(PayloadError::NumFociOutOfRange {
@@ -213,6 +216,27 @@ mod tests {
     }
 
     #[test]
+    fn config_pattern_allows_a_single_index_only_for_an_infinite_loop() {
+        let raw = |size: usize, loop_behavior: LoopBehavior| ConfigPattern {
+            bank: PatternBank::B0,
+            config: SamplingConfig::new(NonZeroU16::MIN),
+            size,
+            loop_behavior,
+        };
+        let finite = LoopBehavior::Finite(NonZeroU16::new(4).unwrap());
+
+        assert!(
+            encode(raw(1, LoopBehavior::Infinite)).is_ok(),
+            "a static pattern is a single index"
+        );
+        assert!(
+            matches!(encode(raw(1, finite)), Err(Error::InvalidPayload(_))),
+            "a single index never advances, so a finite loop would never end"
+        );
+        assert!(encode(raw(2, finite)).is_ok());
+    }
+
+    #[test]
     fn config_foci_stm_rejects_invalid_fields() {
         let foci = |size: usize, num_foci: u8, sound_speed: Velocity| ConfigFociStm {
             bank: PatternBank::B0,
@@ -223,12 +247,16 @@ mod tests {
             loop_behavior: LoopBehavior::Infinite,
         };
         let v = Velocity::from_m_s(340.0);
+        assert!(
+            matches!(encode(foci(1, 1, v)), Err(Error::InvalidPayload(_))),
+            "a single-sample STM never advances its index"
+        );
         assert!(matches!(
-            encode(foci(1, 0, v)),
+            encode(foci(2, 0, v)),
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
-            encode(foci(1, NUM_FOCI_MAX + 1, v)),
+            encode(foci(2, NUM_FOCI_MAX + 1, v)),
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
@@ -236,7 +264,7 @@ mod tests {
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
-            encode(foci(1, 1, Velocity::from_m_s(0.0))),
+            encode(foci(2, 1, Velocity::from_m_s(0.0))),
             Err(Error::InvalidPayload(_))
         ));
         assert!(encode(foci(MAX_FOCI_TOTAL / 8, 8, v)).is_ok());

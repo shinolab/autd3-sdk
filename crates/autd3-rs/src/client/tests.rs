@@ -1054,7 +1054,7 @@ async fn build_rejects_too_fast_pattern_under_strict_silencer() {
     builder.push(SetSilencer::default()).push(ConfigPattern {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
-        size: 1,
+        size: 2,
         loop_behavior: LoopBehavior::Infinite,
     });
     match builder.build().unwrap_err() {
@@ -1086,7 +1086,7 @@ async fn build_rejects_strict_silencer_when_active_sampling_too_fast() {
         .push(ConfigModulation {
             bank: ModulationBank::B0,
             config: SamplingConfig::new(NonZeroU16::new(5).unwrap()),
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         })
         .push(SetSilencer::new(FixedCompletionTime {
@@ -1120,7 +1120,7 @@ async fn opt_out_disables_precheck() {
     builder.push(SetSilencer::default()).push(ConfigPattern {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
-        size: 1,
+        size: 2,
         loop_behavior: LoopBehavior::Infinite,
     });
     assert!(
@@ -1139,7 +1139,7 @@ async fn desync_after_send_failure_stops_precheck() {
         builder.push(ConfigPattern {
             bank: PatternBank::B0,
             config: SamplingConfig::FREQ_40K,
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         });
         builder.build()
@@ -1220,7 +1220,10 @@ async fn build_rejects_timed_transition_on_infinite_loop() {
     use crate::geometry::Point3;
     use crate::value::{ControlPoints, GpioIn, LoopBehavior, SamplingConfig, TransitionMode};
 
-    let points = [ControlPoints::from(Point3::new(0.0, 0.0, 150.0))];
+    let points = [
+        ControlPoints::from(Point3::new(0.0, 0.0, 150.0)),
+        ControlPoints::from(Point3::new(0.0, 0.0, 200.0)),
+    ];
 
     let (client, _slave) = open_client().await;
 
@@ -1310,7 +1313,7 @@ async fn build_rejects_per_device_group_under_strict_silencer() {
             config: SamplingConfig::new(
                 NonZeroU16::new(if device.idx() == 0 { 5 } else { 20 }).unwrap(),
             ),
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         })
     });
@@ -1335,7 +1338,7 @@ async fn separate_builders_share_committed_mirror_state() {
     b2.push(ConfigPattern {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
-        size: 1,
+        size: 2,
         loop_behavior: LoopBehavior::Infinite,
     });
     assert!(matches!(b2.build(), Err(Error::SilencerConstraint { .. })));

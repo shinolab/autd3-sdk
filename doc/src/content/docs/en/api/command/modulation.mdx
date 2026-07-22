@@ -46,7 +46,7 @@ To also change the loop count or transition timing, pass the `loopBehavior` / `t
 | ----------------- | ---------------- | --------------------------- | ---------------------------- |
 | `bank`            | `ModulationBank` | `ModulationBank::B0`        | Bank to write to / play back |
 | `config`          | `SamplingConfig` | —                           | Playback sampling frequency  |
-| `data`            | `&[u8]`          | —                           | AM waveform sample sequence  |
+| `data`            | `&[u8]`          | —                           | AM waveform sample sequence (at least 2 samples) |
 | `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`    | Playback loop count          |
 | `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | Transition behavior on bank switching |
 

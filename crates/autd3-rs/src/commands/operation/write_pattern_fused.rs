@@ -7,13 +7,13 @@ use crate::Velocity;
 use crate::error::{Error, PayloadError};
 use crate::geometry::{Autd3, Device};
 use crate::mirror::FirmwareState;
-use crate::params::{FOCUS_WORDS, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
+use crate::params::{BUFFER_SIZE_MIN, FOCUS_WORDS, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{
     ControlPoints, Emission, LoopBehavior, PatternBank, SamplingConfig, TransitionMode,
 };
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, check_index_advance};
 
 pub(crate) const PATTERN_FUSED_HEADER_BYTES: usize =
     core::mem::size_of::<WritePatternFusedPayload>();
@@ -85,6 +85,7 @@ impl Operation for WritePatternFused<'_> {
             }
             .into());
         }
+        check_index_advance(1, self.loop_behavior)?;
         let divider = self.config.divide()?;
         let margin_ns = self.transition_mode.margin_ns()?;
         let bytes = emissions.as_bytes();
@@ -144,8 +145,12 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let size = self.points.len();
-        if size == 0 {
-            return Err(PayloadError::FociEmpty.into());
+        if size < BUFFER_SIZE_MIN {
+            return Err(PayloadError::PatternSizeTooSmall {
+                size,
+                min: BUFFER_SIZE_MIN,
+            }
+            .into());
         }
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
         if num_foci == 0 || num_foci > NUM_FOCI_MAX {
@@ -258,10 +263,16 @@ mod tests {
 
     #[test]
     fn fused_foci_lays_out_header_and_data() {
-        let points = [ControlPoints::new(
-            [ControlPoint::new(Point3::new(0.0, 0.0, 150.0), Phase::ZERO)],
-            Intensity(0xAA),
-        )];
+        let points = [
+            ControlPoints::new(
+                [ControlPoint::new(Point3::new(0.0, 0.0, 150.0), Phase::ZERO)],
+                Intensity(0xAA),
+            ),
+            ControlPoints::new(
+                [ControlPoint::new(Point3::new(0.0, 0.0, 200.0), Phase::ZERO)],
+                Intensity(0xBB),
+            ),
+        ];
         let op = WriteFociStmFused {
             bank: PatternBank::B0,
             points: &points,
@@ -276,10 +287,10 @@ mod tests {
 
         assert_eq!(cmd, Cmd::WritePatternFused);
         assert_eq!(out[1], EMISSION_TYPE_FOCI);
-        assert_eq!(&out[4..8], &1u32.to_le_bytes(), "size = sample count");
+        assert_eq!(&out[4..8], &2u32.to_le_bytes(), "size = sample count");
         assert_eq!(out[8], 1, "num_foci = N");
         assert_eq!(&out[10..12], &21760u16.to_le_bytes(), "340 m/s * 64");
-        assert_eq!(&out[14..16], &8u16.to_le_bytes(), "data_len = 1 focus");
+        assert_eq!(&out[14..16], &16u16.to_le_bytes(), "data_len = 2 foci");
 
         let expected = Focus {
             x: 0,
@@ -329,11 +340,15 @@ mod tests {
         use crate::value::DcSysTime;
         use core::time::Duration;
 
-        let patterns = [vec![Emission::default(); Autd3::NUM_TRANSDUCERS]];
-        let op = WritePatternFused {
+        let points = [
+            ControlPoints::from(Point3::new(0.0, 0.0, 150.0)),
+            ControlPoints::from(Point3::new(0.0, 0.0, 200.0)),
+        ];
+        let op = WriteFociStmFused {
             bank: PatternBank::B0,
-            emissions: &patterns,
+            points: &points,
             config: SamplingConfig::FREQ_4K,
+            sound_speed: Velocity::from_m_s(340.0),
             loop_behavior: LoopBehavior::Finite(NonZeroU16::new(8).unwrap()),
             transition_mode: TransitionMode::SysTime {
                 time: DcSysTime::from_nanos(0xDEAD_BEEF),

@@ -24,7 +24,7 @@ Unlike [`PatternStm`](/autd3-sdk/en/api/command/pattern-stm/), it can only handl
 | Parameter | Type                     | Description                                          |
 | --------- | ------------------------ | --------------------------------------------------- |
 | `freq`    | `impl Into<StmConfig>`   | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
-| `points`  | `&[ControlPoints<N>]`    | Sequence of focal point samples                     |
+| `points`  | `&[ControlPoints<N>]`    | Sequence of focal point samples (at least 2 samples)        |
 | `option`  | `FociStmOption`          | Options such as sound speed, loop, and transition   |
 
 Passing a `Freq` / `Duration` to `freq` represents "the frequency/period for one full cycle over all samples".

@@ -49,7 +49,7 @@ fn push_each_routes_per_device() {
                 ModulationBank::B1
             },
             config: SamplingConfig::FREQ_40K,
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         })
     });
@@ -69,7 +69,7 @@ fn push_each_fills_unassigned_with_nop() {
         (device.idx() == 0).then_some(ConfigModulation {
             bank: ModulationBank::B0,
             config: SamplingConfig::FREQ_40K,
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         })
     });
@@ -154,7 +154,7 @@ fn push_each_accepts_heterogeneous_boxed_commands() {
             ConfigModulation {
                 bank: ModulationBank::B0,
                 config: SamplingConfig::FREQ_40K,
-                size: 1,
+                size: 2,
                 loop_behavior: LoopBehavior::Infinite,
             }
             .boxed()
@@ -174,7 +174,7 @@ fn adjacent_disjoint_push_each_fuse_into_shared_frames() {
         (device.idx() == 0).then_some(ConfigModulation {
             bank: ModulationBank::B0,
             config: SamplingConfig::FREQ_40K,
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         })
     });
@@ -182,7 +182,7 @@ fn adjacent_disjoint_push_each_fuse_into_shared_frames() {
         (device.idx() == 1).then_some(ConfigModulation {
             bank: ModulationBank::B1,
             config: SamplingConfig::FREQ_40K,
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         })
     });
@@ -201,7 +201,7 @@ fn adjacent_overlapping_push_each_stay_sequential() {
         Some(ConfigModulation {
             bank: ModulationBank::B0,
             config: SamplingConfig::FREQ_40K,
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         })
     });
@@ -209,7 +209,7 @@ fn adjacent_overlapping_push_each_stay_sequential() {
         Some(ConfigModulation {
             bank: ModulationBank::B1,
             config: SamplingConfig::FREQ_40K,
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         })
     });
@@ -227,21 +227,21 @@ fn broadcast_push_is_a_fuse_barrier() {
         (device.idx() == 0).then_some(ConfigModulation {
             bank: ModulationBank::B0,
             config: SamplingConfig::FREQ_40K,
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         })
     });
     b.push(ConfigPattern {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
-        size: 1,
+        size: 2,
         loop_behavior: LoopBehavior::Infinite,
     });
     b.push_each(|device| {
         (device.idx() == 1).then_some(ConfigModulation {
             bank: ModulationBank::B1,
             config: SamplingConfig::FREQ_40K,
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         })
     });
@@ -259,7 +259,7 @@ fn broadcast_op_yields_one_frame_of_one_datagram() {
     let op = ConfigPattern {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
-        size: 1,
+        size: 2,
         loop_behavior: LoopBehavior::Infinite,
     };
     let mut b = DatagramBuilder::new(test_geometry_arc(4));
@@ -302,7 +302,7 @@ fn composite_emission_orders_write_then_config() {
     let ce = ConfigPattern {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
-        size: 1,
+        size: 2,
         loop_behavior: LoopBehavior::Infinite,
     };
     let mut b = DatagramBuilder::new(test_geometry_arc(2));
@@ -330,7 +330,7 @@ fn build_into_reuses_buffer_without_growing() {
     let op = ConfigPattern {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
-        size: 1,
+        size: 2,
         loop_behavior: LoopBehavior::Infinite,
     };
     let mut b = DatagramBuilder::new(test_geometry_arc(1));

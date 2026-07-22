@@ -5,7 +5,7 @@ use zerocopy::little_endian::{U16, U32};
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::mirror::FirmwareState;
-use crate::params::MOD_BUFFER_SAMPLES;
+use crate::params::{BUFFER_SIZE_MIN, MOD_BUFFER_SAMPLES};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
 
@@ -26,9 +26,10 @@ impl Operation for ConfigModulation {
 
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let divider = self.config.divide()?;
-        if self.size == 0 || self.size > MOD_BUFFER_SAMPLES {
+        if self.size < BUFFER_SIZE_MIN || self.size > MOD_BUFFER_SAMPLES {
             return Err(PayloadError::ModulationSizeOutOfRange {
                 size: self.size,
+                min: BUFFER_SIZE_MIN,
                 max: MOD_BUFFER_SAMPLES,
             }
             .into());
@@ -91,7 +92,7 @@ mod tests {
         let base = ConfigModulation {
             bank: ModulationBank::B0,
             config: SamplingConfig::new(NonZeroU16::MIN),
-            size: 1,
+            size: 2,
             loop_behavior: LoopBehavior::Infinite,
         };
         assert!(matches!(
@@ -105,6 +106,13 @@ mod tests {
             encode(ConfigModulation { size: 0, ..base }),
             Err(Error::InvalidPayload(_))
         ));
+        assert!(
+            matches!(
+                encode(ConfigModulation { size: 1, ..base }),
+                Err(Error::InvalidPayload(_))
+            ),
+            "a single sample never advances the FPGA index"
+        );
         assert!(matches!(
             encode(ConfigModulation {
                 size: MOD_BUFFER_SAMPLES + 1,

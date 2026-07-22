@@ -225,7 +225,7 @@ fn fused_modulation_rejects_bad_bank() {
 #[test]
 fn fused_pattern_rejects_invalid_transition_mode_for_finite_loop() {
     let mut h = Harness::new();
-    let mut f = FusedPattern::raw(1, 10, 1);
+    let mut f = FusedPattern::raw(1, 10, 2);
     f.rep = 4;
     f.transition_mode = TransitionMode::Immediate;
     h.deliver(&write_pattern_fused(0, &f, &pattern_words()));

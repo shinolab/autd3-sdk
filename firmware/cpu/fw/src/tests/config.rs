@@ -7,7 +7,7 @@ use crate::params::{
     CTL_FLAG_PATTERN_SET, EMISSION_MAX_INDICES, EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW, NUM_BANKS,
     NUM_FOCI_MAX,
 };
-use crate::proto::{Error, MAX_FOCI_TOTAL, MOD_BUFFER_SAMPLES};
+use crate::proto::{BUFFER_SIZE_MIN, Error, MAX_FOCI_TOTAL, MOD_BUFFER_SAMPLES};
 use crate::tests::builders::{
     change_mod_bank, change_pattern_bank, config_mod, config_mod_rep, config_pattern,
     config_pattern_rep,
@@ -67,6 +67,42 @@ fn config_mod_rejects_invalid_fields_and_leaves_registers_untouched() {
     assert_eq!(h.ctl(ADDR_MOD_CYCLE0 + 1), 99);
     assert_eq!(h.ctl(ADDR_MOD_FREQ_DIV0 + 1), 2);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
+}
+
+#[test]
+fn config_mod_rejects_single_sample_buffer() {
+    let mut h = Harness::new();
+    h.deliver(&config_mod(0, 0, 1, 1));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+
+    h.deliver(&config_mod(1, 0, 1, BUFFER_SIZE_MIN));
+    assert_eq!(h.data(), 0);
+}
+
+#[test]
+fn config_pattern_allows_single_index_only_for_infinite_loop() {
+    let mut h = Harness::new();
+    h.deliver(&config_pattern(0, 0, EMISSION_TYPE_RAW, 10, 1, 0, 0));
+    assert_eq!(h.data(), 0, "static pattern is a single index");
+
+    h.deliver(&config_pattern_rep(1, 0, EMISSION_TYPE_RAW, 10, 1, 0, 0, 4));
+    assert_eq!(
+        h.data(),
+        Error::InvalidPayload as u8,
+        "a single index never advances, so a finite loop would never end"
+    );
+
+    h.deliver(&config_pattern_rep(
+        2,
+        0,
+        EMISSION_TYPE_RAW,
+        10,
+        BUFFER_SIZE_MIN,
+        0,
+        0,
+        4,
+    ));
+    assert_eq!(h.data(), 0);
 }
 
 #[test]
@@ -167,18 +203,25 @@ fn config_pattern_rejects_invalid_raw_fields() {
 fn config_pattern_rejects_invalid_foci_fields() {
     let mut h = Harness::new();
 
-    h.deliver(&config_pattern(0, 0, EMISSION_TYPE_FOCI, 1, 1, 0, 340));
+    h.deliver(&config_pattern(0, 0, EMISSION_TYPE_FOCI, 1, 2, 0, 340));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
     h.deliver(&config_pattern(
         1,
         0,
         EMISSION_TYPE_FOCI,
         1,
-        1,
+        2,
         NUM_FOCI_MAX + 1,
         340,
     ));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
+
+    h.deliver(&config_pattern(5, 0, EMISSION_TYPE_FOCI, 1, 1, 1, 340));
+    assert_eq!(
+        h.data(),
+        Error::InvalidPayload as u8,
+        "a single-sample STM never advances its index"
+    );
 
     h.deliver(&config_pattern(
         2,
@@ -191,7 +234,7 @@ fn config_pattern_rejects_invalid_foci_fields() {
     ));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 
-    h.deliver(&config_pattern(3, 0, EMISSION_TYPE_FOCI, 1, 1, 1, 0));
+    h.deliver(&config_pattern(3, 0, EMISSION_TYPE_FOCI, 1, 2, 1, 0));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 
     h.deliver(&config_pattern(

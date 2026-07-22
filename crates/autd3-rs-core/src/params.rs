@@ -5,7 +5,7 @@ pub const NUM_BANKS: usize = autd3_cpu_wire::params::NUM_BANKS;
 pub const MOD_BUFFER_SAMPLES: usize = autd3_cpu_wire::params::MOD_BUFFER_SAMPLES;
 
 pub use autd3_cpu_wire::layout::{
-    EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, FOCUS_WORDS, MAX_FOCI_TOTAL,
+    BUFFER_SIZE_MIN, EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, FOCUS_WORDS, MAX_FOCI_TOTAL,
 };
 
 pub const EMISSION_MAX_INDICES: usize = autd3_cpu_wire::params::EMISSION_MAX_INDICES as usize;

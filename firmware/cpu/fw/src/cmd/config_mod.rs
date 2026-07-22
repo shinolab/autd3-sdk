@@ -9,7 +9,7 @@ use crate::params::{
     NUM_BANKS,
 };
 use crate::port::Port;
-use crate::proto::{Error, MOD_BUFFER_SAMPLES};
+use crate::proto::{BUFFER_SIZE_MIN, Error, MOD_BUFFER_SAMPLES};
 
 impl Cpu {
     pub(crate) fn config_mod<P: Port>(&self, port: &mut P, payload: &[u8]) -> Result<(), Error> {
@@ -28,7 +28,9 @@ impl Cpu {
         size: u32,
         rep: u16,
     ) -> Result<(), Error> {
-        if usize::from(bank) >= NUM_BANKS || divider == 0 || size == 0 || size > MOD_BUFFER_SAMPLES
+        if usize::from(bank) >= NUM_BANKS
+            || divider == 0
+            || !(BUFFER_SIZE_MIN..=MOD_BUFFER_SAMPLES).contains(&size)
         {
             return Err(Error::InvalidPayload);
         }

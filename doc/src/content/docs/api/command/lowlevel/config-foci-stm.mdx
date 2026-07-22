@@ -31,6 +31,9 @@ import { excerpt } from "@lib/excerpt";
 
 `loop_behavior` と遷移の反映タイミングは [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) を参照.
 
+`size` の下限は 2.
+単一焦点を静的に出したい場合は STM ではなく [Pattern](/autd3-sdk/api/command/pattern/) を使う.
+
 ## Example
 
 `ConfigFociStm` は `WriteFociBuffer` で焦点列を書き込んだ後, `ChangePatternBank` で再生を切り替える流れの中で使う.
