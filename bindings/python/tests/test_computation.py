@@ -269,11 +269,12 @@ def test_loop_behavior_and_transition_mode() -> None:
 
     builder = autd3.DatagramBuilder(geo)
     builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, buf))
+    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 1, buf))
     builder.push(
         autd3.commands.ConfigPattern(
             autd3.value.PatternBank.B1,
             autd3.value.SamplingConfig.FREQ_4K,
-            1,
+            2,
             loop_behavior=autd3.value.LoopBehavior.Finite(5),
         )
     )
