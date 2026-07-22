@@ -1,5 +1,5 @@
 use super::{Focus, Intensity, Phase};
-use crate::geometry::Point3;
+use crate::geometry::{Device, Point3};
 
 const FOCUS_UNIT_MM: f32 = 0.025;
 
@@ -46,16 +46,17 @@ impl<const N: usize> ControlPoints<N> {
     }
 
     #[must_use]
-    pub fn focus(&self, j: usize) -> Focus {
+    pub fn focus(&self, device: &Device, j: usize) -> Focus {
         let cp = self.points[j];
+        let p = device.to_local(cp.point);
         Focus {
-            x: to_fixed(cp.point.x),
-            y: to_fixed(cp.point.y),
-            z: to_fixed(cp.point.z),
+            x: to_fixed(p.x),
+            y: to_fixed(p.y),
+            z: to_fixed(p.z),
             intensity_or_offset: if j == 0 {
                 self.intensity.0
             } else {
-                cp.phase_offset.0
+                (cp.phase_offset - self.points[0].phase_offset).0
             },
         }
     }

@@ -22,12 +22,12 @@ impl<const N: usize> Operation for WriteFociBuffer<'_, N> {
     }
 
     fn distribution(&self) -> Distribution {
-        Distribution::Broadcast
+        Distribution::PerDevice
     }
 
     fn encode(
         &self,
-        _device: &Device,
+        device: &Device,
         frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -59,7 +59,7 @@ impl<const N: usize> Operation for WriteFociBuffer<'_, N> {
             data_len: U16::new(len),
         };
         for (dst, k) in rest.chunks_exact_mut(8).zip(start..start + chunk_len) {
-            let focus = self.points[k / N].focus(k % N);
+            let focus = self.points[k / N].focus(device, k % N);
             dst.copy_from_slice(&focus.encode()?.to_le_bytes());
         }
         Ok(Cmd::WritePatternBuffer)
@@ -105,13 +105,39 @@ mod tests {
                 .try_into()
                 .unwrap(),
         );
-        assert_eq!(first, points[0].focus(0).encode().unwrap());
+        assert_eq!(first, points[0].focus(&test_device(0), 0).encode().unwrap());
 
         let p1 = encode(&op, 1).unwrap();
         let word_offset1 = u32::try_from((10 + MAX_FOCI_PER_FRAME) * FOCUS_WORDS).unwrap();
         assert_eq!(&p1[2..6], &word_offset1.to_le_bytes());
         let rest = u16::try_from((100 - MAX_FOCI_PER_FRAME) * 8).unwrap();
         assert_eq!(&p1[6..8], &rest.to_le_bytes());
+    }
+
+    #[test]
+    fn write_foci_buffer_converts_to_device_local_coordinates() {
+        use crate::geometry::{Autd3, Device, UnitQuaternion, Vector3};
+
+        let rot = UnitQuaternion::from_axis_angle(&Vector3::z_axis(), core::f32::consts::FRAC_PI_2);
+        let device: Device = Autd3::new(Point3::new(10.0, 20.0, 30.0), rot).into();
+        let global = Point3::from(device.position(0).coords + rot * Vector3::new(1.0, 2.0, 3.0));
+        let points = [ControlPoints::from(global)];
+        let op = WriteFociBuffer {
+            bank: PatternBank::B0,
+            index_offset: 0,
+            points: &points,
+        };
+
+        let mut out = [0u8; PAYLOAD_BYTES];
+        op.encode(&device, 0, &mut out).unwrap();
+        let f = u64::from_le_bytes(
+            out[WRITE_HEADER_BYTES..WRITE_HEADER_BYTES + 8]
+                .try_into()
+                .unwrap(),
+        );
+        assert_eq!(f & 0x3_FFFF, 40);
+        assert_eq!((f >> 18) & 0x3_FFFF, 80);
+        assert_eq!((f >> 36) & 0x3_FFFF, 120);
     }
 
     #[test]

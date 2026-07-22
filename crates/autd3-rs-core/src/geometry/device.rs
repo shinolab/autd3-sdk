@@ -1,4 +1,4 @@
-use nalgebra::{Point3, UnitQuaternion, UnitVector3, Vector3};
+use nalgebra::{Isometry3, Point3, Translation3, UnitQuaternion, UnitVector3, Vector3};
 
 #[derive(Clone, Debug)]
 pub struct Device {
@@ -6,6 +6,7 @@ pub struct Device {
     rotation: UnitQuaternion<f32>,
     positions: Vec<Point3<f32>>,
     directions: Vec<UnitVector3<f32>>,
+    inv: Isometry3<f32>,
 }
 
 impl Device {
@@ -15,12 +16,20 @@ impl Device {
         directions: Vec<UnitVector3<f32>>,
     ) -> Self {
         debug_assert_eq!(positions.len(), directions.len());
+        let origin = positions.first().copied().unwrap_or_else(Point3::origin);
+        let inv = (Translation3::from(origin) * rotation).inverse();
         Self {
             idx: 0,
             rotation,
             positions,
             directions,
+            inv,
         }
+    }
+
+    #[must_use]
+    pub fn to_local(&self, p: Point3<f32>) -> Point3<f32> {
+        self.inv * p
     }
 
     pub(super) fn set_idx(&mut self, idx: usize) {
