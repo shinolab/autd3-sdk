@@ -73,7 +73,7 @@ mod tests {
     use super::*;
     use crate::test_utils::test_device;
     use crate::value::{Intensity, Phase};
-    use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
+    const HEADER_BYTES: usize = core::mem::size_of::<WritePatternPayload>();
 
     #[test]
     fn write_pattern_lays_out_slot_words() {
@@ -104,8 +104,8 @@ mod tests {
                 .to_le_bytes()
         );
         for (i, e) in patterns[0].iter().enumerate() {
-            assert_eq!(out[WRITE_HEADER_BYTES + 2 * i], e.phase.0);
-            assert_eq!(out[WRITE_HEADER_BYTES + 2 * i + 1], e.intensity.0);
+            assert_eq!(out[HEADER_BYTES + 2 * i], e.phase.0);
+            assert_eq!(out[HEADER_BYTES + 2 * i + 1], e.intensity.0);
         }
     }
 

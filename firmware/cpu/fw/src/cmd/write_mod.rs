@@ -1,6 +1,6 @@
 use zerocopy::FromBytes;
 
-pub use autd3_cpu_wire::layout::WRITE_MAX_DATA_LEN as MOD_WRITE_MAX_DATA_LEN;
+pub use autd3_cpu_wire::layout::MOD_WRITE_MAX_DATA_LEN;
 pub use autd3_cpu_wire::payload::WriteModPayload;
 
 use crate::fpga;

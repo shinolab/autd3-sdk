@@ -63,7 +63,7 @@ mod tests {
     use super::*;
     use crate::geometry::Point3;
     use crate::test_utils::test_device;
-    use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
+    const HEADER_BYTES: usize = core::mem::size_of::<WritePatternPayload>();
 
     #[test]
     fn write_foci_chunk_writes_its_own_window() {
@@ -85,11 +85,7 @@ mod tests {
         let word_offset = u32::try_from((10 + 2) * FOCUS_WORDS).unwrap();
         assert_eq!(&out[2..6], &word_offset.to_le_bytes());
         assert_eq!(&out[6..8], &u16::try_from(2 * 8).unwrap().to_le_bytes());
-        let first = u64::from_le_bytes(
-            out[WRITE_HEADER_BYTES..WRITE_HEADER_BYTES + 8]
-                .try_into()
-                .unwrap(),
-        );
+        let first = u64::from_le_bytes(out[HEADER_BYTES..HEADER_BYTES + 8].try_into().unwrap());
         assert_eq!(first, points[2].focus(&test_device(0), 0).encode().unwrap());
     }
 
@@ -111,11 +107,7 @@ mod tests {
 
         let mut out = [0u8; PAYLOAD_BYTES];
         op.encode(&device, &mut out).unwrap();
-        let f = u64::from_le_bytes(
-            out[WRITE_HEADER_BYTES..WRITE_HEADER_BYTES + 8]
-                .try_into()
-                .unwrap(),
-        );
+        let f = u64::from_le_bytes(out[HEADER_BYTES..HEADER_BYTES + 8].try_into().unwrap());
         assert_eq!(f & 0x3_FFFF, 40);
         assert_eq!((f >> 18) & 0x3_FFFF, 80);
         assert_eq!((f >> 36) & 0x3_FFFF, 120);

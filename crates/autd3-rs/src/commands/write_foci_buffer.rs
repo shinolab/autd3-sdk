@@ -43,7 +43,8 @@ mod tests {
     use crate::params::{FOCUS_WORDS, MAX_FOCI_TOTAL};
     use crate::protocol::PAYLOAD_BYTES;
     use crate::test_utils::{test_device, test_geometry_arc};
-    use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
+    use autd3_cpu_wire::payload::WritePatternPayload;
+    const HEADER_BYTES: usize = core::mem::size_of::<WritePatternPayload>();
 
     fn expand<const N: usize>(op: WriteFociBuffer<'_, N>) -> Result<Frames, Error> {
         let mut b = DatagramBuilder::new(test_geometry_arc(1));
@@ -74,11 +75,7 @@ mod tests {
         assert_eq!(&p0[2..6], &word_offset0.to_le_bytes());
         let len0 = u16::try_from(MAX_FOCI_PER_FRAME * 8).unwrap();
         assert_eq!(&p0[6..8], &len0.to_le_bytes());
-        let first = u64::from_le_bytes(
-            p0[WRITE_HEADER_BYTES..WRITE_HEADER_BYTES + 8]
-                .try_into()
-                .unwrap(),
-        );
+        let first = u64::from_le_bytes(p0[HEADER_BYTES..HEADER_BYTES + 8].try_into().unwrap());
         assert_eq!(first, points[0].focus(&test_device(0), 0).encode().unwrap());
 
         let p1 = payload(&frames, 1);
@@ -86,11 +83,8 @@ mod tests {
         assert_eq!(&p1[2..6], &word_offset1.to_le_bytes());
         let rest = u16::try_from((100 - MAX_FOCI_PER_FRAME) * 8).unwrap();
         assert_eq!(&p1[6..8], &rest.to_le_bytes());
-        let first_of_rest = u64::from_le_bytes(
-            p1[WRITE_HEADER_BYTES..WRITE_HEADER_BYTES + 8]
-                .try_into()
-                .unwrap(),
-        );
+        let first_of_rest =
+            u64::from_le_bytes(p1[HEADER_BYTES..HEADER_BYTES + 8].try_into().unwrap());
         assert_eq!(
             first_of_rest,
             points[MAX_FOCI_PER_FRAME]
