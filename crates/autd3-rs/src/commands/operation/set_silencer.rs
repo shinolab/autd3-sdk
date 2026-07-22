@@ -168,20 +168,11 @@ impl Default for SetSilencer<FixedCompletionTime> {
 }
 
 impl<T: SilencerConfig> Operation for SetSilencer<T> {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         self.config.write_payload(out)
     }
 
@@ -197,7 +188,7 @@ mod tests {
 
     fn encode<T: SilencerConfig>(config: T) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = SetSilencer::new(config).encode(&test_device(0), 0, &mut out)?;
+        let cmd = SetSilencer::new(config).encode(&test_device(0), &mut out)?;
         Ok((cmd, out))
     }
 
@@ -236,7 +227,7 @@ mod tests {
     fn silencer_default_is_fixed_completion_time_default() {
         let mut out = [0u8; PAYLOAD_BYTES];
         SetSilencer::default()
-            .encode(&test_device(0), 0, &mut out)
+            .encode(&test_device(0), &mut out)
             .unwrap();
         assert_eq!(out[0], SILENCER_FLAG_STRICT_MODE);
         assert_eq!(&out[6..8], &10u16.to_le_bytes());
@@ -247,7 +238,7 @@ mod tests {
     fn disable_is_one_step_non_strict() {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = SetSilencer::disable()
-            .encode(&test_device(0), 0, &mut out)
+            .encode(&test_device(0), &mut out)
             .unwrap();
         assert_eq!(cmd, Cmd::SetSilencer);
         assert_eq!(out[0], 0);

@@ -13,20 +13,11 @@ pub struct SetOutputMask<'a> {
 }
 
 impl Operation for SetOutputMask<'_> {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
-    fn encode(
-        &self,
-        device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let mask = self
             .masks
             .get(device.idx())
@@ -67,7 +58,7 @@ mod tests {
         let data = vec![mask];
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = SetOutputMask { masks: &data }
-            .encode(&dev, 0, &mut out)
+            .encode(&dev, &mut out)
             .unwrap();
         assert_eq!(cmd, Cmd::SetOutputMask);
         assert_eq!(out[0], 1);
@@ -83,7 +74,7 @@ mod tests {
         let data = vec![vec![true; dev.num_transducers()]];
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            SetOutputMask { masks: &data }.encode(&dev, 0, &mut out),
+            SetOutputMask { masks: &data }.encode(&dev, &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }
@@ -94,7 +85,7 @@ mod tests {
         let data = vec![vec![true; dev.num_transducers() + 1]];
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            SetOutputMask { masks: &data }.encode(&dev, 0, &mut out),
+            SetOutputMask { masks: &data }.encode(&dev, &mut out),
             Err(Error::InvalidPayload(
                 PayloadError::TransducerCountMismatch { .. }
             ))

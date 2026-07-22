@@ -65,20 +65,11 @@ fn reflect_fused(
 }
 
 impl Operation for WritePatternFused<'_> {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
-    fn encode(
-        &self,
-        device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let emissions =
             self.emissions
                 .get(device.idx())
@@ -146,21 +137,12 @@ impl<const N: usize> WriteFociStmFused<'_, N> {
 }
 
 impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    fn encode(
-        &self,
-        device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let size = self.points.len();
         if size == 0 {
             return Err(PayloadError::FociEmpty.into());
@@ -257,7 +239,7 @@ mod tests {
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), 0, &mut out).unwrap();
+        let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
         assert_eq!(cmd, Cmd::WritePatternFused);
         assert_eq!(out[0], 1, "bank B1");
@@ -290,7 +272,7 @@ mod tests {
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), 0, &mut out).unwrap();
+        let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
         assert_eq!(cmd, Cmd::WritePatternFused);
         assert_eq!(out[1], EMISSION_TYPE_FOCI);
@@ -330,7 +312,7 @@ mod tests {
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            op.encode(&test_device(0), 0, &mut out),
+            op.encode(&test_device(0), &mut out),
             Err(Error::InvalidPayload(_))
         ));
 
@@ -359,7 +341,7 @@ mod tests {
             },
         };
         let mut out = [0u8; PAYLOAD_BYTES];
-        op.encode(&test_device(0), 0, &mut out).unwrap();
+        op.encode(&test_device(0), &mut out).unwrap();
 
         assert_eq!(out[9], 0x01, "SYS_TIME");
         assert_eq!(&out[12..14], &7u16.to_le_bytes(), "Finite(8) => rep 7");
@@ -378,9 +360,9 @@ mod tests {
             transition_mode: TransitionMode::Immediate,
         };
         let mut out = [0u8; PAYLOAD_BYTES];
-        assert!(op.encode(&test_device(0), 0, &mut out).is_ok());
+        assert!(op.encode(&test_device(0), &mut out).is_ok());
         assert!(matches!(
-            op.encode(&test_device(1), 0, &mut out),
+            op.encode(&test_device(1), &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }

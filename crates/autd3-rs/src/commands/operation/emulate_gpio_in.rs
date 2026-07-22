@@ -13,20 +13,11 @@ pub struct EmulateGpioIn {
 }
 
 impl Operation for EmulateGpioIn {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let (p, _) = GpioInPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = GpioInPayload {
             gpio_in_0: u8::from(self.values[0]),
@@ -49,7 +40,7 @@ mod tests {
         let cmd = EmulateGpioIn {
             values: [false, true, false, true],
         }
-        .encode(&test_device(0), 0, &mut out)
+        .encode(&test_device(0), &mut out)
         .unwrap();
         assert_eq!(cmd, Cmd::EmulateGpioIn);
         assert_eq!(&out[..4], &[0, 1, 0, 1]);

@@ -13,20 +13,11 @@ pub struct ForceFan {
 }
 
 impl Operation for ForceFan {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let (p, _) = ForceFanPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = ForceFanPayload {
             value: u8::from(self.value),
@@ -44,14 +35,14 @@ mod tests {
     fn force_fan_encodes_flag() {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = ForceFan { value: true }
-            .encode(&test_device(0), 0, &mut out)
+            .encode(&test_device(0), &mut out)
             .unwrap();
         assert_eq!(cmd, Cmd::ForceFan);
         assert_eq!(out[0], 1);
 
         let mut out = [0u8; PAYLOAD_BYTES];
         ForceFan { value: false }
-            .encode(&test_device(0), 0, &mut out)
+            .encode(&test_device(0), &mut out)
             .unwrap();
         assert_eq!(out[0], 0);
     }

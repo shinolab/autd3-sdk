@@ -8,20 +8,11 @@ use super::{Distribution, Operation};
 pub struct Nop;
 
 impl Operation for Nop {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        _out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         Ok(Cmd::Nop)
     }
 }
@@ -34,9 +25,8 @@ mod tests {
     #[test]
     fn nop_is_no_payload_broadcast() {
         let mut out = [0xAAu8; PAYLOAD_BYTES];
-        let cmd = Nop.encode(&test_device(0), 0, &mut out).unwrap();
+        let cmd = Nop.encode(&test_device(0), &mut out).unwrap();
         assert_eq!(cmd, Cmd::Nop);
         assert_eq!(Nop.distribution(), Distribution::Broadcast);
-        assert_eq!(Nop.frames(), 1);
     }
 }

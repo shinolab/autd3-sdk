@@ -2,23 +2,22 @@ use std::sync::{Arc, PoisonError};
 
 use crate::commands::Command;
 use crate::commands::operation::Operation;
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::geometry::{Device, Geometry};
 
-use super::each::{EachOwned, each_reflect, each_slot_frames};
+use super::each::{EachFrame, EachOps, each_reflect};
 use super::frame::Frames;
 use super::mirror::{Mirror, MirrorHandle};
 
 enum Step<'a> {
     Op(Box<dyn Operation + 'a>),
-    Each {
-        devices: Vec<Vec<Box<dyn Operation + 'a>>>,
-    },
+    Each { devices: EachOps<'a> },
 }
 
 pub struct DatagramBuilder<'a> {
     geometry: Arc<Geometry>,
     ops: Vec<Step<'a>>,
+    invalid: Option<PayloadError>,
     mirror: Option<MirrorHandle>,
 }
 
@@ -28,6 +27,7 @@ impl<'a> DatagramBuilder<'a> {
         Self {
             geometry,
             ops: Vec::new(),
+            invalid: None,
             mirror: None,
         }
     }
@@ -37,12 +37,18 @@ impl<'a> DatagramBuilder<'a> {
         Self {
             geometry,
             ops: Vec::new(),
+            invalid: None,
             mirror: Some(mirror),
         }
     }
 
     pub fn push<C: Command<'a>>(&mut self, cmd: C) -> &mut Self {
         cmd.expand(self);
+        self
+    }
+
+    pub(crate) fn reject(&mut self, e: PayloadError) -> &mut Self {
+        self.invalid.get_or_insert(e);
         self
     }
 
@@ -53,16 +59,21 @@ impl<'a> DatagramBuilder<'a> {
     {
         let geometry = Arc::clone(&self.geometry);
         let num_devices = geometry.num_devices();
-        let new_devices: Vec<Vec<Box<dyn Operation + 'a>>> = geometry
+        let mut invalid = None;
+        let new_devices: EachOps<'a> = geometry
             .iter()
             .map(|device| {
                 assign(device).map_or_else(Vec::new, |cmd| {
                     let mut sub = DatagramBuilder::new(Arc::clone(&geometry));
                     cmd.expand(&mut sub);
+                    invalid = invalid.or(sub.invalid);
                     sub.take_ops()
                 })
             })
             .collect();
+        if let Some(e) = invalid {
+            self.reject(e);
+        }
 
         let fuse = matches!(
             self.ops.last(),
@@ -93,15 +104,11 @@ impl<'a> DatagramBuilder<'a> {
     pub(crate) fn take_ops(self) -> Vec<Box<dyn Operation + 'a>> {
         self.ops
             .into_iter()
-            .map(|step| match step {
-                Step::Op(op) => op,
-                Step::Each { devices } => {
-                    let slot_frames = each_slot_frames(&devices);
-                    Box::new(EachOwned {
-                        devices,
-                        slot_frames,
-                    }) as Box<dyn Operation + 'a>
-                }
+            .flat_map(|step| match step {
+                Step::Op(op) => vec![op],
+                Step::Each { devices } => EachFrame::flatten(devices)
+                    .map(|frame| Box::new(frame) as Box<dyn Operation + 'a>)
+                    .collect(),
             })
             .collect()
     }
@@ -114,6 +121,10 @@ impl<'a> DatagramBuilder<'a> {
 
     pub fn build_into(&self, out: &mut Frames) -> Result<(), Error> {
         out.clear();
+
+        if let Some(e) = self.invalid {
+            return Err(e.into());
+        }
 
         let mut guard = self
             .mirror

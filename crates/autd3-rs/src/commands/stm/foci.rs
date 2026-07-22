@@ -1,9 +1,7 @@
 use super::StmConfig;
 use crate::Velocity;
-use crate::commands::Command;
-use crate::commands::operation::{
-    ChangePatternBank, ConfigFociStm, WriteFociBuffer, WriteFociStmFused,
-};
+use crate::commands::operation::{ChangePatternBank, ConfigFociStm, WriteFociStmFused};
+use crate::commands::{Command, WriteFociBuffer};
 use crate::datagram::DatagramBuilder;
 use crate::value::{ControlPoints, LoopBehavior, PatternBank, TransitionMode};
 

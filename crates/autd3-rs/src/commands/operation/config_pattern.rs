@@ -48,20 +48,11 @@ fn reflect_pattern(
 }
 
 impl Operation for ConfigPattern {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let divider = self.config.divide()?;
         if self.size == 0 {
             return Err(PayloadError::PatternSizeZero.into());
@@ -94,21 +85,12 @@ impl Operation for ConfigPattern {
 }
 
 impl Operation for ConfigFociStm {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let divider = self.config.divide()?;
         if self.size == 0 {
             return Err(PayloadError::PatternSizeZero.into());
@@ -160,7 +142,7 @@ mod tests {
 
     fn encode(op: impl Operation) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), 0, &mut out)?;
+        let cmd = op.encode(&test_device(0), &mut out)?;
         Ok((cmd, out))
     }
 

@@ -31,20 +31,11 @@ impl WriteModulationFused<'_> {
 }
 
 impl Operation for WriteModulationFused<'_> {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         if self.data.is_empty() {
             return Err(PayloadError::ModulationDataEmpty.into());
         }
@@ -116,7 +107,7 @@ mod tests {
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), 0, &mut out).unwrap();
+        let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
         assert_eq!(cmd, Cmd::WriteModulationFused);
         assert_eq!(out[0], 1, "bank B1");
@@ -143,7 +134,7 @@ mod tests {
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            op.encode(&test_device(0), 0, &mut out),
+            op.encode(&test_device(0), &mut out),
             Err(Error::InvalidPayload(_))
         ));
 
@@ -167,7 +158,7 @@ mod tests {
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            op.encode(&test_device(0), 0, &mut out),
+            op.encode(&test_device(0), &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }

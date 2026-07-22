@@ -72,20 +72,11 @@ pub struct SetGpioOut {
 }
 
 impl Operation for SetGpioOut {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let (p, _) = GpioOutPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = GpioOutPayload {
             values: core::array::from_fn(|i| U64::new(self.outputs[i].encode())),
@@ -110,7 +101,7 @@ mod tests {
                 GpioOut::ModIdx(0x1234),
             ],
         }
-        .encode(&test_device(0), 0, &mut out)
+        .encode(&test_device(0), &mut out)
         .unwrap();
         assert_eq!(cmd, Cmd::SetGpioOut);
         assert_eq!(&out[0..8], &0u64.to_le_bytes());
@@ -141,7 +132,7 @@ mod tests {
                 GpioOut::Off,
             ],
         }
-        .encode(&test_device(0), 0, &mut out)
+        .encode(&test_device(0), &mut out)
         .unwrap();
         assert_eq!(
             &out[8..16],

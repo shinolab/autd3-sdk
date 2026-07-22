@@ -14,20 +14,11 @@ pub struct SetPhaseCorrection<'a> {
 }
 
 impl Operation for SetPhaseCorrection<'_> {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
-    fn encode(
-        &self,
-        device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let phases =
             self.phases
                 .get(device.idx())
@@ -66,7 +57,7 @@ mod tests {
         let data = vec![phases.clone()];
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = SetPhaseCorrection { phases: &data }
-            .encode(&dev, 0, &mut out)
+            .encode(&dev, &mut out)
             .unwrap();
         assert_eq!(cmd, Cmd::SetPhaseCorrection);
         for (i, p) in phases.iter().enumerate() {
@@ -80,7 +71,7 @@ mod tests {
         let data = vec![vec![Phase::ZERO; dev.num_transducers()]];
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            SetPhaseCorrection { phases: &data }.encode(&dev, 0, &mut out),
+            SetPhaseCorrection { phases: &data }.encode(&dev, &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }
@@ -91,7 +82,7 @@ mod tests {
         let data = vec![vec![Phase::ZERO; dev.num_transducers() - 1]];
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            SetPhaseCorrection { phases: &data }.encode(&dev, 0, &mut out),
+            SetPhaseCorrection { phases: &data }.encode(&dev, &mut out),
             Err(Error::InvalidPayload(
                 PayloadError::TransducerCountMismatch { .. }
             ))

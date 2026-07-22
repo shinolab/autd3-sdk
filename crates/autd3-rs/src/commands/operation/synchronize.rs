@@ -8,20 +8,11 @@ use super::{Distribution, Operation};
 pub struct Synchronize;
 
 impl Operation for Synchronize {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        _out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         Ok(Cmd::Synchronize)
     }
 }

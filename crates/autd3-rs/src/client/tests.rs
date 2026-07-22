@@ -27,20 +27,11 @@ const FAIL_MARKER: u8 = 0xAA;
 struct FailingCmd;
 
 impl Operation for FailingCmd {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         out[0] = FAIL_MARKER;
         Ok(Cmd::Nop)
     }

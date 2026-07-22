@@ -12,8 +12,8 @@ mod set_phase_correction;
 mod set_pulse_width_table;
 mod set_silencer;
 mod synchronize;
-mod write_foci_buffer;
-mod write_modulation_buffer;
+mod write_foci_chunk;
+mod write_modulation_chunk;
 mod write_modulation_fused;
 mod write_pattern_buffer;
 mod write_pattern_compressed;
@@ -33,8 +33,8 @@ pub use set_phase_correction::SetPhaseCorrection;
 pub use set_pulse_width_table::{PWE_TABLE_SIZE, SetPulseWidthTable};
 pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, SilencerConfig};
 pub use synchronize::Synchronize;
-pub use write_foci_buffer::WriteFociBuffer;
-pub use write_modulation_buffer::WriteModulationBuffer;
+pub(crate) use write_foci_chunk::WriteFociChunk;
+pub(crate) use write_modulation_chunk::WriteModulationChunk;
 pub use write_modulation_fused::WriteModulationFused;
 pub use write_pattern_buffer::WritePatternBuffer;
 pub use write_pattern_compressed::{
@@ -63,16 +63,9 @@ pub enum Distribution {
 }
 
 pub trait Operation {
-    fn frames(&self) -> usize;
-
     fn distribution(&self) -> Distribution;
 
-    fn encode(
-        &self,
-        device: &Device,
-        frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error>;
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error>;
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
         let _ = (device, state);
@@ -81,21 +74,12 @@ pub trait Operation {
 }
 
 impl<T: Operation + ?Sized> Operation for &T {
-    fn frames(&self) -> usize {
-        (**self).frames()
-    }
-
     fn distribution(&self) -> Distribution {
         (**self).distribution()
     }
 
-    fn encode(
-        &self,
-        device: &Device,
-        frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
-        (**self).encode(device, frame, out)
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+        (**self).encode(device, out)
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {

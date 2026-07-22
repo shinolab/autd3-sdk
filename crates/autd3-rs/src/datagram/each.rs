@@ -1,47 +1,27 @@
+use std::rc::Rc;
+
 use crate::commands::operation::{Distribution, Nop, Operation};
 use crate::error::Error;
 use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-pub(crate) fn each_slot_frames(devices: &[Vec<Box<dyn Operation + '_>>]) -> Vec<usize> {
-    let num_slots = devices.iter().map(Vec::len).max().unwrap_or(0);
-    let mut slot_frames = vec![0usize; num_slots];
-    for ops in devices {
-        for (slot, op) in ops.iter().enumerate() {
-            slot_frames[slot] = slot_frames[slot].max(op.frames());
-        }
-    }
-    slot_frames
-}
+pub(crate) type EachOps<'a> = Vec<Vec<Box<dyn Operation + 'a>>>;
 
-fn each_locate(slot_frames: &[usize], frame: usize) -> Option<(usize, usize)> {
-    let mut remaining = frame;
-    for (slot, &frames) in slot_frames.iter().enumerate() {
-        if remaining < frames {
-            return Some((slot, remaining));
-        }
-        remaining -= frames;
-    }
-    None
+pub(crate) fn each_frames(devices: &[Vec<Box<dyn Operation + '_>>]) -> usize {
+    devices.iter().map(Vec::len).max().unwrap_or(0)
 }
 
 pub(crate) fn each_encode(
     devices: &[Vec<Box<dyn Operation + '_>>],
-    slot_frames: &[usize],
     device: &Device,
     frame: usize,
     out: &mut [u8; PAYLOAD_BYTES],
 ) -> Result<Cmd, Error> {
-    if let Some((slot, subframe)) = each_locate(slot_frames, frame) {
-        if let Some(op) = devices.get(device.idx()).and_then(|ops| ops.get(slot))
-            && subframe < op.frames()
-        {
-            return op.encode(device, subframe, out);
-        }
-        return Nop.encode(device, subframe, out);
+    match devices.get(device.idx()).and_then(|ops| ops.get(frame)) {
+        Some(op) => op.encode(device, out),
+        None => Nop.encode(device, out),
     }
-    Nop.encode(device, frame, out)
 }
 
 pub(crate) fn each_reflect(
@@ -57,30 +37,35 @@ pub(crate) fn each_reflect(
     Ok(())
 }
 
-pub(crate) struct EachOwned<'a> {
-    pub(crate) devices: Vec<Vec<Box<dyn Operation + 'a>>>,
-    pub(crate) slot_frames: Vec<usize>,
+pub(crate) struct EachFrame<'a> {
+    devices: Rc<EachOps<'a>>,
+    frame: usize,
 }
 
-impl Operation for EachOwned<'_> {
-    fn frames(&self) -> usize {
-        self.slot_frames.iter().sum()
+impl<'a> EachFrame<'a> {
+    pub(crate) fn flatten(devices: EachOps<'a>) -> impl Iterator<Item = Self> {
+        let frames = each_frames(&devices);
+        let devices = Rc::new(devices);
+        (0..frames).map(move |frame| Self {
+            devices: Rc::clone(&devices),
+            frame,
+        })
     }
+}
 
+impl Operation for EachFrame<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
-    fn encode(
-        &self,
-        device: &Device,
-        frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
-        each_encode(&self.devices, &self.slot_frames, device, frame, out)
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+        each_encode(&self.devices, device, self.frame, out)
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        each_reflect(&self.devices, device, state)
+        match self.devices.get(device).and_then(|ops| ops.get(self.frame)) {
+            Some(op) => op.reflect(device, state),
+            None => Ok(()),
+        }
     }
 }
