@@ -138,7 +138,7 @@ mod tests {
     use crate::geometry::Autd3;
     use crate::test_utils::test_device;
     use crate::value::{Intensity, Phase};
-    use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
+    const HEADER_BYTES: usize = core::mem::size_of::<WritePatternCompressedPayload>();
 
     #[test]
     fn phase_full_packs_two_phases_per_word() {
@@ -168,10 +168,8 @@ mod tests {
         let expected_offset = u32::try_from(4 * EMISSION_SLOT_WORDS).unwrap();
         assert_eq!(&out[4..8], &expected_offset.to_le_bytes());
         for i in 0..Autd3::NUM_TRANSDUCERS {
-            let word = u16::from_le_bytes([
-                out[WRITE_HEADER_BYTES + 2 * i],
-                out[WRITE_HEADER_BYTES + 2 * i + 1],
-            ]);
+            let word =
+                u16::from_le_bytes([out[HEADER_BYTES + 2 * i], out[HEADER_BYTES + 2 * i + 1]]);
             let expected = u16::from(p0[0][i].phase.0) | (u16::from(p1[0][i].phase.0) << 8);
             assert_eq!(word, expected, "t={i}");
         }
@@ -202,10 +200,8 @@ mod tests {
         assert_eq!(out[1], 2, "format = PhaseHalf");
         assert_eq!(out[2], 4, "count = 4");
         for i in 0..Autd3::NUM_TRANSDUCERS {
-            let word = u16::from_le_bytes([
-                out[WRITE_HEADER_BYTES + 2 * i],
-                out[WRITE_HEADER_BYTES + 2 * i + 1],
-            ]);
+            let word =
+                u16::from_le_bytes([out[HEADER_BYTES + 2 * i], out[HEADER_BYTES + 2 * i + 1]]);
             let expected = u16::from(p0[0][i].phase.0 >> 4)
                 | (u16::from(p1[0][i].phase.0 >> 4) << 4)
                 | (u16::from(p2[0][i].phase.0 >> 4) << 8)

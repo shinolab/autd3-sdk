@@ -6,7 +6,7 @@ use crate::params::{ADDR_MOD_MEM_WR_PAGE, ADDR_PATTERN_MEM_WR_PAGE, NUM_BANKS, N
 use zerocopy::little_endian::{U16, U32};
 
 use crate::cmd::write_mod::{MOD_WRITE_MAX_DATA_LEN, WriteModPayload};
-use crate::cmd::write_pattern::{EM_WRITE_MAX_DATA_LEN, WritePatternPayload};
+use crate::cmd::write_pattern::{PATTERN_WRITE_MAX_DATA_LEN, WritePatternPayload};
 use crate::cmd::write_pattern_compressed::PatternFormat;
 use crate::proto::{Cmd, EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, Error, MOD_BUFFER_SAMPLES};
 use crate::tests::builders::{write_mod_buffer, write_pattern_buffer, write_pattern_compressed};
@@ -99,7 +99,7 @@ fn write_pattern_buffer_rejects_invalid_payloads() {
         bank: 0,
         reserved: 0,
         offset: U32::new(0),
-        data_len: U16::new(u16::try_from(EM_WRITE_MAX_DATA_LEN + 2).unwrap()),
+        data_len: U16::new(u16::try_from(PATTERN_WRITE_MAX_DATA_LEN + 2).unwrap()),
     };
     h.deliver(&Frame::from_payload(2, Cmd::WritePatternBuffer, &too_long));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
