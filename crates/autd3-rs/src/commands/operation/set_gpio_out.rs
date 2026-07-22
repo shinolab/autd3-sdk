@@ -9,13 +9,10 @@ use crate::value::DcSysTime;
 use super::{Distribution, Operation};
 
 use autd3_cpu_wire::params::{
-    GPIO_O_TYPE_BASE_SIG as TYPE_BASE_SIG, GPIO_O_TYPE_DIRECT as TYPE_DIRECT,
-    GPIO_O_TYPE_FORCE_FAN as TYPE_FORCE_FAN, GPIO_O_TYPE_IS_STM_MODE as TYPE_IS_STM_MODE,
-    GPIO_O_TYPE_MOD_BANK as TYPE_MOD_BANK, GPIO_O_TYPE_MOD_IDX as TYPE_MOD_IDX,
-    GPIO_O_TYPE_NONE as TYPE_NONE, GPIO_O_TYPE_PATTERN_BANK as TYPE_PATTERN_BANK,
-    GPIO_O_TYPE_PATTERN_IDX as TYPE_PATTERN_IDX, GPIO_O_TYPE_PWM_OUT as TYPE_PWM_OUT,
-    GPIO_O_TYPE_SYNC as TYPE_SYNC, GPIO_O_TYPE_SYNC_DIFF as TYPE_SYNC_DIFF,
-    GPIO_O_TYPE_SYS_TIME_EQ as TYPE_SYS_TIME_EQ, GPIO_O_TYPE_THERMO as TYPE_THERMO,
+    GPIO_O_TYPE_BASE_SIG, GPIO_O_TYPE_DIRECT, GPIO_O_TYPE_FORCE_FAN, GPIO_O_TYPE_IS_STM_MODE,
+    GPIO_O_TYPE_MOD_BANK, GPIO_O_TYPE_MOD_IDX, GPIO_O_TYPE_NONE, GPIO_O_TYPE_PATTERN_BANK,
+    GPIO_O_TYPE_PATTERN_IDX, GPIO_O_TYPE_PWM_OUT, GPIO_O_TYPE_SYNC, GPIO_O_TYPE_SYNC_DIFF,
+    GPIO_O_TYPE_SYS_TIME_EQ, GPIO_O_TYPE_THERMO,
 };
 
 const VALUE_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
@@ -46,22 +43,25 @@ pub enum GpioOut {
 impl GpioOut {
     fn encode(self) -> u64 {
         let (tag, value): (u8, u64) = match self {
-            GpioOut::Off => (TYPE_NONE, 0),
-            GpioOut::BaseSignal => (TYPE_BASE_SIG, 0),
-            GpioOut::Thermo => (TYPE_THERMO, 0),
-            GpioOut::ForceFan => (TYPE_FORCE_FAN, 0),
-            GpioOut::Sync => (TYPE_SYNC, 0),
-            GpioOut::ModBank => (TYPE_MOD_BANK, 0),
-            GpioOut::ModIdx(idx) => (TYPE_MOD_IDX, u64::from(idx)),
-            GpioOut::PatternBank => (TYPE_PATTERN_BANK, 0),
-            GpioOut::PatternIdx(idx) => (TYPE_PATTERN_IDX, u64::from(idx)),
-            GpioOut::IsStmMode => (TYPE_IS_STM_MODE, 0),
-            GpioOut::SysTimeEq(t) => (TYPE_SYS_TIME_EQ, ec_time_to_gpio_sys_time(t.sys_time())),
-            GpioOut::SyncDiff => (TYPE_SYNC_DIFF, 0),
-            GpioOut::PwmOut(tr) => (TYPE_PWM_OUT, u64::from(tr)),
-            GpioOut::Direct(on) => (TYPE_DIRECT, u64::from(on)),
+            GpioOut::Off => (GPIO_O_TYPE_NONE, 0),
+            GpioOut::BaseSignal => (GPIO_O_TYPE_BASE_SIG, 0),
+            GpioOut::Thermo => (GPIO_O_TYPE_THERMO, 0),
+            GpioOut::ForceFan => (GPIO_O_TYPE_FORCE_FAN, 0),
+            GpioOut::Sync => (GPIO_O_TYPE_SYNC, 0),
+            GpioOut::ModBank => (GPIO_O_TYPE_MOD_BANK, 0),
+            GpioOut::ModIdx(idx) => (GPIO_O_TYPE_MOD_IDX, u64::from(idx)),
+            GpioOut::PatternBank => (GPIO_O_TYPE_PATTERN_BANK, 0),
+            GpioOut::PatternIdx(idx) => (GPIO_O_TYPE_PATTERN_IDX, u64::from(idx)),
+            GpioOut::IsStmMode => (GPIO_O_TYPE_IS_STM_MODE, 0),
+            GpioOut::SysTimeEq(t) => (
+                GPIO_O_TYPE_SYS_TIME_EQ,
+                ec_time_to_gpio_sys_time(t.sys_time()),
+            ),
+            GpioOut::SyncDiff => (GPIO_O_TYPE_SYNC_DIFF, 0),
+            GpioOut::PwmOut(tr) => (GPIO_O_TYPE_PWM_OUT, u64::from(tr)),
+            GpioOut::Direct(on) => (GPIO_O_TYPE_DIRECT, u64::from(on)),
         };
-        (value & VALUE_MASK) | (u64::from(tag) << 56)
+        (u64::from(tag) << 56) | (value & VALUE_MASK)
     }
 }
 
@@ -114,15 +114,15 @@ mod tests {
         assert_eq!(&out[0..8], &0u64.to_le_bytes());
         assert_eq!(
             &out[8..16],
-            &((u64::from(TYPE_DIRECT) << 56) | 1).to_le_bytes()
+            &((u64::from(GPIO_O_TYPE_DIRECT) << 56) | 1).to_le_bytes()
         );
         assert_eq!(
             &out[16..24],
-            &((u64::from(TYPE_PWM_OUT) << 56) | 7).to_le_bytes()
+            &((u64::from(GPIO_O_TYPE_PWM_OUT) << 56) | 7).to_le_bytes()
         );
         assert_eq!(
             &out[24..32],
-            &((u64::from(TYPE_MOD_IDX) << 56) | 0x1234).to_le_bytes()
+            &((u64::from(GPIO_O_TYPE_MOD_IDX) << 56) | 0x1234).to_le_bytes()
         );
     }
 
@@ -143,7 +143,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             &out[8..16],
-            &((u64::from(TYPE_SYS_TIME_EQ) << 56) | (expected & VALUE_MASK)).to_le_bytes()
+            &((u64::from(GPIO_O_TYPE_SYS_TIME_EQ) << 56) | (expected & VALUE_MASK)).to_le_bytes()
         );
     }
 }
