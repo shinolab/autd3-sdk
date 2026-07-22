@@ -31,13 +31,13 @@ impl Operation for WritePatternBuffer<'_> {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        if device.idx() >= self.emissions.len() {
-            return Err(PayloadError::EmissionsDeviceOutOfRange {
-                device: device.idx(),
-                len: self.emissions.len(),
-            }
-            .into());
-        }
+        let emissions =
+            self.emissions
+                .get(device.idx())
+                .ok_or(PayloadError::EmissionsDeviceOutOfRange {
+                    device: device.idx(),
+                    len: self.emissions.len(),
+                })?;
         if self.index >= EMISSION_MAX_INDICES {
             return Err(PayloadError::PatternIndexOutOfRange {
                 index: self.index,
@@ -45,7 +45,6 @@ impl Operation for WritePatternBuffer<'_> {
             }
             .into());
         }
-        let emissions = &self.emissions[device.idx()];
         if emissions.len() != device.num_transducers() {
             return Err(PayloadError::TransducerCountMismatch {
                 device: device.idx(),

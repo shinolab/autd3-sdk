@@ -58,15 +58,10 @@ impl Operation for WritePatternCompressed<'_> {
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         let count = self.count();
-        let dev_len = self.patterns[0].map_or(0, <[_]>::len);
-        if device.idx() >= dev_len {
-            return Err(PayloadError::EmissionsDeviceOutOfRange {
-                device: device.idx(),
-                len: dev_len,
-            }
-            .into());
+        if count == 0 {
+            return Err(PayloadError::PatternSizeZero.into());
         }
-        let last_index = self.index + count.max(1) - 1;
+        let last_index = self.index + count - 1;
         if last_index >= EMISSION_MAX_INDICES {
             return Err(PayloadError::PatternIndexOutOfRange {
                 index: last_index,
@@ -75,10 +70,17 @@ impl Operation for WritePatternCompressed<'_> {
             .into());
         }
         for pattern in self.patterns.iter().flatten() {
-            if pattern[device.idx()].len() != device.num_transducers() {
+            let emissions =
+                pattern
+                    .get(device.idx())
+                    .ok_or(PayloadError::EmissionsDeviceOutOfRange {
+                        device: device.idx(),
+                        len: pattern.len(),
+                    })?;
+            if emissions.len() != device.num_transducers() {
                 return Err(PayloadError::TransducerCountMismatch {
                     device: device.idx(),
-                    got: pattern[device.idx()].len(),
+                    got: emissions.len(),
                     expected: device.num_transducers(),
                 }
                 .into());
