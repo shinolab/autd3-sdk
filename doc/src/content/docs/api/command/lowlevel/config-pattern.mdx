@@ -30,6 +30,9 @@ import { excerpt } from "@lib/excerpt";
 
 `loop_behavior` は, [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) で現在と異なるバンクへ切り替えたときのみ作用する.
 
+`size = 1` (静的 Pattern) は `loop_behavior = Infinite` のときのみ有効.
+有限ループを使う場合は `size` を 2 以上にする.
+
 ## Example
 
 `ConfigPattern` は `WritePatternBuffer` でバッファを書き込んだ後, `ChangePatternBank` で再生を切り替える一連の流れの中で使う.

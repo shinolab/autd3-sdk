@@ -114,10 +114,16 @@ mod tests {
 
     #[test]
     fn foci_stm_expands_to_a_single_fused_frame() {
-        let points = [ControlPoints::new(
-            [ControlPoint::new(Point3::new(0.0, 0.0, 150.0), Phase::ZERO)],
-            Intensity(0xAA),
-        )];
+        let points = [
+            ControlPoints::new(
+                [ControlPoint::new(Point3::new(0.0, 0.0, 150.0), Phase::ZERO)],
+                Intensity(0xAA),
+            ),
+            ControlPoints::new(
+                [ControlPoint::new(Point3::new(0.0, 0.0, 200.0), Phase::ZERO)],
+                Intensity(0xBB),
+            ),
+        ];
         let payload = fused_payload(FociStm::new(
             SamplingConfig::FREQ_4K,
             &points,
@@ -126,7 +132,7 @@ mod tests {
 
         assert_eq!(payload[1], 0, "Foci emission_type");
         assert_eq!(&payload[2..4], &10u16.to_le_bytes(), "FREQ_4K divider");
-        assert_eq!(&payload[4..8], &1u32.to_le_bytes(), "size = sample count");
+        assert_eq!(&payload[4..8], &2u32.to_le_bytes(), "size = sample count");
         assert_eq!(payload[8], 1, "num_foci = N");
         assert_eq!(payload[9], 0xFF, "IMMEDIATE");
         assert_eq!(&payload[10..12], &21760u16.to_le_bytes(), "340 m/s * 64");
@@ -145,13 +151,22 @@ mod tests {
 
     #[test]
     fn foci_stm_first_focus_carries_intensity_rest_phase_offset() {
-        let points = [ControlPoints::new(
-            [
-                ControlPoint::new(Point3::new(1.0, 0.0, 0.0), Phase(0x11)),
-                ControlPoint::new(Point3::new(-1.0, 0.0, 0.0), Phase(0x22)),
-            ],
-            Intensity(0x80),
-        )];
+        let points = [
+            ControlPoints::new(
+                [
+                    ControlPoint::new(Point3::new(1.0, 0.0, 0.0), Phase(0x11)),
+                    ControlPoint::new(Point3::new(-1.0, 0.0, 0.0), Phase(0x22)),
+                ],
+                Intensity(0x80),
+            ),
+            ControlPoints::new(
+                [
+                    ControlPoint::new(Point3::new(2.0, 0.0, 0.0), Phase(0x33)),
+                    ControlPoint::new(Point3::new(-2.0, 0.0, 0.0), Phase(0x44)),
+                ],
+                Intensity(0x40),
+            ),
+        ];
         let payload = fused_payload(FociStm::new(
             SamplingConfig::new(NonZeroU16::MIN),
             &points,
@@ -216,7 +231,10 @@ mod tests {
 
     #[test]
     fn foci_stm_bank_comes_from_option() {
-        let points = [ControlPoints::from(Point3::new(0.0, 0.0, 1.0))];
+        let points = [
+            ControlPoints::from(Point3::new(0.0, 0.0, 1.0)),
+            ControlPoints::from(Point3::new(0.0, 0.0, 2.0)),
+        ];
         let payload = fused_payload(FociStm::new(
             SamplingConfig::FREQ_4K,
             &points,
@@ -232,7 +250,10 @@ mod tests {
     fn foci_stm_loop_behavior_encodes_rep() {
         use crate::value::LoopBehavior;
 
-        let points = [ControlPoints::from(Point3::new(0.0, 0.0, 1.0))];
+        let points = [
+            ControlPoints::from(Point3::new(0.0, 0.0, 1.0)),
+            ControlPoints::from(Point3::new(0.0, 0.0, 2.0)),
+        ];
 
         let payload = fused_payload(FociStm::new(
             SamplingConfig::FREQ_4K,
@@ -261,7 +282,10 @@ mod tests {
     fn foci_stm_transition_mode_encodes_into_fused_frame() {
         use crate::value::{GpioIn, TransitionMode};
 
-        let points = [ControlPoints::from(Point3::new(0.0, 0.0, 1.0))];
+        let points = [
+            ControlPoints::from(Point3::new(0.0, 0.0, 1.0)),
+            ControlPoints::from(Point3::new(0.0, 0.0, 2.0)),
+        ];
         let payload = fused_payload(FociStm::new(
             SamplingConfig::FREQ_4K,
             &points,

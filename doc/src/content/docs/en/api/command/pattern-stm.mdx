@@ -24,7 +24,7 @@ Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary P
 | Parameter  | Type                                  | Description                                          |
 | ---------- | ------------------------------------- | --------------------------------------------------- |
 | `freq`     | `impl Into<StmConfig>`                | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
-| `patterns` | `&[Vec<Vec<Emission>>]` | Sequence of Pattern samples                         |
+| `patterns` | `&[Vec<Vec<Emission>>]` | Sequence of Pattern samples (at least 2 samples)            |
 | `option`   | `PatternStmOption`                    | Options such as transfer mode, loop, and transition |
 
 Passing a `Freq` / `Duration` to `freq` represents "the frequency/period for one full cycle over all samples".

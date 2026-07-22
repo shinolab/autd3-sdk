@@ -46,7 +46,7 @@ import { excerpt } from "@lib/excerpt";
 | ----------------- | ---------------- | --------------------------- | ---------------------------- |
 | `bank`            | `ModulationBank` | `ModulationBank::B0`        | 書き込み先・再生対象のバンク |
 | `config`          | `SamplingConfig` | —                           | 再生サンプリング周波数       |
-| `data`            | `&[u8]`          | —                           | AM 波形サンプル列            |
+| `data`            | `&[u8]`          | —                           | AM 波形サンプル列 (2 サンプル以上)   |
 | `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`    | 再生ループ回数               |
 | `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | バンク切替時の遷移挙動       |
 

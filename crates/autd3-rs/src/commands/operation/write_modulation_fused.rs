@@ -5,7 +5,7 @@ use zerocopy::little_endian::{U16, U32, U64};
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::mirror::FirmwareState;
-use crate::params::MOD_BUFFER_SAMPLES;
+use crate::params::{BUFFER_SIZE_MIN, MOD_BUFFER_SAMPLES};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 
@@ -36,8 +36,13 @@ impl Operation for WriteModulationFused<'_> {
     }
 
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        if self.data.is_empty() {
-            return Err(PayloadError::ModulationDataEmpty.into());
+        if self.data.len() < BUFFER_SIZE_MIN {
+            return Err(PayloadError::ModulationSizeOutOfRange {
+                size: self.data.len(),
+                min: BUFFER_SIZE_MIN,
+                max: MOD_BUFFER_SAMPLES,
+            }
+            .into());
         }
         if self.data.len() > MOD_FUSED_MAX_DATA_LEN {
             return Err(PayloadError::ModulationWriteExceedsCapacity {
@@ -50,6 +55,7 @@ impl Operation for WriteModulationFused<'_> {
         if self.data.len() > MOD_BUFFER_SAMPLES {
             return Err(PayloadError::ModulationSizeOutOfRange {
                 size: self.data.len(),
+                min: BUFFER_SIZE_MIN,
                 max: MOD_BUFFER_SAMPLES,
             }
             .into());

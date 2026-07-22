@@ -24,10 +24,13 @@ import { excerpt } from "@lib/excerpt";
 | --------------- | ---------------- | -------------------------------------------------- |
 | `bank`          | `PatternBank`    | Target bank                                        |
 | `config`        | `SamplingConfig` | Playback sampling frequency                        |
-| `size`          | `usize`          | Number of STM samples                              |
+| `size`          | `usize`          | Number of STM samples (at least 2)                 |
 | `num_foci`      | `u8`             | Number of focal points per sample (the N of `ControlPoints<N>`) |
 | `sound_speed`   | `Velocity`       | Sound speed used for focal point computation       |
 | `loop_behavior` | `LoopBehavior`   | Playback loop count (`Infinite` / `Finite`)        |
+
+The minimum `size` is 2.
+To emit a single focal point statically, use [Pattern](/autd3-sdk/en/api/command/pattern/) instead of an STM.
 
 For the timing at which `loop_behavior` and the transition take effect see [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
 

@@ -10,6 +10,7 @@ pub const WIRE_RX_FRAME_BYTES: usize = RX_FRAME_BYTES + 2;
 pub const WIRE_RX_GAP_START: usize = 498;
 pub const WIRE_RX_GAP_END: usize = 500;
 
+pub const BUFFER_SIZE_MIN: u32 = autd3_cpu_wire::layout::BUFFER_SIZE_MIN as u32;
 pub const MOD_BUFFER_SAMPLES: u32 = autd3_cpu_wire::layout::MOD_BUFFER_SAMPLES as u32;
 pub const EMISSION_RAM_WORDS: u32 = autd3_cpu_wire::layout::EMISSION_RAM_WORDS as u32;
 pub const EMISSION_SLOT_WORDS: u32 = autd3_cpu_wire::layout::EMISSION_SLOT_WORDS as u32;

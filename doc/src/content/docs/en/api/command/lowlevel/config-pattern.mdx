@@ -30,6 +30,9 @@ import { excerpt } from "@lib/excerpt";
 
 `loop_behavior` only takes effect when switching to a bank different from the current one via [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
 
+`size = 1` (a static Pattern) is valid only with `loop_behavior = Infinite`.
+Use `size` of 2 or more when a finite loop is needed.
+
 ## Example
 
 `ConfigPattern` is used within the sequence of writing the buffer with `WritePatternBuffer` and then switching playback with `ChangePatternBank`.

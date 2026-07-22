@@ -75,8 +75,8 @@ pub enum PayloadError {
     #[error("expected {expected} datagram(s) (one per device), got {got}")]
     DatagramCountMismatch { expected: usize, got: usize },
 
-    #[error("modulation size {size} out of range 1..={max}")]
-    ModulationSizeOutOfRange { size: usize, max: usize },
+    #[error("modulation size {size} out of range {min}..={max}")]
+    ModulationSizeOutOfRange { size: usize, min: usize, max: usize },
 
     #[error("modulation data must not be empty")]
     ModulationDataEmpty,
@@ -107,8 +107,11 @@ pub enum PayloadError {
     #[error("silencer completion time {0:?} is out of range (1..=65535 ultrasound periods)")]
     SilencerCompletionTimeOutOfRange(core::time::Duration),
 
-    #[error("pattern size must be >= 1")]
-    PatternSizeZero,
+    #[error("pattern size {size} must be >= {min}")]
+    PatternSizeTooSmall { size: usize, min: usize },
+
+    #[error("a {size}-sample bank never advances its index, so it requires an infinite loop")]
+    FiniteLoopNeedsMultipleSamples { size: usize },
 
     #[error("num_foci {num_foci} out of range 1..={max}")]
     NumFociOutOfRange { num_foci: u8, max: u8 },
@@ -123,8 +126,8 @@ pub enum PayloadError {
     #[error("sound_speed must be >= 1")]
     SoundSpeedZero,
 
-    #[error("STM size {size} out of range 1..={max}")]
-    StmSizeOutOfRange { size: usize, max: usize },
+    #[error("STM size {size} out of range {min}..={max}")]
+    StmSizeOutOfRange { size: usize, min: usize, max: usize },
 
     #[error("emissions has {len} entr(ies) but device {device} was requested")]
     EmissionsDeviceOutOfRange { device: usize, len: usize },

@@ -24,8 +24,11 @@ import { excerpt } from "@lib/excerpt";
 | ---------- | ---------------- | ------------------------------------------------- |
 | `bank`     | `ModulationBank` | 対象バンク                                        |
 | `config`   | `SamplingConfig` | 再生サンプリング周波数                            |
-| `size`     | `usize`          | サンプル数 (`data.len()` と一致させる)            |
+| `size`     | `usize`          | サンプル数                                        |
 | `loop_behavior` | `LoopBehavior` | 再生ループ回数 (`Infinite` / `Finite`)         |
+
+`size` の下限は 2.
+定数変調が要るときは同じ値を 2 サンプル並べる.
 
 `loop_behavior` と遷移の反映タイミングは [ChangeModulationBank](/autd3-sdk/api/command/lowlevel/change-modulation-bank/) を参照.
 

@@ -24,8 +24,11 @@ import { excerpt } from "@lib/excerpt";
 | ---------- | ---------------- | -------------------------------------------------- |
 | `bank`     | `ModulationBank` | Target bank                                        |
 | `config`   | `SamplingConfig` | Playback sampling frequency                        |
-| `size`     | `usize`          | Number of samples (must match `data.len()`)        |
+| `size`     | `usize`          | Number of samples                                  |
 | `loop_behavior` | `LoopBehavior` | Playback loop count (`Infinite` / `Finite`)       |
+
+The minimum `size` is 2.
+To emit a constant modulation, repeat the same value twice.
 
 For the timing at which `loop_behavior` and the transition take effect see [ChangeModulationBank](/autd3-sdk/en/api/command/lowlevel/change-modulation-bank/).
 

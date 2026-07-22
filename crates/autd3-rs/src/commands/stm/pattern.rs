@@ -5,6 +5,8 @@ use crate::commands::operation::{
     WritePatternBuffer, WritePatternCompressed,
 };
 use crate::datagram::DatagramBuilder;
+use crate::error::PayloadError;
+use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES};
 use crate::value::{Emission, LoopBehavior, PatternBank, TransitionMode};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -58,6 +60,14 @@ impl<'a> PatternStm<'a> {
 impl<'a> Command<'a> for PatternStm<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
         let n = self.patterns.len();
+        if n < BUFFER_SIZE_MIN {
+            builder.reject(PayloadError::StmSizeOutOfRange {
+                size: n,
+                min: BUFFER_SIZE_MIN,
+                max: EMISSION_MAX_INDICES,
+            });
+            return;
+        }
         let config = self.config.into_sampling_config(n);
         let size = n;
         let bank = self.option.bank;
@@ -156,6 +166,22 @@ mod tests {
         let chg = datagrams.frame(4).unwrap();
         assert_eq!(chg.datagrams()[0].cmd, Cmd::ChangePatternBank);
         assert_eq!(chg.datagrams()[0].payload[1], 0xFF, "IMMEDIATE");
+    }
+
+    #[test]
+    fn pattern_stm_rejects_a_single_pattern() {
+        use crate::error::Error;
+
+        let patterns: Vec<Vec<Vec<Emission>>> =
+            vec![vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]]];
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
+        b.push(PatternStm::new(
+            SamplingConfig::FREQ_4K,
+            &patterns,
+            PatternStmOption::default(),
+        ));
+
+        assert!(matches!(b.build(), Err(Error::InvalidPayload(_))));
     }
 
     fn make_patterns(n: usize) -> Vec<Vec<Vec<Emission>>> {

@@ -1,7 +1,8 @@
 #![allow(clippy::cast_possible_truncation)]
 
+use autd3_rs_core::params::REP_INFINITE;
 use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
-use autd3_rs_core::value::Intensity;
+use autd3_rs_core::value::{Intensity, TransitionMode};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
@@ -23,19 +24,21 @@ fn single_focus_synthesizes_phases() {
 
     let mut write = vec![BANK, 0];
     write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&8u16.to_le_bytes());
+    write.extend_from_slice(&16u16.to_le_bytes());
+    write.extend_from_slice(&focus.to_le_bytes());
     write.extend_from_slice(&focus.to_le_bytes());
 
-    let mut config = vec![0u8; 12];
+    let mut config = vec![0u8; 14];
     config[0] = BANK;
     config[1] = 0x00;
     config[2..4].copy_from_slice(&512u16.to_le_bytes());
-    config[4..8].copy_from_slice(&1u32.to_le_bytes());
+    config[4..8].copy_from_slice(&2u32.to_le_bytes());
     config[8] = 1;
     config[10..12].copy_from_slice(&340u16.to_le_bytes());
+    config[12..14].copy_from_slice(&REP_INFINITE.to_le_bytes());
 
     let change = {
-        let mut c = vec![BANK, 0x00];
+        let mut c = vec![BANK, TransitionMode::Immediate.as_u8()];
         c.extend_from_slice(&0u64.to_le_bytes());
         c
     };
