@@ -1,8 +1,9 @@
 use crate::error::Error;
 use crate::params::NUM_BANKS;
+pub use crate::params::{
+    SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
+};
 
-pub const SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY: u16 = 10;
-pub const SILENCER_DEFAULT_COMPLETION_STEPS_PHASE: u16 = 40;
 pub const FREQ_DIV_NO_LIMIT: u16 = 0xFFFF;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

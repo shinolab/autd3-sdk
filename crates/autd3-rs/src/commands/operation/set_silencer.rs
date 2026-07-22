@@ -9,16 +9,13 @@ use crate::common::{ULTRASOUND_FREQ, ULTRASOUND_PERIOD};
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::mirror::FirmwareState;
+use crate::params::{
+    SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
+    SILENCER_DEFAULT_UPDATE_RATE, SILENCER_FLAG_FIXED_UPDATE_RATE_MODE, SILENCER_FLAG_STRICT_MODE,
+};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 use super::{Distribution, Operation};
-
-const FLAG_FIXED_UPDATE_RATE: u8 = 1 << 0;
-const FLAG_STRICT_MODE: u8 = 1 << 1;
-
-const DEFAULT_COMPLETION_STEPS_INTENSITY: u16 = 10;
-const DEFAULT_COMPLETION_STEPS_PHASE: u16 = 40;
-const DEFAULT_UPDATE_RATE: u16 = 256;
 
 fn write_payload(
     out: &mut [u8; PAYLOAD_BYTES],
@@ -74,8 +71,8 @@ pub struct FixedCompletionTime {
 impl Default for FixedCompletionTime {
     fn default() -> Self {
         Self {
-            intensity: ULTRASOUND_PERIOD * u32::from(DEFAULT_COMPLETION_STEPS_INTENSITY),
-            phase: ULTRASOUND_PERIOD * u32::from(DEFAULT_COMPLETION_STEPS_PHASE),
+            intensity: ULTRASOUND_PERIOD * u32::from(SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY),
+            phase: ULTRASOUND_PERIOD * u32::from(SILENCER_DEFAULT_COMPLETION_STEPS_PHASE),
             strict_mode: true,
         }
     }
@@ -87,15 +84,15 @@ impl SilencerConfig for FixedCompletionTime {
         let intensity = completion_time_to_steps(self.intensity)?;
         let phase = completion_time_to_steps(self.phase)?;
         let flag = if self.strict_mode {
-            FLAG_STRICT_MODE
+            SILENCER_FLAG_STRICT_MODE
         } else {
             0
         };
         write_payload(
             out,
             flag,
-            DEFAULT_UPDATE_RATE,
-            DEFAULT_UPDATE_RATE,
+            SILENCER_DEFAULT_UPDATE_RATE,
+            SILENCER_DEFAULT_UPDATE_RATE,
             intensity,
             phase,
         );
@@ -126,11 +123,11 @@ impl SilencerConfig for FixedUpdateRate {
     fn write_payload(&self, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         write_payload(
             out,
-            FLAG_FIXED_UPDATE_RATE,
+            SILENCER_FLAG_FIXED_UPDATE_RATE_MODE,
             self.intensity.get(),
             self.phase.get(),
-            DEFAULT_COMPLETION_STEPS_INTENSITY,
-            DEFAULT_COMPLETION_STEPS_PHASE,
+            SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY,
+            SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
         );
         Ok(Cmd::SetSilencer)
     }
@@ -218,10 +215,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(cmd, Cmd::SetSilencer);
-        assert_eq!(payload[0], FLAG_STRICT_MODE);
+        assert_eq!(payload[0], SILENCER_FLAG_STRICT_MODE);
         assert_eq!(payload[1], 0);
-        assert_eq!(&payload[2..4], &DEFAULT_UPDATE_RATE.to_le_bytes());
-        assert_eq!(&payload[4..6], &DEFAULT_UPDATE_RATE.to_le_bytes());
+        assert_eq!(&payload[2..4], &SILENCER_DEFAULT_UPDATE_RATE.to_le_bytes());
+        assert_eq!(&payload[4..6], &SILENCER_DEFAULT_UPDATE_RATE.to_le_bytes());
         assert_eq!(&payload[6..8], &5u16.to_le_bytes());
         assert_eq!(&payload[8..10], &7u16.to_le_bytes());
         assert!(payload[10..].iter().all(|&b| b == 0));
@@ -230,7 +227,7 @@ mod tests {
     #[test]
     fn fixed_completion_time_default_is_10_40_strict() {
         let (_cmd, payload) = encode(FixedCompletionTime::default()).unwrap();
-        assert_eq!(payload[0], FLAG_STRICT_MODE);
+        assert_eq!(payload[0], SILENCER_FLAG_STRICT_MODE);
         assert_eq!(&payload[6..8], &10u16.to_le_bytes());
         assert_eq!(&payload[8..10], &40u16.to_le_bytes());
     }
@@ -241,7 +238,7 @@ mod tests {
         SetSilencer::default()
             .encode(&test_device(0), 0, &mut out)
             .unwrap();
-        assert_eq!(out[0], FLAG_STRICT_MODE);
+        assert_eq!(out[0], SILENCER_FLAG_STRICT_MODE);
         assert_eq!(&out[6..8], &10u16.to_le_bytes());
         assert_eq!(&out[8..10], &40u16.to_le_bytes());
     }
@@ -277,7 +274,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(cmd, Cmd::SetSilencer);
-        assert_eq!(payload[0], FLAG_FIXED_UPDATE_RATE);
+        assert_eq!(payload[0], SILENCER_FLAG_FIXED_UPDATE_RATE_MODE);
         assert_eq!(&payload[2..4], &8u16.to_le_bytes());
         assert_eq!(&payload[4..6], &16u16.to_le_bytes());
         assert_eq!(&payload[6..8], &10u16.to_le_bytes());

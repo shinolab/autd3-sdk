@@ -29,7 +29,11 @@ pub use phase_corr::PhaseCorrPayload;
 pub use pwe::PwePayload;
 pub use read_telemetry::ReadTelemetryPayload;
 pub use set_mode::SetModePayload;
-pub use silencer::SilencerPayload;
+pub use silencer::{
+    SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
+    SILENCER_DEFAULT_UPDATE_RATE, SILENCER_FLAG_BIT_STRICT_MODE, SILENCER_FLAG_STRICT_MODE,
+    SilencerPayload,
+};
 pub use write_mod::WriteModPayload;
 pub use write_mod_fused::WriteModulationFusedPayload;
 pub use write_pattern::WritePatternPayload;
