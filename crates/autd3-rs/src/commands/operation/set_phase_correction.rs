@@ -1,3 +1,6 @@
+use autd3_cpu_wire::payload::PhaseCorrPayload;
+use zerocopy::FromBytes;
+
 use crate::error::{Error, PayloadError};
 use crate::geometry::Autd3;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -40,7 +43,9 @@ impl Operation for SetPhaseCorrection<'_> {
             }
             .into());
         }
-        out.iter_mut()
+        let (p, _) = PhaseCorrPayload::mut_from_prefix(&mut out[..]).unwrap();
+        p.data
+            .iter_mut()
             .zip(phases)
             .for_each(|(dst, phase)| *dst = phase.0);
         Ok(Cmd::SetPhaseCorrection)

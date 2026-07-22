@@ -1,3 +1,6 @@
+use autd3_cpu_wire::payload::ForceFanPayload;
+use zerocopy::FromBytes;
+
 use crate::error::Error;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
@@ -23,7 +26,10 @@ impl Operation for ForceFan {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        out[0] = u8::from(self.value);
+        let (p, _) = ForceFanPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *p = ForceFanPayload {
+            value: u8::from(self.value),
+        };
         Ok(Cmd::ForceFan)
     }
 }

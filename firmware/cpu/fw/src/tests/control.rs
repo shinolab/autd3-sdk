@@ -50,9 +50,9 @@ fn force_fan_survives_subsequent_latch() {
 }
 
 #[test]
-fn emulate_gpio_in_maps_bits() {
+fn emulate_gpio_in_maps_values() {
     let mut h = Harness::new();
-    h.deliver(&gpio_in(0, 0b1010));
+    h.deliver(&gpio_in(0, [0, 1, 0, 1]));
     assert_eq!(h.data(), 0);
     let ctl = h.ctl(ADDR_CTL_FLAG);
     assert_eq!(ctl & CTL_FLAG_GPIO_IN_0, 0);
@@ -64,7 +64,7 @@ fn emulate_gpio_in_maps_bits() {
 #[test]
 fn emulate_gpio_in_rejects_out_of_range() {
     let mut h = Harness::new();
-    h.deliver(&gpio_in(0, 0x10));
+    h.deliver(&gpio_in(0, [0, 0, 2, 0]));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 }
 

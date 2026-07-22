@@ -1,3 +1,7 @@
+use autd3_cpu_wire::payload::OutputMaskPayload;
+use zerocopy::FromBytes;
+use zerocopy::little_endian::U16;
+
 use crate::error::{Error, PayloadError};
 use crate::geometry::Autd3;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -39,14 +43,17 @@ impl Operation for SetOutputMask<'_> {
             }
             .into());
         }
-        mask.chunks(8)
-            .zip(out.iter_mut())
-            .for_each(|(chunk, byte)| {
-                *byte = chunk
-                    .iter()
-                    .enumerate()
-                    .filter(|&(_, &on)| on)
-                    .fold(0u8, |acc, (j, _)| acc | (1 << j));
+        let (p, _) = OutputMaskPayload::mut_from_prefix(&mut out[..]).unwrap();
+        mask.chunks(16)
+            .zip(p.data.iter_mut())
+            .for_each(|(chunk, word)| {
+                *word = U16::new(
+                    chunk
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, &on)| on)
+                        .fold(0u16, |acc, (j, _)| acc | (1 << j)),
+                );
             });
         Ok(Cmd::SetOutputMask)
     }
