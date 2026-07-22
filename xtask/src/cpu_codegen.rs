@@ -33,13 +33,8 @@ const IP_CONSTS: &[IpConst] = &[
     },
 ];
 
-const FW_INTERNAL_PREFIXES: &[&str] = &[
-    "ADDR_",
-    "BRAM_SELECT_",
-    "BRAM_CNT_SELECT_",
-    "CTL_FLAG_",
-    "SILENCER_FLAG_",
-];
+const FW_INTERNAL_PREFIXES: &[&str] =
+    &["ADDR_", "BRAM_SELECT_", "BRAM_CNT_SELECT_", "CTL_FLAG_"];
 
 fn is_fw_internal(name: &str) -> bool {
     FW_INTERNAL_PREFIXES.iter().any(|p| name.starts_with(p))

@@ -2,13 +2,13 @@ use core::cell::Cell;
 
 use zerocopy::FromBytes;
 
-pub use autd3_cpu_wire::payload::SilencerPayload;
+pub use autd3_cpu_wire::payload::{
+    SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
+    SILENCER_FLAG_STRICT_MODE, SilencerPayload,
+};
 
 use crate::app::Cpu;
 use crate::fpga;
-use crate::fpga::{
-    SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
-};
 use crate::params::{
     ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, ADDR_SILENCER_COMPLETION_STEPS_PHASE,
     ADDR_SILENCER_FLAG, ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE,
@@ -16,9 +16,6 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::Error;
-
-pub const SILENCER_FLAG_BIT_STRICT_MODE: u8 = 1;
-pub const SILENCER_FLAG_STRICT_MODE: u8 = 1 << SILENCER_FLAG_BIT_STRICT_MODE;
 
 pub(crate) struct SilencerGuard {
     strict_mode: Cell<bool>,
