@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
     // ANCHOR: push_each
     let mut builder = client.datagram_builder();
     builder.push_each(|device| {
-        Some(if device % 2 == 0 {
+        Some(if device.idx() % 2 == 0 {
             Pattern::new(&left)
         } else {
             Pattern::new(&right)
@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
     // ANCHOR: push_each_boxed
     let mut builder = client.datagram_builder();
     builder.push_each(|device| {
-        Some(if device % 2 == 0 {
+        Some(if device.idx() % 2 == 0 {
             Pattern::new(&left).boxed()
         } else {
             Modulation::new(SamplingConfig::FREQ_4K, &modulation).boxed()

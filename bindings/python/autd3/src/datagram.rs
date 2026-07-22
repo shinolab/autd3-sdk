@@ -325,7 +325,7 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
             ));
         }
         Pending::Each { devices } => {
-            builder.push_each(|device| devices[device].as_ref().map(PendingCommand));
+            builder.push_each(|device| devices[device.idx()].as_ref().map(PendingCommand));
         }
         Pending::Command(command) => {
             command.push_into(builder);
@@ -488,11 +488,16 @@ impl DatagramBuilder {
         Err(PyValueError::new_err("Unknown datagram type"))
     }
 
-    fn push_each(&mut self, assign: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn push_each(&mut self, py: Python<'_>, assign: &Bound<'_, PyAny>) -> PyResult<()> {
         let num_devices = self.geometry.num_devices();
+        let capsule = autd3_python_capsule::geometry_into_capsule(py, (*self.geometry).clone())?;
+        let geometry = py
+            .import("autd3_core")?
+            .getattr("Geometry")?
+            .call_method1("_from_capsule", (capsule,))?;
         let mut devices = Vec::with_capacity(num_devices);
         for device in 0..num_devices {
-            let result = assign.call1((device,))?;
+            let result = assign.call1((geometry.get_item(device)?,))?;
             if result.is_none() {
                 devices.push(None);
             } else {

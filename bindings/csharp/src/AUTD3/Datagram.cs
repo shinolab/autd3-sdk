@@ -68,12 +68,14 @@ namespace AUTD3
 
     public sealed class DatagramBuilder : IDisposable
     {
+        private readonly Geometry _geometry;
         private readonly int _numDevices;
 
         internal IntPtr Handle { get; private set; }
 
         public DatagramBuilder(Geometry geometry)
         {
+            _geometry = geometry;
             _numDevices = geometry.NumDevices;
             Handle = NativeClient.autd3_datagram_builder_new(geometry.Handle);
             if (Handle == IntPtr.Zero)
@@ -89,14 +91,14 @@ namespace AUTD3
             return this;
         }
 
-        public DatagramBuilder PushEach(Func<int, ICommand?> factory)
+        public DatagramBuilder PushEach(Func<Device, ICommand?> factory)
         {
             var ops = new IntPtr[_numDevices];
             try
             {
                 for (var i = 0; i < _numDevices; i++)
                 {
-                    var command = factory(i);
+                    var command = factory(_geometry[i]);
                     ops[i] = command == null ? IntPtr.Zero : command.CreateOp();
                 }
             }

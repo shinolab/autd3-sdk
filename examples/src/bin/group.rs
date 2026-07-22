@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
 
     let mut builder = client.datagram_builder();
     builder.push(SetSilencer::default()).push_each(|device| {
-        Some(if device % 2 == 0 {
+        Some(if device.idx() % 2 == 0 {
             Pattern::new(&left)
         } else {
             Pattern::new(&right)

@@ -20,7 +20,7 @@ async fn send_gpio_each(ctx: &Ctx<'_>, outputs: impl Fn(usize) -> [GpioOut; 4]) 
     let mut builder = ctx.client.datagram_builder();
     builder.push_each(|dev| {
         Some(SetGpioOut {
-            outputs: outputs(dev),
+            outputs: outputs(dev.idx()),
         })
     });
     let frames = builder.build()?;

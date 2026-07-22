@@ -199,7 +199,7 @@ namespace AUTD3.Tests
                 new Autd3(new Vector3(Autd3.DeviceWidth, 0f, 0f)),
             });
             using var builder = new DatagramBuilder(geometry);
-            builder.PushEach(device => device == 0 ? new Clear() : (ICommand?)null);
+            builder.PushEach(device => device.Idx == 0 ? new Clear() : (ICommand?)null);
             using var frames = builder.Build();
             Assert.True(frames.Length > 0);
         }

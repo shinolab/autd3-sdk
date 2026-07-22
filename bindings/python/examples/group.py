@@ -44,7 +44,7 @@ async def main() -> None:
 
     builder = client.datagram_builder()
     builder.push(autd3.commands.SetSilencer())
-    builder.push_each(lambda device: autd3.commands.Pattern(left if device % 2 == 0 else right))
+    builder.push_each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right))
     for frame in builder.build():
         await client.send_checked(frame)
 

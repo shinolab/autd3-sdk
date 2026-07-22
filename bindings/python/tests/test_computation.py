@@ -185,21 +185,21 @@ def test_push_each() -> None:
 
     # homogeneous per-device command
     builder = autd3.DatagramBuilder(geo)
-    builder.push_each(lambda device: autd3.commands.Pattern(left if device % 2 == 0 else right))
+    builder.push_each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right))
     assert len(builder.build()) > 0
 
     # heterogeneous per-device command (Python is dynamically typed, no boxing needed)
     builder = autd3.DatagramBuilder(geo)
     builder.push_each(
         lambda device: autd3.commands.Pattern(left)
-        if device % 2 == 0
+        if device.idx() % 2 == 0
         else autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf)
     )
     assert len(builder.build()) > 0
 
     # returning None leaves that device unassigned
     builder = autd3.DatagramBuilder(geo)
-    builder.push_each(lambda device: autd3.commands.Pattern(left) if device == 0 else None)
+    builder.push_each(lambda device: autd3.commands.Pattern(left) if device.idx() == 0 else None)
     assert len(builder.build()) > 0
 
 

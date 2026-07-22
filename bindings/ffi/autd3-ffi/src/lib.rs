@@ -1423,7 +1423,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             Pending::Each(devices) => {
                 core.push_each::<BoxedCommand, _>(|device| {
                     devices
-                        .get(device)
+                        .get(device.idx())
                         .and_then(Option::as_ref)
                         .and_then(pending_to_boxed)
                 });
