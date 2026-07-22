@@ -42,7 +42,7 @@ internal static class Sample
         {
         // ANCHOR: push_each
         var builder = client.DatagramBuilder();
-        builder.PushEach(device => device % 2 == 0
+        builder.PushEach(device => device.Idx % 2 == 0
             ? new Pattern(left)
             : new Pattern(right));
         var frames = builder.Build();

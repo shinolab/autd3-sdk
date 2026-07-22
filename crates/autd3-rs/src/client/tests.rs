@@ -1316,7 +1316,9 @@ async fn build_rejects_per_device_group_under_strict_silencer() {
     builder.push_each(|device| {
         Some(ConfigModulation {
             bank: ModulationBank::B0,
-            config: SamplingConfig::new(NonZeroU16::new(if device == 0 { 5 } else { 20 }).unwrap()),
+            config: SamplingConfig::new(
+                NonZeroU16::new(if device.idx() == 0 { 5 } else { 20 }).unwrap(),
+            ),
             size: 1,
             loop_behavior: LoopBehavior::Infinite,
         })

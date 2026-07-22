@@ -29,8 +29,8 @@ import csSample from "@codes/csharp/examples/api/basics/datagram-builder.cs?raw"
 
 ## push_each
 
-`push_each` はデバイス番号ごとに呼ばれるクロージャを受け取り, デバイスごとに異なるコマンドを割り当てる.
-Rust では `FnMut(usize) -> Option<C>`, Python では `Callable[[int], Command | None]`.
+`push_each` はデバイスごとに呼ばれるクロージャを受け取り, デバイスごとに異なるコマンドを割り当てる.
+Rust では `FnMut(&Device) -> Option<C>`, Python では `Callable[[Device], Command | None]`, C# では `Func<Device, ICommand?>`.
 `None` を返したデバイスには, そのステップで何も割り当てない.
 
 <CodeTabs rust={excerpt(sample, "push_each")} python={excerpt(pySample, "push_each")} csharp={excerpt(csSample, "push_each")} />

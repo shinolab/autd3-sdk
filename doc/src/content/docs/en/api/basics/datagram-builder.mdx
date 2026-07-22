@@ -29,8 +29,8 @@ The resulting `Frames` is split into multiple `Frame`s, which are sent one frame
 
 ## push_each
 
-`push_each` takes a closure that is called for each device number and assigns a different command per device.
-In Rust it is `FnMut(usize) -> Option<C>`, and in Python it is `Callable[[int], Command | None]`.
+`push_each` takes a closure that is called for each device and assigns a different command per device.
+In Rust it is `FnMut(&Device) -> Option<C>`, in Python `Callable[[Device], Command | None]`, and in C# `Func<Device, ICommand?>`.
 For a device where `None` is returned, nothing is assigned in that step.
 
 <CodeTabs rust={excerpt(sample, "push_each")} python={excerpt(pySample, "push_each")} csharp={excerpt(csSample, "push_each")} />

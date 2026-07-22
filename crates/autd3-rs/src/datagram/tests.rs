@@ -41,7 +41,7 @@ fn push_each_routes_per_device() {
     let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
         Some(ConfigModulation {
-            bank: if device == 0 {
+            bank: if device.idx() == 0 {
                 ModulationBank::B0
             } else {
                 ModulationBank::B1
@@ -64,7 +64,7 @@ fn push_each_routes_per_device() {
 fn push_each_fills_unassigned_with_nop() {
     let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
-        (device == 0).then_some(ConfigModulation {
+        (device.idx() == 0).then_some(ConfigModulation {
             bank: ModulationBank::B0,
             config: SamplingConfig::FREQ_40K,
             size: 1,
@@ -80,7 +80,13 @@ fn push_each_fills_unassigned_with_nop() {
 #[test]
 fn push_each_pads_shorter_device_with_nop() {
     let mut b = DatagramBuilder::new(test_geometry_arc(2));
-    b.push_each(|device| Some(if device == 0 { Multi(1) } else { Multi(3) }));
+    b.push_each(|device| {
+        Some(if device.idx() == 0 {
+            Multi(1)
+        } else {
+            Multi(3)
+        })
+    });
     let frames = b.build().unwrap();
 
     assert_eq!(frames.len(), 3, "frame count = max over devices");
@@ -101,7 +107,7 @@ fn push_each_accepts_heterogeneous_boxed_commands() {
     let patterns = vec![vec![crate::value::Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
     let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
-        Some(if device == 0 {
+        Some(if device.idx() == 0 {
             Pattern::new(&patterns).boxed()
         } else {
             ConfigModulation {
@@ -124,7 +130,7 @@ fn push_each_accepts_heterogeneous_boxed_commands() {
 fn adjacent_disjoint_push_each_fuse_into_shared_frames() {
     let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
-        (device == 0).then_some(ConfigModulation {
+        (device.idx() == 0).then_some(ConfigModulation {
             bank: ModulationBank::B0,
             config: SamplingConfig::FREQ_40K,
             size: 1,
@@ -132,7 +138,7 @@ fn adjacent_disjoint_push_each_fuse_into_shared_frames() {
         })
     });
     b.push_each(|device| {
-        (device == 1).then_some(ConfigModulation {
+        (device.idx() == 1).then_some(ConfigModulation {
             bank: ModulationBank::B1,
             config: SamplingConfig::FREQ_40K,
             size: 1,
@@ -177,7 +183,7 @@ fn adjacent_overlapping_push_each_stay_sequential() {
 fn broadcast_push_is_a_fuse_barrier() {
     let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
-        (device == 0).then_some(ConfigModulation {
+        (device.idx() == 0).then_some(ConfigModulation {
             bank: ModulationBank::B0,
             config: SamplingConfig::FREQ_40K,
             size: 1,
@@ -191,7 +197,7 @@ fn broadcast_push_is_a_fuse_barrier() {
         loop_behavior: LoopBehavior::Infinite,
     });
     b.push_each(|device| {
-        (device == 1).then_some(ConfigModulation {
+        (device.idx() == 1).then_some(ConfigModulation {
             bank: ModulationBank::B1,
             config: SamplingConfig::FREQ_40K,
             size: 1,

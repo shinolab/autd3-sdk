@@ -3,7 +3,7 @@ use std::sync::{Arc, PoisonError};
 use crate::commands::Command;
 use crate::commands::operation::Operation;
 use crate::error::Error;
-use crate::geometry::Geometry;
+use crate::geometry::{Device, Geometry};
 
 use super::each::{EachOwned, each_reflect, each_slot_frames};
 use super::frame::Frames;
@@ -49,13 +49,15 @@ impl<'a> DatagramBuilder<'a> {
     pub fn push_each<C, F>(&mut self, mut assign: F) -> &mut Self
     where
         C: Command<'a>,
-        F: FnMut(usize) -> Option<C>,
+        F: FnMut(&Device) -> Option<C>,
     {
-        let num_devices = self.geometry.num_devices();
-        let new_devices: Vec<Vec<Box<dyn Operation + 'a>>> = (0..num_devices)
+        let geometry = Arc::clone(&self.geometry);
+        let num_devices = geometry.num_devices();
+        let new_devices: Vec<Vec<Box<dyn Operation + 'a>>> = geometry
+            .iter()
             .map(|device| {
                 assign(device).map_or_else(Vec::new, |cmd| {
-                    let mut sub = DatagramBuilder::new(Arc::clone(&self.geometry));
+                    let mut sub = DatagramBuilder::new(Arc::clone(&geometry));
                     cmd.expand(&mut sub);
                     sub.take_ops()
                 })

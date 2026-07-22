@@ -200,6 +200,13 @@ impl Geometry {
     fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
         autd3_python_capsule::geometry_into_capsule(py, self.inner.clone())
     }
+
+    #[staticmethod]
+    fn _from_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<Self> {
+        Ok(Self {
+            inner: autd3_python_capsule::geometry_from_capsule(capsule)?.clone(),
+        })
+    }
 }
 
 #[pyclass(name = "Device", module = "autd3_core")]

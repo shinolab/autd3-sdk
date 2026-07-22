@@ -30,7 +30,7 @@ async def main() -> None:
 
     # ANCHOR: push_each
     builder = client.datagram_builder()
-    builder.push_each(lambda device: Pattern(left if device % 2 == 0 else right))
+    builder.push_each(lambda device: Pattern(left if device.idx() % 2 == 0 else right))
     frames = builder.build()
     # ANCHOR_END: push_each
 
