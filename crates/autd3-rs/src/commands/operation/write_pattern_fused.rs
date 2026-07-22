@@ -152,13 +152,13 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
     }
 
     fn distribution(&self) -> Distribution {
-        Distribution::Broadcast
+        Distribution::PerDevice
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn encode(
         &self,
-        _device: &Device,
+        device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -215,7 +215,7 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
             reserved: U32::new(0),
         };
         for (dst, k) in rest.chunks_exact_mut(8).zip(0..total) {
-            let focus = self.points[k / N].focus(k % N);
+            let focus = self.points[k / N].focus(device, k % N);
             dst.copy_from_slice(&focus.encode()?.to_le_bytes());
         }
         Ok(Cmd::WritePatternFused)

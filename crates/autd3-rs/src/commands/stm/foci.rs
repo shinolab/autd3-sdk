@@ -163,7 +163,11 @@ mod tests {
         let f0 = u64::from_le_bytes(payload[FH..FH + 8].try_into().unwrap());
         let f1 = u64::from_le_bytes(payload[FH + 8..FH + 16].try_into().unwrap());
         assert_eq!((f0 >> 54) & 0xFF, 0x80, "first focus = intensity");
-        assert_eq!((f1 >> 54) & 0xFF, 0x22, "second focus = phase offset");
+        assert_eq!(
+            (f1 >> 54) & 0xFF,
+            0x11,
+            "second focus = phase offset relative to the first"
+        );
 
         assert_eq!(f0 & 0x3_FFFF, 40);
         assert_eq!(f1 & 0x3_FFFF, 0x3_FFD8, "-40 in 18-bit two's complement");
