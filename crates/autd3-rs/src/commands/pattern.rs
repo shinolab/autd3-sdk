@@ -40,11 +40,12 @@ mod tests {
     use crate::geometry::Autd3;
     use crate::mirror::FREQ_DIV_NO_LIMIT;
     use crate::protocol::Cmd;
+    use crate::test_utils::test_geometry_arc;
 
     #[test]
     fn pattern_expands_to_a_single_fused_frame() {
         let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
-        let mut b = DatagramBuilder::new(2);
+        let mut b = DatagramBuilder::new(test_geometry_arc(2));
         b.push(Pattern::new(&patterns));
         let datagrams = b.build().unwrap();
 

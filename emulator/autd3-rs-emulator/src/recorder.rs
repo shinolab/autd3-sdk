@@ -1,5 +1,6 @@
 #![allow(clippy::cast_possible_truncation)]
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_rs::commands::Distribution;
@@ -23,6 +24,7 @@ struct RawTransducerRecord {
 }
 
 pub struct Recorder {
+    geometry: Arc<Geometry>,
     devices: Vec<Device>,
     records: Vec<Vec<RawTransducerRecord>>,
     positions: Vec<Vec<Point3<f32>>>,
@@ -56,6 +58,7 @@ impl Recorder {
             })
             .collect();
         Self {
+            geometry: Arc::new(geometry.clone()),
             devices,
             records,
             positions,
@@ -158,7 +161,7 @@ impl ClientApi for Recorder {
     type Error = EmulatorError;
 
     fn datagram_builder<'a>(&self) -> DatagramBuilder<'a> {
-        DatagramBuilder::new(self.devices.len())
+        DatagramBuilder::new(Arc::clone(&self.geometry))
     }
 
     async fn send_checked(&mut self, frame: Frame<'_>) -> Result<(), Self::Error> {

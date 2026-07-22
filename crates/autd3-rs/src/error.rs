@@ -136,6 +136,13 @@ pub enum PayloadError {
         expected: usize,
     },
 
+    #[error("device {device} pattern data ({len} byte(s)) exceeds frame capacity {capacity}")]
+    PatternWriteExceedsCapacity {
+        device: usize,
+        len: usize,
+        capacity: usize,
+    },
+
     #[error("pattern STM index {index} out of range 0..{max}")]
     PatternIndexOutOfRange { index: usize, max: usize },
 

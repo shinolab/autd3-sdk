@@ -1,4 +1,5 @@
 use crate::error::{Error, PayloadError};
+use crate::geometry::Device;
 use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::ModulationBank;
@@ -26,7 +27,7 @@ impl Operation for WriteModulationBuffer<'_> {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -69,11 +70,12 @@ impl Operation for WriteModulationBuffer<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
     use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
 
     fn encode(op: &WriteModulationBuffer, frame: usize) -> Result<[u8; PAYLOAD_BYTES], Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        op.encode(0, frame, &mut out)?;
+        op.encode(&test_device(0), frame, &mut out)?;
         Ok(out)
     }
 

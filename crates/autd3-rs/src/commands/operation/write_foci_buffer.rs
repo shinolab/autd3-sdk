@@ -1,4 +1,5 @@
 use crate::error::{Error, PayloadError};
+use crate::geometry::Device;
 use crate::params::{FOCUS_WORDS, MAX_FOCI_TOTAL};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{ControlPoints, PatternBank};
@@ -26,7 +27,7 @@ impl<const N: usize> Operation for WriteFociBuffer<'_, N> {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -69,6 +70,7 @@ impl<const N: usize> Operation for WriteFociBuffer<'_, N> {
 mod tests {
     use super::*;
     use crate::geometry::Point3;
+    use crate::test_utils::test_device;
     use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
 
     fn encode<const N: usize>(
@@ -76,7 +78,7 @@ mod tests {
         frame: usize,
     ) -> Result<[u8; PAYLOAD_BYTES], Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        op.encode(0, frame, &mut out)?;
+        op.encode(&test_device(0), frame, &mut out)?;
         Ok(out)
     }
 

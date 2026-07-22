@@ -7,6 +7,7 @@ use autd3_python_capsule::{
     ClientBackend, ResponseToken, capsule_of, geometry_from_capsule, take_client_opener, to_pyerr,
     to_pyerr_gil,
 };
+use autd3_rs::Geometry;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -83,6 +84,7 @@ impl FpgaState {
 #[pyclass(name = "Client", module = "autd3")]
 pub struct Client {
     backend: Arc<dyn ClientBackend>,
+    geometry: Arc<Geometry>,
 }
 
 #[pymethods]
@@ -98,9 +100,11 @@ impl Client {
         let opener = take_client_opener(&capsule_of(link)?)?;
         let config = config.inner;
         future_into_py(py, async move {
+            let geometry_for_client = Arc::new(geometry.clone());
             let backend = opener(geometry, config).await.map_err(to_pyerr_gil)?;
             Ok(Client {
                 backend: Arc::from(backend),
+                geometry: geometry_for_client,
             })
         })
     }
@@ -116,11 +120,13 @@ impl Client {
         let opener = take_client_opener(&capsule_of(link)?)?;
         let config = config.inner;
         future_into_py(py, async move {
+            let geometry_for_client = Arc::new(geometry.clone());
             let backend: Arc<dyn ClientBackend> =
                 Arc::from(opener(geometry, config).await.map_err(to_pyerr_gil)?);
             Ok((
                 Client {
                     backend: Arc::clone(&backend),
+                    geometry: geometry_for_client,
                 },
                 Checker { backend },
             ))
@@ -132,7 +138,7 @@ impl Client {
     }
 
     fn datagram_builder(&self) -> DatagramBuilder {
-        DatagramBuilder::with_devices(self.backend.num_devices())
+        DatagramBuilder::with_geometry(Arc::clone(&self.geometry))
     }
 
     fn read_firmware_version<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

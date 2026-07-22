@@ -2,7 +2,7 @@ use autd3_cpu_wire::payload::PhaseCorrPayload;
 use zerocopy::FromBytes;
 
 use crate::error::{Error, PayloadError};
-use crate::geometry::Autd3;
+use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::Phase;
 
@@ -24,22 +24,22 @@ impl Operation for SetPhaseCorrection<'_> {
 
     fn encode(
         &self,
-        device: usize,
+        device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        let phases = self
-            .phases
-            .get(device)
-            .ok_or(PayloadError::EmissionsDeviceOutOfRange {
-                device,
-                len: self.phases.len(),
-            })?;
-        if phases.len() != Autd3::NUM_TRANSDUCERS {
+        let phases =
+            self.phases
+                .get(device.idx())
+                .ok_or(PayloadError::EmissionsDeviceOutOfRange {
+                    device: device.idx(),
+                    len: self.phases.len(),
+                })?;
+        if phases.len() != device.num_transducers() {
             return Err(PayloadError::TransducerCountMismatch {
-                device,
+                device: device.idx(),
                 got: phases.len(),
-                expected: Autd3::NUM_TRANSDUCERS,
+                expected: device.num_transducers(),
             }
             .into());
         }
@@ -55,16 +55,18 @@ impl Operation for SetPhaseCorrection<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
 
     #[test]
     fn phase_corr_lays_out_bytes() {
-        let phases: Vec<Phase> = (0..Autd3::NUM_TRANSDUCERS)
+        let dev = test_device(0);
+        let phases: Vec<Phase> = (0..dev.num_transducers())
             .map(|i| Phase(u8::try_from(i % 256).unwrap()))
             .collect();
         let data = vec![phases.clone()];
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = SetPhaseCorrection { phases: &data }
-            .encode(0, 0, &mut out)
+            .encode(&dev, 0, &mut out)
             .unwrap();
         assert_eq!(cmd, Cmd::SetPhaseCorrection);
         for (i, p) in phases.iter().enumerate() {
@@ -74,20 +76,22 @@ mod tests {
 
     #[test]
     fn phase_corr_rejects_device_out_of_range() {
-        let data = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
+        let dev = test_device(1);
+        let data = vec![vec![Phase::ZERO; dev.num_transducers()]];
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            SetPhaseCorrection { phases: &data }.encode(1, 0, &mut out),
+            SetPhaseCorrection { phases: &data }.encode(&dev, 0, &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }
 
     #[test]
     fn phase_corr_rejects_wrong_transducer_count() {
-        let data = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS - 1]];
+        let dev = test_device(0);
+        let data = vec![vec![Phase::ZERO; dev.num_transducers() - 1]];
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            SetPhaseCorrection { phases: &data }.encode(0, 0, &mut out),
+            SetPhaseCorrection { phases: &data }.encode(&dev, 0, &mut out),
             Err(Error::InvalidPayload(
                 PayloadError::TransducerCountMismatch { .. }
             ))

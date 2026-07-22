@@ -2,6 +2,7 @@ use autd3_cpu_wire::payload::ForceFanPayload;
 use zerocopy::FromBytes;
 
 use crate::error::Error;
+use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 use super::{Distribution, Operation};
@@ -22,7 +23,7 @@ impl Operation for ForceFan {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -37,16 +38,21 @@ impl Operation for ForceFan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
 
     #[test]
     fn force_fan_encodes_flag() {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = ForceFan { value: true }.encode(0, 0, &mut out).unwrap();
+        let cmd = ForceFan { value: true }
+            .encode(&test_device(0), 0, &mut out)
+            .unwrap();
         assert_eq!(cmd, Cmd::ForceFan);
         assert_eq!(out[0], 1);
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        ForceFan { value: false }.encode(0, 0, &mut out).unwrap();
+        ForceFan { value: false }
+            .encode(&test_device(0), 0, &mut out)
+            .unwrap();
         assert_eq!(out[0], 0);
     }
 }

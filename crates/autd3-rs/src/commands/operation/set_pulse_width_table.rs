@@ -3,6 +3,7 @@ use zerocopy::FromBytes;
 use zerocopy::little_endian::U16;
 
 use crate::error::Error;
+use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PULSE_WIDTH_PERIOD, PulseWidth};
 
@@ -39,7 +40,7 @@ impl Operation for SetPulseWidthTable<'_> {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -55,6 +56,7 @@ impl Operation for SetPulseWidthTable<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
 
     #[test]
     fn pwe_lays_out_le_words() {
@@ -64,7 +66,7 @@ mod tests {
         }
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = SetPulseWidthTable { table: &table }
-            .encode(0, 0, &mut out)
+            .encode(&test_device(0), 0, &mut out)
             .unwrap();
         assert_eq!(cmd, Cmd::SetPulseWidthTable);
         assert_eq!(&out[0..2], &0u16.to_le_bytes());
@@ -78,7 +80,7 @@ mod tests {
         table[0] = PulseWidth::new(PULSE_WIDTH_PERIOD);
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            SetPulseWidthTable { table: &table }.encode(0, 0, &mut out),
+            SetPulseWidthTable { table: &table }.encode(&test_device(0), 0, &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }

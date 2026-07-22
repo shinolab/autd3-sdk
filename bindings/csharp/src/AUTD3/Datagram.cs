@@ -72,15 +72,14 @@ namespace AUTD3
 
         internal IntPtr Handle { get; private set; }
 
-        internal DatagramBuilder(int numDevices)
+        public DatagramBuilder(Geometry geometry)
         {
-            _numDevices = numDevices;
-            Handle = NativeClient.autd3_datagram_builder_new((UIntPtr)numDevices);
-        }
-
-
-        public DatagramBuilder(Geometry geometry) : this(geometry.NumDevices)
-        {
+            _numDevices = geometry.NumDevices;
+            Handle = NativeClient.autd3_datagram_builder_new(geometry.Handle);
+            if (Handle == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create datagram builder");
+            }
         }
 
         public DatagramBuilder Push(ICommand command)

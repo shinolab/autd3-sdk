@@ -113,6 +113,7 @@ mod tests {
     use crate::geometry::Autd3;
     use crate::params::EMISSION_SLOT_WORDS;
     use crate::protocol::Cmd;
+    use crate::test_utils::test_geometry_arc;
     use crate::value::SamplingConfig;
 
     #[test]
@@ -126,7 +127,7 @@ mod tests {
             PatternStmOption::default(),
         );
 
-        let mut b = DatagramBuilder::new(1);
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(stm);
         let datagrams = b.build().unwrap();
 
@@ -183,7 +184,7 @@ mod tests {
             },
         );
 
-        let mut b = DatagramBuilder::new(1);
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(stm);
         let datagrams = b.build().unwrap();
 
@@ -232,7 +233,7 @@ mod tests {
             },
         );
 
-        let mut b = DatagramBuilder::new(1);
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(stm);
         let datagrams = b.build().unwrap();
 
@@ -257,7 +258,7 @@ mod tests {
             },
         );
 
-        let mut b = DatagramBuilder::new(1);
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(stm);
         let datagrams = b.build().unwrap();
 

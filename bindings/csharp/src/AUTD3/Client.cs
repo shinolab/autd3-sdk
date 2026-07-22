@@ -224,9 +224,12 @@ namespace AUTD3
 
         internal IntPtr Handle { get; private set; }
 
-        private Client(IntPtr handle)
+        private readonly Geometry _geometry;
+
+        private Client(IntPtr handle, Geometry geometry)
         {
             Handle = handle;
+            _geometry = geometry;
         }
 
         public static async Task<Client> OpenAsync(Geometry geometry, ILink link, ClientConfig config)
@@ -246,7 +249,7 @@ namespace AUTD3
                 NativeClient.autd3_client_config_free(configHandle);
             }
             var value = await task.ConfigureAwait(false);
-            return new Client(value);
+            return new Client(value, geometry);
         }
 
         public static async Task<(Client Client, Checker Checker)> OpenWithCheckerAsync(Geometry geometry, ILink link, ClientConfig config)
@@ -264,7 +267,7 @@ namespace AUTD3
         public int NumDevices => (int)NativeClient.autd3_client_num_devices(Handle);
 
 
-        public DatagramBuilder DatagramBuilder() => new DatagramBuilder(NumDevices);
+        public DatagramBuilder DatagramBuilder() => new DatagramBuilder(_geometry);
 
 
 

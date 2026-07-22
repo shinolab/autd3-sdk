@@ -3,6 +3,7 @@ use zerocopy::FromBytes;
 use zerocopy::little_endian::{U32, U64};
 
 use crate::error::Error;
+use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PatternBank, TransitionMode};
@@ -26,7 +27,7 @@ impl Operation for ChangePatternBank {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -55,10 +56,11 @@ impl Operation for ChangePatternBank {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
 
     fn encode(op: ChangePatternBank) -> (Cmd, [u8; PAYLOAD_BYTES]) {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(0, 0, &mut out).unwrap();
+        let cmd = op.encode(&test_device(0), 0, &mut out).unwrap();
         (cmd, out)
     }
 
@@ -144,7 +146,7 @@ mod tests {
                 margin: Some(Duration::from_secs(5)),
             },
         }
-        .encode(0, 0, &mut out)
+        .encode(&test_device(0), 0, &mut out)
         .unwrap_err();
 
         assert!(matches!(

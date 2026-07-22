@@ -30,7 +30,7 @@ namespace AUTD3
         internal static extern void autd3_client_config_free(IntPtr config);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_datagram_builder_new(UIntPtr numDevices);
+        internal static extern IntPtr autd3_datagram_builder_new(IntPtr geometry);
 
         [DllImport(Lib)]
         internal static extern void autd3_datagram_builder_push(IntPtr builder, IntPtr op);

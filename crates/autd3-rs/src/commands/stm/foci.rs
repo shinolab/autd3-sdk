@@ -94,6 +94,7 @@ mod tests {
     use crate::commands::operation::MAX_FOCI_PER_FRAME;
     use crate::geometry::Point3;
     use crate::protocol::Cmd;
+    use crate::test_utils::test_geometry_arc;
     use crate::value::{Intensity, Phase, SamplingConfig};
     use core::num::NonZeroU16;
 
@@ -104,7 +105,7 @@ mod tests {
     };
 
     fn fused_payload<const N: usize>(stm: FociStm<'_, N>) -> [u8; crate::protocol::PAYLOAD_BYTES] {
-        let mut b = DatagramBuilder::new(1);
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(stm);
         let datagrams = b.build().unwrap();
         assert_eq!(datagrams.len(), 1, "short FociStm fuses into 1 frame");
@@ -177,7 +178,7 @@ mod tests {
             .collect();
         let stm = FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default());
 
-        let mut b = DatagramBuilder::new(1);
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(stm);
         let datagrams = b.build().unwrap();
 
@@ -290,7 +291,7 @@ mod tests {
             .collect();
         let stm = FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default());
 
-        let mut b = DatagramBuilder::new(1);
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(stm);
         let datagrams = b.build().unwrap();
 

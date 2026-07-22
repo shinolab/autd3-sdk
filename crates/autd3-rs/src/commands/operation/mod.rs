@@ -52,6 +52,7 @@ pub(crate) use write_pattern_fused::{
 };
 
 use crate::error::Error;
+use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
@@ -68,7 +69,7 @@ pub trait Operation {
 
     fn encode(
         &self,
-        device: usize,
+        device: &Device,
         frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error>;
@@ -90,7 +91,7 @@ impl<T: Operation + ?Sized> Operation for &T {
 
     fn encode(
         &self,
-        device: usize,
+        device: &Device,
         frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {

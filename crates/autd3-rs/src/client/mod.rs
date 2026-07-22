@@ -35,6 +35,7 @@ use rt::CmdMessage;
 
 pub struct Client {
     cmd_tx: mpsc::Sender<CmdMessage>,
+    geometry: Arc<Geometry>,
     num_devices: usize,
     pool: Arc<SlotPool>,
     completions: Arc<CompletionPool>,
@@ -109,6 +110,7 @@ impl Client {
             Ok(Ok(())) => {
                 let client = Self {
                     cmd_tx,
+                    geometry: Arc::new(geometry.clone()),
                     num_devices,
                     pool,
                     completions,
@@ -146,7 +148,7 @@ impl Client {
     #[must_use]
     pub fn datagram_builder<'a>(&self) -> DatagramBuilder<'a> {
         DatagramBuilder::with_mirror(
-            self.num_devices,
+            Arc::clone(&self.geometry),
             MirrorHandle {
                 state: Arc::clone(&self.mirror),
                 enabled: self.validate_state,

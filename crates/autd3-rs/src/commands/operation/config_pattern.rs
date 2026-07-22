@@ -5,6 +5,7 @@ use zerocopy::little_endian::{U16, U32};
 
 use crate::Velocity;
 use crate::error::{Error, PayloadError};
+use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::params::{EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -57,7 +58,7 @@ impl Operation for ConfigPattern {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -104,7 +105,7 @@ impl Operation for ConfigFociStm {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -154,11 +155,12 @@ impl Operation for ConfigFociStm {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
     use core::num::NonZeroU16;
 
     fn encode(op: impl Operation) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(0, 0, &mut out)?;
+        let cmd = op.encode(&test_device(0), 0, &mut out)?;
         Ok((cmd, out))
     }
 

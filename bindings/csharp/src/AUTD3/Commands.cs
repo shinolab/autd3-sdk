@@ -42,10 +42,10 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_emulate_gpio_in(byte[] values);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_op_set_output_mask(byte[] masks, UIntPtr numDevices);
+        internal static extern IntPtr autd3_op_set_output_mask(byte[] masks, UIntPtr[] lens, UIntPtr numDevices);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_op_set_phase_correction(byte[] phases, UIntPtr numDevices);
+        internal static extern IntPtr autd3_op_set_phase_correction(byte[] phases, UIntPtr[] lens, UIntPtr numDevices);
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_op_set_pulse_width_table(ushort[] table);
@@ -239,8 +239,6 @@ namespace AUTD3
 
     public sealed class SetOutputMask : ICommand
     {
-        private const int NumTransducers = 249;
-
         private readonly bool[][] _masks;
 
         public SetOutputMask(bool[][] masks)
@@ -250,19 +248,24 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp()
         {
-            var flat = new byte[_masks.Length * NumTransducers];
+            var lens = new UIntPtr[_masks.Length];
+            var total = 0;
             for (var d = 0; d < _masks.Length; d++)
             {
-                if (_masks[d].Length != NumTransducers)
-                {
-                    throw new Autd3Exception($"each device mask requires {NumTransducers} values");
-                }
-                for (var t = 0; t < NumTransducers; t++)
-                {
-                    flat[d * NumTransducers + t] = (byte)(_masks[d][t] ? 1 : 0);
-                }
+                lens[d] = (UIntPtr)_masks[d].Length;
+                total += _masks[d].Length;
             }
-            return NativeCommand.autd3_op_set_output_mask(flat, (UIntPtr)_masks.Length);
+            var flat = new byte[total];
+            var offset = 0;
+            for (var d = 0; d < _masks.Length; d++)
+            {
+                for (var t = 0; t < _masks[d].Length; t++)
+                {
+                    flat[offset + t] = (byte)(_masks[d][t] ? 1 : 0);
+                }
+                offset += _masks[d].Length;
+            }
+            return NativeCommand.autd3_op_set_output_mask(flat, lens, (UIntPtr)_masks.Length);
         }
     }
 
@@ -339,8 +342,6 @@ namespace AUTD3
 
     public sealed class SetPhaseCorrection : ICommand
     {
-        private const int NumTransducers = 249;
-
         private readonly Phase[][] _phases;
 
         public SetPhaseCorrection(Phase[][] phases)
@@ -350,19 +351,24 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp()
         {
-            var flat = new byte[_phases.Length * NumTransducers];
+            var lens = new UIntPtr[_phases.Length];
+            var total = 0;
             for (var d = 0; d < _phases.Length; d++)
             {
-                if (_phases[d].Length != NumTransducers)
-                {
-                    throw new Autd3Exception($"each device phase correction requires {NumTransducers} values");
-                }
-                for (var t = 0; t < NumTransducers; t++)
-                {
-                    flat[d * NumTransducers + t] = _phases[d][t].Value;
-                }
+                lens[d] = (UIntPtr)_phases[d].Length;
+                total += _phases[d].Length;
             }
-            return NativeCommand.autd3_op_set_phase_correction(flat, (UIntPtr)_phases.Length);
+            var flat = new byte[total];
+            var offset = 0;
+            for (var d = 0; d < _phases.Length; d++)
+            {
+                for (var t = 0; t < _phases[d].Length; t++)
+                {
+                    flat[offset + t] = _phases[d][t].Value;
+                }
+                offset += _phases[d].Length;
+            }
+            return NativeCommand.autd3_op_set_phase_correction(flat, lens, (UIntPtr)_phases.Length);
         }
     }
 }
