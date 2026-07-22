@@ -1,6 +1,5 @@
 use autd3_cpu_wire::payload::OutputMaskPayload;
 use zerocopy::FromBytes;
-use zerocopy::little_endian::U16;
 
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
@@ -44,17 +43,9 @@ impl Operation for SetOutputMask<'_> {
             .into());
         }
         let (p, _) = OutputMaskPayload::mut_from_prefix(&mut out[..]).unwrap();
-        mask.chunks(16)
+        mask.iter()
             .zip(p.data.iter_mut())
-            .for_each(|(chunk, word)| {
-                *word = U16::new(
-                    chunk
-                        .iter()
-                        .enumerate()
-                        .filter(|&(_, &on)| on)
-                        .fold(0u16, |acc, (j, _)| acc | (1 << j)),
-                );
-            });
+            .for_each(|(&on, dst)| *dst = u8::from(on));
         Ok(Cmd::SetOutputMask)
     }
 }
@@ -65,7 +56,7 @@ mod tests {
     use crate::test_utils::test_device;
 
     #[test]
-    fn output_mask_packs_bits() {
+    fn output_mask_writes_bytes() {
         let dev = test_device(0);
         let n = dev.num_transducers();
         let mut mask = vec![false; n];
@@ -79,9 +70,11 @@ mod tests {
             .encode(&dev, 0, &mut out)
             .unwrap();
         assert_eq!(cmd, Cmd::SetOutputMask);
-        assert_eq!(out[0], 0b0000_1001);
-        assert_eq!(out[1], 0b0000_0001);
-        assert_eq!(out[(n - 1) / 8], 1 << ((n - 1) % 8));
+        assert_eq!(out[0], 1);
+        assert_eq!(out[1], 0);
+        assert_eq!(out[3], 1);
+        assert_eq!(out[8], 1);
+        assert_eq!(out[n - 1], 1);
     }
 
     #[test]

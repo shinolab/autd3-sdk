@@ -86,13 +86,19 @@ fn phase_corr_packs_bytes_into_words() {
 }
 
 #[test]
-fn output_mask_writes_words() {
+fn output_mask_packs_bytes_into_words() {
     let mut h = Harness::new();
-    let words: Vec<u16> = (0..OUTPUT_MASK_WORDS).map(|i| 0x1000 + i as u16).collect();
-    h.deliver(&output_mask(0, &words));
+    let mask: Vec<bool> = (0..NUM_TRANSDUCERS).map(|i| i % 3 == 0).collect();
+    h.deliver(&output_mask(0, &mask));
     assert_eq!(h.data(), 0);
-    for (i, w) in words.iter().enumerate() {
-        assert_eq!(h.port.output_mask[i], *w);
+    for i in 0..OUTPUT_MASK_WORDS {
+        let expected = mask[i * 16..]
+            .iter()
+            .take(16)
+            .enumerate()
+            .filter(|&(_, &on)| on)
+            .fold(0u16, |acc, (j, _)| acc | (1 << j));
+        assert_eq!(h.port.output_mask[i], expected);
     }
 }
 

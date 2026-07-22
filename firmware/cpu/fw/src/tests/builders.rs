@@ -290,10 +290,10 @@ pub(crate) fn phase_corr(seq: u8, phases: &[u8]) -> Frame {
     Frame::from_payload(seq, Cmd::SetPhaseCorrection, &p)
 }
 
-pub(crate) fn output_mask(seq: u8, words: &[u16]) -> Frame {
+pub(crate) fn output_mask(seq: u8, mask: &[bool]) -> Frame {
     let mut p = OutputMaskPayload::new_zeroed();
-    for (i, w) in words.iter().enumerate() {
-        p.data[i] = U16::new(*w);
+    for (i, on) in mask.iter().enumerate() {
+        p.data[i] = u8::from(*on);
     }
     Frame::from_payload(seq, Cmd::SetOutputMask, &p)
 }

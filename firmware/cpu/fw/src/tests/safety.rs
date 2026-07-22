@@ -1,8 +1,10 @@
-use std::vec::Vec;
+use std::vec;
 
 use crate::FIFO_DEPTH;
 use crate::fpga::TransitionMode;
-use crate::params::{ADDR_FPGA_STATE, ADDR_MOD_REQ_RD_BANK, ADDR_VERSION_NUM_MAJOR};
+use crate::params::{
+    ADDR_FPGA_STATE, ADDR_MOD_REQ_RD_BANK, ADDR_VERSION_NUM_MAJOR, NUM_TRANSDUCERS,
+};
 use zerocopy::FromZeros;
 
 use crate::app::ReadTelemetryPayload;
@@ -22,8 +24,8 @@ fn read_telemetry(seq: u8, id: u8) -> Frame {
 }
 
 fn unmute(h: &mut Harness, seq: u8) {
-    let words: Vec<u16> = (0..OUTPUT_MASK_WORDS).map(|_| 0xFFFF).collect();
-    h.deliver(&output_mask(seq, &words));
+    let mask = vec![true; NUM_TRANSDUCERS];
+    h.deliver(&output_mask(seq, &mask));
     assert_eq!(h.output_mask(0), 0xFFFF);
 }
 
@@ -91,8 +93,8 @@ fn stop_keeps_pattern_state_and_allows_restart() {
     h.deliver(&Frame::new(1, Cmd::Stop));
     assert_muted(&h);
 
-    let words: Vec<u16> = (0..OUTPUT_MASK_WORDS).map(|_| 0xFFFF).collect();
-    h.deliver(&output_mask(2, &words));
+    let mask = vec![true; NUM_TRANSDUCERS];
+    h.deliver(&output_mask(2, &mask));
     assert_eq!(h.output_mask(0), 0xFFFF);
 }
 

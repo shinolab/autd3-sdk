@@ -88,8 +88,9 @@ fn output_mask_disables_transducers() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
 
-    let mut payload = [0u8; 32];
-    payload[0] = 0b0010_0001;
+    let mut payload = [0u8; NUM_TRANSDUCERS];
+    payload[0] = 1;
+    payload[5] = 1;
     device.send(&frame(0, Cmd::SetOutputMask, &payload));
 
     assert!(device.fpga().output_mask_enabled(0));
