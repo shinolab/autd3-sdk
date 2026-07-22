@@ -1,4 +1,5 @@
 use crate::error::Error;
+use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
@@ -18,7 +19,7 @@ impl Operation for Clear {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         _out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -34,11 +35,12 @@ impl Operation for Clear {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
 
     #[test]
     fn clear_is_no_payload_broadcast() {
         let mut out = [0xAAu8; PAYLOAD_BYTES];
-        let cmd = Clear.encode(0, 0, &mut out).unwrap();
+        let cmd = Clear.encode(&test_device(0), 0, &mut out).unwrap();
         assert_eq!(cmd, Cmd::Clear);
         assert_eq!(Clear.distribution(), Distribution::Broadcast);
         assert_eq!(Clear.frames(), 1);

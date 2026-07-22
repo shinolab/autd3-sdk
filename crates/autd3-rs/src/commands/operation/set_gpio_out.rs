@@ -3,6 +3,7 @@ use zerocopy::FromBytes;
 use zerocopy::little_endian::U64;
 
 use crate::error::Error;
+use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::DcSysTime;
 
@@ -81,7 +82,7 @@ impl Operation for SetGpioOut {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -96,6 +97,7 @@ impl Operation for SetGpioOut {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
 
     #[test]
     fn gpio_out_encodes_tag_and_value() {
@@ -108,7 +110,7 @@ mod tests {
                 GpioOut::ModIdx(0x1234),
             ],
         }
-        .encode(0, 0, &mut out)
+        .encode(&test_device(0), 0, &mut out)
         .unwrap();
         assert_eq!(cmd, Cmd::SetGpioOut);
         assert_eq!(&out[0..8], &0u64.to_le_bytes());
@@ -139,7 +141,7 @@ mod tests {
                 GpioOut::Off,
             ],
         }
-        .encode(0, 0, &mut out)
+        .encode(&test_device(0), 0, &mut out)
         .unwrap();
         assert_eq!(
             &out[8..16],

@@ -3,6 +3,7 @@ use zerocopy::FromBytes;
 use zerocopy::little_endian::{U16, U32};
 
 use crate::error::{Error, PayloadError};
+use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -29,7 +30,7 @@ impl Operation for ConfigModulation {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -66,11 +67,12 @@ impl Operation for ConfigModulation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
     use core::num::NonZeroU16;
 
     fn encode(op: ConfigModulation) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(0, 0, &mut out)?;
+        let cmd = op.encode(&test_device(0), 0, &mut out)?;
         Ok((cmd, out))
     }
 

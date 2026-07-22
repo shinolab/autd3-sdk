@@ -7,6 +7,7 @@ use crate::commands::operation::{Distribution, Nop, Operation};
 use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::firmware_version::{FirmwareVersion, Version};
+use crate::geometry::Device;
 use crate::geometry::{Autd3, Geometry};
 use crate::link::{CycleOutcome, Link};
 use crate::protocol::{Cmd, MAX_IN_FLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
@@ -36,7 +37,7 @@ impl Operation for FailingCmd {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {

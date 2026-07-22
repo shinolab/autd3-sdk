@@ -1,4 +1,5 @@
 use crate::error::Error;
+use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 use super::{Distribution, Operation};
@@ -17,7 +18,7 @@ impl Operation for Synchronize {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         _out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {

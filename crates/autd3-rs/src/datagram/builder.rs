@@ -1,8 +1,9 @@
-use std::sync::PoisonError;
+use std::sync::{Arc, PoisonError};
 
 use crate::commands::Command;
 use crate::commands::operation::Operation;
 use crate::error::Error;
+use crate::geometry::Geometry;
 
 use super::each::{EachOwned, each_reflect, each_slot_frames};
 use super::frame::Frames;
@@ -16,25 +17,25 @@ enum Step<'a> {
 }
 
 pub struct DatagramBuilder<'a> {
-    num_devices: usize,
+    geometry: Arc<Geometry>,
     ops: Vec<Step<'a>>,
     mirror: Option<MirrorHandle>,
 }
 
 impl<'a> DatagramBuilder<'a> {
     #[must_use]
-    pub fn new(num_devices: usize) -> Self {
+    pub fn new(geometry: Arc<Geometry>) -> Self {
         Self {
-            num_devices,
+            geometry,
             ops: Vec::new(),
             mirror: None,
         }
     }
 
     #[must_use]
-    pub(crate) fn with_mirror(num_devices: usize, mirror: MirrorHandle) -> Self {
+    pub(crate) fn with_mirror(geometry: Arc<Geometry>, mirror: MirrorHandle) -> Self {
         Self {
-            num_devices,
+            geometry,
             ops: Vec::new(),
             mirror: Some(mirror),
         }
@@ -50,11 +51,11 @@ impl<'a> DatagramBuilder<'a> {
         C: Command<'a>,
         F: FnMut(usize) -> Option<C>,
     {
-        let num_devices = self.num_devices;
+        let num_devices = self.geometry.num_devices();
         let new_devices: Vec<Vec<Box<dyn Operation + 'a>>> = (0..num_devices)
             .map(|device| {
                 assign(device).map_or_else(Vec::new, |cmd| {
-                    let mut sub = DatagramBuilder::new(num_devices);
+                    let mut sub = DatagramBuilder::new(Arc::clone(&self.geometry));
                     cmd.expand(&mut sub);
                     sub.take_ops()
                 })
@@ -126,7 +127,7 @@ impl<'a> DatagramBuilder<'a> {
         for step in &self.ops {
             match step {
                 Step::Op(op) => {
-                    out.push_op(op.as_ref(), self.num_devices)?;
+                    out.push_op(op.as_ref(), &self.geometry)?;
                     if let Some(work) = work.as_mut() {
                         for (device, state) in work.iter_mut().enumerate() {
                             op.reflect(device, state)?;
@@ -134,7 +135,7 @@ impl<'a> DatagramBuilder<'a> {
                     }
                 }
                 Step::Each { devices } => {
-                    out.push_each_step(devices, self.num_devices)?;
+                    out.push_each_step(devices, &self.geometry)?;
                     if let Some(work) = work.as_mut() {
                         for (device, state) in work.iter_mut().enumerate() {
                             each_reflect(devices, device, state)?;

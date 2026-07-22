@@ -1,4 +1,5 @@
 use crate::error::Error;
+use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 use super::{Distribution, Operation};
@@ -17,7 +18,7 @@ impl Operation for Nop {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         _out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -28,11 +29,12 @@ impl Operation for Nop {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
 
     #[test]
     fn nop_is_no_payload_broadcast() {
         let mut out = [0xAAu8; PAYLOAD_BYTES];
-        let cmd = Nop.encode(0, 0, &mut out).unwrap();
+        let cmd = Nop.encode(&test_device(0), 0, &mut out).unwrap();
         assert_eq!(cmd, Cmd::Nop);
         assert_eq!(Nop.distribution(), Distribution::Broadcast);
         assert_eq!(Nop.frames(), 1);

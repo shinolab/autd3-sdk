@@ -152,7 +152,7 @@ def test_holo_algorithms() -> None:
 
 def test_stm_foci_and_pattern() -> None:
     geo = geometry()
-    builder = autd3.DatagramBuilder(geo.num_devices())
+    builder = autd3.DatagramBuilder(geo)
 
     samples = []
     autd3.commands.circle([0.0, 0.0, 150.0], 30.0, 8, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, samples)
@@ -184,12 +184,12 @@ def test_push_each() -> None:
     modulation.sine(150 * Hz, modulation.SineOption(), mod_buf)
 
     # homogeneous per-device command
-    builder = autd3.DatagramBuilder(geo.num_devices())
+    builder = autd3.DatagramBuilder(geo)
     builder.push_each(lambda device: autd3.commands.Pattern(left if device % 2 == 0 else right))
     assert len(builder.build()) > 0
 
     # heterogeneous per-device command (Python is dynamically typed, no boxing needed)
-    builder = autd3.DatagramBuilder(geo.num_devices())
+    builder = autd3.DatagramBuilder(geo)
     builder.push_each(
         lambda device: autd3.commands.Pattern(left)
         if device % 2 == 0
@@ -198,15 +198,14 @@ def test_push_each() -> None:
     assert len(builder.build()) > 0
 
     # returning None leaves that device unassigned
-    builder = autd3.DatagramBuilder(geo.num_devices())
+    builder = autd3.DatagramBuilder(geo)
     builder.push_each(lambda device: autd3.commands.Pattern(left) if device == 0 else None)
     assert len(builder.build()) > 0
 
 
 def test_commands_build() -> None:
     geo = geometry()
-    n = geo.num_devices()
-    builder = autd3.DatagramBuilder(n)
+    builder = autd3.DatagramBuilder(geo)
     builder.push(autd3.commands.Clear())
     builder.push(autd3.commands.Synchronize())
     builder.push(autd3.commands.ForceFan(True))
@@ -221,7 +220,7 @@ def test_commands_build() -> None:
 
 def test_pulse_width_table_and_pulse_width() -> None:
     geo = geometry()
-    builder = autd3.DatagramBuilder(geo.num_devices())
+    builder = autd3.DatagramBuilder(geo)
 
     table = autd3.value.PulseWidth.default_table()
     assert len(table) == 256
@@ -268,7 +267,7 @@ def test_loop_behavior_and_transition_mode() -> None:
     buf = geo.pattern_buffer()
     pattern.focus(geo, geo.center() + np.array([0.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), buf)
 
-    builder = autd3.DatagramBuilder(geo.num_devices())
+    builder = autd3.DatagramBuilder(geo)
     builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, buf))
     builder.push(
         autd3.commands.ConfigPattern(

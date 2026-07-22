@@ -16,7 +16,6 @@ use autd3_rs::commands::{
     WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, WritePatternCompressed, circle,
     line,
 };
-use autd3_rs::geometry::Autd3;
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
     DcSysTime, GpioIn, Intensity, LoopBehavior, ModulationBank, Nearest, PatternBank, Phase,
@@ -819,16 +818,23 @@ pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut Pen
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_set_output_mask(
     masks: *const u8,
+    lens: *const usize,
     num_devices: usize,
 ) -> *mut Pending {
-    if masks.is_null() {
+    if masks.is_null() || lens.is_null() {
         return std::ptr::null_mut();
     }
 
-    let slice = unsafe { std::slice::from_raw_parts(masks, num_devices * Autd3::NUM_TRANSDUCERS) };
-    let masks = slice
-        .chunks_exact(Autd3::NUM_TRANSDUCERS)
-        .map(|device| device.iter().map(|&src| src != 0).collect())
+    let lens = unsafe { std::slice::from_raw_parts(lens, num_devices) };
+    let slice = unsafe { std::slice::from_raw_parts(masks, lens.iter().sum()) };
+    let mut offset = 0;
+    let masks = lens
+        .iter()
+        .map(|&len| {
+            let device = &slice[offset..offset + len];
+            offset += len;
+            device.iter().map(|&src| src != 0).collect()
+        })
         .collect();
     into_handle(Pending::SetOutputMask(masks))
 }
@@ -836,16 +842,23 @@ pub unsafe extern "C" fn autd3_op_set_output_mask(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_set_phase_correction(
     phases: *const u8,
+    lens: *const usize,
     num_devices: usize,
 ) -> *mut Pending {
-    if phases.is_null() {
+    if phases.is_null() || lens.is_null() {
         return std::ptr::null_mut();
     }
 
-    let slice = unsafe { std::slice::from_raw_parts(phases, num_devices * Autd3::NUM_TRANSDUCERS) };
-    let phases = slice
-        .chunks_exact(Autd3::NUM_TRANSDUCERS)
-        .map(|device| device.iter().map(|&src| Phase(src)).collect())
+    let lens = unsafe { std::slice::from_raw_parts(lens, num_devices) };
+    let slice = unsafe { std::slice::from_raw_parts(phases, lens.iter().sum()) };
+    let mut offset = 0;
+    let phases = lens
+        .iter()
+        .map(|&len| {
+            let device = &slice[offset..offset + len];
+            offset += len;
+            device.iter().map(|&src| Phase(src)).collect()
+        })
         .collect();
     into_handle(Pending::SetPhaseCorrection(phases))
 }
@@ -1121,14 +1134,20 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
 }
 
 pub struct DatagramBuilder {
-    num_devices: usize,
+    geometry: Arc<Geometry>,
     pending: Vec<Pending>,
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_datagram_builder_new(num_devices: usize) -> *mut DatagramBuilder {
+pub unsafe extern "C" fn autd3_datagram_builder_new(
+    geometry: *const Geometry,
+) -> *mut DatagramBuilder {
+    if geometry.is_null() {
+        return std::ptr::null_mut();
+    }
+
     into_handle(DatagramBuilder {
-        num_devices,
+        geometry: Arc::new(unsafe { &*geometry }.clone()),
         pending: Vec::new(),
     })
 }
@@ -1191,7 +1210,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
     }
 
     let builder = unsafe { &*builder };
-    let mut core = CoreDatagramBuilder::new(builder.num_devices);
+    let mut core = CoreDatagramBuilder::new(Arc::clone(&builder.geometry));
     for pending in &builder.pending {
         match pending {
             Pending::Pattern { emissions, bank } => {

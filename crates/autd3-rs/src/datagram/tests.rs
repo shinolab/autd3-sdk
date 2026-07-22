@@ -4,8 +4,9 @@ use crate::commands::operation::{
 };
 use crate::commands::{Command, Pattern};
 use crate::error::Error;
-use crate::geometry::Autd3;
+use crate::geometry::{Autd3, Device};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::test_utils::test_geometry_arc;
 use crate::value::{Emission, LoopBehavior, ModulationBank, PatternBank, SamplingConfig};
 
 #[derive(Clone, Copy)]
@@ -22,7 +23,7 @@ impl Operation for Multi {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -37,7 +38,7 @@ fn cmd_at(frames: &Frames, frame: usize, device: usize) -> Cmd {
 
 #[test]
 fn push_each_routes_per_device() {
-    let mut b = DatagramBuilder::new(2);
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
         Some(ConfigModulation {
             bank: if device == 0 {
@@ -61,7 +62,7 @@ fn push_each_routes_per_device() {
 
 #[test]
 fn push_each_fills_unassigned_with_nop() {
-    let mut b = DatagramBuilder::new(2);
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
         (device == 0).then_some(ConfigModulation {
             bank: ModulationBank::B0,
@@ -78,7 +79,7 @@ fn push_each_fills_unassigned_with_nop() {
 
 #[test]
 fn push_each_pads_shorter_device_with_nop() {
-    let mut b = DatagramBuilder::new(2);
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| Some(if device == 0 { Multi(1) } else { Multi(3) }));
     let frames = b.build().unwrap();
 
@@ -98,7 +99,7 @@ fn push_each_pads_shorter_device_with_nop() {
 #[test]
 fn push_each_accepts_heterogeneous_boxed_commands() {
     let patterns = vec![vec![crate::value::Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
-    let mut b = DatagramBuilder::new(2);
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
         Some(if device == 0 {
             Pattern::new(&patterns).boxed()
@@ -121,7 +122,7 @@ fn push_each_accepts_heterogeneous_boxed_commands() {
 
 #[test]
 fn adjacent_disjoint_push_each_fuse_into_shared_frames() {
-    let mut b = DatagramBuilder::new(2);
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
         (device == 0).then_some(ConfigModulation {
             bank: ModulationBank::B0,
@@ -148,7 +149,7 @@ fn adjacent_disjoint_push_each_fuse_into_shared_frames() {
 
 #[test]
 fn adjacent_overlapping_push_each_stay_sequential() {
-    let mut b = DatagramBuilder::new(2);
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|_| {
         Some(ConfigModulation {
             bank: ModulationBank::B0,
@@ -174,7 +175,7 @@ fn adjacent_overlapping_push_each_stay_sequential() {
 
 #[test]
 fn broadcast_push_is_a_fuse_barrier() {
-    let mut b = DatagramBuilder::new(2);
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
         (device == 0).then_some(ConfigModulation {
             bank: ModulationBank::B0,
@@ -214,7 +215,7 @@ fn broadcast_op_yields_one_frame_of_one_datagram() {
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
     };
-    let mut b = DatagramBuilder::new(4);
+    let mut b = DatagramBuilder::new(test_geometry_arc(4));
     b.push(op);
     let frames = b.build().unwrap();
 
@@ -233,7 +234,7 @@ fn per_device_op_yields_one_datagram_per_device() {
         index: 0,
         emissions: &patterns,
     };
-    let mut b = DatagramBuilder::new(3);
+    let mut b = DatagramBuilder::new(test_geometry_arc(3));
     b.push(op);
     let frames = b.build().unwrap();
 
@@ -257,7 +258,7 @@ fn composite_emission_orders_write_then_config() {
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
     };
-    let mut b = DatagramBuilder::new(2);
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push(we).push(ce);
     let frames = b.build().unwrap();
 
@@ -285,7 +286,7 @@ fn build_into_reuses_buffer_without_growing() {
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
     };
-    let mut b = DatagramBuilder::new(1);
+    let mut b = DatagramBuilder::new(test_geometry_arc(1));
     b.push(op);
 
     let mut buf = Frames::default();

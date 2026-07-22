@@ -1,5 +1,5 @@
 use crate::error::{Error, PayloadError};
-use crate::geometry::Autd3;
+use crate::geometry::Device;
 use crate::params::{EMISSION_MAX_INDICES, EMISSION_SLOT_WORDS};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Emission, PatternBank};
@@ -53,15 +53,15 @@ impl Operation for WritePatternCompressed<'_> {
 
     fn encode(
         &self,
-        device: usize,
+        device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
         let count = self.count();
         let dev_len = self.patterns[0].map_or(0, <[_]>::len);
-        if device >= dev_len {
+        if device.idx() >= dev_len {
             return Err(PayloadError::EmissionsDeviceOutOfRange {
-                device,
+                device: device.idx(),
                 len: dev_len,
             }
             .into());
@@ -75,11 +75,11 @@ impl Operation for WritePatternCompressed<'_> {
             .into());
         }
         for pattern in self.patterns.iter().flatten() {
-            if pattern[device].len() != Autd3::NUM_TRANSDUCERS {
+            if pattern[device.idx()].len() != device.num_transducers() {
                 return Err(PayloadError::TransducerCountMismatch {
-                    device,
-                    got: pattern[device].len(),
-                    expected: Autd3::NUM_TRANSDUCERS,
+                    device: device.idx(),
+                    got: pattern[device.idx()].len(),
+                    expected: device.num_transducers(),
                 }
                 .into());
             }
@@ -87,6 +87,14 @@ impl Operation for WritePatternCompressed<'_> {
         let offset =
             u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");
         let (h, rest) = WritePatternCompressedPayload::mut_from_prefix(&mut out[..]).unwrap();
+        if device.num_transducers() * 2 > rest.len() {
+            return Err(PayloadError::PatternWriteExceedsCapacity {
+                device: device.idx(),
+                len: device.num_transducers() * 2,
+                capacity: rest.len(),
+            }
+            .into());
+        }
         *h = WritePatternCompressedPayload {
             bank: self.bank.as_u8(),
             format: self.format.as_u8(),
@@ -95,9 +103,11 @@ impl Operation for WritePatternCompressed<'_> {
             offset: U32::new(offset),
         };
         rest.chunks_exact_mut(2)
-            .take(Autd3::NUM_TRANSDUCERS)
+            .take(device.num_transducers())
             .enumerate()
-            .for_each(|(t, dst)| dst.copy_from_slice(&self.pack_word(device, t).to_le_bytes()));
+            .for_each(|(t, dst)| {
+                dst.copy_from_slice(&self.pack_word(device.idx(), t).to_le_bytes());
+            });
         Ok(Cmd::WritePatternCompressed)
     }
 }
@@ -128,6 +138,8 @@ impl WritePatternCompressed<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::Autd3;
+    use crate::test_utils::test_device;
     use crate::value::{Intensity, Phase};
     use autd3_cpu_wire::layout::WRITE_HEADER_BYTES;
 
@@ -151,7 +163,7 @@ mod tests {
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(0, 0, &mut out).unwrap();
+        let cmd = op.encode(&test_device(0), 0, &mut out).unwrap();
 
         assert_eq!(cmd, Cmd::WritePatternCompressed);
         assert_eq!(out[1], 1, "format = PhaseFull");
@@ -188,7 +200,7 @@ mod tests {
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        op.encode(0, 0, &mut out).unwrap();
+        op.encode(&test_device(0), 0, &mut out).unwrap();
 
         assert_eq!(out[1], 2, "format = PhaseHalf");
         assert_eq!(out[2], 4, "count = 4");
@@ -216,7 +228,7 @@ mod tests {
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            op.encode(0, 0, &mut out),
+            op.encode(&test_device(0), 0, &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }
@@ -231,9 +243,9 @@ mod tests {
             patterns: [Some(&patterns[..]), None, None, None],
         };
         let mut out = [0u8; PAYLOAD_BYTES];
-        assert!(op.encode(0, 0, &mut out).is_ok());
+        assert!(op.encode(&test_device(0), 0, &mut out).is_ok());
         assert!(matches!(
-            op.encode(1, 0, &mut out),
+            op.encode(&test_device(1), 0, &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }

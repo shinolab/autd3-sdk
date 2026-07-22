@@ -1,5 +1,6 @@
 use crate::commands::operation::{Distribution, Nop, Operation};
 use crate::error::Error;
+use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
@@ -28,12 +29,12 @@ fn each_locate(slot_frames: &[usize], frame: usize) -> Option<(usize, usize)> {
 pub(crate) fn each_encode(
     devices: &[Vec<Box<dyn Operation + '_>>],
     slot_frames: &[usize],
-    device: usize,
+    device: &Device,
     frame: usize,
     out: &mut [u8; PAYLOAD_BYTES],
 ) -> Result<Cmd, Error> {
     if let Some((slot, subframe)) = each_locate(slot_frames, frame) {
-        if let Some(op) = devices.get(device).and_then(|ops| ops.get(slot))
+        if let Some(op) = devices.get(device.idx()).and_then(|ops| ops.get(slot))
             && subframe < op.frames()
         {
             return op.encode(device, subframe, out);
@@ -72,7 +73,7 @@ impl Operation for EachOwned<'_> {
 
     fn encode(
         &self,
-        device: usize,
+        device: &Device,
         frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {

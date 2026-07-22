@@ -2,8 +2,8 @@ use std::num::NonZeroU16;
 use std::sync::Arc;
 
 use autd3_python_capsule::{
-    DevicePattern, capsule_of, frame_into_capsule, modulation_from_capsule, pattern_from_capsule,
-    to_pyerr,
+    DevicePattern, capsule_of, frame_into_capsule, geometry_from_capsule, modulation_from_capsule,
+    pattern_from_capsule, to_pyerr,
 };
 use autd3_rs::commands::{
     ChangeModulationBank as CoreChangeModulationBank, ChangePatternBank as CoreChangePatternBank,
@@ -19,7 +19,7 @@ use autd3_rs::value::{
     LoopBehavior as CoreLoopBehavior, ModulationBank as CoreModulationBank,
     PatternBank as CorePatternBank, SamplingConfig, TransitionMode as CoreTransitionMode,
 };
-use autd3_rs::{DatagramBuilder as CoreDatagramBuilder, Frames as CoreFrames, Velocity};
+use autd3_rs::{DatagramBuilder as CoreDatagramBuilder, Frames as CoreFrames, Geometry, Velocity};
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 
@@ -335,14 +335,14 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
 
 #[pyclass(name = "DatagramBuilder", module = "autd3")]
 pub struct DatagramBuilder {
-    num_devices: usize,
+    geometry: Arc<Geometry>,
     pending: Vec<Pending>,
 }
 
 impl DatagramBuilder {
-    pub(crate) fn with_devices(num_devices: usize) -> Self {
+    pub(crate) fn with_geometry(geometry: Arc<Geometry>) -> Self {
         Self {
-            num_devices,
+            geometry,
             pending: Vec::new(),
         }
     }
@@ -351,8 +351,10 @@ impl DatagramBuilder {
 #[pymethods]
 impl DatagramBuilder {
     #[new]
-    fn new(num_devices: usize) -> Self {
-        Self::with_devices(num_devices)
+    fn new(geometry: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let capsule = capsule_of(geometry)?;
+        let geometry = geometry_from_capsule(&capsule)?;
+        Ok(Self::with_geometry(Arc::new(geometry.clone())))
     }
 
     #[allow(clippy::too_many_lines)]
@@ -487,13 +489,14 @@ impl DatagramBuilder {
     }
 
     fn push_each(&mut self, assign: &Bound<'_, PyAny>) -> PyResult<()> {
-        let mut devices = Vec::with_capacity(self.num_devices);
-        for device in 0..self.num_devices {
+        let num_devices = self.geometry.num_devices();
+        let mut devices = Vec::with_capacity(num_devices);
+        for device in 0..num_devices {
             let result = assign.call1((device,))?;
             if result.is_none() {
                 devices.push(None);
             } else {
-                let mut tmp = DatagramBuilder::with_devices(self.num_devices);
+                let mut tmp = DatagramBuilder::with_geometry(Arc::clone(&self.geometry));
                 tmp.push(&result)?;
                 devices.push(tmp.pending.pop());
             }
@@ -503,7 +506,7 @@ impl DatagramBuilder {
     }
 
     fn build(&self, py: Python<'_>) -> PyResult<Frames> {
-        let mut builder = CoreDatagramBuilder::new(self.num_devices);
+        let mut builder = CoreDatagramBuilder::new(Arc::clone(&self.geometry));
         for pending in &self.pending {
             validate_pending(pending)?;
             push_pending(pending, &mut builder);

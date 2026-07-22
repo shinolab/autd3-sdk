@@ -481,6 +481,7 @@ impl Record {
 #[pyclass(name = "Recorder", module = "autd3_emulator", unsendable)]
 pub struct Recorder {
     inner: Option<CoreRecorder>,
+    geometry: Py<PyAny>,
     num_devices: usize,
 }
 
@@ -490,10 +491,11 @@ impl Recorder {
     #[pyo3(signature = (geometry, start_ns = 0))]
     fn new(geometry: &Bound<'_, PyAny>, start_ns: u64) -> PyResult<Self> {
         let capsule = capsule_of(geometry)?;
-        let geometry = geometry_from_capsule(&capsule)?;
+        let inner = geometry_from_capsule(&capsule)?;
         Ok(Self {
-            inner: Some(CoreRecorder::new(geometry, start_ns)),
-            num_devices: geometry.num_devices(),
+            num_devices: inner.num_devices(),
+            inner: Some(CoreRecorder::new(inner, start_ns)),
+            geometry: geometry.clone().unbind(),
         })
     }
 
@@ -504,7 +506,7 @@ impl Recorder {
     fn datagram_builder<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         py.import("autd3")?
             .getattr("DatagramBuilder")?
-            .call1((self.num_devices,))
+            .call1((self.geometry.bind(py),))
     }
 
     fn send_checked(&mut self, frame: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -546,6 +548,7 @@ impl Recorder {
 #[pyclass(name = "Emulator", module = "autd3_emulator")]
 pub struct Emulator {
     geometry: Geometry,
+    geometry_py: Py<PyAny>,
 }
 
 #[pymethods]
@@ -555,6 +558,7 @@ impl Emulator {
         let capsule = capsule_of(geometry)?;
         Ok(Self {
             geometry: geometry_from_capsule(&capsule)?.clone(),
+            geometry_py: geometry.clone().unbind(),
         })
     }
 
@@ -571,6 +575,7 @@ impl Emulator {
             py,
             Recorder {
                 inner: Some(recorder),
+                geometry: self.geometry_py.clone_ref(py),
                 num_devices: self.geometry.num_devices(),
             },
         )?;

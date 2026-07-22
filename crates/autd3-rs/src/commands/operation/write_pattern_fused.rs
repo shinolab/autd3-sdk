@@ -5,7 +5,7 @@ use zerocopy::{FromBytes, IntoBytes};
 
 use crate::Velocity;
 use crate::error::{Error, PayloadError};
-use crate::geometry::Autd3;
+use crate::geometry::{Autd3, Device};
 use crate::mirror::FirmwareState;
 use crate::params::{FOCUS_WORDS, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -75,32 +75,40 @@ impl Operation for WritePatternFused<'_> {
 
     fn encode(
         &self,
-        device: usize,
+        device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        if device >= self.emissions.len() {
+        if device.idx() >= self.emissions.len() {
             return Err(PayloadError::EmissionsDeviceOutOfRange {
-                device,
+                device: device.idx(),
                 len: self.emissions.len(),
             }
             .into());
         }
-        let emissions = &self.emissions[device];
-        if emissions.len() != Autd3::NUM_TRANSDUCERS {
+        let emissions = &self.emissions[device.idx()];
+        if emissions.len() != device.num_transducers() {
             return Err(PayloadError::TransducerCountMismatch {
-                device,
+                device: device.idx(),
                 got: emissions.len(),
-                expected: Autd3::NUM_TRANSDUCERS,
+                expected: device.num_transducers(),
             }
             .into());
         }
         let divider = self.config.divide()?;
         let margin_ns = self.transition_mode.margin_ns()?;
         let bytes = emissions.as_bytes();
-        let data_len = u16::try_from(bytes.len()).expect("bounded by NUM_TRANSDUCERS");
 
         let (h, rest) = WritePatternFusedPayload::mut_from_prefix(&mut out[..]).unwrap();
+        if bytes.len() > rest.len() {
+            return Err(PayloadError::PatternWriteExceedsCapacity {
+                device: device.idx(),
+                len: bytes.len(),
+                capacity: rest.len(),
+            }
+            .into());
+        }
+        let data_len = u16::try_from(bytes.len()).expect("bounded by frame capacity");
         *h = WritePatternFusedPayload {
             bank: self.bank.as_u8(),
             emission_type: EMISSION_TYPE_RAW,
@@ -150,7 +158,7 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -229,6 +237,7 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
 mod tests {
     use super::*;
     use crate::geometry::Point3;
+    use crate::test_utils::test_device;
     use crate::value::{ControlPoint, Focus, Intensity, Phase};
     use core::num::NonZeroU16;
 
@@ -249,7 +258,7 @@ mod tests {
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(0, 0, &mut out).unwrap();
+        let cmd = op.encode(&test_device(0), 0, &mut out).unwrap();
 
         assert_eq!(cmd, Cmd::WritePatternFused);
         assert_eq!(out[0], 1, "bank B1");
@@ -282,7 +291,7 @@ mod tests {
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(0, 0, &mut out).unwrap();
+        let cmd = op.encode(&test_device(0), 0, &mut out).unwrap();
 
         assert_eq!(cmd, Cmd::WritePatternFused);
         assert_eq!(out[1], EMISSION_TYPE_FOCI);
@@ -322,7 +331,7 @@ mod tests {
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            op.encode(0, 0, &mut out),
+            op.encode(&test_device(0), 0, &mut out),
             Err(Error::InvalidPayload(_))
         ));
 
@@ -351,7 +360,7 @@ mod tests {
             },
         };
         let mut out = [0u8; PAYLOAD_BYTES];
-        op.encode(0, 0, &mut out).unwrap();
+        op.encode(&test_device(0), 0, &mut out).unwrap();
 
         assert_eq!(out[9], 0x01, "SYS_TIME");
         assert_eq!(&out[12..14], &7u16.to_le_bytes(), "Finite(8) => rep 7");
@@ -370,9 +379,9 @@ mod tests {
             transition_mode: TransitionMode::Immediate,
         };
         let mut out = [0u8; PAYLOAD_BYTES];
-        assert!(op.encode(0, 0, &mut out).is_ok());
+        assert!(op.encode(&test_device(0), 0, &mut out).is_ok());
         assert!(matches!(
-            op.encode(1, 0, &mut out),
+            op.encode(&test_device(1), 0, &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }

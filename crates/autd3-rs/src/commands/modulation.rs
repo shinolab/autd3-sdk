@@ -68,11 +68,12 @@ impl<'a> Command<'a> for Modulation<'a> {
 mod tests {
     use super::*;
     use crate::protocol::Cmd;
+    use crate::test_utils::test_geometry_arc;
 
     use crate::commands::operation::MOD_FUSED_MAX_DATA_LEN;
 
     fn fused_payload(m: Modulation<'_>) -> [u8; crate::protocol::PAYLOAD_BYTES] {
-        let mut b = DatagramBuilder::new(1);
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(m);
         let datagrams = b.build().unwrap();
         assert_eq!(datagrams.len(), 1, "short modulation fuses into 1 frame");
@@ -144,7 +145,7 @@ mod tests {
     #[test]
     fn long_modulation_falls_back_to_the_three_frame_path() {
         let data = vec![0x80u8; MOD_FUSED_MAX_DATA_LEN + 1];
-        let mut b = DatagramBuilder::new(1);
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(Modulation::with_bank(
             ModulationBank::B1,
             SamplingConfig::FREQ_4K,

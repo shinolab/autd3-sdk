@@ -7,6 +7,7 @@ use zerocopy::little_endian::U16;
 
 use crate::common::{ULTRASOUND_FREQ, ULTRASOUND_PERIOD};
 use crate::error::{Error, PayloadError};
+use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
@@ -180,7 +181,7 @@ impl<T: SilencerConfig> Operation for SetSilencer<T> {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -195,10 +196,11 @@ impl<T: SilencerConfig> Operation for SetSilencer<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
 
     fn encode<T: SilencerConfig>(config: T) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = SetSilencer::new(config).encode(0, 0, &mut out)?;
+        let cmd = SetSilencer::new(config).encode(&test_device(0), 0, &mut out)?;
         Ok((cmd, out))
     }
 
@@ -236,7 +238,9 @@ mod tests {
     #[test]
     fn silencer_default_is_fixed_completion_time_default() {
         let mut out = [0u8; PAYLOAD_BYTES];
-        SetSilencer::default().encode(0, 0, &mut out).unwrap();
+        SetSilencer::default()
+            .encode(&test_device(0), 0, &mut out)
+            .unwrap();
         assert_eq!(out[0], FLAG_STRICT_MODE);
         assert_eq!(&out[6..8], &10u16.to_le_bytes());
         assert_eq!(&out[8..10], &40u16.to_le_bytes());
@@ -245,7 +249,9 @@ mod tests {
     #[test]
     fn disable_is_one_step_non_strict() {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = SetSilencer::disable().encode(0, 0, &mut out).unwrap();
+        let cmd = SetSilencer::disable()
+            .encode(&test_device(0), 0, &mut out)
+            .unwrap();
         assert_eq!(cmd, Cmd::SetSilencer);
         assert_eq!(out[0], 0);
         assert_eq!(&out[6..8], &1u16.to_le_bytes());

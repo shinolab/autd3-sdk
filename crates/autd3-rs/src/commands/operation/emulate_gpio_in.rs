@@ -2,6 +2,7 @@ use autd3_cpu_wire::payload::GpioInPayload;
 use zerocopy::FromBytes;
 
 use crate::error::Error;
+use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 use super::{Distribution, Operation};
@@ -22,7 +23,7 @@ impl Operation for EmulateGpioIn {
 
     fn encode(
         &self,
-        _device: usize,
+        _device: &Device,
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
@@ -40,6 +41,7 @@ impl Operation for EmulateGpioIn {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_device;
 
     #[test]
     fn gpio_in_lays_out_values() {
@@ -47,7 +49,7 @@ mod tests {
         let cmd = EmulateGpioIn {
             values: [false, true, false, true],
         }
-        .encode(0, 0, &mut out)
+        .encode(&test_device(0), 0, &mut out)
         .unwrap();
         assert_eq!(cmd, Cmd::EmulateGpioIn);
         assert_eq!(&out[..4], &[0, 1, 0, 1]);
