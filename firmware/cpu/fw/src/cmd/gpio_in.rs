@@ -10,8 +10,6 @@ use crate::params::{
 use crate::port::Port;
 use crate::proto::Error;
 
-pub const GPIO_IN_FLAG_MASK: u8 = 0x0F;
-
 const GPIO_IN_MASK: u16 =
     CTL_FLAG_GPIO_IN_0 | CTL_FLAG_GPIO_IN_1 | CTL_FLAG_GPIO_IN_2 | CTL_FLAG_GPIO_IN_3;
 
@@ -19,20 +17,18 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
     let Ok((p, _)) = GpioInPayload::ref_from_prefix(payload) else {
         return Err(Error::InvalidPayload);
     };
-    if p.flag > GPIO_IN_FLAG_MASK {
+    let values = [p.gpio_in_0, p.gpio_in_1, p.gpio_in_2, p.gpio_in_3];
+    if values.iter().any(|&v| v > 1) {
         return Err(Error::InvalidPayload);
     }
     let mut ctl = fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG) & !GPIO_IN_MASK;
-    for (bit, mask) in [
+    for (value, mask) in values.into_iter().zip([
         CTL_FLAG_GPIO_IN_0,
         CTL_FLAG_GPIO_IN_1,
         CTL_FLAG_GPIO_IN_2,
         CTL_FLAG_GPIO_IN_3,
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        if (p.flag & (1u8 << bit)) != 0 {
+    ]) {
+        if value != 0 {
             ctl |= mask;
         }
     }

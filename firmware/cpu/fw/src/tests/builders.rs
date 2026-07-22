@@ -275,9 +275,12 @@ pub(crate) fn force_fan(seq: u8, value: u8) -> Frame {
     Frame::from_payload(seq, Cmd::ForceFan, &p)
 }
 
-pub(crate) fn gpio_in(seq: u8, flag: u8) -> Frame {
+pub(crate) fn gpio_in(seq: u8, values: [u8; 4]) -> Frame {
     let mut p = GpioInPayload::new_zeroed();
-    p.flag = flag;
+    p.gpio_in_0 = values[0];
+    p.gpio_in_1 = values[1];
+    p.gpio_in_2 = values[2];
+    p.gpio_in_3 = values[3];
     Frame::from_payload(seq, Cmd::EmulateGpioIn, &p)
 }
 

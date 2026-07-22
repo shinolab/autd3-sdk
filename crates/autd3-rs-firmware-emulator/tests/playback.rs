@@ -207,12 +207,9 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
         "GPIO-in is low: the bank must not switch"
     );
 
-    assert_eq!(
-        device
-            .send(&frame(3, Cmd::EmulateGpioIn, &[1 << GPIO_IN_PIN]))
-            .data,
-        0
-    );
+    let mut gpio_in = [0u8; 4];
+    gpio_in[GPIO_IN_PIN as usize] = 1;
+    assert_eq!(device.send(&frame(3, Cmd::EmulateGpioIn, &gpio_in)).data, 0);
     for i in 8..16u64 {
         device
             .fpga_mut()

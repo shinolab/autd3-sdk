@@ -1,3 +1,6 @@
+use autd3_cpu_wire::payload::GpioInPayload;
+use zerocopy::FromBytes;
+
 use crate::error::Error;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
@@ -23,12 +26,13 @@ impl Operation for EmulateGpioIn {
         _frame: usize,
         out: &mut [u8; PAYLOAD_BYTES],
     ) -> Result<Cmd, Error> {
-        out[0] = self
-            .values
-            .iter()
-            .enumerate()
-            .filter(|&(_, &on)| on)
-            .fold(0u8, |acc, (bit, _)| acc | (1 << bit));
+        let (p, _) = GpioInPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *p = GpioInPayload {
+            gpio_in_0: u8::from(self.values[0]),
+            gpio_in_1: u8::from(self.values[1]),
+            gpio_in_2: u8::from(self.values[2]),
+            gpio_in_3: u8::from(self.values[3]),
+        };
         Ok(Cmd::EmulateGpioIn)
     }
 }
@@ -38,7 +42,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gpio_in_packs_bits() {
+    fn gpio_in_lays_out_values() {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = EmulateGpioIn {
             values: [false, true, false, true],
@@ -46,6 +50,6 @@ mod tests {
         .encode(0, 0, &mut out)
         .unwrap();
         assert_eq!(cmd, Cmd::EmulateGpioIn);
-        assert_eq!(out[0], 0b1010);
+        assert_eq!(&out[..4], &[0, 1, 0, 1]);
     }
 }
