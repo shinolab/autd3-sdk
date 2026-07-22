@@ -2,7 +2,7 @@ use super::*;
 use crate::commands::operation::{
     ConfigModulation, ConfigPattern, Distribution, Operation, WritePatternBuffer,
 };
-use crate::commands::{Command, Pattern};
+use crate::commands::{Command, Pattern, WriteModulationBuffer};
 use crate::error::Error;
 use crate::geometry::{Autd3, Device};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -10,25 +10,27 @@ use crate::test_utils::test_geometry_arc;
 use crate::value::{Emission, LoopBehavior, ModulationBank, PatternBank, SamplingConfig};
 
 #[derive(Clone, Copy)]
-struct Multi(usize);
+struct Marker(u8);
 
-impl Operation for Multi {
-    fn frames(&self) -> usize {
-        self.0
-    }
-
+impl Operation for Marker {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
-        out[0] = u8::try_from(frame).unwrap();
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+        out[0] = self.0;
         Ok(Cmd::ConfigModulation)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Multi(usize);
+
+impl<'a> Command<'a> for Multi {
+    fn expand(self, builder: &mut DatagramBuilder<'a>) {
+        for frame in 0..self.0 {
+            builder.push(Marker(u8::try_from(frame).unwrap()));
+        }
     }
 }
 
@@ -100,6 +102,45 @@ fn push_each_pads_shorter_device_with_nop() {
             frame
         );
     }
+}
+
+#[test]
+fn nested_push_each_keeps_every_frame() {
+    struct Nested;
+
+    impl<'a> Command<'a> for Nested {
+        fn expand(self, builder: &mut DatagramBuilder<'a>) {
+            builder.push_each(|device| (device.idx() == 1).then_some(Multi(2)));
+        }
+    }
+
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
+    b.push_each(|device| (device.idx() == 1).then_some(Nested));
+    let frames = b.build().unwrap();
+
+    assert_eq!(frames.len(), 2, "inner frames must not collapse");
+    for frame in 0..2 {
+        assert_eq!(cmd_at(&frames, frame, 0), Cmd::Nop);
+        assert_eq!(cmd_at(&frames, frame, 1), Cmd::ConfigModulation);
+        assert_eq!(
+            frames.frame(frame).unwrap().datagrams()[1].payload[0] as usize,
+            frame
+        );
+    }
+}
+
+#[test]
+fn push_each_propagates_rejection_from_sub_builder() {
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
+    b.push_each(|device| {
+        (device.idx() == 1).then_some(WriteModulationBuffer {
+            bank: ModulationBank::B0,
+            offset: 0,
+            data: &[],
+        })
+    });
+
+    assert!(matches!(b.build(), Err(Error::InvalidPayload(_))));
 }
 
 #[test]

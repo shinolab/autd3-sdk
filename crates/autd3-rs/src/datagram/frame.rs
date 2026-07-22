@@ -4,7 +4,7 @@ use crate::error::{Error, PayloadError};
 use crate::geometry::Geometry;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::each::{each_encode, each_slot_frames};
+use super::each::{each_encode, each_frames};
 
 #[derive(Clone, Debug)]
 pub struct Datagram {
@@ -102,19 +102,17 @@ impl Frames {
             Distribution::Broadcast => 1,
             Distribution::PerDevice => geometry.num_devices(),
         };
-        for frame in 0..op.frames() {
-            let start = self.payloads.len();
-            for device in 0..encode_devices {
-                let mut payload = [0u8; PAYLOAD_BYTES];
-                let cmd = op.encode(&geometry[device], frame, &mut payload)?;
-                self.payloads.push(Datagram { cmd, payload });
-            }
-            self.frames.push(FrameDesc {
-                dist,
-                start,
-                len: encode_devices,
-            });
+        let start = self.payloads.len();
+        for device in 0..encode_devices {
+            let mut payload = [0u8; PAYLOAD_BYTES];
+            let cmd = op.encode(&geometry[device], &mut payload)?;
+            self.payloads.push(Datagram { cmd, payload });
         }
+        self.frames.push(FrameDesc {
+            dist,
+            start,
+            len: encode_devices,
+        });
         Ok(())
     }
 
@@ -123,20 +121,12 @@ impl Frames {
         devices: &[Vec<Box<dyn Operation + '_>>],
         geometry: &Geometry,
     ) -> Result<(), Error> {
-        let slot_frames = each_slot_frames(devices);
-        let total: usize = slot_frames.iter().sum();
         let num_devices = geometry.num_devices();
-        for frame in 0..total {
+        for frame in 0..each_frames(devices) {
             let start = self.payloads.len();
             for device in 0..num_devices {
                 let mut payload = [0u8; PAYLOAD_BYTES];
-                let cmd = each_encode(
-                    devices,
-                    &slot_frames,
-                    &geometry[device],
-                    frame,
-                    &mut payload,
-                )?;
+                let cmd = each_encode(devices, &geometry[device], frame, &mut payload)?;
                 self.payloads.push(Datagram { cmd, payload });
             }
             self.frames.push(FrameDesc {

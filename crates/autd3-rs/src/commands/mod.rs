@@ -2,16 +2,20 @@ mod modulation;
 pub(crate) mod operation;
 mod pattern;
 pub(crate) mod stm;
+mod write_foci_buffer;
+mod write_modulation_buffer;
 
 pub use modulation::Modulation;
 pub use pattern::Pattern;
+pub use write_foci_buffer::WriteFociBuffer;
+pub use write_modulation_buffer::WriteModulationBuffer;
 
 pub use operation::{
     ChangeModulationBank, ChangePatternBank, Clear, ConfigFociStm, ConfigModulation, ConfigPattern,
     Distribution, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, ForceFan, GpioOut, Nop,
     Operation, PWE_TABLE_SIZE, PatternCompression, SetGpioOut, SetOutputMask, SetPhaseCorrection,
-    SetPulseWidthTable, SetSilencer, SilencerConfig, Synchronize, WriteFociBuffer,
-    WriteModulationBuffer, WritePatternBuffer, WritePatternCompressed,
+    SetPulseWidthTable, SetSilencer, SilencerConfig, Synchronize, WritePatternBuffer,
+    WritePatternCompressed,
 };
 pub use stm::{
     FociStm, FociStmOption, PatternStm, PatternStmMode, PatternStmOption, StmConfig, circle, line,

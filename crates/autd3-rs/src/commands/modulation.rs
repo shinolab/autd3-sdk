@@ -1,7 +1,5 @@
-use super::Command;
-use crate::commands::operation::{
-    ChangeModulationBank, ConfigModulation, WriteModulationBuffer, WriteModulationFused,
-};
+use super::{Command, WriteModulationBuffer};
+use crate::commands::operation::{ChangeModulationBank, ConfigModulation, WriteModulationFused};
 use crate::datagram::DatagramBuilder;
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 

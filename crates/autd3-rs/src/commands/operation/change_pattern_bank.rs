@@ -17,20 +17,11 @@ pub struct ChangePatternBank {
 }
 
 impl Operation for ChangePatternBank {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }
 
-    fn encode(
-        &self,
-        _device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let margin_ns = self.transition_mode.margin_ns()?;
         let (p, _) = ChangePatternBankPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = ChangePatternBankPayload {
@@ -60,7 +51,7 @@ mod tests {
 
     fn encode(op: ChangePatternBank) -> (Cmd, [u8; PAYLOAD_BYTES]) {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), 0, &mut out).unwrap();
+        let cmd = op.encode(&test_device(0), &mut out).unwrap();
         (cmd, out)
     }
 
@@ -146,7 +137,7 @@ mod tests {
                 margin: Some(Duration::from_secs(5)),
             },
         }
-        .encode(&test_device(0), 0, &mut out)
+        .encode(&test_device(0), &mut out)
         .unwrap_err();
 
         assert!(matches!(

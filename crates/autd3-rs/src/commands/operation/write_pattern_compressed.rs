@@ -43,20 +43,11 @@ pub struct WritePatternCompressed<'a> {
 }
 
 impl Operation for WritePatternCompressed<'_> {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
-    fn encode(
-        &self,
-        device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let count = self.count();
         if count == 0 {
             return Err(PayloadError::PatternSizeZero.into());
@@ -165,7 +156,7 @@ mod tests {
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), 0, &mut out).unwrap();
+        let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
         assert_eq!(cmd, Cmd::WritePatternCompressed);
         assert_eq!(out[1], 1, "format = PhaseFull");
@@ -202,7 +193,7 @@ mod tests {
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        op.encode(&test_device(0), 0, &mut out).unwrap();
+        op.encode(&test_device(0), &mut out).unwrap();
 
         assert_eq!(out[1], 2, "format = PhaseHalf");
         assert_eq!(out[2], 4, "count = 4");
@@ -230,7 +221,7 @@ mod tests {
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            op.encode(&test_device(0), 0, &mut out),
+            op.encode(&test_device(0), &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }
@@ -245,9 +236,9 @@ mod tests {
             patterns: [Some(&patterns[..]), None, None, None],
         };
         let mut out = [0u8; PAYLOAD_BYTES];
-        assert!(op.encode(&test_device(0), 0, &mut out).is_ok());
+        assert!(op.encode(&test_device(0), &mut out).is_ok());
         assert!(matches!(
-            op.encode(&test_device(1), 0, &mut out),
+            op.encode(&test_device(1), &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }

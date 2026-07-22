@@ -17,20 +17,11 @@ pub struct WritePatternBuffer<'a> {
 }
 
 impl Operation for WritePatternBuffer<'_> {
-    fn frames(&self) -> usize {
-        1
-    }
-
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
-    fn encode(
-        &self,
-        device: &Device,
-        _frame: usize,
-        out: &mut [u8; PAYLOAD_BYTES],
-    ) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let emissions =
             self.emissions
                 .get(device.idx())
@@ -100,7 +91,7 @@ mod tests {
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&dev, 0, &mut out).unwrap();
+        let cmd = op.encode(&dev, &mut out).unwrap();
 
         assert_eq!(cmd, Cmd::WritePatternBuffer);
         assert_eq!(out[0], 1);
@@ -129,7 +120,7 @@ mod tests {
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            op.encode(&dev, 0, &mut out),
+            op.encode(&dev, &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }
@@ -144,9 +135,9 @@ mod tests {
             emissions: &patterns,
         };
         let mut out = [0u8; PAYLOAD_BYTES];
-        assert!(op.encode(&dev, 0, &mut out).is_ok());
+        assert!(op.encode(&dev, &mut out).is_ok());
         assert!(matches!(
-            op.encode(&test_device(1), 0, &mut out),
+            op.encode(&test_device(1), &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }
