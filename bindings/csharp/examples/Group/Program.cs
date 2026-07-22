@@ -37,7 +37,7 @@ internal static class Program
         using var builder = client.DatagramBuilder();
         builder
             .Push(new SetSilencer())
-            .PushEach(device => new Pattern(device % 2 == 0 ? left : right));
+            .PushEach(device => new Pattern(device.Idx % 2 == 0 ? left : right));
         using var frames = builder.Build();
         foreach (var frame in frames)
         {
