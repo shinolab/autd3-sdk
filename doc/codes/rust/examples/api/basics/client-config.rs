@@ -16,7 +16,6 @@ async fn main() -> Result<()> {
         ClientConfig {
             timeout_cycles: 10,
             max_inflight: NonZeroUsize::new(MAX_IN_FLIGHT).unwrap(),
-            send_interval_cycles: NonZeroU32::new(1).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: 2,

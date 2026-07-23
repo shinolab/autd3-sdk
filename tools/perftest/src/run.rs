@@ -276,7 +276,6 @@ async fn run_with_link<T: IntoLink>(
         ClientConfig {
             timeout_cycles: cli.timeout_cycles,
             max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
-            send_interval_cycles: cli.send_interval_cycles,
             max_resync_rounds: cli.max_resync_rounds,
             low_latency: cli.low_latency,
             reset_resend_cycles: 2,

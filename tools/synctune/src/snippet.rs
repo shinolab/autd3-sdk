@@ -71,7 +71,6 @@ fn imports_block(link: LinkKind, imports: &[&str]) -> String {
 struct Config {
     timeout_cycles: u32,
     max_inflight: usize,
-    send_interval_cycles: u32,
     max_resync_rounds: u32,
     low_latency: bool,
     rt_priority: Option<u8>,
@@ -87,7 +86,6 @@ impl From<&Common> for Config {
                 Mode::StopAndWait => 1,
                 Mode::Streaming => c.max_inflight.max(1),
             },
-            send_interval_cycles: c.send_interval_cycles.get(),
             max_resync_rounds: c.max_resync_rounds.get(),
             low_latency: c.low_latency,
             rt_priority: c.rt_priority,
@@ -111,11 +109,6 @@ fn push_config(body: &mut String, imports: &mut Vec<&'static str>, c: &Config) {
         body,
         "    max_inflight: NonZeroUsize::new({}).unwrap(),",
         c.max_inflight,
-    );
-    let _ = writeln!(
-        body,
-        "    send_interval_cycles: NonZeroU32::new({}).unwrap(),",
-        c.send_interval_cycles,
     );
     let _ = writeln!(
         body,

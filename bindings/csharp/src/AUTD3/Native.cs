@@ -17,7 +17,6 @@ namespace AUTD3
             [MarshalAs(UnmanagedType.I1)] bool lowLatency,
             uint timeoutCycles,
             UIntPtr maxInflight,
-            uint sendIntervalCycles,
             uint maxResyncRounds,
             uint resetResendCycles,
             [MarshalAs(UnmanagedType.I1)] bool hasRtPriority,

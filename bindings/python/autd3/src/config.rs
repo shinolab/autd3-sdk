@@ -17,7 +17,6 @@ impl ClientConfig {
         low_latency = false,
         timeout_cycles = None,
         max_inflight = None,
-        send_interval_cycles = None,
         max_resync_rounds = None,
         reset_resend_cycles = None,
         rt_priority = None,
@@ -29,7 +28,6 @@ impl ClientConfig {
         low_latency: bool,
         timeout_cycles: Option<u32>,
         max_inflight: Option<usize>,
-        send_interval_cycles: Option<u32>,
         max_resync_rounds: Option<u32>,
         reset_resend_cycles: Option<u32>,
         rt_priority: Option<u8>,
@@ -46,10 +44,6 @@ impl ClientConfig {
         if let Some(v) = max_inflight {
             inner.max_inflight = NonZeroUsize::new(v)
                 .ok_or_else(|| PyValueError::new_err("max_inflight must be >= 1"))?;
-        }
-        if let Some(v) = send_interval_cycles {
-            inner.send_interval_cycles = NonZeroU32::new(v)
-                .ok_or_else(|| PyValueError::new_err("send_interval_cycles must be >= 1"))?;
         }
         if let Some(v) = max_resync_rounds {
             inner.max_resync_rounds = NonZeroU32::new(v)

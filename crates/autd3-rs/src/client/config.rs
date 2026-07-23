@@ -13,7 +13,6 @@ pub const MAX_DEVICES: usize = 128;
 pub struct ClientConfig {
     pub timeout_cycles: u32,
     pub max_inflight: NonZeroUsize,
-    pub send_interval_cycles: NonZeroU32,
     pub max_resync_rounds: NonZeroU32,
     pub low_latency: bool,
     pub reset_resend_cycles: u32,
@@ -28,7 +27,6 @@ impl Default for ClientConfig {
         Self {
             timeout_cycles: 10,
             max_inflight: NonZeroUsize::new(MAX_IN_FLIGHT).unwrap(),
-            send_interval_cycles: NonZeroU32::new(1).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: 2,

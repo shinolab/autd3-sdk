@@ -18,7 +18,6 @@ internal static class Sample
             new ClientConfig(
                 timeoutCycles: 10,
                 maxInflight: (uint)Client.MaxInflight,
-                sendIntervalCycles: 1,
                 maxResyncRounds: 8,
                 lowLatency: false,
                 resetResendCycles: 2,

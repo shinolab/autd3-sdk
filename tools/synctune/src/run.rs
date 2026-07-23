@@ -160,7 +160,6 @@ fn client_config(common: &Common, max_inflight: usize) -> ClientConfig {
     ClientConfig {
         timeout_cycles: common.timeout_cycles,
         max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
-        send_interval_cycles: common.send_interval_cycles,
         max_resync_rounds: common.max_resync_rounds,
         low_latency: common.low_latency,
         reset_resend_cycles: 2,
