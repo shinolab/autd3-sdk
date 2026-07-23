@@ -274,6 +274,7 @@ impl<L: Link> RtThread<L> {
     }
 
     fn run(&mut self) {
+        let mut link_error = None;
         loop {
             if self.closed.load(Ordering::Acquire) {
                 break;
@@ -283,8 +284,12 @@ impl<L: Link> RtThread<L> {
                 break;
             }
 
-            let Ok(rx_valid) = self.cycle_once() else {
-                return;
+            let rx_valid = match self.link.cycle(&self.tx_bufs, &mut self.rx_bufs) {
+                Ok(CycleOutcome { rx_valid }) => rx_valid,
+                Err(e) => {
+                    link_error = Some(format!("link cycle failed: {e}"));
+                    break;
+                }
             };
 
             if self.reset_remaining > 0 {
@@ -296,7 +301,7 @@ impl<L: Link> RtThread<L> {
             }
         }
 
-        self.teardown();
+        self.teardown(link_error.as_deref());
     }
 
     fn stage_tx(&mut self) -> StageOutcome {
@@ -345,24 +350,6 @@ impl<L: Link> RtThread<L> {
             exclusive: msg.exclusive,
             response_tx: msg.response_tx,
         });
-    }
-
-    fn cycle_once(&mut self) -> Result<bool, ()> {
-        match self.link.cycle(&self.tx_bufs, &mut self.rx_bufs) {
-            Ok(CycleOutcome { rx_valid }) => Ok(rx_valid),
-            Err(e) => {
-                let msg = format!("link cycle failed: {e}");
-                if let Some(held) = self.held_exclusive.take() {
-                    held.response_tx.send(Err(Error::Link(msg.clone())));
-                    self.pool.release(held.frame);
-                }
-                for entry in self.pending.drain(..) {
-                    entry.response_tx.send(Err(Error::Link(msg.clone())));
-                    self.pool.release(entry.frame);
-                }
-                Err(())
-            }
-        }
     }
 
     fn advance_reset_phase(&mut self) {
@@ -451,17 +438,18 @@ impl<L: Link> RtThread<L> {
         }
     }
 
-    fn teardown(&mut self) {
+    fn teardown(&mut self, link_error: Option<&str>) {
+        let cause = || link_error.map_or(Error::RtClosed, |msg| Error::Link(msg.to_owned()));
         if let Some(msg) = self.held_exclusive.take() {
-            msg.response_tx.send(Err(Error::RtClosed));
+            msg.response_tx.send(Err(cause()));
             self.pool.release(msg.frame);
         }
         for entry in self.pending.drain(..) {
-            entry.response_tx.send(Err(Error::RtClosed));
+            entry.response_tx.send(Err(cause()));
             self.pool.release(entry.frame);
         }
         while let Ok(msg) = self.cmd_rx.try_recv() {
-            msg.response_tx.send(Err(Error::RtClosed));
+            msg.response_tx.send(Err(cause()));
             self.pool.release(msg.frame);
         }
     }

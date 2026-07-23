@@ -41,8 +41,7 @@ pub struct Client {
     completions: Arc<CompletionPool>,
     join: std::sync::Mutex<Option<JoinHandle<()>>>,
     closed: Arc<AtomicBool>,
-    mirror: Arc<std::sync::Mutex<Mirror>>,
-    validate_state: bool,
+    mirror: MirrorHandle,
 }
 
 impl Client {
@@ -116,8 +115,10 @@ impl Client {
                     completions,
                     join: std::sync::Mutex::new(Some(join)),
                     closed,
-                    mirror: Arc::new(std::sync::Mutex::new(Mirror::Desynced)),
-                    validate_state: config.validate_state,
+                    mirror: MirrorHandle {
+                        state: Arc::new(std::sync::Mutex::new(Mirror::Desynced)),
+                        enabled: config.validate_state,
+                    },
                 };
                 if let Err(e) = client.clear().await {
                     let _ = client.close().await;
@@ -147,17 +148,15 @@ impl Client {
 
     #[must_use]
     pub fn datagram_builder<'a>(&self) -> DatagramBuilder<'a> {
-        DatagramBuilder::with_mirror(
-            Arc::clone(&self.geometry),
-            MirrorHandle {
-                state: Arc::clone(&self.mirror),
-                enabled: self.validate_state,
-            },
-        )
+        DatagramBuilder::with_mirror(Arc::clone(&self.geometry), self.mirror.clone())
     }
 
     fn mark_desynced(&self) {
-        *self.mirror.lock().unwrap_or_else(PoisonError::into_inner) = Mirror::Desynced;
+        self.mirror.desync();
+    }
+
+    fn mirror_for_response(&self) -> Option<MirrorHandle> {
+        self.mirror.enabled.then(|| self.mirror.clone())
     }
 
     async fn clear(&self) -> Result<(), Error> {
@@ -165,13 +164,16 @@ impl Client {
         for frame in &datagrams {
             self.send_checked(frame).await?;
         }
-        *self.mirror.lock().unwrap_or_else(PoisonError::into_inner) =
-            Mirror::Synced(vec![FirmwareState::boot_default(); self.num_devices]);
+        self.mirror.set(Mirror::Synced(vec![
+            FirmwareState::boot_default();
+            self.num_devices
+        ]));
         Ok(())
     }
 
     async fn send_datagrams(&self, datagrams: &[Datagram]) -> Result<ResponseFuture, Error> {
         if datagrams.len() != self.num_devices {
+            self.mark_desynced();
             return Err(PayloadError::DatagramCountMismatch {
                 expected: self.num_devices,
                 got: datagrams.len(),
@@ -211,13 +213,7 @@ impl Client {
     }
 
     pub async fn send_checked(&self, frame: Frame<'_>) -> Result<(), Error> {
-        let result = match self.send(frame).await {
-            Ok(future) => match future.await {
-                Ok(response) => response.check(),
-                Err(e) => Err(e),
-            },
-            Err(e) => Err(e),
-        };
+        let result = self.send(frame).await?.await?.check();
         if result.is_err() {
             self.mark_desynced();
         }
@@ -225,7 +221,7 @@ impl Client {
     }
 
     async fn dispatch(&self, slot: pool::Slot, exclusive: bool) -> Result<ResponseFuture, Error> {
-        let (response_tx, response_rx) = self.completions.channel();
+        let (response_tx, response_rx) = self.completions.channel(self.mirror_for_response());
         if let Err(e) = self
             .cmd_tx
             .send(CmdMessage {
@@ -236,6 +232,7 @@ impl Client {
             .await
         {
             self.pool.release(e.0.frame);
+            self.mark_desynced();
             return Err(Error::RtClosed);
         }
         Ok(response_rx)

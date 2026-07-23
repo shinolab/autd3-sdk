@@ -1,6 +1,7 @@
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::time::Duration;
 
 use crate::commands::operation::{Distribution, Nop, Operation};
@@ -53,6 +54,33 @@ async fn send_op<O: Operation + 'static>(client: &Client, op: O) -> Result<(), E
 
 async fn send_nop(client: &Client) -> Result<(), Error> {
     send_op(client, Nop).await
+}
+
+fn build_too_fast_pattern(client: &Client) -> Result<crate::datagram::Frames, Error> {
+    use crate::commands::operation::ConfigPattern;
+    use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
+
+    let mut builder = client.datagram_builder();
+    builder.push(ConfigPattern {
+        bank: PatternBank::B0,
+        config: SamplingConfig::FREQ_40K,
+        size: 2,
+        loop_behavior: LoopBehavior::Infinite,
+    });
+    builder.build()
+}
+
+async fn arm_strict_silencer(client: &Client) {
+    use crate::commands::operation::SetSilencer;
+
+    let datagrams = client
+        .datagram_builder()
+        .push(SetSilencer::default())
+        .build()
+        .unwrap();
+    for frame in &datagrams {
+        client.send_checked(frame).await.unwrap();
+    }
 }
 
 struct LoopbackLink {
@@ -255,6 +283,44 @@ impl Link for LoopbackLink {
             rx_valid &= slave_cycle(&mut s, tx, rx);
         }
         Ok(CycleOutcome { rx_valid })
+    }
+}
+
+#[derive(Debug)]
+struct LinkFailure;
+
+impl std::fmt::Display for LinkFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("link failure")
+    }
+}
+
+struct FailingLink {
+    inner: LoopbackLink,
+    fail: Arc<AtomicBool>,
+}
+
+impl Link for FailingLink {
+    type Error = LinkFailure;
+    type Checker = crate::link::ConstStateChecker;
+
+    fn num_devices(&self) -> usize {
+        self.inner.num_devices()
+    }
+
+    fn state_checker(&self) -> Self::Checker {
+        self.inner.state_checker()
+    }
+
+    fn cycle(
+        &mut self,
+        tx: &[[u8; TX_FRAME_BYTES]],
+        rx: &mut [[u8; RX_FRAME_BYTES]],
+    ) -> Result<CycleOutcome, Self::Error> {
+        if self.fail.load(AtomicOrdering::Relaxed) {
+            return Err(LinkFailure);
+        }
+        Ok(self.inner.cycle(tx, rx).expect("loopback never fails"))
     }
 }
 
@@ -1077,33 +1143,11 @@ async fn opt_out_disables_precheck() {
 
 #[tokio::test]
 async fn desync_after_send_failure_stops_precheck() {
-    use crate::commands::operation::{ConfigPattern, SetSilencer};
-    use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
-
-    let too_fast = |client: &Client| {
-        let mut builder = client.datagram_builder();
-        builder.push(ConfigPattern {
-            bank: PatternBank::B0,
-            config: SamplingConfig::FREQ_40K,
-            size: 2,
-            loop_behavior: LoopBehavior::Infinite,
-        });
-        builder.build()
-    };
-
     let (client, slave) = open_client().await;
-
-    let datagrams = client
-        .datagram_builder()
-        .push(SetSilencer::default())
-        .build()
-        .unwrap();
-    for frame in &datagrams {
-        client.send_checked(frame).await.unwrap();
-    }
+    arm_strict_silencer(&client).await;
 
     assert!(matches!(
-        too_fast(&client),
+        build_too_fast_pattern(&client),
         Err(Error::SilencerConstraint { .. })
     ));
 
@@ -1114,8 +1158,107 @@ async fn desync_after_send_failure_stops_precheck() {
     ));
 
     assert!(
-        too_fast(&client).is_ok(),
+        build_too_fast_pattern(&client).is_ok(),
         "desynced mirror must stop pre-checking until the next Clear/reopen"
+    );
+}
+
+#[tokio::test]
+async fn raw_send_failure_desyncs_the_mirror() {
+    let (client, slave) = open_client().await;
+    arm_strict_silencer(&client).await;
+
+    assert!(matches!(
+        build_too_fast_pattern(&client),
+        Err(Error::SilencerConstraint { .. })
+    ));
+
+    slave.lock().unwrap().stale_for_next = u32::MAX;
+    let datagrams = client.datagram_builder().push(Nop).build().unwrap();
+    for frame in &datagrams {
+        let future = client.send(frame).await.unwrap();
+        assert!(matches!(future.await.unwrap_err(), Error::Timeout { .. }));
+    }
+
+    assert!(
+        build_too_fast_pattern(&client).is_ok(),
+        "awaiting a failed raw send must desync the mirror just like send_checked"
+    );
+}
+
+#[tokio::test]
+async fn validation_opt_out_keeps_the_response_future_mirror_free() {
+    let (link, slave) = slave_pair();
+    let client = Client::open(
+        &geometry(1),
+        link,
+        ClientConfig {
+            validate_state: false,
+            ..ClientConfig::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert!(client.mirror_for_response().is_none());
+
+    slave.lock().unwrap().stale_for_next = u32::MAX;
+    let datagrams = client.datagram_builder().push(Nop).build().unwrap();
+    for frame in &datagrams {
+        let future = client.send(frame).await.unwrap();
+        assert!(matches!(future.await.unwrap_err(), Error::Timeout { .. }));
+    }
+
+    assert!(
+        build_too_fast_pattern(&client).is_ok(),
+        "opt-out must stay a no-op on both the build and the completion side"
+    );
+}
+
+#[tokio::test]
+async fn link_failure_returns_queued_slots_to_the_pool() {
+    let (inner, slave) = slave_pair();
+    let fail = Arc::new(AtomicBool::new(false));
+    let link = FailingLink {
+        inner,
+        fail: Arc::clone(&fail),
+    };
+    let max_inflight = NonZeroUsize::new(3).unwrap();
+    let client = Client::open(
+        &geometry(1),
+        link,
+        ClientConfig {
+            timeout_cycles: u32::MAX,
+            max_inflight,
+            ..ClientConfig::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    slave.lock().unwrap().drop_next = u32::MAX;
+    let in_flight = client
+        .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadErrorDetail))
+        .await
+        .unwrap();
+    let queued = client
+        .send_broadcast(&Datagram::no_payload(Cmd::ReadErrorDetail))
+        .await
+        .unwrap();
+
+    fail.store(true, AtomicOrdering::Relaxed);
+    let in_flight_err = in_flight.await.unwrap_err();
+    let queued_err = queued.await.unwrap_err();
+
+    client.close().await.unwrap();
+    assert_eq!(
+        client.pool.available_permits(),
+        max_inflight.get(),
+        "every slot must be back in the pool once the RT thread has torn down"
+    );
+    assert!(matches!(in_flight_err, Error::Link(_)));
+    assert!(
+        matches!(queued_err, Error::Link(_)),
+        "a command still queued in the channel must be failed with the link error, got {queued_err:?}"
     );
 }
 
