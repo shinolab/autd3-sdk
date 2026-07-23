@@ -187,9 +187,6 @@ struct RtThread<L: Link> {
     next_seq: Seq,
     pending: VecDeque<InFlight>,
     held_exclusive: Option<CmdMessage>,
-    cycle_idx: u64,
-    next_pickup_at: u64,
-    send_interval: u64,
     resync: ResyncState,
     stale_run: u32,
     reset_remaining: u32,
@@ -222,7 +219,6 @@ impl<L: Link> RtThread<L> {
             link,
             cmd_rx,
             pool,
-            send_interval: u64::from(config.send_interval_cycles.get()),
             pending: VecDeque::with_capacity(config.max_inflight.get()),
             held_exclusive: None,
             config,
@@ -231,8 +227,6 @@ impl<L: Link> RtThread<L> {
             tx_bufs: vec![[0u8; TX_FRAME_BYTES]; num_devices],
             rx_bufs: vec![[0u8; RX_FRAME_BYTES]; num_devices],
             next_seq: Seq::ZERO,
-            cycle_idx: 0,
-            next_pickup_at: 0,
             resync: ResyncState::default(),
             stale_run: 0,
             reset_remaining: 0,
@@ -300,8 +294,6 @@ impl<L: Link> RtThread<L> {
             } else {
                 self.handle_stale();
             }
-
-            self.cycle_idx = self.cycle_idx.wrapping_add(1);
         }
 
         self.teardown();
@@ -328,10 +320,7 @@ impl<L: Link> RtThread<L> {
             return StageOutcome::Staged;
         }
         let exclusive_inflight = self.pending.front().is_some_and(|entry| entry.exclusive);
-        if !exclusive_inflight
-            && self.cycle_idx >= self.next_pickup_at
-            && self.pending.len() < self.config.max_inflight.get()
-        {
+        if !exclusive_inflight && self.pending.len() < self.config.max_inflight.get() {
             match self.cmd_rx.try_recv() {
                 Ok(msg) if msg.exclusive && !self.pending.is_empty() => {
                     self.held_exclusive = Some(msg);
@@ -356,7 +345,6 @@ impl<L: Link> RtThread<L> {
             exclusive: msg.exclusive,
             response_tx: msg.response_tx,
         });
-        self.next_pickup_at = self.cycle_idx + self.send_interval;
     }
 
     fn cycle_once(&mut self) -> Result<bool, ()> {

@@ -566,7 +566,6 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
         ClientConfig {
             timeout_cycles: 10,
             max_inflight: NonZeroUsize::new(16).unwrap(),
-            send_interval_cycles: NonZeroU32::new(1).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: 2,
@@ -738,7 +737,6 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
         ClientConfig {
             timeout_cycles: 10,
             max_inflight: NonZeroUsize::new(16).unwrap(),
-            send_interval_cycles: NonZeroU32::new(1).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: 2,
@@ -780,7 +778,6 @@ async fn dead_link_gives_up_whole_window_in_bounded_time() {
         ClientConfig {
             timeout_cycles: 5,
             max_inflight: NonZeroUsize::new(8).unwrap(),
-            send_interval_cycles: NonZeroU32::new(1).unwrap(),
             max_resync_rounds: NonZeroU32::new(3).unwrap(),
             low_latency: false,
             reset_resend_cycles: 2,
@@ -891,7 +888,6 @@ async fn streaming_holds_window_across_stale_and_recovers() {
         ClientConfig {
             timeout_cycles: 10,
             max_inflight: NonZeroUsize::new(8).unwrap(),
-            send_interval_cycles: NonZeroU32::new(1).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: 2,
@@ -974,7 +970,6 @@ async fn open_rejects_oversize_max_inflight() {
         ClientConfig {
             timeout_cycles: 10,
             max_inflight: NonZeroUsize::new(MAX_IN_FLIGHT + 1).unwrap(),
-            send_interval_cycles: NonZeroU32::new(1).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: 2,
@@ -993,55 +988,6 @@ async fn open_rejects_zero_devices() {
     let (link, _slaves) = slaves_pair(0);
     let res = Client::open(&geometry(0), link, ClientConfig::default()).await;
     assert!(matches!(res, Err(Error::InvalidPayload(_))));
-}
-
-#[tokio::test]
-async fn commands_still_succeed_with_send_interval_above_one() {
-    let (link, slave) = slave_pair();
-    {
-        let mut s = slave.lock().unwrap();
-        s.fw_version_major = 0x11;
-        s.fw_version_minor = 0x22;
-        s.fw_version_patch = 0x33;
-        s.fpga_version_major = 0x44;
-        s.fpga_version_minor = 0x55;
-        s.fpga_version_patch = 0x66;
-    }
-    let client = Client::open(
-        &geometry(1),
-        link,
-        ClientConfig {
-            timeout_cycles: 10,
-            max_inflight: NonZeroUsize::new(8).unwrap(),
-            send_interval_cycles: NonZeroU32::new(3).unwrap(),
-            max_resync_rounds: NonZeroU32::new(8).unwrap(),
-            low_latency: false,
-            reset_resend_cycles: 2,
-            rt_priority: None,
-            rt_policy: RtSchedulePolicy::default(),
-            rt_affinity: None,
-            validate_state: true,
-        },
-    )
-    .await
-    .unwrap();
-    let v = client.read_firmware_version().await.unwrap();
-    assert_eq!(
-        v,
-        vec![FirmwareVersion {
-            cpu: Version {
-                major: 0x11,
-                minor: 0x22,
-                patch: 0x33,
-            },
-            fpga: Version {
-                major: 0x44,
-                minor: 0x55,
-                patch: 0x66,
-            },
-            function_bits: 0,
-        }]
-    );
 }
 
 #[tokio::test]

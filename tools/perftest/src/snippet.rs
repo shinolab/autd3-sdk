@@ -65,7 +65,6 @@ impl From<&Cli> for Config {
                 Mode::StopAndWait => 1,
                 Mode::Streaming => cli.max_inflight.max(1),
             },
-            send_interval_cycles: cli.send_interval_cycles.get(),
             max_resync_rounds: cli.max_resync_rounds.get(),
             low_latency: cli.low_latency,
             rt_priority: cli.rt_priority,
@@ -136,7 +135,6 @@ fn rt_policy(p: RtPolicy) -> &'static str {
 struct Config {
     timeout_cycles: u32,
     max_inflight: usize,
-    send_interval_cycles: u32,
     max_resync_rounds: u32,
     low_latency: bool,
     rt_priority: Option<u8>,
@@ -158,11 +156,6 @@ fn push_config(body: &mut String, imports: &mut Vec<&'static str>, c: &Config) {
         body,
         "    max_inflight: NonZeroUsize::new({}).unwrap(),",
         c.max_inflight,
-    );
-    let _ = writeln!(
-        body,
-        "    send_interval_cycles: NonZeroU32::new({}).unwrap(),",
-        c.send_interval_cycles,
     );
     let _ = writeln!(
         body,

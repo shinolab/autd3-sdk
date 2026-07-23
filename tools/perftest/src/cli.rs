@@ -129,8 +129,6 @@ pub struct Cli {
         help = "Pipeline depth in streaming mode (maps to ClientConfig.max_inflight). Ignored in stop-and-wait."
     )]
     pub max_inflight: usize,
-    #[arg(long, default_value_t = NonZeroU32::new(1).unwrap(), help = "maps to ClientConfig.send_interval_cycles")]
-    pub send_interval_cycles: NonZeroU32,
     #[arg(long, default_value_t = NonZeroU32::new(8).unwrap(), help = "maps to ClientConfig.max_resync_rounds")]
     pub max_resync_rounds: NonZeroU32,
     #[arg(

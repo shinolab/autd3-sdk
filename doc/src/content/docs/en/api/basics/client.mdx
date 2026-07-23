@@ -55,7 +55,6 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 | ---------------------- | ------------------------ | ------- | ---------------------------------------------------------- |
 | `timeout_cycles`       | `u32`                    | `10`    | Response-wait timeout (in send cycles)                     |
 | `max_inflight`         | `NonZeroUsize`           | `127`   | Send queue size                                            |
-| `send_interval_cycles` | `NonZeroU32`             | `1`     | Minimum interval between consecutive sends (in cycles)     |
 | `max_resync_rounds`    | `NonZeroU32`             | `8`     | Maximum number of rounds to attempt resynchronization      |
 | `low_latency`          | `bool`                   | `false` | Low-latency mode                                           |
 | `reset_resend_cycles`  | `u32`                    | `2`     | Number of cycles to resend after a reset                   |

@@ -14,7 +14,6 @@ async def main() -> None:
         ClientConfig(
             timeout_cycles=10,
             max_inflight=MAX_IN_FLIGHT,
-            send_interval_cycles=1,
             max_resync_rounds=8,
             low_latency=False,
             reset_resend_cycles=2,

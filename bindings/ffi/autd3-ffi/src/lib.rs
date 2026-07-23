@@ -342,7 +342,6 @@ pub extern "C" fn autd3_client_config_new(
     low_latency: bool,
     timeout_cycles: u32,
     max_inflight: usize,
-    send_interval_cycles: u32,
     max_resync_rounds: u32,
     reset_resend_cycles: u32,
     has_rt_priority: bool,
@@ -351,9 +350,8 @@ pub extern "C" fn autd3_client_config_new(
     rt_affinity: usize,
     validate_state: bool,
 ) -> *mut ClientConfig {
-    let (Some(max_inflight), Some(send_interval_cycles), Some(max_resync_rounds)) = (
+    let (Some(max_inflight), Some(max_resync_rounds)) = (
         NonZeroUsize::new(max_inflight),
-        NonZeroU32::new(send_interval_cycles),
         NonZeroU32::new(max_resync_rounds),
     ) else {
         return std::ptr::null_mut();
@@ -371,7 +369,6 @@ pub extern "C" fn autd3_client_config_new(
         low_latency,
         timeout_cycles,
         max_inflight,
-        send_interval_cycles,
         max_resync_rounds,
         reset_resend_cycles,
         rt_priority,

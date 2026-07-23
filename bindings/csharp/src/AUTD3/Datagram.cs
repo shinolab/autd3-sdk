@@ -11,7 +11,6 @@ namespace AUTD3
         public bool LowLatency { get; }
         public uint TimeoutCycles { get; }
         public uint MaxInflight { get; }
-        public uint SendIntervalCycles { get; }
         public uint MaxResyncRounds { get; }
         public uint ResetResendCycles { get; }
         public byte? RtPriority { get; }
@@ -26,7 +25,6 @@ namespace AUTD3
             bool lowLatency = false,
             uint timeoutCycles = 10,
             uint maxInflight = 127,
-            uint sendIntervalCycles = 1,
             uint maxResyncRounds = 8,
             uint resetResendCycles = 2,
             byte? rtPriority = null,
@@ -36,7 +34,6 @@ namespace AUTD3
             LowLatency = lowLatency;
             TimeoutCycles = timeoutCycles;
             MaxInflight = maxInflight;
-            SendIntervalCycles = sendIntervalCycles;
             MaxResyncRounds = maxResyncRounds;
             ResetResendCycles = resetResendCycles;
             RtPriority = rtPriority;
@@ -50,7 +47,6 @@ namespace AUTD3
                 LowLatency,
                 TimeoutCycles,
                 (UIntPtr)MaxInflight,
-                SendIntervalCycles,
                 MaxResyncRounds,
                 ResetResendCycles,
                 RtPriority.HasValue,
