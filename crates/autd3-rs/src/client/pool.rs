@@ -101,6 +101,11 @@ impl SlotPool {
             .expect("a permit guarantees a free slot")
     }
 
+    #[cfg(test)]
+    pub(super) fn available_permits(&self) -> usize {
+        self.permits.available_permits()
+    }
+
     pub(super) fn release(&self, slot: Slot) {
         self.free
             .lock()
