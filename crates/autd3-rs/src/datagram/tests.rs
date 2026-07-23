@@ -3,7 +3,7 @@ use crate::commands::operation::{
     ConfigModulation, ConfigPattern, Distribution, Operation, WritePatternBuffer,
 };
 use crate::commands::{Command, Pattern, WriteModulationBuffer};
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::geometry::{Autd3, Device};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::test_utils::test_geometry_arc;
@@ -31,6 +31,23 @@ impl<'a> Command<'a> for Multi {
         for frame in 0..self.0 {
             builder.push(Marker(u8::try_from(frame).unwrap()));
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FailAt(usize);
+
+impl Operation for FailAt {
+    fn distribution(&self) -> Distribution {
+        Distribution::PerDevice
+    }
+
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+        if device.idx() == self.0 {
+            return Err(PayloadError::ModulationDataEmpty.into());
+        }
+        out[0] = 0xFF;
+        Ok(Cmd::ConfigModulation)
     }
 }
 
@@ -323,6 +340,34 @@ fn composite_emission_orders_write_then_config() {
         frames.frame(1).unwrap().datagrams()[0].cmd,
         Cmd::ConfigPattern
     );
+}
+
+#[test]
+fn push_op_rolls_back_partial_encode_on_error() {
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
+    b.push(Marker(1)).push(FailAt(1));
+
+    let mut buf = Frames::default();
+    assert!(matches!(
+        b.build_into(&mut buf),
+        Err(Error::InvalidPayload(_))
+    ));
+    assert_eq!(buf.len(), 1);
+    assert_eq!(buf.payloads.len(), 2);
+}
+
+#[test]
+fn push_each_rolls_back_partial_encode_on_error() {
+    let mut b = DatagramBuilder::new(test_geometry_arc(2));
+    b.push(Marker(1)).push_each(|_| Some(FailAt(1)));
+
+    let mut buf = Frames::default();
+    assert!(matches!(
+        b.build_into(&mut buf),
+        Err(Error::InvalidPayload(_))
+    ));
+    assert_eq!(buf.len(), 1);
+    assert_eq!(buf.payloads.len(), 2);
 }
 
 #[test]
