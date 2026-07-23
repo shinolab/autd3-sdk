@@ -40,6 +40,16 @@ impl<'a> Frame<'a> {
     }
 }
 
+fn encode_slots(
+    slots: &mut [Datagram],
+    mut encode: impl FnMut(usize, &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error>,
+) -> Result<(), Error> {
+    for (device, slot) in slots.iter_mut().enumerate() {
+        slot.cmd = encode(device, &mut slot.payload)?;
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
 struct FrameDesc {
     dist: Distribution,
@@ -103,10 +113,13 @@ impl Frames {
             Distribution::PerDevice => geometry.num_devices(),
         };
         let start = self.payloads.len();
-        for device in 0..encode_devices {
-            let mut payload = [0u8; PAYLOAD_BYTES];
-            let cmd = op.encode(&geometry[device], &mut payload)?;
-            self.payloads.push(Datagram { cmd, payload });
+        self.payloads
+            .resize_with(start + encode_devices, || Datagram::no_payload(Cmd::Nop));
+        if let Err(e) = encode_slots(&mut self.payloads[start..], |device, payload| {
+            op.encode(&geometry[device], payload)
+        }) {
+            self.payloads.truncate(start);
+            return Err(e);
         }
         self.frames.push(FrameDesc {
             dist,
@@ -124,10 +137,13 @@ impl Frames {
         let num_devices = geometry.num_devices();
         for frame in 0..each_frames(devices) {
             let start = self.payloads.len();
-            for device in 0..num_devices {
-                let mut payload = [0u8; PAYLOAD_BYTES];
-                let cmd = each_encode(devices, &geometry[device], frame, &mut payload)?;
-                self.payloads.push(Datagram { cmd, payload });
+            self.payloads
+                .resize_with(start + num_devices, || Datagram::no_payload(Cmd::Nop));
+            if let Err(e) = encode_slots(&mut self.payloads[start..], |device, payload| {
+                each_encode(devices, &geometry[device], frame, payload)
+            }) {
+                self.payloads.truncate(start);
+                return Err(e);
             }
             self.frames.push(FrameDesc {
                 dist: Distribution::PerDevice,
