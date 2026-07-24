@@ -10,21 +10,23 @@ use tokio::runtime::Handle;
 use crate::diagnostics::new_shared_cycle_diagnostics;
 use crate::error::EtherCrabLinkError;
 use crate::option::EtherCrabLinkOptionFull;
+use crate::osal::timer;
 use crate::timeout::{with_timeout, without_pdu_timer};
-use crate::timer;
 use crate::transport::Transport;
 use crate::{sync, utils};
 
-use super::{
-    EtherCrabLink, GRACEFUL_SHUTDOWN_TIMEOUT, GROUP_SUBDEVICES, Groups, MAX_GROUPS, MAX_SUBDEVICES,
-    OP_WAIT_TIMEOUT, OP_WARMUP_CYCLES, OP_WKC_STABLE_CYCLES, SUBDEVICE_NAME, SubGroup,
+use super::EtherCrabLink;
+use super::group::{
+    GROUP_SUBDEVICES, Groups, MAX_GROUPS, MAX_SUBDEVICES, SUBDEVICE_NAME, SubGroup,
 };
 
-// With ethercrab's per-PDU timer disarmed, these bound the multi-PDU operations
-// that would otherwise wait forever on a lost frame. They are hang guards, not
-// deadlines: a healthy bus finishes well inside them.
 const ENUMERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const TRANSITION_TIMEOUT_FACTOR: u32 = 2;
+const OP_WAIT_TIMEOUT: Duration = Duration::from_secs(2);
+const OP_WKC_STABLE_CYCLES: u32 = 5;
+const TIMER_RESOLUTION_MS: u32 = 1;
+const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
+const OP_WARMUP_CYCLES: u32 = 200;
 
 pub(super) struct Reached {
     pub(super) group: Groups<Op, HasDc>,
@@ -40,7 +42,7 @@ impl EtherCrabLink {
         let option: EtherCrabLinkOptionFull = option.into();
         tracing::debug!(?option, "opening EtherCrabLink");
 
-        let timer_resolution = crate::timer::TimerResolutionGuard::new(super::TIMER_RESOLUTION_MS);
+        let timer_resolution = timer::TimerResolutionGuard::new(TIMER_RESOLUTION_MS);
         let handle = Handle::try_current().map_err(|_| EtherCrabLinkError::NoTokioRuntime)?;
 
         let interface = if let Some(interface) = option.iface.name() {
@@ -66,7 +68,7 @@ impl EtherCrabLink {
             &interface,
             without_pdu_timer(option.timeouts),
             option.main_device_config,
-            crate::transport::PumpTuning {
+            crate::osal::thread::PumpTuning {
                 priority: option.tx_rx_priority,
                 policy: option.tx_rx_policy,
                 affinity: option.tx_rx_affinity,
@@ -168,8 +170,6 @@ async fn shutdown(
     Ok(())
 }
 
-// ethercrab applies `state_transition` to the state wait alone, so the surrounding
-// PDU writes need headroom on top of it.
 async fn transition<T, F>(
     state_transition: Duration,
     future: F,
@@ -195,9 +195,6 @@ where
     tokio::time::timeout(timeout, future).await
 }
 
-// Bus enumeration reads every subdevice's EEPROM, so it is far slower than a
-// single PDU. Probe the bus first to keep "wrong interface" failing fast, and
-// leave enumeration itself only a coarse guard against a lost PDU wedging it.
 async fn probe_bus(
     maindevice: &MainDevice<'static>,
     pdu_timeout: Duration,

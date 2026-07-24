@@ -3,7 +3,7 @@ use std::time::Duration;
 use autd3_rs_core::Interface;
 use ethercrab::{MainDeviceConfig, Timeouts, subdevice_group::DcConfiguration};
 
-use crate::rt::{CoreId, RtSchedulePolicy, ThreadPriority};
+use crate::osal::thread::{CoreId, RtSchedulePolicy, ThreadPriority};
 
 use super::EtherCrabLinkOption;
 

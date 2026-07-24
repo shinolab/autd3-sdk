@@ -9,9 +9,7 @@ use ethercrab::{PduRx, PduTx};
 use tokio::io::unix::AsyncFd;
 
 const ETHERCAT_ETHERTYPE: u16 = 0x88a4;
-// Ethernet II header (14) + FCS (4); `SIOCGIFMTU` reports the payload MTU only.
 const ETHERNET_OVERHEAD: usize = 18;
-// Cap the frames drained per poll so a busy interface cannot starve the executor.
 const RX_BUDGET: u32 = 32;
 
 #[repr(C)]
@@ -149,7 +147,6 @@ struct TxRxFut<'sto> {
 }
 
 impl TxRxFut<'_> {
-    // `release` clears the storage's exit flag so the `PduStorage` can be split again.
     fn release(&mut self) {
         if let Some(tx) = self.tx.take() {
             let _released = tx.release();
@@ -177,8 +174,6 @@ impl Future for TxRxFut<'_> {
         }
 
         loop {
-            // Take the readiness guard before claiming a frame: a claimed frame
-            // that we cannot send would have to be handed back.
             let mut guard = match this.socket.poll_write_ready(cx) {
                 Poll::Ready(Ok(guard)) => guard,
                 Poll::Ready(Err(e)) => {
@@ -199,8 +194,6 @@ impl Future for TxRxFut<'_> {
                         tracing::error!("sending PDU failed: {e}");
                         Err(EtherCrabError::SendFrame)
                     }
-                    // `try_io` cleared the readiness, so the next `poll_write_ready`
-                    // registers our waker; `send_blocking` hands the frame back.
                     Err(_would_block) => {
                         blocked = true;
                         Ok(0)
@@ -241,7 +234,6 @@ impl Future for TxRxFut<'_> {
                     tracing::error!("receiving PDU failed: {e}");
                     return Poll::Ready(Err(EtherCrabError::ReceiveFrame));
                 }
-                // Readiness was cleared; the next `poll_read_ready` registers our waker.
                 Err(_would_block) => {}
             }
         }

@@ -51,10 +51,10 @@ pub(crate) fn tx_rx_task_blocking(
     mut pdu_rx: PduRx<'_>,
     running: &Arc<AtomicBool>,
     ready: &SyncSender<Result<(), EtherCrabLinkError>>,
-    tuning: crate::transport::PumpTuning,
+    tuning: crate::osal::thread::PumpTuning,
 ) -> Result<(), EtherCrabLinkError> {
     if tuning.priority.is_some() {
-        crate::rt::apply_thread_tuning(tuning.priority, tuning.policy, tuning.affinity);
+        crate::osal::thread::apply_thread_tuning(tuning.priority, tuning.policy, tuning.affinity);
     } else {
         if let Err(e) =
             thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Os(
@@ -63,7 +63,7 @@ pub(crate) fn tx_rx_task_blocking(
         {
             tracing::warn!("failed to raise tx/rx thread priority: {e:?}");
         }
-        crate::rt::apply_thread_tuning(None, tuning.policy, tuning.affinity);
+        crate::osal::thread::apply_thread_tuning(None, tuning.policy, tuning.affinity);
     }
 
     let waker = std::task::Waker::from(Arc::new(ThreadWaker::new()));

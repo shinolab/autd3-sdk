@@ -1,8 +1,9 @@
 use ethercrab::{MainDeviceConfig, Timeouts, std::ethercat_now};
 
 use crate::error::EtherCrabLinkError;
-use crate::link::{DETECT_PDI_LEN, MAX_SUBDEVICES, SUBDEVICE_NAME};
-use crate::transport::{PumpTuning, Transport};
+use crate::link::group::{DETECT_PDI_LEN, MAX_SUBDEVICES, SUBDEVICE_NAME};
+use crate::osal::thread::PumpTuning;
+use crate::transport::Transport;
 
 pub async fn lookup_autd() -> Result<String, EtherCrabLinkError> {
     let devices = pcap::Device::list()?;

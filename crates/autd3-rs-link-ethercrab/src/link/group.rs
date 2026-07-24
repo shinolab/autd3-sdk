@@ -1,21 +1,14 @@
-mod cycle;
-mod open;
-
 use std::future::Future;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use autd3_rs_core::{RX_FRAME_BYTES, TX_FRAME_BYTES};
 use ethercrab::error::TimeoutError;
-use ethercrab::subdevice_group::{HasDc, HasPdi, NoDc, Op, PreOp};
-use ethercrab::{DefaultLock, MainDevice, SubDeviceGroup, Timeouts};
+use ethercrab::subdevice_group::{HasDc, HasPdi, NoDc, PreOp};
+use ethercrab::{DefaultLock, MainDevice, SubDeviceGroup};
 use futures_util::future::join_all;
-use tokio::runtime::Handle;
 
-use crate::diagnostics::SharedCycleDiagnostics;
 use crate::join::join_bounded;
-use crate::option::{EtherCrabLinkOption, EtherCrabLinkOptionFull};
 use crate::timeout::with_timeout;
-use crate::transport::Transport;
 
 pub(crate) const MAX_SUBDEVICES: usize = 32;
 // Splitting devices into groups of two keeps each EtherCAT frame below the
@@ -25,11 +18,6 @@ pub(crate) const GROUP_SUBDEVICES: usize = 2;
 pub(crate) const SUB_GROUP_PDI_LEN: usize = (TX_FRAME_BYTES + RX_FRAME_BYTES) * GROUP_SUBDEVICES;
 pub(crate) const MAX_GROUPS: usize = MAX_SUBDEVICES / GROUP_SUBDEVICES;
 pub(crate) const DETECT_PDI_LEN: usize = (TX_FRAME_BYTES + RX_FRAME_BYTES) * MAX_SUBDEVICES;
-const OP_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
-const OP_WKC_STABLE_CYCLES: u32 = 5;
-const TIMER_RESOLUTION_MS: u32 = 1;
-const GRACEFUL_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
-const OP_WARMUP_CYCLES: u32 = 200;
 
 pub(crate) const SUBDEVICE_NAME: &str = "AUTD";
 
@@ -109,45 +97,4 @@ impl<S: HasPdi> Groups<S, HasDc> {
         }
         Ok(agg)
     }
-}
-
-impl autd3_rs_core::IntoLink for EtherCrabLinkOption {
-    type Link = EtherCrabLink;
-
-    async fn into_link(
-        self,
-        geometry: &autd3_rs_core::Geometry,
-    ) -> Result<EtherCrabLink, autd3_rs_core::error::LinkError> {
-        EtherCrabLinkOptionFull::from(self)
-            .into_link(geometry)
-            .await
-    }
-}
-
-impl autd3_rs_core::IntoLink for EtherCrabLinkOptionFull {
-    type Link = EtherCrabLink;
-
-    async fn into_link(
-        self,
-        _geometry: &autd3_rs_core::Geometry,
-    ) -> Result<EtherCrabLink, autd3_rs_core::error::LinkError> {
-        Box::pin(EtherCrabLink::open(self))
-            .await
-            .map_err(|e| autd3_rs_core::error::LinkError(e.to_string()))
-    }
-}
-
-pub struct EtherCrabLink {
-    group: Option<Groups<Op, HasDc>>,
-    addresses: Vec<u16>,
-    transport: Transport,
-    handle: Handle,
-    next_at: Option<Instant>,
-    num_devices: usize,
-    expected_wkc: u16,
-    rx_was_valid: bool,
-    timeouts: Timeouts,
-    stats: autd3_rs_core::LinkStats,
-    diagnostics: SharedCycleDiagnostics,
-    _timer_resolution: crate::timer::TimerResolutionGuard,
 }

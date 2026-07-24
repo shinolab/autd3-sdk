@@ -2,6 +2,13 @@ pub use autd3_rs_core::RtSchedulePolicy;
 pub use core_affinity::CoreId;
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
 
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PumpTuning {
+    pub(crate) priority: Option<ThreadPriority>,
+    pub(crate) policy: RtSchedulePolicy,
+    pub(crate) affinity: Option<CoreId>,
+}
+
 #[cfg(target_os = "linux")]
 fn set_thread_priority(
     priority: ThreadPriority,

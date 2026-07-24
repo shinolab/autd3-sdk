@@ -6,9 +6,9 @@ use ethercrab::{MainDevice, RegisterAddress};
 use futures_util::future::join_all;
 
 use crate::error::EtherCrabLinkError;
-use crate::link::Groups;
+use crate::link::group::Groups;
+use crate::osal::timer;
 use crate::timeout::with_timeout;
-use crate::timer;
 
 const CHECK_INTERVAL: Duration = Duration::from_millis(10);
 const LOOP_SLEEP: Duration = Duration::from_millis(1);

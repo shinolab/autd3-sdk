@@ -12,7 +12,6 @@ use tokio::io::unix::AsyncFd;
 const ETHERCAT_ETHERTYPE: u32 = 0x88a4;
 const BPF_DEVICES: u32 = 256;
 const BPF_BUFFER_LEN: libc::c_uint = 1 << 16;
-// Cap the reads drained per poll so a busy interface cannot starve the executor.
 const RX_BUDGET: u32 = 32;
 
 const BPF_ALIGNMENT: usize = 4;
@@ -21,7 +20,6 @@ const _: () = assert!(libc::BPF_ALIGNMENT == 4);
 const BH_CAPLEN: usize = std::mem::offset_of!(libc::bpf_hdr, bh_caplen);
 const BH_DATALEN: usize = std::mem::offset_of!(libc::bpf_hdr, bh_datalen);
 const BH_HDRLEN: usize = std::mem::offset_of!(libc::bpf_hdr, bh_hdrlen);
-// `bpf_hdr` carries tail padding, so the record header is shorter than `size_of` reports.
 const BPF_HDR_LEN: usize = BH_HDRLEN + size_of::<libc::c_ushort>();
 const _: () = assert!(BPF_HDR_LEN == 18 && BPF_HDR_LEN < size_of::<libc::bpf_hdr>());
 
@@ -48,14 +46,10 @@ struct BpfProgram {
     bf_insns: *const BpfInsn,
 }
 
-// BPF_LD | BPF_H | BPF_ABS
-const BPF_LDH_ABS: u16 = 0x28;
-// BPF_JMP | BPF_JEQ | BPF_K
-const BPF_JEQ_K: u16 = 0x15;
-// BPF_RET | BPF_K
-const BPF_RET_K: u16 = 0x06;
+const BPF_LDH_ABS: u16 = 0x28; // BPF_LD | BPF_H | BPF_ABS
+const BPF_JEQ_K: u16 = 0x15; // BPF_JMP | BPF_JEQ | BPF_K
+const BPF_RET_K: u16 = 0x06; // BPF_RET | BPF_K
 
-// Keep EtherCAT frames, drop everything else before it reaches user space.
 static ETHERCAT_FILTER: [BpfInsn; 4] = [
     BpfInsn {
         code: BPF_LDH_ABS,
@@ -145,7 +139,6 @@ impl RawSocket {
         let fd = open_device()?;
         let raw = fd.as_raw_fd();
 
-        // `BIOCSBLEN` is only honoured before the descriptor is attached to an interface.
         let mut buffer_len: libc::c_uint = BPF_BUFFER_LEN;
         ioctl(
             raw,
@@ -162,8 +155,6 @@ impl RawSocket {
             libc::BIOCIMMEDIATE,
             std::ptr::from_mut(&mut enable).cast(),
         )?;
-        // Leave the source MAC ethercrab wrote in place, so its own filter recognises
-        // the frames we sent and `receive_frame` ignores them.
         ioctl(
             raw,
             libc::BIOCSHDRCMPLT,
@@ -225,7 +216,6 @@ impl AsRawFd for RawSocket {
     }
 }
 
-// A single `read(2)` returns several `[bpf_hdr, Ethernet frame]` records back to back.
 struct BpfRecords<'a> {
     buf: &'a [u8],
     offset: usize,
@@ -280,7 +270,6 @@ struct TxRxFut<'sto> {
 }
 
 impl TxRxFut<'_> {
-    // `release` clears the storage's exit flag so the `PduStorage` can be split again.
     fn release(&mut self) {
         if let Some(tx) = self.tx.take() {
             let _released = tx.release();
@@ -307,8 +296,6 @@ impl Future for TxRxFut<'_> {
             return Poll::Ready(Ok(()));
         }
 
-        // BPF descriptors reject kqueue's write filter, so there is no writability to
-        // wait on: send eagerly and retry on the next poll if the kernel pushes back.
         while let Some(frame) = tx.next_sendable_frame() {
             let mut blocked = false;
             let sent = frame.send_blocking(|data| match this.socket.get_ref().send(data) {
@@ -322,10 +309,6 @@ impl Future for TxRxFut<'_> {
                     Err(EtherCrabError::SendFrame)
                 }
             });
-            // `send_blocking` turns the `Ok(0)` above into `Err(PartialSend)` after handing
-            // the frame back, so `blocked` must be checked before `sent` is treated as fatal.
-            // The interface queue drains within microseconds and a down link reports
-            // `ENETDOWN` rather than `ENOBUFS`, so respinning beats arming a coarse timer.
             if blocked {
                 cx.waker().wake_by_ref();
                 break;
@@ -367,7 +350,6 @@ impl Future for TxRxFut<'_> {
                     tracing::error!("receiving PDU failed: {e}");
                     return Poll::Ready(Err(EtherCrabError::ReceiveFrame));
                 }
-                // Readiness was cleared; the next `poll_read_ready` registers our waker.
                 Err(_would_block) => {}
             }
         }
