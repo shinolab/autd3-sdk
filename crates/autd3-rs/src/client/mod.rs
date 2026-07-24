@@ -18,6 +18,7 @@ use tokio::sync::{mpsc, oneshot};
 use autd3_cpu_wire::payload::ReadTelemetryPayload;
 use zerocopy::FromBytes;
 
+use crate::commands::Pattern;
 use crate::commands::operation::{Clear, Distribution, Synchronize};
 use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
 use crate::error::{Error, PayloadError};
@@ -255,16 +256,12 @@ impl Client {
 
     pub async fn stop(&self) -> Result<(), Error> {
         tracing::debug!("sending stop");
-        let result = self
-            .send_broadcast(&Datagram::no_payload(Cmd::Stop))
-            .await?
-            .await?
-            .check();
-        if let Err(e) = &result {
-            tracing::warn!(error = %e, "device reported an error; mirror desynced");
-            self.mark_desynced();
+        let buf = self.geometry.pattern_buffer();
+        let datagrams = self.datagram_builder().push(Pattern::new(&buf)).build()?;
+        for frame in &datagrams {
+            self.send_checked(frame).await?;
         }
-        result
+        Ok(())
     }
 
     async fn read_broadcast(&self, cmd: Cmd) -> Result<Vec<u8>, Error> {

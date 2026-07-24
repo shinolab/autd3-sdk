@@ -4,7 +4,7 @@ use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::time::Duration;
 
-use crate::commands::operation::{Distribution, Nop, Operation};
+use crate::commands::operation::{Distribution, Nop, Operation, PATTERN_FUSED_HEADER_BYTES};
 use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::firmware_version::{FirmwareVersion, Version};
@@ -168,15 +168,6 @@ fn slave_cycle(
         return true;
     }
 
-    if parsed.cmd == Cmd::Stop {
-        slave.muted = true;
-        slave.expected_seq = parsed.seq.get().wrapping_add(1);
-        slave.ack = parsed.seq.get();
-        slave.data = 0;
-        *rx = [slave.ack, slave.data];
-        return true;
-    }
-
     if slave.stale_for_next > 0 {
         slave.stale_for_next -= 1;
         *rx = [slave.ack, slave.data];
@@ -227,9 +218,14 @@ fn slave_cycle(
                 ERR_INVALID_PAYLOAD
             }
         }
+        Cmd::WritePatternFused => {
+            let start = PATTERN_FUSED_HEADER_BYTES;
+            let end = start + Autd3::NUM_TRANSDUCERS * 2;
+            slave.muted = parsed.payload[start..end].iter().all(|&b| b == 0);
+            0
+        }
         Cmd::WritePatternBuffer
         | Cmd::WritePatternCompressed
-        | Cmd::WritePatternFused
         | Cmd::WriteModulationBuffer
         | Cmd::WriteModulationFused
         | Cmd::ConfigModulation
@@ -252,7 +248,7 @@ fn slave_cycle(
             slave.mode = parsed.payload[0];
             0
         }
-        Cmd::Reset | Cmd::Stop => unreachable!(),
+        Cmd::Reset => unreachable!(),
     };
     slave.ack = parsed.seq.get();
     slave.data = data;
@@ -1441,18 +1437,26 @@ async fn separate_builders_share_committed_mirror_state() {
 }
 
 #[tokio::test]
-async fn stop_mutes_via_the_stop_command() {
+async fn stop_mutes_via_a_null_pattern() {
     let (client, slave) = open_client().await;
 
     client.stop().await.unwrap();
 
     let s = slave.lock().unwrap();
-    assert!(s.muted);
-    assert!(s.sent_log.iter().any(|(_, cmd)| *cmd == Cmd::Stop));
+    assert!(s.muted, "null pattern zeroes every emission");
+    assert!(
+        s.sent_log
+            .iter()
+            .any(|(_, cmd)| *cmd == Cmd::WritePatternFused)
+    );
+    assert!(
+        !s.sent_log.iter().any(|(_, cmd)| *cmd == Cmd::SetOutputMask),
+        "stop must not touch the output mask"
+    );
 }
 
 #[tokio::test]
-async fn stop_resyncs_seq_and_lets_later_frames_through() {
+async fn stop_leaves_the_link_synced_for_later_frames() {
     let (client, slave) = open_client().await;
 
     client.stop().await.unwrap();
