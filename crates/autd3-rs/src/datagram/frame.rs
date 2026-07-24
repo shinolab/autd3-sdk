@@ -121,6 +121,12 @@ impl Frames {
             self.payloads.truncate(start);
             return Err(e);
         }
+        tracing::trace!(
+            cmd = ?self.payloads[start].cmd,
+            dist = ?dist,
+            devices = encode_devices,
+            "encoded frame"
+        );
         self.frames.push(FrameDesc {
             dist,
             start,
@@ -145,6 +151,7 @@ impl Frames {
                 self.payloads.truncate(start);
                 return Err(e);
             }
+            tracing::trace!(frame, devices = num_devices, "encoded each-step frame");
             self.frames.push(FrameDesc {
                 dist: Distribution::PerDevice,
                 start,
