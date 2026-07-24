@@ -81,7 +81,10 @@ const developerManual = [
     items: [{ autogenerate: { directory: "developer/fpga" } }],
   },
   { label: "CPU ファームウェア", link: "/developer/cpu/" },
-  { label: "ソフトウェア", link: "/developer/software/" },
+  {
+    label: "ソフトウェア",
+    items: [{ autogenerate: { directory: "developer/software" } }],
+  },
 ];
 
 const theory = [

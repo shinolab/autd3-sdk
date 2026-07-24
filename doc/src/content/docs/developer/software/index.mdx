@@ -1,6 +1,8 @@
 ---
 title: ソフトウェア
 description: クライアントライブラリのクレート構成とバインディングの方針
+sidebar:
+  order: 0
 ---
 
 import Mermaid from "@components/Mermaid.astro";
@@ -60,6 +62,23 @@ EtherCAT マスタが要求する定周期処理と, ユーザーの非同期 AP
 `Link` トレイトの `cycle(tx, rx)` が 1 サイクル分の PDO 送受信を担う.
 `EtherCrabLink` / `SoemLink` はホスト自身が EtherCAT マスタとなり raw socket で PDO を直接回す.
 `TwinCATLink` は EtherCAT マスタを TwinCAT の RT カーネルに委譲する.
+
+## ユーザー API からデバイスまで
+
+ユーザーが積んだコマンドは, フレーム列へ実体化されたうえで RT スレッドから 1 サイクルに 1 フレームずつ送出される.
+
+<Mermaid
+  title="コマンドの流れ"
+  code={`flowchart LR
+  CMD["Command"]
+  FR["Frames"]
+  DEV["デバイス"]
+  CMD -- "DatagramBuilder" --> FR
+  FR -- "Client / RT スレッド" --> DEV`}
+/>
+
+- [DatagramBuilder](/autd3-sdk/developer/software/datagram-builder/): コマンドを送信フレームへ変換する
+- [送信処理](/autd3-sdk/developer/software/transmission/): フレームを送出し, SEQ/ACK で多重化と回復を行う
 
 ## バインディング
 
