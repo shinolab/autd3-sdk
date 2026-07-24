@@ -107,6 +107,7 @@ impl Client {
 
         match hs_done_rx.await {
             Ok(Ok(())) => {
+                tracing::debug!("RT thread handshake complete");
                 let client = Self {
                     cmd_tx,
                     geometry: Arc::new(geometry.clone()),
@@ -128,6 +129,7 @@ impl Client {
                     let _ = client.close().await;
                     return Err(e);
                 }
+                tracing::info!(num_devices, "client opened");
                 Ok((client, checker))
             }
             Ok(Err(msg)) => {
@@ -180,6 +182,7 @@ impl Client {
             }
             .into());
         }
+        tracing::trace!(cmd = ?datagrams[0].cmd, "sending per-device frame");
         let mut slot = self.pool.acquire().await;
         slot.reset(Distribution::PerDevice);
         for (device, datagram) in datagrams.iter().enumerate() {
@@ -190,6 +193,7 @@ impl Client {
     }
 
     async fn send_broadcast(&self, datagram: &Datagram) -> Result<ResponseFuture, Error> {
+        tracing::trace!(cmd = ?datagram.cmd, "sending broadcast frame");
         let mut slot = self.pool.acquire().await;
         slot.reset(Distribution::Broadcast);
         slot.payload_mut(0).copy_from_slice(&datagram.payload);
@@ -198,6 +202,7 @@ impl Client {
     }
 
     async fn send_broadcast_exclusive(&self, datagram: &Datagram) -> Result<ResponseFuture, Error> {
+        tracing::trace!(cmd = ?datagram.cmd, "sending exclusive broadcast frame");
         let mut slot = self.pool.acquire().await;
         slot.reset(Distribution::Broadcast);
         slot.payload_mut(0).copy_from_slice(&datagram.payload);
@@ -214,7 +219,8 @@ impl Client {
 
     pub async fn send_checked(&self, frame: Frame<'_>) -> Result<(), Error> {
         let result = self.send(frame).await?.await?.check();
-        if result.is_err() {
+        if let Err(e) = &result {
+            tracing::warn!(error = %e, "device reported an error; mirror desynced");
             self.mark_desynced();
         }
         result
@@ -231,6 +237,7 @@ impl Client {
             })
             .await
         {
+            tracing::warn!("RT thread is closed; frame dropped");
             self.pool.release(e.0.frame);
             self.mark_desynced();
             return Err(Error::RtClosed);
@@ -247,12 +254,14 @@ impl Client {
     }
 
     pub async fn stop(&self) -> Result<(), Error> {
+        tracing::debug!("sending stop");
         let result = self
             .send_broadcast(&Datagram::no_payload(Cmd::Stop))
             .await?
             .await?
             .check();
-        if result.is_err() {
+        if let Err(e) = &result {
+            tracing::warn!(error = %e, "device reported an error; mirror desynced");
             self.mark_desynced();
         }
         result
@@ -346,6 +355,7 @@ impl Client {
     }
 
     pub async fn close(&self) -> Result<(), Error> {
+        tracing::debug!("closing client");
         self.closed.store(true, Ordering::Release);
         let join = self
             .join

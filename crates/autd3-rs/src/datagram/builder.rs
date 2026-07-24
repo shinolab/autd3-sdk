@@ -43,11 +43,13 @@ impl<'a> DatagramBuilder<'a> {
     }
 
     pub fn push<C: Command<'a>>(&mut self, cmd: C) -> &mut Self {
+        tracing::trace!(command = std::any::type_name::<C>(), "pushed command");
         cmd.expand(self);
         self
     }
 
     pub(crate) fn reject(&mut self, e: PayloadError) -> &mut Self {
+        tracing::debug!(error = %e, "command rejected; build will fail");
         self.invalid.get_or_insert(e);
         self
     }
@@ -74,6 +76,13 @@ impl<'a> DatagramBuilder<'a> {
         if let Some(e) = invalid {
             self.reject(e);
         }
+
+        tracing::trace!(
+            command = std::any::type_name::<C>(),
+            assigned = new_devices.iter().filter(|ops| !ops.is_empty()).count(),
+            num_devices,
+            "pushed per-device commands"
+        );
 
         let fuse = matches!(
             self.ops.last(),
@@ -136,6 +145,9 @@ impl<'a> DatagramBuilder<'a> {
             Some(Mirror::Synced(states)) => Some(states.clone()),
             _ => None,
         };
+        if guard.is_some() && work.is_none() {
+            tracing::debug!("mirror is desynced; skipping state validation");
+        }
 
         for step in &self.ops {
             match step {
@@ -158,9 +170,16 @@ impl<'a> DatagramBuilder<'a> {
             }
         }
 
+        let reflected = work.is_some();
         if let (Some(guard), Some(work)) = (guard.as_mut(), work) {
             **guard = Mirror::Synced(work);
         }
+        tracing::trace!(
+            steps = self.ops.len(),
+            frames = out.len(),
+            mirror_reflected = reflected,
+            "built frames"
+        );
         Ok(())
     }
 }

@@ -62,6 +62,7 @@ impl ResyncState {
 
     fn on_ack_progress(&mut self, pending: &mut VecDeque<Inflight>) {
         if self.active {
+            tracing::debug!("ack progress during resync");
             self.rounds = 0;
             self.reset_tried = false;
             if let Some(head) = pending.front_mut() {
@@ -78,6 +79,7 @@ impl ResyncState {
         let Some(head) = pending.front_mut() else {
             if self.active {
                 self.reset();
+                tracing::debug!("resync complete");
             }
             return HeadAction::None;
         };
@@ -89,6 +91,10 @@ impl ResyncState {
         if !self.active {
             self.active = true;
             self.rounds = 0;
+            tracing::debug!(
+                seq = head.seq.get(),
+                "head frame unacked past timeout; entering resync"
+            );
             return HeadAction::None;
         }
         self.rounds += 1;
@@ -100,6 +106,10 @@ impl ResyncState {
             HeadAction::GiveUp
         } else {
             self.reset_tried = true;
+            tracing::warn!(
+                seq = head.seq.get(),
+                "resync rounds exhausted; resetting sequence"
+            );
             HeadAction::Reset
         }
     }
@@ -235,6 +245,11 @@ impl<L: Link> RtThread<L> {
     }
 
     fn handshake(&mut self) -> Result<(), String> {
+        tracing::debug!(
+            cycles = self.config.reset_resend_cycles.get(),
+            low_latency = self.config.low_latency,
+            "starting handshake"
+        );
         for buf in &mut self.tx_bufs {
             TxFrame::new(Seq::ZERO, Cmd::Reset).write_to(buf);
         }
@@ -267,9 +282,11 @@ impl<L: Link> RtThread<L> {
                 .cycle(&self.tx_bufs, &mut self.rx_bufs)
                 .map_err(|e| format!("handshake failed: {e}"))?;
             if rx_valid && self.rx_bufs.iter().all(|rx| rx[0] == Seq::ZERO.get()) {
+                tracing::info!("low-latency mode established");
                 return Ok(Seq::new(1));
             }
         }
+        tracing::warn!("low-latency negotiation failed; staying in FIFO mode");
         Ok(Seq::ZERO)
     }
 
@@ -287,6 +304,7 @@ impl<L: Link> RtThread<L> {
             let rx_valid = match self.link.cycle(&self.tx_bufs, &mut self.rx_bufs) {
                 Ok(CycleOutcome { rx_valid }) => rx_valid,
                 Err(e) => {
+                    tracing::error!("link cycle failed: {e}");
                     link_error = Some(format!("link cycle failed: {e}"));
                     break;
                 }
@@ -306,6 +324,7 @@ impl<L: Link> RtThread<L> {
 
     fn stage_tx(&mut self) -> StageOutcome {
         if self.reset_remaining > 0 {
+            tracing::trace!(remaining = self.reset_remaining, "staging reset frame");
             for buf in &mut self.tx_bufs {
                 TxFrame::new(Seq::ZERO, Cmd::Reset).write_to(buf);
             }
@@ -313,6 +332,7 @@ impl<L: Link> RtThread<L> {
         }
         if self.resync.active {
             if let Some(front) = self.pending.front() {
+                tracing::trace!(seq = front.seq.get(), "retransmitting head frame");
                 stage_frame(front.seq, &front.frame, &mut self.tx_bufs);
             }
             return StageOutcome::Staged;
@@ -328,6 +348,7 @@ impl<L: Link> RtThread<L> {
         if !exclusive_inflight && self.pending.len() < self.config.max_inflight.get() {
             match self.cmd_rx.try_recv() {
                 Ok(msg) if msg.exclusive && !self.pending.is_empty() => {
+                    tracing::trace!("holding exclusive frame until pending drains");
                     self.held_exclusive = Some(msg);
                 }
                 Ok(msg) => self.stage_new(msg),
@@ -341,6 +362,12 @@ impl<L: Link> RtThread<L> {
     fn stage_new(&mut self, msg: CmdMessage) {
         let seq = self.next_seq;
         self.next_seq = self.next_seq.next();
+        tracing::trace!(
+            seq = seq.get(),
+            cmd = ?msg.frame.cmd_for(0),
+            exclusive = msg.exclusive,
+            "staged frame"
+        );
         stage_frame(seq, &msg.frame, &mut self.tx_bufs);
         self.pending.push_back(Inflight {
             seq,
@@ -365,6 +392,10 @@ impl<L: Link> RtThread<L> {
             self.next_seq = seq;
             self.resync.active = !self.pending.is_empty();
             self.resync.rounds = 0;
+            tracing::debug!(
+                pending = self.pending.len(),
+                "sequence reset complete; replaying pending frames"
+            );
         }
     }
 
@@ -375,6 +406,10 @@ impl<L: Link> RtThread<L> {
             HeadAction::None => {}
             HeadAction::Reset => self.reset_remaining = self.config.reset_resend_cycles.get(),
             HeadAction::GiveUp => {
+                tracing::warn!(
+                    pending = self.pending.len(),
+                    "sequence reset did not recover; failing pending frames with timeout"
+                );
                 self.fail_pending_timeout();
                 self.resync.reset();
             }
@@ -383,7 +418,15 @@ impl<L: Link> RtThread<L> {
 
     fn handle_stale(&mut self) {
         self.stale_run = self.stale_run.saturating_add(1);
+        tracing::trace!(run = self.stale_run, "no valid rx this cycle");
         if self.stale_run >= self.stale_limit {
+            if !self.pending.is_empty() {
+                tracing::warn!(
+                    pending = self.pending.len(),
+                    cycles = self.stale_run,
+                    "no valid rx from link; failing pending frames with timeout"
+                );
+            }
             self.fail_pending_timeout();
             self.resync.reset();
             self.stale_run = 0;
@@ -406,6 +449,7 @@ impl<L: Link> RtThread<L> {
             let bit = 1u128 << device;
             for entry in self.pending.iter_mut().take(ack_offset + 1) {
                 if entry.acked & bit == 0 {
+                    tracing::trace!(device, seq = entry.seq.get(), "device acked frame");
                     entry.acked |= bit;
                     entry.frame.record_data(device, rx.data);
                 }
@@ -418,6 +462,7 @@ impl<L: Link> RtThread<L> {
             .is_some_and(|entry| entry.acked == self.all_acked)
         {
             let entry = self.pending.pop_front().expect("just checked");
+            tracing::trace!(seq = entry.seq.get(), "frame acked by all devices");
             entry
                 .response_tx
                 .send(Ok(Response::from_slice(entry.frame.data())));
@@ -439,6 +484,7 @@ impl<L: Link> RtThread<L> {
     }
 
     fn teardown(&mut self, link_error: Option<&str>) {
+        tracing::debug!(pending = self.pending.len(), "RT thread stopping");
         let cause = || link_error.map_or(Error::RtClosed, |msg| Error::Link(msg.to_owned()));
         if let Some(msg) = self.held_exclusive.take() {
             msg.response_tx.send(Err(cause()));
