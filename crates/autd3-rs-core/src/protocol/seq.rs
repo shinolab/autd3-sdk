@@ -21,13 +21,6 @@ impl Seq {
     }
 
     #[must_use]
-    pub const fn is_newer_than(self, other: Self) -> bool {
-        #[allow(clippy::cast_possible_wrap)]
-        let signed_diff = self.0.wrapping_sub(other.0) as i8;
-        signed_diff > 0
-    }
-
-    #[must_use]
     pub const fn distance_from(self, other: Self) -> u8 {
         self.0.wrapping_sub(other.0)
     }
@@ -36,29 +29,6 @@ impl Seq {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn newer_within_same_half() {
-        assert!(Seq::new(5).is_newer_than(Seq::new(3)));
-        assert!(!Seq::new(3).is_newer_than(Seq::new(5)));
-    }
-
-    #[test]
-    fn not_newer_when_equal() {
-        for v in 0u8..=255 {
-            let s = Seq::new(v);
-            assert!(
-                !s.is_newer_than(s),
-                "SEQ {v} should not be newer than itself"
-            );
-        }
-    }
-
-    #[test]
-    fn newer_across_wraparound() {
-        assert!(Seq::new(0x02).is_newer_than(Seq::new(0xFE)));
-        assert!(!Seq::new(0xFE).is_newer_than(Seq::new(0x02)));
-    }
 
     #[test]
     fn next_wraps() {
@@ -81,7 +51,6 @@ mod tests {
         for delta in 1u8..=127 {
             let a = Seq::new(delta);
             let b = Seq::ZERO;
-            assert!(a.is_newer_than(b), "delta {delta} should classify a > b");
             assert_eq!(a.distance_from(b), delta);
         }
     }
