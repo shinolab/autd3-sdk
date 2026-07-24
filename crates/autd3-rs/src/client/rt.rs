@@ -235,10 +235,10 @@ impl<L: Link> RtThread<L> {
     }
 
     fn handshake(&mut self) -> Result<(), String> {
-        for seq in [Seq::ZERO, Seq::new(1)] {
-            for buf in &mut self.tx_bufs {
-                TxFrame::new(seq, Cmd::Reset).write_to(buf);
-            }
+        for buf in &mut self.tx_bufs {
+            TxFrame::new(Seq::ZERO, Cmd::Reset).write_to(buf);
+        }
+        for _ in 0..self.config.reset_resend_cycles.get() {
             self.link
                 .cycle(&self.tx_bufs, &mut self.rx_bufs)
                 .map_err(|e| format!("handshake failed: {e}"))?;
