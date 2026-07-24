@@ -4,7 +4,7 @@ use autd3_rs_core::Interface;
 use ethercrab::{MainDeviceConfig, RetryBehaviour, Timeouts, subdevice_group::DcConfiguration};
 
 use super::EtherCrabLinkOptionFull;
-use crate::rt::{RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
+use crate::osal::thread::{RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
 
 const PERFORMANCE_TX_RX_PRIORITY: u8 = 99;
 

@@ -4,11 +4,6 @@ use std::time::Duration;
 use ethercrab::Timeouts;
 use ethercrab::error::{Error, TimeoutError};
 
-// ethercrab arms an `async_io::Timer` for every PDU, and registering one costs a
-// `BTreeMap` node in the async-io reactor on every bus cycle. `Timer::after` falls
-// back to a timer that is never registered when the deadline overflows, so an
-// infinite `pdu` timeout keeps the hot path allocation-free. Every call site that
-// relied on it must apply `with_timeout` instead.
 pub(crate) fn without_pdu_timer(timeouts: Timeouts) -> Timeouts {
     Timeouts {
         pdu: Duration::MAX,
