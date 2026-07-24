@@ -1,7 +1,7 @@
 import asyncio
 
 import autd3_link_nop as nop
-from autd3 import Client, ClientConfig, MAX_IN_FLIGHT
+from autd3 import Client, ClientConfig, MAX_INFLIGHT
 from autd3.geometry import Autd3, Geometry
 
 
@@ -13,7 +13,7 @@ async def main() -> None:
         # ANCHOR: config
         ClientConfig(
             timeout_cycles=10,
-            max_inflight=MAX_IN_FLIGHT,
+            max_inflight=MAX_INFLIGHT,
             max_resync_rounds=8,
             low_latency=False,
             reset_resend_cycles=2,

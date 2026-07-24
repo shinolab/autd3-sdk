@@ -79,7 +79,7 @@ pub(crate) fn tx_rx_task_blocking(
         }
     };
 
-    let mut in_flight = 0usize;
+    let mut inflight = 0usize;
 
     while running.load(Ordering::Relaxed) {
         pdu_tx.replace_waker(&waker);
@@ -98,17 +98,17 @@ pub(crate) fn tx_rx_task_blocking(
 
         if sent_this_iter > 0 {
             sq.transmit(&mut cap, pcap::sendqueue::SendSync::Off)?;
-            in_flight += sent_this_iter;
+            inflight += sent_this_iter;
         }
 
-        if in_flight > 0 {
+        if inflight > 0 {
             let deadline = Instant::now() + RX_DRAIN_TIMEOUT;
             while running.load(Ordering::Relaxed) {
                 match cap.next_packet() {
                     Ok(packet) => match pdu_rx.receive_frame(packet.data) {
                         Ok(ReceiveAction::Processed) => {
-                            in_flight -= 1;
-                            if in_flight == 0 {
+                            inflight -= 1;
+                            if inflight == 0 {
                                 break;
                             }
                         }
@@ -117,7 +117,7 @@ pub(crate) fn tx_rx_task_blocking(
                     },
                     Err(pcap::Error::NoMorePackets | pcap::Error::TimeoutExpired) => {
                         if Instant::now() >= deadline {
-                            in_flight = 0;
+                            inflight = 0;
                             break;
                         }
                     }

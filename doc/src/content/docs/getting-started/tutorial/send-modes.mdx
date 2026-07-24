@@ -32,7 +32,7 @@ import csSample from "@codes/csharp/examples/tutorial/send-modes.cs?raw";
 応答を待たずに次々と送り, 後で応答をまとめて回収する方式.
 `send` はフレームをキューに積んだ時点で `ResponseFuture` を返し, その `ResponseFuture` を await するとデバイスの応答 (`Response`) が得られる.
 `Response` は `check` でデバイスエラーの有無を検証できる.
-送信キューの最大サイズは `MAX_IN_FLIGHT (127)`.
+送信キューの最大サイズは `MAX_INFLIGHT (127)`.
 `ResponseFuture` を FIFO で保持し, キューが埋まったら最古の応答を回収する.
 1 フレームごとに応答を待たないため, スループットが高い. 
 

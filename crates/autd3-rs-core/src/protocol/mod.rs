@@ -10,4 +10,4 @@ pub use rx_frame::RxFrame;
 pub use seq::Seq;
 pub use tx_frame::TxFrame;
 
-pub const MAX_IN_FLIGHT: usize = 127;
+pub const MAX_INFLIGHT: usize = 127;

@@ -11,7 +11,7 @@ use autd3_rs::commands::{ConfigPattern, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Emission, LoopBehavior, PatternBank, SamplingConfig};
-use autd3_rs::{Client, ClientConfig, Frames, Length, MAX_IN_FLIGHT, ResponseFuture};
+use autd3_rs::{Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 
 const TOTAL_POINTS: usize = 1000;
@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
     let elapsed = run_stop_and_wait(&client, &geometry, &targets, wavelength).await?;
     report("stop-and-wait", elapsed);
 
-    let elapsed = run_streaming(&client, &geometry, &targets, wavelength, MAX_IN_FLIGHT).await?;
+    let elapsed = run_streaming(&client, &geometry, &targets, wavelength, MAX_INFLIGHT).await?;
     report("streaming", elapsed);
 
     client.stop().await?;

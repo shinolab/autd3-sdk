@@ -145,7 +145,7 @@ fn stage_new(&mut self, msg: CmdMessage) {
     let seq = self.next_seq;
     self.next_seq = self.next_seq.next();
     stage_frame(seq, &msg.frame, &mut self.tx_bufs);
-    self.pending.push_back(InFlight {
+    self.pending.push_back(Inflight {
         seq,
         frame: msg.frame,
         acked: 0,
@@ -176,7 +176,7 @@ TX フレームの先頭 2 byte が `Seq` と `Cmd`, 残りがペイロードで
 送信中のコマンドは `pending` に積まれる.
 
 ```rust
-struct InFlight {
+struct Inflight {
     seq: Seq,
     frame: Slot,
     acked: u128,          // ACK を返したデバイスのビットマスク
@@ -291,7 +291,7 @@ while pending.front().is_some_and(|e| e.acked == all_acked) {
 ## streaming
 
 `send` が返す `ResponseFuture` をすぐに `await` せず貯めれば, 応答を待たずに次のフレームを送れる.
-このとき `pending` に複数の `InFlight` が並ぶ.
+このとき `pending` に複数の `Inflight` が並ぶ.
 
 ```
 pending: ┌────────┬────────┬────────┐

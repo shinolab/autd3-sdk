@@ -15,7 +15,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.py()
         .import("atexit")?
         .call_method1("register", (m.getattr("_shutdown_runtime")?,))?;
-    m.add("MAX_IN_FLIGHT", autd3_rs::MAX_IN_FLIGHT)?;
+    m.add("MAX_INFLIGHT", autd3_rs::MAX_INFLIGHT)?;
     m.add_class::<client::Client>()?;
     m.add_class::<client::Checker>()?;
     m.add_class::<client::Response>()?;

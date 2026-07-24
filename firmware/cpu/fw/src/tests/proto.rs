@@ -69,7 +69,7 @@ fn duplicate_frame_is_suppressed_at_isr_boundary() {
 }
 
 #[test]
-fn reset_during_in_flight_drain_overrides_stale_frame() {
+fn reset_during_inflight_drain_overrides_stale_frame() {
     let mut h = Harness::new();
 
     let stale = write_pattern_buffer(0, 0, 0, &[0x5A5A]);

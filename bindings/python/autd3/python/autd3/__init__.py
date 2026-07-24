@@ -9,7 +9,7 @@ from autd3_core import Autd3Error, Duration
 
 from . import commands, geometry, units, value
 from ._autd3 import (
-    MAX_IN_FLIGHT,
+    MAX_INFLIGHT,
     Checker,
     Client,
     ClientConfig,
@@ -22,7 +22,7 @@ from ._autd3 import (
 )
 
 __all__ = [
-    "MAX_IN_FLIGHT",
+    "MAX_INFLIGHT",
     "Autd3Error",
     "Checker",
     "Client",

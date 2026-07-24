@@ -63,7 +63,7 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 | `rt_affinity`          | `Option<CoreId>`         | `None`  | CPU core affinity of the RT thread (OS default if unspecified) |
 | `validate_state`       | `bool`                   | `true`  | Enable pre-send validation                                 |
 
-`max_inflight` errors if it exceeds `MAX_IN_FLIGHT (127)`.
+`max_inflight` errors if it exceeds `MAX_INFLIGHT (127)`.
 
 Enabling `low_latency` bypasses the receive buffer inside the firmware, improving latency.
 However, this may make operation unstable.
