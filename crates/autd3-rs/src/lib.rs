@@ -20,7 +20,7 @@ pub use autd3_rs_core::value::{ControlPoint, ControlPoints, PulseWidth, PulseWid
 
 pub use autd3_rs_core::{
     Angle, Autd3, ConstStateChecker, CycleOutcome, Device, DeviceState, EncodeError, Freq,
-    Geometry, Interface, IntoLink, Length, Link, LinkError, LinkStats, LinkStatus, MAX_IN_FLIGHT,
+    Geometry, Interface, IntoLink, Length, Link, LinkError, LinkStats, LinkStatus, MAX_INFLIGHT,
     Point3, Quaternion, RtSchedulePolicy, StateCheck, UnitQuaternion, UnitVector3, Vector3,
     Velocity, offset, point,
 };

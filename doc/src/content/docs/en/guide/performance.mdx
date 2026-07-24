@@ -32,7 +32,7 @@ In the subsequent hot loop, only `WritePatternBuffer` is sent.
 ## Streaming Transmission
 
 The hot loop above uses [streaming](/autd3-sdk/en/getting-started/tutorial/send-modes/), which sends one after another without waiting for a response.
-`send` queues frames, and once `MAX_IN_FLIGHT` is exceeded, the oldest responses are collected.
+`send` queues frames, and once `MAX_INFLIGHT` is exceeded, the oldest responses are collected.
 Since the round-trip latency is hidden and throughput improves further, choose streaming over stop-and-wait for high-frequency updates.
 
 ## Buffer Reuse

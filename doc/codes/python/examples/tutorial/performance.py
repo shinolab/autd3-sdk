@@ -6,7 +6,7 @@ import numpy as np
 
 import autd3_link_ethercrab as ethercrab
 import autd3_pattern as pattern
-from autd3 import MAX_IN_FLIGHT, Client, ClientConfig
+from autd3 import MAX_INFLIGHT, Client, ClientConfig
 from autd3.commands import ConfigPattern, SetSilencer, WritePatternBuffer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
@@ -73,7 +73,7 @@ async def main() -> None:
             )
         )
         for frame in builder.build():
-            if len(pending) >= MAX_IN_FLIGHT:
+            if len(pending) >= MAX_INFLIGHT:
                 (await pending.popleft()).check()
             pending.append(await client.send(frame))
     while pending:

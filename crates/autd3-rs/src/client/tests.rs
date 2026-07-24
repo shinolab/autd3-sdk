@@ -11,7 +11,7 @@ use crate::firmware_version::{FirmwareVersion, Version};
 use crate::geometry::Device;
 use crate::geometry::{Autd3, Geometry};
 use crate::link::{CycleOutcome, Link};
-use crate::protocol::{Cmd, MAX_IN_FLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
+use crate::protocol::{Cmd, MAX_INFLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
 
 use crate::telemetry::Telemetry;
 use autd3_cpu_wire::Mode;
@@ -1035,7 +1035,7 @@ async fn open_rejects_oversize_max_inflight() {
         link,
         ClientConfig {
             timeout_cycles: 10,
-            max_inflight: NonZeroUsize::new(MAX_IN_FLIGHT + 1).unwrap(),
+            max_inflight: NonZeroUsize::new(MAX_INFLIGHT + 1).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: 2,
@@ -1236,7 +1236,7 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
     .unwrap();
 
     slave.lock().unwrap().drop_next = u32::MAX;
-    let in_flight = client
+    let inflight = client
         .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadErrorDetail))
         .await
         .unwrap();
@@ -1246,7 +1246,7 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
         .unwrap();
 
     fail.store(true, AtomicOrdering::Relaxed);
-    let in_flight_err = in_flight.await.unwrap_err();
+    let inflight_err = inflight.await.unwrap_err();
     let queued_err = queued.await.unwrap_err();
 
     client.close().await.unwrap();
@@ -1255,7 +1255,7 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
         max_inflight.get(),
         "every slot must be back in the pool once the RT thread has torn down"
     );
-    assert!(matches!(in_flight_err, Error::Link(_)));
+    assert!(matches!(inflight_err, Error::Link(_)));
     assert!(
         matches!(queued_err, Error::Link(_)),
         "a command still queued in the channel must be failed with the link error, got {queued_err:?}"

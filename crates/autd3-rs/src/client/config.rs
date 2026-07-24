@@ -5,7 +5,7 @@ use core_affinity::CoreId;
 use thread_priority::ThreadPriority;
 
 use crate::error::{Error, PayloadError};
-use crate::protocol::MAX_IN_FLIGHT;
+use crate::protocol::MAX_INFLIGHT;
 
 pub const MAX_DEVICES: usize = 128;
 
@@ -26,7 +26,7 @@ impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             timeout_cycles: 10,
-            max_inflight: NonZeroUsize::new(MAX_IN_FLIGHT).unwrap(),
+            max_inflight: NonZeroUsize::new(MAX_INFLIGHT).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: 2,
@@ -40,8 +40,8 @@ impl Default for ClientConfig {
 
 impl ClientConfig {
     pub(super) fn validate(self) -> Result<Self, Error> {
-        if self.max_inflight.get() > MAX_IN_FLIGHT {
-            return Err(PayloadError::MaxInFlightTooLarge { max: MAX_IN_FLIGHT }.into());
+        if self.max_inflight.get() > MAX_INFLIGHT {
+            return Err(PayloadError::MaxInflightTooLarge { max: MAX_INFLIGHT }.into());
         }
         Ok(self)
     }

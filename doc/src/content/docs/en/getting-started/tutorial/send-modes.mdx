@@ -32,7 +32,7 @@ Because it proceeds to the next frame only after confirming that each update has
 A method that sends one frame after another without waiting for responses, and collects the responses together later.
 `send` returns a `ResponseFuture` at the point the frame is enqueued, and awaiting that `ResponseFuture` yields the device's response (`Response`).
 `Response` can be validated for device errors with `check`.
-The maximum size of the send queue is `MAX_IN_FLIGHT (127)`.
+The maximum size of the send queue is `MAX_INFLIGHT (127)`.
 `ResponseFuture`s are held in FIFO order, and when the queue is full the oldest response is collected.
 Because it does not wait for a response on every frame, throughput is high.
 

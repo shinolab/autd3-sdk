@@ -71,13 +71,13 @@ async def main() -> None:
             await client.send_checked(frame)
     report("stop-and-wait", time.perf_counter() - start)
 
-    # streaming: keep MAX_IN_FLIGHT frames on the wire, draining the oldest response
+    # streaming: keep MAX_INFLIGHT frames on the wire, draining the oldest response
     # once the window is full.
     start = time.perf_counter()
     pending = collections.deque()
     for dg in datagrams:
         for frame in dg:
-            if len(pending) >= autd3.MAX_IN_FLIGHT:
+            if len(pending) >= autd3.MAX_INFLIGHT:
                 (await pending.popleft()).check()
             pending.append(await client.send(frame))
     while pending:

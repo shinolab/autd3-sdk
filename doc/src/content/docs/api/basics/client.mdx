@@ -63,7 +63,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | `rt_affinity`          | `Option<CoreId>`      | `None`          | RT スレッドの CPU affinity (未指定なら OS 既定)      |
 | `validate_state`       | `bool`                | `true`          | 送信前検証を有効にする                     |
 
-`max_inflight` は `MAX_IN_FLIGHT (127)` を超えるとエラーになる.
+`max_inflight` は `MAX_INFLIGHT (127)` を超えるとエラーになる.
 
 `low_latency` を有効にすると, ファームウェア内部での受信バッファをバイパスするため, レイテンシが改善する. ただし, 動作が不安定になる可能性がある.
 

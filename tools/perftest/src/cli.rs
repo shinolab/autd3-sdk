@@ -3,7 +3,7 @@ use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use autd3_rs::MAX_IN_FLIGHT;
+use autd3_rs::MAX_INFLIGHT;
 use autd3_rs_link_twincat::AmsNetId;
 use clap::{ArgGroup, Parser, ValueEnum};
 
@@ -125,7 +125,7 @@ pub struct Cli {
     #[arg(
         long = "max-inflight",
         alias = "inflight",
-        default_value_t = MAX_IN_FLIGHT,
+        default_value_t = MAX_INFLIGHT,
         help = "Pipeline depth in streaming mode (maps to ClientConfig.max_inflight). Ignored in stop-and-wait."
     )]
     pub max_inflight: usize,
@@ -158,10 +158,10 @@ pub struct Cli {
 impl Cli {
     pub fn validate(&self) -> Result<(), String> {
         if self.mode == Mode::Streaming
-            && (self.max_inflight == 0 || self.max_inflight > MAX_IN_FLIGHT)
+            && (self.max_inflight == 0 || self.max_inflight > MAX_INFLIGHT)
         {
             return Err(format!(
-                "--max-inflight {} must be in 1..={MAX_IN_FLIGHT}",
+                "--max-inflight {} must be in 1..={MAX_INFLIGHT}",
                 self.max_inflight,
             ));
         }

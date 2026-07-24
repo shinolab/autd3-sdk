@@ -21,6 +21,6 @@ pub use link::{
     StateCheck,
 };
 pub use protocol::{
-    Cmd, DeviceErrorCode, MAX_IN_FLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, RxFrame, Seq,
+    Cmd, DeviceErrorCode, MAX_INFLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, RxFrame, Seq,
     TX_FRAME_BYTES, TxFrame, describe_device_error,
 };

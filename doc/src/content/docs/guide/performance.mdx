@@ -32,7 +32,7 @@ import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
 ## streaming 送信
 
 上のホットループでは, 応答を待たずに次々と送る[streaming](/autd3-sdk/getting-started/tutorial/send-modes/)を使っている.
-`send` でフレームをキューに積み, `MAX_IN_FLIGHT` を超えたら古い応答から回収する.
+`send` でフレームをキューに積み, `MAX_INFLIGHT` を超えたら古い応答から回収する.
 往復レイテンシが隠蔽されてスループットがさらに向上するため, 高頻度更新では stop-and-wait より streaming を選ぶ. 
 
 ## バッファの再利用

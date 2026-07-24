@@ -25,7 +25,7 @@ pub(super) struct CmdMessage {
     pub(super) exclusive: bool,
 }
 
-struct InFlight {
+struct Inflight {
     seq: Seq,
     frame: Slot,
     acked: u128,
@@ -60,7 +60,7 @@ impl ResyncState {
         *self = Self::default();
     }
 
-    fn on_ack_progress(&mut self, pending: &mut VecDeque<InFlight>) {
+    fn on_ack_progress(&mut self, pending: &mut VecDeque<Inflight>) {
         if self.active {
             self.rounds = 0;
             self.reset_tried = false;
@@ -72,7 +72,7 @@ impl ResyncState {
 
     fn advance_head(
         &mut self,
-        pending: &mut VecDeque<InFlight>,
+        pending: &mut VecDeque<Inflight>,
         config: &ClientConfig,
     ) -> HeadAction {
         let Some(head) = pending.front_mut() else {
@@ -185,7 +185,7 @@ struct RtThread<L: Link> {
     rx_bufs: Vec<[u8; RX_FRAME_BYTES]>,
 
     next_seq: Seq,
-    pending: VecDeque<InFlight>,
+    pending: VecDeque<Inflight>,
     held_exclusive: Option<CmdMessage>,
     resync: ResyncState,
     stale_run: u32,
@@ -342,7 +342,7 @@ impl<L: Link> RtThread<L> {
         let seq = self.next_seq;
         self.next_seq = self.next_seq.next();
         stage_frame(seq, &msg.frame, &mut self.tx_bufs);
-        self.pending.push_back(InFlight {
+        self.pending.push_back(Inflight {
             seq,
             frame: msg.frame,
             acked: 0,

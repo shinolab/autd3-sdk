@@ -7,7 +7,7 @@ use autd3_rs::commands::{ConfigPattern, SetSilencer, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{LoopBehavior, PatternBank, SamplingConfig};
-use autd3_rs::{Client, ClientConfig, Frames, MAX_IN_FLIGHT, ResponseFuture};
+use autd3_rs::{Client, ClientConfig, Frames, MAX_INFLIGHT, ResponseFuture};
 use autd3_rs_link_nop::Nop;
 
 const NUM_POINTS: usize = 1000;
@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
 
     // ANCHOR: hot_loop
     let mut buf = Frames::default();
-    let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(MAX_IN_FLIGHT);
+    let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(MAX_INFLIGHT);
     for i in 0..NUM_POINTS {
         let theta = 2.0 * PI * i as f32 / NUM_POINTS as f32;
         let target = center
@@ -73,7 +73,7 @@ async fn main() -> Result<()> {
         });
         builder.build_into(&mut buf)?;
         for frame in &buf {
-            if pending.len() >= MAX_IN_FLIGHT {
+            if pending.len() >= MAX_INFLIGHT {
                 pending.pop_front().expect("non-empty").await?.check()?;
             }
             pending.push_back(client.send(frame).await?);

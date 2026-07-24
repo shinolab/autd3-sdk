@@ -64,7 +64,7 @@ where
 #[derive(Clone, Copy, Debug, PartialEq, Error)]
 pub enum PayloadError {
     #[error("max_inflight must be <= {max}")]
-    MaxInFlightTooLarge { max: usize },
+    MaxInflightTooLarge { max: usize },
 
     #[error("link must expose 1..={max} devices, got {got}")]
     DeviceCountOutOfRange { got: usize, max: usize },

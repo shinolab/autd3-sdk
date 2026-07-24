@@ -6,7 +6,7 @@ use anyhow::Result;
 use autd3_rs::commands::{Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::{Client, ClientConfig, Length, MAX_IN_FLIGHT, ResponseFuture};
+use autd3_rs::{Client, ClientConfig, Length, MAX_INFLIGHT, ResponseFuture};
 use autd3_rs_link_nop::Nop;
 
 const NUM_POINTS: usize = 1000;
@@ -84,7 +84,7 @@ async fn streaming(
 ) -> Result<()> {
     // ANCHOR: streaming
     let mut patterns = geometry.pattern_buffer();
-    let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(MAX_IN_FLIGHT);
+    let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(MAX_INFLIGHT);
     for &target in targets {
         autd3_rs_pattern::focus(
             geometry,
@@ -96,7 +96,7 @@ async fn streaming(
         let mut builder = client.datagram_builder();
         builder.push(Pattern::new(&patterns));
         for frame in &builder.build()? {
-            if pending.len() >= MAX_IN_FLIGHT {
+            if pending.len() >= MAX_INFLIGHT {
                 pending.pop_front().expect("non-empty").await?.check()?;
             }
             pending.push_back(client.send(frame).await?);
