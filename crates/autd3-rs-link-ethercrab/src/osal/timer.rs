@@ -46,17 +46,8 @@ mod imp {
     }
 
     pub(crate) async fn async_sleep_until(deadline: Instant) {
-        loop {
-            let now = Instant::now();
-            if now >= deadline {
-                break;
-            }
-            let remaining = deadline - now;
-            if remaining > Duration::from_micros(50) {
-                std::thread::sleep(remaining.saturating_sub(Duration::from_micros(50)));
-            } else {
-                std::hint::spin_loop();
-            }
+        if let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+            spin_sleep::sleep(remaining);
         }
     }
 }
