@@ -680,13 +680,13 @@ async fn send_rejects_wrong_datagram_count() {
 }
 
 #[tokio::test]
-async fn handshake_sends_two_resets_with_seqs_zero_then_one() {
+async fn handshake_sends_reset_resend_cycles_seq_zero_resets() {
     let (_client, slave) = open_client().await;
     tokio::time::sleep(Duration::from_millis(20)).await;
     let s = slave.lock().unwrap();
     assert!(s.sent_log.len() >= 2);
     assert_eq!(s.sent_log[0], (0, Cmd::Reset));
-    assert_eq!(s.sent_log[1], (1, Cmd::Reset));
+    assert_eq!(s.sent_log[1], (0, Cmd::Reset));
     assert!(s.sent_log.contains(&(0, Cmd::Clear)));
     assert!(s.sent_log.contains(&(1, Cmd::Synchronize)));
 }
@@ -902,13 +902,16 @@ async fn recovers_after_transient_stale_cycles() {
     assert_eq!(s.ack, 2);
 }
 
-fn seq0_reset_count(slave: &Arc<StdMutex<Slave>>) -> usize {
-    slave
-        .lock()
-        .unwrap()
+fn post_handshake_reset_count(slave: &Arc<StdMutex<Slave>>) -> usize {
+    let s = slave.lock().unwrap();
+    let after_handshake = s
         .sent_log
         .iter()
-        .filter(|(seq, cmd)| *cmd == Cmd::Reset && *seq == 0)
+        .position(|(_, cmd)| *cmd != Cmd::Reset)
+        .map_or(s.sent_log.len(), |i| i);
+    s.sent_log[after_handshake..]
+        .iter()
+        .filter(|(_, cmd)| *cmd == Cmd::Reset)
         .count()
 }
 
@@ -938,8 +941,8 @@ async fn inflight_held_across_stale_recovers_without_reset() {
     assert_eq!(s.ack, 2);
     drop(s);
     assert_eq!(
-        seq0_reset_count(&slave),
-        1,
+        post_handshake_reset_count(&slave),
+        0,
         "no Reset escalation when the held front still matches expected_seq"
     );
 }
@@ -984,7 +987,11 @@ async fn streaming_holds_window_across_stale_and_recovers() {
         );
     }
     assert_eq!(slave.lock().unwrap().expected_seq, 10);
-    assert_eq!(seq0_reset_count(&slave), 1, "no Reset escalation needed");
+    assert_eq!(
+        post_handshake_reset_count(&slave),
+        0,
+        "no Reset escalation needed"
+    );
 }
 
 #[tokio::test]
@@ -1006,8 +1013,8 @@ async fn frozen_ahead_desync_recovers_via_reset_resync() {
         "Reset re-sync must recover the desync instead of waiting for SEQ wraparound"
     );
     assert!(
-        seq0_reset_count(&slave) > 1,
-        "expected a Reset escalation beyond the single handshake seq-0 reset"
+        post_handshake_reset_count(&slave) > 0,
+        "expected a Reset escalation after the handshake"
     );
 }
 
