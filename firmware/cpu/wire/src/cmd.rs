@@ -5,7 +5,6 @@ crate::wire_enum! {
         SetMode = 0x02,
         Clear = 0x03,
         Nop = 0x04,
-        Stop = 0x05,
         WritePatternBuffer = 0x10,
         ConfigPattern = 0x11,
         ChangePatternBank = 0x12,

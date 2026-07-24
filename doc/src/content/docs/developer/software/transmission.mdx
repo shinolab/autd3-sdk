@@ -513,7 +513,7 @@ timeout_cycles × (1 + 2 × max_resync_rounds) + reset_resend_cycles
 - `ack` を `0xFF` にする
 - FIFO に積まれた未処理フレームを破棄する
 
-`Reset` と `Stop` は FIFO を無視して即座に発行される.
+`Reset` は FIFO を無視して即座に発行される.
 
 ホスト側は Reset 送出が終わったところで `pending` の SEQ を 0 から振り直す.
 

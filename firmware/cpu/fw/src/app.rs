@@ -1,5 +1,5 @@
 use core::cell::Cell;
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering};
+use core::sync::atomic::{AtomicU8, AtomicU16, Ordering};
 
 use zerocopy::FromBytes;
 
@@ -33,7 +33,6 @@ pub struct Cpu {
     fifo_flush_seen: AtomicU16,
     preempt_tx: AtomicU16,
     preempt_expected: AtomicU8,
-    preempt_mute: AtomicBool,
     telemetry: [AtomicU8; Telemetry::COUNT],
     al_err_ticks: Cell<u16>,
     proto: ProtoState,
@@ -66,7 +65,6 @@ impl Cpu {
             fifo_flush_seen: AtomicU16::new(0),
             preempt_tx: AtomicU16::new(0),
             preempt_expected: AtomicU8::new(0),
-            preempt_mute: AtomicBool::new(false),
             telemetry: [const { AtomicU8::new(0) }; Telemetry::COUNT],
             al_err_ticks: Cell::new(0),
             proto: ProtoState::new(),
@@ -93,7 +91,6 @@ impl Cpu {
         self.fifo_flush_seen.store(0, Ordering::Relaxed);
         self.preempt_tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
         self.preempt_expected.store(0, Ordering::Relaxed);
-        self.preempt_mute.store(false, Ordering::Relaxed);
     }
 
     pub(crate) fn reset_telemetry(&self) {
@@ -121,7 +118,7 @@ impl Cpu {
         let ticks = self.al_err_ticks.get().saturating_add(1);
         self.al_err_ticks.set(ticks);
         if ticks == FAILSAFE_TICKS {
-            cmd::stop::mute(port);
+            cmd::failsafe::mute(port);
             self.bump(Telemetry::Failsafe);
         }
     }
@@ -173,18 +170,10 @@ impl Cpu {
 
         let head = self.fifo_head.load(Ordering::Relaxed);
         let cmd = Cmd::from_u8(raw_cmd);
-        let preempt = matches!(cmd, Some(Cmd::Reset | Cmd::Stop));
+        let preempt = cmd == Some(Cmd::Reset);
         if preempt {
-            if cmd == Some(Cmd::Reset) {
-                self.preempt_tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
-                self.preempt_expected.store(0, Ordering::Relaxed);
-                self.preempt_mute.store(false, Ordering::Relaxed);
-            } else {
-                self.preempt_tx.store(pack_tx(seq, 0), Ordering::Relaxed);
-                self.preempt_expected
-                    .store(seq.wrapping_add(1), Ordering::Relaxed);
-                self.preempt_mute.store(true, Ordering::Relaxed);
-            }
+            self.preempt_tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
+            self.preempt_expected.store(0, Ordering::Relaxed);
             self.fifo_flush_head.store(head, Ordering::Relaxed);
             self.fifo_flush_gen.store(
                 self.fifo_flush_gen.load(Ordering::Relaxed).wrapping_add(1),
@@ -230,7 +219,7 @@ impl Cpu {
         self.fifo_tail
             .store(tail.wrapping_add(1), Ordering::Release);
         if self.fifo_flush_gen.load(Ordering::Acquire) != flush_gen {
-            self.apply_preempt(port);
+            self.apply_preempt();
         }
         true
     }
@@ -239,10 +228,7 @@ impl Cpu {
         while self.process_one(port) {}
     }
 
-    fn apply_preempt<P: Port>(&self, port: &mut P) {
-        if self.preempt_mute.load(Ordering::Relaxed) {
-            cmd::stop::mute(port);
-        }
+    fn apply_preempt(&self) {
         self.proto.expected_seq.store(
             self.preempt_expected.load(Ordering::Relaxed),
             Ordering::Relaxed,
@@ -253,8 +239,8 @@ impl Cpu {
 
     fn handle_frame<P: Port>(&self, port: &mut P, in_frame: &RxFrame) {
         let cmd = Cmd::from_u8(in_frame.cmd);
-        if matches!(cmd, Some(Cmd::Reset | Cmd::Stop)) {
-            self.apply_preempt(port);
+        if cmd == Some(Cmd::Reset) {
+            self.apply_preempt();
             return;
         }
         if in_frame.seq == self.proto.expected_seq.load(Ordering::Relaxed) {
@@ -294,7 +280,7 @@ impl Cpu {
 
     fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> u8 {
         let result = match cmd {
-            Cmd::Reset | Cmd::Stop | Cmd::Nop => Ok(()),
+            Cmd::Reset | Cmd::Nop => Ok(()),
             Cmd::ReadCpuFwVersionMajor => return self.proto.fw_version_major.get(),
             Cmd::ReadCpuFwVersionMinor => return self.proto.fw_version_minor.get(),
             Cmd::ReadCpuFwVersionPatch => return self.proto.fw_version_patch.get(),

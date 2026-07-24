@@ -12,9 +12,7 @@ use crate::proto::{
     AL_STATUS_CODE_SM_WATCHDOG, AL_STATUS_CODE_SYNC_ERROR, Cmd, Error, FAILSAFE_TICKS,
     OUTPUT_MASK_WORDS, Telemetry,
 };
-use crate::tests::builders::{
-    change_mod_bank_with_margin, config_mod_rep, force_fan, output_mask, write_pattern_buffer,
-};
+use crate::tests::builders::{change_mod_bank_with_margin, config_mod_rep, force_fan, output_mask};
 use crate::tests::mock::{Frame, Harness};
 
 fn read_telemetry(seq: u8, id: u8) -> Frame {
@@ -33,69 +31,6 @@ fn assert_muted(h: &Harness) {
     for i in 0..OUTPUT_MASK_WORDS {
         assert_eq!(h.output_mask(i), 0);
     }
-}
-
-#[test]
-fn stop_mutes_output_and_bypasses_seq_check() {
-    let mut h = Harness::new();
-    unmute(&mut h, 0);
-
-    h.deliver_no_drain(&Frame::new(0x77, Cmd::Stop));
-
-    assert_muted(&h);
-    assert_eq!(h.ack(), 0x77);
-    assert_eq!(h.data(), 0);
-    assert_eq!(h.expected_seq(), 0x78);
-}
-
-#[test]
-fn stop_is_processed_inline_and_flushes_queue_in_fifo_mode() {
-    let mut h = Harness::new();
-    unmute(&mut h, 0);
-
-    h.deliver_no_drain(&Frame::new(1, Cmd::Nop));
-    h.deliver_no_drain(&Frame::new(2, Cmd::Nop));
-
-    h.deliver_no_drain(&Frame::new(3, Cmd::Stop));
-    assert_muted(&h);
-    assert_eq!(h.ack(), 3);
-    assert_eq!(h.expected_seq(), 4);
-
-    assert!(!h.process_one());
-    assert_eq!(h.expected_seq(), 4);
-
-    h.deliver(&Frame::new(4, Cmd::Nop));
-    assert_eq!(h.ack(), 4);
-    assert_eq!(h.expected_seq(), 5);
-}
-
-#[test]
-fn stop_during_drain_reapplies_mute_and_proto_state() {
-    let mut h = Harness::new();
-    unmute(&mut h, 0);
-
-    h.deliver_no_drain(&write_pattern_buffer(1, 0, 0, &[0x5A5A]));
-    h.arm_isr_frame(9, Cmd::Stop);
-
-    assert!(h.process_one());
-    assert_muted(&h);
-    assert_eq!(h.ack(), 9);
-    assert_eq!(h.data(), 0);
-    assert_eq!(h.expected_seq(), 10);
-
-    assert!(!h.process_one());
-}
-
-#[test]
-fn stop_keeps_pattern_state_and_allows_restart() {
-    let mut h = Harness::new();
-    unmute(&mut h, 0);
-    h.deliver(&Frame::new(1, Cmd::Stop));
-    assert_muted(&h);
-
-    let mask = vec![true; NUM_TRANSDUCERS];
-    h.deliver(&output_mask(2, &mask));
-    assert_eq!(h.output_mask(0), 0xFFFF);
 }
 
 #[test]
