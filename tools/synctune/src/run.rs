@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -162,7 +162,7 @@ fn client_config(common: &Common, max_inflight: usize) -> ClientConfig {
         max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
         max_resync_rounds: common.max_resync_rounds,
         low_latency: common.low_latency,
-        reset_resend_cycles: 2,
+        reset_resend_cycles: NonZeroU32::new(2).unwrap(),
         rt_priority: common.rt_priority.map(|p| {
             ThreadPriority::Crossplatform(
                 ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),

@@ -373,7 +373,7 @@ impl<L: Link> RtThread<L> {
         self.route_acks();
         match self.resync.advance_head(&mut self.pending, &self.config) {
             HeadAction::None => {}
-            HeadAction::Reset => self.reset_remaining = self.config.reset_resend_cycles,
+            HeadAction::Reset => self.reset_remaining = self.config.reset_resend_cycles.get(),
             HeadAction::GiveUp => {
                 self.fail_pending_timeout();
                 self.resync.reset();
