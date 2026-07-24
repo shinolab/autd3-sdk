@@ -50,7 +50,8 @@ impl ClientConfig {
                 .ok_or_else(|| PyValueError::new_err("max_resync_rounds must be >= 1"))?;
         }
         if let Some(v) = reset_resend_cycles {
-            inner.reset_resend_cycles = v;
+            inner.reset_resend_cycles = NonZeroU32::new(v)
+                .ok_or_else(|| PyValueError::new_err("reset_resend_cycles must be >= 1"))?;
         }
         if let Some(v) = rt_priority {
             let value = ThreadPriorityValue::try_from(v)

@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -278,7 +278,7 @@ async fn run_with_link<T: IntoLink>(
             max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
             max_resync_rounds: cli.max_resync_rounds,
             low_latency: cli.low_latency,
-            reset_resend_cycles: 2,
+            reset_resend_cycles: NonZeroU32::new(2).unwrap(),
             rt_priority: cli.rt_priority.map(|p| {
                 ThreadPriority::Crossplatform(
                     ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),

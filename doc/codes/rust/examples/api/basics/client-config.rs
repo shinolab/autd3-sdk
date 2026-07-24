@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
             max_inflight: NonZeroUsize::new(MAX_INFLIGHT).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            reset_resend_cycles: 2,
+            reset_resend_cycles: NonZeroU32::new(2).unwrap(),
             rt_priority: None,
             rt_policy: RtSchedulePolicy::Fifo,
             rt_affinity: None,

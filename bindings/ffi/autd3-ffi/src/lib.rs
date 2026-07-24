@@ -350,9 +350,10 @@ pub extern "C" fn autd3_client_config_new(
     rt_affinity: usize,
     validate_state: bool,
 ) -> *mut ClientConfig {
-    let (Some(max_inflight), Some(max_resync_rounds)) = (
+    let (Some(max_inflight), Some(max_resync_rounds), Some(reset_resend_cycles)) = (
         NonZeroUsize::new(max_inflight),
         NonZeroU32::new(max_resync_rounds),
+        NonZeroU32::new(reset_resend_cycles),
     ) else {
         return std::ptr::null_mut();
     };
