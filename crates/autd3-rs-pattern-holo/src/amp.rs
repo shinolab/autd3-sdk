@@ -1,4 +1,4 @@
-pub const ABSOLUTE_THRESHOLD_OF_HEARING: f32 = 20e-6;
+const ABSOLUTE_THRESHOLD_OF_HEARING: f32 = 20e-6;
 
 #[allow(non_camel_case_types)]
 pub struct dB;

@@ -197,7 +197,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             let link_cfg = EtherCrabLinkOption {
                 iface: cli.interface.clone().into(),
                 sync0_period: cli.sync0_period,
-                sync0_shift: sync0_shift(cli.sync0_period, cli.shift_percent),
+                sync0_shift: cli.sync0_shift(),
                 ..Default::default()
             };
             let link = Box::pin(EtherCrabLink::open(link_cfg))
@@ -212,7 +212,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             let link_cfg = SoemLinkOption {
                 iface: cli.interface.clone().into(),
                 sync0_period: cli.sync0_period,
-                sync0_shift: sync0_shift(cli.sync0_period, cli.shift_percent),
+                sync0_shift: cli.sync0_shift(),
                 ..Default::default()
             };
             let link = tokio::task::spawn_blocking(move || SoemLink::open(link_cfg))
@@ -629,11 +629,6 @@ impl Progress {
             eprintln!();
         }
     }
-}
-
-fn sync0_shift(period: Duration, shift_percent: u8) -> Duration {
-    let nanos = period.as_nanos() * u128::from(shift_percent) / 100;
-    Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
 }
 
 fn spawn_signal_listener(flag: Arc<AtomicBool>) {

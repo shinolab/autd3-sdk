@@ -197,4 +197,9 @@ impl Cli {
         }
         Ok(())
     }
+
+    pub fn sync0_shift(&self) -> Duration {
+        let nanos = self.sync0_period.as_nanos() * u128::from(self.shift_percent) / 100;
+        Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
+    }
 }

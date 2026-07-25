@@ -24,7 +24,7 @@ fn render(cli: &Cli) -> String {
 
 fn link_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
     let sync0_period = cli.sync0_period;
-    let sync0_shift = shift_duration(cli.sync0_period, cli.shift_percent);
+    let sync0_shift = cli.sync0_shift();
     match cli.link {
         LinkKind::Ethercrab | LinkKind::Soem => {
             let (link, option) = match cli.link {
@@ -104,11 +104,6 @@ fn imports_block(link: LinkKind, imports: &[&str]) -> String {
         LinkKind::Nop => {}
     }
     out
-}
-
-fn shift_duration(period: Duration, percent: u8) -> Duration {
-    let nanos = period.as_nanos() * u128::from(percent) / 100;
-    Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
 }
 
 fn fmt_duration(d: Duration) -> String {
