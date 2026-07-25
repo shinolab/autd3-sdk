@@ -152,7 +152,6 @@ dependencies = [
  "chrono",
  "nalgebra",
  "thiserror 2.0.18",
- "tokio",
  "zerocopy 0.8.52",
 ]
 
@@ -255,7 +254,6 @@ dependencies = [
  "autd3-rs-core",
  "crossbeam-channel",
  "thiserror 2.0.18",
- "tokio",
  "tracing",
 ]
 
