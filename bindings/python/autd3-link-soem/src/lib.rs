@@ -1,8 +1,9 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_python_capsule::{
-    BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, link_into_capsule,
+    BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, join_err,
+    link_into_capsule, link_runtime,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -11,20 +12,6 @@ use autd3_rs_link_soem::{SoemLinkOption as CoreOption, StateChecker};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 use tokio::sync::Mutex;
-
-fn link_runtime() -> &'static tokio::runtime::Runtime {
-    static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    RT.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("failed to build soem tokio runtime")
-    })
-}
-
-fn join_err(e: tokio::task::JoinError) -> Error {
-    Error::Link(e.to_string())
-}
 
 fn opt_duration(obj: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Duration>> {
     match obj {

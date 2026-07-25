@@ -64,12 +64,35 @@ impl CompletionCtx {
 mod client {
     use std::future::Future;
     use std::pin::Pin;
-    use std::sync::Arc;
+    use std::sync::{Arc, OnceLock};
+    use std::time::Duration;
 
     use autd3_rs::Error;
     use autd3_rs::{ClientConfig, Frames, Response, ResponseFuture, Telemetry};
     use autd3_rs_core::Geometry;
     use autd3_rs_core::link::DeviceState;
+
+    #[must_use]
+    pub fn link_runtime() -> &'static tokio::runtime::Runtime {
+        static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+        RT.get_or_init(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build tokio runtime")
+        })
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
+    pub fn join_err(e: tokio::task::JoinError) -> Error {
+        Error::Link(e.to_string())
+    }
+
+    #[must_use]
+    pub fn to_ns(d: Duration) -> u64 {
+        u64::try_from(d.as_nanos()).unwrap_or(u64::MAX)
+    }
 
     pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send>>;
 
@@ -143,5 +166,5 @@ mod client {
 #[cfg(feature = "client")]
 pub use client::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
-    client_opener,
+    client_opener, join_err, link_runtime, to_ns,
 };

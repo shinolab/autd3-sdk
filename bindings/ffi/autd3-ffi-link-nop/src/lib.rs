@@ -1,28 +1,13 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
-    client_opener, into_handle,
+    client_opener, into_handle, join_err, link_runtime,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::{ConstStateChecker, StateCheck};
 use tokio::sync::Mutex;
-
-fn link_runtime() -> &'static tokio::runtime::Runtime {
-    static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    RT.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("failed to build nop tokio runtime")
-    })
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn join_err(e: tokio::task::JoinError) -> Error {
-    Error::Link(e.to_string())
-}
 
 struct NopBackend {
     client: Arc<Client>,

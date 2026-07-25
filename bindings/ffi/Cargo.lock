@@ -110,6 +110,7 @@ version = "0.3.0"
 dependencies = [
  "autd3-rs",
  "autd3-rs-core",
+ "tokio",
 ]
 
 [[package]]

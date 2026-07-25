@@ -1,31 +1,16 @@
 use std::ffi::{CStr, c_char};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
-    client_opener, into_handle,
+    client_opener, into_handle, join_err, link_runtime, to_ns,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::Interface;
 use autd3_rs_link_ethercrab::{EtherCrabLinkOption as CoreOption, StateChecker};
 use tokio::sync::Mutex;
-
-fn link_runtime() -> &'static tokio::runtime::Runtime {
-    static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    RT.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("failed to build ethercrab tokio runtime")
-    })
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn join_err(e: tokio::task::JoinError) -> Error {
-    Error::Link(e.to_string())
-}
 
 struct EtherCrabBackend {
     client: Arc<Client>,
@@ -242,10 +227,6 @@ pub struct Autd3EtherCrabLinkOptionValues {
     pub sync0_shift_ns: u64,
     pub sync_tolerance_ns: u64,
     pub sync_timeout_ns: u64,
-}
-
-fn to_ns(d: Duration) -> u64 {
-    u64::try_from(d.as_nanos()).unwrap_or(u64::MAX)
 }
 
 unsafe fn write_option(option: &CoreOption, out: *mut Autd3EtherCrabLinkOptionValues) -> i32 {

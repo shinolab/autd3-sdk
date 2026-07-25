@@ -98,7 +98,7 @@ mod link {
     use std::future::Future;
     use std::pin::Pin;
     use std::ptr::NonNull;
-    use std::sync::Arc;
+    use std::sync::{Arc, OnceLock};
 
     use autd3_rs::Error;
     use autd3_rs::{ClientConfig, Frames, Response, ResponseFuture};
@@ -109,6 +109,23 @@ mod link {
 
     pub const LINK_CAPSULE_NAME: &CStr = c"autd3.link.v1";
     pub const FRAME_CAPSULE_NAME: &CStr = c"autd3.frame.v1";
+
+    #[must_use]
+    pub fn link_runtime() -> &'static tokio::runtime::Runtime {
+        static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+        RT.get_or_init(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build tokio runtime")
+        })
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
+    pub fn join_err(e: tokio::task::JoinError) -> Error {
+        Error::Link(e.to_string())
+    }
 
     pub fn frame_into_capsule(
         py: Python<'_>,
@@ -203,6 +220,6 @@ mod link {
 #[cfg(feature = "client")]
 pub use link::{
     BoxFuture, ClientBackend, ClientOpener, FRAME_CAPSULE_NAME, LINK_CAPSULE_NAME, LinkStatusData,
-    ResponseToken, client_opener, frame_from_capsule, frame_into_capsule, link_into_capsule,
-    take_client_opener,
+    ResponseToken, client_opener, frame_from_capsule, frame_into_capsule, join_err,
+    link_into_capsule, link_runtime, take_client_opener,
 };
