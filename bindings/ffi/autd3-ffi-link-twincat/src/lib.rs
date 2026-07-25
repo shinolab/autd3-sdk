@@ -1,11 +1,11 @@
 use std::ffi::{CStr, c_char};
 use std::net::IpAddr;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
-    client_opener, into_handle,
+    client_opener, into_handle, join_err, link_runtime,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -26,21 +26,6 @@ fn build_timeouts(
         read: has_read.then(|| Duration::from_nanos(read_ns)),
         write: has_write.then(|| Duration::from_nanos(write_ns)),
     }
-}
-
-fn link_runtime() -> &'static tokio::runtime::Runtime {
-    static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    RT.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("failed to build twincat tokio runtime")
-    })
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn join_err(e: tokio::task::JoinError) -> Error {
-    Error::Link(e.to_string())
 }
 
 struct TwinCATBackend {

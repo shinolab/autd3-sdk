@@ -11,9 +11,10 @@ description = "Internal cross-cdylib C ABI contracts shared by autd3 FFI crates.
 [dependencies]
 autd3-rs-core.workspace = true
 autd3-rs = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
 
 [features]
-client = ["dep:autd3-rs"]
+client = ["dep:autd3-rs", "dep:tokio"]
 
 [lints]
 workspace = true
