@@ -13,7 +13,6 @@ name = "autd3_emulator"
 crate-type = ["cdylib"]
 
 [dependencies]
-autd3-rs.workspace = true
 autd3-rs-core.workspace = true
 autd3-rs-emulator.workspace = true
 autd3-python-capsule = { workspace = true, features = ["client"] }

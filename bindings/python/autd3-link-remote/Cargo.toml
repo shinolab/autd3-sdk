@@ -14,7 +14,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 autd3-rs.workspace = true
-autd3-rs-core.workspace = true
 autd3-rs-link-remote.workspace = true
 autd3-python-capsule = { workspace = true, features = ["client"] }
 pyo3.workspace = true
