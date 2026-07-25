@@ -1,6 +1,8 @@
+use autd3_cpu_fw::params::{VERSION_NUM_MAJOR, VERSION_NUM_MINOR, VERSION_NUM_PATCH};
+use autd3_cpu_fw::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 use autd3_rs_core::link::{CycleOutcome, Link};
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, RX_FRAME_BYTES, Seq, TX_FRAME_BYTES, TxFrame};
-use autd3_rs_firmware_emulator::{Audit, Device, cpu_fw_version, fpga_fw_version};
+use autd3_rs_firmware_emulator::{Audit, Device};
 
 // ADDR_ECAT_SYNC_CYCLE_0 in the controller BRAM (params.svh); the firmware writes
 // the Sync0 cycle time here in 20.48MHz ticks (low word).
@@ -24,7 +26,8 @@ fn reset_acks_with_sentinel() {
 
 #[test]
 fn reads_cpu_firmware_version() {
-    let (expected_major, expected_minor, expected_patch) = cpu_fw_version();
+    let (expected_major, expected_minor, expected_patch) =
+        (FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH);
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset));
 
@@ -63,7 +66,12 @@ fn reads_fpga_firmware_version() {
 #[test]
 fn fpga_reports_version_after_init() {
     let device = Device::new(NUM_TRANSDUCERS);
-    assert_eq!(device.fpga().fpga_version(), fpga_fw_version());
+    let expected = (
+        u16::from(VERSION_NUM_MAJOR),
+        u16::from(VERSION_NUM_MINOR),
+        u16::from(VERSION_NUM_PATCH),
+    );
+    assert_eq!(device.fpga().fpga_version(), expected);
 }
 
 #[test]

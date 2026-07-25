@@ -1,4 +1,4 @@
-use crate::FIFO_DEPTH;
+use crate::app::FIFO_DEPTH;
 use zerocopy::FromZeros;
 
 use crate::cmd::set_mode::SetModePayload;

@@ -42,6 +42,10 @@ name = "holo"
 path = "src/bin/holo.rs"
 
 [[bin]]
+name = "group"
+path = "src/bin/group.rs"
+
+[[bin]]
 name = "remote_server"
 path = "src/bin/remote_server.rs"
 

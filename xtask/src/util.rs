@@ -71,7 +71,7 @@ pub fn capture_lenient(program: &str, args: &[&str], cwd: &Path) -> Result<Strin
     Ok(stdout.trim().to_string())
 }
 
-pub fn workspace_member_packages(workspace_dir: &Path) -> Result<Vec<String>> {
+fn workspace_member_packages(workspace_dir: &Path) -> Result<Vec<String>> {
     let manifest = workspace_dir.join("Cargo.toml");
     let text = std::fs::read_to_string(&manifest)
         .with_context(|| format!("failed to read {}", manifest.display()))?;

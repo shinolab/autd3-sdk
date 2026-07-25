@@ -14,6 +14,6 @@ pub mod proto;
 mod tests;
 pub mod version;
 
-pub use app::{Cpu, FIFO_DEPTH};
+pub use app::Cpu;
 pub use port::Port;
 pub use version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
