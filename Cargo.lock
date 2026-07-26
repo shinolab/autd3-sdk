@@ -280,6 +280,7 @@ dependencies = [
  "approx",
  "autd3-rs-core",
  "autd3-rs-pattern",
+ "criterion 0.8.2",
  "nalgebra",
  "rand",
  "thiserror 2.0.18",

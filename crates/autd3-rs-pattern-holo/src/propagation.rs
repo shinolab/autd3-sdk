@@ -25,10 +25,9 @@ pub(crate) fn propagate(
     const P0: f32 = T4010A1_AMPLITUDE / (4. * PI);
     let diff = target - tr_pos;
     let dist = diff.norm();
-    let theta = tr_dir.cross(&diff).norm().atan2(tr_dir.dot(&diff));
-    let r = P0 / dist * directivity.value(theta);
-    let phase = wavenumber * dist;
-    Complex::new(r * phase.cos(), r * phase.sin())
+    let r = P0 / dist * directivity.value_at(tr_dir, &diff);
+    let (sin, cos) = (wavenumber * dist).sin_cos();
+    Complex::new(r * cos, r * sin)
 }
 
 pub(crate) fn make_propagation_matrix<B: LinAlgBackend>(
@@ -42,21 +41,18 @@ pub(crate) fn make_propagation_matrix<B: LinAlgBackend>(
     let wavenumber = 2.0 * PI / wavelength.mm();
     let m = foci.len();
     let n = mask.num_enabled(geometry);
-    let data = geometry
-        .iter()
-        .enumerate()
-        .flat_map(|(d, dev)| {
-            dev.positions()
-                .iter()
-                .zip(dev.directions())
-                .enumerate()
-                .filter(move |&(t, _)| mask.is_enabled(d, t))
-                .flat_map(move |(_, (&pos, &dir))| {
-                    foci.iter()
-                        .map(move |f| propagate(pos, dir, f.point, wavenumber, directivity))
-                })
-        })
-        .collect();
+    let mut data = Vec::with_capacity(m * n);
+    data.extend(geometry.iter().enumerate().flat_map(|(d, dev)| {
+        dev.positions()
+            .iter()
+            .zip(dev.directions())
+            .enumerate()
+            .filter(move |&(t, _)| mask.is_enabled(d, t))
+            .flat_map(move |(_, (&pos, &dir))| {
+                foci.iter()
+                    .map(move |f| propagate(pos, dir, f.point, wavenumber, directivity))
+            })
+    }));
     backend.make_matrix(m, n, data)
 }
 
