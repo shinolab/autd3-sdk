@@ -8,7 +8,7 @@ pub(crate) const VERSION: u8 = 3;
 pub(crate) const TAG_FRAME: u8 = 0x01;
 pub(crate) const TAG_CLOSE: u8 = 0x02;
 
-const LAYOUT_BYTES: usize = 24;
+const LAYOUT_BYTES: usize = size_of::<TransducerLayout>();
 
 pub(crate) fn encode_geometry(devices: &[DeviceLayout]) -> Vec<u8> {
     let num_devices = u32::try_from(devices.len()).unwrap_or(u32::MAX);
