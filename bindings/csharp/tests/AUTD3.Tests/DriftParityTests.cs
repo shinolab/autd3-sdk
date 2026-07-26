@@ -58,8 +58,8 @@ namespace AUTD3.Tests
         public void EtherCrabLinkOptionPresets()
         {
             var safe = AUTD3.Link.EtherCrabLinkOption.SafeDefault();
-            Assert.Equal(TimeSpan.FromMilliseconds(1), safe.Sync0Period);
-            Assert.Equal(safe.Sync0Period, safe.Sync0Shift);
+            Assert.Equal(TimeSpan.FromMilliseconds(2), safe.Sync0Period);
+            Assert.Equal(TimeSpan.Zero, safe.Sync0Shift);
             Assert.Equal(TimeSpan.FromSeconds(10), safe.SyncTimeout);
 
             var perf = AUTD3.Link.EtherCrabLinkOption.PerformanceDefault();

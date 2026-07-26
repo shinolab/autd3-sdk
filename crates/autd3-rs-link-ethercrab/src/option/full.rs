@@ -79,13 +79,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn safe_default_uses_full_cycle_shift() {
+    fn safe_default_uses_2ms_cycle_and_zero_shift() {
         let opt = EtherCrabLinkOptionFull::safe_default();
-        assert_eq!(opt.dc_configuration.sync0_period, Duration::from_millis(1));
-        assert_eq!(
-            opt.dc_configuration.sync0_shift,
-            opt.dc_configuration.sync0_period
-        );
+        assert_eq!(opt.dc_configuration.sync0_period, Duration::from_millis(2));
+        assert_eq!(opt.dc_configuration.sync0_shift, Duration::ZERO);
     }
 
     #[test]
