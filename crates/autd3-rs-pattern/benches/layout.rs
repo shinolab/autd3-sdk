@@ -1,15 +1,3 @@
-// Rationale for the per-device pattern buffer layout (kept as a regression guard and as
-// the evidence behind the design choice). Compares, under a PRE-ALLOCATED & REUSED buffer
-// (allocation excluded, since `Geometry::pattern_buffer()` is built once and reused):
-//
-//   ARRAY : Vec<[Emission; 249]>   (former layout — contiguous, compile-time length)
-//   VEC   : Vec<Vec<Emission>>     (current layout — per-device heap block)
-//
-// Both variants run the IDENTICAL math (`focus_transducer`) and the IDENTICAL wire-pack
-// loop, differing only in the container type, so the benchmark isolates the layout effect.
-// Measured difference is within noise (±3%), which is why the codebase standardised on the
-// ergonomic `Vec<Vec<Emission>>` everywhere.
-
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
