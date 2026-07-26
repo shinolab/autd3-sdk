@@ -3,7 +3,6 @@ use core::f32::consts::PI;
 use nalgebra::Complex;
 
 use autd3_rs_core::common::Length;
-use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::{Geometry, Point3, UnitVector3};
 use autd3_rs_core::value::{Emission, Phase};
 
@@ -88,12 +87,7 @@ pub(crate) fn quantize(
         .fold(0.0_f32, f32::max)
         .sqrt();
     let mut idx = 0;
-    for (d, (slot, dev)) in dst.iter_mut().zip(geometry.iter()).enumerate() {
-        assert_eq!(
-            dev.num_transducers(),
-            Autd3::NUM_TRANSDUCERS,
-            "not an AUTD3 device"
-        );
+    for (d, (slot, _dev)) in dst.iter_mut().zip(geometry.iter()).enumerate() {
         for (t, e) in slot.iter_mut().enumerate() {
             if mask.is_enabled(d, t) {
                 let v = q[idx];
