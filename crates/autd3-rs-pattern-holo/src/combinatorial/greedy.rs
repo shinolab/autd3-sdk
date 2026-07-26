@@ -86,6 +86,7 @@ pub fn greedy(
     }
 
     let intensity = option.constraint.convert(1.0, 1.0);
+    let amp = f32::from(intensity.0) / f32::from(Intensity::MAX.0);
 
     let mut cache = vec![Complex::new(0.0, 0.0); m];
     let mut tmp = vec![Complex::new(0.0, 0.0); m];
@@ -95,7 +96,7 @@ pub fn greedy(
         let pos = dev.positions()[t];
         let dir = dev.directions()[t];
         for (r, f) in tmp.iter_mut().zip(foci) {
-            *r = propagate(pos, dir, f.point, wavenumber, option.directivity);
+            *r = propagate(pos, dir, f.point, wavenumber, option.directivity) * amp;
         }
 
         let mut best_phase = Complex::new(0.0, 0.0);
