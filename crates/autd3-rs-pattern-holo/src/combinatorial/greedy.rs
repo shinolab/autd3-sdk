@@ -5,7 +5,6 @@ use nalgebra::Complex;
 use rand::seq::SliceRandom;
 
 use autd3_rs_core::common::Length;
-use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::{Device, Geometry};
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
@@ -83,7 +82,7 @@ pub fn greedy(
     indices.shuffle(&mut rand::rng());
 
     for slot in dst.iter_mut() {
-        *slot = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
+        slot.fill(Emission::default());
     }
 
     let intensity = option.constraint.convert(1.0, 1.0);
