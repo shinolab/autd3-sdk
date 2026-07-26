@@ -5,7 +5,7 @@ use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs_pattern::wavelength;
 use autd3_rs_pattern_holo::{
-    ControlPoint, Directivity, EmissionConstraint, GspatOption, NalgebraBackend, Pa,
+    ControlPoint, Directivity, EmissionConstraint, NalgebraBackend, GspatOption, Pa,
     TransducerMask, gspat,
 };
 
@@ -17,6 +17,7 @@ fn main() -> anyhow::Result<()> {
     let mut dst = geometry.pattern_buffer();
 
     gspat(
+        &NalgebraBackend,
         &geometry,
         &[
             ControlPoint {
@@ -33,7 +34,6 @@ fn main() -> anyhow::Result<()> {
             repeat: NonZeroUsize::new(100).unwrap(),
             constraint: EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             directivity: Directivity::Sphere,
-            backend: NalgebraBackend,
             mask: TransducerMask::AllEnabled,
         },
         &mut dst,

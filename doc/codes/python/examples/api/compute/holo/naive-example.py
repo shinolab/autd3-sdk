@@ -7,7 +7,6 @@ from autd3_pattern_holo import (
     Directivity,
     EmissionConstraint,
     NaiveOption,
-    NalgebraBackend,
     Pa,
     TransducerMask,
     naive,
@@ -33,7 +32,6 @@ naive(
     NaiveOption(
         constraint=EmissionConstraint.Clamp(0x00, 0xFF),
         directivity=Directivity.Sphere,
-        backend=NalgebraBackend(),
         mask=TransducerMask.AllEnabled,
     ),
     dst,

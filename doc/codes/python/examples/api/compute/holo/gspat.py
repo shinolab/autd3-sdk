@@ -7,7 +7,6 @@ from autd3_pattern_holo import (
     Directivity,
     EmissionConstraint,
     GspatOption,
-    NalgebraBackend,
     Pa,
     TransducerMask,
     gspat,
@@ -31,7 +30,6 @@ wavelength = calc_wavelength(340 * m / s)
 repeat = 100
 constraint = EmissionConstraint.Clamp(0x00, 0xFF)
 directivity = Directivity.Sphere
-backend = NalgebraBackend()
 mask = TransducerMask.AllEnabled
 option = (
     # ANCHOR: option
@@ -39,7 +37,6 @@ option = (
         repeat,
         constraint,
         directivity,
-        backend,
         mask,
     )
     # ANCHOR_END: option

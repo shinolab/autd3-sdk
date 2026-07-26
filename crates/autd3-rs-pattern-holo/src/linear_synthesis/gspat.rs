@@ -4,7 +4,7 @@ use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::value::{Emission, Intensity};
 
-use crate::backend::{LinAlgBackend, NalgebraBackend};
+use crate::backend::LinAlgBackend;
 use crate::constraint::EmissionConstraint;
 use crate::control_point::ControlPoint;
 use crate::directivity::Directivity;
@@ -13,21 +13,19 @@ use crate::mask::TransducerMask;
 use crate::propagation::{make_propagation_matrix, quantize, target_amplitudes};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GspatOption<'a, B = NalgebraBackend> {
+pub struct GspatOption<'a> {
     pub repeat: NonZeroUsize,
     pub constraint: EmissionConstraint,
     pub directivity: Directivity,
-    pub backend: B,
     pub mask: TransducerMask<'a>,
 }
 
-impl Default for GspatOption<'_, NalgebraBackend> {
+impl Default for GspatOption<'_> {
     fn default() -> Self {
         Self {
             repeat: NonZeroUsize::new(100).unwrap(),
             constraint: EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             directivity: Directivity::Sphere,
-            backend: NalgebraBackend,
             mask: TransducerMask::AllEnabled,
         }
     }
@@ -35,16 +33,16 @@ impl Default for GspatOption<'_, NalgebraBackend> {
 
 #[allow(clippy::many_single_char_names)]
 pub fn gspat<B: LinAlgBackend>(
+    backend: &B,
     geometry: &Geometry,
     foci: &[ControlPoint],
     wavelength: Length,
-    option: &GspatOption<'_, B>,
+    option: &GspatOption<'_>,
     dst: &mut [Vec<Emission>],
 ) -> Result<(), HoloError> {
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
-    let backend = &option.backend;
     let mask = option.mask;
     mask.validate(geometry);
 

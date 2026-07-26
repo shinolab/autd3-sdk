@@ -210,22 +210,6 @@ impl PyTransducerMask {
 }
 
 #[pyclass(
-    name = "NalgebraBackend",
-    module = "autd3_pattern_holo",
-    from_py_object
-)]
-#[derive(Clone)]
-pub struct PyNalgebraBackend;
-
-#[pymethods]
-impl PyNalgebraBackend {
-    #[new]
-    fn new() -> Self {
-        Self
-    }
-}
-
-#[pyclass(
     name = "NaiveOption",
     module = "autd3_pattern_holo",
     skip_from_py_object
@@ -241,16 +225,13 @@ impl NaiveOption {
     #[pyo3(signature = (
         constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
-        backend = PyNalgebraBackend,
         mask = PyTransducerMask::all_enabled(),
     ))]
     fn new(
         constraint: EmissionConstraint,
         directivity: Directivity,
-        backend: PyNalgebraBackend,
         mask: PyTransducerMask,
     ) -> Self {
-        let _ = backend;
         Self {
             inner: CoreNaiveOption {
                 constraint: constraint.0,
@@ -275,17 +256,14 @@ impl GsOption {
         repeat = 100,
         constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
-        backend = PyNalgebraBackend,
         mask = PyTransducerMask::all_enabled(),
     ))]
     fn new(
         repeat: usize,
         constraint: EmissionConstraint,
         directivity: Directivity,
-        backend: PyNalgebraBackend,
         mask: PyTransducerMask,
     ) -> PyResult<Self> {
-        let _ = backend;
         Ok(Self {
             inner: CoreGsOption {
                 repeat: NonZeroUsize::new(repeat)
@@ -316,17 +294,14 @@ impl GspatOption {
         repeat = 100,
         constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
-        backend = PyNalgebraBackend,
         mask = PyTransducerMask::all_enabled(),
     ))]
     fn new(
         repeat: usize,
         constraint: EmissionConstraint,
         directivity: Directivity,
-        backend: PyNalgebraBackend,
         mask: PyTransducerMask,
     ) -> PyResult<Self> {
-        let _ = backend;
         Ok(Self {
             inner: CoreGspatOption {
                 repeat: NonZeroUsize::new(repeat)
@@ -419,6 +394,7 @@ fn naive(
     };
     with_dst_buffer(dst, |dst| {
         autd3_rs_pattern_holo::naive(
+            &autd3_rs_pattern_holo::NalgebraBackend,
             geometry,
             &foci,
             Length::millimeters(wavelength),
@@ -447,6 +423,7 @@ fn gs(
     };
     with_dst_buffer(dst, |dst| {
         autd3_rs_pattern_holo::gs(
+            &autd3_rs_pattern_holo::NalgebraBackend,
             geometry,
             &foci,
             Length::millimeters(wavelength),
@@ -475,6 +452,7 @@ fn gspat(
     };
     with_dst_buffer(dst, |dst| {
         autd3_rs_pattern_holo::gspat(
+            &autd3_rs_pattern_holo::NalgebraBackend,
             geometry,
             &foci,
             Length::millimeters(wavelength),
@@ -521,7 +499,6 @@ fn autd3_pattern_holo(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<EmissionConstraint>()?;
     m.add_class::<Directivity>()?;
     m.add_class::<PyTransducerMask>()?;
-    m.add_class::<PyNalgebraBackend>()?;
     m.add_class::<NaiveOption>()?;
     m.add_class::<GsOption>()?;
     m.add_class::<GspatOption>()?;

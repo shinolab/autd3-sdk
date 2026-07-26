@@ -23,14 +23,12 @@ internal static class Sample
         var wavelength = Pattern.Wavelength(340.0f * m / s);
         var constraint = EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
         var directivity = Directivity.Sphere;
-        var backend = new NalgebraBackend();
         var mask = TransducerMask.AllEnabled;
         var option =
             // ANCHOR: option
             new NaiveOption(
                 constraint,
                 directivity,
-                backend,
                 mask
             )
             // ANCHOR_END: option

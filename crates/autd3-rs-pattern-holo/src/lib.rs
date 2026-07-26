@@ -49,6 +49,7 @@ mod tests {
         let mut dst = buffer(&geometry);
         assert_eq!(
             naive(
+                &NalgebraBackend,
                 &geometry,
                 &[],
                 wavelength(),
@@ -71,6 +72,7 @@ mod tests {
         }];
         let mut dst = buffer(&geometry);
         naive(
+            &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
@@ -94,6 +96,7 @@ mod tests {
         }];
         let mut dst = buffer(&geometry);
         gspat(
+            &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
@@ -118,6 +121,7 @@ mod tests {
 
         let mut dst = buffer(&geometry);
         naive(
+            &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
@@ -157,6 +161,7 @@ mod tests {
 
         let mut dst = buffer(&geometry);
         gspat(
+            &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
@@ -197,9 +202,33 @@ mod tests {
         let mut n = buffer(&geometry);
         let mut g = buffer(&geometry);
         let mut gp = buffer(&geometry);
-        naive(&geometry, &foci, lambda, &NaiveOption::default(), &mut n).unwrap();
-        gs(&geometry, &foci, lambda, &GsOption::default(), &mut g).unwrap();
-        gspat(&geometry, &foci, lambda, &GspatOption::default(), &mut gp).unwrap();
+        naive(
+            &NalgebraBackend,
+            &geometry,
+            &foci,
+            lambda,
+            &NaiveOption::default(),
+            &mut n,
+        )
+        .unwrap();
+        gs(
+            &NalgebraBackend,
+            &geometry,
+            &foci,
+            lambda,
+            &GsOption::default(),
+            &mut g,
+        )
+        .unwrap();
+        gspat(
+            &NalgebraBackend,
+            &geometry,
+            &foci,
+            lambda,
+            &GspatOption::default(),
+            &mut gp,
+        )
+        .unwrap();
 
         for dst in [&n, &g, &gp] {
             assert!(dst[0].iter().any(|e| e.intensity != Intensity::MIN));
@@ -223,6 +252,7 @@ mod tests {
 
         let mut dst = buffer(&geometry);
         naive(
+            &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
@@ -230,7 +260,6 @@ mod tests {
                 constraint: EmissionConstraint::Uniform(Intensity::MAX),
                 directivity: Directivity::Sphere,
                 mask,
-                ..Default::default()
             },
             &mut dst,
         )

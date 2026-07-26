@@ -3,7 +3,7 @@ use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs_pattern::wavelength;
 use autd3_rs_pattern_holo::{
-    ControlPoint, Directivity, EmissionConstraint, NaiveOption, NalgebraBackend, Pa,
+    ControlPoint, Directivity, EmissionConstraint, NalgebraBackend, NaiveOption, Pa,
     TransducerMask, naive,
 };
 
@@ -15,6 +15,7 @@ fn main() -> anyhow::Result<()> {
     let mut dst = geometry.pattern_buffer();
 
     naive(
+        &NalgebraBackend,
         &geometry,
         &[
             ControlPoint {
@@ -30,7 +31,6 @@ fn main() -> anyhow::Result<()> {
         &NaiveOption {
             constraint: EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             directivity: Directivity::Sphere,
-            backend: NalgebraBackend,
             mask: TransducerMask::AllEnabled,
         },
         &mut dst,

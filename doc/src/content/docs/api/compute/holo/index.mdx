@@ -62,7 +62,7 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 ### LinAlgBackend (NalgebraBackend)
 
 `naive` / `gs` / `gspat` は線形代数演算を `LinAlgBackend` トレイトに委譲する.
-標準実装として`NalgebraBackend` を用いる.
-各 Option の `backend` フィールドで指定する (デフォルトは `NalgebraBackend`). 
+標準実装として `NalgebraBackend` を用いる.
+バックエンドは各関数の第 1 引数で渡す. 
 
-`Greedy` は行列演算を使わないため `backend` フィールドを持たない. 
+`greedy` は行列演算を使わないためバックエンドを取らない. 

@@ -117,10 +117,10 @@ pub unsafe extern "C" fn autd3_holo_naive(
     let option = NaiveOption {
         constraint: to_constraint(unsafe { &*constraint }),
         directivity: to_directivity(directivity),
-        backend: NalgebraBackend,
         mask: mask_ref(mask.as_deref()),
     };
     match naive(
+        &NalgebraBackend,
         geometry,
         &foci,
         Length::millimeters(wavelength_mm),
@@ -158,10 +158,10 @@ pub unsafe extern "C" fn autd3_holo_gs(
         repeat: NonZeroUsize::new(repeat).unwrap_or(NonZeroUsize::new(100).unwrap()),
         constraint: to_constraint(unsafe { &*constraint }),
         directivity: to_directivity(directivity),
-        backend: NalgebraBackend,
         mask: mask_ref(mask.as_deref()),
     };
     match gs(
+        &NalgebraBackend,
         geometry,
         &foci,
         Length::millimeters(wavelength_mm),
@@ -199,10 +199,10 @@ pub unsafe extern "C" fn autd3_holo_gspat(
         repeat: NonZeroUsize::new(repeat).unwrap_or(NonZeroUsize::new(100).unwrap()),
         constraint: to_constraint(unsafe { &*constraint }),
         directivity: to_directivity(directivity),
-        backend: NalgebraBackend,
         mask: mask_ref(mask.as_deref()),
     };
     match gspat(
+        &NalgebraBackend,
         geometry,
         &foci,
         Length::millimeters(wavelength_mm),
