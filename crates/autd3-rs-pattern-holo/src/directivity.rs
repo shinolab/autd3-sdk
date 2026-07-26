@@ -1,3 +1,5 @@
+use autd3_rs_core::geometry::{UnitVector3, Vector3};
+
 #[allow(clippy::excessive_precision, clippy::unreadable_literal)]
 static DIR_COEF_A: &[f32] = &[
     1.0,
@@ -58,6 +60,14 @@ pub enum Directivity {
 }
 
 impl Directivity {
+    #[must_use]
+    pub(crate) fn value_at(self, tr_dir: UnitVector3<f32>, diff: &Vector3<f32>) -> f32 {
+        match self {
+            Directivity::Sphere => 1.0,
+            Directivity::T4010A1 => self.value(tr_dir.cross(diff).norm().atan2(tr_dir.dot(diff))),
+        }
+    }
+
     #[must_use]
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn value(self, theta_rad: f32) -> f32 {

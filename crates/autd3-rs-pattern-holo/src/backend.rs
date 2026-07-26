@@ -42,13 +42,12 @@ impl LinAlgBackend for NalgebraBackend {
     fn back_prop(&self, g: &Self::Matrix) -> Self::Matrix {
         let m = g.nrows();
         let n = g.ncols();
-        let data = (0..m)
-            .flat_map(|i| {
-                let denom: f32 = (0..n).map(|j| g[(i, j)].norm_sqr()).sum();
-                let x = Complex::new(1.0 / denom, 0.0);
-                (0..n).map(move |j| g[(i, j)].conj() * x)
-            })
-            .collect();
+        let mut data = Vec::with_capacity(m * n);
+        data.extend((0..m).flat_map(|i| {
+            let denom: f32 = (0..n).map(|j| g[(i, j)].norm_sqr()).sum();
+            let x = Complex::new(1.0 / denom, 0.0);
+            (0..n).map(move |j| g[(i, j)].conj() * x)
+        }));
         DMatrix::from_vec(n, m, data)
     }
 
@@ -61,10 +60,19 @@ impl LinAlgBackend for NalgebraBackend {
     }
 
     fn hadamard_normalize(&self, x: &mut Self::Vector, r: &Self::Vector) {
-        x.zip_apply(r, |b, a| *b = *b / b.norm() * a);
+        for (b, a) in x.as_mut_slice().iter_mut().zip(r.as_slice()) {
+            let inv = 1.0 / (b.re * b.re + b.im * b.im).sqrt();
+            let (re, im) = (b.re * inv, b.im * inv);
+            *b = Complex::new(re * a.re - im * a.im, re * a.im + im * a.re);
+        }
     }
 
     fn amplitude_correct(&self, x: &mut Self::Vector, r: &Self::Vector) {
-        x.zip_apply(r, |b, a| *b = *b / b.norm_sqr() * (a * a));
+        for (b, a) in x.as_mut_slice().iter_mut().zip(r.as_slice()) {
+            let inv = 1.0 / (b.re * b.re + b.im * b.im);
+            let (re, im) = (b.re * inv, b.im * inv);
+            let (ar, ai) = (a.re * a.re - a.im * a.im, 2.0 * a.re * a.im);
+            *b = Complex::new(re * ar - im * ai, re * ai + im * ar);
+        }
     }
 }
