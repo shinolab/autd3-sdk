@@ -2,7 +2,6 @@ use core::f32::consts::PI;
 
 use autd3_rs_core::common::Length;
 use autd3_rs_core::common::units::rad;
-use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::{Device, Geometry, Point3};
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
@@ -42,11 +41,6 @@ pub fn focus_device(
     option: &FocusOption,
     dst: &mut [Emission],
 ) {
-    assert_eq!(
-        device.num_transducers(),
-        Autd3::NUM_TRANSDUCERS,
-        "not an AUTD3 device"
-    );
     for (e, &pos) in dst.iter_mut().zip(device.positions()) {
         *e = focus_transducer(pos, target, wavelength, option);
     }

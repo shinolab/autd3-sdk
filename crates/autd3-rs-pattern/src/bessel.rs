@@ -2,7 +2,6 @@ use core::f32::consts::PI;
 
 use autd3_rs_core::common::units::rad;
 use autd3_rs_core::common::{Angle, Length};
-use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitQuaternion, UnitVector3, Vector3};
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
@@ -67,11 +66,6 @@ pub fn bessel_device(
     option: &BesselOption,
     dst: &mut [Emission],
 ) {
-    assert_eq!(
-        device.num_transducers(),
-        Autd3::NUM_TRANSDUCERS,
-        "not an AUTD3 device"
-    );
     let rot = rotation(direction);
     for (e, &pos) in dst.iter_mut().zip(device.positions()) {
         *e = Emission {
