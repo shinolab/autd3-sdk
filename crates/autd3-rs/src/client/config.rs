@@ -30,6 +30,11 @@ impl Default for ClientConfig {
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: NonZeroU32::new(2).unwrap(),
+            #[cfg(target_os = "windows")]
+            rt_priority: Some(thread_priority::ThreadPriority::Os(
+                thread_priority::WinAPIThreadPriority::TimeCritical.into(),
+            )),
+            #[cfg(not(target_os = "windows"))]
             rt_priority: None,
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
