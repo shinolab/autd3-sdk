@@ -69,10 +69,6 @@ namespace AUTD3.Holo
         public static readonly SplUnit dB = default;
     }
 
-    public readonly struct NalgebraBackend
-    {
-    }
-
     public readonly struct EmissionConstraint
     {
         internal byte Kind { get; }
@@ -124,18 +120,16 @@ namespace AUTD3.Holo
     {
         public EmissionConstraint Constraint { get; }
         public Directivity Directivity { get; }
-        public NalgebraBackend Backend { get; }
         public TransducerMask Mask { get; }
 
         public NaiveOption() : this(constraint: null)
         {
         }
 
-        public NaiveOption(EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, NalgebraBackend backend = default, TransducerMask mask = default)
+        public NaiveOption(EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
         {
             Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
             Directivity = directivity;
-            Backend = backend;
             Mask = mask;
         }
     }
@@ -145,19 +139,17 @@ namespace AUTD3.Holo
         public uint Repeat { get; }
         public EmissionConstraint Constraint { get; }
         public Directivity Directivity { get; }
-        public NalgebraBackend Backend { get; }
         public TransducerMask Mask { get; }
 
         public GsOption() : this(repeat: 100)
         {
         }
 
-        public GsOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, NalgebraBackend backend = default, TransducerMask mask = default)
+        public GsOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
         {
             Repeat = repeat;
             Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
             Directivity = directivity;
-            Backend = backend;
             Mask = mask;
         }
     }
@@ -167,19 +159,17 @@ namespace AUTD3.Holo
         public uint Repeat { get; }
         public EmissionConstraint Constraint { get; }
         public Directivity Directivity { get; }
-        public NalgebraBackend Backend { get; }
         public TransducerMask Mask { get; }
 
         public GspatOption() : this(repeat: 100)
         {
         }
 
-        public GspatOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, NalgebraBackend backend = default, TransducerMask mask = default)
+        public GspatOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
         {
             Repeat = repeat;
             Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
             Directivity = directivity;
-            Backend = backend;
             Mask = mask;
         }
     }

@@ -8,7 +8,7 @@ use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::SamplingConfig;
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
-use autd3_rs_pattern_holo::{ControlPoint, GspatOption, Pa, gspat};
+use autd3_rs_pattern_holo::{ControlPoint, GspatOption, NalgebraBackend, Pa, gspat};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -45,6 +45,7 @@ async fn main() -> Result<()> {
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
     let mut emissions = geometry.pattern_buffer();
     gspat(
+        &NalgebraBackend,
         &geometry,
         &foci,
         wavelength,

@@ -24,7 +24,6 @@ internal static class Sample
         uint repeat = 100;
         var constraint = EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
         var directivity = Directivity.Sphere;
-        var backend = new NalgebraBackend();
         var mask = TransducerMask.AllEnabled;
         var option =
             // ANCHOR: option
@@ -32,7 +31,6 @@ internal static class Sample
                 repeat,
                 constraint,
                 directivity,
-                backend,
                 mask
             )
             // ANCHOR_END: option

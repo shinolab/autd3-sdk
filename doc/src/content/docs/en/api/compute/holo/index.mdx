@@ -66,6 +66,6 @@ It is specified via the `mask` field of each Option (the default is `AllEnabled`
 
 `naive` / `gs` / `gspat` delegate linear algebra operations to the `LinAlgBackend` trait.
 `NalgebraBackend` is used as the standard implementation.
-It is specified via the `backend` field of each Option (the default is `NalgebraBackend`).
+The backend is passed as the first argument of each function.
 
-`Greedy` does not use matrix operations, so it does not have a `backend` field.
+`greedy` does not use matrix operations, so it does not take a backend.

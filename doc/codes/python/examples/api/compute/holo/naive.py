@@ -7,7 +7,6 @@ from autd3_pattern_holo import (
     Directivity,
     EmissionConstraint,
     NaiveOption,
-    NalgebraBackend,
     Pa,
     TransducerMask,
     naive,
@@ -30,14 +29,12 @@ foci = [
 wavelength = calc_wavelength(340 * m / s)
 constraint = EmissionConstraint.Clamp(0x00, 0xFF)
 directivity = Directivity.Sphere
-backend = NalgebraBackend()
 mask = TransducerMask.AllEnabled
 option = (
     # ANCHOR: option
     NaiveOption(
         constraint,
         directivity,
-        backend,
         mask,
     )
     # ANCHOR_END: option

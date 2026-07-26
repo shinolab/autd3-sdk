@@ -28,7 +28,6 @@ Holo.Naive(
     new NaiveOption(
         constraint: EmissionConstraint.Clamp(Intensity.Min, Intensity.Max),
         directivity: Directivity.Sphere,
-        backend: new NalgebraBackend(),
         mask: TransducerMask.AllEnabled
     ),
     dst

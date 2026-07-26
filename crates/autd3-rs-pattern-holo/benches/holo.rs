@@ -7,7 +7,8 @@ use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
 use autd3_rs_core::value::Emission;
 use autd3_rs_pattern_holo::{
-    ControlPoint, GreedyOption, GsOption, GspatOption, NaiveOption, Pa, greedy, gs, gspat, naive,
+    ControlPoint, GreedyOption, GsOption, GspatOption, NaiveOption, NalgebraBackend, Pa, greedy,
+    gs, gspat, naive,
 };
 
 const DEVICE_COUNTS: &[usize] = &[1, 9, 64];
@@ -56,6 +57,7 @@ fn bench(c: &mut Criterion) {
             group.bench_with_input(BenchmarkId::new("naive", &id), &foci, |b, foci| {
                 b.iter(|| {
                     naive(
+                        &NalgebraBackend,
                         &geometry,
                         foci,
                         wl,
@@ -68,6 +70,7 @@ fn bench(c: &mut Criterion) {
             group.bench_with_input(BenchmarkId::new("gs", &id), &foci, |b, foci| {
                 b.iter(|| {
                     gs(
+                        &NalgebraBackend,
                         &geometry,
                         foci,
                         wl,
@@ -80,6 +83,7 @@ fn bench(c: &mut Criterion) {
             group.bench_with_input(BenchmarkId::new("gspat", &id), &foci, |b, foci| {
                 b.iter(|| {
                     gspat(
+                        &NalgebraBackend,
                         &geometry,
                         foci,
                         wl,
