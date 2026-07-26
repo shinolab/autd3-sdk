@@ -9,6 +9,11 @@ use clap::{ArgGroup, Parser, ValueEnum};
 
 pub const DEFAULT_MAX_SAMPLES: u64 = 1_000_000;
 
+#[cfg(target_os = "windows")]
+pub const DEFAULT_SYNC0_PERIOD: &str = "2ms";
+#[cfg(not(target_os = "windows"))]
+pub const DEFAULT_SYNC0_PERIOD: &str = "1ms";
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
     #[default]
@@ -76,8 +81,9 @@ pub struct Cli {
     #[arg(
         long = "sync0-period",
         value_parser = humantime::parse_duration,
-        default_value = "1ms",
-        help = "SYNC0 / EtherCAT cycle period, e.g. 1ms / 500us (maps to *LinkOption.sync0_period)"
+        default_value = DEFAULT_SYNC0_PERIOD,
+        help = "SYNC0 / EtherCAT cycle period, e.g. 1ms / 500us (maps to *LinkOption.sync0_period). \
+                Defaults to 2ms on Windows (absorbs DPC wake jitter, matches the library's Windows preset) and 1ms elsewhere."
     )]
     pub sync0_period: Duration,
     #[arg(

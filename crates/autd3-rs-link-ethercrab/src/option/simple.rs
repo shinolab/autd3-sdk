@@ -20,11 +20,10 @@ pub struct EtherCrabLinkOption {
 impl EtherCrabLinkOption {
     #[must_use]
     pub fn safe_default() -> Self {
-        let sync0_period = Duration::from_millis(1);
         Self {
             iface: Interface::Auto,
-            sync0_period,
-            sync0_shift: sync0_period,
+            sync0_period: Duration::from_millis(2),
+            sync0_shift: Duration::ZERO,
             sync_tolerance: Duration::from_micros(1),
             sync_timeout: Duration::from_secs(10),
         }
@@ -98,10 +97,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn safe_default_uses_full_cycle_shift() {
+    fn safe_default_uses_2ms_cycle_and_zero_shift() {
         let opt = EtherCrabLinkOption::safe_default();
-        assert_eq!(opt.sync0_period, Duration::from_millis(1));
-        assert_eq!(opt.sync0_shift, opt.sync0_period);
+        assert_eq!(opt.sync0_period, Duration::from_millis(2));
+        assert_eq!(opt.sync0_shift, Duration::ZERO);
     }
 
     #[test]
