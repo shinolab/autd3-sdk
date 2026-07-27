@@ -1,0 +1,31 @@
+---
+title: Bank Switching
+description: Double buffering by writing to and switching Pattern banks
+sidebar:
+  order: 7
+slug: en/0.4.x/getting-started/tutorial/bank
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+As explained in [Moving the Focal Point](/autd3-sdk/en/0.4.x/getting-started/tutorial/moving-focus/), in AUTD3 a `Pattern` and the like are overwritten each time they are sent, and this write is not buffered.
+As a result, overwriting data that is being played back can cause unintended intermediate data to be output partway through the write.
+
+To prevent this, the AUTD3 `Pattern` has multiple memory regions (called banks).
+By writing to a bank that is not currently being played back and then switching the playback target to that bank after the write completes, the data can be swapped without disturbing the output.
+
+## Writing to a specified bank
+
+The write-target / playback-target bank is specified with `Pattern::with_bank`.
+`Pattern::new` (when the bank is omitted) uses `PatternBank::B0`.
+
+In the example below, focus A is first written to `B0` and played back, and the next focus B is written to `B1`, which is not being played back.
+The output of `B0` is not disturbed even while writing to `B1`, and after the write completes it switches to `B1`.
+
+<CodeTabs rust={"// Write focus A to bank B0 and play it.\nlet target_a = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);\nlet mut pat_a = geometry.pattern_buffer();\nautd3_rs_pattern::focus(\n    &geometry,\n    target_a,\n    wavelength,\n    &autd3_rs_pattern::FocusOption::default(),\n    &mut pat_a,\n);\nlet mut builder = client.datagram_builder();\nbuilder.push(Pattern::with_bank(PatternBank::B0, &pat_a));\nfor frame in &builder.build()? {\n    client.send_checked(frame).await?;\n}\n\n// Write focus B to bank B1, which is not currently playing, then switch to B1.\n// B0 keeps playing cleanly while B1 is being written (double buffering).\nlet target_b = geometry.center() + offset(0.0 * mm, 30.0 * mm, 150.0 * mm);\nlet mut pat_b = geometry.pattern_buffer();\nautd3_rs_pattern::focus(\n    &geometry,\n    target_b,\n    wavelength,\n    &autd3_rs_pattern::FocusOption::default(),\n    &mut pat_b,\n);\nlet mut builder = client.datagram_builder();\nbuilder.push(Pattern::with_bank(PatternBank::B1, &pat_b));\nfor frame in &builder.build()? {\n    client.send_checked(frame).await?;\n}"} python={"# Write focus A to bank B0 and play it.\ntarget_a = geometry.center() + np.array([0.0, 0.0, 150.0])\npat_a = geometry.pattern_buffer()\npattern.focus(\n    geometry,\n    target_a,\n    wavelength,\n    pattern.FocusOption(),\n    pat_a,\n)\nbuilder = client.datagram_builder()\nbuilder.push(Pattern(pat_a, bank=PatternBank.B0))\nfor frame in builder.build():\n    await client.send_checked(frame)\n\n# Write focus B to bank B1, which is not currently playing, then switch to B1.\n# B0 keeps playing cleanly while B1 is being written (double buffering).\ntarget_b = geometry.center() + np.array([0.0, 30.0, 150.0])\npat_b = geometry.pattern_buffer()\npattern.focus(\n    geometry,\n    target_b,\n    wavelength,\n    pattern.FocusOption(),\n    pat_b,\n)\nbuilder = client.datagram_builder()\nbuilder.push(Pattern(pat_b, bank=PatternBank.B1))\nfor frame in builder.build():\n    await client.send_checked(frame)"} csharp={"// Write focus A to bank B0 and play it.\nvar targetA = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);\nvar patA = geometry.PatternBuffer();\nPattern.Focus(\n    geometry,\n    targetA,\n    wavelength,\n    new FocusOption(),\n    patA\n);\nvar builder = client.DatagramBuilder();\nbuilder.Push(new Pattern(PatternBank.B0, patA));\nforeach (var frame in builder.Build())\n{\n    await client.SendCheckedAsync(frame);\n}\n\n// Write focus B to bank B1, which is not currently playing, then switch to B1.\n// B0 keeps playing cleanly while B1 is being written (double buffering).\nvar targetB = geometry.Center + new Vector3(0.0f, 30.0f, 150.0f);\nvar patB = geometry.PatternBuffer();\nPattern.Focus(\n    geometry,\n    targetB,\n    wavelength,\n    new FocusOption(),\n    patB\n);\nvar builder2 = client.DatagramBuilder();\nbuilder2.Push(new Pattern(PatternBank.B1, patB));\nforeach (var frame in builder2.Build())\n{\n    await client.SendCheckedAsync(frame);\n}"} />
+
+By writing alternately to the bank that is not being played back in this way, the pattern can be swapped without disturbing the output.
+
+`Modulation` also has banks, and the write-target bank (`ModulationBank`) can be specified with `Modulation::with_bank`.
+
+For finer control over bank writing, configuration, and switching, refer to the [low-level commands](/autd3-sdk/en/0.4.x/api/command/lowlevel/) in the API reference.

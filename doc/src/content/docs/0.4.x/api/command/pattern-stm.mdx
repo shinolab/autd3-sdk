@@ -1,0 +1,61 @@
+---
+title: PatternStm
+description: ホスト計算した Pattern の列を高速に切り替える STM
+sidebar:
+  order: 3
+slug: 0.4.x/api/command/pattern-stm
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`PatternStm` は, ハードウェアタイマにより任意の音場 (各振動子の emission) を切り替える STM 機能を提供する.
+[FociStm](/autd3-sdk/0.4.x/api/command/foci-stm/) と異なり, 任意の Pattern を扱えるが, データ転送量が大きい.
+
+## API
+
+<CodeTabs rust={"PatternStm::new(freq, &patterns, option);"} python={"PatternStm(freq, patterns, option)"} csharp={"new PatternStm(freq, patterns, option);"} />
+
+| 引数       | 型                                    | 説明                                                 |
+| ---------- | ------------------------------------- | ---------------------------------------------------- |
+| `freq`     | `impl Into<StmConfig>`                | 再生レート (`Freq` / `Duration` / `SamplingConfig`) |
+| `patterns` | `&[Vec<Vec<Emission>>]` | Pattern サンプルの列 (2 サンプル以上)                |
+| `option`   | `PatternStmOption`                    | 転送モード・ループ・遷移などのオプション             |
+
+`freq` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
+サンプリング周波数を指定することもできる.
+
+## PatternStmOption
+
+<CodeTabs rust={"PatternStmOption {\n    bank,\n    mode,\n    loop_behavior,\n    transition_mode,\n}"} python={"PatternStmOption(\n    bank,\n    mode,\n    loop_behavior,\n    transition_mode,\n)"} csharp={"new PatternStmOption(\n    bank,\n    mode,\n    loopBehavior,\n    transitionMode\n)"} />
+
+| フィールド        | 型               | デフォルト                           | 説明                         |
+| ----------------- | ---------------- | ------------------------------------ | ---------------------------- |
+| `bank`            | `PatternBank`    | `PatternBank::B0`                    | 書き込み先・再生対象のバンク |
+| `mode`            | `PatternStmMode` | `PatternStmMode::PhaseIntensityFull` | 転送形式                     |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`             | ループ回数                   |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate`          | バンク切替時の遷移タイミング |
+
+`loop_behavior` と `transition_mode` の挙動は[再生制御](/autd3-sdk/0.4.x/api/command/lowlevel/change-pattern-bank/) を参照.
+
+## PatternStmMode
+
+各 Pattern の転送形式を選ぶ. 位相のみ・低分解能の形式は転送量を減らせる.
+
+| モード               | 内容                                   |
+| -------------------- | -------------------------------------- |
+| `PhaseIntensityFull` | 位相・振幅をそのまま転送 (デフォルト) |
+| `PhaseFull`          | 位相のみ転送. 振幅は最大に固定         |
+| `PhaseHalf`          | 位相を 4 bit に圧縮して転送            |
+
+## 等価な低レベルコマンド
+
+`PatternStm` は内部で [WritePatternBuffer](/autd3-sdk/0.4.x/api/command/lowlevel/write-pattern-buffer/)  (各 index) + [ConfigPattern](/autd3-sdk/0.4.x/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/0.4.x/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
+以下は `PatternStm::new(freq, &patterns, option)` と等価な組み合わせである.
+
+`PatternStmMode` が `PhaseFull` / `PhaseHalf` のときは, `WritePatternBuffer` の代わりに [WritePatternCompressed](/autd3-sdk/0.4.x/api/command/lowlevel/write-pattern-compressed/) が使われる.
+
+<CodeTabs rust={"for (index, pattern) in patterns.iter().enumerate() {\n    WritePatternBuffer {\n        bank: option.bank,\n        index,\n        emissions: pattern.as_slice(),\n    };\n}\nConfigPattern {\n    bank: option.bank,\n    config: StmConfig::new(freq).into_sampling_config(patterns.len()),\n    size: patterns.len(),\n    loop_behavior: option.loop_behavior,\n};\nChangePatternBank {\n    bank: option.bank,\n    transition_mode: option.transition_mode,\n};"} python={"for index, emissions in enumerate(patterns):\n    WritePatternBuffer(\n        bank=option.bank,\n        index=index,\n        emissions=emissions,\n    )\nConfigPattern(\n    bank=option.bank,\n    config=StmConfig(freq).into_sampling_config(len(patterns)),\n    size=len(patterns),\n    loop_behavior=option.loop_behavior,\n)\nChangePatternBank(\n    bank=option.bank,\n    transition_mode=option.transition_mode,\n)"} csharp={"for (var index = 0; index < patterns.Length; index++)\n{\n    new WritePatternBuffer(\n        bank: option.Bank,\n        index: (ushort)index,\n        emissions: patterns[index]\n    );\n}\nnew ConfigPattern(\n    bank: option.Bank,\n    config: new StmConfig(freq).IntoSamplingConfig(patterns.Length),\n    size: (uint)patterns.Length,\n    loopBehavior: option.LoopBehavior\n);\nnew ChangePatternBank(\n    bank: option.Bank,\n    transitionMode: option.TransitionMode\n);"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{PatternStm, PatternStmMode, PatternStmOption};\nuse autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{Hz, m, mm, s};\nuse autd3_rs::value::{LoopBehavior, PatternBank, TransitionMode};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_nop::Nop;\nuse autd3_rs_pattern::{FocusOption, focus, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet client = Client::open(&geometry, Nop, ClientConfig::default()).await?;\n\nlet center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);\nlet wavelength = wavelength(340.0 * m / s);\nlet patterns = (0..200)\n    .map(|i| {\n        let theta = 2.0 * std::f32::consts::PI * i as f32 / 200.0;\n        let target =\n            center + offset(30.0 * theta.cos() * mm, 30.0 * theta.sin() * mm, 0.0 * mm);\n        let mut buffer = geometry.pattern_buffer();\n        focus(\n            &geometry,\n            target,\n            wavelength,\n            &FocusOption::default(),\n            &mut buffer,\n        );\n        buffer\n    })\n    .collect::<Vec<_>>();\n\nlet mut builder = client.datagram_builder();\nbuilder.push(PatternStm::new(\n    1.0 * Hz,\n    &patterns,\n    PatternStmOption {\n        bank: PatternBank::B0,\n        mode: PatternStmMode::PhaseIntensityFull,\n        loop_behavior: LoopBehavior::Infinite,\n        transition_mode: TransitionMode::Immediate,\n    },\n));\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\nimport math\n\nimport numpy as np\n\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import PatternStm, PatternStmMode, PatternStmOption, StmConfig\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import Hz, m, s\nfrom autd3.value import LoopBehavior, PatternBank, TransitionMode\nfrom autd3_link_nop import Nop\nfrom autd3_pattern import FocusOption, focus, wavelength\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    client = await Client.open(geometry, Nop(), ClientConfig())\n\n    center = geometry.center() + np.array([0.0, 0.0, 150.0])\n    wl = wavelength(340 * m / s)\n    patterns = []\n    for i in range(200):\n        theta = 2.0 * math.pi * i / 200\n        target = center + np.array([30.0 * math.cos(theta), 30.0 * math.sin(theta), 0.0])\n        buffer = geometry.pattern_buffer()\n        focus(\n            geometry,\n            target,\n            wl,\n            FocusOption(),\n            buffer,\n        )\n        patterns.append(buffer)\n\n    builder = client.datagram_builder()\n    builder.push(\n        PatternStm(\n            1.0 * Hz,\n            patterns,\n            PatternStmOption(\n                bank=PatternBank.B0,\n                mode=PatternStmMode.PhaseIntensityFull,\n                loop_behavior=LoopBehavior.Infinite,\n                transition_mode=TransitionMode.Immediate,\n            ),\n        )\n    )\n    frames = builder.build()\n    for frame in frames:\n        await client.send_checked(frame)\n\n    await client.close()\n\n\nasyncio.run(main())"} csharp={"using System;\nusing System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing Nop = AUTD3.Link.Nop;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());\n\nvar center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);\nvar wavelength = Pattern.Wavelength(340.0f * m / s);\nvar patterns = new PatternBuffer[200];\nfor (var i = 0; i < 200; i++)\n{\n    var theta = 2.0f * MathF.PI * i / 200.0f;\n    var target = center + new Vector3(30.0f * MathF.Cos(theta), 30.0f * MathF.Sin(theta), 0.0f);\n    var buffer = geometry.PatternBuffer();\n    Pattern.Focus(\n        geometry,\n        target,\n        wavelength,\n        new FocusOption(),\n        buffer\n    );\n    patterns[i] = buffer;\n}\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new PatternStm(\n    1.0f * Hz,\n    patterns,\n    new PatternStmOption(\n        bank: PatternBank.B0,\n        mode: PatternStmMode.PhaseIntensityFull,\n        loopBehavior: LoopBehavior.Infinite,\n        transitionMode: TransitionMode.Immediate\n    )\n));\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nawait client.CloseAsync();"} />

@@ -1,0 +1,37 @@
+---
+title: リンク状態の監視
+description: State Checker でデバイスの EtherCAT リンク状態を監視する
+sidebar:
+  order: 6
+slug: 0.4.x/guide/state-check
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+稼働中にデバイスとの EtherCAT リンクが健全かどうかを監視したい場合がある.
+`Client` はバックグラウンドで状態を監視するタスクを勝手に起動しない.
+代わりに, ユーザーが自分のタイミングで駆動する `Checker` を返す.
+監視の頻度や, 状態変化への対応をユーザー側で完全に制御できる.
+
+## Checker の取得
+
+通常の [`Client::open`](/autd3-sdk/0.4.x/api/basics/client/) の代わりに `open_with_checker` を使うと, `Client` と `Checker` の組が返る.
+
+<CodeTabs rust={"let (client, mut checker) = Client::open_with_checker(\n    &geometry,\n    EtherCrabLinkOption::default(),\n    ClientConfig::default(),\n)\n.await?;"} python={"client, checker = await Client.open_with_checker(\n    geometry,\n    ethercrab.EtherCrabLinkOption(),\n    ClientConfig(),\n)"} csharp={"var (client, checker) = await Client.OpenWithCheckerAsync(\n    geometry,\n    new EtherCrabLinkOption(),\n    new ClientConfig()\n);"} />
+
+## 状態の取得
+
+`Checker::check` は, 呼び出した時点のリンク状態 `LinkStatus` を返す.
+`LinkStatus` は以下を持つ.
+
+* `devices`: デバイスごとの状態 (`DeviceState`). 正常なら `OP`, 切断されると `LOST` など.
+* `all_op`: 全デバイスが `OP` 状態か.
+* `any_lost`: いずれかのデバイスが `LOST` 状態か.
+* `recoveries`: 切断から復帰した累計回数.
+
+以下は, 一定間隔で `check` を呼び, 状態が変化したときだけ出力する例.
+
+<CodeTabs rust={"let mut last: Option<LinkStatus> = None;\nloop {\n    let status = checker.check().await?;\n    if last.as_ref() != Some(&status) {\n        for (i, state) in status.devices.iter().enumerate() {\n            println!(\"device[{i}]: {state}\");\n        }\n        println!(\n            \"all operational: {}, any lost: {}, recoveries: {}\",\n            status.all_op(),\n            status.any_lost(),\n            status.recoveries\n        );\n        last = Some(status);\n    }\n    tokio::time::sleep(CHECK_INTERVAL).await;\n}"} python={"last = None\nwhile True:\n    status = await checker.check()\n    if status != last:\n        for i, state in enumerate(status.device_states):\n            print(f\"device[{i}]: {state}\")\n        print(f\"all operational: {status.all_op}, any lost: {status.any_lost}, recoveries: {status.recoveries}\")\n        last = status\n    await asyncio.sleep(CHECK_INTERVAL)"} csharp={"LinkStatus? last = null;\nwhile (true)\n{\n    var status = await checker.CheckAsync();\n    if (status != last)\n    {\n        for (var i = 0; i < status.Devices.Count; i++)\n        {\n            Console.WriteLine($\"device[{i}]: {status.Devices[i]}\");\n        }\n        Console.WriteLine($\"all operational: {status.AllOp}, any lost: {status.AnyLost}, recoveries: {status.Recoveries}\");\n        last = status;\n    }\n    await Task.Delay(CheckInterval);\n}"} />
+
+`check` を呼ぶ頻度はユーザー次第である.
+高頻度の送信ループとは別のタスクで, 上のように低頻度でポーリングするのが典型的な使い方である.

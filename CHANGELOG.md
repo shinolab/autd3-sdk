@@ -2,6 +2,48 @@
 
 # Rust
 
+## [0.4.0] - 2026-07-27
+
+### 💥 Breaking Changes
+
+- [**breaking**] Configure RT thread scheduling policy
+- [**breaking**] Report firmware emulator via FirmwareVersion::is_emulator and [Emulator] display
+- [**breaking**] Remove the XorHash command and fold patternsoak into perftest
+- [**breaking**] Pass Device to Operation::encode and validate transducer counts per device
+- [**breaking**] Pass `&Device` to `push_each` assign closure instead of device index
+- [**breaking**] Make Operation single-frame and expand buffer writes as Commands
+- [**breaking**] Reject modulation/STM buffers smaller than two samples
+- [**breaking**] Remove ClientConfig::send_interval_cycles
+- [**breaking**] Unify in_flight naming to inflight
+- [**breaking**] Make ClientConfig::reset_resend_cycles NonZeroU32
+
+### 🚀 Features
+
+- Expose SYNC0 resync count via SyncResync telemetry
+- Fuse pattern/modulation write+config+bank-change into one frame
+- *(autd3-rs)* Add tracing instrumentation to send path and datagram builder
+
+### 🐛 Bug Fixes
+
+- Correct FOCUS_TR_X_MAX off-by-one by deriving coord/emission constants from FPGA sources
+- Convert foci into device-local coordinates and send phase offsets relative to the first focus
+- Check every compressed pattern group for the requested device index
+- *(client)* Recover slots on link error and desync the mirror on any send failure
+- Make stop() write a null pattern instead of clearing the output mask
+- *(link)* Default Windows EtherCAT to a 2ms cycle with zero shift
+- *(client)* Default RT thread to TimeCritical priority on Windows
+- *(holo)* Account for emission intensity in greedy search
+
+### ⚡ Performance
+
+- Encode datagrams in place when building frames
+
+### 📦 Dependencies
+
+- *(deps)* Move single-crate deps out of workspace.dependencies
+- *(deps)* Bump the cargo-minor group across 5 directories with 2 updates
+- *(deps)* Bump cc in the cargo-minor group across 1 directory
+
 ## [0.3.0] - 2026-07-14
 
 ### 💥 Breaking Changes
@@ -102,6 +144,24 @@
 
 # Python
 
+## [0.4.0] - 2026-07-27
+
+### 💥 Breaking Changes
+
+- [**breaking**] Configure RT thread scheduling policy
+- [**breaking**] Report firmware emulator via FirmwareVersion::is_emulator and [Emulator] display
+- [**breaking**] Pass Device to Operation::encode and validate transducer counts per device
+- [**breaking**] Pass `&Device` to `push_each` assign closure instead of device index
+- [**breaking**] Reject modulation/STM buffers smaller than two samples
+- [**breaking**] Remove ClientConfig::send_interval_cycles
+- [**breaking**] Unify in_flight naming to inflight
+- [**breaking**] Make ClientConfig::reset_resend_cycles NonZeroU32
+
+### 📦 Dependencies
+
+- *(deps)* Bump the cargo-minor group across 5 directories with 2 updates
+- *(deps)* Bump cc in the cargo-minor group across 1 directory
+
 ## [0.3.0] - 2026-07-14
 
 ### 💥 Breaking Changes
@@ -155,6 +215,19 @@
 - *(py)* Return Response from awaited send instead of implicit check
 
 # C#
+
+## [0.4.0] - 2026-07-27
+
+### 💥 Breaking Changes
+
+- [**breaking**] Report firmware emulator via FirmwareVersion::is_emulator and [Emulator] display
+- [**breaking**] Pass Device to Operation::encode and validate transducer counts per device
+- [**breaking**] Pass `&Device` to `push_each` assign closure instead of device index
+- [**breaking**] Remove ClientConfig::send_interval_cycles
+
+### 🐛 Bug Fixes
+
+- *(link)* Default Windows EtherCAT to a 2ms cycle with zero shift
 
 ## [0.3.0] - 2026-07-14
 
@@ -212,6 +285,13 @@
 
 # Simulator
 
+## [0.4.0] - 2026-07-27
+
+### 📦 Dependencies
+
+- *(deps)* Bump the cargo-minor group across 5 directories with 2 updates
+- *(deps)* Bump cc in the cargo-minor group across 1 directory
+
 ## [0.3.0] - 2026-07-14
 
 ### 🚀 Features
@@ -243,6 +323,13 @@
 
 # Console
 
+## [0.4.0] - 2026-07-27
+
+### 📦 Dependencies
+
+- *(deps)* Bump the cargo-minor group across 5 directories with 2 updates
+- *(deps)* Bump cc in the cargo-minor group across 1 directory
+
 ## [0.1.0] - 2026-07-06
 
 ### 🚀 Features
@@ -250,6 +337,39 @@
 - Derive simulator device count from client geometry
 
 # Firmware
+
+## [0.4.0] - 2026-07-27
+
+### 💥 Breaking Changes
+
+- [**breaking**] Remove the XorHash command and fold patternsoak into perftest
+- [**breaking**] Reject modulation/STM buffers smaller than two samples
+- [**breaking**] Unify in_flight naming to inflight
+
+### 🚀 Features
+
+- Expose SYNC0 resync count via SyncResync telemetry
+- Fuse pattern/modulation write+config+bank-change into one frame
+
+### 🐛 Bug Fixes
+
+- *(fpga)* Synchronize async THERMO input with a 2FF synchronizer
+- *(fpga)* Hard-resync synchronizer on SYNC0 slip to stop permanent drift
+- *(fpga)* Gate controller start-up on clk_wiz locked
+- Drive unused XDCR_OUT bits low
+- Use ram_style attribute for writable RAM macro
+- Correct FOCUS_TR_X_MAX off-by-one by deriving coord/emission constants from FPGA sources
+- Make stop() write a null pattern instead of clearing the output mask
+
+### ⚡ Performance
+
+- *(fpga)* Gate ec_time_to_sys_time conversion to resync window
+- *(fpga)* Gate BRAM read ports with ENB to cut dynamic power
+- *(fpga)* Gate ATAN and small BRAM read ports with EN
+- *(fpga)* Gate swapchain_timer dividers to one division per 40kHz period
+- *(fpga)* Skip the focus_calc datapath for unused foci
+- *(fpga)* Drop the pwm_preconditioner snapshot stage to halve its flip-flops
+- Write FPGA_STATE only when it changes
 
 ## [0.3.0] - 2026-07-14
 

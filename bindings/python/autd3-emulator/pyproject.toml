@@ -7,7 +7,7 @@ name = "autd3-emulator"
 description = "Python bindings for the hardware-free emulator (drive recording and sound-field computation)."
 requires-python = ">=3.12"
 license = "MIT"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = ["autd3-core", "autd3", "polars", "numpy"]
 
 [tool.maturin]

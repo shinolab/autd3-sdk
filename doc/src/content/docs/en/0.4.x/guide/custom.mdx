@@ -1,0 +1,33 @@
+---
+title: Custom Patterns and Modulation
+description: How to build arbitrary Emission patterns and AM waveforms directly
+  without helper functions
+sidebar:
+  order: 5
+slug: en/0.4.x/guide/custom
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Pattern` and `Modulation` are commands that send an already-computed buffer directly to the device.
+The [compute helpers](/autd3-sdk/en/0.4.x/api/compute/pattern/) are pre-provided compute helpers.
+By building the buffer directly without going through a helper, arbitrary patterns and modulation can be expressed.
+
+## Custom Pattern
+
+A pattern is a buffer that lays out a `Vec<Emission>` for each device.
+`Geometry::pattern_buffer` allocates the buffer for all devices, and the `Emission` (phase and intensity) of each transducer can be freely set.
+
+The following is an example of manually computing the same single focal point as [`focus`](/autd3-sdk/en/0.4.x/api/compute/pattern/focus/), without using a helper.
+It gives each transducer a phase according to the distance from the transducer to the focal point.
+
+<CodeTabs rust={"let mut emissions = geometry.pattern_buffer();\nfor (slot, device) in emissions.iter_mut().zip(&geometry) {\n    for (e, &pos) in slot.iter_mut().zip(device.positions()) {\n        let dist = (target - pos).norm();\n        *e = Emission {\n            phase: Phase::from(-dist / wavelength.mm() * 2.0 * PI * rad),\n            intensity: Intensity::MAX,\n        };\n    }\n}\n\nPattern::new(&emissions);"} python={"emissions = geometry.pattern_buffer()\nfor slot, device in zip(emissions, geometry):\n    for t, pos in enumerate(device.positions()):\n        dist = float(np.linalg.norm(target - pos))\n        slot[t] = Emission(\n            Phase(-dist / wavelength * 2.0 * math.pi * rad),\n            Intensity.MAX,\n        )\n\nPattern(emissions)"} csharp={"var emissions = geometry.PatternBuffer();\nforeach (var device in geometry)\n{\n    var slot = emissions[device.Idx];\n    for (var t = 0; t < device.NumTransducers; t++)\n    {\n        var dist = Vector3.Distance(target, device.Position(t));\n        slot[t] = new Emission(\n            (Phase)(-dist / wavelength.Mm * 2.0f * MathF.PI * rad),\n            Intensity.Max);\n    }\n}\n\nnew Pattern(emissions);"} />
+
+## Custom Modulation
+
+Modulation is a pair of a `&[u8]` buffer representing the AM waveform and a [`SamplingConfig`](/autd3-sdk/en/0.4.x/api/basics/sampling-config/).
+Each element of the buffer represents the amplitude of one sample.
+
+The following is an example of Burst modulation that outputs only the first sample within a period.
+
+<CodeTabs rust={"let length = 10;\nlet mut data = vec![0x00u8; length];\ndata[0] = 0xFF;\n\nModulation::new(SamplingConfig::FREQ_4K, &data);"} python={"length = 10\nbuffer = ModulationBuffer(length)\nbuffer[0] = 0xFF\n\nModulation(SamplingConfig.FREQ_4K, buffer)"} csharp={"var length = 10;\nvar buffer = new ModulationBuffer(length);\nbuffer[0] = 0xFF;\n\nnew Modulation(SamplingConfig.Freq4k, buffer);"} />

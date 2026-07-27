@@ -13,7 +13,7 @@ pub const REP_INFINITE: u16 = 0xFFFF;
 pub const FUNC_DYNAMIC_FREQ_BIT: u16 = 1;
 pub const FUNC_EMULATOR_BIT: u16 = 7;
 pub const VERSION_NUM_MAJOR: u8 = 0x0;
-pub const VERSION_NUM_MINOR: u8 = 0x3;
+pub const VERSION_NUM_MINOR: u8 = 0x4;
 pub const VERSION_NUM_PATCH: u8 = 0x0;
 
 pub const FPGA_STATE_BIT_THERMAL_ASSERT: u16 = 0;

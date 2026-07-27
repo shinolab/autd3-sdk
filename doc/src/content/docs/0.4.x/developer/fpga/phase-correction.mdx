@@ -1,0 +1,26 @@
+---
+title: Phase Correction
+description: 振動子毎に固定の位相を加算する Phase Correction サブモジュール
+sidebar:
+  order: 6
+slug: 0.4.x/developer/fpga/phase-correction
+---
+
+import Math from "@components/Math.astro";
+
+| Name           | In/Out | Width | Description              |
+| -------------- | ------ | ----- | ------------------------ |
+| CLK            | In     | 1     | メインクロック           |
+| DIN\_VALID      | In     | 1     | 位相データ有効フラグ     |
+| PHASE\_IN       | In     | 8     | 位相入力                 |
+| PHASE\_OUT      | Out    | 8     | 位相出力                 |
+| DOUT\_VALID     | Out    | 1     | 位相データ有効フラグ     |
+| PHASE\_CORR\_BUS | In     | -     | 位相補正データメモリバス |
+
+このモジュールでは, 位相データに振動子毎の固定の位相を加算する.
+主に振動子の個体差の補正や, `FociSTM` に何らかの位相を加えるために使用される.
+
+補正値は振動子毎に <Math tex="\SI{8}{bit}" />, 計 249 語の BRAM (`BRAM_PHASE_CORR`) に格納される.
+
+このモジュールは `Modulation` モジュール内でインスタンス化されており, `Modulation` による強度データの変調と並列に動作する.
+出力のタイミングを強度データと揃えるため, 入出力に遅延段が挿入されている.

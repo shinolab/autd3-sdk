@@ -1,0 +1,24 @@
+---
+title: Simulator
+description: Launching and connecting to the sound field simulator
+sidebar:
+  order: 7
+slug: 0.4.x/en/0.3.x/guide/simulator
+---
+
+`Simulator` is a sound field simulator that visualizes the AUTD3 output sound field in a browser.
+Even without real hardware, you can check the sound field generated from the data sent by the client.
+
+## Launching
+
+`Simulator` is bundled with the GUI console `autd3-console`.
+
+Download `autd3-console` from the [Release page](https://github.com/shinolab/autd3-sdk/releases) on GitHub, launch it, and open the "Simulator" tab at the top.
+`Simulator` can be launched from the tab.
+
+## Connecting
+
+Since `Simulator` internally launches a `RemoteServer`, the client connects to it with [`RemoteLink`](/autd3-sdk/en/0.4.x/0.3.x/api/link/remote/).
+The connection target is `127.0.0.1:<link-port>` (default is 8080).
+
+On connection, the simulator receives the client's `Geometry`, from which it determines the number of devices and their layout.

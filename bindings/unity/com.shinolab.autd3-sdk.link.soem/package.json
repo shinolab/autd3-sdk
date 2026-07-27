@@ -5,7 +5,7 @@
     "url": "git+https://github.com/shinolab/autd3-sdk.git",
     "directory": "bindings/unity/com.shinolab.autd3-sdk.link.soem"
   },
-  "version": "0.3.0",
+  "version": "0.4.0",
   "displayName": "AUTD3 Link SOEM (GPL-3.0)",
   "description": "AUTD3 SOEM EtherCAT link. Statically links SOEM, so this package is GPL-3.0-only.",
   "unity": "6000.0",
@@ -15,6 +15,6 @@
     "url": "https://github.com/shinolab"
   },
   "dependencies": {
-    "com.shinolab.autd3-sdk": "0.3.0"
+    "com.shinolab.autd3-sdk": "0.4.0"
   }
 }

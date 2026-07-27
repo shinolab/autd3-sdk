@@ -1,0 +1,28 @@
+---
+title: Pulse Width Encoder
+description: Output sound pressure control via PWM and conversion from intensity
+  to pulse width
+sidebar:
+  order: 3
+  label: Pulse Width and Output Sound Pressure
+slug: en/0.4.x/guide/pulse-width
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+
+In AUTD3, the output sound pressure is controlled by PWM (Pulse Width Modulation).
+In PWM, the relationship between the pulse width <Math tex="D" /> and the output sound pressure <Math tex="P" /> is theoretically expressed as follows.
+
+<MathBlock tex="P \propto \sin\left(D\pi\right)." />
+
+By default, the settings are such that the `intensity` parameter and the output sound pressure <Math tex="P" /> are theoretically linearly proportional.
+Specifically, the pulse width <Math tex="D" /> is converted from the `intensity` parameter <Math tex="I" /> (8 bit) as follows.
+
+<MathBlock tex="D = \frac{\arcsin\left(\frac{I}{255}\right)}{\pi} \quad\left(\therefore P \propto \sin\left(\arcsin\left(\frac{I}{255}\right)\right) = \frac{I}{255}\right)" />
+
+However, note that in practice, due to individual differences between transducers and deviations from the theoretical value, the relationship is not necessarily linearly proportional.
+Even so, the output sound pressure can be assumed to increase monotonically with respect to the `intensity` parameter.
+
+Note that this conversion is performed by a lookup table keyed on intensity, and this table can be changed.
+For details, refer to [SetPulseWidthTable](/autd3-sdk/en/0.4.x/api/command/set-pulse-width-table/).

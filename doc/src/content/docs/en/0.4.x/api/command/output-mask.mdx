@@ -1,0 +1,23 @@
+---
+title: SetOutputMask
+description: SetOutputMask to toggle output enable/disable
+sidebar:
+  order: 9
+slug: en/0.4.x/api/command/output-mask
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetOutputMask` is a command that toggles output enable/disable per transducer.
+
+## API
+
+<CodeTabs rust={"SetOutputMask { masks: &masks };"} python={"SetOutputMask(masks)"} csharp={"new SetOutputMask(masks);"} />
+
+| Field   | Type           | Description                                                    |
+| ------- | -------------- | ------------------------------------------------------------- |
+| `masks` | `&[Vec<bool>]` | Output mask per device (output when `true`). |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::SetOutputMask;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_nop::Nop;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet client = Client::open(&geometry, Nop, ClientConfig::default()).await?;\n\nlet masks: Vec<Vec<bool>> = geometry\n    .iter()\n    .map(|dev| vec![true; dev.num_transducers()])\n    .collect();\n\nlet mut builder = client.datagram_builder();\nbuilder.push(SetOutputMask { masks: &masks });\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import SetOutputMask\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3_link_nop import Nop\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    client = await Client.open(geometry, Nop(), ClientConfig())\n\n    masks = [\n        [True] * geometry.device(i).num_transducers()\n        for i in range(geometry.num_devices())\n    ]\n\n    builder = client.datagram_builder()\n    builder.push(SetOutputMask(masks=masks))\n    frames = builder.build()\n    for frame in frames:\n        await client.send_checked(frame)\n\n    await client.close()\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing Nop = AUTD3.Link.Nop;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());\n\nvar masks = new bool[geometry.NumDevices][];\nfor (var i = 0; i < geometry.NumDevices; i++)\n{\n    var count = geometry[i].NumTransducers;\n    masks[i] = new bool[count];\n    for (var t = 0; t < count; t++)\n    {\n        masks[i][t] = true;\n    }\n}\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new SetOutputMask(masks));\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nawait client.CloseAsync();"} />

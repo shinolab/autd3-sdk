@@ -1,0 +1,107 @@
+---
+title: 逆伝搬法
+description: 焦点からの逆伝搬に基づくナイーブ法とGS法およびGS-PATによる位相回復
+sidebar:
+  order: 5
+slug: 0.4.x/theory/holo/back-prop
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import Figure from "@components/Figure.astro";
+
+この章では, 焦点からの逆伝搬を用いる解法を記す.
+
+## ナイーブな方法
+
+ナイーブな方法では, 制御点の位相をすべて<Math tex="0" />として, 単純に焦点から逆伝搬した解を重ね合わせる.
+すなわち,
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  a_j\rme^{-\im\phi_j} = \sum_i \overline{G_{ij}}|p(\br_i)|
+\end{aligned}
+`}
+/>
+
+である.
+(実際には, ここからさらに振動子の出力の制約を満たすようにする必要がある.)
+
+しかし, すでに何度も述べたように, 焦点の位相に対しては最適化の余地がある.
+
+## Gerchberg-Saxton (GS) 法
+
+まず, Marzoらの提案したフェーズドアレイ用の焦点位相回復について述べる\[^marzo2019holographic].
+以下が, そのアルゴリズムである.
+
+1. 初期化: <Math tex="\bq^{(0)} = \bone" />
+2. 以下を<Math tex="n" />回繰り返す:
+   1. 順伝搬: <Math tex="\bgamma^{(n)} = G \bq^{(n-1)}" />
+   2. 焦点の正規化:
+      <Math tex="p^{(n)}(\br_i) =\frac{\gamma_i^{(n)}}{\left|\gamma_i^{(n)}\right|}|p(\br_i)|" />
+   3. 逆伝搬: <Math tex="\bxi^{(n)} = G\hermite\bp^{(n)}" />
+   4. 振動子の正規化:
+      <Math tex="q_j^{(n)} =\frac{\xi_j^{(n)}}{\left|\xi_j^{(n)}\right|}a_j" />
+
+このアルゴリズムは<Math tex="G" />の像<Math tex="\mathrm{Im}\,G" />, すなわち, フェーズドアレイが実際に出力できる音場の集合と, 目標音場の集合<Math tex="F=\left\lbrace \bp^* \mid |p_i^*| = |p_i| \right\rbrace" />との間を交互に射影しながら, その積集合<Math tex="\mathrm{Im}\,G\cap{F}" />内の一点を求めている.
+このように, 伝搬逆伝搬を繰り返して, 望みの場に収束させる方法を, Gerchberg-Saxton (GS) 法\[^gerchberg1972practical]やIterative Fourier transform algorithm (IFTA) \[^wyrowski1988iterative] \[^wyrowski1989iterative] と呼ぶ.
+
+以下にGS法の概念図を示す.
+GS法は2つの集合が凸包である場合には収束する\[^cheney1959proximity].
+このとき, <Math tex="\mathrm{Im}\,G\cap{F} \ne \emptyset" />なら, <Math tex="p \in \mathrm{Im}\,G\cap{F}" />に, そうでないのなら, <Math tex="\mathrm{Im}\,G, F" />間の距離を最小にする点に収束する\[^8].
+しかし, 今回は集合<Math tex="F" />は凸ではない.
+そのため, 収束は保証されないが, 実用的にはほとんど問題ない解が出てくることが確かめられている.
+
+<Figure src="img/theory/holo/gs-image.jpg" alt="GS 法の概念図" caption="GS 法の概念図" />
+
+なお, このアルゴリズムでは振動子の振幅成分を決定できない.
+論文 \[^marzo2019holographic]では, 振動子の振幅は固定されている(<Math tex="a_j=1, \forall j" />).
+
+### GS for Phased Arrays of Transducers (GS-PAT)
+
+上記をさらに最適化したアルゴリズムとして, GS-PATが提案されている \[^plasencia2020gs].
+
+この論文の主目的は高速化である.
+GS法の繰り返し第4ステップがなくなれば, 1,3,4ステップををまとめて<Math tex="\bgamma^{(n)} = GG\hermite\bp^{(n-1)}" />とかける, ということから着想を得ている.
+そこで, 以下の規格化逆伝搬行列<Math tex="B" />を考える.
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  B = \left(\begin{array}{cc}
+          \frac{\overline{G_{00}}}{\sum_{j} |G_{0j}|^2}    & \cdots & \frac{\overline{G_{M-1,0}}}{\sum_{j} |G_{M-1,j}|^2}   \\
+          \vdots                                           & \ddots & \vdots                                                \\
+          \frac{\overline{G_{0,N-1}}}{\sum_{j} |G_{0j}|^2} & \cdots & \frac{\overline{G_{M-1,N-1}}}{\sum_{j} |G_{M-1,j}|^2}
+      \end{array}\right)
+\end{aligned}
+`}
+/>
+
+この<Math tex="B" />の意味は[固有値問題と行列方程式](/autd3-sdk/0.4.x/theory/holo/evp/)の行列<Math tex="X" />とほとんど同じである.
+この<Math tex="B" />を用いて, GS-PATのアルゴリズムは次のように表される.
+
+1. 初期化: <Math tex="\bp^{(0)} = (|p_0|, ..., |p_{M-1}|)\trans" />
+2. 以下を<Math tex="n" />回繰り返す:
+   1. <Math tex="\bgamma^{(n)} = GB\bp^{(n-1)}" />
+   2. <Math tex="\bp^{(n)} = [p^{(n)}(\br_0), ..., p^{(n)}(\br_{M-1})], p_i^{(n)} =\frac{\gamma_i^{(n)}}{\left|\gamma_i^{(n)}\right|}\left|p_i^{(0)}\right|" />
+
+第4ステップを避けて, <Math tex="B" />を使うことのメリットは2つある.
+
+1. <Math tex="GB" />はあらかじめ計算でき, その次元は<Math tex="M\times M" />である.
+   ほとんどの場合, <Math tex="M < N" />であるため, 各ステップの行列計算量は少なくなり, 計算速度の面で有利.
+2. 振動子の振幅の自由度を残したままにできる.
+
+\[^marzo2019holographic]: Marzo, Asier, and Bruce W. Drinkwater. "Holographic acoustic tweezers." Proceedings of the National Academy of Sciences 116.1 (2019): 84-89.
+
+\[^gerchberg1972practical]: Gerhberg, R., and W. Saxton. "A practical algorithm for the determination of phase from image and diffraction plane picture." Optik 35 (1972): 237-246.
+
+\[^wyrowski1988iterative]: Wyrowski, Frank, and Olof Bryngdahl. "Iterative Fourier-transform algorithm applied to computer holography." JOSA A 5.7 (1988): 1058-1065.
+
+\[^wyrowski1989iterative]: Wyrowski, Frank. "Iterative quantization of digital amplitude holograms." Applied optics 28.18 (1989): 3864-3870.
+
+\[^cheney1959proximity]: Cheney, Ward, and Allen A. Goldstein. "Proximity maps for convex sets." Proceedings of the American Mathematical Society 10.3 (1959): 448-450.
+
+\[^8]: ただし, 有限回のステップで収束することは保証されていない.
+
+\[^plasencia2020gs]: Plasencia, Diego Martinez, et al. "GS-PAT: high-speed multi-point sound-fields for phased arrays of transducers." ACM Transactions on Graphics (TOG) 39.4 (2020): 138-1.

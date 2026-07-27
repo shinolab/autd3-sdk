@@ -1,0 +1,37 @@
+---
+title: Link State Monitoring
+description: Monitor the EtherCAT link state of devices with the State Checker
+sidebar:
+  order: 6
+slug: 0.4.x/en/0.3.x/guide/state-check
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+There are cases where you want to monitor whether the EtherCAT link to the device is healthy during operation.
+`Client` does not spawn a background task to monitor the state on its own.
+Instead, it returns a `Checker` that the user drives at their own timing.
+The user has full control over the monitoring frequency and the response to state changes.
+
+## Obtaining the Checker
+
+Using `open_with_checker` instead of the usual [`Client::open`](/autd3-sdk/en/0.4.x/0.3.x/api/basics/client/) returns a pair of `Client` and `Checker`.
+
+<CodeTabs rust={"let (client, mut checker) = Client::open_with_checker(\n    &geometry,\n    EtherCrabLinkOption::default(),\n    ClientConfig::default(),\n)\n.await?;"} python={"client, checker = await Client.open_with_checker(\n    geometry,\n    ethercrab.EtherCrabLinkOption(),\n    ClientConfig(),\n)"} csharp={"var (client, checker) = await Client.OpenWithCheckerAsync(\n    geometry,\n    new EtherCrabLinkOption(),\n    new ClientConfig()\n);"} />
+
+## Obtaining the State
+
+`Checker::check` returns the link state `LinkStatus` at the time of the call.
+`LinkStatus` holds the following.
+
+* `devices`: the state of each device (`DeviceState`). `OP` when normal, `LOST` when disconnected, etc.
+* `all_op`: whether all devices are in the `OP` state.
+* `any_lost`: whether any device is in the `LOST` state.
+* `recoveries`: the cumulative number of recoveries from disconnection.
+
+The following is an example that calls `check` at fixed intervals and outputs only when the state changes.
+
+<CodeTabs rust={"let mut last: Option<LinkStatus> = None;\nloop {\n    let status = checker.check().await?;\n    if last.as_ref() != Some(&status) {\n        for (i, state) in status.devices.iter().enumerate() {\n            println!(\"device[{i}]: {state}\");\n        }\n        println!(\n            \"all operational: {}, any lost: {}, recoveries: {}\",\n            status.all_op(),\n            status.any_lost(),\n            status.recoveries\n        );\n        last = Some(status);\n    }\n    tokio::time::sleep(CHECK_INTERVAL).await;\n}"} python={"last = None\nwhile True:\n    status = await checker.check()\n    if status != last:\n        for i, state in enumerate(status.device_states):\n            print(f\"device[{i}]: {state}\")\n        print(f\"all operational: {status.all_op}, any lost: {status.any_lost}, recoveries: {status.recoveries}\")\n        last = status\n    await asyncio.sleep(CHECK_INTERVAL)"} csharp={"LinkStatus? last = null;\nwhile (true)\n{\n    var status = await checker.CheckAsync();\n    if (status != last)\n    {\n        for (var i = 0; i < status.Devices.Count; i++)\n        {\n            Console.WriteLine($\"device[{i}]: {status.Devices[i]}\");\n        }\n        Console.WriteLine($\"all operational: {status.AllOp}, any lost: {status.AnyLost}, recoveries: {status.Recoveries}\");\n        last = status;\n    }\n    await Task.Delay(CheckInterval);\n}"} />
+
+How often to call `check` is up to the user.
+A typical usage is to poll at a low frequency as above, in a task separate from the high-frequency send loop.
