@@ -19,7 +19,7 @@ jobs:
         with:
           components: rustfmt, clippy
           workspaces: |
-            emulator
+            extras/autd3-rs-emulator
             xtask
       - name: Format
         run: cargo xtask emulator format

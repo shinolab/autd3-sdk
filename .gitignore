@@ -1,6 +1,7 @@
 /target
 /xtask/target
 /simulator/target
+/extras/autd3-rs-emulator/target
 /firmware/cpu/build
 /firmware/cpu/board/target
 /firmware/dist

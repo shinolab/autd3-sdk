@@ -14,7 +14,7 @@ autd3-rs = { path = "../../../crates/autd3-rs" }
 autd3-rs-pattern = { path = "../../../crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { path = "../../../crates/autd3-rs-pattern-holo" }
 autd3-rs-modulation = { path = "../../../crates/autd3-rs-modulation" }
-autd3-rs-emulator = { path = "../../../emulator/autd3-rs-emulator" }
+autd3-rs-emulator = { path = "../../../extras/autd3-rs-emulator" }
 autd3-rs-link-nop = { path = "../../../crates/autd3-rs-link-nop" }
 autd3-rs-link-ethercrab = { path = "../../../crates/autd3-rs-link-ethercrab" }
 autd3-rs-link-remote = { path = "../../../crates/autd3-rs-link-remote" }

@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args;
 
-use crate::component::{detect, release_sections, Component, COMPONENTS};
+use crate::component::{COMPONENTS, Component, detect, release_sections};
 use crate::util::{capture, capture_lenient};
 
 #[derive(Args)]

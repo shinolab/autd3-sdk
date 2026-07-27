@@ -74,7 +74,7 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: ConsoleCmd,
     },
-    /// The firmware emulator (`emulator/`).
+    /// The firmware emulator (`extras/autd3-rs-emulator/`).
     Emulator {
         #[command(subcommand)]
         cmd: EmulatorCmd,

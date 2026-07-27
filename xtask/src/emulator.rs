@@ -54,7 +54,7 @@ pub enum EmulatorCmd {
 }
 
 pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
-    let dir = root.join("emulator");
+    let dir = root.join("extras").join("autd3-rs-emulator");
     let feature_args = |gpu: bool| -> Vec<&str> {
         if gpu {
             vec!["--features", "autd3-rs-emulator/gpu"]

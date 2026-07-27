@@ -33,8 +33,7 @@ const IP_CONSTS: &[IpConst] = &[
     },
 ];
 
-const FW_INTERNAL_PREFIXES: &[&str] =
-    &["ADDR_", "BRAM_SELECT_", "BRAM_CNT_SELECT_", "CTL_FLAG_"];
+const FW_INTERNAL_PREFIXES: &[&str] = &["ADDR_", "BRAM_SELECT_", "BRAM_CNT_SELECT_", "CTL_FLAG_"];
 
 fn is_fw_internal(name: &str) -> bool {
     FW_INTERNAL_PREFIXES.iter().any(|p| name.starts_with(p))
@@ -288,10 +287,13 @@ fn mhz_to_hz(s: &str) -> Option<u64> {
     if int.is_empty() || !int.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
-    if frac.len() > 6 || !frac.bytes().all(|b| b.is_ascii_digit()) {
+    let Ok(frac_digits) = u32::try_from(frac.len()) else {
+        return None;
+    };
+    if frac_digits > 6 || !frac.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
-    let scale = 10u64.pow(6 - frac.len() as u32);
+    let scale = 10u64.pow(6 - frac_digits);
     let frac_hz = if frac.is_empty() {
         0
     } else {
@@ -305,12 +307,16 @@ fn read_clk_consts(root: &Path) -> Result<Vec<Const>> {
         .join(IP_DIR_REL)
         .join(CLK_WIZ_IP)
         .join(format!("{CLK_WIZ_IP}.xci"));
-    let text =
-        std::fs::read_to_string(&xci).with_context(|| format!("failed to read {}", xci.display()))?;
+    let text = std::fs::read_to_string(&xci)
+        .with_context(|| format!("failed to read {}", xci.display()))?;
     let mhz = xci_value_str(&text, CLK_OUT_FREQ_KEY)
         .with_context(|| format!("missing {CLK_OUT_FREQ_KEY} in {}", xci.display()))?;
-    let hz = mhz_to_hz(mhz)
-        .with_context(|| format!("cannot parse {CLK_OUT_FREQ_KEY}={mhz:?} in {}", xci.display()))?;
+    let hz = mhz_to_hz(mhz).with_context(|| {
+        format!(
+            "cannot parse {CLK_OUT_FREQ_KEY}={mhz:?} in {}",
+            xci.display()
+        )
+    })?;
     Ok(vec![Const {
         name: "FPGA_CLK_FREQ_HZ".to_string(),
         value: hz.to_string(),
