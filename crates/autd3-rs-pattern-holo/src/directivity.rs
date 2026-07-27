@@ -59,33 +59,37 @@ pub enum Directivity {
     T4010A1,
 }
 
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn value_t4010a1(theta_rad: f32) -> f32 {
+    let theta_deg = theta_rad.to_degrees().abs() % 180.0;
+    let theta_deg = 90.0 - (theta_deg - 90.0).abs();
+    let i = (theta_deg / 10.0).ceil() as usize;
+    if i == 0 {
+        1.0
+    } else {
+        let idx = i - 1;
+        let x = theta_deg - idx as f32 * 10.0;
+        ((DIR_COEF_D[idx] * x + DIR_COEF_C[idx]) * x + DIR_COEF_B[idx]) * x + DIR_COEF_A[idx]
+    }
+}
+
 impl Directivity {
     #[must_use]
     pub(crate) fn value_at(self, tr_dir: UnitVector3<f32>, diff: &Vector3<f32>) -> f32 {
         match self {
             Directivity::Sphere => 1.0,
-            Directivity::T4010A1 => self.value(tr_dir.cross(diff).norm().atan2(tr_dir.dot(diff))),
+            Directivity::T4010A1 => {
+                value_t4010a1(tr_dir.cross(diff).norm().atan2(tr_dir.dot(diff)))
+            }
         }
     }
 
     #[must_use]
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn value(self, theta_rad: f32) -> f32 {
         match self {
             Directivity::Sphere => 1.0,
-            Directivity::T4010A1 => {
-                let theta_deg = theta_rad.to_degrees().abs() % 180.0;
-                let theta_deg = 90.0 - (theta_deg - 90.0).abs();
-                let i = (theta_deg / 10.0).ceil() as usize;
-                if i == 0 {
-                    1.0
-                } else {
-                    let idx = i - 1;
-                    let x = theta_deg - idx as f32 * 10.0;
-                    ((DIR_COEF_D[idx] * x + DIR_COEF_C[idx]) * x + DIR_COEF_B[idx]) * x
-                        + DIR_COEF_A[idx]
-                }
-            }
+            Directivity::T4010A1 => value_t4010a1(theta_rad),
         }
     }
 }
