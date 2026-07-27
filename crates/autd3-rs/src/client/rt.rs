@@ -17,7 +17,7 @@ use autd3_rs_core::RtSchedulePolicy;
 
 use super::completion::CompletionSender;
 use super::config::{ClientConfig, MAX_DEVICES};
-use super::pool::{Slot, SlotPool};
+use super::pool::Slot;
 
 pub(super) struct CmdMessage {
     pub(super) frame: Slot,
@@ -163,13 +163,12 @@ fn apply_thread_tuning(config: &ClientConfig) {
 pub(super) fn run_rt_thread<L: Link>(
     link: L,
     cmd_rx: mpsc::Receiver<CmdMessage>,
-    pool: Arc<SlotPool>,
     config: ClientConfig,
     hs_done_tx: oneshot::Sender<Result<(), String>>,
     closed: Arc<AtomicBool>,
 ) {
     apply_thread_tuning(&config);
-    let mut rt = RtThread::new(link, cmd_rx, pool, config, closed);
+    let mut rt = RtThread::new(link, cmd_rx, config, closed);
     match rt.handshake() {
         Ok(()) => {}
         Err(e) => {
@@ -186,7 +185,6 @@ pub(super) fn run_rt_thread<L: Link>(
 struct RtThread<L: Link> {
     link: L,
     cmd_rx: mpsc::Receiver<CmdMessage>,
-    pool: Arc<SlotPool>,
     config: ClientConfig,
     closed: Arc<AtomicBool>,
 
@@ -212,7 +210,6 @@ impl<L: Link> RtThread<L> {
     fn new(
         link: L,
         cmd_rx: mpsc::Receiver<CmdMessage>,
-        pool: Arc<SlotPool>,
         config: ClientConfig,
         closed: Arc<AtomicBool>,
     ) -> Self {
@@ -228,7 +225,6 @@ impl<L: Link> RtThread<L> {
         Self {
             link,
             cmd_rx,
-            pool,
             pending: VecDeque::with_capacity(config.max_inflight.get()),
             held_exclusive: None,
             config,
@@ -466,7 +462,6 @@ impl<L: Link> RtThread<L> {
             entry
                 .response_tx
                 .send(Ok(Response::from_slice(entry.frame.data())));
-            self.pool.release(entry.frame);
             progressed = true;
         }
         if progressed {
@@ -479,24 +474,21 @@ impl<L: Link> RtThread<L> {
             entry.response_tx.send(Err(Error::Timeout {
                 cycles: self.config.timeout_cycles,
             }));
-            self.pool.release(entry.frame);
         }
     }
 
     fn teardown(&mut self, link_error: Option<&str>) {
         tracing::debug!(pending = self.pending.len(), "RT thread stopping");
         let cause = || link_error.map_or(Error::RtClosed, |msg| Error::Link(msg.to_owned()));
+        self.cmd_rx.close();
         if let Some(msg) = self.held_exclusive.take() {
             msg.response_tx.send(Err(cause()));
-            self.pool.release(msg.frame);
         }
         for entry in self.pending.drain(..) {
             entry.response_tx.send(Err(cause()));
-            self.pool.release(entry.frame);
         }
         while let Ok(msg) = self.cmd_rx.try_recv() {
             msg.response_tx.send(Err(cause()));
-            self.pool.release(msg.frame);
         }
     }
 }

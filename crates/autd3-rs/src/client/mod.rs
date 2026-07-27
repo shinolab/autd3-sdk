@@ -97,12 +97,11 @@ impl Client {
         let (hs_done_tx, hs_done_rx) = oneshot::channel::<Result<(), String>>();
         let closed = Arc::new(AtomicBool::new(false));
         let closed_for_rt = Arc::clone(&closed);
-        let pool_for_rt = Arc::clone(&pool);
 
         let join = std::thread::Builder::new()
             .name("autd3-rs-rt".to_owned())
             .spawn(move || {
-                rt::run_rt_thread(link, cmd_rx, pool_for_rt, config, hs_done_tx, closed_for_rt);
+                rt::run_rt_thread(link, cmd_rx, config, hs_done_tx, closed_for_rt);
             })
             .map_err(|e| Error::Link(format!("failed to spawn RT thread: {e}")))?;
 
@@ -229,7 +228,7 @@ impl Client {
 
     async fn dispatch(&self, slot: pool::Slot, exclusive: bool) -> Result<ResponseFuture, Error> {
         let (response_tx, response_rx) = self.completions.channel(self.mirror_for_response());
-        if let Err(e) = self
+        if self
             .cmd_tx
             .send(CmdMessage {
                 frame: slot,
@@ -237,9 +236,9 @@ impl Client {
                 exclusive,
             })
             .await
+            .is_err()
         {
             tracing::warn!("RT thread is closed; frame dropped");
-            self.pool.release(e.0.frame);
             self.mark_desynced();
             return Err(Error::RtClosed);
         }

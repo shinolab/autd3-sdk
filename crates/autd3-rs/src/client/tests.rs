@@ -294,6 +294,16 @@ impl std::fmt::Display for LinkFailure {
 struct FailingLink {
     inner: LoopbackLink,
     fail: Arc<AtomicBool>,
+    slow_drop: Option<Arc<AtomicBool>>,
+}
+
+impl Drop for FailingLink {
+    fn drop(&mut self) {
+        if let Some(entered) = &self.slow_drop {
+            entered.store(true, AtomicOrdering::Release);
+            std::thread::sleep(Duration::from_millis(500));
+        }
+    }
 }
 
 impl Link for FailingLink {
@@ -1224,6 +1234,7 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
     let link = FailingLink {
         inner,
         fail: Arc::clone(&fail),
+        slow_drop: None,
     };
     let max_inflight = NonZeroUsize::new(3).unwrap();
     let client = Client::open(
@@ -1262,6 +1273,52 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
     assert!(
         matches!(queued_err, Error::Link(_)),
         "a command still queued in the channel must be failed with the link error, got {queued_err:?}"
+    );
+}
+
+#[tokio::test]
+async fn sending_after_the_rt_thread_died_fails_instead_of_blocking() {
+    let (inner, _slave) = slave_pair();
+    let fail = Arc::new(AtomicBool::new(false));
+    let entered_drop = Arc::new(AtomicBool::new(false));
+    let link = FailingLink {
+        inner,
+        fail: Arc::clone(&fail),
+        slow_drop: Some(Arc::clone(&entered_drop)),
+    };
+    let max_inflight = NonZeroUsize::new(1).unwrap();
+    let client = Client::open(
+        &geometry(1),
+        link,
+        ClientConfig {
+            max_inflight,
+            ..ClientConfig::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    fail.store(true, AtomicOrdering::Relaxed);
+    while !entered_drop.load(AtomicOrdering::Acquire) {
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+
+    for _ in 0..4 {
+        let err = tokio::time::timeout(Duration::from_secs(5), send_nop(&client))
+            .await
+            .expect("a send must not block once the RT thread is gone")
+            .unwrap_err();
+        assert!(matches!(err, Error::RtClosed | Error::Link(_)), "{err:?}");
+    }
+
+    tokio::time::timeout(Duration::from_secs(5), client.close())
+        .await
+        .expect("close must return once the RT thread is gone")
+        .unwrap();
+    assert_eq!(
+        client.pool.available_permits(),
+        max_inflight.get(),
+        "no slot may be lost to a send that raced the RT thread teardown"
     );
 }
 
