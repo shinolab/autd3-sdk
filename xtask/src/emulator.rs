@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Subcommand;
 
-use crate::util::run;
+use crate::util::{publish_workspace, run};
 
 #[derive(Subcommand)]
 pub enum EmulatorCmd {
@@ -30,6 +30,12 @@ pub enum EmulatorCmd {
         /// Rewrite the files instead of only checking them
         #[arg(long)]
         fix: bool,
+    },
+    /// Publish the emulator workspace to crates.io, skipping already-published versions
+    Publish {
+        /// Run every check without uploading
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Build and run an emulator example
     Example {
@@ -87,6 +93,7 @@ pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
             }
             run("cargo", args, &dir)
         }
+        EmulatorCmd::Publish { dry_run } => publish_workspace(&dir, *dry_run),
         EmulatorCmd::Example {
             name,
             debug,
