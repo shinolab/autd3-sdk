@@ -5,7 +5,7 @@ use tokio::sync::Semaphore;
 use crate::commands::operation::Distribution;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-pub(super) struct Slot {
+pub(super) struct SlotData {
     num_devices: usize,
     dist: Distribution,
     payload: Box<[u8]>,
@@ -13,7 +13,7 @@ pub(super) struct Slot {
     data: Box<[u8]>,
 }
 
-impl Slot {
+impl SlotData {
     fn new(num_devices: usize) -> Self {
         Self {
             num_devices,
@@ -74,31 +74,63 @@ impl Slot {
     }
 }
 
+pub(super) struct Slot {
+    pool: Arc<SlotPool>,
+    data: Option<SlotData>,
+}
+
+impl std::ops::Deref for Slot {
+    type Target = SlotData;
+
+    fn deref(&self) -> &SlotData {
+        self.data.as_ref().expect("data is taken only on drop")
+    }
+}
+
+impl std::ops::DerefMut for Slot {
+    fn deref_mut(&mut self) -> &mut SlotData {
+        self.data.as_mut().expect("data is taken only on drop")
+    }
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        if let Some(data) = self.data.take() {
+            self.pool.release(data);
+        }
+    }
+}
+
 pub(super) struct SlotPool {
-    free: Mutex<Vec<Slot>>,
+    free: Mutex<Vec<SlotData>>,
     permits: Semaphore,
 }
 
 impl SlotPool {
     pub(super) fn new(num_devices: usize, capacity: usize) -> Arc<Self> {
-        let free = (0..capacity).map(|_| Slot::new(num_devices)).collect();
+        let free = (0..capacity).map(|_| SlotData::new(num_devices)).collect();
         Arc::new(Self {
             free: Mutex::new(free),
             permits: Semaphore::new(capacity),
         })
     }
 
-    pub(super) async fn acquire(&self) -> Slot {
+    pub(super) async fn acquire(self: &Arc<Self>) -> Slot {
         self.permits
             .acquire()
             .await
             .expect("pool semaphore is never closed")
             .forget();
-        self.free
+        let data = self
+            .free
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .pop()
-            .expect("a permit guarantees a free slot")
+            .expect("a permit guarantees a free slot");
+        Slot {
+            pool: Arc::clone(self),
+            data: Some(data),
+        }
     }
 
     #[cfg(test)]
@@ -106,11 +138,11 @@ impl SlotPool {
         self.permits.available_permits()
     }
 
-    pub(super) fn release(&self, slot: Slot) {
+    fn release(&self, data: SlotData) {
         self.free
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .push(slot);
+            .push(data);
         self.permits.add_permits(1);
     }
 }
