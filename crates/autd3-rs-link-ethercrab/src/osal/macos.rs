@@ -9,6 +9,8 @@ use ethercrab::{PduRx, PduTx};
 use tokio::io::Interest;
 use tokio::io::unix::AsyncFd;
 
+use crate::osal::frame::normalize_source_mac;
+
 const ETHERCAT_ETHERTYPE: u32 = 0x88a4;
 const BPF_DEVICES: u32 = 256;
 const BPF_BUFFER_LEN: libc::c_uint = 1 << 16;
@@ -265,6 +267,7 @@ fn is_transient(e: &io::Error) -> bool {
 struct TxRxFut<'sto> {
     socket: AsyncFd<RawSocket>,
     buf: Box<[u8]>,
+    scratch: Box<[u8]>,
     tx: Option<PduTx<'sto>>,
     rx: Option<PduRx<'sto>>,
 }
@@ -336,7 +339,9 @@ impl Future for TxRxFut<'_> {
                         offset: 0,
                     };
                     for frame in records {
-                        if let Err(e) = rx.receive_frame(frame) {
+                        if let Err(e) =
+                            rx.receive_frame(normalize_source_mac(frame, &mut this.scratch))
+                        {
                             tracing::trace!("skipping unprocessable RX frame: {e}");
                         }
                     }
@@ -370,6 +375,7 @@ pub(crate) fn tx_rx_task<'sto>(
     Ok(TxRxFut {
         socket: AsyncFd::with_interest(socket, Interest::READABLE)?,
         buf: vec![0u8; buffer_len].into_boxed_slice(),
+        scratch: vec![0u8; crate::osal::frame::MAX_FRAME_BYTES].into_boxed_slice(),
         tx: Some(pdu_tx),
         rx: Some(pdu_rx),
     })
