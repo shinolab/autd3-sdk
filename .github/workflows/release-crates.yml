@@ -5,6 +5,7 @@ on:
     tags:
       - 'v*'
       - 'rust-v*'
+  workflow_dispatch:
 
 defaults:
   run:
@@ -32,8 +33,8 @@ jobs:
       - name: Publish workspace to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        run: cargo publish --workspace --no-verify
-      - name: Publish autd3-rs-emulator to crates.io
+        run: cargo xtask rust publish
+      - name: Publish the emulator workspace to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        run: cargo publish -p autd3-rs-emulator --manifest-path emulator/Cargo.toml --no-verify
+        run: cargo xtask emulator publish

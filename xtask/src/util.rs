@@ -71,19 +71,31 @@ pub fn capture_lenient(program: &str, args: &[&str], cwd: &Path) -> Result<Strin
     Ok(stdout.trim().to_string())
 }
 
-fn workspace_member_packages(workspace_dir: &Path) -> Result<Vec<String>> {
+struct MemberPackage {
+    name: String,
+    version: String,
+    publishable: bool,
+}
+
+fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
     let manifest = workspace_dir.join("Cargo.toml");
     let text = std::fs::read_to_string(&manifest)
         .with_context(|| format!("failed to read {}", manifest.display()))?;
     let doc = text
         .parse::<toml_edit::DocumentMut>()
         .with_context(|| format!("failed to parse {}", manifest.display()))?;
+    let inherited_version = doc
+        .get("workspace")
+        .and_then(|w| w.get("package"))
+        .and_then(|p| p.get("version"))
+        .and_then(toml_edit::Item::as_str)
+        .map(str::to_string);
     let members = doc
         .get("workspace")
         .and_then(|w| w.get("members"))
         .and_then(toml_edit::Item::as_array)
         .with_context(|| format!("no [workspace] members in {}", manifest.display()))?;
-    let mut names = Vec::new();
+    let mut packages = Vec::new();
     for member in members {
         let member = member
             .as_str()
@@ -94,14 +106,89 @@ fn workspace_member_packages(workspace_dir: &Path) -> Result<Vec<String>> {
         let member_doc = member_text
             .parse::<toml_edit::DocumentMut>()
             .with_context(|| format!("failed to parse {}", member_manifest.display()))?;
-        let name = member_doc
+        let package = member_doc
             .get("package")
-            .and_then(|p| p.get("name"))
+            .with_context(|| format!("no [package] in {}", member_manifest.display()))?;
+        let name = package
+            .get("name")
             .and_then(toml_edit::Item::as_str)
             .with_context(|| format!("no [package] name in {}", member_manifest.display()))?;
-        names.push(name.to_string());
+        let version = match package.get("version").and_then(toml_edit::Item::as_str) {
+            Some(version) => version.to_string(),
+            None => inherited_version.clone().with_context(|| {
+                format!(
+                    "{} inherits its version but {} has no [workspace.package] version",
+                    member_manifest.display(),
+                    manifest.display()
+                )
+            })?,
+        };
+        let publishable = match package.get("publish") {
+            None => true,
+            Some(item) if item.as_bool() == Some(true) => true,
+            Some(item) => item
+                .as_array()
+                .is_some_and(|r| r.iter().any(|v| v.as_str() == Some("crates-io"))),
+        };
+        packages.push(MemberPackage {
+            name: name.to_string(),
+            version,
+            publishable,
+        });
     }
-    Ok(names)
+    Ok(packages)
+}
+
+fn workspace_member_packages(workspace_dir: &Path) -> Result<Vec<String>> {
+    Ok(workspace_members(workspace_dir)?
+        .into_iter()
+        .map(|package| package.name)
+        .collect())
+}
+
+fn is_published(package: &MemberPackage, cwd: &Path) -> Result<bool> {
+    let spec = format!("{}@{}", package.name, package.version);
+    let status = Command::new("cargo")
+        .args(["info", &spec, "--registry", "crates-io"])
+        .current_dir(cwd)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .context("failed to spawn `cargo` (is it installed and on PATH?)")?;
+    Ok(status.success())
+}
+
+pub fn publish_workspace(workspace_dir: &Path, dry_run: bool) -> Result<()> {
+    let mut args = vec![
+        "publish".to_string(),
+        "--workspace".to_string(),
+        "--no-verify".to_string(),
+    ];
+    let mut pending = Vec::new();
+    for package in workspace_members(workspace_dir)?
+        .iter()
+        .filter(|package| package.publishable)
+    {
+        if is_published(package, workspace_dir)? {
+            println!(
+                "skipping {} v{} (already on crates.io)",
+                package.name, package.version
+            );
+            args.push("--exclude".to_string());
+            args.push(package.name.clone());
+        } else {
+            pending.push(format!("{} v{}", package.name, package.version));
+        }
+    }
+    if pending.is_empty() {
+        println!("nothing to publish; every publishable package is already on crates.io");
+        return Ok(());
+    }
+    println!("publishing {}", pending.join(", "));
+    if dry_run {
+        args.push("--dry-run".to_string());
+    }
+    run("cargo", args, workspace_dir)
 }
 
 pub fn cargo_fmt_packages(workspace_dir: &Path, fix: bool) -> Result<()> {

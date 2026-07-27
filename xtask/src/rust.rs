@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Subcommand;
 
-use crate::util::{run, run_built_bin};
+use crate::util::{publish_workspace, run, run_built_bin};
 
 /// Packages whose test binaries link a pcap runtime
 const PCAP_PACKAGES: &[&str] = &[
@@ -30,6 +30,12 @@ pub enum RustCmd {
         /// Rewrite the files instead of only checking them
         #[arg(long)]
         fix: bool,
+    },
+    /// Publish the `crates/` workspace to crates.io, skipping already-published versions
+    Publish {
+        /// Run every check without uploading
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Build and run an example from `examples/`
     Example {
@@ -73,6 +79,7 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             }
             run("cargo", args, root)
         }
+        RustCmd::Publish { dry_run } => publish_workspace(root, *dry_run),
         RustCmd::Example {
             name,
             debug,
