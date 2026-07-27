@@ -81,7 +81,7 @@ jobs:
               - *shared
               - *xtask-core
               - 'xtask/src/emulator.rs'
-              - 'emulator/**'
+              - 'extras/autd3-rs-emulator/**'
               - 'crates/autd3-rs/**'
               - 'crates/autd3-rs-core/**'
               - 'crates/autd3-rs-firmware-emulator/**'
@@ -102,7 +102,7 @@ jobs:
               - 'xtask/src/py.rs'
               - 'bindings/python/**'
               - 'crates/**'
-              - 'emulator/**'
+              - 'extras/autd3-rs-emulator/**'
               - 'Cargo.toml'
               - '.github/workflows/ci-py.yml'
             ffi:
@@ -165,7 +165,7 @@ jobs:
               - 'firmware/cpu/fw/src/version.rs'
               - 'firmware/fpga/rtl/sources_1/new/headers/params.svh'
               - 'crates/**'
-              - 'emulator/**'
+              - 'extras/autd3-rs-emulator/**'
               - 'bindings/python/**'
               - 'bindings/csharp/**'
               - 'bindings/ffi/**'
@@ -179,7 +179,7 @@ jobs:
               - 'xtask/src/cs.rs'
               - 'doc/codes/**'
               - 'crates/**'
-              - 'emulator/**'
+              - 'extras/autd3-rs-emulator/**'
               - 'bindings/python/**'
               - 'bindings/csharp/**'
               - 'bindings/ffi/**'

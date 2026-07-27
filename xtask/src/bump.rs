@@ -1,11 +1,11 @@
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args;
-use toml_edit::{value, DocumentMut, Item, Value};
+use toml_edit::{DocumentMut, Item, Value, value};
 
 use crate::changelog::write_changelog_file;
-use crate::component::{detect, Component, COMPONENTS};
+use crate::component::{COMPONENTS, Component, detect};
 use crate::cpu::gen_param;
 use crate::util::capture;
 
@@ -44,7 +44,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             bump_cargo_toml(&root.join("bindings/python/Cargo.toml"), &core)?;
             bump_python_pyproject(root, &core)?;
             bump_csharp_props(&root.join("bindings/csharp/Directory.Build.props"), &core)?;
-            bump_cargo_toml(&root.join("emulator/Cargo.toml"), &core)?;
+            bump_cargo_toml(&root.join("extras/autd3-rs-emulator/Cargo.toml"), &core)?;
             bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
             bump_package_version(&root.join("console/Cargo.toml"), &core)?;
             println!(
@@ -209,11 +209,13 @@ fn print_next_steps(name: &str) {
             println!("  cargo xtask rust build         # refresh Cargo.lock");
             println!("  cargo xtask ffi build          # refresh bindings/ffi/Cargo.lock");
             println!("  cargo xtask py build           # refresh bindings/python/Cargo.lock");
-            println!("  cargo xtask emulator build     # refresh emulator/Cargo.lock");
+            println!(
+                "  cargo xtask emulator build     # refresh extras/autd3-rs-emulator/Cargo.lock"
+            );
             println!("  cargo xtask simulator build    # refresh simulator/Cargo.lock");
             println!("  cargo xtask console build      # refresh console/Cargo.lock");
             println!(
-                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props emulator/Cargo.toml emulator/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock 'bindings/unity/*/package.json'"
+                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock 'bindings/unity/*/package.json'"
             );
         }
         "python" => {

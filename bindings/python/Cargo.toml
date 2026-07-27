@@ -39,7 +39,7 @@ autd3-rs-link-soem = { path = "../../crates/autd3-rs-link-soem" }
 autd3-rs-link-remote = { path = "../../crates/autd3-rs-link-remote" }
 autd3-rs-link-twincat = { path = "../../crates/autd3-rs-link-twincat" }
 autd3-rs-link-nop = { path = "../../crates/autd3-rs-link-nop" }
-autd3-rs-emulator = { path = "../../emulator/autd3-rs-emulator", default-features = false }
+autd3-rs-emulator = { path = "../../extras/autd3-rs-emulator", default-features = false }
 autd3-python-capsule = { path = "autd3-python-capsule" }
 bytemuck = { version = "1.25.0", default-features = false }
 

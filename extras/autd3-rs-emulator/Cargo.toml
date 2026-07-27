@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["autd3-rs-emulator", "examples"]
+members = ["examples"]
 
 [workspace.package]
 version = "0.4.0"
@@ -22,12 +22,12 @@ missing_panics_doc = "allow"
 cast_precision_loss = "allow"
 
 [workspace.dependencies]
-autd3-rs = { version = "0.4.0", path = "../crates/autd3-rs" }
-autd3-rs-core = { version = "0.4.0", path = "../crates/autd3-rs-core" }
-autd3-rs-firmware-emulator = { version = "0.4.0", path = "../crates/autd3-rs-firmware-emulator" }
-autd3-rs-emulator = { path = "autd3-rs-emulator" }
-autd3-rs-pattern = { path = "../crates/autd3-rs-pattern" }
-autd3-rs-modulation = { path = "../crates/autd3-rs-modulation" }
+autd3-rs = { version = "0.4.0", path = "../../crates/autd3-rs" }
+autd3-rs-core = { version = "0.4.0", path = "../../crates/autd3-rs-core" }
+autd3-rs-firmware-emulator = { version = "0.4.0", path = "../../crates/autd3-rs-firmware-emulator" }
+autd3-rs-emulator = { path = "." }
+autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
+autd3-rs-modulation = { path = "../../crates/autd3-rs-modulation" }
 anyhow = { version = "1.0.102", default-features = false, features = ["std"] }
 bytemuck = { version = "1.25.0", default-features = false, features = ["derive"] }
 wgpu = { version = "29.0.1", default-features = false, features = ["std", "parking_lot", "dx12", "vulkan", "metal", "wgsl"] }
@@ -38,3 +38,35 @@ pollster = { version = "1.0.1" }
 polars = { version = "0.54.4", default-features = false, features = ["dtype-u8", "dtype-u16"] }
 rayon = { version = "1.10.0" }
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
+
+[package]
+name = "autd3-rs-emulator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Hardware-free emulator for AUTD3: records device drive data and computes the ultrasound sound field offline."
+
+[features]
+default = ["polars"]
+polars = ["dep:polars"]
+gpu = ["dep:wgpu", "dep:bytemuck"]
+
+[dependencies]
+autd3-rs.workspace = true
+autd3-rs-core.workspace = true
+autd3-rs-firmware-emulator.workspace = true
+thiserror.workspace = true
+pollster.workspace = true
+rayon.workspace = true
+polars = { workspace = true, optional = true }
+wgpu = { workspace = true, optional = true }
+bytemuck = { workspace = true, optional = true }
+
+[dev-dependencies]
+approx.workspace = true
+
+[lints]
+workspace = true

@@ -20,7 +20,8 @@ This repository is a monorepo. See the README in each subfolder for details.
 
 - Software libraries
   - [`crates/`](./crates): Rust client library [![autd3-rs](https://img.shields.io/crates/v/autd3-rs?label=autd3-rs)](https://crates.io/crates/autd3-rs)
-  - [`emulator/`](./emulator): Emulator [![autd3-rs-emulator](https://img.shields.io/crates/v/autd3-rs-emulator?label=autd3-rs-emulator)](https://crates.io/crates/autd3-rs-emulator)
+  - [`extras/`](./extras): Optional crates kept out of the main workspace because their GPU dependencies are slow to build
+    - [`extras/autd3-rs-emulator/`](./extras/autd3-rs-emulator): Emulator [![autd3-rs-emulator](https://img.shields.io/crates/v/autd3-rs-emulator?label=autd3-rs-emulator)](https://crates.io/crates/autd3-rs-emulator)
   - [`bindings/ffi/`](./bindings/ffi): C API bindings
   - [`bindings/python/`](./bindings/python): Python bindings [![autd3](https://img.shields.io/pypi/v/autd3?label=autd3)](https://pypi.org/project/autd3/)
   - [`bindings/csharp/`](./bindings/csharp): C# bindings [![AUTD3](https://img.shields.io/nuget/vpre/AUTD3?label=AUTD3)](https://www.nuget.org/packages/AUTD3)

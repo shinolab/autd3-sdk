@@ -26,7 +26,7 @@ exclude = [
     "bindings/python",
     "bindings/ffi",
     "simulator",
-    "emulator",
+    "extras/autd3-rs-emulator",
 ]
 
 [workspace.package]

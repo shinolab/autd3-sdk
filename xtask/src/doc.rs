@@ -4,11 +4,11 @@ use std::process::{Child, Command};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Subcommand;
-use toml_edit::{value, ArrayOfTables, DocumentMut, Item, Table};
+use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
-use crate::py::{develop, ensure_venv, pip_install, venv_python, MIT_WHEELS};
+use crate::py::{MIT_WHEELS, develop, ensure_venv, pip_install, venv_python};
 use crate::util::{capture, on_path, run, run_tool};
 
 const FIRMWARE_MARKER: &str = "Firmware v";
