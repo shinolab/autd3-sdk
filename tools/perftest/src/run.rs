@@ -30,6 +30,7 @@ pub struct RunOutput {
     pub samples: Vec<Sample>,
     pub sends: u64,
     pub stopped_on_error: Option<(u64, SampleStatus)>,
+    pub rt_closed: bool,
     pub warmup: u64,
     pub elapsed: Duration,
     pub frame_bytes: usize,
@@ -343,6 +344,7 @@ async fn run_stop_and_wait(
     let mut recorded = Recorder::new(cli);
     let mut index: u64 = 0;
     let mut stopped_on_error = None;
+    let mut rt_closed = false;
     let mut progress = Progress::new(cli);
 
     let mem_recorder = mem::start();
@@ -391,12 +393,16 @@ async fn run_stop_and_wait(
             }
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
+                rt_closed = true;
                 SampleStatus::LinkError
             }
         };
 
         recorded.push(Sample { index, rtt, status });
         progress.observe(status, start.elapsed());
+        if rt_closed {
+            break;
+        }
         if cli.stop_on_error && status != SampleStatus::Ok {
             stopped_on_error = Some((index, status));
             break;
@@ -411,6 +417,7 @@ async fn run_stop_and_wait(
         samples: recorded.samples,
         sends: recorded.sends,
         stopped_on_error,
+        rt_closed,
         warmup: cli.warmup,
         elapsed: start.elapsed(),
         frame_bytes: TX_FRAME_BYTES,
@@ -433,6 +440,7 @@ async fn run_streaming(
     let mut sends_issued: u64 = 0;
     let mut sample_index: u64 = 0;
     let mut stopped_on_error = None;
+    let mut rt_closed = false;
     let mut progress = Progress::new(cli);
 
     let mem_recorder = mem::start();
@@ -446,9 +454,18 @@ async fn run_streaming(
         if need_send && pending.len() < max_inflight {
             sender.prepare(client)?;
             let sent_at = Instant::now();
-            let fut = client
+            let fut = match client
                 .send(sender.frames.frame(0).expect("one frame"))
-                .await?;
+                .await
+            {
+                Ok(fut) => fut,
+                Err(ClientError::RtClosed) => {
+                    eprintln!("client RT thread closed unexpectedly");
+                    rt_closed = true;
+                    break;
+                }
+                Err(e) => return Err(e.into()),
+            };
             pending.push_back(PendingFuture { sent_at, fut });
             sends_issued += 1;
             continue;
@@ -486,6 +503,7 @@ async fn run_streaming(
             }
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
+                rt_closed = true;
                 SampleStatus::LinkError
             }
         };
@@ -495,6 +513,9 @@ async fn run_streaming(
             status,
         });
         progress.observe(status, start.elapsed());
+        if rt_closed {
+            break;
+        }
         if cli.stop_on_error && status != SampleStatus::Ok {
             stopped_on_error = Some((sample_index, status));
             break;
@@ -509,6 +530,7 @@ async fn run_streaming(
         samples: recorded.samples,
         sends: recorded.sends,
         stopped_on_error,
+        rt_closed,
         warmup: cli.warmup,
         elapsed: start.elapsed(),
         frame_bytes: TX_FRAME_BYTES,

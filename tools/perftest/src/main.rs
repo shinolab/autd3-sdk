@@ -53,6 +53,7 @@ async fn main() -> Result<()> {
         samples,
         sends,
         stopped_on_error,
+        rt_closed,
         warmup,
         elapsed,
         frame_bytes,
@@ -92,6 +93,12 @@ async fn main() -> Result<()> {
 
     if let Some((index, status)) = stopped_on_error {
         anyhow::bail!("stopped at send #{index}: {status:?} (--stop-on-error)");
+    }
+    if rt_closed {
+        anyhow::bail!(
+            "the client RT thread died before the run finished; \
+             the summary covers only what was sent until then"
+        );
     }
 
     Ok(())
