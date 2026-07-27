@@ -8,6 +8,8 @@ use ethercrab::error::Error as EtherCrabError;
 use ethercrab::{PduRx, PduTx};
 use tokio::io::unix::AsyncFd;
 
+use crate::osal::frame::normalize_source_mac;
+
 const ETHERCAT_ETHERTYPE: u16 = 0x88a4;
 const ETHERNET_OVERHEAD: usize = 18;
 const RX_BUDGET: u32 = 32;
@@ -142,6 +144,7 @@ impl AsFd for RawSocket {
 struct TxRxFut<'sto> {
     socket: AsyncFd<RawSocket>,
     buf: Box<[u8]>,
+    scratch: Box<[u8]>,
     tx: Option<PduTx<'sto>>,
     rx: Option<PduRx<'sto>>,
 }
@@ -221,7 +224,9 @@ impl Future for TxRxFut<'_> {
             match guard.try_io(|socket| socket.get_ref().recv(&mut this.buf)) {
                 Ok(Ok(0)) => break,
                 Ok(Ok(n)) => {
-                    if let Err(e) = rx.receive_frame(&this.buf[..n]) {
+                    if let Err(e) =
+                        rx.receive_frame(normalize_source_mac(&this.buf[..n], &mut this.scratch))
+                    {
                         tracing::trace!("skipping unprocessable RX frame: {e}");
                     }
                     budget -= 1;
@@ -251,9 +256,11 @@ pub(crate) fn tx_rx_task<'sto>(
     let mtu = socket.interface_mtu(interface)?;
     tracing::debug!("opening {interface} with MTU {mtu}");
 
+    let len = mtu + ETHERNET_OVERHEAD;
     Ok(TxRxFut {
         socket: AsyncFd::new(socket)?,
-        buf: vec![0u8; mtu + ETHERNET_OVERHEAD].into_boxed_slice(),
+        buf: vec![0u8; len].into_boxed_slice(),
+        scratch: vec![0u8; len].into_boxed_slice(),
         tx: Some(pdu_tx),
         rx: Some(pdu_rx),
     })
@@ -288,6 +295,37 @@ mod tests {
             }
         };
         assert_eq!(&buf[..n], &frame[..]);
+    }
+
+    #[test]
+    #[ignore = "needs CAP_NET_RAW and a veth pair: run under \
+                `unshare -rn bash -c 'ip link add veth0 type veth peer name veth1 && \
+                ip link set veth0 up && ip link set veth1 up && cargo test ...'`"]
+    fn a_protocol_bound_socket_never_sees_the_frames_it_sends() {
+        let socket = RawSocket::new("veth0").expect("open veth0");
+
+        let mut frame = [0u8; 64];
+        frame[0..6].copy_from_slice(&[0xff; 6]);
+        frame[6..12].copy_from_slice(&[0x10; 6]);
+        frame[12..14].copy_from_slice(&ETHERCAT_ETHERTYPE.to_be_bytes());
+        frame[14] = 0xa5;
+        assert_eq!(socket.send(&frame).expect("send"), frame.len());
+
+        let mut buf = [0u8; 128];
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(200);
+        while std::time::Instant::now() < deadline {
+            match socket.recv(&mut buf) {
+                Ok(n) => assert_ne!(
+                    buf[..n],
+                    frame[..],
+                    "binding a protocol puts the socket in ptype_base, so the outgoing \
+                     copy that ptype_all listeners get must not arrive here; \
+                     normalize_source_mac would otherwise tag our own frame as a reply"
+                ),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(e) => panic!("recv failed: {e}"),
+            }
+        }
     }
 
     #[test]
