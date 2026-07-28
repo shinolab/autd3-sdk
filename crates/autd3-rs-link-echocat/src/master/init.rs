@@ -96,7 +96,7 @@ impl<B: RawBus> Master<B> {
             Address::broadcast(reg::sync_manager(0)),
             &vec![0u8; usize::from(SM_COUNT) * 8],
         )?;
-        self.write_u16(Command::Bwr, Address::broadcast(reg::DL_CONTROL), 0)?;
+        self.write_u8(Command::Bwr, Address::broadcast(reg::DL_CONTROL_LOOP), 0)?;
         self.write_u8(
             Command::Bwr,
             Address::broadcast(reg::EEPROM_CONFIGURATION),
@@ -104,12 +104,20 @@ impl<B: RawBus> Master<B> {
         )?;
 
         for index in 0..self.devices {
+            let position = u16::try_from(index).expect("device index fits in u16");
             let wkc = self.write_u16(
                 Command::Apwr,
-                Address::position(
-                    u16::try_from(index).expect("device index fits in u16"),
-                    reg::STATION_ADDRESS,
-                ),
+                Address::position(position, reg::DL_CONTROL),
+                if index == 0 {
+                    reg::DL_CONTROL_DESTROY_NON_ETHERCAT
+                } else {
+                    0
+                },
+            )?;
+            Self::expect_wkc(wkc, 1)?;
+            let wkc = self.write_u16(
+                Command::Apwr,
+                Address::position(position, reg::STATION_ADDRESS),
                 Self::station_address(index),
             )?;
             Self::expect_wkc(wkc, 1)?;

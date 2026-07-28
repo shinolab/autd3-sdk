@@ -11,6 +11,8 @@ pub const MIN_ETHERNET_FRAME_BYTES: usize = 60;
 pub const MAX_DATAGRAM_DATA_BYTES: usize = 0x07ff;
 
 pub const MASTER_MAC: [u8; 6] = [0x10, 0x10, 0x10, 0x10, 0x10, 0x10];
+pub const SOURCE_MAC_OFFSET: usize = 6;
+pub const LOCALLY_ADMINISTERED_BIT: u8 = 0x02;
 
 const BROADCAST_MAC: [u8; 6] = [0xff; 6];
 const ECAT_TYPE_DLPDU: u16 = 1;
