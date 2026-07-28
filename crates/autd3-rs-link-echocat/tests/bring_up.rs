@@ -5,8 +5,12 @@ use autd3_rs_core::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
 use autd3_rs_firmware_emulator::Device;
 use autd3_rs_link_echocat::master::init::{INPUT_BYTES, OUTPUT_BYTES};
 use autd3_rs_link_echocat::reg::AlState;
-use autd3_rs_link_echocat::sim::{EscSim, ProcessData};
-use autd3_rs_link_echocat::{Master, MasterConfig};
+use autd3_rs_link_echocat::sim::{EscSim, ProcessData, SubDevice};
+use autd3_rs_link_echocat::wire::{
+    Address, Command, FrameBuilder, LOCALLY_ADMINISTERED_BIT, MIN_ETHERNET_FRAME_BYTES,
+    SOURCE_MAC_OFFSET,
+};
+use autd3_rs_link_echocat::{Master, MasterConfig, RawBus};
 
 const NUM_TRANSDUCERS: usize = 249;
 
@@ -67,6 +71,49 @@ fn a_single_device_bus_reaches_op() {
     let device = &master.bus().devices()[0];
     assert_eq!(device.al_state(), Some(AlState::Op));
     assert_eq!(device.al_status_code(), 0);
+}
+
+fn brd(bus: &mut EscSim, register: u16) -> Vec<u8> {
+    let mut frame = vec![0u8; MIN_ETHERNET_FRAME_BYTES];
+    let mut builder = FrameBuilder::new(&mut frame, 0);
+    builder
+        .push(Command::Brd, Address::broadcast(register), 2)
+        .expect("the datagram fits");
+    let len = builder.finish();
+    bus.send(&frame[..len]).expect("the simulated bus accepts");
+    let mut reply = vec![0u8; len];
+    let received = bus
+        .receive(&mut reply, Duration::from_millis(1))
+        .expect("the simulated bus replies")
+        .expect("a reply is queued");
+    reply.truncate(received);
+    reply
+}
+
+#[test]
+fn only_the_first_device_destroys_non_ethercat_frames() {
+    let master = open(3);
+    let flags: Vec<bool> = master
+        .bus()
+        .devices()
+        .iter()
+        .map(SubDevice::destroys_non_ethercat_frames)
+        .collect();
+    assert_eq!(flags, vec![true, false, false]);
+}
+
+#[test]
+fn replies_carry_the_locally_administered_bit_once_the_bus_is_brought_up() {
+    let mut untouched = EscSim::nop(1, Duration::from_millis(1));
+    let before = brd(&mut untouched, 0x0130);
+    assert_eq!(before[SOURCE_MAC_OFFSET] & LOCALLY_ADMINISTERED_BIT, 0);
+
+    let mut master = open(1);
+    let after = brd(master.bus_mut(), 0x0130);
+    assert_eq!(
+        after[SOURCE_MAC_OFFSET] & LOCALLY_ADMINISTERED_BIT,
+        LOCALLY_ADMINISTERED_BIT
+    );
 }
 
 #[test]

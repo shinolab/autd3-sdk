@@ -7,6 +7,8 @@ pub const AL_STATUS: u16 = 0x0130;
 pub const AL_STATUS_CODE: u16 = 0x0134;
 
 pub const DL_CONTROL: u16 = 0x0100;
+pub const DL_CONTROL_LOOP: u16 = 0x0101;
+pub const DL_CONTROL_DESTROY_NON_ETHERCAT: u16 = 0x0001;
 pub const STATION_ADDRESS: u16 = 0x0010;
 
 pub const EEPROM_CONFIGURATION: u16 = 0x0500;

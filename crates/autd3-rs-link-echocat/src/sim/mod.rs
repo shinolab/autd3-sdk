@@ -10,7 +10,10 @@ use std::time::Duration;
 
 use crate::bus::RawBus;
 use crate::reg;
-use crate::wire::{Command, DATAGRAM_HEADER_BYTES, FRAME_HEADER_BYTES, WKC_BYTES};
+use crate::wire::{
+    Command, DATAGRAM_HEADER_BYTES, FRAME_HEADER_BYTES, LOCALLY_ADMINISTERED_BIT,
+    SOURCE_MAC_OFFSET, WKC_BYTES,
+};
 
 pub const AUTD3_IDENTITY: Identity = Identity {
     vendor: 0x0000_08a9,
@@ -182,6 +185,15 @@ impl EscSim {
             if length_field & 0x8000 == 0 {
                 break;
             }
+        }
+
+        if frame.len() > SOURCE_MAC_OFFSET
+            && self
+                .devices
+                .first()
+                .is_some_and(SubDevice::destroys_non_ethercat_frames)
+        {
+            frame[SOURCE_MAC_OFFSET] |= LOCALLY_ADMINISTERED_BIT;
         }
     }
 }

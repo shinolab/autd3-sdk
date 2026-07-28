@@ -99,6 +99,11 @@ impl SubDevice {
     }
 
     #[must_use]
+    pub fn destroys_non_ethercat_frames(&self) -> bool {
+        self.read_u16(reg::DL_CONTROL) & reg::DL_CONTROL_DESTROY_NON_ETHERCAT != 0
+    }
+
+    #[must_use]
     pub fn sync_manager(&self, index: u16) -> SmConfig {
         let base = reg::sync_manager(index);
         SmConfig {
