@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 autd3-rs.workspace = true
+autd3-rs-link-echocat.workspace = true
 autd3-rs-link-ethercrab.workspace = true
 autd3-rs-link-soem.workspace = true
 clap.workspace = true

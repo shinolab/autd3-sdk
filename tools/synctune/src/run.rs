@@ -12,6 +12,7 @@ use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, Frames, Link, ResponseFuture,
     RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
 };
+use autd3_rs_link_echocat::{EchocatLink, EchocatLinkOption};
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
 
@@ -35,6 +36,26 @@ pub async fn measure_candidate(
                 ..Default::default()
             };
             match Box::pin(EtherCrabLink::open(opt)).await {
+                Ok(link) => Box::pin(measure_with_link(link, common, cand, shutdown)).await,
+                Err(e) => Ok(CandidateResult::failed(
+                    period,
+                    shift,
+                    cand.shift_percent,
+                    CandidateStatus::FailedOpen,
+                    format!("link open: {e}"),
+                )),
+            }
+        }
+        LinkKind::Echocat => {
+            let opt = EchocatLinkOption {
+                iface: common.interface.clone().into(),
+                sync0_period: period,
+                ..Default::default()
+            };
+            let opened = tokio::task::spawn_blocking(move || EchocatLink::open(&opt))
+                .await
+                .expect("open task panicked");
+            match opened {
                 Ok(link) => Box::pin(measure_with_link(link, common, cand, shutdown)).await,
                 Err(e) => Ok(CandidateResult::failed(
                     period,
@@ -163,11 +184,12 @@ fn client_config(common: &Common, max_inflight: usize) -> ClientConfig {
         max_resync_rounds: common.max_resync_rounds,
         low_latency: common.low_latency,
         reset_resend_cycles: NonZeroU32::new(2).unwrap(),
-        rt_priority: common.rt_priority.map(|p| {
-            ThreadPriority::Crossplatform(
+        rt_priority: match common.rt_priority {
+            Some(p) => Some(ThreadPriority::Crossplatform(
                 ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),
-            )
-        }),
+            )),
+            None => ClientConfig::default().rt_priority,
+        },
         rt_policy: match common.rt_policy {
             RtPolicy::Normal => RtSchedulePolicy::Normal,
             RtPolicy::Fifo => RtSchedulePolicy::Fifo,

@@ -118,6 +118,14 @@ async fn run(cli: &Cli) -> Result<()> {
             };
             Client::open(&geometry, option, config).await
         }
+        LinkKind::Echocat => {
+            let option = autd3_rs_link_echocat::EchocatLinkOption {
+                iface: cli.interface.clone().into(),
+                sync0_period,
+                ..Default::default()
+            };
+            Client::open(&geometry, option, config).await
+        }
         LinkKind::Twincat => {
             let option = match (cli.twincat_remote, cli.ams_net_id) {
                 (Some(addr), Some(ams_net_id)) => TwinCATLinkOption::remote(addr, ams_net_id),

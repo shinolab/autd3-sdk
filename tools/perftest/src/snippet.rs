@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::time::Duration;
 
-use crate::cli::{Cli, LinkKind, Mode, RtPolicy};
+use crate::cli::{Cli, LinkKind, Mode, RtPolicy, SleepStrategyArg};
 
 pub fn print(cli: &Cli) {
     println!();
@@ -16,7 +16,11 @@ fn render(cli: &Cli) -> String {
     link_block(cli, &mut body, &mut imports);
     push_config(&mut body, &mut imports, &Config::from(cli));
 
-    let mut out = imports_block(cli.link, &imports);
+    let mut out = imports_block(
+        cli.link,
+        cli.sleep_strategy == SleepStrategyArg::Spin,
+        &imports,
+    );
     out.push('\n');
     out.push_str(&body);
     out
@@ -26,6 +30,23 @@ fn link_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
     let sync0_period = cli.sync0_period;
     let sync0_shift = cli.sync0_shift();
     match cli.link {
+        LinkKind::Echocat => {
+            imports.push("std::time::Duration");
+            let _ = writeln!(body, "let link = EchocatLink::open(&EchocatLinkOption {{");
+            if let Some(iface) = &cli.interface {
+                let _ = writeln!(body, "    iface: {iface:?}.into(),");
+            }
+            let _ = writeln!(body, "    sync0_period: {},", fmt_duration(sync0_period));
+            if cli.sleep_strategy == SleepStrategyArg::Spin {
+                let _ = writeln!(
+                    body,
+                    "    sleep_strategy: SleepStrategy::Spin {{ margin: {} }},",
+                    fmt_duration(cli.spin_margin),
+                );
+            }
+            let _ = writeln!(body, "    ..Default::default()");
+            let _ = writeln!(body, "}})?;");
+        }
         LinkKind::Ethercrab | LinkKind::Soem => {
             let (link, option) = match cli.link {
                 LinkKind::Soem => ("SoemLink", "SoemLinkOption"),
@@ -74,7 +95,7 @@ impl From<&Cli> for Config {
     }
 }
 
-fn imports_block(link: LinkKind, imports: &[&str]) -> String {
+fn imports_block(link: LinkKind, spin: bool, imports: &[&str]) -> String {
     let mut out = String::new();
     for imp in imports.iter().filter(|s| s.starts_with("std::")) {
         let _ = writeln!(out, "use {imp};");
@@ -90,6 +111,13 @@ fn imports_block(link: LinkKind, imports: &[&str]) -> String {
             let _ = writeln!(
                 out,
                 "use autd3_rs_link_ethercrab::{{EtherCrabLink, EtherCrabLinkOption}};",
+            );
+        }
+        LinkKind::Echocat => {
+            let _ = writeln!(
+                out,
+                "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption{}}};",
+                if spin { ", SleepStrategy" } else { "" },
             );
         }
         LinkKind::Soem => {

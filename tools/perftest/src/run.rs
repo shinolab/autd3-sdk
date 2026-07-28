@@ -209,6 +209,24 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             guard.stop().await;
             out
         }
+        LinkKind::Echocat => {
+            let link_cfg = autd3_rs_link_echocat::EchocatLinkOption {
+                iface: cli.interface.clone().into(),
+                sync0_period: cli.sync0_period,
+                sleep_strategy: cli.echocat_sleep_strategy(),
+                ..Default::default()
+            };
+            let link = tokio::task::spawn_blocking(move || {
+                autd3_rs_link_echocat::EchocatLink::open(&link_cfg)
+            })
+            .await
+            .expect("open task panicked")
+            .context("opening EtherCAT link (echocat)")?;
+            let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
+            let out = Box::pin(run_with_bus_link(link, cli)).await;
+            guard.stop().await;
+            out
+        }
         LinkKind::Soem => {
             let link_cfg = SoemLinkOption {
                 iface: cli.interface.clone().into(),
@@ -280,11 +298,12 @@ async fn run_with_link<T: IntoLink>(
             max_resync_rounds: cli.max_resync_rounds,
             low_latency: cli.low_latency,
             reset_resend_cycles: NonZeroU32::new(2).unwrap(),
-            rt_priority: cli.rt_priority.map(|p| {
-                ThreadPriority::Crossplatform(
+            rt_priority: match cli.rt_priority {
+                Some(p) => Some(ThreadPriority::Crossplatform(
                     ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),
-                )
-            }),
+                )),
+                None => ClientConfig::default().rt_priority,
+            },
             rt_policy: match cli.rt_policy {
                 RtPolicy::Normal => RtSchedulePolicy::Normal,
                 RtPolicy::Fifo => RtSchedulePolicy::Fifo,
