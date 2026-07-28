@@ -168,6 +168,10 @@ name = "api_command_silencer"
 path = "examples/api/command/silencer.rs"
 
 [[example]]
+name = "api_compute_holo_batch"
+path = "examples/api/compute/holo/batch.rs"
+
+[[example]]
 name = "api_compute_holo_greedy_example"
 path = "examples/api/compute/holo/greedy-example.rs"
 

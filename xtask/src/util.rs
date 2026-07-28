@@ -77,6 +77,49 @@ struct MemberPackage {
     publishable: bool,
 }
 
+fn read_member_package(
+    member_manifest: &Path,
+    workspace_manifest: &Path,
+    inherited_version: Option<&str>,
+) -> Result<MemberPackage> {
+    let member_text = std::fs::read_to_string(member_manifest)
+        .with_context(|| format!("failed to read {}", member_manifest.display()))?;
+    let member_doc = member_text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("failed to parse {}", member_manifest.display()))?;
+    let package = member_doc
+        .get("package")
+        .with_context(|| format!("no [package] in {}", member_manifest.display()))?;
+    let name = package
+        .get("name")
+        .and_then(toml_edit::Item::as_str)
+        .with_context(|| format!("no [package] name in {}", member_manifest.display()))?;
+    let version = match package.get("version").and_then(toml_edit::Item::as_str) {
+        Some(version) => version.to_string(),
+        None => inherited_version
+            .with_context(|| {
+                format!(
+                    "{} inherits its version but {} has no [workspace.package] version",
+                    member_manifest.display(),
+                    workspace_manifest.display()
+                )
+            })?
+            .to_string(),
+    };
+    let publishable = match package.get("publish") {
+        None => true,
+        Some(item) if item.as_bool() == Some(true) => true,
+        Some(item) => item
+            .as_array()
+            .is_some_and(|r| r.iter().any(|v| v.as_str() == Some("crates-io"))),
+    };
+    Ok(MemberPackage {
+        name: name.to_string(),
+        version,
+        publishable,
+    })
+}
+
 fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
     let manifest = workspace_dir.join("Cargo.toml");
     let text = std::fs::read_to_string(&manifest)
@@ -90,51 +133,28 @@ fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
         .and_then(|p| p.get("version"))
         .and_then(toml_edit::Item::as_str)
         .map(str::to_string);
-    let members = doc
+    let Some(members) = doc
         .get("workspace")
         .and_then(|w| w.get("members"))
         .and_then(toml_edit::Item::as_array)
-        .with_context(|| format!("no [workspace] members in {}", manifest.display()))?;
+    else {
+        return Ok(vec![read_member_package(
+            &manifest,
+            &manifest,
+            inherited_version.as_deref(),
+        )?]);
+    };
     let mut packages = Vec::new();
     for member in members {
         let member = member
             .as_str()
             .with_context(|| format!("non-string member in {}", manifest.display()))?;
         let member_manifest = workspace_dir.join(member).join("Cargo.toml");
-        let member_text = std::fs::read_to_string(&member_manifest)
-            .with_context(|| format!("failed to read {}", member_manifest.display()))?;
-        let member_doc = member_text
-            .parse::<toml_edit::DocumentMut>()
-            .with_context(|| format!("failed to parse {}", member_manifest.display()))?;
-        let package = member_doc
-            .get("package")
-            .with_context(|| format!("no [package] in {}", member_manifest.display()))?;
-        let name = package
-            .get("name")
-            .and_then(toml_edit::Item::as_str)
-            .with_context(|| format!("no [package] name in {}", member_manifest.display()))?;
-        let version = match package.get("version").and_then(toml_edit::Item::as_str) {
-            Some(version) => version.to_string(),
-            None => inherited_version.clone().with_context(|| {
-                format!(
-                    "{} inherits its version but {} has no [workspace.package] version",
-                    member_manifest.display(),
-                    manifest.display()
-                )
-            })?,
-        };
-        let publishable = match package.get("publish") {
-            None => true,
-            Some(item) if item.as_bool() == Some(true) => true,
-            Some(item) => item
-                .as_array()
-                .is_some_and(|r| r.iter().any(|v| v.as_str() == Some("crates-io"))),
-        };
-        packages.push(MemberPackage {
-            name: name.to_string(),
-            version,
-            publishable,
-        });
+        packages.push(read_member_package(
+            &member_manifest,
+            &manifest,
+            inherited_version.as_deref(),
+        )?);
     }
     Ok(packages)
 }

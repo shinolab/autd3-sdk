@@ -5,7 +5,7 @@ use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs_pattern::wavelength;
 use autd3_rs_pattern_holo::{
-    ControlPoint, Directivity, EmissionConstraint, NalgebraBackend, GspatOption, Pa,
+    ControlPoint, Directivity, EmissionConstraint, GspatOption, NalgebraBackend, Pa,
     TransducerMask, gspat,
 };
 
@@ -35,6 +35,7 @@ fn main() -> anyhow::Result<()> {
             constraint: EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             directivity: Directivity::Sphere,
             mask: TransducerMask::AllEnabled,
+            parallel: true,
         },
         &mut dst,
     )?;

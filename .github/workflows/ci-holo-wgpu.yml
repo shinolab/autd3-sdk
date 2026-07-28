@@ -1,0 +1,28 @@
+name: ci-holo-wgpu
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  holo-wgpu:
+    name: holo-wgpu (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt, clippy
+          workspaces: |
+            extras/autd3-rs-pattern-holo-wgpu
+            xtask
+      - name: Format
+        run: cargo xtask holo-wgpu format
+      - run: cargo xtask holo-wgpu lint
+      - name: Test (GPU-dependent cases skip without an adapter)
+        run: cargo xtask holo-wgpu test

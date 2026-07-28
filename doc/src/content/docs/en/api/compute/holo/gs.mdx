@@ -43,10 +43,13 @@ The parameters other than `option` are the same as [Naive](/autd3-sdk/en/api/com
 | `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
 | `directivity` | `Directivity`        | `Sphere`                  |
 | `mask`        | `TransducerMask`     | `AllEnabled`              |
+| `parallel`    | `bool`               | `true`                    |
 
 `repeat` is the number of iterations.
 The larger it is, the higher the quality, but the more computation time increases.
 For the meaning of `constraint` / `directivity` / `mask`, see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
+
+`parallel` decides whether the quantization of the result is spread over several host threads (a GPU backend ignores it).
 
 ## Example
 

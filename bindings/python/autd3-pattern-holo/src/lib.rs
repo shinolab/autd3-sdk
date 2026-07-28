@@ -226,16 +226,19 @@ impl NaiveOption {
         constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
         mask = PyTransducerMask::all_enabled(),
+        parallel = true,
     ))]
     fn new(
         constraint: EmissionConstraint,
         directivity: Directivity,
         mask: PyTransducerMask,
+        parallel: bool,
     ) -> Self {
         Self {
             inner: CoreNaiveOption {
                 constraint: constraint.0,
                 directivity: directivity.0,
+                parallel,
                 ..CoreNaiveOption::default()
             },
             mask: mask.mask,
@@ -257,12 +260,14 @@ impl GsOption {
         constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
         mask = PyTransducerMask::all_enabled(),
+        parallel = true,
     ))]
     fn new(
         repeat: usize,
         constraint: EmissionConstraint,
         directivity: Directivity,
         mask: PyTransducerMask,
+        parallel: bool,
     ) -> PyResult<Self> {
         Ok(Self {
             inner: CoreGsOption {
@@ -270,6 +275,7 @@ impl GsOption {
                     .ok_or_else(|| PyValueError::new_err("repeat must be >= 1"))?,
                 constraint: constraint.0,
                 directivity: directivity.0,
+                parallel,
                 ..CoreGsOption::default()
             },
             mask: mask.mask,
@@ -295,12 +301,14 @@ impl GspatOption {
         constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
         mask = PyTransducerMask::all_enabled(),
+        parallel = true,
     ))]
     fn new(
         repeat: usize,
         constraint: EmissionConstraint,
         directivity: Directivity,
         mask: PyTransducerMask,
+        parallel: bool,
     ) -> PyResult<Self> {
         Ok(Self {
             inner: CoreGspatOption {
@@ -308,6 +316,7 @@ impl GspatOption {
                     .ok_or_else(|| PyValueError::new_err("repeat must be >= 1"))?,
                 constraint: constraint.0,
                 directivity: directivity.0,
+                parallel,
                 ..CoreGspatOption::default()
             },
             mask: mask.mask,

@@ -9,6 +9,7 @@ use crate::constraint::EmissionConstraint;
 use crate::control_point::ControlPoint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
+use crate::linear_synthesis::batch::{BatchSetup, solve_batched};
 use crate::mask::TransducerMask;
 use crate::propagation::{make_propagation_matrix, quantize, target_amplitudes};
 
@@ -18,6 +19,7 @@ pub struct GspatOption<'a> {
     pub constraint: EmissionConstraint,
     pub directivity: Directivity,
     pub mask: TransducerMask<'a>,
+    pub parallel: bool,
 }
 
 impl Default for GspatOption<'_> {
@@ -27,6 +29,7 @@ impl Default for GspatOption<'_> {
             constraint: EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             directivity: Directivity::Sphere,
             mask: TransducerMask::AllEnabled,
+            parallel: true,
         }
     }
 }
@@ -59,22 +62,55 @@ pub fn gspat<B: LinAlgBackend>(
 
     let r = backend.gemm(&g, &b);
 
-    let mut zeta = backend.clone_vector(&amps);
-    let mut gamma = backend.clone_vector(&amps);
-    for _ in 0..option.repeat.get() {
-        gamma = backend.gemv(&r, &zeta);
-        zeta = backend.clone_vector(&gamma);
-        backend.hadamard_normalize(&mut zeta, &amps);
+    let mut gamma = backend.gemv(&r, &amps);
+    for _ in 1..option.repeat.get() {
+        gamma = backend.gemv_hadamard_normalized(&r, gamma, &amps);
     }
     backend.amplitude_correct(&mut gamma, &amps);
     let q = backend.gemv(&b, &gamma);
 
     quantize(
+        backend,
         geometry,
-        &backend.vector_to_host(&q),
+        &q,
         option.constraint,
         mask,
+        option.parallel,
         dst,
     );
     Ok(())
+}
+
+pub fn gspat_batch<B: LinAlgBackend>(
+    backend: &B,
+    geometry: &Geometry,
+    foci: &[&[ControlPoint]],
+    wavelength: Length,
+    option: &GspatOption<'_>,
+    dst: &mut [Vec<Vec<Emission>>],
+) -> Result<(), HoloError> {
+    let setup = BatchSetup {
+        constraint: option.constraint,
+        directivity: option.directivity,
+        mask: option.mask,
+        parallel: option.parallel,
+    };
+    solve_batched(
+        backend,
+        geometry,
+        foci,
+        wavelength,
+        &setup,
+        dst,
+        |backend, g, amps, _, _| {
+            let b = backend.batch_back_prop(g);
+            let r = backend.batch_gemm(g, &b);
+            let mut gamma = backend.batch_gemv(&r, amps);
+            for _ in 1..option.repeat.get() {
+                gamma = backend.batch_gemv_hadamard_normalized(&r, gamma, amps);
+            }
+            backend.batch_amplitude_correct(&mut gamma, amps);
+            backend.batch_gemv(&b, &gamma)
+        },
+    )
 }

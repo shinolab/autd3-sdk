@@ -102,6 +102,7 @@ pub unsafe extern "C" fn autd3_holo_naive(
     constraint: *const Autd3EmissionConstraint,
     directivity: u8,
     mask: *const u8,
+    parallel: bool,
     buffer: *mut PatternBuffer,
 ) -> i32 {
     if geometry.is_null() || foci.is_null() || constraint.is_null() || buffer.is_null() {
@@ -118,6 +119,7 @@ pub unsafe extern "C" fn autd3_holo_naive(
         constraint: to_constraint(unsafe { &*constraint }),
         directivity: to_directivity(directivity),
         mask: mask_ref(mask.as_deref()),
+        parallel,
     };
     match naive(
         &NalgebraBackend,
@@ -142,6 +144,7 @@ pub unsafe extern "C" fn autd3_holo_gs(
     constraint: *const Autd3EmissionConstraint,
     directivity: u8,
     mask: *const u8,
+    parallel: bool,
     buffer: *mut PatternBuffer,
 ) -> i32 {
     if geometry.is_null() || foci.is_null() || constraint.is_null() || buffer.is_null() {
@@ -159,6 +162,7 @@ pub unsafe extern "C" fn autd3_holo_gs(
         constraint: to_constraint(unsafe { &*constraint }),
         directivity: to_directivity(directivity),
         mask: mask_ref(mask.as_deref()),
+        parallel,
     };
     match gs(
         &NalgebraBackend,
@@ -183,6 +187,7 @@ pub unsafe extern "C" fn autd3_holo_gspat(
     constraint: *const Autd3EmissionConstraint,
     directivity: u8,
     mask: *const u8,
+    parallel: bool,
     buffer: *mut PatternBuffer,
 ) -> i32 {
     if geometry.is_null() || foci.is_null() || constraint.is_null() || buffer.is_null() {
@@ -200,6 +205,7 @@ pub unsafe extern "C" fn autd3_holo_gspat(
         constraint: to_constraint(unsafe { &*constraint }),
         directivity: to_directivity(directivity),
         mask: mask_ref(mask.as_deref()),
+        parallel,
     };
     match gspat(
         &NalgebraBackend,

@@ -43,9 +43,12 @@ naive より焦点間の干渉を抑えられるが, 反復回数に応じて計
 | `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
 | `directivity` | `Directivity`        | `Sphere`                  |
 | `mask`        | `TransducerMask`     | `AllEnabled`              |
+| `parallel`    | `bool`               | `true`                    |
 
 `repeat` は反復回数. 大きくするほど品質は向上するが計算時間も増える. 
 `constraint` / `directivity` / `mask` の意味は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 
+
+`parallel` は結果の量子化をホスト側で複数スレッドへ分散するかどうか (GPU バックエンドの場合は無視される). 
 
 ## Example
 

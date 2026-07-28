@@ -42,8 +42,11 @@ The parameters are the same as [gs](/autd3-sdk/en/api/compute/holo/gs/).
 | `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
 | `directivity` | `Directivity`        | `Sphere`                  |
 | `mask`        | `TransducerMask`     | `AllEnabled`              |
+| `parallel`    | `bool`               | `true`                    |
 
 The options are the same as [gs](/autd3-sdk/en/api/compute/holo/gs/).
+
+`parallel` decides whether the quantization of the result is spread over several host threads (a GPU backend ignores it).
 
 ## Example
 

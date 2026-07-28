@@ -45,10 +45,14 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             bump_python_pyproject(root, &core)?;
             bump_csharp_props(&root.join("bindings/csharp/Directory.Build.props"), &core)?;
             bump_cargo_toml(&root.join("extras/autd3-rs-emulator/Cargo.toml"), &core)?;
+            bump_standalone_crate(
+                &root.join("extras/autd3-rs-pattern-holo-wgpu/Cargo.toml"),
+                &core,
+            )?;
             bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
             bump_package_version(&root.join("console/Cargo.toml"), &core)?;
             println!(
-                "Updated software version -> {core} (crates, ffi, python, csharp, emulator, simulator, console)"
+                "Updated software version -> {core} (crates, ffi, python, csharp, emulator, holo-wgpu, simulator, console)"
             );
             bump_unity_series(root, &core)?;
         }
@@ -212,10 +216,13 @@ fn print_next_steps(name: &str) {
             println!(
                 "  cargo xtask emulator build     # refresh extras/autd3-rs-emulator/Cargo.lock"
             );
+            println!(
+                "  cargo xtask holo-wgpu build    # refresh extras/autd3-rs-pattern-holo-wgpu/Cargo.lock"
+            );
             println!("  cargo xtask simulator build    # refresh simulator/Cargo.lock");
             println!("  cargo xtask console build      # refresh console/Cargo.lock");
             println!(
-                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock 'bindings/unity/*/package.json'"
+                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock 'bindings/unity/*/package.json'"
             );
         }
         "python" => {
@@ -333,6 +340,38 @@ fn bump_package_version(path: &Path, version: &str) -> Result<()> {
         .and_then(Item::as_table_like_mut)
         .with_context(|| format!("missing [package] table in {}", path.display()))?;
     package.insert("version", value(version));
+    std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
+    Ok(())
+}
+
+/// Bumps a crate that is its own workspace root but declares everything in
+/// `[package]` / `[dependencies]` rather than workspace tables, so
+/// [`bump_cargo_toml`] has nothing to grab. The sibling requirements have to
+/// move with it: crates.io rejects a package whose path dependency names a
+/// version that was never published.
+fn bump_standalone_crate(path: &Path, version: &str) -> Result<()> {
+    bump_package_version(path, version)?;
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let mut doc: DocumentMut = text
+        .parse()
+        .with_context(|| format!("parsing {}", path.display()))?;
+    for table in ["dependencies", "dev-dependencies", "build-dependencies"] {
+        let Some(deps) = doc.get_mut(table).and_then(Item::as_table_like_mut) else {
+            continue;
+        };
+        for (key, item) in deps.iter_mut() {
+            let name = key.get();
+            if !name.starts_with("autd3-") || FIRMWARE_VERSIONED_CRATES.contains(&name) {
+                continue;
+            }
+            if let Some(inline) = item.as_inline_table_mut()
+                && inline.contains_key("version")
+            {
+                inline.insert("version", Value::from(version));
+            }
+        }
+    }
     std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
     Ok(())
 }

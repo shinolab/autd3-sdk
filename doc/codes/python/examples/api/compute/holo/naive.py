@@ -30,12 +30,14 @@ wavelength = calc_wavelength(340 * m / s)
 constraint = EmissionConstraint.Clamp(0x00, 0xFF)
 directivity = Directivity.Sphere
 mask = TransducerMask.AllEnabled
+parallel = True
 option = (
     # ANCHOR: option
     NaiveOption(
         constraint,
         directivity,
         mask,
+        parallel,
     )
     # ANCHOR_END: option
 )
