@@ -175,6 +175,43 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void LaterStagesAModulationBankWithoutChangingIt()
+        {
+            using var geometry = SingleDevice();
+            using var modulation = Modulation.ModulationBuffer();
+            Modulation.Sine(200 * Hz, new SineOption(), modulation);
+
+            using var builder = new DatagramBuilder(geometry);
+            builder.Push(new Modulation(ModulationBank.B1, SamplingConfig.Freq4k, modulation,
+                transitionMode: TransitionMode.Later));
+            using var frames = builder.Build();
+            Assert.Equal(2, frames.Length);
+        }
+
+        [Fact]
+        public void LaterStagesAPatternBankWithoutChangingIt()
+        {
+            using var geometry = SingleDevice();
+            using var buffer = geometry.PatternBuffer();
+            Pattern.Uniform(new Emission(Phase.Pi, Intensity.Max), buffer);
+
+            using var builder = new DatagramBuilder(geometry);
+            builder.Push(new Pattern(PatternBank.B1, buffer, TransitionMode.Later));
+            using var frames = builder.Build();
+            Assert.Equal(2, frames.Length);
+        }
+
+        [Fact]
+        public void ABankChangeRefusesToNotTransition()
+        {
+            using var geometry = SingleDevice();
+            using var builder = new DatagramBuilder(geometry);
+            builder.Push(new ChangeModulationBank(ModulationBank.B1, TransitionMode.Later));
+            var e = Assert.Throws<Autd3Exception>(() => builder.Build());
+            Assert.Contains("Later", e.Message);
+        }
+
+        [Fact]
         public void CommandsBuildDatagrams()
         {
             using var geometry = SingleDevice();

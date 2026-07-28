@@ -34,9 +34,15 @@ import { excerpt } from "@lib/excerpt";
 | `SysTime(DcSysTime, margin)` | 指定した DC システム時刻 (`margin` は後述. 省略可) |
 | `Gpio(GpioIn)`       | 指定 GPIO 入力ピンのトリガ        |
 | `Ext`                | 拡張モード (バンク内の再生が終わると次のバンクに自動で切り替え) |
+| `Later`              | 遷移しない (バンクへの書き込みだけを行う) |
 
 `SysTime` は指定時刻が近すぎると FPGA が遷移を取りこぼす可能性があるため, 「現在時刻 + マージン」より前の指定を `MISS_TRANSITION_TIME` エラーで拒否する.
 マージンはデフォルトで 10 ms である.
+
+`Later` は「バンクへ書き込むだけで遷移しない」ことを表す.
+`Modulation` / `FociStm` / `PatternStm` の `transition_mode` に指定すると, 末尾のバンク切り替えを送らず書き込みと設定だけを行う.
+遷移コマンドである `ChangeModulationBank` / `ChangePatternBank` 自身に指定した場合はビルド時エラーになる.
+また `Later` は遷移しないため, `LoopBehavior` との組み合わせ制約の対象外である.
 
 `Gpio(GpioIn)` の詳細は [GPIO ピン](/autd3-sdk/hardware/gpio/) を参照.
 

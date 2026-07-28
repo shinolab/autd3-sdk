@@ -26,7 +26,7 @@ impl Operation for ChangeModulationBank {
         let (p, _) = ChangeModBankPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = ChangeModBankPayload {
             bank: self.bank.as_u8(),
-            transition_mode: self.transition_mode.as_u8(),
+            transition_mode: self.transition_mode.as_u8()?,
             transition_value: U64::new(self.transition_mode.value()),
             margin_ns: U32::new(margin_ns),
         };
@@ -82,5 +82,22 @@ mod tests {
 
         assert_eq!(payload[1], 0x01);
         assert_eq!(&payload[2..10], &0x0123_4567_89AB_CDEFu64.to_le_bytes());
+    }
+
+    #[test]
+    fn change_mod_bank_refuses_to_not_transition() {
+        use autd3_rs_core::error::EncodeError;
+
+        let mut out = [0u8; PAYLOAD_BYTES];
+        let e = ChangeModulationBank {
+            bank: ModulationBank::B1,
+            transition_mode: TransitionMode::Later,
+        }
+        .encode(&test_device(0), &mut out)
+        .unwrap_err();
+        assert!(matches!(
+            e,
+            Error::Encode(EncodeError::TransitionLaterNotEncodable)
+        ));
     }
 }

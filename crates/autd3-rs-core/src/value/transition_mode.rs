@@ -14,18 +14,24 @@ pub enum TransitionMode {
     Ext,
     #[default]
     Immediate,
+    Later,
 }
 
 impl TransitionMode {
-    #[must_use]
-    pub const fn as_u8(self) -> u8 {
+    pub const fn as_u8(self) -> Result<u8, EncodeError> {
         match self {
-            TransitionMode::SyncIdx => autd3_cpu_wire::params::TRANSITION_MODE_SYNC_IDX,
-            TransitionMode::SysTime { .. } => autd3_cpu_wire::params::TRANSITION_MODE_SYS_TIME,
-            TransitionMode::Gpio(_) => autd3_cpu_wire::params::TRANSITION_MODE_GPIO,
-            TransitionMode::Ext => autd3_cpu_wire::params::TRANSITION_MODE_EXT,
-            TransitionMode::Immediate => 0xFF,
+            TransitionMode::SyncIdx => Ok(autd3_cpu_wire::params::TRANSITION_MODE_SYNC_IDX),
+            TransitionMode::SysTime { .. } => Ok(autd3_cpu_wire::params::TRANSITION_MODE_SYS_TIME),
+            TransitionMode::Gpio(_) => Ok(autd3_cpu_wire::params::TRANSITION_MODE_GPIO),
+            TransitionMode::Ext => Ok(autd3_cpu_wire::params::TRANSITION_MODE_EXT),
+            TransitionMode::Immediate => Ok(0xFF),
+            TransitionMode::Later => Err(EncodeError::TransitionLaterNotEncodable),
         }
+    }
+
+    #[must_use]
+    pub const fn is_later(self) -> bool {
+        matches!(self, TransitionMode::Later)
     }
 
     #[must_use]
@@ -63,11 +69,26 @@ mod tests {
 
     #[test]
     fn wire_mode_bytes() {
-        assert_eq!(TransitionMode::SyncIdx.as_u8(), 0x00);
-        assert_eq!(sys_time(0).as_u8(), 0x01);
-        assert_eq!(TransitionMode::Gpio(GpioIn::I0).as_u8(), 0x02);
-        assert_eq!(TransitionMode::Ext.as_u8(), 0xF0);
-        assert_eq!(TransitionMode::Immediate.as_u8(), 0xFF);
+        assert_eq!(TransitionMode::SyncIdx.as_u8(), Ok(0x00));
+        assert_eq!(sys_time(0).as_u8(), Ok(0x01));
+        assert_eq!(TransitionMode::Gpio(GpioIn::I0).as_u8(), Ok(0x02));
+        assert_eq!(TransitionMode::Ext.as_u8(), Ok(0xF0));
+        assert_eq!(TransitionMode::Immediate.as_u8(), Ok(0xFF));
+    }
+
+    #[test]
+    fn later_has_no_wire_byte() {
+        assert_eq!(
+            TransitionMode::Later.as_u8(),
+            Err(EncodeError::TransitionLaterNotEncodable)
+        );
+    }
+
+    #[test]
+    fn only_later_is_later() {
+        assert!(TransitionMode::Later.is_later());
+        assert!(!TransitionMode::Immediate.is_later());
+        assert!(!TransitionMode::Ext.is_later());
     }
 
     #[test]
@@ -75,6 +96,7 @@ mod tests {
         assert_eq!(TransitionMode::SyncIdx.value(), 0);
         assert_eq!(TransitionMode::Immediate.value(), 0);
         assert_eq!(TransitionMode::Ext.value(), 0);
+        assert_eq!(TransitionMode::Later.value(), 0);
         assert_eq!(sys_time(0x0123_4567).value(), 0x0123_4567);
         assert_eq!(TransitionMode::Gpio(GpioIn::I3).value(), 3);
     }

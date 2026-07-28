@@ -19,6 +19,9 @@ impl BankLoop {
 
     #[must_use]
     pub const fn accepts(self, mode: TransitionMode) -> bool {
+        if mode.is_later() {
+            return true;
+        }
         match self {
             BankLoop::Infinite => {
                 matches!(mode, TransitionMode::Immediate | TransitionMode::Ext)
@@ -128,6 +131,12 @@ mod tests {
         assert!(BankLoop::Finite.accepts(TransitionMode::Gpio(GpioIn::I0)));
         assert!(!BankLoop::Finite.accepts(TransitionMode::Immediate));
         assert!(!BankLoop::Finite.accepts(TransitionMode::Ext));
+    }
+
+    #[test]
+    fn later_is_outside_the_loop_constraint() {
+        assert!(BankLoop::Infinite.accepts(TransitionMode::Later));
+        assert!(BankLoop::Finite.accepts(TransitionMode::Later));
     }
 
     #[test]

@@ -168,6 +168,12 @@ impl TransitionMode {
         Self(CoreTransitionMode::Immediate)
     }
 
+    #[classattr]
+    #[pyo3(name = "Later")]
+    fn later() -> Self {
+        Self(CoreTransitionMode::Later)
+    }
+
     #[staticmethod]
     #[pyo3(name = "SysTime", signature = (sys_time, margin = None))]
     fn sys_time(sys_time: DcSysTime, margin: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {

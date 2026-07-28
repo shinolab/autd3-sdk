@@ -33,6 +33,21 @@ impl<'a> Modulation<'a> {
 impl<'a> Command<'a> for Modulation<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
         let size = self.data.len();
+        if self.transition_mode.is_later() {
+            builder
+                .push(WriteModulationBuffer {
+                    bank: self.bank,
+                    offset: 0,
+                    data: self.data,
+                })
+                .push(ConfigModulation {
+                    bank: self.bank,
+                    config: self.config,
+                    size,
+                    loop_behavior: self.loop_behavior,
+                });
+            return;
+        }
         if WriteModulationFused::fits_single_frame(size) {
             builder.push(WriteModulationFused {
                 bank: self.bank,
@@ -164,5 +179,47 @@ mod tests {
             datagrams.frame(2).unwrap().datagrams()[0].cmd,
             Cmd::ChangeModulationBank
         );
+    }
+
+    #[test]
+    fn later_writes_the_bank_without_changing_it() {
+        let data = vec![0x80u8; 4];
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
+        b.push(Modulation {
+            bank: ModulationBank::B1,
+            transition_mode: TransitionMode::Later,
+            ..Modulation::new(SamplingConfig::FREQ_4K, &data)
+        });
+        let datagrams = b.build().unwrap();
+
+        assert_eq!(
+            datagrams.len(),
+            2,
+            "write + config, no fusion and no change"
+        );
+        assert_eq!(
+            datagrams.frame(0).unwrap().datagrams()[0].cmd,
+            Cmd::WriteModulationBuffer
+        );
+        let cfg = datagrams.frame(1).unwrap();
+        assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigModulation);
+        assert_eq!(cfg.datagrams()[0].payload[0], 1, "bank B1");
+        assert_eq!(&cfg.datagrams()[0].payload[4..8], &4u32.to_le_bytes());
+    }
+
+    #[test]
+    fn later_skips_the_loop_behavior_constraint() {
+        use crate::value::LoopBehavior;
+        use core::num::NonZeroU16;
+
+        let data = vec![0x80u8; 4];
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
+        b.push(Modulation {
+            bank: ModulationBank::B1,
+            loop_behavior: LoopBehavior::Finite(NonZeroU16::new(10).unwrap()),
+            transition_mode: TransitionMode::Later,
+            ..Modulation::new(SamplingConfig::FREQ_4K, &data)
+        });
+        assert!(b.build().is_ok(), "no transition, so no constraint applies");
     }
 }
