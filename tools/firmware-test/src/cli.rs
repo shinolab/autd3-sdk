@@ -7,6 +7,7 @@ use clap::{Parser, ValueEnum};
 pub enum LinkKind {
     #[default]
     Ethercrab,
+    Echocat,
     Soem,
     Twincat,
     Remote,

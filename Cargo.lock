@@ -184,6 +184,7 @@ version = "0.4.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
+ "autd3-rs-link-echocat",
  "autd3-rs-link-ethercrab",
  "autd3-rs-link-remote",
  "autd3-rs-link-soem",
@@ -193,6 +194,20 @@ dependencies = [
  "clap",
  "tokio",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "autd3-rs-link-echocat"
+version = "0.4.0"
+dependencies = [
+ "autd3-cpu-wire",
+ "autd3-rs-core",
+ "autd3-rs-firmware-emulator",
+ "cc",
+ "libc",
+ "pcap",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]
@@ -293,6 +308,7 @@ version = "0.4.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
+ "autd3-rs-link-echocat",
  "autd3-rs-link-ethercrab",
  "autd3-rs-link-nop",
  "autd3-rs-link-soem",
@@ -309,6 +325,7 @@ version = "0.4.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
+ "autd3-rs-link-echocat",
  "autd3-rs-link-ethercrab",
  "autd3-rs-link-soem",
  "clap",

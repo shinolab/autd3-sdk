@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use autd3_rs::MAX_INFLIGHT;
+use autd3_rs_link_echocat::SleepStrategy;
 use autd3_rs_link_twincat::AmsNetId;
 use clap::{ArgGroup, Parser, ValueEnum};
 
@@ -25,6 +26,7 @@ pub enum Mode {
 pub enum LinkKind {
     #[default]
     Ethercrab,
+    Echocat,
     Soem,
     Twincat,
     Nop,
@@ -42,6 +44,13 @@ impl Command {
     pub const fn is_pattern(self) -> bool {
         matches!(self, Self::WritePatternBuffer | Self::Pattern)
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum SleepStrategyArg {
+    #[default]
+    Sleep,
+    Spin,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -83,7 +92,7 @@ pub struct Cli {
         value_parser = humantime::parse_duration,
         default_value = DEFAULT_SYNC0_PERIOD,
         help = "SYNC0 / EtherCAT cycle period, e.g. 1ms / 500us (maps to *LinkOption.sync0_period). \
-                Defaults to 2ms on Windows (absorbs DPC wake jitter, matches the library's Windows preset) and 1ms elsewhere."
+                Defaults to 2ms on Windows (absorbs DPC wake jitter, matches the ethercrab/soem Windows preset; echocat keeps 1ms everywhere) and 1ms elsewhere."
     )]
     pub sync0_period: Duration,
     #[arg(
@@ -92,6 +101,21 @@ pub struct Cli {
         help = "SYNC0 shift as a percent of the period (maps to *LinkOption.sync0_shift = period * percent)."
     )]
     pub shift_percent: u8,
+    #[arg(
+        long = "sleep-strategy",
+        value_enum,
+        default_value_t = SleepStrategyArg::Sleep,
+        help = "--link echocat only: how the RT thread waits for the next cycle (maps to EchocatLinkOption.sleep_strategy)."
+    )]
+    pub sleep_strategy: SleepStrategyArg,
+    #[arg(
+        long = "spin-margin",
+        value_parser = humantime::parse_duration,
+        default_value = "1ms",
+        help = "How long before the deadline --sleep-strategy spin stops sleeping and busy-waits. \
+                Must exceed how far the OS oversleeps (0.5-0.7ms on Windows even under timeBeginPeriod(1))."
+    )]
+    pub spin_margin: Duration,
     #[arg(long)]
     pub count: Option<u64>,
     #[arg(long, value_parser = humantime::parse_duration)]
@@ -149,7 +173,11 @@ pub struct Cli {
     pub ams_net_id: Option<AmsNetId>,
     #[arg(long, default_value_t = false)]
     pub no_win_perf_tune: bool,
-    #[arg(long, help = "maps to ClientConfig.rt_priority (0..=99)")]
+    #[arg(
+        long,
+        help = "maps to ClientConfig.rt_priority (0..=99). Omit to keep the library default \
+                (TimeCritical on Windows, unset elsewhere)."
+    )]
     pub rt_priority: Option<u8>,
     #[arg(long, value_enum, default_value_t = RtPolicy::Fifo, help = "maps to ClientConfig.rt_policy")]
     pub rt_policy: RtPolicy,
@@ -186,6 +214,26 @@ impl Cli {
                 "--twincat-remote / --ams-net-id are only valid with --link twincat".to_string(),
             );
         }
+        if self.link == LinkKind::Echocat && self.shift_percent != 0 {
+            return Err(
+                "--shift-percent is not valid with --link echocat: it keeps SYNC0 at shift 0 \
+                 and phase-locks the send instant on its own"
+                    .to_string(),
+            );
+        }
+        if self.link != LinkKind::Echocat && self.sleep_strategy != SleepStrategyArg::Sleep {
+            return Err(
+                "--sleep-strategy is only valid with --link echocat: the other links do not \
+                 drive the cycle wait themselves"
+                    .to_string(),
+            );
+        }
+        if self.sleep_strategy == SleepStrategyArg::Spin && self.spin_margin.is_zero() {
+            return Err(
+                "--spin-margin 0s leaves no room for the OS to oversleep past the deadline"
+                    .to_string(),
+            );
+        }
         if self.link == LinkKind::Nop {
             if self.devices.is_none() {
                 return Err("--devices is required with --link nop".to_string());
@@ -207,5 +255,14 @@ impl Cli {
     pub fn sync0_shift(&self) -> Duration {
         let nanos = self.sync0_period.as_nanos() * u128::from(self.shift_percent) / 100;
         Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
+    }
+
+    pub fn echocat_sleep_strategy(&self) -> SleepStrategy {
+        match self.sleep_strategy {
+            SleepStrategyArg::Sleep => SleepStrategy::Sleep,
+            SleepStrategyArg::Spin => SleepStrategy::Spin {
+                margin: self.spin_margin,
+            },
+        }
     }
 }

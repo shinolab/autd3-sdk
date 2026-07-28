@@ -1,0 +1,30 @@
+[package]
+name = "autd3-rs-link-echocat"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "echocat: an EtherCAT main device for AUTD3"
+
+[dependencies]
+autd3-rs-core.workspace = true
+thiserror.workspace = true
+tracing = { workspace = true, features = ["log"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+libc = "0.2.186"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+pcap = { version = "2.4.0", default-features = false }
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+cc = "1.2.65"
+
+[dev-dependencies]
+autd3-cpu-wire.workspace = true
+autd3-rs-firmware-emulator.workspace = true
+
+[lints]
+workspace = true
