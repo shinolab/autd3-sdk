@@ -32,13 +32,21 @@ fn link_block(common: &Common, sync0_period: Duration, sync0_shift: Duration, bo
     let (link, option) = match common.link {
         LinkKind::Soem => ("SoemLink", "SoemLinkOption"),
         LinkKind::Ethercrab => ("EtherCrabLink", "EtherCrabLinkOption"),
+        LinkKind::Echocat => ("EchocatLink", "EchocatLinkOption"),
     };
-    let _ = writeln!(body, "let link = {link}::open({option} {{");
+    let open_arg = if common.link == LinkKind::Echocat {
+        "&"
+    } else {
+        ""
+    };
+    let _ = writeln!(body, "let link = {link}::open({open_arg}{option} {{");
     if let Some(iface) = &common.interface {
         let _ = writeln!(body, "    iface: {iface:?}.into(),");
     }
     let _ = writeln!(body, "    sync0_period: {},", fmt_duration(sync0_period));
-    let _ = writeln!(body, "    sync0_shift: {},", fmt_duration(sync0_shift));
+    if common.link != LinkKind::Echocat {
+        let _ = writeln!(body, "    sync0_shift: {},", fmt_duration(sync0_shift));
+    }
     let _ = writeln!(body, "    ..Default::default()");
     let _ = writeln!(body, "}})?;");
 }
@@ -59,6 +67,12 @@ fn imports_block(link: LinkKind, imports: &[&str]) -> String {
             let _ = writeln!(
                 out,
                 "use autd3_rs_link_ethercrab::{{EtherCrabLink, EtherCrabLinkOption}};",
+            );
+        }
+        LinkKind::Echocat => {
+            let _ = writeln!(
+                out,
+                "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption}};",
             );
         }
         LinkKind::Soem => {

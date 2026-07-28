@@ -5,6 +5,9 @@ use std::time::Duration;
 use autd3_rs::MAX_INFLIGHT;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+const ECHOCAT_SHIFT_ERR: &str = "a SYNC0 shift is not valid with --link echocat: it keeps SYNC0 \
+                                 at shift 0 and phase-locks the send instant on its own";
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
     StopAndWait,
@@ -16,6 +19,7 @@ pub enum Mode {
 pub enum LinkKind {
     #[default]
     Ethercrab,
+    Echocat,
     Soem,
 }
 
@@ -125,7 +129,11 @@ pub struct Common {
     pub low_latency: bool,
     #[arg(long, default_value_t = false)]
     pub no_win_perf_tune: bool,
-    #[arg(long, help = "maps to ClientConfig.rt_priority (0..=99)")]
+    #[arg(
+        long,
+        help = "maps to ClientConfig.rt_priority (0..=99). Omit to keep the library default \
+                (TimeCritical on Windows, unset elsewhere)."
+    )]
     pub rt_priority: Option<u8>,
     #[arg(long, value_enum, default_value_t = RtPolicy::Fifo, help = "maps to ClientConfig.rt_policy")]
     pub rt_policy: RtPolicy,
@@ -186,6 +194,9 @@ impl MeasureArgs {
                 self.shift_percent
             ));
         }
+        if self.common.link == LinkKind::Echocat && self.shift_percent != 0 {
+            return Err(ECHOCAT_SHIFT_ERR.to_string());
+        }
         Ok(())
     }
 }
@@ -216,6 +227,9 @@ impl TuneArgs {
         }
         if self.shift_step == 0 {
             return Err("--shift-step must be greater than zero".to_string());
+        }
+        if self.common.link == LinkKind::Echocat && self.shift_max != 0 {
+            return Err(ECHOCAT_SHIFT_ERR.to_string());
         }
         Ok(())
     }
