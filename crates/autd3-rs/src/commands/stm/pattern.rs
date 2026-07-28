@@ -103,17 +103,18 @@ impl<'a> Command<'a> for PatternStm<'a> {
             }
         }
 
-        builder
-            .push(ConfigPattern {
-                bank,
-                config,
-                size,
-                loop_behavior: self.option.loop_behavior,
-            })
-            .push(ChangePatternBank {
+        builder.push(ConfigPattern {
+            bank,
+            config,
+            size,
+            loop_behavior: self.option.loop_behavior,
+        });
+        if !self.option.transition_mode.is_later() {
+            builder.push(ChangePatternBank {
                 bank,
                 transition_mode: self.option.transition_mode,
             });
+        }
     }
 }
 
@@ -300,5 +301,26 @@ mod tests {
             | (u16::from(patterns[2][0][0].phase.0 >> 4) << 8)
             | (u16::from(patterns[3][0][0].phase.0 >> 4) << 12);
         assert_eq!(word, expected);
+    }
+
+    #[test]
+    fn later_writes_the_bank_without_changing_it() {
+        let patterns = make_patterns(3);
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
+        b.push(PatternStm::new(
+            SamplingConfig::FREQ_4K,
+            &patterns,
+            PatternStmOption {
+                bank: PatternBank::B1,
+                transition_mode: TransitionMode::Later,
+                ..Default::default()
+            },
+        ));
+        let datagrams = b.build().unwrap();
+
+        assert_eq!(datagrams.len(), 4, "3 writes + config, no change");
+        let cfg = datagrams.frame(3).unwrap();
+        assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
+        assert_eq!(cfg.datagrams()[0].payload[0], 1, "bank B1");
     }
 }

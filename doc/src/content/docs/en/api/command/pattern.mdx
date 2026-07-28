@@ -44,6 +44,7 @@ To write to another bank, use `new Pattern(bank, emissions)`.
 | ----------------- | -------------------------------- | --------------------------- | -------------------------------- |
 | `bank`            | `PatternBank`                    | `PatternBank::B0`           | Bank to write to / play back     |
 | `emissions`       | `&[Vec<Emission>]` | —                           | Emission pattern per device      |
+| `transition_mode` | `TransitionMode`                 | `TransitionMode::Immediate` | Behavior when switching the bank |
 
 Several [helper functions](/autd3-sdk/en/api/compute/pattern/) are provided for computing patterns.
 
@@ -51,6 +52,10 @@ Several [helper functions](/autd3-sdk/en/api/compute/pattern/) are provided for 
 
 `Pattern` is equivalent to the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/), which are fused into a single frame.
 The following is equivalent to `Pattern { bank, emissions }`.
+
+When `transition_mode` is `TransitionMode::Later`, nothing is fused: the command decomposes into the two frames `WritePatternBuffer` + `ConfigPattern` and no `ChangePatternBank` is sent.
+That is, the bank is only written to and the playback target does not switch.
+See the `TransitionMode` section of [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/) for details.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

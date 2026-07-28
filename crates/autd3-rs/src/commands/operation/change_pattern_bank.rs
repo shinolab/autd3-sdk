@@ -26,7 +26,7 @@ impl Operation for ChangePatternBank {
         let (p, _) = ChangePatternBankPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = ChangePatternBankPayload {
             bank: self.bank.as_u8(),
-            transition_mode: self.transition_mode.as_u8(),
+            transition_mode: self.transition_mode.as_u8()?,
             transition_value: U64::new(self.transition_mode.value()),
             margin_ns: U32::new(margin_ns),
         };
@@ -143,6 +143,22 @@ mod tests {
         assert!(matches!(
             err,
             Error::Encode(crate::EncodeError::TransitionMarginOutOfRange(_))
+        ));
+    }
+
+    #[test]
+    fn change_pattern_bank_refuses_to_not_transition() {
+        let mut out = [0u8; PAYLOAD_BYTES];
+        let err = ChangePatternBank {
+            bank: PatternBank::B1,
+            transition_mode: TransitionMode::Later,
+        }
+        .encode(&test_device(0), &mut out)
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            Error::Encode(crate::EncodeError::TransitionLaterNotEncodable)
         ));
     }
 }

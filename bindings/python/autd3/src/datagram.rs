@@ -29,18 +29,24 @@ use crate::ops;
 pub struct Pattern {
     bank: CorePatternBank,
     emissions: Vec<DevicePattern>,
+    transition_mode: CoreTransitionMode,
 }
 
 #[pymethods]
 impl Pattern {
     #[new]
-    #[pyo3(signature = (emissions, bank = None))]
-    fn new(emissions: &Bound<'_, PyAny>, bank: Option<ops::PatternBank>) -> PyResult<Self> {
+    #[pyo3(signature = (emissions, bank = None, transition_mode = None))]
+    fn new(
+        emissions: &Bound<'_, PyAny>,
+        bank: Option<ops::PatternBank>,
+        transition_mode: Option<ops::TransitionMode>,
+    ) -> PyResult<Self> {
         let capsule = capsule_of(emissions)?;
         let emissions = pattern_from_capsule(&capsule)?;
         Ok(Self {
             bank: bank.map_or(CorePatternBank::B0, |b| b.0),
             emissions: emissions.to_vec(),
+            transition_mode: transition_mode.map_or(CoreTransitionMode::Immediate, |t| t.0),
         })
     }
 }
@@ -82,6 +88,7 @@ enum Pending {
     Pattern {
         bank: CorePatternBank,
         emissions: Vec<DevicePattern>,
+        transition_mode: CoreTransitionMode,
     },
     Modulation {
         bank: CoreModulationBank,
@@ -184,8 +191,15 @@ fn validate_pending(pending: &Pending) -> PyResult<()> {
 #[allow(clippy::too_many_lines)]
 fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>) {
     match pending {
-        Pending::Pattern { bank, emissions } => {
-            builder.push(CorePattern::with_bank(*bank, emissions));
+        Pending::Pattern {
+            bank,
+            emissions,
+            transition_mode,
+        } => {
+            builder.push(CorePattern {
+                transition_mode: *transition_mode,
+                ..CorePattern::with_bank(*bank, emissions)
+            });
         }
         Pending::Modulation {
             bank,
@@ -364,6 +378,7 @@ impl DatagramBuilder {
             self.pending.push(Pending::Pattern {
                 bank: pattern.bank,
                 emissions: pattern.emissions.clone(),
+                transition_mode: pattern.transition_mode,
             });
             return Ok(());
         }

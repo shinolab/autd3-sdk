@@ -46,7 +46,7 @@ fn raw_pattern_round_trips_to_drives() {
 
     let mut change = vec![0u8; 10];
     change[0] = BANK;
-    change[1] = TransitionMode::Immediate.as_u8();
+    change[1] = TransitionMode::Immediate.as_u8().unwrap();
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));

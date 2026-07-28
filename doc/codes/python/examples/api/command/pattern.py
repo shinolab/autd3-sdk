@@ -5,6 +5,7 @@ from autd3.value import LoopBehavior, PatternBank, SamplingConfig, TransitionMod
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 bank = PatternBank.B0
+transition_mode = TransitionMode.Immediate
 
 emissions = geometry.pattern_buffer()
 
@@ -14,6 +15,7 @@ Pattern(emissions)
 Pattern(
     bank=bank,
     emissions=emissions,
+    transition_mode=transition_mode,
 )
 # ANCHOR_END: api
 
@@ -31,6 +33,6 @@ ConfigPattern(
 )
 ChangePatternBank(
     bank=bank,
-    transition_mode=TransitionMode.Immediate
+    transition_mode=transition_mode,
 )
 # ANCHOR_END: equivalent

@@ -34,9 +34,15 @@ import { excerpt } from "@lib/excerpt";
 | `SysTime(DcSysTime, margin)` | At the specified DC system time (`margin` is optional, see below) |
 | `Gpio(GpioIn)`       | Trigger on the specified GPIO input pin |
 | `Ext`                | Extended mode (automatically switches to the next bank when playback within the bank finishes) |
+| `Later`              | Does not transition (only writes to the bank) |
 
 `SysTime` rejects a time earlier than "now + margin" with a `MISS_TRANSITION_TIME` error, because the FPGA may miss a transition whose time is too close.
 The margin defaults to 10 ms.
+
+`Later` means "only write to the bank, do not transition".
+Specifying it as the `transition_mode` of `Modulation` / `FociStm` / `PatternStm` writes and configures the bank without sending the trailing bank change.
+Specifying it on `ChangeModulationBank` / `ChangePatternBank` themselves, which are the transition commands, is a build-time error.
+Because `Later` never transitions, it is also exempt from the `LoopBehavior` combination constraint.
 
 See [GPIO pins](/autd3-sdk/en/hardware/gpio/) for details on `Gpio(GpioIn)`.
 

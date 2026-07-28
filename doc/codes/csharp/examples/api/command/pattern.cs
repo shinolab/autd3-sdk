@@ -10,6 +10,7 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         var bank = PatternBank.B0;
+        var transitionMode = TransitionMode.Immediate;
 
         var emissions = geometry.PatternBuffer();
 
@@ -17,6 +18,12 @@ internal static class Sample
         new Pattern(emissions);
 
         new Pattern(bank, emissions);
+
+        new Pattern(
+            bank: bank,
+            emissions: emissions,
+            transitionMode: transitionMode
+        );
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
@@ -33,7 +40,7 @@ internal static class Sample
         );
         new ChangePatternBank(
             bank: bank,
-            transitionMode: TransitionMode.Immediate
+            transitionMode: transitionMode
         );
         // ANCHOR_END: equivalent
     }

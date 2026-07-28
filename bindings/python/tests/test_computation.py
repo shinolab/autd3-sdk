@@ -203,6 +203,45 @@ def test_push_each() -> None:
     assert len(builder.build()) > 0
 
 
+def test_later_stages_a_bank_without_changing_it() -> None:
+    geo = geometry()
+    buf = modulation.modulation_buffer()
+    modulation.sine(200 * Hz, modulation.SineOption(), buf)
+
+    builder = autd3.DatagramBuilder(geo)
+    builder.push(
+        autd3.commands.Modulation(
+            autd3.value.SamplingConfig.FREQ_4K,
+            buf,
+            bank=autd3.value.ModulationBank.B1,
+            transition_mode=autd3.value.TransitionMode.Later,
+        )
+    )
+    assert len(builder.build()) == 2
+
+    pat = geo.pattern_buffer()
+    pattern.uniform(autd3.value.Emission(autd3.value.Phase(0x00), autd3.value.Intensity(0x80)), pat)
+    builder = autd3.DatagramBuilder(geo)
+    builder.push(
+        autd3.commands.Pattern(
+            pat,
+            bank=autd3.value.PatternBank.B1,
+            transition_mode=autd3.value.TransitionMode.Later,
+        )
+    )
+    assert len(builder.build()) == 2
+
+    builder = autd3.DatagramBuilder(geo)
+    builder.push(
+        autd3.commands.ChangeModulationBank(
+            autd3.value.ModulationBank.B1,
+            transition_mode=autd3.value.TransitionMode.Later,
+        )
+    )
+    with pytest.raises(autd3.Autd3Error, match="Later"):
+        builder.build()
+
+
 def test_commands_build() -> None:
     geo = geometry()
     builder = autd3.DatagramBuilder(geo)
