@@ -8,6 +8,8 @@ updates:
       - "/simulator"
       - "/simulator/frontend"
       - "/console"
+      - "/extras/autd3-rs-emulator"
+      - "/extras/autd3-rs-pattern-holo-wgpu"
       - "/bindings/ffi"
       - "/bindings/python"
       - "/firmware/cpu/board"
