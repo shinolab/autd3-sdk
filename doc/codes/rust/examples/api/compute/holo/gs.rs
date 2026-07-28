@@ -6,7 +6,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Emission, Intensity};
 use autd3_rs_pattern_holo::{
-    ControlPoint, Directivity, EmissionConstraint, NalgebraBackend, GsOption, Pa, TransducerMask,
+    ControlPoint, Directivity, EmissionConstraint, GsOption, NalgebraBackend, Pa, TransducerMask,
     gs,
 };
 
@@ -30,6 +30,7 @@ fn main() -> Result<()> {
     let constraint = EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX);
     let directivity = Directivity::Sphere;
     let mask = TransducerMask::AllEnabled;
+    let parallel = true;
     let option =
         // ANCHOR: option
         GsOption {
@@ -37,12 +38,20 @@ fn main() -> Result<()> {
             constraint,
             directivity,
             mask,
+            parallel,
         }
         // ANCHOR_END: option
         ;
     let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
     // ANCHOR: api
-    gs(&NalgebraBackend, &geometry, &foci, wavelength, &option, &mut dst)?;
+    gs(
+        &NalgebraBackend,
+        &geometry,
+        &foci,
+        wavelength,
+        &option,
+        &mut dst,
+    )?;
     // ANCHOR_END: api
     Ok(())
 }

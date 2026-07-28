@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
+      holo-wgpu: ${{ steps.filter.outputs.holo-wgpu }}
       simulator: ${{ steps.filter.outputs.simulator }}
       console: ${{ steps.filter.outputs.console }}
       emulator: ${{ steps.filter.outputs.emulator }}
@@ -58,6 +59,16 @@ jobs:
               - 'Cargo.lock'
               - '.cargo/**'
               - '.github/workflows/ci-rust.yml'
+            holo-wgpu:
+              - *shared
+              - *xtask-core
+              - 'xtask/src/holo_wgpu.rs'
+              - 'extras/autd3-rs-pattern-holo-wgpu/**'
+              - 'crates/autd3-rs-pattern-holo/**'
+              - 'crates/autd3-rs-core/**'
+              - 'crates/autd3-rs-pattern/**'
+              - '.cargo/**'
+              - '.github/workflows/ci-holo-wgpu.yml'
             simulator:
               - *shared
               - *xtask-core
@@ -192,6 +203,12 @@ jobs:
     if: ${{ needs.changes.outputs.rust == 'true' }}
     uses: ./.github/workflows/ci-rust.yml
 
+  holo-wgpu:
+    name: holo-wgpu
+    needs: changes
+    if: ${{ needs.changes.outputs.holo-wgpu == 'true' }}
+    uses: ./.github/workflows/ci-holo-wgpu.yml
+
   simulator:
     name: simulator
     needs: changes
@@ -300,7 +317,7 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [changes, rust, simulator, console, emulator, cpu, py, ffi, cs, unity, license, doc, guard]
+    needs: [changes, rust, holo-wgpu, simulator, console, emulator, cpu, py, ffi, cs, unity, license, doc, guard]
     runs-on: ubuntu-latest
     steps:
       - name: Verify detect-changes succeeded
@@ -312,7 +329,8 @@ jobs:
       - name: Verify no required job failed or was cancelled
         env:
           RESULTS: >-
-            ${{ needs.rust.result }} ${{ needs.simulator.result }}
+            ${{ needs.rust.result }} ${{ needs.holo-wgpu.result }}
+            ${{ needs.simulator.result }}
             ${{ needs.console.result }} ${{ needs.emulator.result }}
             ${{ needs.cpu.result }} ${{ needs.py.result }}
             ${{ needs.ffi.result }} ${{ needs.cs.result }}

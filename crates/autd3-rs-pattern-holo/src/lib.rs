@@ -16,7 +16,9 @@ pub use constraint::EmissionConstraint;
 pub use control_point::ControlPoint;
 pub use directivity::Directivity;
 pub use error::HoloError;
-pub use linear_synthesis::{GsOption, GspatOption, NaiveOption, gs, gspat, naive};
+pub use linear_synthesis::{
+    GsOption, GspatOption, NaiveOption, gs, gs_batch, gspat, gspat_batch, naive, naive_batch,
+};
 pub use mask::TransducerMask;
 
 #[cfg(test)]
@@ -260,6 +262,7 @@ mod tests {
                 constraint: EmissionConstraint::Uniform(Intensity::MAX),
                 directivity: Directivity::Sphere,
                 mask,
+                ..Default::default()
             },
             &mut dst,
         )

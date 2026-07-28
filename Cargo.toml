@@ -27,6 +27,7 @@ exclude = [
     "bindings/ffi",
     "simulator",
     "extras/autd3-rs-emulator",
+    "extras/autd3-rs-pattern-holo-wgpu",
 ]
 
 [workspace.package]
@@ -41,6 +42,7 @@ repository = "https://github.com/shinolab/autd3-sdk"
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
 core_affinity = { version = "0.8.3", default-features = false }
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
+rayon = { version = "1.11.0", default-features = false }
 thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 zerocopy = { version = "0.8.52", default-features = false, features = ["derive"] }
 tokio = { version = "1.52.3", default-features = false, features = [

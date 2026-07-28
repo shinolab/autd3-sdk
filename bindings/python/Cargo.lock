@@ -350,6 +350,7 @@ dependencies = [
  "autd3-rs-core",
  "nalgebra",
  "rand",
+ "rayon",
  "thiserror 2.0.18",
 ]
 

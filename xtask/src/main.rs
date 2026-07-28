@@ -11,6 +11,7 @@ mod ffi;
 mod firmware;
 mod fpga;
 mod fpga_codegen;
+mod holo_wgpu;
 mod license;
 mod py;
 mod rust;
@@ -32,6 +33,7 @@ use emulator::{EmulatorCmd, run_emulator};
 use ffi::{FfiCmd, run_ffi};
 use firmware::{FirmwareCmd, run_firmware};
 use fpga::{FpgaCmd, run_fpga};
+use holo_wgpu::{HoloWgpuCmd, run_holo_wgpu};
 use license::{LicenseCmd, run_license};
 use py::{PyCmd, run_py};
 use rust::{RustCmd, run_rust};
@@ -63,6 +65,11 @@ enum TopCmd {
     Tool {
         #[command(subcommand)]
         cmd: ToolCmd,
+    },
+    /// The wgpu holo backend (`extras/autd3-rs-pattern-holo-wgpu/`).
+    HoloWgpu {
+        #[command(subcommand)]
+        cmd: HoloWgpuCmd,
     },
     /// The sound-field simulator (`simulator/`).
     Simulator {
@@ -132,6 +139,7 @@ fn main() -> Result<()> {
         TopCmd::Rust { cmd } => run_rust(&root, &cmd),
         TopCmd::Cpu { cmd } => run_cpu(&root, &cmd),
         TopCmd::Tool { cmd } => run_tool(&root, cmd),
+        TopCmd::HoloWgpu { cmd } => run_holo_wgpu(&root, &cmd),
         TopCmd::Simulator { cmd } => run_simulator(&root, &cmd),
         TopCmd::Console { cmd } => run_console(&root, &cmd),
         TopCmd::Emulator { cmd } => run_emulator(&root, &cmd),

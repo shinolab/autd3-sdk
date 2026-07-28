@@ -8,6 +8,8 @@ sidebar:
 import Math from "@components/Math.astro";
 import CodeTabs from "@components/CodeTabs.astro";
 import Install from "@components/Install.astro";
+import batchSample from "@codes/rust/examples/api/compute/holo/batch.rs?raw";
+import { excerpt } from "@lib/excerpt";
 
 Holo は複数の焦点 (制御点) を同時に生成するための Pattern 計算群. 
 各振動子の位相・振幅を最適化し, 指定した複数点で目標音圧が得られるようにする. 
@@ -62,7 +64,23 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 ### LinAlgBackend (NalgebraBackend)
 
 `naive` / `gs` / `gspat` は線形代数演算を `LinAlgBackend` トレイトに委譲する.
-標準実装として `NalgebraBackend` を用いる.
+標準実装としてCPUで計算する `NalgebraBackend` を用いる.
 バックエンドは各関数の第 1 引数で渡す. 
 
 `greedy` は行列演算を使わないためバックエンドを取らない. 
+
+### GPU Backend (WgpuBackend)
+
+GPUで計算するバックエンドとして `WgpuBackend` を用意している.
+
+<Install rust="autd3-rs-pattern-holo-wgpu"/>
+
+#### バッチ API
+
+`naive` / `gs` / `gspat` には, 独立した複数の問題をまとめて解く `naive_batch` / `gs_batch` / `gspat_batch` がある. 
+
+<CodeTabs rust={excerpt(batchSample, "api")} />
+
+バッチ内の全問題は焦点数が揃っている必要があり, 揃っていなければエラーになる.
+
+バッチAPIで計算速度に利があるのはGPU バックエンドのみで, CPU バックエンドでは意味はない.

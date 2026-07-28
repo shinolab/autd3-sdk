@@ -8,6 +8,8 @@ sidebar:
 import Math from "@components/Math.astro";
 import CodeTabs from "@components/CodeTabs.astro";
 import Install from "@components/Install.astro";
+import batchSample from "@codes/rust/examples/api/compute/holo/batch.rs?raw";
+import { excerpt } from "@lib/excerpt";
 
 Holo is a set of Pattern computations for generating multiple focal points (control points) simultaneously.
 It optimizes the phase and amplitude of each transducer so that the target sound pressure is obtained at the specified multiple points.
@@ -69,3 +71,19 @@ It is specified via the `mask` field of each Option (the default is `AllEnabled`
 The backend is passed as the first argument of each function.
 
 `greedy` does not use matrix operations, so it does not take a backend.
+
+### GPU Backend (WgpuBackend)
+
+`WgpuBackend` is a backend that performs calculations on the GPU.
+
+<Install rust="autd3-rs-pattern-holo-wgpu"/>
+
+### The batch API
+
+`naive` / `gs` / `gspat` each have a `naive_batch` / `gs_batch` / `gspat_batch` counterpart that solves several independent problems at once.
+
+<CodeTabs rust={excerpt(batchSample, "api")} />
+
+Every problem in a batch must have the same focus count; otherwise an error is returned.
+
+The gain comes from GPU backends, `NalgebraBackend` does not get faster.

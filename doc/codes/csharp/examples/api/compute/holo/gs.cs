@@ -25,13 +25,15 @@ internal static class Sample
         var constraint = EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
         var directivity = Directivity.Sphere;
         var mask = TransducerMask.AllEnabled;
+        var parallel = true;
         var option =
             // ANCHOR: option
             new GsOption(
                 repeat,
                 constraint,
                 directivity,
-                mask
+                mask,
+                parallel
             )
             // ANCHOR_END: option
             ;

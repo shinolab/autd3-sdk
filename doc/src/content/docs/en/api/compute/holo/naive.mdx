@@ -41,8 +41,11 @@ For the common elements (`ControlPoint` / `TransducerMask` / `LinAlgBackend`, et
 | `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
 | `directivity` | `Directivity`        | `Sphere`                  |
 | `mask`        | `TransducerMask`     | `AllEnabled`              |
+| `parallel`    | `bool`               | `true`                    |
 
 For the meaning of each field, see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
+
+`parallel` decides whether the quantization of the result is spread over several host threads (a GPU backend ignores it).
 
 ## Example
 

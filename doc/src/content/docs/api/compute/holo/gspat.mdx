@@ -42,8 +42,11 @@ gspat は, [gs](/autd3-sdk/api/compute/holo/gs/) を高速化したアルゴリ�
 | `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
 | `directivity` | `Directivity`        | `Sphere`                  |
 | `mask`        | `TransducerMask`     | `AllEnabled`              |
+| `parallel`    | `bool`               | `true`                    |
 
 オプションは [gs](/autd3-sdk/api/compute/holo/gs/) と同一.
+
+`parallel` は結果の量子化をホスト側で複数スレッドへ分散するかどうか (GPU バックエンドの場合は無視される). 
 
 ## Example
 

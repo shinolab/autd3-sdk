@@ -2,6 +2,7 @@
 /xtask/target
 /simulator/target
 /extras/autd3-rs-emulator/target
+/extras/autd3-rs-pattern-holo-wgpu/target
 /firmware/cpu/build
 /firmware/cpu/board/target
 /firmware/dist
