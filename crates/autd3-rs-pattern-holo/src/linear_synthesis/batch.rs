@@ -22,7 +22,7 @@ pub(crate) struct BatchSetup<'a> {
 pub(crate) fn solve_batched<B, F>(
     backend: &B,
     geometry: &Geometry,
-    foci: &[&[ControlPoint]],
+    foci: &[ControlPoint],
     wavelength: Length,
     setup: &BatchSetup<'_>,
     dst: &mut [Vec<Vec<Emission>>],
@@ -41,18 +41,21 @@ where
     let enabled = tr_pos.len();
     let chunk = backend.max_batch(2 * foci_per_problem * enabled * 8).max(1);
 
-    for (foci, dst) in foci.chunks(chunk).zip(dst.chunks_mut(chunk)) {
-        let flat: Vec<ControlPoint> = foci.iter().flat_map(|f| f.iter().copied()).collect();
+    for (foci, dst) in foci
+        .chunks(chunk.saturating_mul(foci_per_problem))
+        .zip(dst.chunks_mut(chunk))
+    {
+        let problems = dst.len();
         let g = backend.batch_propagation_matrix(
             &tr_pos,
             &tr_dir,
-            &flat,
-            foci.len(),
+            foci,
+            problems,
             k,
             setup.directivity,
         );
-        let amps = batch_target_amplitudes(backend, foci);
-        let q = solve(backend, &g, &amps, foci.len(), enabled);
+        let amps = batch_target_amplitudes(backend, foci, problems);
+        let q = solve(backend, &g, &amps, problems, enabled);
         quantize_batch(
             backend,
             geometry,

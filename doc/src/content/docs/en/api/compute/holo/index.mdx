@@ -84,6 +84,8 @@ The backend is passed as the first argument of each function.
 
 <CodeTabs rust={excerpt(batchSample, "api")} />
 
-Every problem in a batch must have the same focus count; otherwise an error is returned.
+The problem count is determined by the length of `dst`.
+The foci are passed as a slice of length equal to the number of problems multiplied by the number of foci per problem.
+An error is returned if the length of the slice is not divisible by the length of `dst`.
 
 The gain comes from GPU backends, `NalgebraBackend` does not get faster.
