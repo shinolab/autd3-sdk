@@ -16,4 +16,9 @@ pub enum EncodeError {
 
     #[error("transition margin {0:?} is out of range (0..=4294967295 ns)")]
     TransitionMarginOutOfRange(core::time::Duration),
+
+    #[error(
+        "transition mode `Later` only writes a bank without transitioning, so it cannot be encoded into a transition"
+    )]
+    TransitionLaterNotEncodable,
 }

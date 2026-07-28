@@ -98,6 +98,7 @@ fn to_transition_mode(mode: u8, value: u64, margin_ns: u32) -> TransitionMode {
         #[allow(clippy::cast_possible_truncation)]
         0x02 => TransitionMode::Gpio(to_gpio_in(value as u8)),
         0xF0 => TransitionMode::Ext,
+        0xFE => TransitionMode::Later,
         0xFF => TransitionMode::Immediate,
         _ => TransitionMode::SyncIdx,
     }
@@ -388,6 +389,7 @@ pub enum Pending {
     Pattern {
         emissions: Vec<DevicePattern>,
         bank: PatternBank,
+        transition_mode: TransitionMode,
     },
     Modulation {
         divider: u16,
@@ -494,6 +496,9 @@ fn to_pattern_compression(v: u8) -> PatternCompression {
 pub unsafe extern "C" fn autd3_op_pattern(
     bank: u8,
     pattern_buffer: *const PatternBuffer,
+    transition_mode: u8,
+    transition_value: u64,
+    transition_margin_ns: u32,
 ) -> *mut Pending {
     if pattern_buffer.is_null() {
         return std::ptr::null_mut();
@@ -502,6 +507,11 @@ pub unsafe extern "C" fn autd3_op_pattern(
     into_handle(Pending::Pattern {
         emissions: unsafe { &*pattern_buffer }.0.clone(),
         bank: to_pattern_bank(bank),
+        transition_mode: to_transition_mode(
+            transition_mode,
+            transition_value,
+            transition_margin_ns,
+        ),
     })
 }
 
@@ -1012,7 +1022,15 @@ pub unsafe extern "C" fn autd3_op_free(op: *mut Pending) {
 #[allow(clippy::too_many_lines)]
 fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
     Some(match pending {
-        Pending::Pattern { emissions, bank } => Pattern::with_bank(*bank, emissions).boxed(),
+        Pending::Pattern {
+            emissions,
+            bank,
+            transition_mode,
+        } => Pattern {
+            transition_mode: *transition_mode,
+            ..Pattern::with_bank(*bank, emissions)
+        }
+        .boxed(),
         Pending::Modulation {
             divider,
             data,
@@ -1211,8 +1229,15 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
     let mut core = CoreDatagramBuilder::new(Arc::clone(&builder.geometry));
     for pending in &builder.pending {
         match pending {
-            Pending::Pattern { emissions, bank } => {
-                core.push(Pattern::with_bank(*bank, emissions));
+            Pending::Pattern {
+                emissions,
+                bank,
+                transition_mode,
+            } => {
+                core.push(Pattern {
+                    transition_mode: *transition_mode,
+                    ..Pattern::with_bank(*bank, emissions)
+                });
             }
             Pending::Modulation {
                 divider,

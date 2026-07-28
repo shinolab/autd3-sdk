@@ -140,7 +140,7 @@ namespace AUTD3
 
 
         [DllImport("autd3capi")]
-        internal static extern IntPtr autd3_op_pattern(byte bank, IntPtr patternBuffer);
+        internal static extern IntPtr autd3_op_pattern(byte bank, IntPtr patternBuffer, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
         [DllImport("autd3capi")]
         internal static extern IntPtr autd3_op_write_pattern_buffer(byte bank, ushort index, IntPtr patternBuffer);
@@ -294,18 +294,22 @@ namespace AUTD3
     {
         private readonly PatternBank _bank;
         private readonly PatternBuffer _buffer;
+        private readonly TransitionMode _transitionMode;
 
-        public Pattern(PatternBuffer emissions) : this(PatternBank.B0, emissions)
+        public Pattern(PatternBuffer emissions, TransitionMode? transitionMode = null)
+            : this(PatternBank.B0, emissions, transitionMode)
         {
         }
 
-        public Pattern(PatternBank bank, PatternBuffer emissions)
+        public Pattern(PatternBank bank, PatternBuffer emissions, TransitionMode? transitionMode = null)
         {
             _bank = bank;
             _buffer = emissions;
+            _transitionMode = transitionMode ?? TransitionMode.Immediate;
         }
 
-        IntPtr ICommand.CreateOp() => NativePattern.autd3_op_pattern((byte)_bank, _buffer.Handle);
+        IntPtr ICommand.CreateOp() =>
+            NativePattern.autd3_op_pattern((byte)_bank, _buffer.Handle, _transitionMode.Mode, _transitionMode.Value, _transitionMode.MarginNs);
 
 
         public static Length Wavelength(Velocity soundSpeed) =>

@@ -9,6 +9,7 @@ fn main() {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     let bank = PatternBank::B0;
+    let transition_mode = TransitionMode::Immediate;
 
     let emissions = geometry.pattern_buffer();
 
@@ -20,6 +21,7 @@ fn main() {
     Pattern {
         bank,
         emissions: &emissions,
+        transition_mode,
     };
     // ANCHOR_END: api
 
@@ -38,7 +40,7 @@ fn main() {
     };
     ChangePatternBank {
         bank,
-        transition_mode: TransitionMode::Immediate,
+        transition_mode,
     };
     // ANCHOR_END: equivalent
 }

@@ -54,6 +54,23 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
 
         let bank = self.option.bank;
+        if self.option.transition_mode.is_later() {
+            builder
+                .push(WriteFociBuffer {
+                    bank,
+                    index_offset: 0,
+                    points: self.points,
+                })
+                .push(ConfigFociStm {
+                    bank,
+                    config,
+                    size,
+                    num_foci,
+                    sound_speed: self.option.sound_speed,
+                    loop_behavior: self.option.loop_behavior,
+                });
+            return;
+        }
         if WriteFociStmFused::<N>::fits_single_frame(n) {
             builder.push(WriteFociStmFused {
                 bank,
@@ -336,5 +353,38 @@ mod tests {
             &datagrams.frame(last - 1).unwrap().datagrams()[0].payload[4..8],
             &size.to_le_bytes()
         );
+    }
+
+    #[test]
+    fn later_writes_the_bank_without_changing_it() {
+        let points = [
+            ControlPoints::from(Point3::new(0.0, 0.0, 1.0)),
+            ControlPoints::from(Point3::new(0.0, 0.0, 2.0)),
+        ];
+        let mut b = DatagramBuilder::new(test_geometry_arc(1));
+        b.push(FociStm::new(
+            SamplingConfig::FREQ_4K,
+            &points,
+            FociStmOption {
+                bank: PatternBank::B1,
+                transition_mode: TransitionMode::Later,
+                ..Default::default()
+            },
+        ));
+        let datagrams = b.build().unwrap();
+
+        assert_eq!(
+            datagrams.len(),
+            2,
+            "write + config, no fusion and no change"
+        );
+        assert_eq!(
+            datagrams.frame(0).unwrap().datagrams()[0].cmd,
+            Cmd::WritePatternBuffer
+        );
+        let cfg = datagrams.frame(1).unwrap();
+        assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
+        assert_eq!(cfg.datagrams()[0].payload[0], 1, "bank B1");
+        assert_eq!(&cfg.datagrams()[0].payload[4..8], &2u32.to_le_bytes());
     }
 }

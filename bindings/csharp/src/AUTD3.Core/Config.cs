@@ -63,6 +63,8 @@ namespace AUTD3
 
         public static TransitionMode Ext => new TransitionMode(0xF0, 0);
 
+        public static TransitionMode Later => new TransitionMode(0xFE, 0);
+
         public static TransitionMode Immediate => new TransitionMode(0xFF, 0);
     }
 
