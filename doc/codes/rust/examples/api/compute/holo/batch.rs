@@ -12,17 +12,15 @@ fn main() -> Result<()> {
     let option = GsOption::default();
 
     // ANCHOR: api
-    let problems: Vec<Vec<ControlPoint>> = (0..64)
-        .map(|i| {
-            vec![ControlPoint {
-                point: center + offset(i as f32 * 0.5 * mm, 0.0 * mm, 0.0 * mm),
-                amplitude: 5e3 * Pa,
-            }]
+    let problems = 64;
+    let foci: Vec<ControlPoint> = (0..problems)
+        .map(|i| ControlPoint {
+            point: center + offset(i as f32 * 0.5 * mm, 0.0 * mm, 0.0 * mm),
+            amplitude: 5e3 * Pa,
         })
         .collect();
-    let foci: Vec<&[ControlPoint]> = problems.iter().map(Vec::as_slice).collect();
 
-    let mut dst = vec![geometry.pattern_buffer(); foci.len()];
+    let mut dst = vec![geometry.pattern_buffer(); problems];
     gs_batch(
         &NalgebraBackend,
         &geometry,

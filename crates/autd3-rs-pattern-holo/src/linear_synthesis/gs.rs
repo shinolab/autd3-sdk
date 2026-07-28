@@ -86,7 +86,7 @@ pub fn gs<B: LinAlgBackend>(
 pub fn gs_batch<B: LinAlgBackend>(
     backend: &B,
     geometry: &Geometry,
-    foci: &[&[ControlPoint]],
+    foci: &[ControlPoint],
     wavelength: Length,
     option: &GsOption<'_>,
     dst: &mut [Vec<Vec<Emission>>],

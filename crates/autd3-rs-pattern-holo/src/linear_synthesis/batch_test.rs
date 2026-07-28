@@ -53,9 +53,9 @@ fn batch_matches_sequential() {
     let g = geometry(2);
     for nf in [1usize, 4] {
         let owned: Vec<Vec<ControlPoint>> = (0..5).map(|k| problem(&g, k, nf)).collect();
-        let foci: Vec<&[ControlPoint]> = owned.iter().map(Vec::as_slice).collect();
+        let foci: Vec<ControlPoint> = owned.concat();
 
-        let mut batched = vec![slot(&g); foci.len()];
+        let mut batched = vec![slot(&g); owned.len()];
         let mut one = slot(&g);
 
         naive_batch(
@@ -67,7 +67,7 @@ fn batch_matches_sequential() {
             &mut batched,
         )
         .unwrap();
-        for (f, want) in foci.iter().zip(&batched) {
+        for (f, want) in owned.iter().zip(&batched) {
             naive(
                 &NalgebraBackend,
                 &g,
@@ -89,7 +89,7 @@ fn batch_matches_sequential() {
             &mut batched,
         )
         .unwrap();
-        for (f, want) in foci.iter().zip(&batched) {
+        for (f, want) in owned.iter().zip(&batched) {
             gs(
                 &NalgebraBackend,
                 &g,
@@ -111,7 +111,7 @@ fn batch_matches_sequential() {
             &mut batched,
         )
         .unwrap();
-        for (f, want) in foci.iter().zip(&batched) {
+        for (f, want) in owned.iter().zip(&batched) {
             gspat(
                 &NalgebraBackend,
                 &g,
@@ -137,7 +137,7 @@ fn parallel_flag_does_not_change_the_result() {
         })
         .collect();
     let owned: Vec<Vec<ControlPoint>> = (0..3).map(|k| problem(&g, k, 4)).collect();
-    let foci: Vec<&[ControlPoint]> = owned.iter().map(Vec::as_slice).collect();
+    let foci: Vec<ControlPoint> = owned.concat();
 
     for mask in [TransducerMask::AllEnabled, TransducerMask::Masked(&masked)] {
         let mut on = slot(&g);
@@ -145,7 +145,7 @@ fn parallel_flag_does_not_change_the_result() {
         gs(
             &NalgebraBackend,
             &g,
-            foci[0],
+            &owned[0],
             wl(),
             &GsOption {
                 mask,
@@ -158,7 +158,7 @@ fn parallel_flag_does_not_change_the_result() {
         gs(
             &NalgebraBackend,
             &g,
-            foci[0],
+            &owned[0],
             wl(),
             &GsOption {
                 mask,
@@ -170,8 +170,8 @@ fn parallel_flag_does_not_change_the_result() {
         .unwrap();
         assert_eq!(on, off, "single problem");
 
-        let mut on = vec![slot(&g); foci.len()];
-        let mut off = vec![slot(&g); foci.len()];
+        let mut on = vec![slot(&g); owned.len()];
+        let mut off = vec![slot(&g); owned.len()];
         gs_batch(
             &NalgebraBackend,
             &g,
@@ -208,7 +208,7 @@ fn all_masked_batch_matches_sequential() {
     let masked: Vec<Vec<bool>> = vec![vec![false; Autd3::NUM_TRANSDUCERS]; g.num_devices()];
     let mask = TransducerMask::Masked(&masked);
     let owned: Vec<Vec<ControlPoint>> = (0..3).map(|k| problem(&g, k, 2)).collect();
-    let foci: Vec<&[ControlPoint]> = owned.iter().map(Vec::as_slice).collect();
+    let foci: Vec<ControlPoint> = owned.concat();
 
     let dirty = vec![
         vec![
@@ -223,11 +223,11 @@ fn all_masked_batch_matches_sequential() {
     let inactive = slot(&g);
 
     let mut one = dirty.clone();
-    let mut batched = vec![dirty.clone(); foci.len()];
+    let mut batched = vec![dirty.clone(); owned.len()];
     naive(
         &NalgebraBackend,
         &g,
-        foci[0],
+        &owned[0],
         wl(),
         &NaiveOption {
             mask,
@@ -252,11 +252,11 @@ fn all_masked_batch_matches_sequential() {
     assert!(batched.iter().all(|b| *b == one), "naive batch");
 
     let mut one = dirty.clone();
-    let mut batched = vec![dirty.clone(); foci.len()];
+    let mut batched = vec![dirty.clone(); owned.len()];
     gs(
         &NalgebraBackend,
         &g,
-        foci[0],
+        &owned[0],
         wl(),
         &GsOption {
             mask,
@@ -281,11 +281,11 @@ fn all_masked_batch_matches_sequential() {
     assert!(batched.iter().all(|b| *b == one), "gs batch");
 
     let mut one = dirty.clone();
-    let mut batched = vec![dirty; foci.len()];
+    let mut batched = vec![dirty; owned.len()];
     gspat(
         &NalgebraBackend,
         &g,
-        foci[0],
+        &owned[0],
         wl(),
         &GspatOption {
             mask,
@@ -313,40 +313,28 @@ fn all_masked_batch_matches_sequential() {
 #[test]
 fn rejects_malformed_batches() {
     let g = geometry(1);
-    let a = problem(&g, 0, 2);
-    let b = problem(&g, 1, 3);
+    let foci = problem(&g, 0, 5);
     let mut dst = vec![slot(&g); 2];
 
     assert_eq!(
         gs_batch(
             &NalgebraBackend,
             &g,
-            &[&a, &b],
-            wl(),
-            &GsOption::default(),
-            &mut dst
-        ),
-        Err(HoloError::UnevenBatch(2, 3))
-    );
-    assert_eq!(
-        gs_batch(
-            &NalgebraBackend,
-            &g,
-            &[&a],
+            &foci,
             wl(),
             &GsOption::default(),
             &mut dst
         ),
         Err(HoloError::BatchSizeMismatch {
-            problems: 1,
-            slots: 2
+            foci: 5,
+            problems: 2
         })
     );
     assert_eq!(
         gs_batch(
             &NalgebraBackend,
             &g,
-            &[],
+            &foci,
             wl(),
             &GsOption::default(),
             &mut []
@@ -357,7 +345,7 @@ fn rejects_malformed_batches() {
         gs_batch(
             &NalgebraBackend,
             &g,
-            &[&[]],
+            &[],
             wl(),
             &GsOption::default(),
             &mut [slot(&g)]

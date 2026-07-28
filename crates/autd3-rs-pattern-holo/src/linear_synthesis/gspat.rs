@@ -84,7 +84,7 @@ pub fn gspat<B: LinAlgBackend>(
 pub fn gspat_batch<B: LinAlgBackend>(
     backend: &B,
     geometry: &Geometry,
-    foci: &[&[ControlPoint]],
+    foci: &[ControlPoint],
     wavelength: Length,
     option: &GspatOption<'_>,
     dst: &mut [Vec<Vec<Emission>>],

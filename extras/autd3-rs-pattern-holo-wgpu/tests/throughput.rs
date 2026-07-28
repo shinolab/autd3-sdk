@@ -94,7 +94,7 @@ fn batch_vs_sequential() {
                             .collect()
                     })
                     .collect();
-                let foci: Vec<&[ControlPoint]> = owned.iter().map(Vec::as_slice).collect();
+                let foci: Vec<ControlPoint> = owned.concat();
                 let mut dst =
                     vec![vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; d]; problems];
 
@@ -123,7 +123,7 @@ fn run_batch(
     alg: u8,
     gpu: &WgpuBackend,
     g: &Geometry,
-    foci: &[&[ControlPoint]],
+    foci: &[ControlPoint],
     wl: autd3_rs_core::common::Length,
     dst: &mut [Vec<Vec<Emission>>],
 ) {
@@ -134,7 +134,7 @@ fn run_batch(
             _ => gspat_batch(gpu, g, foci, wl, &GspatOption::default(), dst).unwrap(),
         }
     } else {
-        for (f, dst) in foci.iter().zip(dst) {
+        for (f, dst) in foci.chunks(foci.len() / dst.len()).zip(dst) {
             match alg {
                 0 => naive(gpu, g, f, wl, &NaiveOption::default(), dst).unwrap(),
                 1 => gs(gpu, g, f, wl, &GsOption::default(), dst).unwrap(),

@@ -6,8 +6,6 @@ pub enum HoloError {
     NoFoci,
     #[error("at least one problem is required")]
     NoProblems,
-    #[error("every problem in a batch must have the same focus count: found {0} and {1}")]
-    UnevenBatch(usize, usize),
-    #[error("the batch has {problems} problems but {slots} output slots")]
-    BatchSizeMismatch { problems: usize, slots: usize },
+    #[error("{foci} control points cannot be split evenly across {problems} problems")]
+    BatchSizeMismatch { foci: usize, problems: usize },
 }

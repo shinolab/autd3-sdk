@@ -75,32 +75,31 @@ pub(crate) fn enabled_transducers(
     (tr_pos, tr_dir)
 }
 
-pub(crate) fn batch_shape(foci: &[&[ControlPoint]], slots: usize) -> Result<usize, HoloError> {
-    if foci.len() != slots {
-        return Err(HoloError::BatchSizeMismatch {
-            problems: foci.len(),
-            slots,
-        });
+pub(crate) fn batch_shape(foci: &[ControlPoint], problems: usize) -> Result<usize, HoloError> {
+    if problems == 0 {
+        return Err(HoloError::NoProblems);
     }
-    let (first, rest) = foci.split_first().ok_or(HoloError::NoProblems)?;
-    if first.is_empty() {
+    if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
-    if let Some(bad) = rest.iter().find(|f| f.len() != first.len()) {
-        return Err(HoloError::UnevenBatch(first.len(), bad.len()));
+    if !foci.len().is_multiple_of(problems) {
+        return Err(HoloError::BatchSizeMismatch {
+            foci: foci.len(),
+            problems,
+        });
     }
-    Ok(first.len())
+    Ok(foci.len() / problems)
 }
 
 #[must_use]
 pub(crate) fn batch_target_amplitudes<B: LinAlgBackend>(
     backend: &B,
-    foci: &[&[ControlPoint]],
+    foci: &[ControlPoint],
+    problems: usize,
 ) -> B::BatchVector {
     backend.make_batch_vector(
-        foci.len(),
+        problems,
         foci.iter()
-            .flat_map(|f| f.iter())
             .map(|f| Complex::new(f.amplitude.pascal(), 0.0))
             .collect(),
     )

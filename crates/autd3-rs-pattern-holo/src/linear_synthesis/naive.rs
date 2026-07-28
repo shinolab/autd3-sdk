@@ -71,7 +71,7 @@ pub fn naive<B: LinAlgBackend>(
 pub fn naive_batch<B: LinAlgBackend>(
     backend: &B,
     geometry: &Geometry,
-    foci: &[&[ControlPoint]],
+    foci: &[ControlPoint],
     wavelength: Length,
     option: &NaiveOption<'_>,
     dst: &mut [Vec<Vec<Emission>>],

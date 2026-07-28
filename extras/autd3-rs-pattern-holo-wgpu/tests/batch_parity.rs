@@ -192,7 +192,7 @@ fn batch_matches_nalgebra_on_pool_size_collision() {
     let nf = 1usize;
     let problems = Autd3::NUM_TRANSDUCERS * 2 / nf;
     let owned: Vec<Vec<ControlPoint>> = (0..problems).map(|k| problem(&g, k, nf)).collect();
-    let foci: Vec<&[ControlPoint]> = owned.iter().map(Vec::as_slice).collect();
+    let foci: Vec<ControlPoint> = owned.concat();
 
     let mut batched = vec![slot(&g); problems];
     let mut one = slot(&g);
@@ -204,7 +204,7 @@ fn batch_matches_nalgebra_on_pool_size_collision() {
         ..Default::default()
     };
     naive_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-    for (k, (f, got)) in foci.iter().zip(&batched).enumerate() {
+    for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
         naive(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
         compare(&format!("naive {problems}problems #{k}"), &one, got);
     }
@@ -216,7 +216,7 @@ fn batch_matches_nalgebra_on_pool_size_collision() {
         ..Default::default()
     };
     gs_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-    for (k, (f, got)) in foci.iter().zip(&batched).enumerate() {
+    for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
         gs(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
         compare(&format!("gs {problems}problems #{k}"), &one, got);
     }
@@ -228,7 +228,7 @@ fn batch_matches_nalgebra_on_pool_size_collision() {
         ..Default::default()
     };
     gspat_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-    for (k, (f, got)) in foci.iter().zip(&batched).enumerate() {
+    for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
         gspat(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
         compare(&format!("gspat {problems}problems #{k}"), &one, got);
     }
@@ -252,7 +252,7 @@ fn batch_matches_nalgebra_per_problem() {
             for problems in [1usize, 2, 3, 9] {
                 let owned: Vec<Vec<ControlPoint>> =
                     (0..problems).map(|k| problem(&g, k, nf)).collect();
-                let foci: Vec<&[ControlPoint]> = owned.iter().map(Vec::as_slice).collect();
+                let foci: Vec<ControlPoint> = owned.concat();
                 let directivity = Directivity::T4010A1;
 
                 let mut batched = vec![slot(&g); problems];
@@ -271,7 +271,7 @@ fn batch_matches_nalgebra_per_problem() {
                             ..Default::default()
                         };
                         naive_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-                        for (k, (f, got)) in foci.iter().zip(&batched).enumerate() {
+                        for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
                             naive(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
                             compare(&format!("naive {label} #{k}"), &one, got);
                         }
@@ -283,7 +283,7 @@ fn batch_matches_nalgebra_per_problem() {
                             ..Default::default()
                         };
                         gs_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-                        for (k, (f, got)) in foci.iter().zip(&batched).enumerate() {
+                        for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
                             gs(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
                             compare(&format!("gs {label} #{k}"), &one, got);
                         }
@@ -295,7 +295,7 @@ fn batch_matches_nalgebra_per_problem() {
                             ..Default::default()
                         };
                         gspat_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-                        for (k, (f, got)) in foci.iter().zip(&batched).enumerate() {
+                        for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
                             gspat(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
                             compare(&format!("gspat {label} #{k}"), &one, got);
                         }
