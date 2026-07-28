@@ -17,7 +17,7 @@ namespace AUTD3.Link
         }
     }
 
-    public readonly struct TwinCATLinkOption : ILink
+    public readonly struct TwinCATLinkOption : ILink, ILegacyLink
     {
         private readonly bool _isRemote;
         private readonly string? _addr;
@@ -62,6 +62,25 @@ namespace AUTD3.Link
             }
             return opener;
         }
+
+        IntPtr ILegacyLink.TakeLegacyOpener()
+        {
+            var opener = _isRemote
+                ? NativeTwincat.autd3_link_twincat_remote_legacy(
+                    _addr!, _amsNetId!,
+                    Timeouts.Connect.HasValue, (ulong)(Timeouts.Connect?.Ticks * 100 ?? 0),
+                    Timeouts.Read.HasValue, (ulong)(Timeouts.Read?.Ticks * 100 ?? 0),
+                    Timeouts.Write.HasValue, (ulong)(Timeouts.Write?.Ticks * 100 ?? 0))
+                : NativeTwincat.autd3_link_twincat_local_legacy(
+                    Timeouts.Connect.HasValue, (ulong)(Timeouts.Connect?.Ticks * 100 ?? 0),
+                    Timeouts.Read.HasValue, (ulong)(Timeouts.Read?.Ticks * 100 ?? 0),
+                    Timeouts.Write.HasValue, (ulong)(Timeouts.Write?.Ticks * 100 ?? 0));
+            if (opener == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create twincat link (invalid address or AMS Net Id?)");
+            }
+            return opener;
+        }
     }
 
     internal static class NativeTwincat
@@ -76,6 +95,20 @@ namespace AUTD3.Link
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_link_twincat_remote(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string addr,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string amsNetId,
+            [MarshalAs(UnmanagedType.I1)] bool hasConnect, ulong connectNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasRead, ulong readNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasWrite, ulong writeNs);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_twincat_local_legacy(
+            [MarshalAs(UnmanagedType.I1)] bool hasConnect, ulong connectNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasRead, ulong readNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasWrite, ulong writeNs);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_twincat_remote_legacy(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string addr,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string amsNetId,
             [MarshalAs(UnmanagedType.I1)] bool hasConnect, ulong connectNs,

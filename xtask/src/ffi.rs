@@ -18,6 +18,8 @@ pub enum FfiCmd {
         #[arg(long)]
         soem: bool,
     },
+    /// Test the FFI workspace
+    Test,
     /// Clippy the FFI workspace
     Lint,
     /// Rustfmt the FFI workspace
@@ -42,6 +44,11 @@ pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
             }
             run("cargo", args, &dir)
         }
+        FfiCmd::Test => run(
+            "cargo",
+            vec!["test", "--workspace", "--exclude", SOEM_CRATE],
+            &dir,
+        ),
         FfiCmd::Lint => {
             let mut args = vec!["clippy", "--workspace", "--all-targets"];
             args.extend(["--", "-D", "warnings"]);

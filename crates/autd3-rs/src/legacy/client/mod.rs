@@ -1,0 +1,363 @@
+mod rt;
+
+use std::num::NonZeroU32;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+
+use autd3_rs_core::geometry::Geometry;
+use autd3_rs_core::link::{IntoLink, Link};
+use autd3_rs_core::value::Emission;
+use tokio::sync::{Mutex, mpsc, oneshot};
+
+use crate::legacy::datagram::{LegacyDatagramBuilder, LegacyFrame, LegacyFrames};
+use crate::legacy::error::{LegacyError, PayloadError};
+use crate::legacy::op;
+use crate::legacy::wire::{FirmwareVersion, FpgaState, InfoType, Version};
+
+use rt::CmdMessage;
+
+pub const MAX_DEVICES: usize = 128;
+
+const DEFAULT_TIMEOUT_CYCLES: NonZeroU32 = NonZeroU32::new(2000).unwrap();
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LegacyClientConfig {
+    pub timeout_cycles: NonZeroU32,
+}
+
+impl Default for LegacyClientConfig {
+    fn default() -> Self {
+        Self {
+            timeout_cycles: DEFAULT_TIMEOUT_CYCLES,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LegacyResponse {
+    data: Vec<u8>,
+}
+
+impl LegacyResponse {
+    #[must_use]
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+}
+
+pub struct LegacyClient {
+    cmd_tx: mpsc::Sender<CmdMessage>,
+    send_lock: Mutex<()>,
+    geometry: Arc<Geometry>,
+    firmware_version: Vec<FirmwareVersion>,
+    reads_fpga_state: AtomicBool,
+    join: std::sync::Mutex<Option<JoinHandle<()>>>,
+    closed: Arc<AtomicBool>,
+}
+
+impl LegacyClient {
+    pub async fn open<T: IntoLink>(
+        geometry: &Geometry,
+        link: T,
+        config: LegacyClientConfig,
+    ) -> Result<Self, LegacyError> {
+        Self::open_impl(geometry, link, config)
+            .await
+            .map(|(client, _checker)| client)
+    }
+
+    pub async fn open_with_checker<T: IntoLink>(
+        geometry: &Geometry,
+        link: T,
+        config: LegacyClientConfig,
+    ) -> Result<(Self, <T::Link as Link>::Checker), LegacyError> {
+        Self::open_impl(geometry, link, config).await
+    }
+
+    async fn open_impl<T: IntoLink>(
+        geometry: &Geometry,
+        link: T,
+        config: LegacyClientConfig,
+    ) -> Result<(Self, <T::Link as Link>::Checker), LegacyError> {
+        let link = link.into_link(geometry).await?;
+        let num_devices = link.num_devices();
+        if num_devices == 0 {
+            return Err(LegacyError::NoDevices);
+        }
+        if num_devices > MAX_DEVICES {
+            return Err(PayloadError::DeviceCountOutOfRange {
+                got: num_devices,
+                max: MAX_DEVICES,
+            }
+            .into());
+        }
+        if geometry.num_devices() != num_devices {
+            return Err(LegacyError::DeviceCountMismatch {
+                geometry: geometry.num_devices(),
+                link: num_devices,
+            });
+        }
+
+        let checker = link.state_checker();
+
+        let (cmd_tx, cmd_rx) = mpsc::channel::<CmdMessage>(1);
+        let (handshake_tx, handshake_rx) = oneshot::channel();
+        let closed = Arc::new(AtomicBool::new(false));
+        let closed_for_rt = Arc::clone(&closed);
+        let timeout_cycles = config.timeout_cycles;
+        let join = std::thread::Builder::new()
+            .name("autd3-rs-legacy-rt".to_owned())
+            .spawn(move || {
+                rt::run_rt_thread(link, cmd_rx, timeout_cycles, closed_for_rt, handshake_tx);
+            })
+            .map_err(|e| LegacyError::Link(format!("failed to spawn RT thread: {e}")))?;
+
+        let mut client = Self {
+            cmd_tx,
+            send_lock: Mutex::new(()),
+            geometry: Arc::new(geometry.clone()),
+            firmware_version: Vec::new(),
+            reads_fpga_state: AtomicBool::new(false),
+            join: std::sync::Mutex::new(Some(join)),
+            closed,
+        };
+
+        match handshake_rx.await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                let _ = client.close().await;
+                return Err(e);
+            }
+            Err(_) => {
+                let _ = client.close().await;
+                return Err(LegacyError::RtClosed);
+            }
+        }
+
+        match client.initialize().await {
+            Ok(versions) => {
+                client.firmware_version = versions;
+                tracing::info!(num_devices, "legacy client opened");
+                Ok((client, checker))
+            }
+            Err(e) => {
+                let _ = client.close().await;
+                Err(e)
+            }
+        }
+    }
+
+    async fn initialize(&self) -> Result<Vec<FirmwareVersion>, LegacyError> {
+        let frames = {
+            let mut builder = self.datagram_builder();
+            builder.push_op(op::Clear::new()).push_op(op::Sync::new());
+            builder.build()?
+        };
+        self.send_all(&frames).await?;
+
+        let versions = self.read_firmware_version().await?;
+        for version in &versions {
+            if !version.is_supported() {
+                return Err(LegacyError::UnsupportedFirmware {
+                    device: version.idx,
+                    version: version.cpu.to_string(),
+                });
+            }
+        }
+        Ok(versions)
+    }
+
+    #[must_use]
+    pub fn num_devices(&self) -> usize {
+        self.geometry.num_devices()
+    }
+
+    #[must_use]
+    pub fn geometry(&self) -> &Geometry {
+        &self.geometry
+    }
+
+    #[must_use]
+    pub fn firmware_version(&self) -> &[FirmwareVersion] {
+        &self.firmware_version
+    }
+
+    #[must_use]
+    pub fn datagram_builder<'a>(&self) -> LegacyDatagramBuilder<'a> {
+        LegacyDatagramBuilder::new(Arc::clone(&self.geometry))
+    }
+
+    pub async fn send(&self, frame: LegacyFrame) -> Result<LegacyResponse, LegacyError> {
+        let _guard = self.send_lock.lock().await;
+        self.dispatch(frame).await
+    }
+
+    pub async fn send_checked(&self, frame: LegacyFrame) -> Result<(), LegacyError> {
+        self.send(frame).await.map(|_| ())
+    }
+
+    async fn dispatch(&self, frame: LegacyFrame) -> Result<LegacyResponse, LegacyError> {
+        if frame.num_devices() != self.num_devices() {
+            return Err(PayloadError::FrameDeviceCountMismatch {
+                expected: self.num_devices(),
+                got: frame.num_devices(),
+            }
+            .into());
+        }
+        let (reply, response) = oneshot::channel();
+        self.cmd_tx
+            .send(CmdMessage {
+                round: frame,
+                reply,
+            })
+            .await
+            .map_err(|_| LegacyError::RtClosed)?;
+        let data = response.await.map_err(|_| LegacyError::RtClosed)??;
+        Ok(LegacyResponse { data })
+    }
+
+    async fn send_all(&self, frames: &LegacyFrames) -> Result<LegacyResponse, LegacyError> {
+        let _guard = self.send_lock.lock().await;
+        let mut last = LegacyResponse { data: Vec::new() };
+        for frame in frames {
+            last = self.dispatch(frame).await?;
+        }
+        Ok(last)
+    }
+
+    fn build_op<'a, O: op::LegacyOperation + Clone + 'a>(
+        &self,
+        operation: O,
+    ) -> Result<LegacyFrames, LegacyError> {
+        let mut builder = self.datagram_builder();
+        builder.push_op(operation);
+        builder.build()
+    }
+
+    async fn send_op<'a, O: op::LegacyOperation + Clone + 'a>(
+        &self,
+        operation: O,
+    ) -> Result<LegacyResponse, LegacyError> {
+        let frames = self.build_op(operation)?;
+        self.send_all(&frames).await
+    }
+
+    async fn fetch_firm_info(&self, ty: InfoType) -> Result<Vec<u8>, LegacyError> {
+        Ok(self.send_op(op::FirmInfo::new(ty)).await?.data)
+    }
+
+    pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, LegacyError> {
+        let result = self.read_firmware_version_impl().await;
+        let cleared = self.fetch_firm_info(InfoType::Clear).await;
+        let versions = result?;
+        cleared?;
+        Ok(versions)
+    }
+
+    async fn read_firmware_version_impl(&self) -> Result<Vec<FirmwareVersion>, LegacyError> {
+        let cpu_major = self.fetch_firm_info(InfoType::CpuMajor).await?;
+        let cpu_minor = self.fetch_firm_info(InfoType::CpuMinor).await?;
+        let fpga_major = self.fetch_firm_info(InfoType::FpgaMajor).await?;
+        let fpga_minor = self.fetch_firm_info(InfoType::FpgaMinor).await?;
+        let fpga_functions = self.fetch_firm_info(InfoType::FpgaFunctions).await?;
+        Ok((0..self.num_devices())
+            .map(|idx| FirmwareVersion {
+                idx,
+                cpu: Version {
+                    major: cpu_major[idx],
+                    minor: cpu_minor[idx],
+                },
+                fpga: Version {
+                    major: fpga_major[idx],
+                    minor: fpga_minor[idx],
+                },
+                function_bits: fpga_functions[idx],
+            })
+            .collect())
+    }
+
+    pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, LegacyError> {
+        if !self.reads_fpga_state.load(Ordering::Acquire) {
+            self.send_op(op::ReadsFpgaState::new(true)).await?;
+            self.reads_fpga_state.store(true, Ordering::Release);
+        }
+        Ok(self
+            .send_op(op::Nop::new())
+            .await?
+            .data
+            .into_iter()
+            .map(FpgaState)
+            .collect())
+    }
+
+    pub async fn stop(&self) -> Result<(), LegacyError> {
+        let null = self
+            .geometry
+            .iter()
+            .map(|d| vec![Emission::NULL; d.num_transducers()])
+            .collect::<Vec<_>>();
+        self.send_op(op::Gain::new(&null)).await.map(|_| ())
+    }
+
+    pub async fn close(&self) -> Result<(), LegacyError> {
+        tracing::debug!("closing legacy client");
+        let shutdown = self.shutdown_sequence().await;
+        self.closed.store(true, Ordering::Release);
+        let join = self
+            .join
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        let joined = match join {
+            Some(join) => wait_thread(join).await,
+            None => Ok(()),
+        };
+        shutdown.and(joined)
+    }
+
+    async fn shutdown_sequence(&self) -> Result<(), LegacyError> {
+        if self.closed.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        self.send_op(op::Silencer::new(op::SilencerConfig::default_non_strict()))
+            .await?;
+        self.stop().await?;
+        self.send_op(op::Clear::new()).await.map(|_| ())
+    }
+}
+
+impl core::fmt::Debug for LegacyClient {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("LegacyClient")
+            .field("cmd_tx", &self.cmd_tx)
+            .field("send_lock", &self.send_lock)
+            .field("geometry", &self.geometry)
+            .field("firmware_version", &self.firmware_version)
+            .field("reads_fpga_state", &self.reads_fpga_state)
+            .field("join", &self.join)
+            .field("closed", &self.closed)
+            .finish()
+    }
+}
+
+impl Drop for LegacyClient {
+    fn drop(&mut self) {
+        self.closed.store(true, Ordering::Release);
+        let join = self
+            .join
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(join) = join {
+            let _ = join.join();
+        }
+    }
+}
+
+async fn wait_thread(join: JoinHandle<()>) -> Result<(), LegacyError> {
+    tokio::task::spawn_blocking(move || join.join())
+        .await
+        .map_err(|e| LegacyError::Link(format!("RT thread join failed: {e}")))?
+        .map_err(|_| LegacyError::Link("RT thread panicked".to_owned()))
+}

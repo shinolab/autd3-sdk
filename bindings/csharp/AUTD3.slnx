@@ -13,6 +13,7 @@
   </Folder>
   <Folder Name="/examples/">
     <Project Path="examples/FocusSine/FocusSine.csproj" />
+    <Project Path="examples/LegacyFocusSine/LegacyFocusSine.csproj" />
     <Project Path="examples/StatusCheck/StatusCheck.csproj" />
     <Project Path="examples/LowLatency/LowLatency.csproj" />
     <Project Path="examples/SendModes/SendModes.csproj" />

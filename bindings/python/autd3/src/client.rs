@@ -4,8 +4,8 @@ use crate::config::ClientConfig;
 use crate::datagram::{DatagramBuilder, Frame};
 use crate::future::future_into_py;
 use autd3_python_capsule::{
-    ClientBackend, ResponseToken, capsule_of, geometry_from_capsule, take_client_opener, to_pyerr,
-    to_pyerr_gil,
+    ClientBackend, LegacyClientBackend, ResponseToken, capsule_of, geometry_from_capsule,
+    take_client_opener, to_pyerr, to_pyerr_gil,
 };
 use autd3_rs::Geometry;
 use pyo3::exceptions::PyValueError;
@@ -40,7 +40,7 @@ impl LinkStatus {
 }
 
 #[pyclass(name = "FpgaState", module = "autd3")]
-pub struct FpgaState(autd3_rs::FpgaState);
+pub struct FpgaState(pub(crate) autd3_rs::FpgaState);
 
 #[pymethods]
 impl FpgaState {
@@ -128,7 +128,9 @@ impl Client {
                     backend: Arc::clone(&backend),
                     geometry: geometry_for_client,
                 },
-                Checker { backend },
+                Checker {
+                    source: CheckerSource::Current(backend),
+                },
             ))
         })
     }
@@ -264,17 +266,32 @@ impl ResponseFuture {
     }
 }
 
+pub(crate) enum CheckerSource {
+    Current(Arc<dyn ClientBackend>),
+    Legacy(Arc<dyn LegacyClientBackend>),
+}
+
 #[pyclass(name = "Checker", module = "autd3")]
 pub struct Checker {
-    backend: Arc<dyn ClientBackend>,
+    pub(crate) source: CheckerSource,
 }
 
 #[pymethods]
 impl Checker {
     fn check<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let backend = Arc::clone(&self.backend);
+        let source = match &self.source {
+            CheckerSource::Current(backend) => CheckerSource::Current(Arc::clone(backend)),
+            CheckerSource::Legacy(backend) => CheckerSource::Legacy(Arc::clone(backend)),
+        };
         future_into_py(py, async move {
-            let status = backend.check_status().await.map_err(to_pyerr_gil)?;
+            let status = match source {
+                CheckerSource::Current(backend) => {
+                    backend.check_status().await.map_err(to_pyerr_gil)
+                }
+                CheckerSource::Legacy(backend) => {
+                    backend.check_status().await.map_err(to_pyerr_gil)
+                }
+            }?;
             Ok(LinkStatus {
                 device_states: status.device_states,
                 all_op: status.all_op,

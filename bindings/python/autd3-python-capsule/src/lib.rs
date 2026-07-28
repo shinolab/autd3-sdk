@@ -3,7 +3,7 @@ use std::ptr::NonNull;
 
 use autd3_rs_core::Geometry;
 use autd3_rs_core::value::Emission;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyAttributeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyCapsuleMethods};
 
@@ -34,6 +34,26 @@ pub fn capsule_of<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyCapsule
         return Ok(capsule.clone());
     }
     let capsule = obj.call_method0("_capsule")?;
+    Ok(capsule.cast_into::<PyCapsule>()?)
+}
+
+pub fn legacy_capsule_of<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyCapsule>> {
+    if let Ok(capsule) = obj.cast::<PyCapsule>() {
+        return Ok(capsule.clone());
+    }
+    let capsule = match obj.call_method0("_legacy_capsule") {
+        Ok(capsule) => capsule,
+        Err(e) if e.is_instance_of::<PyAttributeError>(obj.py()) => {
+            let name = obj
+                .get_type()
+                .name()
+                .map_or_else(|_| "this link".to_owned(), |name| name.to_string());
+            return Err(PyTypeError::new_err(format!(
+                "{name} does not support LegacyClient; update the autd3-link-* wheel to one that exposes _legacy_capsule"
+            )));
+        }
+        Err(e) => return Err(e),
+    };
     Ok(capsule.cast_into::<PyCapsule>()?)
 }
 
@@ -215,11 +235,242 @@ mod link {
             .take()
             .ok_or_else(|| PyValueError::new_err("link has already been consumed by open()"))
     }
+
+    use autd3_rs::legacy::{LegacyClient, LegacyClientConfig, LegacyError, LegacyFrames};
+    use autd3_rs_core::link::{IntoLink, StateCheck};
+
+    pub const LEGACY_LINK_CAPSULE_NAME: &CStr = c"autd3.legacy_link.v1";
+    pub const LEGACY_FRAME_CAPSULE_NAME: &CStr = c"autd3.legacy_frame.v1";
+
+    pub type LegacyBoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, LegacyError>> + Send>>;
+
+    pub trait LegacyClientBackend: Send + Sync {
+        fn num_devices(&self) -> usize;
+        fn read_firmware_version(&self) -> LegacyBoxFuture<Vec<String>>;
+        fn read_fpga_state(&self) -> LegacyBoxFuture<Vec<u8>>;
+        fn send(&self, frames: Arc<LegacyFrames>, index: usize) -> LegacyBoxFuture<Vec<u8>>;
+        fn send_checked(
+            &self,
+            frames: Arc<LegacyFrames>,
+            frame: Option<usize>,
+        ) -> LegacyBoxFuture<()>;
+        fn check_status(&self) -> LegacyBoxFuture<LinkStatusData>;
+        fn stop(&self) -> LegacyBoxFuture<()>;
+        fn close(&self) -> LegacyBoxFuture<()>;
+    }
+
+    pub type LegacyClientOpener = Box<
+        dyn FnOnce(Geometry, LegacyClientConfig) -> LegacyBoxFuture<Box<dyn LegacyClientBackend>>
+            + Send,
+    >;
+
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
+    pub fn legacy_join_err(e: tokio::task::JoinError) -> LegacyError {
+        LegacyError::Link(e.to_string())
+    }
+
+    struct LegacyBackend<C> {
+        client: Arc<LegacyClient>,
+        checker: Arc<tokio::sync::Mutex<C>>,
+    }
+
+    fn legacy_frame_range(
+        frames: &LegacyFrames,
+        frame: Option<usize>,
+    ) -> Result<(usize, usize), LegacyError> {
+        match frame {
+            Some(index) if index >= frames.len() => {
+                Err(LegacyError::Link(format!("frame {index} out of range")))
+            }
+            Some(index) => Ok((index, index + 1)),
+            None => Ok((0, frames.len())),
+        }
+    }
+
+    impl<C: StateCheck> LegacyClientBackend for LegacyBackend<C> {
+        fn num_devices(&self) -> usize {
+            self.client.num_devices()
+        }
+
+        fn read_firmware_version(&self) -> LegacyBoxFuture<Vec<String>> {
+            let client = Arc::clone(&self.client);
+            Box::pin(async move {
+                link_runtime()
+                    .spawn(async move {
+                        let versions = client.read_firmware_version().await?;
+                        Ok::<Vec<String>, LegacyError>(
+                            versions.iter().map(ToString::to_string).collect(),
+                        )
+                    })
+                    .await
+                    .map_err(legacy_join_err)?
+            })
+        }
+
+        fn read_fpga_state(&self) -> LegacyBoxFuture<Vec<u8>> {
+            let client = Arc::clone(&self.client);
+            Box::pin(async move {
+                link_runtime()
+                    .spawn(async move {
+                        let states = client.read_fpga_state().await?;
+                        Ok::<Vec<u8>, LegacyError>(states.iter().map(|s| s.0).collect())
+                    })
+                    .await
+                    .map_err(legacy_join_err)?
+            })
+        }
+
+        fn send(&self, frames: Arc<LegacyFrames>, index: usize) -> LegacyBoxFuture<Vec<u8>> {
+            let client = Arc::clone(&self.client);
+            Box::pin(async move {
+                link_runtime()
+                    .spawn(async move {
+                        let frame = frames.frame(index).ok_or_else(|| {
+                            LegacyError::Link(format!("frame {index} out of range"))
+                        })?;
+                        Ok::<Vec<u8>, LegacyError>(client.send(frame).await?.data().to_vec())
+                    })
+                    .await
+                    .map_err(legacy_join_err)?
+            })
+        }
+
+        fn send_checked(
+            &self,
+            frames: Arc<LegacyFrames>,
+            frame: Option<usize>,
+        ) -> LegacyBoxFuture<()> {
+            let client = Arc::clone(&self.client);
+            Box::pin(async move {
+                link_runtime()
+                    .spawn(async move {
+                        let (start, end) = legacy_frame_range(&frames, frame)?;
+                        for index in start..end {
+                            let frame = frames.frame(index).ok_or_else(|| {
+                                LegacyError::Link(format!("frame {index} out of range"))
+                            })?;
+                            client.send_checked(frame).await?;
+                        }
+                        Ok::<(), LegacyError>(())
+                    })
+                    .await
+                    .map_err(legacy_join_err)?
+            })
+        }
+
+        fn check_status(&self) -> LegacyBoxFuture<LinkStatusData> {
+            let checker = Arc::clone(&self.checker);
+            Box::pin(async move {
+                link_runtime()
+                    .spawn(async move {
+                        let status = checker
+                            .lock()
+                            .await
+                            .check()
+                            .await
+                            .map_err(|e| LegacyError::Link(e.to_string()))?;
+                        Ok::<LinkStatusData, LegacyError>(LinkStatusData {
+                            device_states: status.devices.iter().map(ToString::to_string).collect(),
+                            all_op: status.all_op(),
+                            any_lost: status.any_lost(),
+                            recoveries: status.recoveries,
+                        })
+                    })
+                    .await
+                    .map_err(legacy_join_err)?
+            })
+        }
+
+        fn stop(&self) -> LegacyBoxFuture<()> {
+            let client = Arc::clone(&self.client);
+            Box::pin(async move {
+                link_runtime()
+                    .spawn(async move { client.stop().await })
+                    .await
+                    .map_err(legacy_join_err)?
+            })
+        }
+
+        fn close(&self) -> LegacyBoxFuture<()> {
+            let client = Arc::clone(&self.client);
+            Box::pin(async move {
+                link_runtime()
+                    .spawn(async move { client.close().await })
+                    .await
+                    .map_err(legacy_join_err)?
+            })
+        }
+    }
+
+    pub fn legacy_client_opener<T, F>(make_link: F) -> LegacyClientOpener
+    where
+        F: FnOnce(&Geometry) -> Result<T, LegacyError> + Send + 'static,
+        T: IntoLink + 'static,
+    {
+        Box::new(move |geometry, config| {
+            Box::pin(async move {
+                let link = make_link(&geometry)?;
+                let (client, checker) =
+                    link_runtime()
+                        .spawn(async move {
+                            LegacyClient::open_with_checker(&geometry, link, config).await
+                        })
+                        .await
+                        .map_err(legacy_join_err)??;
+                let backend: Box<dyn LegacyClientBackend> = Box::new(LegacyBackend {
+                    client: Arc::new(client),
+                    checker: Arc::new(tokio::sync::Mutex::new(checker)),
+                });
+                Ok(backend)
+            })
+        })
+    }
+
+    pub fn legacy_link_into_capsule(
+        py: Python<'_>,
+        opener: LegacyClientOpener,
+    ) -> PyResult<Bound<'_, PyCapsule>> {
+        PyCapsule::new_with_value(py, RefCell::new(Some(opener)), LEGACY_LINK_CAPSULE_NAME)
+    }
+
+    pub fn take_legacy_client_opener(
+        capsule: &Bound<'_, PyCapsule>,
+    ) -> PyResult<LegacyClientOpener> {
+        let ptr: NonNull<c_void> = capsule.pointer_checked(Some(LEGACY_LINK_CAPSULE_NAME))?;
+        // SAFETY: name-checked above; produced by `legacy_link_into_capsule` storing a
+        // `RefCell<Option<LegacyClientOpener>>`. Same autd3-rs version across wheels.
+        let cell = unsafe { ptr.cast::<RefCell<Option<LegacyClientOpener>>>().as_ref() };
+        cell.borrow_mut()
+            .take()
+            .ok_or_else(|| PyValueError::new_err("link has already been consumed by open()"))
+    }
+
+    pub fn legacy_frame_into_capsule(
+        py: Python<'_>,
+        frames: Arc<LegacyFrames>,
+        index: usize,
+    ) -> PyResult<Bound<'_, PyCapsule>> {
+        PyCapsule::new_with_value(py, (frames, index), LEGACY_FRAME_CAPSULE_NAME)
+    }
+
+    pub fn legacy_frame_from_capsule(
+        capsule: &Bound<'_, PyCapsule>,
+    ) -> PyResult<(Arc<LegacyFrames>, usize)> {
+        let ptr: NonNull<c_void> = capsule.pointer_checked(Some(LEGACY_FRAME_CAPSULE_NAME))?;
+        // SAFETY: name-checked above; produced by `legacy_frame_into_capsule` storing a
+        // `(Arc<LegacyFrames>, usize)`. Same autd3-rs version across wheels.
+        let (frames, index) = unsafe { ptr.cast::<(Arc<LegacyFrames>, usize)>().as_ref() };
+        Ok((Arc::clone(frames), *index))
+    }
 }
 
 #[cfg(feature = "client")]
 pub use link::{
-    BoxFuture, ClientBackend, ClientOpener, FRAME_CAPSULE_NAME, LINK_CAPSULE_NAME, LinkStatusData,
-    ResponseToken, client_opener, frame_from_capsule, frame_into_capsule, join_err,
-    link_into_capsule, link_runtime, take_client_opener,
+    BoxFuture, ClientBackend, ClientOpener, FRAME_CAPSULE_NAME, LEGACY_FRAME_CAPSULE_NAME,
+    LEGACY_LINK_CAPSULE_NAME, LINK_CAPSULE_NAME, LegacyBoxFuture, LegacyClientBackend,
+    LegacyClientOpener, LinkStatusData, ResponseToken, client_opener, frame_from_capsule,
+    frame_into_capsule, join_err, legacy_client_opener, legacy_frame_from_capsule,
+    legacy_frame_into_capsule, legacy_join_err, legacy_link_into_capsule, link_into_capsule,
+    link_runtime, take_client_opener, take_legacy_client_opener,
 };

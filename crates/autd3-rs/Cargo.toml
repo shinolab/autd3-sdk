@@ -8,6 +8,9 @@ authors.workspace = true
 repository.workspace = true
 description = "Core async client library for the AUTD3 phased-array kit."
 
+[features]
+legacy = []
+
 [dependencies]
 autd3-cpu-wire.workspace = true
 autd3-rs-core.workspace = true
@@ -26,6 +29,8 @@ windows-sys = { version = "0.61.2", features = [
 ] }
 
 [dev-dependencies]
+autd3-rs-modulation.workspace = true
+autd3-rs-pattern.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "macros", "rt", "rt-multi-thread"] }
 
 [lints]

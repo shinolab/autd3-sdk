@@ -1,0 +1,110 @@
+---
+title: Legacy Firmware
+description: Drive devices running the legacy firmware v12.1.0 with LegacyClient
+sidebar:
+  order: 9
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/guide/legacy.rs?raw";
+import pySample from "@codes/python/examples/guide/legacy.py?raw";
+import csSample from "@codes/csharp/examples/guide/legacy.cs?raw";
+
+This SDK is incompatible with the old autd3 SDK, and its communication protocol is a new design.
+Therefore, the regular `Client` cannot drive devices running the legacy firmware.
+
+`LegacyClient` is a compatibility client for driving devices running the legacy firmware **v12.1.0**.
+
+:::caution
+Only v12.1.0 (CPU version major = `0xA5`) is supported.
+If the firmware can be updated, use the current `Client`.
+:::
+
+## Enabling
+
+In Rust, it is enabled by the `legacy` feature of `autd3-rs` (disabled by default).
+
+```toml
+autd3-rs = { version = "0.4", features = ["legacy"] }
+```
+
+The Python and C# bindings require no extra setup.
+They are available as `autd3.LegacyClient` and the `AUTD3.Legacy` namespace respectively.
+
+## Usage
+
+User code has the same shape as with the current SDK.
+Only replace `Client` with `LegacyClient` and `ClientConfig` with `LegacyClientConfig`.
+All the current [Links](/autd3-sdk/en/api/link/ethercrab/) can be used as they are.
+
+<CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} csharp={excerpt(csSample, "open")} />
+
+`LegacyClientConfig` only holds `timeout_cycles` (default 2000).
+
+Reading the firmware version is also the same as with the current client.
+
+<CodeTabs rust={excerpt(sample, "version")} python={excerpt(pySample, "version")} csharp={excerpt(csSample, "version")} />
+
+Assembling commands is the same as well (the type is `LegacyDatagramBuilder` instead of `DatagramBuilder`).
+The compute helpers for [Emission patterns](/autd3-sdk/en/api/compute/pattern/focus/) and [AM waveforms](/autd3-sdk/en/api/compute/modulation/sine/) are shared too.
+
+<CodeTabs rust={excerpt(sample, "send")} python={excerpt(pySample, "send")} csharp={excerpt(csSample, "send")} />
+
+[`push_each`](/autd3-sdk/en/api/basics/datagram-builder/), which assigns a command per device, works the same way too.
+
+Shutdown is the same as well.
+
+<CodeTabs rust={excerpt(sample, "close")} python={excerpt(pySample, "close")} csharp={excerpt(csSample, "close")} />
+
+## Differences from the current `Client`
+
+| Item                    | `Client`                                   | `LegacyClient`                              |
+| ----------------------- | ------------------------------------------ | ------------------------------------------- |
+| Send model              | Pipelined / stop-and-wait                  | Stop-and-wait only                          |
+| Reading error details   | `read_error_detail()`                      | Not supported (only the ack error code)     |
+| Reading telemetry counters | `read_telemetry()`                      | Not supported                               |
+
+The pipelined send of the current client cannot be used with the legacy firmware.
+Throughput is therefore substantially lower than with the current client.
+
+## Supported Commands
+
+The following commands are available.
+
+- [`Clear`](/autd3-sdk/en/api/command/clear/)
+- [`ForceFan`](/autd3-sdk/en/api/command/force-fan/)
+- [`SetSilencer`](/autd3-sdk/en/api/command/silencer/)
+- [`Pattern`](/autd3-sdk/en/api/command/pattern/)
+- [`Modulation`](/autd3-sdk/en/api/command/modulation/)
+- [`ChangeModulationBank`](/autd3-sdk/en/api/command/lowlevel/change-modulation-bank/)
+- [`FociStm`](/autd3-sdk/en/api/command/foci-stm/)
+- [`PatternStm`](/autd3-sdk/en/api/command/pattern-stm/)
+- [`SetOutputMask`](/autd3-sdk/en/api/command/output-mask/)
+- [`SetPhaseCorrection`](/autd3-sdk/en/api/command/phase-correction/)
+- [`SetPulseWidthTable`](/autd3-sdk/en/api/command/set-pulse-width-table/)
+- [`SetGpioOut`](/autd3-sdk/en/api/command/gpio/)
+- [`EmulateGpioIn`](/autd3-sdk/en/hardware/gpio/)
+
+The following are unavailable.
+
+- [`WritePatternBuffer`](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/)
+- [`WriteModulationBuffer`](/autd3-sdk/en/api/command/lowlevel/write-modulation-buffer/)
+- [`WriteFociBuffer`](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/)
+- [`WritePatternCompressed`](/autd3-sdk/en/api/command/lowlevel/write-pattern-compressed/)
+- [`ConfigPattern`](/autd3-sdk/en/api/command/lowlevel/config-pattern/)
+- [`ConfigModulation`](/autd3-sdk/en/api/command/lowlevel/config-modulation/)
+- [`ConfigFociStm`](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/)
+- [`ChangePatternBank`](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/) (see below)
+
+### Switching the Pattern Bank
+
+Instead of `ChangePatternBank`, use the legacy-specific `LegacyChangePatternBank`.
+Choose `pattern` / `foci_stm` / `pattern_stm` according to what is being switched.
+
+<CodeTabs
+  rust={excerpt(sample, "change_bank")}
+  python={excerpt(pySample, "change_bank")}
+  csharp={excerpt(csSample, "change_bank")}
+/>
+
