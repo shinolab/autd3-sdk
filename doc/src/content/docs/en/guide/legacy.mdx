@@ -40,7 +40,9 @@ All the current [Links](/autd3-sdk/en/api/link/) can be used as they are.
 
 <CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} csharp={excerpt(csSample, "open")} />
 
-`LegacyClientConfig` only holds `timeout_cycles` (default 2000).
+`LegacyClientConfig` only holds `timeout_cycles` (default 2000) and the RT thread tuning
+(`rt_priority` / `rt_policy` / `rt_affinity`).
+The latter have the same types and the same defaults as the current `ClientConfig` (TimeCritical on Windows, unset elsewhere).
 
 Reading the firmware version is also the same as with the current client.
 

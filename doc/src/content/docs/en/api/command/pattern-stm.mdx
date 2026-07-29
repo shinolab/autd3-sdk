@@ -29,6 +29,7 @@ Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary P
 
 Passing a `Freq` / `Duration` to `freq` represents "the frequency/period for one full cycle over all samples".
 A sampling frequency can also be specified.
+A `Duration` that is not divisible by the number of samples is an error (use `Nearest` to round it).
 
 ## PatternStmOption
 

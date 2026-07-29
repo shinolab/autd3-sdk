@@ -40,7 +40,9 @@ Python と C# のバインディングは追加の設定は不要である.
 
 <CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} csharp={excerpt(csSample, "open")} />
 
-`LegacyClientConfig` が持つのは `timeout_cycles` のみ (既定 2000).
+`LegacyClientConfig` が持つのは `timeout_cycles` (既定 2000) と RT スレッドのチューニング
+(`rt_priority` / `rt_policy` / `rt_affinity`) のみ.
+後者は現行 `ClientConfig` と同じ型・同じ既定値である (Windows は TimeCritical, それ以外は無指定).
 
 ファームウェアバージョンの読み出しも現行と同じ.
 

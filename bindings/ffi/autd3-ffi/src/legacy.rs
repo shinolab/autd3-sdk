@@ -19,6 +19,7 @@ use autd3_rs::legacy::{
     LegacyChangePatternBank, LegacyClientConfig, LegacyDatagramBuilder, LegacyFrames,
 };
 use autd3_rs::value::{PatternBank, SamplingConfig, TransitionMode};
+use autd3_rs::{CoreId, RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
 
 use crate::{
     ByteArray, CheckerHandle, Pending, StringArray, runtime, to_cstrings, to_pattern_bank,
@@ -46,11 +47,31 @@ pub struct LegacyBuilder {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_legacy_client_config_new(timeout_cycles: u32) -> *mut LegacyClientConfig {
+pub extern "C" fn autd3_legacy_client_config_new(
+    timeout_cycles: u32,
+    has_rt_priority: bool,
+    rt_priority: u8,
+    has_rt_affinity: bool,
+    rt_affinity: usize,
+) -> *mut LegacyClientConfig {
     let Some(timeout_cycles) = NonZeroU32::new(timeout_cycles) else {
         return std::ptr::null_mut();
     };
-    into_handle(LegacyClientConfig { timeout_cycles })
+    let rt_priority = if has_rt_priority {
+        match ThreadPriorityValue::try_from(rt_priority) {
+            Ok(value) => Some(ThreadPriority::Crossplatform(value)),
+            Err(_) => return std::ptr::null_mut(),
+        }
+    } else {
+        None
+    };
+    let rt_affinity = has_rt_affinity.then_some(CoreId { id: rt_affinity });
+    into_handle(LegacyClientConfig {
+        timeout_cycles,
+        rt_priority,
+        rt_policy: RtSchedulePolicy::default(),
+        rt_affinity,
+    })
 }
 
 #[unsafe(no_mangle)]

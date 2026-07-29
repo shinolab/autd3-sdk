@@ -18,6 +18,7 @@ use autd3_rs::legacy::{
     LegacyDatagramBuilder as CoreLegacyBuilder, LegacyFrames as CoreLegacyFrames,
 };
 use autd3_rs::value::{SamplingConfig, TransitionMode as CoreTransitionMode};
+use autd3_rs::{CoreId, ThreadPriority, ThreadPriorityValue};
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 
@@ -35,12 +36,24 @@ pub struct LegacyClientConfig {
 #[pymethods]
 impl LegacyClientConfig {
     #[new]
-    #[pyo3(signature = (timeout_cycles = None))]
-    fn new(timeout_cycles: Option<u32>) -> PyResult<Self> {
+    #[pyo3(signature = (timeout_cycles = None, rt_priority = None, rt_affinity = None))]
+    fn new(
+        timeout_cycles: Option<u32>,
+        rt_priority: Option<u8>,
+        rt_affinity: Option<usize>,
+    ) -> PyResult<Self> {
         let mut inner = CoreLegacyClientConfig::default();
         if let Some(v) = timeout_cycles {
             inner.timeout_cycles = NonZeroU32::new(v)
                 .ok_or_else(|| PyValueError::new_err("timeout_cycles must be >= 1"))?;
+        }
+        if let Some(v) = rt_priority {
+            let value = ThreadPriorityValue::try_from(v)
+                .map_err(|e| PyValueError::new_err(format!("invalid rt_priority: {e}")))?;
+            inner.rt_priority = Some(ThreadPriority::Crossplatform(value));
+        }
+        if let Some(v) = rt_affinity {
+            inner.rt_affinity = Some(CoreId { id: v });
         }
         Ok(Self { inner })
     }

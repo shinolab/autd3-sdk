@@ -9,6 +9,8 @@ use crate::legacy::datagram::LegacyFrame;
 use crate::legacy::error::{INVALID_MSG_ID, LegacyError, TimeoutPhase, check_device_error};
 use crate::legacy::wire::{MsgId, RX_FRAME_BYTES, RxFrame, TX_FRAME_BYTES, TxFrame};
 
+use super::LegacyClientConfig;
+
 pub(super) type Reply = oneshot::Sender<Result<Vec<u8>, LegacyError>>;
 
 pub(super) struct CmdMessage {
@@ -19,11 +21,12 @@ pub(super) struct CmdMessage {
 pub(super) fn run_rt_thread<L: Link>(
     link: L,
     cmd_rx: mpsc::Receiver<CmdMessage>,
-    timeout_cycles: NonZeroU32,
+    config: LegacyClientConfig,
     closed: Arc<AtomicBool>,
     handshake_tx: oneshot::Sender<Result<(), LegacyError>>,
 ) {
-    let mut rt = RtThread::new(link, cmd_rx, timeout_cycles, closed);
+    crate::rt_tuning::apply_thread_tuning(config.rt_priority, config.rt_policy, config.rt_affinity);
+    let mut rt = RtThread::new(link, cmd_rx, config.timeout_cycles, closed);
     match rt.handshake() {
         Ok(()) => {
             if handshake_tx.send(Ok(())).is_err() {
@@ -135,6 +138,7 @@ impl<L: Link> RtThread<L> {
     }
 
     fn run(&mut self) {
+        let mut link_error = None;
         loop {
             if self.closed.load(Ordering::Acquire) {
                 break;
@@ -150,16 +154,29 @@ impl<L: Link> RtThread<L> {
                 }
                 Err(mpsc::error::TryRecvError::Empty) => {
                     if let Err(e) = self.cycle() {
-                        tracing::error!("link cycle failed: {e}");
+                        tracing::error!("{e}");
+                        link_error = Some(match e {
+                            LegacyError::Link(msg) => msg,
+                            other => other.to_string(),
+                        });
                         break;
                     }
                 }
                 Err(mpsc::error::TryRecvError::Disconnected) => break,
             }
         }
+        self.teardown(link_error.as_deref());
+    }
+
+    fn teardown(&mut self, link_error: Option<&str>) {
+        let cause = || {
+            link_error.map_or(LegacyError::RtClosed, |msg| {
+                LegacyError::Link(msg.to_owned())
+            })
+        };
         self.cmd_rx.close();
         while let Ok(msg) = self.cmd_rx.try_recv() {
-            let _ = msg.reply.send(Err(LegacyError::RtClosed));
+            let _ = msg.reply.send(Err(cause()));
         }
     }
 

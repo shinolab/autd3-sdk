@@ -8,9 +8,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+use autd3_rs_core::RtSchedulePolicy;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::link::{DcClock, IntoLink, Link};
 use autd3_rs_core::value::{DcSysTime, Emission};
+use core_affinity::CoreId;
+use thread_priority::ThreadPriority;
 use tokio::sync::{Mutex, MutexGuard, mpsc, oneshot};
 
 use crate::legacy::datagram::{LegacyDatagramBuilder, LegacyFrame, LegacyFrames};
@@ -26,15 +29,21 @@ const DEFAULT_TIMEOUT_CYCLES: NonZeroU32 = NonZeroU32::new(2000).unwrap();
 
 const SHUTDOWN_POLL: Duration = Duration::from_micros(100);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 pub struct LegacyClientConfig {
     pub timeout_cycles: NonZeroU32,
+    pub rt_priority: Option<ThreadPriority>,
+    pub rt_policy: RtSchedulePolicy,
+    pub rt_affinity: Option<CoreId>,
 }
 
 impl Default for LegacyClientConfig {
     fn default() -> Self {
         Self {
             timeout_cycles: DEFAULT_TIMEOUT_CYCLES,
+            rt_priority: crate::rt_tuning::default_rt_priority(),
+            rt_policy: RtSchedulePolicy::default(),
+            rt_affinity: None,
         }
     }
 }
@@ -113,11 +122,10 @@ impl LegacyClient {
         let (handshake_tx, handshake_rx) = oneshot::channel();
         let closed = Arc::new(AtomicBool::new(false));
         let closed_for_rt = Arc::clone(&closed);
-        let timeout_cycles = config.timeout_cycles;
         let join = std::thread::Builder::new()
             .name("autd3-rs-legacy-rt".to_owned())
             .spawn(move || {
-                rt::run_rt_thread(link, cmd_rx, timeout_cycles, closed_for_rt, handshake_tx);
+                rt::run_rt_thread(link, cmd_rx, config, closed_for_rt, handshake_tx);
             })
             .map_err(|e| LegacyError::Link(format!("failed to spawn RT thread: {e}")))?;
 
@@ -164,18 +172,22 @@ impl LegacyClient {
             builder.push_op(op::Clear::new()).push_op(op::Sync::new());
             builder.build()?
         };
-        self.send_all(&frames).await?;
+        if let Err(e) = self.send_all(&frames).await {
+            return Err(self.explain_initialize_failure(e).await);
+        }
 
         let versions = self.read_firmware_version().await?;
-        for version in &versions {
-            if !version.is_supported() {
-                return Err(LegacyError::UnsupportedFirmware {
-                    device: version.idx,
-                    version: version.cpu.to_string(),
-                });
-            }
+        if let Some(e) = unsupported_firmware(&versions) {
+            return Err(e);
         }
         Ok(versions)
+    }
+
+    async fn explain_initialize_failure(&self, error: LegacyError) -> LegacyError {
+        let Ok(versions) = self.read_firmware_version().await else {
+            return error;
+        };
+        unsupported_firmware(&versions).unwrap_or(error)
     }
 
     #[must_use]
@@ -310,11 +322,20 @@ impl LegacyClient {
         self.send_all(&frames).await
     }
 
+    async fn dispatch_op<'a, O: op::LegacyOperation + Clone + 'a>(
+        &self,
+        operation: O,
+    ) -> Result<LegacyResponse, LegacyError> {
+        let frames = self.build_op(operation)?;
+        self.dispatch_all(&frames).await
+    }
+
     async fn fetch_firm_info(&self, ty: InfoType) -> Result<Vec<u8>, LegacyError> {
-        Ok(self.send_op(op::FirmInfo::new(ty)).await?.data)
+        Ok(self.dispatch_op(op::FirmInfo::new(ty)).await?.data)
     }
 
     pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, LegacyError> {
+        let _guard = self.acquire().await?;
         let result = self.read_firmware_version_impl().await;
         let cleared = self.fetch_firm_info(InfoType::Clear).await;
         let versions = result?;
@@ -345,12 +366,37 @@ impl LegacyClient {
     }
 
     pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, LegacyError> {
+        let _guard = self.acquire().await?;
         if !self.reads_fpga_state.load(Ordering::Acquire) {
-            self.send_op(op::ReadsFpgaState::new(true)).await?;
-            self.reads_fpga_state.store(true, Ordering::Release);
+            self.enable_fpga_state_reads().await?;
         }
+        let states = self.fetch_fpga_state().await?;
+        if first_invalid(&states).is_none() {
+            return Ok(states);
+        }
+        tracing::debug!(
+            "a device reported an fpga state with the valid bit clear; re-enabling the reads"
+        );
+        self.enable_fpga_state_reads().await?;
+        let states = self.fetch_fpga_state().await?;
+        match first_invalid(&states) {
+            Some((device, state)) => Err(LegacyError::FpgaStateInvalid {
+                device,
+                state: state.0,
+            }),
+            None => Ok(states),
+        }
+    }
+
+    async fn enable_fpga_state_reads(&self) -> Result<(), LegacyError> {
+        self.dispatch_op(op::ReadsFpgaState::new(true)).await?;
+        self.reads_fpga_state.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    async fn fetch_fpga_state(&self) -> Result<Vec<FpgaState>, LegacyError> {
         Ok(self
-            .send_op(op::Nop::new())
+            .dispatch_op(op::Nop::new())
             .await?
             .data
             .into_iter()
@@ -465,6 +511,24 @@ impl Drop for LegacyClient {
             let _ = join.join();
         }
     }
+}
+
+fn unsupported_firmware(versions: &[FirmwareVersion]) -> Option<LegacyError> {
+    versions
+        .iter()
+        .find(|version| !version.is_supported())
+        .map(|version| LegacyError::UnsupportedFirmware {
+            device: version.idx,
+            version: version.cpu.to_string(),
+        })
+}
+
+fn first_invalid(states: &[FpgaState]) -> Option<(usize, FpgaState)> {
+    states
+        .iter()
+        .enumerate()
+        .find(|(_, state)| !state.is_valid())
+        .map(|(device, state)| (device, *state))
 }
 
 async fn wait_thread(join: JoinHandle<()>) -> Result<(), LegacyError> {

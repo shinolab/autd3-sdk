@@ -3,7 +3,7 @@
 use core::time::Duration;
 
 use crate::Freq;
-use crate::value::{Nearest, SamplingConfig};
+use crate::value::{Nearest, SamplingConfig, SamplingConfigError};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum StmConfigInner {
@@ -28,7 +28,13 @@ impl StmConfig {
         let size = size.max(1);
         match self.0 {
             StmConfigInner::Freq(freq) => SamplingConfig::new(freq * size as f32),
-            StmConfigInner::Period(period) => SamplingConfig::new(period / size as u32),
+            StmConfigInner::Period(period) => {
+                if period.as_nanos() % size as u128 == 0 {
+                    SamplingConfig::new(period / size as u32)
+                } else {
+                    SamplingConfig::new(SamplingConfigError::StmPeriodIndivisible(period, size))
+                }
+            }
             StmConfigInner::Sampling(config) => config,
             StmConfigInner::FreqNearest(freq) => SamplingConfig::new(Nearest(freq * size as f32)),
             StmConfigInner::PeriodNearest(period) => {
@@ -88,6 +94,25 @@ mod tests {
                 .into_sampling_config(4)
                 .divide(),
             Ok(10)
+        );
+    }
+
+    #[test]
+    fn stm_period_that_does_not_divide_is_rejected_instead_of_truncated() {
+        let period = Duration::from_nanos(50_001);
+        assert_eq!(
+            StmConfig::new(period).into_sampling_config(2).divide(),
+            Err(SamplingConfigError::StmPeriodIndivisible(period, 2))
+        );
+    }
+
+    #[test]
+    fn stm_nearest_period_still_rounds_an_indivisible_period() {
+        assert_eq!(
+            StmConfig::new(Nearest(Duration::from_nanos(50_001)))
+                .into_sampling_config(2)
+                .divide(),
+            Ok(1)
         );
     }
 

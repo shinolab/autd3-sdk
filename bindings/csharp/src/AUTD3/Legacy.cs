@@ -10,19 +10,31 @@ namespace AUTD3.Legacy
     public readonly struct LegacyClientConfig
     {
         public uint TimeoutCycles { get; }
+        public byte? RtPriority { get; }
+        public ulong? RtAffinity { get; }
 
         public LegacyClientConfig() : this(timeoutCycles: 2000)
         {
         }
 
-        public LegacyClientConfig(uint timeoutCycles = 2000)
+        public LegacyClientConfig(
+            uint timeoutCycles = 2000,
+            byte? rtPriority = null,
+            ulong? rtAffinity = null)
         {
             TimeoutCycles = timeoutCycles;
+            RtPriority = rtPriority;
+            RtAffinity = rtAffinity;
         }
 
         internal IntPtr CreateHandle()
         {
-            var handle = NativeLegacyClient.autd3_legacy_client_config_new(TimeoutCycles);
+            var handle = NativeLegacyClient.autd3_legacy_client_config_new(
+                TimeoutCycles,
+                RtPriority.HasValue,
+                RtPriority ?? 0,
+                RtAffinity.HasValue,
+                (UIntPtr)(RtAffinity ?? 0));
             if (handle == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create legacy client config");

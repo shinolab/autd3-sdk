@@ -29,6 +29,7 @@ import { excerpt } from "@lib/excerpt";
 
 `freq` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
 サンプリング周波数を指定することもできる.
+`Duration` がサンプル数で割り切れない場合はエラーになる (丸めたいときは `Nearest` を使う).
 
 ## ControlPoint / ControlPoints
 
