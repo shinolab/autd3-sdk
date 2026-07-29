@@ -9,8 +9,8 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use autd3_rs_core::geometry::Geometry;
-use autd3_rs_core::link::{IntoLink, Link};
-use autd3_rs_core::value::Emission;
+use autd3_rs_core::link::{DcClock, IntoLink, Link};
+use autd3_rs_core::value::{DcSysTime, Emission};
 use tokio::sync::{Mutex, MutexGuard, mpsc, oneshot};
 
 use crate::legacy::datagram::{LegacyDatagramBuilder, LegacyFrame, LegacyFrames};
@@ -60,6 +60,7 @@ pub struct LegacyClient {
     join: std::sync::Mutex<Option<JoinHandle<()>>>,
     closed: Arc<AtomicBool>,
     shutting_down: AtomicBool,
+    dc_clock: Option<DcClock>,
 }
 
 impl LegacyClient {
@@ -106,6 +107,7 @@ impl LegacyClient {
         }
 
         let checker = link.state_checker();
+        let dc_clock = link.dc_clock();
 
         let (cmd_tx, cmd_rx) = mpsc::channel::<CmdMessage>(1);
         let (handshake_tx, handshake_rx) = oneshot::channel();
@@ -128,6 +130,7 @@ impl LegacyClient {
             join: std::sync::Mutex::new(Some(join)),
             closed,
             shutting_down: AtomicBool::new(false),
+            dc_clock,
         };
 
         match handshake_rx.await {
@@ -191,8 +194,21 @@ impl LegacyClient {
     }
 
     #[must_use]
+    pub fn dc_offset_ns(&self) -> i64 {
+        self.dc_clock
+            .as_ref()
+            .and_then(DcClock::offset_ns)
+            .unwrap_or(0)
+    }
+
+    #[must_use]
+    pub fn dc_sys_time(&self) -> DcSysTime {
+        DcSysTime::now().with_dc_offset(self.dc_offset_ns())
+    }
+
+    #[must_use]
     pub fn datagram_builder<'a>(&self) -> LegacyDatagramBuilder<'a> {
-        LegacyDatagramBuilder::new(Arc::clone(&self.geometry))
+        LegacyDatagramBuilder::with_dc_offset(Arc::clone(&self.geometry), self.dc_offset_ns())
     }
 
     pub async fn send(&self, frame: LegacyFrame) -> Result<LegacyResponse, LegacyError> {
@@ -427,6 +443,7 @@ impl core::fmt::Debug for LegacyClient {
             .field("join", &self.join)
             .field("closed", &self.closed)
             .field("shutting_down", &self.shutting_down)
+            .field("dc_clock", &self.dc_clock)
             .finish()
     }
 }

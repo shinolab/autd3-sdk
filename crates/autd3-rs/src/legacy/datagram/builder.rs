@@ -37,15 +37,27 @@ enum Step<'a> {
 pub struct LegacyDatagramBuilder<'a> {
     geometry: Arc<Geometry>,
     steps: Vec<Step<'a>>,
+    dc_offset_ns: i64,
 }
 
 impl<'a> LegacyDatagramBuilder<'a> {
     #[must_use]
     pub fn new(geometry: Arc<Geometry>) -> Self {
+        Self::with_dc_offset(geometry, 0)
+    }
+
+    #[must_use]
+    pub fn with_dc_offset(geometry: Arc<Geometry>, dc_offset_ns: i64) -> Self {
         Self {
             geometry,
             steps: Vec::new(),
+            dc_offset_ns,
         }
+    }
+
+    #[must_use]
+    pub(crate) const fn dc_offset_ns(&self) -> i64 {
+        self.dc_offset_ns
     }
 
     pub fn push<C: LegacyCommand<'a>>(&mut self, cmd: C) -> &mut Self {
@@ -65,7 +77,10 @@ impl<'a> LegacyDatagramBuilder<'a> {
             .enumerate()
             .map(|(idx, device)| {
                 assign(device).map_or_else(Vec::new, |cmd| {
-                    let mut sub = LegacyDatagramBuilder::new(Arc::clone(&geometry));
+                    let mut sub = LegacyDatagramBuilder::with_dc_offset(
+                        Arc::clone(&geometry),
+                        self.dc_offset_ns,
+                    );
                     cmd.expand(&mut sub);
                     sub.queue_for(idx)
                 })

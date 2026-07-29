@@ -168,7 +168,7 @@ namespace AUTD3
         internal static extern void autd3_legacy_datagram_builder_free(IntPtr builder);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_legacy_datagram_builder_build(IntPtr builder, byte[] outErr, UIntPtr outErrLen);
+        internal static extern IntPtr autd3_legacy_datagram_builder_build(IntPtr builder, IntPtr client, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib)]
         internal static extern UIntPtr autd3_legacy_frames_num_frames(IntPtr frames);
