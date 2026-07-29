@@ -5,10 +5,23 @@ mod app;
 mod launch;
 mod panel;
 mod process;
+mod update;
 
 use eframe::egui;
 
 fn main() -> eframe::Result {
+    let result = run();
+    if update::restart_requested()
+        && let Ok(exe) = std::env::current_exe()
+    {
+        let mut command = std::process::Command::new(exe);
+        process::no_window(&mut command);
+        let _ = command.spawn();
+    }
+    result
+}
+
+fn run() -> eframe::Result {
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([760.0, 560.0])
         .with_min_inner_size([560.0, 400.0])

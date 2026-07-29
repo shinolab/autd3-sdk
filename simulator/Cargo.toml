@@ -50,6 +50,7 @@ axum = { version = "0.8.9", default-features = false, features = [
     "ws",
 ] }
 tower-http = { version = "0.7.0", default-features = false, features = ["fs"] }
+rust-embed = { version = "8.12.0", default-features = false, features = ["mime-guess"] }
 tracing = { version = "0.1.44", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = [
     "std",

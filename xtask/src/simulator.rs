@@ -5,35 +5,59 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use crate::util::{on_path, run, run_built_bin, run_tool};
+use crate::util::{cargo_bin, cargo_build_args, copy_dir, on_path, run, run_built_bin, run_tool};
 
-pub fn build_backend_and_frontend(root: &Path, debug: bool) -> Result<(PathBuf, PathBuf)> {
+pub fn build_backend_and_frontend(
+    root: &Path,
+    debug: bool,
+    target: Option<&str>,
+) -> Result<(PathBuf, PathBuf)> {
     let sim = root.join("simulator");
     let frontend = sim.join("frontend");
-    let profile = if debug { "debug" } else { "release" };
 
     crate::license::generate_simulator(root)?;
     build_frontend(&frontend, debug)?;
-    let public = frontend
+    let public = frontend_public(&frontend, debug);
+    stage_web_assets(&sim, &public)?;
+
+    run(
+        "cargo",
+        cargo_build_args("autd3-rs-simulator", target, debug),
+        &sim,
+    )?;
+    let bin = cargo_bin(&sim, target, debug, "autd3-rs-simulator");
+    Ok((bin, public))
+}
+
+fn frontend_public(frontend: &Path, debug: bool) -> PathBuf {
+    frontend
         .join("target")
         .join("dx")
         .join("autd3-rs-simulator-frontend")
-        .join(profile)
+        .join(if debug { "debug" } else { "release" })
         .join("web")
-        .join("public");
+        .join("public")
+}
 
-    let mut build_args: Vec<&str> = vec!["build", "-p", "autd3-rs-simulator"];
-    if !debug {
-        build_args.push("--release");
+fn stage_web_assets(sim: &Path, public: &Path) -> Result<()> {
+    if !public.join("index.html").is_file() {
+        bail!("frontend bundle not found at {}", public.display());
     }
-    run("cargo", build_args, &sim)?;
-    let bin_name = if cfg!(windows) {
-        "autd3-rs-simulator.exe"
-    } else {
-        "autd3-rs-simulator"
-    };
-    let bin = sim.join("target").join(profile).join(bin_name);
-    Ok((bin, public))
+    let dst = sim.join("backend").join("web");
+    std::fs::create_dir_all(&dst)?;
+    for entry in std::fs::read_dir(&dst).with_context(|| format!("reading {}", dst.display()))? {
+        let entry = entry?;
+        if entry.file_name() == ".gitkeep" {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            std::fs::remove_dir_all(&path)?;
+        } else {
+            std::fs::remove_file(&path)?;
+        }
+    }
+    copy_dir(public, &dst)
 }
 
 #[derive(Subcommand)]
@@ -76,15 +100,7 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
     let sim = root.join("simulator");
     let frontend = sim.join("frontend");
     match cmd {
-        SimulatorCmd::Build { debug } => {
-            crate::license::generate_simulator(root)?;
-            let mut args = vec!["build"];
-            if !*debug {
-                args.push("--release");
-            }
-            run("cargo", args, &sim)?;
-            build_frontend(&frontend, *debug)
-        }
+        SimulatorCmd::Build { debug } => build_backend_and_frontend(root, *debug, None).map(|_| ()),
         SimulatorCmd::Lint => {
             run(
                 "cargo",
@@ -184,13 +200,7 @@ fn run_serve(
         build_frontend(frontend, debug)?;
     }
 
-    let public = frontend
-        .join("target")
-        .join("dx")
-        .join("autd3-rs-simulator-frontend")
-        .join(profile)
-        .join("web")
-        .join("public");
+    let public = frontend_public(frontend, debug);
     if !public.join("index.html").is_file() {
         bail!(
             "frontend bundle not found at {}. Run without --skip-web-build first.",

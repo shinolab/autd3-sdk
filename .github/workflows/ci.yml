@@ -86,8 +86,10 @@ jobs:
               - 'xtask/src/console.rs'
               - 'xtask/src/simulator.rs'
               - 'console/**'
+              - 'dist-workspace.toml'
               - '.cargo/**'
               - '.github/workflows/ci-console.yml'
+              - '.github/workflows/console-build-setup.yml'
             emulator:
               - *shared
               - *xtask-core

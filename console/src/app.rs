@@ -3,6 +3,7 @@ use std::time::Duration;
 use eframe::egui;
 
 use crate::panel::{FirmwarePanel, SimulatorPanel, TwinCatPanel};
+use crate::update::Updater;
 
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 enum Tab {
@@ -19,6 +20,7 @@ pub struct ConsoleApp {
     simulator: SimulatorPanel,
     twincat: TwinCatPanel,
     firmware: FirmwarePanel,
+    updater: Updater,
 }
 
 impl ConsoleApp {
@@ -34,9 +36,15 @@ impl ConsoleApp {
             if let Some(config) = eframe::get_value(storage, "firmware") {
                 app.firmware.config = config;
             }
+            if let Some(config) = eframe::get_value(storage, "update") {
+                app.updater.config = config;
+            }
         }
         if !cfg!(target_os = "windows") {
             app.tab = Tab::Simulator;
+        }
+        if app.updater.config.auto_check {
+            app.updater.check();
         }
         app
     }
@@ -47,7 +55,12 @@ impl eframe::App for ConsoleApp {
         self.simulator.pump();
         self.twincat.pump();
         self.firmware.pump();
-        if self.simulator.is_running() || self.twincat.is_running() || self.firmware.is_running() {
+        self.updater.pump();
+        if self.simulator.is_running()
+            || self.twincat.is_running()
+            || self.firmware.is_running()
+            || self.updater.is_busy()
+        {
             ctx.request_repaint_after(Duration::from_millis(250));
         }
     }
@@ -63,11 +76,14 @@ impl eframe::App for ConsoleApp {
                 ui.selectable_value(&mut self.tab, Tab::About, "About");
             });
         });
-        egui::CentralPanel::default().show(ui, |ui| match self.tab {
-            Tab::Simulator => self.simulator.ui(ui),
-            Tab::TwinCat => self.twincat.ui(ui),
-            Tab::Firmware => self.firmware.ui(ui),
-            Tab::About => crate::about::ui(ui),
+        egui::CentralPanel::default().show(ui, |ui| {
+            self.updater.banner(ui);
+            match self.tab {
+                Tab::Simulator => self.simulator.ui(ui),
+                Tab::TwinCat => self.twincat.ui(ui),
+                Tab::Firmware => self.firmware.ui(ui),
+                Tab::About => crate::about::ui(ui, &mut self.updater),
+            }
         });
     }
 
@@ -75,5 +91,6 @@ impl eframe::App for ConsoleApp {
         eframe::set_value(storage, "simulator", &self.simulator.config);
         eframe::set_value(storage, "twincat", &self.twincat.config);
         eframe::set_value(storage, "firmware", &self.firmware.config);
+        eframe::set_value(storage, "update", &self.updater.config);
     }
 }

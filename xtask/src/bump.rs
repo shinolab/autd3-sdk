@@ -51,6 +51,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             )?;
             bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
             bump_package_version(&root.join("console/Cargo.toml"), &core)?;
+            bump_package_version(&root.join("console/dist.toml"), &core)?;
             println!(
                 "Updated software version -> {core} (crates, ffi, python, csharp, emulator, holo-wgpu, simulator, console)"
             );
@@ -75,6 +76,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
         }
         "console" => {
             bump_package_version(&root.join("console/Cargo.toml"), &core)?;
+            bump_package_version(&root.join("console/dist.toml"), &core)?;
             println!("Updated console version -> {core}");
         }
         "firmware" => {
@@ -222,7 +224,7 @@ fn print_next_steps(name: &str) {
             println!("  cargo xtask simulator build    # refresh simulator/Cargo.lock");
             println!("  cargo xtask console build      # refresh console/Cargo.lock");
             println!(
-                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock 'bindings/unity/*/package.json'"
+                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock console/dist.toml 'bindings/unity/*/package.json'"
             );
         }
         "python" => {
@@ -243,7 +245,9 @@ fn print_next_steps(name: &str) {
         }
         "console" => {
             println!("  cargo xtask console build      # refresh console/Cargo.lock");
-            println!("  git add console/Cargo.toml console/Cargo.lock CHANGELOG.md");
+            println!(
+                "  git add console/Cargo.toml console/Cargo.lock console/dist.toml CHANGELOG.md"
+            );
         }
         "firmware" => {
             println!("  cargo xtask rust build         # refresh Cargo.lock");
