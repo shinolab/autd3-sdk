@@ -17,7 +17,7 @@ internal static class Sample
         // ANCHOR: open
         using var client = await LegacyClient.OpenAsync(
             geometry,
-            new EtherCrabLinkOption(),
+            new EchocatLinkOption(),
             new LegacyClientConfig()
         );
         // ANCHOR_END: open

@@ -25,8 +25,8 @@ pub enum Mode {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum LinkKind {
     #[default]
-    Ethercrab,
     Echocat,
+    Ethercrab,
     Soem,
     Twincat,
     Nop,
@@ -68,7 +68,7 @@ pub enum RtPolicy {
     group(ArgGroup::new("stop").args(["count", "duration"]).multiple(false))
 )]
 pub struct Cli {
-    #[arg(long, value_enum, default_value_t = LinkKind::Ethercrab)]
+    #[arg(long, value_enum, default_value_t = LinkKind::Echocat)]
     pub link: LinkKind,
     #[arg(
         long,
@@ -92,7 +92,7 @@ pub struct Cli {
         value_parser = humantime::parse_duration,
         default_value = DEFAULT_SYNC0_PERIOD,
         help = "SYNC0 / EtherCAT cycle period, e.g. 1ms / 500us (maps to *LinkOption.sync0_period). \
-                Defaults to 2ms on Windows (absorbs DPC wake jitter, matches the ethercrab/soem Windows preset; echocat keeps 1ms everywhere) and 1ms elsewhere."
+                Defaults to 2ms on Windows (absorbs DPC wake jitter, matching every link's own Windows default) and 1ms elsewhere."
     )]
     pub sync0_period: Duration,
     #[arg(

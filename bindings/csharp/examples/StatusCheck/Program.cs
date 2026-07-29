@@ -15,7 +15,7 @@ internal static class Program
     private static async Task Main()
     {
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
-        var (client, checker) = await Client.OpenWithCheckerAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
+        var (client, checker) = await Client.OpenWithCheckerAsync(geometry, new EchocatLinkOption(), new ClientConfig());
         using var _client = client;
         using var _checker = checker;
 

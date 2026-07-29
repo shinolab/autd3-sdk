@@ -17,10 +17,10 @@ internal static class Sample
 // Define a geometry consisting of a single AUTD3 device.
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-// Open the client over an EtherCrab link.
+// Open the client over an echocat link.
 var client = await Client.OpenAsync(
     geometry,
-    new EtherCrabLinkOption(),
+    new EchocatLinkOption(),
     new ClientConfig()
 );
 

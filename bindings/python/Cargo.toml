@@ -7,6 +7,7 @@ members = [
     "autd3-pattern",
     "autd3-pattern-holo",
     "autd3-modulation",
+    "autd3-link-echocat",
     "autd3-link-ethercrab",
     "autd3-link-soem",
     "autd3-link-remote",
@@ -34,6 +35,7 @@ autd3-rs-core = { path = "../../crates/autd3-rs-core" }
 autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { path = "../../crates/autd3-rs-pattern-holo" }
 autd3-rs-modulation = { path = "../../crates/autd3-rs-modulation" }
+autd3-rs-link-echocat = { path = "../../crates/autd3-rs-link-echocat" }
 autd3-rs-link-ethercrab = { path = "../../crates/autd3-rs-link-ethercrab" }
 autd3-rs-link-soem = { path = "../../crates/autd3-rs-link-soem" }
 autd3-rs-link-remote = { path = "../../crates/autd3-rs-link-remote" }

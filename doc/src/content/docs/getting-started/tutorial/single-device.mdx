@@ -16,7 +16,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## 依存プログラムのインストール
 
-本チュートリアルでは[EtherCrab](https://github.com/ethercrab-rs/ethercrab)を利用する.
+本チュートリアルでは[echocat](/autd3-sdk/api/link/echocat/)を利用する.
 Windowsを使用する場合, [Npcap](https://npcap.com/)を「**WinPcap API-compatible Mode**」でインストールしておくこと.
 
 以下は, 1台のAUTD3デバイスでアレイの中心から150 mm直上に焦点を生成し, 200 Hzの正弦波AMかける例である.
@@ -24,13 +24,13 @@ Windowsを使用する場合, [Npcap](https://npcap.com/)を「**WinPcap API-com
 <CodeTabs>
 <Fragment slot="rust" >
 まずは適当なプロジェクトを作成し, autd3ライブラリを依存関係に追加する.
-また, デバイスとの通信を行うautd3-link-ethercrabライブラリも依存関係に追加する.
+また, デバイスとの通信を行うautd3-rs-link-echocatライブラリも依存関係に追加する.
 非同期ランタイムも必要なので, tokioも追加する.
 
 ```
 cargo new --bin autd3-sample && cd autd3-sample
 cargo add autd3-rs
-cargo add autd3-rs-link-ethercrab
+cargo add autd3-rs-link-echocat
 cargo add tokio --features full
 ```
 次に, `src/main.rs`ファイルを編集し, 以下のようにする. 
@@ -42,7 +42,7 @@ cargo add tokio --features full
 cargo run --release
 ```
 
-Linux, macOSでは, EtherCrabを使用するのに管理者権限が必要になるかもしれない. その場合は,
+Linux, macOSでは, echocatを使用するのに管理者権限が必要になるかもしれない. その場合は,
 ```
 cargo build --release && sudo ./target/release/autd3_sample
 ```
@@ -50,13 +50,13 @@ cargo build --release && sudo ./target/release/autd3_sample
 </Fragment>
 <Fragment slot="python" >
 まずは適当なディレクトリを作成し, 仮想環境を用意してautd3ライブラリを追加する.
-また, デバイスとの通信を行うautd3-link-ethercrab, 焦点計算のautd3-pattern, AM変調のautd3-modulationも併せて追加する.
+また, デバイスとの通信を行うautd3-link-echocat, 焦点計算のautd3-pattern, AM変調のautd3-modulationも併せて追加する.
 
 ```
 mkdir autd3-sample && cd autd3-sample
 python3 -m venv .venv
 source .venv/bin/activate
-pip install autd3 autd3-pattern autd3-modulation autd3-link-ethercrab
+pip install autd3 autd3-pattern autd3-modulation autd3-link-echocat
 ```
 次に, `main.py`ファイルを以下のようにする.
 
@@ -67,7 +67,7 @@ pip install autd3 autd3-pattern autd3-modulation autd3-link-ethercrab
 python3 main.py
 ```
 
-Linux, macOSでは, EtherCrabを使用するのに管理者権限が必要になるかもしれない. その場合は,
+Linux, macOSでは, echocatを使用するのに管理者権限が必要になるかもしれない. その場合は,
 ```
 sudo .venv/bin/python3 main.py
 ```
@@ -75,14 +75,14 @@ sudo .venv/bin/python3 main.py
 </Fragment>
 <Fragment slot="csharp">
 まずは適当なディレクトリを作成し, autd3 ライブラリを追加する.
-また, デバイスとの通信を行う AUTD3.Link.Ethercrab, 焦点計算の AUTD3.Pattern, AM 変調の AUTD3.Modulation も併せて追加する.
+また, デバイスとの通信を行う AUTD3.Link.Echocat, 焦点計算の AUTD3.Pattern, AM 変調の AUTD3.Modulation も併せて追加する.
 
 ```
 dotnet new console -o autd3-sample && cd autd3-sample
 dotnet add package AUTD3
 dotnet add package AUTD3.Pattern
 dotnet add package AUTD3.Modulation
-dotnet add package AUTD3.Link.Ethercrab
+dotnet add package AUTD3.Link.Echocat
 ```
 次に, `Program.cs`ファイルを以下のようにする.
 
@@ -93,7 +93,7 @@ dotnet add package AUTD3.Link.Ethercrab
 dotnet run -c Release
 ```
 
-Linux, macOSでは, EtherCrabを使用するのに管理者権限が必要になるかもしれない.
+Linux, macOSでは, echocatを使用するのに管理者権限が必要になるかもしれない.
 </Fragment>
 </CodeTabs>
 

@@ -16,6 +16,7 @@ Each Link implementation is provided as an independent package. Add the package 
 | Link | Rust | Python | C# |
 | ---- | ---- | ------ | -- |
 | [TwinCAT](/autd3-sdk/en/api/link/twincat/) | `autd3-rs-link-twincat` | `autd3-link-twincat` | `AUTD3.Link.TwinCAT` |
+| [echocat](/autd3-sdk/en/api/link/echocat/) | `autd3-rs-link-echocat` | `autd3-link-echocat` | `AUTD3.Link.Echocat` |
 | [EtherCrab](/autd3-sdk/en/api/link/ethercrab/) | `autd3-rs-link-ethercrab` | `autd3-link-ethercrab` | `AUTD3.Link.Ethercrab` |
 | [SOEM](/autd3-sdk/en/api/link/soem/) | `autd3-rs-link-soem` | `autd3-link-soem` | `AUTD3.Link.Soem` |
 | [Remote](/autd3-sdk/en/api/link/remote/) | `autd3-rs-link-remote` | `autd3-link-remote` | `AUTD3.Link.Remote` |
@@ -33,11 +34,11 @@ The send/receive interface seen from the `Client` is common across Link implemen
 The rough performance trends per Link and OS combination are shown below.
 The values depend heavily on the NIC, kernel settings, OS tuning, and so on, so treat them only as a rough guide.
 
-| Metric     | TwinCAT (Windows) | EtherCrab (mac/Linux) | EtherCrab (Windows) | SOEM (mac/Linux) | SOEM (Windows) |
-| ---------- | ----------------- | --------------------- | ------------------- | ---------------- | -------------- |
-| Throughput | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                | ⭐⭐⭐           | ⭐⭐           |
-| Latency    | ⭐                | ⭐⭐⭐                | ⭐⭐                | ⭐⭐⭐           | ⭐⭐           |
-| Stability  | ⭐⭐⭐            | ⭐⭐                  | ⭐                  | ⭐⭐             | ⭐             |
+| Metric     | TwinCAT (Windows) | echocat (mac/Linux) | echocat (Windows) | EtherCrab (mac/Linux) | EtherCrab (Windows) | SOEM (mac/Linux) | SOEM (Windows) |
+| ---------- | ----------------- | ------------------- | ----------------- | --------------------- | ------------------- | ---------------- | -------------- |
+| Throughput | ⭐⭐              | ⭐⭐⭐              | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                | ⭐⭐⭐           | ⭐⭐           |
+| Latency    | ⭐                | ⭐⭐⭐              | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                | ⭐⭐⭐           | ⭐⭐           |
+| Stability  | ⭐⭐⭐            | ⭐⭐                | ⭐                | ⭐⭐                  | ⭐                  | ⭐⭐             | ⭐             |
 
 For reference, the measured values for each environment are listed below.
 

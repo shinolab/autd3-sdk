@@ -19,15 +19,21 @@ pub struct StateChecker {
     state: BusState,
 }
 
-impl StateCheck for StateChecker {
-    type Error = Infallible;
-
-    fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Self::Error>> + Send {
+impl StateChecker {
+    pub fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Infallible>> + Send + use<> {
         let status = LinkStatus {
             devices: self.state.states(),
             recoveries: self.state.recoveries(),
         };
         std::future::ready(Ok(status))
+    }
+}
+
+impl StateCheck for StateChecker {
+    type Error = Infallible;
+
+    fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Self::Error>> + Send {
+        StateChecker::check(self)
     }
 }
 

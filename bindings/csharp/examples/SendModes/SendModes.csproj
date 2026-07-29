@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/AUTD3/AUTD3.csproj" />
-    <ProjectReference Include="../../src/AUTD3.Link.Ethercrab/AUTD3.Link.Ethercrab.csproj" />
+    <ProjectReference Include="../../src/AUTD3.Link.Echocat/AUTD3.Link.Echocat.csproj" />
   </ItemGroup>
 
 </Project>

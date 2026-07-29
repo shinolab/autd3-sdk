@@ -3,17 +3,17 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::SamplingConfig;
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_ethercrab::EtherCrabLinkOption;
+use autd3_rs_link_echocat::EchocatLinkOption;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define a geometry consisting of a single AUTD3 device.
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    // Open the client over an EtherCrab link.
+    // Open the client over an echocat link.
     let client = Client::open(
         &geometry,
-        EtherCrabLinkOption::default(),
+        EchocatLinkOption::default(),
         ClientConfig::default(),
     )
     .await?;

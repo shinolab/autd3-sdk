@@ -1,6 +1,6 @@
 import asyncio
 
-import autd3_link_ethercrab as ethercrab
+import autd3_link_echocat as echocat
 from autd3 import Client, ClientConfig
 from autd3.geometry import Autd3, Geometry
 
@@ -15,7 +15,7 @@ async def main() -> None:
     # ANCHOR: open
     client, checker = await Client.open_with_checker(
         geometry,
-        ethercrab.EtherCrabLinkOption(),
+        echocat.EchocatLinkOption(),
         ClientConfig(),
     )
     # ANCHOR_END: open

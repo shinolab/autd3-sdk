@@ -9,7 +9,7 @@ import signal
 import numpy as np
 
 import autd3
-import autd3_link_ethercrab as ethercrab
+import autd3_link_echocat as echocat
 from autd3.units import Hz
 
 
@@ -18,7 +18,7 @@ async def main() -> None:
 
     client = await autd3.Client.open(
         geometry,
-        ethercrab.EtherCrabLinkOption(),
+        echocat.EchocatLinkOption(),
         autd3.ClientConfig(),
     )
 

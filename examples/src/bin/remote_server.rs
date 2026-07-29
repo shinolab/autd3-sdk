@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 
 use anyhow::Result;
 
-use autd3_rs_link_ethercrab::EtherCrabLinkOption;
+use autd3_rs_link_echocat::EchocatLinkOption;
 use autd3_rs_link_remote::RemoteServer;
 
 const BIND_ADDR: &str = "0.0.0.0:8080";
@@ -21,7 +21,7 @@ async fn main() -> Result<()> {
         .init();
 
     let bind: SocketAddr = BIND_ADDR.parse()?;
-    let server = RemoteServer::open(bind, EtherCrabLinkOption::default()).await?;
+    let server = RemoteServer::open(bind, EchocatLinkOption::default()).await?;
 
     println!(
         "remote link server listening on {bind} (devices: {}) — press Ctrl+C to stop",

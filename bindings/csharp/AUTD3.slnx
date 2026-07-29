@@ -5,6 +5,7 @@
     <Project Path="src/AUTD3.Pattern/AUTD3.Pattern.csproj" />
     <Project Path="src/AUTD3.Pattern.Holo/AUTD3.Pattern.Holo.csproj" />
     <Project Path="src/AUTD3.Modulation/AUTD3.Modulation.csproj" />
+    <Project Path="src/AUTD3.Link.Echocat/AUTD3.Link.Echocat.csproj" />
     <Project Path="src/AUTD3.Link.Ethercrab/AUTD3.Link.Ethercrab.csproj" />
     <Project Path="src/AUTD3.Link.Soem/AUTD3.Link.Soem.csproj" />
     <Project Path="src/AUTD3.Link.Remote/AUTD3.Link.Remote.csproj" />

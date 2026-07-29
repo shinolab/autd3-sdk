@@ -2,7 +2,7 @@ import asyncio
 
 import numpy as np
 
-import autd3_link_ethercrab as ethercrab
+import autd3_link_echocat as echocat
 import autd3_modulation as modulation
 import autd3_pattern as pattern
 from autd3 import Client, ClientConfig
@@ -18,10 +18,10 @@ async def main() -> None:
     # Define a geometry consisting of a single AUTD3 device.
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    # Open the client over an EtherCrab link.
+    # Open the client over an echocat link.
     client = await Client.open(
         geometry,
-        ethercrab.EtherCrabLinkOption(),
+        echocat.EchocatLinkOption(),
         ClientConfig(),
     )
 

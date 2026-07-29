@@ -73,6 +73,13 @@ jobs:
           manylinux: '2_28'
           before-script-linux: ${{ env.BEFORE_SCRIPT_LINUX }}
           args: --release -m autd3-modulation/Cargo.toml --find-interpreter -o dist
+      - name: Build autd3-link-echocat
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: bindings/python
+          manylinux: '2_28'
+          before-script-linux: ${{ env.BEFORE_SCRIPT_LINUX }}
+          args: --release -m autd3-link-echocat/Cargo.toml --find-interpreter -o dist
       - name: Build autd3-link-ethercrab
         uses: PyO3/maturin-action@v1
         with:

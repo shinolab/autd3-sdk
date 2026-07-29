@@ -17,7 +17,7 @@ internal static class Sample
         // ANCHOR: open
         var (client, checker) = await Client.OpenWithCheckerAsync(
             geometry,
-            new EtherCrabLinkOption(),
+            new EchocatLinkOption(),
             new ClientConfig()
         );
         // ANCHOR_END: open

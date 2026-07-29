@@ -2,7 +2,7 @@ import asyncio
 
 import numpy as np
 
-import autd3_link_ethercrab as ethercrab
+import autd3_link_echocat as echocat
 from autd3 import Client, ClientConfig
 from autd3.commands import FixedCompletionTime, FociStm, FociStmOption, SetSilencer
 from autd3.geometry import Autd3, Geometry
@@ -18,7 +18,7 @@ async def main() -> None:
 
     client = await Client.open(
         geometry,
-        ethercrab.EtherCrabLinkOption(),
+        echocat.EchocatLinkOption(),
         ClientConfig(),
     )
 

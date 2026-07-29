@@ -1,0 +1,51 @@
+---
+title: echocat
+description: AUTD3 専用の EtherCAT メインデバイスを用いた Link
+sidebar:
+  order: 2
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/link/echocat.rs?raw";
+import pySample from "@codes/python/examples/api/link/echocat.py?raw";
+import csSample from "@codes/csharp/examples/api/link/echocat.cs?raw";
+
+`EchocatLink` は AUTD3 のために書かれた EtherCAT Link.
+
+<Install rust="autd3-rs-link-echocat" python="autd3-link-echocat" csharp="AUTD3.Link.Echocat" />
+
+Ethernet の raw socket を扱うため, Linux/macOS では実行に root 権限 (または `CAP_NET_RAW`) が必要.
+Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mode」でインストールする必要がある.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| フィールド                  | 型          | 説明                                                                            |
+| --------------------------- | ----------- | ------------------------------------------------------------------------------- |
+| `iface`                     | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
+| `sync0_period`              | `Duration`  | SYNC0 信号の周期 (= フレームの送出周期)                             |
+| `pdu_timeout`               | `Duration`  | 1 つの PDU の応答を待つタイムアウト                                             |
+| `state_transition_timeout`  | `Duration`  | EtherCAT 状態遷移 (INIT → PRE-OP → SAFE-OP → OP) を待つタイムアウト             |
+| `dc_static_sync_iterations` | `u32`       | DC の静的ドリフト補正で回すフレーム数                                           |
+| `dc_start_delay`            | `Duration`  | SYNC0 の開始時刻を現在のバス時刻からどれだけ先に置くか                          |
+| `dc_sync_tolerance`         | `Duration`  | 同期完了とみなす許容誤差                                                        |
+| `dc_sync_timeout`           | `Duration`  | 同期完了を待つタイムアウト                                                      |
+| `process_data_watchdog`     | `Duration`  | サブデバイスがプロセスデータの途絶を検出するまでの時間                          |
+| `sleep_strategy`            | `SleepStrategy` | 次のサイクルまでの待ち方                                                    |
+
+`sync0_period` の既定値は Windows で 2 ms, それ以外で 1 ms.
+
+## `SleepStrategy`
+
+RT スレッドが次のサイクルまで待つ方法を選ぶ.
+
+<CodeTabs rust={excerpt(sample, "sleep_strategy")} />
+
+| バリアント             | 説明                                                                 |
+| ---------------------- | -------------------------------------------------------------------- |
+| `Sleep` (既定)         | `std::thread::sleep` で待つ. CPU を消費しない                        |
+| `Spin { margin }`      | 締切の `margin` 手前まで sleep し, そこからスピンする                |
+

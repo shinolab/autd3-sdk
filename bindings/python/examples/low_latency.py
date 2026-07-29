@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 import autd3
-import autd3_link_ethercrab as ethercrab
+import autd3_link_echocat as echocat
 import autd3_pattern as pattern
 from autd3.units import m, s
 
@@ -21,7 +21,7 @@ async def main() -> None:
 
     client = await autd3.Client.open(
         geometry,
-        ethercrab.EtherCrabLinkOption(),
+        echocat.EchocatLinkOption(),
         autd3.ClientConfig(low_latency=ENABLE_LOW_LATENCY),
     )
 

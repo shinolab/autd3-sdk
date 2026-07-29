@@ -5,7 +5,7 @@ import asyncio
 import signal
 
 import autd3
-import autd3_link_ethercrab as ethercrab
+import autd3_link_echocat as echocat
 
 CHECK_INTERVAL = 0.1
 
@@ -15,7 +15,7 @@ async def main() -> None:
 
     client, checker = await autd3.Client.open_with_checker(
         geometry,
-        ethercrab.EtherCrabLinkOption(),
+        echocat.EchocatLinkOption(),
         autd3.ClientConfig(),
     )
 
