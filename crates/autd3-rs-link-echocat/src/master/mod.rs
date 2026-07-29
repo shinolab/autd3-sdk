@@ -43,14 +43,9 @@ impl SleepStrategy {
                 }
             }
             Self::Spin { margin } => {
-                let spin_at = deadline.checked_sub(margin).unwrap_or(deadline);
-                let now = Instant::now();
-                if spin_at > now {
-                    std::thread::sleep(spin_at - now);
-                }
-                while Instant::now() < deadline {
-                    std::hint::spin_loop();
-                }
+                spin_sleep::SpinSleeper::new(u32::try_from(margin.as_nanos()).unwrap_or(u32::MAX))
+                    .with_spin_strategy(spin_sleep::SpinStrategy::SpinLoopHint)
+                    .sleep_until(deadline);
             }
         }
     }

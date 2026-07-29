@@ -23,7 +23,7 @@ tracing = { workspace = true, features = ["log"] }
 libc = "0.2.186"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-spin_sleep = "1.3.3"
+spin_sleep.workspace = true
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 cc = "1.2.65"

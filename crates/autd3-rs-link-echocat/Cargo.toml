@@ -10,6 +10,7 @@ description = "echocat: an EtherCAT main device for AUTD3"
 
 [dependencies]
 autd3-rs-core.workspace = true
+spin_sleep.workspace = true
 thiserror.workspace = true
 tracing = { workspace = true, features = ["log"] }
 
