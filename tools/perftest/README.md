@@ -56,9 +56,10 @@ cargo xtask tool perftest -- --interface enp3s0 --count 10000 --command nop
 | `--low-latency`       | Request the slave's low-latency (inline ISR) processing mode instead of the default FIFO path (`ClientConfig.low_latency`). Default: off. |
 | `--rt-priority <N>` / `--rt-policy <P>` / `--rt-affinity <CORE>` | RT thread scheduling (`ClientConfig.rt_priority` / `rt_policy` / `rt_affinity`). `--rt-affinity` alias: `--rt-core`. |
 
-Each flag notes the `EtherCrabLinkOption` / `SoemLinkOption` / `ClientConfig` field it drives, and after every run
-the tool prints a copy-pasteable `=== reproduce this configuration in your app ===` Rust snippet that reconstructs
+Each flag notes the `EtherCrabLinkOption` / `SoemLinkOption` / `ClientConfig` field it drives, and every run
+prints a copy-pasteable `=== reproduce this configuration in your app ===` Rust snippet that reconstructs
 the exact link option + `ClientConfig` used, so a good perftest result maps straight into application code.
+The snippet comes first and the summary last, so the numbers stay at the bottom of the terminal.
 
 ## Soak testing
 

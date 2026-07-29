@@ -108,6 +108,7 @@ async fn run_measure(args: &MeasureArgs, shutdown: &Arc<AtomicBool>) -> Result<(
         args.common.dwell,
     );
     let result = Box::pin(measure_candidate(&args.common, cand, shutdown)).await?;
+    snippet::print(&args.common, result.period, result.shift);
     report::print_measure(&result, &args.common);
     write_csv_if_requested(&args.common, std::slice::from_ref(&result));
     Ok(())
@@ -154,6 +155,9 @@ async fn run_tune(args: &TuneArgs, shutdown: &Arc<AtomicBool>) -> Result<()> {
     }
 
     let best = select_best(&results);
+    if let Some(r) = best.map(|i| &results[i]) {
+        snippet::print(&args.common, r.period, r.shift);
+    }
     report::print_table(&results, best);
     report::print_best(&results, best, &args.common);
     write_csv_if_requested(&args.common, &results);

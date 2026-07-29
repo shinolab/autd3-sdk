@@ -75,11 +75,7 @@ async fn main() -> Result<()> {
         .min(samples.len());
     let measured = &samples[drop..];
 
-    let summary = Summary::from_samples(measured, frame_bytes, elapsed, stale_cycles, lost_cycles);
-    print_summary(&summary);
-    if let Some(mem) = &mem {
-        print_mem(mem);
-    }
+    snippet::print(&cli);
 
     if let Some(path) = &cli.csv {
         if let Err(e) = write_csv(path, &samples) {
@@ -89,7 +85,11 @@ async fn main() -> Result<()> {
         }
     }
 
-    snippet::print(&cli);
+    let summary = Summary::from_samples(measured, frame_bytes, elapsed, stale_cycles, lost_cycles);
+    print_summary(&summary);
+    if let Some(mem) = &mem {
+        print_mem(mem);
+    }
 
     if let Some((index, status)) = stopped_on_error {
         anyhow::bail!("stopped at send #{index}: {status:?} (--stop-on-error)");

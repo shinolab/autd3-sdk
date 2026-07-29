@@ -4,10 +4,8 @@ use std::time::Duration;
 use crate::cli::{Common, LinkKind, Mode, RtPolicy};
 
 pub fn print(common: &Common, sync0_period: Duration, sync0_shift: Duration) {
-    println!("\n  reproduce this configuration in your app:");
-    for line in render(common, sync0_period, sync0_shift).lines() {
-        println!("    {line}");
-    }
+    println!("\n=== reproduce this configuration in your app ===");
+    print!("{}", render(common, sync0_period, sync0_shift));
 }
 
 fn render(common: &Common, sync0_period: Duration, sync0_shift: Duration) -> String {

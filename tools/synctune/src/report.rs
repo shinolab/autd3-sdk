@@ -172,7 +172,6 @@ pub fn print_measure(r: &CandidateResult, common: &Common) {
         "\nload-test with perftest:\n  {}",
         perftest_command(common, micros(r.period), r.shift_percent),
     );
-    crate::snippet::print(common, r.period, r.shift);
 }
 
 pub fn print_table(results: &[CandidateResult], best: Option<usize>) {
@@ -235,7 +234,6 @@ pub fn print_best(results: &[CandidateResult], best: Option<usize>, common: &Com
                 perftest_command(common, micros(r.period), r.shift_percent),
             );
             println!("  (tie-break: higher op_ratio, fewer drops, lower shift, lower period)");
-            crate::snippet::print(common, r.period, r.shift);
         }
         None => println!("\nbest: none (no candidate produced measurable samples)"),
     }
