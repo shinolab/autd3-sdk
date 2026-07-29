@@ -6,7 +6,7 @@ use ethercrab::{MainDeviceConfig, RetryBehaviour, Timeouts, subdevice_group::DcC
 use super::EtherCrabLinkOptionFull;
 use crate::osal::thread::{RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
 
-const PERFORMANCE_TX_RX_PRIORITY: u8 = 99;
+const PERFORMANCE_TX_RX_PRIORITY: u8 = 90;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EtherCrabLinkOption {
@@ -85,6 +85,12 @@ impl From<EtherCrabLinkOption> for EtherCrabLinkOptionFull {
             },
             sync_tolerance: opt.sync_tolerance,
             sync_timeout: opt.sync_timeout,
+            #[cfg(not(target_os = "windows"))]
+            tx_rx_priority: Some(ThreadPriority::Crossplatform(
+                ThreadPriorityValue::try_from(PERFORMANCE_TX_RX_PRIORITY)
+                    .expect("0..=99 is a valid thread priority"),
+            )),
+            #[cfg(target_os = "windows")]
             tx_rx_priority: None,
             tx_rx_policy: autd3_rs_core::RtSchedulePolicy::default(),
             tx_rx_affinity: None,

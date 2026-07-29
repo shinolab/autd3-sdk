@@ -220,13 +220,10 @@ fn the_default_config_tunes_the_rt_thread_like_the_new_client() {
     let config = LegacyClientConfig::default();
     assert_eq!(config.rt_policy, RtSchedulePolicy::default());
     assert!(config.rt_affinity.is_none());
-    #[cfg(target_os = "windows")]
-    assert!(matches!(
+    assert_eq!(
         config.rt_priority,
-        Some(thread_priority::ThreadPriority::Os(_))
-    ));
-    #[cfg(not(target_os = "windows"))]
-    assert!(config.rt_priority.is_none());
+        crate::ClientConfig::default().rt_priority
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -31,6 +31,17 @@ fn set_rt_priority(
     thread_priority::set_current_thread_priority(priority)
 }
 
+#[cfg(not(target_os = "windows"))]
+pub const RT_THREAD_PRIORITY: u8 = 80;
+
+#[cfg(target_os = "linux")]
+const RT_PRIORITY_REMEDY: &str = "Grant the capability with \
+     `sudo setcap cap_sys_nice+ep <executable>`, or raise `rtprio` for the user in \
+     /etc/security/limits.conf.";
+
+#[cfg(not(target_os = "linux"))]
+const RT_PRIORITY_REMEDY: &str = "Run with sufficient scheduling privileges.";
+
 pub(crate) fn apply_thread_tuning(
     rt_priority: Option<ThreadPriority>,
     rt_policy: RtSchedulePolicy,
@@ -41,7 +52,10 @@ pub(crate) fn apply_thread_tuning(
             Ok(()) => {
                 tracing::debug!(?priority, policy = ?rt_policy, "applied RT thread scheduling");
             }
-            Err(e) => tracing::warn!("failed to set RT thread priority: {e:?}"),
+            Err(e) => tracing::warn!(
+                "failed to set RT thread priority: {e:?}. The bus will be unstable under load. {}",
+                RT_PRIORITY_REMEDY
+            ),
         }
     }
     if let Some(core) = rt_affinity
@@ -52,7 +66,7 @@ pub(crate) fn apply_thread_tuning(
 }
 
 #[must_use]
-#[cfg_attr(target_os = "windows", allow(clippy::unnecessary_wraps))]
+#[allow(clippy::unnecessary_wraps)]
 pub(crate) fn default_rt_priority() -> Option<ThreadPriority> {
     #[cfg(target_os = "windows")]
     {
@@ -62,6 +76,9 @@ pub(crate) fn default_rt_priority() -> Option<ThreadPriority> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        None
+        Some(ThreadPriority::Crossplatform(
+            thread_priority::ThreadPriorityValue::try_from(RT_THREAD_PRIORITY)
+                .expect("0..=99 is a valid thread priority"),
+        ))
     }
 }
