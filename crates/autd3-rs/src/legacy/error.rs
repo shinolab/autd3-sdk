@@ -97,6 +97,9 @@ pub enum LegacyError {
 
     #[error("legacy RT worker is no longer alive")]
     RtClosed,
+
+    #[error("the legacy client is closing or already closed")]
+    Closed,
 }
 
 impl From<LinkError> for LegacyError {
