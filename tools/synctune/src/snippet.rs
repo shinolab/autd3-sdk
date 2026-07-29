@@ -20,7 +20,7 @@ fn render(common: &Common, sync0_period: Duration, sync0_shift: Duration) -> Str
     link_block(common, sync0_period, sync0_shift, &mut body);
     push_config(&mut body, &mut imports, &Config::from(common));
 
-    let mut out = imports_block(common.link, &imports);
+    let mut out = imports_block(common.link, tx_rx_tuned(common), &imports);
     out.push('\n');
     out.push_str(&body);
     out
@@ -37,7 +37,14 @@ fn link_block(common: &Common, sync0_period: Duration, sync0_shift: Duration, bo
     } else {
         ""
     };
-    let _ = writeln!(body, "let link = {link}::open({open_arg}{option} {{");
+    if tx_rx_tuned(common) {
+        let _ = writeln!(
+            body,
+            "let mut link_option: EtherCrabLinkOptionFull = {option} {{"
+        );
+    } else {
+        let _ = writeln!(body, "let link = {link}::open({open_arg}{option} {{");
+    }
     if let Some(iface) = &common.interface {
         let _ = writeln!(body, "    iface: {iface:?}.into(),");
     }
@@ -46,10 +53,42 @@ fn link_block(common: &Common, sync0_period: Duration, sync0_shift: Duration, bo
         let _ = writeln!(body, "    sync0_shift: {},", fmt_duration(sync0_shift));
     }
     let _ = writeln!(body, "    ..Default::default()");
-    let _ = writeln!(body, "}})?;");
+    if !tx_rx_tuned(common) {
+        let _ = writeln!(body, "}})?;");
+        return;
+    }
+    let _ = writeln!(body, "}}.into();");
+    if common.no_tx_rx_priority {
+        let _ = writeln!(body, "link_option.tx_rx_priority = None;");
+    } else if let Some(p) = common.tx_rx_priority {
+        let _ = writeln!(
+            body,
+            "link_option.tx_rx_priority = Some(ThreadPriority::Crossplatform(\
+             ThreadPriorityValue::try_from({p}).unwrap()));",
+        );
+    }
+    let _ = writeln!(
+        body,
+        "link_option.tx_rx_policy = {};",
+        rt_policy(common.tx_rx_policy)
+    );
+    if let Some(id) = common.tx_rx_affinity {
+        let _ = writeln!(
+            body,
+            "link_option.tx_rx_affinity = Some(CoreId {{ id: {id} }});"
+        );
+    }
+    let _ = writeln!(body, "let link = EtherCrabLink::open(link_option).await?;");
 }
 
-fn imports_block(link: LinkKind, imports: &[&str]) -> String {
+fn tx_rx_tuned(common: &Common) -> bool {
+    common.link == LinkKind::Ethercrab
+        && (common.no_tx_rx_priority
+            || common.tx_rx_priority.is_some()
+            || common.tx_rx_affinity.is_some())
+}
+
+fn imports_block(link: LinkKind, tx_rx_tuned: bool, imports: &[&str]) -> String {
     let mut out = String::new();
     for imp in imports.iter().filter(|s| s.starts_with("std::")) {
         let _ = writeln!(out, "use {imp};");
@@ -61,6 +100,13 @@ fn imports_block(link: LinkKind, imports: &[&str]) -> String {
         .collect();
     let _ = writeln!(out, "use autd3_rs::{{{}}};", autd.join(", "));
     match link {
+        LinkKind::Ethercrab if tx_rx_tuned => {
+            let _ = writeln!(
+                out,
+                "use autd3_rs_link_ethercrab::{{EtherCrabLink, EtherCrabLinkOption, \
+                 EtherCrabLinkOptionFull}};",
+            );
+        }
         LinkKind::Ethercrab => {
             let _ = writeln!(
                 out,
@@ -86,6 +132,7 @@ struct Config {
     max_resync_rounds: u32,
     low_latency: bool,
     rt_priority: Option<u8>,
+    no_rt_priority: bool,
     rt_policy: RtPolicy,
     rt_affinity: Option<usize>,
 }
@@ -101,6 +148,7 @@ impl From<&Common> for Config {
             max_resync_rounds: c.max_resync_rounds.get(),
             low_latency: c.low_latency,
             rt_priority: c.rt_priority,
+            no_rt_priority: c.no_rt_priority,
             rt_policy: c.rt_policy,
             rt_affinity: c.rt_affinity,
         }
@@ -130,7 +178,9 @@ fn push_config(body: &mut String, imports: &mut Vec<&'static str>, c: &Config) {
     if c.low_latency {
         let _ = writeln!(body, "    low_latency: true,");
     }
-    if let Some(p) = c.rt_priority {
+    if c.no_rt_priority {
+        let _ = writeln!(body, "    rt_priority: None,");
+    } else if let Some(p) = c.rt_priority {
         need("ThreadPriority");
         need("ThreadPriorityValue");
         let _ = writeln!(

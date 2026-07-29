@@ -163,9 +163,17 @@ pub struct Common {
     #[arg(
         long,
         help = "maps to ClientConfig.rt_priority (0..=99). Omit to keep the library default \
-                (TimeCritical on Windows, unset elsewhere)."
+                (TimeCritical on Windows, SCHED_FIFO 80 elsewhere)."
     )]
     pub rt_priority: Option<u8>,
+    #[arg(
+        long,
+        default_value_t = false,
+        conflicts_with = "rt_priority",
+        help = "Force ClientConfig.rt_priority = None (no RT scheduling), overriding the library \
+                default. Use to compare against the pre-default behaviour."
+    )]
+    pub no_rt_priority: bool,
     #[arg(long, value_enum, default_value_t = RtPolicy::Fifo, help = "maps to ClientConfig.rt_policy")]
     pub rt_policy: RtPolicy,
     #[arg(
@@ -174,6 +182,32 @@ pub struct Common {
         help = "Pin the RT thread to this CPU core (maps to ClientConfig.rt_affinity)."
     )]
     pub rt_affinity: Option<usize>,
+
+    #[arg(
+        long,
+        help = "--link ethercrab only: maps to EtherCrabLinkOptionFull.tx_rx_priority (0..=99). \
+                Omit to keep the library default (90 outside Windows)."
+    )]
+    pub tx_rx_priority: Option<u8>,
+    #[arg(
+        long,
+        default_value_t = false,
+        conflicts_with = "tx_rx_priority",
+        help = "--link ethercrab only: force tx_rx_priority = None (pump thread left at OS default)."
+    )]
+    pub no_tx_rx_priority: bool,
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = RtPolicy::Fifo,
+        help = "--link ethercrab only: maps to EtherCrabLinkOptionFull.tx_rx_policy"
+    )]
+    pub tx_rx_policy: RtPolicy,
+    #[arg(
+        long,
+        help = "--link ethercrab only: pin the tx/rx pump thread to this CPU core."
+    )]
+    pub tx_rx_affinity: Option<usize>,
 
     #[arg(long, value_parser = humantime::parse_duration, default_value = "30s")]
     pub dwell: Duration,
@@ -202,6 +236,11 @@ impl Common {
             && p > 99
         {
             return Err(format!("--rt-priority {p} must be in 0..=99"));
+        }
+        if let Some(p) = self.tx_rx_priority
+            && p > 99
+        {
+            return Err(format!("--tx-rx-priority {p} must be in 0..=99"));
         }
         if self.poll_interval.is_zero() {
             return Err("--poll-interval must be greater than zero".to_string());
