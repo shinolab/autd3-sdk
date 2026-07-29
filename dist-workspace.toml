@@ -1,19 +1,28 @@
 [workspace]
 members = ["dist:console"]
 
+# Config for 'dist'
 [dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.32.0"
+# CI backends to support
 ci = "github"
+# The installers to generate for each app
 installers = ["shell", "powershell"]
+# Target platforms to build apps for (Rust target-triple syntax)
 targets = [
     "aarch64-apple-darwin",
     "x86_64-unknown-linux-gnu",
     "x86_64-pc-windows-msvc",
 ]
+# A prefix git tags must include for dist to care about them
 tag-namespace = "console"
+# Whether to install an updater program
 install-updater = true
-github-build-setup = "console-build-setup.yml"
+github-build-setup = "parts/console-build-setup.yml"
+# Path that installers should place binaries in
 install-path = "~/.autd3/bin"
+# Extra static files to include in each App (path relative to this Cargo.toml's dir)
 include = ["console/THIRD-PARTY-LICENSES.md"]
 
 # Linux build dependencies for the eframe/glutin GUI
@@ -23,3 +32,7 @@ libxcb-shape0-dev = '*'
 libxcb-xfixes0-dev = '*'
 libxkbcommon-dev = '*'
 libssl-dev = '*'
+
+[dist.github-custom-runners]
+x86_64-unknown-linux-gnu = "ubuntu-24.04"
+x86_64-pc-windows-msvc = "windows-latest"

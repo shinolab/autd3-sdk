@@ -5,7 +5,9 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use crate::util::{cargo_bin, cargo_build_args, copy_dir, on_path, run, run_built_bin, run_tool};
+use crate::util::{
+    cargo_bin, cargo_build_args, copy_dir, on_path, run, run_built_bin, run_cargo, run_tool,
+};
 
 pub fn build_backend_and_frontend(
     root: &Path,
@@ -20,11 +22,7 @@ pub fn build_backend_and_frontend(
     let public = frontend_public(&frontend, debug);
     stage_web_assets(&sim, &public)?;
 
-    run(
-        "cargo",
-        cargo_build_args("autd3-rs-simulator", target, debug),
-        &sim,
-    )?;
+    run_cargo(cargo_build_args("autd3-rs-simulator", target, debug), &sim)?;
     let bin = cargo_bin(&sim, target, debug, "autd3-rs-simulator");
     Ok((bin, public))
 }

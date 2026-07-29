@@ -38,6 +38,27 @@ pub fn cargo_bin(workspace: &Path, target: Option<&str>, debug: bool, name: &str
         .join(exe_name(name))
 }
 
+pub fn run_cargo<I, S>(args: I, cwd: &Path) -> Result<()>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut command = Command::new("cargo");
+    command.args(args).current_dir(cwd);
+    for var in ["CC", "CXX"] {
+        if std::env::var(var).as_deref() == Ok("cl.exe") {
+            command.env_remove(var);
+        }
+    }
+    let status = command
+        .status()
+        .context("failed to spawn `cargo` (is it installed and on PATH?)")?;
+    if !status.success() {
+        bail!("`cargo` exited with {status}");
+    }
+    Ok(())
+}
+
 pub fn cargo_build_args<'a>(
     package: &'a str,
     target: Option<&'a str>,
