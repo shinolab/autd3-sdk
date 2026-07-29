@@ -6,15 +6,21 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 use crate::Target;
+use crate::series::Series;
 use crate::util::{on_path, run};
 
-pub fn write(version: &str, target: Option<Target>, force_download: bool) -> Result<()> {
+pub fn write(
+    version: &str,
+    target: Option<Target>,
+    force_download: bool,
+    series: Series,
+) -> Result<()> {
     let version = version.trim_start_matches('v');
 
-    let dir = download_and_extract(version, force_download)?;
+    let dir = download_and_extract(version, force_download, series)?;
     let (cpu, fpga) = find_firmwares(&dir)?;
 
-    eprintln!("Found firmwares:");
+    eprintln!("Found firmwares ({} v{version}):", series.label());
     match &cpu {
         Some(p) => eprintln!("  CPU : {}", p.display()),
         None => eprintln!("  CPU : (none)"),
@@ -43,8 +49,8 @@ pub fn write(version: &str, target: Option<Target>, force_download: bool) -> Res
     Ok(())
 }
 
-fn download_and_extract(version: &str, force: bool) -> Result<PathBuf> {
-    let dest = std::env::temp_dir().join(format!("autd3-sdk-firmware-v{version}"));
+fn download_and_extract(version: &str, force: bool, series: Series) -> Result<PathBuf> {
+    let dest = std::env::temp_dir().join(series.cache_dir_name(version));
     if dest.is_dir() && !force {
         eprintln!("Using cached firmware at {}", dest.display());
         return Ok(dest);
@@ -54,9 +60,7 @@ fn download_and_extract(version: &str, force: bool) -> Result<PathBuf> {
             .with_context(|| format!("removing stale cache {}", dest.display()))?;
     }
 
-    let url = format!(
-        "https://github.com/shinolab/autd3-sdk/releases/download/firmware-v{version}/autd3-sdk-firmware-v{version}.zip"
-    );
+    let url = series.bundle_url(version);
     eprintln!("Downloading {url}");
     let resp = ureq::get(&url)
         .call()
@@ -79,22 +83,38 @@ fn find_firmwares(dir: &Path) -> Result<(Option<PathBuf>, Option<PathBuf>)> {
     let mut files = Vec::new();
     collect_files(dir, &mut files)?;
 
-    let mut cpu = None;
-    let mut fpga = None;
+    let mut cpu = Vec::new();
+    let mut fpga = Vec::new();
     for f in files {
         match f.extension().and_then(|e| e.to_str()) {
-            Some("bin") => cpu = Some(f),
-            Some("mcs") => fpga = Some(f),
+            Some("bin") => cpu.push(f),
+            Some("mcs") => fpga.push(f),
             _ => {}
         }
     }
-    if cpu.is_none() && fpga.is_none() {
+    if cpu.is_empty() && fpga.is_empty() {
         bail!(
             "no firmware images (*.bin / *.mcs) found in {}",
             dir.display()
         );
     }
-    Ok((cpu, fpga))
+    Ok((single(cpu, "bin", dir)?, single(fpga, "mcs", dir)?))
+}
+
+fn single(mut candidates: Vec<PathBuf>, ext: &str, dir: &Path) -> Result<Option<PathBuf>> {
+    if candidates.len() > 1 {
+        candidates.sort();
+        let list = candidates
+            .iter()
+            .map(|p| format!("  {}", p.display()))
+            .collect::<Vec<_>>()
+            .join("\n");
+        bail!(
+            "multiple *.{ext} firmware images found in {}; cannot tell which one to write:\n{list}",
+            dir.display()
+        );
+    }
+    Ok(candidates.pop())
 }
 
 fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {

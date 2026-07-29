@@ -2,6 +2,8 @@ pub mod commands;
 pub mod error;
 pub mod firmware_version;
 pub mod fpga_state;
+#[cfg(feature = "legacy")]
+pub mod legacy;
 pub mod mirror;
 pub mod telemetry;
 pub mod tuning;

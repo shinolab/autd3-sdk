@@ -33,4 +33,5 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo xtask ffi format
       - run: cargo xtask ffi lint
+      - run: cargo xtask ffi test
       - run: cargo xtask ffi build --soem

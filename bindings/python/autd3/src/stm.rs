@@ -356,6 +356,19 @@ macro_rules! foci_points {
                 }
             }
 
+            pub(crate) fn push_legacy_into<'a>(
+                &'a self,
+                config: CoreStmConfig,
+                option: CoreFociStmOption,
+                builder: &mut autd3_rs::legacy::LegacyDatagramBuilder<'a>,
+            ) {
+                match self {
+                    $(FociPoints::$variant(v) => {
+                        builder.push(CoreFociStm::new(config, v.as_slice(), option));
+                    })*
+                }
+            }
+
             pub(crate) fn push_write_foci<'a>(
                 &'a self,
                 bank: CorePatternBank,

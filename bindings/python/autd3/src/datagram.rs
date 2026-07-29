@@ -84,7 +84,7 @@ impl Modulation {
     }
 }
 
-enum Pending {
+pub(crate) enum Pending {
     Pattern {
         bank: CorePatternBank,
         emissions: Vec<DevicePattern>,
@@ -170,7 +170,7 @@ impl<'a> CoreCommand<'a> for PendingCommand<'a> {
     }
 }
 
-fn validate_pending(pending: &Pending) -> PyResult<()> {
+pub(crate) fn validate_pending(pending: &Pending) -> PyResult<()> {
     match pending {
         Pending::Modulation { divider, .. }
         | Pending::ConfigPattern { divider, .. }
@@ -350,7 +350,7 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
 #[pyclass(name = "DatagramBuilder", module = "autd3")]
 pub struct DatagramBuilder {
     geometry: Arc<Geometry>,
-    pending: Vec<Pending>,
+    pub(crate) pending: Vec<Pending>,
 }
 
 impl DatagramBuilder {
@@ -359,6 +359,24 @@ impl DatagramBuilder {
             geometry,
             pending: Vec::new(),
         }
+    }
+
+    pub(crate) fn pop_pushed(&mut self, obj: &Bound<'_, PyAny>) -> PyResult<Pending> {
+        self.push(obj)?;
+        self.pending
+            .pop()
+            .ok_or_else(|| PyValueError::new_err("Unknown datagram type"))
+    }
+
+    pub(crate) fn pop_pushed_each(
+        &mut self,
+        py: Python<'_>,
+        assign: &Bound<'_, PyAny>,
+    ) -> PyResult<Pending> {
+        self.push_each(py, assign)?;
+        self.pending
+            .pop()
+            .ok_or_else(|| PyValueError::new_err("Unknown datagram type"))
     }
 }
 
@@ -372,7 +390,7 @@ impl DatagramBuilder {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn push(&mut self, obj: &Bound<'_, PyAny>) -> PyResult<()> {
+    pub(crate) fn push(&mut self, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         if let Ok(pattern) = obj.cast::<Pattern>() {
             let pattern = pattern.borrow();
             self.pending.push(Pending::Pattern {
@@ -503,7 +521,7 @@ impl DatagramBuilder {
         Err(PyValueError::new_err("Unknown datagram type"))
     }
 
-    fn push_each(&mut self, py: Python<'_>, assign: &Bound<'_, PyAny>) -> PyResult<()> {
+    pub(crate) fn push_each(&mut self, py: Python<'_>, assign: &Bound<'_, PyAny>) -> PyResult<()> {
         let num_devices = self.geometry.num_devices();
         let capsule = autd3_python_capsule::geometry_into_capsule(py, (*self.geometry).clone())?;
         let geometry = py

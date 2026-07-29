@@ -14,7 +14,7 @@ autd3-rs = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
 [features]
-client = ["dep:autd3-rs", "dep:tokio"]
+client = ["dep:autd3-rs", "autd3-rs/legacy", "dep:tokio"]
 
 [lints]
 workspace = true

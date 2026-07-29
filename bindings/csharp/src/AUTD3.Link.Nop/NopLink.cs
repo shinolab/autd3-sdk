@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace AUTD3.Link
 {
-    public sealed class Nop : ILink
+    public sealed class Nop : ILink, ILegacyLink
     {
         public Nop()
         {
@@ -18,6 +18,16 @@ namespace AUTD3.Link
             }
             return opener;
         }
+
+        IntPtr ILegacyLink.TakeLegacyOpener()
+        {
+            var opener = NativeNop.autd3_link_nop_legacy();
+            if (opener == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create nop link");
+            }
+            return opener;
+        }
     }
 
     internal static class NativeNop
@@ -26,5 +36,8 @@ namespace AUTD3.Link
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_link_nop();
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_nop_legacy();
     }
 }

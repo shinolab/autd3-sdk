@@ -9,4 +9,10 @@ namespace AUTD3
 
         IntPtr TakeOpener();
     }
+
+    public interface ILegacyLink
+    {
+
+        IntPtr TakeLegacyOpener();
+    }
 }

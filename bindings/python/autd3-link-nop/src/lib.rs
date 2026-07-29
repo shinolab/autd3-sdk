@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, join_err,
-    link_into_capsule, link_runtime,
+    legacy_client_opener, legacy_link_into_capsule, link_into_capsule, link_runtime,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, ConstStateChecker, Frames, StateCheck};
@@ -179,6 +179,20 @@ impl Nop {
             Ok(backend)
         });
         link_into_capsule(py, opener)
+    }
+
+    #[allow(clippy::unused_self)]
+    fn _legacy_capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
+        legacy_link_into_capsule(
+            py,
+            legacy_client_opener(|geometry| {
+                Ok(autd3_rs::legacy::emulator::LegacyAudit::new(
+                    geometry
+                        .iter()
+                        .map(autd3_rs::geometry::Device::num_transducers),
+                ))
+            }),
+        )
     }
 }
 

@@ -34,6 +34,9 @@ pub struct WriteArgs {
     /// List the available firmware versions and exit
     #[arg(long)]
     list: bool,
+    /// Use the pre-rewrite release series (shinolab/autd3-firmware), e.g. --version 12.1.0
+    #[arg(long)]
+    legacy: bool,
 }
 
 pub fn run_firmware(root: &Path, cmd: FirmwareCmd) -> Result<()> {
@@ -109,6 +112,9 @@ fn write(root: &Path, args: &WriteArgs) -> Result<()> {
     }
     if args.list {
         cli_args.push("--list".to_string());
+    }
+    if args.legacy {
+        cli_args.push("--legacy".to_string());
     }
 
     run_built_bin(&bin, &cli_args, true, root)

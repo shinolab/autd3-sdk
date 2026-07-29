@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_ffi_abi::{
-    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
-    client_opener, into_handle, join_err, link_runtime,
+    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
+    ResponseTokenData, client_opener, into_handle, join_err, legacy_client_opener, link_runtime,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -185,6 +185,10 @@ impl CheckerBackend for TwinCATChecker {
     }
 }
 
+fn into_legacy_opener(option: TwinCATLinkOption) -> *mut LegacyClientOpener {
+    into_handle(legacy_client_opener(move |_| Ok(option)))
+}
+
 fn into_opener(option: TwinCATLinkOption) -> *mut ClientOpener {
     let opener = client_opener(move |geometry, config| async move {
         let (client, checker) = link_runtime()
@@ -246,6 +250,65 @@ pub unsafe extern "C" fn autd3_link_twincat_remote(
         return std::ptr::null_mut();
     };
     into_opener(TwinCATLinkOption::remote_with_timeouts(
+        addr,
+        ams_net_id,
+        build_timeouts(
+            has_connect,
+            connect_ns,
+            has_read,
+            read_ns,
+            has_write,
+            write_ns,
+        ),
+    ))
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::fn_params_excessive_bools)]
+pub extern "C" fn autd3_link_twincat_local_legacy(
+    has_connect: bool,
+    connect_ns: u64,
+    has_read: bool,
+    read_ns: u64,
+    has_write: bool,
+    write_ns: u64,
+) -> *mut LegacyClientOpener {
+    into_legacy_opener(TwinCATLinkOption::local_with_timeouts(build_timeouts(
+        has_connect,
+        connect_ns,
+        has_read,
+        read_ns,
+        has_write,
+        write_ns,
+    )))
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_link_twincat_remote_legacy(
+    addr: *const c_char,
+    ams_net_id: *const c_char,
+    has_connect: bool,
+    connect_ns: u64,
+    has_read: bool,
+    read_ns: u64,
+    has_write: bool,
+    write_ns: u64,
+) -> *mut LegacyClientOpener {
+    if addr.is_null() || ams_net_id.is_null() {
+        return std::ptr::null_mut();
+    }
+    let addr = unsafe { CStr::from_ptr(addr) }
+        .to_string_lossy()
+        .into_owned();
+    let ams_net_id = unsafe { CStr::from_ptr(ams_net_id) }
+        .to_string_lossy()
+        .into_owned();
+    let (Ok(addr), Ok(ams_net_id)) = (addr.parse::<IpAddr>(), ams_net_id.parse::<AmsNetId>())
+    else {
+        return std::ptr::null_mut();
+    };
+    into_legacy_opener(TwinCATLinkOption::remote_with_timeouts(
         addr,
         ams_net_id,
         build_timeouts(

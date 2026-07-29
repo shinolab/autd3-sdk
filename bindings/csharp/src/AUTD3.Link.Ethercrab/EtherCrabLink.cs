@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace AUTD3.Link
 {
-    public readonly struct EtherCrabLinkOption : ILink
+    public readonly struct EtherCrabLinkOption : ILink, ILegacyLink
     {
         public Interface Iface { get; }
         public TimeSpan? Sync0Period { get; }
@@ -58,6 +58,21 @@ namespace AUTD3.Link
             }
             return opener;
         }
+
+        IntPtr ILegacyLink.TakeLegacyOpener()
+        {
+            var opener = NativeEthercrab.autd3_link_ethercrab_legacy(
+                Iface.NameValue,
+                Sync0Period.HasValue, (ulong)(Sync0Period?.Ticks * 100 ?? 0),
+                Sync0Shift.HasValue, (ulong)(Sync0Shift?.Ticks * 100 ?? 0),
+                SyncTolerance.HasValue, (ulong)(SyncTolerance?.Ticks * 100 ?? 0),
+                SyncTimeout.HasValue, (ulong)(SyncTimeout?.Ticks * 100 ?? 0));
+            if (opener == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create ethercrab link");
+            }
+            return opener;
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -81,6 +96,14 @@ namespace AUTD3.Link
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_link_ethercrab(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName,
+            [MarshalAs(UnmanagedType.I1)] bool hasSync0Period, ulong sync0PeriodNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasSync0Shift, ulong sync0ShiftNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasSyncTolerance, ulong syncToleranceNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasSyncTimeout, ulong syncTimeoutNs);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_ethercrab_legacy(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName,
             [MarshalAs(UnmanagedType.I1)] bool hasSync0Period, ulong sync0PeriodNs,
             [MarshalAs(UnmanagedType.I1)] bool hasSync0Shift, ulong sync0ShiftNs,

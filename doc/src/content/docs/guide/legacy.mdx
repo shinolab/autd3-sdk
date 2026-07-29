@@ -1,0 +1,110 @@
+---
+title: レガシーファームウェア
+description: 旧世代ファームウェア v12.1.0 を積んだ実機を LegacyClient で駆動する
+sidebar:
+  order: 9
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/guide/legacy.rs?raw";
+import pySample from "@codes/python/examples/guide/legacy.py?raw";
+import csSample from "@codes/csharp/examples/guide/legacy.cs?raw";
+
+この SDK は旧 autd3 SDK とは非互換であり, 通信プロトコルも新規に設計されている.
+そのため, 通常の `Client` は旧世代ファームウェアを積んだデバイスを駆動できない.
+
+`LegacyClient` は, 旧世代ファームウェア **v12.1.0** の実機を駆動するための互換クライアントである.
+
+:::caution
+対応するのは v12.1.0 (CPU version major = `0xA5`) のみ.
+ファームウェアを更新できるのであれば, 現行の `Client` を使うこと.
+:::
+
+## 有効化
+
+Rust では, `autd3-rs` の feature `legacy` で有効になる (既定では無効).
+
+```toml
+autd3-rs = { version = "0.4", features = ["legacy"] }
+```
+
+Python と C# のバインディングは追加の設定は不要である.
+それぞれ `autd3.LegacyClient`, `AUTD3.Legacy` 名前空間として利用できる.
+
+## 使い方
+
+ユーザーコードの形は現行 SDK と同じである.
+`Client` を `LegacyClient` に, `ClientConfig` を `LegacyClientConfig` に置き換えるだけでよい.
+[Link](/autd3-sdk/api/link/ethercrab/) はすべて現行のものをそのまま使える.
+
+<CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} csharp={excerpt(csSample, "open")} />
+
+`LegacyClientConfig` が持つのは `timeout_cycles` のみ (既定 2000).
+
+ファームウェアバージョンの読み出しも現行と同じ.
+
+<CodeTabs rust={excerpt(sample, "version")} python={excerpt(pySample, "version")} csharp={excerpt(csSample, "version")} />
+
+コマンドの組み立ても同じである (型が `DatagramBuilder` ではなく `LegacyDatagramBuilder` になる).
+[Emission パターン](/autd3-sdk/api/compute/pattern/focus/)・[AM 波形](/autd3-sdk/api/compute/modulation/sine/)の計算ヘルパも共通である.
+
+<CodeTabs rust={excerpt(sample, "send")} python={excerpt(pySample, "send")} csharp={excerpt(csSample, "send")} />
+
+デバイス毎にコマンドを割り当てる [`push_each`](/autd3-sdk/api/basics/datagram-builder/) も同じように使える.
+
+終了処理も同様である.
+
+<CodeTabs rust={excerpt(sample, "close")} python={excerpt(pySample, "close")} csharp={excerpt(csSample, "close")} />
+
+## 現行 `Client` との違い
+
+| 項目             | `Client`                             | `LegacyClient`                                |
+| ---------------- | ------------------------------------ | --------------------------------------------- |
+| 送信モデル       | パイプライン / stop-and-wait         | stop-and-wait のみ |
+| エラー詳細の読み出し | `read_error_detail()`            | 非対応 (エラーは ack のコードのみ)            |
+| Telemetry カウンタの読み出し | `read_telemetry()`       | 非対応                                        |
+
+旧ファームウェアでは, 現行のパイプライン送信は使えない.
+したがってスループットは現行より大きく劣る.
+
+## 対応コマンド
+
+以下のコマンドが使える.
+
+- [`Clear`](/autd3-sdk/api/command/clear/)
+- [`ForceFan`](/autd3-sdk/api/command/force-fan/)
+- [`SetSilencer`](/autd3-sdk/api/command/silencer/)
+- [`Pattern`](/autd3-sdk/api/command/pattern/)
+- [`Modulation`](/autd3-sdk/api/command/modulation/)
+- [`ChangeModulationBank`](/autd3-sdk/api/command/lowlevel/change-modulation-bank/)
+- [`FociStm`](/autd3-sdk/api/command/foci-stm/)
+- [`PatternStm`](/autd3-sdk/api/command/pattern-stm/)
+- [`SetOutputMask`](/autd3-sdk/api/command/output-mask/)
+- [`SetPhaseCorrection`](/autd3-sdk/api/command/phase-correction/)
+- [`SetPulseWidthTable`](/autd3-sdk/api/command/set-pulse-width-table/)
+- [`SetGpioOut`](/autd3-sdk/api/command/gpio/)
+- [`EmulateGpioIn`](/autd3-sdk/hardware/gpio/)
+
+以下は使用不可.
+
+- [`WritePatternBuffer`](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/)
+- [`WriteModulationBuffer`](/autd3-sdk/api/command/lowlevel/write-modulation-buffer/)
+- [`WriteFociBuffer`](/autd3-sdk/api/command/lowlevel/write-foci-buffer/)
+- [`WritePatternCompressed`](/autd3-sdk/api/command/lowlevel/write-pattern-compressed/)
+- [`ConfigPattern`](/autd3-sdk/api/command/lowlevel/config-pattern/)
+- [`ConfigModulation`](/autd3-sdk/api/command/lowlevel/config-modulation/)
+- [`ConfigFociStm`](/autd3-sdk/api/command/lowlevel/config-foci-stm/)
+- [`ChangePatternBank`](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) (下記参照)
+
+### パターンバンクの切り替え
+
+`ChangePatternBank` の代わりに, レガシー固有の `LegacyChangePatternBank` を使う.
+切り替え先の内容に応じて `pattern` / `foci_stm` / `pattern_stm` を選ぶ.
+
+<CodeTabs
+  rust={excerpt(sample, "change_bank")}
+  python={excerpt(pySample, "change_bank")}
+  csharp={excerpt(csSample, "change_bank")}
+/>
+
