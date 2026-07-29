@@ -143,7 +143,7 @@ mod tests {
     use crate::test_utils::test_device;
     use core::num::NonZeroU16;
 
-    fn encode(op: impl Operation) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
+    fn encode(op: &impl Operation) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = op.encode(&test_device(0), &mut out)?;
         Ok((cmd, out))
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn config_pattern_lays_out_raw_fields() {
-        let (cmd, payload) = encode(ConfigPattern {
+        let (cmd, payload) = encode(&ConfigPattern {
             bank: PatternBank::B0,
             config: SamplingConfig::new(NonZeroU16::new(2).unwrap()),
             size: 1024,
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn config_foci_stm_lays_out_foci_fields() {
-        let (cmd, payload) = encode(ConfigFociStm {
+        let (cmd, payload) = encode(&ConfigFociStm {
             bank: PatternBank::B1,
             config: SamplingConfig::new(NonZeroU16::MIN),
             size: 8192,
@@ -198,10 +198,10 @@ mod tests {
             size,
             loop_behavior: LoopBehavior::Infinite,
         };
-        assert!(matches!(encode(raw(0)), Err(Error::InvalidPayload(_))));
+        assert!(matches!(encode(&raw(0)), Err(Error::InvalidPayload(_))));
         assert!(
             matches!(
-                encode(ConfigPattern {
+                encode(&ConfigPattern {
                     config: SamplingConfig::new(core::time::Duration::from_nanos(1)),
                     ..raw(1)
                 }),
@@ -210,7 +210,7 @@ mod tests {
             "an unrepresentable sampling config is rejected"
         );
         assert!(matches!(
-            encode(raw(EMISSION_MAX_INDICES + 1)),
+            encode(&raw(EMISSION_MAX_INDICES + 1)),
             Err(Error::InvalidPayload(_))
         ));
     }
@@ -226,14 +226,14 @@ mod tests {
         let finite = LoopBehavior::Finite(NonZeroU16::new(4).unwrap());
 
         assert!(
-            encode(raw(1, LoopBehavior::Infinite)).is_ok(),
+            encode(&raw(1, LoopBehavior::Infinite)).is_ok(),
             "a static pattern is a single index"
         );
         assert!(
-            matches!(encode(raw(1, finite)), Err(Error::InvalidPayload(_))),
+            matches!(encode(&raw(1, finite)), Err(Error::InvalidPayload(_))),
             "a single index never advances, so a finite loop would never end"
         );
-        assert!(encode(raw(2, finite)).is_ok());
+        assert!(encode(&raw(2, finite)).is_ok());
     }
 
     #[test]
@@ -248,25 +248,25 @@ mod tests {
         };
         let v = Velocity::from_m_s(340.0);
         assert!(
-            matches!(encode(foci(1, 1, v)), Err(Error::InvalidPayload(_))),
+            matches!(encode(&foci(1, 1, v)), Err(Error::InvalidPayload(_))),
             "a single-sample STM never advances its index"
         );
         assert!(matches!(
-            encode(foci(2, 0, v)),
+            encode(&foci(2, 0, v)),
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
-            encode(foci(2, NUM_FOCI_MAX + 1, v)),
+            encode(&foci(2, NUM_FOCI_MAX + 1, v)),
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
-            encode(foci(MAX_FOCI_TOTAL / 8 + 1, 8, v)),
+            encode(&foci(MAX_FOCI_TOTAL / 8 + 1, 8, v)),
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
-            encode(foci(2, 1, Velocity::from_m_s(0.0))),
+            encode(&foci(2, 1, Velocity::from_m_s(0.0))),
             Err(Error::InvalidPayload(_))
         ));
-        assert!(encode(foci(MAX_FOCI_TOTAL / 8, 8, v)).is_ok());
+        assert!(encode(&foci(MAX_FOCI_TOTAL / 8, 8, v)).is_ok());
     }
 }

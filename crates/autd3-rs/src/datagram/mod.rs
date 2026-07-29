@@ -1,4 +1,5 @@
 mod builder;
+pub(crate) mod dc_offset;
 mod each;
 mod frame;
 mod mirror;

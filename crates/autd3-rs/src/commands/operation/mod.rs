@@ -85,17 +85,3 @@ pub trait Operation {
         let _ = offset_ns;
     }
 }
-
-impl<T: Operation + ?Sized> Operation for &T {
-    fn distribution(&self) -> Distribution {
-        (**self).distribution()
-    }
-
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        (**self).encode(device, out)
-    }
-
-    fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        (**self).reflect(device, state)
-    }
-}
