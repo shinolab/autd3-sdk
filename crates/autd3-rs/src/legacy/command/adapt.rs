@@ -27,7 +27,7 @@ pub(crate) const fn modulation_segment(bank: ModulationBank) -> Segment {
 }
 
 #[must_use]
-pub(crate) fn transition_mode(mode: TransitionMode) -> LegacyTransitionMode {
+pub(crate) fn transition_mode(mode: TransitionMode, dc_offset_ns: i64) -> LegacyTransitionMode {
     if let TransitionMode::SysTime {
         margin: Some(margin),
         ..
@@ -40,7 +40,9 @@ pub(crate) fn transition_mode(mode: TransitionMode) -> LegacyTransitionMode {
     }
     match mode {
         TransitionMode::SyncIdx => LegacyTransitionMode::SyncIdx,
-        TransitionMode::SysTime { time, .. } => LegacyTransitionMode::SysTime(time),
+        TransitionMode::SysTime { time, .. } => {
+            LegacyTransitionMode::SysTime(time.with_dc_offset(dc_offset_ns))
+        }
         TransitionMode::Gpio(pin) => LegacyTransitionMode::Gpio(pin),
         TransitionMode::Ext => LegacyTransitionMode::Ext,
         TransitionMode::Immediate => LegacyTransitionMode::Immediate,
@@ -112,13 +114,14 @@ impl<'a> LegacyCommand<'a> for Pattern<'a> {
 
 impl<'a> LegacyCommand<'a> for Modulation<'a> {
     fn expand(self, builder: &mut LegacyDatagramBuilder<'a>) {
+        let transition_mode = transition_mode(self.transition_mode, builder.dc_offset_ns());
         builder.push_op(op::Modulation::new(
             self.config,
             self.data,
             op::ModulationOption {
                 segment: modulation_segment(self.bank),
                 loop_behavior: self.loop_behavior,
-                transition_mode: transition_mode(self.transition_mode),
+                transition_mode,
             },
         ));
     }
@@ -126,9 +129,10 @@ impl<'a> LegacyCommand<'a> for Modulation<'a> {
 
 impl<'a> LegacyCommand<'a> for ChangeModulationBank {
     fn expand(self, builder: &mut LegacyDatagramBuilder<'a>) {
+        let transition_mode = transition_mode(self.transition_mode, builder.dc_offset_ns());
         builder.push_op(op::LegacyChangePatternBank::modulation(
             modulation_segment(self.bank),
-            transition_mode(self.transition_mode),
+            transition_mode,
         ));
     }
 }
@@ -136,6 +140,7 @@ impl<'a> LegacyCommand<'a> for ChangeModulationBank {
 impl<'a, const N: usize> LegacyCommand<'a> for FociStm<'a, N> {
     fn expand(self, builder: &mut LegacyDatagramBuilder<'a>) {
         let config = self.config.into_sampling_config(self.points.len());
+        let transition_mode = transition_mode(self.option.transition_mode, builder.dc_offset_ns());
         builder.push_op(op::FociStm::new(
             config,
             self.points,
@@ -143,7 +148,7 @@ impl<'a, const N: usize> LegacyCommand<'a> for FociStm<'a, N> {
                 segment: pattern_segment(self.option.bank),
                 sound_speed: self.option.sound_speed,
                 loop_behavior: self.option.loop_behavior,
-                transition_mode: transition_mode(self.option.transition_mode),
+                transition_mode,
             },
         ));
     }
@@ -152,6 +157,7 @@ impl<'a, const N: usize> LegacyCommand<'a> for FociStm<'a, N> {
 impl<'a> LegacyCommand<'a> for PatternStm<'a> {
     fn expand(self, builder: &mut LegacyDatagramBuilder<'a>) {
         let config = self.config.into_sampling_config(self.patterns.len());
+        let transition_mode = transition_mode(self.option.transition_mode, builder.dc_offset_ns());
         builder.push_op(op::GainStm::new(
             config,
             self.patterns,
@@ -159,14 +165,14 @@ impl<'a> LegacyCommand<'a> for PatternStm<'a> {
                 mode: gain_stm_mode(self.option.mode),
                 segment: pattern_segment(self.option.bank),
                 loop_behavior: self.option.loop_behavior,
-                transition_mode: transition_mode(self.option.transition_mode),
+                transition_mode,
             },
         ));
     }
 }
 
 #[must_use]
-const fn gpio_out(output: NewGpioOut) -> GpioOut {
+fn gpio_out(output: NewGpioOut, dc_offset_ns: i64) -> GpioOut {
     match output {
         NewGpioOut::Off => GpioOut::Off,
         NewGpioOut::BaseSignal => GpioOut::BaseSignal,
@@ -178,7 +184,7 @@ const fn gpio_out(output: NewGpioOut) -> GpioOut {
         NewGpioOut::PatternBank => GpioOut::StmSegment,
         NewGpioOut::PatternIdx(idx) => GpioOut::StmIdx(idx),
         NewGpioOut::IsStmMode => GpioOut::IsStmMode,
-        NewGpioOut::SysTimeEq(t) => GpioOut::SysTimeEq(t),
+        NewGpioOut::SysTimeEq(t) => GpioOut::SysTimeEq(t.with_dc_offset(dc_offset_ns)),
         NewGpioOut::SyncDiff => GpioOut::SyncDiff,
         NewGpioOut::PwmOut(tr) => GpioOut::PwmOut(tr),
         NewGpioOut::Direct(on) => GpioOut::Direct(on),
@@ -205,7 +211,10 @@ impl<'a> LegacyCommand<'a> for SetPulseWidthTable<'a> {
 
 impl<'a> LegacyCommand<'a> for SetGpioOut {
     fn expand(self, builder: &mut LegacyDatagramBuilder<'a>) {
-        builder.push_op(op::SetGpioOut::new(self.outputs.map(gpio_out)));
+        let dc_offset_ns = builder.dc_offset_ns();
+        builder.push_op(op::SetGpioOut::new(
+            self.outputs.map(|out| gpio_out(out, dc_offset_ns)),
+        ));
     }
 }
 
@@ -234,27 +243,27 @@ mod tests {
     fn transition_modes_map_one_to_one() {
         let time = DcSysTime::from_nanos(0x1234);
         assert_eq!(
-            transition_mode(TransitionMode::SyncIdx),
+            transition_mode(TransitionMode::SyncIdx, 0),
             LegacyTransitionMode::SyncIdx
         );
         assert_eq!(
-            transition_mode(TransitionMode::SysTime { time, margin: None }),
+            transition_mode(TransitionMode::SysTime { time, margin: None }, 0),
             LegacyTransitionMode::SysTime(time)
         );
         assert_eq!(
-            transition_mode(TransitionMode::Gpio(GpioIn::I2)),
+            transition_mode(TransitionMode::Gpio(GpioIn::I2), 0),
             LegacyTransitionMode::Gpio(GpioIn::I2)
         );
         assert_eq!(
-            transition_mode(TransitionMode::Ext),
+            transition_mode(TransitionMode::Ext, 0),
             LegacyTransitionMode::Ext
         );
         assert_eq!(
-            transition_mode(TransitionMode::Immediate),
+            transition_mode(TransitionMode::Immediate, 0),
             LegacyTransitionMode::Immediate
         );
         assert_eq!(
-            transition_mode(TransitionMode::Later),
+            transition_mode(TransitionMode::Later, 0),
             LegacyTransitionMode::Later
         );
     }
@@ -263,12 +272,51 @@ mod tests {
     fn a_requested_sys_time_margin_is_dropped() {
         let time = DcSysTime::from_nanos(0x1234);
         assert_eq!(
-            transition_mode(TransitionMode::SysTime {
-                time,
-                margin: Some(Duration::from_millis(5)),
-            }),
+            transition_mode(
+                TransitionMode::SysTime {
+                    time,
+                    margin: Some(Duration::from_millis(5)),
+                },
+                0
+            ),
             LegacyTransitionMode::SysTime(time),
             "legacy firmware hard-codes a 10 ms margin"
+        );
+    }
+
+    #[test]
+    fn sys_time_is_retimed_onto_the_bus_clock() {
+        let time = DcSysTime::from_nanos(1_000_000);
+        assert_eq!(
+            transition_mode(TransitionMode::SysTime { time, margin: None }, 500),
+            LegacyTransitionMode::SysTime(DcSysTime::from_nanos(1_000_500))
+        );
+        assert_eq!(
+            transition_mode(TransitionMode::SysTime { time, margin: None }, -500),
+            LegacyTransitionMode::SysTime(DcSysTime::from_nanos(999_500))
+        );
+        assert_eq!(
+            transition_mode(TransitionMode::SyncIdx, 500),
+            LegacyTransitionMode::SyncIdx,
+            "modes without a time are untouched"
+        );
+    }
+
+    #[test]
+    fn sys_time_eq_is_retimed_before_it_is_scaled() {
+        let ns = 3125u64 * 4096;
+        assert_eq!(
+            gpio_out(NewGpioOut::SysTimeEq(DcSysTime::from_nanos(ns)), 3125),
+            GpioOut::SysTimeEq(DcSysTime::from_nanos(ns + 3125))
+        );
+        assert_eq!(
+            gpio_out(NewGpioOut::SysTimeEq(DcSysTime::from_nanos(ns)), 3125).encode(),
+            GpioOut::SysTimeEq(DcSysTime::from_nanos(ns + 3125)).encode()
+        );
+        assert_eq!(
+            gpio_out(NewGpioOut::BaseSignal, 3125),
+            GpioOut::BaseSignal,
+            "outputs without a time are untouched"
         );
     }
 

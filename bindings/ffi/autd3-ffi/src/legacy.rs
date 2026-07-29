@@ -366,6 +366,7 @@ fn push_item<'a>(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_legacy_datagram_builder_build(
     builder: *const LegacyBuilder,
+    client: *const LegacyClientHandle,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> *mut Arc<LegacyFrames> {
@@ -374,8 +375,14 @@ pub unsafe extern "C" fn autd3_legacy_datagram_builder_build(
         return std::ptr::null_mut();
     }
 
+    let dc_offset_ns = if client.is_null() {
+        0
+    } else {
+        unsafe { &*client }.0.dc_offset_ns()
+    };
     let builder = unsafe { &*builder };
-    let mut legacy = LegacyDatagramBuilder::new(Arc::clone(&builder.geometry));
+    let mut legacy =
+        LegacyDatagramBuilder::with_dc_offset(Arc::clone(&builder.geometry), dc_offset_ns);
     for item in &builder.pending {
         if let Err(e) = push_item(item, &mut legacy) {
             unsafe { write_cstr(out_err, out_err_len, &e) };

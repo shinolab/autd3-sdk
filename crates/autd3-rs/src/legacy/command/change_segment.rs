@@ -51,16 +51,11 @@ impl LegacyChangePatternBank {
 impl<'a> LegacyCommand<'a> for LegacyChangePatternBank {
     fn expand(self, builder: &mut LegacyDatagramBuilder<'a>) {
         let segment = pattern_segment(self.bank);
+        let mode = transition_mode(self.transition_mode, builder.dc_offset_ns());
         builder.push_op(match self.kind {
             Kind::Pattern => op::LegacyChangePatternBank::gain(segment),
-            Kind::FociStm => op::LegacyChangePatternBank::foci_stm(
-                segment,
-                transition_mode(self.transition_mode),
-            ),
-            Kind::PatternStm => op::LegacyChangePatternBank::gain_stm(
-                segment,
-                transition_mode(self.transition_mode),
-            ),
+            Kind::FociStm => op::LegacyChangePatternBank::foci_stm(segment, mode),
+            Kind::PatternStm => op::LegacyChangePatternBank::gain_stm(segment, mode),
         });
     }
 }
@@ -121,7 +116,7 @@ mod tests {
                     ),
                 ] {
                     let payload = frames(cmd);
-                    let expected = transition_mode(mode);
+                    let expected = transition_mode(mode, 0);
                     assert_eq!(payload[0], tag.as_u8());
                     assert_eq!(payload[1], segment.as_u8());
                     assert_eq!(payload[2], expected.as_u8());
@@ -142,11 +137,11 @@ mod tests {
             ),
             (
                 LegacyChangePatternBank::foci_stm(PatternBank::B0, mode),
-                op::LegacyChangePatternBank::foci_stm(Segment::S0, transition_mode(mode)),
+                op::LegacyChangePatternBank::foci_stm(Segment::S0, transition_mode(mode, 0)),
             ),
             (
                 LegacyChangePatternBank::pattern_stm(PatternBank::B1, mode),
-                op::LegacyChangePatternBank::gain_stm(Segment::S1, transition_mode(mode)),
+                op::LegacyChangePatternBank::gain_stm(Segment::S1, transition_mode(mode, 0)),
             ),
         ] {
             let geometry = Geometry::new(vec![Autd3::default()]);

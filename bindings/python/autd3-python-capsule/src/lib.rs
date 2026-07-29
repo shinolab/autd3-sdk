@@ -247,6 +247,7 @@ mod link {
 
     pub trait LegacyClientBackend: Send + Sync {
         fn num_devices(&self) -> usize;
+        fn dc_offset_ns(&self) -> i64;
         fn read_firmware_version(&self) -> LegacyBoxFuture<Vec<String>>;
         fn read_fpga_state(&self) -> LegacyBoxFuture<Vec<u8>>;
         fn send(&self, frames: Arc<LegacyFrames>, index: usize) -> LegacyBoxFuture<Vec<u8>>;
@@ -292,6 +293,10 @@ mod link {
     impl<C: StateCheck> LegacyClientBackend for LegacyBackend<C> {
         fn num_devices(&self) -> usize {
             self.client.num_devices()
+        }
+
+        fn dc_offset_ns(&self) -> i64 {
+            self.client.dc_offset_ns()
         }
 
         fn read_firmware_version(&self) -> LegacyBoxFuture<Vec<String>> {

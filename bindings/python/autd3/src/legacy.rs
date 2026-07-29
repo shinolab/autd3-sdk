@@ -208,15 +208,28 @@ pub struct LegacyDatagramBuilder {
     geometry: Arc<Geometry>,
     inner: DatagramBuilder,
     pending: Vec<LegacyItem>,
+    backend: Option<Arc<dyn LegacyClientBackend>>,
 }
 
 impl LegacyDatagramBuilder {
     pub(crate) fn with_geometry(geometry: Arc<Geometry>) -> Self {
+        Self::with_backend(geometry, None)
+    }
+
+    pub(crate) fn with_backend(
+        geometry: Arc<Geometry>,
+        backend: Option<Arc<dyn LegacyClientBackend>>,
+    ) -> Self {
         Self {
             inner: DatagramBuilder::with_geometry(Arc::clone(&geometry)),
             geometry,
             pending: Vec::new(),
+            backend,
         }
+    }
+
+    fn dc_offset_ns(&self) -> i64 {
+        self.backend.as_ref().map_or(0, |b| b.dc_offset_ns())
     }
 }
 
@@ -247,7 +260,8 @@ impl LegacyDatagramBuilder {
     }
 
     fn build(&self, py: Python<'_>) -> PyResult<LegacyFrames> {
-        let mut builder = CoreLegacyBuilder::new(Arc::clone(&self.geometry));
+        let mut builder =
+            CoreLegacyBuilder::with_dc_offset(Arc::clone(&self.geometry), self.dc_offset_ns());
         for item in &self.pending {
             match item {
                 LegacyItem::Current(pending) => {
@@ -364,7 +378,10 @@ impl LegacyClient {
     }
 
     fn datagram_builder(&self) -> LegacyDatagramBuilder {
-        LegacyDatagramBuilder::with_geometry(Arc::clone(&self.geometry))
+        LegacyDatagramBuilder::with_backend(
+            Arc::clone(&self.geometry),
+            Some(Arc::clone(&self.backend)),
+        )
     }
 
     fn read_firmware_version<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
