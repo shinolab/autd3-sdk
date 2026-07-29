@@ -2,6 +2,8 @@ use std::time::Duration;
 
 use autd3_rs::{DeviceState, LinkStatus};
 
+use crate::drift::DriftStats;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CandidateStatus {
     Ok,
@@ -46,6 +48,7 @@ pub struct CandidateResult {
     pub send_success: u64,
     pub send_errors: u64,
     pub load: LoadStats,
+    pub drift: DriftStats,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -89,6 +92,7 @@ impl CandidateResult {
             send_success: 0,
             send_errors: 0,
             load: LoadStats::default(),
+            drift: DriftStats::default(),
         }
     }
 

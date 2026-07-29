@@ -2,8 +2,8 @@ use std::num::NonZeroU16;
 use std::sync::Arc;
 
 use autd3_python_capsule::{
-    DevicePattern, capsule_of, frame_into_capsule, geometry_from_capsule, modulation_from_capsule,
-    pattern_from_capsule, to_pyerr,
+    ClientBackend, DevicePattern, capsule_of, frame_into_capsule, geometry_from_capsule,
+    modulation_from_capsule, pattern_from_capsule, to_pyerr,
 };
 use autd3_rs::commands::{
     ChangeModulationBank as CoreChangeModulationBank, ChangePatternBank as CoreChangePatternBank,
@@ -351,13 +351,22 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
 pub struct DatagramBuilder {
     geometry: Arc<Geometry>,
     pub(crate) pending: Vec<Pending>,
+    backend: Option<Arc<dyn ClientBackend>>,
 }
 
 impl DatagramBuilder {
     pub(crate) fn with_geometry(geometry: Arc<Geometry>) -> Self {
+        Self::with_backend(geometry, None)
+    }
+
+    pub(crate) fn with_backend(
+        geometry: Arc<Geometry>,
+        backend: Option<Arc<dyn ClientBackend>>,
+    ) -> Self {
         Self {
             geometry,
             pending: Vec::new(),
+            backend,
         }
     }
 
@@ -377,6 +386,10 @@ impl DatagramBuilder {
         self.pending
             .pop()
             .ok_or_else(|| PyValueError::new_err("Unknown datagram type"))
+    }
+
+    fn dc_offset_ns(&self) -> i64 {
+        self.backend.as_ref().map_or(0, |b| b.dc_offset_ns())
     }
 }
 
@@ -544,7 +557,8 @@ impl DatagramBuilder {
     }
 
     fn build(&self, py: Python<'_>) -> PyResult<Frames> {
-        let mut builder = CoreDatagramBuilder::new(Arc::clone(&self.geometry));
+        let mut builder =
+            CoreDatagramBuilder::with_dc_offset(Arc::clone(&self.geometry), self.dc_offset_ns());
         for pending in &self.pending {
             validate_pending(pending)?;
             push_pending(pending, &mut builder);

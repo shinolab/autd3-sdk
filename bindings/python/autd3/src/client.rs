@@ -140,7 +140,7 @@ impl Client {
     }
 
     fn datagram_builder(&self) -> DatagramBuilder {
-        DatagramBuilder::with_geometry(Arc::clone(&self.geometry))
+        DatagramBuilder::with_backend(Arc::clone(&self.geometry), Some(Arc::clone(&self.backend)))
     }
 
     fn read_firmware_version<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

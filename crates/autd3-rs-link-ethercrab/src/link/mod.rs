@@ -52,6 +52,7 @@ pub struct EtherCrabLink {
     rx_was_valid: bool,
     timeouts: Timeouts,
     stats: autd3_rs_core::LinkStats,
+    dc_clock: autd3_rs_core::DcClock,
     diagnostics: SharedCycleDiagnostics,
     _timer_resolution: TimerResolutionGuard,
 }

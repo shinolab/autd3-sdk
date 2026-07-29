@@ -267,7 +267,7 @@ namespace AUTD3
         public int NumDevices => (int)NativeClient.autd3_client_num_devices(Handle);
 
 
-        public DatagramBuilder DatagramBuilder() => new DatagramBuilder(_geometry);
+        public DatagramBuilder DatagramBuilder() => new DatagramBuilder(_geometry, Handle);
 
 
 

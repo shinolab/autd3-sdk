@@ -25,10 +25,11 @@ use crate::error::{Error, PayloadError};
 use crate::firmware_version::{FirmwareVersion, Version};
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
-use crate::link::{IntoLink, Link};
+use crate::link::{DcClock, IntoLink, Link};
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, DeviceErrorCode};
 use crate::telemetry::Telemetry;
+use crate::value::DcSysTime;
 
 use completion::CompletionPool;
 use pool::SlotPool;
@@ -43,6 +44,7 @@ pub struct Client {
     join: std::sync::Mutex<Option<JoinHandle<()>>>,
     closed: Arc<AtomicBool>,
     mirror: MirrorHandle,
+    dc_clock: Option<DcClock>,
 }
 
 impl Client {
@@ -90,6 +92,7 @@ impl Client {
         }
 
         let checker = link.state_checker();
+        let dc_clock = link.dc_clock();
         let pool = SlotPool::new(num_devices, config.max_inflight.get());
         let completions = CompletionPool::new(config.max_inflight.get());
 
@@ -120,6 +123,7 @@ impl Client {
                         state: Arc::new(std::sync::Mutex::new(Mirror::Desynced)),
                         enabled: config.validate_state,
                     },
+                    dc_clock,
                 };
                 if let Err(e) = client.clear().await {
                     let _ = client.close().await;
@@ -149,8 +153,25 @@ impl Client {
     }
 
     #[must_use]
+    pub fn dc_offset_ns(&self) -> i64 {
+        self.dc_clock
+            .as_ref()
+            .and_then(DcClock::offset_ns)
+            .unwrap_or(0)
+    }
+
+    #[must_use]
+    pub fn dc_sys_time(&self) -> DcSysTime {
+        DcSysTime::now().with_dc_offset(self.dc_offset_ns())
+    }
+
+    #[must_use]
     pub fn datagram_builder<'a>(&self) -> DatagramBuilder<'a> {
-        DatagramBuilder::with_mirror(Arc::clone(&self.geometry), self.mirror.clone())
+        DatagramBuilder::with_mirror(
+            Arc::clone(&self.geometry),
+            self.mirror.clone(),
+            self.dc_offset_ns(),
+        )
     }
 
     fn mark_desynced(&self) {

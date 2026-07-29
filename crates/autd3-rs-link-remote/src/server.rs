@@ -5,6 +5,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use autd3_rs_core::link::Link;
+use autd3_rs_core::value::DcSysTime;
 use autd3_rs_core::{IntoLink, RX_FRAME_BYTES, TX_FRAME_BYTES};
 
 use crate::error::RemoteLinkError;
@@ -18,6 +19,7 @@ struct BusState {
     tx: Vec<[u8; TX_FRAME_BYTES]>,
     rx: Vec<[u8; RX_FRAME_BYTES]>,
     rx_valid: bool,
+    dc_time_ns: u64,
     tx_version: u64,
     applied_version: u64,
     shutdown: bool,
@@ -35,6 +37,7 @@ impl Shared {
                 tx: vec![[0u8; TX_FRAME_BYTES]; num_devices],
                 rx: vec![[0u8; RX_FRAME_BYTES]; num_devices],
                 rx_valid: false,
+                dc_time_ns: wire::DC_TIME_UNAVAILABLE,
                 tx_version: 0,
                 applied_version: 0,
                 shutdown: false,
@@ -52,7 +55,7 @@ impl Shared {
         self.cv.notify_all();
     }
 
-    fn exchange(&self, tx: &[u8], rx: &mut [u8]) -> Result<bool, RemoteLinkError> {
+    fn exchange(&self, tx: &[u8], rx: &mut [u8]) -> Result<(bool, u64), RemoteLinkError> {
         let mut state = self
             .state
             .lock()
@@ -66,7 +69,7 @@ impl Shared {
             }
             if state.applied_version >= want {
                 rx.copy_from_slice(state.rx.as_flattened());
-                return Ok(state.rx_valid);
+                return Ok((state.rx_valid, state.dc_time_ns));
             }
             state = self
                 .cv
@@ -78,6 +81,7 @@ impl Shared {
 
 fn run_bus_loop<L: Link>(mut link: L, shared: &Shared, cycle_period: Duration) {
     let num_devices = link.num_devices();
+    let dc_clock = link.dc_clock();
     let mut tx_local = vec![[0u8; TX_FRAME_BYTES]; num_devices];
     let mut rx_local = vec![[0u8; RX_FRAME_BYTES]; num_devices];
 
@@ -106,6 +110,10 @@ fn run_bus_loop<L: Link>(mut link: L, shared: &Shared, cycle_period: Duration) {
                 Ok(outcome) => {
                     state.rx.copy_from_slice(&rx_local);
                     state.rx_valid = outcome.rx_valid;
+                    state.dc_time_ns = dc_clock
+                        .as_ref()
+                        .and_then(autd3_rs_core::DcClock::now)
+                        .map_or(wire::DC_TIME_UNAVAILABLE, DcSysTime::sys_time);
                 }
                 Err(e) => {
                     tracing::error!(error = %e, "bus cycle failed; stopping server bus loop");
@@ -313,8 +321,9 @@ fn run_frame_loop(
         match tag[0] {
             wire::TAG_FRAME => {
                 stream.read_exact(&mut tx_buf)?;
-                let rx_valid = shared.exchange(&tx_buf, &mut rx_buf)?;
+                let (rx_valid, dc_time_ns) = shared.exchange(&tx_buf, &mut rx_buf)?;
                 stream.write_all(&[u8::from(rx_valid)])?;
+                stream.write_all(&dc_time_ns.to_le_bytes())?;
                 stream.write_all(&rx_buf)?;
                 stream.flush()?;
             }

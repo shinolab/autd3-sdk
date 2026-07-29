@@ -1,7 +1,9 @@
 use std::convert::Infallible;
 
+use autd3_rs_core::value::DcSysTime;
 use autd3_rs_core::{
-    CycleOutcome, Geometry, Link, LinkStats, LinkStatus, RX_FRAME_BYTES, StateCheck, TX_FRAME_BYTES,
+    CycleOutcome, DcClock, Geometry, Link, LinkStats, LinkStatus, RX_FRAME_BYTES, StateCheck,
+    TX_FRAME_BYTES,
 };
 
 use crate::bus::{RawSocket, interface_candidates};
@@ -33,6 +35,7 @@ pub struct EchocatLink {
     master: Master<RawSocket>,
     state: BusState,
     stats: LinkStats,
+    dc_clock: DcClock,
     rx_was_valid: bool,
     recovery_backoff: u32,
     _timer_resolution: TimerResolutionGuard,
@@ -51,6 +54,7 @@ impl EchocatLink {
             master,
             state,
             stats: LinkStats::default(),
+            dc_clock: DcClock::new(),
             rx_was_valid: true,
             recovery_backoff: 0,
             _timer_resolution: timer_resolution,
@@ -106,6 +110,10 @@ impl Link for EchocatLink {
         }
     }
 
+    fn dc_clock(&self) -> Option<DcClock> {
+        Some(self.dc_clock.clone())
+    }
+
     fn cycle(
         &mut self,
         tx: &[[u8; TX_FRAME_BYTES]],
@@ -115,6 +123,10 @@ impl Link for EchocatLink {
             .master
             .cycle(tx.as_flattened(), rx.as_flattened_mut())?;
 
+        if report.dc_system_time != 0 {
+            self.dc_clock
+                .observe(DcSysTime::from_nanos(report.dc_system_time));
+        }
         if !report.rx_valid {
             self.stats.record_stale_cycle();
             if report.dc_system_time == 0 {

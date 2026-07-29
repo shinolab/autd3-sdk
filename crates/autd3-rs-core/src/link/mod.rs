@@ -1,4 +1,5 @@
 mod cycle_outcome;
+mod dc_clock;
 mod device_state;
 mod interface;
 mod into_link;
@@ -7,6 +8,7 @@ mod stats;
 mod status;
 
 pub use cycle_outcome::CycleOutcome;
+pub use dc_clock::{DcClock, DcObservation};
 pub use device_state::DeviceState;
 pub use interface::Interface;
 pub use into_link::IntoLink;
@@ -27,6 +29,10 @@ pub trait Link: Send + 'static {
     }
 
     fn state_checker(&self) -> Self::Checker;
+
+    fn dc_clock(&self) -> Option<DcClock> {
+        None
+    }
 
     fn cycle(
         &mut self,

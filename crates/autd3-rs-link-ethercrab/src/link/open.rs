@@ -92,6 +92,7 @@ impl EtherCrabLink {
             rx_was_valid: true,
             timeouts: option.timeouts,
             stats: autd3_rs_core::LinkStats::default(),
+            dc_clock: autd3_rs_core::DcClock::new(),
             diagnostics,
             _timer_resolution: timer_resolution,
         })
