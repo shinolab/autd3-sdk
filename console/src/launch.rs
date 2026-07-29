@@ -6,11 +6,12 @@ pub fn tool_bin(subdir: &str, name: &str) -> std::io::Result<PathBuf> {
     } else {
         name.to_string()
     };
-    Ok(exe_dir()?.join(subdir).join(exe_name))
-}
-
-pub fn tool_path(subdir: &str, rel: &str) -> std::io::Result<PathBuf> {
-    Ok(exe_dir()?.join(subdir).join(rel))
+    let dir = exe_dir()?;
+    let adjacent = dir.join(&exe_name);
+    if adjacent.is_file() {
+        return Ok(adjacent);
+    }
+    Ok(dir.join(subdir).join(exe_name))
 }
 
 fn exe_dir() -> std::io::Result<PathBuf> {

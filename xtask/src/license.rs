@@ -144,7 +144,6 @@ fn generate(root: &Path, target: GenTarget) -> Result<()> {
             generate_csharp(root)?;
             generate_unity(root)?;
             generate_console(root)?;
-            generate_simulator(root)?;
         }
         GenTarget::Python => generate_python(root)?,
         GenTarget::Csharp => generate_csharp(root)?,
@@ -254,11 +253,32 @@ pub fn generate_unity(root: &Path) -> Result<()> {
 pub fn generate_console(root: &Path) -> Result<()> {
     ensure_about()?;
     let console = root.join("console");
+    let out = console.join(THIRD_PARTY);
+    about(root, &console.join("Cargo.toml"), &out)?;
+
+    generate_simulator(root)?;
+    let simulator_notice = root.join("simulator").join(THIRD_PARTY);
+    let simulator = std::fs::read_to_string(&simulator_notice)
+        .with_context(|| format!("reading {}", simulator_notice.display()))?;
+
+    let firmware_tmp = console.join(".third-party-firmware.md");
     about(
         root,
-        &console.join("Cargo.toml"),
-        &console.join(THIRD_PARTY),
-    )
+        &root.join("tools").join("firmware").join("Cargo.toml"),
+        &firmware_tmp,
+    )?;
+    let firmware = std::fs::read_to_string(&firmware_tmp)
+        .with_context(|| format!("reading {}", firmware_tmp.display()))?;
+
+    let mut combined =
+        std::fs::read_to_string(&out).with_context(|| format!("reading {}", out.display()))?;
+    combined.push_str("\n\n---\n\n# Simulator dependencies\n\n");
+    combined.push_str(&simulator);
+    combined.push_str("\n\n---\n\n# Firmware tool dependencies\n\n");
+    combined.push_str(&firmware);
+    std::fs::write(&out, combined).with_context(|| format!("writing {}", out.display()))?;
+    std::fs::remove_file(&firmware_tmp).ok();
+    Ok(())
 }
 
 pub fn generate_simulator(root: &Path) -> Result<()> {

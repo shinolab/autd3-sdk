@@ -1,0 +1,10 @@
+- name: Install cargo-binstall and cargo-about
+  uses: taiki-e/install-action@v2
+  with:
+    tool: cargo-binstall,cargo-about
+- name: Install dioxus-cli
+  run: cargo binstall -y dioxus-cli --locked
+  shell: bash
+- name: Add wasm target
+  run: rustup target add wasm32-unknown-unknown
+  shell: bash

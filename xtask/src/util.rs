@@ -11,6 +11,73 @@ pub fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+pub fn exe_name(name: &str) -> String {
+    if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    }
+}
+
+pub fn dist_target() -> Option<String> {
+    std::env::var("CARGO_DIST_TARGET")
+        .ok()
+        .filter(|target| !target.is_empty())
+}
+
+pub fn ensure_rust_target(target: &str) -> Result<()> {
+    run("rustup", ["target", "add", target], &workspace_root())
+}
+
+pub fn cargo_bin(workspace: &Path, target: Option<&str>, debug: bool, name: &str) -> PathBuf {
+    let mut dir = workspace.join("target");
+    if let Some(target) = target {
+        dir = dir.join(target);
+    }
+    dir.join(if debug { "debug" } else { "release" })
+        .join(exe_name(name))
+}
+
+pub fn cargo_build_args<'a>(
+    package: &'a str,
+    target: Option<&'a str>,
+    debug: bool,
+) -> Vec<&'a str> {
+    let mut args = vec!["build", "-p", package];
+    if !debug {
+        args.push("--release");
+    }
+    if let Some(target) = target {
+        args.push("--target");
+        args.push(target);
+    }
+    args
+}
+
+pub fn copy_file(src: &Path, dst: &Path) -> Result<()> {
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::copy(src, dst)
+        .with_context(|| format!("copying {} -> {}", src.display(), dst.display()))?;
+    Ok(())
+}
+
+pub fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src).with_context(|| format!("reading {}", src.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        let target = dst.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir(&path, &target)?;
+        } else {
+            copy_file(&path, &target)?;
+        }
+    }
+    Ok(())
+}
+
 pub fn on_path(name: &str) -> bool {
     let Some(paths) = std::env::var_os("PATH") else {
         return false;

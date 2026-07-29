@@ -22,7 +22,27 @@ AUTD3 デバイスを正しく動作させるには, SDK に対応したバー�
 ## autd3-console の入手
 
 autd3-console は GitHub Releases (`console-v*`) から配布している.
-[Releases](https://github.com/shinolab/autd3-sdk/releases) から実行環境に対応する配布物 (`autd3-console-<os>.tar.gz/zip`) をダウンロードし, 展開して実行する.
+インストーラを使うのが最も簡単である.
+[Releases](https://github.com/shinolab/autd3-sdk/releases) で最新の `console-v*` を開き, そこに記載のインストールコマンドを実行する
+(下記の `<version>` を埋めても同じ).
+
+Linux / macOS:
+
+```console
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/shinolab/autd3-sdk/releases/download/console-v<version>/console-installer.sh | sh
+```
+
+Windows (PowerShell):
+
+```console
+irm https://github.com/shinolab/autd3-sdk/releases/download/console-v<version>/console-installer.ps1 | iex
+```
+
+インストーラは `autd3-console` 本体に加え, Simulator (`autd3-rs-simulator`) とファームウェア書き込みツール (`autd3-firmware`) を `~/.autd3/bin` へ配置する.
+インストーラを使わない場合は, 同じリリースのアーカイブ (`console-<target>.tar.xz` / `.zip`) をダウンロードし, 展開して実行してもよい.
+
+インストーラで導入した場合, autd3-console は起動時に新しいバージョンを確認し, 見つかれば画面上部から自己更新できる.
+自動確認は **About** タブで無効化できる.
 
 ## 事前準備
 

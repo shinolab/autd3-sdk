@@ -5,7 +5,10 @@ use clap::Subcommand;
 
 use crate::simulator::build_backend_and_frontend;
 use crate::tool::build_twincat_cli;
-use crate::util::run;
+use crate::util::{
+    cargo_bin, cargo_build_args, copy_dir, copy_file, dist_target, ensure_rust_target, exe_name,
+    run,
+};
 
 #[derive(Subcommand)]
 pub enum ConsoleCmd {
@@ -29,13 +32,21 @@ pub enum ConsoleCmd {
         #[arg(long)]
         debug: bool,
     },
-    /// Build console + simulator (+ twincat on Windows) and produce a distributable archive
+    /// Build every distributed binary into `console/target/distrib` (used by `dist`)
+    Stage {
+        /// Build the dev profile instead of release
+        #[arg(long)]
+        debug: bool,
+    },
+    /// Stage the binaries and produce a self-contained archive (includes twincat on Windows)
     Bundle {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
     },
 }
+
+const BINARIES: &[&str] = &["autd3-console", "autd3-rs-simulator", "autd3-firmware"];
 
 pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
     let dir = root.join("console");
@@ -67,51 +78,66 @@ pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
             }
             run("cargo", args, &dir)
         }
+        ConsoleCmd::Stage { debug } => stage(root, &dir, *debug).map(|_| ()),
         ConsoleCmd::Bundle { debug } => bundle(root, &dir, *debug),
     }
 }
 
-fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
-    let profile = if debug { "debug" } else { "release" };
+fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
+    let target = dist_target();
+    if let Some(target) = &target {
+        ensure_rust_target(target)?;
+    }
+    let target = target.as_deref();
 
     crate::license::generate_console(root)?;
 
-    let mut args = vec!["build"];
-    if !debug {
-        args.push("--release");
-    }
-    run("cargo", args, console_dir)?;
-    let console_bin = console_dir
-        .join("target")
-        .join(profile)
-        .join(exe_name("autd3-console"));
+    run(
+        "cargo",
+        cargo_build_args("autd3-console", target, debug),
+        console_dir,
+    )?;
+    let console_bin = cargo_bin(console_dir, target, debug, "autd3-console");
 
-    let (sim_bin, sim_web) = build_backend_and_frontend(root, debug)?;
+    let (sim_bin, _) = build_backend_and_frontend(root, debug, target)?;
+
+    run(
+        "cargo",
+        cargo_build_args("autd3-firmware", target, debug),
+        root,
+    )?;
+    let fw_bin = cargo_bin(root, target, debug, "autd3-firmware");
+
+    let out_dir = console_dir.join("target").join("distrib");
+    if out_dir.exists() {
+        std::fs::remove_dir_all(&out_dir)?;
+    }
+    std::fs::create_dir_all(&out_dir)?;
+    for (bin, name) in [&console_bin, &sim_bin, &fw_bin].into_iter().zip(BINARIES) {
+        copy_file(bin, &out_dir.join(exe_name(name)))?;
+    }
+    copy_file(&root.join("LICENSE"), &out_dir.join("LICENSE"))?;
+    copy_file(
+        &console_dir.join("THIRD-PARTY-LICENSES.md"),
+        &out_dir.join("THIRD-PARTY-LICENSES.md"),
+    )?;
+    println!(
+        "staged {} binaries in {}",
+        BINARIES.len(),
+        out_dir.display()
+    );
+    Ok(out_dir)
+}
+
+fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
+    let distrib = stage(root, console_dir, debug)?;
 
     let out_dir = console_dir.join("target").join("bundle");
     let staging = out_dir.join("autd3-console");
     if staging.exists() {
         std::fs::remove_dir_all(&staging)?;
     }
-    std::fs::create_dir_all(&staging)?;
-
-    copy_file(&console_bin, &staging.join(exe_name("autd3-console")))?;
-
-    copy_file(&root.join("LICENSE"), &staging.join("LICENSE"))?;
-    copy_file(
-        &console_dir.join("THIRD-PARTY-LICENSES.md"),
-        &staging.join("THIRD-PARTY-LICENSES.md"),
-    )?;
-
-    let sim_dir = staging.join("simulator");
-    copy_file(&sim_bin, &sim_dir.join(exe_name("autd3-rs-simulator")))?;
-    copy_dir(&sim_web, &sim_dir.join("web"))?;
-
-    let fw_bin = build_firmware_cli(root, debug)?;
-    copy_file(
-        &fw_bin,
-        &staging.join("firmware").join(exe_name("autd3-firmware")),
-    )?;
+    copy_dir(&distrib, &staging)?;
 
     if cfg!(target_os = "windows") {
         let exe = build_twincat_cli(root, debug)?;
@@ -144,27 +170,6 @@ fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     Ok(())
 }
 
-fn build_firmware_cli(root: &Path, debug: bool) -> Result<PathBuf> {
-    let mut args = vec!["build", "-p", "autd3-firmware"];
-    if !debug {
-        args.push("--release");
-    }
-    run("cargo", args, root)?;
-    let profile = if debug { "debug" } else { "release" };
-    Ok(root
-        .join("target")
-        .join(profile)
-        .join(exe_name("autd3-firmware")))
-}
-
-fn exe_name(name: &str) -> String {
-    if cfg!(windows) {
-        format!("{name}.exe")
-    } else {
-        name.to_string()
-    }
-}
-
 fn bundle_os() -> &'static str {
     if cfg!(target_os = "windows") {
         "windows-x64"
@@ -175,31 +180,10 @@ fn bundle_os() -> &'static str {
     }
 }
 
-fn copy_file(src: &Path, dst: &Path) -> Result<()> {
-    if let Some(parent) = dst.parent() {
+fn zip_dir(src: &Path, archive: &Path) -> Result<()> {
+    if let Some(parent) = archive.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::copy(src, dst)
-        .with_context(|| format!("copying {} -> {}", src.display(), dst.display()))?;
-    Ok(())
-}
-
-fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src).with_context(|| format!("reading {}", src.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        let target = dst.join(entry.file_name());
-        if path.is_dir() {
-            copy_dir(&path, &target)?;
-        } else {
-            copy_file(&path, &target)?;
-        }
-    }
-    Ok(())
-}
-
-fn zip_dir(src: &Path, archive: &Path) -> Result<()> {
     let file = std::fs::File::create(archive)
         .with_context(|| format!("creating {}", archive.display()))?;
     let mut zip = zip::ZipWriter::new(file);

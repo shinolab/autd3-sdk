@@ -1,7 +1,7 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use crate::launch::{tool_bin, tool_path};
+use crate::launch::tool_bin;
 use crate::process::ManagedProcess;
 
 const SUBDIR: &str = "simulator";
@@ -97,14 +97,11 @@ impl SimulatorPanel {
                 return;
             }
         };
-        let web = tool_path(SUBDIR, "web").unwrap_or_default();
         let args = vec![
             "--http-port".to_string(),
             self.config.http_port.to_string(),
             "--link-port".to_string(),
             self.config.link_port.to_string(),
-            "--web-dir".to_string(),
-            web.to_string_lossy().into_owned(),
         ];
         match ManagedProcess::spawn(&bin, &args) {
             Ok(proc) => self.proc = Some(proc),

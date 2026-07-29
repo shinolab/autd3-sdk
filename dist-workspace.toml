@@ -1,0 +1,25 @@
+[workspace]
+members = ["dist:console"]
+
+[dist]
+cargo-dist-version = "0.32.0"
+ci = "github"
+installers = ["shell", "powershell"]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+]
+tag-namespace = "console"
+install-updater = true
+github-build-setup = "console-build-setup.yml"
+install-path = "~/.autd3/bin"
+include = ["console/THIRD-PARTY-LICENSES.md"]
+
+# Linux build dependencies for the eframe/glutin GUI
+[dist.dependencies.apt]
+libxcb-render0-dev = '*'
+libxcb-shape0-dev = '*'
+libxcb-xfixes0-dev = '*'
+libxkbcommon-dev = '*'
+libssl-dev = '*'

@@ -4,14 +4,17 @@ use std::sync::atomic::Ordering;
 
 use axum::{
     Router,
+    body::Body,
     extract::{
         State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
-    response::IntoResponse,
+    http::{StatusCode, Uri, header},
+    response::{IntoResponse, Response},
     routing::get,
 };
 use futures_util::{SinkExt, StreamExt};
+use rust_embed::RustEmbed;
 use tokio::sync::watch;
 use tower_http::services::ServeDir;
 
@@ -27,13 +30,31 @@ pub struct AppState {
     pub control: Arc<ControlState>,
 }
 
+#[derive(RustEmbed)]
+#[folder = "web/"]
+struct WebAssets;
+
 pub fn router(state: AppState, web_dir: Option<PathBuf>) -> Router {
     let router = Router::new().route("/ws", get(ws_handler));
     let router = match web_dir {
         Some(dir) => router.fallback_service(ServeDir::new(dir)),
+        None if WebAssets::get("index.html").is_some() => router.fallback(embedded_handler),
         None => router.route("/", get(|| async { "autd3-rs-simulator backend" })),
     };
     router.with_state(state)
+}
+
+async fn embedded_handler(uri: Uri) -> Response {
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+    match WebAssets::get(path) {
+        Some(file) => (
+            [(header::CONTENT_TYPE, file.metadata.mimetype())],
+            Body::from(file.data.into_owned()),
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "not found").into_response(),
+    }
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
