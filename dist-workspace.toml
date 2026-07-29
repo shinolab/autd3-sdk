@@ -20,6 +20,8 @@ tag-namespace = "console"
 # Whether to install an updater program
 install-updater = true
 github-build-setup = "parts/console-build-setup.yml"
+# Rewrites the PowerShell install command in the release body
+post-announce-jobs = ["./console-release-notes"]
 # Path that installers should place binaries in
 install-path = "~/.autd3/bin"
 # Extra static files to include in each App (path relative to this Cargo.toml's dir)
