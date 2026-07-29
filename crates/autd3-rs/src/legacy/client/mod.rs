@@ -1,14 +1,17 @@
 mod rt;
+#[cfg(test)]
+mod tests;
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::link::{IntoLink, Link};
 use autd3_rs_core::value::Emission;
-use tokio::sync::{Mutex, mpsc, oneshot};
+use tokio::sync::{Mutex, MutexGuard, mpsc, oneshot};
 
 use crate::legacy::datagram::{LegacyDatagramBuilder, LegacyFrame, LegacyFrames};
 use crate::legacy::error::{LegacyError, PayloadError};
@@ -20,6 +23,8 @@ use rt::CmdMessage;
 pub const MAX_DEVICES: usize = 128;
 
 const DEFAULT_TIMEOUT_CYCLES: NonZeroU32 = NonZeroU32::new(2000).unwrap();
+
+const SHUTDOWN_POLL: Duration = Duration::from_micros(100);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LegacyClientConfig {
@@ -54,6 +59,7 @@ pub struct LegacyClient {
     reads_fpga_state: AtomicBool,
     join: std::sync::Mutex<Option<JoinHandle<()>>>,
     closed: Arc<AtomicBool>,
+    shutting_down: AtomicBool,
 }
 
 impl LegacyClient {
@@ -121,6 +127,7 @@ impl LegacyClient {
             reads_fpga_state: AtomicBool::new(false),
             join: std::sync::Mutex::new(Some(join)),
             closed,
+            shutting_down: AtomicBool::new(false),
         };
 
         match handshake_rx.await {
@@ -189,12 +196,20 @@ impl LegacyClient {
     }
 
     pub async fn send(&self, frame: LegacyFrame) -> Result<LegacyResponse, LegacyError> {
-        let _guard = self.send_lock.lock().await;
+        let _guard = self.acquire().await?;
         self.dispatch(frame).await
     }
 
     pub async fn send_checked(&self, frame: LegacyFrame) -> Result<(), LegacyError> {
         self.send(frame).await.map(|_| ())
+    }
+
+    async fn acquire(&self) -> Result<MutexGuard<'_, ()>, LegacyError> {
+        let guard = self.send_lock.lock().await;
+        if self.shutting_down.load(Ordering::Acquire) {
+            return Err(LegacyError::Closed);
+        }
+        Ok(guard)
     }
 
     async fn dispatch(&self, frame: LegacyFrame) -> Result<LegacyResponse, LegacyError> {
@@ -217,13 +232,49 @@ impl LegacyClient {
         Ok(LegacyResponse { data })
     }
 
-    async fn send_all(&self, frames: &LegacyFrames) -> Result<LegacyResponse, LegacyError> {
-        let _guard = self.send_lock.lock().await;
+    async fn dispatch_all(&self, frames: &LegacyFrames) -> Result<LegacyResponse, LegacyError> {
         let mut last = LegacyResponse { data: Vec::new() };
         for frame in frames {
             last = self.dispatch(frame).await?;
         }
         Ok(last)
+    }
+
+    async fn send_all(&self, frames: &LegacyFrames) -> Result<LegacyResponse, LegacyError> {
+        let _guard = self.acquire().await?;
+        self.dispatch_all(frames).await
+    }
+
+    fn dispatch_blocking(&self, frame: LegacyFrame) -> Result<(), LegacyError> {
+        let (reply, mut response) = oneshot::channel();
+        let mut pending = CmdMessage {
+            round: frame,
+            reply,
+        };
+        loop {
+            match self.cmd_tx.try_send(pending) {
+                Ok(()) => break,
+                Err(mpsc::error::TrySendError::Full(msg)) => {
+                    pending = msg;
+                    std::thread::sleep(SHUTDOWN_POLL);
+                }
+                Err(mpsc::error::TrySendError::Closed(_)) => return Err(LegacyError::RtClosed),
+            }
+        }
+        loop {
+            match response.try_recv() {
+                Ok(result) => return result.map(|_| ()),
+                Err(oneshot::error::TryRecvError::Empty) => std::thread::sleep(SHUTDOWN_POLL),
+                Err(oneshot::error::TryRecvError::Closed) => return Err(LegacyError::RtClosed),
+            }
+        }
+    }
+
+    fn dispatch_all_blocking(&self, frames: &LegacyFrames) -> Result<(), LegacyError> {
+        for frame in frames {
+            self.dispatch_blocking(frame)?;
+        }
+        Ok(())
     }
 
     fn build_op<'a, O: op::LegacyOperation + Clone + 'a>(
@@ -302,7 +353,14 @@ impl LegacyClient {
 
     pub async fn close(&self) -> Result<(), LegacyError> {
         tracing::debug!("closing legacy client");
-        let shutdown = self.shutdown_sequence().await;
+        let shutdown = {
+            let _guard = self.send_lock.lock().await;
+            if self.shutting_down.swap(true, Ordering::AcqRel) {
+                Ok(())
+            } else {
+                self.shutdown_sequence().await
+            }
+        };
         self.closed.store(true, Ordering::Release);
         let join = self
             .join
@@ -316,14 +374,45 @@ impl LegacyClient {
         shutdown.and(joined)
     }
 
+    fn shutdown_frames(&self) -> [Result<LegacyFrames, LegacyError>; 3] {
+        let null = self
+            .geometry
+            .iter()
+            .map(|d| vec![Emission::NULL; d.num_transducers()])
+            .collect::<Vec<_>>();
+        [
+            self.build_op(op::Silencer::new(op::SilencerConfig::default_non_strict())),
+            self.build_op(op::Gain::new(&null)),
+            self.build_op(op::Clear::new()),
+        ]
+    }
+
     async fn shutdown_sequence(&self) -> Result<(), LegacyError> {
-        if self.closed.load(Ordering::Acquire) {
-            return Ok(());
+        let mut first_error = Ok(());
+        for frames in self.shutdown_frames() {
+            let step = match frames {
+                Ok(frames) => self.dispatch_all(&frames).await.map(|_| ()),
+                Err(e) => Err(e),
+            };
+            if first_error.is_ok() {
+                first_error = step;
+            }
         }
-        self.send_op(op::Silencer::new(op::SilencerConfig::default_non_strict()))
-            .await?;
-        self.stop().await?;
-        self.send_op(op::Clear::new()).await.map(|_| ())
+        first_error
+    }
+
+    fn shutdown_sequence_blocking(&self) -> Result<(), LegacyError> {
+        let mut first_error = Ok(());
+        for frames in self.shutdown_frames() {
+            let step = match frames {
+                Ok(frames) => self.dispatch_all_blocking(&frames),
+                Err(e) => Err(e),
+            };
+            if first_error.is_ok() {
+                first_error = step;
+            }
+        }
+        first_error
     }
 }
 
@@ -337,12 +426,18 @@ impl core::fmt::Debug for LegacyClient {
             .field("reads_fpga_state", &self.reads_fpga_state)
             .field("join", &self.join)
             .field("closed", &self.closed)
+            .field("shutting_down", &self.shutting_down)
             .finish()
     }
 }
 
 impl Drop for LegacyClient {
     fn drop(&mut self) {
+        if !self.shutting_down.swap(true, Ordering::AcqRel)
+            && let Err(e) = self.shutdown_sequence_blocking()
+        {
+            tracing::warn!("legacy client failed to mute on drop: {e}");
+        }
         self.closed.store(true, Ordering::Release);
         let join = self
             .join
