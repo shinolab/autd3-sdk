@@ -10,7 +10,7 @@ autoexamples = false
 [workspace]
 
 [dependencies]
-autd3-rs = { path = "../../../crates/autd3-rs" }
+autd3-rs = { path = "../../../crates/autd3-rs", features = ["legacy"] }
 autd3-rs-pattern = { path = "../../../crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { path = "../../../crates/autd3-rs-pattern-holo" }
 autd3-rs-modulation = { path = "../../../crates/autd3-rs-modulation" }
@@ -310,6 +310,10 @@ path = "examples/guide/custom-pattern.rs"
 [[example]]
 name = "guide_emulator"
 path = "examples/guide/emulator.rs"
+
+[[example]]
+name = "guide_legacy"
+path = "examples/guide/legacy.rs"
 
 [[example]]
 name = "guide_state_check"

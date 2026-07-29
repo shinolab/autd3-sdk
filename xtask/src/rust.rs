@@ -37,6 +37,8 @@ pub enum RustCmd {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Regenerate the legacy golden TSV with the old SDK (v38.1.0)
+    Golden,
     /// Build and run an example from `examples/`
     Example {
         /// Example binary name (one binary per feature; see `examples/`)
@@ -56,20 +58,49 @@ pub enum RustCmd {
 pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
     match cmd {
         RustCmd::Build => {
-            let args = vec!["build", "--workspace", "--all-targets"];
+            let args = vec![
+                "build",
+                "--workspace",
+                "--all-targets",
+                "--features",
+                "autd3-rs/legacy",
+            ];
             run("cargo", args, root)
         }
         RustCmd::Test { no_pcap } => {
-            let mut args = vec!["test", "--workspace", "--all-targets"];
+            let mut args = vec![
+                "test",
+                "--workspace",
+                "--all-targets",
+                "--features",
+                "autd3-rs/legacy",
+            ];
             if *no_pcap {
                 args.extend(PCAP_PACKAGES.iter().flat_map(|pkg| ["--exclude", *pkg]));
             }
             run("cargo", args, root)
         }
         RustCmd::Lint => {
-            let mut args = vec!["clippy", "--workspace", "--all-targets"];
+            let mut args = vec![
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--features",
+                "autd3-rs/legacy",
+            ];
             args.extend(["--", "-D", "warnings"]);
-            run("cargo", args, root)
+            run("cargo", args, root)?;
+
+            let default_feature_args = vec![
+                "clippy",
+                "-p",
+                "autd3-rs",
+                "--all-targets",
+                "--",
+                "-D",
+                "warnings",
+            ];
+            run("cargo", default_feature_args, root)
         }
         RustCmd::Format { fix } => {
             let mut args = vec!["fmt", "--all"];
@@ -78,6 +109,10 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
                 args.push("--check");
             }
             run("cargo", args, root)
+        }
+        RustCmd::Golden => {
+            let dir = root.join("crates/autd3-rs/tests/golden/generator");
+            run("cargo", ["run", "--release", "--", "../legacy_v38_pack.tsv"], &dir)
         }
         RustCmd::Publish { dry_run } => publish_workspace(root, *dry_run),
         RustCmd::Example {

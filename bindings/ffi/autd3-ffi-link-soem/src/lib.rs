@@ -3,8 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_ffi_abi::{
-    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
-    client_opener, into_handle, join_err, link_runtime, to_ns,
+    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
+    ResponseTokenData, client_opener, into_handle, join_err, legacy_client_opener, link_runtime,
+    to_ns,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -168,9 +169,8 @@ impl CheckerBackend for SoemChecker {
     }
 }
 
-#[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub unsafe extern "C" fn autd3_link_soem(
+unsafe fn make_option(
     iface: *const c_char,
     has_sync0_period: bool,
     sync0_period_ns: u64,
@@ -180,7 +180,7 @@ pub unsafe extern "C" fn autd3_link_soem(
     sync_tolerance_ns: u64,
     has_sync_timeout: bool,
     sync_timeout_ns: u64,
-) -> *mut ClientOpener {
+) -> CoreOption {
     let iface = if iface.is_null() {
         None
     } else {
@@ -206,6 +206,35 @@ pub unsafe extern "C" fn autd3_link_soem(
     if has_sync_timeout {
         option.sync_timeout = Duration::from_nanos(sync_timeout_ns);
     }
+    option
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+pub unsafe extern "C" fn autd3_link_soem(
+    iface: *const c_char,
+    has_sync0_period: bool,
+    sync0_period_ns: u64,
+    has_sync0_shift: bool,
+    sync0_shift_ns: u64,
+    has_sync_tolerance: bool,
+    sync_tolerance_ns: u64,
+    has_sync_timeout: bool,
+    sync_timeout_ns: u64,
+) -> *mut ClientOpener {
+    let option = unsafe {
+        make_option(
+            iface,
+            has_sync0_period,
+            sync0_period_ns,
+            has_sync0_shift,
+            sync0_shift_ns,
+            has_sync_tolerance,
+            sync_tolerance_ns,
+            has_sync_timeout,
+            sync_timeout_ns,
+        )
+    };
     let opener = client_opener(move |geometry, config| async move {
         let (client, checker) = link_runtime()
             .spawn(async move { Client::open_with_checker(&geometry, option, config).await })
@@ -218,6 +247,35 @@ pub unsafe extern "C" fn autd3_link_soem(
         Ok(backend)
     });
     into_handle(opener)
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+pub unsafe extern "C" fn autd3_link_soem_legacy(
+    iface: *const c_char,
+    has_sync0_period: bool,
+    sync0_period_ns: u64,
+    has_sync0_shift: bool,
+    sync0_shift_ns: u64,
+    has_sync_tolerance: bool,
+    sync_tolerance_ns: u64,
+    has_sync_timeout: bool,
+    sync_timeout_ns: u64,
+) -> *mut LegacyClientOpener {
+    let option = unsafe {
+        make_option(
+            iface,
+            has_sync0_period,
+            sync0_period_ns,
+            has_sync0_shift,
+            sync0_shift_ns,
+            has_sync_tolerance,
+            sync_tolerance_ns,
+            has_sync_timeout,
+            sync_timeout_ns,
+        )
+    };
+    into_handle(legacy_client_opener(move |_| Ok(option)))
 }
 
 #[repr(C)]

@@ -15,7 +15,7 @@ tokio = { workspace = true, optional = true }
 pyo3.workspace = true
 
 [features]
-client = ["dep:autd3-rs", "dep:tokio"]
+client = ["dep:autd3-rs", "autd3-rs/legacy", "dep:tokio"]
 
 [lints]
 workspace = true

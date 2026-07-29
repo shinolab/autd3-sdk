@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use autd3_ffi_abi::{
-    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
-    client_opener, into_handle, join_err, link_runtime,
+    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
+    ResponseTokenData, client_opener, into_handle, join_err, legacy_client_opener, link_runtime,
 };
 use autd3_rs::Error;
+use autd3_rs::legacy::emulator::LegacyAudit;
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::{ConstStateChecker, StateCheck};
 use tokio::sync::Mutex;
@@ -182,4 +183,15 @@ pub extern "C" fn autd3_link_nop() -> *mut ClientOpener {
         Ok(backend)
     });
     into_handle(opener)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_link_nop_legacy() -> *mut LegacyClientOpener {
+    into_handle(legacy_client_opener(|geometry| {
+        Ok(LegacyAudit::new(
+            geometry
+                .iter()
+                .map(autd3_rs_core::geometry::Device::num_transducers),
+        ))
+    }))
 }

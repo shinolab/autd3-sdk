@@ -23,6 +23,7 @@ members = [
 ]
 exclude = [
     "xtask",
+    "crates/autd3-rs/tests/golden/generator",
     "firmware/cpu/board",
     "bindings/python",
     "bindings/ffi",

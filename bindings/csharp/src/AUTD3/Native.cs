@@ -135,4 +135,75 @@ namespace AUTD3
         [DllImport(Lib)]
         internal static extern void autd3_link_status_free(IntPtr status);
     }
+
+    internal static class NativeLegacyClient
+    {
+        private const string Lib = "autd3capi";
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_legacy_client_config_new(uint timeoutCycles);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_client_config_free(IntPtr config);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_legacy_datagram_builder_new(IntPtr geometry);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_datagram_builder_push(IntPtr builder, IntPtr op);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_legacy_op_change_segment(byte kind, byte bank, byte transitionMode, ulong transitionValue);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_op_free(IntPtr op);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_datagram_builder_push_legacy(IntPtr builder, IntPtr op);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_datagram_builder_push_each(IntPtr builder, IntPtr[] ops, UIntPtr numDevices);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_datagram_builder_free(IntPtr builder);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_legacy_datagram_builder_build(IntPtr builder, byte[] outErr, UIntPtr outErrLen);
+
+        [DllImport(Lib)]
+        internal static extern UIntPtr autd3_legacy_frames_num_frames(IntPtr frames);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_frames_free(IntPtr frames);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_client_open(IntPtr geometry, IntPtr link, IntPtr config, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern UIntPtr autd3_legacy_client_num_devices(IntPtr client);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_client_send(IntPtr client, IntPtr frames, long frame, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_client_send_checked(IntPtr client, IntPtr frames, long frame, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_client_read_firmware_version(IntPtr client, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_client_read_fpga_state(IntPtr client, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_legacy_client_checker(IntPtr client);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_client_stop(IntPtr client, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_client_close(IntPtr client, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_legacy_client_free(IntPtr client);
+    }
 }

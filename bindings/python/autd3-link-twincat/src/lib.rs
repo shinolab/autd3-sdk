@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, join_err,
-    link_into_capsule, link_runtime,
+    legacy_client_opener, legacy_link_into_capsule, link_into_capsule, link_runtime,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames, StateCheck};
@@ -272,6 +272,22 @@ impl TwinCATLinkOption {
             Ok(backend)
         });
         link_into_capsule(py, opener)
+    }
+
+    fn _legacy_capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
+        let server = self.server;
+        let timeouts = self.timeouts;
+        legacy_link_into_capsule(
+            py,
+            legacy_client_opener(move |_| {
+                Ok(match server {
+                    ServerSpec::Local => CoreOption::local_with_timeouts(timeouts),
+                    ServerSpec::Remote { addr, ams_net_id } => {
+                        CoreOption::remote_with_timeouts(addr, ams_net_id, timeouts)
+                    }
+                })
+            }),
+        )
     }
 }
 

@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use autd3_ffi_abi::{
-    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LinkStatusData, ResponseTokenData,
-    client_opener, into_handle, join_err, link_runtime,
+    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
+    ResponseTokenData, client_opener, into_handle, join_err, legacy_client_opener, link_runtime,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -201,4 +201,26 @@ pub unsafe extern "C" fn autd3_link_remote(
         Ok(backend)
     });
     into_handle(opener)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_remote_legacy(
+    addr: *const c_char,
+    timeout_ns: u64,
+) -> *mut LegacyClientOpener {
+    if addr.is_null() {
+        return std::ptr::null_mut();
+    }
+    let addr = unsafe { CStr::from_ptr(addr) }
+        .to_string_lossy()
+        .into_owned();
+    let Ok(addr) = addr.parse::<SocketAddr>() else {
+        return std::ptr::null_mut();
+    };
+    into_handle(legacy_client_opener(move |_| {
+        Ok(RemoteLinkOption {
+            addr,
+            timeout: (timeout_ns != 0).then(|| std::time::Duration::from_nanos(timeout_ns)),
+        })
+    }))
 }

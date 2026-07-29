@@ -29,7 +29,9 @@ use autd3_rs::{
 use autd3_rs::{DeviceState, Telemetry};
 use tokio::runtime::{Builder, Runtime};
 
-fn runtime() -> &'static Runtime {
+mod legacy;
+
+pub(crate) fn runtime() -> &'static Runtime {
     static RT: OnceLock<Runtime> = OnceLock::new();
     RT.get_or_init(|| {
         Builder::new_multi_thread()
@@ -39,7 +41,7 @@ fn runtime() -> &'static Runtime {
     })
 }
 
-unsafe fn write_cstr(buf: *mut c_char, len: usize, s: &str) {
+pub(crate) unsafe fn write_cstr(buf: *mut c_char, len: usize, s: &str) {
     if buf.is_null() || len == 0 {
         return;
     }
@@ -184,6 +186,19 @@ macro_rules! foci_points {
                 config: StmConfig,
                 option: FociStmOption,
                 builder: &mut CoreDatagramBuilder<'a>,
+            ) {
+                match self {
+                    $(FociPoints::$variant(v) => {
+                        builder.push(CoreFociStm::new(config, v.as_slice(), option));
+                    })*
+                }
+            }
+
+            pub(crate) fn push_legacy_into<'a>(
+                &'a self,
+                config: StmConfig,
+                option: FociStmOption,
+                builder: &mut autd3_rs::legacy::LegacyDatagramBuilder<'a>,
             ) {
                 match self {
                     $(FociPoints::$variant(v) => {
@@ -1489,7 +1504,7 @@ pub struct LinkStatus {
     recoveries: u64,
 }
 
-fn to_cstrings(values: Vec<String>) -> Vec<CString> {
+pub(crate) fn to_cstrings(values: Vec<String>) -> Vec<CString> {
     values
         .into_iter()
         .map(|s| CString::new(s.replace('\0', " ")).unwrap_or_default())

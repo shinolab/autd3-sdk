@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, join_err,
-    link_into_capsule, link_runtime,
+    legacy_client_opener, legacy_link_into_capsule, link_into_capsule, link_runtime,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, ConstStateChecker, Frames, StateCheck};
@@ -202,6 +202,14 @@ impl RemoteLinkOption {
             Ok(backend)
         });
         link_into_capsule(py, opener)
+    }
+
+    fn _legacy_capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
+        let option = CoreOption {
+            addr: self.addr,
+            timeout: self.timeout,
+        };
+        legacy_link_into_capsule(py, legacy_client_opener(move |_| Ok(option)))
     }
 }
 
