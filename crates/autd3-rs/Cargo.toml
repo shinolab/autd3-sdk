@@ -29,9 +29,13 @@ windows-sys = { version = "0.61.2", features = [
 ] }
 
 [dev-dependencies]
-autd3-rs-modulation.workspace = true
-autd3-rs-pattern.workspace = true
-tokio = { workspace = true, features = ["sync", "time", "macros", "rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = [
+    "sync",
+    "time",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+] }
 
 [lints]
 workspace = true

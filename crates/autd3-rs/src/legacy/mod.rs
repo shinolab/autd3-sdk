@@ -5,7 +5,6 @@ pub mod op;
 mod client;
 mod command;
 mod datagram;
-mod golden;
 mod wire;
 
 pub use client::{LegacyClient, LegacyClientConfig, LegacyResponse, MAX_DEVICES};
