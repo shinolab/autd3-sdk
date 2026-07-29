@@ -11,6 +11,7 @@ pub(crate) const MIT_WHEELS: &[&str] = &[
     "autd3-pattern",
     "autd3-pattern-holo",
     "autd3-modulation",
+    "autd3-link-echocat",
     "autd3-link-ethercrab",
     "autd3-link-remote",
     "autd3-link-twincat",

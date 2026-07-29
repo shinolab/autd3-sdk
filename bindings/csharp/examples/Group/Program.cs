@@ -19,7 +19,7 @@ internal static class Program
             new Autd3(new Vector3(Autd3.DeviceWidth, 0f, 0f)),
         });
 
-        using var client = await Client.OpenAsync(geometry, new EtherCrabLinkOption(), new ClientConfig());
+        using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
 

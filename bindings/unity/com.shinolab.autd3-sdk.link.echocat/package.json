@@ -1,0 +1,20 @@
+{
+  "name": "com.shinolab.autd3-sdk.link.echocat",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shinolab/autd3-sdk.git",
+    "directory": "bindings/unity/com.shinolab.autd3-sdk.link.echocat"
+  },
+  "version": "0.4.0",
+  "displayName": "AUTD3 Link echocat",
+  "description": "AUTD3 echocat EtherCAT link (Unity binding).",
+  "unity": "6000.0",
+  "license": "MIT",
+  "author": {
+    "name": "Shun Suzuki",
+    "url": "https://github.com/shinolab"
+  },
+  "dependencies": {
+    "com.shinolab.autd3-sdk": "0.4.0"
+  }
+}

@@ -13,6 +13,7 @@ bindings/unity/
   com.shinolab.autd3-sdk.pattern/       # AUTD3.Pattern
   com.shinolab.autd3-sdk.pattern.holo/  # AUTD3.Pattern.Holo
   com.shinolab.autd3-sdk.modulation/    # AUTD3.Modulation
+  com.shinolab.autd3-sdk.link.echocat/    # default EtherCAT link
   com.shinolab.autd3-sdk.link.ethercrab/
   com.shinolab.autd3-sdk.link.nop/
   com.shinolab.autd3-sdk.link.remote/
@@ -62,7 +63,7 @@ from the registry automatically.
   ],
   "dependencies": {
     "com.shinolab.autd3-sdk": "0.1.0",
-    "com.shinolab.autd3-sdk.link.ethercrab": "0.1.0"
+    "com.shinolab.autd3-sdk.link.echocat": "0.1.0"
   }
 }
 ```
@@ -136,5 +137,5 @@ written fully qualified as `new AUTD3.Link.Nop()`.
 - Targets are Editor + Standalone (Windows / macOS / Linux). Mobile / IL2CPP device builds are
   not validated yet.
 - On Linux, EtherCAT raw sockets need `CAP_NET_RAW`; setting that on the Editor is impractical,
-  so real-hardware use is primarily Windows (TwinCAT / ethercrab + Npcap).
+  so real-hardware use is primarily Windows (TwinCAT / echocat + Npcap).
 - `com.shinolab.autd3-sdk.link.soem` is GPL-3.0-only. Installing it makes the resulting build GPL.

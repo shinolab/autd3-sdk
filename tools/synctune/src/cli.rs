@@ -18,8 +18,8 @@ pub enum Mode {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum LinkKind {
     #[default]
-    Ethercrab,
     Echocat,
+    Ethercrab,
     Soem,
 }
 
@@ -123,7 +123,7 @@ pub struct TuneArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct Common {
-    #[arg(long, value_enum, default_value_t = LinkKind::Ethercrab)]
+    #[arg(long, value_enum, default_value_t = LinkKind::Echocat)]
     pub link: LinkKind,
     #[arg(
         long,

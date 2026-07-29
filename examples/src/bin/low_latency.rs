@@ -10,7 +10,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_ethercrab::EtherCrabLinkOption;
+use autd3_rs_link_echocat::EchocatLinkOption;
 
 const ITERATIONS: usize = 1000;
 const WARMUP: usize = 10;
@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
 
     let client = Client::open(
         &geometry,
-        EtherCrabLinkOption::default(),
+        EchocatLinkOption::default(),
         ClientConfig {
             low_latency: ENABLE_LOW_LATENCY,
             ..ClientConfig::default()

@@ -161,7 +161,7 @@ version = "0.4.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
- "autd3-rs-link-ethercrab",
+ "autd3-rs-link-echocat",
  "autd3-rs-link-remote",
  "autd3-rs-modulation",
  "autd3-rs-pattern",

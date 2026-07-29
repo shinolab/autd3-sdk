@@ -4,7 +4,7 @@ import math
 
 import numpy as np
 
-import autd3_link_ethercrab as ethercrab
+import autd3_link_echocat as echocat
 import autd3_pattern as pattern
 from autd3 import MAX_INFLIGHT, Client, ClientConfig
 from autd3.commands import Pattern, SetSilencer
@@ -20,7 +20,7 @@ async def main() -> None:
 
     client = await Client.open(
         geometry,
-        ethercrab.EtherCrabLinkOption(),
+        echocat.EchocatLinkOption(),
         ClientConfig(),
     )
 

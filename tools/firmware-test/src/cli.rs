@@ -6,8 +6,8 @@ use clap::{Parser, ValueEnum};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum LinkKind {
     #[default]
-    Ethercrab,
     Echocat,
+    Ethercrab,
     Soem,
     Twincat,
     Remote,
@@ -16,7 +16,7 @@ pub enum LinkKind {
 #[derive(Parser, Debug, Clone)]
 #[command(name = "autd3-rs-firmware-test", about)]
 pub struct Cli {
-    #[arg(long, value_enum, default_value_t = LinkKind::Ethercrab)]
+    #[arg(long, value_enum, default_value_t = LinkKind::Echocat)]
     pub link: LinkKind,
     #[arg(long, default_value = None)]
     pub interface: Option<String>,

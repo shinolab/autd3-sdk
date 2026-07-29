@@ -17,6 +17,7 @@ Link 実装はそれぞれ独立したパッケージで提供される. 使用�
 | Link | Rust | Python | C# |
 | ---- | ---- | ------ | -- |
 | [TwinCAT](/autd3-sdk/api/link/twincat/) | `autd3-rs-link-twincat` | `autd3-link-twincat` | `AUTD3.Link.TwinCAT` |
+| [echocat](/autd3-sdk/api/link/echocat/) | `autd3-rs-link-echocat` | `autd3-link-echocat` | `AUTD3.Link.Echocat` |
 | [EtherCrab](/autd3-sdk/api/link/ethercrab/) | `autd3-rs-link-ethercrab` | `autd3-link-ethercrab` | `AUTD3.Link.Ethercrab` |
 | [SOEM](/autd3-sdk/api/link/soem/) | `autd3-rs-link-soem` | `autd3-link-soem` | `AUTD3.Link.Soem` |
 | [Remote](/autd3-sdk/api/link/remote/) | `autd3-rs-link-remote` | `autd3-link-remote` | `AUTD3.Link.Remote` |
@@ -36,11 +37,11 @@ Link は `Client::open` に Link Option を渡すことで構築する. Option �
 Link と OS の組み合わせごとの大まかな性能の傾向を以下に示す. 
 値は NIC・カーネル設定・OS チューニングなどに強く依存するため, あくまで目安である. 
 
-| 指標         | TwinCAT (Windows) | EtherCrab (mac/Linux) | EtherCrab (Windows) | SOEM (mac/Linux) | SOEM (Windows) |
-| ------------ | ----------------- | --------------------- | ------------------- | ---------------- | -------------- |
-| スループット | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                | ⭐⭐⭐           | ⭐⭐           |
-| レイテンシ   | ⭐                | ⭐⭐⭐                | ⭐⭐                | ⭐⭐⭐           | ⭐⭐           |
-| 安定性       | ⭐⭐⭐            | ⭐⭐                  | ⭐                  | ⭐⭐             | ⭐             |
+| 指標         | TwinCAT (Windows) | echocat (mac/Linux) | echocat (Windows) | EtherCrab (mac/Linux) | EtherCrab (Windows) | SOEM (mac/Linux) | SOEM (Windows) |
+| ------------ | ----------------- | ------------------- | ----------------- | --------------------- | ------------------- | ---------------- | -------------- |
+| スループット | ⭐⭐              | ⭐⭐⭐              | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                | ⭐⭐⭐           | ⭐⭐           |
+| レイテンシ   | ⭐                | ⭐⭐⭐              | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                | ⭐⭐⭐           | ⭐⭐           |
+| 安定性       | ⭐⭐⭐            | ⭐⭐                | ⭐                | ⭐⭐                  | ⭐                  | ⭐⭐             | ⭐             |
 
 参考として, 以下に各環境での実測値を載せる.
 

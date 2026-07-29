@@ -122,6 +122,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-ffi-link-echocat"
+version = "0.4.0"
+dependencies = [
+ "autd3-ffi-abi",
+ "autd3-rs",
+ "autd3-rs-core",
+ "autd3-rs-link-echocat",
+ "tokio",
+]
+
+[[package]]
 name = "autd3-ffi-link-ethercrab"
 version = "0.4.0"
 dependencies = [
@@ -235,6 +246,18 @@ version = "0.4.0"
 dependencies = [
  "autd3-cpu-fw",
  "autd3-rs-core",
+]
+
+[[package]]
+name = "autd3-rs-link-echocat"
+version = "0.4.0"
+dependencies = [
+ "autd3-rs-core",
+ "cc",
+ "libc",
+ "pcap",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]

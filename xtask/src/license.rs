@@ -11,6 +11,7 @@ const PY_MIT_WHEELS: &[&str] = &[
     "autd3-pattern",
     "autd3-pattern-holo",
     "autd3-modulation",
+    "autd3-link-echocat",
     "autd3-link-ethercrab",
     "autd3-link-remote",
     "autd3-link-twincat",
@@ -25,6 +26,7 @@ const CS_PACKAGES: &[(&str, &str)] = &[
     ("AUTD3.Pattern", "autd3-ffi-pattern"),
     ("AUTD3.Pattern.Holo", "autd3-ffi-pattern-holo"),
     ("AUTD3.Modulation", "autd3-ffi-modulation"),
+    ("AUTD3.Link.Echocat", "autd3-ffi-link-echocat"),
     ("AUTD3.Link.Ethercrab", "autd3-ffi-link-ethercrab"),
     ("AUTD3.Link.Remote", "autd3-ffi-link-remote"),
     ("AUTD3.Link.TwinCAT", "autd3-ffi-link-twincat"),
@@ -42,6 +44,10 @@ const UNITY_PACKAGES: &[(&str, &str)] = &[
         "autd3-ffi-pattern-holo",
     ),
     ("com.shinolab.autd3-sdk.modulation", "autd3-ffi-modulation"),
+    (
+        "com.shinolab.autd3-sdk.link.echocat",
+        "autd3-ffi-link-echocat",
+    ),
     (
         "com.shinolab.autd3-sdk.link.ethercrab",
         "autd3-ffi-link-ethercrab",

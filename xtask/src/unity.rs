@@ -65,6 +65,12 @@ const PACKAGES: &[UnityPkg] = &[
         gpl: false,
     },
     UnityPkg {
+        id: "com.shinolab.autd3-sdk.link.echocat",
+        assembly: "AUTD3.Link.Echocat",
+        lib: "autd3_link_echocat",
+        gpl: false,
+    },
+    UnityPkg {
         id: "com.shinolab.autd3-sdk.link.ethercrab",
         assembly: "AUTD3.Link.Ethercrab",
         lib: "autd3_link_ethercrab",

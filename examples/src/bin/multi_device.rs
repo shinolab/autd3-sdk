@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitQuaternion};
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_ethercrab::EtherCrabLinkOption;
+use autd3_rs_link_echocat::EchocatLinkOption;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
 
     let client = Client::open(
         &geometry,
-        EtherCrabLinkOption::default(),
+        EchocatLinkOption::default(),
         ClientConfig::default(),
     )
     .await?;

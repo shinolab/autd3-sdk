@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{Client, ClientConfig, LinkStatus};
-use autd3_rs_link_ethercrab::EtherCrabLinkOption;
+use autd3_rs_link_echocat::EchocatLinkOption;
 
 const CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR: open
     let (client, mut checker) = Client::open_with_checker(
         &geometry,
-        EtherCrabLinkOption::default(),
+        EchocatLinkOption::default(),
         ClientConfig::default(),
     )
     .await?;

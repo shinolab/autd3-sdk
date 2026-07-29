@@ -16,7 +16,7 @@ This section explains how to drive a single device.
 
 ## Installing the required software
 
-This tutorial uses [EtherCrab](https://github.com/ethercrab-rs/ethercrab).
+This tutorial uses [echocat](/autd3-sdk/en/api/link/echocat/).
 If you are on Windows, install [Npcap](https://npcap.com/) in "**WinPcap API-compatible Mode**".
 
 The following is an example that generates a focal point 150 mm directly above the center of the array with a single AUTD3 device and applies a 200 Hz sine-wave AM.
@@ -24,13 +24,13 @@ The following is an example that generates a focal point 150 mm directly above t
 <CodeTabs>
 <Fragment slot="rust" >
 First, create an appropriate project and add the autd3 library as a dependency.
-Also add the autd3-link-ethercrab library, which handles communication with the device.
+Also add the autd3-rs-link-echocat library, which handles communication with the device.
 An asynchronous runtime is also required, so add tokio as well.
 
 ```
 cargo new --bin autd3-sample && cd autd3-sample
 cargo add autd3-rs
-cargo add autd3-rs-link-ethercrab
+cargo add autd3-rs-link-echocat
 cargo add tokio --features full
 ```
 Next, edit the `src/main.rs` file to look like the following.
@@ -42,20 +42,20 @@ Then, run it.
 cargo run --release
 ```
 
-On Linux and macOS, administrator privileges may be required to use EtherCrab. In that case, use:
+On Linux and macOS, administrator privileges may be required to use echocat. In that case, use:
 ```
 cargo build --release && sudo ./target/release/autd3_sample
 ```
 </Fragment>
 <Fragment slot="python" >
 First, create an appropriate directory, prepare a virtual environment, and add the autd3 library.
-Also add autd3-link-ethercrab for communication with the device, autd3-pattern for focus computation, and autd3-modulation for AM modulation.
+Also add autd3-link-echocat for communication with the device, autd3-pattern for focus computation, and autd3-modulation for AM modulation.
 
 ```
 mkdir autd3-sample && cd autd3-sample
 python3 -m venv .venv
 source .venv/bin/activate
-pip install autd3 autd3-pattern autd3-modulation autd3-link-ethercrab
+pip install autd3 autd3-pattern autd3-modulation autd3-link-echocat
 ```
 Next, make the `main.py` file look like the following.
 
@@ -66,21 +66,21 @@ Then, run it.
 python3 main.py
 ```
 
-On Linux and macOS, administrator privileges may be required to use EtherCrab. In that case, use:
+On Linux and macOS, administrator privileges may be required to use echocat. In that case, use:
 ```
 sudo .venv/bin/python3 main.py
 ```
 </Fragment>
 <Fragment slot="csharp">
 First, create an appropriate directory and add the autd3 library.
-Also add AUTD3.Link.Ethercrab for communication with the device, AUTD3.Pattern for focus computation, and AUTD3.Modulation for AM modulation.
+Also add AUTD3.Link.Echocat for communication with the device, AUTD3.Pattern for focus computation, and AUTD3.Modulation for AM modulation.
 
 ```
 dotnet new console -o autd3-sample && cd autd3-sample
 dotnet add package AUTD3
 dotnet add package AUTD3.Pattern
 dotnet add package AUTD3.Modulation
-dotnet add package AUTD3.Link.Ethercrab
+dotnet add package AUTD3.Link.Echocat
 ```
 Next, make the `Program.cs` file look like the following.
 
@@ -91,6 +91,6 @@ Then, run it.
 dotnet run -c Release
 ```
 
-On Linux and macOS, administrator privileges may be required to use EtherCrab.
+On Linux and macOS, administrator privileges may be required to use echocat.
 </Fragment>
 </CodeTabs>
