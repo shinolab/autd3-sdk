@@ -21,7 +21,8 @@ internal static class Sample
                 maxResyncRounds: 8,
                 lowLatency: false,
                 resetResendCycles: 2,
-                rtPriority: null,
+                rtPriority: 80,
+                disableRtPriority: false,
                 rtAffinity: null,
                 validateState: true
             )

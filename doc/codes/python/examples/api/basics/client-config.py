@@ -17,7 +17,8 @@ async def main() -> None:
             max_resync_rounds=8,
             low_latency=False,
             reset_resend_cycles=2,
-            rt_priority=None,
+            rt_priority=80,
+            disable_rt_priority=False,
             rt_affinity=None,
             validate_state=True,
         )
