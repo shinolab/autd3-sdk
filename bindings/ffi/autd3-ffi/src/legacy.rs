@@ -15,7 +15,9 @@ use autd3_rs::commands::{
     FociStmOption, ForceFan, Modulation, Nop, Pattern, PatternStm, PatternStmOption, SetGpioOut,
     SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, Synchronize,
 };
-use autd3_rs::legacy::{LegacyChangePatternBank, LegacyClientConfig, LegacyDatagramBuilder, LegacyFrames};
+use autd3_rs::legacy::{
+    LegacyChangePatternBank, LegacyClientConfig, LegacyDatagramBuilder, LegacyFrames,
+};
 use autd3_rs::value::{PatternBank, SamplingConfig, TransitionMode};
 
 use crate::{

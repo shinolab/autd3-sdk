@@ -13,8 +13,9 @@ use autd3_rs::commands::{
     Pattern as CorePattern, PatternStm as CorePatternStm,
 };
 use autd3_rs::legacy::{
-    LegacyChangePatternBank as CoreLegacyChangePatternBank, LegacyClientConfig as CoreLegacyClientConfig,
-    LegacyCommand, LegacyDatagramBuilder as CoreLegacyBuilder, LegacyFrames as CoreLegacyFrames,
+    LegacyChangePatternBank as CoreLegacyChangePatternBank,
+    LegacyClientConfig as CoreLegacyClientConfig, LegacyCommand,
+    LegacyDatagramBuilder as CoreLegacyBuilder, LegacyFrames as CoreLegacyFrames,
 };
 use autd3_rs::value::{SamplingConfig, TransitionMode as CoreTransitionMode};
 use pyo3::exceptions::{PyIndexError, PyValueError};
@@ -151,7 +152,11 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreLegacyBuilder<'a>) -
     Ok(())
 }
 
-#[pyclass(name = "LegacyChangePatternBank", module = "autd3", skip_from_py_object)]
+#[pyclass(
+    name = "LegacyChangePatternBank",
+    module = "autd3",
+    skip_from_py_object
+)]
 #[derive(Clone, Copy)]
 pub struct LegacyChangePatternBank {
     inner: CoreLegacyChangePatternBank,
@@ -170,7 +175,10 @@ impl LegacyChangePatternBank {
     #[pyo3(signature = (bank, transition_mode = None))]
     fn foci_stm(bank: PatternBank, transition_mode: Option<TransitionMode>) -> Self {
         Self {
-            inner: CoreLegacyChangePatternBank::foci_stm(bank.0, unwrap_transition_mode(transition_mode)),
+            inner: CoreLegacyChangePatternBank::foci_stm(
+                bank.0,
+                unwrap_transition_mode(transition_mode),
+            ),
         }
     }
 
@@ -178,7 +186,10 @@ impl LegacyChangePatternBank {
     #[pyo3(signature = (bank, transition_mode = None))]
     fn pattern_stm(bank: PatternBank, transition_mode: Option<TransitionMode>) -> Self {
         Self {
-            inner: CoreLegacyChangePatternBank::pattern_stm(bank.0, unwrap_transition_mode(transition_mode)),
+            inner: CoreLegacyChangePatternBank::pattern_stm(
+                bank.0,
+                unwrap_transition_mode(transition_mode),
+            ),
         }
     }
 }
@@ -220,7 +231,8 @@ impl LegacyDatagramBuilder {
     fn push(&mut self, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         if let Ok(op) = obj.cast::<LegacyChangePatternBank>() {
             let op = *op.borrow();
-            self.pending.push(LegacyItem::LegacyChangePatternBank(op.inner));
+            self.pending
+                .push(LegacyItem::LegacyChangePatternBank(op.inner));
             return Ok(());
         }
         let pending = self.inner.pop_pushed(obj)?;
