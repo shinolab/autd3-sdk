@@ -1,0 +1,32 @@
+name: console-release-notes
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: write
+
+jobs:
+  simplify-powershell-command:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Rewrite the PowerShell install command
+        run: |
+          body=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body)
+          fixed=$(printf '%s' "$body" | sed -E 's/powershell -ExecutionPolicy Bypass -c "(.*)"$/\1/')
+          if [ "$body" = "$fixed" ]; then
+            echo "::warning::PowerShell install snippet not found; release notes left as dist generated them"
+            exit 0
+          fi
+          printf '%s' "$fixed" | gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file -

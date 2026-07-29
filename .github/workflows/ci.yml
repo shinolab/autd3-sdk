@@ -90,6 +90,7 @@ jobs:
               - '.cargo/**'
               - '.github/workflows/ci-console.yml'
               - '.github/workflows/parts/console-build-setup.yml'
+              - '.github/workflows/console-release-notes.yml'
             emulator:
               - *shared
               - *xtask-core
