@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 
@@ -30,20 +30,52 @@ pub fn on_path(name: &str) -> bool {
     })
 }
 
+#[cfg(target_os = "linux")]
+fn setcap_program() -> Option<String> {
+    if on_path("setcap") {
+        return Some("setcap".to_owned());
+    }
+    ["/usr/bin/setcap", "/usr/sbin/setcap", "/sbin/setcap"]
+        .into_iter()
+        .find(|path| Path::new(path).is_file())
+        .map(str::to_owned)
+}
+
+#[cfg(target_os = "linux")]
+fn grant_net_raw(bin: &Path) -> bool {
+    let Some(setcap) = setcap_program() else {
+        return false;
+    };
+    Command::new("sudo")
+        .args(["-n", &setcap, "cap_net_raw+ep"])
+        .arg(bin)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn grant_net_raw(_bin: &Path) -> bool {
+    false
+}
+
 pub fn run_built_bin(bin: &Path, args: &[String], no_sudo: bool, cwd: &Path) -> Result<()> {
     let bin_str = bin.to_string_lossy().into_owned();
-    let use_sudo = !no_sudo && cfg!(unix);
-    if use_sudo {
-        let mut sudo_args: Vec<String> = Vec::with_capacity(args.len() + 2);
-        if let Ok(log) = std::env::var("RUST_LOG") {
-            sudo_args.push(format!("RUST_LOG={log}"));
-        }
-        sudo_args.push(bin_str);
-        sudo_args.extend(args.iter().cloned());
-        run("sudo", sudo_args.iter().map(String::as_str), cwd)
-    } else {
-        run(&bin_str, args.iter().map(String::as_str), cwd)
+    if no_sudo || !cfg!(unix) {
+        return run(&bin_str, args.iter().map(String::as_str), cwd);
     }
+    if grant_net_raw(bin) {
+        println!("granted CAP_NET_RAW to {bin_str}; running without sudo");
+        return run(&bin_str, args.iter().map(String::as_str), cwd);
+    }
+    let mut sudo_args: Vec<String> = Vec::with_capacity(args.len() + 2);
+    if let Ok(log) = std::env::var("RUST_LOG") {
+        sudo_args.push(format!("RUST_LOG={log}"));
+    }
+    sudo_args.push(bin_str);
+    sudo_args.extend(args.iter().cloned());
+    run("sudo", sudo_args.iter().map(String::as_str), cwd)
 }
 
 pub fn capture(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
