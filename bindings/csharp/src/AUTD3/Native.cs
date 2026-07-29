@@ -141,7 +141,12 @@ namespace AUTD3
         private const string Lib = "autd3capi";
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_legacy_client_config_new(uint timeoutCycles);
+        internal static extern IntPtr autd3_legacy_client_config_new(
+            uint timeoutCycles,
+            [MarshalAs(UnmanagedType.I1)] bool hasRtPriority,
+            byte rtPriority,
+            [MarshalAs(UnmanagedType.I1)] bool hasRtAffinity,
+            UIntPtr rtAffinity);
 
         [DllImport(Lib)]
         internal static extern void autd3_legacy_client_config_free(IntPtr config);

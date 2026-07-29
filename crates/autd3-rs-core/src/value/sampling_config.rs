@@ -30,6 +30,8 @@ pub enum SamplingConfigError {
     FreqOutOfRangeF(Freq<f32>, Freq<f32>, Freq<f32>),
     #[error("Sampling period ({0:?}) is out of range ([{1:?}, {2:?}])")]
     PeriodOutOfRange(Duration, Duration, Duration),
+    #[error("STM period ({0:?}) must be divisible by the number of samples ({1})")]
+    StmPeriodIndivisible(Duration, usize),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -42,6 +44,7 @@ enum SamplingConfigInner {
     Period(Duration),
     FreqNearest(Freq<f32>),
     PeriodNearest(Duration),
+    Invalid(SamplingConfigError),
 }
 
 #[derive(Clone, Copy)]
@@ -68,6 +71,7 @@ impl Debug for SamplingConfig {
             SamplingConfigInner::PeriodNearest(period) => {
                 write!(f, "SamplingConfig::PeriodNearest({:?})", Nearest(period))
             }
+            SamplingConfigInner::Invalid(e) => write!(f, "SamplingConfig::Invalid({e})"),
         }
     }
 }
@@ -99,6 +103,12 @@ impl From<Nearest<Freq<f32>>> for SamplingConfig {
 impl From<Nearest<Duration>> for SamplingConfig {
     fn from(value: Nearest<Duration>) -> Self {
         Self(SamplingConfigInner::PeriodNearest(value.0))
+    }
+}
+
+impl From<SamplingConfigError> for SamplingConfig {
+    fn from(value: SamplingConfigError) -> Self {
+        Self(SamplingConfigInner::Invalid(value))
     }
 }
 
@@ -151,6 +161,7 @@ impl SamplingConfig {
                     / ULTRASOUND_PERIOD.as_nanos())
                 .clamp(1, u16::MAX as u128) as u16)
             }
+            SamplingConfigInner::Invalid(e) => Err(e),
         }
     }
 

@@ -77,6 +77,13 @@ pub enum LegacyError {
     )]
     UnsupportedFirmware { device: usize, version: String },
 
+    #[error(
+        "device {device} returned fpga state {state:#04x} with the valid bit clear; \
+         the fpga state reads were turned off (a Clear or ReadsFpgaState(false) command) \
+         and re-enabling them did not take effect"
+    )]
+    FpgaStateInvalid { device: usize, state: u8 },
+
     #[error("geometry has {geometry} device(s) but the link exposes {link}")]
     DeviceCountMismatch { geometry: usize, link: usize },
 
