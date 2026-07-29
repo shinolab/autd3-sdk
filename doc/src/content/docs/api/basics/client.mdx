@@ -58,7 +58,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | `max_resync_rounds`    | `NonZeroU32`          | `8`             | 再同期を試みる最大ラウンド数                               |
 | `low_latency`          | `bool`                | `false`         | 低レイテンシモード          |
 | `reset_resend_cycles`  | `NonZeroU32`          | `2`             | リセット命令の送信サイクル数                             |
-| `rt_priority`          | `Option<ThreadPriority>` | `None`       | RT スレッドの優先度 (未指定なら OS 既定) |
+| `rt_priority`          | `Option<ThreadPriority>` | Windows: `TimeCritical` / その他: `80` | RT スレッドの優先度. `None` にすると OS 既定. |
 | `rt_policy`            | `RtSchedulePolicy`    | `Fifo`          | `rt_priority` 指定時のスケジューリングポリシー. `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
 | `rt_affinity`          | `Option<CoreId>`      | `None`          | RT スレッドの CPU affinity (未指定なら OS 既定)      |
 | `validate_state`       | `bool`                | `true`          | 送信前検証を有効にする                     |

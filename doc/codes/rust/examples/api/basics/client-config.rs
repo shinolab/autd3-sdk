@@ -3,7 +3,9 @@ use anyhow::Result;
 use std::num::{NonZeroU32, NonZeroUsize};
 
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, ClientConfig, MAX_INFLIGHT, RtSchedulePolicy};
+use autd3_rs::{
+    Client, ClientConfig, MAX_INFLIGHT, RtSchedulePolicy, ThreadPriority, ThreadPriorityValue,
+};
 use autd3_rs_link_nop::Nop;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -19,7 +21,9 @@ async fn main() -> Result<()> {
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: NonZeroU32::new(2).unwrap(),
-            rt_priority: None,
+            rt_priority: Some(ThreadPriority::Crossplatform(
+                ThreadPriorityValue::try_from(80).unwrap(),
+            )),
             rt_policy: RtSchedulePolicy::Fifo,
             rt_affinity: None,
             validate_state: true,
