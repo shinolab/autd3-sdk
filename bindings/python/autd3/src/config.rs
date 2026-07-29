@@ -20,6 +20,7 @@ impl ClientConfig {
         max_resync_rounds = None,
         reset_resend_cycles = None,
         rt_priority = None,
+        disable_rt_priority = false,
         rt_affinity = None,
         validate_state = None,
     ))]
@@ -31,6 +32,7 @@ impl ClientConfig {
         max_resync_rounds: Option<u32>,
         reset_resend_cycles: Option<u32>,
         rt_priority: Option<u8>,
+        disable_rt_priority: bool,
         rt_affinity: Option<usize>,
         validate_state: Option<bool>,
     ) -> PyResult<Self> {
@@ -52,6 +54,14 @@ impl ClientConfig {
         if let Some(v) = reset_resend_cycles {
             inner.reset_resend_cycles = NonZeroU32::new(v)
                 .ok_or_else(|| PyValueError::new_err("reset_resend_cycles must be >= 1"))?;
+        }
+        if rt_priority.is_some() && disable_rt_priority {
+            return Err(PyValueError::new_err(
+                "rt_priority and disable_rt_priority are mutually exclusive",
+            ));
+        }
+        if disable_rt_priority {
+            inner.rt_priority = None;
         }
         if let Some(v) = rt_priority {
             let value = ThreadPriorityValue::try_from(v)

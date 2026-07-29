@@ -14,8 +14,13 @@ namespace AUTD3
         public uint MaxResyncRounds { get; }
         public uint ResetResendCycles { get; }
         public byte? RtPriority { get; }
+        public bool DisableRtPriority { get; }
         public ulong? RtAffinity { get; }
         public bool ValidateState { get; }
+
+        private const byte RtPriorityModeDefault = 0;
+        private const byte RtPriorityModeDisabled = 1;
+        private const byte RtPriorityModeExplicit = 2;
 
         public ClientConfig() : this(lowLatency: false)
         {
@@ -28,15 +33,21 @@ namespace AUTD3
             uint maxResyncRounds = 8,
             uint resetResendCycles = 2,
             byte? rtPriority = null,
+            bool disableRtPriority = false,
             ulong? rtAffinity = null,
             bool validateState = true)
         {
+            if (rtPriority.HasValue && disableRtPriority)
+            {
+                throw new ArgumentException("rtPriority and disableRtPriority are mutually exclusive");
+            }
             LowLatency = lowLatency;
             TimeoutCycles = timeoutCycles;
             MaxInflight = maxInflight;
             MaxResyncRounds = maxResyncRounds;
             ResetResendCycles = resetResendCycles;
             RtPriority = rtPriority;
+            DisableRtPriority = disableRtPriority;
             RtAffinity = rtAffinity;
             ValidateState = validateState;
         }
@@ -49,7 +60,11 @@ namespace AUTD3
                 (UIntPtr)MaxInflight,
                 MaxResyncRounds,
                 ResetResendCycles,
-                RtPriority.HasValue,
+                RtPriority.HasValue
+                    ? RtPriorityModeExplicit
+                    : DisableRtPriority
+                        ? RtPriorityModeDisabled
+                        : RtPriorityModeDefault,
                 RtPriority ?? 0,
                 RtAffinity.HasValue,
                 (UIntPtr)(RtAffinity ?? 0),

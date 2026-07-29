@@ -19,7 +19,7 @@ namespace AUTD3
             UIntPtr maxInflight,
             uint maxResyncRounds,
             uint resetResendCycles,
-            [MarshalAs(UnmanagedType.I1)] bool hasRtPriority,
+            byte rtPriorityMode,
             byte rtPriority,
             [MarshalAs(UnmanagedType.I1)] bool hasRtAffinity,
             UIntPtr rtAffinity,

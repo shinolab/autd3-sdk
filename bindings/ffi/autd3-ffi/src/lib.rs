@@ -352,6 +352,10 @@ pub unsafe extern "C" fn autd3_stm_line(
     0
 }
 
+pub const AUTD3_RT_PRIORITY_DEFAULT: u8 = 0;
+pub const AUTD3_RT_PRIORITY_DISABLED: u8 = 1;
+pub const AUTD3_RT_PRIORITY_EXPLICIT: u8 = 2;
+
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn autd3_client_config_new(
@@ -360,7 +364,7 @@ pub extern "C" fn autd3_client_config_new(
     max_inflight: usize,
     max_resync_rounds: u32,
     reset_resend_cycles: u32,
-    has_rt_priority: bool,
+    rt_priority_mode: u8,
     rt_priority: u8,
     has_rt_affinity: bool,
     rt_affinity: usize,
@@ -373,13 +377,14 @@ pub extern "C" fn autd3_client_config_new(
     ) else {
         return std::ptr::null_mut();
     };
-    let rt_priority = if has_rt_priority {
-        match ThreadPriorityValue::try_from(rt_priority) {
+    let rt_priority = match rt_priority_mode {
+        AUTD3_RT_PRIORITY_DEFAULT => ClientConfig::default().rt_priority,
+        AUTD3_RT_PRIORITY_DISABLED => None,
+        AUTD3_RT_PRIORITY_EXPLICIT => match ThreadPriorityValue::try_from(rt_priority) {
             Ok(value) => Some(ThreadPriority::Crossplatform(value)),
             Err(_) => return std::ptr::null_mut(),
-        }
-    } else {
-        None
+        },
+        _ => return std::ptr::null_mut(),
     };
     let rt_affinity = has_rt_affinity.then_some(CoreId { id: rt_affinity });
     into_handle(ClientConfig {
