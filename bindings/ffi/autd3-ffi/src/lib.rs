@@ -1247,8 +1247,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
         unsafe { &*client }.0.dc_offset_ns()
     };
     let builder = unsafe { &*builder };
-    let mut core =
-        CoreDatagramBuilder::with_dc_offset(Arc::clone(&builder.geometry), dc_offset_ns);
+    let mut core = CoreDatagramBuilder::with_dc_offset(Arc::clone(&builder.geometry), dc_offset_ns);
     for pending in &builder.pending {
         match pending {
             Pending::Pattern {
