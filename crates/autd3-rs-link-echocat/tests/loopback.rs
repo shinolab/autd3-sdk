@@ -40,10 +40,6 @@ impl RawBus for LoopbackBus {
     fn mtu(&self) -> usize {
         self.inner.mtu()
     }
-
-    fn echoes_sent_frames(&self) -> bool {
-        true
-    }
 }
 
 fn test_config() -> MasterConfig {

@@ -12,8 +12,8 @@ pub struct EchocatLinkOption {
     pub state_transition_timeout: Duration,
     pub dc_static_sync_iterations: u32,
     pub dc_start_delay: Duration,
-    pub dc_sync_tolerance: Duration,
-    pub dc_sync_timeout: Duration,
+    pub sync_tolerance: Duration,
+    pub sync_timeout: Duration,
     pub process_data_watchdog: Duration,
     pub sleep_strategy: SleepStrategy,
 }
@@ -32,8 +32,8 @@ impl Default for EchocatLinkOption {
             state_transition_timeout: Duration::from_secs(10),
             dc_static_sync_iterations: 10_000,
             dc_start_delay: Duration::from_millis(100),
-            dc_sync_tolerance: Duration::from_micros(1),
-            dc_sync_timeout: Duration::from_secs(10),
+            sync_tolerance: Duration::from_micros(1),
+            sync_timeout: Duration::from_secs(10),
             process_data_watchdog: Duration::from_millis(100),
             sleep_strategy: SleepStrategy::Sleep,
         }
@@ -48,8 +48,8 @@ impl From<&EchocatLinkOption> for MasterConfig {
             state_transition_timeout: option.state_transition_timeout,
             dc_static_sync_iterations: option.dc_static_sync_iterations,
             dc_start_delay: option.dc_start_delay,
-            dc_sync_tolerance: option.dc_sync_tolerance,
-            dc_sync_timeout: option.dc_sync_timeout,
+            sync_tolerance: option.sync_tolerance,
+            sync_timeout: option.sync_timeout,
             process_data_watchdog: option.process_data_watchdog,
             sleep_strategy: option.sleep_strategy,
         }

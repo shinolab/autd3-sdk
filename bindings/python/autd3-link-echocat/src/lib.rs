@@ -185,8 +185,8 @@ impl EchocatLinkOption {
         state_transition_timeout = None,
         dc_static_sync_iterations = None,
         dc_start_delay = None,
-        dc_sync_tolerance = None,
-        dc_sync_timeout = None,
+        sync_tolerance = None,
+        sync_timeout = None,
         process_data_watchdog = None,
         spin_margin = None,
     ))]
@@ -198,8 +198,8 @@ impl EchocatLinkOption {
         state_transition_timeout: Option<&Bound<'_, PyAny>>,
         dc_static_sync_iterations: Option<u32>,
         dc_start_delay: Option<&Bound<'_, PyAny>>,
-        dc_sync_tolerance: Option<&Bound<'_, PyAny>>,
-        dc_sync_timeout: Option<&Bound<'_, PyAny>>,
+        sync_tolerance: Option<&Bound<'_, PyAny>>,
+        sync_timeout: Option<&Bound<'_, PyAny>>,
         process_data_watchdog: Option<&Bound<'_, PyAny>>,
         spin_margin: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
@@ -222,11 +222,11 @@ impl EchocatLinkOption {
         if let Some(v) = opt_duration(dc_start_delay)? {
             inner.dc_start_delay = v;
         }
-        if let Some(v) = opt_duration(dc_sync_tolerance)? {
-            inner.dc_sync_tolerance = v;
+        if let Some(v) = opt_duration(sync_tolerance)? {
+            inner.sync_tolerance = v;
         }
-        if let Some(v) = opt_duration(dc_sync_timeout)? {
-            inner.dc_sync_timeout = v;
+        if let Some(v) = opt_duration(sync_timeout)? {
+            inner.sync_timeout = v;
         }
         if let Some(v) = opt_duration(process_data_watchdog)? {
             inner.process_data_watchdog = v;

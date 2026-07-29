@@ -27,12 +27,12 @@ On Windows, [npcap](https://nmap.org/npcap/) must be installed in "WinPcap API-c
 | --------------------------- | ----------- | -------------------------------------------------------------------------------- |
 | `iface`                     | `Interface` | network interface to use. `Interface::Auto` for automatic selection, `Interface::Name(..)` to specify by name |
 | `sync0_period`              | `Duration`  | period of the SYNC0 signal (= the cyclic frame period)                           |
-| `pdu_timeout`               | `Duration`  | timeout to wait for the response to a single PDU                                 |
+| `pdu_timeout`               | `Duration`  | timeout to wait for the response to a single PDU         |
 | `state_transition_timeout`  | `Duration`  | timeout to wait for an EtherCAT state transition (INIT → PRE-OP → SAFE-OP → OP)  |
 | `dc_static_sync_iterations` | `u32`       | number of frames used for DC static drift compensation                           |
 | `dc_start_delay`            | `Duration`  | how far ahead of the current bus time the SYNC0 start time is placed             |
-| `dc_sync_tolerance`         | `Duration`  | tolerance considered as synchronization complete                                 |
-| `dc_sync_timeout`           | `Duration`  | timeout to wait for synchronization to complete                                  |
+| `sync_tolerance`            | `Duration`  | tolerance considered as synchronization complete                                 |
+| `sync_timeout`              | `Duration`  | timeout to wait for synchronization to complete                                  |
 | `process_data_watchdog`     | `Duration`  | time after which a subdevice detects that process data has stopped               |
 | `sleep_strategy`            | `SleepStrategy` | how to wait for the next cycle                                               |
 

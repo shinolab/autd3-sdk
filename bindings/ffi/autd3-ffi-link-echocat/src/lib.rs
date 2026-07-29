@@ -186,10 +186,10 @@ unsafe fn make_option(
     dc_static_sync_iterations: u32,
     has_dc_start_delay: bool,
     dc_start_delay_ns: u64,
-    has_dc_sync_tolerance: bool,
-    dc_sync_tolerance_ns: u64,
-    has_dc_sync_timeout: bool,
-    dc_sync_timeout_ns: u64,
+    has_sync_tolerance: bool,
+    sync_tolerance_ns: u64,
+    has_sync_timeout: bool,
+    sync_timeout_ns: u64,
     has_process_data_watchdog: bool,
     process_data_watchdog_ns: u64,
     has_spin_margin: bool,
@@ -223,11 +223,11 @@ unsafe fn make_option(
     if has_dc_start_delay {
         option.dc_start_delay = Duration::from_nanos(dc_start_delay_ns);
     }
-    if has_dc_sync_tolerance {
-        option.dc_sync_tolerance = Duration::from_nanos(dc_sync_tolerance_ns);
+    if has_sync_tolerance {
+        option.sync_tolerance = Duration::from_nanos(sync_tolerance_ns);
     }
-    if has_dc_sync_timeout {
-        option.dc_sync_timeout = Duration::from_nanos(dc_sync_timeout_ns);
+    if has_sync_timeout {
+        option.sync_timeout = Duration::from_nanos(sync_timeout_ns);
     }
     if has_process_data_watchdog {
         option.process_data_watchdog = Duration::from_nanos(process_data_watchdog_ns);
@@ -254,10 +254,10 @@ pub unsafe extern "C" fn autd3_link_echocat(
     dc_static_sync_iterations: u32,
     has_dc_start_delay: bool,
     dc_start_delay_ns: u64,
-    has_dc_sync_tolerance: bool,
-    dc_sync_tolerance_ns: u64,
-    has_dc_sync_timeout: bool,
-    dc_sync_timeout_ns: u64,
+    has_sync_tolerance: bool,
+    sync_tolerance_ns: u64,
+    has_sync_timeout: bool,
+    sync_timeout_ns: u64,
     has_process_data_watchdog: bool,
     process_data_watchdog_ns: u64,
     has_spin_margin: bool,
@@ -276,10 +276,10 @@ pub unsafe extern "C" fn autd3_link_echocat(
             dc_static_sync_iterations,
             has_dc_start_delay,
             dc_start_delay_ns,
-            has_dc_sync_tolerance,
-            dc_sync_tolerance_ns,
-            has_dc_sync_timeout,
-            dc_sync_timeout_ns,
+            has_sync_tolerance,
+            sync_tolerance_ns,
+            has_sync_timeout,
+            sync_timeout_ns,
             has_process_data_watchdog,
             process_data_watchdog_ns,
             has_spin_margin,
@@ -314,10 +314,10 @@ pub unsafe extern "C" fn autd3_link_echocat_legacy(
     dc_static_sync_iterations: u32,
     has_dc_start_delay: bool,
     dc_start_delay_ns: u64,
-    has_dc_sync_tolerance: bool,
-    dc_sync_tolerance_ns: u64,
-    has_dc_sync_timeout: bool,
-    dc_sync_timeout_ns: u64,
+    has_sync_tolerance: bool,
+    sync_tolerance_ns: u64,
+    has_sync_timeout: bool,
+    sync_timeout_ns: u64,
     has_process_data_watchdog: bool,
     process_data_watchdog_ns: u64,
     has_spin_margin: bool,
@@ -336,10 +336,10 @@ pub unsafe extern "C" fn autd3_link_echocat_legacy(
             dc_static_sync_iterations,
             has_dc_start_delay,
             dc_start_delay_ns,
-            has_dc_sync_tolerance,
-            dc_sync_tolerance_ns,
-            has_dc_sync_timeout,
-            dc_sync_timeout_ns,
+            has_sync_tolerance,
+            sync_tolerance_ns,
+            has_sync_timeout,
+            sync_timeout_ns,
             has_process_data_watchdog,
             process_data_watchdog_ns,
             has_spin_margin,

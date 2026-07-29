@@ -16,8 +16,8 @@ async fn main() -> Result<()> {
     let state_transition_timeout = Duration::from_secs(10);
     let dc_static_sync_iterations = 10_000;
     let dc_start_delay = Duration::from_millis(100);
-    let dc_sync_tolerance = Duration::from_micros(1);
-    let dc_sync_timeout = Duration::from_secs(10);
+    let sync_tolerance = Duration::from_micros(1);
+    let sync_timeout = Duration::from_secs(10);
     let process_data_watchdog = Duration::from_millis(100);
     let sleep_strategy = SleepStrategy::Sleep;
     // ANCHOR: api
@@ -28,8 +28,8 @@ async fn main() -> Result<()> {
         state_transition_timeout,
         dc_static_sync_iterations,
         dc_start_delay,
-        dc_sync_tolerance,
-        dc_sync_timeout,
+        sync_tolerance,
+        sync_timeout,
         process_data_watchdog,
         sleep_strategy,
     };

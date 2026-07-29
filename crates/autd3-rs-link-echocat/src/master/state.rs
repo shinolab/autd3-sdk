@@ -39,6 +39,16 @@ impl BusState {
         }
     }
 
+    pub fn lose(&self, device: usize) {
+        self.observe(device, UNOBSERVED);
+    }
+
+    pub fn lose_all(&self) {
+        for slot in &self.inner.al_status {
+            slot.store(UNOBSERVED, Ordering::Relaxed);
+        }
+    }
+
     pub fn record_recovery(&self) {
         self.inner.recoveries.fetch_add(1, Ordering::Relaxed);
     }

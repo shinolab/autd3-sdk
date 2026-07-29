@@ -29,9 +29,9 @@ impl<B: RawBus> Master<B> {
     }
 
     pub fn wait_for_dc_sync(&mut self) -> Result<(), EchocatError> {
-        let tolerance = u32::try_from(self.config.dc_sync_tolerance.as_nanos())
+        let tolerance = u32::try_from(self.config.sync_tolerance.as_nanos())
             .expect("tolerance fits in u32 nanoseconds");
-        let deadline = Instant::now() + self.config.dc_sync_timeout;
+        let deadline = Instant::now() + self.config.sync_timeout;
         let node = Self::station_address(0);
         loop {
             let mut time = [0u8; 8];
@@ -59,7 +59,7 @@ impl<B: RawBus> Master<B> {
                     tolerance_ns = tolerance,
                     "distributed clocks did not settle",
                 );
-                return Err(EchocatError::DcSyncTimeout(self.config.dc_sync_timeout));
+                return Err(EchocatError::DcSyncTimeout(self.config.sync_timeout));
             }
         }
     }

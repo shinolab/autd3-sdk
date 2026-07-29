@@ -27,12 +27,12 @@ Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mo
 | --------------------------- | ----------- | ------------------------------------------------------------------------------- |
 | `iface`                     | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
 | `sync0_period`              | `Duration`  | SYNC0 信号の周期 (= フレームの送出周期)                             |
-| `pdu_timeout`               | `Duration`  | 1 つの PDU の応答を待つタイムアウト                                             |
+| `pdu_timeout`               | `Duration`  | 1 つの PDU の応答を待つタイムアウト                   |
 | `state_transition_timeout`  | `Duration`  | EtherCAT 状態遷移 (INIT → PRE-OP → SAFE-OP → OP) を待つタイムアウト             |
 | `dc_static_sync_iterations` | `u32`       | DC の静的ドリフト補正で回すフレーム数                                           |
 | `dc_start_delay`            | `Duration`  | SYNC0 の開始時刻を現在のバス時刻からどれだけ先に置くか                          |
-| `dc_sync_tolerance`         | `Duration`  | 同期完了とみなす許容誤差                                                        |
-| `dc_sync_timeout`           | `Duration`  | 同期完了を待つタイムアウト                                                      |
+| `sync_tolerance`            | `Duration`  | 同期完了とみなす許容誤差                                                        |
+| `sync_timeout`              | `Duration`  | 同期完了を待つタイムアウト                                                      |
 | `process_data_watchdog`     | `Duration`  | サブデバイスがプロセスデータの途絶を検出するまでの時間                          |
 | `sleep_strategy`            | `SleepStrategy` | 次のサイクルまでの待ち方                                                    |
 
