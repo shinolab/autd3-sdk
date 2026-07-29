@@ -10,6 +10,8 @@ use crate::wire::{
     FRAME_HEADER_BYTES, FrameBuilder, FrameView, MIN_ETHERNET_FRAME_BYTES, Slot,
 };
 
+pub const LOSE_CONTACT_AFTER_CYCLES: u32 = 3;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Role {
     DcTime,
@@ -155,7 +157,7 @@ impl<B: RawBus> Master<B> {
         let slots = frames.iter().map(|d| Vec::with_capacity(d.len())).collect();
         let indices = vec![0u8; frames.len()];
         let sent = vec![0usize; frames.len()];
-        let echo_pending = vec![false; frames.len()];
+        let echo_pending = vec![true; frames.len()];
         let received = vec![false; frames.len()];
 
         tracing::debug!(
@@ -172,6 +174,25 @@ impl<B: RawBus> Master<B> {
             echo_pending,
             received,
         };
+    }
+
+    fn cyclic_deadline(&self) -> Duration {
+        self.config.cycle.min(self.config.pdu_timeout)
+    }
+
+    fn account_for_al_status(&mut self, observed: bool) {
+        if observed {
+            self.unobserved_cycles = 0;
+            return;
+        }
+        self.unobserved_cycles = self.unobserved_cycles.saturating_add(1);
+        if self.unobserved_cycles == LOSE_CONTACT_AFTER_CYCLES {
+            tracing::warn!(
+                cycles = LOSE_CONTACT_AFTER_CYCLES,
+                "no AL status came back for the last cycles; reporting the bus as lost",
+            );
+            self.state.lose_all();
+        }
     }
 
     pub fn exchange(&mut self, tx: &[u8], rx: &mut [u8]) -> Result<CycleReport, EchocatError> {
@@ -193,7 +214,7 @@ impl<B: RawBus> Master<B> {
             let index = self.index;
             self.plan.indices[frame] = index;
             self.plan.received[frame] = false;
-            self.plan.echo_pending[frame] = self.bus.echoes_sent_frames();
+            self.plan.echo_pending[frame] = true;
             self.plan.slots[frame].clear();
 
             let buffer = &mut self.plan.buffers[frame];
@@ -227,8 +248,9 @@ impl<B: RawBus> Master<B> {
         let mut rx_valid = true;
         let mut dc_system_time = 0u64;
         let mut al_status = 0u16;
+        let mut al_status_observed = false;
         let mut outstanding = self.plan.frames.len();
-        let deadline = std::time::Instant::now() + self.config.pdu_timeout;
+        let deadline = std::time::Instant::now() + self.cyclic_deadline();
 
         while outstanding > 0 {
             let now = std::time::Instant::now();
@@ -253,10 +275,14 @@ impl<B: RawBus> Master<B> {
             if self.plan.received[frame] {
                 continue;
             }
-            if super::is_echo(
-                &self.rx[..len],
-                &self.plan.buffers[frame][..self.plan.sent[frame]],
-            ) {
+            if self.plan.echo_pending[frame]
+                && super::is_echo(
+                    &self.rx[..len],
+                    &self.plan.buffers[frame][..self.plan.sent[frame]],
+                )
+            {
+                tracing::trace!("discarding a frame the interface looped back");
+                self.plan.echo_pending[frame] = false;
                 continue;
             }
             let Ok(view) = FrameView::parse(&self.rx[..len], self.plan.indices[frame]) else {
@@ -281,11 +307,12 @@ impl<B: RawBus> Master<B> {
                         al_status = u16::from_le_bytes([data[0], data[1]]);
                     }
                     Role::DeviceAlStatus => {
+                        al_status_observed = true;
                         if wkc == datagram.expected_wkc {
                             let data = view.data(*slot)?;
                             self.state.observe(observed, data[0]);
                         } else {
-                            self.state.observe(observed, 0xff);
+                            self.state.lose(observed);
                         }
                     }
                     Role::Inputs => {
@@ -299,6 +326,7 @@ impl<B: RawBus> Master<B> {
         if outstanding > 0 {
             rx_valid = false;
         }
+        self.account_for_al_status(al_status_observed);
 
         Ok(CycleReport {
             rx_valid,

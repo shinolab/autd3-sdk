@@ -28,7 +28,6 @@ pub fn interface_candidates() -> io::Result<Vec<String>> {
 
 pub struct RawSocket {
     capture: Capture<Active>,
-    echoes_sent_frames: bool,
 }
 
 impl RawSocket {
@@ -42,23 +41,18 @@ impl RawSocket {
             .open()
             .map_err(|e| to_io(&e))?;
 
-        let echoes_sent_frames = if let Err(e) = capture.direction(Direction::In) {
+        if let Err(e) = capture.direction(Direction::In) {
             tracing::warn!(
                 interface,
-                "the driver keeps looping sent frames back; they are rejected by comparison: {e}"
+                "the driver refused an inbound-only capture; sent frames are rejected by \
+                 comparison instead: {e}"
             );
-            true
-        } else {
-            false
-        };
+        }
         capture
             .filter(&format!("ether proto {ETHERTYPE_ETHERCAT:#06x}"), true)
             .map_err(|e| to_io(&e))?;
 
-        Ok(Self {
-            capture,
-            echoes_sent_frames,
-        })
+        Ok(Self { capture })
     }
 }
 
@@ -88,9 +82,5 @@ impl RawBus for RawSocket {
 
     fn mtu(&self) -> usize {
         MTU
-    }
-
-    fn echoes_sent_frames(&self) -> bool {
-        self.echoes_sent_frames
     }
 }

@@ -11,12 +11,12 @@ namespace AUTD3.Link
         public TimeSpan? StateTransitionTimeout { get; }
         public uint? DcStaticSyncIterations { get; }
         public TimeSpan? DcStartDelay { get; }
-        public TimeSpan? DcSyncTolerance { get; }
-        public TimeSpan? DcSyncTimeout { get; }
+        public TimeSpan? SyncTolerance { get; }
+        public TimeSpan? SyncTimeout { get; }
         public TimeSpan? ProcessDataWatchdog { get; }
         public TimeSpan? SpinMargin { get; }
 
-        public EchocatLinkOption(Interface? iface = null, TimeSpan? sync0Period = null, TimeSpan? pduTimeout = null, TimeSpan? stateTransitionTimeout = null, uint? dcStaticSyncIterations = null, TimeSpan? dcStartDelay = null, TimeSpan? dcSyncTolerance = null, TimeSpan? dcSyncTimeout = null, TimeSpan? processDataWatchdog = null, TimeSpan? spinMargin = null)
+        public EchocatLinkOption(Interface? iface = null, TimeSpan? sync0Period = null, TimeSpan? pduTimeout = null, TimeSpan? stateTransitionTimeout = null, uint? dcStaticSyncIterations = null, TimeSpan? dcStartDelay = null, TimeSpan? syncTolerance = null, TimeSpan? syncTimeout = null, TimeSpan? processDataWatchdog = null, TimeSpan? spinMargin = null)
         {
             Iface = iface ?? Interface.Auto;
             Sync0Period = sync0Period;
@@ -24,8 +24,8 @@ namespace AUTD3.Link
             StateTransitionTimeout = stateTransitionTimeout;
             DcStaticSyncIterations = dcStaticSyncIterations;
             DcStartDelay = dcStartDelay;
-            DcSyncTolerance = dcSyncTolerance;
-            DcSyncTimeout = dcSyncTimeout;
+            SyncTolerance = syncTolerance;
+            SyncTimeout = syncTimeout;
             ProcessDataWatchdog = processDataWatchdog;
             SpinMargin = spinMargin;
         }
@@ -41,8 +41,8 @@ namespace AUTD3.Link
                 StateTransitionTimeout.HasValue, ToNs(StateTransitionTimeout),
                 DcStaticSyncIterations.HasValue, DcStaticSyncIterations ?? 0,
                 DcStartDelay.HasValue, ToNs(DcStartDelay),
-                DcSyncTolerance.HasValue, ToNs(DcSyncTolerance),
-                DcSyncTimeout.HasValue, ToNs(DcSyncTimeout),
+                SyncTolerance.HasValue, ToNs(SyncTolerance),
+                SyncTimeout.HasValue, ToNs(SyncTimeout),
                 ProcessDataWatchdog.HasValue, ToNs(ProcessDataWatchdog),
                 SpinMargin.HasValue, ToNs(SpinMargin));
             if (opener == IntPtr.Zero)
@@ -61,8 +61,8 @@ namespace AUTD3.Link
                 StateTransitionTimeout.HasValue, ToNs(StateTransitionTimeout),
                 DcStaticSyncIterations.HasValue, DcStaticSyncIterations ?? 0,
                 DcStartDelay.HasValue, ToNs(DcStartDelay),
-                DcSyncTolerance.HasValue, ToNs(DcSyncTolerance),
-                DcSyncTimeout.HasValue, ToNs(DcSyncTimeout),
+                SyncTolerance.HasValue, ToNs(SyncTolerance),
+                SyncTimeout.HasValue, ToNs(SyncTimeout),
                 ProcessDataWatchdog.HasValue, ToNs(ProcessDataWatchdog),
                 SpinMargin.HasValue, ToNs(SpinMargin));
             if (opener == IntPtr.Zero)
@@ -85,8 +85,8 @@ namespace AUTD3.Link
             [MarshalAs(UnmanagedType.I1)] bool hasStateTransitionTimeout, ulong stateTransitionTimeoutNs,
             [MarshalAs(UnmanagedType.I1)] bool hasDcStaticSyncIterations, uint dcStaticSyncIterations,
             [MarshalAs(UnmanagedType.I1)] bool hasDcStartDelay, ulong dcStartDelayNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasDcSyncTolerance, ulong dcSyncToleranceNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasDcSyncTimeout, ulong dcSyncTimeoutNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasSyncTolerance, ulong syncToleranceNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasSyncTimeout, ulong syncTimeoutNs,
             [MarshalAs(UnmanagedType.I1)] bool hasProcessDataWatchdog, ulong processDataWatchdogNs,
             [MarshalAs(UnmanagedType.I1)] bool hasSpinMargin, ulong spinMarginNs);
 
@@ -98,8 +98,8 @@ namespace AUTD3.Link
             [MarshalAs(UnmanagedType.I1)] bool hasStateTransitionTimeout, ulong stateTransitionTimeoutNs,
             [MarshalAs(UnmanagedType.I1)] bool hasDcStaticSyncIterations, uint dcStaticSyncIterations,
             [MarshalAs(UnmanagedType.I1)] bool hasDcStartDelay, ulong dcStartDelayNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasDcSyncTolerance, ulong dcSyncToleranceNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasDcSyncTimeout, ulong dcSyncTimeoutNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasSyncTolerance, ulong syncToleranceNs,
+            [MarshalAs(UnmanagedType.I1)] bool hasSyncTimeout, ulong syncTimeoutNs,
             [MarshalAs(UnmanagedType.I1)] bool hasProcessDataWatchdog, ulong processDataWatchdogNs,
             [MarshalAs(UnmanagedType.I1)] bool hasSpinMargin, ulong spinMarginNs);
     }

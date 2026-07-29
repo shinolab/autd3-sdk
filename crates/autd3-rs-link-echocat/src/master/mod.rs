@@ -4,7 +4,7 @@ pub mod init;
 mod open;
 mod state;
 
-pub use cyclic::{CycleReport, next_cycle_wait};
+pub use cyclic::{CycleReport, LOSE_CONTACT_AFTER_CYCLES, next_cycle_wait};
 pub use state::{BusState, device_state};
 
 use std::time::{Duration, Instant};
@@ -63,8 +63,8 @@ pub struct MasterConfig {
     pub state_transition_timeout: Duration,
     pub dc_static_sync_iterations: u32,
     pub dc_start_delay: Duration,
-    pub dc_sync_tolerance: Duration,
-    pub dc_sync_timeout: Duration,
+    pub sync_tolerance: Duration,
+    pub sync_timeout: Duration,
     pub process_data_watchdog: Duration,
     pub sleep_strategy: SleepStrategy,
 }
@@ -77,8 +77,8 @@ impl Default for MasterConfig {
             state_transition_timeout: Duration::from_secs(10),
             dc_static_sync_iterations: 10_000,
             dc_start_delay: Duration::from_millis(100),
-            dc_sync_tolerance: Duration::from_micros(1),
-            dc_sync_timeout: Duration::from_secs(10),
+            sync_tolerance: Duration::from_micros(1),
+            sync_timeout: Duration::from_secs(10),
             process_data_watchdog: Duration::from_millis(100),
             sleep_strategy: SleepStrategy::Sleep,
         }
@@ -97,6 +97,7 @@ pub struct Master<B: RawBus> {
     last_cycle_at: Option<Instant>,
     op_entered: bool,
     rotation: usize,
+    unobserved_cycles: u32,
     state: BusState,
     phase_bias_ns: i64,
     phase_excursions: u64,
@@ -119,6 +120,7 @@ impl<B: RawBus> Master<B> {
             last_cycle_at: None,
             op_entered: false,
             rotation: 0,
+            unobserved_cycles: 0,
             state: BusState::new(0),
             phase_bias_ns: 0,
             phase_excursions: 0,
@@ -182,7 +184,7 @@ impl<B: RawBus> Master<B> {
 
     fn receive_matching(&mut self, index: u8, sent: usize) -> Result<usize, EchocatError> {
         let deadline = Instant::now() + self.config.pdu_timeout;
-        let mut echo_pending = self.bus.echoes_sent_frames();
+        let mut echo_pending = true;
         loop {
             let now = Instant::now();
             if now >= deadline {
@@ -456,10 +458,6 @@ mod tests {
 
         fn mtu(&self) -> usize {
             self.inner.mtu()
-        }
-
-        fn echoes_sent_frames(&self) -> bool {
-            true
         }
     }
 

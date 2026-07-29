@@ -329,7 +329,8 @@ impl RawSocket {
             events: libc::POLLIN,
             revents: 0,
         };
-        let millis = libc::c_int::try_from(timeout.as_millis()).unwrap_or(libc::c_int::MAX);
+        let millis = libc::c_int::try_from(timeout.as_nanos().div_ceil(1_000_000))
+            .unwrap_or(libc::c_int::MAX);
         // SAFETY: `pollfd` is a live, correctly initialised single-element array.
         let res = unsafe { libc::poll(&raw mut pollfd, 1, millis) };
         if res == -1 {

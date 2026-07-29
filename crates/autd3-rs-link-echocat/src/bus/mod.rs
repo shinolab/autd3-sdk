@@ -21,8 +21,4 @@ pub trait RawBus: Send + 'static {
     fn receive(&mut self, buf: &mut [u8], timeout: Duration) -> io::Result<Option<usize>>;
 
     fn mtu(&self) -> usize;
-
-    fn echoes_sent_frames(&self) -> bool {
-        false
-    }
 }

@@ -14,8 +14,8 @@ internal static class Sample
         var stateTransitionTimeout = TimeSpan.FromSeconds(10);
         uint dcStaticSyncIterations = 10000;
         var dcStartDelay = TimeSpan.FromMilliseconds(100);
-        var dcSyncTolerance = TimeSpan.FromMicroseconds(1);
-        var dcSyncTimeout = TimeSpan.FromSeconds(10);
+        var syncTolerance = TimeSpan.FromMicroseconds(1);
+        var syncTimeout = TimeSpan.FromSeconds(10);
         var processDataWatchdog = TimeSpan.FromMilliseconds(100);
         TimeSpan? spinMargin = null;
         // ANCHOR: api
@@ -26,8 +26,8 @@ internal static class Sample
             stateTransitionTimeout,
             dcStaticSyncIterations,
             dcStartDelay,
-            dcSyncTolerance,
-            dcSyncTimeout,
+            syncTolerance,
+            syncTimeout,
             processDataWatchdog,
             spinMargin
         );

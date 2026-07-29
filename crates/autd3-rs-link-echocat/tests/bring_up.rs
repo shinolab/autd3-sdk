@@ -1,10 +1,11 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::Cmd;
 use autd3_rs_core::DcClock;
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
 use autd3_rs_core::value::DcSysTime;
 use autd3_rs_firmware_emulator::Device;
+use autd3_rs_link_echocat::master::LOSE_CONTACT_AFTER_CYCLES;
 use autd3_rs_link_echocat::master::init::{INPUT_BYTES, OUTPUT_BYTES};
 use autd3_rs_link_echocat::reg::AlState;
 use autd3_rs_link_echocat::sim::{EscSim, ProcessData, SubDevice};
@@ -263,9 +264,11 @@ fn a_dropped_frame_is_reported_as_an_invalid_cycle_and_then_recovers() {
     );
 
     master.bus_mut().drop_next_frames(1);
+    let started = Instant::now();
     let report = master
         .cycle(&tx, &mut rx)
         .expect("a dropped frame is not an error");
+    let stalled_for = started.elapsed();
     assert!(
         !report.rx_valid,
         "a lost frame must not look like a good cycle"
@@ -273,6 +276,97 @@ fn a_dropped_frame_is_reported_as_an_invalid_cycle_and_then_recovers() {
 
     let report = master.cycle(&tx, &mut rx).expect("a cycle completes");
     assert!(report.rx_valid, "the bus recovers on the next cycle");
+
+    let config = test_config();
+    assert!(
+        stalled_for < config.pdu_timeout / 2,
+        "the lost cycle stalled for {stalled_for:?}; giving cyclic receive the acyclic \
+         {:?} budget lets one lost frame outlast the {:?} SM watchdog, which turns a single \
+         drop into every device falling out of OP",
+        config.pdu_timeout,
+        config.process_data_watchdog,
+    );
+}
+
+#[test]
+fn a_bus_that_stops_answering_is_reported_as_lost_instead_of_still_op() {
+    let devices = 2;
+    let mut master = open(devices);
+    let tx = vec![0u8; devices * usize::from(OUTPUT_BYTES)];
+    let mut rx = vec![0u8; devices * usize::from(INPUT_BYTES)];
+    let state = master.state();
+    assert!(state.all_op());
+
+    master
+        .bus_mut()
+        .drop_next_frames(usize::try_from(LOSE_CONTACT_AFTER_CYCLES).expect("fits"));
+    for _ in 0..LOSE_CONTACT_AFTER_CYCLES {
+        assert!(
+            !master
+                .cycle(&tx, &mut rx)
+                .expect("a silent bus is not an error")
+                .rx_valid
+        );
+    }
+
+    assert_eq!(
+        state.states(),
+        vec![autd3_rs_core::DeviceState::Lost; devices],
+        "a bus that answers nothing must not keep publishing the last AL status it \
+         happened to see; all_op() staying true is what stops recover_op from ever running",
+    );
+    assert!(!state.all_op());
+
+    for _ in 0..devices {
+        assert!(
+            master
+                .cycle(&tx, &mut rx)
+                .expect("a cycle completes")
+                .rx_valid
+        );
+    }
+    assert_eq!(
+        state.states(),
+        vec![autd3_rs_core::DeviceState::Op; devices],
+        "the rotation re-observes every device once the answers come back"
+    );
+}
+
+#[test]
+fn a_device_that_fell_out_of_op_while_silent_is_recovered_once_it_answers_again() {
+    let devices = 2;
+    let mut master = open(devices);
+    let tx = vec![0u8; devices * usize::from(OUTPUT_BYTES)];
+    let mut rx = vec![0u8; devices * usize::from(INPUT_BYTES)];
+    let state = master.state();
+
+    master
+        .bus_mut()
+        .drop_next_frames(usize::try_from(LOSE_CONTACT_AFTER_CYCLES).expect("fits"));
+    master.bus_mut().latch_al_error(AlState::SafeOp, 0x001a);
+    for _ in 0..LOSE_CONTACT_AFTER_CYCLES {
+        master.cycle(&tx, &mut rx).expect("a silent bus is fine");
+    }
+    assert_eq!(
+        state.states(),
+        vec![autd3_rs_core::DeviceState::Lost; devices]
+    );
+
+    // What EchocatLink drives every cycle: observe, and act on anything below OP.
+    for _ in 0..8 * devices {
+        master.cycle(&tx, &mut rx).expect("a cycle completes");
+        if !state.all_op() {
+            master.recover_op().expect("recovery goes through");
+        }
+    }
+
+    assert_eq!(
+        state.states(),
+        vec![autd3_rs_core::DeviceState::Op; devices],
+        "the devices dropped to SAFE-OP with a sync error while the frames were gone; \
+         recover_op has to acknowledge that and ask for OP again once they answer",
+    );
+    assert!(state.recoveries() > 0);
 }
 
 #[test]
