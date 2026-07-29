@@ -176,7 +176,7 @@ pub struct Cli {
     #[arg(
         long,
         help = "maps to ClientConfig.rt_priority (0..=99). Omit to keep the library default \
-                (TimeCritical on Windows, unset elsewhere)."
+                (TimeCritical on Windows, SCHED_FIFO 80 elsewhere)."
     )]
     pub rt_priority: Option<u8>,
     #[arg(long, value_enum, default_value_t = RtPolicy::Fifo, help = "maps to ClientConfig.rt_policy")]

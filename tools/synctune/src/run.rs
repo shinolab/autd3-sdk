@@ -13,7 +13,7 @@ use autd3_rs::{
     RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
 };
 use autd3_rs_link_echocat::{EchocatLink, EchocatLinkOption};
-use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
+use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption, EtherCrabLinkOptionFull};
 use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
 
 use crate::cli::{Common, LinkKind, Mode, RtPolicy};
@@ -30,12 +30,26 @@ pub async fn measure_candidate(
     let shift = cand.shift();
     match common.link {
         LinkKind::Ethercrab => {
-            let opt = EtherCrabLinkOption {
+            let mut opt: EtherCrabLinkOptionFull = EtherCrabLinkOption {
                 iface: common.interface.clone().into(),
                 sync0_period: period,
                 sync0_shift: shift,
                 ..Default::default()
+            }
+            .into();
+            if common.no_tx_rx_priority {
+                opt.tx_rx_priority = None;
+            } else if let Some(p) = common.tx_rx_priority {
+                opt.tx_rx_priority = Some(ThreadPriority::Crossplatform(
+                    ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),
+                ));
+            }
+            opt.tx_rx_policy = match common.tx_rx_policy {
+                RtPolicy::Normal => RtSchedulePolicy::Normal,
+                RtPolicy::Fifo => RtSchedulePolicy::Fifo,
+                RtPolicy::RoundRobin => RtSchedulePolicy::RoundRobin,
             };
+            opt.tx_rx_affinity = common.tx_rx_affinity.map(|id| CoreId { id });
             match Box::pin(EtherCrabLink::open(opt)).await {
                 Ok(link) => Box::pin(measure_with_link(link, common, cand, shutdown)).await,
                 Err(e) => Ok(CandidateResult::failed(
@@ -221,11 +235,15 @@ fn client_config(common: &Common, max_inflight: usize) -> ClientConfig {
         max_resync_rounds: common.max_resync_rounds,
         low_latency: common.low_latency,
         reset_resend_cycles: NonZeroU32::new(2).unwrap(),
-        rt_priority: match common.rt_priority {
-            Some(p) => Some(ThreadPriority::Crossplatform(
-                ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),
-            )),
-            None => ClientConfig::default().rt_priority,
+        rt_priority: if common.no_rt_priority {
+            None
+        } else {
+            match common.rt_priority {
+                Some(p) => Some(ThreadPriority::Crossplatform(
+                    ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),
+                )),
+                None => ClientConfig::default().rt_priority,
+            }
         },
         rt_policy: match common.rt_policy {
             RtPolicy::Normal => RtSchedulePolicy::Normal,
