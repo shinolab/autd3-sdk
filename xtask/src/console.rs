@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::simulator::build_backend_and_frontend;
 use crate::tool::build_twincat_cli;
 use crate::util::{
     cargo_bin, cargo_build_args, copy_dir, copy_file, dist_target, ensure_rust_target, exe_name,
-    run,
+    run, run_cargo,
 };
 
 #[derive(Subcommand)]
@@ -84,6 +84,8 @@ pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
 }
 
 fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
+    check_versions_match(console_dir)?;
+
     let target = dist_target();
     if let Some(target) = &target {
         ensure_rust_target(target)?;
@@ -92,8 +94,7 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
 
     crate::license::generate_console(root)?;
 
-    run(
-        "cargo",
+    run_cargo(
         cargo_build_args("autd3-console", target, debug),
         console_dir,
     )?;
@@ -101,11 +102,7 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
 
     let (sim_bin, _) = build_backend_and_frontend(root, debug, target)?;
 
-    run(
-        "cargo",
-        cargo_build_args("autd3-firmware", target, debug),
-        root,
-    )?;
+    run_cargo(cargo_build_args("autd3-firmware", target, debug), root)?;
     let fw_bin = cargo_bin(root, target, debug, "autd3-firmware");
 
     let out_dir = console_dir.join("target").join("distrib");
@@ -127,6 +124,31 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
         out_dir.display()
     );
     Ok(out_dir)
+}
+
+fn check_versions_match(console_dir: &Path) -> Result<()> {
+    let cargo = package_version(&console_dir.join("Cargo.toml"))?;
+    let dist = package_version(&console_dir.join("dist.toml"))?;
+    if cargo != dist {
+        bail!(
+            "console/Cargo.toml is {cargo} but console/dist.toml is {dist}; \
+             run `cargo xtask bump-version console <version>`"
+        );
+    }
+    Ok(())
+}
+
+fn package_version(manifest: &Path) -> Result<String> {
+    let text = std::fs::read_to_string(manifest)
+        .with_context(|| format!("reading {}", manifest.display()))?;
+    let doc: toml_edit::DocumentMut = text
+        .parse()
+        .with_context(|| format!("parsing {}", manifest.display()))?;
+    doc.get("package")
+        .and_then(|package| package.get("version"))
+        .and_then(toml_edit::Item::as_str)
+        .map(str::to_string)
+        .with_context(|| format!("no [package] version in {}", manifest.display()))
 }
 
 fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {

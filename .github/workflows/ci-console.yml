@@ -29,3 +29,14 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo xtask console format
       - run: cargo xtask console lint
+      - name: Install dist
+        if: runner.os == 'Linux'
+        run: |
+          version=$(grep '^cargo-dist-version' dist-workspace.toml | cut -d'"' -f2)
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            "https://github.com/axodotdev/cargo-dist/releases/download/v${version}/cargo-dist-installer.sh" | sh
+      - name: Check dist config
+        if: runner.os == 'Linux'
+        run: |
+          dist generate --check
+          dist plan

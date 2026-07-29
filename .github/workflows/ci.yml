@@ -89,7 +89,7 @@ jobs:
               - 'dist-workspace.toml'
               - '.cargo/**'
               - '.github/workflows/ci-console.yml'
-              - '.github/workflows/console-build-setup.yml'
+              - '.github/workflows/parts/console-build-setup.yml'
             emulator:
               - *shared
               - *xtask-core
