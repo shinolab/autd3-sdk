@@ -17,6 +17,7 @@ use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
 
 use crate::cli::{Common, LinkKind, Mode, RtPolicy};
+use crate::drift::DriftAccumulator;
 use crate::grid::Candidate;
 use crate::monitor::{CandidateResult, CandidateStatus, LoadStats, OpAccumulator};
 
@@ -106,6 +107,7 @@ async fn measure_with_link<L: Link>(
     }
 
     let checker = link.state_checker();
+    let dc_clock = link.dc_clock();
 
     let max_inflight = match common.mode {
         Mode::StopAndWait => 1,
@@ -155,6 +157,8 @@ async fn measure_with_link<L: Link>(
         })
     };
 
+    let sampler = spawn_drift_sampler(dc_clock, common, start, total, shutdown);
+
     let load = run_load(
         &client,
         &geometry,
@@ -167,6 +171,7 @@ async fn measure_with_link<L: Link>(
     .await;
 
     let acc = monitor.await.expect("monitor task panicked");
+    let drift = sampler.await.expect("drift sampler task panicked").finish();
     let _ = client.close().await;
 
     let mut result = acc.into_result(CandidateResult::new(period, shift, cand.shift_percent));
@@ -174,7 +179,39 @@ async fn measure_with_link<L: Link>(
     result.send_success = load.send_success;
     result.send_errors = load.send_errors;
     result.load = load;
+    result.drift = drift;
     Ok(result)
+}
+
+fn spawn_drift_sampler(
+    dc_clock: Option<autd3_rs::DcClock>,
+    common: &Common,
+    start: Instant,
+    total: Duration,
+    shutdown: &Arc<AtomicBool>,
+) -> tokio::task::JoinHandle<DriftAccumulator> {
+    let warmup = common.warmup;
+    let poll = common.poll_interval;
+    let shutdown = Arc::clone(shutdown);
+    tokio::spawn(async move {
+        let mut acc = DriftAccumulator::new();
+        let Some(dc_clock) = dc_clock else {
+            return acc;
+        };
+        loop {
+            if shutdown.load(Ordering::Relaxed) || start.elapsed() >= total {
+                break;
+            }
+            let elapsed = start.elapsed();
+            if elapsed >= warmup
+                && let Some(offset_ns) = dc_clock.offset_ns()
+            {
+                acc.observe(elapsed.saturating_sub(warmup), offset_ns);
+            }
+            tokio::time::sleep(poll).await;
+        }
+        acc
+    })
 }
 
 fn client_config(common: &Common, max_inflight: usize) -> ClientConfig {

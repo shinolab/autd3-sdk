@@ -17,8 +17,8 @@ pub use geometry::{
     point,
 };
 pub use link::{
-    ConstStateChecker, CycleOutcome, DeviceState, Interface, IntoLink, Link, LinkStats, LinkStatus,
-    StateCheck,
+    ConstStateChecker, CycleOutcome, DcClock, DcObservation, DeviceState, Interface, IntoLink,
+    Link, LinkStats, LinkStatus, StateCheck,
 };
 pub use protocol::{
     Cmd, DeviceErrorCode, MAX_INFLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, RxFrame, Seq,

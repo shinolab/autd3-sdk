@@ -2,7 +2,8 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
-use autd3_rs_core::link::{ConstStateChecker, CycleOutcome, Link};
+use autd3_rs_core::link::{ConstStateChecker, CycleOutcome, DcClock, Link};
+use autd3_rs_core::value::DcSysTime;
 use autd3_rs_core::{IntoLink, RX_FRAME_BYTES, TX_FRAME_BYTES};
 
 use crate::error::RemoteLinkError;
@@ -39,6 +40,7 @@ pub struct RemoteLink {
     stream: TcpStream,
     num_devices: usize,
     rx_buf: Vec<u8>,
+    dc_clock: DcClock,
 }
 
 impl RemoteLink {
@@ -86,6 +88,7 @@ impl RemoteLink {
             stream,
             num_devices,
             rx_buf: vec![0u8; num_devices * RX_FRAME_BYTES],
+            dc_clock: DcClock::new(),
         })
     }
 }
@@ -102,6 +105,10 @@ impl Link for RemoteLink {
         ConstStateChecker::new(self.num_devices)
     }
 
+    fn dc_clock(&self) -> Option<DcClock> {
+        Some(self.dc_clock.clone())
+    }
+
     fn cycle(
         &mut self,
         tx: &[[u8; TX_FRAME_BYTES]],
@@ -113,8 +120,15 @@ impl Link for RemoteLink {
 
         let mut valid = [0u8; 1];
         self.stream.read_exact(&mut valid)?;
+        let mut dc_time = [0u8; wire::DC_TIME_BYTES];
+        self.stream.read_exact(&mut dc_time)?;
         self.stream.read_exact(&mut self.rx_buf)?;
         rx.as_flattened_mut().copy_from_slice(&self.rx_buf);
+
+        let dc_time_ns = u64::from_le_bytes(dc_time);
+        if dc_time_ns != wire::DC_TIME_UNAVAILABLE {
+            self.dc_clock.observe(DcSysTime::from_nanos(dc_time_ns));
+        }
 
         Ok(CycleOutcome {
             rx_valid: valid[0] != 0,

@@ -66,13 +66,19 @@ namespace AUTD3
     {
         private readonly Geometry _geometry;
         private readonly int _numDevices;
+        private readonly IntPtr _client;
 
         internal IntPtr Handle { get; private set; }
 
-        public DatagramBuilder(Geometry geometry)
+        public DatagramBuilder(Geometry geometry) : this(geometry, IntPtr.Zero)
+        {
+        }
+
+        internal DatagramBuilder(Geometry geometry, IntPtr client)
         {
             _geometry = geometry;
             _numDevices = geometry.NumDevices;
+            _client = client;
             Handle = NativeClient.autd3_datagram_builder_new(geometry.Handle);
             if (Handle == IntPtr.Zero)
             {
@@ -116,7 +122,7 @@ namespace AUTD3
         public Frames Build()
         {
             var err = new byte[256];
-            var handle = NativeClient.autd3_datagram_builder_build(Handle, err, (UIntPtr)err.Length);
+            var handle = NativeClient.autd3_datagram_builder_build(Handle, _client, err, (UIntPtr)err.Length);
             if (handle == IntPtr.Zero)
             {
                 throw new Autd3Exception(NativeUtil.Utf8(err));

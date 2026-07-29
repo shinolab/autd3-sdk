@@ -523,6 +523,7 @@ namespace TwincatCli
                 var name = $"state[{id}]";
                 task1In.CreateChild(name, -1, null, "WORD");
             }
+            task1In.CreateChild("dc_to_tc_offset", -1, null, "LINT");
             for (var id = 0; id < autds.Count; id++)
             {
                 for (var i = 0; i < HeadSize; i++)
@@ -558,6 +559,20 @@ namespace TwincatCli
             sysManager.LinkVariables(
                 "TIRT^Task 1^Inputs^cfg_slave_count",
                 "TIID^EtherCAT Master^InfoData^CfgSlaveCount");
+
+            try
+            {
+                sysManager.LinkVariables(
+                    "TIRT^Task 1^Inputs^dc_to_tc_offset",
+                    "TIID^EtherCAT Master^InfoData^DcToTcTimeOffset");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(
+                    "Warning: could not link InfoData^DcToTcTimeOffset " +
+                    $"({e.Message}). SysTime transitions will drift with the bus clock. " +
+                    "Run with --debug to dump the master XML and check the variable name.");
+            }
         }
 
         [Flags]

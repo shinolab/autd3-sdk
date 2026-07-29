@@ -1,7 +1,9 @@
 use std::time::Duration;
 
 use autd3_cpu_wire::Cmd;
+use autd3_rs_core::DcClock;
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
+use autd3_rs_core::value::DcSysTime;
 use autd3_rs_firmware_emulator::Device;
 use autd3_rs_link_echocat::master::init::{INPUT_BYTES, OUTPUT_BYTES};
 use autd3_rs_link_echocat::reg::AlState;
@@ -291,4 +293,25 @@ fn a_bus_left_in_an_error_state_by_the_previous_session_is_acknowledged_on_open(
         assert_eq!(device.al_state(), Some(AlState::Op));
         assert_eq!(device.al_status_code(), 0);
     }
+}
+
+#[test]
+fn the_cyclic_dc_time_is_anchored_to_the_host_wall_clock() {
+    let opened_at = DcSysTime::now().sys_time();
+    let mut master = open(1);
+
+    let tx = vec![0u8; usize::from(OUTPUT_BYTES)];
+    let mut rx = vec![0u8; usize::from(INPUT_BYTES)];
+    let report = master.cycle(&tx, &mut rx).expect("a cycle on an OP bus");
+
+    let skew = report.dc_system_time.abs_diff(opened_at);
+    assert!(
+        skew < Duration::from_secs(1).as_nanos().try_into().expect("fits"),
+        "the cyclic FRMW DC time is what the link publishes as the bus clock, so it \
+         has to share the host epoch; it sits {skew} ns away from it",
+    );
+
+    let clock = DcClock::new();
+    clock.observe(DcSysTime::from_nanos(report.dc_system_time));
+    assert_eq!(clock.observation().map(|o| o.samples), Some(1));
 }

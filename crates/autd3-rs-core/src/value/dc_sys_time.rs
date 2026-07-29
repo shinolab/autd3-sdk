@@ -50,6 +50,11 @@ impl DcSysTime {
     }
 
     #[must_use]
+    pub fn with_dc_offset(self, offset_ns: i64) -> Self {
+        Self(self.0.saturating_add_signed(offset_ns))
+    }
+
+    #[must_use]
     pub fn to_utc(self) -> DateTime<Utc> {
         let unix_nanos = i64::try_from(ECAT_EPOCH_OFFSET_NANOS + i128::from(self.0))
             .expect("DcSysTime exceeds chrono's representable range");
@@ -153,6 +158,19 @@ mod tests {
         t -= Duration::from_secs(1);
         assert_eq!(t.sys_time(), 2_000_000_000);
         assert_eq!((t - Duration::from_secs(2)).sys_time(), 0);
+    }
+
+    #[test]
+    fn with_dc_offset_shifts_onto_the_bus_clock() {
+        let t = DcSysTime::from_nanos(1_000_000);
+        assert_eq!(t.with_dc_offset(500).sys_time(), 1_000_500);
+        assert_eq!(t.with_dc_offset(-500).sys_time(), 999_500);
+        assert_eq!(t.with_dc_offset(0), t);
+        assert_eq!(DcSysTime::ZERO.with_dc_offset(-1), DcSysTime::ZERO);
+        assert_eq!(
+            DcSysTime::from_nanos(u64::MAX).with_dc_offset(1).sys_time(),
+            u64::MAX
+        );
     }
 
     #[test]

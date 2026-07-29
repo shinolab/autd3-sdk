@@ -1,12 +1,10 @@
 use std::net::SocketAddr;
 
 use ads::{AmsAddr, Client, Source, Timeouts};
-use autd3_rs_core::{DeviceState, LinkStatus, RX_FRAME_BYTES};
+use autd3_rs_core::{DeviceState, LinkStatus};
 
 use crate::error::TwinCATLinkError;
-use crate::link::{AUTD_INDEX_GROUP, AUTD_INDEX_OFFSET_RX};
-
-const STATE_BYTES_PER_DEVICE: usize = 2;
+use crate::link::{AUTD_INDEX_GROUP, STATE_BYTES_PER_DEVICE, state_index};
 
 const AL_STATE_MASK: u8 = 0x0F;
 const AL_STATE_SAFE_OP: u8 = 0x04;
@@ -43,8 +41,7 @@ impl TwinCATStateChecker {
         ams_addr: AmsAddr,
         num_devices: usize,
     ) -> Self {
-        let state_offset = AUTD_INDEX_OFFSET_RX
-            + u32::try_from(num_devices * RX_FRAME_BYTES).expect("input image size exceeds u32");
+        let state_offset = state_index(num_devices);
         Self {
             conn_addr,
             source,

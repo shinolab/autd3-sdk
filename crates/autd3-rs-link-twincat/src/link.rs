@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use ads::notif::{Attributes, Handle, Notification, TransmissionMode};
 use ads::{AmsAddr, AmsNetId, Client, Source, Timeouts};
-use autd3_rs_core::{CycleOutcome, IntoLink, Link, RX_FRAME_BYTES, TX_FRAME_BYTES};
+use autd3_rs_core::{CycleOutcome, DcClock, IntoLink, Link, RX_FRAME_BYTES, TX_FRAME_BYTES};
 use crossbeam_channel::Receiver;
 
 use crate::error::TwinCATLinkError;
@@ -17,6 +17,22 @@ const AUTD_INDEX_OFFSET_COUNT: u32 = AUTD_INDEX_OFFSET_INPUT_BASE;
 pub(crate) const AUTD_INDEX_OFFSET_RX: u32 = AUTD_INDEX_OFFSET_INPUT_BASE + CFG_SLAVE_COUNT_BYTES;
 const AUTD_AMS_PORT: u16 = 301;
 const MAX_DEVICES: usize = 128;
+pub(crate) const STATE_BYTES_PER_DEVICE: usize = 2;
+const DC_OFFSET_BYTES: usize = 8;
+const DC_OFFSET_READ_INTERVAL: Duration = Duration::from_millis(100);
+const DC_OFFSET_PLAUSIBLE_NS: i64 = 24 * 60 * 60 * 1_000_000_000;
+
+// The task input image built by tools/twincat-cli is
+//   [cfg_slave_count u16][input[] rx][state[] u16][dc_to_tc_offset i64]
+pub(crate) fn state_index(num_devices: usize) -> u32 {
+    AUTD_INDEX_OFFSET_RX
+        + u32::try_from(num_devices * RX_FRAME_BYTES).expect("input image size exceeds u32")
+}
+
+pub(crate) fn dc_offset_index(num_devices: usize) -> u32 {
+    state_index(num_devices)
+        + u32::try_from(num_devices * STATE_BYTES_PER_DEVICE).expect("input image size exceeds u32")
+}
 
 pub enum TwinCATServer {
     Local,
@@ -84,6 +100,10 @@ pub struct TwinCATLink {
     conn_addr: SocketAddr,
     source: Source,
     timeouts: Timeouts,
+    dc_clock: DcClock,
+    dc_offset_index: u32,
+    dc_next_read: Option<std::time::Instant>,
+    dc_warned: bool,
 }
 
 impl TwinCATLink {
@@ -137,7 +157,50 @@ impl TwinCATLink {
             conn_addr,
             source,
             timeouts,
+            dc_clock: DcClock::new(),
+            dc_offset_index: dc_offset_index(num_devices),
+            dc_next_read: None,
+            dc_warned: false,
         })
+    }
+
+    fn refresh_dc_offset(&mut self) {
+        let now = std::time::Instant::now();
+        if self.dc_next_read.is_some_and(|next| now < next) {
+            return;
+        }
+        self.dc_next_read = Some(now + DC_OFFSET_READ_INTERVAL);
+
+        let mut buf = [0u8; DC_OFFSET_BYTES];
+        match self.client.device(self.ams_addr).read_exact(
+            AUTD_INDEX_GROUP,
+            self.dc_offset_index,
+            &mut buf,
+        ) {
+            Ok(()) => {
+                let offset_ns = i64::from_le_bytes(buf);
+                if offset_ns.abs() > DC_OFFSET_PLAUSIBLE_NS {
+                    self.warn_no_dc_offset(format_args!(
+                        "InfoData^DcToTcTimeOffset read back an implausible {offset_ns} ns"
+                    ));
+                    return;
+                }
+                self.dc_clock.observe_offset(offset_ns);
+            }
+            Err(e) => self.warn_no_dc_offset(format_args!("{e}")),
+        }
+    }
+
+    fn warn_no_dc_offset(&mut self, reason: std::fmt::Arguments<'_>) {
+        if self.dc_warned {
+            return;
+        }
+        self.dc_warned = true;
+        tracing::warn!(
+            "could not read the TwinCAT DC clock offset ({reason}); TransitionMode::SysTime and \
+             GpioOut::SysTimeEq will drift with the bus clock. Re-run the TwinCAT setup so the \
+             task input image carries InfoData^DcToTcTimeOffset",
+        );
     }
 
     fn read_device_count(client: &Client, ams_addr: AmsAddr) -> Result<usize, TwinCATLinkError> {
@@ -195,11 +258,16 @@ impl Link for TwinCATLink {
         )
     }
 
+    fn dc_clock(&self) -> Option<DcClock> {
+        Some(self.dc_clock.clone())
+    }
+
     fn cycle(
         &mut self,
         tx: &[[u8; TX_FRAME_BYTES]],
         rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Self::Error> {
+        self.refresh_dc_offset();
         let device = self.client.device(self.ams_addr);
 
         device.write(AUTD_INDEX_GROUP, AUTD_INDEX_OFFSET_TX, tx.as_flattened())?;
@@ -223,5 +291,28 @@ impl Link for TwinCATLink {
         }
 
         Ok(CycleOutcome { rx_valid: true })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_input_image_puts_the_dc_offset_after_the_state_words() {
+        // [cfg_slave_count u16][input[] rx][state[] u16][dc_to_tc_offset i64]
+        assert_eq!(AUTD_INDEX_OFFSET_RX, AUTD_INDEX_OFFSET_INPUT_BASE + 2);
+        for num_devices in [1usize, 2, 8, MAX_DEVICES] {
+            let state = state_index(num_devices);
+            assert_eq!(
+                state,
+                AUTD_INDEX_OFFSET_RX + u32::try_from(num_devices * RX_FRAME_BYTES).unwrap()
+            );
+            assert_eq!(
+                dc_offset_index(num_devices),
+                state + u32::try_from(num_devices * STATE_BYTES_PER_DEVICE).unwrap(),
+                "the client and tools/twincat-cli must agree on the image layout",
+            );
+        }
     }
 }

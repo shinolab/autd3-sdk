@@ -38,6 +38,10 @@ impl ClientBackend for TwinCATBackend {
         self.client.num_devices()
     }
 
+    fn dc_offset_ns(&self) -> i64 {
+        self.client.dc_offset_ns()
+    }
+
     fn read_firmware_version(&self) -> BoxFuture<Vec<String>> {
         let client = Arc::clone(&self.client);
         Box::pin(async move {

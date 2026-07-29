@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use autd3_rs_core::{CycleOutcome, Link, LinkStats, RX_FRAME_BYTES, TX_FRAME_BYTES};
+use autd3_rs_core::value::DcSysTime;
+use autd3_rs_core::{CycleOutcome, DcClock, Link, LinkStats, RX_FRAME_BYTES, TX_FRAME_BYTES};
 
 use crate::adapters;
 use crate::context::{Context, EC_TIMEOUTRET_US};
@@ -65,6 +66,7 @@ pub struct SoemLink {
     next_at: Option<Instant>,
     rx_was_valid: bool,
     stats: LinkStats,
+    dc_clock: DcClock,
     shutdown_done: bool,
     diagnostics: SharedCycleDiagnostics,
     _timer_resolution: TimerResolutionGuard,
@@ -152,6 +154,7 @@ impl SoemLink {
             next_at: None,
             rx_was_valid: true,
             stats: LinkStats::default(),
+            dc_clock: DcClock::new(),
             shutdown_done: false,
             diagnostics,
             _timer_resolution: timer_resolution,
@@ -165,6 +168,61 @@ impl SoemLink {
     #[must_use]
     pub fn num_devices(&self) -> usize {
         self.num_devices
+    }
+
+    fn store_failed_cycle_diagnostics(
+        &self,
+        deadline_overrun: Duration,
+        tx_rx_duration: Duration,
+        wkc: i32,
+    ) {
+        let previous_samples =
+            crate::diagnostics::load_cycle_diagnostics(&self.diagnostics).samples;
+        store_cycle_diagnostics(
+            &self.diagnostics,
+            CycleDiagnostics {
+                samples: previous_samples.saturating_add(1),
+                deadline_overrun,
+                tx_rx_duration,
+                expected_wkc: self.expected_wkc,
+                working_counter: Some(wkc),
+                rx_valid: false,
+                tx_rx_succeeded: false,
+                dc_time_ns: None,
+                next_cycle_wait: None,
+                dc_phase: None,
+            },
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn store_cycle_diagnostics(
+        &self,
+        deadline_overrun: Duration,
+        tx_rx_duration: Duration,
+        wkc: i32,
+        rx_valid: bool,
+        dc_time_ns: i64,
+        next_cycle_wait: Duration,
+        dc_phase: Duration,
+    ) {
+        let previous_samples =
+            crate::diagnostics::load_cycle_diagnostics(&self.diagnostics).samples;
+        store_cycle_diagnostics(
+            &self.diagnostics,
+            CycleDiagnostics {
+                samples: previous_samples.saturating_add(1),
+                deadline_overrun,
+                tx_rx_duration,
+                expected_wkc: self.expected_wkc,
+                working_counter: Some(wkc),
+                rx_valid,
+                tx_rx_succeeded: true,
+                dc_time_ns: Some(dc_time_ns),
+                next_cycle_wait: Some(next_cycle_wait),
+                dc_phase: Some(dc_phase),
+            },
+        );
     }
 
     fn shutdown(&mut self) {
@@ -303,6 +361,10 @@ impl Link for SoemLink {
         StateChecker::new(&self.ctx, self.num_devices, Arc::clone(&self.diagnostics))
     }
 
+    fn dc_clock(&self) -> Option<DcClock> {
+        Some(self.dc_clock.clone())
+    }
+
     fn cycle(
         &mut self,
         tx: &[[u8; TX_FRAME_BYTES]],
@@ -331,23 +393,7 @@ impl Link for SoemLink {
         if wkc <= 0 {
             self.next_at = None;
             self.stats.record_lost_cycle();
-            let previous_samples =
-                crate::diagnostics::load_cycle_diagnostics(&self.diagnostics).samples;
-            store_cycle_diagnostics(
-                &self.diagnostics,
-                CycleDiagnostics {
-                    samples: previous_samples.saturating_add(1),
-                    deadline_overrun,
-                    tx_rx_duration,
-                    expected_wkc: self.expected_wkc,
-                    working_counter: Some(wkc),
-                    rx_valid: false,
-                    tx_rx_succeeded: false,
-                    dc_time_ns: None,
-                    next_cycle_wait: None,
-                    dc_phase: None,
-                },
-            );
+            self.store_failed_cycle_diagnostics(deadline_overrun, tx_rx_duration, wkc);
             if self.rx_was_valid {
                 tracing::warn!(
                     wkc,
@@ -362,28 +408,24 @@ impl Link for SoemLink {
         }
 
         let dc_time_ns = self.ctx.dc_time();
+        if dc_time_ns > 0 {
+            self.dc_clock
+                .observe(DcSysTime::from_nanos(dc_time_ns.cast_unsigned()));
+        }
         let wait = next_cycle_wait(dc_time_ns, self.cycle_ns, self.shift_ns);
         self.next_at = Some(cycle_start + wait);
 
         let rx_valid = wkc == self.expected_wkc;
-        let previous_samples =
-            crate::diagnostics::load_cycle_diagnostics(&self.diagnostics).samples;
         #[allow(clippy::cast_sign_loss)]
         let dc_phase = Duration::from_nanos(dc_time_ns.rem_euclid(self.cycle_ns) as u64);
-        store_cycle_diagnostics(
-            &self.diagnostics,
-            CycleDiagnostics {
-                samples: previous_samples.saturating_add(1),
-                deadline_overrun,
-                tx_rx_duration,
-                expected_wkc: self.expected_wkc,
-                working_counter: Some(wkc),
-                rx_valid,
-                tx_rx_succeeded: true,
-                dc_time_ns: Some(dc_time_ns),
-                next_cycle_wait: Some(wait),
-                dc_phase: Some(dc_phase),
-            },
+        self.store_cycle_diagnostics(
+            deadline_overrun,
+            tx_rx_duration,
+            wkc,
+            rx_valid,
+            dc_time_ns,
+            wait,
+            dc_phase,
         );
         if !rx_valid {
             self.stats.record_stale_cycle();

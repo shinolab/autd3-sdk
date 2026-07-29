@@ -393,3 +393,141 @@ fn build_into_reuses_buffer_without_growing() {
         "second build must not reallocate"
     );
 }
+
+#[test]
+fn a_dc_offset_moves_sys_time_transitions_onto_the_bus_clock() {
+    use crate::commands::operation::ChangePatternBank;
+    use crate::value::{DcSysTime, TransitionMode};
+    use autd3_cpu_wire::payload::ChangePatternBankPayload;
+    use zerocopy::FromBytes;
+
+    let host = DcSysTime::from_nanos(2_000_000_000);
+    let offset_ns = 29_348_000i64;
+    let cmd = ChangePatternBank {
+        bank: PatternBank::B0,
+        transition_mode: TransitionMode::SysTime {
+            time: host,
+            margin: None,
+        },
+    };
+
+    let transition_value = |offset_ns: i64| {
+        let mut b = DatagramBuilder::with_dc_offset(test_geometry_arc(1), offset_ns);
+        b.push(cmd);
+        let frames = b.build().unwrap();
+        let payload = frames.frame(0).unwrap().datagrams()[0].payload;
+        let (p, _) = ChangePatternBankPayload::ref_from_prefix(&payload[..]).unwrap();
+        p.transition_value.get()
+    };
+
+    assert_eq!(
+        transition_value(0),
+        host.sys_time(),
+        "without a bus clock the value goes out as the caller wrote it"
+    );
+    assert_eq!(
+        transition_value(offset_ns),
+        host.sys_time() + offset_ns.cast_unsigned(),
+        "the firmware compares against the bus clock, so the host instant has to be translated"
+    );
+}
+
+#[test]
+fn a_dc_offset_reaches_per_device_commands_too() {
+    use crate::commands::operation::ChangePatternBank;
+    use crate::value::{DcSysTime, TransitionMode};
+    use autd3_cpu_wire::payload::ChangePatternBankPayload;
+    use zerocopy::FromBytes;
+
+    let host = DcSysTime::from_nanos(2_000_000_000);
+    let offset_ns = 1_234_567i64;
+    let mut b = DatagramBuilder::with_dc_offset(test_geometry_arc(2), offset_ns);
+    b.push_each(|_| {
+        Some(ChangePatternBank {
+            bank: PatternBank::B0,
+            transition_mode: TransitionMode::SysTime {
+                time: host,
+                margin: None,
+            },
+        })
+    });
+    let frames = b.build().unwrap();
+
+    for device in 0..2 {
+        let payload = frames.frame(0).unwrap().datagrams()[device].payload;
+        let (p, _) = ChangePatternBankPayload::ref_from_prefix(&payload[..]).unwrap();
+        assert_eq!(
+            p.transition_value.get(),
+            host.sys_time() + offset_ns.cast_unsigned(),
+            "device {device} must be retimed like every other",
+        );
+    }
+}
+
+#[test]
+fn a_dc_offset_moves_the_gpio_sys_time_trigger() {
+    use crate::commands::operation::{GpioOut, SetGpioOut};
+    use crate::value::DcSysTime;
+    use autd3_cpu_wire::payload::GpioOutPayload;
+    use zerocopy::FromBytes;
+
+    let host = DcSysTime::from_nanos(2_000_000_000);
+    let offset_ns = 29_348_000i64;
+
+    let encoded = |offset_ns: i64| {
+        let mut b = DatagramBuilder::with_dc_offset(test_geometry_arc(1), offset_ns);
+        b.push(SetGpioOut {
+            outputs: [
+                GpioOut::SysTimeEq(host),
+                GpioOut::Off,
+                GpioOut::Off,
+                GpioOut::Off,
+            ],
+        });
+        let frames = b.build().unwrap();
+        let payload = frames.frame(0).unwrap().datagrams()[0].payload;
+        let (p, _) = GpioOutPayload::ref_from_prefix(&payload[..]).unwrap();
+        p.values[0].get()
+    };
+
+    let expected = |t: DcSysTime| ((t.sys_time() / 3125) << 6) >> 9;
+    assert_eq!(encoded(0) & 0x00FF_FFFF_FFFF_FFFF, expected(host));
+    assert_eq!(
+        encoded(offset_ns) & 0x00FF_FFFF_FFFF_FFFF,
+        expected(host.with_dc_offset(offset_ns)),
+        "SysTimeEq is an absolute bus instant like TransitionMode::SysTime",
+    );
+}
+
+#[test]
+fn a_dc_offset_reaches_the_fused_modulation_frame() {
+    use crate::commands::Modulation;
+    use crate::value::{DcSysTime, TransitionMode};
+    use autd3_cpu_wire::payload::WriteModulationFusedPayload;
+    use zerocopy::FromBytes;
+
+    let host = DcSysTime::from_nanos(2_000_000_000);
+    let offset_ns = 29_348_000i64;
+    let data = [0u8; 4];
+    let mut b = DatagramBuilder::with_dc_offset(test_geometry_arc(1), offset_ns);
+    b.push(Modulation {
+        bank: ModulationBank::B0,
+        config: SamplingConfig::FREQ_4K,
+        data: &data,
+        loop_behavior: LoopBehavior::Finite(std::num::NonZeroU16::new(1).unwrap()),
+        transition_mode: TransitionMode::SysTime {
+            time: host,
+            margin: None,
+        },
+    });
+    let frames = b.build().unwrap();
+
+    assert_eq!(cmd_at(&frames, 0, 0), Cmd::WriteModulationFused);
+    let payload = frames.frame(0).unwrap().datagrams()[0].payload;
+    let (p, _) = WriteModulationFusedPayload::ref_from_prefix(&payload[..]).unwrap();
+    assert_eq!(
+        p.transition_value.get(),
+        host.sys_time() + offset_ns.cast_unsigned(),
+        "the fused write carries the transition too, so it needs the same retiming",
+    );
+}
