@@ -10,7 +10,6 @@ use autd3_ffi_abi::{
 };
 use autd3_rs::Geometry;
 use autd3_rs::Velocity;
-use autd3_rs::{CoreId, RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
 use autd3_rs::commands::{
     ChangeModulationBank, Clear, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
     FociStmOption, ForceFan, Modulation, Nop, Pattern, PatternStm, PatternStmOption, SetGpioOut,
@@ -20,6 +19,7 @@ use autd3_rs::legacy::{
     LegacyChangePatternBank, LegacyClientConfig, LegacyDatagramBuilder, LegacyFrames,
 };
 use autd3_rs::value::{PatternBank, SamplingConfig, TransitionMode};
+use autd3_rs::{CoreId, RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
 
 use crate::{
     ByteArray, CheckerHandle, Pending, StringArray, runtime, to_cstrings, to_pattern_bank,

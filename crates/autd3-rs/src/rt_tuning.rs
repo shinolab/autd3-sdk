@@ -52,6 +52,7 @@ pub(crate) fn apply_thread_tuning(
 }
 
 #[must_use]
+#[cfg_attr(target_os = "windows", allow(clippy::unnecessary_wraps))]
 pub(crate) fn default_rt_priority() -> Option<ThreadPriority> {
     #[cfg(target_os = "windows")]
     {

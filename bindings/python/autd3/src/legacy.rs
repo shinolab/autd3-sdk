@@ -8,7 +8,6 @@ use autd3_python_capsule::{
     legacy_frame_into_capsule, take_legacy_client_opener, to_pyerr, to_pyerr_gil,
 };
 use autd3_rs::Geometry;
-use autd3_rs::{CoreId, ThreadPriority, ThreadPriorityValue};
 use autd3_rs::commands::{
     ChangeModulationBank as CoreChangeModulationBank, Modulation as CoreModulation,
     Pattern as CorePattern, PatternStm as CorePatternStm,
@@ -19,6 +18,7 @@ use autd3_rs::legacy::{
     LegacyDatagramBuilder as CoreLegacyBuilder, LegacyFrames as CoreLegacyFrames,
 };
 use autd3_rs::value::{SamplingConfig, TransitionMode as CoreTransitionMode};
+use autd3_rs::{CoreId, ThreadPriority, ThreadPriorityValue};
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 
