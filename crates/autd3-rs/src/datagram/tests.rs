@@ -500,6 +500,42 @@ fn a_dc_offset_moves_the_gpio_sys_time_trigger() {
 }
 
 #[test]
+fn a_dc_clock_is_sampled_when_the_command_is_pushed_not_when_the_builder_is_made() {
+    use crate::commands::operation::ChangePatternBank;
+    use crate::link::DcClock;
+    use crate::value::{DcSysTime, TransitionMode};
+    use autd3_cpu_wire::payload::ChangePatternBankPayload;
+    use zerocopy::FromBytes;
+
+    let host = DcSysTime::from_nanos(2_000_000_000);
+    let offset_ns = 29_348_000i64;
+    let cmd = ChangePatternBank {
+        bank: PatternBank::B0,
+        transition_mode: TransitionMode::SysTime {
+            time: host,
+            margin: None,
+        },
+    };
+
+    let clock = DcClock::new();
+    let mut b = DatagramBuilder::with_dc_clock(test_geometry_arc(1), clock.clone());
+    clock.observe_against(
+        DcSysTime::from_nanos(1_000_000_000u64.saturating_add_signed(offset_ns)),
+        DcSysTime::from_nanos(1_000_000_000),
+    );
+    b.push(cmd);
+    let frames = b.build().unwrap();
+
+    let payload = frames.frame(0).unwrap().datagrams()[0].payload;
+    let (p, _) = ChangePatternBankPayload::ref_from_prefix(&payload[..]).unwrap();
+    assert_eq!(
+        p.transition_value.get(),
+        host.sys_time() + offset_ns.cast_unsigned(),
+        "a builder held across cycles must retime with the offset current at push",
+    );
+}
+
+#[test]
 fn a_dc_offset_reaches_the_fused_modulation_frame() {
     use crate::commands::Modulation;
     use crate::value::{DcSysTime, TransitionMode};

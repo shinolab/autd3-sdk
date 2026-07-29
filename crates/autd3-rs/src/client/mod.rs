@@ -161,7 +161,7 @@ impl Client {
     }
 
     #[must_use]
-    pub fn dc_sys_time(&self) -> DcSysTime {
+    pub fn bus_time_now(&self) -> DcSysTime {
         DcSysTime::now().with_dc_offset(self.dc_offset_ns())
     }
 
@@ -170,7 +170,7 @@ impl Client {
         DatagramBuilder::with_mirror(
             Arc::clone(&self.geometry),
             self.mirror.clone(),
-            self.dc_offset_ns(),
+            self.dc_clock.clone().into(),
         )
     }
 

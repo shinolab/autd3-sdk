@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use autd3_rs_core::geometry::{Device, Geometry};
+use autd3_rs_core::link::DcClock;
 
+use crate::datagram::dc_offset::DcOffset;
 use crate::legacy::command::LegacyCommand;
 use crate::legacy::error::LegacyError;
 use crate::legacy::op::{LegacyOperation, Nop};
@@ -37,7 +39,7 @@ enum Step<'a> {
 pub struct LegacyDatagramBuilder<'a> {
     geometry: Arc<Geometry>,
     steps: Vec<Step<'a>>,
-    dc_offset_ns: i64,
+    dc_offset: DcOffset,
 }
 
 impl<'a> LegacyDatagramBuilder<'a> {
@@ -48,16 +50,25 @@ impl<'a> LegacyDatagramBuilder<'a> {
 
     #[must_use]
     pub fn with_dc_offset(geometry: Arc<Geometry>, dc_offset_ns: i64) -> Self {
+        Self::with_source(geometry, DcOffset::Fixed(dc_offset_ns))
+    }
+
+    #[must_use]
+    pub fn with_dc_clock(geometry: Arc<Geometry>, dc_clock: DcClock) -> Self {
+        Self::with_source(geometry, DcOffset::Clock(dc_clock))
+    }
+
+    fn with_source(geometry: Arc<Geometry>, dc_offset: DcOffset) -> Self {
         Self {
             geometry,
             steps: Vec::new(),
-            dc_offset_ns,
+            dc_offset,
         }
     }
 
     #[must_use]
-    pub(crate) const fn dc_offset_ns(&self) -> i64 {
-        self.dc_offset_ns
+    pub(crate) fn dc_offset_ns(&self) -> i64 {
+        self.dc_offset.offset_ns()
     }
 
     pub fn push<C: LegacyCommand<'a>>(&mut self, cmd: C) -> &mut Self {
@@ -77,9 +88,9 @@ impl<'a> LegacyDatagramBuilder<'a> {
             .enumerate()
             .map(|(idx, device)| {
                 assign(device).map_or_else(Vec::new, |cmd| {
-                    let mut sub = LegacyDatagramBuilder::with_dc_offset(
+                    let mut sub = LegacyDatagramBuilder::with_source(
                         Arc::clone(&geometry),
-                        self.dc_offset_ns,
+                        self.dc_offset.clone(),
                     );
                     cmd.expand(&mut sub);
                     sub.queue_for(idx)

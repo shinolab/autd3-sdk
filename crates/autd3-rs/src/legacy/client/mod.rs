@@ -214,13 +214,16 @@ impl LegacyClient {
     }
 
     #[must_use]
-    pub fn dc_sys_time(&self) -> DcSysTime {
+    pub fn bus_time_now(&self) -> DcSysTime {
         DcSysTime::now().with_dc_offset(self.dc_offset_ns())
     }
 
     #[must_use]
     pub fn datagram_builder<'a>(&self) -> LegacyDatagramBuilder<'a> {
-        LegacyDatagramBuilder::with_dc_offset(Arc::clone(&self.geometry), self.dc_offset_ns())
+        self.dc_clock.clone().map_or_else(
+            || LegacyDatagramBuilder::new(Arc::clone(&self.geometry)),
+            |clock| LegacyDatagramBuilder::with_dc_clock(Arc::clone(&self.geometry), clock),
+        )
     }
 
     pub async fn send(&self, frame: LegacyFrame) -> Result<LegacyResponse, LegacyError> {
