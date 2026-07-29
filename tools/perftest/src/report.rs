@@ -9,6 +9,7 @@ use crate::stats::{Sample, SampleStatus, Summary};
 pub fn print_summary(s: &Summary) {
     let total = s.success + s.timeouts + s.link_errors + s.device_errors.values().sum::<u64>();
 
+    println!();
     println!("=== perftest summary ===");
     println!("elapsed         : {}", format_duration(s.elapsed));
     println!("total sends     : {total}");
