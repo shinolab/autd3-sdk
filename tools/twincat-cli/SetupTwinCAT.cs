@@ -479,8 +479,8 @@ namespace TwincatCli
                     node.InnerText = "true";
                 }
 
-                SetFlag("InfoData");
-                SetFlag("CfgSlaveCount");
+                SetFlag("InfoDataSupport");
+                SetFlag("InfoDataCfgSlaveCnt");
 
                 master.ConsumeXml(doc.OuterXml);
             }

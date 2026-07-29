@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use autd3_rs_core::{CycleOutcome, Link, RX_FRAME_BYTES, TX_FRAME_BYTES};
+use autd3_rs_core::value::DcSysTime;
+use autd3_rs_core::{CycleOutcome, DcClock, Link, RX_FRAME_BYTES, TX_FRAME_BYTES};
 
 use crate::diagnostics::{CycleDiagnostics, store_cycle_diagnostics};
 use crate::error::EtherCrabLinkError;
@@ -28,6 +29,10 @@ impl Link for EtherCrabLink {
             Arc::clone(&self.diagnostics),
             self.timeouts.pdu,
         )
+    }
+
+    fn dc_clock(&self) -> Option<DcClock> {
+        Some(self.dc_clock.clone())
     }
 
     fn cycle(
@@ -87,6 +92,11 @@ impl Link for EtherCrabLink {
         };
         let tx_rx_duration = cycle_start.elapsed();
         self.next_at = Some(cycle_start + resp.next_cycle_wait);
+
+        if resp.dc_system_time != 0 {
+            self.dc_clock
+                .observe(DcSysTime::from_nanos(resp.dc_system_time));
+        }
 
         let all_op = resp.all_op;
         let rx_valid = resp.working_counter == self.expected_wkc && all_op;

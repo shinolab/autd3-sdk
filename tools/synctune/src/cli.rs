@@ -43,6 +43,8 @@ pub enum Command {
     Measure(MeasureArgs),
 
     Tune(TuneArgs),
+
+    Drift(DriftArgs),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -64,6 +66,35 @@ pub struct MeasureArgs {
         help = "SYNC0 shift as a percent of the period (maps to *LinkOption.sync0_shift = period * percent)."
     )]
     pub shift_percent: u8,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct DriftArgs {
+    #[command(flatten)]
+    pub common: Common,
+
+    #[arg(
+        long = "sync0-period",
+        value_parser = humantime::parse_duration,
+        default_value = "1ms",
+        help = "SYNC0 / EtherCAT cycle period, e.g. 1ms / 500us (maps to *LinkOption.sync0_period)."
+    )]
+    pub sync0_period: Duration,
+
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "SYNC0 shift as a percent of the period (maps to *LinkOption.sync0_shift = period * percent)."
+    )]
+    pub shift_percent: u8,
+
+    #[arg(
+        long,
+        value_parser = humantime::parse_duration,
+        default_value = "120s",
+        help = "Sampling window. Overrides --dwell; longer windows tighten the ppm estimate."
+    )]
+    pub duration: Duration,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -198,6 +229,36 @@ impl MeasureArgs {
             return Err(ECHOCAT_SHIFT_ERR.to_string());
         }
         Ok(())
+    }
+}
+
+impl DriftArgs {
+    pub fn validate(&self) -> Result<(), String> {
+        self.common.validate()?;
+        if self.sync0_period.is_zero() {
+            return Err("--sync0-period must be greater than zero".to_string());
+        }
+        if self.shift_percent > 100 {
+            return Err(format!(
+                "--shift-percent {} must be in 0..=100",
+                self.shift_percent
+            ));
+        }
+        if self.common.link == LinkKind::Echocat && self.shift_percent != 0 {
+            return Err(ECHOCAT_SHIFT_ERR.to_string());
+        }
+        if self.duration.is_zero() {
+            return Err("--duration must be greater than zero".to_string());
+        }
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn common(&self) -> Common {
+        Common {
+            dwell: self.duration,
+            ..self.common.clone()
+        }
     }
 }
 

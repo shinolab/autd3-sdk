@@ -80,6 +80,10 @@ pub trait Operation {
         let _ = (device, state);
         Ok(())
     }
+
+    fn apply_dc_offset(&mut self, offset_ns: i64) {
+        let _ = offset_ns;
+    }
 }
 
 impl<T: Operation + ?Sized> Operation for &T {

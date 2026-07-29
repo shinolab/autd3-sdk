@@ -43,6 +43,17 @@ impl TransitionMode {
         }
     }
 
+    #[must_use]
+    pub fn with_dc_offset(self, offset_ns: i64) -> Self {
+        match self {
+            TransitionMode::SysTime { time, margin } => TransitionMode::SysTime {
+                time: time.with_dc_offset(offset_ns),
+                margin,
+            },
+            other => other,
+        }
+    }
+
     pub fn margin_ns(self) -> Result<u32, EncodeError> {
         let TransitionMode::SysTime {
             margin: Some(margin),
@@ -123,6 +134,23 @@ mod tests {
                 Duration::from_secs(5)
             ))
         );
+    }
+
+    #[test]
+    fn only_sys_time_moves_with_the_bus_clock() {
+        assert_eq!(
+            sys_time(1_000).with_dc_offset(25),
+            sys_time(1_025),
+            "SysTime is an absolute instant on the bus clock"
+        );
+        for mode in [
+            TransitionMode::SyncIdx,
+            TransitionMode::Gpio(GpioIn::I0),
+            TransitionMode::Ext,
+            TransitionMode::Immediate,
+        ] {
+            assert_eq!(mode.with_dc_offset(25), mode);
+        }
     }
 
     #[test]

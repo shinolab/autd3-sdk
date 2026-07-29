@@ -1,4 +1,5 @@
 mod cli;
+mod drift;
 mod grid;
 mod monitor;
 mod report;
@@ -12,7 +13,7 @@ use anyhow::Result;
 use autd3_rs::PerfTuning;
 use clap::Parser;
 
-use crate::cli::{Cli, Command, Common, MeasureArgs, TuneArgs};
+use crate::cli::{Cli, Command, Common, DriftArgs, MeasureArgs, TuneArgs};
 use crate::grid::{Candidate, candidates, select_best};
 use crate::monitor::CandidateResult;
 use crate::run::measure_candidate;
@@ -41,6 +42,12 @@ async fn main() -> Result<()> {
             }
             a.common.clone()
         }
+        Command::Drift(a) => {
+            if let Err(msg) = a.validate() {
+                anyhow::bail!(msg);
+            }
+            a.common()
+        }
     };
 
     let _tuning = (!common.no_win_perf_tune).then(|| {
@@ -67,7 +74,25 @@ async fn main() -> Result<()> {
     match cli.cmd {
         Command::Measure(a) => run_measure(&a, &shutdown).await,
         Command::Tune(a) => run_tune(&a, &shutdown).await,
+        Command::Drift(a) => run_drift(&a, &shutdown).await,
     }
+}
+
+async fn run_drift(args: &DriftArgs, shutdown: &Arc<AtomicBool>) -> Result<()> {
+    let common = args.common();
+    let cand = Candidate {
+        period: args.sync0_period,
+        shift_percent: args.shift_percent,
+    };
+    eprintln!(
+        "sampling the bus DC time against the host clock for {:?} \
+(warmup={:?}, every {:?})...",
+        common.dwell, common.warmup, common.poll_interval,
+    );
+    let result = Box::pin(measure_candidate(&common, cand, shutdown)).await?;
+    report::print_drift(&result);
+    write_csv_if_requested(&common, std::slice::from_ref(&result));
+    Ok(())
 }
 
 async fn run_measure(args: &MeasureArgs, shutdown: &Arc<AtomicBool>) -> Result<()> {

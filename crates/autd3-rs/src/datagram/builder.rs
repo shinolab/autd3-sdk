@@ -19,26 +19,38 @@ pub struct DatagramBuilder<'a> {
     ops: Vec<Step<'a>>,
     invalid: Option<PayloadError>,
     mirror: Option<MirrorHandle>,
+    dc_offset_ns: i64,
 }
 
 impl<'a> DatagramBuilder<'a> {
     #[must_use]
     pub fn new(geometry: Arc<Geometry>) -> Self {
+        Self::with_dc_offset(geometry, 0)
+    }
+
+    #[must_use]
+    pub fn with_dc_offset(geometry: Arc<Geometry>, dc_offset_ns: i64) -> Self {
         Self {
             geometry,
             ops: Vec::new(),
             invalid: None,
             mirror: None,
+            dc_offset_ns,
         }
     }
 
     #[must_use]
-    pub(crate) fn with_mirror(geometry: Arc<Geometry>, mirror: MirrorHandle) -> Self {
+    pub(crate) fn with_mirror(
+        geometry: Arc<Geometry>,
+        mirror: MirrorHandle,
+        dc_offset_ns: i64,
+    ) -> Self {
         Self {
             geometry,
             ops: Vec::new(),
             invalid: None,
             mirror: Some(mirror),
+            dc_offset_ns,
         }
     }
 
@@ -66,7 +78,8 @@ impl<'a> DatagramBuilder<'a> {
             .iter()
             .map(|device| {
                 assign(device).map_or_else(Vec::new, |cmd| {
-                    let mut sub = DatagramBuilder::new(Arc::clone(&geometry));
+                    let mut sub =
+                        DatagramBuilder::with_dc_offset(Arc::clone(&geometry), self.dc_offset_ns);
                     cmd.expand(&mut sub);
                     invalid = invalid.or(sub.invalid);
                     sub.take_ops()
@@ -105,7 +118,10 @@ impl<'a> DatagramBuilder<'a> {
         self
     }
 
-    pub(crate) fn push_op<O: Operation + 'a>(&mut self, op: O) -> &mut Self {
+    pub(crate) fn push_op<O: Operation + 'a>(&mut self, mut op: O) -> &mut Self {
+        if self.dc_offset_ns != 0 {
+            op.apply_dc_offset(self.dc_offset_ns);
+        }
         self.ops.push(Step::Op(Box::new(op)));
         self
     }

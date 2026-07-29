@@ -64,6 +64,14 @@ impl GpioOut {
         };
         (u64::from(tag) << 56) | (value & VALUE_MASK)
     }
+
+    #[must_use]
+    fn with_dc_offset(self, offset_ns: i64) -> Self {
+        match self {
+            GpioOut::SysTimeEq(t) => GpioOut::SysTimeEq(t.with_dc_offset(offset_ns)),
+            other => other,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -72,6 +80,10 @@ pub struct SetGpioOut {
 }
 
 impl Operation for SetGpioOut {
+    fn apply_dc_offset(&mut self, offset_ns: i64) {
+        self.outputs = self.outputs.map(|out| out.with_dc_offset(offset_ns));
+    }
+
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
     }

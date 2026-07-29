@@ -197,6 +197,7 @@ mod link {
 
     pub trait ClientBackend: Send + Sync {
         fn num_devices(&self) -> usize;
+        fn dc_offset_ns(&self) -> i64;
         fn read_firmware_version(&self) -> BoxFuture<Vec<String>>;
         fn read_fpga_state(&self) -> BoxFuture<Vec<u8>>;
         fn read_error_detail(&self) -> BoxFuture<Vec<u8>>;

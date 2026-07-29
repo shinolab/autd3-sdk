@@ -3,10 +3,13 @@ use std::io::Read;
 use crate::{DeviceLayout, TransducerLayout};
 
 pub(crate) const MAGIC: [u8; 4] = *b"ARMT";
-pub(crate) const VERSION: u8 = 3;
+pub(crate) const VERSION: u8 = 4;
 
 pub(crate) const TAG_FRAME: u8 = 0x01;
 pub(crate) const TAG_CLOSE: u8 = 0x02;
+
+pub(crate) const DC_TIME_BYTES: usize = 8;
+pub(crate) const DC_TIME_UNAVAILABLE: u64 = 0;
 
 const LAYOUT_BYTES: usize = size_of::<TransducerLayout>();
 

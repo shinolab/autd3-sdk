@@ -1232,6 +1232,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_free(builder: *mut DatagramBuild
 #[allow(clippy::too_many_lines)]
 pub unsafe extern "C" fn autd3_datagram_builder_build(
     builder: *const DatagramBuilder,
+    client: *const ClientHandle,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> *mut Arc<Frames> {
@@ -1240,8 +1241,13 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
         return std::ptr::null_mut();
     }
 
+    let dc_offset_ns = if client.is_null() {
+        0
+    } else {
+        unsafe { &*client }.0.dc_offset_ns()
+    };
     let builder = unsafe { &*builder };
-    let mut core = CoreDatagramBuilder::new(Arc::clone(&builder.geometry));
+    let mut core = CoreDatagramBuilder::with_dc_offset(Arc::clone(&builder.geometry), dc_offset_ns);
     for pending in &builder.pending {
         match pending {
             Pending::Pattern {
