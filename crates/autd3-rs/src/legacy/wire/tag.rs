@@ -21,6 +21,7 @@ pub enum Tag {
     OutputMask = 0x90,
     FpgaGpioOut = 0xF0,
     EmulateGpioIn = 0xF1,
+    CpuGpioOut = 0xF2,
 }
 
 impl Tag {
@@ -99,6 +100,7 @@ mod tests {
         assert_eq!(Tag::OutputMask.as_u8(), 0x90);
         assert_eq!(Tag::FpgaGpioOut.as_u8(), 0xF0);
         assert_eq!(Tag::EmulateGpioIn.as_u8(), 0xF1);
+        assert_eq!(Tag::CpuGpioOut.as_u8(), 0xF2);
     }
 
     #[test]

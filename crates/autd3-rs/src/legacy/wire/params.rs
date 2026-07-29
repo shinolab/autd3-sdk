@@ -70,3 +70,93 @@ pub const GPIO_O_TYPE_PWM_OUT: u8 = 0xE0;
 pub const GPIO_O_TYPE_DIRECT: u8 = 0xF0;
 
 pub const GPIO_O_VALUE_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_and_buffer_limits_match_legacy_firmware() {
+        assert_eq!(CPU_VERSION_V12_1, 0xA5);
+
+        assert_eq!(MOD_BUF_SIZE_MIN, 2);
+        assert_eq!(MOD_BUF_SIZE_MAX, 65536);
+        assert_eq!(MOD_HEAD_SIZE_MAX, 254);
+
+        assert_eq!(STM_BUF_SIZE_MIN, 2);
+        assert_eq!(FOCI_STM_BUF_SIZE_MAX, 65536);
+        assert_eq!(GAIN_STM_BUF_SIZE_MAX, 1024);
+
+        assert_eq!(FOCI_STM_FOCI_NUM_MIN, 1);
+        assert_eq!(FOCI_STM_FOCI_NUM_MAX, 8);
+
+        assert_eq!(PWE_TABLE_SIZE, 256);
+    }
+
+    #[test]
+    fn transition_modes_match_legacy_firmware() {
+        assert_eq!(REP_INFINITE, 0xFFFF);
+        assert_eq!(TRANSITION_MODE_SYNC_IDX, 0x00);
+        assert_eq!(TRANSITION_MODE_SYS_TIME, 0x01);
+        assert_eq!(TRANSITION_MODE_GPIO, 0x02);
+        assert_eq!(TRANSITION_MODE_EXT, 0xF0);
+        assert_eq!(TRANSITION_MODE_NONE, 0xFE);
+        assert_eq!(TRANSITION_MODE_IMMEDIATE, 0xFF);
+        assert_eq!(SYS_TIME_TRANSITION_MARGIN_NS, 10_000_000);
+    }
+
+    #[test]
+    fn operation_flags_match_legacy_firmware() {
+        assert_eq!(GAIN_FLAG_UPDATE, 0x01);
+
+        assert_eq!(MODULATION_FLAG_BEGIN, 0x01);
+        assert_eq!(MODULATION_FLAG_END, 0x02);
+        assert_eq!(MODULATION_FLAG_TRANSITION, 0x04);
+        assert_eq!(MODULATION_FLAG_SEGMENT, 0x08);
+
+        assert_eq!(FOCI_STM_FLAG_BEGIN, 0x01);
+        assert_eq!(FOCI_STM_FLAG_END, 0x02);
+        assert_eq!(FOCI_STM_FLAG_TRANSITION, 0x04);
+
+        assert_eq!(GAIN_STM_FLAG_BEGIN, 0x01);
+        assert_eq!(GAIN_STM_FLAG_END, 0x02);
+        assert_eq!(GAIN_STM_FLAG_TRANSITION, 0x04);
+        assert_eq!(GAIN_STM_FLAG_SEGMENT, 0x08);
+        assert_eq!(GAIN_STM_FLAG_SEND_BIT0, 0x40);
+        assert_eq!(GAIN_STM_FLAG_SEND_BIT1, 0x80);
+
+        assert_eq!(SILENCER_FLAG_FIXED_UPDATE_RATE_MODE, 0x01);
+        assert_eq!(SILENCER_FLAG_STRICT_MODE, 0x04);
+
+        assert_eq!(GPIO_IN_FLAG_0, 0x01);
+        assert_eq!(GPIO_IN_FLAG_1, 0x02);
+        assert_eq!(GPIO_IN_FLAG_2, 0x04);
+        assert_eq!(GPIO_IN_FLAG_3, 0x08);
+    }
+
+    #[test]
+    fn silencer_defaults_match_the_firmware_boot_state() {
+        assert_eq!(SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, 10);
+        assert_eq!(SILENCER_DEFAULT_COMPLETION_STEPS_PHASE, 40);
+        assert_eq!(SILENCER_DEFAULT_UPDATE_RATE, 256);
+    }
+
+    #[test]
+    fn gpio_out_types_match_legacy_firmware() {
+        assert_eq!(GPIO_O_TYPE_NONE, 0x00);
+        assert_eq!(GPIO_O_TYPE_BASE_SIG, 0x01);
+        assert_eq!(GPIO_O_TYPE_THERMO, 0x02);
+        assert_eq!(GPIO_O_TYPE_FORCE_FAN, 0x03);
+        assert_eq!(GPIO_O_TYPE_SYNC, 0x10);
+        assert_eq!(GPIO_O_TYPE_MOD_SEGMENT, 0x20);
+        assert_eq!(GPIO_O_TYPE_MOD_IDX, 0x21);
+        assert_eq!(GPIO_O_TYPE_STM_SEGMENT, 0x50);
+        assert_eq!(GPIO_O_TYPE_STM_IDX, 0x51);
+        assert_eq!(GPIO_O_TYPE_IS_STM_MODE, 0x52);
+        assert_eq!(GPIO_O_TYPE_SYS_TIME_EQ, 0x60);
+        assert_eq!(GPIO_O_TYPE_SYNC_DIFF, 0x70);
+        assert_eq!(GPIO_O_TYPE_PWM_OUT, 0xE0);
+        assert_eq!(GPIO_O_TYPE_DIRECT, 0xF0);
+        assert_eq!(GPIO_O_VALUE_MASK, 0x00FF_FFFF_FFFF_FFFF);
+    }
+}

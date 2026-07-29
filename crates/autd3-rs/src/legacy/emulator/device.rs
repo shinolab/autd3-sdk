@@ -27,6 +27,8 @@ const GAIN_STM_MODE_PHASE_HALF: u8 = 2;
 
 const MOD_CYCLE_INIT: u32 = 2;
 
+const DEFAULT_CYCLE_PERIOD_NS: u64 = 1_000_000;
+
 const ASIN_TABLE: [u8; PWE_TABLE_SIZE] = [
     0x00, 0x01, 0x01, 0x02, 0x03, 0x03, 0x04, 0x04, 0x05, 0x06, 0x06, 0x07, 0x08, 0x08, 0x09, 0x0a,
     0x0a, 0x0b, 0x0c, 0x0c, 0x0d, 0x0d, 0x0e, 0x0f, 0x0f, 0x10, 0x11, 0x11, 0x12, 0x13, 0x13, 0x14,
@@ -114,14 +116,15 @@ pub struct LegacyDevice {
     rx_data: u8,
     is_rx_data_used: bool,
     reads_fpga_state: bool,
-    reads_fpga_state_store: bool,
     synchronized: bool,
     force_fan: bool,
+    force_fan_pending: bool,
     thermal_assert: bool,
     cpu_version: (u8, u8),
     fpga_version: (u8, u8),
     fpga_functions: u8,
     dc_sys_time_ns: u64,
+    cycle_period_ns: u64,
     segments: [SegmentState; 2],
     stm_segment: u8,
     mod_segment: u8,
@@ -136,6 +139,9 @@ pub struct LegacyDevice {
     pulse_width_table: Vec<u16>,
     gpio_out: [u64; 4],
     gpio_in: [bool; 4],
+    gpio_in_pending: [bool; 4],
+    cpu_gpio_out: u8,
+    segment_out_of_range: bool,
     wedged: bool,
     mod_cycle: u32,
     stm_write_cursor: u32,
@@ -157,14 +163,15 @@ impl LegacyDevice {
             rx_data: 0,
             is_rx_data_used: false,
             reads_fpga_state: false,
-            reads_fpga_state_store: false,
             synchronized: false,
             force_fan: false,
+            force_fan_pending: false,
             thermal_assert: false,
             cpu_version: (crate::legacy::wire::params::CPU_VERSION_V12_1, 0x00),
             fpga_version: (crate::legacy::wire::params::CPU_VERSION_V12_1, 0x00),
             fpga_functions: 0,
-            dc_sys_time_ns: 0,
+            dc_sys_time_ns: autd3_rs_core::value::DcSysTime::now().sys_time(),
+            cycle_period_ns: DEFAULT_CYCLE_PERIOD_NS,
             segments: [SegmentState::default(), SegmentState::default()],
             stm_segment: 0,
             mod_segment: 0,
@@ -182,6 +189,9 @@ impl LegacyDevice {
             pulse_width_table: default_pulse_width_table().to_vec(),
             gpio_out: [0; 4],
             gpio_in: [false; 4],
+            gpio_in_pending: [false; 4],
+            cpu_gpio_out: 0,
+            segment_out_of_range: false,
             wedged: false,
             mod_cycle: MOD_CYCLE_INIT,
             stm_write_cursor: 0,
@@ -285,6 +295,21 @@ impl LegacyDevice {
     }
 
     #[must_use]
+    pub const fn cpu_gpio_out(&self) -> u8 {
+        self.cpu_gpio_out
+    }
+
+    #[must_use]
+    pub const fn segment_out_of_range(&self) -> bool {
+        self.segment_out_of_range
+    }
+
+    #[must_use]
+    pub const fn dc_sys_time_ns(&self) -> u64 {
+        self.dc_sys_time_ns
+    }
+
+    #[must_use]
     pub fn segment(&self, segment: crate::legacy::wire::Segment) -> &SegmentState {
         &self.segments[segment.as_u8() as usize]
     }
@@ -319,6 +344,10 @@ impl LegacyDevice {
 
     pub const fn set_dc_sys_time(&mut self, ns: u64) {
         self.dc_sys_time_ns = ns;
+    }
+
+    pub const fn set_cycle_period_ns(&mut self, ns: u64) {
+        self.cycle_period_ns = ns;
     }
 
     pub const fn set_thermal_assert(&mut self, value: bool) {
@@ -368,6 +397,11 @@ impl LegacyDevice {
 
     pub fn cycle(&mut self, tx: &[u8; TX_FRAME_BYTES], rx: &mut [u8; RX_FRAME_BYTES]) {
         self.rx().write_to(rx);
+        if self.wedged {
+            return;
+        }
+        self.dc_sys_time_ns = self.dc_sys_time_ns.wrapping_add(self.cycle_period_ns);
+        self.refresh_rx_data();
         self.recv(tx);
     }
 
@@ -378,10 +412,6 @@ impl LegacyDevice {
             return;
         }
         self.last_msg_id = msg_id.get();
-        if self.wedged {
-            return;
-        }
-        self.refresh_rx_data();
         self.ack = msg_id.get() & 0x0F;
 
         if msg_id > MsgId::MAX {
@@ -399,7 +429,12 @@ impl LegacyDevice {
                 Some(payload) => self.handle_payload(payload),
                 None => NOT_SUPPORTED_TAG,
             };
+            if self.err != NO_ERROR {
+                return;
+            }
         }
+        self.force_fan = self.force_fan_pending;
+        self.gpio_in = self.gpio_in_pending;
     }
 
     fn refresh_rx_data(&mut self) {
@@ -447,7 +482,7 @@ impl LegacyDevice {
             }
             v if v == Tag::ForceFan.as_u8() => match data.get(1) {
                 Some(&value) => {
-                    self.force_fan = value != 0;
+                    self.force_fan_pending = value != 0;
                     NO_ERROR
                 }
                 None => NOT_SUPPORTED_TAG,
@@ -464,14 +499,21 @@ impl LegacyDevice {
             v if v == Tag::ConfigPulseWidthEncoder.as_u8() => self.write_pulse_width_table(data),
             v if v == Tag::FpgaGpioOut.as_u8() => self.write_gpio_out(data),
             v if v == Tag::EmulateGpioIn.as_u8() => self.write_gpio_in(data),
+            v if v == Tag::CpuGpioOut.as_u8() => match data.get(1) {
+                Some(&value) => {
+                    self.cpu_gpio_out = value;
+                    NO_ERROR
+                }
+                None => NOT_SUPPORTED_TAG,
+            },
             _ => NOT_SUPPORTED_TAG,
         }
     }
 
     fn clear(&mut self) {
-        self.reads_fpga_state = false;
-        self.force_fan = false;
-        self.gpio_in = [false; 4];
+        self.force_fan_pending = false;
+        self.gpio_in_pending = [false; 4];
+        self.cpu_gpio_out = 0;
 
         self.silencer_strict = true;
         self.silencer_fixed_update_rate = false;
@@ -512,8 +554,6 @@ impl LegacyDevice {
         };
         match ty {
             v if v == InfoType::CpuMajor.as_u8() => {
-                self.reads_fpga_state_store = self.reads_fpga_state;
-                self.reads_fpga_state = false;
                 self.is_rx_data_used = true;
                 self.rx_data = self.cpu_version.0;
             }
@@ -522,13 +562,19 @@ impl LegacyDevice {
             v if v == InfoType::FpgaMinor.as_u8() => self.rx_data = self.fpga_version.1,
             v if v == InfoType::FpgaFunctions.as_u8() => self.rx_data = self.fpga_functions,
             v if v == InfoType::Clear.as_u8() => {
-                self.reads_fpga_state = self.reads_fpga_state_store;
                 self.is_rx_data_used = false;
                 self.rx_data = 0;
             }
             _ => return INVALID_INFO_TYPE,
         }
         NO_ERROR
+    }
+
+    fn take_segment(&mut self, raw: u8) -> u8 {
+        if raw > 1 {
+            self.segment_out_of_range = true;
+        }
+        raw & 0x01
     }
 
     fn validate_transition_mode(current: u8, segment: u8, rep: u16, mode: u8) -> bool {
@@ -595,7 +641,7 @@ impl LegacyDevice {
         let Some(head) = prefix(data, 4) else {
             return NOT_SUPPORTED_TAG;
         };
-        let segment = head[1] & 0x01;
+        let segment = self.take_segment(head[1]);
         let flag = head[2];
         let Some(words) = body(data, 4, self.num_transducers * size_of::<Emission>()) else {
             return NOT_SUPPORTED_TAG;
@@ -619,7 +665,6 @@ impl LegacyDevice {
 
         if flag & GAIN_FLAG_UPDATE != 0 {
             self.stm_transition_mode = TRANSITION_MODE_SYNC_IDX;
-            self.stm_transition_value = 0;
         }
         NO_ERROR
     }
@@ -628,14 +673,13 @@ impl LegacyDevice {
         let Some(head) = prefix(data, 2) else {
             return NOT_SUPPORTED_TAG;
         };
-        let segment = head[1] & 0x01;
+        let segment = self.take_segment(head[1]);
         let state = &self.segments[segment as usize];
         if state.kind != StmKind::Gain || state.cycle != 1 {
             return INVALID_SEGMENT_TRANSITION;
         }
         self.stm_segment = segment;
         self.stm_transition_mode = TRANSITION_MODE_SYNC_IDX;
-        self.stm_transition_value = 0;
         NO_ERROR
     }
 
@@ -707,7 +751,7 @@ impl LegacyDevice {
         let Some(head) = prefix(data, 16) else {
             return NOT_SUPPORTED_TAG;
         };
-        let segment = head[1] & 0x01;
+        let segment = self.take_segment(head[1]);
         let mode = head[2];
         let value = u64::from_le_bytes([
             head[8], head[9], head[10], head[11], head[12], head[13], head[14], head[15],
@@ -736,7 +780,7 @@ impl LegacyDevice {
         };
         let flag = head[1];
         let send_num = usize::from(head[2]);
-        let segment = head[3] & 0x01;
+        let segment = self.take_segment(head[3]);
 
         let offset = if flag & FOCI_STM_FLAG_BEGIN != 0 {
             let Some(head) = prefix(data, 24) else {
@@ -916,7 +960,7 @@ impl LegacyDevice {
         let Some(head) = prefix(data, 16) else {
             return NOT_SUPPORTED_TAG;
         };
-        let segment = head[1] & 0x01;
+        let segment = self.take_segment(head[1]);
         let mode = head[2];
         let value = u64::from_le_bytes([
             head[8], head[9], head[10], head[11], head[12], head[13], head[14], head[15],
@@ -947,7 +991,7 @@ impl LegacyDevice {
         let Some(head) = prefix(data, 2) else {
             return NOT_SUPPORTED_TAG;
         };
-        let segment = usize::from(head[1] & 0x01);
+        let segment = usize::from(self.take_segment(head[1]));
         let Some(bytes) = body(data, 2, self.num_transducers.div_ceil(8)) else {
             return NOT_SUPPORTED_TAG;
         };
@@ -990,7 +1034,7 @@ impl LegacyDevice {
         let Some(&flag) = data.get(1) else {
             return NOT_SUPPORTED_TAG;
         };
-        for (i, dst) in self.gpio_in.iter_mut().enumerate() {
+        for (i, dst) in self.gpio_in_pending.iter_mut().enumerate() {
             *dst = flag & (1 << i) != 0;
         }
         NO_ERROR
