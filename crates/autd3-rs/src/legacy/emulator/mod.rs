@@ -1,5 +1,8 @@
 mod device;
 
+#[cfg(test)]
+mod tests;
+
 pub use device::{LegacyDevice, SegmentState, StmKind, default_pulse_width_table};
 
 use core::convert::Infallible;
