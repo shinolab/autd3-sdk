@@ -13,19 +13,19 @@ import pyClient from "@codes/python/examples/api/link/remote_client.py?raw";
 import csClient from "@codes/csharp/examples/api/link/remote_client.cs?raw";
 import server from "@codes/rust/examples/api/link/remote_server.rs?raw";
 
-`RemoteLink` is a Link implementation that connects over TCP to a **separate host** directly wired to the AUTD3 devices for sending and receiving.
+`RemoteLink` is a Link implementation that connects over TCP to a separate host connected to the AUTD3 devices for sending and receiving.
 Use it when the machine that operates AUTD3 differs from the machine wired to the real hardware.
 
 <Install rust="autd3-rs-link-remote" python="autd3-link-remote" csharp="AUTD3.Link.Remote" />
 
 It consists of two processes: a server and a client.
 
-- `RemoteServer`: runs on the host wired to the real hardware. It drives a real-hardware link and relays tx/rx frames over TCP.
+- `RemoteServer`: runs on the host wired to the real hardware. It drives a real-hardware link and relays frames over TCP.
 - `RemoteLink`: runs on the operating host.
 
 On the server-side host, also add the package of the Link that drives the real hardware (such as [EtherCrab](/autd3-sdk/en/api/link/ethercrab/)).
 
-Connection to the [`Simulator`](/autd3-sdk/en/guide/simulator/) is also done with `RemoteLink` (the `Simulator` internally starts a `RemoteServer`).
+Connection to the [`Simulator`](/autd3-sdk/en/guide/simulator/) is also done with `RemoteLink`.
 
 ## API
 
@@ -41,7 +41,7 @@ Connection to the [`Simulator`](/autd3-sdk/en/guide/simulator/) is also done wit
 | `link` | `impl IntoLink` | Option of the real-hardware link to relay |
 
 `open` internally starts an EtherCAT thread and keeps driving EtherCAT regardless of whether a client is connected.
-`serve` waits for a client connection and starts relaying tx/rx frames (a blocking call that does not return).
+`serve` waits for a client connection and starts relaying frames.
 
 ### RemoteLink
 

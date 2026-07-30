@@ -85,7 +85,7 @@ The position and normal direction of each transducer, as well as the device's ro
 
 ## Coordinate Helpers (Rust only)
 
-`autd3_rs::geometry` provides auxiliary functions to build coordinates.
+`autd3_rs::geometry` provides helpers to build coordinates.
 The argument type is `Length`, so a unit can be specified.
 
 | Function            | Returns         | Description                                  |
@@ -93,4 +93,4 @@ The argument type is `Length`, so a unit can be specified.
 | `point(x, y, z)`    | `Point3<f32>`   | An absolute-coordinate point                 |
 | `offset(x, y, z)`   | `Vector3<f32>`  | A relative displacement vector               |
 
-Python / C# have no length-unit type and treat coordinates as raw values in mm, so these helpers do not exist.
+Python / C# have no length-unit type; coordinates are always in mm.

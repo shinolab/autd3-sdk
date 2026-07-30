@@ -39,9 +39,8 @@ Since the round-trip latency is hidden and throughput improves further, choose s
 
 To avoid per-frame allocation, reuse buffers.
 
-- The buffer obtained via `pattern_buffer()` can be overwritten every frame as the output destination of the Pattern compute function. Do not recreate it every frame. The hot loops in both languages practice this.
-- In Rust, `Frames` can also be written into the same buffer with `build_into`, avoiding allocation on every `build` (the Rust hot loop above practices this).
-  Python's `Frames` is shared with the send queue, so `build_into` is not provided, and there is no choice but to `build` every frame.
+- The buffer obtained via `pattern_buffer()` can be overwritten every frame as the output destination of the Pattern compute function.
+- In Rust, `Frames` can also be written into the same buffer with `build_into`, avoiding allocation on every `build`. `build_into` is not provided in Python / C#.
 
 ## OS Tuning
 

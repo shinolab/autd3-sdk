@@ -15,7 +15,7 @@ import csFullSample from "@codes/csharp/examples/api/command/foci-stm-example.cs
 import { excerpt } from "@lib/excerpt";
 
 `FociStm` provides an STM feature that switches single- and multi-focus sound fields by a hardware timer.
-Unlike [`PatternStm`](/autd3-sdk/en/api/command/pattern-stm/), it can only handle focal points, but its data transfer volume is small, so its latency is low.
+Unlike [`PatternStm`](/autd3-sdk/en/api/command/pattern-stm/), it can only handle focal points, but multiple focal points fit in a single frame, so the number of frames is small and the latency is low.
 
 ## API
 

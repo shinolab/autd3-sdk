@@ -23,13 +23,16 @@ Windowsを使用する場合, [Npcap](https://npcap.com/)を「**WinPcap API-com
 
 <CodeTabs>
 <Fragment slot="rust" >
-まずは適当なプロジェクトを作成し, autd3ライブラリを依存関係に追加する.
+まずは適当なプロジェクトを作成し, `autd3-rs`ライブラリを依存関係に追加する.
+焦点計算やAM変調のために, `autd3-rs-pattern`と`autd3-rs-modulation`も依存関係に追加する.
 また, デバイスとの通信を行うautd3-rs-link-echocatライブラリも依存関係に追加する.
 非同期ランタイムも必要なので, tokioも追加する.
 
 ```
 cargo new --bin autd3-sample && cd autd3-sample
 cargo add autd3-rs
+cargo add autd3-rs-pattern
+cargo add autd3-rs-modulation
 cargo add autd3-rs-link-echocat
 cargo add tokio --features full
 ```

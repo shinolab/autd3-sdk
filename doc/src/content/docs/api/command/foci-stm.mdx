@@ -15,7 +15,7 @@ import csFullSample from "@codes/csharp/examples/api/command/foci-stm-example.cs
 import { excerpt } from "@lib/excerpt";
 
 `FociStm` は, ハードウェアタイマにより単一, 及び, 多焦点音場を切り替える STM 機能を提供する.
-[`PatternStm`](/autd3-sdk/api/command/pattern-stm/) と異なり, 焦点しか扱えないが, データ転送量が少ないためレイテンシが小さい. 
+[`PatternStm`](/autd3-sdk/api/command/pattern-stm/) と異なり, 焦点しか扱えないが, 1フレームに複数の焦点情報を乗せされるためフレーム数が少なく, レイテンシが小さい. 
 
 ## API
 

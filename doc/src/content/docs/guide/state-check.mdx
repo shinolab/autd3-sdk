@@ -11,10 +11,7 @@ import sample from "@codes/rust/examples/guide/state-check.rs?raw";
 import pySample from "@codes/python/examples/guide/state-check.py?raw";
 import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
-稼働中にデバイスとの EtherCAT リンクが健全かどうかを監視したい場合がある.
-`Client` はバックグラウンドで状態を監視するタスクを勝手に起動しない.
-代わりに, ユーザーが自分のタイミングで駆動する `Checker` を返す.
-監視の頻度や, 状態変化への対応をユーザー側で完全に制御できる.
+`Checker`を使うことでデバイスとの EtherCAT リンクが正常に動いているかどうかを監視できる.
 
 ## Checker の取得
 
@@ -37,4 +34,3 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
 
 `check` を呼ぶ頻度はユーザー次第である.
-高頻度の送信ループとは別のタスクで, 上のように低頻度でポーリングするのが典型的な使い方である.

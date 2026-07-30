@@ -12,12 +12,10 @@ sidebar:
 
 `Simulator` は GUI コンソール `autd3-console` に同梱されている.
 
-GitHub の [Release ページ](https://github.com/shinolab/autd3-sdk/releases) から `autd3-console` をダウンロードして起動し, 上部の「Simulator」タブを開く.
-タブから `Simulator` を起動できる.
+GitHub の [Releases](https://github.com/shinolab/autd3-sdk/releases) で最新の `console-v*` から `autd3-console` をインストールして起動し, 上部の「Simulator」タブを開く.
 
 ## 接続
 
 `Simulator` は内部で `RemoteServer` を起動しているため, クライアントからは [`RemoteLink`](/autd3-sdk/api/link/remote/) で接続する.
 接続先は `127.0.0.1:<link-port>` ( デフォルトは 8080 ).
 
-シミュレータは接続時にクライアントの `Geometry` を受け取り, そこからデバイス数や配置を決定する.

@@ -8,7 +8,7 @@ sidebar:
 import Math from "@components/Math.astro";
 import Install from "@components/Install.astro";
 
-Pattern 計算は本体とは別のパッケージで提供され, 単一焦点・平面波・ベッセルビームなどの代表的な音場計算ユーティリティを含む.
+単一焦点・平面波・ベッセルビームなどの代表的な音場計算ユーティリティ.
 
 <Install rust="autd3-rs-pattern" python="autd3-pattern" csharp="AUTD3.Pattern" />
 
@@ -26,5 +26,5 @@ Pattern 計算は本体とは別のパッケージで提供され, 単一焦点�
 
 位相計算には波長 <Math tex="\lambda = c / f" /> が必要にになる.
 音速 <Math tex="c" /> から `autd3_rs_pattern::wavelength(sound_speed)` で波長を求められる. 
-音速 340 m/s (室温約15°の空気中での音速) では<Math tex="\lambda \approx 8.5\,\mathrm{mm}" />. 
+音速 340 m/s (室温約15°の空気中での音速) では<Math tex="\lambda = 8.5\,\mathrm{mm}" />. 
 

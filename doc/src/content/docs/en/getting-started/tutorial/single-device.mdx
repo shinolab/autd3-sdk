@@ -23,13 +23,16 @@ The following is an example that generates a focal point 150 mm directly above t
 
 <CodeTabs>
 <Fragment slot="rust" >
-First, create an appropriate project and add the autd3 library as a dependency.
+First, create an appropriate project and add the `autd3-rs` library as a dependency.
+For focus computation and AM modulation, also add `autd3-rs-pattern` and `autd3-rs-modulation`.
 Also add the autd3-rs-link-echocat library, which handles communication with the device.
 An asynchronous runtime is also required, so add tokio as well.
 
 ```
 cargo new --bin autd3-sample && cd autd3-sample
 cargo add autd3-rs
+cargo add autd3-rs-pattern
+cargo add autd3-rs-modulation
 cargo add autd3-rs-link-echocat
 cargo add tokio --features full
 ```

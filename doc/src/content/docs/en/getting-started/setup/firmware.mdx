@@ -22,27 +22,8 @@ If the firmware version does not match the SDK, correct operation is not guarant
 ## Obtaining autd3-console
 
 autd3-console is distributed via GitHub Releases (`console-v*`).
-Using the installer is the easiest way.
-Open the newest `console-v*` entry on [Releases](https://github.com/shinolab/autd3-sdk/releases) and run the install command shown there
-(filling `<version>` into the commands below does the same).
-
-Linux / macOS:
-
-```console
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/shinolab/autd3-sdk/releases/download/console-v<version>/console-installer.sh | sh
-```
-
-Windows (PowerShell):
-
-```console
-irm https://github.com/shinolab/autd3-sdk/releases/download/console-v<version>/console-installer.ps1 | iex
-```
-
-Besides autd3-console itself, the installer places the Simulator (`autd3-rs-simulator`) and the firmware flashing tool (`autd3-firmware`) into `~/.autd3/bin`.
-Alternatively, download the archive matching your runtime environment (`console-<target>.tar.xz` / `.zip`) from the same release, extract it, and run it.
-
-When installed through the installer, autd3-console checks for a newer version on startup and can update itself from the banner at the top of the window.
-The automatic check can be disabled in the **About** tab.
+Open the newest `console-v*` entry on [Releases](https://github.com/shinolab/autd3-sdk/releases) and run the install command shown there.
+If you do not use the installer, download the archive from the same release (`console-<target>.tar.xz` / `.zip`), extract it, and run it.
 
 ## Prerequisites
 

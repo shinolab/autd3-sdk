@@ -7,27 +7,22 @@ sidebar:
 
 import CodeTabs from "@components/CodeTabs.astro";
 
-`Link` is an abstraction of the physical communication path with AUTD3 devices. It absorbs the differences between communication methods such as EtherCAT so that the higher-level `Client` can handle them through the same API.
+`Link` is an abstraction of the physical communication path with AUTD3 devices.
 
-## Packages
+## Link List
 
-Each Link implementation is provided as an independent package. Add the package of the Link you use as a dependency.
-
-| Link | Rust | Python | C# |
-| ---- | ---- | ------ | -- |
-| [TwinCAT](/autd3-sdk/en/api/link/twincat/) | `autd3-rs-link-twincat` | `autd3-link-twincat` | `AUTD3.Link.TwinCAT` |
-| [echocat](/autd3-sdk/en/api/link/echocat/) | `autd3-rs-link-echocat` | `autd3-link-echocat` | `AUTD3.Link.Echocat` |
-| [EtherCrab](/autd3-sdk/en/api/link/ethercrab/) | `autd3-rs-link-ethercrab` | `autd3-link-ethercrab` | `AUTD3.Link.Ethercrab` |
-| [SOEM](/autd3-sdk/en/api/link/soem/) | `autd3-rs-link-soem` | `autd3-link-soem` | `AUTD3.Link.Soem` |
-| [Remote](/autd3-sdk/en/api/link/remote/) | `autd3-rs-link-remote` | `autd3-link-remote` | `AUTD3.Link.Remote` |
-
-See each Link's page for installation instructions.
+- [TwinCAT](/autd3-sdk/en/api/link/twincat/) — Link that uses Beckhoff TwinCAT 3
+- [echocat](/autd3-sdk/en/api/link/echocat/) — EtherCAT Link dedicated to AUTD3
+- [EtherCrab](/autd3-sdk/en/api/link/ethercrab/) — Link based on EtherCrab
+- [SOEM](/autd3-sdk/en/api/link/soem/) — Link based on SOEM ([GPL-3.0-only](/autd3-sdk/en/misc/license/))
+- [Remote](/autd3-sdk/en/api/link/remote/) — Link for remote connections
 
 ## Usage
 
 A Link is constructed by passing a Link Option to `Client::open`. The Option specifies the connection target, synchronization parameters, and so on.
 
-The send/receive interface seen from the `Client` is common across Link implementations. Therefore, swapping the link does not require changing the higher-level code.
+The send/receive interface seen from the `Client` is common across Link implementations.
+Therefore, swapping the link does not require changing the higher-level code.
 
 ## Performance
 
