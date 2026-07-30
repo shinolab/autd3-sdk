@@ -42,7 +42,7 @@ impl RawSocket {
             .map_err(|e| to_io(&e))?;
 
         if let Err(e) = capture.direction(Direction::In) {
-            tracing::warn!(
+            tracing::debug!(
                 interface,
                 "the driver refused an inbound-only capture; sent frames are rejected by \
                  comparison instead: {e}"
