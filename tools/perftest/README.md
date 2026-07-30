@@ -1,7 +1,53 @@
 # autd3-rs-perftest
 
 A CLI tool that streams commands over a real EtherCAT link and reports latency/throughput statistics.
-Useful for sanity-checking the firmware ↔ host protocol, comparing kernels/NICs, and watching for regressions in `autd3-rs`'s request-response engine.
+
+## Run
+
+The link uses raw sockets, so it needs privileges: root or `CAP_NET_RAW` on Linux, read/write access to
+`/dev/bpf*` on macOS.
+
+```sh
+# 10,000 commands as fast as the bus allows by stop-and-wait manner
+cargo xtask tool perftest -- --interface enp3s0 --count 10000
+
+# Pipelined streaming run — measures the 1-frame-per-cycle ceiling
+cargo xtask tool perftest -- --interface enp3s0 --count 10000 --mode streaming
+
+# Isolate the link path from the FPGA write
+cargo xtask tool perftest -- --interface enp3s0 --count 10000 --command nop
+
+# Allocation histogram on top of the usual summary
+cargo xtask tool perftest --mem-profile -- --interface enp3s0 --count 10000
+```
+
+## Arguments
+
+| Flag                  | Description |
+|-----------------------|-------------|
+| `--link <KIND>`       | `echocat` (default), `ethercrab`, `soem`, `twincat`, or `nop`. |
+| `--command <CMD>`     | `pattern` (default), `write-pattern-buffer`, or `nop`. See the table below. |
+| `--interface <NAME>`  | EtherCAT network interface (for `echocat` / `ethercrab` / `soem`). Not valid with `--link nop`. |
+| `--devices <N>`       | Expected device count. Required for `nop` (nothing to scan); a mismatch guard otherwise. |
+| `--twincat-remote <IP>` | Connect to a remote TwinCAT host over ADS (requires `--ams-net-id`). Omit for a local TwinCAT runtime. `--link twincat` only. |
+| `--ams-net-id <ID>`   | AMS Net ID of the remote target, e.g. `192.168.0.1.1.1`. `--link twincat` only. |
+| `--count <N>` *or* `--duration <DUR>` | Stop condition; at most one. With neither, the run continues until Ctrl+C. |
+| `--max-samples <N>`   | Cap on retained per-send samples, so an unbounded run has bounded memory. Sends continue past the cap but are no longer recorded, and the summary/CSV then cover that prefix only (a warning says so). Default = 1000000, `0` = unlimited. |
+| `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
+| `--gpio-base-signal`  | Emit `BaseSignal` on GPIO[0] of every device at start-up. Probing GPIO[0] across devices with an oscilloscope shows whether they stay synchronized during the run. Default: off. |
+| `--sync0-period <DUR>` | SYNC0 / EtherCAT cycle period, e.g. `1ms` / `500us` (`*LinkOption.sync0_period`). Default = `2ms` on Windows (absorbs DPC wake jitter, matching every link's own Windows default) and `1ms` elsewhere. `0ms` = free-run, `--link nop` only. |
+| `--shift-percent <N>` | SYNC0 shift as a percent of the period (`*LinkOption.sync0_shift = period * percent`). Default = 0. Not valid with `--link echocat`, which keeps SYNC0 at shift 0 and phase-locks the send instant itself. |
+| `--sleep-strategy <S>` | `--link echocat` only: how the RT thread waits for the next cycle (`EchocatLinkOption.sleep_strategy`). `sleep` (default) or `spin`. |
+| `--spin-margin <DUR>` | How long before the deadline `--sleep-strategy spin` stops sleeping and busy-waits. Must exceed how far the OS oversleeps (0.5–0.7 ms on Windows even under `timeBeginPeriod(1)`). Default = `1ms`. |
+| `--warmup <N>`        | Drop the first N samples from the summary. Default = 0. |
+| `--csv <PATH>`        | Write every sample's `(index, rtt_ns, status)` to CSV. |
+| `--timeout-cycles <N>`| PDO cycles to wait for an ACK match before raising `Timeout` (`ClientConfig.timeout_cycles`). Default = 10. |
+| `--max-resync-rounds <N>` | Resync rounds allowed before the client gives up (`ClientConfig.max_resync_rounds`). Default = 8. |
+| `--mode <MODE>`       | `stop-and-wait` (default) or `streaming`. See below. |
+| `--max-inflight <N>`  | Pipeline depth in `streaming` mode (`ClientConfig.max_inflight`). Default = 127 (the SEQ-wrap cap). Ignored in `stop-and-wait`. Alias: `--inflight`. |
+| `--low-latency`       | Request the slave's low-latency (inline ISR) processing mode instead of the default FIFO path (`ClientConfig.low_latency`). Default: off. |
+| `--rt-priority <N>` / `--rt-policy <P>` / `--rt-affinity <CORE>` | RT thread scheduling (`ClientConfig.rt_priority` / `rt_policy` / `rt_affinity`). `--rt-priority` is 0..=99; omit it to keep the library default (TimeCritical on Windows, SCHED_FIFO 80 elsewhere). `--rt-affinity` alias: `--rt-core`. |
+| `--no-win-perf-tune`  | Skip `PerfTuning::apply()` (the 1 ms timer resolution and HIGH process priority raised on Windows). Default: off. |
 
 `--command` selects what is sent, which isolates where the time goes:
 
@@ -15,135 +61,25 @@ Every frame is the same size on the wire regardless of command, and the fused `p
 frame, so all three are directly comparable frame-for-frame. The differences are the FPGA RAM write
 and the per-frame latch.
 
-## Run
-
-The link uses raw sockets, so it needs privileges: root or `CAP_NET_RAW` on Linux, read/write access to
-`/dev/bpf*` on macOS. The easiest way is through xtask; it builds in release mode and then runs the
-binary under `sudo`:
-
-```sh
-# 10,000 commands as fast as the bus allows by stop-and-wait manner
-cargo xtask tool perftest -- --interface enp3s0 --count 10000
-
-# Pipelined streaming run — measures the 1-frame-per-cycle ceiling
-cargo xtask tool perftest -- --interface enp3s0 --count 10000 --mode streaming
-
-# Isolate the link path from the FPGA write
-cargo xtask tool perftest -- --interface enp3s0 --count 10000 --command nop
-```
-
-## Arguments
-
-| Flag                  | Description |
-|-----------------------|-------------|
-| `--link <KIND>`       | `ethercrab` (default), `soem`, `twincat`, or `nop`. |
-| `--command <CMD>`     | `pattern` (default), `write-pattern-buffer`, or `nop`. See the table above. |
-| `--interface <NAME>`  | EtherCAT network interface (for `ethercrab` / `soem`). |
-| `--devices <N>`       | Expected device count. Required for `twincat` (no bus scan) and `nop`; a mismatch guard otherwise. |
-| `--twincat-remote <IP>` | Connect to a remote TwinCAT host over ADS (requires `--ams-net-id`). Omit for a local TwinCAT runtime. `--link twincat` only. |
-| `--ams-net-id <ID>`   | AMS Net ID of the remote target, e.g. `192.168.0.1.1.1`. `--link twincat` only. |
-| `--count <N>` *or* `--duration <DUR>` | Stop condition; at most one. With neither, the run continues until Ctrl+C. |
-| `--max-samples <N>`   | Cap on retained per-send samples, so an unbounded run has bounded memory. Sends continue past the cap but are no longer recorded, and the summary/CSV then cover that prefix only (a warning says so). Default = 1000000, `0` = unlimited. |
-| `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
-| `--gpio-base-signal`  | Emit `BaseSignal` on GPIO[0] of every device at start-up. Probing GPIO[0] across devices with an oscilloscope shows whether they stay synchronized during the run. Default: off. |
-| `--sync0-period <DUR>` | SYNC0 / EtherCAT cycle period, e.g. `1ms` / `500us` (`*LinkOption.sync0_period`). Default = `1ms`. `0ms` = free-run, `--link nop` only. |
-| `--shift-percent <N>` | SYNC0 shift as a percent of the period (`*LinkOption.sync0_shift = period * percent`). Default = 0. |
-| `--warmup <N>`        | Drop the first N samples from the summary. Default = 0. |
-| `--csv <PATH>`        | Write every sample's `(index, rtt_ns, status)` to CSV. |
-| `--timeout-cycles <N>`| PDO cycles to wait for an ACK match before raising `Timeout` (`ClientConfig.timeout_cycles`). Default = 10. |
-| `--mode <MODE>`       | `stop-and-wait` (default) or `streaming`. See below. |
-| `--max-inflight <N>`  | Pipeline depth in `streaming` mode (`ClientConfig.max_inflight`). Default = 127 (the SEQ-wrap cap). Ignored in `stop-and-wait`. Alias: `--inflight`. |
-| `--low-latency`       | Request the slave's low-latency (inline ISR) processing mode instead of the default FIFO path (`ClientConfig.low_latency`). Default: off. |
-| `--rt-priority <N>` / `--rt-policy <P>` / `--rt-affinity <CORE>` | RT thread scheduling (`ClientConfig.rt_priority` / `rt_policy` / `rt_affinity`). `--rt-affinity` alias: `--rt-core`. |
-
-Each flag notes the `EtherCrabLinkOption` / `SoemLinkOption` / `ClientConfig` field it drives, and every run
-prints a copy-pasteable `=== reproduce this configuration in your app ===` Rust snippet that reconstructs
-the exact link option + `ClientConfig` used, so a good perftest result maps straight into application code.
-The snippet comes first and the summary last, so the numbers stay at the bottom of the terminal.
-
-## Soak testing
-
-Omitting both `--count` and `--duration` runs until Ctrl+C, which turns the tool into a soak test for the
-CPU board's frame reception. `--stop-on-error` halts at the first bad send so the failure is not buried in
-hours of output, and `--gpio-base-signal` gives an oscilloscope something to watch inter-device sync on.
-
-`--command pattern --low-latency` is the harshest combination: the fused command latches `CTL_FLAG` once per
-frame, so the firmware's `set_and_wait_update` spin runs inline in the EtherCAT ISR every cycle. Use
-`--command write-pattern-buffer` to keep the FPGA RAM traffic but drop the latch.
-
-```sh
-# Hammer the fused write until Ctrl+C, stopping at the first error
-cargo xtask tool perftest -- --interface enp3s0 --stop-on-error --gpio-base-signal
-
-# Same, with the per-frame latch running inside the EtherCAT ISR
-cargo xtask tool perftest -- --interface enp3s0 --low-latency --stop-on-error
-```
-
-## Hardware-free runs (`--link nop`)
-
-`--link nop` swaps the EtherCAT bus for the `autd3-rs-link-nop` firmware emulator, so the whole
-client stack — RT thread, slot pool, request-response engine, real CPU firmware C code — runs
-without any hardware. The device count comes from `--devices` instead of a bus scan.
-
-The emulator answers each frame instantly, so the tool paces `cycle()` itself to `--sync0-period`
-(default 1000 µs) to reproduce the timing of a real bus. Pass `--sync0-period 0ms` to free-run: cycles
-then advance as fast as the CPU allows, which turns a 10,000-sample run into a few tens of
-milliseconds. Latency and throughput numbers are meaningless in free-run mode; allocation counts
-are not.
-
-```sh
-# 1 ms emulated bus — throughput/latency behave like real hardware
-cargo xtask tool perftest --no-sudo -- --link nop --devices 1 --duration 10s --mode streaming
-
-# free-run — fastest way to gather allocation statistics
-cargo xtask tool perftest --mem-profile --no-sudo -- --link nop --devices 1 --count 10000 --sync0-period 0ms
-```
-
-`--no-sudo` is worth passing: the nop link opens no raw socket, so it needs no privileges.
-
-## Memory profiling
-
-Pass `--mem-profile` to xtask to build with the `mem-profile` cargo feature, which installs an
-instrumented global allocator and appends a process-wide allocation summary to the report:
-alloc/free/realloc counts, total bytes, per-send averages, and a **histogram of allocation sizes**.
-
-```sh
-cargo xtask tool perftest --mem-profile -- --link soem --interface enp3s0 --count 10000
-```
-
-The histogram is the useful part. Counts are exact per size below 8192 bytes, sorted by the share
-of bytes they contribute, so a per-send allocation shows up as a row with `per send` ≈ 1.00 and the
-size tells you what it is:
-
-```
-  allocation sizes (largest share of bytes first):
-        size       count    per send    bytes/send
-         456       10000        1.00        456.00   <- BTreeMap<(Instant, usize), Waker> node
-         104       10000        1.00        104.00
-```
-
-Recording starts after the link is open and the handshake is done, so startup allocations are
-excluded; `net bytes` is therefore usually negative (frees of pre-recording allocations).
-
-Works with every link. `--link nop --sync0-period 0ms` iterates fastest and needs no hardware, but only
-exercises the client; use `--link ethercrab` / `--link soem` with `--interface` to profile a link
-implementation against a real bus.
-
-The feature is opt-in so ordinary latency runs keep the plain system allocator and stay unperturbed.
-
 ## Modes
 
 ### `stop-and-wait` (default)
 
 Sends the selected command one at a time, waiting for each ACK before sending the next.
-Mirrors the only mode the public client API supports.
-Per-sample `rtt` is the full request-response round-trip — the sum of "queue into PDI", "slave processes", "slave Rx returns", "host observes ACK" — typically 4 PDO cycles at a 1 ms cycle.
+
 Throughput is `1 / rtt` (~ 250 cmd/s on a 1 ms cycle).
 
 ### `streaming`
 
-Bypasses the `Controller` after the startup handshake and drives the link directly: each PDO cycle either queues a fresh command (when the in-flight window has room) or just advances the cycle stream so the slave's `ACK` can catch up. 
-Used for measuring the protocol's theoretical ceiling of one frame per cycle (~ 1000 cmd/s on a 1 ms cycle), well above what the production `Controller` API can deliver.
+Sends the selected command as fast as the link allows, without waiting for ACKs.
 
-Per-sample `rtt` is the *individual* request's send-to-ACK latency — still ~5 cycles on a healthy link, the same as stop-and-wait.
+Used for measuring the protocol's theoretical ceiling of one frame per cycle (~ 1000 cmd/s on a 1 ms cycle).
+
+Per-sample `rtt` is the *individual* request's send-to-ACK latency.
 The difference shows up in throughput, not latency: many requests are in flight at once, so completions land one per cycle once the pipeline is primed.
+
+## See also
+
+[`tools/synctune`](../synctune/README.md) measures OP-state retention and DC drift, and sweeps
+`sync0_period` / `sync0_shift` for the setting that holds OP. Pick the timing there first, then
+load-test it here.
