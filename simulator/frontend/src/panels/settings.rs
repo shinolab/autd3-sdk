@@ -122,7 +122,7 @@ pub fn SettingsPanel() -> Element {
             div { class: "card bg-base-100 shadow",
                 div { class: "card-body gap-4",
                     div { class: "flex items-center gap-4",
-                        label { class: "label-text font-medium", "Background color" }
+                        label { class: "label font-medium", "Background color" }
                         input {
                             r#type: "color",
                             class: "h-9 w-16 rounded border border-base-300 bg-base-100",
@@ -132,9 +132,9 @@ pub fn SettingsPanel() -> Element {
                         span { class: "text-sm opacity-70", "{bg_hex}" }
                     }
                     div { class: "grid grid-cols-1 gap-4 sm:grid-cols-2",
-                        div { class: "form-control",
+                        div { class: "flex flex-col",
                             label { class: "label py-1",
-                                span { class: "label-text", "Animation" }
+                                "Animation"
                             }
                             button {
                                 class: if playing() { "btn btn-sm btn-primary w-fit" } else { "btn btn-sm w-fit" },
@@ -145,7 +145,7 @@ pub fn SettingsPanel() -> Element {
                                 if playing() { "Pause" } else { "Play" }
                             }
                         }
-                        div { class: "form-control",
+                        div { class: "flex flex-col",
                             label { class: "label cursor-pointer justify-start gap-3",
                                 input {
                                     r#type: "checkbox",
@@ -153,10 +153,10 @@ pub fn SettingsPanel() -> Element {
                                     checked: show_markers(),
                                     onchange: on_show,
                                 }
-                                span { class: "label-text", "Show devices" }
+                                "Show devices"
                             }
                         }
-                        div { class: "form-control",
+                        div { class: "flex flex-col",
                             label { class: "label cursor-pointer justify-start gap-3",
                                 input {
                                     r#type: "checkbox",
@@ -164,7 +164,7 @@ pub fn SettingsPanel() -> Element {
                                     checked: mod_enabled(),
                                     onchange: on_mod,
                                 }
-                                span { class: "label-text", "Apply modulation" }
+                                "Apply modulation"
                             }
                         }
                     }

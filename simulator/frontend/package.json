@@ -6,7 +6,8 @@
     "css:watch": "tailwindcss -i ./input.css -o ./assets/tailwind.css --watch"
   },
   "devDependencies": {
-    "daisyui": "^4.12.0",
-    "tailwindcss": "^3.4.0"
+    "@tailwindcss/cli": "^4.3.3",
+    "daisyui": "^5.7.8",
+    "tailwindcss": "^4.3.3"
   }
 }

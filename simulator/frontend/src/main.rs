@@ -358,7 +358,7 @@ fn App() -> Element {
             onmouseup: on_root_up,
             div { class: "navbar shrink-0 bg-base-100 shadow gap-2",
                 div { class: "px-2 text-lg font-semibold", "AUTD3 Simulator" }
-                div { role: "tablist", class: "tabs tabs-boxed flex-1",
+                div { role: "tablist", class: "tabs tabs-box flex-1",
                     for tab in Tab::ALL {
                         button {
                             role: "tab",
