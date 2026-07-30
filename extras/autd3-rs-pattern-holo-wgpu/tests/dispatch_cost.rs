@@ -144,6 +144,18 @@ fn dispatch_cost_breakdown() {
                 q = Some(gpu.gemv_hadamard_normalized(&b, p, &amps));
             });
         }
+        {
+            let r = gpu.gemm(&g, &b);
+            measure(&gpu, "gspat loop x100 (unfused)", 100, || {
+                let mut gamma = gpu.gemv(&r, &amps);
+                for _ in 1..100 {
+                    gamma = gpu.gemv_hadamard_normalized(&r, gamma, &amps);
+                }
+            });
+            measure(&gpu, "gspat loop x100 (fused)", 2, || {
+                let _ = gpu.repeat_gemv_normalized(&r, gpu.gemv(&r, &amps), &amps, 99);
+            });
+        }
     }
 }
 

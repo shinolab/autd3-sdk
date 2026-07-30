@@ -56,6 +56,19 @@ pub trait LinAlgBackend {
         self.gemv(a, &x)
     }
 
+    fn repeat_gemv_normalized(
+        &self,
+        a: &Self::Matrix,
+        mut x: Self::Vector,
+        r: &Self::Vector,
+        repeat: usize,
+    ) -> Self::Vector {
+        for _ in 0..repeat {
+            x = self.gemv_hadamard_normalized(a, x, r);
+        }
+        x
+    }
+
     fn quantize(
         &self,
         v: &Self::Vector,
@@ -93,6 +106,19 @@ pub trait LinAlgBackend {
         x: Self::BatchVector,
         r: &Self::BatchVector,
     ) -> Self::BatchVector;
+
+    fn batch_repeat_gemv_normalized(
+        &self,
+        a: &Self::BatchMatrix,
+        mut x: Self::BatchVector,
+        r: &Self::BatchVector,
+        repeat: usize,
+    ) -> Self::BatchVector {
+        for _ in 0..repeat {
+            x = self.batch_gemv_hadamard_normalized(a, x, r);
+        }
+        x
+    }
 
     fn batch_amplitude_correct(&self, x: &mut Self::BatchVector, r: &Self::BatchVector);
 

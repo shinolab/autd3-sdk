@@ -16,6 +16,7 @@ pub use buffer::{GpuMatrix, GpuVector, Pooled};
 const WG: u32 = 256;
 const COLS_PER_CHUNK: u32 = 1024;
 const ROWWISE_COL_LIMIT: usize = 256;
+const FUSED_REPEAT_LIMIT: usize = 256;
 const UNIFORM_SIZE: u64 = 32;
 const UNIFORM_SLOTS: u64 = 1024;
 const MAX_BINDINGS: usize = 6;
@@ -533,6 +534,16 @@ impl LinAlgBackend for WgpuBackend {
         self.gemv_maybe_normalized(a, &x, Some(r))
     }
 
+    fn repeat_gemv_normalized(
+        &self,
+        a: &Self::Matrix,
+        x: Self::Vector,
+        r: &Self::Vector,
+        repeat: usize,
+    ) -> Self::Vector {
+        self.repeat_normalized(a, x, r, repeat)
+    }
+
     fn hadamard_normalize(&self, x: &mut Self::Vector, r: &Self::Vector) {
         self.elementwise(&self.pipelines.hadamard_normalize, x, r);
     }
@@ -599,6 +610,16 @@ impl LinAlgBackend for WgpuBackend {
         r: &Self::BatchVector,
     ) -> Self::BatchVector {
         self.gemv_hadamard_normalized(a, x, r)
+    }
+
+    fn batch_repeat_gemv_normalized(
+        &self,
+        a: &Self::BatchMatrix,
+        x: Self::BatchVector,
+        r: &Self::BatchVector,
+        repeat: usize,
+    ) -> Self::BatchVector {
+        self.repeat_normalized(a, x, r, repeat)
     }
 
     fn batch_amplitude_correct(&self, x: &mut Self::BatchVector, r: &Self::BatchVector) {
@@ -725,6 +746,53 @@ impl WgpuBackend {
             batch,
             row_major: true,
         }
+    }
+
+    fn repeat_normalized(
+        &self,
+        a: &GpuMatrix,
+        x: GpuVector,
+        r: &GpuVector,
+        repeat: usize,
+    ) -> GpuVector {
+        if repeat == 0 {
+            return x;
+        }
+        if a.rows != a.cols || a.cols > FUSED_REPEAT_LIMIT {
+            let mut x = x;
+            for _ in 0..repeat {
+                x = self.gemv_maybe_normalized(a, &x, Some(r));
+            }
+            return x;
+        }
+        self.materialize(&x);
+        self.materialize(r);
+        let (n, batch) = (a.cols, a.batch);
+        let out = self.storage(bytes_of(n * batch));
+        let dims = self.uniform([
+            to_u32(n),
+            to_u32(repeat),
+            broadcast_stride(r),
+            broadcast_stride(&x),
+            u32::from(a.row_major),
+            0,
+            0,
+            0,
+        ]);
+        self.dispatch(
+            &self.pipelines.repeat_gemv,
+            &self.pipelines.gemv_layout,
+            &Bindings::default()
+                .storage(&a.buf)
+                .storage(&x.buf)
+                .storage(&self.unused_rw)
+                .storage(&out)
+                .uniform(&dims)
+                .storage(&r.buf),
+            dims.offset,
+            (1, 1, to_u32(batch).max(1)),
+        );
+        GpuVector::new(out, n, batch)
     }
 
     fn gemv_maybe_normalized(

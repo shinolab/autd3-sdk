@@ -62,10 +62,8 @@ pub fn gspat<B: LinAlgBackend>(
 
     let r = backend.gemm(&g, &b);
 
-    let mut gamma = backend.gemv(&r, &amps);
-    for _ in 1..option.repeat.get() {
-        gamma = backend.gemv_hadamard_normalized(&r, gamma, &amps);
-    }
+    let mut gamma =
+        backend.repeat_gemv_normalized(&r, backend.gemv(&r, &amps), &amps, option.repeat.get() - 1);
     backend.amplitude_correct(&mut gamma, &amps);
     let q = backend.gemv(&b, &gamma);
 
@@ -105,10 +103,12 @@ pub fn gspat_batch<B: LinAlgBackend>(
         |backend, g, amps, _, _| {
             let b = backend.batch_back_prop(g);
             let r = backend.batch_gemm(g, &b);
-            let mut gamma = backend.batch_gemv(&r, amps);
-            for _ in 1..option.repeat.get() {
-                gamma = backend.batch_gemv_hadamard_normalized(&r, gamma, amps);
-            }
+            let mut gamma = backend.batch_repeat_gemv_normalized(
+                &r,
+                backend.batch_gemv(&r, amps),
+                amps,
+                option.repeat.get() - 1,
+            );
             backend.batch_amplitude_correct(&mut gamma, amps);
             backend.batch_gemv(&b, &gamma)
         },
