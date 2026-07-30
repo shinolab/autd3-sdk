@@ -50,8 +50,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
                 &core,
             )?;
             bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
-            bump_package_version(&root.join("console/Cargo.toml"), &core)?;
-            bump_package_version(&root.join("console/dist.toml"), &core)?;
+            bump_console(root, &core)?;
             println!(
                 "Updated software version -> {core} (crates, ffi, python, csharp, emulator, holo-wgpu, simulator, console)"
             );
@@ -75,8 +74,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             println!("Updated simulator version -> {core}");
         }
         "console" => {
-            bump_package_version(&root.join("console/Cargo.toml"), &core)?;
-            bump_package_version(&root.join("console/dist.toml"), &core)?;
+            bump_console(root, &core)?;
             println!("Updated console version -> {core}");
         }
         "firmware" => {
@@ -224,7 +222,7 @@ fn print_next_steps(name: &str) {
             println!("  cargo xtask simulator build    # refresh simulator/Cargo.lock");
             println!("  cargo xtask console build      # refresh console/Cargo.lock");
             println!(
-                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock console/dist.toml 'bindings/unity/*/package.json'"
+                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock console/dist.toml 'bindings/unity/*/package.json' doc/src/content/docs"
             );
         }
         "python" => {
@@ -237,7 +235,7 @@ fn print_next_steps(name: &str) {
             println!("  git add bindings/csharp/Directory.Build.props CHANGELOG.md");
         }
         "unity" => {
-            println!("  git add 'bindings/unity/*/package.json' CHANGELOG.md");
+            println!("  git add 'bindings/unity/*/package.json' doc/src/content/docs CHANGELOG.md");
         }
         "simulator" => {
             println!("  cargo xtask simulator build    # refresh simulator/Cargo.lock");
@@ -246,18 +244,26 @@ fn print_next_steps(name: &str) {
         "console" => {
             println!("  cargo xtask console build      # refresh console/Cargo.lock");
             println!(
-                "  git add console/Cargo.toml console/Cargo.lock console/dist.toml CHANGELOG.md"
+                "  git add console/Cargo.toml console/Cargo.lock console/dist.toml doc/src/content/docs CHANGELOG.md"
             );
         }
         "firmware" => {
             println!("  cargo xtask rust build         # refresh Cargo.lock");
             println!("  cargo xtask cpu build          # refresh firmware/cpu/board/Cargo.lock");
             println!(
-                "  git add firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/fw/src/params.rs firmware/cpu/fw/Cargo.toml firmware/cpu/wire/Cargo.toml firmware/cpu/board/Cargo.toml firmware/cpu/board/Cargo.lock Cargo.toml Cargo.lock CHANGELOG.md"
+                "  git add firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/fw/src/params.rs firmware/cpu/fw/Cargo.toml firmware/cpu/wire/Cargo.toml firmware/cpu/board/Cargo.toml firmware/cpu/board/Cargo.lock Cargo.toml Cargo.lock doc/src/content/docs CHANGELOG.md"
             );
         }
         _ => {}
     }
+}
+
+fn bump_console(root: &Path, version: &str) -> Result<()> {
+    bump_package_version(&root.join("console/Cargo.toml"), version)?;
+    bump_package_version(&root.join("console/dist.toml"), version)?;
+    let pages = crate::doc::rewrite_console_version(root, version)?;
+    println!("Updated console release link in {pages} doc page(s) -> console-v{version}");
+    Ok(())
 }
 
 fn bump_unity_series(root: &Path, core: &str) -> Result<()> {
@@ -481,6 +487,8 @@ fn bump_unity(root: &Path, version: &str) -> Result<usize> {
     if count == 0 {
         bail!("no package.json found under {}", unity_root.display());
     }
+    let pages = crate::doc::rewrite_unity_version(root, version)?;
+    println!("Updated Unity package version in {pages} doc page(s) -> {version}");
     Ok(count)
 }
 
