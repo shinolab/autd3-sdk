@@ -22,8 +22,6 @@ const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const MSAA_SAMPLES: u32 = 4;
 const MAX_DIM: u32 = 4096;
 const MAX_DPR: f64 = 2.0;
-// 4x MSAA colour + 4x MSAA Depth32Float cost 32 B per pixel of surface, so the backing store is
-// bounded to keep the attachments around 128 MB even on a maximised HiDPI window.
 const MAX_PIXELS: f64 = 4.0e6;
 const FIELD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub const FIELD_TEXELS_PER_MM: f32 = 2.0;

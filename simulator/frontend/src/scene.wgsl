@@ -64,8 +64,6 @@ fn colormap(x: f32) -> vec3<f32> {
     return inferno(x);
 }
 
-// The acoustic field is evaluated once per slice texel in `field_cs` and stored in a texture whose
-// size follows the slice's physical extent, so its cost is independent of the viewport resolution.
 @compute @workgroup_size(8, 8, 1)
 fn field_cs(@builtin(global_invocation_id) id: vec3<u32>) {
     if id.x >= uni.slice_w || id.y >= uni.slice_h {
