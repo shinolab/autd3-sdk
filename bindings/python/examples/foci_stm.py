@@ -1,4 +1,5 @@
-"""Sweeps a focus around a 30 mm circle at 1 Hz using FociStm.
+"""
+Sweeps a focus around a 30 mm circle at 1 Hz using FociStm.
 
 Run with: cargo xtask py example foci_stm
 """

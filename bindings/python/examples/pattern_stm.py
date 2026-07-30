@@ -1,6 +1,8 @@
-"""Pattern STM: a circle of host-computed focus patterns played back at 1 Hz.
+"""
+Pattern STM: a circle of host-computed focus patterns played back at 1 Hz.
 
-Run with: cargo xtask py example pattern_stm"""
+Run with: cargo xtask py example pattern_stm
+"""
 
 import asyncio
 import math

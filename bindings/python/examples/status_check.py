@@ -1,5 +1,8 @@
-"""Watch the EtherCAT link status for every device.
-Run with: cargo xtask py example status_check"""
+"""
+Watch the EtherCAT link status for every device.
+
+Run with: cargo xtask py example status_check
+"""
 
 import asyncio
 import signal

@@ -1,5 +1,8 @@
-"""One-shot (stop-and-wait) command latency in low-latency mode.
-Run with: cargo xtask py example low_latency"""
+"""
+One-shot (stop-and-wait) command latency in low-latency mode.
+
+Run with: cargo xtask py example low_latency
+"""
 
 import asyncio
 import time

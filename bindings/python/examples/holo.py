@@ -1,4 +1,8 @@
-"""Two simultaneous foci synthesized with GS-PAT. Run with: cargo xtask py example holo"""
+"""
+Two simultaneous foci synthesized with GS-PAT.
+
+Run with: cargo xtask py example holo
+"""
 
 import asyncio
 import signal

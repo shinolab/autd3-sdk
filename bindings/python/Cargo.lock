@@ -290,6 +290,7 @@ dependencies = [
  "cc",
  "libc",
  "pcap",
+ "spin_sleep",
  "thiserror 2.0.18",
  "tracing",
 ]

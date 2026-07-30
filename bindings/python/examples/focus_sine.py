@@ -1,4 +1,8 @@
-"""Single focus with a 200 Hz sine AM. Run with: cargo xtask py example focus_sine"""
+"""
+Single focus with a 200 Hz sine AM. 
+
+Run with: cargo xtask py example focus_sine
+"""
 
 import asyncio
 import signal
@@ -25,7 +29,7 @@ async def main() -> None:
     for i, fw in enumerate(await client.read_firmware_version()):
         print(f"device[{i}] firmware version: {fw}")
 
-    # length in mm; sound speed as a Velocity
+    # length in mm
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
     wavelength = pattern.wavelength(340 * m / s)
     patterns = geometry.pattern_buffer()

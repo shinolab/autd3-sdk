@@ -20,7 +20,7 @@ Python bindings for the autd3-rs SDK built with PyO3 and maturin.
 ## Build
 
 ```bash
-cargo xtask py build [--debug] [--soem]   # build wheels (release default)
+cargo xtask py build [--debug] [--soem]      # build wheels (release default)
 cargo xtask py develop [--release] [--soem]  # editable-install into .venv
 cargo xtask py lint                          # clippy over the binding workspace
 cargo xtask py format [--fix]                # rustfmt
