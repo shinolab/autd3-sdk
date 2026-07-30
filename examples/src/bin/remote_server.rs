@@ -1,6 +1,6 @@
-// Remote Link server: drives a real EtherCAT link locally and relays tx/rx
-// frames to a remote client over TCP. Run this on the host wired to the AUTD3
-// devices. Run with: cargo xtask example remote_server
+// Remote Link server: drives a real EtherCAT link locally and relays tx/rx frames to a remote client over TCP.
+//
+// Run with: cargo xtask example remote_server
 
 use std::net::SocketAddr;
 

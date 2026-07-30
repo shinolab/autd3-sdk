@@ -1,4 +1,5 @@
 // Watch the EtherCAT link status for every device by driving the state checker.
+//
 // Run with: cargo xtask example status_check
 
 use std::time::Duration;

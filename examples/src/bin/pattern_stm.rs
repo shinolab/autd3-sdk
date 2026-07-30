@@ -1,4 +1,5 @@
 // Pattern STM: a circle of host-computed focus patterns played back at 1 Hz.
+//
 // Run with: cargo xtask example pattern_stm
 
 use anyhow::Result;
