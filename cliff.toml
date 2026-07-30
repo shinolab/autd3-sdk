@@ -42,6 +42,4 @@ commit_parsers = [
 filter_commits = true
 topo_order = false
 sort_commits = "oldest"
-# Default for standalone `git-cliff` runs. xtask overrides this per release
-# component via `--tag-pattern` (see xtask `component.rs`).
 tag_pattern = "v[0-9]*"

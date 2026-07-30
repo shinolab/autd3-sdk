@@ -12,6 +12,5 @@
 *.log
 *.logfile
 
-# simulator frontend bundle staged by `cargo xtask simulator build`
 /simulator/backend/web/*
 !/simulator/backend/web/.gitkeep
