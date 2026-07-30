@@ -32,11 +32,11 @@ pub(crate) fn NumField(
     rsx! {
         div {
             label { class: "label py-1",
-                span { class: "label-text {accent} font-medium", "{label}" }
+                span { class: "{accent} font-medium", "{label}" }
             }
             input {
                 r#type: "number",
-                class: "input input-bordered input-sm w-full cursor-ew-resize",
+                class: "input input-sm w-full cursor-ew-resize",
                 min: "{min}",
                 max: "{max}",
                 step: "{step}",
@@ -60,11 +60,11 @@ pub(crate) fn PlainNum(
     rsx! {
         div {
             label { class: "label py-1",
-                span { class: "label-text", "{label}" }
+                "{label}"
             }
             input {
                 r#type: "number",
-                class: "input input-bordered input-sm w-full",
+                class: "input input-sm w-full",
                 min: "{min}",
                 max: "{max}",
                 step: "{step}",

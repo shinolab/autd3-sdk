@@ -116,7 +116,7 @@ pub fn SlicePanel() -> Element {
                                 checked: gizmo_on(),
                                 onchange: move |e: Event<FormData>| gizmo_on.set(e.checked()),
                             }
-                            span { class: "label-text", "Show gizmo" }
+                            "Show gizmo"
                         }
                         div { class: "join",
                             button {
@@ -182,7 +182,7 @@ pub fn SlicePanel() -> Element {
                     div { class: "grid grid-cols-1 gap-4 sm:grid-cols-2",
                         div {
                             label { class: "label py-1",
-                                span { class: "label-text", "{pressure_label}" }
+                                "{pressure_label}"
                             }
                             input {
                                 r#type: "range",
@@ -196,10 +196,10 @@ pub fn SlicePanel() -> Element {
                         }
                         div {
                             label { class: "label py-1",
-                                span { class: "label-text", "Color map" }
+                                "Color map"
                             }
                             select {
-                                class: "select select-bordered select-sm",
+                                class: "select select-sm",
                                 value: if colormap() == 1 { "viridis" } else { "inferno" },
                                 onchange: on_colormap,
                                 option { value: "inferno", "Inferno" }

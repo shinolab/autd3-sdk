@@ -26,7 +26,7 @@ pub fn EnvironmentPanel() -> Element {
                 div { class: "card-body grid grid-cols-1 gap-4 sm:grid-cols-2",
                     div {
                         label { class: "label py-1",
-                            span { class: "label-text", "{sound_speed_label}" }
+                            "{sound_speed_label}"
                         }
                         input {
                             r#type: "range",
