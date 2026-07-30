@@ -1,4 +1,8 @@
-"""Multiple AUTD3 devices arranged side by side. Run with: cargo xtask py example multi_device"""
+"""
+Multiple AUTD3 devices arranged side by side.
+
+Run with: cargo xtask py example multi_device
+"""
 
 import asyncio
 

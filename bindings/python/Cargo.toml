@@ -55,10 +55,6 @@ module_name_repetitions = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 cast_precision_loss = "allow"
-# pyo3 #[pymethods] take `&self` and extract pyclass args by value/ref following
-# Python calling conventions; these pedantic lints fight that pervasively.
 needless_pass_by_value = "allow"
 trivially_copy_pass_by_ref = "allow"
-# pyo3 mandates `PyResult` return types for #[pymodule]/#[pyfunction] even when a
-# particular one is infallible.
 unnecessary_wraps = "allow"

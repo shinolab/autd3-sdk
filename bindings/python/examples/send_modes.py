@@ -1,8 +1,8 @@
-"""Sweeps a focus around a circle two ways: stop-and-wait vs streaming.
+"""
+Sweeps a focus around a circle two ways: stop-and-wait vs streaming.
 
-Both languages pipeline the streaming mode with two-stage await: `send` enqueues a
-frame and returns a ResponseFuture, and a FIFO deque bounds the in-flight frames.
-Run with: cargo xtask py example send_modes"""
+Run with: cargo xtask py example send_modes
+"""
 
 import asyncio
 import collections

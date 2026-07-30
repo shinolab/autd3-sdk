@@ -1,6 +1,8 @@
-"""Per-device-group command: focus each device group at a different target.
+"""
+Per-device-group command: focus each device group at a different target.
 
-Run with: cargo xtask py example group"""
+Run with: cargo xtask py example group
+"""
 
 import asyncio
 import signal

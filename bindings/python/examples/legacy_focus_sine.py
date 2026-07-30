@@ -1,6 +1,6 @@
-"""Single focus with a 200 Hz sine AM on legacy firmware v12.1.0.
+"""
+Single focus with a 200 Hz sine AM on legacy firmware v12.1.0.
 
-Identical to focus_sine except for the client type.
 Run with: cargo xtask py example legacy_focus_sine
 """
 
@@ -29,7 +29,7 @@ async def main() -> None:
     for i, fw in enumerate(await client.read_firmware_version()):
         print(f"device[{i}] firmware version: {fw}")
 
-    # length in mm; sound speed as a Velocity
+    # length in mm
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
     wavelength = pattern.wavelength(340 * m / s)
     patterns = geometry.pattern_buffer()
