@@ -31,3 +31,14 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo xtask simulator format
       - run: cargo xtask simulator lint
+      - name: Install cargo-binstall and cargo-about
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-binstall,cargo-about
+      - name: Install dioxus-cli
+        if: runner.os == 'Linux'
+        run: cargo binstall -y dioxus-cli --locked
+      - name: Build
+        if: runner.os == 'Linux'
+        run: cargo xtask simulator build --debug
