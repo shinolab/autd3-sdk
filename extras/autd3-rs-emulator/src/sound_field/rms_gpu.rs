@@ -316,7 +316,9 @@ impl GpuRms {
         }
         pending.take().unwrap()?;
         {
-            let data = buffer_slice.get_mapped_range();
+            let data = buffer_slice
+                .get_mapped_range()
+                .expect("failed to map the staging buffer");
             self.buffer.copy_from_slice(bytemuck::cast_slice(&data));
         }
         self.buf_staging_dst.unmap();

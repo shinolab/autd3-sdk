@@ -356,6 +356,7 @@ impl<'a> GpuInstant<'a> {
             .collect::<Vec<_>>();
         buffer_slice
             .get_mapped_range_mut()
+            .expect("failed to map the staging buffer")
             .copy_from_slice(bytemuck::cast_slice(&src));
         self.buf_staging_output_ultrasound.unmap();
     }
@@ -434,7 +435,9 @@ impl<'a> GpuInstant<'a> {
             }
             pending.take().unwrap()?;
             {
-                let data = buffer_slice.get_mapped_range();
+                let data = buffer_slice
+                    .get_mapped_range()
+                    .expect("failed to map the staging buffer");
                 self.field[i].copy_from_slice(bytemuck::cast_slice(&data));
             }
             self.buf_staging_dst.unmap();
