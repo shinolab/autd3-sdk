@@ -1,16 +1,6 @@
-// Computes the instantaneous (time-domain) sound field on a plane through a
-// focus (silencer disabled), saves it as CSV, and animates it with matplotlib
-// (plot_field.py) so the ultrasound oscillation is visible. The recording must
-// be long enough for the sound to reach the observation plane; we skip the
-// propagation delay and capture one ultrasound period (25 time steps).
-// Pass `--no-plot` to skip the Python step. Run with:
-//   cargo xtask emulator example sound_field
-//   cargo xtask emulator example sound_field --no-plot
+// Computes the instantaneous sound field on a plane through a focus and animates it
 //
-// Build with `--features gpu` to compute the field on the GPU (wgpu) instead of
-// the CPU (requires a GPU adapter); the `option.gpu` field below is enabled
-// automatically under that feature:
-//   cargo run -p autd3-rs-emulator-examples --bin sound_field --release --features gpu
+// Run with: cargo xtask emulator example sound_field
 
 use std::fs::File;
 use std::time::Duration;

@@ -1,8 +1,6 @@
 // Records the per-transducer drive (phase / pulse width) of a 200 Hz AM focus
-// with the hardware-free emulator. The send loop is identical to a real-device
-// example; only the surrounding `record(...)` wrapper and `tick(...)` are
-// emulator-specific. Run with:
-//   cargo run -p autd3-rs-emulator-examples --bin record_drive
+//
+// Run with: cargo xtask emulator example record_drive
 
 use std::time::Duration;
 
@@ -57,7 +55,7 @@ fn main() -> Result<()> {
         for frame in &datagrams {
             r.send_checked(frame).await?;
         }
-        r.tick(Duration::from_millis(1))?;
+        r.tick(Duration::from_millis(10))?;
         Ok(())
     })?;
 

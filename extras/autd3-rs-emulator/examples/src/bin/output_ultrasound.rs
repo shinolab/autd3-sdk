@@ -1,7 +1,5 @@
-// Records a uniform full-intensity drive (silencer disabled) and plots the
-// output voltage waveform and the emitted ultrasound (T4010A1BVD model) of
-// transducer 0 as terminal line charts. With Intensity::MAX and the silencer
-// disabled the duty ratio is 50% (pulse width 256 / 512).
+// Records a uniform full-intensity drive and plots the output voltage waveform and the emitted ultrasound of 0th transducer
+//
 // Run with: cargo xtask emulator example output_ultrasound
 
 use anyhow::Result;
