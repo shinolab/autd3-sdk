@@ -104,10 +104,7 @@ fn fused_gspat_is_bit_identical() {
         b.amplitude_correct(&mut want, &amps);
         let want = b.gemv(&bp, &want);
 
-        let mut got = b.gemv(&r, &amps);
-        for _ in 1..repeat {
-            got = b.gemv_hadamard_normalized(&r, got, &amps);
-        }
+        let mut got = b.repeat_gemv_normalized(&r, b.gemv(&r, &amps), &amps, repeat - 1);
         b.amplitude_correct(&mut got, &amps);
         let got = b.gemv(&bp, &got);
 

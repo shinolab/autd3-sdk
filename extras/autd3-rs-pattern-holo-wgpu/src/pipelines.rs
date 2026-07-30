@@ -17,6 +17,7 @@ pub(crate) struct Pipelines {
     pub(crate) gemv_rowwise_pending: wgpu::ComputePipeline,
     pub(crate) gemv_partial: wgpu::ComputePipeline,
     pub(crate) gemv_reduce: wgpu::ComputePipeline,
+    pub(crate) repeat_gemv: wgpu::ComputePipeline,
     pub(crate) gemm: wgpu::ComputePipeline,
     pub(crate) back_prop_row_norm: wgpu::ComputePipeline,
     pub(crate) back_prop_write: wgpu::ComputePipeline,
@@ -105,6 +106,7 @@ impl Pipelines {
 
         let elementwise = module(device, include_str!("../shaders/elementwise.wgsl"));
         let vec_mod = module(device, include_str!("../shaders/gemv.wgsl"));
+        let repeat_mod = module(device, include_str!("../shaders/repeat_gemv.wgsl"));
         let mat_mod = module(device, include_str!("../shaders/gemm.wgsl"));
         let back_prop = module(device, include_str!("../shaders/back_prop.wgsl"));
         let prop = module(device, include_str!("../shaders/propagation.wgsl"));
@@ -127,6 +129,7 @@ impl Pipelines {
             gemv_rowwise_pending: pipeline(device, &vec_layout, &vec_mod, "rowwise_pending"),
             gemv_partial: pipeline(device, &vec_layout, &vec_mod, "partial_pass"),
             gemv_reduce: pipeline(device, &vec_layout, &vec_mod, "reduce_pass"),
+            repeat_gemv: pipeline(device, &vec_layout, &repeat_mod, "main"),
             gemm: pipeline(device, &mat_layout, &mat_mod, "main"),
             back_prop_row_norm: pipeline(device, &back_prop_layout, &back_prop, "row_norm_pass"),
             back_prop_write: pipeline(device, &back_prop_layout, &back_prop, "write_pass"),
