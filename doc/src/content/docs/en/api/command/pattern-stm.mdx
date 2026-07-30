@@ -15,7 +15,7 @@ import csFullSample from "@codes/csharp/examples/api/command/pattern-stm-example
 import { excerpt } from "@lib/excerpt";
 
 `PatternStm` provides an STM feature that switches arbitrary sound fields (the emission of each transducer) by a hardware timer.
-Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary Patterns, but its data transfer volume is large.
+Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary Patterns, but the number of frames to transfer is large (i.e. the latency is high).
 
 ## API
 
@@ -46,7 +46,7 @@ For the behavior of `loop_behavior` and `transition_mode`, see [playback control
 
 ## PatternStmMode
 
-Selects the transfer format of each Pattern. The phase-only and low-resolution formats can reduce the transfer volume.
+Selects the transfer format of each Pattern. The phase-only and low-resolution formats can reduce the number of frames to transfer.
 
 | Mode                 | Content                                  | 
 | -------------------- | ---------------------------------------- |

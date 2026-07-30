@@ -11,8 +11,7 @@ import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/guide/emulator.rs?raw";
 import pySample from "@codes/python/examples/guide/emulator.py?raw";
 
-`Emulator` is a tool that records AUTD3 drive data without real hardware and computes the sound field offline from it.
-It is provided as a package separate from the main library (no package is provided for C#).
+`Emulator` is a tool that records AUTD3 drive data without real hardware and computes the sound field offline from it (not provided for C#).
 
 <Install rust="autd3-rs-emulator" python="autd3-emulator" />
 
@@ -250,7 +249,7 @@ shape: (1_681, 25)
 ### Observation Range
 
 `Range` represents a set of observation points.
-Besides a plane specified by giving two axes a range and fixing the remaining axis to a constant (like `RangeXY`), there are lines along a single axis (`RangeX`, etc.) and cubes spanning all three axes (`RangeXYZ`, etc.).
+Besides planes such as `RangeXY`, there are single-axis variants such as `RangeX` and all-three-axis variants such as `RangeXYZ`.
 The order of the axes (`RangeXY` vs. `RangeYX`, etc.) determines the enumeration order of the observation points.
 `resolution` is the step width of each axis (mm).
 

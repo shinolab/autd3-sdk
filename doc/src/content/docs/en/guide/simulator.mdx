@@ -12,12 +12,10 @@ Even without real hardware, you can check the sound field generated from the dat
 
 `Simulator` is bundled with the GUI console `autd3-console`.
 
-Download `autd3-console` from the [Release page](https://github.com/shinolab/autd3-sdk/releases) on GitHub, launch it, and open the "Simulator" tab at the top.
-`Simulator` can be launched from the tab.
+Install `autd3-console` from the newest `console-v*` on GitHub [Releases](https://github.com/shinolab/autd3-sdk/releases), launch it, and open the "Simulator" tab at the top.
 
 ## Connecting
 
 Since `Simulator` internally launches a `RemoteServer`, the client connects to it with [`RemoteLink`](/autd3-sdk/en/api/link/remote/).
 The connection target is `127.0.0.1:<link-port>` (default is 8080).
 
-On connection, the simulator receives the client's `Geometry`, from which it determines the number of devices and their layout.

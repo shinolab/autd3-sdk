@@ -85,7 +85,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## 座標ヘルパ (Rustのみ)
 
-`autd3_rs::geometry` には座標を組み立てる補助関数がある.
+`autd3_rs::geometry` には座標を組み立てるヘルパがある.
 引数の型が `Length` になっており, 単位を指定することができる.
 
 | 関数                | 返り値          | 説明                                         |
@@ -93,4 +93,4 @@ import { excerpt } from "@lib/excerpt";
 | `point(x, y, z)`    | `Point3<f32>`   | 絶対座標の点                                 |
 | `offset(x, y, z)`   | `Vector3<f32>`  | 相対変位ベクトル                             |
 
-Python / C# には長さの単位型が無く座標は mm 単位の素の値で扱うため, これらのヘルパは存在しない.
+Python / C# には長さの単位型はなく, mm 固定である.

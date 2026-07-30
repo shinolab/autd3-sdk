@@ -46,6 +46,8 @@ Selects how the RT thread waits for the next cycle.
 
 | Variant                | Description                                                          |
 | ---------------------- | -------------------------------------------------------------------- |
-| `Sleep` (default)      | waits with `std::thread::sleep`. Does not burn CPU                   |
+| `Sleep`                | waits with `std::thread::sleep`.                                     |
 | `Spin { margin }`      | sleeps until `margin` before the deadline, then spins                |
+
+The default is `Sleep`.
 

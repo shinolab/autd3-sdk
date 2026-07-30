@@ -15,7 +15,7 @@ import csFullSample from "@codes/csharp/examples/api/command/pattern-stm-example
 import { excerpt } from "@lib/excerpt";
 
 `PatternStm` は, ハードウェアタイマにより任意の音場 (各振動子の emission) を切り替える STM 機能を提供する.
-[FociStm](/autd3-sdk/api/command/foci-stm/) と異なり, 任意の Pattern を扱えるが, データ転送量が大きい.
+[FociStm](/autd3-sdk/api/command/foci-stm/) と異なり, 任意の Pattern を扱えるが, 転送フレーム数が多い (=レイテンシが大きい).
 
 ## API
 
@@ -46,7 +46,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## PatternStmMode
 
-各 Pattern の転送形式を選ぶ. 位相のみ・低分解能の形式は転送量を減らせる.
+各 Pattern の転送形式を選ぶ. 位相のみ・低分解能の形式は転送フレーム数を減らせる.
 
 | モード               | 内容                                   | 
 | -------------------- | -------------------------------------- |

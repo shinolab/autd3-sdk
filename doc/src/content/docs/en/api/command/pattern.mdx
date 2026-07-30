@@ -54,7 +54,6 @@ Several [helper functions](/autd3-sdk/en/api/compute/pattern/) are provided for 
 The following is equivalent to `Pattern { bank, emissions }`.
 
 When `transition_mode` is `TransitionMode::Later`, nothing is fused: the command decomposes into the two frames `WritePatternBuffer` + `ConfigPattern` and no `ChangePatternBank` is sent.
-That is, the bank is only written to and the playback target does not switch.
 See the `TransitionMode` section of [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/) for details.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

@@ -54,7 +54,6 @@ patternの計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/patte
 以下は `Pattern { bank, emissions }` と等価な組み合わせである.
 
 `transition_mode` に `TransitionMode::Later` を指定した場合は融合せず, `WritePatternBuffer` + `ConfigPattern` の 2 フレームに分解して送る (`ChangePatternBank` を送らない).
-つまりバンクへ書き込むだけで再生対象は切り替わらない.
 詳細は [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の `TransitionMode` を参照.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

@@ -13,7 +13,6 @@ import { excerpt } from "@lib/excerpt";
 
 Holo is a set of Pattern computations for generating multiple focal points (control points) simultaneously.
 It optimizes the phase and amplitude of each transducer so that the target sound pressure is obtained at the specified multiple points.
-It is provided in a package separate from [Pattern](/autd3-sdk/en/api/compute/pattern/).
 
 <Install rust="autd3-rs-pattern-holo" python="autd3-pattern-holo" csharp="AUTD3.Pattern.Holo" />
 
@@ -53,8 +52,8 @@ The default differs depending on the algorithm.
 ### Directivity
 
 The directivity model of the transducer.
-`Sphere` (omnidirectional) or the real-hardware directivity `T4010A1` can be chosen.
-It is specified via the `directivity` field of each Option (the default is `Sphere`).
+Either the omnidirectional `Sphere` (default) or the real-hardware directivity `T4010A1` can be chosen.
+It is specified via the `directivity` field of each Option.
 
 ### TransducerMask
 

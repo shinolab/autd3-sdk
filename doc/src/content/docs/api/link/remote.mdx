@@ -13,19 +13,19 @@ import pyClient from "@codes/python/examples/api/link/remote_client.py?raw";
 import csClient from "@codes/csharp/examples/api/link/remote_client.cs?raw";
 import server from "@codes/rust/examples/api/link/remote_server.rs?raw";
 
-`RemoteLink` は, AUTD3 デバイスに直接配線された**別ホスト**へ TCP 接続して送受信する Link 実装. 
+`RemoteLink` は, AUTD3 デバイスに接続された別ホストへ TCP 接続して送受信する Link 実装. 
 AUTD3 を操作したいマシンと実機を配線したマシンが異なる場合に使う.
 
 <Install rust="autd3-rs-link-remote" python="autd3-link-remote" csharp="AUTD3.Link.Remote" />
 
 サーバとクライアントの 2 プロセスで構成する.
 
-- `RemoteServer`: 実機に配線されたホストで動かす. 実機リンクを駆動し, tx/rx フレームを TCP で中継する. 
+- `RemoteServer`: 実機に配線されたホストで動かす. 実機リンクを駆動し, フレームを TCP で中継する. 
 - `RemoteLink`: 操作側のホストで動かす. 
 
 サーバ側のホストには, 実機を駆動する Link のパッケージ ([EtherCrab](/autd3-sdk/api/link/ethercrab/) 等) も併せて追加する.
 
-[`Simulator`](/autd3-sdk/guide/simulator/) への接続も`RemoteLink`で行う (`Simulator` は内部で `RemoteServer` を起動している).
+[`Simulator`](/autd3-sdk/guide/simulator/) への接続も`RemoteLink`で行う.
 
 ## API
 
@@ -41,7 +41,7 @@ AUTD3 を操作したいマシンと実機を配線したマシンが異なる�
 | `link` | `impl IntoLink` | 中継する実機リンクの Option               |
 
 `open` は内部でEtherCATスレッドを起動し, クライアントの接続有無によらずEtherCATはを駆動し続ける.
-`serve` はクライアントの接続を待ち受け, tx/rx フレームの中継を開始する (戻らないブロッキング呼び出し).
+`serve` はクライアントの接続を待ち受け, フレームの中継を開始する.
 
 ### RemoteLink
 

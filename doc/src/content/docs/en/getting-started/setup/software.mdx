@@ -17,11 +17,12 @@ The packages provided for each language are as follows.
 - [autd3-rs-core](https://crates.io/crates/autd3-rs-core): Core layer
 - [autd3-rs-pattern](https://crates.io/crates/autd3-rs-pattern): Pattern computation (single focal point, etc.)
 - [autd3-rs-pattern-holo](https://crates.io/crates/autd3-rs-pattern-holo): Multi-focus optimization
+- [autd3-rs-pattern-holo-wgpu](https://crates.io/crates/autd3-rs-pattern-holo-wgpu): GPU backend for multi-focus optimization
 - [autd3-rs-modulation](https://crates.io/crates/autd3-rs-modulation): AM modulation computation
 - [autd3-rs-emulator](https://crates.io/crates/autd3-rs-emulator): [Emulator](/autd3-sdk/en/guide/emulator/) that records drive data without real hardware
 - [autd3-rs-link-echocat](https://crates.io/crates/autd3-rs-link-echocat): AUTD3 dedicated EtherCAT Link
-- [autd3-rs-link-ethercrab](https://crates.io/crates/autd3-rs-link-ethercrab): EtherCrab-based Link
-- [autd3-rs-link-soem](https://crates.io/crates/autd3-rs-link-soem): SOEM-based Link ([GPL-3.0-only](/autd3-sdk/en/misc/license/))
+- [autd3-rs-link-ethercrab](https://crates.io/crates/autd3-rs-link-ethercrab): [EtherCrab](https://github.com/ethercrab-rs/ethercrab)-based Link
+- [autd3-rs-link-soem](https://crates.io/crates/autd3-rs-link-soem): [SOEM](https://github.com/OpenEtherCATsociety/SOEM)-based Link ([GPL-3.0-only](/autd3-sdk/en/misc/license/))
 - [autd3-rs-link-remote](https://crates.io/crates/autd3-rs-link-remote): Link for remote connections
 - [autd3-rs-link-twincat](https://crates.io/crates/autd3-rs-link-twincat): TwinCAT-based Link
 </Fragment>
@@ -33,8 +34,8 @@ The packages provided for each language are as follows.
 - [autd3-modulation](https://pypi.org/project/autd3-modulation/): AM modulation computation
 - [autd3-emulator](https://pypi.org/project/autd3-emulator/): [Emulator](/autd3-sdk/en/guide/emulator/) that records drive data without real hardware
 - [autd3-link-echocat](https://pypi.org/project/autd3-link-echocat/): AUTD3 dedicated EtherCAT Link 
-- [autd3-link-ethercrab](https://pypi.org/project/autd3-link-ethercrab/): EtherCrab-based Link
-- [autd3-link-soem](https://pypi.org/project/autd3-link-soem/): SOEM-based Link ([GPL-3.0-only](/autd3-sdk/en/misc/license/))
+- [autd3-link-ethercrab](https://pypi.org/project/autd3-link-ethercrab/): [EtherCrab](https://github.com/ethercrab-rs/ethercrab)-based Link
+- [autd3-link-soem](https://pypi.org/project/autd3-link-soem/): [SOEM](https://github.com/OpenEtherCATsociety/SOEM)-based Link ([GPL-3.0-only](/autd3-sdk/en/misc/license/))
 - [autd3-link-remote](https://pypi.org/project/autd3-link-remote/): Link for remote connections
 - [autd3-link-twincat](https://pypi.org/project/autd3-link-twincat/): TwinCAT-based Link
 </Fragment>
@@ -45,8 +46,8 @@ The packages provided for each language are as follows.
 - [AUTD3.Pattern.Holo](https://www.nuget.org/packages/AUTD3.Pattern.Holo/): Multi-focus optimization
 - [AUTD3.Modulation](https://www.nuget.org/packages/AUTD3.Modulation/): AM modulation computation
 - [AUTD3.Link.Echocat](https://www.nuget.org/packages/AUTD3.Link.Echocat/): AUTD3 dedicated EtherCAT Link 
-- [AUTD3.Link.Ethercrab](https://www.nuget.org/packages/AUTD3.Link.Ethercrab/): EtherCrab-based Link
-- [AUTD3.Link.Soem](https://www.nuget.org/packages/AUTD3.Link.Soem/): SOEM-based Link ([GPL-3.0-only](/autd3-sdk/en/misc/license/))
+- [AUTD3.Link.Ethercrab](https://www.nuget.org/packages/AUTD3.Link.Ethercrab/): [EtherCrab](https://github.com/ethercrab-rs/ethercrab)-based Link
+- [AUTD3.Link.Soem](https://www.nuget.org/packages/AUTD3.Link.Soem/): [SOEM](https://github.com/OpenEtherCATsociety/SOEM)-based Link ([GPL-3.0-only](/autd3-sdk/en/misc/license/))
 - [AUTD3.Link.Remote](https://www.nuget.org/packages/AUTD3.Link.Remote/): Link for remote connections
 - [AUTD3.Link.TwinCAT](https://www.nuget.org/packages/AUTD3.Link.TwinCAT/): TwinCAT-based Link
 </Fragment>
@@ -64,8 +65,8 @@ The supported Unity version is 6 (6000.x) or later.
 - [com.shinolab.autd3-sdk.pattern.holo](https://www.npmjs.com/package/com.shinolab.autd3-sdk.pattern.holo): Multi-focus optimization
 - [com.shinolab.autd3-sdk.modulation](https://www.npmjs.com/package/com.shinolab.autd3-sdk.modulation): AM modulation computation
 - [com.shinolab.autd3-sdk.link.echocat](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.echocat): AUTD3 dedicated EtherCAT Link 
-- [com.shinolab.autd3-sdk.link.ethercrab](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.ethercrab): EtherCrab-based Link
-- [com.shinolab.autd3-sdk.link.soem](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.soem): SOEM-based Link ([GPL-3.0-only](/autd3-sdk/en/misc/license/))
+- [com.shinolab.autd3-sdk.link.ethercrab](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.ethercrab): [EtherCrab](https://github.com/ethercrab-rs/ethercrab)-based Link
+- [com.shinolab.autd3-sdk.link.soem](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.soem): [SOEM](https://github.com/OpenEtherCATsociety/SOEM)-based Link ([GPL-3.0-only](/autd3-sdk/en/misc/license/))
 - [com.shinolab.autd3-sdk.link.remote](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.remote): Link for remote connections
 - [com.shinolab.autd3-sdk.link.twincat](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.twincat): TwinCAT-based Link
 - [com.shinolab.autd3-sdk.link.nop](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.nop): Link that does nothing (for testing)

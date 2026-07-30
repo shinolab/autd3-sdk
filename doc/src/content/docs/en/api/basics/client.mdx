@@ -17,7 +17,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 `Client` is the central object that sends commands and reads state.
 The basic and command APIs, including `Client`, are provided by the main package.
-Connecting to real hardware and the like additionally requires a separate [Link](/autd3-sdk/en/api/link/) package.
+Connecting to real hardware and the like additionally requires a [Link](/autd3-sdk/en/api/link/).
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
@@ -29,7 +29,7 @@ Connecting to real hardware and the like additionally requires a separate [Link]
 | `link`     | `impl IntoLink` | Link                          |
 | `config`   | `ClientConfig`  | See below                     |
 
-To continuously monitor the operating state of the link, use `open_with_checker` and drive the returned `Checker`.
+To continuously monitor the operating state of the link, use `open_with_checker` and drive the returned `Checker` (see [Link State Monitoring](/autd3-sdk/en/guide/state-check/)).
 
 ## API
 
@@ -38,7 +38,7 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 | Method                    | async | Returns                               | Description                                                |
 | ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
 | `num_devices()`           | —     | `usize`                               | Number of connected devices                                |
-| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device (`FirmwareVersion { cpu, fpga }`) |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
 | `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | Error detail of each device                                |
 | `datagram_builder()`      | —     | `DatagramBuilder`                     | [DatagramBuilder](/autd3-sdk/en/api/basics/datagram-builder/) |
@@ -60,7 +60,7 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 | `reset_resend_cycles`  | `NonZeroU32`             | `2`     | Number of cycles to send a reset command                   |
 | `rt_priority`          | `Option<ThreadPriority>` | Windows: `TimeCritical` / otherwise: `80` | Priority of the RT thread. Setting `None` leaves the OS default. |
 | `rt_policy`            | `RtSchedulePolicy`       | `Fifo`  | Scheduling policy used when `rt_priority` is set: `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
-| `rt_affinity`          | `Option<CoreId>`         | `None`  | CPU core affinity of the RT thread (OS default if unspecified) |
+| `rt_affinity`          | `Option<CoreId>`         | `None`  | CPU core affinity of the RT thread (OS default if `None`)  |
 | `validate_state`       | `bool`                   | `true`  | Enable pre-send validation                                 |
 
 `max_inflight` errors if it exceeds `MAX_INFLIGHT (127)`.

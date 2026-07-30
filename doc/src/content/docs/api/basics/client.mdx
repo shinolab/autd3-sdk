@@ -17,7 +17,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 `Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
 `Client` を含む基礎・コマンドの API は本体パッケージが提供する.
-実機等への接続には, これとは別に [Link](/autd3-sdk/api/link/) のパッケージが必要.
+実機等への接続には, これとは別に [Link](/autd3-sdk/api/link/) が必要.
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
@@ -29,7 +29,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | `link`     | `impl IntoLink`| リンク               |
 | `config`   | `ClientConfig` | 下記参照             |
 
-リンクの稼働状態を継続的に監視したい場合は `open_with_checker` を使い, 返り値の `Checker` を駆動する.
+リンクの稼働状態を継続的に監視したい場合は `open_with_checker` を使い, 返り値の `Checker` を駆動する ([リンクの状態監視](/autd3-sdk/guide/state-check/) 参照).
 
 ## API
 
@@ -38,9 +38,9 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | メソッド                  | async | 返り値                                | 説明                                                       |
 | ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
 | `num_devices()`           | —     | `usize`                               | 接続中のデバイス台数                                       |
-| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン (`FirmwareVersion { cpu, fpga }`) |
-| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                      |
-| `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | 各デバイスのエラー詳細                                      |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
+| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
+| `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | 各デバイスのエラー詳細                                     |
 | `datagram_builder()`      | —     | `DatagramBuilder`                     | [DatagramBuilder](/autd3-sdk/api/basics/datagram-builder/) |
 | `send(frame)`             | ✓     | `Result<ResponseFuture, Error>`       | フレームを送信キューにいれる. `ResponseFuture` を await すると応答 (`Response`) が得られる |
 | `send_checked(frame)`     | ✓     | `Result<(), Error>`                   | 送信し, 応答確認まで行う                                   |
@@ -60,7 +60,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | `reset_resend_cycles`  | `NonZeroU32`          | `2`             | リセット命令の送信サイクル数                             |
 | `rt_priority`          | `Option<ThreadPriority>` | Windows: `TimeCritical` / その他: `80` | RT スレッドの優先度. `None` にすると OS 既定. |
 | `rt_policy`            | `RtSchedulePolicy`    | `Fifo`          | `rt_priority` 指定時のスケジューリングポリシー. `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
-| `rt_affinity`          | `Option<CoreId>`      | `None`          | RT スレッドの CPU affinity (未指定なら OS 既定)      |
+| `rt_affinity`          | `Option<CoreId>`      | `None`          | RT スレッドの CPU affinity (`None` なら OS 既定)      |
 | `validate_state`       | `bool`                | `true`          | 送信前検証を有効にする                     |
 
 `max_inflight` は `MAX_INFLIGHT (127)` を超えるとエラーになる.

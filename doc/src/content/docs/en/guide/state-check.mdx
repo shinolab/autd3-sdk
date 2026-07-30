@@ -11,10 +11,7 @@ import sample from "@codes/rust/examples/guide/state-check.rs?raw";
 import pySample from "@codes/python/examples/guide/state-check.py?raw";
 import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
-There are cases where you want to monitor whether the EtherCAT link to the device is healthy during operation.
-`Client` does not spawn a background task to monitor the state on its own.
-Instead, it returns a `Checker` that the user drives at their own timing.
-The user has full control over the monitoring frequency and the response to state changes.
+The `Checker` lets you monitor whether the EtherCAT link to the device is working correctly.
 
 ## Obtaining the Checker
 
@@ -37,4 +34,3 @@ The following is an example that calls `check` at fixed intervals and outputs on
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
 
 How often to call `check` is up to the user.
-A typical usage is to poll at a low frequency as above, in a task separate from the high-frequency send loop.

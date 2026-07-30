@@ -8,7 +8,7 @@ sidebar:
 import Math from "@components/Math.astro";
 import Install from "@components/Install.astro";
 
-Pattern computation is provided in a package separate from the main library, and includes representative sound field computation utilities such as a single focal point, a plane wave, and a Bessel beam.
+Representative sound field computation utilities such as a single focal point, a plane wave, and a Bessel beam.
 
 <Install rust="autd3-rs-pattern" python="autd3-pattern" csharp="AUTD3.Pattern" />
 
@@ -26,4 +26,4 @@ Each function also has a `*_device` variant that computes for only a single devi
 
 The phase computation requires the wavelength <Math tex="\lambda = c / f" />.
 The wavelength can be obtained from the sound speed <Math tex="c" /> via `autd3_rs_pattern::wavelength(sound_speed)`.
-At a sound speed of 340 m/s (the speed of sound in air at a room temperature of about 15°C), <Math tex="\lambda \approx 8.5\,\mathrm{mm}" />.
+At a sound speed of 340 m/s (the speed of sound in air at a room temperature of about 15°C), <Math tex="\lambda = 8.5\,\mathrm{mm}" />.
