@@ -1200,6 +1200,53 @@ async fn raw_send_failure_desyncs_the_mirror() {
 }
 
 #[tokio::test]
+async fn raw_send_device_error_desyncs_the_mirror() {
+    let (client, _slave) = open_client().await;
+    arm_strict_silencer(&client).await;
+
+    assert!(matches!(
+        build_too_fast_pattern(&client),
+        Err(Error::SilencerConstraint { .. })
+    ));
+
+    let datagrams = client.datagram_builder().push(FailingCmd).build().unwrap();
+    for frame in &datagrams {
+        let response = client.send(frame).await.unwrap().await.unwrap();
+        assert_eq!(response.data(), [ERR_INVALID_DATA]);
+    }
+
+    assert!(
+        build_too_fast_pattern(&client).is_ok(),
+        "a device error must desync the mirror even when the caller never calls check()"
+    );
+}
+
+#[tokio::test]
+async fn read_replies_never_count_as_device_errors() {
+    let (client, slave) = open_client().await;
+    arm_strict_silencer(&client).await;
+    {
+        let mut s = slave.lock().unwrap();
+        s.fpga_state = 0x80;
+        s.supports_fpga_version = false;
+    }
+
+    assert_eq!(client.read_fpga_state().await.unwrap()[0].0, 0x80);
+    assert_eq!(
+        client.read_firmware_version().await.unwrap()[0].fpga,
+        Version::UNKNOWN
+    );
+
+    assert!(
+        matches!(
+            build_too_fast_pattern(&client),
+            Err(Error::SilencerConstraint { .. })
+        ),
+        "a nonzero read reply is a value, not an ack error, so the mirror must stay synced"
+    );
+}
+
+#[tokio::test]
 async fn validation_opt_out_keeps_the_response_future_mirror_free() {
     let (link, slave) = slave_pair();
     let client = Client::open(

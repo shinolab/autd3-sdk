@@ -13,6 +13,18 @@ struct Inner {
     sender_gone: bool,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Reply {
+    Ack,
+    Value,
+}
+
+impl Reply {
+    pub(super) fn exclusive(self) -> bool {
+        matches!(self, Self::Value)
+    }
+}
+
 pub(super) struct Completion {
     // `None` for the heap fallback handed out when the pool is empty.
     index: Option<usize>,
@@ -90,6 +102,7 @@ impl CompletionPool {
     pub(super) fn channel(
         self: &Arc<Self>,
         mirror: Option<MirrorHandle>,
+        reply: Reply,
     ) -> (CompletionSender, ResponseFuture) {
         let index = self
             .free
@@ -111,6 +124,7 @@ impl CompletionPool {
                 completion: Some(completion),
                 pool: Arc::clone(self),
                 mirror,
+                reply,
             },
         )
     }
@@ -162,13 +176,22 @@ pub struct ResponseFuture {
     completion: Option<Arc<Completion>>,
     pool: Arc<CompletionPool>,
     mirror: Option<MirrorHandle>,
+    reply: Reply,
 }
 
 impl ResponseFuture {
     fn finish(&mut self, result: Result<Response, Error>) -> Poll<Result<Response, Error>> {
-        if result.is_err()
+        let device_error = match (&result, self.reply) {
+            (Ok(response), Reply::Ack) => response.check().err(),
+            _ => None,
+        };
+        if let Some(e) = &device_error {
+            tracing::warn!(error = %e, "device reported an error");
+        }
+        if (result.is_err() || device_error.is_some())
             && let Some(mirror) = self.mirror.take()
         {
+            tracing::debug!("mirror desynced");
             mirror.desync();
         }
         Poll::Ready(result)
@@ -205,7 +228,7 @@ impl Drop for ResponseFuture {
 mod tests {
     use std::sync::atomic::Ordering;
 
-    use super::CompletionPool;
+    use super::{CompletionPool, Reply};
     use crate::error::Error;
     use crate::response::Response;
 
@@ -216,7 +239,7 @@ mod tests {
     #[tokio::test]
     async fn a_completed_channel_returns_to_the_pool() {
         let pool = CompletionPool::new(1);
-        let (tx, rx) = pool.channel(None);
+        let (tx, rx) = pool.channel(None, Reply::Ack);
         assert_eq!(free_len(&pool), 0);
 
         tx.send(Ok(Response::from_slice(&[0x42])));
@@ -227,7 +250,7 @@ mod tests {
     #[tokio::test]
     async fn dropping_the_sender_reports_a_closed_rt() {
         let pool = CompletionPool::new(1);
-        let (tx, rx) = pool.channel(None);
+        let (tx, rx) = pool.channel(None, Reply::Ack);
         drop(tx);
         assert!(matches!(rx.await, Err(Error::RtClosed)));
         assert_eq!(free_len(&pool), 1);
@@ -236,7 +259,7 @@ mod tests {
     #[tokio::test]
     async fn dropping_the_future_first_still_recycles() {
         let pool = CompletionPool::new(1);
-        let (tx, rx) = pool.channel(None);
+        let (tx, rx) = pool.channel(None, Reply::Ack);
         drop(rx);
         assert_eq!(free_len(&pool), 0);
         tx.send(Ok(Response::from_slice(&[0])));
@@ -246,8 +269,8 @@ mod tests {
     #[tokio::test]
     async fn an_exhausted_pool_falls_back_to_the_heap_instead_of_blocking() {
         let pool = CompletionPool::new(1);
-        let (tx1, rx1) = pool.channel(None);
-        let (tx2, rx2) = pool.channel(None);
+        let (tx1, rx1) = pool.channel(None, Reply::Ack);
+        let (tx2, rx2) = pool.channel(None, Reply::Ack);
         assert_eq!(free_len(&pool), 0);
 
         tx2.send(Ok(Response::from_slice(&[2])));
@@ -263,7 +286,7 @@ mod tests {
     #[tokio::test]
     async fn a_pending_future_is_woken_by_the_sender() {
         let pool = CompletionPool::new(1);
-        let (tx, rx) = pool.channel(None);
+        let (tx, rx) = pool.channel(None, Reply::Ack);
         let joined = tokio::spawn(rx);
         tokio::task::yield_now().await;
         tx.send(Ok(Response::from_slice(&[7])));
@@ -273,7 +296,7 @@ mod tests {
     #[test]
     fn a_recycled_entry_starts_clean() {
         let pool = CompletionPool::new(1);
-        let (tx, rx) = pool.channel(None);
+        let (tx, rx) = pool.channel(None, Reply::Ack);
         tx.send(Err(Error::RtClosed));
         drop(rx);
         let entry = &pool.entries[0];
