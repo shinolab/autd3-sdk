@@ -1,9 +1,6 @@
-// Computes the RMS sound field on a plane through a focus (silencer disabled so
-// the focus forms immediately), saves it as CSV, and visualizes it with
-// matplotlib (plot_field.py). Pass `--no-plot` to skip the Python step.
-// Run with:
-//   cargo xtask emulator example rms
-//   cargo xtask emulator example rms --no-plot
+// Computes the RMS sound field on a plane through a focus and visualizes it
+//
+// Run with: cargo xtask emulator example rms
 
 use std::fs::File;
 
