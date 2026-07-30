@@ -12,8 +12,6 @@ It is built for .NET Framework 4.8 to reduce binary size (the dependencies do no
 
 # Build & Run
 
-From `autd3-sdk/`, drive everything via xtask.
-
 ```
 cargo xtask tool twincat run -- [options]   # scan + set up a TwinCAT project
 cargo xtask tool twincat open -- [options]  # reopen the saved project
