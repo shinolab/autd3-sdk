@@ -1,6 +1,7 @@
-// Remote Link client: connects to a remote_server over TCP and emits a 200 Hz
-// sine AM focus exactly as a local link would — the Client API is unchanged.
-// Start remote_server first. Run with: cargo xtask example remote_client
+// Remote Link client: connects to a remote_server over TCP and emits a 200 Hz sine AM focus.
+// Start remote_server first.
+//
+// Run with: cargo xtask example remote_client
 
 use std::net::SocketAddr;
 

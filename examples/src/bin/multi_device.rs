@@ -1,4 +1,6 @@
-// Multiple AUTD3 devices arranged side by side. Run with: cargo xtask example multi_device
+// Multiple AUTD3 devices arranged side by side.
+//
+// Run with: cargo xtask example multi_device
 
 use anyhow::Result;
 

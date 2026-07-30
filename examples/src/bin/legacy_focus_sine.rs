@@ -1,5 +1,5 @@
 // Single focus with a 200 Hz sine AM on legacy firmware v12.1.0.
-// Identical to focus_sine except for the client type.
+//
 // Run with: cargo xtask rust example legacy_focus_sine
 
 use anyhow::Result;

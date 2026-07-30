@@ -1,4 +1,6 @@
-// Two simultaneous foci via GSPAT hologram optimization. Run with: cargo xtask example holo
+// Two simultaneous foci via GSPAT hologram optimization.
+//
+// Run with: cargo xtask example holo
 
 use anyhow::Result;
 

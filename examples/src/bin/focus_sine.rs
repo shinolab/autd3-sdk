@@ -1,4 +1,6 @@
-// Single focus with a 200 Hz sine AM. Run with: cargo xtask example focus_sine
+// Single focus with a 200 Hz sine AM.
+//
+// Run with: cargo xtask example focus_sine
 
 use anyhow::Result;
 

@@ -1,5 +1,6 @@
-// Measures one-shot (stop-and-wait) command latency with the slave in
-// low-latency mode. Run with: cargo xtask example low_latency
+// Measures one-shot (stop-and-wait) command latency with the slave in low-latency mode.
+//
+// Run with: cargo xtask example low_latency
 
 use std::time::{Duration, Instant};
 
