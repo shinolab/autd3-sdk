@@ -8,10 +8,13 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
+use crate::component::COMPONENTS;
 use crate::py::{MIT_WHEELS, develop, ensure_venv, pip_install, venv_python};
 use crate::util::{capture, on_path, run, run_tool};
 
 const FIRMWARE_MARKER: &str = "Firmware v";
+const UNITY_PKG_MARKER: &str = "\"com.shinolab.autd3-sdk";
+const CONSOLE_TAG_MARKER: &str = "console-v";
 const EXPECT_ERROR_MARKER: &str = "# xtask:expect-error";
 const LONG_RUNNING_MARKER: &str = "# xtask:long-running";
 const SAMPLE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -87,7 +90,7 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
         }
         DocCmd::Build { no_samples } => {
             verify_frozen_versions(&doc)?;
-            verify_firmware_series(root, &doc)?;
+            verify_versions(root, &doc)?;
             if !*no_samples {
                 build_samples(&samples)?;
             }
@@ -104,7 +107,7 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
         }
         DocCmd::Check => {
             verify_frozen_versions(&doc)?;
-            verify_firmware_series(root, &doc)?;
+            verify_versions(root, &doc)?;
             npm_install(&doc)?;
             npm(&doc, &["run", "check"])
         }
@@ -279,67 +282,192 @@ fn firmware_series_spans(text: &str) -> Vec<(usize, usize, String)> {
     spans
 }
 
-pub fn rewrite_firmware_series(root: &Path, series: &str) -> Result<usize> {
-    let doc = root.join("doc");
-    let slugs = version_slugs(&doc)?;
+fn semver_spans(text: &str, marker: &str, quoted: bool) -> Vec<(usize, usize, String)> {
+    let mut spans = Vec::new();
+    let mut base = 0;
+    while let Some(pos) = text[base..].find(marker) {
+        let mut start = base + pos + marker.len();
+        base = start;
+        if quoted {
+            let line = text[start..].lines().next().unwrap_or_default();
+            let Some(colon) = line.find(':') else {
+                continue;
+            };
+            let Some(open) = line[colon..].find('"') else {
+                continue;
+            };
+            start += colon + open + 1;
+        }
+        let len = text[start..]
+            .find(|c: char| !c.is_ascii_digit() && c != '.')
+            .unwrap_or(text.len() - start);
+        base = start + len;
+        let value = &text[start..base];
+        if value.split('.').count() == 3
+            && value
+                .split('.')
+                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+        {
+            spans.push((start, base, value.to_string()));
+        }
+    }
+    spans
+}
+
+fn unity_version_spans(text: &str) -> Vec<(usize, usize, String)> {
+    semver_spans(text, UNITY_PKG_MARKER, true)
+}
+
+fn console_version_spans(text: &str) -> Vec<(usize, usize, String)> {
+    semver_spans(text, CONSOLE_TAG_MARKER, false)
+}
+
+type Spans = fn(&str) -> Vec<(usize, usize, String)>;
+
+fn doc_pages(doc: &Path) -> Result<Vec<PathBuf>> {
+    let slugs = version_slugs(doc)?;
     let mut pages = Vec::new();
     live_pages(&doc.join("src/content/docs"), &slugs, &mut pages)?;
+    Ok(pages)
+}
 
+fn rewrite_spans(root: &Path, spans: Spans, new: &str) -> Result<usize> {
     let mut count = 0;
-    for page in pages {
+    for page in doc_pages(&root.join("doc"))? {
         let text =
             fs::read_to_string(&page).with_context(|| format!("reading {}", page.display()))?;
-        let spans = firmware_series_spans(&text);
-        if spans.is_empty() {
+        let found = spans(&text);
+        if found.is_empty() {
             continue;
         }
-        let mut new = String::with_capacity(text.len());
+        let mut out = String::with_capacity(text.len());
         let mut cursor = 0;
-        for (start, end, _) in spans {
-            new.push_str(&text[cursor..start]);
-            new.push_str(series);
-            new.push_str(".x");
+        for (start, end, _) in found {
+            out.push_str(&text[cursor..start]);
+            out.push_str(new);
             cursor = end;
         }
-        new.push_str(&text[cursor..]);
-        if new != text {
-            fs::write(&page, new).with_context(|| format!("writing {}", page.display()))?;
+        out.push_str(&text[cursor..]);
+        if out != text {
+            fs::write(&page, out).with_context(|| format!("writing {}", page.display()))?;
         }
         count += 1;
     }
     Ok(count)
 }
 
-fn verify_firmware_series(root: &Path, doc: &Path) -> Result<()> {
-    let expected = crate::bump::firmware_series(root)?;
-    let slugs = version_slugs(doc)?;
-    let mut pages = Vec::new();
-    live_pages(&doc.join("src/content/docs"), &slugs, &mut pages)?;
-
-    let mut offenders = Vec::new();
-    let mut found = 0;
-    for page in pages {
+fn collect_spans(doc: &Path, spans: Spans) -> Result<Vec<(PathBuf, String)>> {
+    let mut found = Vec::new();
+    for page in doc_pages(doc)? {
         let text =
             fs::read_to_string(&page).with_context(|| format!("reading {}", page.display()))?;
-        for (_, _, series) in firmware_series_spans(&text) {
-            found += 1;
-            if series != expected {
-                offenders.push(format!("{}: {FIRMWARE_MARKER}{series}.x", page.display()));
-            }
-        }
+        found.extend(
+            spans(&text)
+                .into_iter()
+                .map(|(_, _, value)| (page.clone(), value)),
+        );
     }
-    if found == 0 {
+    Ok(found)
+}
+
+fn component_version(root: &Path, name: &str) -> Result<String> {
+    COMPONENTS
+        .iter()
+        .find(|c| c.name == name)
+        .with_context(|| format!("missing `{name}` component"))?
+        .current_version(root)
+}
+
+pub fn rewrite_firmware_series(root: &Path, series: &str) -> Result<usize> {
+    rewrite_spans(root, firmware_series_spans, &format!("{series}.x"))
+}
+
+pub fn rewrite_unity_version(root: &Path, version: &str) -> Result<usize> {
+    rewrite_spans(root, unity_version_spans, version)
+}
+
+pub fn rewrite_console_version(root: &Path, version: &str) -> Result<usize> {
+    rewrite_spans(root, console_version_spans, version)
+}
+
+fn verify_versions(root: &Path, doc: &Path) -> Result<()> {
+    verify_firmware_series(root, doc)?;
+    verify_unity_version(root, doc)?;
+    verify_console_version(root, doc)
+}
+
+fn verify_firmware_series(root: &Path, doc: &Path) -> Result<()> {
+    let expected = crate::bump::firmware_series(root)?;
+    let found = collect_spans(doc, firmware_series_spans)?;
+    if found.is_empty() {
         bail!(
             "no `{FIRMWARE_MARKER}<major>.<minor>.x` marker found in the current docs; the supported \
              firmware version must be stated (and kept in sync with firmware/cpu/fw/Cargo.toml)"
         );
     }
+    let offenders: Vec<_> = found
+        .iter()
+        .filter(|(_, series)| *series != expected)
+        .map(|(page, series)| format!("{}: {FIRMWARE_MARKER}{series}.x", page.display()))
+        .collect();
     if !offenders.is_empty() {
         bail!(
             "docs advertise a firmware version that firmware/cpu/fw/Cargo.toml does not build \
              (expected `{FIRMWARE_MARKER}{expected}.x`):\n  {}\n\
              run `cargo xtask bump-version firmware <version>` (it rewrites these pages), or fix the marker by hand. \
              frozen version snapshots are exempt: they record the firmware version of their own SDK release.",
+            offenders.join("\n  ")
+        );
+    }
+    Ok(())
+}
+
+fn verify_unity_version(root: &Path, doc: &Path) -> Result<()> {
+    let expected = component_version(root, "unity")?;
+    let found = collect_spans(doc, unity_version_spans)?;
+    if found.is_empty() {
+        bail!(
+            "no `{UNITY_PKG_MARKER}...\": \"<version>\"` requirement found in the current docs; the \
+             Unity install instructions must pin a version (kept in sync with bindings/unity/*/package.json)"
+        );
+    }
+    let offenders: Vec<_> = found
+        .iter()
+        .filter(|(_, version)| *version != expected)
+        .map(|(page, version)| format!("{}: {version}", page.display()))
+        .collect();
+    if !offenders.is_empty() {
+        bail!(
+            "docs tell users to install a Unity package version that is not the current one \
+             (expected `{expected}`):\n  {}\n\
+             run `cargo xtask bump-version unity <version>` (it rewrites these pages), or fix the version by hand. \
+             frozen version snapshots are exempt: they record the Unity version of their own SDK release.",
+            offenders.join("\n  ")
+        );
+    }
+    Ok(())
+}
+
+fn verify_console_version(root: &Path, doc: &Path) -> Result<()> {
+    let expected = component_version(root, "console")?;
+    let found = collect_spans(doc, console_version_spans)?;
+    if found.is_empty() {
+        bail!(
+            "no `{CONSOLE_TAG_MARKER}<version>` link found in the current docs; the autd3-console \
+             download must point at a concrete release (kept in sync with console/Cargo.toml)"
+        );
+    }
+    let offenders: Vec<_> = found
+        .iter()
+        .filter(|(_, version)| *version != expected)
+        .map(|(page, version)| format!("{}: {CONSOLE_TAG_MARKER}{version}", page.display()))
+        .collect();
+    if !offenders.is_empty() {
+        bail!(
+            "docs link to an autd3-console release that console/Cargo.toml does not build \
+             (expected `{CONSOLE_TAG_MARKER}{expected}`):\n  {}\n\
+             run `cargo xtask bump-version console <version>` (it rewrites these pages), or fix the link by hand. \
+             frozen version snapshots are exempt: they record the console version of their own SDK release.",
             offenders.join("\n  ")
         );
     }
