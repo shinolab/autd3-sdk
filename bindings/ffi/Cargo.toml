@@ -50,8 +50,5 @@ module_name_repetitions = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 cast_precision_loss = "allow"
-# The C ABI is documented in the generated headers / spec, not Rust docs; the
-# implementer's reasoning is carried by inline SAFETY comments instead.
 missing_safety_doc = "allow"
-# Doc comments become C header text full of protocol acronyms (EtherCAT, SOEM, NIC).
 doc_markdown = "allow"

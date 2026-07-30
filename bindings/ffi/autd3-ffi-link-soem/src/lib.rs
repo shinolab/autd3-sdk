@@ -295,7 +295,6 @@ unsafe fn write_option(option: &CoreOption, out: *mut Autd3SoemLinkOptionValues)
         return -1;
     }
 
-    // SAFETY: the caller guarantees `out` points to a writable Autd3SoemLinkOptionValues.
     unsafe {
         *out = Autd3SoemLinkOptionValues {
             sync0_period_ns: to_ns(option.sync0_period),
