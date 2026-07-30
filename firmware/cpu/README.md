@@ -4,7 +4,6 @@
 
 ```
 firmware/cpu/
-├── README.md
 ├── wire/                 # shared wire-protocol contract
 ├── fw/                   # portable firmware logic
 ├── board/                # the board target: RZ/T1 registers, BSP, the `Port` implementation and the C-ABI symbols platform.o calls
@@ -12,8 +11,6 @@ firmware/cpu/
 ```
 
 ## Build & test
-
-All tasks are run from the repository root (`autd3-sdk/`) via xtask.
 
 ```bash
 cargo xtask cpu build          # cargo build (staticlib) + link with platform.o -> build/autd3-cpu.bin

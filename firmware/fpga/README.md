@@ -4,7 +4,6 @@
 
 ```
 firmware/fpga/
-├── README.md
 ├── coe/                     # BRAM / ROM initialization data (*.coe)
 ├── scripts/                 # Vivado batch scripts (Tcl)
 │   ├── proj_gen.tcl         #   generate the Vivado project
@@ -19,8 +18,6 @@ firmware/fpga/
 ```
 
 ## Build
-
-All Vivado tasks are run from the repository root (`autd3-sdk/`) via xtask.
 
 ```bash
 cargo xtask fpga project        # generate the Vivado project
