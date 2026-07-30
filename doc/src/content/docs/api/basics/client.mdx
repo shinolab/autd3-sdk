@@ -47,6 +47,8 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | `stop()`                  | ✓     | `Result<(), Error>`                   | 全振動子を停止                                             |
 | `close()`                 | ✓     | `Result<(), Error>`                   | 接続を閉じる                                               |
 
+`send_checked(frame).await?` は, `send(frame).await?.await?.check()` と等価である.
+
 ## ClientConfig
 
 <CodeTabs rust={excerpt(open, "config")} python={excerpt(pyOpen, "config")} csharp={excerpt(csOpen, "config")} />

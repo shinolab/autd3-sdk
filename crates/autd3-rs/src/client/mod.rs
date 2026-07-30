@@ -31,7 +31,7 @@ use crate::protocol::{Cmd, DeviceErrorCode};
 use crate::telemetry::Telemetry;
 use crate::value::DcSysTime;
 
-use completion::CompletionPool;
+use completion::{CompletionPool, Reply};
 use pool::SlotPool;
 use rt::CmdMessage;
 
@@ -210,7 +210,7 @@ impl Client {
             slot.payload_mut(device).copy_from_slice(&datagram.payload);
             slot.set_cmd(device, datagram.cmd);
         }
-        self.dispatch(slot, false).await
+        self.dispatch(slot, Reply::Ack).await
     }
 
     async fn send_broadcast(&self, datagram: &Datagram) -> Result<ResponseFuture, Error> {
@@ -219,7 +219,7 @@ impl Client {
         slot.reset(Distribution::Broadcast);
         slot.payload_mut(0).copy_from_slice(&datagram.payload);
         slot.set_cmd(0, datagram.cmd);
-        self.dispatch(slot, false).await
+        self.dispatch(slot, Reply::Ack).await
     }
 
     async fn send_broadcast_exclusive(&self, datagram: &Datagram) -> Result<ResponseFuture, Error> {
@@ -228,7 +228,7 @@ impl Client {
         slot.reset(Distribution::Broadcast);
         slot.payload_mut(0).copy_from_slice(&datagram.payload);
         slot.set_cmd(0, datagram.cmd);
-        self.dispatch(slot, true).await
+        self.dispatch(slot, Reply::Value).await
     }
 
     pub async fn send(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {
@@ -239,22 +239,18 @@ impl Client {
     }
 
     pub async fn send_checked(&self, frame: Frame<'_>) -> Result<(), Error> {
-        let result = self.send(frame).await?.await?.check();
-        if let Err(e) = &result {
-            tracing::warn!(error = %e, "device reported an error; mirror desynced");
-            self.mark_desynced();
-        }
-        result
+        self.send(frame).await?.await?.check()
     }
 
-    async fn dispatch(&self, slot: pool::Slot, exclusive: bool) -> Result<ResponseFuture, Error> {
-        let (response_tx, response_rx) = self.completions.channel(self.mirror_for_response());
+    async fn dispatch(&self, slot: pool::Slot, reply: Reply) -> Result<ResponseFuture, Error> {
+        let (response_tx, response_rx) =
+            self.completions.channel(self.mirror_for_response(), reply);
         if self
             .cmd_tx
             .send(CmdMessage {
                 frame: slot,
                 response_tx,
-                exclusive,
+                exclusive: reply.exclusive(),
             })
             .await
             .is_err()
