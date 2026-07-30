@@ -26,7 +26,7 @@ internal static class Program
             Console.WriteLine($"device[{i}] firmware version: {versions[i]}");
         }
 
-        // length in mm; sound speed as a Velocity
+        // length in mm
         var target = geometry.Center + new Vector3(0f, 0f, 150f);
         var wavelength = Pattern.Wavelength(340 * m / s);
         using var patterns = geometry.PatternBuffer();

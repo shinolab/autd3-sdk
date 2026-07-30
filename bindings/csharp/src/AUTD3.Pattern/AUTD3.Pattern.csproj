@@ -11,6 +11,4 @@
     <ProjectReference Include="../AUTD3.Core/AUTD3.Core.csproj" />
   </ItemGroup>
 
-  <!-- InternalsVisibleTo lives in AssemblyInfo.cs so Unity (asmdef, no csproj) gets it too. -->
-
 </Project>

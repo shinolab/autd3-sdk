@@ -1,4 +1,5 @@
-// Watch the EtherCAT link status for every device. Run with: cargo xtask cs example StatusCheck
+// Watch the EtherCAT link status for every device.
+// Run with: cargo xtask cs example StatusCheck
 
 using System;
 using System.Collections.Generic;

@@ -1,4 +1,5 @@
-// Multiple AUTD3 devices side by side. Run with: cargo xtask cs example MultiDevice
+// Multiple AUTD3 devices side by side. 
+// Run with: cargo xtask cs example MultiDevice
 
 using System;
 using System.Collections.Generic;

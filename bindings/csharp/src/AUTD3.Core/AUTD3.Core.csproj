@@ -7,6 +7,4 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
-  <!-- InternalsVisibleTo lives in AssemblyInfo.cs so Unity (asmdef, no csproj) gets it too. -->
-
 </Project>
