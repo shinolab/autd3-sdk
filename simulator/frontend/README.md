@@ -4,9 +4,8 @@ Browser frontend for the AUTD3 Simulator.
 
 ## How to use
 
-The backend listens as a Remote Link server (default port **8080**), decodes the
-frames sent by a connected client with the built-in firmware emulator, and displays
-the sound field. The browser UI is on a separate port (default **8081**).
+The backend listens as a Remote Link server (default port **8080**), decodes the frames sent by a connected client and displays the sound field.
+The browser UI is on a separate port (default **8081**).
 
 ```bash
 # 1) Start the simulator (in autd3-sdk/)
@@ -26,16 +25,11 @@ npm install
 
 ## Running
 
-In `autd3-sdk/`:
-
 ```bash
 cargo xtask simulator run
 cargo xtask simulator run --open          # open the browser automatically after start
 cargo xtask simulator run --port 9000
 ```
-
-> If you see the `Browserslist: caniuse-lite is outdated` warning, update it with
-> `npx update-browserslist-db@latest` (in the frontend directory).
 
 ## Browser requirements
 
