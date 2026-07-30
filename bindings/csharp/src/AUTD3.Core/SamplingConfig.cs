@@ -2,13 +2,10 @@ using System;
 
 namespace AUTD3
 {
-
-
     public readonly struct SamplingConfig
     {
         private enum Kind : byte
         {
-            // default(SamplingConfig) must stay usable: treat it as FREQ_4K like SineOption's default
             Default,
             Divide,
             Freq,

@@ -10,7 +10,6 @@ namespace AUTD3
         }
     }
 
-
     public readonly struct Autd3
     {
         public const int NumTransducers = 249;

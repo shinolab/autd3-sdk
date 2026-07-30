@@ -1,5 +1,4 @@
 // Remote Link client: connects to a remote server over TCP and emits a 200 Hz
-// sine AM focus exactly as a local link would -- the Client API is unchanged.
 // Start the Rust remote_server example first.
 // Run with: cargo xtask cs example RemoteClient
 

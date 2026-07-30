@@ -1,5 +1,4 @@
 // Sweeps a focus around a circle two ways: stop-and-wait vs streaming.
-// Streaming keeps up to MaxInflight frames in flight via a semaphore.
 // Run with: cargo xtask cs example SendModes
 
 using System;
@@ -76,8 +75,7 @@ internal static class Program
         }
         Report("stop-and-wait", sw.Elapsed.TotalSeconds);
 
-        // streaming: keep Client.MaxInflight frames on the wire, draining the oldest
-        // response once the window is full.
+        // streaming: keep Client.MaxInflight frames on the wire, draining the oldest response once the window is full.
         sw.Restart();
         var pending = new Queue<ResponseToken>();
         foreach (var dg in frames)

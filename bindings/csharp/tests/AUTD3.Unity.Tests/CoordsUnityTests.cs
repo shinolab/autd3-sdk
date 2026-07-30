@@ -4,8 +4,6 @@ using Xunit;
 
 namespace AUTD3.Unity.Tests
 {
-    // Verifies the Unity-frame boundary conversion (left-handed, metres, +z forward)
-    // <-> canonical (right-handed, mm). Matches the retired Autd3Unity test vectors.
     public class CoordsUnityTests
     {
         [Fact]
