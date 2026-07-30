@@ -30,7 +30,7 @@ autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
 autd3-rs-modulation = { path = "../../crates/autd3-rs-modulation" }
 anyhow = { version = "1.0.102", default-features = false, features = ["std"] }
 bytemuck = { version = "1.25.0", default-features = false, features = ["derive"] }
-wgpu = { version = "29.0.1", default-features = false, features = ["std", "parking_lot", "dx12", "vulkan", "metal", "wgsl"] }
+wgpu = { version = "30.0.0", default-features = false, features = ["std", "parking_lot", "dx12", "vulkan", "metal", "wgsl"] }
 textplots = { version = "0.8.7" }
 thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
