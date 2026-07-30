@@ -1,6 +1,5 @@
 build/
 board/target/
 
-# e2 studio / Eclipse CDT local metadata (project files .project/.cproject/*.launch are tracked)
 .settings/
 .autotools
