@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::f32::consts::{PI, SQRT_2};
 use std::time::Duration;
 
-use autd3_rs_core::common::ULTRASOUND_PERIOD;
+use autd3_rs_core::common::{ULTRASOUND_PERIOD, Velocity};
 use autd3_rs_core::geometry::Point3;
 use rayon::prelude::*;
 
@@ -28,7 +28,7 @@ const P0: f32 = T4010A1_AMPLITUDE * SQRT_2 / (4.0 * PI);
 
 #[derive(Debug, Clone, Copy)]
 pub struct InstantRecordOption {
-    pub sound_speed: f32,
+    pub sound_speed: Velocity,
     pub time_step: Duration,
     pub memory_limits_hint_mb: usize,
     #[cfg(feature = "gpu")]
@@ -38,7 +38,7 @@ pub struct InstantRecordOption {
 impl Default for InstantRecordOption {
     fn default() -> Self {
         Self {
-            sound_speed: 340e3,
+            sound_speed: Velocity::from_m_s(340.0),
             time_step: Duration::from_micros(1),
             memory_limits_hint_mb: 128,
             #[cfg(feature = "gpu")]
@@ -247,7 +247,7 @@ impl Instant<'_> {
             .init(self.cache_size, &mut self.cursor, &mut self.rem_frame);
 
         let time_step = self.option.time_step;
-        let sound_speed = self.option.sound_speed;
+        let sound_speed = self.option.sound_speed.mm_per_s();
         let target = self.last_frame + num_frames;
         let mut cur_frame = self.last_frame;
         let mut out = Vec::new();
@@ -351,10 +351,11 @@ impl Record {
         let positions = self.transducer_positions();
 
         let period_secs = ULTRASOUND_PERIOD.as_secs_f32();
+        let sound_speed = option.sound_speed.mm_per_s();
         let min_dist = aabb_min_dist(&self.aabb, &range.aabb());
         let max_dist = aabb_max_dist(&self.aabb, &range.aabb());
-        let required_frame_size = (max_dist / option.sound_speed / period_secs).ceil() as usize
-            - (min_dist / option.sound_speed / period_secs).floor() as usize;
+        let required_frame_size = (max_dist / sound_speed / period_secs).ceil() as usize
+            - (min_dist / sound_speed / period_secs).floor() as usize;
 
         let frame_window_size = {
             let num_transducers = self.records.len();
@@ -371,7 +372,7 @@ impl Record {
             frame_window_size_mem.min(frame_window_size_time)
         };
 
-        let cursor = -((max_dist / option.sound_speed / period_secs).ceil() as isize);
+        let cursor = -((max_dist / sound_speed / period_secs).ceil() as isize);
         let cache_size = (required_frame_size + frame_window_size) as isize;
 
         let output_ultrasound = self

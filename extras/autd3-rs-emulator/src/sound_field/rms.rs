@@ -3,7 +3,7 @@
 use std::f32::consts::{PI, SQRT_2};
 use std::time::Duration;
 
-use autd3_rs_core::common::ULTRASOUND_PERIOD;
+use autd3_rs_core::common::{ULTRASOUND_PERIOD, Velocity};
 use autd3_rs_core::params::ULTRASOUND_FREQ_HZ;
 use autd3_rs_core::value::Phase;
 use rayon::prelude::*;
@@ -21,7 +21,7 @@ const P0: f32 = T4010A1_AMPLITUDE / (4.0 * PI) / SQRT_2;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RmsRecordOption {
-    pub sound_speed: f32,
+    pub sound_speed: Velocity,
     #[cfg(feature = "gpu")]
     pub gpu: bool,
 }
@@ -29,7 +29,7 @@ pub struct RmsRecordOption {
 impl Default for RmsRecordOption {
     fn default() -> Self {
         Self {
-            sound_speed: 340e3,
+            sound_speed: Velocity::from_m_s(340.0),
             #[cfg(feature = "gpu")]
             gpu: false,
         }
@@ -127,7 +127,7 @@ impl Rms {
 
     pub fn next_raw(&mut self, duration: Duration) -> Result<RawFrame, EmulatorError> {
         let num_frames = self.advance(duration)?;
-        let wavenumber = 2.0 * PI * ULTRASOUND_FREQ_HZ as f32 / self.option.sound_speed;
+        let wavenumber = 2.0 * PI * ULTRASOUND_FREQ_HZ as f32 / self.option.sound_speed.mm_per_s();
         let rows = self.x.len();
         let columns = (0..num_frames)
             .map(|i| {
