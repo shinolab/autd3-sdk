@@ -94,7 +94,7 @@ impl FpgaEmulator {
     }
 
     #[must_use]
-    pub fn foci_drives_at(&self, bank: usize, idx: usize) -> Vec<Emission> {
+    pub fn foci_emissions_at(&self, bank: usize, idx: usize) -> Vec<Emission> {
         let sound_speed = u32::from(self.sound_speed(bank));
         let num_foci = self.num_foci(bank);
         let ram = &self.em_ram[bank];

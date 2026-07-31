@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "autd3-emulator"
-description = "Python bindings for the hardware-free emulator (drive recording and sound-field computation)."
+description = "Python bindings for the hardware-free emulator (emission recording and sound-field computation)."
 requires-python = ">=3.12"
 license = "MIT"
 version = "0.4.0"

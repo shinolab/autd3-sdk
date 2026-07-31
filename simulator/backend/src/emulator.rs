@@ -26,8 +26,8 @@ fn constant_wave(v: u8) -> Vec<u8> {
 }
 
 fn pwm_waveform(fpga: &FpgaEmulator, tr: usize) -> Vec<u8> {
-    let drives = fpga.drives();
-    let Some(em) = drives.get(tr) else {
+    let emissions = fpga.emissions();
+    let Some(em) = emissions.get(tr) else {
         return constant_wave(0);
     };
     let pw = fpga.to_pulse_width(em.intensity, fpga.modulation());
@@ -133,7 +133,7 @@ pub fn extract_states_into(devices: &[EmuDevice], out: &mut Vec<TransState>, mod
         } else {
             u8::MAX
         };
-        for (i, d) in fpga.drives().iter().enumerate() {
+        for (i, d) in fpga.emissions().iter().enumerate() {
             let pulse_width = fpga.to_pulse_width(d.intensity, modulation);
             let amp = (PI * f32::from(pulse_width) / ULTRASOUND_PERIOD_COUNT).sin();
             out.push(TransState {

@@ -99,15 +99,16 @@ impl Recorder {
             for d in 0..self.devices.len() {
                 self.devices[d].fpga_mut().update_with_sys_time(t);
                 let m = self.devices[d].fpga().modulation();
-                let drives = self.devices[d].fpga().drives();
-                for (tr, drive) in drives.iter().enumerate() {
+                let emissions = self.devices[d].fpga().emissions();
+                for (tr, emission) in emissions.iter().enumerate() {
                     let rec = &mut self.records[d][tr];
-                    let intensity_mod = ((u16::from(drive.intensity.0) * u16::from(m)) / 255) as u8;
+                    let intensity_mod =
+                        ((u16::from(emission.intensity.0) * u16::from(m)) / 255) as u8;
                     let silenced_int = rec.silencer_intensity.apply(intensity_mod);
                     let pw = self.devices[d]
                         .fpga()
                         .pulse_width_table(silenced_int as usize);
-                    let ph = rec.silencer_phase.apply(drive.phase.0);
+                    let ph = rec.silencer_phase.apply(emission.phase.0);
                     rec.pulse_width.push(pw);
                     rec.phase.push(ph);
                     rec.last_intensity = silenced_int;

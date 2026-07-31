@@ -1,6 +1,6 @@
 ---
 title: Emulator
-description: 実機なしで駆動データを記録し, 音場をオフライン計算する
+description: 実機なしで出力データを記録し, 音場をオフライン計算する
 sidebar:
   order: 8
 ---
@@ -11,7 +11,7 @@ import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/guide/emulator.rs?raw";
 import pySample from "@codes/python/examples/guide/emulator.py?raw";
 
-`Emulator` は, 実機なしで AUTD3 の駆動データを記録し, そこから音場をオフライン計算するツールである (C# には提供していない).
+`Emulator` は, 実機なしで AUTD3 の出力データを記録し, そこから音場をオフライン計算するツールである (C# には提供していない).
 
 <Install rust="autd3-rs-emulator" python="autd3-emulator" />
 
@@ -30,7 +30,7 @@ import pySample from "@codes/python/examples/guide/emulator.py?raw";
 
 `Emulator::transducer_table` は, 全トランスデューサの一覧を `DataFrame` として返す.
 各行が 1 トランスデューサで, デバイスインデックス ( `dev_idx` ), デバイス内のローカルインデックス ( `tr_idx` ), 位置 ( `x/y/z[mm]` ), 法線方向 ( `nx/ny/nz` ) が格納される.
-後述の駆動データ・出力信号の各行は, このテーブルの行と 1 対 1 で対応している.
+後述の出力データ・出力信号の各行は, このテーブルの行と 1 対 1 で対応している.
 
 <CodeTabs rust={excerpt(sample, "transducer")} python={excerpt(pySample, "transducer")} />
 
@@ -55,13 +55,13 @@ shape: (249, 8)
 └─────────┴────────┴────────────┴────────────┴───────┴─────┴─────┴─────┘
 ```
 
-## 駆動データの取得
+## 出力データの取得
 
-`record` が返す `Record` から, 記録された駆動データを取得できる.
+`record` が返す `Record` から, 記録された出力データを取得できる.
 `phase` / `pulse_width` は列が時刻の `DataFrame` を返す.
 列名は `phase@<時刻>[ns]` / `pulse_width@<時刻>[ns]` で, 時刻は超音波周期 ( 25 us ) 刻みである.
 
-<CodeTabs rust={excerpt(sample, "drive")} python={excerpt(pySample, "drive")} />
+<CodeTabs rust={excerpt(sample, "emission")} python={excerpt(pySample, "emission")} />
 
 ```
 shape: (249, 40)

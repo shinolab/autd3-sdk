@@ -59,14 +59,14 @@ fn single_focus_synthesizes_phases() {
     assert_eq!(0x00, device.fpga().pattern_mode(BANK as usize));
     assert_eq!(1, device.fpga().num_foci(BANK as usize));
 
-    let drives = device.fpga().drives();
-    assert_eq!(NUM_TRANSDUCERS, drives.len());
+    let emissions = device.fpga().emissions();
+    assert_eq!(NUM_TRANSDUCERS, emissions.len());
 
     assert!(
-        drives
+        emissions
             .iter()
             .all(|d| d.intensity == Intensity(FOCUS_INTENSITY))
     );
 
-    assert!(drives.iter().any(|d| d.phase != drives[0].phase));
+    assert!(emissions.iter().any(|d| d.phase != emissions[0].phase));
 }

@@ -17,7 +17,7 @@ fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
 }
 
 #[test]
-fn raw_pattern_round_trips_to_drives() {
+fn raw_pattern_round_trips_to_emissions() {
     let expected: Vec<Emission> = (0..NUM_TRANSDUCERS)
         .map(|i| Emission {
             phase: Phase(i as u8),
@@ -62,7 +62,7 @@ fn raw_pattern_round_trips_to_drives() {
 
     assert_eq!(u16::from(BANK), device.fpga().req_pattern_bank());
     assert_eq!(0x01, device.fpga().pattern_mode(BANK as usize));
-    assert_eq!(expected, device.fpga().drives_at(BANK as usize, 0));
+    assert_eq!(expected, device.fpga().emissions_at(BANK as usize, 0));
 }
 
 fn config_change(bank: u8) -> (Vec<u8>, Vec<u8>) {
@@ -104,8 +104,8 @@ fn phase_full_pattern_decompresses_to_two_indices() {
         0
     );
 
-    let idx0 = device.fpga().drives_at(BANK as usize, 0);
-    let idx1 = device.fpga().drives_at(BANK as usize, 1);
+    let idx0 = device.fpga().emissions_at(BANK as usize, 0);
+    let idx1 = device.fpga().emissions_at(BANK as usize, 1);
     for (i, &(p0, p1)) in phases.iter().enumerate() {
         assert_eq!(idx0[i].phase, Phase(p0), "index 0 phase t={i}");
         assert_eq!(
@@ -161,7 +161,7 @@ fn phase_half_pattern_decompresses_to_four_indices() {
     );
 
     for g in 0..4 {
-        let idx = device.fpga().drives_at(BANK as usize, g);
+        let idx = device.fpga().emissions_at(BANK as usize, g);
         for (i, n) in nibbles.iter().enumerate() {
             let p4 = n[g];
             let expected = (p4 << 4) | p4;

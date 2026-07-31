@@ -33,13 +33,13 @@ table = emulator.transducer_table()
 print(table)
 # ANCHOR_END: transducer
 
-# ANCHOR: drive
+# ANCHOR: emission
 phase = record.phase()
 print(phase)
 
 pulse_width = record.pulse_width()
 print(pulse_width)
-# ANCHOR_END: drive
+# ANCHOR_END: emission
 
 # ANCHOR: output
 voltage = record.output_voltage()
