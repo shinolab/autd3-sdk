@@ -11,7 +11,7 @@ pub enum EmulatorError {
     #[error("the requested time range has not been recorded")]
     NotRecorded,
     #[error("{0}")]
-    Driver(#[from] autd3_rs::error::Error),
+    Autd3(#[from] autd3_rs::error::Error),
     #[cfg(feature = "gpu")]
     #[error("{0}")]
     RequestAdapter(#[from] wgpu::RequestAdapterError),
