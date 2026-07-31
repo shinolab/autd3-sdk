@@ -87,16 +87,16 @@ fn fused_path(emissions: &[Emission]) -> Device {
 }
 
 #[test]
-fn fused_pattern_produces_the_same_drives_as_the_three_frame_path() {
+fn fused_pattern_produces_the_same_emissions_as_the_three_frame_path() {
     let emissions = expected_emissions();
 
     let split = split_path(&emissions);
     let fused = fused_path(&emissions);
 
-    assert_eq!(emissions, fused.fpga().drives_at(BANK as usize, 0));
+    assert_eq!(emissions, fused.fpga().emissions_at(BANK as usize, 0));
     assert_eq!(
-        split.fpga().drives_at(BANK as usize, 0),
-        fused.fpga().drives_at(BANK as usize, 0),
+        split.fpga().emissions_at(BANK as usize, 0),
+        fused.fpga().emissions_at(BANK as usize, 0),
         "fused path must drive transducers identically"
     );
     assert_eq!(

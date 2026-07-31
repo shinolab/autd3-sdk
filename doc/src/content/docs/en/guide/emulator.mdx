@@ -1,6 +1,6 @@
 ---
 title: Emulator
-description: Record drive data without real hardware and compute the sound field offline
+description: Record emission data without real hardware and compute the sound field offline
 sidebar:
   order: 8
 ---
@@ -11,7 +11,7 @@ import { excerpt } from "@lib/excerpt";
 import sample from "@codes/rust/examples/guide/emulator.rs?raw";
 import pySample from "@codes/python/examples/guide/emulator.py?raw";
 
-`Emulator` is a tool that records AUTD3 drive data without real hardware and computes the sound field offline from it (not provided for C#).
+`Emulator` is a tool that records AUTD3 emission data without real hardware and computes the sound field offline from it (not provided for C#).
 
 <Install rust="autd3-rs-emulator" python="autd3-emulator" />
 
@@ -30,7 +30,7 @@ For details, refer to the Polars documentation.
 
 `Emulator::transducer_table` returns a list of all transducers as a `DataFrame`.
 Each row is one transducer, storing the device index (`dev_idx`), the local index within the device (`tr_idx`), the position (`x/y/z[mm]`), and the normal direction (`nx/ny/nz`).
-Each row of the drive data and output signal described later corresponds one-to-one with a row of this table.
+Each row of the emission data and output signal described later corresponds one-to-one with a row of this table.
 
 <CodeTabs rust={excerpt(sample, "transducer")} python={excerpt(pySample, "transducer")} />
 
@@ -55,13 +55,13 @@ shape: (249, 8)
 └─────────┴────────┴────────────┴────────────┴───────┴─────┴─────┴─────┘
 ```
 
-## Obtaining Drive Data
+## Obtaining Emission Data
 
-From the `Record` returned by `record`, the recorded drive data can be obtained.
+From the `Record` returned by `record`, the recorded emission data can be obtained.
 `phase` / `pulse_width` return a `DataFrame` whose columns are times.
 The column names are `phase@<time>[ns]` / `pulse_width@<time>[ns]`, and the time is in increments of the ultrasound period (25 us).
 
-<CodeTabs rust={excerpt(sample, "drive")} python={excerpt(pySample, "drive")} />
+<CodeTabs rust={excerpt(sample, "emission")} python={excerpt(pySample, "emission")} />
 
 ```
 shape: (249, 40)

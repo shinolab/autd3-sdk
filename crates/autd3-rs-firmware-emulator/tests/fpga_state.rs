@@ -139,7 +139,7 @@ fn multi_index_pattern_reports_stm_mode() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
 
-    // A multi-index pattern (cycle > 1) is STM mode; the gain/STM bit derives from
+    // A multi-index pattern (cycle > 1) is STM mode; the pattern-mode bit derives from
     // the pattern cycle register, so the buffer contents are irrelevant here.
     device.send(&frame(
         0,

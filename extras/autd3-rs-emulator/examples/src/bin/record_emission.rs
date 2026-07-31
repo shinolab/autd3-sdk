@@ -1,6 +1,6 @@
-// Records the per-transducer drive (phase / pulse width) of a 200 Hz AM focus
+// Records the per-transducer emission (phase / pulse width) of a 200 Hz AM focus
 //
-// Run with: cargo xtask emulator example record_drive
+// Run with: cargo xtask emulator example record_emission
 
 use std::time::Duration;
 

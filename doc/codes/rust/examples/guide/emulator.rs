@@ -49,13 +49,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dbg!(table);
     // ANCHOR_END: transducer
 
-    // ANCHOR: drive
+    // ANCHOR: emission
     let phase = record.phase();
     dbg!(phase);
 
     let pulse_width = record.pulse_width();
     dbg!(pulse_width);
-    // ANCHOR_END: drive
+    // ANCHOR_END: emission
 
     // ANCHOR: output
     let voltage = record.output_voltage();

@@ -1,4 +1,4 @@
-"""Hardware-free tests: emulator drive recording and sound-field computation."""
+"""Hardware-free tests: emulator emission recording and sound-field computation."""
 
 import numpy as np
 import polars as pl
@@ -43,7 +43,7 @@ def test_transducer_table() -> None:
     assert table["nz"][0] == 1.0
 
 
-def test_record_drive() -> None:
+def test_record_emission() -> None:
     record = recorded(geometry())
     assert record.num_transducers() == 249
     assert record.num_samples() == 40

@@ -1,4 +1,4 @@
-// Records a uniform full-intensity drive and plots the output voltage waveform and the emitted ultrasound of 0th transducer
+// Records a uniform full-intensity emission and plots the output voltage waveform and the emitted ultrasound of 0th transducer
 //
 // Run with: cargo xtask emulator example output_ultrasound
 

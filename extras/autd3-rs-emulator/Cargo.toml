@@ -47,7 +47,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Hardware-free emulator for AUTD3: records device drive data and computes the ultrasound sound field offline."
+description = "Hardware-free emulator for AUTD3: records device emission data and computes the ultrasound sound field offline."
 
 [features]
 default = ["polars"]

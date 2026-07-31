@@ -317,13 +317,13 @@ impl FpgaEmulator {
     }
 
     #[must_use]
-    pub fn drives(&self) -> Vec<Emission> {
+    pub fn emissions(&self) -> Vec<Emission> {
         let bank = self.current_pattern_bank();
         let idx = self.current_pattern_idx();
         if self.pattern_mode(bank) == fw::EMISSION_TYPE_FOCI as u16 {
-            self.foci_drives_at(bank, idx)
+            self.foci_emissions_at(bank, idx)
         } else {
-            self.drives_at(bank, idx)
+            self.emissions_at(bank, idx)
         }
     }
 
@@ -480,7 +480,7 @@ impl FpgaEmulator {
     }
 
     #[must_use]
-    pub fn drives_at(&self, bank: usize, idx: usize) -> Vec<Emission> {
+    pub fn emissions_at(&self, bank: usize, idx: usize) -> Vec<Emission> {
         let base = idx * EMISSION_SLOT_WORDS;
         (0..self.num_transducers)
             .map(|i| {

@@ -13,8 +13,8 @@ publish = false
 gpu = ["autd3-rs-emulator/gpu"]
 
 [[bin]]
-name = "record_drive"
-path = "src/bin/record_drive.rs"
+name = "record_emission"
+path = "src/bin/record_emission.rs"
 
 [[bin]]
 name = "output_ultrasound"
