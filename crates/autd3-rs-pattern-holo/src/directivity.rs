@@ -1,3 +1,4 @@
+use autd3_rs_core::common::Angle;
 use autd3_rs_core::geometry::{UnitVector3, Vector3};
 
 #[allow(clippy::excessive_precision, clippy::unreadable_literal)]
@@ -86,22 +87,24 @@ impl Directivity {
     }
 
     #[must_use]
-    pub fn value(self, theta_rad: f32) -> f32 {
+    pub fn value(self, theta: Angle) -> f32 {
         match self {
             Directivity::Sphere => 1.0,
-            Directivity::T4010A1 => value_t4010a1(theta_rad),
+            Directivity::T4010A1 => value_t4010a1(theta.radian()),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use autd3_rs_core::common::units::{deg, rad};
+
     use super::*;
 
     #[test]
     fn sphere_is_unit() {
         for theta in [0.0, 0.3, 1.0, 2.5] {
-            approx::assert_abs_diff_eq!(1.0, Directivity::Sphere.value(theta));
+            approx::assert_abs_diff_eq!(1.0, Directivity::Sphere.value(theta * rad));
         }
     }
 
@@ -123,7 +126,7 @@ mod tests {
         ] {
             approx::assert_abs_diff_eq!(
                 expected,
-                Directivity::T4010A1.value(theta_deg.to_radians()),
+                Directivity::T4010A1.value(theta_deg * deg),
                 epsilon = 1e-5
             );
         }
