@@ -58,6 +58,19 @@ def test_record_emission() -> None:
     assert record.output_ultrasound().shape[0] == 249
 
 
+def test_record_option_sound_speed_is_velocity() -> None:
+    assert emu.RmsRecordOption().sound_speed.m_s == pytest.approx(340.0)
+    assert emu.RmsRecordOption(sound_speed=350 * m / s).sound_speed.m_s == pytest.approx(350.0)
+    assert emu.InstantRecordOption(sound_speed=350 * m / s).sound_speed.m_s == pytest.approx(350.0)
+
+    option = emu.RmsRecordOption()
+    option.sound_speed = 350 * m / s
+    assert option.sound_speed.m_s == pytest.approx(350.0)
+
+    with pytest.raises(ValueError):
+        emu.RmsRecordOption(sound_speed=340e3)
+
+
 def test_sound_field_rms() -> None:
     record = recorded(geometry())
     rng = emu.RangeXY((-10.0, 10.0), (-10.0, 10.0), 150.0, 10.0)

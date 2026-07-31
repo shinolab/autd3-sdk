@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_python_capsule::{capsule_of, frame_from_capsule, geometry_from_capsule, to_pyerr_gil};
+use autd3_rs_core::common::Velocity;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_emulator::{
     ClientApi, Emulator as CoreEmulator, Instant as CoreInstant,
@@ -19,6 +20,21 @@ fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
     u64::try_from(nanos)
         .map(Duration::from_nanos)
         .map_err(|_| PyValueError::new_err("duration is out of range"))
+}
+
+fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
+    let mm_per_s: f32 = obj.getattr("mm_per_s").and_then(|v| v.extract()).map_err(|_| {
+        PyValueError::new_err(
+            "sound speed must be a Velocity, e.g. 340 * m / s (bare numbers are no longer accepted)",
+        )
+    })?;
+    Ok(Velocity::from_mm_s(mm_per_s))
+}
+
+fn velocity_to_py(py: Python<'_>, v: Velocity) -> PyResult<Bound<'_, PyAny>> {
+    py.import("autd3_core")?
+        .getattr("Velocity")?
+        .call_method1("from_mm_s", (v.mm_per_s(),))
 }
 
 fn raw_to_polars(py: Python<'_>, frame: RawFrame) -> PyResult<Bound<'_, PyAny>> {
@@ -290,23 +306,37 @@ fn extract_range(obj: &Bound<'_, PyAny>) -> PyResult<AnyRange> {
 
 #[pyclass(name = "RmsRecordOption", module = "autd3_emulator")]
 pub struct RmsRecordOption {
-    #[pyo3(get, set)]
-    sound_speed: f32,
+    sound_speed: Velocity,
 }
 
 #[pymethods]
 impl RmsRecordOption {
     #[new]
-    #[pyo3(signature = (sound_speed = 340e3))]
-    fn new(sound_speed: f32) -> Self {
-        Self { sound_speed }
+    #[pyo3(signature = (sound_speed = None))]
+    fn new(sound_speed: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        Ok(Self {
+            sound_speed: match sound_speed {
+                Some(v) => extract_velocity(v)?,
+                None => CoreRmsOption::default().sound_speed,
+            },
+        })
+    }
+
+    #[getter]
+    fn sound_speed<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        velocity_to_py(py, self.sound_speed)
+    }
+
+    #[setter]
+    fn set_sound_speed(&mut self, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.sound_speed = extract_velocity(value)?;
+        Ok(())
     }
 }
 
 #[pyclass(name = "InstantRecordOption", module = "autd3_emulator")]
 pub struct InstantRecordOption {
-    #[pyo3(get, set)]
-    sound_speed: f32,
+    sound_speed: Velocity,
     time_step_ns: u64,
     #[pyo3(get, set)]
     memory_limits_hint_mb: usize,
@@ -315,9 +345,9 @@ pub struct InstantRecordOption {
 #[pymethods]
 impl InstantRecordOption {
     #[new]
-    #[pyo3(signature = (sound_speed = 340e3, time_step = None, memory_limits_hint_mb = 128))]
+    #[pyo3(signature = (sound_speed = None, time_step = None, memory_limits_hint_mb = 128))]
     fn new(
-        sound_speed: f32,
+        sound_speed: Option<&Bound<'_, PyAny>>,
         time_step: Option<&Bound<'_, PyAny>>,
         memory_limits_hint_mb: usize,
     ) -> PyResult<Self> {
@@ -327,10 +357,24 @@ impl InstantRecordOption {
             None => 1_000,
         };
         Ok(Self {
-            sound_speed,
+            sound_speed: match sound_speed {
+                Some(v) => extract_velocity(v)?,
+                None => CoreInstantOption::default().sound_speed,
+            },
             time_step_ns,
             memory_limits_hint_mb,
         })
+    }
+
+    #[getter]
+    fn sound_speed<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        velocity_to_py(py, self.sound_speed)
+    }
+
+    #[setter]
+    fn set_sound_speed(&mut self, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.sound_speed = extract_velocity(value)?;
+        Ok(())
     }
 }
 
