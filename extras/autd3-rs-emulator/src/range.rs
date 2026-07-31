@@ -49,441 +49,81 @@ impl Range for Vec<Vector3<f32>> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct RangeX {
-    pub x: RangeInclusive<f32>,
-    pub y: f32,
-    pub z: f32,
-    pub resolution: f32,
-}
-
-impl Range for RangeX {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let x_start = *self.x.start();
-        let (y, z, res) = (self.y, self.z, self.resolution);
-        (0..nx).map(move |ix| (x_start + res * ix as f32, y, z))
-    }
-
-    fn aabb(&self) -> Aabb {
-        Aabb {
-            min: Vector3::new(*self.x.start(), self.y, self.z).into(),
-            max: Vector3::new(*self.x.end(), self.y, self.z).into(),
+macro_rules! impl_range {
+    (@ty range) => { RangeInclusive<f32> };
+    (@ty scalar) => { f32 };
+    (@spec range, $v:expr, $res:expr) => { (*$v.start(), n(*$v.start(), *$v.end(), $res)) };
+    (@spec scalar, $v:expr, $res:expr) => { ($v, 1usize) };
+    (@min range, $v:expr) => { *$v.start() };
+    (@min scalar, $v:expr) => { $v };
+    (@max range, $v:expr) => { *$v.end() };
+    (@max scalar, $v:expr) => { $v };
+    (
+        $name:ident {
+            $ax:ident: $kx:ident,
+            $ay:ident: $ky:ident,
+            $az:ident: $kz:ident $(,)?
+        },
+        order: [$a0:ident, $a1:ident, $a2:ident] $(,)?
+    ) => {
+        #[derive(Clone, Debug)]
+        pub struct $name {
+            pub $ax: impl_range!(@ty $kx),
+            pub $ay: impl_range!(@ty $ky),
+            pub $az: impl_range!(@ty $kz),
+            pub resolution: f32,
         }
-    }
-}
 
-#[derive(Clone, Debug)]
-pub struct RangeY {
-    pub x: f32,
-    pub y: RangeInclusive<f32>,
-    pub z: f32,
-    pub resolution: f32,
-}
+        impl Range for $name {
+            fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
+                let res = self.resolution;
+                let $ax = impl_range!(@spec $kx, self.$ax, res);
+                let $ay = impl_range!(@spec $ky, self.$ay, res);
+                let $az = impl_range!(@spec $kz, self.$az, res);
+                (0..$a2.1).flat_map(move |i2| {
+                    let $a2 = $a2.0 + res * i2 as f32;
+                    (0..$a1.1).flat_map(move |i1| {
+                        let $a1 = $a1.0 + res * i1 as f32;
+                        (0..$a0.1).map(move |i0| {
+                            let $a0 = $a0.0 + res * i0 as f32;
+                            ($ax, $ay, $az)
+                        })
+                    })
+                })
+            }
 
-impl Range for RangeY {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let y_start = *self.y.start();
-        let (x, z, res) = (self.x, self.z, self.resolution);
-        (0..ny).map(move |iy| (x, y_start + res * iy as f32, z))
-    }
-
-    fn aabb(&self) -> Aabb {
-        Aabb {
-            min: Vector3::new(self.x, *self.y.start(), self.z).into(),
-            max: Vector3::new(self.x, *self.y.end(), self.z).into(),
+            fn aabb(&self) -> Aabb {
+                Aabb {
+                    min: Vector3::new(
+                        impl_range!(@min $kx, self.$ax),
+                        impl_range!(@min $ky, self.$ay),
+                        impl_range!(@min $kz, self.$az),
+                    )
+                    .into(),
+                    max: Vector3::new(
+                        impl_range!(@max $kx, self.$ax),
+                        impl_range!(@max $ky, self.$ay),
+                        impl_range!(@max $kz, self.$az),
+                    )
+                    .into(),
+                }
+            }
         }
-    }
+    };
 }
 
-#[derive(Clone, Debug)]
-pub struct RangeZ {
-    pub x: f32,
-    pub y: f32,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-impl Range for RangeZ {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let z_start = *self.z.start();
-        let (x, y, res) = (self.x, self.y, self.resolution);
-        (0..nz).map(move |iz| (x, y, z_start + res * iz as f32))
-    }
-
-    fn aabb(&self) -> Aabb {
-        Aabb {
-            min: Vector3::new(self.x, self.y, *self.z.start()).into(),
-            max: Vector3::new(self.x, self.y, *self.z.end()).into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeXY {
-    pub x: RangeInclusive<f32>,
-    pub y: RangeInclusive<f32>,
-    pub z: f32,
-    pub resolution: f32,
-}
-
-impl Range for RangeXY {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let (x0, y0, z, res) = (*self.x.start(), *self.y.start(), self.z, self.resolution);
-        (0..ny).flat_map(move |iy| {
-            let py = y0 + res * iy as f32;
-            (0..nx).map(move |ix| (x0 + res * ix as f32, py, z))
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        Aabb {
-            min: Vector3::new(*self.x.start(), *self.y.start(), self.z).into(),
-            max: Vector3::new(*self.x.end(), *self.y.end(), self.z).into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeXZ {
-    pub x: RangeInclusive<f32>,
-    pub y: f32,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-impl Range for RangeXZ {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let (x0, y, z0, res) = (*self.x.start(), self.y, *self.z.start(), self.resolution);
-        (0..nz).flat_map(move |iz| {
-            let pz = z0 + res * iz as f32;
-            (0..nx).map(move |ix| (x0 + res * ix as f32, y, pz))
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        Aabb {
-            min: Vector3::new(*self.x.start(), self.y, *self.z.start()).into(),
-            max: Vector3::new(*self.x.end(), self.y, *self.z.end()).into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeYX {
-    pub x: RangeInclusive<f32>,
-    pub y: RangeInclusive<f32>,
-    pub z: f32,
-    pub resolution: f32,
-}
-
-impl Range for RangeYX {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let (x0, y0, z, res) = (*self.x.start(), *self.y.start(), self.z, self.resolution);
-        (0..nx).flat_map(move |ix| {
-            let px = x0 + res * ix as f32;
-            (0..ny).map(move |iy| (px, y0 + res * iy as f32, z))
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        Aabb {
-            min: Vector3::new(*self.x.start(), *self.y.start(), self.z).into(),
-            max: Vector3::new(*self.x.end(), *self.y.end(), self.z).into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeYZ {
-    pub x: f32,
-    pub y: RangeInclusive<f32>,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-impl Range for RangeYZ {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let (x, y0, z0, res) = (self.x, *self.y.start(), *self.z.start(), self.resolution);
-        (0..nz).flat_map(move |iz| {
-            let pz = z0 + res * iz as f32;
-            (0..ny).map(move |iy| (x, y0 + res * iy as f32, pz))
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        Aabb {
-            min: Vector3::new(self.x, *self.y.start(), *self.z.start()).into(),
-            max: Vector3::new(self.x, *self.y.end(), *self.z.end()).into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeZX {
-    pub x: RangeInclusive<f32>,
-    pub y: f32,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-impl Range for RangeZX {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let (x0, y, z0, res) = (*self.x.start(), self.y, *self.z.start(), self.resolution);
-        (0..nx).flat_map(move |ix| {
-            let px = x0 + res * ix as f32;
-            (0..nz).map(move |iz| (px, y, z0 + res * iz as f32))
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        Aabb {
-            min: Vector3::new(*self.x.start(), self.y, *self.z.start()).into(),
-            max: Vector3::new(*self.x.end(), self.y, *self.z.end()).into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeZY {
-    pub x: f32,
-    pub y: RangeInclusive<f32>,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-impl Range for RangeZY {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let (x, y0, z0, res) = (self.x, *self.y.start(), *self.z.start(), self.resolution);
-        (0..ny).flat_map(move |iy| {
-            let py = y0 + res * iy as f32;
-            (0..nz).map(move |iz| (x, py, z0 + res * iz as f32))
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        Aabb {
-            min: Vector3::new(self.x, *self.y.start(), *self.z.start()).into(),
-            max: Vector3::new(self.x, *self.y.end(), *self.z.end()).into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeXYZ {
-    pub x: RangeInclusive<f32>,
-    pub y: RangeInclusive<f32>,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeXZY {
-    pub x: RangeInclusive<f32>,
-    pub y: RangeInclusive<f32>,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeYXZ {
-    pub x: RangeInclusive<f32>,
-    pub y: RangeInclusive<f32>,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeYZX {
-    pub x: RangeInclusive<f32>,
-    pub y: RangeInclusive<f32>,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeZXY {
-    pub x: RangeInclusive<f32>,
-    pub y: RangeInclusive<f32>,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-#[derive(Clone, Debug)]
-pub struct RangeZYX {
-    pub x: RangeInclusive<f32>,
-    pub y: RangeInclusive<f32>,
-    pub z: RangeInclusive<f32>,
-    pub resolution: f32,
-}
-
-fn aabb_3d(x: &RangeInclusive<f32>, y: &RangeInclusive<f32>, z: &RangeInclusive<f32>) -> Aabb {
-    Aabb {
-        min: Vector3::new(*x.start(), *y.start(), *z.start()).into(),
-        max: Vector3::new(*x.end(), *y.end(), *z.end()).into(),
-    }
-}
-
-impl Range for RangeXYZ {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let (x0, y0, z0, res) = (
-            *self.x.start(),
-            *self.y.start(),
-            *self.z.start(),
-            self.resolution,
-        );
-        (0..nz).flat_map(move |iz| {
-            let pz = z0 + res * iz as f32;
-            (0..ny).flat_map(move |iy| {
-                let py = y0 + res * iy as f32;
-                (0..nx).map(move |ix| (x0 + res * ix as f32, py, pz))
-            })
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        aabb_3d(&self.x, &self.y, &self.z)
-    }
-}
-
-impl Range for RangeXZY {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let (x0, y0, z0, res) = (
-            *self.x.start(),
-            *self.y.start(),
-            *self.z.start(),
-            self.resolution,
-        );
-        (0..ny).flat_map(move |iy| {
-            let py = y0 + res * iy as f32;
-            (0..nz).flat_map(move |iz| {
-                let pz = z0 + res * iz as f32;
-                (0..nx).map(move |ix| (x0 + res * ix as f32, py, pz))
-            })
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        aabb_3d(&self.x, &self.y, &self.z)
-    }
-}
-
-impl Range for RangeYXZ {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let (x0, y0, z0, res) = (
-            *self.x.start(),
-            *self.y.start(),
-            *self.z.start(),
-            self.resolution,
-        );
-        (0..nz).flat_map(move |iz| {
-            let pz = z0 + res * iz as f32;
-            (0..nx).flat_map(move |ix| {
-                let px = x0 + res * ix as f32;
-                (0..ny).map(move |iy| (px, y0 + res * iy as f32, pz))
-            })
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        aabb_3d(&self.x, &self.y, &self.z)
-    }
-}
-
-impl Range for RangeYZX {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let (x0, y0, z0, res) = (
-            *self.x.start(),
-            *self.y.start(),
-            *self.z.start(),
-            self.resolution,
-        );
-        (0..nx).flat_map(move |ix| {
-            let px = x0 + res * ix as f32;
-            (0..nz).flat_map(move |iz| {
-                let pz = z0 + res * iz as f32;
-                (0..ny).map(move |iy| (px, y0 + res * iy as f32, pz))
-            })
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        aabb_3d(&self.x, &self.y, &self.z)
-    }
-}
-
-impl Range for RangeZXY {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let (x0, y0, z0, res) = (
-            *self.x.start(),
-            *self.y.start(),
-            *self.z.start(),
-            self.resolution,
-        );
-        (0..ny).flat_map(move |iy| {
-            let py = y0 + res * iy as f32;
-            (0..nx).flat_map(move |ix| {
-                let px = x0 + res * ix as f32;
-                (0..nz).map(move |iz| (px, py, z0 + res * iz as f32))
-            })
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        aabb_3d(&self.x, &self.y, &self.z)
-    }
-}
-
-impl Range for RangeZYX {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let nx = n(*self.x.start(), *self.x.end(), self.resolution);
-        let ny = n(*self.y.start(), *self.y.end(), self.resolution);
-        let nz = n(*self.z.start(), *self.z.end(), self.resolution);
-        let (x0, y0, z0, res) = (
-            *self.x.start(),
-            *self.y.start(),
-            *self.z.start(),
-            self.resolution,
-        );
-        (0..nx).flat_map(move |ix| {
-            let px = x0 + res * ix as f32;
-            (0..ny).flat_map(move |iy| {
-                let py = y0 + res * iy as f32;
-                (0..nz).map(move |iz| (px, py, z0 + res * iz as f32))
-            })
-        })
-    }
-
-    fn aabb(&self) -> Aabb {
-        aabb_3d(&self.x, &self.y, &self.z)
-    }
-}
+impl_range!(RangeX { x: range, y: scalar, z: scalar }, order: [x, y, z]);
+impl_range!(RangeY { x: scalar, y: range, z: scalar }, order: [y, x, z]);
+impl_range!(RangeZ { x: scalar, y: scalar, z: range }, order: [z, x, y]);
+impl_range!(RangeXY { x: range, y: range, z: scalar }, order: [x, y, z]);
+impl_range!(RangeXZ { x: range, y: scalar, z: range }, order: [x, z, y]);
+impl_range!(RangeYX { x: range, y: range, z: scalar }, order: [y, x, z]);
+impl_range!(RangeYZ { x: scalar, y: range, z: range }, order: [y, z, x]);
+impl_range!(RangeZX { x: range, y: scalar, z: range }, order: [z, x, y]);
+impl_range!(RangeZY { x: scalar, y: range, z: range }, order: [z, y, x]);
+impl_range!(RangeXYZ { x: range, y: range, z: range }, order: [x, y, z]);
+impl_range!(RangeXZY { x: range, y: range, z: range }, order: [x, z, y]);
+impl_range!(RangeYXZ { x: range, y: range, z: range }, order: [y, x, z]);
+impl_range!(RangeYZX { x: range, y: range, z: range }, order: [y, z, x]);
+impl_range!(RangeZXY { x: range, y: range, z: range }, order: [z, x, y]);
+impl_range!(RangeZYX { x: range, y: range, z: range }, order: [z, y, x]);
