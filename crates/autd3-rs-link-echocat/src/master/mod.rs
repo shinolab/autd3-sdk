@@ -9,6 +9,8 @@ pub use state::{BusState, device_state};
 
 use std::time::{Duration, Instant};
 
+use autd3_rs_core::LinkStats;
+
 use crate::bus::RawBus;
 use crate::error::EchocatError;
 use crate::reg::{self, AlState};
@@ -90,10 +92,12 @@ pub struct Master<B: RawBus> {
     plan: CyclePlan,
     next_at: Option<Instant>,
     last_cycle_at: Option<Instant>,
+    last_exchange: Duration,
     op_entered: bool,
     rotation: usize,
     unobserved_cycles: u32,
     state: BusState,
+    stats: LinkStats,
     phase_bias_ns: i64,
     phase_excursions: u64,
     worst_phase_ns: u64,
@@ -113,15 +117,22 @@ impl<B: RawBus> Master<B> {
             plan: CyclePlan::default(),
             next_at: None,
             last_cycle_at: None,
+            last_exchange: Duration::ZERO,
             op_entered: false,
             rotation: 0,
             unobserved_cycles: 0,
             state: BusState::new(0),
+            stats: LinkStats::default(),
             phase_bias_ns: 0,
             phase_excursions: 0,
             worst_phase_ns: 0,
             last_phase_warn_at: None,
         }
+    }
+
+    #[must_use]
+    pub fn stats(&self) -> LinkStats {
+        self.stats.clone()
     }
 
     #[must_use]
