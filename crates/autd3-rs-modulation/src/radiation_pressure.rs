@@ -30,7 +30,7 @@ mod tests {
     fn radiation_pressure_empty() {
         let mut dst = vec![1, 2, 3];
         radiation_pressure(&[], &mut dst);
-        assert_eq!(dst, []);
+        assert_eq!(dst, Vec::<u8>::new());
     }
 
     #[test]
@@ -44,6 +44,6 @@ mod tests {
     fn radiation_pressure_inplace_empty() {
         let mut buf: [u8; 0] = [];
         radiation_pressure_inplace(&mut buf);
-        assert_eq!(buf, []);
+        assert_eq!(buf, [0u8; 0]);
     }
 }
