@@ -56,10 +56,11 @@ impl EchocatLink {
             None => Self::open_on_any_interface(config)?,
         };
         let state = master.state();
+        let link_stats = master.stats();
         Ok(Self {
             master,
             state,
-            stats: LinkStats::default(),
+            stats: link_stats,
             dc_clock: DcClock::new(),
             rx_was_valid: true,
             recovery_backoff: 0,

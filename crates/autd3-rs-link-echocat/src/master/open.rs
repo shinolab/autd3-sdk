@@ -99,6 +99,7 @@ impl<B: RawBus> Master<B> {
     }
 
     fn paced_cycle(&mut self, tx: &[u8], rx: &mut [u8]) -> Result<CycleReport, EchocatError> {
+        let entered = Instant::now();
         if let Some(deadline) = self.next_at {
             self.config.sleep_strategy.wait_until(deadline);
         }
@@ -110,13 +111,22 @@ impl<B: RawBus> Master<B> {
                     ?gap,
                     cycle = ?self.config.cycle,
                     missed_sync0 = gap.as_nanos() / self.config.cycle.as_nanos().max(1),
+                    prev_exchange = ?self.last_exchange,
+                    slept = ?anchor.duration_since(entered),
+                    overshoot = ?self
+                        .next_at
+                        .map(|deadline| anchor.saturating_duration_since(deadline)),
                     "process data stopped for longer than a SYNC0 period; \
                      the subdevice may drop to SAFE-OP with a synchronization error",
                 );
             }
         }
         self.last_cycle_at = Some(anchor);
+        let exchange_at = Instant::now();
         let report = self.exchange(tx, rx)?;
+        self.last_exchange = exchange_at.elapsed();
+        self.stats
+            .record_exchange(u64::try_from(self.last_exchange.as_nanos()).unwrap_or(u64::MAX));
         self.report_landing_phase(report.dc_system_time, anchor);
         self.update_phase_bias(report.dc_system_time);
         self.next_at = (report.dc_system_time != 0)
@@ -142,6 +152,7 @@ impl<B: RawBus> Master<B> {
         }
         self.phase_excursions += 1;
         self.worst_phase_ns = self.worst_phase_ns.max(deviation);
+        self.stats.record_phase_excursion(deviation);
         if self
             .last_phase_warn_at
             .is_some_and(|last| at.duration_since(last) < PHASE_WARN_INTERVAL)
