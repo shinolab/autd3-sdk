@@ -15,7 +15,7 @@ mod response;
 #[cfg(test)]
 mod test_utils;
 
-pub use autd3_rs_core::{common, geometry, link, params, protocol, units, value};
+pub use autd3_rs_core::{common, geometry, link, params, protocol, rt, units, value};
 pub use error::{Error, PayloadError};
 
 pub use autd3_rs_core::value::{ControlPoint, ControlPoints, PulseWidth, PulseWidthError};

@@ -1,5 +1,11 @@
+#[cfg(feature = "logging")]
+mod logging;
+
 pub use core_affinity::CoreId;
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
+
+#[cfg(feature = "logging")]
+pub use logging::{LogWriter, TracingGuard, TracingOption, init_tracing};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RtSchedulePolicy {

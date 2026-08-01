@@ -9,6 +9,7 @@ use clap::Parser;
 
 use autd3_rs::commands::Command;
 use autd3_rs::geometry::{Autd3, Geometry};
+use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use autd3_rs::{Client, ClientConfig, DatagramBuilder};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 use autd3_rs_link_remote::RemoteLinkOption;
@@ -72,13 +73,10 @@ async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
-        )
-        .with_writer(std::io::stderr)
-        .init();
+    let _log_guard = init_tracing(TracingOption {
+        default_filter: "warn",
+        writer: LogWriter::Stderr,
+    });
 
     let cli = Cli::parse();
     if let Err(msg) = cli.validate() {

@@ -58,14 +58,13 @@ name = "remote_client"
 path = "src/bin/remote_client.rs"
 
 [dependencies]
-autd3-rs = { workspace = true, features = ["legacy"] }
+autd3-rs = { workspace = true, features = ["legacy", "logging"] }
 autd3-rs-pattern.workspace = true
 autd3-rs-pattern-holo.workspace = true
 autd3-rs-link-echocat.workspace = true
 autd3-rs-link-remote.workspace = true
 autd3-rs-modulation.workspace = true
 anyhow.workspace = true
-tracing-subscriber.workspace = true
 tokio = { workspace = true, features = [
     "sync",
     "time",

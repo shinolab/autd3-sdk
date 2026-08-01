@@ -10,6 +10,7 @@ use anyhow::Result;
 
 use autd3_rs::commands::{ConfigPattern, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
+use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Emission, LoopBehavior, PatternBank, SamplingConfig};
 use autd3_rs::{Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture};
@@ -19,12 +20,7 @@ const TOTAL_POINTS: usize = 1000;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    let _log_guard = init_tracing(TracingOption::default());
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
