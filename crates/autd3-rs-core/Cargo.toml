@@ -8,6 +8,9 @@ authors.workspace = true
 repository.workspace = true
 description = "Core types and link abstraction shared across the AUTD3 phased-array sdk crates."
 
+[features]
+logging = ["dep:tracing-appender", "dep:tracing-subscriber"]
+
 [dependencies]
 autd3-cpu-wire.workspace = true
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
@@ -16,6 +19,8 @@ nalgebra.workspace = true
 thiserror.workspace = true
 thread-priority.workspace = true
 tracing.workspace = true
+tracing-appender = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
 zerocopy.workspace = true
 
 [dev-dependencies]

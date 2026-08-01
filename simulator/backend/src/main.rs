@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::Result;
+use autd3_rs_core::rt::{TracingOption, init_tracing};
 use autd3_rs_link_remote::{DeviceLayout, RemoteLinkError, RemoteServer};
 use autd3_rs_simulator_protocol::ServerMsg;
 use clap::Parser;
@@ -31,7 +32,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    let _log_guard = init_tracing(TracingOption::default());
     let args = Args::parse();
 
     let control = Arc::new(ControlState::default());

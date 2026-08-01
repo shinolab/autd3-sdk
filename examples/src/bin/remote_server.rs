@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 
 use anyhow::Result;
 
+use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs_link_echocat::EchocatLinkOption;
 use autd3_rs_link_remote::RemoteServer;
 
@@ -13,12 +14,7 @@ const BIND_ADDR: &str = "0.0.0.0:8080";
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    let _log_guard = init_tracing(TracingOption::default());
 
     let bind: SocketAddr = BIND_ADDR.parse()?;
     let server = RemoteServer::open(bind, EchocatLinkOption::default()).await?;
