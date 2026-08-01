@@ -11,7 +11,6 @@ pub mod tuning;
 mod client;
 mod datagram;
 mod response;
-mod rt_tuning;
 
 #[cfg(test)]
 mod test_utils;

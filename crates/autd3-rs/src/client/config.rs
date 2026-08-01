@@ -30,7 +30,7 @@ impl Default for ClientConfig {
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
             reset_resend_cycles: NonZeroU32::new(2).unwrap(),
-            rt_priority: crate::rt_tuning::default_rt_priority(),
+            rt_priority: autd3_rs_core::default_rt_priority(),
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,

@@ -11,8 +11,11 @@ description = "Core types and link abstraction shared across the AUTD3 phased-ar
 [dependencies]
 autd3-cpu-wire.workspace = true
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+core_affinity.workspace = true
 nalgebra.workspace = true
 thiserror.workspace = true
+thread-priority.workspace = true
+tracing.workspace = true
 zerocopy.workspace = true
 
 [dev-dependencies]

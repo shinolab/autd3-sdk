@@ -120,7 +120,11 @@ pub(super) fn run_rt_thread<L: Link>(
     hs_done_tx: oneshot::Sender<Result<(), String>>,
     closed: Arc<AtomicBool>,
 ) {
-    crate::rt_tuning::apply_thread_tuning(config.rt_priority, config.rt_policy, config.rt_affinity);
+    autd3_rs_core::apply_thread_tuning(autd3_rs_core::RtThreadTuning {
+        priority: config.rt_priority,
+        policy: config.rt_policy,
+        affinity: config.rt_affinity,
+    });
     let mut rt = RtThread::new(link, cmd_rx, config, closed);
     match rt.handshake() {
         Ok(()) => {}
