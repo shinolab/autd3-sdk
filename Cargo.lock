@@ -150,8 +150,11 @@ dependencies = [
  "approx",
  "autd3-cpu-wire",
  "chrono",
+ "core_affinity",
  "nalgebra",
  "thiserror 2.0.18",
+ "thread-priority",
+ "tracing",
  "zerocopy 0.8.52",
 ]
 

@@ -41,7 +41,7 @@ impl Default for LegacyClientConfig {
     fn default() -> Self {
         Self {
             timeout_cycles: DEFAULT_TIMEOUT_CYCLES,
-            rt_priority: crate::rt_tuning::default_rt_priority(),
+            rt_priority: autd3_rs_core::default_rt_priority(),
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
         }
