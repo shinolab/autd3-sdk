@@ -69,6 +69,17 @@ fn link_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
                  // or ::remote(addr, ams_net_id)",
             );
         }
+        LinkKind::Remote => match &cli.addr {
+            Some(addr) => {
+                let _ = writeln!(
+                    body,
+                    "let link = RemoteLinkOption::new(\"{addr}\".parse()?);"
+                );
+            }
+            None => {
+                let _ = writeln!(body, "let link = RemoteLinkOption::discover()?;");
+            }
+        },
         LinkKind::Nop => {
             let _ = writeln!(
                 body,
@@ -128,6 +139,9 @@ fn imports_block(link: LinkKind, spin: bool, imports: &[&str]) -> String {
                 out,
                 "use autd3_rs_link_twincat::{{TwinCATLink, TwinCATLinkOption}};",
             );
+        }
+        LinkKind::Remote => {
+            let _ = writeln!(out, "use autd3_rs_link_remote::RemoteLinkOption;");
         }
         LinkKind::Nop => {}
     }

@@ -1,4 +1,4 @@
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -29,6 +29,7 @@ pub enum LinkKind {
     Ethercrab,
     Soem,
     Twincat,
+    Remote,
     Nop,
 }
 
@@ -167,6 +168,17 @@ pub struct Cli {
         help = "maps to ClientConfig.low_latency"
     )]
     pub low_latency: bool,
+    #[arg(
+        long,
+        help = "--link remote only: address of the appliance's wire port. \
+                Omit to find it over mDNS."
+    )]
+    pub addr: Option<SocketAddr>,
+    #[arg(
+        long,
+        help = "--link remote only: instance name to pick when several appliances answer."
+    )]
+    pub instance: Option<String>,
     #[arg(long)]
     pub twincat_remote: Option<IpAddr>,
     #[arg(long)]
@@ -233,6 +245,34 @@ impl Cli {
                 "--spin-margin 0s leaves no room for the OS to oversleep past the deadline"
                     .to_string(),
             );
+        }
+        if self.link != LinkKind::Remote && (self.addr.is_some() || self.instance.is_some()) {
+            return Err("--addr / --instance are only valid with --link remote".to_string());
+        }
+        if self.link == LinkKind::Remote {
+            if self.devices.is_none() {
+                return Err(
+                    "--devices is required with --link remote: the appliance rejects a client \
+                     whose geometry does not match the bus"
+                        .to_string(),
+                );
+            }
+            if self.interface.is_some() {
+                return Err(
+                    "--interface is not valid with --link remote: the appliance owns the \
+                     EtherCAT interface"
+                        .to_string(),
+                );
+            }
+            if self.shift_percent != 0 {
+                return Err(
+                    "--shift-percent is not valid with --link remote: the appliance owns SYNC0"
+                        .to_string(),
+                );
+            }
+            if self.addr.is_some() && self.instance.is_some() {
+                return Err("--instance is redundant with --addr".to_string());
+            }
         }
         if self.link == LinkKind::Nop {
             if self.devices.is_none() {

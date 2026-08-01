@@ -14,6 +14,7 @@ use autd3_rs::{
     ResponseFuture, RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
 };
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
+use autd3_rs_link_remote::{DiscoveryOption, RemoteLink, discover};
 
 use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
 use autd3_rs_link_twincat::{TwinCATLink, TwinCATLinkOption};
@@ -252,6 +253,31 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
                 .await
                 .expect("open task panicked")
                 .context("opening TwinCAT link")?;
+            let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
+            let out = Box::pin(run_with_bus_link(link, cli)).await;
+            guard.stop().await;
+            out
+        }
+        LinkKind::Remote => {
+            let num_devices = cli.devices.expect("--devices validated for --link remote");
+            let addr = if let Some(addr) = cli.addr {
+                addr
+            } else {
+                let appliance = discover(&DiscoveryOption {
+                    instance: cli.instance.clone(),
+                    ..Default::default()
+                })
+                .context("finding the appliance over mDNS")?;
+                eprintln!("appliance: {} at {}", appliance.instance, appliance.addr);
+                appliance.addr
+            };
+            let link = tokio::task::spawn_blocking(move || {
+                let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
+                RemoteLink::open(addr, None, &geometry)
+            })
+            .await
+            .expect("open task panicked")
+            .with_context(|| format!("opening the remote link to {addr}"))?;
             let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
             let out = Box::pin(run_with_bus_link(link, cli)).await;
             guard.stop().await;
