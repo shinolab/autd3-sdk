@@ -40,11 +40,14 @@ pub enum ConsoleCmd {
         #[arg(long)]
         debug: bool,
     },
-    /// Stage the binaries and produce a self-contained archive (includes twincat on Windows)
+    /// Stage the binaries and produce a self-contained archive
     Bundle {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Build twincat-cli and include it in the archive (Windows only, requires TwinCAT XAE)
+        #[arg(long)]
+        twincat: bool,
     },
 }
 
@@ -87,7 +90,7 @@ pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
             run("cargo", args, &dir)
         }
         ConsoleCmd::Stage { debug } => stage(root, &dir, *debug).map(|_| ()),
-        ConsoleCmd::Bundle { debug } => bundle(root, &dir, *debug),
+        ConsoleCmd::Bundle { debug, twincat } => bundle(root, &dir, *debug, *twincat),
     }
 }
 
@@ -165,7 +168,14 @@ fn package_version(manifest: &Path) -> Result<String> {
         .with_context(|| format!("no [package] version in {}", manifest.display()))
 }
 
-fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
+fn bundle(root: &Path, console_dir: &Path, debug: bool, twincat: bool) -> Result<()> {
+    if twincat && !cfg!(target_os = "windows") {
+        bail!(
+            "`--twincat` is Windows-only: twincat-cli targets .NET Framework 4.8 and \
+             drives the TwinCAT XAE Shell through the DTE COM API"
+        );
+    }
+
     let distrib = stage(root, console_dir, debug)?;
 
     let out_dir = console_dir.join("target").join("bundle");
@@ -175,7 +185,7 @@ fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     }
     copy_dir(&distrib, &staging)?;
 
-    if cfg!(target_os = "windows") {
+    if twincat {
         let exe = build_twincat_cli(root, debug)?;
         let dist = exe
             .parent()
