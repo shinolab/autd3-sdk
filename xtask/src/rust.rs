@@ -5,7 +5,6 @@ use clap::Subcommand;
 
 use crate::util::{publish_workspace, run, run_built_bin};
 
-/// Packages whose test binaries link a pcap runtime
 const PCAP_PACKAGES: &[&str] = &[
     "autd3-rs-perftest",
     "autd3-rs-synctune",
@@ -100,7 +99,18 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
                 "-D",
                 "warnings",
             ];
-            run("cargo", default_feature_args, root)
+            run("cargo", default_feature_args, root)?;
+
+            let no_discovery_args = vec![
+                "clippy",
+                "-p",
+                "autd3-rs-link-remote",
+                "--all-targets",
+                "--",
+                "-D",
+                "warnings",
+            ];
+            run("cargo", no_discovery_args, root)
         }
         RustCmd::Format { fix } => {
             let mut args = vec!["fmt", "--all"];
@@ -112,7 +122,11 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
         }
         RustCmd::Golden => {
             let dir = root.join("crates/autd3-rs/tests/golden/generator");
-            run("cargo", ["run", "--release", "--", "../legacy_v38_pack.tsv"], &dir)
+            run(
+                "cargo",
+                ["run", "--release", "--", "../legacy_v38_pack.tsv"],
+                &dir,
+            )
         }
         RustCmd::Publish { dry_run } => publish_workspace(root, *dry_run),
         RustCmd::Example {

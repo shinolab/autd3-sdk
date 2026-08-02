@@ -83,6 +83,10 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
                 "Updated firmware version (fw/wire/board Cargo.toml + params.svh, regenerated params.rs) -> {core}"
             );
         }
+        "appliance" => bail!(
+            "the appliance image follows the software version; bump `software` and push a `v*` tag \
+             (release-image.yml publishes the `appliance-v*` release)"
+        ),
         other => bail!("no version-bump implementation for component `{other}`"),
     }
 

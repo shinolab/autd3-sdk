@@ -1,9 +1,11 @@
 use std::convert::Infallible;
-use std::net::{Ipv4Addr, SocketAddr, TcpListener};
+use std::net::{Ipv4Addr, SocketAddr};
 
 use autd3_rs_core::link::{ConstStateChecker, CycleOutcome, Link};
 use autd3_rs_core::{RX_FRAME_BYTES, TX_FRAME_BYTES};
-use autd3_rs_link_remote::{DeviceLayout, RemoteLink, RemoteLinkError, RemoteServer};
+use autd3_rs_link_remote::{
+    DeviceLayout, RemoteLink, RemoteLinkError, RemoteServer, RemoteServerOption,
+};
 
 struct EchoLink {
     num_devices: usize,
@@ -37,31 +39,22 @@ impl Link for EchoLink {
 fn factory_derives_device_count_from_client_geometry() {
     let num_devices = 3;
 
-    let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0))).unwrap();
-    let addr = listener.local_addr().unwrap();
-    drop(listener);
-
-    std::thread::spawn(move || {
-        let factory = |layout: &[DeviceLayout]| -> Result<EchoLink, RemoteLinkError> {
-            Ok(EchoLink {
-                num_devices: layout.len(),
-            })
-        };
-        let _ = RemoteServer::serve_with_factory(addr, factory);
-    });
+    let option = RemoteServerOption::new(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)));
+    let mut server = RemoteServer::new(option, |layout: &[DeviceLayout]| {
+        Ok::<_, RemoteLinkError>(EchoLink {
+            num_devices: layout.len(),
+        })
+    })
+    .unwrap();
+    let addr = server.local_addr().unwrap();
+    std::thread::spawn(move || server.serve());
 
     let geometry = autd3_rs_core::Geometry::new(
         (0..num_devices)
             .map(|_| autd3_rs_core::Autd3::default())
             .collect::<Vec<_>>(),
     );
-    let mut link = loop {
-        match RemoteLink::open(addr, None, &geometry) {
-            Ok(link) => break link,
-            Err(RemoteLinkError::Io(_)) => std::thread::yield_now(),
-            Err(e) => panic!("unexpected error: {e}"),
-        }
-    };
+    let mut link = RemoteLink::open(addr, None, &geometry).unwrap();
 
     assert_eq!(link.num_devices(), num_devices);
 

@@ -1,0 +1,1 @@
+isolcpus=3 nohz_full=3 rcu_nocbs=3 rcu_nocb_poll irqaffinity=0-2

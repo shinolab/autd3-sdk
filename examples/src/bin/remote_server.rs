@@ -7,24 +7,21 @@ use std::net::SocketAddr;
 use anyhow::Result;
 
 use autd3_rs::rt::{TracingOption, init_tracing};
-use autd3_rs_link_echocat::EchocatLinkOption;
-use autd3_rs_link_remote::RemoteServer;
+use autd3_rs_link_echocat::{EchocatLink, EchocatLinkOption};
+use autd3_rs_link_remote::{DeviceLayout, RemoteLinkError, RemoteServer, RemoteServerOption};
 
 const BIND_ADDR: &str = "0.0.0.0:8080";
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let _log_guard = init_tracing(TracingOption::default());
 
     let bind: SocketAddr = BIND_ADDR.parse()?;
-    let server = RemoteServer::open(bind, EchocatLinkOption::default()).await?;
+    let mut server = RemoteServer::new(RemoteServerOption::new(bind), |_: &[DeviceLayout]| {
+        EchocatLink::open(&EchocatLinkOption::default())
+            .map_err(|e| RemoteLinkError::Link(e.to_string()))
+    })?;
 
-    println!(
-        "remote link server listening on {bind} (devices: {}) — press Ctrl+C to stop",
-        server.num_devices()
-    );
-
-    let mut server = server;
-    tokio::task::spawn_blocking(move || server.serve()).await??;
+    println!("remote link server listening on {bind} — press Ctrl+C to stop");
+    server.serve()?;
     Ok(())
 }

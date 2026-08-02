@@ -27,6 +27,7 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo xtask console format
       - run: cargo xtask console lint
+      - run: cargo xtask console test
       - name: Install dist
         if: runner.os == 'Linux'
         run: |

@@ -1,0 +1,118 @@
+name: release-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Publish the appliance release for the tag this runs on (requires a `v*` tag ref)
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*'
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      RELEASE_INPUT: ${{ inputs.release }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-rust
+        with:
+          workspaces: xtask
+
+      - name: Resolve the appliance tag
+        id: tag
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            v[0-9]*)
+              echo "tag=appliance-${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+              if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ "${RELEASE_INPUT}" != "true" ]; then
+                echo "::notice::rebuilding the image for ${GITHUB_REF_NAME} without publishing; the image is not a reproducible build, so re-run with \`release\` checked only to replace the published assets"
+                echo "publish=false" >> "$GITHUB_OUTPUT"
+              else
+                echo "publish=true" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            *)
+              if [ "${RELEASE_INPUT}" = "true" ]; then
+                echo "::error::the appliance release follows the SDK version; run this on a \`v*\` tag to publish"
+                exit 1
+              fi
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Install the aarch64 emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user qemu-user-static binfmt-support
+          sudo systemctl restart systemd-binfmt || true
+
+      - name: Reclaim disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - name: Build the image
+        run: cargo xtask image build
+
+      - name: Checksum
+        run: |
+          for deploy in appliance/image/*/deploy; do
+            (cd "$deploy" && sha256sum *.img.xz > SHA256SUMS && cat SHA256SUMS)
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autd3-appliance-image
+          path: |
+            appliance/image/*/deploy/*.img.xz
+            appliance/image/*/deploy/SHA256SUMS
+          retention-days: 30
+
+      - uses: taiki-e/install-action@v2
+        if: steps.tag.outputs.publish == 'true'
+        with:
+          tool: git-cliff
+
+      - name: Generate release notes
+        if: steps.tag.outputs.publish == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null || git tag "${TAG}"
+          if ! cargo xtask changelog --tag "${TAG}" --release-notes --output RELEASE_NOTES.md; then
+            echo "::warning::no appliance-scoped commits for ${TAG}; publishing a minimal body"
+            printf 'Appliance image built from %s.\n' "${GITHUB_REF_NAME}" > RELEASE_NOTES.md
+          fi
+
+      - name: Publish the appliance release
+        if: steps.tag.outputs.publish == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --notes-file RELEASE_NOTES.md
+            gh release upload "${TAG}" appliance/image/*/deploy/*.img.xz appliance/image/*/deploy/SHA256SUMS --clobber
+          else
+            gh release create "${TAG}" \
+              --target "${GITHUB_SHA}" \
+              --title "${TAG}" \
+              --notes-file RELEASE_NOTES.md \
+              appliance/image/*/deploy/*.img.xz appliance/image/*/deploy/SHA256SUMS
+          fi

@@ -1,0 +1,2 @@
+Defaults:autd3 secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+autd3 ALL=(root) NOPASSWD: /usr/local/sbin/autd3-admin

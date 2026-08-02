@@ -1,0 +1,13 @@
+[Unit]
+Description=AUTD3 appliance Wi-Fi radio and regulatory domain
+Documentation=https://shinolab.github.io/autd3-sdk/
+After=local-fs.target autd3-firstboot.service
+Before=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/autd3/autd3-wifi-init
+
+[Install]
+WantedBy=multi-user.target

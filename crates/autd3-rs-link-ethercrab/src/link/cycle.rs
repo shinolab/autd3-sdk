@@ -35,6 +35,15 @@ impl Link for EtherCrabLink {
         Some(self.dc_clock.clone())
     }
 
+    fn wait_next_cycle(&mut self) {
+        if let Some(deadline) = self.next_at {
+            let now = Instant::now();
+            if deadline > now {
+                std::thread::sleep(deadline - now);
+            }
+        }
+    }
+
     fn cycle(
         &mut self,
         tx: &[[u8; TX_FRAME_BYTES]],
@@ -91,12 +100,13 @@ impl Link for EtherCrabLink {
             Err(e) => return Err(e.into()),
         };
         let tx_rx_duration = cycle_start.elapsed();
-        self.next_at = Some(cycle_start + resp.next_cycle_wait);
+        self.stats
+            .record_exchange(u64::try_from(tx_rx_duration.as_nanos()).unwrap_or(u64::MAX));
+        let next_cycle_wait =
+            crate::pacing::next_cycle_wait(resp.dc_system_time, self.cycle, self.shift);
+        self.next_at = Some(cycle_start + next_cycle_wait);
 
-        if resp.dc_system_time != 0 {
-            self.dc_clock
-                .observe(DcSysTime::from_nanos(resp.dc_system_time));
-        }
+        self.observe_dc(resp.dc_system_time);
 
         let all_op = resp.all_op;
         let rx_valid = resp.working_counter == self.expected_wkc && all_op;
@@ -107,7 +117,7 @@ impl Link for EtherCrabLink {
             all_op,
             rx_valid,
             resp.dc_system_time,
-            resp.next_cycle_wait,
+            next_cycle_wait,
             resp.cycle_start_offset,
         );
         if !rx_valid {
@@ -124,7 +134,7 @@ impl Link for EtherCrabLink {
                     ?deadline_overrun,
                     ?tx_rx_duration,
                     dc_system_time_ns = resp.dc_system_time,
-                    next_cycle_wait = ?resp.next_cycle_wait,
+                    next_cycle_wait = ?next_cycle_wait,
                     cycle_start_offset = ?resp.cycle_start_offset,
                     "stale cycle: slaves did not process this cycle",
                 );
@@ -148,6 +158,17 @@ impl Link for EtherCrabLink {
 }
 
 impl EtherCrabLink {
+    fn observe_dc(&self, dc_system_time: u64) {
+        if dc_system_time == 0 {
+            return;
+        }
+        self.dc_clock.observe(DcSysTime::from_nanos(dc_system_time));
+        let deviation = crate::pacing::phase_deviation_ns(dc_system_time, self.cycle, self.shift);
+        if u128::from(deviation) > self.cycle.as_nanos() / 4 {
+            self.stats.record_phase_excursion(deviation);
+        }
+    }
+
     fn store_failed_cycle_diagnostics(&self, deadline_overrun: Duration, tx_rx_duration: Duration) {
         let previous_samples =
             crate::diagnostics::load_cycle_diagnostics(&self.diagnostics).samples;

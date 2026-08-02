@@ -10,7 +10,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 use autd3_rs_core::rt::{TracingOption, init_tracing};
-use autd3_rs_link_remote::{DeviceLayout, RemoteLinkError, RemoteServer};
+use autd3_rs_link_remote::{
+    BusOption, DeviceLayout, RemoteLinkError, RemoteServer, RemoteServerOption,
+};
 use autd3_rs_simulator_protocol::ServerMsg;
 use clap::Parser;
 use tokio::sync::watch;
@@ -67,7 +69,14 @@ async fn main() -> Result<()> {
                 ))
             };
             tracing::info!("remote link server listening on {link_addr}");
-            if let Err(e) = RemoteServer::serve_with_factory(link_addr, factory) {
+            let option = RemoteServerOption {
+                bus: BusOption {
+                    rt_priority: None,
+                    ..BusOption::default()
+                },
+                ..RemoteServerOption::new(link_addr)
+            };
+            if let Err(e) = RemoteServer::serve_with_factory(option, factory) {
                 tracing::error!("remote link server stopped: {e}");
             }
         });

@@ -31,22 +31,76 @@ Connection to the [`Simulator`](/autd3-sdk/en/guide/simulator/) is also done wit
 
 ### RemoteServer
 
-`RemoteServer::open` opens the real-hardware link and starts listening on TCP.
+Pass the listening settings and a closure that opens the real-hardware link to `RemoteServer::new`,
+then call `serve` to start relaying.
 
 <CodeTabs rust={excerpt(server, "api")} />
 
-| Parameter | Type            | Description                                                 |
-| ------ | -------------- | ---------------------------------------------------------- |
-| `bind` | `SocketAddr`   | TCP address on which the server listens                    |
-| `link` | `impl IntoLink` | Option of the real-hardware link to relay |
+| Parameter | Type                                          | Description                                        |
+| --------- | --------------------------------------------- | -------------------------------------------------- |
+| `option`  | `RemoteServerOption`                          | listening address and bus thread settings          |
+| `factory` | `FnMut(&[DeviceLayout]) -> Result<impl Link>` | closure that opens the real-hardware link          |
 
-`open` internally starts an EtherCAT thread and keeps driving EtherCAT regardless of whether a client is connected.
-`serve` waits for a client connection and starts relaying frames.
+Fields of `RemoteServerOption`:
+
+| Field  | Type         | Description                               |
+| ------ | ------------ | ----------------------------------------- |
+| `bind` | `SocketAddr` | TCP address on which the server listens   |
+| `bus`  | `BusOption`  | bus thread settings                       |
+
+Fields of `BusOption`:
+
+| Field         | Type                     | Description                                                                              |
+| ------------- | ------------------------ | ---------------------------------------------------------------------------------------- |
+| `pacing`      | `BusPacing`              | bus cycle period. `LinkPaced` leaves the pacing to the link itself (use it for EtherCAT links) |
+| `rt_priority` | `Option<ThreadPriority>` | priority of the bus thread. By default a real-time priority is attempted, with a warning on failure |
+| `rt_policy`   | `RtSchedulePolicy`       | scheduling policy of the bus thread                                                      |
+| `rt_affinity` | `Option<CoreId>`         | CPU core to pin the bus thread to                                                        |
+| `stack_prefault_bytes` | `usize`         | bytes of the bus thread stack to page in at start-up. 0 by default; leaving it at 0 costs a page-fault delay on the first frames |
+
+`serve` waits for client connections and, for each one, opens the real-hardware link with `factory` and starts relaying tx/rx frames.
+
+The device count of the client's `Geometry` has to match the device count of the bus on the server.
+
+Setting `rt_priority` requires privileges (`CAP_SYS_NICE` on Linux).
+Without them the server warns and runs with plain scheduling, which makes the bus unstable under load.
 
 ### RemoteLink
 
 <CodeTabs rust={excerpt(client, "api")} python={excerpt(pyClient, "api")} csharp={excerpt(csClient, "api")} />
 
-| Field      | Type         | Description                |
-| ---------- | ------------ | -------------------------- |
-| `addr`     | `SocketAddr` | address of the server to connect to |
+| Field      | Type               | Description                |
+| ---------- | ------------------ | -------------------------- |
+| `addr`     | `SocketAddr`       | address of the server to connect to |
+| `timeout`  | `Option<Duration>` | how long to wait on the connect and on every frame. `None` leaves the OS defaults, so an address that answers nothing takes minutes to fail |
+
+### Discovery
+
+The server can be found over mDNS.
+In Rust this needs the `discovery` feature; Python and C# have it built in.
+
+```toml
+autd3-rs-link-remote = { version = "0.4", features = ["discovery"] }
+```
+
+<CodeTabs rust={excerpt(client, "discover")} python={excerpt(pyClient, "discover")} csharp={excerpt(csClient, "discover")} />
+
+Finding no server, and finding more than one, are both errors.
+The error for the latter lists what was found, so one of them can be picked by name.
+
+<CodeTabs rust={excerpt(client, "discover_option")} python={excerpt(pyClient, "discover_option")} csharp={excerpt(csClient, "discover_option")} />
+
+Fields of `DiscoveryOption`:
+
+| Field      | Type             | Description                                                        |
+| ---------- | ---------------- | ------------------------------------------------------------------ |
+| `timeout`  | `Duration`       | how long to wait for answers. 2 seconds by default; a shorter wait misses servers |
+| `instance` | `Option<String>` | name of the server to look for. `None` means every server          |
+
+Use `discover_all` when only the list is wanted.
+
+<CodeTabs rust={excerpt(client, "discover_list")} />
+
+Over a direct cable, discovery returns the IPv6 link-local address.
+Nothing has to be configured on the host as long as the interface is up.
+A connection profile that keeps a link-local address is needed only to reach the appliance over IPv4.

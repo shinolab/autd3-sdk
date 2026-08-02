@@ -20,6 +20,9 @@ members = [
     "tools/firmware",
     "tools/firmware-test",
     "examples",
+    "appliance/lib",
+    "appliance/cli",
+    "appliance/server",
 ]
 exclude = [
     "xtask",
@@ -54,6 +57,7 @@ tokio = { version = "1.52.3", default-features = false, features = [
     "rt",
 ] }
 thread-priority = { version = "3.1.1", default-features = false }
+socket2 = { version = "0.6.4", default-features = false }
 spin_sleep = { version = "1.3.3", default-features = false }
 clap = { version = "4.6.1", default-features = false, features = [
     "std",
@@ -63,6 +67,16 @@ clap = { version = "4.6.1", default-features = false, features = [
     "error-context",
 ] }
 humantime = { version = "2.3.0", default-features = false }
+mdns-sd = { version = "0.20.3", default-features = false }
+axum = { version = "0.8.9", default-features = false, features = [
+    "http1",
+    "json",
+    "tokio",
+    "query",
+] }
+serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.150", default-features = false, features = ["std"] }
+toml = { version = "0.9.11", default-features = false, features = ["parse", "serde"] }
 anyhow = { version = "1.0.102", default-features = false, features = ["std"] }
 tracing = { version = "0.1.44", default-features = false }
 tracing-appender = { version = "0.2.3", default-features = false }
@@ -76,6 +90,7 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 autd3-rs = { version = "0.4.0", path = "crates/autd3-rs" }
 autd3-cpu-wire = { version = "0.4.0", path = "firmware/cpu/wire" }
 autd3-cpu-fw = { version = "0.4.0", path = "firmware/cpu/fw" }
+autd3-rs-appliance = { version = "0.4.0", path = "appliance/lib" }
 autd3-rs-core = { version = "0.4.0", path = "crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { version = "0.4.0", path = "crates/autd3-rs-firmware-emulator" }
 autd3-rs-pattern = { version = "0.4.0", path = "crates/autd3-rs-pattern" }

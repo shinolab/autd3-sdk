@@ -1,0 +1,32 @@
+[Unit]
+Description=AUTD3 EtherCAT master appliance
+Documentation=https://shinolab.github.io/autd3-sdk/
+After=network-pre.target
+Wants=network-pre.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+WatchdogSec=30s
+User=autd3
+Group=autd3
+SupplementaryGroups=systemd-journal
+ExecStartPre=+/usr/local/libexec/autd3/tune-appliance.sh
+ExecStart=/usr/local/libexec/autd3/run-server --config /etc/autd3/remote-server.toml
+Restart=always
+RestartSec=5
+AmbientCapabilities=CAP_NET_RAW CAP_SYS_NICE CAP_IPC_LOCK
+LimitMEMLOCK=infinity
+LimitRTPRIO=99
+StateDirectory=autd3
+ProtectSystem=strict
+ReadWritePaths=/etc/autd3
+ReadWritePaths=/usr/local/bin
+ReadWritePaths=-/etc/NetworkManager/system-connections
+ReadWritePaths=-/data
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=AUTD3 appliance first boot provisioning
+ConditionPathExists=!/data/.provisioned
+After=local-fs.target
+Before=autd3-remote-server.service
+Wants=autd3-remote-server.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/autd3/autd3-firstboot
+
+[Install]
+WantedBy=multi-user.target

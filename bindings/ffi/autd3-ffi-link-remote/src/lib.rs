@@ -4,17 +4,17 @@ use std::sync::Arc;
 
 use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
-    ResponseTokenData, client_opener, into_handle, join_err, legacy_client_opener, link_runtime,
+    ResponseTokenData, alloc_cstring, client_opener, free_cstring, into_handle, join_err,
+    legacy_client_opener, link_runtime,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_core::{ConstStateChecker, StateCheck};
-use autd3_rs_link_remote::RemoteLinkOption;
+use autd3_rs_link_remote::{RemoteLinkOption, RemoteStateChecker};
 use tokio::sync::Mutex;
 
 struct RemoteBackend {
     client: Arc<Client>,
-    checker: Arc<Mutex<ConstStateChecker>>,
+    checker: Arc<Mutex<RemoteStateChecker>>,
 }
 
 impl ClientBackend for RemoteBackend {
@@ -148,7 +148,7 @@ impl ClientBackend for RemoteBackend {
     }
 }
 
-struct RemoteChecker(Arc<Mutex<ConstStateChecker>>);
+struct RemoteChecker(Arc<Mutex<RemoteStateChecker>>);
 
 impl CheckerBackend for RemoteChecker {
     fn check(&self) -> BoxFuture<LinkStatusData> {
@@ -227,4 +227,42 @@ pub unsafe extern "C" fn autd3_link_remote_legacy(
             timeout: (timeout_ns != 0).then(|| std::time::Duration::from_nanos(timeout_ns)),
         })
     }))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_remote_discover(
+    timeout_ns: u64,
+    instance: *const c_char,
+    err: *mut *mut c_char,
+) -> *mut c_char {
+    if !err.is_null() {
+        unsafe { *err = std::ptr::null_mut() };
+    }
+    let instance = (!instance.is_null()).then(|| {
+        unsafe { CStr::from_ptr(instance) }
+            .to_string_lossy()
+            .into_owned()
+    });
+    let option = autd3_rs_link_remote::DiscoveryOption {
+        timeout: if timeout_ns == 0 {
+            autd3_rs_link_remote::DiscoveryOption::default().timeout
+        } else {
+            std::time::Duration::from_nanos(timeout_ns)
+        },
+        instance,
+    };
+    match autd3_rs_link_remote::discover(&option) {
+        Ok(appliance) => alloc_cstring(&appliance.addr.to_string()),
+        Err(e) => {
+            if !err.is_null() {
+                unsafe { *err = alloc_cstring(&e.to_string()) };
+            }
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_remote_free_string(ptr: *mut c_char) {
+    unsafe { free_cstring(ptr) };
 }

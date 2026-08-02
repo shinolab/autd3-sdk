@@ -12,9 +12,11 @@ mod firmware;
 mod fpga;
 mod fpga_codegen;
 mod holo_wgpu;
+mod image;
 mod license;
 mod py;
 mod rust;
+mod server;
 mod simulator;
 mod tool;
 mod unity;
@@ -34,9 +36,11 @@ use ffi::{FfiCmd, run_ffi};
 use firmware::{FirmwareCmd, run_firmware};
 use fpga::{FpgaCmd, run_fpga};
 use holo_wgpu::{HoloWgpuCmd, run_holo_wgpu};
+use image::{ImageCmd, run_image};
 use license::{LicenseCmd, run_license};
 use py::{PyCmd, run_py};
 use rust::{RustCmd, run_rust};
+use server::{ServerCmd, run_server};
 use simulator::{SimulatorCmd, run_simulator};
 use tool::{ToolCmd, run_tool};
 use unity::{UnityCmd, run_unity};
@@ -70,6 +74,16 @@ enum TopCmd {
     HoloWgpu {
         #[command(subcommand)]
         cmd: HoloWgpuCmd,
+    },
+    /// The EtherCAT master appliance server (`appliance/server/`).
+    Server {
+        #[command(subcommand)]
+        cmd: ServerCmd,
+    },
+    /// The appliance SD image (`appliance/image/<board>/`, pi-gen + Docker).
+    Image {
+        #[command(subcommand)]
+        cmd: ImageCmd,
     },
     /// The sound-field simulator (`simulator/`).
     Simulator {
@@ -140,6 +154,8 @@ fn main() -> Result<()> {
         TopCmd::Cpu { cmd } => run_cpu(&root, &cmd),
         TopCmd::Tool { cmd } => run_tool(&root, cmd),
         TopCmd::HoloWgpu { cmd } => run_holo_wgpu(&root, &cmd),
+        TopCmd::Server { cmd } => run_server(&root, &cmd),
+        TopCmd::Image { cmd } => run_image(&root, &cmd),
         TopCmd::Simulator { cmd } => run_simulator(&root, &cmd),
         TopCmd::Console { cmd } => run_console(&root, &cmd),
         TopCmd::Emulator { cmd } => run_emulator(&root, &cmd),

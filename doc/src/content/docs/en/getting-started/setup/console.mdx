@@ -1,0 +1,48 @@
+---
+title: Console
+description: How to obtain autd3-console and what ships with it
+sidebar:
+  order: 4
+---
+
+`autd3-console` is a GUI tool that gathers firmware flashing, the simulator, TwinCAT setup, and appliance operation in one place.
+
+## Obtaining it
+
+It is distributed via GitHub Releases (`console-v*`).
+Open [console-v0.4.0](https://github.com/shinolab/autd3-sdk/releases/tag/console-v0.4.0) and run the install command shown there.
+
+The installer puts the executables in `~/.autd3/bin` (`%USERPROFILE%\.autd3\bin` on Windows) and adds that directory to `PATH`.
+Reopen the shell (the terminal on Windows) for the `PATH` change to take effect.
+
+If you do not use the installer, download the archive from the same release (`console-<target>.tar.xz` / `.zip`),
+extract it, and run `autd3-console`.
+
+## Bundled commands
+
+The same archive carries the commands you can run directly without the GUI.
+
+| Command | Purpose |
+| --- | --- |
+| `autd3-console` | The GUI itself |
+| `autd3-appliance` | Discovering and operating the [appliance](/autd3-sdk/en/guide/appliance/) |
+| `autd3-firmware` | Flashing the [firmware](/autd3-sdk/en/getting-started/setup/firmware/) |
+| `autd3-rs-simulator` | The [simulator](/autd3-sdk/en/guide/simulator/) |
+
+The Windows build additionally carries `twincat-cli`, used for TwinCAT setup.
+
+## Tabs
+
+Tabs are shown along the top once it starts.
+
+| Tab | Contents |
+| --- | --- |
+| Simulator | Launching the [simulator](/autd3-sdk/en/guide/simulator/) |
+| Appliance | Discovering the [appliance](/autd3-sdk/en/guide/appliance/), showing its status, opening and closing the bus |
+| TwinCAT | [TwinCAT setup](/autd3-sdk/en/getting-started/twincat/) (shown on Windows only) |
+| Firmware | [Updating the firmware](/autd3-sdk/en/getting-started/setup/firmware/) |
+
+## Updates
+
+It checks for a newer release at startup.
+If it was installed with the installer it can update itself; if you are running an extracted archive it opens the Releases page instead.

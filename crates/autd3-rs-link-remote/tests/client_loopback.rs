@@ -3,14 +3,16 @@ use std::net::{Ipv4Addr, SocketAddr};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_firmware_emulator::Audit;
-use autd3_rs_link_remote::{RemoteLinkOption, RemoteServer};
+use autd3_rs_link_remote::{
+    DeviceLayout, RemoteLinkError, RemoteLinkOption, RemoteServer, RemoteServerOption,
+};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_open_over_remote_emulator() {
-    let mut server = RemoteServer::with_link(
-        SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
-        Audit::new(vec![249]),
-    )
+    let option = RemoteServerOption::new(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)));
+    let mut server = RemoteServer::new(option, |layout: &[DeviceLayout]| {
+        Ok::<_, RemoteLinkError>(Audit::new(vec![249; layout.len()]))
+    })
     .unwrap();
     let addr = server.local_addr().unwrap();
     let handle = std::thread::spawn(move || server.serve_once());

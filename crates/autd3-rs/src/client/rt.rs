@@ -250,6 +250,8 @@ impl<L: Link> RtThread<L> {
                 break;
             }
 
+            self.link.wait_next_cycle();
+
             if matches!(self.stage_tx(), StageOutcome::Disconnected) {
                 break;
             }

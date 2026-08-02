@@ -1,0 +1,4 @@
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="bcmgenet", NAME="ecat0"
+
+SUBSYSTEM=="net", ACTION=="add", SUBSYSTEMS=="usb", KERNEL=="eth0", NAME="up0"
+SUBSYSTEM=="net", ACTION=="add", SUBSYSTEMS=="usb", KERNEL=="eth[1-9]*", NAME="up%n"

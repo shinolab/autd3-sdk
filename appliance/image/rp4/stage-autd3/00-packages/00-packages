@@ -1,0 +1,8 @@
+e2fsprogs
+ethtool
+initramfs-tools
+iw
+libcap2-bin
+network-manager
+rfkill
+systemd-timesyncd

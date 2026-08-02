@@ -1,0 +1,30 @@
+[package]
+name = "autd3-rs-appliance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Control API schema for the AUTD3 EtherCAT master appliance, shared by the server and its clients."
+
+[features]
+client = ["dep:ureq", "dep:serde_json", "dep:thiserror"]
+discovery = ["dep:autd3-rs-link-remote"]
+
+[dependencies]
+serde.workspace = true
+autd3-rs-link-remote = { workspace = true, features = [
+    "discovery",
+], optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+ureq = { version = "3.3.0", default-features = false, features = [
+    "json",
+], optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

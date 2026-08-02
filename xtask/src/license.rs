@@ -270,14 +270,26 @@ pub fn generate_console(root: &Path) -> Result<()> {
     let firmware = std::fs::read_to_string(&firmware_tmp)
         .with_context(|| format!("reading {}", firmware_tmp.display()))?;
 
+    let appliance_tmp = console.join(".third-party-appliance.md");
+    about(
+        root,
+        &root.join("appliance").join("cli").join("Cargo.toml"),
+        &appliance_tmp,
+    )?;
+    let appliance = std::fs::read_to_string(&appliance_tmp)
+        .with_context(|| format!("reading {}", appliance_tmp.display()))?;
+
     let mut combined =
         std::fs::read_to_string(&out).with_context(|| format!("reading {}", out.display()))?;
     combined.push_str("\n\n---\n\n# Simulator dependencies\n\n");
     combined.push_str(&simulator);
     combined.push_str("\n\n---\n\n# Firmware tool dependencies\n\n");
     combined.push_str(&firmware);
+    combined.push_str("\n\n---\n\n# Appliance CLI dependencies\n\n");
+    combined.push_str(&appliance);
     std::fs::write(&out, combined).with_context(|| format!("writing {}", out.display()))?;
     std::fs::remove_file(&firmware_tmp).ok();
+    std::fs::remove_file(&appliance_tmp).ok();
     Ok(())
 }
 

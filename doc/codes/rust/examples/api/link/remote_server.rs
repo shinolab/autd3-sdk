@@ -2,15 +2,18 @@ use std::net::SocketAddr;
 
 use anyhow::Result;
 
-use autd3_rs_link_echocat::EchocatLinkOption;
-use autd3_rs_link_remote::RemoteServer;
+use autd3_rs_link_echocat::{EchocatLink, EchocatLinkOption};
+use autd3_rs_link_remote::{DeviceLayout, RemoteLinkError, RemoteServer, RemoteServerOption};
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let bind: SocketAddr = "0.0.0.0:8080".parse()?;
-    let link = EchocatLinkOption::default();
     // ANCHOR: api
-    RemoteServer::open(bind, link).await?.serve()?;
+    let option = RemoteServerOption::new(bind);
+    RemoteServer::new(option, |_: &[DeviceLayout]| {
+        EchocatLink::open(&EchocatLinkOption::default())
+            .map_err(|e| RemoteLinkError::Link(e.to_string()))
+    })?
+    .serve()?;
     // ANCHOR_END: api
 
     Ok(())
