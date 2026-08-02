@@ -1,13 +1,25 @@
+use std::convert::Infallible;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use autd3_rs_core::link::{ConstStateChecker, CycleOutcome, DcClock, Link};
+use autd3_rs_core::link::{CycleOutcome, DcClock, Link, LinkStats, LinkStatus, StateCheck};
 use autd3_rs_core::value::DcSysTime;
 use autd3_rs_core::{IntoLink, RX_FRAME_BYTES, TX_FRAME_BYTES};
 
-use crate::error::RemoteLinkError;
-use crate::wire;
+use crate::error::{RejectKind, RemoteLinkError};
+use crate::wire::{self, BusStatus};
+
+fn reject_kind(code: u8) -> RejectKind {
+    match code {
+        wire::SESSION_BUS_CLOSED => RejectKind::BusClosed,
+        wire::SESSION_DEVICE_COUNT => RejectKind::DeviceCount,
+        wire::SESSION_BUS_UNAVAILABLE => RejectKind::BusUnavailable,
+        wire::SESSION_INTERNAL => RejectKind::Internal,
+        other => RejectKind::Unknown(other),
+    }
+}
 
 pub struct RemoteLinkOption {
     pub addr: SocketAddr,
@@ -36,10 +48,38 @@ impl IntoLink for RemoteLinkOption {
     }
 }
 
+#[derive(Clone)]
+pub struct RemoteStateChecker {
+    status: Arc<Mutex<LinkStatus>>,
+}
+
+impl RemoteStateChecker {
+    pub fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Infallible>> + Send + use<> {
+        let status = self
+            .status
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        std::future::ready(Ok(status))
+    }
+}
+
+impl StateCheck for RemoteStateChecker {
+    type Error = Infallible;
+
+    fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Self::Error>> + Send {
+        RemoteStateChecker::check(self)
+    }
+}
+
 pub struct RemoteLink {
     stream: TcpStream,
     num_devices: usize,
-    rx_buf: Vec<u8>,
+    reply_buf: Vec<u8>,
+    status: BusStatus,
+    shared_status: Arc<Mutex<LinkStatus>>,
+    stats: LinkStats,
+    counters: [u64; 4],
     dc_clock: DcClock,
 }
 
@@ -57,6 +97,17 @@ impl RemoteLink {
         stream.set_read_timeout(timeout)?;
         stream.set_write_timeout(timeout)?;
 
+        stream.write_all(&wire::encode_hello())?;
+        stream.flush()?;
+
+        let peer = wire::read_hello(&mut stream)?;
+        if peer.as_ref().is_none_or(|p| p.wire != wire::VERSION) {
+            return Err(RemoteLinkError::ProtocolMismatch {
+                local: wire::local_version(),
+                peer,
+            });
+        }
+
         let layout: Vec<crate::DeviceLayout> = geometry
             .iter()
             .map(|dev| crate::DeviceLayout {
@@ -71,15 +122,18 @@ impl RemoteLink {
                     .collect(),
             })
             .collect();
-
-        stream.write_all(&wire::MAGIC)?;
-        stream.write_all(&[wire::VERSION])?;
         stream.write_all(&wire::encode_geometry(&layout))?;
         stream.flush()?;
 
-        let mut buf = [0u8; 2];
-        stream.read_exact(&mut buf)?;
-        let num_devices = usize::from(u16::from_le_bytes(buf));
+        let num_devices = match wire::read_session_reply(&mut stream)? {
+            Ok(num_devices) => num_devices,
+            Err((code, detail)) => {
+                return Err(RemoteLinkError::SessionRejected {
+                    kind: reject_kind(code),
+                    detail,
+                });
+            }
+        };
         if num_devices == 0 {
             return Err(RemoteLinkError::InvalidDeviceCount { found: num_devices });
         }
@@ -87,22 +141,59 @@ impl RemoteLink {
         Ok(Self {
             stream,
             num_devices,
-            rx_buf: vec![0u8; num_devices * RX_FRAME_BYTES],
+            reply_buf: vec![
+                0u8;
+                wire::REPLY_HEADER_BYTES + num_devices + num_devices * RX_FRAME_BYTES
+            ],
+            status: BusStatus::new(num_devices),
+            shared_status: Arc::new(Mutex::new(LinkStatus::new(num_devices))),
+            stats: LinkStats::default(),
+            counters: [0; 4],
             dc_clock: DcClock::new(),
         })
+    }
+
+    fn publish_status(&mut self) {
+        let observed = [
+            self.status.stale_cycles,
+            self.status.lost_cycles,
+            self.status.phase_excursions,
+            self.status.worst_phase_deviation_ns,
+        ];
+        self.stats
+            .add_stale_cycles(observed[0].saturating_sub(self.counters[0]));
+        self.stats
+            .add_lost_cycles(observed[1].saturating_sub(self.counters[1]));
+        self.stats
+            .add_phase_excursions(observed[2].saturating_sub(self.counters[2]), observed[3]);
+        self.counters = observed;
+
+        let mut status = self
+            .shared_status
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        status.devices.clear();
+        status.devices.extend_from_slice(&self.status.devices);
+        status.recoveries = self.status.recoveries;
     }
 }
 
 impl Link for RemoteLink {
     type Error = RemoteLinkError;
-    type Checker = ConstStateChecker;
+    type Checker = RemoteStateChecker;
 
     fn num_devices(&self) -> usize {
         self.num_devices
     }
 
-    fn state_checker(&self) -> ConstStateChecker {
-        ConstStateChecker::new(self.num_devices)
+    fn stats(&self) -> LinkStats {
+        self.stats.clone()
+    }
+
+    fn state_checker(&self) -> RemoteStateChecker {
+        RemoteStateChecker {
+            status: Arc::clone(&self.shared_status),
+        }
     }
 
     fn dc_clock(&self) -> Option<DcClock> {
@@ -118,21 +209,19 @@ impl Link for RemoteLink {
         self.stream.write_all(tx.as_flattened())?;
         self.stream.flush()?;
 
-        let mut valid = [0u8; 1];
-        self.stream.read_exact(&mut valid)?;
-        let mut dc_time = [0u8; wire::DC_TIME_BYTES];
-        self.stream.read_exact(&mut dc_time)?;
-        self.stream.read_exact(&mut self.rx_buf)?;
-        rx.as_flattened_mut().copy_from_slice(&self.rx_buf);
+        self.stream.read_exact(&mut self.reply_buf)?;
+        let states_end = wire::REPLY_HEADER_BYTES + self.num_devices;
+        let (rx_valid, dc_time_ns) =
+            wire::decode_reply_header(&self.reply_buf[..states_end], &mut self.status);
+        rx.as_flattened_mut()
+            .copy_from_slice(&self.reply_buf[states_end..]);
+        self.publish_status();
 
-        let dc_time_ns = u64::from_le_bytes(dc_time);
         if dc_time_ns != wire::DC_TIME_UNAVAILABLE {
             self.dc_clock.observe(DcSysTime::from_nanos(dc_time_ns));
         }
 
-        Ok(CycleOutcome {
-            rx_valid: valid[0] != 0,
-        })
+        Ok(CycleOutcome { rx_valid })
     }
 }
 

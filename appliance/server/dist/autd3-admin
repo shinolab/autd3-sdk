@@ -1,0 +1,134 @@
+#!/bin/sh
+set -eu
+
+BIN=/usr/local/bin/autd3-remote-server
+[ -d /data/bin ] && BIN=/data/bin/autd3-remote-server
+STAGED=/var/lib/autd3/staged-server
+CAPS=cap_net_raw,cap_sys_nice,cap_ipc_lock+ep
+WIFI_PROFILE=/etc/NetworkManager/system-connections/autd3-wifi.nmconnection
+REGDOMAIN_FILE=/data/regdomain
+RADIO_OFF_FLAG=/data/wifi-radio-off
+
+usage() {
+  echo "usage: autd3-admin reboot|shutdown|install|wifi|wifi-forget" >&2
+  exit 64
+}
+
+install_staged() {
+  [ -e "$STAGED" ] || [ -L "$STAGED" ] || {
+    echo "no staged binary at $STAGED" >&2
+    exit 65
+  }
+  work=$(mktemp -d /tmp/autd3-admin.XXXXXX)
+  trap 'rm -rf "$work"' EXIT INT TERM
+  pending="$work/server"
+  mv -- "$STAGED" "$pending"
+  { [ -f "$pending" ] && [ ! -L "$pending" ]; } || {
+    echo "$STAGED is not a regular file; refusing to install" >&2
+    exit 65
+  }
+  install -m 0755 -o root -g root "$pending" "$BIN"
+  setcap "$CAPS" "$BIN" ||
+    echo "could not set file capabilities on $BIN (the unit grants them anyway)" >&2
+  echo "installed $BIN"
+}
+
+wifi_device() {
+  nmcli -t -f DEVICE,TYPE device 2> /dev/null | awk -F: '$2 == "wifi" { print $1; exit }'
+}
+
+set_wifi() {
+  IFS= read -r ssid || true
+  IFS= read -r psk || true
+  IFS= read -r country || true
+  [ -n "${ssid:-}" ] || {
+    echo "no SSID given" >&2
+    exit 65
+  }
+
+  rm -f "$RADIO_OFF_FLAG"
+
+  if command -v rfkill > /dev/null 2>&1; then
+    rfkill unblock wifi || echo "could not unblock the Wi-Fi radio" >&2
+  fi
+  nmcli radio wifi on || echo "could not enable the Wi-Fi radio" >&2
+
+  device=$(wifi_device)
+  [ -n "$device" ] || {
+    echo "no Wi-Fi device found" >&2
+    exit 69
+  }
+
+  umask 077
+  if [ -n "${country:-}" ]; then
+    mkdir -p "$(dirname "$REGDOMAIN_FILE")"
+    printf '%s\n' "$country" > "$REGDOMAIN_FILE"
+    chmod 644 "$REGDOMAIN_FILE"
+  fi
+
+  {
+    echo "[connection]"
+    echo "id=autd3-wifi"
+    echo "type=wifi"
+    echo "interface-name=$device"
+    echo "autoconnect=true"
+    echo
+    echo "[wifi]"
+    echo "mode=infrastructure"
+    echo "ssid=$ssid"
+    if [ -n "${psk:-}" ]; then
+      echo
+      echo "[wifi-security]"
+      echo "key-mgmt=wpa-psk"
+      echo "psk=$psk"
+    fi
+    echo
+    echo "[ipv4]"
+    echo "method=auto"
+    echo
+    echo "[ipv6]"
+    echo "method=auto"
+  } > "$WIFI_PROFILE"
+  chmod 600 "$WIFI_PROFILE"
+
+  if [ -n "${country:-}" ] && command -v iw > /dev/null 2>&1; then
+    iw reg set "$country" || echo "could not set the regulatory domain to $country" >&2
+  fi
+
+  nmcli connection reload
+  nmcli --wait 45 connection up autd3-wifi ||
+    echo "stored the profile, but could not associate with $ssid" >&2
+  echo "configured $device for $ssid"
+}
+
+forget_wifi() {
+  IFS= read -r mode || true
+
+  nmcli connection down autd3-wifi > /dev/null 2>&1 || true
+  nmcli connection delete autd3-wifi > /dev/null 2>&1 || true
+  rm -f "$WIFI_PROFILE" "$REGDOMAIN_FILE"
+  nmcli connection reload || echo "could not reload the connection profiles" >&2
+
+  if [ "${mode:-}" != "radio-off" ]; then
+    echo "removed the Wi-Fi profile"
+    return 0
+  fi
+
+  umask 077
+  mkdir -p "$(dirname "$RADIO_OFF_FLAG")"
+  : > "$RADIO_OFF_FLAG"
+  chmod 644 "$RADIO_OFF_FLAG"
+  if command -v rfkill > /dev/null 2>&1; then
+    rfkill block wifi || echo "could not block the Wi-Fi radio" >&2
+  fi
+  echo "removed the Wi-Fi profile and blocked the radio"
+}
+
+case "${1-}" in
+  reboot) exec systemctl reboot ;;
+  shutdown) exec systemctl poweroff ;;
+  install) install_staged ;;
+  wifi) set_wifi ;;
+  wifi-forget) forget_wifi ;;
+  *) usage ;;
+esac

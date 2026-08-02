@@ -7,8 +7,8 @@ use autd3_python_capsule::{
     legacy_client_opener, legacy_link_into_capsule, link_into_capsule, link_runtime,
 };
 use autd3_rs::Error;
-use autd3_rs::{Client, ConstStateChecker, Frames, StateCheck};
-use autd3_rs_link_remote::RemoteLinkOption as CoreOption;
+use autd3_rs::{Client, Frames};
+use autd3_rs_link_remote::{RemoteLinkOption as CoreOption, RemoteStateChecker};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
@@ -28,7 +28,7 @@ fn opt_duration(obj: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Duration>> {
 
 struct RemoteBackend {
     client: Arc<Client>,
-    checker: Arc<Mutex<ConstStateChecker>>,
+    checker: Arc<Mutex<RemoteStateChecker>>,
 }
 
 impl ClientBackend for RemoteBackend {
@@ -206,6 +206,25 @@ impl RemoteLinkOption {
             Ok(backend)
         });
         link_into_capsule(py, opener)
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (timeout = None, instance = None))]
+    fn discover(
+        py: Python<'_>,
+        timeout: Option<&Bound<'_, PyAny>>,
+        instance: Option<String>,
+    ) -> PyResult<String> {
+        let default = autd3_rs_link_remote::DiscoveryOption::default();
+        let option = autd3_rs_link_remote::DiscoveryOption {
+            timeout: opt_duration(timeout)?.unwrap_or(default.timeout),
+            instance,
+        };
+        py.detach(|| {
+            autd3_rs_link_remote::discover(&option)
+                .map(|appliance| appliance.addr.to_string())
+                .map_err(|e| PyValueError::new_err(e.to_string()))
+        })
     }
 
     fn _legacy_capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {

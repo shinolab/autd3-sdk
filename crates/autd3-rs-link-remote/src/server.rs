@@ -1,205 +1,101 @@
 use std::io::{ErrorKind, Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::{Arc, Condvar, Mutex};
-use std::thread::JoinHandle;
+use std::marker::PhantomData;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use autd3_rs_core::link::Link;
-use autd3_rs_core::value::DcSysTime;
-use autd3_rs_core::{IntoLink, RX_FRAME_BYTES, TX_FRAME_BYTES};
+use autd3_rs_core::{RX_FRAME_BYTES, TX_FRAME_BYTES};
 
+use crate::bus::{BusOption, BusShared, Desired, SharedBus, run_bus_loop, run_status_loop};
 use crate::error::RemoteLinkError;
-use crate::{DeviceLayout, wire};
+use crate::wire::{self, BusStatus};
+use crate::{DeviceLayout, wire::REPLY_HEADER_BYTES};
 
-type GeometryHandler = Arc<dyn Fn(Vec<DeviceLayout>) + Send + Sync>;
+const DEFAULT_PORT: u16 = 8080;
+const STACK_HEADROOM_BYTES: usize = 1024 * 1024;
+pub(crate) const SESSION_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(10);
+const KEEPALIVE_IDLE: Duration = Duration::from_secs(5);
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(2);
 
-const DEFAULT_CYCLE_PERIOD: Duration = Duration::from_micros(250);
-
-struct BusState {
-    tx: Vec<[u8; TX_FRAME_BYTES]>,
-    rx: Vec<[u8; RX_FRAME_BYTES]>,
-    rx_valid: bool,
-    dc_time_ns: u64,
-    tx_version: u64,
-    applied_version: u64,
-    shutdown: bool,
+#[derive(Clone, Copy, Debug)]
+pub struct RemoteServerOption {
+    pub bind: SocketAddr,
+    pub bus: BusOption,
+    pub idle_timeout: Duration,
 }
 
-struct Shared {
-    state: Mutex<BusState>,
-    cv: Condvar,
-}
-
-impl Shared {
-    fn new(num_devices: usize) -> Self {
+impl Default for RemoteServerOption {
+    fn default() -> Self {
         Self {
-            state: Mutex::new(BusState {
-                tx: vec![[0u8; TX_FRAME_BYTES]; num_devices],
-                rx: vec![[0u8; RX_FRAME_BYTES]; num_devices],
-                rx_valid: false,
-                dc_time_ns: wire::DC_TIME_UNAVAILABLE,
-                tx_version: 0,
-                applied_version: 0,
-                shutdown: false,
-            }),
-            cv: Condvar::new(),
-        }
-    }
-
-    fn shutdown(&self) {
-        let mut state = self
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.shutdown = true;
-        self.cv.notify_all();
-    }
-
-    fn exchange(&self, tx: &[u8], rx: &mut [u8]) -> Result<(bool, u64), RemoteLinkError> {
-        let mut state = self
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.tx.as_flattened_mut().copy_from_slice(tx);
-        state.tx_version += 1;
-        let want = state.tx_version;
-        loop {
-            if state.shutdown {
-                return Err(RemoteLinkError::Link("bus loop stopped".to_owned()));
-            }
-            if state.applied_version >= want {
-                rx.copy_from_slice(state.rx.as_flattened());
-                return Ok((state.rx_valid, state.dc_time_ns));
-            }
-            state = self
-                .cv
-                .wait(state)
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            bind: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), DEFAULT_PORT),
+            bus: BusOption::default(),
+            idle_timeout: DEFAULT_IDLE_TIMEOUT,
         }
     }
 }
 
-fn run_bus_loop<L: Link>(mut link: L, shared: &Shared, cycle_period: Duration) {
-    let num_devices = link.num_devices();
-    let dc_clock = link.dc_clock();
-    let mut tx_local = vec![[0u8; TX_FRAME_BYTES]; num_devices];
-    let mut rx_local = vec![[0u8; RX_FRAME_BYTES]; num_devices];
-
-    loop {
-        let version = {
-            let state = shared
-                .state
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if state.shutdown {
-                break;
-            }
-            tx_local.copy_from_slice(&state.tx);
-            state.tx_version
-        };
-
-        let start = Instant::now();
-        let result = link.cycle(&tx_local, &mut rx_local);
-
-        {
-            let mut state = shared
-                .state
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            match result {
-                Ok(outcome) => {
-                    state.rx.copy_from_slice(&rx_local);
-                    state.rx_valid = outcome.rx_valid;
-                    state.dc_time_ns = dc_clock
-                        .as_ref()
-                        .and_then(autd3_rs_core::DcClock::now)
-                        .map_or(wire::DC_TIME_UNAVAILABLE, DcSysTime::sys_time);
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "bus cycle failed; stopping server bus loop");
-                    state.rx_valid = false;
-                    state.shutdown = true;
-                }
-            }
-            state.applied_version = version;
-            let stop = state.shutdown;
-            shared.cv.notify_all();
-            if stop {
-                break;
-            }
-        }
-
-        let remaining = cycle_period.saturating_sub(start.elapsed());
-        if !remaining.is_zero() {
-            std::thread::sleep(remaining);
-        }
-    }
-}
-
-pub struct RemoteServer {
-    listener: TcpListener,
-    shared: Arc<Shared>,
-    num_devices: usize,
-    on_geometry: Option<GeometryHandler>,
-    rt: Option<JoinHandle<()>>,
-}
-
-impl RemoteServer {
-    pub fn with_link<L: Link>(bind: SocketAddr, link: L) -> Result<Self, RemoteLinkError> {
-        Self::with_link_inner(bind, link, None)
-    }
-
-    pub fn with_link_and_geometry<L, F>(
-        bind: SocketAddr,
-        link: L,
-        on_geometry: F,
-    ) -> Result<Self, RemoteLinkError>
-    where
-        L: Link,
-        F: Fn(Vec<DeviceLayout>) + Send + Sync + 'static,
-    {
-        Self::with_link_inner(bind, link, Some(Arc::new(on_geometry)))
-    }
-
-    fn with_link_inner<L: Link>(
-        bind: SocketAddr,
-        link: L,
-        on_geometry: Option<GeometryHandler>,
-    ) -> Result<Self, RemoteLinkError> {
-        let num_devices = link.num_devices();
-        if num_devices == 0 {
-            return Err(RemoteLinkError::InvalidDeviceCount { found: num_devices });
-        }
-        let listener = TcpListener::bind(bind)?;
-        let shared = Arc::new(Shared::new(num_devices));
-        let rt = {
-            let shared = Arc::clone(&shared);
-            std::thread::Builder::new()
-                .name("autd3-remote-bus".to_owned())
-                .spawn(move || run_bus_loop(link, &shared, DEFAULT_CYCLE_PERIOD))
-                .map_err(|e| RemoteLinkError::Link(format!("failed to spawn bus thread: {e}")))?
-        };
-        Ok(Self {
-            listener,
-            shared,
-            num_devices,
-            on_geometry,
-            rt: Some(rt),
-        })
-    }
-
-    pub async fn open<T: IntoLink>(bind: SocketAddr, link: T) -> Result<Self, RemoteLinkError> {
-        let geometry = autd3_rs_core::Geometry::new(Vec::<autd3_rs_core::Device>::new());
-        let link = link
-            .into_link(&geometry)
-            .await
-            .map_err(|e| RemoteLinkError::Link(e.to_string()))?;
-        Self::with_link(bind, link)
-    }
-
+impl RemoteServerOption {
     #[must_use]
-    pub fn num_devices(&self) -> usize {
-        self.num_devices
+    pub fn new(bind: SocketAddr) -> Self {
+        Self {
+            bind,
+            ..Self::default()
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct BusServerOption {
+    pub bind: SocketAddr,
+    pub auto_open: bool,
+    pub idle_timeout: Duration,
+}
+
+impl Default for BusServerOption {
+    fn default() -> Self {
+        Self {
+            bind: SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), DEFAULT_PORT),
+            auto_open: true,
+            idle_timeout: DEFAULT_IDLE_TIMEOUT,
+        }
+    }
+}
+
+impl BusServerOption {
+    #[must_use]
+    pub fn new(bind: SocketAddr) -> Self {
+        Self {
+            bind,
+            ..Self::default()
+        }
+    }
+}
+
+pub struct RemoteServer<L, F>
+where
+    L: Link,
+    F: FnMut(&[DeviceLayout]) -> Result<L, RemoteLinkError> + Send,
+{
+    listener: TcpListener,
+    option: RemoteServerOption,
+    factory: F,
+    _link: PhantomData<fn() -> L>,
+}
+
+impl<L, F> RemoteServer<L, F>
+where
+    L: Link,
+    F: FnMut(&[DeviceLayout]) -> Result<L, RemoteLinkError> + Send,
+{
+    pub fn new(option: RemoteServerOption, factory: F) -> Result<Self, RemoteLinkError> {
+        Ok(Self {
+            listener: TcpListener::bind(option.bind)?,
+            option,
+            factory,
+            _link: PhantomData,
+        })
     }
 
     pub fn local_addr(&self) -> Result<SocketAddr, RemoteLinkError> {
@@ -208,11 +104,8 @@ impl RemoteServer {
 
     pub fn serve(&mut self) -> Result<(), RemoteLinkError> {
         loop {
-            let (stream, peer) = self.listener.accept()?;
-            tracing::info!(%peer, "client connected");
-            match self.handle_client(stream) {
-                Ok(()) => tracing::info!(%peer, "client disconnected"),
-                Err(e) => tracing::warn!(%peer, error = %e, "client connection terminated"),
+            if let Some((stream, peer)) = accept(&self.listener)? {
+                report_session(peer, self.handle_client(stream));
             }
         }
     }
@@ -222,130 +115,308 @@ impl RemoteServer {
         self.handle_client(stream)
     }
 
-    pub fn serve_with_factory<L, F>(bind: SocketAddr, mut factory: F) -> Result<(), RemoteLinkError>
-    where
-        L: Link,
-        F: FnMut(&[DeviceLayout]) -> Result<L, RemoteLinkError>,
-    {
-        let listener = TcpListener::bind(bind)?;
+    pub fn serve_with_factory(
+        option: RemoteServerOption,
+        factory: F,
+    ) -> Result<(), RemoteLinkError> {
+        Self::new(option, factory)?.serve()
+    }
+
+    fn handle_client(&mut self, mut stream: TcpStream) -> Result<(), RemoteLinkError> {
+        tune_session_socket(&stream, self.option.idle_timeout)?;
+        handshake(&mut stream)?;
+        let layout = wire::read_geometry(&mut stream)?;
+
+        let shared = Arc::new(BusShared::new());
+        let (checker_tx, checker_rx) = std::sync::mpsc::channel();
+        let factory = &mut self.factory;
+        let bus_option = &self.option.bus;
+        let layout = &layout;
+        shared.set_desired(Desired::Open);
+
+        std::thread::scope(|scope| {
+            let mut builder = std::thread::Builder::new().name("autd3-remote-bus".to_owned());
+            if bus_option.stack_prefault_bytes > 0 {
+                builder =
+                    builder.stack_size(bus_option.stack_prefault_bytes + STACK_HEADROOM_BYTES);
+            }
+            let bus_shared = Arc::clone(&shared);
+            let bus = builder
+                .spawn_scoped(scope, move || {
+                    run_bus_loop(&bus_shared, bus_option, || factory(layout), &checker_tx);
+                })
+                .map_err(|e| RemoteLinkError::Link(format!("failed to spawn bus thread: {e}")))?;
+            let status_shared = Arc::clone(&shared);
+            let status = std::thread::Builder::new()
+                .name("autd3-remote-status".to_owned())
+                .spawn_scoped(scope, move || {
+                    run_status_loop(&status_shared, bus_option, &checker_rx);
+                })
+                .map_err(|e| {
+                    RemoteLinkError::Link(format!("failed to spawn status thread: {e}"))
+                })?;
+
+            let result = serve_session(&mut stream, &shared, bus_option, layout.len(), true);
+
+            shared.stop();
+            let _ = bus.join();
+            let _ = status.join();
+            result
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Session {
+    pub peer: SocketAddr,
+    pub devices: usize,
+    pub since: Instant,
+}
+
+#[derive(Default)]
+pub struct Sessions {
+    current: std::sync::Mutex<Option<Session>>,
+}
+
+impl Sessions {
+    #[must_use]
+    pub fn current(&self) -> Option<Session> {
+        self.lock().clone()
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Option<Session>> {
+        self.current
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn open(&self, peer: SocketAddr, devices: usize) {
+        *self.lock() = Some(Session {
+            peer,
+            devices,
+            since: Instant::now(),
+        });
+    }
+
+    fn close(&self) {
+        *self.lock() = None;
+    }
+}
+
+pub struct BusServer {
+    listener: TcpListener,
+    option: BusServerOption,
+    bus: Arc<SharedBus>,
+    sessions: Arc<Sessions>,
+}
+
+impl BusServer {
+    pub fn new(option: BusServerOption, bus: Arc<SharedBus>) -> Result<Self, RemoteLinkError> {
+        Ok(Self {
+            listener: TcpListener::bind(option.bind)?,
+            option,
+            bus,
+            sessions: Arc::new(Sessions::default()),
+        })
+    }
+
+    #[must_use]
+    pub fn sessions(&self) -> Arc<Sessions> {
+        Arc::clone(&self.sessions)
+    }
+
+    pub fn local_addr(&self) -> Result<SocketAddr, RemoteLinkError> {
+        Ok(self.listener.local_addr()?)
+    }
+
+    pub fn serve(&mut self) -> Result<(), RemoteLinkError> {
         loop {
-            let (stream, peer) = listener.accept()?;
-            tracing::info!(%peer, "client connected");
-            match handle_factory_client(stream, &mut factory) {
-                Ok(()) => tracing::info!(%peer, "client disconnected"),
-                Err(e) => tracing::warn!(%peer, error = %e, "client connection terminated"),
+            if let Some((stream, peer)) = accept(&self.listener)? {
+                report_session(peer, self.handle_client(stream));
             }
         }
     }
 
+    pub fn serve_once(&mut self) -> Result<(), RemoteLinkError> {
+        let (stream, _peer) = self.listener.accept()?;
+        self.handle_client(stream)
+    }
+
     fn handle_client(&mut self, mut stream: TcpStream) -> Result<(), RemoteLinkError> {
-        stream.set_nodelay(true)?;
-        read_hello(&mut stream)?;
+        tune_session_socket(&stream, self.option.idle_timeout)?;
+        let peer = stream.peer_addr()?;
+        handshake(&mut stream)?;
         let layout = wire::read_geometry(&mut stream)?;
-        if let Some(cb) = &self.on_geometry {
-            cb(layout);
-        }
-        send_num_devices(&mut stream, self.num_devices)?;
-        run_frame_loop(&mut stream, &self.shared, self.num_devices)
+
+        self.sessions.open(peer, layout.len());
+        let result = serve_session(
+            &mut stream,
+            self.bus.shared(),
+            self.bus.option(),
+            layout.len(),
+            self.option.auto_open,
+        );
+        self.sessions.close();
+        result
     }
 }
 
-fn handle_factory_client<L, F>(
-    mut stream: TcpStream,
-    factory: &mut F,
-) -> Result<(), RemoteLinkError>
-where
-    L: Link,
-    F: FnMut(&[DeviceLayout]) -> Result<L, RemoteLinkError>,
-{
+fn tune_session_socket(stream: &TcpStream, idle_timeout: Duration) -> std::io::Result<()> {
     stream.set_nodelay(true)?;
-    read_hello(&mut stream)?;
-    let layout = wire::read_geometry(&mut stream)?;
+    stream.set_read_timeout(Some(idle_timeout))?;
+    stream.set_write_timeout(Some(idle_timeout))?;
+    socket2::SockRef::from(stream).set_tcp_keepalive(
+        &socket2::TcpKeepalive::new()
+            .with_time(KEEPALIVE_IDLE)
+            .with_interval(KEEPALIVE_INTERVAL),
+    )
+}
 
-    let link = factory(&layout)?;
-    let num_devices = link.num_devices();
-    if num_devices == 0 {
-        return Err(RemoteLinkError::InvalidDeviceCount { found: num_devices });
+fn is_timeout(error: &std::io::Error) -> bool {
+    matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut)
+}
+
+fn accept(listener: &TcpListener) -> Result<Option<(TcpStream, SocketAddr)>, RemoteLinkError> {
+    match listener.accept() {
+        Ok(accepted) => Ok(Some(accepted)),
+        Err(e)
+            if is_timeout(&e)
+                || matches!(
+                    e.kind(),
+                    ErrorKind::ConnectionAborted
+                        | ErrorKind::ConnectionReset
+                        | ErrorKind::Interrupted
+                ) =>
+        {
+            tracing::warn!(error = %e, "failed to accept a client; still listening");
+            Ok(None)
+        }
+        Err(e) => Err(e.into()),
     }
+}
 
-    let shared = Arc::new(Shared::new(num_devices));
-    let rt = {
-        let shared = Arc::clone(&shared);
-        std::thread::Builder::new()
-            .name("autd3-remote-bus".to_owned())
-            .spawn(move || run_bus_loop(link, &shared, DEFAULT_CYCLE_PERIOD))
-            .map_err(|e| RemoteLinkError::Link(format!("failed to spawn bus thread: {e}")))?
+fn report_session(peer: SocketAddr, result: Result<(), RemoteLinkError>) {
+    match result {
+        Ok(()) => tracing::info!(%peer, "client disconnected"),
+        Err(e) => tracing::warn!(%peer, error = %e, "client connection terminated"),
+    }
+}
+
+fn serve_session(
+    stream: &mut TcpStream,
+    shared: &Arc<BusShared>,
+    bus_option: &BusOption,
+    client_devices: usize,
+    auto_open: bool,
+) -> Result<(), RemoteLinkError> {
+    let num_devices = match attach(shared, client_devices, auto_open) {
+        Ok(num_devices) => num_devices,
+        Err(e) => {
+            let (code, detail) = reject_of(&e);
+            stream.write_all(&wire::encode_session_reject(code, &detail))?;
+            stream.flush()?;
+            return Err(e);
+        }
     };
 
-    let result = send_num_devices(&mut stream, num_devices)
-        .and_then(|()| run_frame_loop(&mut stream, &shared, num_devices));
-
-    shared.shutdown();
-    let _ = rt.join();
-    result
-}
-
-fn read_hello(stream: &mut TcpStream) -> Result<(), RemoteLinkError> {
-    let mut hello = [0u8; 5];
-    stream.read_exact(&mut hello)?;
-    if hello[..4] != wire::MAGIC || hello[4] != wire::VERSION {
-        return Err(RemoteLinkError::ProtocolMismatch);
-    }
-    Ok(())
-}
-
-fn send_num_devices(stream: &mut TcpStream, num_devices: usize) -> Result<(), RemoteLinkError> {
     let n = u16::try_from(num_devices)
         .map_err(|_| RemoteLinkError::InvalidDeviceCount { found: num_devices })?;
-    stream.write_all(&n.to_le_bytes())?;
+    stream.write_all(&wire::encode_session_ok(n))?;
     stream.flush()?;
+
+    std::thread::scope(|scope| {
+        let session = std::thread::Builder::new()
+            .name("autd3-remote-session".to_owned())
+            .spawn_scoped(scope, || {
+                autd3_rs_core::apply_thread_tuning(bus_option.session_tuning());
+                run_frame_loop(stream, shared, num_devices)
+            })
+            .map_err(|e| RemoteLinkError::Link(format!("failed to spawn session thread: {e}")))?;
+        session
+            .join()
+            .unwrap_or_else(|_| Err(RemoteLinkError::Link("session thread panicked".to_owned())))
+    })
+}
+
+fn attach(
+    shared: &BusShared,
+    client_devices: usize,
+    auto_open: bool,
+) -> Result<usize, RemoteLinkError> {
+    if shared.desired() == Desired::Closed {
+        if !auto_open {
+            return Err(RemoteLinkError::BusClosed);
+        }
+        tracing::info!("opening the bus for an incoming client");
+        shared.set_desired(Desired::Open);
+    }
+    let num_devices = shared.wait_for_open(SESSION_OPEN_TIMEOUT)?;
+    if num_devices != client_devices {
+        return Err(RemoteLinkError::GeometryMismatch {
+            client: client_devices,
+            bus: num_devices,
+        });
+    }
+    Ok(num_devices)
+}
+
+fn reject_of(error: &RemoteLinkError) -> (u8, String) {
+    let code = match error {
+        RemoteLinkError::BusClosed => wire::SESSION_BUS_CLOSED,
+        RemoteLinkError::GeometryMismatch { .. } => wire::SESSION_DEVICE_COUNT,
+        RemoteLinkError::BusUnavailable { .. } => wire::SESSION_BUS_UNAVAILABLE,
+        _ => wire::SESSION_INTERNAL,
+    };
+    (code, error.to_string())
+}
+
+fn handshake(stream: &mut TcpStream) -> Result<(), RemoteLinkError> {
+    let peer = wire::read_hello(stream)?;
+    stream.write_all(&wire::encode_hello())?;
+    stream.flush()?;
+    if peer.as_ref().is_none_or(|p| p.wire != wire::VERSION) {
+        return Err(RemoteLinkError::ProtocolMismatch {
+            local: wire::local_version(),
+            peer,
+        });
+    }
     Ok(())
 }
 
 fn run_frame_loop(
     stream: &mut TcpStream,
-    shared: &Shared,
+    shared: &BusShared,
     num_devices: usize,
 ) -> Result<(), RemoteLinkError> {
     let mut tx_buf = vec![0u8; num_devices * TX_FRAME_BYTES];
     let mut rx_buf = vec![0u8; num_devices * RX_FRAME_BYTES];
+    let mut status = BusStatus::new(num_devices);
+    let mut reply = Vec::with_capacity(REPLY_HEADER_BYTES + num_devices);
 
     loop {
         let mut tag = [0u8; 1];
         match stream.read_exact(&mut tag) {
             Ok(()) => {}
             Err(e) if e.kind() == ErrorKind::UnexpectedEof => return Ok(()),
+            Err(e) if is_timeout(&e) => {
+                return Err(RemoteLinkError::Link(
+                    "the client stopped sending frames; ending the session".to_owned(),
+                ));
+            }
             Err(e) => return Err(e.into()),
         }
 
         match tag[0] {
             wire::TAG_FRAME => {
                 stream.read_exact(&mut tx_buf)?;
-                let (rx_valid, dc_time_ns) = shared.exchange(&tx_buf, &mut rx_buf)?;
-                stream.write_all(&[u8::from(rx_valid)])?;
-                stream.write_all(&dc_time_ns.to_le_bytes())?;
-                stream.write_all(&rx_buf)?;
+                let frame = shared.exchange(num_devices, &tx_buf, &mut rx_buf, &mut status)?;
+                wire::encode_reply_header(frame.rx_valid, frame.dc_time_ns, &status, &mut reply);
+                reply.extend_from_slice(&rx_buf);
+                stream.write_all(&reply)?;
                 stream.flush()?;
             }
             wire::TAG_CLOSE => return Ok(()),
             other => return Err(RemoteLinkError::UnexpectedTag(other)),
-        }
-    }
-}
-
-impl Drop for RemoteServer {
-    fn drop(&mut self) {
-        {
-            let mut state = self
-                .shared
-                .state
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            state.shutdown = true;
-        }
-        self.shared.cv.notify_all();
-        if let Some(rt) = self.rt.take() {
-            let _ = rt.join();
         }
     }
 }

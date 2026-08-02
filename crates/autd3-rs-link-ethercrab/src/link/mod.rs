@@ -2,7 +2,7 @@ mod cycle;
 pub(crate) mod group;
 mod open;
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use ethercrab::Timeouts;
 use ethercrab::subdevice_group::{HasDc, Op};
@@ -47,6 +47,8 @@ pub struct EtherCrabLink {
     transport: Transport,
     handle: Handle,
     next_at: Option<Instant>,
+    cycle: Duration,
+    shift: Duration,
     num_devices: usize,
     expected_wkc: u16,
     rx_was_valid: bool,

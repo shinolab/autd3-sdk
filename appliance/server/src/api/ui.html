@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AUTD3 appliance</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #16181d;
+        --bg: #f6f7f9;
+        --card: #ffffff;
+        --line: #d8dce3;
+        --muted: #5d6470;
+        --ok: #1a7f37;
+        --warn: #9a6700;
+        --bad: #b42318;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e6e8ec;
+          --bg: #14161a;
+          --card: #1c1f25;
+          --line: #2f343d;
+          --muted: #9aa2b1;
+          --ok: #3fb950;
+          --warn: #d29922;
+          --bad: #f85149;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 1.5rem 1rem 3rem;
+        font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+      }
+      main { max-width: 60rem; margin: 0 auto; }
+      h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+      h2 { font-size: 1rem; margin: 0 0 0.75rem; }
+      .sub { color: var(--muted); margin: 0 0 1.5rem; font-variant-numeric: tabular-nums; }
+      section {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 1rem 1.1rem;
+        margin-bottom: 1rem;
+      }
+      table { width: 100%; border-collapse: collapse; }
+      td { padding: 0.2rem 0; vertical-align: top; }
+      td:first-child { color: var(--muted); width: 14rem; }
+      td:last-child { font-variant-numeric: tabular-nums; }
+      .pill {
+        display: inline-block;
+        padding: 0.05rem 0.5rem;
+        border-radius: 999px;
+        border: 1px solid currentColor;
+        font-size: 0.85em;
+      }
+      .ok { color: var(--ok); }
+      .warn { color: var(--warn); }
+      .bad { color: var(--bad); }
+      button {
+        font: inherit;
+        padding: 0.35rem 0.85rem;
+        margin: 0 0.4rem 0.4rem 0;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--bg);
+        color: inherit;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) { border-color: var(--muted); }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      button.danger { color: var(--bad); }
+      textarea, pre {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--bg);
+        color: inherit;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        padding: 0.6rem;
+      }
+      textarea { min-height: 18rem; resize: vertical; }
+      pre { max-height: 24rem; overflow: auto; margin: 0; }
+      #message {
+        min-height: 1.4rem;
+        margin: 0 0 1rem;
+        font-variant-numeric: tabular-nums;
+      }
+      .overflow { overflow-x: auto; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="instance">AUTD3 appliance</h1>
+      <p class="sub" id="subtitle">connecting…</p>
+      <p id="message"></p>
+
+      <section>
+        <h2>Bus</h2>
+        <div class="overflow"><table id="bus"></table></div>
+        <div style="margin-top: 0.9rem">
+          <button data-post="/bus/open">Open</button>
+          <button data-post="/bus/close">Close</button>
+          <button data-post="/bus/probe">Probe</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Appliance</h2>
+        <div class="overflow"><table id="appliance"></table></div>
+        <div style="margin-top: 0.9rem">
+          <button data-post="/restart">Restart server</button>
+          <button class="danger" data-post="/reboot" data-confirm="Reboot the appliance?">Reboot</button>
+          <button class="danger" data-post="/shutdown" data-confirm="Shut the appliance down?">Shut down</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Configuration</h2>
+        <textarea id="config" spellcheck="false"></textarea>
+        <div style="margin-top: 0.6rem">
+          <button id="config-save">Save</button>
+          <button id="config-reload">Reload</button>
+          <span class="sub" style="margin: 0">applied on the next restart</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Log</h2>
+        <pre id="logs">…</pre>
+        <div style="margin-top: 0.6rem">
+          <button id="logs-refresh">Refresh</button>
+          <select id="logs-unit">
+            <option value="">this server</option>
+            <option value="NetworkManager">NetworkManager</option>
+            <option value="autd3-wifi-init">autd3-wifi-init</option>
+            <option value="autd3-firstboot">autd3-firstboot</option>
+          </select>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let admin = true;
+
+      function say(text, kind) {
+        const el = $("message");
+        el.textContent = text;
+        el.className = kind || "";
+      }
+
+      async function call(method, path, body) {
+        const init = { method };
+        if (body !== undefined) {
+          init.headers = { "content-type": "application/json" };
+          init.body = JSON.stringify(body);
+        }
+        const res = await fetch(path, init);
+        const text = await res.text();
+        let payload = {};
+        try {
+          payload = text ? JSON.parse(text) : {};
+        } catch {
+          payload = { error: text };
+        }
+        if (!res.ok) throw new Error(payload.error || res.statusText);
+        return payload;
+      }
+
+      function rows(table, entries) {
+        table.replaceChildren(
+          ...entries.map(([label, value, kind]) => {
+            const tr = document.createElement("tr");
+            const key = document.createElement("td");
+            key.textContent = label;
+            const val = document.createElement("td");
+            if (kind) {
+              const pill = document.createElement("span");
+              pill.className = "pill " + kind;
+              pill.textContent = value;
+              val.append(pill);
+            } else {
+              val.textContent = value;
+            }
+            tr.append(key, val);
+            return tr;
+          }),
+        );
+      }
+
+      const us = (ns) => (ns / 1000).toFixed(0) + " us";
+
+      function duration(secs) {
+        const d = Math.floor(secs / 86400);
+        const h = Math.floor((secs % 86400) / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        return (d ? d + "d " : "") + (d || h ? h + "h " : "") + m + "m";
+      }
+
+      function uplink(up) {
+        const parts = [up.carrier ? "up" : up.operstate];
+        if (up.wifi) {
+          parts.push(
+            up.wifi.ssid
+              ? up.wifi.ssid + (up.wifi.signal_dbm === null ? "" : " (" + up.wifi.signal_dbm + " dBm)")
+              : up.wifi.blocked ? "radio blocked" : "not associated",
+          );
+          parts.push("domain " + (up.wifi.regdomain || "unset"));
+        }
+        parts.push(up.addresses.length ? up.addresses.join(", ") : "no address");
+        return parts.join(" · ");
+      }
+
+      function render(s) {
+        document.title = s.instance + " — AUTD3 appliance";
+        $("instance").textContent = s.instance;
+        $("subtitle").textContent =
+          "autd3-sdk " + s.sdk_version + " · wire " + s.wire_version + " · up " + duration(s.uptime_secs) +
+          (s.image ? " · image " + s.image.version : "");
+
+        const bus = s.bus;
+        const healthy = bus.actual === "open" && bus.devices.every((d) => d === "OP");
+        rows($("bus"), [
+          ["state", bus.failure ? bus.actual + ": " + bus.failure : bus.actual,
+            bus.actual === "open" ? (healthy ? "ok" : "warn") : bus.actual === "failed" ? "bad" : "warn"],
+          ["requested", bus.desired],
+          ["devices", bus.num_devices + (bus.devices.length ? " (" + bus.devices.join(", ") + ")" : "")],
+          ["recoveries", bus.recoveries],
+          ["stale / lost cycles", bus.stale_cycles + " / " + bus.lost_cycles],
+          ["phase excursions", bus.phase_excursions + " (worst " + us(bus.worst_phase_deviation_ns) + ")"],
+          ["exchange mean / worst", bus.exchanges ? us(bus.exchange_mean_ns) + " / " + us(bus.exchange_worst_ns) : "—"],
+          ["client", s.client ? s.client.peer + " (" + s.client.devices + " devices, " + duration(s.client.connected_secs) + ")" : "none"],
+        ]);
+
+        const nic = s.interface;
+        const appliance = [
+          ["binary", s.binary || "—"],
+          ["EtherCAT port", nic.name || "—"],
+          ["link", nic.carrier ? "up" + (nic.speed_mbps ? " (" + nic.speed_mbps + " Mbit/s)" : "") : nic.operstate,
+            nic.carrier ? "ok" : "bad"],
+        ];
+        for (const up of s.uplinks || []) {
+          appliance.push([
+            "uplink " + up.name,
+            uplink(up),
+            up.addresses.length ? "ok" : up.carrier ? "warn" : "bad",
+          ]);
+        }
+        if (s.storage) {
+          appliance.push([
+            "storage " + s.storage.path,
+            s.storage.free_mb + " MB free of " + s.storage.total_mb + " MB",
+            s.storage.free_mb >= 64 ? "ok" : "bad",
+          ]);
+        }
+        appliance.push(
+          ["administrative endpoints", s.allow_admin ? "enabled" : "disabled", s.allow_admin ? "ok" : "warn"],
+        );
+        rows($("appliance"), appliance);
+
+        admin = s.allow_admin;
+        for (const button of document.querySelectorAll("[data-confirm], #config-save")) {
+          button.disabled = !admin;
+        }
+      }
+
+      async function refresh() {
+        try {
+          render(await call("GET", "/status"));
+        } catch (e) {
+          say("cannot reach the appliance: " + e.message, "bad");
+        }
+      }
+
+      async function loadConfig() {
+        try {
+          $("config").value = (await call("GET", "/config")).toml;
+        } catch (e) {
+          say(e.message, "bad");
+        }
+      }
+
+      async function loadLogs() {
+        try {
+          const unit = $("logs-unit").value;
+          const path = "/logs?lines=200" + (unit ? "&unit=" + encodeURIComponent(unit) : "");
+          $("logs").textContent = (await call("GET", path)).lines.join("\n");
+        } catch (e) {
+          $("logs").textContent = e.message;
+        }
+      }
+
+      for (const button of document.querySelectorAll("[data-post]")) {
+        button.addEventListener("click", async () => {
+          const confirmation = button.dataset.confirm;
+          if (confirmation && !confirm(confirmation)) return;
+          try {
+            const result = await call("POST", button.dataset.post);
+            say(result.message ?? (result.num_devices + " device(s) on the bus"), "ok");
+          } catch (e) {
+            say(e.message, "bad");
+          }
+          refresh();
+        });
+      }
+
+      $("config-save").addEventListener("click", async () => {
+        try {
+          say((await call("PUT", "/config", { toml: $("config").value })).message, "ok");
+        } catch (e) {
+          say(e.message, "bad");
+        }
+      });
+      $("config-reload").addEventListener("click", loadConfig);
+      $("logs-refresh").addEventListener("click", loadLogs);
+      $("logs-unit").addEventListener("change", loadLogs);
+
+      refresh();
+      loadConfig();
+      loadLogs();
+      setInterval(refresh, 2000);
+    </script>
+  </body>
+</html>

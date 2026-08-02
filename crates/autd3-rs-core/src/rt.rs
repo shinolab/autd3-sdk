@@ -62,11 +62,17 @@ fn set_rt_priority(
     thread_priority::set_current_thread_priority(priority)
 }
 
-pub fn apply_thread_tuning(tuning: RtThreadTuning) {
+pub fn apply_thread_tuning(tuning: RtThreadTuning) -> RtThreadTuning {
+    let mut applied = RtThreadTuning {
+        priority: None,
+        policy: tuning.policy,
+        affinity: None,
+    };
     if let Some(priority) = tuning.priority {
         match set_rt_priority(priority, tuning.policy) {
             Ok(()) => {
                 tracing::debug!(?priority, policy = ?tuning.policy, "applied RT thread scheduling");
+                applied.priority = Some(priority);
             }
             Err(e) => tracing::warn!(
                 "failed to set RT thread priority: {e:?}. The bus will be unstable under load. {}",
@@ -74,11 +80,25 @@ pub fn apply_thread_tuning(tuning: RtThreadTuning) {
             ),
         }
     }
-    if let Some(core) = tuning.affinity
-        && !core_affinity::set_for_current(core)
-    {
-        tracing::warn!("failed to pin RT thread to core {}", core.id);
+    if let Some(core) = tuning.affinity {
+        if core_affinity::set_for_current(core) {
+            applied.affinity = Some(core);
+        } else {
+            tracing::warn!("failed to pin RT thread to core {}", core.id);
+        }
     }
+    applied
+}
+
+#[must_use]
+pub fn step_below(priority: ThreadPriority) -> Option<ThreadPriority> {
+    let ThreadPriority::Crossplatform(value) = priority else {
+        return None;
+    };
+    let below = u8::from(value).checked_sub(1)?;
+    ThreadPriorityValue::try_from(below)
+        .ok()
+        .map(ThreadPriority::Crossplatform)
 }
 
 #[must_use]
@@ -96,5 +116,26 @@ pub fn default_rt_priority() -> Option<ThreadPriority> {
             ThreadPriorityValue::try_from(RT_THREAD_PRIORITY)
                 .expect("0..=99 is a valid thread priority"),
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn crossplatform(value: u8) -> ThreadPriority {
+        ThreadPriority::Crossplatform(ThreadPriorityValue::try_from(value).unwrap())
+    }
+
+    #[test]
+    fn a_step_below_is_one_lower() {
+        assert_eq!(step_below(crossplatform(80)), Some(crossplatform(79)));
+    }
+
+    #[test]
+    fn only_the_crossplatform_ladder_steps_down() {
+        assert_eq!(step_below(ThreadPriority::Max), None);
+        assert_eq!(step_below(ThreadPriority::Min), None);
+        assert_eq!(step_below(crossplatform(0)), None);
     }
 }

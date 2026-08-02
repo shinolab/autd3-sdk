@@ -83,6 +83,7 @@ version = "0.4.0"
 dependencies = [
  "autd3-rs-core",
  "thiserror",
+ "tokio",
  "tracing",
 ]
 

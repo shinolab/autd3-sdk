@@ -1,0 +1,36 @@
+#!/bin/sh
+set -eu
+
+REGDOMAIN_FILE=/data/regdomain
+RADIO_OFF_FLAG=/data/wifi-radio-off
+
+if [ -e "$RADIO_OFF_FLAG" ]; then
+  if command -v rfkill > /dev/null 2>&1; then
+    rfkill block wifi || echo "autd3-wifi-init: could not block the Wi-Fi radio" >&2
+  fi
+  echo "autd3-wifi-init: $RADIO_OFF_FLAG is present; leaving the Wi-Fi radio blocked"
+  exit 0
+fi
+
+if command -v rfkill > /dev/null 2>&1; then
+  rfkill unblock wifi || echo "autd3-wifi-init: could not unblock the Wi-Fi radio" >&2
+fi
+
+if [ ! -r "$REGDOMAIN_FILE" ]; then
+  echo "autd3-wifi-init: no stored regulatory domain; leaving the world domain in place"
+  exit 0
+fi
+
+country=$(tr -dc 'A-Za-z' < "$REGDOMAIN_FILE" | cut -c 1-2 | tr '[:lower:]' '[:upper:]')
+if [ ${#country} -ne 2 ]; then
+  echo "autd3-wifi-init: $REGDOMAIN_FILE does not hold a two-letter country code" >&2
+  exit 0
+fi
+
+if ! command -v iw > /dev/null 2>&1; then
+  echo "autd3-wifi-init: iw is not installed; cannot set the regulatory domain" >&2
+  exit 0
+fi
+
+iw reg set "$country"
+echo "autd3-wifi-init: regulatory domain set to $country"

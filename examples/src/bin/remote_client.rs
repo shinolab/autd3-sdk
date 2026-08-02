@@ -1,5 +1,7 @@
 // Remote Link client: connects to a remote_server over TCP and emits a 200 Hz sine AM focus.
-// Start remote_server first.
+// Start remote_server (or the simulator) first.
+// Pass an address to skip the mDNS lookup; without one it falls back to the local default
+// when no appliance answers, which is where remote_server and the simulator both listen.
 //
 // Run with: cargo xtask example remote_client
 
@@ -15,21 +17,26 @@ use autd3_rs::value::SamplingConfig;
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_remote::RemoteLinkOption;
 
-const SERVER_ADDR: &str = "127.0.0.1:8080";
+const LOCAL_ADDR: &str = "127.0.0.1:8080";
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let _log_guard = init_tracing(TracingOption::default());
 
-    let addr: SocketAddr = SERVER_ADDR.parse()?;
+    let option = match std::env::args().nth(1) {
+        Some(addr) => RemoteLinkOption::new(addr.parse()?),
+        None => match RemoteLinkOption::discover() {
+            Ok(option) => option,
+            Err(e) => {
+                println!("discovery found no appliance ({e}); falling back to {LOCAL_ADDR}");
+                RemoteLinkOption::new(LOCAL_ADDR.parse::<SocketAddr>()?)
+            }
+        },
+    };
+    let addr = option.addr;
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(
-        &geometry,
-        RemoteLinkOption::new(addr),
-        ClientConfig::default(),
-    )
-    .await?;
+    let client = Client::open(&geometry, option, ClientConfig::default()).await?;
 
     println!("connected to {addr}, devices: {}", client.num_devices());
     for (i, fw) in client.read_firmware_version().await?.iter().enumerate() {

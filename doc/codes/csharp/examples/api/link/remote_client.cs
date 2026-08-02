@@ -1,3 +1,4 @@
+using System;
 using AUTD3.Link;
 
 namespace DocSamples.ApiLinkRemoteClient;
@@ -11,5 +12,20 @@ internal static class Sample
         // ANCHOR: api
         new RemoteLinkOption(addr);
         // ANCHOR_END: api
+    }
+
+    internal static void Discover()
+    {
+        // ANCHOR: discover
+        var option = new RemoteLinkOption(RemoteLinkOption.Discover());
+        // ANCHOR_END: discover
+    }
+
+    internal static void DiscoverWithOption()
+    {
+        // ANCHOR: discover_option
+        var option = new RemoteLinkOption(
+            RemoteLinkOption.Discover(TimeSpan.FromSeconds(5), "autd3-0a1b2c3d"));
+        // ANCHOR_END: discover_option
     }
 }

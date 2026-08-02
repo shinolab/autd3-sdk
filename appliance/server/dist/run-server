@@ -1,0 +1,14 @@
+#!/bin/sh
+set -u
+
+IMAGE_BIN=/usr/local/bin/autd3-remote-server
+DATA_BIN=/data/bin/autd3-remote-server
+
+if [ -x "$DATA_BIN" ]; then
+  if "$DATA_BIN" --version > /dev/null 2>&1; then
+    exec "$DATA_BIN" "$@"
+  fi
+  echo "run-server: $DATA_BIN does not run; falling back to $IMAGE_BIN" >&2
+fi
+
+exec "$IMAGE_BIN" "$@"

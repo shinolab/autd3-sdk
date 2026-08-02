@@ -87,6 +87,8 @@ impl EtherCrabLink {
             transport,
             handle,
             next_at: None,
+            cycle: option.dc_configuration.sync0_period,
+            shift: option.dc_configuration.sync0_shift,
             num_devices,
             expected_wkc,
             rx_was_valid: true,
@@ -322,7 +324,14 @@ async fn try_reach_op(
         cycles = OP_WARMUP_CYCLES,
         "warming up DC before requesting OP"
     );
-    Box::pin(warmup_dc(&group, maindevice, pdu_timeout)).await?;
+    Box::pin(warmup_dc(
+        &group,
+        maindevice,
+        pdu_timeout,
+        option.dc_configuration.sync0_period,
+        option.dc_configuration.sync0_shift,
+    ))
+    .await?;
 
     let group = transition(
         state_transition,
@@ -331,7 +340,14 @@ async fn try_reach_op(
     .await?;
     tracing::info!("requested OP, waiting for all devices");
 
-    let expected_wkc = wait_for_op(&group, maindevice, pdu_timeout).await?;
+    let expected_wkc = wait_for_op(
+        &group,
+        maindevice,
+        pdu_timeout,
+        option.dc_configuration.sync0_period,
+        option.dc_configuration.sync0_shift,
+    )
+    .await?;
     let addresses: Vec<u16> = group
         .groups
         .iter()
@@ -351,11 +367,16 @@ async fn warmup_dc(
     group: &Groups<SafeOp, HasDc>,
     maindevice: &MainDevice<'_>,
     pdu_timeout: Duration,
+    cycle: Duration,
+    shift: Duration,
 ) -> Result<(), EtherCrabLinkError> {
     for _ in 0..OP_WARMUP_CYCLES {
         let cycle_start = Instant::now();
         let resp = group.tx_rx_dc(maindevice, pdu_timeout).await?;
-        timer::async_sleep_until(cycle_start + resp.next_cycle_wait).await;
+        timer::async_sleep_until(
+            cycle_start + crate::pacing::next_cycle_wait(resp.dc_system_time, cycle, shift),
+        )
+        .await;
     }
     Ok(())
 }
@@ -364,6 +385,8 @@ async fn wait_for_op(
     group: &Groups<Op, HasDc>,
     maindevice: &MainDevice<'_>,
     pdu_timeout: Duration,
+    cycle: Duration,
+    shift: Duration,
 ) -> Result<u16, EtherCrabLinkError> {
     let op_requested = Instant::now();
     let op_deadline = op_requested + OP_WAIT_TIMEOUT;
@@ -415,7 +438,10 @@ async fn wait_for_op(
             log_al_status(group, maindevice, pdu_timeout).await;
             return Err(EtherCrabLinkError::OpTimeout);
         }
-        timer::async_sleep_until(cycle_start + resp.next_cycle_wait).await;
+        timer::async_sleep_until(
+            cycle_start + crate::pacing::next_cycle_wait(resp.dc_system_time, cycle, shift),
+        )
+        .await;
     }
 }
 

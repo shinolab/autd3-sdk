@@ -11,6 +11,7 @@ const usersManual = [
           { label: "ハードウェア", translations: { en: "Hardware" }, link: "/getting-started/setup/hardware/" },
           { label: "ファームウェア", translations: { en: "Firmware" }, link: "/getting-started/setup/firmware/" },
           { label: "ソフトウェア", translations: { en: "Software" }, link: "/getting-started/setup/software/" },
+          { label: "コンソール", translations: { en: "Console" }, link: "/getting-started/setup/console/" },
         ],
       },
       {

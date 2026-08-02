@@ -1,0 +1,18 @@
+mountroot()
+{
+	. /scripts/local
+	local_mount_root
+
+	modprobe overlay
+
+	mkdir -p /upper /lower
+	mount -t tmpfs -o noatime,mode=0755 tmpfs /upper
+	mkdir -p /upper/data /upper/work
+
+	mount -n -o move "${rootmnt}" /lower
+	mount -t overlay overlay \
+		-o lowerdir=/lower,upperdir=/upper/data,workdir=/upper/work "${rootmnt}"
+
+	mkdir -p "${rootmnt}/lower"
+	mount -n -o rbind /lower "${rootmnt}/lower"
+}

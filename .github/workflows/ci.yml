@@ -23,6 +23,7 @@ jobs:
       holo-wgpu: ${{ steps.filter.outputs.holo-wgpu }}
       simulator: ${{ steps.filter.outputs.simulator }}
       console: ${{ steps.filter.outputs.console }}
+      image: ${{ steps.filter.outputs.image }}
       emulator: ${{ steps.filter.outputs.emulator }}
       cpu: ${{ steps.filter.outputs.cpu }}
       py: ${{ steps.filter.outputs.py }}
@@ -55,6 +56,9 @@ jobs:
               - 'firmware/cpu/fw/**'
               - 'tools/**'
               - 'examples/**'
+              - 'appliance/lib/**'
+              - 'appliance/cli/**'
+              - 'appliance/server/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - '.cargo/**'
@@ -91,6 +95,18 @@ jobs:
               - '.github/workflows/ci-console.yml'
               - '.github/workflows/parts/console-build-setup.yml'
               - '.github/workflows/console-release-notes.yml'
+            image:
+              - *shared
+              - *xtask-core
+              - 'xtask/src/image.rs'
+              - 'xtask/src/server.rs'
+              - 'appliance/**'
+              - 'crates/autd3-rs-core/**'
+              - 'crates/autd3-rs-link-echocat/**'
+              - 'crates/autd3-rs-link-remote/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/ci-image.yml'
             emulator:
               - *shared
               - *xtask-core
@@ -224,6 +240,12 @@ jobs:
     if: ${{ needs.changes.outputs.console == 'true' }}
     uses: ./.github/workflows/ci-console.yml
 
+  image:
+    name: image
+    needs: changes
+    if: ${{ needs.changes.outputs.image == 'true' }}
+    uses: ./.github/workflows/ci-image.yml
+
   emulator:
     name: emulator
     needs: changes
@@ -320,7 +342,7 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [changes, rust, holo-wgpu, simulator, console, emulator, cpu, py, ffi, cs, unity, license, doc, guard]
+    needs: [changes, rust, holo-wgpu, simulator, console, image, emulator, cpu, py, ffi, cs, unity, license, doc, guard]
     runs-on: ubuntu-latest
     steps:
       - name: Verify detect-changes succeeded
@@ -334,7 +356,8 @@ jobs:
           RESULTS: >-
             ${{ needs.rust.result }} ${{ needs.holo-wgpu.result }}
             ${{ needs.simulator.result }}
-            ${{ needs.console.result }} ${{ needs.emulator.result }}
+            ${{ needs.console.result }} ${{ needs.image.result }}
+            ${{ needs.emulator.result }}
             ${{ needs.cpu.result }} ${{ needs.py.result }}
             ${{ needs.ffi.result }} ${{ needs.cs.result }}
             ${{ needs.unity.result }} ${{ needs.license.result }}

@@ -1,0 +1,135 @@
+#!/bin/sh
+set -eu
+
+STAMP=/data/.provisioned
+CMDLINE=/boot/firmware/cmdline.txt
+LABEL=autd3-data
+SEED=/usr/lib/autd3/seed
+
+log() { echo "autd3-firstboot: $*"; }
+
+create_data_partition() {
+  if blkid -L "$LABEL" > /dev/null 2>&1; then
+    return 0
+  fi
+  root_source=$(findmnt -no SOURCE / | sed 's/\[.*\]//')
+  disk=$(lsblk -no PKNAME "$root_source" 2> /dev/null || true)
+  if [ -z "$disk" ]; then
+    log "cannot tell which disk / is on; leaving the card alone"
+    return 1
+  fi
+  end=0
+  last=""
+  parts=0
+  for part_dir in "/sys/block/$disk/$disk"*/; do
+    [ -r "$part_dir/start" ] || continue
+    parts=$((parts + 1))
+    part_end=$(($(cat "$part_dir/start") + $(cat "$part_dir/size")))
+    if [ "$part_end" -gt "$end" ]; then
+      end=$part_end
+      last=$(basename "$part_dir")
+    fi
+  done
+  [ "$end" -gt 0 ] || {
+    log "no partitions on /dev/$disk; leaving the card alone"
+    return 1
+  }
+
+  if [ "$parts" -gt 2 ] && [ -z "$(blkid -o value -s LABEL "/dev/$last" 2> /dev/null || true)" ]; then
+    log "formatting the unlabelled /dev/$last left by an interrupted first boot"
+    mkfs.ext4 -q -F -L "$LABEL" "/dev/$last"
+    return 0
+  fi
+
+  start=$(((end + 2047) / 2048 * 2048))
+  sectors=$(cat "/sys/block/$disk/size")
+  free=$((sectors - start))
+  if [ "$free" -lt 131072 ]; then
+    log "only $((free / 2048)) MiB free after the last partition; not creating $LABEL"
+    return 1
+  fi
+
+  log "creating $LABEL on /dev/$disk at sector $start ($((free / 2048)) MiB)"
+  echo "$start,,L" | sfdisk --append --no-reread --no-tell-kernel "/dev/$disk"
+  partx -a "/dev/$disk" 2> /dev/null || partprobe "/dev/$disk" 2> /dev/null || true
+  udevadm settle
+
+  part=""
+  for part_dir in "/sys/block/$disk/$disk"*/; do
+    [ -r "$part_dir/start" ] || continue
+    [ "$(cat "$part_dir/start")" = "$start" ] && part=$(basename "$part_dir")
+  done
+  [ -n "$part" ] || {
+    log "the new partition did not appear at sector $start"
+    return 1
+  }
+  mkfs.ext4 -q -F -L "$LABEL" "/dev/$part"
+}
+
+mount_data() {
+  mkdir -p /data
+  mountpoint -q /data && return 0
+  mount -L "$LABEL" /data 2> /dev/null && return 0
+  log "WARNING: no usable $LABEL partition; /data is a tmpfs and settings will not persist"
+  mount -t tmpfs -o mode=0755 tmpfs /data
+}
+
+data_is_persistent() {
+  case "$(findmnt -no SOURCE /data 2> /dev/null || true)" in
+    /dev/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+report_data_size() {
+  size=$(df -Pm /data | awk 'NR == 2 { print $2 }')
+  log "/data is ${size} MiB on $(findmnt -no SOURCE /data)"
+  [ "${size:-0}" -ge 64 ] || log "WARNING: /data is too small for a binary update"
+}
+
+seed_data() {
+  mkdir -p /data/autd3 /data/network /data/bin
+  chmod 700 /data/network
+  if [ ! -f /data/autd3/remote-server.toml ]; then
+    install -m 644 "$SEED/remote-server.toml" /data/autd3/remote-server.toml
+  fi
+  for keyfile in "$SEED"/network/*.nmconnection; do
+    [ -e "$keyfile" ] || continue
+    target=/data/network/$(basename "$keyfile")
+    [ -f "$target" ] || install -m 600 -o root -g root "$keyfile" "$target"
+  done
+  chown -R autd3:autd3 /data/autd3
+}
+
+enable_overlay() {
+  [ -f "$CMDLINE" ] || {
+    log "no $CMDLINE; leaving the rootfs writable"
+    return 1
+  }
+  grep -q 'boot=overlay' "$CMDLINE" && return 1
+  sed -i -e 's/\brw\b/ro/' -e '1 s/$/ boot=overlay/' "$CMDLINE"
+  log "the rootfs will be a read-only overlay from the next boot"
+  return 0
+}
+
+create_data_partition || true
+mount_data
+report_data_size
+seed_data
+sync
+
+if ! data_is_persistent; then
+  log "WARNING: /data is not on a partition, so nothing written here survives a reboot."
+  log "leaving the rootfs writable and retrying the provisioning on the next boot"
+  exit 0
+fi
+
+touch "$STAMP"
+sync
+
+if enable_overlay; then
+  log "provisioned; rebooting"
+  systemctl reboot
+else
+  log "provisioned"
+fi

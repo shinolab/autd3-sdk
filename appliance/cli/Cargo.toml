@@ -1,0 +1,24 @@
+[package]
+name = "autd3-appliance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+description = "CLI for the AUTD3 EtherCAT master appliance: finds it on the network and drives its control API."
+
+[[bin]]
+name = "autd3-appliance"
+path = "src/main.rs"
+
+[dependencies]
+autd3-rs-appliance = { workspace = true, features = ["client", "discovery"] }
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

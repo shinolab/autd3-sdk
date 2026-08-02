@@ -98,11 +98,15 @@ impl<B: RawBus> Master<B> {
         self.paced_cycle(tx, rx)
     }
 
-    fn paced_cycle(&mut self, tx: &[u8], rx: &mut [u8]) -> Result<CycleReport, EchocatError> {
-        let entered = Instant::now();
+    pub fn wait_next_cycle(&mut self) {
         if let Some(deadline) = self.next_at {
             self.config.sleep_strategy.wait_until(deadline);
         }
+    }
+
+    fn paced_cycle(&mut self, tx: &[u8], rx: &mut [u8]) -> Result<CycleReport, EchocatError> {
+        let entered = Instant::now();
+        self.wait_next_cycle();
         let anchor = Instant::now();
         if let Some(previous) = self.last_cycle_at {
             let gap = anchor.duration_since(previous);

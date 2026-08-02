@@ -9,7 +9,7 @@ pub mod value;
 
 pub use rt::{
     CoreId, RtSchedulePolicy, RtThreadTuning, ThreadPriority, ThreadPriorityValue,
-    apply_thread_tuning, default_rt_priority,
+    apply_thread_tuning, default_rt_priority, step_below,
 };
 
 pub use common::units;

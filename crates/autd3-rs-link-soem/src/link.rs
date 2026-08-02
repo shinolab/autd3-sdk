@@ -45,10 +45,20 @@ impl autd3_rs_core::IntoLink for SoemLinkOptionFull {
     }
 }
 
+fn landing_target(cycle_ns: i64, shift_ns: i64) -> i64 {
+    (shift_ns + cycle_ns / 2).rem_euclid(cycle_ns)
+}
+
 fn next_cycle_wait(dc_time_ns: i64, cycle_ns: i64, shift_ns: i64) -> Duration {
     let phase = dc_time_ns.rem_euclid(cycle_ns);
     #[allow(clippy::cast_sign_loss)]
-    Duration::from_nanos(((cycle_ns - phase) + shift_ns) as u64)
+    Duration::from_nanos(((cycle_ns - phase) + landing_target(cycle_ns, shift_ns)) as u64)
+}
+
+#[allow(clippy::cast_sign_loss)]
+fn phase_deviation_ns(dc_time_ns: i64, cycle_ns: i64, shift_ns: i64) -> u64 {
+    let diff = (dc_time_ns - landing_target(cycle_ns, shift_ns)).rem_euclid(cycle_ns);
+    diff.min(cycle_ns - diff) as u64
 }
 
 #[allow(clippy::cast_possible_truncation)]
@@ -365,6 +375,15 @@ impl Link for SoemLink {
         Some(self.dc_clock.clone())
     }
 
+    fn wait_next_cycle(&mut self) {
+        if let Some(deadline) = self.next_at {
+            let now = Instant::now();
+            if deadline > now {
+                std::thread::sleep(deadline - now);
+            }
+        }
+    }
+
     fn cycle(
         &mut self,
         tx: &[[u8; TX_FRAME_BYTES]],
@@ -390,6 +409,8 @@ impl Link for SoemLink {
         self.ctx.send_processdata();
         let wkc = self.ctx.receive_processdata(EC_TIMEOUTRET_US);
         let tx_rx_duration = cycle_start.elapsed();
+        self.stats
+            .record_exchange(u64::try_from(tx_rx_duration.as_nanos()).unwrap_or(u64::MAX));
         if wkc <= 0 {
             self.next_at = None;
             self.stats.record_lost_cycle();
@@ -414,6 +435,12 @@ impl Link for SoemLink {
         }
         let wait = next_cycle_wait(dc_time_ns, self.cycle_ns, self.shift_ns);
         self.next_at = Some(cycle_start + wait);
+
+        let deviation = phase_deviation_ns(dc_time_ns, self.cycle_ns, self.shift_ns);
+        #[allow(clippy::cast_sign_loss)]
+        if deviation > (self.cycle_ns / 4) as u64 {
+            self.stats.record_phase_excursion(deviation);
+        }
 
         let rx_valid = wkc == self.expected_wkc;
         #[allow(clippy::cast_sign_loss)]
@@ -461,16 +488,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn next_cycle_wait_targets_sync0_edge() {
+    fn next_cycle_wait_targets_the_middle_of_the_sync0_period() {
         let cycle = 1_000_000i64;
-        assert_eq!(next_cycle_wait(0, cycle, 0), Duration::from_millis(1));
+        assert_eq!(next_cycle_wait(0, cycle, 0), Duration::from_micros(1_500));
         assert_eq!(
             next_cycle_wait(cycle / 2, cycle, 0),
-            Duration::from_micros(500)
+            Duration::from_millis(1)
         );
         assert_eq!(
             next_cycle_wait(42 * cycle + cycle / 2, cycle, 0),
-            Duration::from_micros(500)
+            Duration::from_millis(1)
         );
     }
 
@@ -480,11 +507,29 @@ mod tests {
         let shift = 250_000i64;
         assert_eq!(
             next_cycle_wait(0, cycle, shift),
-            Duration::from_micros(1_250)
+            Duration::from_micros(1_750)
         );
         assert_eq!(
             next_cycle_wait(cycle - 1, cycle, shift),
-            Duration::from_nanos(250_001)
+            Duration::from_nanos(750_001)
         );
+    }
+
+    #[test]
+    fn a_full_cycle_shift_lands_where_no_shift_lands() {
+        let cycle = 1_000_000i64;
+        assert_eq!(
+            next_cycle_wait(0, cycle, cycle),
+            next_cycle_wait(0, cycle, 0)
+        );
+    }
+
+    #[test]
+    fn phase_deviation_is_measured_from_the_landing_target() {
+        let cycle = 1_000_000i64;
+        assert_eq!(phase_deviation_ns(cycle / 2, cycle, 0), 0);
+        assert_eq!(phase_deviation_ns(cycle / 2 + 1_000, cycle, 0), 1_000);
+        assert_eq!(phase_deviation_ns(0, cycle, 0), cycle.cast_unsigned() / 2);
+        assert_eq!(phase_deviation_ns(cycle - 1_000, cycle, 0), 499_000);
     }
 }

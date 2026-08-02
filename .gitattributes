@@ -1,0 +1,3 @@
+*.sh text=auto eol=lf
+appliance/server/dist/** text=auto eol=lf
+appliance/image/** text=auto eol=lf

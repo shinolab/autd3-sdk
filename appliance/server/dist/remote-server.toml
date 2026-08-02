@@ -1,0 +1,31 @@
+[server]
+bind = "[::]:8080"
+auto_open = true
+
+[bus]
+interface = "eth0"
+open_on_start = true
+sync0_period = "1ms"
+pdu_timeout = "100ms"
+state_transition_timeout = "10s"
+process_data_watchdog = "100ms"
+sync_timeout = "10s"
+
+[rt]
+priority = 80
+policy = "fifo"
+affinity = 3
+lock_memory = true
+prefault_stack_bytes = 524288
+
+[health]
+report_interval = "1m"
+
+[control]
+enabled = true
+bind = "[::]:8081"
+allow_admin = true
+unit = "autd3-remote-server.service"
+
+[mdns]
+enabled = true

@@ -34,6 +34,8 @@ pub trait Link: Send + 'static {
         None
     }
 
+    fn wait_next_cycle(&mut self) {}
+
     fn cycle(
         &mut self,
         tx: &[[u8; TX_FRAME_BYTES]],

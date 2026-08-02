@@ -1,0 +1,8 @@
+autd3-remote-server
+autd3-admin
+autd3-remote-server.service
+image-release
+remote-server.toml
+run-server
+sudoers-autd3-admin
+tune-appliance.sh

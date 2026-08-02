@@ -18,6 +18,8 @@ pub enum ConsoleCmd {
         #[arg(long)]
         debug: bool,
     },
+    /// Test the console workspace
+    Test,
     /// Clippy the console workspace
     Lint,
     /// Rustfmt the console workspace
@@ -46,7 +48,12 @@ pub enum ConsoleCmd {
     },
 }
 
-const BINARIES: &[&str] = &["autd3-console", "autd3-rs-simulator", "autd3-firmware"];
+const BINARIES: &[&str] = &[
+    "autd3-console",
+    "autd3-rs-simulator",
+    "autd3-firmware",
+    "autd3-appliance",
+];
 
 pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
     let dir = root.join("console");
@@ -58,6 +65,7 @@ pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
             }
             run("cargo", args, &dir)
         }
+        ConsoleCmd::Test => run("cargo", ["test"], &dir),
         ConsoleCmd::Lint => run(
             "cargo",
             ["clippy", "--all-targets", "--", "-D", "warnings"],
@@ -105,12 +113,18 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
     run_cargo(cargo_build_args("autd3-firmware", target, debug), root)?;
     let fw_bin = cargo_bin(root, target, debug, "autd3-firmware");
 
+    run_cargo(cargo_build_args("autd3-appliance", target, debug), root)?;
+    let appliance_bin = cargo_bin(root, target, debug, "autd3-appliance");
+
     let out_dir = console_dir.join("target").join("distrib");
     if out_dir.exists() {
         std::fs::remove_dir_all(&out_dir)?;
     }
     std::fs::create_dir_all(&out_dir)?;
-    for (bin, name) in [&console_bin, &sim_bin, &fw_bin].into_iter().zip(BINARIES) {
+    for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &appliance_bin]
+        .into_iter()
+        .zip(BINARIES)
+    {
         copy_file(bin, &out_dir.join(exe_name(name)))?;
     }
     copy_file(&root.join("LICENSE"), &out_dir.join("LICENSE"))?;

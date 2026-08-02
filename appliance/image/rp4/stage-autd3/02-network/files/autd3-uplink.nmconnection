@@ -1,0 +1,16 @@
+[connection]
+id=autd3-uplink
+type=ethernet
+interface-name=up0
+autoconnect=true
+
+[ethernet]
+
+[ipv4]
+method=auto
+link-local=3
+may-fail=true
+dhcp-timeout=10
+
+[ipv6]
+method=link-local

@@ -4,6 +4,7 @@ mod join;
 mod link;
 mod option;
 mod osal;
+mod pacing;
 mod state_check;
 mod status;
 mod sync;

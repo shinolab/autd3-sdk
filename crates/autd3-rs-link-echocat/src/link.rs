@@ -121,6 +121,10 @@ impl Link for EchocatLink {
         Some(self.dc_clock.clone())
     }
 
+    fn wait_next_cycle(&mut self) {
+        self.master.wait_next_cycle();
+    }
+
     fn cycle(
         &mut self,
         tx: &[[u8; TX_FRAME_BYTES]],
