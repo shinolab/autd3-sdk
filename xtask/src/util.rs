@@ -366,6 +366,25 @@ where
     Ok(())
 }
 
+pub fn run_env<I, S>(program: &str, args: I, cwd: &Path, env: &[(&str, &Path)]) -> Result<()>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut command = Command::new(program);
+    command.args(args).current_dir(cwd);
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    let status = command
+        .status()
+        .with_context(|| format!("failed to spawn `{program}` (is it installed and on PATH?)"))?;
+    if !status.success() {
+        bail!("`{program}` exited with {status}");
+    }
+    Ok(())
+}
+
 pub fn run_tool<I, S>(program: &str, args: I, cwd: &Path) -> Result<()>
 where
     I: IntoIterator<Item = S>,
