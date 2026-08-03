@@ -1,0 +1,27 @@
+---
+title: Versioning
+description: Scope of SemVer, handling of deprecated APIs, firmware compatibility, and the required Rust version
+sidebar:
+  order: 1
+---
+
+This SDK follows [Semantic Versioning 2.0.0](https://semver.org/).
+
+## Firmware compatibility
+
+A given SDK version supports exactly one firmware series.
+The supported series is stated in [Firmware](/autd3-sdk/en/getting-started/setup/firmware/).
+
+## Required Rust version
+
+No minimum supported Rust version (MSRV) is guaranteed.
+The only guarantee is that the SDK builds with the latest stable Rust.
+
+## Versions across packages
+
+Keep the versions of packages used together identical.
+Mixing packages of different versions is not supported.
+
+Python and C# packages may use a four-component version, `MAJOR.MINOR.PATCH.BUILD`.
+The first three components are the SDK version; the fourth marks a binding-only fix.
+Unity packages use three components, where `MAJOR.MINOR` tracks the SDK and PATCH advances independently.

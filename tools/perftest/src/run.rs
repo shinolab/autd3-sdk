@@ -337,6 +337,7 @@ async fn run_with_link<T: IntoLink>(
             },
             rt_affinity: cli.rt_affinity.map(|id| CoreId { id }),
             validate_state: false,
+            ..Default::default()
         },
     ))
     .await
@@ -436,6 +437,7 @@ async fn run_stop_and_wait(
             Err(e @ ClientError::TransitionConstraint { .. }) => {
                 anyhow::bail!("rejected by the local transition precheck: {e}");
             }
+            Err(e @ ClientError::UnsupportedFirmware { .. }) => anyhow::bail!("{e}"),
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
                 rt_closed = true;
@@ -546,6 +548,7 @@ async fn run_streaming(
             Err(e @ ClientError::TransitionConstraint { .. }) => {
                 anyhow::bail!("rejected by the local transition precheck: {e}");
             }
+            Err(e @ ClientError::UnsupportedFirmware { .. }) => anyhow::bail!("{e}"),
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
                 rt_closed = true;

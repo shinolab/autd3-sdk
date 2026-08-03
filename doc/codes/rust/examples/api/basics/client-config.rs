@@ -27,6 +27,8 @@ async fn main() -> Result<()> {
             rt_policy: RtSchedulePolicy::Fifo,
             rt_affinity: None,
             validate_state: true,
+            require_supported_firmware: false,
+            ..Default::default()
         }
         // ANCHOR_END: config
         ;

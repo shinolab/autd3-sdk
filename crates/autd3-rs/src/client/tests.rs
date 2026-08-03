@@ -412,6 +412,77 @@ async fn read_firmware_version_returns_full_triplet() {
     assert_eq!(v[0].to_string(), "CPU: 1.2.3, FPGA: 4.5.6");
 }
 
+fn set_supported_series(slave: &Arc<StdMutex<Slave>>) {
+    let (major, minor) = FirmwareVersion::SUPPORTED_SERIES;
+    let mut s = slave.lock().unwrap();
+    s.fw_version_major = major;
+    s.fw_version_minor = minor;
+    s.fpga_version_major = major;
+    s.fpga_version_minor = minor;
+}
+
+#[tokio::test]
+async fn the_bundled_series_is_reported_as_supported() {
+    let (client, slave) = open_client().await;
+    set_supported_series(&slave);
+
+    let v = client.read_firmware_version().await.unwrap();
+    assert!(v[0].is_supported());
+}
+
+#[tokio::test]
+async fn a_foreign_series_is_reported_as_unsupported() {
+    let (client, slave) = open_client().await;
+    set_supported_series(&slave);
+    slave.lock().unwrap().fw_version_minor = FirmwareVersion::SUPPORTED_SERIES.1.wrapping_add(1);
+
+    let v = client.read_firmware_version().await.unwrap();
+    assert!(!v[0].is_supported());
+}
+
+#[tokio::test]
+async fn an_unknown_fpga_version_is_never_supported() {
+    let (client, slave) = open_client().await;
+    set_supported_series(&slave);
+    slave.lock().unwrap().supports_fpga_version = false;
+
+    let v = client.read_firmware_version().await.unwrap();
+    assert!(v[0].fpga.is_unknown());
+    assert!(!v[0].is_supported());
+}
+
+#[tokio::test]
+async fn open_rejects_a_foreign_series_only_when_the_check_is_requested() {
+    let config = ClientConfig {
+        require_supported_firmware: true,
+        ..Default::default()
+    };
+
+    let (link, slave) = slave_pair();
+    set_supported_series(&slave);
+    let client = Client::open(&geometry(1), link, config).await.unwrap();
+    client.close().await.unwrap();
+
+    let (link, slave) = slave_pair();
+    set_supported_series(&slave);
+    slave.lock().unwrap().fpga_version_major = FirmwareVersion::SUPPORTED_SERIES.0.wrapping_add(1);
+    let opened = Client::open(&geometry(1), link, config).await;
+    assert!(matches!(
+        opened.err(),
+        Some(Error::UnsupportedFirmware { device: 0, .. })
+    ));
+
+    let (link, slave) = slave_pair();
+    set_supported_series(&slave);
+    slave.lock().unwrap().fpga_version_major = FirmwareVersion::SUPPORTED_SERIES.0.wrapping_add(1);
+    Client::open(&geometry(1), link, ClientConfig::default())
+        .await
+        .unwrap()
+        .close()
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn read_firmware_version_reports_unknown_fpga_on_outdated_firmware() {
     let (client, slave) = open_client().await;
@@ -645,6 +716,7 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
+            ..Default::default()
         },
     )
     .await
@@ -816,6 +888,7 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
+            ..Default::default()
         },
     )
     .await
@@ -857,6 +930,7 @@ async fn dead_link_gives_up_whole_window_in_bounded_time() {
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
+            ..Default::default()
         },
     )
     .await
@@ -970,6 +1044,7 @@ async fn streaming_holds_window_across_stale_and_recovers() {
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
+            ..Default::default()
         },
     )
     .await
@@ -1056,6 +1131,7 @@ async fn open_rejects_oversize_max_inflight() {
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
+            ..Default::default()
         },
     )
     .await;
