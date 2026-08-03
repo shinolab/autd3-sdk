@@ -37,5 +37,10 @@ jobs:
       - name: Check dist config
         if: runner.os == 'Linux'
         run: |
-          dist generate --check
+          norm() { sed -E 's#(uses: *"?[^"@]+)@[^"[:space:]]*#\1@PIN#' "$1"; }
+          norm .github/workflows/console-release.yml > "$RUNNER_TEMP/committed.yml"
+          dist generate
+          norm .github/workflows/console-release.yml > "$RUNNER_TEMP/generated.yml"
+          diff -u "$RUNNER_TEMP/committed.yml" "$RUNNER_TEMP/generated.yml"
+          git checkout -- .github/workflows/console-release.yml
           dist plan
