@@ -1,0 +1,40 @@
+---
+title: Controller
+description: CPU が書き込んだ設定値を読み出して各モジュールへ配る Controller モジュール
+sidebar:
+  order: 11
+slug: 0.5.x/developer/fpga/controller
+---
+
+import Math from "@components/Math.astro";
+
+Controller モジュールは基本的に制御用のデータを読み出すだけのモジュールである.
+Controller Main BRAM を巡回して読み出し, `MOD_SETTINGS` / `PATTERN_SETTINGS` / `SILENCER_SETTINGS` / `SYNC_SETTINGS` / `DEBUG_SETTINGS` として各モジュールへ供給する.
+
+中身は巨大なステートマシンになっている.
+これを手で書くのは大変なので, `gen_cnt_state_machine.py` スクリプトで自動生成するようにしている.
+
+## 制御フラグ
+
+`ADDR_CTL_FLAG` (アドレス `0x00`) は CPU と FPGA の間のハンドシェイクに使われる.
+
+CPU が設定値を書き込んだ後, 対応する `*_SET` ビットを立てる.
+Controller はそのビットを検出したら設定値を読み出し, 対応するモジュールへ `UPDATE` を送ったうえで, ビットをクリアする.
+CPU 側はビットがクリアされるまでポーリングして待つ (`set_and_wait_update`).
+
+| ビット | 名前              | 意味                            |
+| ------ | ----------------- | ------------------------------- |
+| 0      | `MOD_SET`         | Modulation 設定の更新要求       |
+| 1      | `PATTERN_SET`     | Emission 設定の更新要求         |
+| 2      | `SILENCER_SET`    | Silencer 設定の更新要求         |
+| 4      | `DEBUG_SET`       | GPIO Output 設定の更新要求      |
+| 5      | `SYNC_SET`        | 同期の更新要求                  |
+| 8-11   | `GPIO_IN_0`-`3`   | GPIO 入力のソフトウェアエミュレート |
+| 13     | `FORCE_FAN`       | ファンの強制動作                |
+
+`GPIO_IN_*` は実際の GPIO 入力ピンと論理和が取られる.
+これにより, GPIO による遷移をソフトウェアからテストできる.
+
+## バージョン番号
+
+Controller は起動時に自身のバージョン番号 (`params.svh` の `VersionNumMajor` / `VersionNumMinor` / `VersionNumPatch`) を Controller Main BRAM のアドレス <Math tex="\text{0x02}" />--<Math tex="\text{0x04}" /> へ書き込む.

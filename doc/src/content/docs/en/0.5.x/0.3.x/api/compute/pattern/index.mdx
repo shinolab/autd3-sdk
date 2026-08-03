@@ -1,0 +1,31 @@
+---
+title: Pattern
+description: Pattern computes the phase and amplitude emission of each
+  transducer to form a sound field
+sidebar:
+  order: 1
+slug: 0.5.x/en/0.3.x/api/compute/pattern
+---
+
+import Math from "@components/Math.astro";
+import Install from "@components/Install.astro";
+
+Pattern computation is provided in a package separate from the main library, and includes representative sound field computation utilities such as a single focal point, a plane wave, and a Bessel beam.
+
+<Install rust="autd3-rs-pattern" python="autd3-pattern" csharp="AUTD3.Pattern" />
+
+## Function List
+
+* [focus](/autd3-sdk/en/0.5.x/0.3.x/api/compute/pattern/focus/) — single focal point
+* [plane](/autd3-sdk/en/0.5.x/0.3.x/api/compute/pattern/plane/) — plane wave
+* [bessel](/autd3-sdk/en/0.5.x/0.3.x/api/compute/pattern/bessel/) — Bessel beam
+* [uniform](/autd3-sdk/en/0.5.x/0.3.x/api/compute/pattern/uniform/) — uniform over all transducers
+* [null](/autd3-sdk/en/0.5.x/0.3.x/api/compute/pattern/null/) — no output
+
+Each function also has a `*_device` variant that computes for only a single device, and a `*_transducer` variant that computes for only a single transducer element (for example, `focus_device` / `focus_transducer`).
+
+## Wavelength
+
+The phase computation requires the wavelength <Math tex="\lambda = c / f" />.
+The wavelength can be obtained from the sound speed <Math tex="c" /> via `autd3_rs_pattern::wavelength(sound_speed)`.
+At a sound speed of 340 m/s (the speed of sound in air at a room temperature of about 15°C), <Math tex="\lambda \approx 8.5\,\mathrm{mm}" />.

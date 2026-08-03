@@ -1,6 +1,6 @@
 [package]
 name = "console"
-version = "0.4.0"
+version = "0.5.0"
 description = "GUI console that launches AUTD3 tools (simulator / firmware / TwinCAT setup)"
 repository = "https://github.com/shinolab/autd3-sdk"
 license = "MIT"

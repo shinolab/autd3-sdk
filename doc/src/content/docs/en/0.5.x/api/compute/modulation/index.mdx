@@ -1,0 +1,32 @@
+---
+title: Modulation
+description: Amplitude modulation (AM) that modulates the output amplitude over time
+sidebar:
+  order: 20
+slug: en/0.5.x/api/compute/modulation
+---
+
+import Math from "@components/Math.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+Modulation is an amplitude modulation (AM) feature that modulates the output amplitude of each transducer over time.
+It applies a coefficient sequence common to all transducers while sampling it at a fixed period, thereby varying the intensity of the sound field produced by the Pattern over time.
+
+<Install rust="autd3-rs-modulation" python="autd3-modulation" csharp="AUTD3.Modulation" />
+
+Each sample is an 8 bit amplitude coefficient <Math tex="0 \le m \le 255" />, which is multiplied by the transducer output amplitude and then divided by 255.
+
+## SamplingConfig
+
+Each sample in the buffer is applied in order at the period of the `SamplingConfig` passed to `Modulation::new`.
+The `sampling_config` held by the Option of a waveform computation function determines the length of the waveform (number of samples), and it must match the `SamplingConfig` passed to `Modulation::new`.
+For example, with `SamplingConfig::FREQ_4K` (4 kHz, sampling period 250 µs), one period of a 200 Hz sine wave is 20 samples.
+
+## Function List
+
+* [constant](/autd3-sdk/en/0.5.x/api/compute/modulation/constant/) — constant amplitude (no modulation)
+* [sine](/autd3-sdk/en/0.5.x/api/compute/modulation/sine/) — sine wave
+* [square](/autd3-sdk/en/0.5.x/api/compute/modulation/square/) — square wave
+* [fourier](/autd3-sdk/en/0.5.x/api/compute/modulation/fourier/) — synthesis of multiple sine waves
+* [radiation\_pressure](/autd3-sdk/en/0.5.x/api/compute/modulation/radiation/) — radiation pressure correction

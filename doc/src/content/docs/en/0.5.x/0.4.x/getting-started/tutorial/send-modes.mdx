@@ -1,0 +1,40 @@
+---
+title: Send Modes
+description: Choosing between stop-and-wait and streaming
+sidebar:
+  order: 9
+slug: 0.5.x/en/0.4.x/getting-started/tutorial/send-modes
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+The `Frames` obtained from `DatagramBuilder::build` may be split into multiple `Frame`s.
+There are two ways to send a `Frame`, with a trade-off between reliability and throughput.
+
+Below, the two send methods are compared using an example that moves the focal point along a circle.
+The focal positions to move to are prepared in advance as `targets`.
+
+<CodeTabs rust={"// Prepare 1000 focus points along a circle 150 mm above the array center.\nlet center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);\nlet targets: Vec<Point3<f32>> = (0..NUM_POINTS)\n    .map(|i| {\n        let theta = 2.0 * PI * i as f32 / NUM_POINTS as f32;\n        center\n            + offset(\n                RADIUS_MM * theta.cos() * mm,\n                RADIUS_MM * theta.sin() * mm,\n                0.0 * mm,\n            )\n    })\n    .collect();"} python={"# Prepare 1000 focus points along a circle 150 mm above the array center.\ncenter = geometry.center() + np.array([0.0, 0.0, 150.0])\ntargets = [\n    center\n    + np.array(\n        [\n            RADIUS_MM * math.cos(2.0 * math.pi * i / NUM_POINTS),\n            RADIUS_MM * math.sin(2.0 * math.pi * i / NUM_POINTS),\n            0.0,\n        ]\n    )\n    for i in range(NUM_POINTS)\n]"} csharp={"// Prepare 1000 focus points along a circle 150 mm above the array center.\nvar center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);\nvar targets = new Vector3[NumPoints];\nfor (var i = 0; i < NumPoints; i++)\n{\n    var theta = 2.0f * MathF.PI * i / NumPoints;\n    targets[i] = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0.0f);\n}"} />
+
+## stop-and-wait
+
+A method that waits for a response after each frame before sending the next.
+It uses `send_checked`.
+Because it proceeds to the next frame only after confirming that each update has been reliably applied, it is reliable, but throughput is low because a round-trip latency is incurred on every frame.
+
+<CodeTabs rust={"let mut patterns = geometry.pattern_buffer();\nfor &target in targets {\n    autd3_rs_pattern::focus(\n        geometry,\n        target,\n        wavelength,\n        &autd3_rs_pattern::FocusOption::default(),\n        &mut patterns,\n    );\n    let mut builder = client.datagram_builder();\n    builder.push(Pattern::new(&patterns));\n    for frame in &builder.build()? {\n        client.send_checked(frame).await?;\n    }\n}"} python={"patterns = geometry.pattern_buffer()\nfor target in targets:\n    pattern.focus(\n        geometry,\n        target,\n        wavelength,\n        pattern.FocusOption(),\n        patterns,\n    )\n    builder = client.datagram_builder()\n    builder.push(Pattern(patterns))\n    for frame in builder.build():\n        await client.send_checked(frame)"} csharp={"var patterns = geometry.PatternBuffer();\nforeach (var target in targets)\n{\n    Pattern.Focus(\n        geometry,\n        target,\n        wavelength,\n        new FocusOption(),\n        patterns\n    );\n    var builder = client.DatagramBuilder();\n    builder.Push(new Pattern(patterns));\n    foreach (var frame in builder.Build())\n    {\n        await client.SendCheckedAsync(frame);\n    }\n}"} />
+
+## streaming
+
+A method that sends one frame after another without waiting for responses, and collects the responses together later.
+`send` returns a `ResponseFuture` at the point the frame is enqueued, and awaiting that `ResponseFuture` yields the device's response (`Response`).
+`Response` can be validated for device errors with `check`.
+The maximum size of the send queue is `MAX_INFLIGHT (127)`.
+`ResponseFuture`s are held in FIFO order, and when the queue is full the oldest response is collected.
+Because it does not wait for a response on every frame, throughput is high.
+
+<CodeTabs rust={"let mut patterns = geometry.pattern_buffer();\nlet mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(MAX_INFLIGHT);\nfor &target in targets {\n    autd3_rs_pattern::focus(\n        geometry,\n        target,\n        wavelength,\n        &autd3_rs_pattern::FocusOption::default(),\n        &mut patterns,\n    );\n    let mut builder = client.datagram_builder();\n    builder.push(Pattern::new(&patterns));\n    for frame in &builder.build()? {\n        if pending.len() >= MAX_INFLIGHT {\n            pending.pop_front().expect(\"non-empty\").await?.check()?;\n        }\n        pending.push_back(client.send(frame).await?);\n    }\n}\n// Drain the remaining responses.\nwhile let Some(fut) = pending.pop_front() {\n    fut.await?.check()?;\n}"} python={"patterns = geometry.pattern_buffer()\npending = collections.deque()\nfor target in targets:\n    pattern.focus(\n        geometry,\n        target,\n        wavelength,\n        pattern.FocusOption(),\n        patterns,\n    )\n    builder = client.datagram_builder()\n    builder.push(Pattern(patterns))\n    for frame in builder.build():\n        if len(pending) >= MAX_INFLIGHT:\n            (await pending.popleft()).check()\n        pending.append(await client.send(frame))\n# Drain the remaining responses.\nwhile pending:\n    (await pending.popleft()).check()"} csharp={"var patterns = geometry.PatternBuffer();\nvar pending = new Queue<ResponseToken>();\nforeach (var target in targets)\n{\n    Pattern.Focus(\n        geometry,\n        target,\n        wavelength,\n        new FocusOption(),\n        patterns\n    );\n    var builder = client.DatagramBuilder();\n    builder.Push(new Pattern(patterns));\n    foreach (var frame in builder.Build())\n    {\n        if (pending.Count >= Client.MaxInflight)\n        {\n            (await pending.Dequeue()).Check();\n        }\n        pending.Enqueue(await client.SendAsync(frame));\n    }\n}\n// Drain the remaining responses.\nwhile (pending.Count > 0)\n{\n    (await pending.Dequeue()).Check();\n}"} />
+
+For commands that must be applied reliably one at a time, such as initialization and configuration, use stop-and-wait.
+For situations where throughput matters, such as updating the focal point at high frequency, use streaming.
+For details on `send` / `send_checked`, refer to [Client](/autd3-sdk/en/0.5.x/0.4.x/api/basics/client/).

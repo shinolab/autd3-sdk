@@ -18,3 +18,6 @@ src/content/versions/*
 !src/content/versions/0.4.x.json
 !src/content/docs/0.4.x/
 !src/content/docs/*/0.4.x/
+!src/content/versions/0.5.x.json
+!src/content/docs/0.5.x/
+!src/content/docs/*/0.5.x/

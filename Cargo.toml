@@ -36,7 +36,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -87,21 +87,21 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
     "env-filter",
 ] }
 
-autd3-rs = { version = "0.4.0", path = "crates/autd3-rs" }
+autd3-rs = { version = "0.5.0", path = "crates/autd3-rs" }
 autd3-cpu-wire = { version = "0.4.0", path = "firmware/cpu/wire" }
 autd3-cpu-fw = { version = "0.4.0", path = "firmware/cpu/fw" }
-autd3-rs-appliance = { version = "0.4.0", path = "appliance/lib" }
-autd3-rs-core = { version = "0.4.0", path = "crates/autd3-rs-core" }
-autd3-rs-firmware-emulator = { version = "0.4.0", path = "crates/autd3-rs-firmware-emulator" }
-autd3-rs-pattern = { version = "0.4.0", path = "crates/autd3-rs-pattern" }
-autd3-rs-pattern-holo = { version = "0.4.0", path = "crates/autd3-rs-pattern-holo" }
-autd3-rs-link-echocat = { version = "0.4.0", path = "crates/autd3-rs-link-echocat" }
-autd3-rs-link-ethercrab = { version = "0.4.0", path = "crates/autd3-rs-link-ethercrab" }
-autd3-rs-link-nop = { version = "0.4.0", path = "crates/autd3-rs-link-nop" }
-autd3-rs-link-remote = { version = "0.4.0", path = "crates/autd3-rs-link-remote" }
-autd3-rs-link-soem = { version = "0.4.0", path = "crates/autd3-rs-link-soem" }
-autd3-rs-link-twincat = { version = "0.4.0", path = "crates/autd3-rs-link-twincat" }
-autd3-rs-modulation = { version = "0.4.0", path = "crates/autd3-rs-modulation" }
+autd3-rs-appliance = { version = "0.5.0", path = "appliance/lib" }
+autd3-rs-core = { version = "0.5.0", path = "crates/autd3-rs-core" }
+autd3-rs-firmware-emulator = { version = "0.5.0", path = "crates/autd3-rs-firmware-emulator" }
+autd3-rs-pattern = { version = "0.5.0", path = "crates/autd3-rs-pattern" }
+autd3-rs-pattern-holo = { version = "0.5.0", path = "crates/autd3-rs-pattern-holo" }
+autd3-rs-link-echocat = { version = "0.5.0", path = "crates/autd3-rs-link-echocat" }
+autd3-rs-link-ethercrab = { version = "0.5.0", path = "crates/autd3-rs-link-ethercrab" }
+autd3-rs-link-nop = { version = "0.5.0", path = "crates/autd3-rs-link-nop" }
+autd3-rs-link-remote = { version = "0.5.0", path = "crates/autd3-rs-link-remote" }
+autd3-rs-link-soem = { version = "0.5.0", path = "crates/autd3-rs-link-soem" }
+autd3-rs-link-twincat = { version = "0.5.0", path = "crates/autd3-rs-link-twincat" }
+autd3-rs-modulation = { version = "0.5.0", path = "crates/autd3-rs-modulation" }
 
 [workspace.lints.rust]
 warnings = "deny"

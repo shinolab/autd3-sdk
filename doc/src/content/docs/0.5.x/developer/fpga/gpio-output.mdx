@@ -1,0 +1,57 @@
+---
+title: GPIO Output
+description: FPGA 内部の状態をデバッグ用に GPIO ピンへ出力するモジュール
+sidebar:
+  order: 10
+slug: 0.5.x/developer/fpga/gpio-output
+---
+
+import Math from "@components/Math.astro";
+
+| Name           | In/Out | Width | Description                     |
+| -------------- | ------ | ----- | ------------------------------- |
+| CLK            | In     | 1     | メインクロック                  |
+| DEBUG\_SETTINGS | In     | -     |                                 |
+| ├─ UPDATE      | In     | 1     | 設定更新フラグ                  |
+| └─ VALUE\[n]    | In     | 64    | 第 n ピンの設定値               |
+| TIME\_CNT       | In     | 9     | 超音波周期カウンタ              |
+| SYS\_TIME       | In     | 57    | システム時刻                    |
+| SYNC\_TIME\_DIFF | In     | 14    | 時刻補正の残量                  |
+| PWM\_OUT        | In     | 1x249 | PWM 信号                        |
+| THERMO         | In     | 1     | 温度センサ                      |
+| FORCE\_FAN      | In     | 1     | ファン強制動作フラグ            |
+| SYNC           | In     | 1     | Sync0 検出フラグ                |
+| PATTERN\_BANK   | In     | 1     | 現在の Emission バンク          |
+| MOD\_BANK       | In     | 1     | 現在の Modulation バンク        |
+| PATTERN\_IDX    | In     | 16    | 現在の Emission インデックス    |
+| MOD\_IDX        | In     | 16    | 現在の Modulation インデックス  |
+| PATTERN\_CYCLE  | In     | 16    | 現在の Emission 周期            |
+| GPIO\_OUT       | Out    | 4     | GPIO 出力                       |
+
+このモジュールは, FPGA 内部の状態を 4 本の GPIO 出力ピンへ出力する.
+主にオシロスコープ等で内部状態を観測するためのデバッグ機能である.
+
+各ピンの出力は `DEBUG_SETTINGS.VALUE[n]` (<Math tex="\SI{64}{bit}" />) で独立に設定する.
+上位 <Math tex="\SI{8}{bit}" /> が出力タイプ, 下位 <Math tex="\SI{56}{bit}" /> がその引数である.
+
+| 出力タイプ        | 値     | 出力                                                       |
+| ----------------- | ------ | ---------------------------------------------------------- |
+| `NONE`            | `0x00` | 常に 0                                                     |
+| `BASE_SIG`        | `0x01` | 超音波周期の前半で 1 (`TIME_CNT` の最上位ビットの反転)     |
+| `THERMO`          | `0x02` | 温度センサの出力                                           |
+| `FORCE_FAN`       | `0x03` | ファン強制動作フラグ                                       |
+| `SYNC`            | `0x10` | Sync0 信号を検出したクロックで 1                           |
+| `MOD_BANK`        | `0x20` | 現在の Modulation バンク                                   |
+| `MOD_IDX`         | `0x21` | Modulation のインデックスが引数と一致する間 1              |
+| `PATTERN_BANK`    | `0x50` | 現在の Emission バンク                                     |
+| `PATTERN_IDX`     | `0x51` | Emission のインデックスが引数と一致する間 1                |
+| `IS_PATTERN_MODE` | `0x52` | Emission の周期が 0 でない (STM として動作している) 間 1   |
+| `SYS_TIME_EQ`     | `0x60` | `SYS_TIME` の上位 48 bit が引数と一致する間 1              |
+| `SYNC_DIFF`       | `0x70` | 時刻補正の残量が 0 でない間 1                              |
+| `PWM_OUT`         | `0xE0` | 引数で指定した振動子の PWM 出力                            |
+| `DIRECT`          | `0xF0` | 引数の最下位ビットをそのまま出力                           |
+
+:::note
+`SYS_TIME_EQ` は `SYS_TIME` の下位 <Math tex="\SI{9}{bit}" /> を切り捨てた値と比較する.
+引数として渡す値はこのスケールに合わせる必要があり, クライアント側で変換される.
+:::

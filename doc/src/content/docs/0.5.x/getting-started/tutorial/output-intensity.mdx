@@ -1,0 +1,24 @@
+---
+title: 出力音圧の制御
+description: Intensity と Modulation で出力音圧を制御する
+sidebar:
+  order: 6
+slug: 0.5.x/getting-started/tutorial/output-intensity
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`focus` などの Pattern には出力強度を 8 bit で制御する `intensity` パラメータがある.
+例えば, 以下のコードでは, この強度を最大値の約半分に設定している.
+
+<CodeTabs rust={"let mut patterns = geometry.pattern_buffer();\nautd3_rs_pattern::focus(\n    &geometry,\n    target,\n    wavelength,\n    &autd3_rs_pattern::FocusOption {\n        intensity: Intensity(0x80),\n        ..Default::default()\n    },\n    &mut patterns,\n);"} python={"patterns = geometry.pattern_buffer()\npattern.focus(\n    geometry,\n    target,\n    wavelength,\n    pattern.FocusOption(intensity=Intensity(0x80)),\n    patterns,\n)"} csharp={"var patterns = geometry.PatternBuffer();\nPattern.Focus(\n    geometry,\n    target,\n    wavelength,\n    new FocusOption(intensity: new Intensity(0x80)),\n    patterns\n);"} />
+
+AUTD3 は出力音圧を PWM で制御しており, デフォルトでは `intensity` パラメータと出力音圧がおおよそ線形に比例するように変換される.
+振動子の個体差などにより厳密な線形性は保証されないが, `intensity` に対して出力音圧は単調増加すると考えてよい.
+
+PWM やパルス幅への変換式, およびその変更方法の詳細は [Pulse Width と出力音圧](/autd3-sdk/0.5.x/guide/pulse-width/) を参照されたい.
+
+## Modulationによる調整
+
+`Modulation` は`Pattern`の`intensity`パラメータを時間的に変調することで作用する.
+したがって, 実際の`intensity`としては, `Pattern` 等で指定する`intensity`パラメータに`Modulation` による変調データ (8 bit) をかけ合わせ 255 で割った値が使用される.

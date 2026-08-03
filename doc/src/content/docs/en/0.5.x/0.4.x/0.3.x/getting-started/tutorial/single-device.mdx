@@ -1,0 +1,103 @@
+---
+title: Single Device
+description: Generate a focal point with a single AUTD3
+sidebar:
+  order: 1
+slug: 0.5.x/0.4.x/en/0.3.x/getting-started/tutorial/single-device
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+
+This section explains how to drive a single device.
+
+## Installing the required software
+
+This tutorial uses [EtherCrab](https://github.com/ethercrab-rs/ethercrab).
+If you are on Windows, install [Npcap](https://npcap.com/) in "**WinPcap API-compatible Mode**".
+
+The following is an example that generates a focal point 150 mm directly above the center of the array with a single AUTD3 device and applies a 200 Hz sine-wave AM.
+
+<CodeTabs>
+  <Fragment slot="rust">
+    First, create an appropriate project and add the autd3 library as a dependency.
+    Also add the autd3-link-ethercrab library, which handles communication with the device.
+    An asynchronous runtime is also required, so add tokio as well.
+
+    ```
+    cargo new --bin autd3-sample && cd autd3-sample
+    cargo add autd3-rs
+    cargo add autd3-rs-link-ethercrab
+    cargo add tokio --features full
+    ```
+
+    Next, edit the `src/main.rs` file to look like the following.
+
+    <Code code={"use autd3_rs::commands::{Modulation, Pattern, SetSilencer};\nuse autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{Hz, m, mm, s};\nuse autd3_rs::value::SamplingConfig;\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_ethercrab::EtherCrabLinkOption;\n\n#[tokio::main(flavor = \"multi_thread\")]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {\n    // Define a geometry consisting of a single AUTD3 device.\n    let geometry = Geometry::new(vec![Autd3::default()]);\n\n    // Open the client over an EtherCrab link.\n    let client = Client::open(\n        &geometry,\n        EtherCrabLinkOption::default(),\n        ClientConfig::default(),\n    )\n    .await?;\n\n    // Generate a focus 150 mm above the array center.\n    let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);\n    let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);\n    let mut patterns = geometry.pattern_buffer();\n    autd3_rs_pattern::focus(\n        &geometry,\n        target,\n        wavelength,\n        &autd3_rs_pattern::FocusOption::default(),\n        &mut patterns,\n    );\n\n    // Apply a 200 Hz sine-wave AM.\n    let mut modulation = autd3_rs_modulation::modulation_buffer();\n    autd3_rs_modulation::sine(\n        200 * Hz,\n        &autd3_rs_modulation::SineOption {\n            sampling_config: SamplingConfig::FREQ_4K,\n            ..Default::default()\n        },\n        &mut modulation,\n    )?;\n\n    let mut builder = client.datagram_builder();\n    builder\n        .push(SetSilencer::default())\n        .push(Pattern::new(&patterns))\n        .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation));\n    let frames = builder.build()?;\n    for frame in &frames {\n        client.send_checked(frame).await?;\n    }\n\n    tokio::signal::ctrl_c().await?;\n\n    client.stop().await?;\n    client.close().await?;\n\n    Ok(())\n}"} lang="rust" />
+
+    Then, run it.
+
+    ```
+    cargo run --release
+    ```
+
+    On Linux and macOS, administrator privileges may be required to use EtherCrab. In that case, use:
+
+    ```
+    cargo build --release && sudo ./target/release/autd3_sample
+    ```
+  </Fragment>
+
+  <Fragment slot="python">
+    First, create an appropriate directory, prepare a virtual environment, and add the autd3 library.
+    Also add autd3-link-ethercrab for communication with the device, autd3-pattern for focus computation, and autd3-modulation for AM modulation.
+
+    ```
+    mkdir autd3-sample && cd autd3-sample
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install autd3 autd3-pattern autd3-modulation autd3-link-ethercrab
+    ```
+
+    Next, make the `main.py` file look like the following.
+
+    <Code code={"import asyncio\n\nimport numpy as np\n\nimport autd3_link_ethercrab as ethercrab\nimport autd3_modulation as modulation\nimport autd3_pattern as pattern\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import Modulation, Pattern, SetSilencer\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import Hz, m, s\nfrom autd3.value import SamplingConfig\n\n\n\nasync def main() -> None:\n    # Define a geometry consisting of a single AUTD3 device.\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n\n    # Open the client over an EtherCrab link.\n    client = await Client.open(\n        geometry,\n        ethercrab.EtherCrabLinkOption(),\n        ClientConfig(),\n    )\n\n    # Generate a focus 150 mm above the array center.\n    target = geometry.center() + np.array([0.0, 0.0, 150.0])\n    wavelength = pattern.wavelength(340 * m / s)\n    patterns = geometry.pattern_buffer()\n    pattern.focus(\n        geometry,\n        target,\n        wavelength,\n        pattern.FocusOption(),\n        patterns,\n    )\n\n    # Apply a 200 Hz sine-wave AM.\n    mod_buf = modulation.modulation_buffer()\n    modulation.sine(\n        200 * Hz,\n        modulation.SineOption(sampling_config=SamplingConfig.FREQ_4K),\n        mod_buf,\n    )\n\n    builder = client.datagram_builder()\n    builder.push(SetSilencer())\n    builder.push(Pattern(patterns))\n    builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))\n    for frame in builder.build():\n        await client.send_checked(frame)\n\n    try:\n        await asyncio.Event().wait()\n    finally:\n        await client.stop()\n        await client.close()\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())"} lang="python" />
+
+    Then, run it.
+
+    ```
+    python3 main.py
+    ```
+
+    On Linux and macOS, administrator privileges may be required to use EtherCrab. In that case, use:
+
+    ```
+    sudo .venv/bin/python3 main.py
+    ```
+  </Fragment>
+
+  <Fragment slot="csharp">
+    First, create an appropriate directory and add the autd3 library.
+    Also add AUTD3.Link.Ethercrab for communication with the device, AUTD3.Pattern for focus computation, and AUTD3.Modulation for AM modulation.
+
+    ```
+    dotnet new console -o autd3-sample && cd autd3-sample
+    dotnet add package AUTD3
+    dotnet add package AUTD3.Pattern
+    dotnet add package AUTD3.Modulation
+    dotnet add package AUTD3.Link.Ethercrab
+    ```
+
+    Next, make the `Program.cs` file look like the following.
+
+    <Code code={"using System;\nusing System.Numerics;\nusing System.Threading;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing static AUTD3.Units;\n\n// Define a geometry consisting of a single AUTD3 device.\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\n\n// Open the client over an EtherCrab link.\nvar client = await Client.OpenAsync(\n    geometry,\n    new EtherCrabLinkOption(),\n    new ClientConfig()\n);\n\n// Generate a focus 150 mm above the array center.\nvar target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);\nvar wavelength = Pattern.Wavelength(340.0f * m / s);\nvar patterns = geometry.PatternBuffer();\nPattern.Focus(\n    geometry,\n    target,\n    wavelength,\n    new FocusOption(),\n    patterns\n);\n\n// Apply a 200 Hz sine-wave AM.\nvar modulation = Modulation.ModulationBuffer();\nModulation.Sine(\n    200 * Hz,\n    new SineOption(samplingConfig: SamplingConfig.Freq4k),\n    modulation\n);\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new SetSilencer());\nbuilder.Push(new Pattern(patterns));\nbuilder.Push(new Modulation(SamplingConfig.Freq4k, modulation));\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nusing var cts = new CancellationTokenSource();\nConsole.CancelKeyPress += (_, e) =>\n{\n    e.Cancel = true;\n    cts.Cancel();\n};\n\ntry\n{\n    await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token);\n}\ncatch (OperationCanceledException)\n{\n}\nfinally\n{\n    await client.StopAsync();\n    await client.CloseAsync();\n}"} lang="csharp" />
+
+    Then, run it.
+
+    ```
+    dotnet run -c Release
+    ```
+
+    On Linux and macOS, administrator privileges may be required to use EtherCrab.
+  </Fragment>
+</CodeTabs>

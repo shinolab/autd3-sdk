@@ -235,7 +235,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-cpu-wire",
  "autd3-rs-core",
@@ -250,7 +250,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-cpu-wire",
  "chrono",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-emulator"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-rs",
  "autd3-rs-core",
@@ -277,7 +277,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-firmware-emulator"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-cpu-fw",
  "autd3-rs-core",
@@ -285,7 +285,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-echocat"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-rs-core",
  "cc",
@@ -298,7 +298,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-ethercrab"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-rs-core",
  "cc",
@@ -316,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-nop"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-rs-core",
  "autd3-rs-firmware-emulator",
@@ -324,7 +324,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-remote"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-rs-core",
  "mdns-sd",
@@ -336,7 +336,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-twincat"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "ads",
  "autd3-rs-core",
@@ -347,7 +347,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-modulation"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-rs-core",
  "thiserror 2.0.18",
@@ -355,14 +355,14 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-rs-core",
 ]
 
 [[package]]
 name = "autd3-rs-pattern-holo"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "autd3-rs-core",
  "nalgebra",

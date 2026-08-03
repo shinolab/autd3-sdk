@@ -1,0 +1,39 @@
+---
+title: DatagramBuilder
+description: The DatagramBuilder that assembles commands and converts them into Frames
+sidebar:
+  order: 3
+slug: en/0.5.x/api/basics/datagram-builder
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`DatagramBuilder` is a struct that accumulates the commands to send and converts them into `Frames`.
+It is obtained via `Client::datagram_builder`.
+
+## API
+
+`push` accumulates commands, and `build` converts them into `Frames`.
+The resulting `Frames` is split into multiple `Frame`s; send them one frame at a time with `Client::send` / `send_checked`.
+
+<CodeTabs rust={"let mut builder = client.datagram_builder();\nbuilder.push(SetSilencer::default());\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}"} python={"builder = client.datagram_builder()\nbuilder.push(SetSilencer())\nframes = builder.build()\nfor frame in frames:\n    await client.send_checked(frame)"} csharp={"var builder = client.DatagramBuilder();\nbuilder.Push(new SetSilencer());\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}"} />
+
+| Method              | Description                                         |
+| ------------------- | -------------------------------------------------- |
+| `push(cmd)`         | Accumulate a command common to all devices         |
+| `push_each(assign)` | Accumulate a different command per device (see below) |
+| `build()`           | Convert the accumulated commands into `Frames`     |
+
+## push\_each
+
+`push_each` takes a closure that receives a device and assigns a different command per device.
+In Rust it is `FnMut(&Device) -> Option<C>`, in Python `Callable[[Device], Command | None]`, and in C# `Func<Device, ICommand?>`.
+For a device where `None` is returned, nothing is assigned in that step.
+
+<CodeTabs rust={"let mut builder = client.datagram_builder();\nbuilder.push_each(|device| {\n    Some(if device.idx() % 2 == 0 {\n        Pattern::new(&left)\n    } else {\n        Pattern::new(&right)\n    })\n});\nlet frames = builder.build()?;"} python={"builder = client.datagram_builder()\nbuilder.push_each(lambda device: Pattern(left if device.idx() % 2 == 0 else right))\nframes = builder.build()"} csharp={"var builder = client.DatagramBuilder();\nbuilder.PushEach(device => device.Idx % 2 == 0\n    ? new Pattern(left)\n    : new Pattern(right));\nvar frames = builder.Build();"} />
+
+In Rust, the return values of the closure must all be the same type.
+To mix commands of different types, either unify them into a `BoxedCommand` with `Command::boxed`, or call `push_each` once per type.
+Because Python is dynamically typed, commands of different types can be returned per device as-is.
+
+<CodeTabs rust={"let mut builder = client.datagram_builder();\nbuilder.push_each(|device| {\n    Some(if device.idx() % 2 == 0 {\n        Pattern::new(&left).boxed()\n    } else {\n        Modulation::new(SamplingConfig::FREQ_4K, &modulation).boxed()\n    })\n});\nlet frames = builder.build()?;"} />

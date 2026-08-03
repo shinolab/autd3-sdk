@@ -1,0 +1,56 @@
+---
+title: パフォーマンス Tips
+description: スループットを上げるための実践的な指針
+sidebar:
+  order: 4
+slug: 0.5.x/guide/performance
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+高頻度に焦点を更新するなど, スループットが要求される場面で性能を引き出すための指針.
+
+## 複合コマンドと低レベルコマンド
+
+[Pattern](/autd3-sdk/0.5.x/api/command/pattern/) はバッファ書き込み・再生設定・バンク切替をまとめて行う複合コマンドだが, これらは 1 フレームに融合して送られる.
+そのためフレーム数は低レベルコマンド 1 つと同じであり, 単に焦点を更新するだけなら `Pattern` をそのまま高頻度で送ってよい.
+
+ただし, [バンク](/autd3-sdk/0.5.x/getting-started/tutorial/bank/)を設定してしまえば, 毎フレームの焦点更新で必要なのはバッファの書き換え, すなわち `WritePatternBuffer` だけである.
+`WritePatternBuffer` のみを送ると, 毎フレームの再生設定とバンク切替を省けるため, デバイス側の 1 フレームあたりの処理が軽くなる.
+
+最初に一度だけバンクを設定しておく. (最初は`Pattern`を使っても良い.)
+
+<CodeTabs rust={"let mut builder = client.datagram_builder();\nbuilder\n    .push(SetSilencer::disable())\n    .push(WritePatternBuffer {\n        bank: PatternBank::B0,\n        index: 0,\n        emissions: &patterns,\n    })\n    .push(ConfigPattern {\n        bank: PatternBank::B0,\n        config: SamplingConfig::FREQ_40K,\n        size: 1,\n        loop_behavior: LoopBehavior::Infinite,\n    });\nfor frame in &builder.build()? {\n    client.send_checked(frame).await?;\n}"} python={"builder = client.datagram_builder()\nbuilder.push(SetSilencer.disable())\nbuilder.push(\n    WritePatternBuffer(\n        bank=PatternBank.B0,\n        index=0,\n        emissions=patterns,\n    )\n)\nbuilder.push(\n    ConfigPattern(\n        bank=PatternBank.B0,\n        config=SamplingConfig.FREQ_40K,\n        size=1,\n        loop_behavior=LoopBehavior.Infinite,\n    )\n)\nfor frame in builder.build():\n    await client.send_checked(frame)"} csharp={"var builder = client.DatagramBuilder();\nbuilder.Push(SetSilencer.Disable());\nbuilder.Push(new WritePatternBuffer(\n    bank: PatternBank.B0,\n    index: 0,\n    emissions: patterns\n));\nbuilder.Push(new ConfigPattern(\n    bank: PatternBank.B0,\n    config: SamplingConfig.Freq40k,\n    size: 1,\n    loopBehavior: LoopBehavior.Infinite\n));\nforeach (var frame in builder.Build())\n{\n    await client.SendCheckedAsync(frame);\n}"} />
+
+以降のホットループでは `WritePatternBuffer` のみを送る.
+
+<CodeTabs rust={"let mut buf = Frames::default();\nlet mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(MAX_INFLIGHT);\nfor i in 0..NUM_POINTS {\n    let theta = 2.0 * PI * i as f32 / NUM_POINTS as f32;\n    let target = center\n        + offset(\n            RADIUS_MM * theta.cos() * mm,\n            RADIUS_MM * theta.sin() * mm,\n            0.0 * mm,\n        );\n    autd3_rs_pattern::focus(\n        &geometry,\n        target,\n        wavelength,\n        &autd3_rs_pattern::FocusOption::default(),\n        &mut patterns,\n    );\n\n    let mut builder = client.datagram_builder();\n    builder.push(WritePatternBuffer {\n        bank: PatternBank::B0,\n        index: 0,\n        emissions: &patterns,\n    });\n    builder.build_into(&mut buf)?;\n    for frame in &buf {\n        if pending.len() >= MAX_INFLIGHT {\n            pending.pop_front().expect(\"non-empty\").await?.check()?;\n        }\n        pending.push_back(client.send(frame).await?);\n    }\n}\nwhile let Some(fut) = pending.pop_front() {\n    fut.await?.check()?;\n}"} python={"pending = collections.deque()\nfor i in range(NUM_POINTS):\n    theta = 2.0 * math.pi * i / NUM_POINTS\n    target = center + np.array([RADIUS_MM * math.cos(theta), RADIUS_MM * math.sin(theta), 0.0])\n    pattern.focus(\n        geometry,\n        target,\n        wavelength,\n        pattern.FocusOption(),\n        patterns,\n    )\n    builder = client.datagram_builder()\n    builder.push(\n        WritePatternBuffer(\n            bank=PatternBank.B0,\n            index=0,\n            emissions=patterns,\n        )\n    )\n    for frame in builder.build():\n        if len(pending) >= MAX_INFLIGHT:\n            (await pending.popleft()).check()\n        pending.append(await client.send(frame))\nwhile pending:\n    (await pending.popleft()).check()"} csharp={"var pending = new Queue<ResponseToken>();\nfor (var i = 0; i < NumPoints; i++)\n{\n    var theta = 2.0f * MathF.PI * i / NumPoints;\n    var target = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0.0f);\n    Pattern.Focus(\n        geometry,\n        target,\n        wavelength,\n        new FocusOption(),\n        patterns\n    );\n\n    var hotBuilder = client.DatagramBuilder();\n    hotBuilder.Push(new WritePatternBuffer(\n        bank: PatternBank.B0,\n        index: 0,\n        emissions: patterns\n    ));\n    foreach (var frame in hotBuilder.Build())\n    {\n        if (pending.Count >= Client.MaxInflight)\n        {\n            (await pending.Dequeue()).Check();\n        }\n        pending.Enqueue(await client.SendAsync(frame));\n    }\n}\nwhile (pending.Count > 0)\n{\n    (await pending.Dequeue()).Check();\n}"} />
+
+## streaming 送信
+
+上のホットループでは, 応答を待たずに次々と送る[streaming](/autd3-sdk/0.5.x/getting-started/tutorial/send-modes/)を使っている.
+`send` でフレームをキューに積み, `MAX_INFLIGHT` を超えたら古い応答から回収する.
+往復レイテンシが隠蔽されてスループットがさらに向上するため, 高頻度更新では stop-and-wait より streaming を選ぶ.
+
+## バッファの再利用
+
+毎フレームの確保を避けるため, バッファは使い回す.
+
+* `pattern_buffer()` で得たバッファは, Pattern 計算関数の出力先として毎フレーム上書きできる.
+* Rust では `Frames` も `build_into` で同じバッファへ書き出せば, `build` のたびに確保せずに済む. Python/C# では `build_into` は提供されない.
+
+## OS チューニング
+
+EtherCAT のリアルタイム性は OS の設定にも左右される. スレッドの優先度・CPU アフィニティ・タイマ精度などを調整することで, ジッタを抑えてより安定した高レート送信ができる可能性がある.
+
+これらは `ClientConfig` の `rt_priority` / `rt_policy` / `rt_affinity`, および Link Option の `sync0_period` / `sync0_shift` として設定できる.
+適切な値は環境によって異なるため, 実測して決めるのがよい.
+
+## 計測ツール
+
+リポジトリには, 性能の計測とチューニングのためのツールが用意されている.
+
+* `cargo xtask tool perftest`: スループットとレイテンシを計測する
+* `cargo xtask tool synctune`: 同期の安定性を計測し最適なパラメータを探索する
+
+詳しい使い方は各ツールの `--help` を参照.

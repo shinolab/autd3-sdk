@@ -1,0 +1,25 @@
+---
+title: constant
+description: Modulation with constant amplitude (no modulation)
+sidebar:
+  order: 20.5
+srcPath: crates/autd3-rs-modulation/src/constant.rs
+slug: 0.5.x/en/0.4.x/api/compute/modulation/constant
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`constant` generates a modulation that outputs a constant amplitude (effectively no modulation).
+
+## API
+
+<CodeTabs rust={"constant(intensity, &mut dst);"} python={"constant(intensity, dst)"} csharp={"Modulation.Constant(intensity, dst);"} />
+
+| Parameter   | Type           | Description            |
+| ----------- | -------------- | ---------------------- |
+| `intensity` | `u8`           | amplitude coefficient  |
+| `dst`       | `&mut Vec<u8>` | output buffer          |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs_modulation::constant;\n\nlet mut dst = Vec::new();\n\nconstant(0xFF, &mut dst);"} python={"from autd3_modulation import constant, modulation_buffer\n\ndst = modulation_buffer()\n\nconstant(0xFF, dst)"} csharp={"using AUTD3;\n\nvar dst = Modulation.ModulationBuffer();\n\nModulation.Constant(0xFF, dst);"} />

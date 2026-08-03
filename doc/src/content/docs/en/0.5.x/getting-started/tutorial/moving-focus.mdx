@@ -1,0 +1,35 @@
+---
+title: Moving the Focal Point
+description: How to move the focal point over time (software control / STM)
+sidebar:
+  order: 4
+slug: en/0.5.x/getting-started/tutorial/moving-focus
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+## Software control
+
+In AUTD3, a `Pattern` is overwritten each time it is sent.
+Therefore, running code like the following moves the focal position roughly once per second.
+
+<CodeTabs rust={"let mut patterns = geometry.pattern_buffer();\nloop {\n    for sign in [1.0_f32, -1.0] {\n        let target = center + offset((sign * 20.0) * mm, 0.0 * mm, 0.0 * mm);\n        autd3_rs_pattern::focus(\n            &geometry,\n            target,\n            wavelength,\n            &autd3_rs_pattern::FocusOption::default(),\n            &mut patterns,\n        );\n        let mut builder = client.datagram_builder();\n        builder.push(Pattern::new(&patterns));\n        for frame in &builder.build()? {\n            client.send_checked(frame).await?;\n        }\n        tokio::time::sleep(Duration::from_secs(1)).await;\n    }\n}"} python={"patterns = geometry.pattern_buffer()\nwhile True:\n    for sign in (1.0, -1.0):\n        target = center + np.array([sign * 20.0, 0.0, 0.0])\n        pattern.focus(\n            geometry,\n            target,\n            wavelength,\n            pattern.FocusOption(),\n            patterns,\n        )\n        builder = client.datagram_builder()\n        builder.push(Pattern(patterns))\n        for frame in builder.build():\n            await client.send_checked(frame)\n        await asyncio.sleep(1.0)"} csharp={"var patterns = geometry.PatternBuffer();\nwhile (true)\n{\n    foreach (var sign in new[] { 1.0f, -1.0f })\n    {\n        var target = center + new Vector3(sign * 20.0f, 0.0f, 0.0f);\n        Pattern.Focus(\n            geometry,\n            target,\n            wavelength,\n            new FocusOption(),\n            patterns\n        );\n        var builder = client.DatagramBuilder();\n        builder.Push(new Pattern(patterns));\n        foreach (var frame in builder.Build())\n        {\n            await client.SendCheckedAsync(frame);\n        }\n        await Task.Delay(TimeSpan.FromSeconds(1));\n    }\n}"} />
+
+The code above controls the timing in software.
+Its accuracy depends on the OS and the execution environment, so if higher-precision control is needed, using `FociStm` / `PatternStm` is recommended.
+
+## Hardware control with FociStm
+
+The code that achieves behavior equivalent to the above using [`FociStm`](/autd3-sdk/en/0.5.x/api/command/foci-stm/) is as follows.
+
+<CodeTabs rust={"let points = [\n    ControlPoints::from(center + offset(20.0 * mm, 0.0 * mm, 0.0 * mm)),\n    ControlPoints::from(center + offset(-20.0 * mm, 0.0 * mm, 0.0 * mm)),\n];\nlet mut builder = client.datagram_builder();\nbuilder.push(FociStm::new(0.5 * Hz, &points, FociStmOption::default()));\nfor frame in &builder.build()? {\n    client.send_checked(frame).await?;\n}"} python={"points = [\n    ControlPoints([ControlPoint(center + np.array([20.0, 0.0, 0.0]))]),\n    ControlPoints([ControlPoint(center + np.array([-20.0, 0.0, 0.0]))]),\n]\nbuilder = client.datagram_builder()\nbuilder.push(FociStm(0.5 * Hz, points, FociStmOption()))\nfor frame in builder.build():\n    await client.send_checked(frame)"} csharp={"var points = new[]\n{\n    new ControlPoints(new[] { new ControlPoint(center + new Vector3(20.0f, 0.0f, 0.0f)) }),\n    new ControlPoints(new[] { new ControlPoint(center + new Vector3(-20.0f, 0.0f, 0.0f)) }),\n};\nvar builder = client.DatagramBuilder();\nbuilder.Push(new FociStm(0.5f * Hz, points));\nforeach (var frame in builder.Build())\n{\n    await client.SendCheckedAsync(frame);\n}"} />
+
+Because `FociStm` / `PatternStm` loops inside the AUTD3 device, no software loop is needed, and it automatically loops infinitely after being sent.
+In addition, the timing is controlled by the timer built into the AUTD3 device, so it is highly accurate and can be specified with a resolution as fine as 25 µs.
+However, due to constraints of this timer, there are [frequencies that cannot be output](/autd3-sdk/en/0.5.x/api/basics/sampling-config/#internal-representation).
+
+The switching timing of `FociStm` / `PatternStm` is specified by the frequency or period of one loop.
+That is, in this case two focal points make 0.5 Hz (2 s), so each focal point is output for 1 s.
+Note that by using [`SamplingConfig`](/autd3-sdk/en/0.5.x/api/basics/sampling-config/), the frequency or period can be specified as the sampling frequency, that is per focal point, rather than per loop.
+
+To switch an arbitrary Pattern rather than just a focal point, use [`PatternStm`](/autd3-sdk/en/0.5.x/api/command/pattern-stm/) instead of `FociStm`.

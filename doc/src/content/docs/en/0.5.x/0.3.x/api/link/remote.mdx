@@ -1,0 +1,49 @@
+---
+title: Remote
+description: Remote Link that connects over TCP to a separate host wired to the
+  real hardware
+sidebar:
+  order: 4
+slug: 0.5.x/en/0.3.x/api/link/remote
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`RemoteLink` is a Link implementation that connects over TCP to a **separate host** directly wired to the AUTD3 devices for sending and receiving.
+Use it when the machine that operates AUTD3 differs from the machine wired to the real hardware.
+
+<Install rust="autd3-rs-link-remote" python="autd3-link-remote" csharp="AUTD3.Link.Remote" />
+
+It consists of two processes: a server and a client.
+
+* `RemoteServer`: runs on the host wired to the real hardware. It drives a real-hardware link such as EtherCrab and relays tx/rx frames over TCP.
+* `RemoteLink`: runs on the operating host.
+
+On the server-side host, also add the package of the Link that drives the real hardware (such as [EtherCrab](/autd3-sdk/en/0.5.x/0.3.x/api/link/ethercrab/)).
+
+Connection to the [`Simulator`](/autd3-sdk/en/0.5.x/0.3.x/guide/simulator/) is also done with `RemoteLink` (the `Simulator` internally starts a `RemoteServer`).
+
+## API
+
+### RemoteServer
+
+`RemoteServer::open` opens the real-hardware link and starts listening on TCP.
+
+<CodeTabs rust={"RemoteServer::open(bind, link).await?.serve()?;"} />
+
+| Parameter | Type            | Description                                                 |
+| ------ | -------------- | ---------------------------------------------------------- |
+| `bind` | `SocketAddr`   | TCP address on which the server listens                    |
+| `link` | `impl IntoLink` | Option of the real-hardware link to relay (such as EtherCrab) |
+
+`open` internally starts an EtherCAT thread and keeps driving EtherCAT regardless of whether a client is connected.
+`serve` waits for a client connection and starts relaying tx/rx frames (a blocking call that does not return).
+
+### RemoteLink
+
+<CodeTabs rust={"RemoteLinkOption::new(addr);"} python={"RemoteLinkOption(addr)"} csharp={"new RemoteLinkOption(addr);"} />
+
+| Field      | Type         | Description                |
+| ---------- | ------------ | -------------------------- |
+| `addr`     | `SocketAddr` | address of the server to connect to |

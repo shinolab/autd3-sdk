@@ -1,0 +1,50 @@
+---
+title: ChangePatternBank
+description: Switching the Pattern bank
+sidebar:
+  order: 14
+slug: en/0.5.x/api/command/lowlevel/change-pattern-bank
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`ChangePatternBank` is a low-level command that switches the Pattern bank to be played.
+
+## API
+
+<CodeTabs rust={"ChangePatternBank {\n    bank,\n    transition_mode,\n};"} python={"ChangePatternBank(\n    bank=bank,\n    transition_mode=transition_mode,\n)"} csharp={"new ChangePatternBank(\n    bank: bank,\n    transitionMode: transitionMode\n);"} />
+
+| Field             | Type             | Description             |
+| ----------------- | ---------------- | ----------------------- |
+| `bank`            | `PatternBank`    | Destination bank        |
+| `transition_mode` | `TransitionMode` | Behavior on switching   |
+
+## TransitionMode
+
+|            |              |
+| -------------------- | --------------------------        |
+| `Immediate`          | Immediate                         |
+| `SyncIdx`            | When the playback index next becomes 0 |
+| `SysTime(DcSysTime, margin)` | At the specified DC system time (`margin` is optional, see below) |
+| `Gpio(GpioIn)`       | Trigger on the specified GPIO input pin |
+| `Ext`                | Extended mode (automatically switches to the next bank when playback within the bank finishes) |
+| `Later`              | Does not transition (only writes to the bank) |
+
+`SysTime` rejects a time earlier than "now + margin" with a `MISS_TRANSITION_TIME` error, because the FPGA may miss a transition whose time is too close.
+The margin defaults to 10 ms.
+
+`Later` means "only write to the bank, do not transition".
+Specifying it as the `transition_mode` of `Modulation` / `FociStm` / `PatternStm` writes and configures the bank without sending the trailing bank change.
+Specifying it on `ChangeModulationBank` / `ChangePatternBank` themselves, which are the transition commands, is a build-time error.
+Because `Later` never transitions, it is also exempt from the `LoopBehavior` combination constraint.
+
+See [GPIO pins](/autd3-sdk/en/0.5.x/hardware/gpio/) for details on `Gpio(GpioIn)`.
+
+When switching to the same bank, the `TransitionMode` and `LoopBehavior` settings have no effect.
+For details on bank operation see the [bank switching tutorial](/autd3-sdk/en/0.5.x/getting-started/tutorial/bank/).
+
+## Example
+
+`ChangePatternBank` is sent after preparing the bank with `WritePatternBuffer` + `ConfigPattern` to switch the playback target.
+
+<CodeTabs rust={"use core::num::NonZeroU16;\n\nuse autd3_rs::commands::{ChangePatternBank, ConfigPattern, WritePatternBuffer};\nuse autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs::value::{LoopBehavior, PatternBank, SamplingConfig, TransitionMode};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_nop::Nop;\nuse autd3_rs_pattern::{FocusOption, focus, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet client = Client::open(&geometry, Nop, ClientConfig::default()).await?;\n\nlet mut emissions = geometry.pattern_buffer();\nfocus(\n    &geometry,\n    geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n    wavelength(340.0 * m / s),\n    &FocusOption::default(),\n    &mut emissions,\n);\n\nlet bank = PatternBank::B0;\n\nlet mut builder = client.datagram_builder();\nbuilder.push(WritePatternBuffer {\n    bank,\n    index: 0,\n    emissions: &emissions,\n});\nbuilder.push(ConfigPattern {\n    bank,\n    config: SamplingConfig::new(NonZeroU16::MAX),\n    size: 1,\n    loop_behavior: LoopBehavior::Infinite,\n});\nbuilder.push(ChangePatternBank {\n    bank,\n    transition_mode: TransitionMode::Immediate,\n});\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\n\nimport numpy as np\n\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import ChangePatternBank, ConfigPattern, WritePatternBuffer\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import m, s\nfrom autd3.value import LoopBehavior, PatternBank, SamplingConfig, TransitionMode\nfrom autd3_link_nop import Nop\nfrom autd3_pattern import FocusOption, focus, wavelength\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    client = await Client.open(geometry, Nop(), ClientConfig())\n\n    emissions = geometry.pattern_buffer()\n    focus(\n        geometry,\n        geometry.center() + np.array([0.0, 0.0, 150.0]),\n        wavelength(340 * m / s),\n        FocusOption(),\n        emissions,\n    )\n\n    bank = PatternBank.B0\n\n    builder = client.datagram_builder()\n    builder.push(\n        WritePatternBuffer(\n            bank=bank,\n            index=0,\n            emissions=emissions,\n        )\n    )\n    builder.push(\n        ConfigPattern(\n            bank=bank,\n            config=SamplingConfig(0xFFFF),\n            size=1,\n            loop_behavior=LoopBehavior.Infinite,\n        )\n    )\n    builder.push(\n        ChangePatternBank(\n            bank=bank,\n            transition_mode=TransitionMode.Immediate,\n        )\n    )\n    frames = builder.build()\n    for frame in frames:\n        await client.send_checked(frame)\n\n    await client.close()\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing Nop = AUTD3.Link.Nop;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());\n\nvar emissions = geometry.PatternBuffer();\nPattern.Focus(\n    geometry,\n    geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),\n    Pattern.Wavelength(340.0f * m / s),\n    new FocusOption(),\n    emissions\n);\n\nvar bank = PatternBank.B0;\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new WritePatternBuffer(\n    bank: bank,\n    index: 0,\n    emissions: emissions\n));\nbuilder.Push(new ConfigPattern(\n    bank: bank,\n    config: new SamplingConfig(ushort.MaxValue),\n    size: 1,\n    loopBehavior: LoopBehavior.Infinite\n));\nbuilder.Push(new ChangePatternBank(\n    bank: bank,\n    transitionMode: TransitionMode.Immediate\n));\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nawait client.CloseAsync();"} />

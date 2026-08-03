@@ -1,0 +1,56 @@
+---
+title: fourier
+description: Modulation that generates an amplitude modulation synthesized from
+  multiple sine waves
+sidebar:
+  order: 23
+srcPath: crates/autd3-rs-modulation/src/fourier.rs
+slug: 0.5.x/en/0.4.x/api/compute/modulation/fourier
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+
+`fourier` generates an amplitude modulation synthesized from multiple sine-wave components. Each component is computed in the same way as [sine](/autd3-sdk/en/0.5.x/0.4.x/api/compute/modulation/sine/), and they are summed into a single waveform.
+
+## API
+
+<CodeTabs rust={"fourier(&components, &option, &mut dst)?;"} python={"fourier(components, option, dst)"} csharp={"Modulation.Fourier(components, option, dst);"} />
+
+| Parameter    | Type                  | Description               |
+| ------------ | --------------------- | ------------------------- |
+| `components` | `&[SineComponent<S>]` | array of sine-wave components to synthesize |
+| `option`     | `&FourierOption`      | additional options (see below) |
+| `dst`        | `&mut Vec<u8>`        | output buffer             |
+
+Each `SineComponent` is a pair of a frequency `freq` and a `SineOption`.
+The `sampling_config` of all components must be identical, otherwise an error occurs.
+The length of the synthesized waveform is the least common multiple of the periods of the components.
+
+Each sample is the sum of all components multiplied by a scale <Math tex="s" /> (`scale_factor`), plus an offset <Math tex="b" /> (`offset`).
+
+<MathBlock tex="m_i = s \sum_{k} m^{(k)}_i + b" />
+
+## SineComponent
+
+| Field      | Type           | Description             |
+| ---------- | -------------- | ----------------------- |
+| `freq`     | `Freq<u32>` etc. | frequency of the component |
+| `option`   | `SineOption`   | per-component sine Option |
+
+<CodeTabs rust={"SineComponent {\n    freq: 100 * Hz,\n    option: SineOption::default(),\n};"} python={"SineComponent(\n    100.0 * Hz,\n    SineOption(),\n)"} csharp={"new SineComponent(\n    100 * Hz,\n    new SineOption()\n);"} />
+
+## FourierOption
+
+<CodeTabs rust={"FourierOption {\n    scale_factor,\n    clamp,\n    offset,\n}"} python={"FourierOption(\n    scale_factor,\n    clamp,\n    offset,\n)"} csharp={"new FourierOption(\n    scaleFactor,\n    clamp,\n    offset\n)"} />
+
+| Field          | Type          | Default    | Description                                               |
+| -------------- | ------------- | ---------- | --------------------------------------------------------- |
+| `scale_factor` | `Option<f32>` | `None`     | scale applied to the synthesized value. If `None`, the reciprocal of the number of components |
+| `clamp`        | `bool`        | `false`    | whether to clamp out-of-range values to \[0, 255]          |
+| `offset`       | `u8`          | `0`        | DC offset added after synthesis                           |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::units::Hz;\nuse autd3_rs_modulation::{FourierOption, SineComponent, SineOption, fourier};\n\nlet mut dst = Vec::new();\n\nfourier(\n    &[SineComponent {\n        freq: 100 * Hz,\n        option: SineOption::default(),\n    }],\n    &FourierOption {\n        scale_factor: None,\n        clamp: false,\n        offset: 0x00,\n    },\n    &mut dst,\n)?;"} python={"from autd3.units import Hz\nfrom autd3_modulation import (\n    FourierOption,\n    SineComponent,\n    SineOption,\n    fourier,\n    modulation_buffer,\n)\n\ndst = modulation_buffer()\n\nfourier(\n    [\n        SineComponent(\n            freq=100 * Hz,\n            option=SineOption(),\n        )\n    ],\n    FourierOption(\n        scale_factor=None,\n        clamp=False,\n        offset=0x00,\n    ),\n    dst,\n)"} csharp={"using AUTD3;\nusing static AUTD3.Units;\n\nvar dst = Modulation.ModulationBuffer();\n\nModulation.Fourier(\n    new[]\n    {\n        new SineComponent(\n            100 * Hz,\n            new SineOption()\n        ),\n    },\n    new FourierOption(\n        scaleFactor: null,\n        clamp: false,\n        offset: 0x00\n    ),\n    dst\n);"} />

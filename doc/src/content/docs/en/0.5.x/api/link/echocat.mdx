@@ -1,0 +1,49 @@
+---
+title: echocat
+description: Default Link using echocat, the EtherCAT main device written for AUTD3
+sidebar:
+  order: 2
+slug: en/0.5.x/api/link/echocat
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`EchocatLink` is a Link implementation using `echocat`, an EtherCAT main device written for AUTD3.
+
+<Install rust="autd3-rs-link-echocat" python="autd3-link-echocat" csharp="AUTD3.Link.Echocat" />
+
+Because it handles an Ethernet raw socket, running it on Linux/macOS requires root privileges (or `CAP_NET_RAW`).
+On Windows, [npcap](https://nmap.org/npcap/) must be installed in "WinPcap API-compatible mode".
+
+## API
+
+<CodeTabs rust={"EchocatLinkOption {\n    iface,\n    sync0_period,\n    pdu_timeout,\n    state_transition_timeout,\n    dc_static_sync_iterations,\n    dc_start_delay,\n    sync_tolerance,\n    sync_timeout,\n    process_data_watchdog,\n    sleep_strategy,\n};"} python={"echocat.EchocatLinkOption(\n    iface,\n    sync0_period,\n    pdu_timeout,\n    state_transition_timeout,\n    dc_static_sync_iterations,\n    dc_start_delay,\n    sync_tolerance,\n    sync_timeout,\n    process_data_watchdog,\n    spin_margin,\n)"} csharp={"new EchocatLinkOption(\n    iface,\n    sync0Period,\n    pduTimeout,\n    stateTransitionTimeout,\n    dcStaticSyncIterations,\n    dcStartDelay,\n    syncTolerance,\n    syncTimeout,\n    processDataWatchdog,\n    spinMargin\n);"} />
+
+| Field                       | Type        | Description                                                                      |
+| --------------------------- | ----------- | -------------------------------------------------------------------------------- |
+| `iface`                     | `Interface` | network interface to use. `Interface::Auto` for automatic selection, `Interface::Name(..)` to specify by name |
+| `sync0_period`              | `Duration`  | period of the SYNC0 signal (= the cyclic frame period)                           |
+| `pdu_timeout`               | `Duration`  | timeout to wait for the response to a single PDU         |
+| `state_transition_timeout`  | `Duration`  | timeout to wait for an EtherCAT state transition (INIT → PRE-OP → SAFE-OP → OP)  |
+| `dc_static_sync_iterations` | `u32`       | number of frames used for DC static drift compensation                           |
+| `dc_start_delay`            | `Duration`  | how far ahead of the current bus time the SYNC0 start time is placed             |
+| `sync_tolerance`            | `Duration`  | tolerance considered as synchronization complete                                 |
+| `sync_timeout`              | `Duration`  | timeout to wait for synchronization to complete                                  |
+| `process_data_watchdog`     | `Duration`  | time after which a subdevice detects that process data has stopped               |
+| `sleep_strategy`            | `SleepStrategy` | how to wait for the next cycle                                               |
+
+The default `sync0_period` is 2 ms on Windows and 1 ms elsewhere.
+
+## Waiting (`SleepStrategy`)
+
+Selects how the RT thread waits for the next cycle.
+
+<CodeTabs rust={"SleepStrategy::Sleep;\nSleepStrategy::Spin {\n    margin: Duration::from_micros(100),\n};"} />
+
+| Variant                | Description                                                          |
+| ---------------------- | -------------------------------------------------------------------- |
+| `Sleep`                | waits with `std::thread::sleep`.                                     |
+| `Spin { margin }`      | sleeps until `margin` before the deadline, then spins                |
+
+The default is `Sleep`.

@@ -2,6 +2,45 @@
 
 # Rust
 
+## [0.5.0] - 2026-08-03
+
+### 💥 Breaking Changes
+
+- [**breaking**] Pass the holo LinAlgBackend as an argument, not an option field
+- [**breaking**] Add a wgpu LinAlgBackend for holo with batched APIs and backend-side quantization
+- [**breaking**] Correct SysTime drift by retiming onto the EtherCAT bus clock
+- [**breaking**] Let bindings select the default, an explicit, or no RT priority
+- [**breaking**] Rename legacy drive terminology to emission
+- *(holo)* [**breaking**] Take Angle in Directivity::value instead of raw radians
+- *(appliance)* [**breaking**] Ship the EtherCAT master as a zero-config appliance
+
+### 🚀 Features
+
+- *(holo)* Take batch foci as a single flat slice
+- *(link-echocat)* Add echocat, an EtherCAT main device for AUTD3
+- Add TransitionMode::Later to stage a bank without switching to it
+- *(legacy)* Add a compatibility client for the legacy firmware v12.1.0
+- Make echocat the default link and add its bindings
+- *(link)* Report phase excursions and process-data exchange time through LinkStats
+
+### 🐛 Bug Fixes
+
+- *(client)* Return the frame slot when a send races the RT teardown
+- *(legacy)* Always run the full mute sequence on close and drop
+- Retime legacy SysTime onto the EtherCAT bus clock
+- *(echocat)* Bound cyclic receive to one cycle and report a silent bus as lost
+- Harden the legacy client and reject indivisible STM periods
+- *(legacy)* Advance the emulator clock and match the firmware v12.1.0 quirks
+- Harden the DC clock offset and rename dc_sys_time to bus_time_now
+- Apply RT scheduling to the client and tx/rx threads by default outside Windows
+- Desync the state mirror on device errors observed through the raw send path
+- Write logs through a non-blocking writer in every binary
+
+### ⚡ Performance
+
+- Remove hypot and atan2 from holo hot paths
+- *(holo)* Fuse the GSPAT iteration into a single GPU dispatch
+
 ## [0.4.0] - 2026-07-27
 
 ### 💥 Breaking Changes
@@ -144,6 +183,30 @@
 
 # Python
 
+## [0.5.0] - 2026-08-03
+
+### 💥 Breaking Changes
+
+- [**breaking**] Pass the holo LinAlgBackend as an argument, not an option field
+- [**breaking**] Add a wgpu LinAlgBackend for holo with batched APIs and backend-side quantization
+- [**breaking**] Correct SysTime drift by retiming onto the EtherCAT bus clock
+- [**breaking**] Let bindings select the default, an explicit, or no RT priority
+- [**breaking**] Rename legacy drive terminology to emission
+- *(emulator)* [**breaking**] Type record option sound_speed as Velocity
+- *(appliance)* [**breaking**] Ship the EtherCAT master as a zero-config appliance
+
+### 🚀 Features
+
+- Add TransitionMode::Later to stage a bank without switching to it
+- *(legacy)* Add a compatibility client for the legacy firmware v12.1.0
+- Make echocat the default link and add its bindings
+
+### 🐛 Bug Fixes
+
+- Retime legacy SysTime onto the EtherCAT bus clock
+- *(echocat)* Bound cyclic receive to one cycle and report a silent bus as lost
+- Harden the legacy client and reject indivisible STM periods
+
 ## [0.4.0] - 2026-07-27
 
 ### 💥 Breaking Changes
@@ -216,6 +279,28 @@
 
 # C#
 
+## [0.5.0] - 2026-08-03
+
+### 💥 Breaking Changes
+
+- [**breaking**] Pass the holo LinAlgBackend as an argument, not an option field
+- [**breaking**] Add a wgpu LinAlgBackend for holo with batched APIs and backend-side quantization
+- [**breaking**] Correct SysTime drift by retiming onto the EtherCAT bus clock
+- [**breaking**] Let bindings select the default, an explicit, or no RT priority
+- *(appliance)* [**breaking**] Ship the EtherCAT master as a zero-config appliance
+
+### 🚀 Features
+
+- Add TransitionMode::Later to stage a bank without switching to it
+- *(legacy)* Add a compatibility client for the legacy firmware v12.1.0
+- Make echocat the default link and add its bindings
+
+### 🐛 Bug Fixes
+
+- Retime legacy SysTime onto the EtherCAT bus clock
+- *(echocat)* Bound cyclic receive to one cycle and report a silent bus as lost
+- Harden the legacy client and reject indivisible STM periods
+
 ## [0.4.0] - 2026-07-27
 
 ### 💥 Breaking Changes
@@ -275,6 +360,12 @@
 
 # Unity
 
+## [0.5.0] - 2026-08-03
+
+### 🚀 Features
+
+- Make echocat the default link and add its bindings
+
 ## [0.2.0] - 2026-07-09
 
 ### 🚀 Features
@@ -284,6 +375,21 @@
 ## [0.1.0] - 2026-07-06
 
 # Simulator
+
+## [0.5.0] - 2026-08-03
+
+### 💥 Breaking Changes
+
+- [**breaking**] Rename legacy drive terminology to emission
+- *(appliance)* [**breaking**] Ship the EtherCAT master as a zero-config appliance
+
+### 🚀 Features
+
+- *(console)* Distribute via cargo-dist with installers and in-app auto-update
+
+### 🐛 Bug Fixes
+
+- Write logs through a non-blocking writer in every binary
 
 ## [0.4.0] - 2026-07-27
 
@@ -323,6 +429,16 @@
 
 # Console
 
+## [0.5.0] - 2026-08-03
+
+### 💥 Breaking Changes
+
+- *(appliance)* [**breaking**] Ship the EtherCAT master as a zero-config appliance
+
+### 🚀 Features
+
+- *(console)* Distribute via cargo-dist with installers and in-app auto-update
+
 ## [0.4.0] - 2026-07-27
 
 ### 📦 Dependencies
@@ -335,6 +451,14 @@
 ### 🚀 Features
 
 - Derive simulator device count from client geometry
+
+# Appliance
+
+## [0.5.0] - 2026-08-03
+
+### 💥 Breaking Changes
+
+- *(appliance)* [**breaking**] Ship the EtherCAT master as a zero-config appliance
 
 # Firmware
 

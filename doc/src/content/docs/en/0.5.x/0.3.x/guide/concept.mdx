@@ -1,0 +1,46 @@
+---
+title: Concept
+description: Architecture and design philosophy of the AUTD3 SDK
+sidebar:
+  order: 1
+slug: 0.5.x/en/0.3.x/guide/concept
+---
+
+import Mermaid from "@components/Mermaid.astro";
+
+This page explains the overall picture of the AUTD3 SDK and its central concepts.
+For details of each API, refer to the [API reference](/autd3-sdk/en/0.5.x/0.3.x/api/basics/geometry/).
+
+The drive signal sent to each transducer is generated through the following data flow.
+
+<Mermaid
+  title="Data flow of drive signal generation"
+  code={`flowchart LR
+MOD["Modulation"]
+PS["Pattern / STM"]
+MUL(["×"])
+SIL["Silencer"]
+PWM["PWM"]
+SIG["Signal"]
+PS -- Intensity --> MUL
+MOD --> MUL
+MUL --> SIL
+PS -- Phase --> SIL
+SIL --> PWM
+PWM --> SIG`}
+/>
+
+AUTD3 is a device that controls the phase of many ultrasound transducers to generate an arbitrary sound field in space.
+
+This SDK is responsible for computing these phases and amplitudes and transmitting them to the device.
+
+## Overview
+
+The AUTD3 SDK consists of the following layers.
+
+* **Geometry** — represents the physical device layout (position and rotation).
+* **Pattern** — a bundle of the phase and amplitude (`Emission`) of each transducer.
+* **Modulation** — modulates the output amplitude in the time direction (AM).
+* **STM** — a feature that switches Patterns using a hardware timer.
+* **Client** — transmits data such as Pattern and Modulation to the device via a Link.
+* **Link** — an abstraction of the communication path to the device.

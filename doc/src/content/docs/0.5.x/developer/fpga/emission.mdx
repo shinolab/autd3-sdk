@@ -1,0 +1,188 @@
+---
+title: Emission
+description: 振動子毎の強度/位相データを生成する Emission モジュール
+sidebar:
+  order: 7
+slug: 0.5.x/developer/fpga/emission
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import Mermaid from "@components/Mermaid.astro";
+
+<Mermaid
+  title="Emission モジュール"
+  code={`flowchart LR
+TM["Timer"]
+SW["Swapchain"]
+RAW["Raw"]
+FOCUS["Focus"]
+MUX{"MODE"}
+OM["Output Mask"]
+OUT(["INTENSITY / PHASE"])
+MEM[("Emission BRAM")]
+TM -- "IDX" --> SW
+SW -- "BANK / IDX / STOP" --> RAW
+SW -- "BANK / IDX / STOP" --> FOCUS
+MEM --> RAW
+MEM --> FOCUS
+RAW --> MUX
+FOCUS --> MUX
+MUX --> OM --> OUT`}
+/>
+
+| Name                | In/Out | Width | Description                        |
+| ------------------- | ------ | ----- | ---------------------------------- |
+| CLK                 | In     | 1     | メインクロック                     |
+| PATTERN\_SETTINGS    | In     | -     |                                    |
+| ├─ UPDATE           | In     | 1     | 設定更新フラグ                     |
+| ├─ REQ\_RD\_BANK      | In     | 1     | 要求読み込みバンク                 |
+| ├─ MODE\[n]          | In     | 1     | 第 n バンクの出力タイプ            |
+| ├─ CYCLE\[n]         | In     | 16    | 第 n バンクの周期 - 1              |
+| ├─ FREQ\_DIV\[n]      | In     | 16    | 第 n バンクの周波数分周比          |
+| ├─ REP\[n]           | In     | 16    | 第 n バンクの繰り返し回数 - 1      |
+| ├─ SOUND\_SPEED\[n]   | In     | 16    | 第 n バンクの音速                  |
+| ├─ NUM\_FOCI\[n]      | In     | 8     | 第 n バンクの焦点数                |
+| ├─ TRANSITION\_MODE  | In     | 8     | 遷移モード                         |
+| └─ TRANSITION\_VALUE | In     | 64    | 遷移値                             |
+| SYS\_TIME            | In     | 57    | システム時刻                       |
+| UPDATE              | In     | 1     | 超音波周期トリガ                   |
+| GPIO\_IN             | In     | 4     | GPIO 入力                          |
+| INTENSITY           | Out    | 8     | 強度                               |
+| PHASE               | Out    | 8     | 位相                               |
+| DOUT\_VALID          | Out    | 1     | 強度/位相データ有効フラグ          |
+| EMISSION\_BUS        | In     | -     | Emission データメモリバス          |
+| OUTPUT\_MASK\_BUS     | In     | -     | Output Mask データメモリバス       |
+
+本モジュールは, 振動子毎の強度/位相データを出力する.
+
+出力タイプ (`MODE`) はバンク毎に 2 種類ある.
+
+* `EMISSION_TYPE_RAW`: 振動子毎の強度/位相をそのまま BRAM から読み出す
+* `EMISSION_TYPE_FOCI`: 焦点の位置データから位相を計算する
+
+`UPDATE` (超音波周期トリガ) を起点に, `Swapchain` が決めたバンクとインデックスのデータを 1 周期分読み出し, 249 振動子分の強度/位相を順次出力する.
+
+## Timer
+
+このサブモジュールは, システム時刻, 周期 <Math tex="T" />, 周波数分周比 <Math tex="N" /> から, 現在読み込むべきデータのインデックスを計算する.
+インデックス <Math tex="i" /> は
+
+<MathBlock
+  tex={String.raw`
+i = \left\lfloor \frac{\text{SYS\_TIME}}{512N} \right\rfloor \,\%\, T
+`}
+/>
+
+として計算される.
+`SYS_TIME` は <Math tex="\SI{20.48}{MHz}" /> でカウントアップされるため, データのサンプリング周波数 <Math tex="f" /> は
+
+<MathBlock
+  tex={String.raw`
+f = \frac{\SI{40}{kHz}}{N}
+`}
+/>
+
+となり, <Math tex="i" /> はこの周波数で <Math tex="0" /> から <Math tex="T-1" /> まで周期的にカウントアップされる.
+
+`SYS_TIME` がすべてのデバイスで同期しているため, このインデックスも必然的にすべてのデバイスで同期する.
+
+:::note
+`PATTERN_SETTINGS` で指定する `CYCLE` は <Math tex="T-1" /> であることに注意する.
+:::
+
+## Swapchain
+
+このサブモジュールはバンクの切り替えを制御する.
+挙動は [Modulation](/autd3-sdk/0.5.x/developer/fpga/modulation/) の `Swapchain` と同一である.
+
+`STOP` がアサートされている間, `Emission` はバンク及びインデックスを更新せず, 最後にサンプルしたデータを出力し続ける.
+
+## Raw
+
+このサブモジュールは, 指定されたインデックスのデータを順次出力するだけである.
+
+なお, Emission BRAM は後述のFocusサブモジュールのために読み出し側が <Math tex="\SI{64}{bit}" /> 幅となっている点に注意.
+
+## Focus
+
+このサブモジュールは BRAM に書き込まれた焦点の位置データ列から適切な位相を計算して出力する.
+
+焦点の位置データはデバイスにローカルな座標系で表現される.
+また, 位置データは <Math tex="\SI{18}{bit}" /> 符号あり固定小数点数で表現される.
+この単位は <Math tex="\SI{0.025}{mm}" /> である.
+
+このサブモジュールでは, 焦点位置データ <Math tex="\br_\text{f}" /> と, 振動子の位置データ <Math tex="\br_\text{tr}" />, 及び, 音速 (`SOUND_SPEED`, <Math tex="c" />) から, 振動子の位相を計算する.
+ここで, 音速の単位は <Math tex="\SI{1/64}{m/s}" /> である.
+また, 振動子のローカル座標における位置データはあらかじめ計算しておくことができるため, これを専用の分散 RAM に格納しておく.
+
+:::note
+振動子の位置データは `tr.coe` に格納されている.
+:::
+
+まず, <Math tex="\br_\text{f}" /> と <Math tex="\br_\text{tr}" /> の間の距離を計算する.
+
+<MathBlock
+  tex={String.raw`
+d = \sqrt{\|\br_\text{f} - \br_\text{tr}\|^2} \times \SI{0.025}{mm}
+`}
+/>
+
+また, 音速 <Math tex="c" /> から波長 <Math tex="\lambda" /> を計算すると,
+
+<MathBlock
+  tex={String.raw`
+\lambda = \frac{c}{f} = \frac{c \times \frac{1}{64}\SI{}{m/s}}{\SI{40}{kHz}} = \frac{c}{2^{6}} \times \SI{0.025}{mm}
+`}
+/>
+
+となる.
+よって, 位相 <Math tex="p" /> は
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+p & = \left(256\times\frac{d}{\lambda}\right) \,\%\,256 \\
+& = \frac{\sqrt{\|\br_\text{f} - \br_\text{tr}\|^2} \times 2^{14}}{c} \,\%\,256
+\end{aligned}
+`}
+/>
+
+と計算できる.
+
+:::note
+<Math tex="256" /> が <Math tex="2\pi" /> に対応することに注意.
+:::
+
+:::note
+音速の単位が複雑なのは以下の理由による.
+まず, 振動子-焦点間距離の計算において, 各座標の入力値が <Math tex="\SI{18}{bit}" /> 符号あり固定小数点数なので, その値の二乗値のビット幅は <Math tex="\lceil\log_2 (3\times (2^{17})^2)\rceil=\SI{36}{bit}" /> となる.
+したがって, 距離の値のビット幅は <Math tex="\SI{18}{bit}" /> になる.
+音速の単位を上記のようにしておくと, 位相の計算の際, 分母の計算が楽になり, その値を <Math tex="\SI{32}{bit}" /> の範囲に収められる.
+:::
+
+### 多焦点
+
+`Focus` サブモジュールは上記の計算を同時 8 焦点分行い, 各焦点の位相 <Math tex="p_i" /> から, 以下の計算により, 最終的な位相データ <Math tex="P" /> を求める.
+
+<MathBlock
+  tex={String.raw`
+P = \tan^{-1} \frac{\sum_0^N \sin(p_i)}{\sum_0^N \cos(p_i)}
+`}
+/>
+
+ここで, <Math tex="N" /> は焦点の数 (`NUM_FOCI`) である.
+
+<Math tex="\sin, \cos" /> の計算に関しては <Math tex="p_i" /> が <Math tex="\SI{8}{bit}" /> の有限値であるため, あらかじめ計算済みの <Math tex="\sin" /> テーブルを用いる.
+また, <Math tex="\tan^{-1}" /> の計算も, 計算済みのテーブルを用いる.
+<Math tex="\tan^{-1}" /> のテーブルはデータ量を削減するため, <Math tex="\SI{8}{bit}" /> の <Math tex="\sin(p_i)" /> の平均値 <Math tex="\displaystyle S = \frac{\sum_0^N \sin(p_i)}{N}" />, <Math tex="\cos(p_i)" /> の平均値 <Math tex="\displaystyle C = \frac{\sum_0^N \cos(p_i)}{N}" /> に対して, <Math tex="\lbrace S[7:1], C[7:1]\rbrace" /> をキーとしている.
+
+出力する強度は第 0 焦点のデータに含まれる強度フィールドである.
+第 1 焦点以降の同フィールドは強度ではなく, その焦点に加算する位相オフセットとして扱われる.
+
+## Output Mask
+
+`Output Mask` サブモジュールは `Raw`, または, `Focus` サブモジュールからの出力を, マスクデータに基づいて, 超音波を出力するか否か (強度を 0 にするか否か) を制御する.
+マスクデータはバンク毎に <Math tex="\SI{256}{bit}" /> (振動子毎に 1 bit) である.
+
+`Raw` は振動子毎に強度を設定できるため, 基本的に `Focus` サブモジュールからの出力を制御する目的で使用される.

@@ -1,0 +1,43 @@
+---
+title: Performance Tips
+description: Practical guidelines for increasing throughput
+sidebar:
+  order: 4
+slug: 0.5.x/en/0.3.x/guide/performance
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+Guidelines for drawing out performance in situations that demand throughput, such as updating the focal point at high frequency.
+
+## Avoid Composite Commands
+
+[Pattern](/autd3-sdk/en/0.5.x/0.3.x/api/command/pattern/) is a composite command that internally sends `WritePatternBuffer` + `ConfigPattern` + `ChangePatternBank` together.
+However, once the [bank](/autd3-sdk/en/0.5.x/0.3.x/getting-started/tutorial/bank/) is set, all that is needed for a per-frame focal point update is rewriting the buffer, that is, only `WritePatternBuffer`.
+
+Set the bank once at the beginning. (You may use `Pattern` for the first time.)
+
+<CodeTabs rust={"let mut builder = client.datagram_builder();\nbuilder\n    .push(SetSilencer::disable())\n    .push(WritePatternBuffer {\n        bank: PatternBank::B0,\n        index: 0,\n        emissions: &patterns,\n    })\n    .push(ConfigPattern {\n        bank: PatternBank::B0,\n        config: SamplingConfig::FREQ_40K,\n        size: 1,\n        loop_behavior: LoopBehavior::Infinite,\n    });\nfor frame in &builder.build()? {\n    client.send_checked(frame).await?;\n}"} python={"builder = client.datagram_builder()\nbuilder.push(SetSilencer.disable())\nbuilder.push(\n    WritePatternBuffer(\n        bank=PatternBank.B0,\n        index=0,\n        emissions=patterns,\n    )\n)\nbuilder.push(\n    ConfigPattern(\n        bank=PatternBank.B0,\n        config=SamplingConfig.FREQ_40K,\n        size=1,\n        loop_behavior=LoopBehavior.Infinite,\n    )\n)\nfor frame in builder.build():\n    await client.send_checked(frame)"} csharp={"var builder = client.DatagramBuilder();\nbuilder.Push(SetSilencer.Disable());\nbuilder.Push(new WritePatternBuffer(\n    bank: PatternBank.B0,\n    index: 0,\n    emissions: patterns\n));\nbuilder.Push(new ConfigPattern(\n    bank: PatternBank.B0,\n    config: SamplingConfig.Freq40k,\n    size: 1,\n    loopBehavior: LoopBehavior.Infinite\n));\nforeach (var frame in builder.Build())\n{\n    await client.SendCheckedAsync(frame);\n}"} />
+
+In the subsequent hot loop, only `WritePatternBuffer` is sent.
+The amount of command data sent is reduced, increasing throughput accordingly.
+
+<CodeTabs rust={"let mut buf = Frames::default();\nlet mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(MAX_IN_FLIGHT);\nfor i in 0..NUM_POINTS {\n    let theta = 2.0 * PI * i as f32 / NUM_POINTS as f32;\n    let target = center\n        + offset(\n            RADIUS_MM * theta.cos() * mm,\n            RADIUS_MM * theta.sin() * mm,\n            0.0 * mm,\n        );\n    autd3_rs_pattern::focus(\n        &geometry,\n        target,\n        wavelength,\n        &autd3_rs_pattern::FocusOption::default(),\n        &mut patterns,\n    );\n\n    let mut builder = client.datagram_builder();\n    builder.push(WritePatternBuffer {\n        bank: PatternBank::B0,\n        index: 0,\n        emissions: &patterns,\n    });\n    builder.build_into(&mut buf)?;\n    for frame in &buf {\n        if pending.len() >= MAX_IN_FLIGHT {\n            pending.pop_front().expect(\"non-empty\").await?.check()?;\n        }\n        pending.push_back(client.send(frame).await?);\n    }\n}\nwhile let Some(fut) = pending.pop_front() {\n    fut.await?.check()?;\n}"} python={"pending = collections.deque()\nfor i in range(NUM_POINTS):\n    theta = 2.0 * math.pi * i / NUM_POINTS\n    target = center + np.array([RADIUS_MM * math.cos(theta), RADIUS_MM * math.sin(theta), 0.0])\n    pattern.focus(\n        geometry,\n        target,\n        wavelength,\n        pattern.FocusOption(),\n        patterns,\n    )\n    builder = client.datagram_builder()\n    builder.push(\n        WritePatternBuffer(\n            bank=PatternBank.B0,\n            index=0,\n            emissions=patterns,\n        )\n    )\n    for frame in builder.build():\n        if len(pending) >= MAX_IN_FLIGHT:\n            (await pending.popleft()).check()\n        pending.append(await client.send(frame))\nwhile pending:\n    (await pending.popleft()).check()"} csharp={"var pending = new Queue<ResponseToken>();\nfor (var i = 0; i < NumPoints; i++)\n{\n    var theta = 2.0f * MathF.PI * i / NumPoints;\n    var target = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0.0f);\n    Pattern.Focus(\n        geometry,\n        target,\n        wavelength,\n        new FocusOption(),\n        patterns\n    );\n\n    var hotBuilder = client.DatagramBuilder();\n    hotBuilder.Push(new WritePatternBuffer(\n        bank: PatternBank.B0,\n        index: 0,\n        emissions: patterns\n    ));\n    foreach (var frame in hotBuilder.Build())\n    {\n        if (pending.Count >= Client.MaxInflight)\n        {\n            (await pending.Dequeue()).Check();\n        }\n        pending.Enqueue(await client.SendAsync(frame));\n    }\n}\nwhile (pending.Count > 0)\n{\n    (await pending.Dequeue()).Check();\n}"} />
+
+## Streaming Transmission
+
+The hot loop above uses [streaming](/autd3-sdk/en/0.5.x/0.3.x/getting-started/tutorial/send-modes/), which sends one after another without waiting for a response.
+`send` queues frames, and once `MAX_IN_FLIGHT` is exceeded, the oldest responses are collected.
+Since the round-trip latency is hidden and throughput improves further, choose streaming over stop-and-wait for high-frequency updates.
+
+## Buffer Reuse
+
+To avoid per-frame allocation, reuse buffers.
+
+* The buffer obtained via `pattern_buffer()` can be overwritten every frame as the output destination of the Pattern compute function. Do not recreate it every frame. The hot loops in both languages practice this.
+* In Rust, `Frames` can also be written into the same buffer with `build_into`, avoiding allocation on every `build` (the Rust hot loop above practices this).
+  Python's `Frames` is shared with the send queue, so `build_into` is not provided, and there is no choice but to `build` every frame.
+
+## OS Tuning
+
+The real-time performance of EtherCAT also depends on the OS settings. By adjusting thread priority, CPU affinity, timer precision, and so on, jitter can be suppressed, potentially enabling more stable high-rate transmission.

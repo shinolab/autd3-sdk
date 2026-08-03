@@ -1,0 +1,27 @@
+---
+title: ForceFan
+description: ForceFan to force the fan on
+sidebar:
+  order: 6
+slug: 0.5.x/en/0.4.x/api/command/force-fan
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`ForceFan` is a command that forcibly turns the cooling fan on.
+
+:::caution
+It cannot be forcibly turned off.
+:::
+
+## API
+
+<CodeTabs rust={"ForceFan { value };"} python={"ForceFan(value)"} csharp={"new ForceFan(value);"} />
+
+| Field   | Type   | Description                         |
+| ------- | ------ | ----------------------------------- |
+| `value` | `bool` | Force the fan on when `true`        |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::ForceFan;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_nop::Nop;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet client = Client::open(&geometry, Nop, ClientConfig::default()).await?;\n\nlet mut builder = client.datagram_builder();\nbuilder.push(ForceFan { value: true });\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import ForceFan\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3_link_nop import Nop\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    client = await Client.open(geometry, Nop(), ClientConfig())\n\n    builder = client.datagram_builder()\n    builder.push(ForceFan(value=True))\n    frames = builder.build()\n    for frame in frames:\n        await client.send_checked(frame)\n\n    await client.close()\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing Nop = AUTD3.Link.Nop;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new ForceFan(true));\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nawait client.CloseAsync();"} />

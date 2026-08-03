@@ -1,0 +1,95 @@
+---
+title: Geometry
+description: デバイスの物理配置を表現する Geometry
+sidebar:
+  order: 1
+slug: 0.5.x/api/basics/geometry
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+
+`Geometry` は AUTD3 デバイスの物理配置 (位置・姿勢) を表現する.
+
+<CodeTabs>
+  <Fragment slot="rust">
+    <Code code={"Geometry::new(vec![Autd3::new(\n    Point3::origin(),\n    UnitQuaternion::identity(),\n)]);"} lang="rust" />
+
+    `Autd3::new(origin, rotation)` は原点位置 (`Point3`) と姿勢 (`UnitQuaternion`) から 1 台のデバイスを構築する.
+    原点を `Point3::origin()`, 姿勢を `UnitQuaternion::identity()` とする `Autd3::default()` もある.
+  </Fragment>
+
+  <Fragment slot="python">
+    <Code code={"Geometry(\n    [\n        Autd3(\n            [0.0, 0.0, 0.0],\n            [1.0, 0.0, 0.0, 0.0],\n        )\n    ]\n)"} lang="python" />
+
+    `Autd3([x, y, z], rotation)` は原点位置と姿勢から 1 台のデバイスを構築する.
+
+    姿勢には以下の 3 形式を渡せる.
+
+    <Code code={"Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])\nAutd3([0.0, 0.0, 0.0], EulerAngles.ZYZ(0.0 * deg, 90.0 * deg, 0.0 * deg))\nAutd3([0.0, 0.0, 0.0], Rotation.from_euler(\"ZYZ\", [0.0, 90.0, 0.0], degrees=True))"} lang="python" />
+
+    * クォータニオン: **scalar-first** `[w, i, j, k]`
+    * `EulerAngles`: intrinsic なオイラー角
+    * scipy の `Rotation`
+  </Fragment>
+
+  <Fragment slot="csharp">
+    <Code code={"new Geometry(new[] { new Autd3(\n    Vector3.Zero,\n    Quaternion.Identity\n) });"} lang="csharp" />
+
+    `new Autd3(origin, rotation)` は原点位置 (`Vector3`) と姿勢 (`Quaternion`) から 1 台のデバイスを構築する.
+    姿勢を省略した `new Autd3(origin)` もある (`Quaternion.Identity` を使う).
+  </Fragment>
+</CodeTabs>
+
+`Geometry::new` に複数台を渡すと, 先頭から順にデバイス番号 (`idx`) が割り振られる.
+
+## API
+
+配置全体の情報取得と, 各 `Device` へのアクセスを提供する.
+
+<CodeTabs rust={"let num_devices = geometry.num_devices();\nlet total_transducers = geometry.num_transducers();\nlet array_center = geometry.center();\n\nfor device in &geometry {\n    let _ = device;\n}\n\nlet first = &geometry[0];"} python={"num_devices = geometry.num_devices()\ntotal_transducers = geometry.num_transducers()\narray_center = geometry.center()\n\nfor device in geometry:\n    pass\n\nfirst = geometry[0]"} csharp={"var numDevices = geometry.NumDevices;\nvar totalTransducers = geometry.NumTransducers;\nvar arrayCenter = geometry.Center;\n\nfor (var i = 0; i < geometry.NumDevices; i++)\n{\n    var device = geometry[i];\n}\n\nvar first = geometry[0];"} />
+
+| メソッド             | 返り値                             | 説明                                  |
+| -------------------- | ---------------------------------- | ------------------------------------- |
+| `num_devices()`      | `usize`                            | デバイス台数                          |
+| `num_transducers()`  | `usize`                            | 全デバイスの振動子総数                |
+| `center()`           | `Point3<f32>`                      | アレイ全体の中心座標                  |
+| `pattern_buffer()`   | `Vec<Vec<Emission>>` | Pattern 計算用の出力バッファを確保    |
+| `iter()` / `&geometry` | `Iterator<Item = &Device>`       | 各 `Device` を走査                    |
+| `geometry[i]`        | `&Device`                          | `i` 番目の `Device` を取得            |
+
+## Device
+
+1 台のデバイスを表す.
+`geometry[i]` または `&geometry` の走査で得る.
+各振動子の位置・法線方向や, デバイスの姿勢を取得できる.
+
+<CodeTabs rust={"let idx = device.idx();\nlet num_transducers = device.num_transducers();\nlet center = device.center();\nlet rotation = device.rotation();\nlet x = device.x_direction();\nlet y = device.y_direction();\nlet axial = device.axial_direction();\nlet positions = device.positions();\nlet directions = device.directions();\nlet pos0 = device.position(0);\nlet dir0 = device.direction(0);"} python={"idx = device.idx()\nnum_transducers = device.num_transducers()\ncenter = device.center()\nrotation = device.rotation()\nx = device.x_direction()\ny = device.y_direction()\naxial = device.axial_direction()\npositions = device.positions()\ndirections = device.directions()\npos0 = device.position(0)\ndir0 = device.direction(0)"} csharp={"var idx = dev.Idx;\nvar numTransducers = dev.NumTransducers;\nvar center = dev.Center;\nvar rotation = dev.Rotation;\nvar x = dev.XDirection;\nvar y = dev.YDirection;\nvar axial = dev.AxialDirection;\nvar positions = dev.Positions;\nvar directions = dev.Directions;\nvar pos0 = dev.Position(0);\nvar dir0 = dev.Direction(0);"} />
+
+| メソッド             | 返り値                  | 説明                                          |
+| -------------------- | ----------------------- | --------------------------------------------- |
+| `idx()`              | `usize`                 | `Geometry` 内でのデバイス番号                 |
+| `num_transducers()`  | `usize`                 | 振動子数                                      |
+| `center()`           | `Point3<f32>`           | デバイス中心座標                              |
+| `rotation()`         | `UnitQuaternion<f32>`   | デバイスの姿勢 (回転)                         |
+| `x_direction()`      | `UnitVector3<f32>`      | ローカル x 軸方向                             |
+| `y_direction()`      | `UnitVector3<f32>`      | ローカル y 軸方向                             |
+| `axial_direction()`  | `UnitVector3<f32>`      | 軸方向 (超音波の放射方向)                     |
+| `positions()`        | `&[Point3<f32>]`        | 全振動子の位置                                |
+| `directions()`       | `&[UnitVector3<f32>]`   | 全振動子の法線方向                            |
+| `position(i)`        | `Point3<f32>`           | `i` 番目の振動子の位置                        |
+| `direction(i)`       | `UnitVector3<f32>`      | `i` 番目の振動子の方向                        |
+
+## 座標ヘルパ (Rustのみ)
+
+`autd3_rs::geometry` には座標を組み立てるヘルパがある.
+引数の型が `Length` になっており, 単位を指定することができる.
+
+| 関数                | 返り値          | 説明                                         |
+| ------------------- | --------------- | -------------------------------------------- |
+| `point(x, y, z)`    | `Point3<f32>`   | 絶対座標の点                                 |
+| `offset(x, y, z)`   | `Vector3<f32>`  | 相対変位ベクトル                             |
+
+Python / C# には長さの単位型はなく, mm 固定である.

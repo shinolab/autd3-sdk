@@ -1,0 +1,167 @@
+---
+title: Appliance
+description: Run the EtherCAT master on a dedicated board to decouple the bus
+  from your host's load and OS settings
+sidebar:
+  order: 10
+slug: en/0.5.x/guide/appliance
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+The appliance is a dedicated board that runs nothing but the EtherCAT master.
+The board owns the cable to the AUTD3 devices, and your machine connects over TCP with [`RemoteLink`](/autd3-sdk/en/0.5.x/api/link/remote/).
+
+Only the Raspberry Pi 4 (RP4) is currently supported.
+
+## What you need
+
+| | |
+| --- | --- |
+| Board | Raspberry Pi 4 Model B |
+| microSD card | 8GB or larger |
+| Power supply | A USB-C supply for the RP4 (5V/3A) |
+| USB Ethernet adapter | The second wired port, used for the host. AX88179-based adapters are the ones we have tested |
+| Ethernet cables | Two, CAT 5e or better (one for the AUTD3 devices, one for the host) |
+
+## Getting the image
+
+The SD image is distributed on a Release page separate from the SDK itself.
+Open the newest [`appliance-v*` release](https://github.com/shinolab/autd3-sdk/releases?q=appliance-v\&expanded=true) and download `autd3-appliance-rp4-<version>-<date>.img.xz`.
+Use the image whose version matches the client you use.
+
+## Writing the card
+
+With [Raspberry Pi Imager](https://www.raspberrypi.com/software/), pick the `.img.xz` as is under "Use custom".
+
+:::caution
+Do not use the Imager's OS customisation (username, password, Wi-Fi, SSH).
+The image configures itself, and its root filesystem boots read-only, so the customisation is either ignored or may stop the board from booting.
+:::
+
+On Linux and macOS, `dd` works too.
+
+```sh
+xz -dc autd3-appliance-rp4-*.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
+```
+
+## First boot
+
+Insert the card and power the board on: the first boot creates the settings area in the free space on the card and reboots on its own.
+That takes about a minute.
+
+Discover the appliance from the host to confirm it came up.
+
+```sh
+autd3-appliance list
+```
+
+`autd3-appliance` is bundled with autd3-console ([Console](/autd3-sdk/en/0.5.x/getting-started/setup/console/)).
+Pressing "Scan" on the **Appliance** tab of autd3-console does the same thing.
+
+## Getting started
+
+1. Connect the RP4's onboard Ethernet port to the AUTD3 devices, and connect the host directly to the RP4 with an additional USB Ethernet adapter
+   * The RP4 and the host may also be connected over a LAN (Wi-Fi works too, see below), but a direct cable is recommended
+2. Power on the AUTD3 devices and the board
+3. Connect from the host with `RemoteLink`
+
+<CodeTabs rust={"let option = RemoteLinkOption::discover()?;"} python={"option = RemoteLinkOption(RemoteLinkOption.discover())"} csharp={"var option = new RemoteLinkOption(RemoteLinkOption.Discover());"} />
+
+A Linux host needs a connection profile that holds a link-local address.
+
+## Dashboard
+
+`http://autd3-<serial no.>.local:8081/` shows the state of the bus.
+(The address is in the discovery result.)
+
+The following operations are available.
+
+| | |
+| --- | --- |
+| Status | Whether the bus is open, the EtherCAT state of each device, phase excursions and exchange times, the connected client, the uplink addresses and Wi-Fi state |
+| Bus | Open, close, count the devices |
+| Config | Read and replace the config file (takes effect after a restart) |
+| Logs | The board's log |
+| Maintenance | Restart the server, reboot or power off the board, update the server binary, set or remove Wi-Fi credentials |
+
+The same operations are available from the `autd3-appliance` command.
+Discovery, status, opening and closing the bus, and restarting are also on the **Appliance** tab of autd3-console.
+
+```sh
+autd3-appliance list
+autd3-appliance status
+autd3-appliance config get > appliance.toml
+autd3-appliance config set appliance.toml
+autd3-appliance logs --lines 500
+```
+
+## Wi-Fi
+
+To use Wi-Fi, connect over Ethernet first (a direct cable or a LAN both work), then store the credentials.
+
+```sh
+autd3-appliance wifi set --ssid <SSID> --psk <PASSPHRASE> --country JP
+```
+
+Pass a two-letter country code to `--country` (`JP` for Japan).
+Leave it out and the 5GHz band and channels 12/13 stay unavailable.
+
+The `uplink` line of `autd3-appliance status` says whether it associated.
+`radio blocked` means the radio is disabled on the board, and `domain unset` means no country code is stored.
+
+Wi-Fi is slower and less stable than Ethernet, so a wired connection is recommended if possible.
+
+### Turning Wi-Fi off
+
+`wifi forget` removes the stored credentials.
+
+```sh
+autd3-appliance wifi forget
+autd3-appliance wifi forget --radio-off
+```
+
+With `--radio-off` the radio itself is turned off on top of removing the credentials.
+That survives a reboot, and the `uplink` line of `status` reads `radio blocked`.
+
+Both are refused unless the board is reachable over Ethernet, because dropping Wi-Fi while it is the only path leaves the board out of reach.
+Add `--force` to go ahead anyway.
+
+`wifi set` brings the radio back even after `--radio-off`.
+
+### When the API can no longer undo it
+
+If `wifi forget --force` left the board unreachable, or neither Ethernet nor Wi-Fi comes up, pull the SD card and fix it there.
+
+Insert the card into a host, and add this line at the end of `config.txt` on the boot partition to stop the radio for good.
+
+```
+dtoverlay=disable-wifi
+```
+
+Remove the line to bring the radio back.
+To drop only the credentials, delete `network/autd3-wifi.nmconnection` and `wifi-radio-off` from the `autd3-data` partition.
+
+## Security
+
+Neither the control API nor the Remote Link has authentication.
+
+To turn off only the write side, set `control.allow_admin` to `false`.
+Status and opening or closing the bus keep working; rebooting the board, powering it off, binary updates, Wi-Fi setup and removal, and replacing the config are refused.
+Restarting the server process is not refused.
+Setting `control.enabled` to `false` disables HTTP communication entirely.
+
+## Configuration
+
+The config file is `/data/autd3/remote-server.toml` on the board.
+Read and write it from the browser or with `autd3-appliance config`.
+Changes take effect after the server restarts.
+
+The two keys you will mainly touch are the following.
+
+| Key | Meaning |
+| --- | --- |
+| `bus.sync0_period` | The bus period, 1ms by default. Lengthen it when there are many devices and the bus is unstable |
+| `bus.open_on_start` | Whether to open the bus at power-on. `true` by default |
+
+`sync0_period` is best set to the smallest multiple of 500us that is longer than twice the exchange time.

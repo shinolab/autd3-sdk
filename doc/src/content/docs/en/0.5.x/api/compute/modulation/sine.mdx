@@ -1,0 +1,59 @@
+---
+title: sine
+description: Modulation that generates a sine-wave amplitude modulation
+sidebar:
+  order: 21
+srcPath: crates/autd3-rs-modulation/src/sine.rs
+slug: en/0.5.x/api/compute/modulation/sine
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+
+`sine` generates a sine-wave amplitude modulation.
+
+<ModulationPlot fixed="freq = 200 Hz (clamp = true)" />
+
+## API
+
+<CodeTabs rust={"sine(freq, &option, &mut dst)?;"} python={"sine(freq, option, dst)"} csharp={"Modulation.Sine(freq, option, dst);"} />
+
+| Parameter | Type           | Description                                  |
+| --------- | -------------- | -------------------------------------------- |
+| `freq`    | `Freq<u32>` etc. | modulation frequency                       |
+| `option`  | `&SineOption`  | additional options (see below)               |
+| `dst`     | `&mut Vec<u8>` | output buffer                                |
+
+The value of each sample <Math tex="i" /> is given by the following equation, for amplitude <Math tex="A" /> (`amplitude`), offset <Math tex="b" /> (`offset`), and phase <Math tex="\theta" /> (`phase`).
+
+<MathBlock tex="m_i = \frac{A}{2}\sin\!\left(2\pi f t_i + \theta\right) + b" />
+
+`freq` is specified as `Freq<u32>` (`150 * Hz`) or `Freq<f32>` (`150.0 * Hz`).
+
+## SineOption
+
+<CodeTabs rust={"SineOption {\n    amplitude,\n    offset,\n    phase,\n    clamp,\n    sampling_config,\n}"} python={"SineOption(\n    amplitude,\n    offset,\n    phase,\n    clamp,\n    sampling_config,\n)"} csharp={"new SineOption(\n    amplitude,\n    offset,\n    phase,\n    clamp,\n    samplingConfig\n)"} />
+
+| Field             | Type             | Default                 | Description                                              |
+| ----------------- | ---------------- | ----------------------- | -------------------------------------------------------- |
+| `amplitude`       | `u8`             | `0xFF`                  | amplitude of the sine wave                               |
+| `offset`          | `u8`             | `0x80`                  | DC offset                                                |
+| `phase`           | `Angle`          | `Angle::ZERO`           | phase                                                    |
+| `clamp`           | `bool`           | `false`                 | whether to clamp out-of-range values to \[0, 255]         |
+| `sampling_config` | `SamplingConfig` | `SamplingConfig::FREQ_4K` | sampling configuration                                 |
+
+If the combination of `amplitude` and `offset` causes the waveform to fall outside the \[0, 255] range, an error occurs when `clamp` is `false`.
+Choose values that stay within range, or set `clamp` to `true`.
+
+## Constraints
+
+Due to the [constraints of SamplingConfig](/autd3-sdk/en/0.5.x/api/basics/sampling-config/), the specified frequency may not be a representable frequency.
+In that case, passing `Nearest(freq)` rounds it to the nearest representable frequency.
+
+<CodeTabs rust={"sine(Nearest(150.5 * Hz), &option, &mut dst)?;"} python={"sine(Nearest(150.5 * Hz), option, dst)"} csharp={"Modulation.Sine(Nearest(150.5f * Hz), option, dst);"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::units::{Hz, rad};\nuse autd3_rs::value::SamplingConfig;\nuse autd3_rs_modulation::{SineOption, sine};\n\nlet mut dst = Vec::new();\n\nsine(\n    150 * Hz,\n    &SineOption {\n        amplitude: 0xFF,\n        offset: 0x80,\n        phase: 0.0 * rad,\n        clamp: false,\n        sampling_config: SamplingConfig::FREQ_4K,\n    },\n    &mut dst,\n)?;"} python={"from autd3.units import Hz, rad\nfrom autd3.value import SamplingConfig\nfrom autd3_modulation import SineOption, modulation_buffer, sine\n\ndst = modulation_buffer()\n\nsine(\n    150 * Hz,\n    SineOption(\n        amplitude=0xFF,\n        offset=0x80,\n        phase=0.0 * rad,\n        clamp=False,\n        sampling_config=SamplingConfig.FREQ_4K,\n    ),\n    dst,\n)"} csharp={"using AUTD3;\nusing static AUTD3.Units;\n\nvar dst = Modulation.ModulationBuffer();\n\nModulation.Sine(\n    150 * Hz,\n    new SineOption(\n        amplitude: 0xFF,\n        offset: 0x80,\n        phase: 0.0f * rad,\n        clamp: false,\n        samplingConfig: SamplingConfig.Freq4k\n    ),\n    dst\n);"} />

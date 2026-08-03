@@ -1,0 +1,100 @@
+---
+title: Remote
+description: 実機につながる別ホストへ TCP 接続する Remote Link
+sidebar:
+  order: 5
+slug: 0.5.x/api/link/remote
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`RemoteLink` は, AUTD3 デバイスに接続された別ホストへ TCP 接続して送受信する Link 実装.
+AUTD3 を操作したいマシンと実機を配線したマシンが異なる場合に使う.
+
+<Install rust="autd3-rs-link-remote" python="autd3-link-remote" csharp="AUTD3.Link.Remote" />
+
+サーバとクライアントの 2 プロセスで構成する.
+
+* `RemoteServer`: 実機に配線されたホストで動かす. 実機リンクを駆動し, フレームを TCP で中継する.
+* `RemoteLink`: 操作側のホストで動かす.
+
+サーバ側のホストには, 実機を駆動する Link のパッケージ ([EtherCrab](/autd3-sdk/0.5.x/api/link/ethercrab/) 等) も併せて追加する.
+
+[`Simulator`](/autd3-sdk/0.5.x/guide/simulator/) への接続も`RemoteLink`で行う.
+
+## API
+
+### RemoteServer
+
+`RemoteServer::new` に待ち受け設定と実機リンクを開くクロージャを渡し, `serve` で中継を始める.
+
+<CodeTabs rust={"let option = RemoteServerOption::new(bind);\nRemoteServer::new(option, |_: &[DeviceLayout]| {\n    EchocatLink::open(&EchocatLinkOption::default())\n        .map_err(|e| RemoteLinkError::Link(e.to_string()))\n})?\n.serve()?;"} />
+
+| 引数      | 型                                            | 説明                                       |
+| --------- | --------------------------------------------- | ------------------------------------------ |
+| `option`  | `RemoteServerOption`                          | 待ち受けアドレスとバススレッドの設定       |
+| `factory` | `FnMut(&[DeviceLayout]) -> Result<impl Link>` | 実機リンクを開くクロージャ                 |
+
+`RemoteServerOption` のフィールド:
+
+| フィールド | 型                   | 説明                                     |
+| ---------- | -------------------- | ---------------------------------------- |
+| `bind`     | `SocketAddr`         | サーバが待ち受ける TCP アドレス           |
+| `bus`      | `BusOption`          | バススレッドの設定                        |
+
+`BusOption` のフィールド:
+
+| フィールド     | 型                       | 説明                                                                    |
+| -------------- | ------------------------ | ----------------------------------------------------------------------- |
+| `pacing`       | `BusPacing`              | バスの周期. `LinkPaced` は Link 自身のペースに任せる (EtherCAT リンクはこちら) |
+| `rt_priority`  | `Option<ThreadPriority>` | バススレッドの優先度. 既定で実時間優先度を試み, 失敗したら警告を出す     |
+| `rt_policy`    | `RtSchedulePolicy`       | バススレッドのスケジューリングポリシー                                  |
+| `rt_affinity`  | `Option<CoreId>`         | バススレッドを固定する CPU コア                                         |
+| `stack_prefault_bytes` | `usize`          | 起動時にページインしておくバススレッドのスタックのバイト数. 既定 0. 0 のままだと最初のフレームがページフォールト分だけ遅れる |
+
+`serve` はクライアントの接続を待ち受け, 接続ごとに `factory` で実機リンクを開いて tx/rx フレームの中継を始める.
+
+クライアントの `Geometry` の台数はサーバ側のバスの台数と一致していなければならない.
+
+`rt_priority` の設定には特権が要る (Linux では `CAP_SYS_NICE`).
+権限が無いと警告を出して素のスケジューリングで動くが, 負荷時にバスが不安定になる.
+
+### RemoteLink
+
+<CodeTabs rust={"RemoteLinkOption::new(addr);"} python={"RemoteLinkOption(addr)"} csharp={"new RemoteLinkOption(addr);"} />
+
+| フィールド | 型                 | 説明                       |
+| ---------- | ------------------ | -------------------------- |
+| `addr`     | `SocketAddr`       | 接続先サーバのアドレス     |
+| `timeout`  | `Option<Duration>` | 接続と 1 フレームごとの待ち時間. `None` は OS 既定のため, 応答の無いアドレスは失敗するまで数分かかる |
+
+### 探索
+
+mDNS でネットワーク上のサーバを探すことができる.
+Rust では `discovery` feature が要る (Python と C# は既定で使える).
+
+```toml
+autd3-rs-link-remote = { version = "0.4", features = ["discovery"] }
+```
+
+<CodeTabs rust={"let option = RemoteLinkOption::discover()?;"} python={"option = RemoteLinkOption(RemoteLinkOption.discover())"} csharp={"var option = new RemoteLinkOption(RemoteLinkOption.Discover());"} />
+
+サーバが 1 つも見つからないか複数見つかった場合はエラーになる.
+複数見つかったときのエラーには見つかったサーバの一覧が入るので, その中から名前で選ぶ.
+
+<CodeTabs rust={"let option = RemoteLinkOption::discover_with(&DiscoveryOption {\n    instance: Some(\"autd3-0a1b2c3d\".to_string()),\n    ..Default::default()\n})?;"} python={"option = RemoteLinkOption(\n    RemoteLinkOption.discover(timeout=timedelta(seconds=5), instance=\"autd3-0a1b2c3d\")\n)"} csharp={"var option = new RemoteLinkOption(\n    RemoteLinkOption.Discover(TimeSpan.FromSeconds(5), \"autd3-0a1b2c3d\"));"} />
+
+`DiscoveryOption` のフィールド:
+
+| フィールド | 型                 | 説明                                                       |
+| ---------- | ------------------ | ---------------------------------------------------------- |
+| `timeout`  | `Duration`         | 応答を待つ時間. 既定 2 秒. 短くすると取りこぼす            |
+| `instance` | `Option<String>`   | 探すサーバの名前. `None` ならすべて                        |
+
+一覧だけが要るなら `discover_all` を使う.
+
+<CodeTabs rust={"for appliance in autd3_rs_link_remote::discover_all(&DiscoveryOption::default())? {\n    println!(\"{} at {}\", appliance.instance, appliance.addr);\n}"} />
+
+直結する場合, 探索は IPv6 リンクローカルアドレスを返す.
+ホスト側に設定は基本的に不要だが, IPv4 で繋ぎたい場合だけ, ホスト側にもリンクローカルアドレスを持つ接続プロファイルが必要.

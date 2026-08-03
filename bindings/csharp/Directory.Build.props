@@ -8,7 +8,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <Authors>Shun Suzuki</Authors>
     <Company>shinolab</Company>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Description>AUTD3 .NET binding ($(AssemblyName)).</Description>
     <PackageProjectUrl>https://github.com/shinolab/autd3-sdk</PackageProjectUrl>
     <RepositoryUrl>https://github.com/shinolab/autd3-sdk</RepositoryUrl>
