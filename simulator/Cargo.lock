@@ -82,6 +82,7 @@ name = "autd3-rs-link-remote"
 version = "0.4.0"
 dependencies = [
  "autd3-rs-core",
+ "socket2",
  "thiserror",
  "tokio",
  "tracing",
