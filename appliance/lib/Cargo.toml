@@ -7,6 +7,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 description = "Control API schema for the AUTD3 EtherCAT master appliance, shared by the server and its clients."
+publish = false
 
 [features]
 client = ["dep:ureq", "dep:serde_json", "dep:thiserror"]
