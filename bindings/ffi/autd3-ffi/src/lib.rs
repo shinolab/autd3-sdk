@@ -397,6 +397,7 @@ pub extern "C" fn autd3_client_config_new(
         rt_policy: RtSchedulePolicy::default(),
         rt_affinity,
         validate_state,
+        ..Default::default()
     })
 }
 

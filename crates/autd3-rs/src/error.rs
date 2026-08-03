@@ -3,6 +3,7 @@ use thiserror::Error;
 use autd3_rs_core::error::{EncodeError, LinkError};
 use autd3_rs_core::protocol::describe_device_error;
 
+use crate::firmware_version::FirmwareVersion;
 use crate::mirror::{BankLoop, SilencerAxis};
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError, TransitionMode};
 
@@ -28,6 +29,16 @@ pub enum Error {
         device: usize,
         transition_mode: TransitionMode,
         bank_loop: BankLoop,
+    },
+
+    #[error(
+        "device {device} runs firmware {version}, which is outside the series supported by this SDK ({}.{}.x)",
+        FirmwareVersion::SUPPORTED_SERIES.0,
+        FirmwareVersion::SUPPORTED_SERIES.1
+    )]
+    UnsupportedFirmware {
+        device: usize,
+        version: FirmwareVersion,
     },
 
     #[error("ack timeout after {cycles} cycles")]

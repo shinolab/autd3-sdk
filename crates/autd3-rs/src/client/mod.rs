@@ -125,6 +125,12 @@ impl Client {
                     },
                     dc_clock,
                 };
+                if config.require_supported_firmware
+                    && let Err(e) = client.check_firmware_version().await
+                {
+                    let _ = client.close().await;
+                    return Err(e);
+                }
                 if let Err(e) = client.clear().await {
                     let _ = client.close().await;
                     return Err(e);
@@ -307,7 +313,7 @@ impl Client {
         let fpga_functions = self.read_broadcast(Cmd::ReadFpgaFunctions).await?;
         let err_after = self.read_broadcast(Cmd::ReadErrorDetail).await?;
 
-        Ok((0..cpu_major.len())
+        let versions: Vec<_> = (0..cpu_major.len())
             .map(|i| {
                 let (fpga, function_bits) = if err_after[i] == UNKNOWN_CMD {
                     if err_before[i] == UNKNOWN_CMD {
@@ -344,7 +350,32 @@ impl Client {
                     function_bits,
                 }
             })
-            .collect())
+            .collect();
+
+        let (major, minor) = FirmwareVersion::SUPPORTED_SERIES;
+        versions
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| !v.is_supported())
+            .for_each(|(device, version)| {
+                tracing::warn!(
+                    device,
+                    "firmware {version} is outside the series supported by this SDK ({major}.{minor}.x); correct operation is not guaranteed"
+                );
+            });
+
+        Ok(versions)
+    }
+
+    async fn check_firmware_version(&self) -> Result<(), Error> {
+        self.read_firmware_version()
+            .await?
+            .into_iter()
+            .enumerate()
+            .find(|(_, version)| !version.is_supported())
+            .map_or(Ok(()), |(device, version)| {
+                Err(Error::UnsupportedFirmware { device, version })
+            })
     }
 
     pub async fn read_error_detail(&self) -> Result<Vec<u8>, Error> {

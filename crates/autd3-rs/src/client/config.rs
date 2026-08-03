@@ -20,6 +20,7 @@ pub struct ClientConfig {
     pub rt_policy: RtSchedulePolicy,
     pub rt_affinity: Option<CoreId>,
     pub validate_state: bool,
+    pub require_supported_firmware: bool,
 }
 
 impl Default for ClientConfig {
@@ -34,6 +35,7 @@ impl Default for ClientConfig {
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             validate_state: true,
+            require_supported_firmware: false,
         }
     }
 }

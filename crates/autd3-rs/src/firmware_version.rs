@@ -1,6 +1,6 @@
 use core::fmt;
 
-use autd3_cpu_wire::params::FUNC_EMULATOR_BIT;
+use autd3_cpu_wire::params::{FUNC_EMULATOR_BIT, VERSION_NUM_MAJOR, VERSION_NUM_MINOR};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Version {
@@ -20,6 +20,11 @@ impl Version {
     pub const fn is_unknown(self) -> bool {
         self.major == 0 && self.minor == 0 && self.patch == 0
     }
+
+    #[must_use]
+    pub const fn series(self) -> (u8, u8) {
+        (self.major, self.minor)
+    }
 }
 
 impl fmt::Display for Version {
@@ -36,10 +41,22 @@ pub struct FirmwareVersion {
 }
 
 impl FirmwareVersion {
+    pub const SUPPORTED_SERIES: (u8, u8) = (VERSION_NUM_MAJOR, VERSION_NUM_MINOR);
+
     #[must_use]
     pub const fn is_emulator(&self) -> bool {
         self.function_bits & (1 << FUNC_EMULATOR_BIT) != 0
     }
+
+    #[must_use]
+    pub const fn is_supported(&self) -> bool {
+        !self.fpga.is_unknown() && is_supported_series(self.cpu) && is_supported_series(self.fpga)
+    }
+}
+
+const fn is_supported_series(version: Version) -> bool {
+    version.major == FirmwareVersion::SUPPORTED_SERIES.0
+        && version.minor == FirmwareVersion::SUPPORTED_SERIES.1
 }
 
 impl fmt::Display for FirmwareVersion {
