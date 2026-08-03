@@ -1,4 +1,7 @@
-use glam::{EulerRot, Mat3, Mat4, Quat, Vec2, Vec3};
+use glam::{
+    EulerRot, Mat3, Mat4, Quat, Vec2, Vec3,
+    camera::rh::{proj::directx::perspective, view::look_at_mat4},
+};
 
 fn quat_to_euler_deg(q: Quat) -> Vec3 {
     let (x, y, z) = q.to_euler(EulerRot::XYZ);
@@ -9,7 +12,7 @@ fn look_euler(pos: Vec3, pivot: Vec3) -> Vec3 {
     if (pivot - pos).length() < 1e-4 {
         return Vec3::ZERO;
     }
-    let view = Mat4::look_at_rh(pos, pivot, Vec3::Z);
+    let view = look_at_mat4(pos, pivot, Vec3::Z);
     let world_rot = Mat3::from_mat4(view).transpose();
     quat_to_euler_deg(Quat::from_mat3(&world_rot))
 }
@@ -54,8 +57,7 @@ impl Camera {
 
     pub(crate) fn view_proj(&self, aspect: f32) -> Mat4 {
         let view = (Mat4::from_translation(self.pos) * Mat4::from_quat(self.quat())).inverse();
-        let proj =
-            Mat4::perspective_rh(self.fov.to_radians(), aspect.max(0.01), self.near, self.far);
+        let proj = perspective(self.fov.to_radians(), aspect.max(0.01), self.near, self.far);
         proj * view
     }
 
