@@ -270,6 +270,13 @@ fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
         )?]);
     };
     let mut packages = Vec::new();
+    if doc.contains_key("package") {
+        packages.push(read_member_package(
+            &manifest,
+            &manifest,
+            inherited_version.as_deref(),
+        )?);
+    }
     for member in members {
         let member = member
             .as_str()
