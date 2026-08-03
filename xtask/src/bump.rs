@@ -51,6 +51,8 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             )?;
             bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
             bump_console(root, &core)?;
+            let pages = crate::doc::rewrite_appliance_version(root, &core)?;
+            println!("Updated appliance image link in {pages} doc page(s) -> appliance-v{core}");
             println!(
                 "Updated software version -> {core} (crates, ffi, python, csharp, emulator, holo-wgpu, simulator, console)"
             );

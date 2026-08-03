@@ -15,6 +15,7 @@ use crate::util::{capture, on_path, run, run_tool};
 const FIRMWARE_MARKER: &str = "Firmware v";
 const UNITY_PKG_MARKER: &str = "\"com.shinolab.autd3-sdk";
 const CONSOLE_TAG_MARKER: &str = "console-v";
+const APPLIANCE_TAG_MARKER: &str = "appliance-v";
 const EXPECT_ERROR_MARKER: &str = "# xtask:expect-error";
 const LONG_RUNNING_MARKER: &str = "# xtask:long-running";
 const SAMPLE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -322,6 +323,10 @@ fn console_version_spans(text: &str) -> Vec<(usize, usize, String)> {
     semver_spans(text, CONSOLE_TAG_MARKER, false)
 }
 
+fn appliance_version_spans(text: &str) -> Vec<(usize, usize, String)> {
+    semver_spans(text, APPLIANCE_TAG_MARKER, false)
+}
+
 type Spans = fn(&str) -> Vec<(usize, usize, String)>;
 
 fn doc_pages(doc: &Path) -> Result<Vec<PathBuf>> {
@@ -390,10 +395,15 @@ pub fn rewrite_console_version(root: &Path, version: &str) -> Result<usize> {
     rewrite_spans(root, console_version_spans, version)
 }
 
+pub fn rewrite_appliance_version(root: &Path, version: &str) -> Result<usize> {
+    rewrite_spans(root, appliance_version_spans, version)
+}
+
 fn verify_versions(root: &Path, doc: &Path) -> Result<()> {
     verify_firmware_series(root, doc)?;
     verify_unity_version(root, doc)?;
-    verify_console_version(root, doc)
+    verify_console_version(root, doc)?;
+    verify_appliance_version(root, doc)
 }
 
 fn verify_firmware_series(root: &Path, doc: &Path) -> Result<()> {
@@ -468,6 +478,32 @@ fn verify_console_version(root: &Path, doc: &Path) -> Result<()> {
              (expected `{CONSOLE_TAG_MARKER}{expected}`):\n  {}\n\
              run `cargo xtask bump-version console <version>` (it rewrites these pages), or fix the link by hand. \
              frozen version snapshots are exempt: they record the console version of their own SDK release.",
+            offenders.join("\n  ")
+        );
+    }
+    Ok(())
+}
+
+fn verify_appliance_version(root: &Path, doc: &Path) -> Result<()> {
+    let expected = component_version(root, "appliance")?;
+    let found = collect_spans(doc, appliance_version_spans)?;
+    if found.is_empty() {
+        bail!(
+            "no `{APPLIANCE_TAG_MARKER}<version>` link found in the current docs; the appliance image \
+             download must point at a concrete release (the appliance follows the software version in Cargo.toml)"
+        );
+    }
+    let offenders: Vec<_> = found
+        .iter()
+        .filter(|(_, version)| *version != expected)
+        .map(|(page, version)| format!("{}: {APPLIANCE_TAG_MARKER}{version}", page.display()))
+        .collect();
+    if !offenders.is_empty() {
+        bail!(
+            "docs link to an appliance image release that does not match the software version \
+             (expected `{APPLIANCE_TAG_MARKER}{expected}`):\n  {}\n\
+             run `cargo xtask bump-version software <version>` (it rewrites these pages), or fix the link by hand. \
+             frozen version snapshots are exempt: they record the appliance version of their own SDK release.",
             offenders.join("\n  ")
         );
     }
