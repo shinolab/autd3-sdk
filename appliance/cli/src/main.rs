@@ -36,8 +36,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// List every appliance answering on the network
-    List,
+    /// Scan the network for appliances
+    Scan,
     /// Show the bus and appliance status
     Status,
     /// Ask the bus to open
@@ -118,13 +118,13 @@ enum ConfigAction {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    if matches!(cli.command, Command::List) {
-        return list(&cli);
+    if matches!(cli.command, Command::Scan) {
+        return scan(&cli);
     }
 
     let client = connect(&cli)?;
     match &cli.command {
-        Command::List => unreachable!("handled above"),
+        Command::Scan => unreachable!("handled above"),
         Command::Status => status(&cli, &client)?,
         Command::Open => emit(&cli, &client.bus_open()?, |a| println!("{}", a.message))?,
         Command::Close => emit(&cli, &client.bus_close()?, |a| println!("{}", a.message))?,
@@ -219,7 +219,7 @@ fn discovery_option(cli: &Cli) -> DiscoveryOption {
     }
 }
 
-fn list(cli: &Cli) -> Result<()> {
+fn scan(cli: &Cli) -> Result<()> {
     let found = discover_all(&discovery_option(cli))?;
     if cli.json {
         let rows: Vec<_> = found.iter().map(json_of).collect();
@@ -277,7 +277,7 @@ fn connect(cli: &Cli) -> Result<ApplianceClient> {
         0 => match &cli.instance {
             Some(instance) => bail!(
                 "no appliance called `{instance}` answered within {}s. \
-                 Run `autd3-appliance list` without --instance to see what is on this link",
+                 Run `autd3-appliance scan` without --instance to see what is on this link",
                 cli.discovery_timeout,
             ),
             None => bail!(
