@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use crate::util::{capture, capture_lenient, copy_dir, copy_file, on_path, run};
+use crate::util::{capture, capture_lenient, copy_dir, copy_file, on_path, run, which};
 
 const PI_GEN_URL: &str = "https://github.com/RPi-Distro/pi-gen";
 const ECAT_INTERFACE: &str = "ecat0";
@@ -789,7 +789,9 @@ fn shell_quote(path: &Path) -> String {
 const BINFMT_MISC: &str = "/proc/sys/fs/binfmt_misc";
 
 const EMULATION_FIX: &str = "Register a statically linked emulator instead:\n  \
-     Debian/Ubuntu: sudo apt install qemu-user-static binfmt-support\n  \
+     Debian/Ubuntu: sudo apt install qemu-user-static  (the packaged handler names a \
+     /usr/libexec wrapper, so also `sudo ln -sf qemu-aarch64-static /usr/bin/qemu-aarch64` \
+     instead of installing qemu-user)\n  \
      Arch:          sudo pacman -S qemu-user-static-binfmt  (replaces qemu-user-binfmt; keep \
      qemu-user, pi-gen looks for qemu-aarch64 by name)\n  \
      Fedora:        sudo dnf install qemu-user-static\n  \
@@ -830,18 +832,19 @@ fn check_emulation(root: &Path) -> Result<()> {
              enough, `sudo mount binfmt_misc -t binfmt_misc {BINFMT_MISC}`",
         );
     }
-    if !on_path("qemu-aarch64") {
+    let Some(qemu) = which("qemu-aarch64") else {
         bail!(
             "`qemu-aarch64` is not on PATH. pi-gen's build-docker.sh looks it up by that exact \
              name before it will start (`qemu-user` on most distributions).",
         );
-    }
+    };
 
     let mut handlers = Vec::new();
+    let mut globbed = Vec::new();
     for entry in std::fs::read_dir(BINFMT_MISC).with_context(|| format!("reading {BINFMT_MISC}"))? {
         let path = entry?.path();
         let name = path.file_name().unwrap_or_default().to_string_lossy();
-        if !(name.contains("aarch64") || name.contains("arm64")) || name.ends_with("_be") {
+        if !(name.contains("aarch64") || name.contains("arm64")) {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap_or_default();
@@ -852,7 +855,14 @@ fn check_emulation(root: &Path) -> Result<()> {
                 .trim()
                 .to_owned()
         };
-        handlers.push((name.into_owned(), field("interpreter "), field("flags:")));
+        let interpreter = field("interpreter ");
+        if name.starts_with("qemu-aarch64") {
+            globbed.push(interpreter.clone());
+        }
+        if name.ends_with("_be") {
+            continue;
+        }
+        handlers.push((name.into_owned(), interpreter, field("flags:")));
     }
     if handlers.is_empty() {
         bail!("no binfmt_misc handler for aarch64 is registered.\n{EMULATION_FIX}");
@@ -874,6 +884,22 @@ fn check_emulation(root: &Path) -> Result<()> {
                 interpreter.display(),
             );
         }
+    }
+
+    let qemu_prefix = qemu.to_string_lossy().into_owned();
+    if !globbed
+        .iter()
+        .any(|interpreter| interpreter.starts_with(&qemu_prefix))
+        && !is_statically_linked(&qemu)?
+    {
+        bail!(
+            "build-docker.sh registers `qemu-aarch64-rpi` naming {qemu_prefix} whenever no \
+             `qemu-aarch64*` handler already names it, and the entry it adds is the one the \
+             kernel matches first. {qemu_prefix} is dynamically linked, so every handler checked \
+             above is bypassed and the container fails at `arch-test`. Put the static build first \
+             on PATH under that name (`ln -sf qemu-aarch64-static /usr/bin/qemu-aarch64`).\n\
+             {EMULATION_FIX}",
+        );
     }
     Ok(())
 }

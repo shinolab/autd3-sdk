@@ -99,10 +99,8 @@ pub fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn on_path(name: &str) -> bool {
-    let Some(paths) = std::env::var_os("PATH") else {
-        return false;
-    };
+pub fn which(name: &str) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH")?;
     let exts: Vec<String> = if cfg!(windows) {
         std::env::var("PATHEXT")
             .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
@@ -112,10 +110,15 @@ pub fn on_path(name: &str) -> bool {
     } else {
         vec![String::new()]
     };
-    std::env::split_paths(&paths).any(|dir| {
+    std::env::split_paths(&paths).find_map(|dir| {
         exts.iter()
-            .any(|ext| dir.join(format!("{name}{ext}")).is_file())
+            .map(|ext| dir.join(format!("{name}{ext}")))
+            .find(|path| path.is_file())
     })
+}
+
+pub fn on_path(name: &str) -> bool {
+    which(name).is_some()
 }
 
 #[cfg(target_os = "linux")]
