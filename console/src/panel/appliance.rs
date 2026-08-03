@@ -235,7 +235,7 @@ impl AppliancePanel {
                 return;
             }
         };
-        match ManagedProcess::spawn(&bin, &["list".to_owned(), "--json".to_owned()]) {
+        match ManagedProcess::spawn(&bin, &["scan".to_owned(), "--json".to_owned()]) {
             Ok(proc) => self.scan = Some(proc),
             Err(e) => self.error = Some(super::spawn_error(&bin, &e)),
         }

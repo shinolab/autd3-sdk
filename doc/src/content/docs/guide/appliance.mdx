@@ -56,7 +56,7 @@ xz -dc autd3-appliance-rp4-*.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync statu
 起動したかどうかは, ホストからアプライアンスを探索して確かめる.
 
 ```sh
-autd3-appliance list
+autd3-appliance scan
 ```
 
 `autd3-appliance` は autd3-console のバンドルに同梱されている ([コンソール](/autd3-sdk/getting-started/setup/console/)).
@@ -91,7 +91,7 @@ autd3-console の **Appliance** タブで「Scan」を押しても良い.
 探索・状態表示・バスの開閉・再起動は autd3-console の **Appliance** タブからも行える.
 
 ```sh
-autd3-appliance list
+autd3-appliance scan
 autd3-appliance status
 autd3-appliance config get > appliance.toml
 autd3-appliance config set appliance.toml
