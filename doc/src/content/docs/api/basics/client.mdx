@@ -64,6 +64,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | `rt_policy`            | `RtSchedulePolicy`    | `Fifo`          | `rt_priority` 指定時のスケジューリングポリシー. `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
 | `rt_affinity`          | `Option<CoreId>`      | `None`          | RT スレッドの CPU affinity (`None` なら OS 既定)      |
 | `validate_state`       | `bool`                | `true`          | 送信前検証を有効にする                     |
+| `require_supported_firmware` | `bool`          | `false`         | `true`なら接続時にファームウェアがサポートされているか検査する (Rust のみ) |
 
 `max_inflight` は `MAX_INFLIGHT (127)` を超えるとエラーになる.
 

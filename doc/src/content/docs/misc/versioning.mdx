@@ -1,0 +1,27 @@
+---
+title: バージョニング
+description: SemVer の適用範囲, 非推奨 API の扱い, ファームウェア互換, Rust の要求版数
+sidebar:
+  order: 1
+---
+
+本 SDK は [Semantic Versioning 2.0.0](https://semver.org/lang/ja/) に従う.
+
+## ファームウェアとの対応
+
+SDK のあるバージョンがサポートするファームウェアのバージョン系列 (MAJOR.MINORの組) は 1 つだけである.
+対応する系列は [ファームウェア](/autd3-sdk/getting-started/setup/firmware/) に記載する.
+
+## Rust の要求版数
+
+MSRV は保証しない.
+本 SDK は常に最新の stable Rust でビルドできることのみを保証する.
+
+## パッケージ間の版数
+
+同時に使うパッケージは版数を揃えること.
+異なる版数のパッケージを混在させた場合の動作は保証しない.
+
+Python / C# のパッケージは `MAJOR.MINOR.PATCH.BUILD` の 4 桁を使うことがある.
+先頭 3 桁が SDK の版数で, 4 桁目はバインディング側だけの修正を表す.
+Unity パッケージは 3 桁で, `MAJOR.MINOR` が SDK に対応し, PATCH は独立して進む.

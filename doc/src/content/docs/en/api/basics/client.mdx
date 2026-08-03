@@ -62,6 +62,7 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 | `rt_policy`            | `RtSchedulePolicy`       | `Fifo`  | Scheduling policy used when `rt_priority` is set: `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
 | `rt_affinity`          | `Option<CoreId>`         | `None`  | CPU core affinity of the RT thread (OS default if `None`)  |
 | `validate_state`       | `bool`                   | `true`  | Enable pre-send validation                                 |
+| `require_supported_firmware` | `bool`             | `false` | Check the firmware series on open (Rust only) |
 
 `max_inflight` errors if it exceeds `MAX_INFLIGHT (127)`.
 
