@@ -153,6 +153,15 @@ fn read_telemetry_sync_resync_returns_fpga_state_high_byte() {
 }
 
 #[test]
+fn derived_telemetry_id_is_not_a_cpu_counter() {
+    let h = Harness::new();
+    for &id in Telemetry::ALL {
+        assert_eq!(h.telemetry(id), 0);
+    }
+    assert_eq!(h.telemetry(Telemetry::SyncResync), 0);
+}
+
+#[test]
 fn clear_resets_telemetry_counters() {
     let mut h = Harness::new();
     h.deliver(&force_fan(0, 2));

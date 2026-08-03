@@ -11,5 +11,7 @@ crate::wire_enum! {
 }
 
 impl Telemetry {
-    pub const COUNT: usize = 6;
+    pub const CPU_COUNTER_COUNT: usize = Self::SyncResync as usize;
 }
+
+const _: () = assert!(Telemetry::ALL.len() == Telemetry::CPU_COUNTER_COUNT + 1);

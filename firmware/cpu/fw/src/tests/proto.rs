@@ -59,6 +59,17 @@ fn unknown_cmd_sets_error_detail() {
 }
 
 #[test]
+fn every_cmd_has_a_dispatch_arm() {
+    for &cmd in Cmd::ALL {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, cmd));
+        let next_seq = u8::from(cmd != Cmd::Reset);
+        h.deliver(&Frame::new(next_seq, Cmd::ReadErrorDetail));
+        assert_ne!(h.data(), Error::UnknownCmd as u8, "{cmd:?}");
+    }
+}
+
+#[test]
 fn duplicate_frame_is_suppressed_at_isr_boundary() {
     let mut h = Harness::new();
     let f = Frame::new(0, Cmd::Nop);

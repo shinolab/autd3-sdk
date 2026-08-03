@@ -73,7 +73,7 @@ fn write_switch<P: Port>(port: &mut P, reg: u16, value: u16) {
 pub fn set_and_wait_update<P: Port>(port: &mut P, mode: Mode, flag: u16) -> Result<(), Error> {
     let max_polls = match mode {
         Mode::LowLatency => FPGA_WAIT_UPDATE_MAX_POLLS_INLINE,
-        Mode::Fifo => FPGA_WAIT_UPDATE_MAX_POLLS,
+        _ => FPGA_WAIT_UPDATE_MAX_POLLS,
     };
     let persistent = read(port, BRAM_SELECT_CONTROLLER, ADDR_CTL_FLAG);
     write(
