@@ -512,6 +512,12 @@ impl Telemetry {
         Self(autd3_rs::Telemetry::Failsafe)
     }
 
+    #[classattr]
+    #[pyo3(name = "SyncResync")]
+    fn sync_resync() -> Self {
+        Self(autd3_rs::Telemetry::SyncResync)
+    }
+
     fn __repr__(&self) -> String {
         format!("Telemetry.{:?}", self.0)
     }

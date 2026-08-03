@@ -5,11 +5,14 @@ macro_rules! wire_enum {
     ($vis:vis enum $name:ident { $($variant:ident = $value:expr,)+ }) => {
         #[derive(Clone, Copy, PartialEq, Eq, Debug)]
         #[repr(u8)]
+        #[non_exhaustive]
         $vis enum $name {
             $($variant = $value,)+
         }
 
         impl $name {
+            $vis const ALL: &'static [Self] = &[$(Self::$variant,)+];
+
             #[must_use]
             $vis const fn from_u8(value: u8) -> Option<Self> {
                 $(if value == $value {

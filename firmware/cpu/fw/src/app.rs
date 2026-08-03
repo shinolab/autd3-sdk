@@ -33,7 +33,7 @@ pub struct Cpu {
     fifo_flush_seen: AtomicU16,
     preempt_tx: AtomicU16,
     preempt_expected: AtomicU8,
-    telemetry: [AtomicU8; Telemetry::COUNT],
+    telemetry: [AtomicU8; Telemetry::CPU_COUNTER_COUNT],
     al_err_ticks: Cell<u16>,
     proto: ProtoState,
     pub(crate) silencer: cmd::silencer::SilencerGuard,
@@ -65,7 +65,7 @@ impl Cpu {
             fifo_flush_seen: AtomicU16::new(0),
             preempt_tx: AtomicU16::new(0),
             preempt_expected: AtomicU8::new(0),
-            telemetry: [const { AtomicU8::new(0) }; Telemetry::COUNT],
+            telemetry: [const { AtomicU8::new(0) }; Telemetry::CPU_COUNTER_COUNT],
             al_err_ticks: Cell::new(0),
             proto: ProtoState::new(),
             silencer: cmd::silencer::SilencerGuard::new(),
@@ -101,12 +101,16 @@ impl Cpu {
     }
 
     fn bump(&self, id: Telemetry) {
-        self.telemetry[id as usize].fetch_add(1, Ordering::Relaxed);
+        if let Some(counter) = self.telemetry.get(id as usize) {
+            counter.fetch_add(1, Ordering::Relaxed);
+        }
     }
 
     #[must_use]
     pub fn telemetry(&self, id: Telemetry) -> u8 {
-        self.telemetry[id as usize].load(Ordering::Relaxed)
+        self.telemetry
+            .get(id as usize)
+            .map_or(0, |counter| counter.load(Ordering::Relaxed))
     }
 
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
@@ -323,6 +327,7 @@ impl Cpu {
             Cmd::Synchronize => self.sync(port),
             Cmd::SetMode => self.set_mode_cmd(payload),
             Cmd::Clear => self.clear(port),
+            _ => Err(Error::UnknownCmd),
         };
         match result {
             Ok(()) => 0,

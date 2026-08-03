@@ -248,7 +248,7 @@ fn slave_cycle(
             slave.mode = parsed.payload[0];
             0
         }
-        Cmd::Reset => unreachable!(),
+        _ => unreachable!(),
     };
     slave.ack = parsed.seq.get();
     slave.data = data;
