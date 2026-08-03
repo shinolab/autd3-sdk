@@ -14,16 +14,18 @@ namespace AUTD3.Link
             Timeout = timeout;
         }
 
-        public static string Discover(TimeSpan? timeout = null, string? instance = null)
+        public static RemoteLinkOption Discover(TimeSpan? timeout = null, string? instance = null)
         {
             var timeoutNs = (ulong)(timeout?.Ticks * 100 ?? 0);
+            var linkTimeoutNs = 0UL;
             var err = IntPtr.Zero;
-            var found = NativeRemote.autd3_link_remote_discover(timeoutNs, instance, ref err);
+            var found = NativeRemote.autd3_link_remote_discover(timeoutNs, instance, ref linkTimeoutNs, ref err);
             if (found != IntPtr.Zero)
             {
                 try
                 {
-                    return Marshal.PtrToStringUTF8(found) ?? throw new Autd3Exception("mDNS discovery returned nothing");
+                    var addr = Marshal.PtrToStringUTF8(found) ?? throw new Autd3Exception("mDNS discovery returned nothing");
+                    return new RemoteLinkOption(addr, linkTimeoutNs == 0 ? null : TimeSpan.FromTicks((long)(linkTimeoutNs / 100)));
                 }
                 finally
                 {
@@ -72,7 +74,7 @@ namespace AUTD3.Link
         internal static extern IntPtr autd3_link_remote_legacy([MarshalAs(UnmanagedType.LPUTF8Str)] string addr, ulong timeoutNs);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_remote_discover(ulong timeoutNs, [MarshalAs(UnmanagedType.LPUTF8Str)] string? instance, ref IntPtr err);
+        internal static extern IntPtr autd3_link_remote_discover(ulong timeoutNs, [MarshalAs(UnmanagedType.LPUTF8Str)] string? instance, ref ulong linkTimeoutNs, ref IntPtr err);
 
         [DllImport(Lib)]
         internal static extern void autd3_link_remote_free_string(IntPtr ptr);

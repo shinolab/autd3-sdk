@@ -10,15 +10,13 @@ RemoteLinkOption(addr)
 
 def discover() -> RemoteLinkOption:
     # ANCHOR: discover
-    option = RemoteLinkOption(RemoteLinkOption.discover())
+    option = RemoteLinkOption.discover()
     # ANCHOR_END: discover
     return option
 
 
 def discover_with_option() -> RemoteLinkOption:
     # ANCHOR: discover_option
-    option = RemoteLinkOption(
-        RemoteLinkOption.discover(timeout=timedelta(seconds=5), instance="autd3-0a1b2c3d")
-    )
+    option = RemoteLinkOption.discover(timeout=timedelta(seconds=5), instance="autd3-0a1b2c3d")
     # ANCHOR_END: discover_option
     return option
