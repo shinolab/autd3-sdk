@@ -7,6 +7,10 @@ members = ["dist:console"]
 cargo-dist-version = "0.32.0"
 # CI backends to support
 ci = "github"
+# dependabot bumps the action pins in the generated workflow, which dist cannot
+# express; ci-console diffs the file against a fresh `dist generate` (ignoring
+# this setting and the pins) so real drift is still caught
+allow-dirty = ["ci"]
 # The installers to generate for each app
 installers = ["shell", "powershell"]
 # Target platforms to build apps for (Rust target-triple syntax)

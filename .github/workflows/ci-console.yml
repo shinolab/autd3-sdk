@@ -39,8 +39,9 @@ jobs:
         run: |
           norm() { sed -E 's#(uses: *"?[^"@]+)@[^"[:space:]]*#\1@PIN#' "$1"; }
           norm .github/workflows/console-release.yml > "$RUNNER_TEMP/committed.yml"
+          sed -i '/^allow-dirty = /d' dist-workspace.toml
           dist generate
           norm .github/workflows/console-release.yml > "$RUNNER_TEMP/generated.yml"
+          git checkout -- .github/workflows/console-release.yml dist-workspace.toml
           diff -u "$RUNNER_TEMP/committed.yml" "$RUNNER_TEMP/generated.yml"
-          git checkout -- .github/workflows/console-release.yml
           dist plan
