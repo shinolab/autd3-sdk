@@ -189,6 +189,11 @@ impl RemoteLinkOption {
         Ok(Self { addr, timeout })
     }
 
+    #[getter]
+    fn addr(&self) -> String {
+        self.addr.to_string()
+    }
+
     fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
         let option = CoreOption {
             addr: self.addr,
@@ -214,15 +219,18 @@ impl RemoteLinkOption {
         py: Python<'_>,
         timeout: Option<&Bound<'_, PyAny>>,
         instance: Option<String>,
-    ) -> PyResult<String> {
+    ) -> PyResult<Self> {
         let default = autd3_rs_link_remote::DiscoveryOption::default();
         let option = autd3_rs_link_remote::DiscoveryOption {
             timeout: opt_duration(timeout)?.unwrap_or(default.timeout),
             instance,
         };
         py.detach(|| {
-            autd3_rs_link_remote::discover(&option)
-                .map(|appliance| appliance.addr.to_string())
+            CoreOption::discover_with(&option)
+                .map(|option| Self {
+                    addr: option.addr,
+                    timeout: option.timeout,
+                })
                 .map_err(|e| PyValueError::new_err(e.to_string()))
         })
     }

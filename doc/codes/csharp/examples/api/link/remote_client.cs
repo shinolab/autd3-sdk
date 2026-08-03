@@ -17,15 +17,14 @@ internal static class Sample
     internal static void Discover()
     {
         // ANCHOR: discover
-        var option = new RemoteLinkOption(RemoteLinkOption.Discover());
+        var option = RemoteLinkOption.Discover();
         // ANCHOR_END: discover
     }
 
     internal static void DiscoverWithOption()
     {
         // ANCHOR: discover_option
-        var option = new RemoteLinkOption(
-            RemoteLinkOption.Discover(TimeSpan.FromSeconds(5), "autd3-0a1b2c3d"));
+        var option = RemoteLinkOption.Discover(TimeSpan.FromSeconds(5), "autd3-0a1b2c3d");
         // ANCHOR_END: discover_option
     }
 }

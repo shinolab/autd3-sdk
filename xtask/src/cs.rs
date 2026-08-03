@@ -72,6 +72,9 @@ pub enum CsCmd {
         /// Also build the SOEM cdylib (opt-in: it is GPL-3.0-only)
         #[arg(long)]
         soem: bool,
+        /// Arguments forwarded to the example
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 }
 
@@ -117,6 +120,7 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             debug,
             no_sudo,
             soem,
+            args,
         } => {
             let native = build_ffi(root, soem)?;
             let config = if debug { "Debug" } else { "Release" };
@@ -131,7 +135,7 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
                 &dir,
             )?;
             let exe = find_example_exe(&project_dir, config, &name)?;
-            run_example(&exe, &native, no_sudo, &dir)
+            run_example(&exe, &native, &args, no_sudo, &dir)
         }
     }
 }
@@ -249,7 +253,13 @@ fn find_example_exe(project_dir: &Path, config: &str, name: &str) -> Result<Path
     bail!("built example executable not found under {}", bin.display());
 }
 
-fn run_example(exe: &Path, native: &Path, no_sudo: bool, cwd: &Path) -> Result<()> {
+fn run_example(
+    exe: &Path,
+    native: &Path,
+    args: &[String],
+    no_sudo: bool,
+    cwd: &Path,
+) -> Result<()> {
     let exe = exe.to_string_lossy().into_owned();
     let native = native.to_string_lossy().into_owned();
     let lib_path_var = if cfg!(target_os = "macos") {
@@ -258,11 +268,12 @@ fn run_example(exe: &Path, native: &Path, no_sudo: bool, cwd: &Path) -> Result<(
         "LD_LIBRARY_PATH"
     };
     if !no_sudo && cfg!(unix) {
-        let args = [format!("{lib_path_var}={native}"), exe];
-        run("sudo", args.iter().map(String::as_str), cwd)
+        let mut sudo_args = vec![format!("{lib_path_var}={native}"), exe];
+        sudo_args.extend(args.iter().cloned());
+        run("sudo", sudo_args.iter().map(String::as_str), cwd)
     } else {
         let mut cmd = Command::new(&exe);
-        cmd.current_dir(cwd).env(lib_path_var, &native);
+        cmd.current_dir(cwd).args(args).env(lib_path_var, &native);
         spawn(cmd, "example")
     }
 }
