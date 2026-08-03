@@ -76,7 +76,7 @@ axum = { version = "0.8.9", default-features = false, features = [
 ] }
 serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.150", default-features = false, features = ["std"] }
-toml = { version = "0.9.11", default-features = false, features = ["parse", "serde"] }
+toml = { version = "1.1.4", default-features = false, features = ["parse", "serde"] }
 anyhow = { version = "1.0.102", default-features = false, features = ["std"] }
 tracing = { version = "0.1.44", default-features = false }
 tracing-appender = { version = "0.2.3", default-features = false }
