@@ -1,5 +1,8 @@
-// Remote Link client: connects to a remote server over TCP and emits a 200 Hz
-// Start the Rust remote_server example first.
+// Remote Link client: connects to a remote server over TCP and emits a 200 Hz sine AM focus
+// Start the Rust remote_server example (or the simulator) first.
+// Pass an address to skip the mDNS lookup; without one it falls back to the local default
+// when no appliance answers, which is where remote_server and the simulator both listen.
+//
 // Run with: cargo xtask cs example RemoteClient
 
 using System;
@@ -12,15 +15,33 @@ using static AUTD3.Units;
 
 internal static class Program
 {
-    private const string ServerAddr = "127.0.0.1:8080";
+    private const string LocalAddr = "127.0.0.1:8080";
 
-    private static async Task Main()
+    private static RemoteLinkOption LinkOption(string[] args)
     {
+        if (args.Length > 0)
+        {
+            return new RemoteLinkOption(args[0]);
+        }
+        try
+        {
+            return RemoteLinkOption.Discover();
+        }
+        catch (Autd3Exception e)
+        {
+            Console.WriteLine($"discovery found no appliance ({e.Message}); falling back to {LocalAddr}");
+            return new RemoteLinkOption(LocalAddr);
+        }
+    }
+
+    private static async Task Main(string[] args)
+    {
+        var option = LinkOption(args);
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
 
-        using var client = await Client.OpenAsync(geometry, new RemoteLinkOption(ServerAddr), new ClientConfig());
+        using var client = await Client.OpenAsync(geometry, option, new ClientConfig());
 
-        Console.WriteLine($"connected to {ServerAddr}, devices: {client.NumDevices}");
+        Console.WriteLine($"connected to {option.Addr}, devices: {client.NumDevices}");
         var versions = await client.ReadFirmwareVersionAsync();
         for (var i = 0; i < versions.Count; i++)
         {

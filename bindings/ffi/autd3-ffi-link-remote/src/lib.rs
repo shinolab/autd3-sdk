@@ -233,10 +233,14 @@ pub unsafe extern "C" fn autd3_link_remote_legacy(
 pub unsafe extern "C" fn autd3_link_remote_discover(
     timeout_ns: u64,
     instance: *const c_char,
+    link_timeout_ns: *mut u64,
     err: *mut *mut c_char,
 ) -> *mut c_char {
     if !err.is_null() {
         unsafe { *err = std::ptr::null_mut() };
+    }
+    if !link_timeout_ns.is_null() {
+        unsafe { *link_timeout_ns = 0 };
     }
     let instance = (!instance.is_null()).then(|| {
         unsafe { CStr::from_ptr(instance) }
@@ -251,8 +255,17 @@ pub unsafe extern "C" fn autd3_link_remote_discover(
         },
         instance,
     };
-    match autd3_rs_link_remote::discover(&option) {
-        Ok(appliance) => alloc_cstring(&appliance.addr.to_string()),
+    match RemoteLinkOption::discover_with(&option) {
+        Ok(option) => {
+            if !link_timeout_ns.is_null() {
+                unsafe {
+                    *link_timeout_ns = option.timeout.map_or(0, |timeout| {
+                        u64::try_from(timeout.as_nanos()).unwrap_or(u64::MAX)
+                    });
+                }
+            }
+            alloc_cstring(&option.addr.to_string())
+        }
         Err(e) => {
             if !err.is_null() {
                 unsafe { *err = alloc_cstring(&e.to_string()) };
