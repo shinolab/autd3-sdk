@@ -28,6 +28,9 @@ jobs:
         run: cargo xtask console format
       - run: cargo xtask console lint
       - run: cargo xtask console test
+      - name: Build twincat-cli
+        if: runner.os == 'Windows'
+        run: cargo xtask tool twincat build
       - name: Install dist
         if: runner.os == 'Linux'
         run: |

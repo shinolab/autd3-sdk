@@ -1,11 +1,8 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use crate::launch::tool_bin;
+use crate::launch::{TWINCAT_BIN, twincat_bin};
 use crate::process::ManagedProcess;
-
-const SUBDIR: &str = "twincat";
-const BIN: &str = "twincat-cli";
 const BASE_TIMES: &[&str] = &[
     "50us", "62.5us", "66.6us", "71.4us", "76.9us", "83.3us", "100us", "125us", "200us", "250us",
     "333us", "500us", "1ms", "none",
@@ -199,10 +196,10 @@ impl TwinCatPanel {
 
     fn start(&mut self) {
         self.error = None;
-        let bin = match tool_bin(SUBDIR, BIN) {
+        let bin = match twincat_bin() {
             Ok(bin) => bin,
             Err(e) => {
-                self.error = Some(format!("cannot resolve {BIN}: {e}"));
+                self.error = Some(format!("cannot resolve {TWINCAT_BIN}: {e}"));
                 return;
             }
         };

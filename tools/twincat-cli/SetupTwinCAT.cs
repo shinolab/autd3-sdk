@@ -23,7 +23,8 @@ namespace TwincatCli
         private const int HeadSize = 64;
         private const int BodySize = 249;
 
-        private readonly TwinCATVersion _version;
+        private const string DefaultProgID = "TcXaeShell.DTE.17.0";
+
         private readonly string _clientIpAddr;
         private readonly string _deviceName;
         private readonly int _taskCycleTime;
@@ -35,11 +36,10 @@ namespace TwincatCli
         private readonly string _twinCatRoot;
         private readonly string _progId;
 
-        internal SetupTwinCAT(TwinCATVersion version, string clientIpAddr, string deviceName, int taskCycleTime, int cpuBaseTime, int sync0CycleTime, bool keep, int delayTime, bool debug, string twinCatRoot, string progId)
+        internal SetupTwinCAT(string clientIpAddr, string deviceName, int taskCycleTime, int cpuBaseTime, int sync0CycleTime, bool keep, int delayTime, bool debug, string twinCatRoot, string progId)
         {
             if (debug)
             {
-                Console.WriteLine($"TwinCAT version: {version}");
                 Console.WriteLine($"Client IP: {clientIpAddr}");
                 Console.WriteLine($"Device Name: {deviceName}");
                 Console.WriteLine($"Sync0 Cycle Time: {sync0CycleTime}");
@@ -49,7 +49,6 @@ namespace TwincatCli
                 Console.WriteLine($"Keep Open: {keep}");
             }
 
-            _version = version;
             _clientIpAddr = clientIpAddr;
             _deviceName = deviceName;
             _taskCycleTime = taskCycleTime;
@@ -62,9 +61,8 @@ namespace TwincatCli
             _progId = progId;
         }
 
-        internal SetupTwinCAT(TwinCATVersion version, string progId, string twinCatRoot, bool debug)
+        internal SetupTwinCAT(string progId, string twinCatRoot, bool debug)
         {
-            _version = version;
             _progId = progId;
             _twinCatRoot = twinCatRoot;
             _debug = debug;
@@ -72,16 +70,7 @@ namespace TwincatCli
 
         private string ProgID()
         {
-            if (!string.IsNullOrWhiteSpace(_progId))
-                return _progId;
-            switch (_version)
-            {
-                case TwinCATVersion.Build4024:
-                    return "TcXaeShell.DTE.15.0";
-                case TwinCATVersion.Build4026:
-                    return "TcXaeShell.DTE.17.0";
-            }
-            throw new Exception($"TwinCAT version {_version} is not supported.");
+            return string.IsNullOrWhiteSpace(_progId) ? DefaultProgID : _progId;
         }
 
         private string TemplatePath()

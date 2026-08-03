@@ -29,6 +29,9 @@ axoupdater = { version = "0.10.0", default-features = false, features = [
 ] }
 tokio = { version = "1.52.3", default-features = false, features = ["rt"] }
 
+[target.'cfg(windows)'.dependencies]
+rust-embed = { version = "8.12.0", default-features = false }
+
 [lints]
 workspace = true
 

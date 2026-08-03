@@ -40,6 +40,7 @@
     <PackageReference Include="System.CommandLine" Version="2.0.9" />
     <PackageReference Include="Microsoft.VisualStudio.Interop" Version="17.14.40260" />
     <PackageReference Include="Microsoft.VisualStudio.Imaging.Interop.14.0.DesignTime" Version="17.14.40254" />
+    <PackageReference Include="Beckhoff.TwinCAT.TCatSysManager" Version="4026.22.0" ExcludeAssets="runtime" />
     <PackageReference Include="Beckhoff.TwinCAT.Ads" Version="7.0.172" />
     <PackageReference Include="Beckhoff.TwinCAT.Ads.Abstractions" Version="7.0.172" />
     <PackageReference Include="Beckhoff.TwinCAT.Ads.ConfigurationProviders" Version="7.0.172" />
@@ -64,18 +65,6 @@
     <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.9" />
     <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
     <PackageReference Include="System.ValueTuple" Version="4.6.2" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <COMReference Include="TCatSysManagerLib">
-      <Guid>{3C49D6C3-93DC-11D0-B162-00A0248C244B}</Guid>
-      <VersionMajor>3</VersionMajor>
-      <VersionMinor>3</VersionMinor>
-      <Lcid>0</Lcid>
-      <WrapperTool>tlbimp</WrapperTool>
-      <Isolated>False</Isolated>
-      <EmbedInteropTypes>True</EmbedInteropTypes>
-    </COMReference>
   </ItemGroup>
 
   <Target Name="ILRepackMerge" AfterTargets="Build">

@@ -57,6 +57,13 @@ pub enum ToolCmd {
 
 #[derive(Subcommand)]
 pub enum TwincatCmd {
+    /// Build twincat-cli without running it
+    Build {
+        /// Build the Debug configuration instead of Release
+        #[arg(long)]
+        debug: bool,
+    },
+
     /// Generate the TwinCAT project and activate its configuration
     Run {
         /// Build the Debug configuration instead of Release
@@ -133,7 +140,14 @@ fn run_twincat(root: &Path, cmd: TwincatCmd) -> Result<()> {
 
     let dir = root.join("tools").join("twincat-cli");
 
+    if let TwincatCmd::Build { debug } = cmd {
+        let exe = build_twincat_cli(root, debug)?;
+        println!("built {}", exe.display());
+        return Ok(());
+    }
+
     let (sub, debug, args) = match cmd {
+        TwincatCmd::Build { .. } => unreachable!(),
         TwincatCmd::Run { debug, args } => ("run", debug, args),
         TwincatCmd::Open { debug, args } => ("open", debug, args),
         TwincatCmd::Doctor { debug, args } => ("doctor", debug, args),
@@ -154,8 +168,7 @@ pub fn build_twincat_cli(root: &Path, debug: bool) -> Result<PathBuf> {
     if !exe.is_file() {
         bail!(
             "twincat-cli build did not produce {} (MSBuild ran but the merged exe is missing; \
-             check the ILRepack step and that TwinCAT XAE is installed for the TCatSysManagerLib \
-             COM reference)",
+             check the ILRepack step)",
             exe.display()
         );
     }

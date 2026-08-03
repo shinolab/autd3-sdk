@@ -7,7 +7,9 @@ It is built for .NET Framework 4.8 to reduce binary size (the dependencies do no
 
 # Prerequisites
 
-- **TwinCAT XAE** (engineering) installed, plus the **TwinCAT XAE integration**.
+To **run** it:
+
+- **TwinCAT 3.1 build 4026** XAE (engineering) installed, plus the **TwinCAT XAE integration**.
 - TwinCAT runtime installed (the ESI directory `…\TwinCAT\3.1\Config\Io\EtherCAT\` must exist).
 
 # Build & Run
@@ -33,19 +35,17 @@ Options:
   -s, --sync0 <CYCLE_TIME>  Sync0 cycle time in units of 500μs. [default: 2]
   -t, --task <CYCLE_TIME>   Task cycle time in units of CPU base time. [default: 1]
   -b, --base <TIME>         CPU base time. [default: 1ms]
-  --twincat <4024|4026>     TwinCAT version [default: 4026]
   -k, --keep                Keep TwinCAT XAE Shell window open. [default: False]
   --delay <DELAY_MS>        Delay time to wait for the operation to complete (ms). [default: 1000]
   --twincat-root <DIR>      TwinCAT 3.1 install directory (the folder %TwinCAT3Dir% points to). Auto-detected if empty.
-  --progid <PROGID>         Override the DTE COM ProgID (e.g. VisualStudio.DTE.17.0). Defaults by --twincat version.
+  --progid <PROGID>         Override the DTE COM ProgID. Defaults to TcXaeShell.DTE.17.0.
   -d, --debug               Enable debug mode. [default: False]
 
 twincat-cli open [options]
 
 Options:
-  --twincat <4024|4026>     TwinCAT version [default: 4026]
   --twincat-root <DIR>      TwinCAT 3.1 install directory (the folder %TwinCAT3Dir% points to). Auto-detected if empty.
-  --progid <PROGID>         Override the DTE COM ProgID (e.g. VisualStudio.DTE.17.0). Defaults by --twincat version.
+  --progid <PROGID>         Override the DTE COM ProgID. Defaults to TcXaeShell.DTE.17.0.
   -d, --debug               Enable debug mode. [default: False]
 ```
 

@@ -42,12 +42,6 @@ namespace TwincatCli
             };
             cpuBaseTime.AcceptOnlyFromAmong(CpuBaseTimeParser.AvailableTimes().ToArray());
             cpuBaseTime.HelpName = "TIME";
-            var tcVersion = new Option<string>("--twincat")
-            {
-                Description = "TwinCAT version",
-                DefaultValueFactory = _ => "4026",
-            };
-            tcVersion.AcceptOnlyFromAmong(TwinCATVersionParser.AvailableVersions().ToArray());
             var keep = new Option<bool>("--keep", "-k")
             {
                 Description = "Keep TwinCAT XAE Shell window open.",
@@ -72,7 +66,7 @@ namespace TwincatCli
             twincatRoot.HelpName = "DIR";
             var progId = new Option<string>("--progid")
             {
-                Description = "Override the DTE COM ProgID (e.g. VisualStudio.DTE.17.0). Defaults by --twincat version.",
+                Description = "Override the DTE COM ProgID. Defaults to TcXaeShell.DTE.17.0.",
                 DefaultValueFactory = _ => "",
             };
             progId.HelpName = "PROGID";
@@ -83,7 +77,6 @@ namespace TwincatCli
             runCommand.Options.Add(sync0CycleTime);
             runCommand.Options.Add(taskCycleTime);
             runCommand.Options.Add(cpuBaseTime);
-            runCommand.Options.Add(tcVersion);
             runCommand.Options.Add(keep);
             runCommand.Options.Add(delayTime);
             runCommand.Options.Add(debug);
@@ -97,24 +90,17 @@ namespace TwincatCli
                 var sync0Cycle = parseResult.GetValue(sync0CycleTime);
                 var taskCycle = parseResult.GetValue(taskCycleTime);
                 var baseTime = CpuBaseTimeParser.Parse(parseResult.GetResult(cpuBaseTime));
-                var version = TwinCATVersionParser.Parse(parseResult.GetResult(tcVersion));
                 var keepOpen = parseResult.GetValue(keep);
                 var delay= parseResult.GetValue(delayTime);
                 var debugMode = parseResult.GetValue(debug);
                 var tcRoot = parseResult.GetValue(twincatRoot);
                 var dteProgId = parseResult.GetValue(progId);
-                Setup(version, clientIp, devName, sync0Cycle, taskCycle, baseTime, keepOpen, delay, debugMode, tcRoot, dteProgId);
+                Setup(clientIp, devName, sync0Cycle, taskCycle, baseTime, keepOpen, delay, debugMode, tcRoot, dteProgId);
             });
 
-            var openVersion = new Option<string>("--twincat")
-            {
-                Description = "TwinCAT version",
-                DefaultValueFactory = _ => "4026",
-            };
-            openVersion.AcceptOnlyFromAmong(TwinCATVersionParser.AvailableVersions().ToArray());
             var openProgId = new Option<string>("--progid")
             {
-                Description = "Override the DTE COM ProgID (e.g. VisualStudio.DTE.17.0). Defaults by --twincat version.",
+                Description = "Override the DTE COM ProgID. Defaults to TcXaeShell.DTE.17.0.",
                 DefaultValueFactory = _ => "",
             };
             openProgId.HelpName = "PROGID";
@@ -131,18 +117,16 @@ namespace TwincatCli
             };
 
             var openCommand = new Command("open", "Open the already-saved TwinCAT project (for when --keep was forgotten).");
-            openCommand.Options.Add(openVersion);
             openCommand.Options.Add(openProgId);
             openCommand.Options.Add(openTwincatRoot);
             openCommand.Options.Add(openDebug);
 
             openCommand.SetAction(parseResult =>
             {
-                var version = TwinCATVersionParser.Parse(parseResult.GetResult(openVersion));
                 var dteProgId = parseResult.GetValue(openProgId);
                 var tcRoot = parseResult.GetValue(openTwincatRoot);
                 var debugMode = parseResult.GetValue(openDebug);
-                (new SetupTwinCAT(version, dteProgId, tcRoot, debugMode)).Open();
+                (new SetupTwinCAT(dteProgId, tcRoot, debugMode)).Open();
             });
 
             var doctorCommand = new Command("doctor", "Diagnose virtualization-based security (must be OFF for TwinCAT real-time).");
@@ -165,7 +149,7 @@ namespace TwincatCli
         }
 
         [STAThread]
-        private static void Setup(TwinCATVersion version, string clientIpAddr, string deviceName, int sync0CycleTime, int taskCycleTime, CpuBaseTime cpuBaseTime, bool keep, int delayTime, bool debugMode, string twinCatRoot, string progId)
+        private static void Setup(string clientIpAddr, string deviceName, int sync0CycleTime, int taskCycleTime, CpuBaseTime cpuBaseTime, bool keep, int delayTime, bool debugMode, string twinCatRoot, string progId)
         {
             try
             {
@@ -178,7 +162,7 @@ namespace TwincatCli
 
             var baseTime = CpuBaseTimeParser.ToValueUnitsOf100ns(cpuBaseTime);
             var sync0CycleTimeInNs = 500000 * sync0CycleTime;
-            (new SetupTwinCAT(version, clientIpAddr, deviceName, baseTime * taskCycleTime, baseTime, sync0CycleTimeInNs, keep, delayTime, debugMode, twinCatRoot, progId)).Run();
+            (new SetupTwinCAT(clientIpAddr, deviceName, baseTime * taskCycleTime, baseTime, sync0CycleTimeInNs, keep, delayTime, debugMode, twinCatRoot, progId)).Run();
         }
     }
 }

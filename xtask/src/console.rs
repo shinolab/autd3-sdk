@@ -45,9 +45,6 @@ pub enum ConsoleCmd {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
-        /// Build twincat-cli and include it in the archive (Windows only, requires TwinCAT XAE)
-        #[arg(long)]
-        twincat: bool,
     },
 }
 
@@ -90,7 +87,7 @@ pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
             run("cargo", args, &dir)
         }
         ConsoleCmd::Stage { debug } => stage(root, &dir, *debug).map(|_| ()),
-        ConsoleCmd::Bundle { debug, twincat } => bundle(root, &dir, *debug, *twincat),
+        ConsoleCmd::Bundle { debug } => bundle(root, &dir, *debug),
     }
 }
 
@@ -104,6 +101,8 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
     let target = target.as_deref();
 
     crate::license::generate_console(root)?;
+
+    stage_twincat(root, console_dir, debug)?;
 
     run_cargo(
         cargo_build_args("autd3-console", target, debug),
@@ -143,6 +142,42 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
     Ok(out_dir)
 }
 
+fn stage_twincat(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
+    let dst = console_dir.join("twincat");
+    std::fs::create_dir_all(&dst)?;
+    for entry in std::fs::read_dir(&dst).with_context(|| format!("reading {}", dst.display()))? {
+        let entry = entry?;
+        if entry.file_name() == ".gitkeep" {
+            continue;
+        }
+        std::fs::remove_file(entry.path())?;
+    }
+    if !cfg!(target_os = "windows") {
+        return Ok(());
+    }
+
+    let exe = build_twincat_cli(root, debug)?;
+    let src = exe
+        .parent()
+        .context("twincat-cli.exe has no parent directory")?;
+    for entry in std::fs::read_dir(src).with_context(|| format!("reading {}", src.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() {
+            copy_file(&path, &dst.join(entry.file_name()))?;
+        }
+    }
+    let staged = dst.join(exe_name("twincat-cli"));
+    if !staged.is_file() {
+        bail!(
+            "twincat-cli was not staged to {}; autd3-console would be built without it",
+            staged.display()
+        );
+    }
+    println!("staged twincat-cli in {}", dst.display());
+    Ok(())
+}
+
 fn check_versions_match(console_dir: &Path) -> Result<()> {
     let cargo = package_version(&console_dir.join("Cargo.toml"))?;
     let dist = package_version(&console_dir.join("dist.toml"))?;
@@ -168,14 +203,7 @@ fn package_version(manifest: &Path) -> Result<String> {
         .with_context(|| format!("no [package] version in {}", manifest.display()))
 }
 
-fn bundle(root: &Path, console_dir: &Path, debug: bool, twincat: bool) -> Result<()> {
-    if twincat && !cfg!(target_os = "windows") {
-        bail!(
-            "`--twincat` is Windows-only: twincat-cli targets .NET Framework 4.8 and \
-             drives the TwinCAT XAE Shell through the DTE COM API"
-        );
-    }
-
+fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     let distrib = stage(root, console_dir, debug)?;
 
     let out_dir = console_dir.join("target").join("bundle");
@@ -184,14 +212,6 @@ fn bundle(root: &Path, console_dir: &Path, debug: bool, twincat: bool) -> Result
         std::fs::remove_dir_all(&staging)?;
     }
     copy_dir(&distrib, &staging)?;
-
-    if twincat {
-        let exe = build_twincat_cli(root, debug)?;
-        let dist = exe
-            .parent()
-            .context("twincat-cli.exe has no parent directory")?;
-        copy_dir(dist, &staging.join("twincat"))?;
-    }
 
     let archive = if cfg!(target_os = "windows") {
         let archive = out_dir.join(format!("autd3-console-{}.zip", bundle_os()));
