@@ -129,13 +129,15 @@ fn setcap_program() -> Option<String> {
         .map(str::to_owned)
 }
 
+const RUN_CAPABILITIES: &str = "cap_net_raw,cap_net_admin,cap_sys_nice+ep";
+
 #[cfg(target_os = "linux")]
-fn grant_net_raw(bin: &Path) -> bool {
+fn grant_capabilities(bin: &Path) -> bool {
     let Some(setcap) = setcap_program() else {
         return false;
     };
     Command::new("sudo")
-        .args(["-n", &setcap, "cap_net_raw+ep"])
+        .args(["-n", &setcap, RUN_CAPABILITIES])
         .arg(bin)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -144,7 +146,7 @@ fn grant_net_raw(bin: &Path) -> bool {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn grant_net_raw(_bin: &Path) -> bool {
+fn grant_capabilities(_bin: &Path) -> bool {
     false
 }
 
@@ -153,8 +155,8 @@ pub fn run_built_bin(bin: &Path, args: &[String], no_sudo: bool, cwd: &Path) -> 
     if no_sudo || !cfg!(unix) {
         return run(&bin_str, args.iter().map(String::as_str), cwd);
     }
-    if grant_net_raw(bin) {
-        println!("granted CAP_NET_RAW to {bin_str}; running without sudo");
+    if grant_capabilities(bin) {
+        println!("granted {RUN_CAPABILITIES} to {bin_str}; running without sudo");
         return run(&bin_str, args.iter().map(String::as_str), cwd);
     }
     let mut sudo_args: Vec<String> = Vec::with_capacity(args.len() + 2);
