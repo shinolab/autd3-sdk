@@ -54,6 +54,11 @@ pub enum DocCmd {
         /// Target version slug (e.g. 0.1.x)
         slug: String,
     },
+    /// Drop a frozen version: undeclare it and delete its snapshot and config
+    RemoveVersion {
+        /// Target version slug (e.g. 0.1.x)
+        slug: String,
+    },
 }
 
 pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
@@ -121,8 +126,10 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
                 ["scripts/freeze-version-codes.mjs", slug.as_str()],
                 &doc,
             )?;
+            prune_nested_versions(&doc, slug)?;
             track_frozen_version(&doc, slug)
         }
+        DocCmd::RemoveVersion { slug } => remove_version(&doc, slug),
     }
 }
 
@@ -141,6 +148,97 @@ pub fn add_version(root: &Path, slug: &str) -> Result<bool> {
         unignore_version_config(lines, slug);
     })?;
     Ok(true)
+}
+
+pub fn remove_version(doc: &Path, slug: &str) -> Result<()> {
+    let slugs = version_slugs(doc)?;
+    if !slugs.iter().any(|s| s == slug) {
+        bail!("version {slug} is not declared in astro.config.mjs");
+    }
+    if slugs.len() == 1 {
+        bail!(
+            "{slug} is the only declared version, and starlight-versions rejects an empty \
+             `versions` array; drop the plugin from astro.config.mjs instead if the site should \
+             stop being versioned"
+        );
+    }
+    // Undeclare first: `astro build` regenerates the snapshot of any slug that is declared but
+    // has no `src/content/docs/<slug>/`, and refuses to do more than one at a time.
+    undeclare_version_slug(doc, slug)?;
+    let mut removed = Vec::new();
+    remove_dirs_named(
+        &doc.join("src/content/docs"),
+        &[slug.to_string()],
+        &mut removed,
+    )?;
+    let config = doc
+        .join("src/content/versions")
+        .join(format!("{slug}.json"));
+    if config.is_file() {
+        fs::remove_file(&config)
+            .with_context(|| format!("failed to remove {}", config.display()))?;
+        removed.push(config);
+    }
+    for path in &removed {
+        println!("doc: removed {}", path.display());
+    }
+    edit_gitignore(doc, slug, |lines, slug| {
+        let doomed = [
+            format!("!src/content/versions/{slug}.json"),
+            format!("!src/content/docs/{slug}/"),
+            format!("!src/content/docs/*/{slug}/"),
+        ];
+        lines.retain(|l| !doomed.iter().any(|d| l.trim() == d));
+    })?;
+    Ok(())
+}
+
+// starlight-versions only skips version directories at the root of `src/content/docs/`, so a
+// snapshot taken from a locale directory swallows every older version living under it
+// (`en/0.4.x/` becomes `en/0.5.x/0.4.x/`). Those copies are duplicates reachable only through
+// nonsense URLs, and they make each new version cost as much as all its predecessors combined.
+fn prune_nested_versions(doc: &Path, slug: &str) -> Result<()> {
+    let slugs = version_slugs(doc)?;
+    let docs = doc.join("src/content/docs");
+    let mut roots = Vec::new();
+    if docs.join(slug).is_dir() {
+        roots.push(docs.join(slug));
+    }
+    for entry in fs::read_dir(&docs).with_context(|| format!("reading {}", docs.display()))? {
+        let nested = entry?.path().join(slug);
+        if nested.is_dir() {
+            roots.push(nested);
+        }
+    }
+    let mut removed = Vec::new();
+    for root in &roots {
+        remove_dirs_named(root, &slugs, &mut removed)?;
+    }
+    for path in &removed {
+        println!("doc: removed nested snapshot {}", path.display());
+    }
+    Ok(())
+}
+
+fn remove_dirs_named(dir: &Path, names: &[String], removed: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
+        let path = entry?.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        if names.iter().any(|n| n == name) {
+            fs::remove_dir_all(&path)
+                .with_context(|| format!("failed to remove {}", path.display()))?;
+            removed.push(path);
+        } else {
+            remove_dirs_named(&path, names, removed)?;
+        }
+    }
+    Ok(())
 }
 
 fn declare_version_slug(doc: &Path, slug: &str) -> Result<()> {
@@ -164,6 +262,56 @@ fn declare_version_slug(doc: &Path, slug: &str) -> Result<()> {
     fs::write(&path, new_text).with_context(|| format!("failed to write {}", path.display()))?;
     println!("doc: declared version {slug} in {}", path.display());
     Ok(())
+}
+
+fn undeclare_version_slug(doc: &Path, slug: &str) -> Result<()> {
+    let path = doc.join("astro.config.mjs");
+    let text =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let key = text
+        .find("versions:")
+        .context("`versions:` not found in astro.config.mjs")?;
+    let open = key
+        + text[key..]
+            .find('[')
+            .context("`versions:` is not followed by an array in astro.config.mjs")?;
+    let close = open
+        + text[open..]
+            .find(']')
+            .context("unterminated `versions:` array in astro.config.mjs")?;
+    let quoted = format!("\"{slug}\"");
+    let kept: Vec<&str> = version_entries(&text[open + 1..close])
+        .into_iter()
+        .filter(|entry| !entry.contains(&quoted))
+        .collect();
+    let new_text = format!("{}{}{}", &text[..=open], kept.join(", "), &text[close..]);
+    fs::write(&path, new_text).with_context(|| format!("failed to write {}", path.display()))?;
+    println!("doc: undeclared version {slug} in {}", path.display());
+    Ok(())
+}
+
+fn version_entries(inner: &str) -> Vec<&str> {
+    let mut entries = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    for (i, c) in inner.char_indices() {
+        match c {
+            '{' => {
+                if depth == 0 {
+                    start = i;
+                }
+                depth += 1;
+            }
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    entries.push(&inner[start..=i]);
+                }
+            }
+            _ => {}
+        }
+    }
+    entries
 }
 
 fn unignore_version_config(lines: &mut Vec<String>, slug: &str) {
@@ -197,11 +345,11 @@ fn edit_gitignore(
         new_text.push('\n');
     }
     if new_text == text {
-        println!("doc: {slug} already tracked in {}", path.display());
+        println!("doc: {} already matches {slug}", path.display());
         return Ok(false);
     }
     fs::write(&path, new_text).with_context(|| format!("failed to write {}", path.display()))?;
-    println!("doc: tracked {slug} in {}", path.display());
+    println!("doc: updated {} for {slug}", path.display());
     Ok(true)
 }
 
@@ -538,17 +686,27 @@ fn verify_frozen_versions(doc: &Path) -> Result<()> {
         return Ok(());
     };
     let mut offenders = Vec::new();
+    let mut nested = Vec::new();
     for rel in tracked.lines() {
         let ext = Path::new(rel).extension().and_then(|e| e.to_str());
         if !matches!(ext, Some("md" | "mdx")) {
             continue;
         }
-        let Some(slug) = slugs
-            .iter()
-            .find(|s| rel.split('/').any(|seg| seg == s.as_str()))
-        else {
+        let mut hits = rel
+            .split('/')
+            .filter(|seg| slugs.iter().any(|s| s == seg))
+            .peekable();
+        let Some(slug) = hits.next() else {
             continue;
         };
+        if hits.peek().is_some() {
+            nested.push(rel.to_string());
+            continue;
+        }
+        // Still in the index but already deleted from the worktree: nothing left to inspect.
+        if !doc.join(rel).is_file() {
+            continue;
+        }
         let text =
             fs::read_to_string(doc.join(rel)).with_context(|| format!("failed to read {rel}"))?;
         if (text.contains("@codes/") && text.contains("?raw")) || text.contains("excerpt(") {
@@ -560,6 +718,21 @@ fn verify_frozen_versions(doc: &Path) -> Result<()> {
             "committed version snapshot(s) still depend on live `@codes` sources (not frozen):\n  {}\n\
              run `cargo xtask doc freeze-version <slug>` for each affected version, then re-commit.",
             offenders.join("\n  ")
+        );
+    }
+    if !nested.is_empty() {
+        bail!(
+            "{} committed page(s) sit under two version directories, e.g.:\n  {}\n\
+             starlight-versions copied older versions into a new locale snapshot; they are \
+             duplicates served under nonsense URLs. run `cargo xtask doc freeze-version <slug>` \
+             for the new version (it prunes them), then re-commit.",
+            nested.len(),
+            nested
+                .iter()
+                .take(5)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n  ")
         );
     }
     Ok(())
