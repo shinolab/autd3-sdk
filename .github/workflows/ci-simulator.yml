@@ -36,7 +36,7 @@ jobs:
           tool: cargo-binstall,cargo-about
       - name: Install dioxus-cli
         if: runner.os == 'Linux'
-        run: cargo binstall -y dioxus-cli --locked
+        run: cargo binstall -y dioxus-cli --locked --force
       - name: Build
         if: runner.os == 'Linux'
         run: cargo xtask simulator build --debug
