@@ -132,7 +132,7 @@ jobs:
         with:
           "tool": "cargo-binstall,cargo-about"
       - name: "Install dioxus-cli"
-        run: "cargo binstall -y dioxus-cli --locked"
+        run: "cargo binstall -y dioxus-cli@0.7.10 --locked"
         shell: "bash"
       - name: "Add wasm target"
         run: "rustup target add wasm32-unknown-unknown"
