@@ -44,7 +44,7 @@ impl IntoLink for RemoteLinkOption {
         geometry: &autd3_rs_core::Geometry,
     ) -> Result<RemoteLink, autd3_rs_core::error::LinkError> {
         RemoteLink::open(self.addr, self.timeout, geometry)
-            .map_err(|e| autd3_rs_core::error::LinkError(e.to_string()))
+            .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e))
     }
 }
 
