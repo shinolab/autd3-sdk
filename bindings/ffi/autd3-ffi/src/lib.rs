@@ -370,11 +370,18 @@ pub extern "C" fn autd3_client_config_new(
     rt_affinity: usize,
     validate_state: bool,
 ) -> *mut ClientConfig {
-    let (Some(max_inflight), Some(max_resync_rounds), Some(reset_resend_cycles)) = (
+    let (
+        Some(timeout_cycles),
+        Some(max_inflight),
+        Some(max_resync_rounds),
+        Some(reset_resend_cycles),
+    ) = (
+        NonZeroU32::new(timeout_cycles),
         NonZeroUsize::new(max_inflight),
         NonZeroU32::new(max_resync_rounds),
         NonZeroU32::new(reset_resend_cycles),
-    ) else {
+    )
+    else {
         return std::ptr::null_mut();
     };
     let rt_priority = match rt_priority_mode {

@@ -1,3 +1,4 @@
+use core::num::NonZeroU32;
 use std::fmt::Write;
 use std::time::Duration;
 
@@ -170,7 +171,7 @@ fn rt_policy(p: RtPolicy) -> &'static str {
 }
 
 struct Config {
-    timeout_cycles: u32,
+    timeout_cycles: NonZeroU32,
     max_inflight: usize,
     max_resync_rounds: u32,
     low_latency: bool,
@@ -188,7 +189,11 @@ fn push_config(body: &mut String, imports: &mut Vec<&'static str>, c: &Config) {
     need("std::num::NonZeroUsize");
     need("std::num::NonZeroU32");
     let _ = writeln!(body, "let config = ClientConfig {{");
-    let _ = writeln!(body, "    timeout_cycles: {},", c.timeout_cycles);
+    let _ = writeln!(
+        body,
+        "    timeout_cycles: NonZeroU32::new({}).unwrap(),",
+        c.timeout_cycles
+    );
     let _ = writeln!(
         body,
         "    max_inflight: NonZeroUsize::new({}).unwrap(),",

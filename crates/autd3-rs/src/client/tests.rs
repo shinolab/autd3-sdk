@@ -709,7 +709,7 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
         &geometry(2),
         link,
         ClientConfig {
-            timeout_cycles: 10,
+            timeout_cycles: NonZeroU32::new(10).unwrap(),
             max_inflight: NonZeroUsize::new(16).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
@@ -881,7 +881,7 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
         &geometry(1),
         link,
         ClientConfig {
-            timeout_cycles: 10,
+            timeout_cycles: NonZeroU32::new(10).unwrap(),
             max_inflight: NonZeroUsize::new(16).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
@@ -923,7 +923,7 @@ async fn dead_link_gives_up_whole_window_in_bounded_time() {
         &geometry(1),
         link,
         ClientConfig {
-            timeout_cycles: 5,
+            timeout_cycles: NonZeroU32::new(5).unwrap(),
             max_inflight: NonZeroUsize::new(8).unwrap(),
             max_resync_rounds: NonZeroU32::new(3).unwrap(),
             low_latency: false,
@@ -1037,7 +1037,7 @@ async fn streaming_holds_window_across_stale_and_recovers() {
         &geometry(1),
         link,
         ClientConfig {
-            timeout_cycles: 10,
+            timeout_cycles: NonZeroU32::new(10).unwrap(),
             max_inflight: NonZeroUsize::new(8).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
@@ -1124,7 +1124,7 @@ async fn open_rejects_oversize_max_inflight() {
         &geometry(1),
         link,
         ClientConfig {
-            timeout_cycles: 10,
+            timeout_cycles: NonZeroU32::new(10).unwrap(),
             max_inflight: NonZeroUsize::new(MAX_INFLIGHT + 1).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
@@ -1366,7 +1366,7 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
         &geometry(1),
         link,
         ClientConfig {
-            timeout_cycles: u32::MAX,
+            timeout_cycles: NonZeroU32::MAX,
             max_inflight,
             ..ClientConfig::default()
         },

@@ -147,10 +147,10 @@ pub struct Cli {
     pub csv: Option<PathBuf>,
     #[arg(
         long,
-        default_value_t = 10,
+        default_value_t = NonZeroU32::new(10).unwrap(),
         help = "maps to ClientConfig.timeout_cycles"
     )]
-    pub timeout_cycles: u32,
+    pub timeout_cycles: NonZeroU32,
     #[arg(long, value_enum, default_value_t = Mode::StopAndWait)]
     pub mode: Mode,
     #[arg(

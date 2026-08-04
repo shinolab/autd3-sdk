@@ -82,7 +82,7 @@ impl ResyncState {
             return HeadAction::None;
         };
         head.age = head.age.saturating_add(1);
-        if head.age < config.timeout_cycles {
+        if head.age < config.timeout_cycles.get() {
             return HeadAction::None;
         }
         head.age = 0;
@@ -178,6 +178,7 @@ impl<L: Link> RtThread<L> {
         };
         let stale_limit = config
             .timeout_cycles
+            .get()
             .saturating_mul(config.max_resync_rounds.get());
         Self {
             link,
@@ -228,7 +229,7 @@ impl<L: Link> RtThread<L> {
             frame.write_to(buf);
         }
 
-        let bound = self.config.timeout_cycles.max(2);
+        let bound = self.config.timeout_cycles.get().max(2);
         for _ in 0..bound {
             let rx_valid = self
                 .link
@@ -432,7 +433,7 @@ impl<L: Link> RtThread<L> {
     fn fail_pending_timeout(&mut self) {
         for entry in self.pending.drain(..) {
             entry.response_tx.send(Err(Error::Timeout {
-                cycles: self.config.timeout_cycles,
+                cycles: self.config.timeout_cycles.get(),
             }));
         }
     }
