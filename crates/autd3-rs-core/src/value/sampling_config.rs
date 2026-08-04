@@ -8,8 +8,9 @@ use core::{fmt::Debug, num::NonZeroU16, time::Duration};
 
 use crate::common::{Freq, ULTRASOUND_FREQ, ULTRASOUND_PERIOD, units::Hz};
 
-pub const IS_INTEGER_EPSILON: f64 = 1e-6;
+const IS_INTEGER_EPSILON: f64 = 1e-6;
 
+#[doc(hidden)]
 #[must_use]
 pub const fn is_integer(a: f64) -> bool {
     let dist = 0.5 - (a.fract() - 0.5).abs();

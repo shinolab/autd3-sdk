@@ -21,7 +21,8 @@ pub use intensity::Intensity;
 pub use loop_behavior::LoopBehavior;
 pub use phase::Phase;
 pub use pulse_width::{PULSE_WIDTH_PERIOD, PulseWidth, PulseWidthError};
-pub use sampling_config::{
-    IS_INTEGER_EPSILON, Nearest, SamplingConfig, SamplingConfigError, is_integer,
-};
+pub use sampling_config::{Nearest, SamplingConfig, SamplingConfigError};
+
+#[doc(hidden)]
+pub use sampling_config::is_integer;
 pub use transition_mode::TransitionMode;
