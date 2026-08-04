@@ -1,5 +1,4 @@
-pub use autd3_rs_core::RtSchedulePolicy;
-pub use core_affinity::CoreId;
+pub use autd3_rs_core::{CoreId, RtSchedulePolicy};
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
 
 #[derive(Clone, Copy, Default)]

@@ -10,7 +10,6 @@ description = "EtherCrab-backed Link implementation for autd3-rs."
 
 [dependencies]
 autd3-rs-core.workspace = true
-core_affinity.workspace = true
 thiserror.workspace = true
 thread-priority.workspace = true
 ethercrab = { version = "0.7.1", default-features = false, features = ["std"] }
