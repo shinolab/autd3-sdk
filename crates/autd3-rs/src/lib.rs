@@ -19,7 +19,7 @@ mod sealed {
 #[cfg(test)]
 mod test_utils;
 
-pub use autd3_rs_core::{common, geometry, link, params, protocol, rt, units, value};
+pub use autd3_rs_core::{common, geometry, link, nalgebra, params, protocol, rt, units, value};
 pub use error::{Error, PayloadError};
 
 pub use autd3_rs_core::{

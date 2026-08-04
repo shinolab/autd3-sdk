@@ -12,6 +12,8 @@ pub use rt::{
     apply_thread_tuning, default_rt_priority, step_below,
 };
 
+pub use nalgebra;
+
 pub use common::units;
 pub use common::{Angle, Freq, Length, Velocity};
 pub use error::{EncodeError, LinkError};
