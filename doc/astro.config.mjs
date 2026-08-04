@@ -23,13 +23,14 @@ export default defineConfig({
       title: "AUTD3 SDK",
       favicon: "/favicon.svg",
       expressiveCode: {
+        defaultProps: {
+          overridesByLang: {
+            "bash,batch,bat,cmd,console,nu,nushell,powershell,ps,ps1,psd1,psm1,sh,shell,shellscript,shellsession,zsh":
+              { frame: "none" },
+          },
+        },
         styleOverrides: {
           codeLineHeight: "1.3",
-          // Default mono stack resolves to a font lacking box-drawing glyphs
-          // (e.g. Liberation Mono has no U+2506), so polars' UTF-8 tables fall
-          // back per-glyph to a CJK font and misalign. Prefer fonts that carry
-          // the full box-drawing block at 1ch; keep generics last so a CJK
-          // default is never selected for those glyphs.
           codeFontFamily:
             'Menlo, Consolas, "Cascadia Mono", "DejaVu Sans Mono", "Noto Sans Mono", ui-monospace, monospace',
         },
