@@ -30,7 +30,7 @@ impl Operation for ChangePatternBank {
         let (p, _) = ChangePatternBankPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = ChangePatternBankPayload {
             bank: self.bank.as_u8(),
-            transition_mode: self.transition_mode.as_u8()?,
+            transition_mode: self.transition_mode.try_as_u8()?,
             transition_value: U64::new(self.transition_mode.value()),
             margin_ns: U32::new(margin_ns),
         };

@@ -71,7 +71,7 @@ impl Operation for WriteModulationFused<'_> {
         let (h, rest) = WriteModulationFusedPayload::mut_from_prefix(&mut out[..]).unwrap();
         *h = WriteModulationFusedPayload {
             bank: self.bank.as_u8(),
-            transition_mode: self.transition_mode.as_u8()?,
+            transition_mode: self.transition_mode.try_as_u8()?,
             divider: U16::new(divider),
             size: U32::new(u32::try_from(self.data.len()).expect("bounded by MOD_BUFFER_SAMPLES")),
             rep: U16::new(self.loop_behavior.rep()),
