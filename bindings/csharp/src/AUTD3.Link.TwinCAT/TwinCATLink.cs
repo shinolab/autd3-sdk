@@ -44,75 +44,69 @@ namespace AUTD3.Link
         public static TwinCATLinkOption RemoteWithTimeouts(string addr, string amsNetId, Timeouts timeouts) =>
             new TwinCATLinkOption(true, addr, amsNetId, timeouts);
 
-        IntPtr ILink.TakeOpener()
+        private IntPtr CreateHandle()
         {
-            var opener = _isRemote
-                ? NativeTwincat.autd3_link_twincat_remote(
-                    _addr!, _amsNetId!,
-                    Timeouts.Connect.HasValue, (ulong)(Timeouts.Connect?.Ticks * 100 ?? 0),
-                    Timeouts.Read.HasValue, (ulong)(Timeouts.Read?.Ticks * 100 ?? 0),
-                    Timeouts.Write.HasValue, (ulong)(Timeouts.Write?.Ticks * 100 ?? 0))
-                : NativeTwincat.autd3_link_twincat_local(
-                    Timeouts.Connect.HasValue, (ulong)(Timeouts.Connect?.Ticks * 100 ?? 0),
-                    Timeouts.Read.HasValue, (ulong)(Timeouts.Read?.Ticks * 100 ?? 0),
-                    Timeouts.Write.HasValue, (ulong)(Timeouts.Write?.Ticks * 100 ?? 0));
-            if (opener == IntPtr.Zero)
+            var handle = _isRemote
+                ? NativeTwincat.autd3_link_twincat_option_remote(_addr!, _amsNetId!)
+                : NativeTwincat.autd3_link_twincat_option_local();
+            if (handle == IntPtr.Zero)
             {
-                throw new Autd3Exception("failed to create twincat link (invalid address or AMS Net Id?)");
+                throw new Autd3Exception("failed to create twincat link option (invalid address or AMS Net Id?)");
             }
-            return opener;
+            try
+            {
+                LinkOptionNative.SetOptionalDuration(handle, "connect", Timeouts.Connect, NativeTwincat.autd3_link_twincat_option_set_connect_timeout);
+                LinkOptionNative.SetOptionalDuration(handle, "read", Timeouts.Read, NativeTwincat.autd3_link_twincat_option_set_read_timeout);
+                LinkOptionNative.SetOptionalDuration(handle, "write", Timeouts.Write, NativeTwincat.autd3_link_twincat_option_set_write_timeout);
+            }
+            catch
+            {
+                NativeTwincat.autd3_link_twincat_option_free(handle);
+                throw;
+            }
+            return handle;
         }
 
-        IntPtr ILegacyLink.TakeLegacyOpener()
-        {
-            var opener = _isRemote
-                ? NativeTwincat.autd3_link_twincat_remote_legacy(
-                    _addr!, _amsNetId!,
-                    Timeouts.Connect.HasValue, (ulong)(Timeouts.Connect?.Ticks * 100 ?? 0),
-                    Timeouts.Read.HasValue, (ulong)(Timeouts.Read?.Ticks * 100 ?? 0),
-                    Timeouts.Write.HasValue, (ulong)(Timeouts.Write?.Ticks * 100 ?? 0))
-                : NativeTwincat.autd3_link_twincat_local_legacy(
-                    Timeouts.Connect.HasValue, (ulong)(Timeouts.Connect?.Ticks * 100 ?? 0),
-                    Timeouts.Read.HasValue, (ulong)(Timeouts.Read?.Ticks * 100 ?? 0),
-                    Timeouts.Write.HasValue, (ulong)(Timeouts.Write?.Ticks * 100 ?? 0));
-            if (opener == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create twincat link (invalid address or AMS Net Id?)");
-            }
-            return opener;
-        }
+        IntPtr ILink.TakeOpener() =>
+            LinkOptionNative.TakeOpener("twincat", CreateHandle(), NativeTwincat.autd3_link_twincat_open);
+
+        IntPtr ILegacyLink.TakeLegacyOpener() =>
+            LinkOptionNative.TakeOpener("twincat", CreateHandle(), NativeTwincat.autd3_link_twincat_open_legacy);
     }
 
     internal static class NativeTwincat
     {
         private const string Lib = "autd3_link_twincat";
 
-        [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_twincat_local(
-            [MarshalAs(UnmanagedType.I1)] bool hasConnect, ulong connectNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasRead, ulong readNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasWrite, ulong writeNs);
+        static NativeTwincat() => NativeAbi.Verify(Lib, autd3_abi_version());
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_twincat_remote(
+        private static extern uint autd3_abi_version();
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_twincat_option_local();
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_twincat_option_remote(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string addr,
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string amsNetId,
-            [MarshalAs(UnmanagedType.I1)] bool hasConnect, ulong connectNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasRead, ulong readNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasWrite, ulong writeNs);
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string amsNetId);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_twincat_local_legacy(
-            [MarshalAs(UnmanagedType.I1)] bool hasConnect, ulong connectNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasRead, ulong readNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasWrite, ulong writeNs);
+        internal static extern int autd3_link_twincat_option_set_connect_timeout(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_twincat_remote_legacy(
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string addr,
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string amsNetId,
-            [MarshalAs(UnmanagedType.I1)] bool hasConnect, ulong connectNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasRead, ulong readNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasWrite, ulong writeNs);
+        internal static extern int autd3_link_twincat_option_set_read_timeout(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_twincat_option_set_write_timeout(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_link_twincat_option_free(IntPtr option);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_twincat_open(IntPtr option);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_twincat_open_legacy(IntPtr option);
     }
 }

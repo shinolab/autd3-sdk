@@ -30,77 +30,96 @@ namespace AUTD3.Link
             SpinMargin = spinMargin;
         }
 
-        private static ulong ToNs(TimeSpan? value) => (ulong)(value?.Ticks * 100 ?? 0);
-
-        IntPtr ILink.TakeOpener()
+        private IntPtr CreateHandle()
         {
-            var opener = NativeEchocat.autd3_link_echocat(
-                Iface.NameValue,
-                Sync0Period.HasValue, ToNs(Sync0Period),
-                PduTimeout.HasValue, ToNs(PduTimeout),
-                StateTransitionTimeout.HasValue, ToNs(StateTransitionTimeout),
-                DcStaticSyncIterations.HasValue, DcStaticSyncIterations ?? 0,
-                DcStartDelay.HasValue, ToNs(DcStartDelay),
-                SyncTolerance.HasValue, ToNs(SyncTolerance),
-                SyncTimeout.HasValue, ToNs(SyncTimeout),
-                ProcessDataWatchdog.HasValue, ToNs(ProcessDataWatchdog),
-                SpinMargin.HasValue, ToNs(SpinMargin));
-            if (opener == IntPtr.Zero)
+            var handle = NativeEchocat.autd3_link_echocat_option_new();
+            if (handle == IntPtr.Zero)
             {
-                throw new Autd3Exception("failed to create echocat link");
+                throw new Autd3Exception("failed to create echocat link option");
             }
-            return opener;
+            try
+            {
+                LinkOptionNative.Apply("iface", NativeEchocat.autd3_link_echocat_option_set_iface(handle, Iface.NameValue));
+                LinkOptionNative.SetDuration(handle, "sync0Period", Sync0Period, NativeEchocat.autd3_link_echocat_option_set_sync0_period);
+                LinkOptionNative.SetDuration(handle, "pduTimeout", PduTimeout, NativeEchocat.autd3_link_echocat_option_set_pdu_timeout);
+                LinkOptionNative.SetDuration(handle, "stateTransitionTimeout", StateTransitionTimeout, NativeEchocat.autd3_link_echocat_option_set_state_transition_timeout);
+                if (DcStaticSyncIterations is { } iterations)
+                {
+                    LinkOptionNative.Apply("dcStaticSyncIterations", NativeEchocat.autd3_link_echocat_option_set_dc_static_sync_iterations(handle, iterations));
+                }
+                LinkOptionNative.SetDuration(handle, "dcStartDelay", DcStartDelay, NativeEchocat.autd3_link_echocat_option_set_dc_start_delay);
+                LinkOptionNative.SetDuration(handle, "syncTolerance", SyncTolerance, NativeEchocat.autd3_link_echocat_option_set_sync_tolerance);
+                LinkOptionNative.SetDuration(handle, "syncTimeout", SyncTimeout, NativeEchocat.autd3_link_echocat_option_set_sync_timeout);
+                LinkOptionNative.SetDuration(handle, "processDataWatchdog", ProcessDataWatchdog, NativeEchocat.autd3_link_echocat_option_set_process_data_watchdog);
+                if (SpinMargin is { } margin)
+                {
+                    LinkOptionNative.Apply("spinMargin", NativeEchocat.autd3_link_echocat_option_set_spin_margin(handle, true, LinkOptionNative.ToNanos(margin)));
+                }
+            }
+            catch
+            {
+                NativeEchocat.autd3_link_echocat_option_free(handle);
+                throw;
+            }
+            return handle;
         }
 
-        IntPtr ILegacyLink.TakeLegacyOpener()
-        {
-            var opener = NativeEchocat.autd3_link_echocat_legacy(
-                Iface.NameValue,
-                Sync0Period.HasValue, ToNs(Sync0Period),
-                PduTimeout.HasValue, ToNs(PduTimeout),
-                StateTransitionTimeout.HasValue, ToNs(StateTransitionTimeout),
-                DcStaticSyncIterations.HasValue, DcStaticSyncIterations ?? 0,
-                DcStartDelay.HasValue, ToNs(DcStartDelay),
-                SyncTolerance.HasValue, ToNs(SyncTolerance),
-                SyncTimeout.HasValue, ToNs(SyncTimeout),
-                ProcessDataWatchdog.HasValue, ToNs(ProcessDataWatchdog),
-                SpinMargin.HasValue, ToNs(SpinMargin));
-            if (opener == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create echocat link");
-            }
-            return opener;
-        }
+        IntPtr ILink.TakeOpener() =>
+            LinkOptionNative.TakeOpener("echocat", CreateHandle(), NativeEchocat.autd3_link_echocat_open);
+
+        IntPtr ILegacyLink.TakeLegacyOpener() =>
+            LinkOptionNative.TakeOpener("echocat", CreateHandle(), NativeEchocat.autd3_link_echocat_open_legacy);
     }
 
     internal static class NativeEchocat
     {
         private const string Lib = "autd3_link_echocat";
 
-        [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_echocat(
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName,
-            [MarshalAs(UnmanagedType.I1)] bool hasSync0Period, ulong sync0PeriodNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasPduTimeout, ulong pduTimeoutNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasStateTransitionTimeout, ulong stateTransitionTimeoutNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasDcStaticSyncIterations, uint dcStaticSyncIterations,
-            [MarshalAs(UnmanagedType.I1)] bool hasDcStartDelay, ulong dcStartDelayNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSyncTolerance, ulong syncToleranceNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSyncTimeout, ulong syncTimeoutNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasProcessDataWatchdog, ulong processDataWatchdogNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSpinMargin, ulong spinMarginNs);
+        static NativeEchocat() => NativeAbi.Verify(Lib, autd3_abi_version());
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_echocat_legacy(
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName,
-            [MarshalAs(UnmanagedType.I1)] bool hasSync0Period, ulong sync0PeriodNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasPduTimeout, ulong pduTimeoutNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasStateTransitionTimeout, ulong stateTransitionTimeoutNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasDcStaticSyncIterations, uint dcStaticSyncIterations,
-            [MarshalAs(UnmanagedType.I1)] bool hasDcStartDelay, ulong dcStartDelayNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSyncTolerance, ulong syncToleranceNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSyncTimeout, ulong syncTimeoutNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasProcessDataWatchdog, ulong processDataWatchdogNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSpinMargin, ulong spinMarginNs);
+        private static extern uint autd3_abi_version();
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_echocat_option_new();
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_iface(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_sync0_period(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_pdu_timeout(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_state_transition_timeout(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_dc_static_sync_iterations(IntPtr option, uint value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_dc_start_delay(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_sync_tolerance(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_sync_timeout(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_process_data_watchdog(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_spin_margin(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasSpinMargin, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_link_echocat_option_free(IntPtr option);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_echocat_open(IntPtr option);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_echocat_open_legacy(IntPtr option);
     }
 }

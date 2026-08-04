@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -11,6 +12,8 @@ namespace AUTD3.Legacy
     {
         public uint TimeoutCycles { get; }
         public byte? RtPriority { get; }
+        public bool DisableRtPriority { get; }
+        public RtSchedulePolicy RtPolicy { get; }
         public ulong? RtAffinity { get; }
 
         public LegacyClientConfig() : this(timeoutCycles: 2000)
@@ -20,24 +23,39 @@ namespace AUTD3.Legacy
         public LegacyClientConfig(
             uint timeoutCycles = 2000,
             byte? rtPriority = null,
+            bool disableRtPriority = false,
+            RtSchedulePolicy rtPolicy = RtSchedulePolicy.Fifo,
             ulong? rtAffinity = null)
         {
+            if (rtPriority.HasValue && disableRtPriority)
+            {
+                throw new ArgumentException("rtPriority and disableRtPriority are mutually exclusive");
+            }
             TimeoutCycles = timeoutCycles;
             RtPriority = rtPriority;
+            DisableRtPriority = disableRtPriority;
+            RtPolicy = rtPolicy;
             RtAffinity = rtAffinity;
         }
 
         internal IntPtr CreateHandle()
         {
-            var handle = NativeLegacyClient.autd3_legacy_client_config_new(
-                TimeoutCycles,
-                RtPriority.HasValue,
-                RtPriority ?? 0,
-                RtAffinity.HasValue,
-                (UIntPtr)(RtAffinity ?? 0));
+            var handle = NativeLegacyClient.autd3_legacy_client_config_new();
             if (handle == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create legacy client config");
+            }
+            try
+            {
+                NativeConfig.Apply("timeoutCycles", NativeLegacyClient.autd3_legacy_client_config_set_timeout_cycles(handle, TimeoutCycles));
+                NativeConfig.Apply("rtPriority", NativeLegacyClient.autd3_legacy_client_config_set_rt_priority(handle, NativeConfig.RtPriorityMode(RtPriority, DisableRtPriority), RtPriority ?? 0));
+                NativeConfig.Apply("rtPolicy", NativeLegacyClient.autd3_legacy_client_config_set_rt_policy(handle, (byte)RtPolicy));
+                NativeConfig.Apply("rtAffinity", NativeLegacyClient.autd3_legacy_client_config_set_rt_affinity(handle, RtAffinity.HasValue, (UIntPtr)(RtAffinity ?? 0)));
+            }
+            catch
+            {
+                NativeLegacyClient.autd3_legacy_client_config_free(handle);
+                throw;
             }
             return handle;
         }
@@ -80,7 +98,9 @@ namespace AUTD3.Legacy
         private readonly int _numDevices;
         private readonly IntPtr _client;
 
-        internal IntPtr Handle { get; private set; }
+        private IntPtr _handle;
+
+        internal IntPtr Handle => _handle;
 
         public LegacyDatagramBuilder(Geometry geometry) : this(geometry, IntPtr.Zero)
         {
@@ -91,7 +111,7 @@ namespace AUTD3.Legacy
             _geometry = geometry;
             _numDevices = geometry.NumDevices;
             _client = client;
-            Handle = NativeLegacyClient.autd3_legacy_datagram_builder_new(geometry.Handle);
+            _handle = NativeLegacyClient.autd3_legacy_datagram_builder_new(geometry.Handle);
             if (Handle == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create legacy datagram builder");
@@ -101,14 +121,20 @@ namespace AUTD3.Legacy
         public LegacyDatagramBuilder Push(ICommand command)
         {
             var op = command.CreateOp();
-            NativeLegacyClient.autd3_legacy_datagram_builder_push(Handle, op);
+            if (NativeLegacyClient.autd3_legacy_datagram_builder_push(Handle, op) != 0)
+            {
+                throw new Autd3Exception("failed to push the command onto the legacy datagram builder");
+            }
             return this;
         }
 
         public LegacyDatagramBuilder Push(ILegacyCommand command)
         {
             var op = command.CreateOp();
-            NativeLegacyClient.autd3_legacy_datagram_builder_push_legacy(Handle, op);
+            if (NativeLegacyClient.autd3_legacy_datagram_builder_push_legacy(Handle, op) != 0)
+            {
+                throw new Autd3Exception("failed to push the command onto the legacy datagram builder");
+            }
             return this;
         }
 
@@ -134,13 +160,16 @@ namespace AUTD3.Legacy
                 }
                 throw;
             }
-            NativeLegacyClient.autd3_legacy_datagram_builder_push_each(Handle, ops, (UIntPtr)_numDevices);
+            if (NativeLegacyClient.autd3_legacy_datagram_builder_push_each(Handle, ops, (UIntPtr)_numDevices) != 0)
+            {
+                throw new Autd3Exception("failed to push the per-device commands onto the legacy datagram builder");
+            }
             return this;
         }
 
         public LegacyFrames Build()
         {
-            var err = new byte[256];
+            var err = new byte[NativeAbi.ErrorBufferLength];
             var handle = NativeLegacyClient.autd3_legacy_datagram_builder_build(Handle, _client, err, (UIntPtr)err.Length);
             if (handle == IntPtr.Zero)
             {
@@ -151,19 +180,20 @@ namespace AUTD3.Legacy
 
         public void Dispose()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeLegacyClient.autd3_legacy_datagram_builder_free(Handle);
-                Handle = IntPtr.Zero;
+                NativeLegacyClient.autd3_legacy_datagram_builder_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~LegacyDatagramBuilder()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeLegacyClient.autd3_legacy_datagram_builder_free(Handle);
+                NativeLegacyClient.autd3_legacy_datagram_builder_free(handle);
             }
         }
     }
@@ -182,11 +212,13 @@ namespace AUTD3.Legacy
 
     public sealed class LegacyFrames : IDisposable, IEnumerable<LegacyFrame>
     {
-        internal IntPtr Handle { get; private set; }
+        private IntPtr _handle;
+
+        internal IntPtr Handle => _handle;
 
         internal LegacyFrames(IntPtr handle)
         {
-            Handle = handle;
+            _handle = handle;
         }
 
         public int Length => (int)NativeLegacyClient.autd3_legacy_frames_num_frames(Handle);
@@ -216,32 +248,35 @@ namespace AUTD3.Legacy
 
         public void Dispose()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeLegacyClient.autd3_legacy_frames_free(Handle);
-                Handle = IntPtr.Zero;
+                NativeLegacyClient.autd3_legacy_frames_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~LegacyFrames()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeLegacyClient.autd3_legacy_frames_free(Handle);
+                NativeLegacyClient.autd3_legacy_frames_free(handle);
             }
         }
     }
 
     public sealed class LegacyClient : IDisposable
     {
-        internal IntPtr Handle { get; private set; }
+        private IntPtr _handle;
+
+        internal IntPtr Handle => _handle;
 
         private readonly Geometry _geometry;
 
         private LegacyClient(IntPtr handle, Geometry geometry)
         {
-            Handle = handle;
+            _handle = handle;
             _geometry = geometry;
         }
 
@@ -249,8 +284,17 @@ namespace AUTD3.Legacy
         {
             var opener = link.TakeLegacyOpener();
 
+            IntPtr configHandle;
+            try
+            {
+                configHandle = config.CreateHandle();
+            }
+            catch
+            {
+                NativeLegacyClient.autd3_legacy_client_opener_free(opener);
+                throw;
+            }
 
-            var configHandle = config.CreateHandle();
             Task<IntPtr> task;
             try
             {
@@ -329,19 +373,20 @@ namespace AUTD3.Legacy
 
         public void Dispose()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeLegacyClient.autd3_legacy_client_free(Handle);
-                Handle = IntPtr.Zero;
+                NativeLegacyClient.autd3_legacy_client_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~LegacyClient()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeLegacyClient.autd3_legacy_client_free(Handle);
+                NativeLegacyClient.autd3_legacy_client_free(handle);
             }
         }
     }

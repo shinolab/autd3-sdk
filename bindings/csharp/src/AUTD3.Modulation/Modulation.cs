@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -17,6 +18,11 @@ namespace AUTD3
     internal static class NativeModulation
     {
         private const string Lib = "autd3_modulation";
+
+        static NativeModulation() => NativeAbi.Verify(Lib, autd3_abi_version());
+
+        [DllImport(Lib)]
+        private static extern uint autd3_abi_version();
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_modulation_buffer_new();
@@ -47,7 +53,7 @@ namespace AUTD3
         internal static extern void autd3_modulation_sine_option_free(IntPtr option);
 
         [DllImport(Lib)]
-        internal static extern int autd3_modulation_sine(byte mode, float freq, uint freqInt, IntPtr option, IntPtr buffer);
+        internal static extern int autd3_modulation_sine(byte mode, float freq, uint freqInt, IntPtr option, IntPtr buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_modulation_square_option_new(byte low, byte high, float duty, IntPtr samplingConfig);
@@ -56,7 +62,7 @@ namespace AUTD3
         internal static extern void autd3_modulation_square_option_free(IntPtr option);
 
         [DllImport(Lib)]
-        internal static extern int autd3_modulation_square(byte mode, float freq, uint freqInt, IntPtr option, IntPtr buffer);
+        internal static extern int autd3_modulation_square(byte mode, float freq, uint freqInt, IntPtr option, IntPtr buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_modulation_fourier_option_new([MarshalAs(UnmanagedType.I1)] bool hasScaleFactor, float scaleFactor, [MarshalAs(UnmanagedType.I1)] bool clamp, byte offset);
@@ -65,7 +71,7 @@ namespace AUTD3
         internal static extern void autd3_modulation_fourier_option_free(IntPtr option);
 
         [DllImport(Lib)]
-        internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, IntPtr option, IntPtr buffer);
+        internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, IntPtr option, IntPtr buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib)]
         internal static extern int autd3_modulation_constant(byte intensity, IntPtr buffer);
@@ -82,7 +88,9 @@ namespace AUTD3
 
     public sealed class ModulationBuffer : IDisposable, IEnumerable<byte>
     {
-        internal IntPtr Handle { get; private set; }
+        private IntPtr _handle;
+
+        internal IntPtr Handle => _handle;
 
         private ModulationBuffer(IntPtr handle)
         {
@@ -90,7 +98,7 @@ namespace AUTD3
             {
                 throw new Autd3Exception("failed to create modulation buffer");
             }
-            Handle = handle;
+            _handle = handle;
         }
 
         internal ModulationBuffer() : this(NativeModulation.autd3_modulation_buffer_new())
@@ -136,19 +144,20 @@ namespace AUTD3
 
         public void Dispose()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeModulation.autd3_modulation_buffer_free(Handle);
-                Handle = IntPtr.Zero;
+                NativeModulation.autd3_modulation_buffer_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~ModulationBuffer()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeModulation.autd3_modulation_buffer_free(Handle);
+                NativeModulation.autd3_modulation_buffer_free(handle);
             }
         }
     }
@@ -294,9 +303,10 @@ namespace AUTD3
                     option.Amplitude, option.Offset, option.Phase.Radian, option.Clamp, sampling);
                 try
                 {
-                    if (NativeModulation.autd3_modulation_sine(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, dst.Handle) != 0)
+                    var err = new byte[NativeAbi.ErrorBufferLength];
+                    if (NativeModulation.autd3_modulation_sine(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, dst.Handle, err, (UIntPtr)err.Length) != 0)
                     {
-                        throw new Autd3Exception("sine modulation failed");
+                        throw new Autd3Exception(NativeUtil.Utf8(err));
                     }
                 }
                 finally
@@ -325,9 +335,10 @@ namespace AUTD3
                     option.Low, option.High, option.Duty, sampling);
                 try
                 {
-                    if (NativeModulation.autd3_modulation_square(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, dst.Handle) != 0)
+                    var err = new byte[NativeAbi.ErrorBufferLength];
+                    if (NativeModulation.autd3_modulation_square(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, dst.Handle, err, (UIntPtr)err.Length) != 0)
                     {
-                        throw new Autd3Exception("square modulation failed");
+                        throw new Autd3Exception(NativeUtil.Utf8(err));
                     }
                 }
                 finally
@@ -377,9 +388,10 @@ namespace AUTD3
                     option.ScaleFactor.HasValue, option.ScaleFactor ?? 0f, option.Clamp, option.Offset);
                 try
                 {
-                    if (NativeModulation.autd3_modulation_fourier(native, (UIntPtr)components.Length, fourierOption, dst.Handle) != 0)
+                    var err = new byte[NativeAbi.ErrorBufferLength];
+                    if (NativeModulation.autd3_modulation_fourier(native, (UIntPtr)components.Length, fourierOption, dst.Handle, err, (UIntPtr)err.Length) != 0)
                     {
-                        throw new Autd3Exception("fourier modulation failed");
+                        throw new Autd3Exception(NativeUtil.Utf8(err));
                     }
                 }
                 finally

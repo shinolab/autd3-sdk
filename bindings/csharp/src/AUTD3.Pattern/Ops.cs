@@ -16,8 +16,14 @@ namespace AUTD3
 
     public static class PatternCompressionExt
     {
-        public static int PerFrame(this PatternCompression format) =>
-            (int)NativePattern.autd3_pattern_compression_per_frame((byte)format);
+        public static int PerFrame(this PatternCompression format)
+        {
+            if (NativePattern.autd3_pattern_compression_per_frame((byte)format, out var perFrame) != 0)
+            {
+                throw new Autd3Exception($"unknown pattern compression format {format}");
+            }
+            return (int)perFrame;
+        }
     }
 
     public sealed class WritePatternCompressed : ICommand

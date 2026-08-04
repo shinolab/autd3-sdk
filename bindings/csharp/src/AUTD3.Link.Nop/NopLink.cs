@@ -34,6 +34,11 @@ namespace AUTD3.Link
     {
         private const string Lib = "autd3_link_nop";
 
+        static NativeNop() => NativeAbi.Verify(Lib, autd3_abi_version());
+
+        [DllImport(Lib)]
+        private static extern uint autd3_abi_version();
+
         [DllImport(Lib)]
         internal static extern IntPtr autd3_link_nop();
 
