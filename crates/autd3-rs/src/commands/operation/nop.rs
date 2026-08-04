@@ -7,6 +7,8 @@ use super::{Distribution, Operation};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Nop;
 
+impl crate::sealed::Sealed for Nop {}
+
 impl Operation for Nop {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast

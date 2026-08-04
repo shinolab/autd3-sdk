@@ -27,6 +27,8 @@ const FAIL_MARKER: u8 = 0xAA;
 
 struct FailingCmd;
 
+impl crate::sealed::Sealed for FailingCmd {}
+
 impl Operation for FailingCmd {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast

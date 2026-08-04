@@ -16,6 +16,8 @@ pub struct WritePatternBuffer<'a> {
     pub emissions: &'a [Vec<Emission>],
 }
 
+impl crate::sealed::Sealed for WritePatternBuffer<'_> {}
+
 impl Operation for WritePatternBuffer<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice

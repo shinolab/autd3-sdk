@@ -53,6 +53,8 @@ impl<'a> EachFrame<'a> {
     }
 }
 
+impl crate::sealed::Sealed for EachFrame<'_> {}
+
 impl Operation for EachFrame<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice

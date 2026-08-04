@@ -167,6 +167,8 @@ impl Default for SetSilencer<FixedCompletionTime> {
     }
 }
 
+impl<T: SilencerConfig> crate::sealed::Sealed for SetSilencer<T> {}
+
 impl<T: SilencerConfig> Operation for SetSilencer<T> {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast

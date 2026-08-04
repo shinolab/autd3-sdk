@@ -18,6 +18,8 @@ pub(crate) struct WriteFociChunk<'a, const N: usize> {
     pub focus_len: usize,
 }
 
+impl<const N: usize> crate::sealed::Sealed for WriteFociChunk<'_, N> {}
+
 impl<const N: usize> Operation for WriteFociChunk<'_, N> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice

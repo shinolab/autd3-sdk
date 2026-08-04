@@ -16,6 +16,8 @@ pub struct ChangeModulationBank {
     pub transition_mode: TransitionMode,
 }
 
+impl crate::sealed::Sealed for ChangeModulationBank {}
+
 impl Operation for ChangeModulationBank {
     fn apply_dc_offset(&mut self, offset_ns: i64) {
         self.transition_mode = self.transition_mode.with_dc_offset(offset_ns);

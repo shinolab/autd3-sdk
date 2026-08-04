@@ -12,6 +12,10 @@ mod client;
 mod datagram;
 mod response;
 
+mod sealed {
+    pub trait Sealed {}
+}
+
 #[cfg(test)]
 mod test_utils;
 

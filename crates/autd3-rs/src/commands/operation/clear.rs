@@ -8,6 +8,8 @@ use super::{Distribution, Operation};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Clear;
 
+impl crate::sealed::Sealed for Clear {}
+
 impl Operation for Clear {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast

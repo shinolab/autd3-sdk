@@ -29,6 +29,8 @@ impl SetPulseWidthTable<'_> {
     }
 }
 
+impl crate::sealed::Sealed for SetPulseWidthTable<'_> {}
+
 impl Operation for SetPulseWidthTable<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
