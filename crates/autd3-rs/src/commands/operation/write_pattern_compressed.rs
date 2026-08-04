@@ -42,6 +42,8 @@ pub struct WritePatternCompressed<'a> {
     pub patterns: [Option<&'a [Vec<Emission>]>; PATTERN_MAX_PER_FRAME],
 }
 
+impl crate::sealed::Sealed for WritePatternCompressed<'_> {}
+
 impl Operation for WritePatternCompressed<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice

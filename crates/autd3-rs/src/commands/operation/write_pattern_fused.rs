@@ -64,6 +64,8 @@ fn reflect_fused(
     Ok(())
 }
 
+impl crate::sealed::Sealed for WritePatternFused<'_> {}
+
 impl Operation for WritePatternFused<'_> {
     fn apply_dc_offset(&mut self, offset_ns: i64) {
         self.transition_mode = self.transition_mode.with_dc_offset(offset_ns);
@@ -140,6 +142,8 @@ impl<const N: usize> WriteFociStmFused<'_, N> {
         points > 0 && points * N <= PATTERN_FUSED_MAX_FOCI_PER_FRAME
     }
 }
+
+impl<const N: usize> crate::sealed::Sealed for WriteFociStmFused<'_, N> {}
 
 impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
     fn apply_dc_offset(&mut self, offset_ns: i64) {

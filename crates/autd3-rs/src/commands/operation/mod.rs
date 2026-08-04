@@ -71,7 +71,7 @@ pub enum Distribution {
     PerDevice,
 }
 
-pub trait Operation {
+pub trait Operation: crate::sealed::Sealed {
     fn distribution(&self) -> Distribution;
 
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error>;

@@ -13,6 +13,8 @@ pub struct SetPhaseCorrection<'a> {
     pub phases: &'a [Vec<Phase>],
 }
 
+impl crate::sealed::Sealed for SetPhaseCorrection<'_> {}
+
 impl Operation for SetPhaseCorrection<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice

@@ -19,6 +19,8 @@ pub struct ConfigModulation {
     pub loop_behavior: LoopBehavior,
 }
 
+impl crate::sealed::Sealed for ConfigModulation {}
+
 impl Operation for ConfigModulation {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast

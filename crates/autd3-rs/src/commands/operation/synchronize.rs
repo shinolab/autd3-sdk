@@ -7,6 +7,8 @@ use super::{Distribution, Operation};
 #[derive(Clone, Copy, Debug)]
 pub struct Synchronize;
 
+impl crate::sealed::Sealed for Synchronize {}
+
 impl Operation for Synchronize {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast

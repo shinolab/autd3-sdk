@@ -16,6 +16,8 @@ pub(crate) struct WriteModulationChunk<'a> {
     pub data: &'a [u8],
 }
 
+impl crate::sealed::Sealed for WriteModulationChunk<'_> {}
+
 impl Operation for WriteModulationChunk<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
