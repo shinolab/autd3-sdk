@@ -20,6 +20,7 @@ const LENGTH_MASK: u16 = 0x07ff;
 const MORE_DATAGRAMS: u16 = 0x8000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum FrameError {
     #[error("datagram does not fit in the frame buffer")]
     FrameFull,

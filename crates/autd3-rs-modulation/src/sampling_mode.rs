@@ -20,6 +20,7 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum SamplingMode {
     ExactFreq(Freq<u32>),
     ExactFreqFloat(Freq<f32>),

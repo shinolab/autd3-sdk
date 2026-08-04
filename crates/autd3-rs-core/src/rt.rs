@@ -8,6 +8,7 @@ pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
 pub use logging::{LogWriter, TracingGuard, TracingOption, init_tracing};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RtSchedulePolicy {
     Normal,
     #[default]

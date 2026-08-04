@@ -17,6 +17,7 @@ pub const fn is_integer(a: f64) -> bool {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone, thiserror::Error)]
+#[non_exhaustive]
 pub enum SamplingConfigError {
     #[error("Sampling frequency ({0:?}) must divide the ultrasound frequency")]
     FreqInvalid(Freq<u32>),

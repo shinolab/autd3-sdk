@@ -8,6 +8,7 @@ use crate::mirror::{BankLoop, SilencerAxis};
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError, TransitionMode};
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     #[error("device {device} firmware error {code:#04x}: {}", describe_device_error(*code))]
     DeviceError { device: usize, code: u8 },
@@ -73,6 +74,7 @@ where
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Error)]
+#[non_exhaustive]
 pub enum PayloadError {
     #[error("max_inflight must be <= {max}")]
     MaxInflightTooLarge { max: usize },

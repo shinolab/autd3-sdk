@@ -4,6 +4,7 @@ use super::{DcSysTime, GpioIn};
 use crate::error::EncodeError;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum TransitionMode {
     SyncIdx,
     SysTime {

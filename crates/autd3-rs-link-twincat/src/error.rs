@@ -1,4 +1,5 @@
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum TwinCATLinkError {
     #[error("ADS error: {0}")]
     Ads(#[from] ads::Error),

@@ -47,6 +47,13 @@ pub(crate) fn transition_mode(mode: TransitionMode, dc_offset_ns: i64) -> Legacy
         TransitionMode::Ext => LegacyTransitionMode::Ext,
         TransitionMode::Immediate => LegacyTransitionMode::Immediate,
         TransitionMode::Later => LegacyTransitionMode::Later,
+        other => {
+            tracing::warn!(
+                ?other,
+                "legacy firmware has no equivalent transition mode; falling back to Immediate"
+            );
+            LegacyTransitionMode::Immediate
+        }
     }
 }
 
