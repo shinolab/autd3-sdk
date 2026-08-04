@@ -82,10 +82,19 @@ namespace AUTD3
     {
         private const string Lib = "autd3_pattern";
 
-        static NativePattern() => NativeAbi.Verify(Lib, autd3_abi_version());
+        private const string ClientLib = "autd3capi";
+
+        static NativePattern()
+        {
+            NativeAbi.Verify(Lib, autd3_abi_version());
+            NativeAbi.Verify(ClientLib, autd3capi_abi_version());
+        }
 
         [DllImport(Lib)]
         private static extern uint autd3_abi_version();
+
+        [DllImport(ClientLib, EntryPoint = "autd3_abi_version")]
+        private static extern uint autd3capi_abi_version();
 
         [DllImport(Lib)]
         internal static extern float autd3_pattern_wavelength(float soundSpeedMmPerS);
@@ -145,25 +154,25 @@ namespace AUTD3
         internal static extern void autd3_pattern_null(IntPtr buffer);
 
 
-        [DllImport("autd3capi")]
+        [DllImport(ClientLib)]
         internal static extern IntPtr autd3_op_pattern(byte bank, IntPtr patternBuffer, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
-        [DllImport("autd3capi")]
+        [DllImport(ClientLib)]
         internal static extern IntPtr autd3_op_write_pattern_buffer(byte bank, ushort index, IntPtr patternBuffer);
 
-        [DllImport("autd3capi")]
+        [DllImport(ClientLib)]
         internal static extern IntPtr autd3_op_write_pattern_compressed(byte bank, uint index, byte format, IntPtr[] patterns, UIntPtr numPatterns);
 
-        [DllImport("autd3capi")]
+        [DllImport(ClientLib)]
         internal static extern IntPtr autd3_op_config_pattern(byte bank, IntPtr samplingConfig, uint size, ushort rep);
 
-        [DllImport("autd3capi")]
+        [DllImport(ClientLib)]
         internal static extern IntPtr autd3_op_config_foci_stm(byte bank, IntPtr samplingConfig, uint size, byte numFoci, float soundSpeedMPerS, ushort rep);
 
-        [DllImport("autd3capi")]
+        [DllImport(ClientLib)]
         internal static extern IntPtr autd3_op_change_pattern_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
-        [DllImport("autd3capi")]
+        [DllImport(ClientLib)]
         internal static extern int autd3_pattern_compression_per_frame(byte format, out UIntPtr @out);
     }
 

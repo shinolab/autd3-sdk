@@ -117,9 +117,9 @@ namespace AUTD3.Link
         internal static extern void autd3_link_echocat_option_free(IntPtr option);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_echocat_open(IntPtr option);
+        internal static extern IntPtr autd3_link_echocat_open(IntPtr option, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_echocat_open_legacy(IntPtr option);
+        internal static extern IntPtr autd3_link_echocat_open_legacy(IntPtr option, byte[] outErr, UIntPtr outErrLen);
     }
 }

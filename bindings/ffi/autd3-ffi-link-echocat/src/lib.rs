@@ -1,10 +1,12 @@
+use std::ffi::c_char;
 use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_ffi_abi::{
     AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, BoxFuture, CheckerBackend, ClientBackend, ClientOpener,
-    LegacyClientOpener, LinkStatusData, ResponseTokenData, client_opener, handle_mut, handle_ref,
-    into_handle, join_err, legacy_client_opener, link_runtime, take_handle, to_ns, write_out,
+    LegacyClientOpener, LinkStatusData, OPTION_HANDLE_CONSUMED, ResponseTokenData, client_opener,
+    handle_mut, handle_ref, into_handle, join_err, legacy_client_opener, link_runtime, take_handle,
+    to_ns, write_cstr, write_out,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -284,8 +286,11 @@ pub unsafe extern "C" fn autd3_link_echocat_option_get_spin_margin(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_echocat_open(
     option: *mut EchocatLinkOptionHandle,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> *mut ClientOpener {
     let Some(EchocatLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        unsafe { write_cstr(out_err, out_err_len, OPTION_HANDLE_CONSUMED) };
         return std::ptr::null_mut();
     };
     let opener = client_opener(move |geometry, config| async move {
@@ -305,8 +310,11 @@ pub unsafe extern "C" fn autd3_link_echocat_open(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_echocat_open_legacy(
     option: *mut EchocatLinkOptionHandle,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> *mut LegacyClientOpener {
     let Some(EchocatLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        unsafe { write_cstr(out_err, out_err_len, OPTION_HANDLE_CONSUMED) };
         return std::ptr::null_mut();
     };
     into_handle(legacy_client_opener(move |_| Ok(option)))

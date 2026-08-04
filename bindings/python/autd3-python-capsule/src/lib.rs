@@ -86,6 +86,7 @@ pub struct PatternBufferMut {
     _owner: Py<PyAny>,
 }
 
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn pattern_capsule_mut(
     py: Python<'_>,
     ptr: NonNull<Vec<DevicePattern>>,

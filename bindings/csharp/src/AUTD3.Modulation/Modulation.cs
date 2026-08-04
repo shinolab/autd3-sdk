@@ -19,10 +19,19 @@ namespace AUTD3
     {
         private const string Lib = "autd3_modulation";
 
-        static NativeModulation() => NativeAbi.Verify(Lib, autd3_abi_version());
+        private const string ClientLib = "autd3capi";
+
+        static NativeModulation()
+        {
+            NativeAbi.Verify(Lib, autd3_abi_version());
+            NativeAbi.Verify(ClientLib, autd3capi_abi_version());
+        }
 
         [DllImport(Lib)]
         private static extern uint autd3_abi_version();
+
+        [DllImport(ClientLib, EntryPoint = "autd3_abi_version")]
+        private static extern uint autd3capi_abi_version();
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_modulation_buffer_new();
@@ -82,7 +91,7 @@ namespace AUTD3
         [DllImport(Lib)]
         internal static extern int autd3_modulation_radiation_pressure_inplace(IntPtr buffer);
 
-        [DllImport("autd3capi")]
+        [DllImport(ClientLib)]
         internal static extern IntPtr autd3_op_modulation(byte bank, IntPtr samplingConfig, IntPtr modulationBuffer, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
     }
 

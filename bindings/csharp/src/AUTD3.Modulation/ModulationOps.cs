@@ -11,13 +11,20 @@ namespace AUTD3
 
     internal static class NativeModulationOp
     {
-        [DllImport("autd3capi")]
+        private const string Lib = "autd3capi";
+
+        static NativeModulationOp() => NativeAbi.Verify(Lib, autd3_abi_version());
+
+        [DllImport(Lib)]
+        private static extern uint autd3_abi_version();
+
+        [DllImport(Lib)]
         internal static extern IntPtr autd3_op_write_modulation_buffer(byte bank, uint offset, IntPtr modulationBuffer);
 
-        [DllImport("autd3capi")]
+        [DllImport(Lib)]
         internal static extern IntPtr autd3_op_config_modulation(byte bank, IntPtr samplingConfig, uint size, ushort rep);
 
-        [DllImport("autd3capi")]
+        [DllImport(Lib)]
         internal static extern IntPtr autd3_op_change_modulation_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
     }
 

@@ -131,6 +131,9 @@ pub const AUTD3_ERR_INVALID_ARGUMENT: i32 = -5;
 pub const AUTD3_ERR_UNSUPPORTED_FIRMWARE: i32 = -6;
 pub const AUTD3_ERR_ABORTED: i32 = -7;
 
+pub const OPTION_HANDLE_CONSUMED: &str =
+    "link option handle is null; it was already consumed by a previous open call";
+
 pub const AUTD3_RT_PRIORITY_DEFAULT: u8 = 0;
 pub const AUTD3_RT_PRIORITY_DISABLED: u8 = 1;
 pub const AUTD3_RT_PRIORITY_EXPLICIT: u8 = 2;
@@ -204,6 +207,14 @@ pub unsafe fn slice_ref<'a, T>(ptr: *const T, len: usize) -> Option<&'a [T]> {
     }
     let ptr = NonNull::new(ptr.cast_mut())?;
     Some(unsafe { std::slice::from_raw_parts(ptr.as_ptr().cast_const(), len) })
+}
+
+pub unsafe fn slice_mut<'a, T>(ptr: *mut T, len: usize) -> Option<&'a mut [T]> {
+    if len == 0 {
+        return Some(&mut []);
+    }
+    let ptr = NonNull::new(ptr)?;
+    Some(unsafe { std::slice::from_raw_parts_mut(ptr.as_ptr(), len) })
 }
 
 #[must_use]
