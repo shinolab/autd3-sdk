@@ -5,6 +5,7 @@ use thiserror::Error;
 use crate::state::AlState;
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum SoemLinkError {
     #[error("no socket connection on interface {0:?} (root / CAP_NET_RAW required?)")]
     NoSocketConnection(String),

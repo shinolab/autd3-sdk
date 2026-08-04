@@ -646,6 +646,13 @@ fn encode_constraint(constraint: EmissionConstraint) -> (u32, u32, u32) {
         EmissionConstraint::Clamp(min, max) => {
             (3, f32::from(min.0).to_bits(), f32::from(max.0).to_bits())
         }
+        other => {
+            tracing::warn!(
+                ?other,
+                "this backend has no shader for the constraint; falling back to Normalize"
+            );
+            (0, 0, 0)
+        }
     }
 }
 

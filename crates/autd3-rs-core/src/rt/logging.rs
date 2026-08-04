@@ -3,6 +3,7 @@ use std::io::{Stderr, Stdout, Write};
 use tracing_appender::non_blocking::WorkerGuard;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LogWriter {
     #[default]
     Stdout,

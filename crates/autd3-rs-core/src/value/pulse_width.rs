@@ -6,6 +6,7 @@ pub const PULSE_WIDTH_PERIOD: u16 =
     (crate::params::FPGA_CLK_FREQ_HZ / crate::params::ULTRASOUND_FREQ_HZ) as u16;
 
 #[derive(Clone, Copy, Debug, PartialEq, Error)]
+#[non_exhaustive]
 pub enum PulseWidthError {
     #[error("pulse width ({0}) is out of range [0, {n})", n = PULSE_WIDTH_PERIOD)]
     PulseWidthOutOfRange(u16),

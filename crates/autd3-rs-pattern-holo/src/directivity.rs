@@ -54,6 +54,7 @@ static DIR_COEF_D: &[f32] = &[
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum Directivity {
     #[default]
     Sphere,

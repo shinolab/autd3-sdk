@@ -27,6 +27,7 @@ pub(crate) fn is_echo(received: &[u8], sent: &[u8]) -> bool {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SleepStrategy {
     #[default]
     Sleep,

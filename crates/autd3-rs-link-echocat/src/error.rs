@@ -4,6 +4,7 @@ use crate::reg::AlState;
 use crate::wire::FrameError;
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum EchocatError {
     #[error("{0}")]
     Io(#[from] std::io::Error),

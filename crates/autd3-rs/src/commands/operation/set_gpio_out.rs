@@ -23,6 +23,7 @@ const fn ec_time_to_gpio_sys_time(ec_time_ns: u64) -> u64 {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum GpioOut {
     #[default]
     Off,

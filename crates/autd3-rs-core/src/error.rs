@@ -5,6 +5,7 @@ use thiserror::Error;
 pub struct LinkError(pub String);
 
 #[derive(Clone, Copy, Debug, PartialEq, Error)]
+#[non_exhaustive]
 pub enum EncodeError {
     #[error("focus coordinate {axis} = {value} out of range {min}..={max}")]
     FocusOutOfRange {
