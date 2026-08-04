@@ -5,7 +5,8 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use autd3_rs_appliance::{
     Appliance, ApplianceClient, ApplianceStatus, ConfigDocument, DEFAULT_CONTROL_PORT,
-    DiscoveryOption, LogLines, UplinkStatus, WifiCredentials, WifiForget, discover_all,
+    DiscoveryOption, LogLines, UNKNOWN_STATE_HINT, UplinkStatus, WifiCredentials, WifiForget,
+    discover_all,
 };
 use clap::{Parser, Subcommand};
 
@@ -338,9 +339,14 @@ fn print_status(status: &ApplianceStatus) {
     }
     println!("uptime     {}", human_duration(status.uptime_secs));
     println!(
-        "bus        {:?} (requested {:?}){}",
+        "bus        {:?} (requested {:?}){}{}",
         bus.actual,
         bus.desired,
+        if bus.has_unknown_state() {
+            format!(" [{UNKNOWN_STATE_HINT}]")
+        } else {
+            String::new()
+        },
         bus.failure
             .as_ref()
             .map_or_else(String::new, |reason| format!(": {reason}")),

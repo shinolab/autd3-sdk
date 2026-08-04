@@ -1,7 +1,9 @@
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::time::{Duration, Instant};
 
-use autd3_rs_appliance::{ApplianceClient, ApplianceStatus, BusActual, UplinkStatus};
+use autd3_rs_appliance::{
+    ApplianceClient, ApplianceStatus, BusActual, UNKNOWN_STATE_HINT, UplinkStatus,
+};
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
@@ -314,9 +316,13 @@ fn status_view(ui: &mut egui::Ui, status: &ApplianceStatus) {
                 } else {
                     egui::Color32::LIGHT_RED
                 },
-                match &bus.failure {
-                    Some(reason) => format!("{:?}: {reason}", bus.actual),
-                    None => format!("{:?} (requested {:?})", bus.actual, bus.desired),
+                match (&bus.failure, bus.has_unknown_state()) {
+                    (Some(reason), _) => format!("{:?}: {reason}", bus.actual),
+                    (None, true) => format!(
+                        "{:?} (requested {:?}) [{UNKNOWN_STATE_HINT}]",
+                        bus.actual, bus.desired
+                    ),
+                    (None, false) => format!("{:?} (requested {:?})", bus.actual, bus.desired),
                 },
             );
             ui.end_row();
