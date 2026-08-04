@@ -55,7 +55,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 | フィールド             | 型                    | デフォルト          | 説明                                                       |
 | ---------------------- | --------------------- | --------------- | ---------------------------------------------------------- |
-| `timeout_cycles`       | `u32`                 | `10`            | 応答待ちのタイムアウト (送信サイクル数)                    |
+| `timeout_cycles`       | `NonZeroU32`          | `10`            | 応答待ちのタイムアウト (送信サイクル数)                    |
 | `max_inflight`         | `NonZeroUsize`        | `127`           | 送信キューサイズ                     |
 | `max_resync_rounds`    | `NonZeroU32`          | `8`             | 再同期を試みる最大ラウンド数                               |
 | `low_latency`          | `bool`                | `false`         | 低レイテンシモード          |

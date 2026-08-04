@@ -41,7 +41,8 @@ impl ClientConfig {
             ..CoreClientConfig::default()
         };
         if let Some(v) = timeout_cycles {
-            inner.timeout_cycles = v;
+            inner.timeout_cycles = NonZeroU32::new(v)
+                .ok_or_else(|| PyValueError::new_err("timeout_cycles must be >= 1"))?;
         }
         if let Some(v) = max_inflight {
             inner.max_inflight = NonZeroUsize::new(v)

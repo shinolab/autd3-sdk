@@ -16,7 +16,7 @@ async fn main() -> Result<()> {
     let option =
         // ANCHOR: config
         ClientConfig {
-            timeout_cycles: 10,
+            timeout_cycles: NonZeroU32::new(10).unwrap(),
             max_inflight: NonZeroUsize::new(MAX_INFLIGHT).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
