@@ -42,6 +42,7 @@ rust-version = "1.96"
 license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"
+homepage = "https://shinolab.github.io/autd3-sdk/en/"
 
 [workspace.dependencies]
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
@@ -49,7 +50,9 @@ core_affinity = { version = "0.8.3", default-features = false }
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
 rayon = { version = "1.11.0", default-features = false }
 thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
-zerocopy = { version = "0.8.52", default-features = false, features = ["derive"] }
+zerocopy = { version = "0.8.52", default-features = false, features = [
+    "derive",
+] }
 tokio = { version = "1.52.3", default-features = false, features = [
     "sync",
     "time",
@@ -74,9 +77,17 @@ axum = { version = "0.8.9", default-features = false, features = [
     "tokio",
     "query",
 ] }
-serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
-serde_json = { version = "1.0.150", default-features = false, features = ["std"] }
-toml = { version = "1.1.4", default-features = false, features = ["parse", "serde"] }
+serde = { version = "1.0.228", default-features = false, features = [
+    "std",
+    "derive",
+] }
+serde_json = { version = "1.0.150", default-features = false, features = [
+    "std",
+] }
+toml = { version = "1.1.4", default-features = false, features = [
+    "parse",
+    "serde",
+] }
 anyhow = { version = "1.0.102", default-features = false, features = ["std"] }
 tracing = { version = "0.1.44", default-features = false }
 tracing-appender = { version = "0.2.3", default-features = false }
@@ -102,6 +113,9 @@ autd3-rs-link-remote = { version = "0.5.0", path = "crates/autd3-rs-link-remote"
 autd3-rs-link-soem = { version = "0.5.0", path = "crates/autd3-rs-link-soem" }
 autd3-rs-link-twincat = { version = "0.5.0", path = "crates/autd3-rs-link-twincat" }
 autd3-rs-modulation = { version = "0.5.0", path = "crates/autd3-rs-modulation" }
+
+[workspace.metadata.cargo-semver-checks.lints]
+constructible_struct_adds_field = "allow"
 
 [workspace.lints.rust]
 warnings = "deny"

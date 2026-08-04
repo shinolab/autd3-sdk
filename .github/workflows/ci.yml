@@ -183,6 +183,12 @@ jobs:
               - 'bindings/ffi/Cargo.lock'
               - 'bindings/python/**/Cargo.toml'
               - 'bindings/python/Cargo.lock'
+              - 'LICENSE'
+              - 'crates/**/LICENSE'
+              - 'crates/autd3-rs-link-soem/COPYING'
+              - 'firmware/cpu/**/LICENSE'
+              - 'extras/**/LICENSE'
+              - 'extras/**/Cargo.toml'
               - '.github/workflows/ci-license.yml'
             doc:
               - *shared
@@ -295,6 +301,11 @@ jobs:
     with:
       samples: ${{ needs.changes.outputs.doc-samples == 'true' }}
 
+  semver:
+    name: semver
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+    uses: ./.github/workflows/ci-semver.yml
+
   guard:
     name: guard-main-source
     if: ${{ github.event_name == 'pull_request' }}
@@ -342,7 +353,7 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [changes, rust, holo-wgpu, simulator, console, image, emulator, cpu, py, ffi, cs, unity, license, doc, guard]
+    needs: [changes, rust, holo-wgpu, simulator, console, image, emulator, cpu, py, ffi, cs, unity, license, doc, semver, guard]
     runs-on: ubuntu-latest
     steps:
       - name: Verify detect-changes succeeded
@@ -361,7 +372,8 @@ jobs:
             ${{ needs.cpu.result }} ${{ needs.py.result }}
             ${{ needs.ffi.result }} ${{ needs.cs.result }}
             ${{ needs.unity.result }} ${{ needs.license.result }}
-            ${{ needs.doc.result }} ${{ needs.guard.result }}
+            ${{ needs.doc.result }} ${{ needs.semver.result }}
+            ${{ needs.guard.result }}
         run: |
           for r in $RESULTS; do
             if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
