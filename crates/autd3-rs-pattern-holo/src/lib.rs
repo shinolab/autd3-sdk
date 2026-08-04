@@ -9,6 +9,8 @@ mod linear_synthesis;
 mod mask;
 mod propagation;
 
+pub use nalgebra;
+
 pub use amp::{Amplitude, Pa, dB, kPa};
 pub use amplitude_target::AmplitudeTarget;
 pub use backend::{LinAlgBackend, NalgebraBackend};
