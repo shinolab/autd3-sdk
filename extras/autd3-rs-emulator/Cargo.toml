@@ -9,6 +9,7 @@ rust-version = "1.96"
 license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"
+homepage = "https://shinolab.github.io/autd3-sdk/en/"
 
 [workspace.lints.rust]
 warnings = "deny"
@@ -47,7 +48,14 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Hardware-free emulator for AUTD3: records device emission data and computes the ultrasound sound field offline."
+readme = "README.md"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 default = ["polars"]

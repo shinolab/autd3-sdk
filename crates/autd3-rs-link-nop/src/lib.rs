@@ -1,3 +1,11 @@
+//! Hardware-free `Link` for [`autd3-rs`](https://docs.rs/autd3-rs), backed by
+//! [`autd3-rs-firmware-emulator`](https://docs.rs/autd3-rs-firmware-emulator).
+//!
+//! Frames go to an emulated device instead of the bus, so examples, tests, and documentation
+//! samples run without an AUTD3 connected.
+//!
+//! See the [documentation site](https://shinolab.github.io/autd3-sdk/en/).
+
 use autd3_rs_core::geometry::{Device, Geometry};
 use autd3_rs_core::link::IntoLink;
 use autd3_rs_firmware_emulator::Audit;

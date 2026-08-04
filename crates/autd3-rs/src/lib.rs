@@ -1,3 +1,13 @@
+//! Async client library for [AUTD3](https://hapislab.org/en/airborne-ultrasound-tactile-display),
+//! an airborne ultrasound tactile display that produces midair haptic sensations.
+//!
+//! [`Client`] owns the realtime bus thread and sends emission patterns and amplitude modulation
+//! to the devices over a [`Link`].
+//! Pick a transport from one of the `autd3-rs-link-*` crates.
+//!
+//! See the [documentation site](https://shinolab.github.io/autd3-sdk/en/) for a walkthrough,
+//! and the crate README for a minimal example.
+
 pub mod commands;
 pub mod error;
 pub mod firmware_version;

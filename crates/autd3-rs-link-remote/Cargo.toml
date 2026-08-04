@@ -6,7 +6,14 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "TCP transport Link for autd3-rs: relays tx/rx frames to a remote server driving a real Link."
+readme = "README.md"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 discovery = ["dep:mdns-sd"]

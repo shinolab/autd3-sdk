@@ -1,3 +1,11 @@
+//! Core types shared across the [AUTD3](https://hapislab.org/en/airborne-ultrasound-tactile-display)
+//! sdk crates: geometry, units, values, the [`link::Link`] abstraction, and realtime tuning.
+//!
+//! Application code normally uses [`autd3-rs`](https://docs.rs/autd3-rs), which re-exports what it
+//! needs from here. Depend on this crate directly only to write a `Link` or another sdk crate.
+//!
+//! See the [documentation site](https://shinolab.github.io/autd3-sdk/en/).
+
 pub mod common;
 pub mod error;
 pub mod geometry;

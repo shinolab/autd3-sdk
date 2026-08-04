@@ -1,3 +1,12 @@
+//! Shared wire-protocol contract between the
+//! [AUTD3](https://hapislab.org/en/airborne-ultrasound-tactile-display) CPU firmware and its
+//! clients: command opcodes, error codes, frame layout, and payload types.
+//!
+//! `no_std`, and the single source of truth for both sides. Application code should use the
+//! re-exports from [`autd3-rs`](https://docs.rs/autd3-rs) rather than depend on this crate.
+//!
+//! See the [documentation site](https://shinolab.github.io/autd3-sdk/en/).
+
 #![no_std]
 
 #[macro_export]

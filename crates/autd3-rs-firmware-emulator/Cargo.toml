@@ -6,7 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Software emulator of the AUTD3 device firmware (the real CPU firmware sources + a Rust FPGA emulator) for running tests without hardware."
+readme = "README.md"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
+
 [dependencies]
 autd3-cpu-fw.workspace = true
 autd3-rs-core.workspace = true
