@@ -363,8 +363,8 @@ async fn successful_send_advances_seq_and_leaves_no_error() {
     send_nop(&client).await.unwrap();
 
     let s = slave.lock().unwrap();
-    assert_eq!(s.ack, 2);
-    assert_eq!(s.expected_seq, 3);
+    assert_eq!(s.ack, 3);
+    assert_eq!(s.expected_seq, 4);
     assert_eq!(s.error_detail, 0);
 }
 
@@ -741,8 +741,8 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
             "resync must recover as success with per-device data"
         );
     }
-    assert_eq!(slaves[0].lock().unwrap().expected_seq, 10);
-    assert_eq!(slaves[1].lock().unwrap().expected_seq, 10);
+    assert_eq!(slaves[0].lock().unwrap().expected_seq, 11);
+    assert_eq!(slaves[1].lock().unwrap().expected_seq, 11);
 }
 
 #[tokio::test]
@@ -767,8 +767,8 @@ async fn handshake_sends_reset_resend_cycles_seq_zero_resets() {
     assert!(s.sent_log.len() >= 2);
     assert_eq!(s.sent_log[0], (0, Cmd::Reset));
     assert_eq!(s.sent_log[1], (0, Cmd::Reset));
-    assert!(s.sent_log.contains(&(0, Cmd::Clear)));
-    assert!(s.sent_log.contains(&(1, Cmd::Synchronize)));
+    assert!(s.sent_log.contains(&(1, Cmd::Clear)));
+    assert!(s.sent_log.contains(&(2, Cmd::Synchronize)));
 }
 
 #[tokio::test]
@@ -794,12 +794,31 @@ async fn low_latency_handshake_switches_slave_mode_and_continues_traffic() {
 }
 
 #[tokio::test]
-async fn default_config_leaves_slave_in_fifo_mode() {
+async fn default_config_negotiates_fifo_mode() {
     let (_client, slave) = open_client().await;
     tokio::time::sleep(Duration::from_millis(20)).await;
     let s = slave.lock().unwrap();
     assert_eq!(s.mode, Mode::Fifo.as_u8());
-    assert!(!s.sent_log.iter().any(|(_, cmd)| *cmd == Cmd::SetMode));
+    assert!(s.sent_log.contains(&(0, Cmd::SetMode)));
+}
+
+#[tokio::test]
+async fn handshake_clears_low_latency_left_by_a_previous_session() {
+    let (link, slave) = slave_pair();
+    slave.lock().unwrap().mode = Mode::LowLatency.as_u8();
+    let client = Client::open(&geometry(1), link, ClientConfig::default())
+        .await
+        .unwrap();
+    {
+        let s = slave.lock().unwrap();
+        assert_eq!(
+            s.mode,
+            Mode::Fifo.as_u8(),
+            "a low-latency slave must fall back to FIFO without a power cycle"
+        );
+    }
+    send_nop(&client).await.unwrap();
+    assert_eq!(slave.lock().unwrap().mode, Mode::Fifo.as_u8());
 }
 
 #[tokio::test]
@@ -815,11 +834,11 @@ async fn handshake_resets_slave_proto_state() {
         .unwrap();
     {
         let s = slave.lock().unwrap();
-        assert_eq!(s.expected_seq, 2);
-        assert_eq!(s.ack, 1);
+        assert_eq!(s.expected_seq, 3);
+        assert_eq!(s.ack, 2);
     }
     send_nop(&client).await.unwrap();
-    assert_eq!(slave.lock().unwrap().expected_seq, 3);
+    assert_eq!(slave.lock().unwrap().expected_seq, 4);
 }
 
 #[tokio::test]
@@ -913,7 +932,7 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
             "resync must recover as success"
         );
     }
-    assert_eq!(slave.lock().unwrap().expected_seq, 10);
+    assert_eq!(slave.lock().unwrap().expected_seq, 11);
 }
 
 #[tokio::test]
@@ -980,8 +999,8 @@ async fn recovers_after_transient_stale_cycles() {
         .await
         .expect("send should recover after the stale burst");
     let s = slave.lock().unwrap();
-    assert_eq!(s.expected_seq, 3);
-    assert_eq!(s.ack, 2);
+    assert_eq!(s.expected_seq, 4);
+    assert_eq!(s.ack, 3);
 }
 
 fn post_handshake_reset_count(slave: &Arc<StdMutex<Slave>>) -> usize {
@@ -1017,10 +1036,10 @@ async fn inflight_held_across_stale_recovers_without_reset() {
     );
     let s = slave.lock().unwrap();
     assert_eq!(
-        s.expected_seq, 3,
-        "Clear(seq0) + Synchronize(seq1) + one command, each once"
+        s.expected_seq, 4,
+        "SetMode(seq0) + Clear(seq1) + Synchronize(seq2) + one command, each once"
     );
-    assert_eq!(s.ack, 2);
+    assert_eq!(s.ack, 3);
     drop(s);
     assert_eq!(
         post_handshake_reset_count(&slave),
@@ -1069,7 +1088,7 @@ async fn streaming_holds_window_across_stale_and_recovers() {
             "every held in-flight must recover after the stale burst"
         );
     }
-    assert_eq!(slave.lock().unwrap().expected_seq, 10);
+    assert_eq!(slave.lock().unwrap().expected_seq, 11);
     assert_eq!(
         post_handshake_reset_count(&slave),
         0,
