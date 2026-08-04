@@ -1,12 +1,13 @@
 use autd3_rs_core::value::Emission;
 
-pub fn null_transducer(dst: &mut Emission) {
-    *dst = Emission::default();
+#[must_use]
+pub fn null_transducer() -> Emission {
+    Emission::default()
 }
 
 pub fn null_device(dst: &mut [Emission]) {
     for slot in dst.iter_mut() {
-        null_transducer(slot);
+        *slot = null_transducer();
     }
 }
 
