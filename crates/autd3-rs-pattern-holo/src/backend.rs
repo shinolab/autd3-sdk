@@ -3,8 +3,8 @@ use nalgebra::{Complex, DMatrix, DVector};
 use autd3_rs_core::geometry::{Point3, UnitVector3};
 use autd3_rs_core::value::Emission;
 
+use crate::amplitude_target::AmplitudeTarget;
 use crate::constraint::EmissionConstraint;
-use crate::control_point::ControlPoint;
 use crate::directivity::Directivity;
 use crate::propagation::{emission, max_coefficient, propagate};
 
@@ -26,7 +26,7 @@ pub trait LinAlgBackend {
         &self,
         tr_pos: &[Point3<f32>],
         tr_dir: &[UnitVector3<f32>],
-        foci: &[ControlPoint],
+        foci: &[AmplitudeTarget],
         wavenumber: f32,
         directivity: Directivity,
     ) -> Self::Matrix {
@@ -90,7 +90,7 @@ pub trait LinAlgBackend {
         &self,
         tr_pos: &[Point3<f32>],
         tr_dir: &[UnitVector3<f32>],
-        foci: &[ControlPoint],
+        foci: &[AmplitudeTarget],
         batch: usize,
         wavenumber: f32,
         directivity: Directivity,
@@ -236,7 +236,7 @@ impl LinAlgBackend for NalgebraBackend {
         &self,
         tr_pos: &[Point3<f32>],
         tr_dir: &[UnitVector3<f32>],
-        foci: &[ControlPoint],
+        foci: &[AmplitudeTarget],
         batch: usize,
         wavenumber: f32,
         directivity: Directivity,

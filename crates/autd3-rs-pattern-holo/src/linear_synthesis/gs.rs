@@ -6,9 +6,9 @@ use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::value::{Emission, Intensity};
 
+use crate::amplitude_target::AmplitudeTarget;
 use crate::backend::LinAlgBackend;
 use crate::constraint::EmissionConstraint;
-use crate::control_point::ControlPoint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::linear_synthesis::batch::{BatchSetup, solve_batched};
@@ -40,7 +40,7 @@ impl Default for GsOption<'_> {
 pub fn gs<B: LinAlgBackend>(
     backend: &B,
     geometry: &Geometry,
-    foci: &[ControlPoint],
+    foci: &[AmplitudeTarget],
     wavelength: Length,
     option: &GsOption<'_>,
     dst: &mut [Vec<Emission>],
@@ -86,7 +86,7 @@ pub fn gs<B: LinAlgBackend>(
 pub fn gs_batch<B: LinAlgBackend>(
     backend: &B,
     geometry: &Geometry,
-    foci: &[ControlPoint],
+    foci: &[AmplitudeTarget],
     wavelength: Length,
     option: &GsOption<'_>,
     dst: &mut [Vec<Vec<Emission>>],

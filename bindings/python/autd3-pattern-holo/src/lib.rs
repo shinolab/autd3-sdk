@@ -6,10 +6,10 @@ use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::Point3;
 use autd3_rs_core::value::Intensity;
 use autd3_rs_pattern_holo::{
-    Amplitude as CoreAmplitude, ControlPoint as CoreControlPoint, Directivity as CoreDirectivity,
-    EmissionConstraint as CoreEmissionConstraint, GreedyOption as CoreGreedyOption,
-    GsOption as CoreGsOption, GspatOption as CoreGspatOption, NaiveOption as CoreNaiveOption, Pa,
-    TransducerMask, dB, kPa,
+    Amplitude as CoreAmplitude, AmplitudeTarget as CoreAmplitudeTarget,
+    Directivity as CoreDirectivity, EmissionConstraint as CoreEmissionConstraint,
+    GreedyOption as CoreGreedyOption, GsOption as CoreGsOption, GspatOption as CoreGspatOption,
+    NaiveOption as CoreNaiveOption, Pa, TransducerMask, dB, kPa,
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyValueError};
@@ -101,17 +101,17 @@ impl AmplitudeUnit {
     }
 }
 
-#[pyclass(name = "ControlPoint", module = "autd3_pattern_holo")]
-pub struct ControlPoint {
-    pub(crate) inner: CoreControlPoint,
+#[pyclass(name = "AmplitudeTarget", module = "autd3_pattern_holo")]
+pub struct AmplitudeTarget {
+    pub(crate) inner: CoreAmplitudeTarget,
 }
 
 #[pymethods]
-impl ControlPoint {
+impl AmplitudeTarget {
     #[new]
     fn new(point: &Bound<'_, PyAny>, amplitude: Amplitude) -> PyResult<Self> {
         Ok(Self {
-            inner: CoreControlPoint {
+            inner: CoreAmplitudeTarget {
                 point: extract_point(point)?,
                 amplitude: amplitude.0,
             },
@@ -363,7 +363,7 @@ impl GreedyOption {
     }
 }
 
-fn collect_foci(foci: &[PyRef<'_, ControlPoint>]) -> Vec<CoreControlPoint> {
+fn collect_foci(foci: &[PyRef<'_, AmplitudeTarget>]) -> Vec<CoreAmplitudeTarget> {
     foci.iter().map(|f| f.inner).collect()
 }
 
@@ -389,7 +389,7 @@ where
 #[pyo3(signature = (geometry, foci, wavelength, option, dst))]
 fn naive(
     geometry: &Bound<'_, PyAny>,
-    foci: Vec<PyRef<'_, ControlPoint>>,
+    foci: Vec<PyRef<'_, AmplitudeTarget>>,
     wavelength: f32,
     option: &NaiveOption,
     dst: &Bound<'_, PyAny>,
@@ -418,7 +418,7 @@ fn naive(
 #[pyo3(signature = (geometry, foci, wavelength, option, dst))]
 fn gs(
     geometry: &Bound<'_, PyAny>,
-    foci: Vec<PyRef<'_, ControlPoint>>,
+    foci: Vec<PyRef<'_, AmplitudeTarget>>,
     wavelength: f32,
     option: &GsOption,
     dst: &Bound<'_, PyAny>,
@@ -447,7 +447,7 @@ fn gs(
 #[pyo3(signature = (geometry, foci, wavelength, option, dst))]
 fn gspat(
     geometry: &Bound<'_, PyAny>,
-    foci: Vec<PyRef<'_, ControlPoint>>,
+    foci: Vec<PyRef<'_, AmplitudeTarget>>,
     wavelength: f32,
     option: &GspatOption,
     dst: &Bound<'_, PyAny>,
@@ -476,7 +476,7 @@ fn gspat(
 #[pyo3(signature = (geometry, foci, wavelength, option, dst))]
 fn greedy(
     geometry: &Bound<'_, PyAny>,
-    foci: Vec<PyRef<'_, ControlPoint>>,
+    foci: Vec<PyRef<'_, AmplitudeTarget>>,
     wavelength: f32,
     option: &GreedyOption,
     dst: &Bound<'_, PyAny>,
@@ -504,7 +504,7 @@ fn greedy(
 fn autd3_pattern_holo(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Amplitude>()?;
     m.add_class::<AmplitudeUnit>()?;
-    m.add_class::<ControlPoint>()?;
+    m.add_class::<AmplitudeTarget>()?;
     m.add_class::<EmissionConstraint>()?;
     m.add_class::<Directivity>()?;
     m.add_class::<PyTransducerMask>()?;

@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using AUTD3;
 using AUTD3.Holo;
 using AUTD3.Link;
-using ControlPoint = AUTD3.Holo.ControlPoint;
 using static AUTD3.Holo.HoloUnits;
 using static AUTD3.Units;
 
@@ -26,8 +25,8 @@ internal static class Program
         var wavelength = Pattern.Wavelength(340 * m / s);
         var foci = new[]
         {
-            new ControlPoint(center + new Vector3(-20f, 0f, 150f), 150 * dB),
-            new ControlPoint(center + new Vector3(20f, 0f, 150f), 150 * dB),
+            new AmplitudeTarget(center + new Vector3(-20f, 0f, 150f), 150 * dB),
+            new AmplitudeTarget(center + new Vector3(20f, 0f, 150f), 150 * dB),
         };
 
         using var patterns = geometry.PatternBuffer();

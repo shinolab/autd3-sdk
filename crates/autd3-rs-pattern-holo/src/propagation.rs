@@ -6,9 +6,9 @@ use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::{Geometry, Point3, UnitVector3};
 use autd3_rs_core::value::{Emission, Phase};
 
+use crate::amplitude_target::AmplitudeTarget;
 use crate::backend::LinAlgBackend;
 use crate::constraint::EmissionConstraint;
-use crate::control_point::ControlPoint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::mask::TransducerMask;
@@ -34,7 +34,7 @@ pub(crate) fn propagate(
 pub(crate) fn make_propagation_matrix<B: LinAlgBackend>(
     backend: &B,
     geometry: &Geometry,
-    foci: &[ControlPoint],
+    foci: &[AmplitudeTarget],
     wavelength: Length,
     directivity: Directivity,
     mask: TransducerMask<'_>,
@@ -49,7 +49,10 @@ pub(crate) fn wavenumber(wavelength: Length) -> f32 {
 }
 
 #[must_use]
-pub(crate) fn target_amplitudes<B: LinAlgBackend>(backend: &B, foci: &[ControlPoint]) -> B::Vector {
+pub(crate) fn target_amplitudes<B: LinAlgBackend>(
+    backend: &B,
+    foci: &[AmplitudeTarget],
+) -> B::Vector {
     backend.make_vector(
         foci.iter()
             .map(|f| Complex::new(f.amplitude.pascal(), 0.0))
@@ -75,7 +78,7 @@ pub(crate) fn enabled_transducers(
     (tr_pos, tr_dir)
 }
 
-pub(crate) fn batch_shape(foci: &[ControlPoint], problems: usize) -> Result<usize, HoloError> {
+pub(crate) fn batch_shape(foci: &[AmplitudeTarget], problems: usize) -> Result<usize, HoloError> {
     if problems == 0 {
         return Err(HoloError::NoProblems);
     }
@@ -94,7 +97,7 @@ pub(crate) fn batch_shape(foci: &[ControlPoint], problems: usize) -> Result<usiz
 #[must_use]
 pub(crate) fn batch_target_amplitudes<B: LinAlgBackend>(
     backend: &B,
-    foci: &[ControlPoint],
+    foci: &[AmplitudeTarget],
     problems: usize,
 ) -> B::BatchVector {
     backend.make_batch_vector(

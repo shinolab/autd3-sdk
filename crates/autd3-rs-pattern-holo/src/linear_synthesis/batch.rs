@@ -2,9 +2,9 @@ use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::value::Emission;
 
+use crate::amplitude_target::AmplitudeTarget;
 use crate::backend::LinAlgBackend;
 use crate::constraint::EmissionConstraint;
-use crate::control_point::ControlPoint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::mask::TransducerMask;
@@ -22,7 +22,7 @@ pub(crate) struct BatchSetup<'a> {
 pub(crate) fn solve_batched<B, F>(
     backend: &B,
     geometry: &Geometry,
-    foci: &[ControlPoint],
+    foci: &[AmplitudeTarget],
     wavelength: Length,
     setup: &BatchSetup<'_>,
     dst: &mut [Vec<Vec<Emission>>],

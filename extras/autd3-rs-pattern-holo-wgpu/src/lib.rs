@@ -9,7 +9,7 @@ use nalgebra::Complex;
 
 use autd3_rs_core::geometry::{Point3, UnitVector3};
 use autd3_rs_core::value::{Emission, Intensity, Phase};
-use autd3_rs_pattern_holo::{ControlPoint, Directivity, EmissionConstraint, LinAlgBackend};
+use autd3_rs_pattern_holo::{AmplitudeTarget, Directivity, EmissionConstraint, LinAlgBackend};
 
 pub use buffer::{GpuMatrix, GpuVector, Pooled};
 
@@ -434,7 +434,7 @@ impl LinAlgBackend for WgpuBackend {
         &self,
         tr_pos: &[Point3<f32>],
         tr_dir: &[UnitVector3<f32>],
-        foci: &[ControlPoint],
+        foci: &[AmplitudeTarget],
         wavenumber: f32,
         directivity: Directivity,
     ) -> Self::Matrix {
@@ -583,7 +583,7 @@ impl LinAlgBackend for WgpuBackend {
         &self,
         tr_pos: &[Point3<f32>],
         tr_dir: &[UnitVector3<f32>],
-        foci: &[ControlPoint],
+        foci: &[AmplitudeTarget],
         batch: usize,
         wavenumber: f32,
         directivity: Directivity,
@@ -707,7 +707,7 @@ impl WgpuBackend {
         &self,
         tr_pos: &[Point3<f32>],
         tr_dir: &[UnitVector3<f32>],
-        foci: &[ControlPoint],
+        foci: &[AmplitudeTarget],
         batch: usize,
         wavenumber: f32,
         directivity: Directivity,

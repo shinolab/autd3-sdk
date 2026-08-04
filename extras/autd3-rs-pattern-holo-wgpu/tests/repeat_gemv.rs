@@ -1,7 +1,7 @@
 use nalgebra::Complex;
 
 use autd3_rs_core::geometry::{Point3, UnitVector3, Vector3};
-use autd3_rs_pattern_holo::{ControlPoint, Directivity, LinAlgBackend, Pa};
+use autd3_rs_pattern_holo::{AmplitudeTarget, Directivity, LinAlgBackend, Pa};
 use autd3_rs_pattern_holo_wgpu::WgpuBackend;
 
 const WAVENUMBER: f32 = 0.0733;
@@ -32,9 +32,9 @@ fn transducers(n: usize) -> (Vec<Point3<f32>>, Vec<UnitVector3<f32>>) {
     (pos, dir)
 }
 
-fn foci(count: usize) -> Vec<ControlPoint> {
+fn foci(count: usize) -> Vec<AmplitudeTarget> {
     (0..count)
-        .map(|i| ControlPoint {
+        .map(|i| AmplitudeTarget {
             point: Point3::new(i as f32 * 7.0, i as f32 * -3.0, 150.0),
             amplitude: (3e3 + i as f32 * 200.0) * Pa,
         })

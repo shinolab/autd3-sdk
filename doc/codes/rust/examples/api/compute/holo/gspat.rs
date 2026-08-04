@@ -6,7 +6,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Emission, Intensity};
 use autd3_rs_pattern_holo::{
-    ControlPoint, Directivity, EmissionConstraint, GspatOption, NalgebraBackend, Pa,
+    AmplitudeTarget, Directivity, EmissionConstraint, GspatOption, NalgebraBackend, Pa,
     TransducerMask, gspat,
 };
 
@@ -15,11 +15,11 @@ fn main() -> Result<()> {
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let foci = [
-        ControlPoint {
+        AmplitudeTarget {
             point: center + offset(-30.0 * mm, 0.0 * mm, 0.0 * mm),
             amplitude: 2.5e3 * Pa,
         },
-        ControlPoint {
+        AmplitudeTarget {
             point: center + offset(30.0 * mm, 0.0 * mm, 0.0 * mm),
             amplitude: 2.5e3 * Pa,
         },

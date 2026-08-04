@@ -25,12 +25,12 @@ It does not iterate and is fast, but it does not correct for interference betwee
 | Parameter    | Type                   | Description               |
 | ------------ | ---------------------- | ------------------------- |
 | `geometry`   | `&Geometry`            | Device layout             |
-| `foci`       | `&[ControlPoint]`      | Sequence of focal points (position and target amplitude) |
+| `foci`       | `&[AmplitudeTarget]`      | Sequence of focal points (position and target amplitude) |
 | `wavelength` | `Length`               | Wavelength                |
 | `option`     | `&NaiveOption`         | Additional options (see below) |
 | `dst`        | `&mut [[Emission; _]]` | Output buffer             |
 
-For the common elements (`ControlPoint` / `TransducerMask` / `LinAlgBackend`, etc.), see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
+For the common elements (`AmplitudeTarget` / `TransducerMask` / `LinAlgBackend`, etc.), see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
 
 ## NaiveOption
 

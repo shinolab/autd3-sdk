@@ -112,7 +112,7 @@ namespace AUTD3.Tests
             using var buffer = geometry.PatternBuffer();
             var foci = new[]
             {
-                new ControlPoint(geometry.Center + new Vector3(0f, 0f, 150f), 150 * dB),
+                new AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 150 * dB),
             };
             Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new NaiveOption(EmissionConstraint.Clamp(Intensity.Min, Intensity.Max)), buffer);
             Assert.Equal(1, buffer.NumDevices);

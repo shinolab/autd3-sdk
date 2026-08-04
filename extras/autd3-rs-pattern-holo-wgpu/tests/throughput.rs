@@ -29,8 +29,8 @@ fn throughput_vs_nalgebra() {
                 .collect(),
         );
         for nf in [1usize, 16] {
-            let f: Vec<ControlPoint> = (0..nf)
-                .map(|i| ControlPoint {
+            let f: Vec<AmplitudeTarget> = (0..nf)
+                .map(|i| AmplitudeTarget {
                     point: g.center() + Vector3::new(i as f32 * 10.0, 0.0, 150.0),
                     amplitude: 5e3 * Pa,
                 })
@@ -84,17 +84,17 @@ fn batch_vs_sequential() {
         );
         for nf in [1usize, 4] {
             for problems in [16usize, 64] {
-                let owned: Vec<Vec<ControlPoint>> = (0..problems)
+                let owned: Vec<Vec<AmplitudeTarget>> = (0..problems)
                     .map(|k| {
                         (0..nf)
-                            .map(|i| ControlPoint {
+                            .map(|i| AmplitudeTarget {
                                 point: g.center() + Vector3::new((k + i) as f32 * 7.0, 0.0, 150.0),
                                 amplitude: 5e3 * Pa,
                             })
                             .collect()
                     })
                     .collect();
-                let foci: Vec<ControlPoint> = owned.concat();
+                let foci: Vec<AmplitudeTarget> = owned.concat();
                 let mut dst =
                     vec![vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; d]; problems];
 
@@ -123,7 +123,7 @@ fn run_batch(
     alg: u8,
     gpu: &WgpuBackend,
     g: &Geometry,
-    foci: &[ControlPoint],
+    foci: &[AmplitudeTarget],
     wl: autd3_rs_core::common::Length,
     dst: &mut [Vec<Vec<Emission>>],
 ) {
@@ -149,7 +149,7 @@ fn call(
     run: u8,
     gpu: &WgpuBackend,
     g: &Geometry,
-    f: &[ControlPoint],
+    f: &[AmplitudeTarget],
     wl: autd3_rs_core::common::Length,
     dst: &mut [Vec<Emission>],
 ) {

@@ -9,8 +9,8 @@ use autd3_rs_core::geometry::{Device, Geometry};
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
 use crate::amp::Amplitude;
+use crate::amplitude_target::AmplitudeTarget;
 use crate::constraint::EmissionConstraint;
-use crate::control_point::ControlPoint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::mask::TransducerMask;
@@ -45,7 +45,7 @@ impl Default for GreedyOption<'_> {
 #[allow(clippy::many_single_char_names)]
 pub fn greedy(
     geometry: &Geometry,
-    foci: &[ControlPoint],
+    foci: &[AmplitudeTarget],
     wavelength: Length,
     option: &GreedyOption<'_>,
     dst: &mut [Vec<Emission>],
@@ -140,8 +140,8 @@ mod tests {
         autd3_rs_pattern::wavelength(340.0 * m / s)
     }
 
-    fn single_focus() -> [ControlPoint; 1] {
-        [ControlPoint {
+    fn single_focus() -> [AmplitudeTarget; 1] {
+        [AmplitudeTarget {
             point: Point3::origin() + Vector3::new(0.0, 0.0, 150.0),
             amplitude: 5e3 * Pa,
         }]

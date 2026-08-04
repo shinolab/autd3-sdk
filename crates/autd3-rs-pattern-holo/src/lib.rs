@@ -1,8 +1,8 @@
 mod amp;
+mod amplitude_target;
 mod backend;
 mod combinatorial;
 mod constraint;
-mod control_point;
 mod directivity;
 mod error;
 mod linear_synthesis;
@@ -10,10 +10,10 @@ mod mask;
 mod propagation;
 
 pub use amp::{Amplitude, Pa, dB, kPa};
+pub use amplitude_target::AmplitudeTarget;
 pub use backend::{LinAlgBackend, NalgebraBackend};
 pub use combinatorial::{GreedyOption, abs_objective_func, greedy};
 pub use constraint::EmissionConstraint;
-pub use control_point::ControlPoint;
 pub use directivity::Directivity;
 pub use error::HoloError;
 pub use linear_synthesis::{
@@ -68,7 +68,7 @@ mod tests {
             Autd3::default(),
             Autd3::new(Point3::new(200.0, 0.0, 0.0), UnitQuaternion::identity()),
         ]);
-        let foci = [ControlPoint {
+        let foci = [AmplitudeTarget {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
         }];
@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn uniform_constraint_sets_all_intensities() {
         let geometry = single_device();
-        let foci = [ControlPoint {
+        let foci = [AmplitudeTarget {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
         }];
@@ -116,7 +116,7 @@ mod tests {
     fn naive_single_focus_phases_match_focus_pattern() {
         let geometry = single_device();
         let target = focus_target(&geometry);
-        let foci = [ControlPoint {
+        let foci = [AmplitudeTarget {
             point: target,
             amplitude: 5e3 * Pa,
         }];
@@ -156,7 +156,7 @@ mod tests {
     fn gspat_single_focus_phases_match_focus_pattern() {
         let geometry = single_device();
         let target = focus_target(&geometry);
-        let foci = [ControlPoint {
+        let foci = [AmplitudeTarget {
             point: target,
             amplitude: 5e3 * Pa,
         }];
@@ -195,7 +195,7 @@ mod tests {
     fn all_algorithms_focus_on_target() {
         let geometry = single_device();
         let target = focus_target(&geometry);
-        let foci = [ControlPoint {
+        let foci = [AmplitudeTarget {
             point: target,
             amplitude: 5e3 * Pa,
         }];
@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn masked_transducers_are_null() {
         let geometry = single_device();
-        let foci = [ControlPoint {
+        let foci = [AmplitudeTarget {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
         }];

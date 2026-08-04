@@ -5,7 +5,7 @@ use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs_pattern::wavelength;
 use autd3_rs_pattern_holo::{
-    ControlPoint, Directivity, EmissionConstraint, GreedyOption, Pa, TransducerMask,
+    AmplitudeTarget, Directivity, EmissionConstraint, GreedyOption, Pa, TransducerMask,
     abs_objective_func, greedy,
 };
 
@@ -19,11 +19,11 @@ fn main() -> anyhow::Result<()> {
     greedy(
         &geometry,
         &[
-            ControlPoint {
+            AmplitudeTarget {
                 point: geometry.center() + offset(-30.0 * mm, 0.0 * mm, 150.0 * mm),
                 amplitude: 2.5e3 * Pa,
             },
-            ControlPoint {
+            AmplitudeTarget {
                 point: geometry.center() + offset(30.0 * mm, 0.0 * mm, 150.0 * mm),
                 amplitude: 2.5e3 * Pa,
             },
