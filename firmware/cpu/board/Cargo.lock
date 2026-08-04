@@ -4,14 +4,14 @@ version = 4
 
 [[package]]
 name = "autd3-cpu"
-version = "0.4.0"
+version = "0.6.0"
 dependencies = [
  "autd3-cpu-fw",
 ]
 
 [[package]]
 name = "autd3-cpu-fw"
-version = "0.4.0"
+version = "0.6.0"
 dependencies = [
  "autd3-cpu-wire",
  "zerocopy",
@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-wire"
-version = "0.4.0"
+version = "0.6.0"
 dependencies = [
  "zerocopy",
 ]

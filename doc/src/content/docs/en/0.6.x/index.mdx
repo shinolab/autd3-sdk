@@ -1,0 +1,60 @@
+---
+title: AUTD3 SDK
+description: An overview of the AUTD3 ultrasound phased array and the SDK that controls it
+hero:
+  tagline: An SDK for controlling the AUTD3 ultrasound phased array
+  actions:
+    - text: Get started
+      link: /autd3-sdk/en/0.6.x/getting-started/setup/
+      icon: right-arrow
+      variant: primary
+    - text: GitHub
+      link: https://github.com/shinolab/autd3-sdk
+      icon: external
+      variant: minimal
+slug: en/0.6.x
+---
+
+import { LinkCard, CardGrid } from "@astrojs/starlight/components";
+import Math from "@components/Math.astro";
+
+## What is AUTD3
+
+AUTD3 is an ultrasound phased array device for midair haptics.
+An ultrasound phased array is an array of ultrasound transducers (typically arranged in a grid) whose phases can be controlled individually.
+Controlling the phase of the ultrasound makes it possible to generate an arbitrary sound field in space.
+
+The energy of an acoustic wave focused tightly enough by a phased array produces acoustic radiation pressure.
+This pressure can be used to push the surface of a human body without contact.
+The position of the focal point can be steered freely by controlling the phased array electronically.
+Furthermore, by solving the inverse problem, one can create not only a single focal point but a more complex spatial distribution of sound pressure.
+
+The upper bound on the pressure a phased array can currently generate is roughly <Math tex="50\,\mathrm{mN/cm^2} \sim 5\,\mathrm{gf/cm^2}" />.
+The spatial resolution is limited to about the wavelength in use (for example, about <Math tex="8.5\,\mathrm{mm}" /> at <Math tex="40\,\mathrm{kHz}" />).
+Despite these constraints, phased arrays attract attention as a technology that can freely design the spatio-temporal distribution of force and thereby produce a wide variety of tactile sensations.
+
+This field of stimulating the sense of touch without contact is called **midair haptics**, and we call this ultrasound midair haptic device the **Airborne Ultrasound Tactile Display (AUTD)**.
+The essential parts of AUTD were proposed and established by the University of Tokyo between 2008\[^iwamoto2008] and the early 2010s\[^hoshi2010].
+Since then, universities and companies around the world have entered the field, and research and development have been active.
+AUTD3 is the third-generation version of AUTD developed in the Shinoda-Makino Lab at the University of Tokyo.
+A list of research using AUTD is available on [the laboratory website](https://hapislab.org/airborne-ultrasound-tactile-display).
+
+If you use AUTD3 in your research, see [Citation](/autd3-sdk/en/0.6.x/misc/citation/).
+
+## What is the AUTD3 SDK
+
+The AUTD3 SDK is a set of client libraries for controlling the **AUTD3** ultrasound phased array.
+
+<CardGrid>
+  <LinkCard title="Getting Started" href="/autd3-sdk/en/getting-started/setup/" description="Hardware, firmware and software setup." />
+
+  <LinkCard title="Tutorial" href="/autd3-sdk/en/getting-started/tutorial/single-device/" description="Basic usage with a single device and with multiple devices." />
+
+  <LinkCard title="API Reference" href="/autd3-sdk/en/api/basics/geometry/" description="Details of Geometry / Client / Pattern / Modulation / STM / Link and more." />
+
+  <LinkCard title="Guide" href="/autd3-sdk/en/guide/concept/" description="Architecture and design philosophy, and how each feature works." />
+</CardGrid>
+
+\[^iwamoto2008]: [Takayuki Iwamoto, Mari Tatezono, and Hiroyuki Shinoda: Non-contact Method for Producing Tactile Sensation Using Airborne Ultrasound, Haptics: Perception, Devices and Scenarios: 6th International Conference, Eurohaptics 2008 Proceedings (Lecture Notes in Computer Science), pp.504-513, 2008.](https://hapislab.org/public/hiroyuki_shinoda/research/pdf/08Eurohaptics_iwamoto.pdf)
+
+\[^hoshi2010]: [Takayuki Hoshi, Masafumi Takahashi, Takayuki Iwamoto, and Hiroyuki Shinoda: Noncontact Tactile Display Based on Radiation Pressure of Airborne Ultrasound, IEEE Trans. on Haptics, Vol. 3, No. 3, pp.155-165, 2010.](https://hapislab.org/public/hiroyuki_shinoda/research/pdf/10_Trans_Haptics_Hoshi.pdf)

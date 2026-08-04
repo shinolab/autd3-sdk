@@ -17,7 +17,7 @@ package params;
   localparam int FuncEmulatorBit = 7;  // reserved
 
   localparam bit [7:0] VersionNumMajor = 8'd0;
-  localparam bit [7:0] VersionNumMinor = 8'd4;
+  localparam bit [7:0] VersionNumMinor = 8'd6;
   localparam bit [7:0] VersionNumPatch = 8'd0;
 
   typedef enum int {

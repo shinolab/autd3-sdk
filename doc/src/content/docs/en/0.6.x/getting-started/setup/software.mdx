@@ -1,0 +1,109 @@
+---
+title: Software
+description: List of packages that make up the SDK
+sidebar:
+  order: 3
+slug: en/0.6.x/getting-started/setup/software
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+The AUTD3 SDK is implemented in Rust and also provides bindings for Python / C#.
+A package for [Unity](#unity) is also provided.
+The packages provided for each language are as follows.
+
+<CodeTabs>
+  <Fragment slot="rust">
+    * [autd3-rs](https://crates.io/crates/autd3-rs): Client
+    * [autd3-rs-core](https://crates.io/crates/autd3-rs-core): Core layer
+    * [autd3-rs-pattern](https://crates.io/crates/autd3-rs-pattern): Pattern computation (single focal point, etc.)
+    * [autd3-rs-pattern-holo](https://crates.io/crates/autd3-rs-pattern-holo): Multi-focus optimization
+    * [autd3-rs-pattern-holo-wgpu](https://crates.io/crates/autd3-rs-pattern-holo-wgpu): GPU backend for multi-focus optimization
+    * [autd3-rs-modulation](https://crates.io/crates/autd3-rs-modulation): AM modulation computation
+    * [autd3-rs-emulator](https://crates.io/crates/autd3-rs-emulator): [Emulator](/autd3-sdk/en/0.6.x/guide/emulator/) that records emission data without real hardware
+    * [autd3-rs-link-echocat](https://crates.io/crates/autd3-rs-link-echocat): AUTD3 dedicated EtherCAT Link
+    * [autd3-rs-link-ethercrab](https://crates.io/crates/autd3-rs-link-ethercrab): [EtherCrab](https://github.com/ethercrab-rs/ethercrab)-based Link
+    * [autd3-rs-link-soem](https://crates.io/crates/autd3-rs-link-soem): [SOEM](https://github.com/OpenEtherCATsociety/SOEM)-based Link ([GPL-3.0-only](/autd3-sdk/en/0.6.x/misc/license/))
+    * [autd3-rs-link-remote](https://crates.io/crates/autd3-rs-link-remote): Link for remote connections
+    * [autd3-rs-link-twincat](https://crates.io/crates/autd3-rs-link-twincat): TwinCAT-based Link
+  </Fragment>
+
+  <Fragment slot="python">
+    * [autd3](https://pypi.org/project/autd3/): Client
+    * [autd3-core](https://pypi.org/project/autd3-core/): Core layer
+    * [autd3-pattern](https://pypi.org/project/autd3-pattern/): Pattern computation (single focal point, etc.)
+    * [autd3-pattern-holo](https://pypi.org/project/autd3-pattern-holo/): Multi-focus optimization
+    * [autd3-modulation](https://pypi.org/project/autd3-modulation/): AM modulation computation
+    * [autd3-emulator](https://pypi.org/project/autd3-emulator/): [Emulator](/autd3-sdk/en/0.6.x/guide/emulator/) that records emission data without real hardware
+    * [autd3-link-echocat](https://pypi.org/project/autd3-link-echocat/): AUTD3 dedicated EtherCAT Link
+    * [autd3-link-ethercrab](https://pypi.org/project/autd3-link-ethercrab/): [EtherCrab](https://github.com/ethercrab-rs/ethercrab)-based Link
+    * [autd3-link-soem](https://pypi.org/project/autd3-link-soem/): [SOEM](https://github.com/OpenEtherCATsociety/SOEM)-based Link ([GPL-3.0-only](/autd3-sdk/en/0.6.x/misc/license/))
+    * [autd3-link-remote](https://pypi.org/project/autd3-link-remote/): Link for remote connections
+    * [autd3-link-twincat](https://pypi.org/project/autd3-link-twincat/): TwinCAT-based Link
+  </Fragment>
+
+  <Fragment slot="csharp">
+    * [AUTD3](https://www.nuget.org/packages/AUTD3/): Client
+    * [AUTD3.Core](https://www.nuget.org/packages/AUTD3.Core/): Core layer
+    * [AUTD3.Pattern](https://www.nuget.org/packages/AUTD3.Pattern/): Pattern computation (single focal point, etc.)
+    * [AUTD3.Pattern.Holo](https://www.nuget.org/packages/AUTD3.Pattern.Holo/): Multi-focus optimization
+    * [AUTD3.Modulation](https://www.nuget.org/packages/AUTD3.Modulation/): AM modulation computation
+    * [AUTD3.Link.Echocat](https://www.nuget.org/packages/AUTD3.Link.Echocat/): AUTD3 dedicated EtherCAT Link
+    * [AUTD3.Link.Ethercrab](https://www.nuget.org/packages/AUTD3.Link.Ethercrab/): [EtherCrab](https://github.com/ethercrab-rs/ethercrab)-based Link
+    * [AUTD3.Link.Soem](https://www.nuget.org/packages/AUTD3.Link.Soem/): [SOEM](https://github.com/OpenEtherCATsociety/SOEM)-based Link ([GPL-3.0-only](/autd3-sdk/en/0.6.x/misc/license/))
+    * [AUTD3.Link.Remote](https://www.nuget.org/packages/AUTD3.Link.Remote/): Link for remote connections
+    * [AUTD3.Link.TwinCAT](https://www.nuget.org/packages/AUTD3.Link.TwinCAT/): TwinCAT-based Link
+  </Fragment>
+</CodeTabs>
+
+## Unity
+
+The Unity package is distributed via the npm registry ([npmjs](https://www.npmjs.com/package/com.shinolab.autd3-sdk)).
+
+The supported Unity version is 6 (6000.x) or later.
+
+* [com.shinolab.autd3-sdk](https://www.npmjs.com/package/com.shinolab.autd3-sdk): Client
+* [com.shinolab.autd3-sdk.core](https://www.npmjs.com/package/com.shinolab.autd3-sdk.core): Core layer
+* [com.shinolab.autd3-sdk.pattern](https://www.npmjs.com/package/com.shinolab.autd3-sdk.pattern): Pattern computation (single focal point, etc.)
+* [com.shinolab.autd3-sdk.pattern.holo](https://www.npmjs.com/package/com.shinolab.autd3-sdk.pattern.holo): Multi-focus optimization
+* [com.shinolab.autd3-sdk.modulation](https://www.npmjs.com/package/com.shinolab.autd3-sdk.modulation): AM modulation computation
+* [com.shinolab.autd3-sdk.link.echocat](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.echocat): AUTD3 dedicated EtherCAT Link
+* [com.shinolab.autd3-sdk.link.ethercrab](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.ethercrab): [EtherCrab](https://github.com/ethercrab-rs/ethercrab)-based Link
+* [com.shinolab.autd3-sdk.link.soem](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.soem): [SOEM](https://github.com/OpenEtherCATsociety/SOEM)-based Link ([GPL-3.0-only](/autd3-sdk/en/0.6.x/misc/license/))
+* [com.shinolab.autd3-sdk.link.remote](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.remote): Link for remote connections
+* [com.shinolab.autd3-sdk.link.twincat](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.twincat): TwinCAT-based Link
+* [com.shinolab.autd3-sdk.link.nop](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.nop): Link that does nothing (for testing)
+
+### Installation
+
+Add the scoped registry and the required packages to the Unity project's `Packages/manifest.json`.
+
+```json
+{
+  "scopedRegistries": [
+    { 
+        "name": "npmjs",
+        "url": "https://registry.npmjs.org", 
+        "scopes": ["com.shinolab"]
+    }
+  ],
+  "dependencies": {
+    "com.shinolab.autd3-sdk": "0.6.0",
+    "com.shinolab.autd3-sdk.pattern": "0.6.0",
+    "com.shinolab.autd3-sdk.modulation": "0.6.0",
+    "com.shinolab.autd3-sdk.link.echocat": "0.6.0"
+  }
+}
+```
+
+To do this from the GUI, add the following registry under **Edit → Project Settings → Package Manager → Scoped Registries**.
+
+* Name: `npmjs`
+* URL: `https://registry.npmjs.org`
+* Scope(s): `com.shinolab`
+
+Then add the required packages from **Window → Package Manager → My registries → npmjs**.
+
+:::note
+The Unity version of the API is left-handed and uses meters as its unit.
+:::

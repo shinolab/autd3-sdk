@@ -1,6 +1,6 @@
 [package]
 name = "autd3-cpu-fw"
-version = "0.4.0"
+version = "0.6.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

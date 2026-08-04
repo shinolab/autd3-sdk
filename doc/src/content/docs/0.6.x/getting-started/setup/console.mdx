@@ -1,0 +1,49 @@
+---
+title: コンソール
+description: autd3-console の入手方法と, 同梱されるツール
+sidebar:
+  order: 4
+slug: 0.6.x/getting-started/setup/console
+---
+
+`autd3-console` は, ファームウェアの書き込み, シミュレータの起動, TwinCAT のセットアップ, アプライアンスの操作をまとめた GUI ツール.
+
+## 入手
+
+GitHub Releases (`console-v*`) から配布している.
+[console-v0.6.0](https://github.com/shinolab/autd3-sdk/releases/tag/console-v0.6.0) を開き, そこに記載のインストールコマンドを実行する.
+
+インストーラは実行ファイルを `~/.autd3/bin` (Windows では `%USERPROFILE%\.autd3\bin`) に置き, `PATH` に追加する.
+`PATH` の変更を反映するにはシェル (Windows ではターミナル) を開き直す.
+
+インストーラを使わない場合は, 同じリリースのアーカイブ (`console-<target>.tar.xz` / `.zip`) をダウンロードし,
+展開して `autd3-console` を実行してもよい.
+
+## 同梱されるコマンド
+
+GUI を使わずに直接叩けるコマンドも同じアーカイブに入っている.
+
+| コマンド | 用途 |
+| --- | --- |
+| `autd3-console` | GUI 本体 |
+| `autd3-appliance` | [アプライアンス](/autd3-sdk/0.6.x/guide/appliance/) の探索と操作 |
+| `autd3-firmware` | [ファームウェア](/autd3-sdk/0.6.x/getting-started/setup/firmware/) の書き込み |
+| `autd3-rs-simulator` | [シミュレータ](/autd3-sdk/0.6.x/guide/simulator/) |
+
+Windows 版にはこれに加えて TwinCAT のセットアップ用の `twincat-cli` が入る.
+
+## タブ
+
+起動すると上部にタブが並ぶ.
+
+| タブ | 内容 |
+| --- | --- |
+| Simulator | [シミュレータ](/autd3-sdk/0.6.x/guide/simulator/) の起動 |
+| Appliance | [アプライアンス](/autd3-sdk/0.6.x/guide/appliance/) の探索, 状態表示, バスの開閉 |
+| TwinCAT | [TwinCAT のセットアップ](/autd3-sdk/0.6.x/getting-started/twincat/) (Windows のみ表示される) |
+| Firmware | [ファームウェアの更新](/autd3-sdk/0.6.x/getting-started/setup/firmware/) |
+
+## 更新
+
+起動時に新しいリリースが無いか確認する.
+インストーラで入れた場合はその場で更新でき, アーカイブを展開して使っている場合は Releases ページが開く.

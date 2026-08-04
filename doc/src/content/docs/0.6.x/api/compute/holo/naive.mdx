@@ -1,0 +1,46 @@
+---
+title: naive
+description: 単一ステップの逆伝搬による多焦点最適化
+sidebar:
+  order: 11
+srcPath: crates/autd3-rs-pattern-holo/src/linear_synthesis/naive.rs
+slug: 0.6.x/api/compute/holo/naive
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+Naive 法は, 目標音圧ベクトルに逆伝搬をかけるアルゴリズム.
+反復を行わず高速だが, 焦点間の干渉補正は行われないため, 弱い音場が生成される可能性がある.
+
+## API
+
+<CodeTabs rust={"naive(\n    &NalgebraBackend,\n    &geometry,\n    &foci,\n    wavelength,\n    &option,\n    &mut dst,\n)?;"} python={"naive(geometry, foci, wavelength, option, dst)"} csharp={"Holo.Naive(geometry, foci, wavelength, option, dst);"} />
+
+| 引数         | 型                     | 説明                      |
+| ------------ | ---------------------- | ------------------------- |
+| `geometry`   | `&Geometry`            | デバイス配置              |
+| `foci`       | `&[AmplitudeTarget]`      | 焦点列 (位置と目標振幅)   |
+| `wavelength` | `Length`               | 波長                      |
+| `option`     | `&NaiveOption`         | 追加オプション (下記参照) |
+| `dst`        | `&mut [[Emission; _]]` | 出力バッファ              |
+
+共通要素 (`AmplitudeTarget` / `TransducerMask` / `LinAlgBackend` など) は [Holo 概要](/autd3-sdk/0.6.x/api/compute/holo/) を参照.
+
+## NaiveOption
+
+<CodeTabs rust={"NaiveOption {\n    constraint,\n    directivity,\n    mask,\n    parallel,\n}"} python={"NaiveOption(\n    constraint,\n    directivity,\n    mask,\n    parallel,\n)"} csharp={"new NaiveOption(\n    constraint,\n    directivity,\n    mask,\n    parallel\n)"} />
+
+| フィールド    | 型                   | デフォルト                    |
+|---------------|----------------------|---------------------------|
+| `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
+| `directivity` | `Directivity`        | `Sphere`                  |
+| `mask`        | `TransducerMask`     | `AllEnabled`              |
+| `parallel`    | `bool`               | `true`                    |
+
+各フィールドの意味は [Holo 概要](/autd3-sdk/0.6.x/api/compute/holo/) を参照.
+
+`parallel` は結果の量子化をホスト側で複数スレッドへ分散するかどうか (GPU バックエンドの場合は無視される).
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs::value::Intensity;\nuse autd3_rs_pattern::wavelength;\nuse autd3_rs_pattern_holo::{\n    AmplitudeTarget, Directivity, EmissionConstraint, NaiveOption, NalgebraBackend, Pa,\n    TransducerMask, naive,\n};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\n\nlet mut dst = geometry.pattern_buffer();\n\nnaive(\n    &NalgebraBackend,\n    &geometry,\n    &[\n        AmplitudeTarget {\n            point: geometry.center() + offset(-30.0 * mm, 0.0 * mm, 150.0 * mm),\n            amplitude: 2.5e3 * Pa,\n        },\n        AmplitudeTarget {\n            point: geometry.center() + offset(30.0 * mm, 0.0 * mm, 150.0 * mm),\n            amplitude: 2.5e3 * Pa,\n        },\n    ],\n    wavelength(340.0 * m / s),\n    &NaiveOption {\n        constraint: EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX),\n        directivity: Directivity::Sphere,\n        mask: TransducerMask::AllEnabled,\n        parallel: true,\n    },\n    &mut dst,\n)?;"} python={"import numpy as np\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import m, s\nfrom autd3_pattern import wavelength\nfrom autd3_pattern_holo import (\n    AmplitudeTarget,\n    Directivity,\n    EmissionConstraint,\n    NaiveOption,\n    Pa,\n    TransducerMask,\n    naive,\n)\n\ngeometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n\ndst = geometry.pattern_buffer()\n\nnaive(\n    geometry,\n    [\n        AmplitudeTarget(\n            point=geometry.center() + np.array([-30.0, 0.0, 150.0]),\n            amplitude=2.5e3 * Pa,\n        ),\n        AmplitudeTarget(\n            point=geometry.center() + np.array([30.0, 0.0, 150.0]),\n            amplitude=2.5e3 * Pa,\n        ),\n    ],\n    wavelength(340 * m / s),\n    NaiveOption(\n        constraint=EmissionConstraint.Clamp(0x00, 0xFF),\n        directivity=Directivity.Sphere,\n        mask=TransducerMask.AllEnabled,\n    ),\n    dst,\n)"} csharp={"using System.Numerics;\nusing AUTD3;\nusing AUTD3.Holo;\nusing static AUTD3.Units;\nusing static AUTD3.Holo.HoloUnits;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\n\nvar dst = geometry.PatternBuffer();\n\nHolo.Naive(\n    geometry,\n    new[]\n    {\n        new AmplitudeTarget(geometry.Center + new Vector3(-30.0f, 0.0f, 150.0f), 2.5e3f * Pa),\n        new AmplitudeTarget(geometry.Center + new Vector3(30.0f, 0.0f, 150.0f), 2.5e3f * Pa),\n    },\n    Pattern.Wavelength(340.0f * m / s),\n    new NaiveOption(\n        constraint: EmissionConstraint.Clamp(Intensity.Min, Intensity.Max),\n        directivity: Directivity.Sphere,\n        mask: TransducerMask.AllEnabled\n    ),\n    dst\n);"} />
