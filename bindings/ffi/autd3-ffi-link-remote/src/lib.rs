@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
-    ResponseTokenData, alloc_cstring, client_opener, free_cstring, into_handle, join_err,
-    legacy_client_opener, link_runtime,
+    ResponseTokenData, alloc_cstring, client_opener, cstr_to_string, free_cstring, into_handle,
+    join_err, legacy_client_opener, link_runtime, take_handle,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -173,29 +173,42 @@ impl CheckerBackend for RemoteChecker {
     }
 }
 
+pub struct RemoteLinkOptionHandle(RemoteLinkOption);
+
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_remote(
+pub unsafe extern "C" fn autd3_link_remote_option_new(
     addr: *const c_char,
-    timeout_ns: u64,
-) -> *mut ClientOpener {
-    if addr.is_null() {
+) -> *mut RemoteLinkOptionHandle {
+    let Some(addr) = (unsafe { cstr_to_string(addr) }) else {
         return std::ptr::null_mut();
-    }
-    let addr = unsafe { CStr::from_ptr(addr) }
-        .to_string_lossy()
-        .into_owned();
+    };
     let Ok(addr) = addr.parse::<SocketAddr>() else {
+        return std::ptr::null_mut();
+    };
+    into_handle(RemoteLinkOptionHandle(RemoteLinkOption {
+        addr,
+        timeout: None,
+    }))
+}
+
+autd3_ffi_abi::option_handle_opt_duration_field!(
+    RemoteLinkOptionHandle,
+    [timeout],
+    autd3_link_remote_option_set_timeout,
+    autd3_link_remote_option_get_timeout
+);
+autd3_ffi_abi::option_handle_lifecycle!(RemoteLinkOptionHandle, autd3_link_remote_option_free);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_remote_open(
+    option: *mut RemoteLinkOptionHandle,
+) -> *mut ClientOpener {
+    let Some(RemoteLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
         return std::ptr::null_mut();
     };
     let opener = client_opener(move |geometry, config| async move {
         let (client, checker) = link_runtime()
-            .spawn(async move {
-                let option = RemoteLinkOption {
-                    addr,
-                    timeout: (timeout_ns != 0).then(|| std::time::Duration::from_nanos(timeout_ns)),
-                };
-                Client::open_with_checker(&geometry, option, config).await
-            })
+            .spawn(async move { Client::open_with_checker(&geometry, option, config).await })
             .await
             .map_err(join_err)??;
         let backend: Box<dyn ClientBackend> = Box::new(RemoteBackend {
@@ -208,25 +221,13 @@ pub unsafe extern "C" fn autd3_link_remote(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_remote_legacy(
-    addr: *const c_char,
-    timeout_ns: u64,
+pub unsafe extern "C" fn autd3_link_remote_open_legacy(
+    option: *mut RemoteLinkOptionHandle,
 ) -> *mut LegacyClientOpener {
-    if addr.is_null() {
-        return std::ptr::null_mut();
-    }
-    let addr = unsafe { CStr::from_ptr(addr) }
-        .to_string_lossy()
-        .into_owned();
-    let Ok(addr) = addr.parse::<SocketAddr>() else {
+    let Some(RemoteLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
         return std::ptr::null_mut();
     };
-    into_handle(legacy_client_opener(move |_| {
-        Ok(RemoteLinkOption {
-            addr,
-            timeout: (timeout_ns != 0).then(|| std::time::Duration::from_nanos(timeout_ns)),
-        })
-    }))
+    into_handle(legacy_client_opener(move |_| Ok(option)))
 }
 
 #[unsafe(no_mangle)]
@@ -279,3 +280,5 @@ pub unsafe extern "C" fn autd3_link_remote_discover(
 pub unsafe extern "C" fn autd3_link_remote_free_string(ptr: *mut c_char) {
     unsafe { free_cstring(ptr) };
 }
+
+autd3_ffi_abi::export_abi_version!();

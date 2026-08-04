@@ -1,16 +1,15 @@
-use std::ffi::{CStr, c_char};
 use std::sync::Arc;
-use std::time::Duration;
 
 use autd3_ffi_abi::{
-    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
-    ResponseTokenData, client_opener, into_handle, join_err, legacy_client_opener, link_runtime,
-    to_ns,
+    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, BoxFuture, CheckerBackend, ClientBackend, ClientOpener,
+    LegacyClientOpener, LinkStatusData, ResponseTokenData, client_opener, from_rt_policy,
+    handle_mut, handle_ref, into_handle, join_err, legacy_client_opener, link_runtime, take_handle,
+    to_rt_policy, to_rt_priority, write_out,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_core::Interface;
-use autd3_rs_link_ethercrab::{EtherCrabLinkOption as CoreOption, StateChecker};
+use autd3_rs_core::CoreId;
+use autd3_rs_link_ethercrab::{EtherCrabLinkOptionFull as CoreOption, StateChecker};
 use tokio::sync::Mutex;
 
 struct EtherCrabBackend {
@@ -174,71 +173,137 @@ impl CheckerBackend for EtherCrabChecker {
     }
 }
 
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-unsafe fn make_option(
-    iface: *const c_char,
-    has_sync0_period: bool,
-    sync0_period_ns: u64,
-    has_sync0_shift: bool,
-    sync0_shift_ns: u64,
-    has_sync_tolerance: bool,
-    sync_tolerance_ns: u64,
-    has_sync_timeout: bool,
-    sync_timeout_ns: u64,
-) -> CoreOption {
-    let iface = if iface.is_null() {
-        None
-    } else {
-        Some(
-            unsafe { CStr::from_ptr(iface) }
-                .to_string_lossy()
-                .into_owned(),
-        )
-    };
-    let mut option = CoreOption {
-        iface: Interface::from(iface),
-        ..CoreOption::default()
-    };
-    if has_sync0_period {
-        option.sync0_period = Duration::from_nanos(sync0_period_ns);
-    }
-    if has_sync0_shift {
-        option.sync0_shift = Duration::from_nanos(sync0_shift_ns);
-    }
-    if has_sync_tolerance {
-        option.sync_tolerance = Duration::from_nanos(sync_tolerance_ns);
-    }
-    if has_sync_timeout {
-        option.sync_timeout = Duration::from_nanos(sync_timeout_ns);
-    }
-    option
+pub struct EtherCrabLinkOptionHandle(CoreOption);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_link_ethercrab_option_new() -> *mut EtherCrabLinkOptionHandle {
+    into_handle(EtherCrabLinkOptionHandle(CoreOption::default()))
 }
 
 #[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub unsafe extern "C" fn autd3_link_ethercrab(
-    iface: *const c_char,
-    has_sync0_period: bool,
-    sync0_period_ns: u64,
-    has_sync0_shift: bool,
-    sync0_shift_ns: u64,
-    has_sync_tolerance: bool,
-    sync_tolerance_ns: u64,
-    has_sync_timeout: bool,
-    sync_timeout_ns: u64,
+pub extern "C" fn autd3_link_ethercrab_option_safe_default() -> *mut EtherCrabLinkOptionHandle {
+    into_handle(EtherCrabLinkOptionHandle(CoreOption::safe_default()))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_link_ethercrab_option_performance_default() -> *mut EtherCrabLinkOptionHandle
+{
+    into_handle(EtherCrabLinkOptionHandle(CoreOption::performance_default()))
+}
+
+autd3_ffi_abi::option_handle_iface!(
+    EtherCrabLinkOptionHandle,
+    [iface],
+    autd3_link_ethercrab_option_set_iface
+);
+autd3_ffi_abi::option_handle_field!(
+    EtherCrabLinkOptionHandle,
+    [dc_configuration.sync0_period],
+    duration,
+    autd3_link_ethercrab_option_set_sync0_period,
+    autd3_link_ethercrab_option_get_sync0_period
+);
+autd3_ffi_abi::option_handle_field!(
+    EtherCrabLinkOptionHandle,
+    [dc_configuration.sync0_shift],
+    duration,
+    autd3_link_ethercrab_option_set_sync0_shift,
+    autd3_link_ethercrab_option_get_sync0_shift
+);
+autd3_ffi_abi::option_handle_field!(
+    EtherCrabLinkOptionHandle,
+    [sync_tolerance],
+    duration,
+    autd3_link_ethercrab_option_set_sync_tolerance,
+    autd3_link_ethercrab_option_get_sync_tolerance
+);
+autd3_ffi_abi::option_handle_field!(
+    EtherCrabLinkOptionHandle,
+    [sync_timeout],
+    duration,
+    autd3_link_ethercrab_option_set_sync_timeout,
+    autd3_link_ethercrab_option_get_sync_timeout
+);
+autd3_ffi_abi::option_handle_field!(
+    EtherCrabLinkOptionHandle,
+    [timeouts.pdu],
+    duration,
+    autd3_link_ethercrab_option_set_pdu_timeout,
+    autd3_link_ethercrab_option_get_pdu_timeout
+);
+autd3_ffi_abi::option_handle_field!(
+    EtherCrabLinkOptionHandle,
+    [timeouts.state_transition],
+    duration,
+    autd3_link_ethercrab_option_set_state_transition_timeout,
+    autd3_link_ethercrab_option_get_state_transition_timeout
+);
+autd3_ffi_abi::option_handle_lifecycle!(
+    EtherCrabLinkOptionHandle,
+    autd3_link_ethercrab_option_free
+);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_ethercrab_option_set_tx_rx_priority(
+    handle: *mut EtherCrabLinkOptionHandle,
+    mode: u8,
+    value: u8,
+) -> i32 {
+    let Some(option) = (unsafe { handle_mut(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let Some(priority) = to_rt_priority(mode, value) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    option.0.tx_rx_priority = priority;
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_ethercrab_option_set_tx_rx_policy(
+    handle: *mut EtherCrabLinkOptionHandle,
+    value: u8,
+) -> i32 {
+    let Some(option) = (unsafe { handle_mut(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let Some(policy) = to_rt_policy(value) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    option.0.tx_rx_policy = policy;
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_ethercrab_option_get_tx_rx_policy(
+    handle: *const EtherCrabLinkOptionHandle,
+    out: *mut u8,
+) -> i32 {
+    let Some(option) = (unsafe { handle_ref(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe { write_out(out, from_rt_policy(option.0.tx_rx_policy)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_ethercrab_option_set_tx_rx_affinity(
+    handle: *mut EtherCrabLinkOptionHandle,
+    has_affinity: bool,
+    core_id: usize,
+) -> i32 {
+    let Some(option) = (unsafe { handle_mut(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    option.0.tx_rx_affinity = has_affinity.then_some(CoreId { id: core_id });
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_ethercrab_open(
+    option: *mut EtherCrabLinkOptionHandle,
 ) -> *mut ClientOpener {
-    let option = unsafe {
-        make_option(
-            iface,
-            has_sync0_period,
-            sync0_period_ns,
-            has_sync0_shift,
-            sync0_shift_ns,
-            has_sync_tolerance,
-            sync_tolerance_ns,
-            has_sync_timeout,
-            sync_timeout_ns,
-        )
+    let Some(EtherCrabLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        return std::ptr::null_mut();
     };
     let opener = client_opener(move |geometry, config| async move {
         let (client, checker) = link_runtime()
@@ -255,77 +320,13 @@ pub unsafe extern "C" fn autd3_link_ethercrab(
 }
 
 #[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub unsafe extern "C" fn autd3_link_ethercrab_legacy(
-    iface: *const c_char,
-    has_sync0_period: bool,
-    sync0_period_ns: u64,
-    has_sync0_shift: bool,
-    sync0_shift_ns: u64,
-    has_sync_tolerance: bool,
-    sync_tolerance_ns: u64,
-    has_sync_timeout: bool,
-    sync_timeout_ns: u64,
+pub unsafe extern "C" fn autd3_link_ethercrab_open_legacy(
+    option: *mut EtherCrabLinkOptionHandle,
 ) -> *mut LegacyClientOpener {
-    let option = unsafe {
-        make_option(
-            iface,
-            has_sync0_period,
-            sync0_period_ns,
-            has_sync0_shift,
-            sync0_shift_ns,
-            has_sync_tolerance,
-            sync_tolerance_ns,
-            has_sync_timeout,
-            sync_timeout_ns,
-        )
+    let Some(EtherCrabLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        return std::ptr::null_mut();
     };
     into_handle(legacy_client_opener(move |_| Ok(option)))
 }
 
-#[repr(C)]
-pub struct Autd3EtherCrabLinkOptionValues {
-    pub sync0_period_ns: u64,
-    pub sync0_shift_ns: u64,
-    pub sync_tolerance_ns: u64,
-    pub sync_timeout_ns: u64,
-}
-
-unsafe fn write_option(option: &CoreOption, out: *mut Autd3EtherCrabLinkOptionValues) -> i32 {
-    if out.is_null() {
-        return -1;
-    }
-
-    unsafe {
-        *out = Autd3EtherCrabLinkOptionValues {
-            sync0_period_ns: to_ns(option.sync0_period),
-            sync0_shift_ns: to_ns(option.sync0_shift),
-            sync_tolerance_ns: to_ns(option.sync_tolerance),
-            sync_timeout_ns: to_ns(option.sync_timeout),
-        };
-    }
-    0
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_ethercrab_option_safe_default(
-    out: *mut Autd3EtherCrabLinkOptionValues,
-) -> i32 {
-    unsafe { write_option(&CoreOption::safe_default(), out) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_ethercrab_option_performance_default(
-    out: *mut Autd3EtherCrabLinkOptionValues,
-) -> i32 {
-    let full = CoreOption::performance_default();
-    unsafe {
-        *out = Autd3EtherCrabLinkOptionValues {
-            sync0_period_ns: to_ns(full.dc_configuration.sync0_period),
-            sync0_shift_ns: to_ns(full.dc_configuration.sync0_shift),
-            sync_tolerance_ns: to_ns(full.sync_tolerance),
-            sync_timeout_ns: to_ns(full.sync_timeout),
-        };
-    }
-    0
-}
+autd3_ffi_abi::export_abi_version!();

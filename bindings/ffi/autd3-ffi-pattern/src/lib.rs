@@ -502,3 +502,5 @@ pub unsafe extern "C" fn autd3_pattern_null(buffer: *mut PatternBuffer) {
 
     autd3_rs_pattern::null(&mut unsafe { &mut *buffer }.0);
 }
+
+autd3_ffi_abi::export_abi_version!();

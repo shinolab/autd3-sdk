@@ -199,3 +199,5 @@ pub extern "C" fn autd3_link_nop_legacy() -> *mut LegacyClientOpener {
         ))
     }))
 }
+
+autd3_ffi_abi::export_abi_version!();

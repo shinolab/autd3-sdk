@@ -1,6 +1,10 @@
+use std::ffi::c_char;
 use std::num::{NonZeroU8, NonZeroUsize};
 
-use autd3_ffi_abi::PatternBuffer;
+use autd3_ffi_abi::{
+    AUTD3_ERR, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, PatternBuffer, handle_mut, handle_ref,
+    slice_ref, write_cstr,
+};
 use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::value::Intensity;
 use autd3_rs_core::{Geometry, Length, Point3};
@@ -39,27 +43,29 @@ pub extern "C" fn autd3_holo_amplitude_spl(value: f32) -> f32 {
     (value * dB).pascal()
 }
 
-fn to_directivity(d: u8) -> Directivity {
-    if d == 1 {
-        Directivity::T4010A1
-    } else {
-        Directivity::Sphere
+fn to_directivity(d: u8) -> Option<Directivity> {
+    match d {
+        0 => Some(Directivity::Sphere),
+        1 => Some(Directivity::T4010A1),
+        _ => None,
     }
 }
 
-fn to_constraint(c: &Autd3EmissionConstraint) -> EmissionConstraint {
+fn to_constraint(c: &Autd3EmissionConstraint) -> Option<EmissionConstraint> {
     match c.kind {
-        1 => EmissionConstraint::Multiply(c.multiply),
-        2 => EmissionConstraint::Uniform(Intensity(c.min)),
-        3 => EmissionConstraint::Clamp(Intensity(c.min), Intensity(c.max)),
-        _ => EmissionConstraint::Normalize,
+        0 => Some(EmissionConstraint::Normalize),
+        1 => Some(EmissionConstraint::Multiply(c.multiply)),
+        2 => Some(EmissionConstraint::Uniform(Intensity(c.min))),
+        3 => Some(EmissionConstraint::Clamp(
+            Intensity(c.min),
+            Intensity(c.max),
+        )),
+        _ => None,
     }
 }
 
-unsafe fn build_foci(foci: *const Autd3HoloAmplitudeTarget, num_foci: usize) -> Vec<AmplitudeTarget> {
-    let slice = unsafe { std::slice::from_raw_parts(foci, num_foci) };
-    slice
-        .iter()
+fn build_foci(foci: &[Autd3HoloAmplitudeTarget]) -> Vec<AmplitudeTarget> {
+    foci.iter()
         .map(|f| AmplitudeTarget {
             point: Point3::new(f.point[0], f.point[1], f.point[2]),
             amplitude: f.amplitude_pa * Pa,
@@ -68,10 +74,7 @@ unsafe fn build_foci(foci: *const Autd3HoloAmplitudeTarget, num_foci: usize) -> 
 }
 
 unsafe fn build_mask(mask: *const u8, num_devices: usize) -> Option<Vec<Vec<bool>>> {
-    if mask.is_null() {
-        return None;
-    }
-    let slice = unsafe { std::slice::from_raw_parts(mask, num_devices * Autd3::NUM_TRANSDUCERS) };
+    let slice = unsafe { slice_ref(mask, num_devices * Autd3::NUM_TRANSDUCERS) }?;
     Some(
         slice
             .chunks_exact(Autd3::NUM_TRANSDUCERS)
@@ -93,7 +96,84 @@ fn mask_ref(mask: Option<&[Vec<bool>]>) -> TransducerMask<'_> {
     }
 }
 
+struct Common<'a> {
+    geometry: &'a Geometry,
+    buffer: &'a mut PatternBuffer,
+    foci: Vec<AmplitudeTarget>,
+    mask: Option<Vec<Vec<bool>>>,
+    constraint: EmissionConstraint,
+    directivity: Directivity,
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn prepare<'a>(
+    geometry: *const Geometry,
+    foci: *const Autd3HoloAmplitudeTarget,
+    num_foci: usize,
+    constraint: *const Autd3EmissionConstraint,
+    directivity: u8,
+    mask: *const u8,
+    buffer: *mut PatternBuffer,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> Result<Common<'a>, i32> {
+    let fail = |message: &str| {
+        unsafe { write_cstr(out_err, out_err_len, message) };
+        AUTD3_ERR_INVALID_ARGUMENT
+    };
+
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+        return Err(fail("null geometry"));
+    };
+    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
+        return Err(fail("null pattern buffer"));
+    };
+    if buffer.0.len() != geometry.num_devices() {
+        return Err(fail(
+            "the pattern buffer length does not match the geometry",
+        ));
+    }
+    let Some(constraint) = (unsafe { handle_ref(constraint) }) else {
+        return Err(fail("null constraint"));
+    };
+    let Some(constraint) = to_constraint(constraint) else {
+        return Err(fail("unknown emission constraint"));
+    };
+    let Some(directivity) = to_directivity(directivity) else {
+        return Err(fail("unknown directivity"));
+    };
+    let Some(foci) = (unsafe { slice_ref(foci, num_foci) }) else {
+        return Err(fail("null foci"));
+    };
+    let foci = build_foci(foci);
+    let num_devices = buffer.0.len();
+    let mask = unsafe { build_mask(mask, num_devices) };
+    Ok(Common {
+        geometry,
+        buffer,
+        foci,
+        mask,
+        constraint,
+        directivity,
+    })
+}
+
+unsafe fn finish<E: std::fmt::Display>(
+    result: Result<(), E>,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    match result {
+        Ok(()) => AUTD3_OK,
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            AUTD3_ERR
+        }
+    }
+}
+
 #[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn autd3_holo_naive(
     geometry: *const Geometry,
     foci: *const Autd3HoloAmplitudeTarget,
@@ -104,37 +184,44 @@ pub unsafe extern "C" fn autd3_holo_naive(
     mask: *const u8,
     parallel: bool,
     buffer: *mut PatternBuffer,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> i32 {
-    if geometry.is_null() || foci.is_null() || constraint.is_null() || buffer.is_null() {
-        return -1;
-    }
-    let geometry = unsafe { &*geometry };
-    let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.num_devices() {
-        return -1;
-    }
-    let foci = unsafe { build_foci(foci, num_foci) };
-    let mask = unsafe { build_mask(mask, buffer.0.len()) };
+    let common = match unsafe {
+        prepare(
+            geometry,
+            foci,
+            num_foci,
+            constraint,
+            directivity,
+            mask,
+            buffer,
+            out_err,
+            out_err_len,
+        )
+    } {
+        Ok(common) => common,
+        Err(code) => return code,
+    };
     let option = NaiveOption {
-        constraint: to_constraint(unsafe { &*constraint }),
-        directivity: to_directivity(directivity),
-        mask: mask_ref(mask.as_deref()),
+        constraint: common.constraint,
+        directivity: common.directivity,
+        mask: mask_ref(common.mask.as_deref()),
         parallel,
     };
-    match naive(
+    let result = naive(
         &NalgebraBackend,
-        geometry,
-        &foci,
+        common.geometry,
+        &common.foci,
         Length::millimeters(wavelength_mm),
         &option,
-        &mut buffer.0,
-    ) {
-        Ok(()) => 0,
-        Err(_) => -1,
-    }
+        &mut common.buffer.0,
+    );
+    unsafe { finish(result, out_err, out_err_len) }
 }
 
 #[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn autd3_holo_gs(
     geometry: *const Geometry,
     foci: *const Autd3HoloAmplitudeTarget,
@@ -146,38 +233,49 @@ pub unsafe extern "C" fn autd3_holo_gs(
     mask: *const u8,
     parallel: bool,
     buffer: *mut PatternBuffer,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> i32 {
-    if geometry.is_null() || foci.is_null() || constraint.is_null() || buffer.is_null() {
-        return -1;
-    }
-    let geometry = unsafe { &*geometry };
-    let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.num_devices() {
-        return -1;
-    }
-    let foci = unsafe { build_foci(foci, num_foci) };
-    let mask = unsafe { build_mask(mask, buffer.0.len()) };
+    let Some(repeat) = NonZeroUsize::new(repeat) else {
+        unsafe { write_cstr(out_err, out_err_len, "repeat must be >= 1") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let common = match unsafe {
+        prepare(
+            geometry,
+            foci,
+            num_foci,
+            constraint,
+            directivity,
+            mask,
+            buffer,
+            out_err,
+            out_err_len,
+        )
+    } {
+        Ok(common) => common,
+        Err(code) => return code,
+    };
     let option = GsOption {
-        repeat: NonZeroUsize::new(repeat).unwrap_or(NonZeroUsize::new(100).unwrap()),
-        constraint: to_constraint(unsafe { &*constraint }),
-        directivity: to_directivity(directivity),
-        mask: mask_ref(mask.as_deref()),
+        repeat,
+        constraint: common.constraint,
+        directivity: common.directivity,
+        mask: mask_ref(common.mask.as_deref()),
         parallel,
     };
-    match gs(
+    let result = gs(
         &NalgebraBackend,
-        geometry,
-        &foci,
+        common.geometry,
+        &common.foci,
         Length::millimeters(wavelength_mm),
         &option,
-        &mut buffer.0,
-    ) {
-        Ok(()) => 0,
-        Err(_) => -1,
-    }
+        &mut common.buffer.0,
+    );
+    unsafe { finish(result, out_err, out_err_len) }
 }
 
 #[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn autd3_holo_gspat(
     geometry: *const Geometry,
     foci: *const Autd3HoloAmplitudeTarget,
@@ -189,38 +287,49 @@ pub unsafe extern "C" fn autd3_holo_gspat(
     mask: *const u8,
     parallel: bool,
     buffer: *mut PatternBuffer,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> i32 {
-    if geometry.is_null() || foci.is_null() || constraint.is_null() || buffer.is_null() {
-        return -1;
-    }
-    let geometry = unsafe { &*geometry };
-    let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.num_devices() {
-        return -1;
-    }
-    let foci = unsafe { build_foci(foci, num_foci) };
-    let mask = unsafe { build_mask(mask, buffer.0.len()) };
+    let Some(repeat) = NonZeroUsize::new(repeat) else {
+        unsafe { write_cstr(out_err, out_err_len, "repeat must be >= 1") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let common = match unsafe {
+        prepare(
+            geometry,
+            foci,
+            num_foci,
+            constraint,
+            directivity,
+            mask,
+            buffer,
+            out_err,
+            out_err_len,
+        )
+    } {
+        Ok(common) => common,
+        Err(code) => return code,
+    };
     let option = GspatOption {
-        repeat: NonZeroUsize::new(repeat).unwrap_or(NonZeroUsize::new(100).unwrap()),
-        constraint: to_constraint(unsafe { &*constraint }),
-        directivity: to_directivity(directivity),
-        mask: mask_ref(mask.as_deref()),
+        repeat,
+        constraint: common.constraint,
+        directivity: common.directivity,
+        mask: mask_ref(common.mask.as_deref()),
         parallel,
     };
-    match gspat(
+    let result = gspat(
         &NalgebraBackend,
-        geometry,
-        &foci,
+        common.geometry,
+        &common.foci,
         Length::millimeters(wavelength_mm),
         &option,
-        &mut buffer.0,
-    ) {
-        Ok(()) => 0,
-        Err(_) => -1,
-    }
+        &mut common.buffer.0,
+    );
+    unsafe { finish(result, out_err, out_err_len) }
 }
 
 #[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn autd3_holo_greedy(
     geometry: *const Geometry,
     foci: *const Autd3HoloAmplitudeTarget,
@@ -231,33 +340,50 @@ pub unsafe extern "C" fn autd3_holo_greedy(
     directivity: u8,
     mask: *const u8,
     buffer: *mut PatternBuffer,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> i32 {
-    if geometry.is_null() || foci.is_null() || constraint.is_null() || buffer.is_null() {
-        return -1;
-    }
-    let geometry = unsafe { &*geometry };
-    let buffer = unsafe { &mut *buffer };
-    if buffer.0.len() != geometry.num_devices() {
-        return -1;
-    }
-    let foci = unsafe { build_foci(foci, num_foci) };
-    let mask = unsafe { build_mask(mask, buffer.0.len()) };
-    let option = GreedyOption {
-        phase_quantization_levels: NonZeroU8::new(phase_quantization_levels)
-            .unwrap_or(NonZeroU8::new(16).unwrap()),
-        constraint: to_constraint(unsafe { &*constraint }),
-        directivity: to_directivity(directivity),
-        objective_func: abs_objective_func,
-        mask: mask_ref(mask.as_deref()),
+    let Some(phase_quantization_levels) = NonZeroU8::new(phase_quantization_levels) else {
+        unsafe {
+            write_cstr(
+                out_err,
+                out_err_len,
+                "phase_quantization_levels must be >= 1",
+            );
+        }
+        return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    match greedy(
-        geometry,
-        &foci,
+    let common = match unsafe {
+        prepare(
+            geometry,
+            foci,
+            num_foci,
+            constraint,
+            directivity,
+            mask,
+            buffer,
+            out_err,
+            out_err_len,
+        )
+    } {
+        Ok(common) => common,
+        Err(code) => return code,
+    };
+    let option = GreedyOption {
+        phase_quantization_levels,
+        constraint: common.constraint,
+        directivity: common.directivity,
+        objective_func: abs_objective_func,
+        mask: mask_ref(common.mask.as_deref()),
+    };
+    let result = greedy(
+        common.geometry,
+        &common.foci,
         Length::millimeters(wavelength_mm),
         &option,
-        &mut buffer.0,
-    ) {
-        Ok(()) => 0,
-        Err(_) => -1,
-    }
+        &mut common.buffer.0,
+    );
+    unsafe { finish(result, out_err, out_err_len) }
 }
+
+autd3_ffi_abi::export_abi_version!();
