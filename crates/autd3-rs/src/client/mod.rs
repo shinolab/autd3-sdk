@@ -310,35 +310,29 @@ impl Client {
         let fpga_major = self.read_broadcast(Cmd::ReadFpgaFwVersionMajor).await?;
         let fpga_minor = self.read_broadcast(Cmd::ReadFpgaFwVersionMinor).await?;
         let fpga_patch = self.read_broadcast(Cmd::ReadFpgaFwVersionPatch).await?;
+        let err_after_version = self.read_broadcast(Cmd::ReadErrorDetail).await?;
         let fpga_functions = self.read_broadcast(Cmd::ReadFpgaFunctions).await?;
-        let err_after = self.read_broadcast(Cmd::ReadErrorDetail).await?;
+        let err_after_functions = self.read_broadcast(Cmd::ReadErrorDetail).await?;
 
         let versions: Vec<_> = (0..cpu_major.len())
             .map(|i| {
-                let (fpga, function_bits) = if err_after[i] == UNKNOWN_CMD {
-                    if err_before[i] == UNKNOWN_CMD {
-                        tracing::warn!(
-                            device = i,
-                            "FPGA firmware version is unknown: {} was already latched before the query, so it cannot be attributed to it",
-                            DeviceErrorCode::UnknownCmd.describe()
-                        );
-                    } else {
-                        tracing::warn!(
-                            device = i,
-                            "FPGA firmware version is unknown: {}",
-                            DeviceErrorCode::UnknownCmd.describe()
-                        );
-                    }
-                    (Version::UNKNOWN, 0)
+                let fpga = if err_after_version[i] == UNKNOWN_CMD {
+                    warn_unknown(i, "FPGA firmware version", err_before[i] == UNKNOWN_CMD);
+                    Version::UNKNOWN
                 } else {
-                    (
-                        Version {
-                            major: fpga_major[i],
-                            minor: fpga_minor[i],
-                            patch: fpga_patch[i],
-                        },
-                        fpga_functions[i],
-                    )
+                    Version {
+                        major: fpga_major[i],
+                        minor: fpga_minor[i],
+                        patch: fpga_patch[i],
+                    }
+                };
+                let function_bits = if err_after_functions[i] == UNKNOWN_CMD {
+                    if err_after_version[i] != UNKNOWN_CMD {
+                        warn_unknown(i, "FPGA function bits", false);
+                    }
+                    0
+                } else {
+                    fpga_functions[i]
                 };
                 FirmwareVersion {
                     cpu: Version {
@@ -392,10 +386,23 @@ impl Client {
     }
 
     pub async fn read_telemetry(&self, counter: Telemetry) -> Result<Vec<u8>, Error> {
+        const INVALID_PAYLOAD: u8 = DeviceErrorCode::InvalidPayload as u8;
+
         let mut datagram = Datagram::no_payload(Cmd::ReadTelemetry);
         let (p, _) = ReadTelemetryPayload::mut_from_prefix(&mut datagram.payload).unwrap();
         p.counter_id = counter.as_u8();
-        self.read_broadcast_with(&datagram).await
+
+        let err_before = self.read_broadcast(Cmd::ReadErrorDetail).await?;
+        let counters = self.read_broadcast_with(&datagram).await?;
+        let err_after = self.read_broadcast(Cmd::ReadErrorDetail).await?;
+
+        if let Some(device) = (0..counters.len()).find(|&i| err_after[i] == INVALID_PAYLOAD) {
+            if err_before[device] == INVALID_PAYLOAD {
+                warn_unknown(device, "telemetry counter", true);
+            }
+            return Err(Error::UnsupportedTelemetry { device, counter });
+        }
+        Ok(counters)
     }
 
     pub async fn close(&self) -> Result<(), Error> {
@@ -425,6 +432,20 @@ impl Drop for Client {
         if let Some(join) = join {
             let _ = join.join();
         }
+    }
+}
+
+fn warn_unknown(device: usize, what: &str, pre_latched: bool) {
+    if pre_latched {
+        tracing::warn!(
+            device,
+            "{what} is unknown: an error was already latched before the query, so it cannot be attributed to it"
+        );
+    } else {
+        tracing::warn!(
+            device,
+            "{what} is unknown; device firmware may be out of date"
+        );
     }
 }
 
