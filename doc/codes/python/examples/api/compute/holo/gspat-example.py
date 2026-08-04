@@ -3,7 +3,7 @@ from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 from autd3_pattern import wavelength
 from autd3_pattern_holo import (
-    ControlPoint,
+    AmplitudeTarget,
     Directivity,
     EmissionConstraint,
     GspatOption,
@@ -19,11 +19,11 @@ dst = geometry.pattern_buffer()
 gspat(
     geometry,
     [
-        ControlPoint(
+        AmplitudeTarget(
             point=geometry.center() + np.array([-30.0, 0.0, 150.0]),
             amplitude=2.5e3 * Pa,
         ),
-        ControlPoint(
+        AmplitudeTarget(
             point=geometry.center() + np.array([30.0, 0.0, 150.0]),
             amplitude=2.5e3 * Pa,
         ),

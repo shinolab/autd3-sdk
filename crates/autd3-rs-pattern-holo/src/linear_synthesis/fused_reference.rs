@@ -8,13 +8,13 @@ use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
 
 use crate::amp::Pa;
+use crate::amplitude_target::AmplitudeTarget;
 use crate::backend::{LinAlgBackend, NalgebraBackend};
-use crate::control_point::ControlPoint;
 use crate::directivity::Directivity;
 use crate::mask::TransducerMask;
 use crate::propagation::{make_propagation_matrix, target_amplitudes};
 
-fn setup(devices: usize, nf: usize) -> (Geometry, Vec<ControlPoint>) {
+fn setup(devices: usize, nf: usize) -> (Geometry, Vec<AmplitudeTarget>) {
     let g = Geometry::new(
         (0..devices)
             .map(|i| {
@@ -26,7 +26,7 @@ fn setup(devices: usize, nf: usize) -> (Geometry, Vec<ControlPoint>) {
             .collect(),
     );
     let f = (0..nf)
-        .map(|i| ControlPoint {
+        .map(|i| AmplitudeTarget {
             point: g.center() + Vector3::new(i as f32 * 10.0, i as f32 * -5.0, 150.0),
             amplitude: (3e3 + i as f32 * 200.0) * Pa,
         })

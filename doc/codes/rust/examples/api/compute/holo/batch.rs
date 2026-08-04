@@ -3,7 +3,7 @@ use anyhow::Result;
 use autd3_rs::geometry::{offset, Autd3, Geometry};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Emission;
-use autd3_rs_pattern_holo::{gs_batch, ControlPoint, GsOption, NalgebraBackend, Pa};
+use autd3_rs_pattern_holo::{gs_batch, AmplitudeTarget, GsOption, NalgebraBackend, Pa};
 
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
@@ -13,8 +13,8 @@ fn main() -> Result<()> {
 
     // ANCHOR: api
     let problems = 64;
-    let foci: Vec<ControlPoint> = (0..problems)
-        .map(|i| ControlPoint {
+    let foci: Vec<AmplitudeTarget> = (0..problems)
+        .map(|i| AmplitudeTarget {
             point: center + offset(i as f32 * 0.5 * mm, 0.0 * mm, 0.0 * mm),
             amplitude: 5e3 * Pa,
         })

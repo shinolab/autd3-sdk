@@ -201,7 +201,7 @@ namespace AUTD3.Holo
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct HoloControlPointNative
+    internal struct HoloAmplitudeTargetNative
     {
         public float X;
         public float Y;
@@ -223,24 +223,24 @@ namespace AUTD3.Holo
         internal static extern float autd3_holo_amplitude_spl(float value);
 
         [DllImport(Lib)]
-        internal static extern int autd3_holo_naive(IntPtr geometry, HoloControlPointNative[] foci, UIntPtr numFoci, float wavelengthMm, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer);
+        internal static extern int autd3_holo_naive(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer);
 
         [DllImport(Lib)]
-        internal static extern int autd3_holo_gs(IntPtr geometry, HoloControlPointNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer);
+        internal static extern int autd3_holo_gs(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer);
 
         [DllImport(Lib)]
-        internal static extern int autd3_holo_gspat(IntPtr geometry, HoloControlPointNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer);
+        internal static extern int autd3_holo_gspat(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer);
 
         [DllImport(Lib)]
-        internal static extern int autd3_holo_greedy(IntPtr geometry, HoloControlPointNative[] foci, UIntPtr numFoci, float wavelengthMm, byte phaseQuantizationLevels, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, IntPtr buffer);
+        internal static extern int autd3_holo_greedy(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, byte phaseQuantizationLevels, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, IntPtr buffer);
     }
 
-    public readonly struct ControlPoint
+    public readonly struct AmplitudeTarget
     {
         public Vector3 Point { get; }
         public Amplitude Amplitude { get; }
 
-        public ControlPoint(Vector3 point, Amplitude amplitude)
+        public AmplitudeTarget(Vector3 point, Amplitude amplitude)
         {
             Point = point;
             Amplitude = amplitude;
@@ -250,13 +250,13 @@ namespace AUTD3.Holo
     public static class Holo
     {
 
-        private static HoloControlPointNative[] ToNative(ControlPoint[] foci)
+        private static HoloAmplitudeTargetNative[] ToNative(AmplitudeTarget[] foci)
         {
-            var native = new HoloControlPointNative[foci.Length];
+            var native = new HoloAmplitudeTargetNative[foci.Length];
             for (var i = 0; i < foci.Length; i++)
             {
                 var p = Coords.Point(foci[i].Point);
-                native[i] = new HoloControlPointNative
+                native[i] = new HoloAmplitudeTargetNative
                 {
                     X = p.X,
                     Y = p.Y,
@@ -288,7 +288,7 @@ namespace AUTD3.Holo
             return flat;
         }
 
-        public static void Naive(Geometry geometry, ControlPoint[] foci, Length wavelength, NaiveOption option, PatternBuffer dst)
+        public static void Naive(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, NaiveOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
             if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle) != 0)
@@ -297,7 +297,7 @@ namespace AUTD3.Holo
             }
         }
 
-        public static void Gs(Geometry geometry, ControlPoint[] foci, Length wavelength, GsOption option, PatternBuffer dst)
+        public static void Gs(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GsOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
             if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle) != 0)
@@ -306,7 +306,7 @@ namespace AUTD3.Holo
             }
         }
 
-        public static void Gspat(Geometry geometry, ControlPoint[] foci, Length wavelength, GspatOption option, PatternBuffer dst)
+        public static void Gspat(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GspatOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
             if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle) != 0)
@@ -315,7 +315,7 @@ namespace AUTD3.Holo
             }
         }
 
-        public static void Greedy(Geometry geometry, ControlPoint[] foci, Length wavelength, GreedyOption option, PatternBuffer dst)
+        public static void Greedy(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GreedyOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
             if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle) != 0)

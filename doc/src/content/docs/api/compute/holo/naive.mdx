@@ -25,12 +25,12 @@ Naive 法は, 目標音圧ベクトルに逆伝搬をかけるアルゴリズム
 | 引数         | 型                     | 説明                      |
 | ------------ | ---------------------- | ------------------------- |
 | `geometry`   | `&Geometry`            | デバイス配置              |
-| `foci`       | `&[ControlPoint]`      | 焦点列 (位置と目標振幅)   |
+| `foci`       | `&[AmplitudeTarget]`      | 焦点列 (位置と目標振幅)   |
 | `wavelength` | `Length`               | 波長                      |
 | `option`     | `&NaiveOption`         | 追加オプション (下記参照) |
 | `dst`        | `&mut [[Emission; _]]` | 出力バッファ              |
 
-共通要素 (`ControlPoint` / `TransducerMask` / `LinAlgBackend` など) は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 
+共通要素 (`AmplitudeTarget` / `TransducerMask` / `LinAlgBackend` など) は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 
 
 ## NaiveOption
 

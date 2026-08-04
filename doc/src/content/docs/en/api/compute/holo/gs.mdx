@@ -26,7 +26,7 @@ The algorithm is based on the paper by Marzo et al. ([Marzo & Drinkwater, 2019](
 | Parameter    | Type                   | Description               |
 | ------------ | ---------------------- | ------------------------- |
 | `geometry`   | `&Geometry`            | Device layout             |
-| `foci`       | `&[ControlPoint]`      | Sequence of focal points (position and target amplitude) |
+| `foci`       | `&[AmplitudeTarget]`      | Sequence of focal points (position and target amplitude) |
 | `wavelength` | `Length`               | Wavelength                |
 | `option`     | `&GsOption`            | Additional options (see below) |
 | `dst`        | `&mut [[Emission; _]]` | Output buffer             |

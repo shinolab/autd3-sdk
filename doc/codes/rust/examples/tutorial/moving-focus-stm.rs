@@ -3,8 +3,8 @@ use anyhow::Result;
 use autd3_rs::commands::{FociStm, FociStmOption, Modulation, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, mm};
-use autd3_rs::value::SamplingConfig;
-use autd3_rs::{Client, ClientConfig, ControlPoints};
+use autd3_rs::value::{ControlPoints, SamplingConfig};
+use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_nop::Nop;
 
 #[tokio::main(flavor = "multi_thread")]
