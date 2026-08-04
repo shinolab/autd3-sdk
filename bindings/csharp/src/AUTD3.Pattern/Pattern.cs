@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
@@ -81,6 +82,11 @@ namespace AUTD3
     {
         private const string Lib = "autd3_pattern";
 
+        static NativePattern() => NativeAbi.Verify(Lib, autd3_abi_version());
+
+        [DllImport(Lib)]
+        private static extern uint autd3_abi_version();
+
         [DllImport(Lib)]
         internal static extern float autd3_pattern_wavelength(float soundSpeedMmPerS);
 
@@ -158,7 +164,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_change_pattern_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
         [DllImport("autd3capi")]
-        internal static extern UIntPtr autd3_pattern_compression_per_frame(byte format);
+        internal static extern int autd3_pattern_compression_per_frame(byte format, out UIntPtr @out);
     }
 
     public readonly struct DevicePattern : IEnumerable<Emission>
@@ -206,7 +212,9 @@ namespace AUTD3
     {
         internal const int NumTransducers = 249;
 
-        internal IntPtr Handle { get; private set; }
+        private IntPtr _handle;
+
+        internal IntPtr Handle => _handle;
 
         internal PatternBuffer(IntPtr handle)
         {
@@ -214,7 +222,7 @@ namespace AUTD3
             {
                 throw new Autd3Exception("failed to create pattern buffer");
             }
-            Handle = handle;
+            _handle = handle;
         }
 
         public static PatternBuffer FromArray(Emission[][] emissions)
@@ -264,19 +272,20 @@ namespace AUTD3
 
         public void Dispose()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativePattern.autd3_pattern_buffer_free(Handle);
-                Handle = IntPtr.Zero;
+                NativePattern.autd3_pattern_buffer_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~PatternBuffer()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativePattern.autd3_pattern_buffer_free(Handle);
+                NativePattern.autd3_pattern_buffer_free(handle);
             }
         }
     }

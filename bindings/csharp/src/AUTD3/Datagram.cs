@@ -1,10 +1,18 @@
 using System;
+using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
 
 namespace AUTD3
 {
 
+
+    public enum RtSchedulePolicy : byte
+    {
+        Normal = 0,
+        Fifo = 1,
+        RoundRobin = 2,
+    }
 
     public readonly struct ClientConfig
     {
@@ -15,12 +23,10 @@ namespace AUTD3
         public uint ResetResendCycles { get; }
         public byte? RtPriority { get; }
         public bool DisableRtPriority { get; }
+        public RtSchedulePolicy RtPolicy { get; }
         public ulong? RtAffinity { get; }
         public bool ValidateState { get; }
-
-        private const byte RtPriorityModeDefault = 0;
-        private const byte RtPriorityModeDisabled = 1;
-        private const byte RtPriorityModeExplicit = 2;
+        public bool RequireSupportedFirmware { get; }
 
         public ClientConfig() : this(lowLatency: false)
         {
@@ -34,8 +40,10 @@ namespace AUTD3
             uint resetResendCycles = 2,
             byte? rtPriority = null,
             bool disableRtPriority = false,
+            RtSchedulePolicy rtPolicy = RtSchedulePolicy.Fifo,
             ulong? rtAffinity = null,
-            bool validateState = true)
+            bool validateState = true,
+            bool requireSupportedFirmware = false)
         {
             if (rtPriority.HasValue && disableRtPriority)
             {
@@ -48,32 +56,60 @@ namespace AUTD3
             ResetResendCycles = resetResendCycles;
             RtPriority = rtPriority;
             DisableRtPriority = disableRtPriority;
+            RtPolicy = rtPolicy;
             RtAffinity = rtAffinity;
             ValidateState = validateState;
+            RequireSupportedFirmware = requireSupportedFirmware;
         }
 
         internal IntPtr CreateHandle()
         {
-            var handle = NativeClient.autd3_client_config_new(
-                LowLatency,
-                TimeoutCycles,
-                (UIntPtr)MaxInflight,
-                MaxResyncRounds,
-                ResetResendCycles,
-                RtPriority.HasValue
-                    ? RtPriorityModeExplicit
-                    : DisableRtPriority
-                        ? RtPriorityModeDisabled
-                        : RtPriorityModeDefault,
-                RtPriority ?? 0,
-                RtAffinity.HasValue,
-                (UIntPtr)(RtAffinity ?? 0),
-                ValidateState);
+            var handle = NativeClient.autd3_client_config_new();
             if (handle == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create client config");
             }
+            try
+            {
+                NativeConfig.Apply("lowLatency", NativeClient.autd3_client_config_set_low_latency(handle, LowLatency));
+                NativeConfig.Apply("timeoutCycles", NativeClient.autd3_client_config_set_timeout_cycles(handle, TimeoutCycles));
+                NativeConfig.Apply("maxInflight", NativeClient.autd3_client_config_set_max_inflight(handle, (UIntPtr)MaxInflight));
+                NativeConfig.Apply("maxResyncRounds", NativeClient.autd3_client_config_set_max_resync_rounds(handle, MaxResyncRounds));
+                NativeConfig.Apply("resetResendCycles", NativeClient.autd3_client_config_set_reset_resend_cycles(handle, ResetResendCycles));
+                NativeConfig.Apply("rtPriority", NativeClient.autd3_client_config_set_rt_priority(handle, NativeConfig.RtPriorityMode(RtPriority, DisableRtPriority), RtPriority ?? 0));
+                NativeConfig.Apply("rtPolicy", NativeClient.autd3_client_config_set_rt_policy(handle, (byte)RtPolicy));
+                NativeConfig.Apply("rtAffinity", NativeClient.autd3_client_config_set_rt_affinity(handle, RtAffinity.HasValue, (UIntPtr)(RtAffinity ?? 0)));
+                NativeConfig.Apply("validateState", NativeClient.autd3_client_config_set_validate_state(handle, ValidateState));
+                NativeConfig.Apply("requireSupportedFirmware", NativeClient.autd3_client_config_set_require_supported_firmware(handle, RequireSupportedFirmware));
+            }
+            catch
+            {
+                NativeClient.autd3_client_config_free(handle);
+                throw;
+            }
             return handle;
+        }
+    }
+
+    internal static class NativeConfig
+    {
+        internal const byte RtPriorityModeDefault = 0;
+        internal const byte RtPriorityModeDisabled = 1;
+        internal const byte RtPriorityModeExplicit = 2;
+
+        internal static byte RtPriorityMode(byte? rtPriority, bool disabled) =>
+            rtPriority.HasValue
+                ? RtPriorityModeExplicit
+                : disabled
+                    ? RtPriorityModeDisabled
+                    : RtPriorityModeDefault;
+
+        internal static void Apply(string field, int code)
+        {
+            if (code != 0)
+            {
+                throw new Autd3Exception($"`{field}` is out of the range the native library accepts");
+            }
         }
     }
 
@@ -83,7 +119,9 @@ namespace AUTD3
         private readonly int _numDevices;
         private readonly IntPtr _client;
 
-        internal IntPtr Handle { get; private set; }
+        private IntPtr _handle;
+
+        internal IntPtr Handle => _handle;
 
         public DatagramBuilder(Geometry geometry) : this(geometry, IntPtr.Zero)
         {
@@ -94,7 +132,7 @@ namespace AUTD3
             _geometry = geometry;
             _numDevices = geometry.NumDevices;
             _client = client;
-            Handle = NativeClient.autd3_datagram_builder_new(geometry.Handle);
+            _handle = NativeClient.autd3_datagram_builder_new(geometry.Handle);
             if (Handle == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create datagram builder");
@@ -104,7 +142,10 @@ namespace AUTD3
         public DatagramBuilder Push(ICommand command)
         {
             var op = command.CreateOp();
-            NativeClient.autd3_datagram_builder_push(Handle, op);
+            if (NativeClient.autd3_datagram_builder_push(Handle, op) != 0)
+            {
+                throw new Autd3Exception("failed to push the command onto the datagram builder");
+            }
             return this;
         }
 
@@ -130,13 +171,16 @@ namespace AUTD3
                 }
                 throw;
             }
-            NativeClient.autd3_datagram_builder_push_each(Handle, ops, (UIntPtr)_numDevices);
+            if (NativeClient.autd3_datagram_builder_push_each(Handle, ops, (UIntPtr)_numDevices) != 0)
+            {
+                throw new Autd3Exception("failed to push the per-device commands onto the datagram builder");
+            }
             return this;
         }
 
         public Frames Build()
         {
-            var err = new byte[256];
+            var err = new byte[NativeAbi.ErrorBufferLength];
             var handle = NativeClient.autd3_datagram_builder_build(Handle, _client, err, (UIntPtr)err.Length);
             if (handle == IntPtr.Zero)
             {
@@ -147,19 +191,20 @@ namespace AUTD3
 
         public void Dispose()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeClient.autd3_datagram_builder_free(Handle);
-                Handle = IntPtr.Zero;
+                NativeClient.autd3_datagram_builder_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~DatagramBuilder()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeClient.autd3_datagram_builder_free(Handle);
+                NativeClient.autd3_datagram_builder_free(handle);
             }
         }
     }
@@ -179,11 +224,13 @@ namespace AUTD3
 
     public sealed class Frames : IDisposable, IEnumerable<Frame>
     {
-        internal IntPtr Handle { get; private set; }
+        private IntPtr _handle;
+
+        internal IntPtr Handle => _handle;
 
         internal Frames(IntPtr handle)
         {
-            Handle = handle;
+            _handle = handle;
         }
 
         public int Length => (int)NativeClient.autd3_datagrams_num_frames(Handle);
@@ -213,19 +260,20 @@ namespace AUTD3
 
         public void Dispose()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeClient.autd3_datagrams_free(Handle);
-                Handle = IntPtr.Zero;
+                NativeClient.autd3_datagrams_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~Frames()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeClient.autd3_datagrams_free(Handle);
+                NativeClient.autd3_datagrams_free(handle);
             }
         }
     }

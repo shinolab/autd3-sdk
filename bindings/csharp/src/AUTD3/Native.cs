@@ -12,30 +12,58 @@ namespace AUTD3
     {
         private const string Lib = "autd3capi";
 
+        static NativeClient() => NativeAbi.Verify(Lib, autd3_abi_version());
+
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_client_config_new(
-            [MarshalAs(UnmanagedType.I1)] bool lowLatency,
-            uint timeoutCycles,
-            UIntPtr maxInflight,
-            uint maxResyncRounds,
-            uint resetResendCycles,
-            byte rtPriorityMode,
-            byte rtPriority,
-            [MarshalAs(UnmanagedType.I1)] bool hasRtAffinity,
-            UIntPtr rtAffinity,
-            [MarshalAs(UnmanagedType.I1)] bool validateState);
+        private static extern uint autd3_abi_version();
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_client_config_new();
+
+        [DllImport(Lib)]
+        internal static extern int autd3_client_config_set_low_latency(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_client_config_set_validate_state(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_client_config_set_require_supported_firmware(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_client_config_set_timeout_cycles(IntPtr config, uint value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_client_config_set_max_inflight(IntPtr config, UIntPtr value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_client_config_set_max_resync_rounds(IntPtr config, uint value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_client_config_set_reset_resend_cycles(IntPtr config, uint value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_client_config_set_rt_priority(IntPtr config, byte mode, byte value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_client_config_set_rt_policy(IntPtr config, byte value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_client_config_set_rt_affinity(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasAffinity, UIntPtr coreId);
 
         [DllImport(Lib)]
         internal static extern void autd3_client_config_free(IntPtr config);
 
         [DllImport(Lib)]
+        internal static extern void autd3_client_opener_free(IntPtr opener);
+
+        [DllImport(Lib)]
         internal static extern IntPtr autd3_datagram_builder_new(IntPtr geometry);
 
         [DllImport(Lib)]
-        internal static extern void autd3_datagram_builder_push(IntPtr builder, IntPtr op);
+        internal static extern int autd3_datagram_builder_push(IntPtr builder, IntPtr op);
 
         [DllImport(Lib)]
-        internal static extern void autd3_datagram_builder_push_each(IntPtr builder, IntPtr[] ops, UIntPtr numDevices);
+        internal static extern int autd3_datagram_builder_push_each(IntPtr builder, IntPtr[] ops, UIntPtr numDevices);
 
         [DllImport(Lib)]
         internal static extern void autd3_op_free(IntPtr op);
@@ -141,21 +169,31 @@ namespace AUTD3
         private const string Lib = "autd3capi";
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_legacy_client_config_new(
-            uint timeoutCycles,
-            [MarshalAs(UnmanagedType.I1)] bool hasRtPriority,
-            byte rtPriority,
-            [MarshalAs(UnmanagedType.I1)] bool hasRtAffinity,
-            UIntPtr rtAffinity);
+        internal static extern IntPtr autd3_legacy_client_config_new();
+
+        [DllImport(Lib)]
+        internal static extern int autd3_legacy_client_config_set_timeout_cycles(IntPtr config, uint value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_legacy_client_config_set_rt_priority(IntPtr config, byte mode, byte value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_legacy_client_config_set_rt_policy(IntPtr config, byte value);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_legacy_client_config_set_rt_affinity(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasAffinity, UIntPtr coreId);
 
         [DllImport(Lib)]
         internal static extern void autd3_legacy_client_config_free(IntPtr config);
 
         [DllImport(Lib)]
+        internal static extern void autd3_legacy_client_opener_free(IntPtr opener);
+
+        [DllImport(Lib)]
         internal static extern IntPtr autd3_legacy_datagram_builder_new(IntPtr geometry);
 
         [DllImport(Lib)]
-        internal static extern void autd3_legacy_datagram_builder_push(IntPtr builder, IntPtr op);
+        internal static extern int autd3_legacy_datagram_builder_push(IntPtr builder, IntPtr op);
 
         [DllImport(Lib)]
         internal static extern IntPtr autd3_legacy_op_change_segment(byte kind, byte bank, byte transitionMode, ulong transitionValue);
@@ -164,10 +202,10 @@ namespace AUTD3
         internal static extern void autd3_legacy_op_free(IntPtr op);
 
         [DllImport(Lib)]
-        internal static extern void autd3_legacy_datagram_builder_push_legacy(IntPtr builder, IntPtr op);
+        internal static extern int autd3_legacy_datagram_builder_push_legacy(IntPtr builder, IntPtr op);
 
         [DllImport(Lib)]
-        internal static extern void autd3_legacy_datagram_builder_push_each(IntPtr builder, IntPtr[] ops, UIntPtr numDevices);
+        internal static extern int autd3_legacy_datagram_builder_push_each(IntPtr builder, IntPtr[] ops, UIntPtr numDevices);
 
         [DllImport(Lib)]
         internal static extern void autd3_legacy_datagram_builder_free(IntPtr builder);

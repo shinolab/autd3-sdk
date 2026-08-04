@@ -11,6 +11,18 @@ namespace AUTD3.Tests
         private static Geometry SingleDevice() => new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         [Fact]
+        public void DefaultConfigMatchesRust()
+        {
+            var config = new LegacyClientConfig();
+
+            Assert.Null(config.RtPriority);
+            Assert.False(config.DisableRtPriority);
+            Assert.Equal(RtSchedulePolicy.Fifo, config.RtPolicy);
+            Assert.Equal(2000u, config.TimeoutCycles);
+            Assert.Null(config.RtAffinity);
+        }
+
+        [Fact]
         public async Task OpenReportsLegacyFirmwareVersion()
         {
             using var geometry = SingleDevice();

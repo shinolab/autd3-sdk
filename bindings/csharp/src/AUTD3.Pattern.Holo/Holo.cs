@@ -213,6 +213,11 @@ namespace AUTD3.Holo
     {
         private const string Lib = "autd3_pattern_holo";
 
+        static NativeHolo() => NativeAbi.Verify(Lib, autd3_abi_version());
+
+        [DllImport(Lib)]
+        private static extern uint autd3_abi_version();
+
         [DllImport(Lib)]
         internal static extern float autd3_holo_amplitude_pascal(float value);
 
@@ -223,16 +228,16 @@ namespace AUTD3.Holo
         internal static extern float autd3_holo_amplitude_spl(float value);
 
         [DllImport(Lib)]
-        internal static extern int autd3_holo_naive(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer);
+        internal static extern int autd3_holo_naive(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib)]
-        internal static extern int autd3_holo_gs(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer);
+        internal static extern int autd3_holo_gs(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib)]
-        internal static extern int autd3_holo_gspat(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer);
+        internal static extern int autd3_holo_gspat(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib)]
-        internal static extern int autd3_holo_greedy(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, byte phaseQuantizationLevels, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, IntPtr buffer);
+        internal static extern int autd3_holo_greedy(IntPtr geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, byte phaseQuantizationLevels, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, IntPtr buffer, byte[] outErr, UIntPtr outErrLen);
     }
 
     public readonly struct AmplitudeTarget
@@ -291,36 +296,40 @@ namespace AUTD3.Holo
         public static void Naive(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, NaiveOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle) != 0)
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle, err, (UIntPtr)err.Length) != 0)
             {
-                throw new Autd3Exception("naive failed");
+                throw new Autd3Exception(NativeUtil.Utf8(err));
             }
         }
 
         public static void Gs(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GsOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle) != 0)
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle, err, (UIntPtr)err.Length) != 0)
             {
-                throw new Autd3Exception("gs failed");
+                throw new Autd3Exception(NativeUtil.Utf8(err));
             }
         }
 
         public static void Gspat(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GspatOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle) != 0)
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle, err, (UIntPtr)err.Length) != 0)
             {
-                throw new Autd3Exception("gspat failed");
+                throw new Autd3Exception(NativeUtil.Utf8(err));
             }
         }
 
         public static void Greedy(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GreedyOption option, PatternBuffer dst)
         {
             var c = option.Constraint.ToNative();
-            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle) != 0)
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle, err, (UIntPtr)err.Length) != 0)
             {
-                throw new Autd3Exception("greedy failed");
+                throw new Autd3Exception(NativeUtil.Utf8(err));
             }
         }
     }
