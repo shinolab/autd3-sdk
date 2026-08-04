@@ -6,7 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "No-op (hardware-free) Link for autd3-rs backed by the firmware emulator; used in examples, tests, and docs."
+readme = "README.md"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
 
 [dependencies]
 autd3-rs-core.workspace = true

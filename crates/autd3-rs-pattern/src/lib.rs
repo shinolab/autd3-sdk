@@ -1,3 +1,12 @@
+//! Emission-pattern computation for [AUTD3](https://hapislab.org/en/airborne-ultrasound-tactile-display):
+//! [`focus`], [`bessel`], [`plane`], [`null`], and [`uniform`].
+//!
+//! Each function writes into an emission buffer obtained from the geometry; pass the result to
+//! [`autd3-rs`](https://docs.rs/autd3-rs). For multi-focus holograms see
+//! [`autd3-rs-pattern-holo`](https://docs.rs/autd3-rs-pattern-holo).
+//!
+//! See the [documentation site](https://shinolab.github.io/autd3-sdk/en/).
+
 mod bessel;
 mod focus;
 mod null;

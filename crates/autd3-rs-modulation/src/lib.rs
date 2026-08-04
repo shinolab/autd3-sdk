@@ -1,3 +1,12 @@
+//! Amplitude-modulation waveforms for
+//! [AUTD3](https://hapislab.org/en/airborne-ultrasound-tactile-display): [`sine`], [`square`],
+//! [`constant`], and [`fourier`].
+//!
+//! Each function writes into a [`modulation_buffer`]; pass the result to
+//! [`autd3-rs`](https://docs.rs/autd3-rs).
+//!
+//! See the [documentation site](https://shinolab.github.io/autd3-sdk/en/).
+
 mod constant;
 mod error;
 mod fourier;

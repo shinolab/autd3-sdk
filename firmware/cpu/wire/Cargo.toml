@@ -6,7 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Shared wire-protocol contract (command opcodes, error codes, frame layout) for the AUTD3 CPU firmware and its clients."
+readme = "README.md"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
 
 [dependencies]
 zerocopy.workspace = true

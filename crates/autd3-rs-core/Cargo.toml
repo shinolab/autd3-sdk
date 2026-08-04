@@ -6,7 +6,14 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Core types and link abstraction shared across the AUTD3 phased-array sdk crates."
+readme = "README.md"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 logging = ["dep:tracing-appender", "dep:tracing-subscriber"]

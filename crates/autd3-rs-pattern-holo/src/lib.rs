@@ -1,3 +1,12 @@
+//! Multi-focus hologram optimization for
+//! [AUTD3](https://hapislab.org/en/airborne-ultrasound-tactile-display): Naive, GS, GSPAT, and
+//! a greedy combinatorial solver.
+//!
+//! The linear algebra goes through [`LinAlgBackend`]; [`NalgebraBackend`] is the CPU default and
+//! [`autd3-rs-pattern-holo-wgpu`](https://docs.rs/autd3-rs-pattern-holo-wgpu) runs it on the GPU.
+//!
+//! See the [documentation site](https://shinolab.github.io/autd3-sdk/en/).
+
 mod amp;
 mod amplitude_target;
 mod backend;

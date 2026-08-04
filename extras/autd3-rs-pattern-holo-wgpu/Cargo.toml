@@ -8,7 +8,11 @@ rust-version = "1.96"
 license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"
+homepage = "https://shinolab.github.io/autd3-sdk/en/"
 description = "wgpu-based LinAlgBackend for autd3-rs-pattern-holo."
+readme = "README.md"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
 
 [dependencies]
 autd3-rs-core = { version = "0.5.0", path = "../../crates/autd3-rs-core" }

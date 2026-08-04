@@ -6,7 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Portable logic of the AUTD3 CPU board firmware (protocol, FPGA access, commands)."
+readme = "README.md"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
 
 [dependencies]
 autd3-cpu-wire.workspace = true

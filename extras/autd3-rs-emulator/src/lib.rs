@@ -1,3 +1,11 @@
+//! Hardware-free emulator for
+//! [AUTD3](https://hapislab.org/en/airborne-ultrasound-tactile-display): records what the devices
+//! would emit, then computes the resulting ultrasound sound field offline.
+//!
+//! Use it to inspect a pattern or a modulation without a device on the desk.
+//!
+//! See the [documentation site](https://shinolab.github.io/autd3-sdk/en/).
+
 mod aabb;
 mod client_api;
 mod error;

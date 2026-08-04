@@ -6,7 +6,11 @@ rust-version.workspace = true
 license = "GPL-3.0-only"
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "SOEM-backed Link implementation for autd3-rs (GPL-3.0)."
+readme = "README.md"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
 
 [dependencies]
 autd3-rs-core.workspace = true
