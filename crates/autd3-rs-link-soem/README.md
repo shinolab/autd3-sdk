@@ -1,6 +1,11 @@
 # autd3-rs-link-soem
 
-[SOEM](https://github.com/OpenEtherCATsociety/SOEM)-backed EtherCAT `Link` implementation for autd3-rs.
+[SOEM](https://github.com/OpenEtherCATsociety/SOEM)-backed EtherCAT `Link` implementation for [`autd3-rs`](https://crates.io/crates/autd3-rs).
+
+## Documentation
+
+* [日本語](https://shinolab.github.io/autd3-sdk/)
+* [English](https://shinolab.github.io/autd3-sdk/en/)
 
 ## ⚠️ License notice
 

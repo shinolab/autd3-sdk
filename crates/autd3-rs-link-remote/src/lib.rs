@@ -1,3 +1,10 @@
+//! TCP transport `Link` for [`autd3-rs`](https://docs.rs/autd3-rs): relays tx/rx frames to a
+//! remote server that drives the real link.
+//!
+//! Use it to keep the realtime bus on a dedicated machine while the application runs elsewhere.
+//!
+//! See the [documentation site](https://shinolab.github.io/autd3-sdk/en/).
+
 mod bus;
 #[cfg(feature = "discovery")]
 mod discovery;

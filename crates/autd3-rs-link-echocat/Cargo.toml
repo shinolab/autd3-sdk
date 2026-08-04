@@ -6,7 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "echocat: an EtherCAT main device for AUTD3"
+readme = "README.md"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
 
 [dependencies]
 autd3-rs-core.workspace = true
