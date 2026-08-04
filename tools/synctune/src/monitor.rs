@@ -159,7 +159,7 @@ impl OpAccumulator {
     }
 
     pub fn observe(&mut self, status: &LinkStatus, elapsed: Duration) {
-        self.recoveries = status.recoveries;
+        self.recoveries = status.recoveries();
         let all_op = status.all_op();
         let any_lost = status.any_lost();
 
@@ -201,7 +201,7 @@ impl OpAccumulator {
         let mut safe_op_error = false;
         let mut lost = false;
         let mut other = false;
-        for d in &status.devices {
+        for d in status.devices() {
             match d {
                 DeviceState::Op => {}
                 DeviceState::SafeOp => safe_op = true,

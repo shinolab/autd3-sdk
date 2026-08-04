@@ -31,7 +31,7 @@ impl Link for EchoLink {
         for (t, r) in tx.iter().zip(rx.iter_mut()) {
             r[0] = t[0];
         }
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 
@@ -64,7 +64,7 @@ fn factory_derives_device_count_from_client_geometry() {
     }
     let mut rx = vec![[0u8; RX_FRAME_BYTES]; num_devices];
     let outcome = link.cycle(&tx, &mut rx).unwrap();
-    assert!(outcome.rx_valid);
+    assert!(outcome.rx_valid());
     for (d, r) in rx.iter().enumerate() {
         assert_eq!(r[0], u8::try_from(d + 1).unwrap());
     }

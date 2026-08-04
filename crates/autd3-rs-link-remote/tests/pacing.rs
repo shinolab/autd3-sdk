@@ -60,7 +60,7 @@ impl Link for PacedLink {
             r[1] = t[1];
         }
         self.next_at = Some(started + PERIOD);
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 

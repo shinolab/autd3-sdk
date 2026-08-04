@@ -163,8 +163,8 @@ impl CheckerBackend for EchocatChecker {
                         .await
                         .map_err(|e| Error::Link(e.to_string()))?;
                     Ok::<LinkStatusData, Error>(LinkStatusData {
-                        devices: status.devices,
-                        recoveries: status.recoveries,
+                        devices: status.devices().to_vec(),
+                        recoveries: status.recoveries(),
                     })
                 })
                 .await

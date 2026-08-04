@@ -73,7 +73,7 @@ impl Link for LegacyAudit {
         for ((device, tx), rx) in self.devices.iter().zip(tx).zip(rx) {
             device.with_mut(|d| d.cycle(tx, rx));
         }
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 

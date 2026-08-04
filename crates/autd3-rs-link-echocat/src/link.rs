@@ -21,10 +21,7 @@ pub struct StateChecker {
 
 impl StateChecker {
     pub fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Infallible>> + Send + use<> {
-        let status = LinkStatus {
-            devices: self.state.states(),
-            recoveries: self.state.recoveries(),
-        };
+        let status = LinkStatus::new(self.state.states(), self.state.recoveries());
         std::future::ready(Ok(status))
     }
 }
@@ -166,9 +163,7 @@ impl Link for EchocatLink {
             self.recovery_backoff = RECOVERY_BACKOFF_CYCLES;
         }
 
-        Ok(CycleOutcome {
-            rx_valid: report.rx_valid,
-        })
+        Ok(CycleOutcome::new(report.rx_valid))
     }
 }
 

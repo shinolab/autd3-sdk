@@ -216,7 +216,7 @@ impl<L: Link> RtThread<L> {
         let mut cycles = 0u32;
         let mut stale_cycles = 0u32;
         loop {
-            let CycleOutcome { rx_valid } = self.cycle()?;
+            let rx_valid = self.cycle()?.rx_valid();
             cycles += 1;
             if rx_valid {
                 if self.all_processed() {

@@ -86,10 +86,7 @@ impl TwinCATStateChecker {
             }
         }
 
-        Ok(LinkStatus {
-            devices: self.states.clone(),
-            recoveries: 0,
-        })
+        Ok(LinkStatus::new(self.states.clone(), 0))
     }
 }
 
