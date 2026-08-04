@@ -38,7 +38,7 @@ With [Raspberry Pi Imager](https://www.raspberrypi.com/software/), pick the `.im
 
 :::caution
 Do not use the Imager's OS customisation (username, password, Wi-Fi, SSH).
-The image configures itself, and its root filesystem boots read-only, so the customisation is either ignored or may stop the board from booting.
+The customisation is either ignored or may stop the board from booting.
 :::
 
 On Linux and macOS, `dd` works too.
@@ -49,10 +49,9 @@ xz -dc autd3-appliance-rp4-*.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync statu
 
 ## First boot
 
-Insert the card and power the board on: the first boot creates the settings area in the free space on the card and reboots on its own.
-That takes about a minute.
+The first boot takes about a minute.
 
-Discover the appliance from the host to confirm it came up.
+Discovering the appliance from the host tells you whether it came up.
 
 ```sh
 autd3-appliance scan
@@ -70,12 +69,10 @@ Pressing "Scan" on the **Appliance** tab of autd3-console does the same thing.
 
 <CodeTabs rust={excerpt(client, "discover")} python={excerpt(pyClient, "discover")} csharp={excerpt(csClient, "discover")} />
 
-A Linux host needs a connection profile that holds a link-local address.
-
 ## Dashboard
 
 `http://autd3-<serial no.>.local:8081/` shows the state of the bus.
-(The address is in the discovery result.)
+(The address is in the `scan` result.)
 
 The following operations are available.
 
@@ -124,18 +121,15 @@ autd3-appliance wifi forget --radio-off
 ```
 
 With `--radio-off` the radio itself is turned off on top of removing the credentials.
-That survives a reboot, and the `uplink` line of `status` reads `radio blocked`.
 
-Both are refused unless the board is reachable over Ethernet, because dropping Wi-Fi while it is the only path leaves the board out of reach.
-Add `--force` to go ahead anyway.
-
-`wifi set` brings the radio back even after `--radio-off`.
+Both are refused unless the board is reachable over Ethernet.
+Add `--force` to turn it off over Wi-Fi anyway.
 
 ### When the API can no longer undo it
 
-If `wifi forget --force` left the board unreachable, or neither Ethernet nor Wi-Fi comes up, pull the SD card and fix it there.
+If `wifi forget --force` left the board unreachable, or neither Ethernet nor Wi-Fi comes up, you have to fix it by editing the SD card directly.
 
-Insert the card into a host, and add this line at the end of `config.txt` on the boot partition to stop the radio for good.
+Insert the card into a host, and add this line at the end of `config.txt` on the boot partition to stop the radio.
 
 ```
 dtoverlay=disable-wifi
