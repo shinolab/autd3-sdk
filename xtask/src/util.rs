@@ -196,10 +196,11 @@ pub fn capture_lenient(program: &str, args: &[&str], cwd: &Path) -> Result<Strin
     Ok(stdout.trim().to_string())
 }
 
-struct MemberPackage {
+pub struct MemberPackage {
     name: String,
     version: String,
     publishable: bool,
+    dir: PathBuf,
 }
 
 fn read_member_package(
@@ -242,7 +243,28 @@ fn read_member_package(
         name: name.to_string(),
         version,
         publishable,
+        dir: member_manifest
+            .parent()
+            .with_context(|| format!("{} has no parent", member_manifest.display()))?
+            .to_path_buf(),
     })
+}
+
+pub fn publishable_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
+    Ok(workspace_members(workspace_dir)?
+        .into_iter()
+        .filter(|package| package.publishable)
+        .collect())
+}
+
+impl MemberPackage {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
 }
 
 fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
