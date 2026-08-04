@@ -68,7 +68,7 @@ impl Link for FlakyLink {
         for (t, r) in tx.iter().zip(rx.iter_mut()) {
             r[0] = t[0];
         }
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 
@@ -111,8 +111,8 @@ fn the_bus_loop_reopens_the_link_and_the_server_survives() {
         let outcome = link
             .cycle(&tx, &mut rx)
             .expect("the client keeps running while the server recovers");
-        saw_invalid |= !outcome.rx_valid;
-        (outcome.rx_valid && opens.load(Ordering::SeqCst) >= 3).then_some(())
+        saw_invalid |= !outcome.rx_valid();
+        (outcome.rx_valid() && opens.load(Ordering::SeqCst) >= 3).then_some(())
     });
 
     assert!(saw_invalid, "the client must see the gap as an invalid rx");
@@ -121,7 +121,7 @@ fn the_bus_loop_reopens_the_link_and_the_server_survives() {
         tx[0][0] = tx[0][0].wrapping_add(1);
         let _ = link.cycle(&tx, &mut rx);
         let status: LinkStatus = futures_lite_block_on(checker.check()).unwrap();
-        (status.recoveries > 0).then_some(status)
+        (status.recoveries() > 0).then_some(status)
     });
     assert!(status.all_op());
 
@@ -146,10 +146,7 @@ impl StateCheck for WatchedChecker {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
-        std::future::ready(Ok(LinkStatus {
-            devices,
-            recoveries: 0,
-        }))
+        std::future::ready(Ok(LinkStatus::new(devices, 0)))
     }
 }
 
@@ -172,7 +169,7 @@ impl Link for WatchedLink {
         _tx: &[[u8; TX_FRAME_BYTES]],
         _rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Infallible> {
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 
@@ -210,7 +207,10 @@ fn the_real_bus_state_reaches_the_remote_client() {
         let status = futures_lite_block_on(checker.check()).unwrap();
         (!status.all_op()).then_some(status)
     });
-    assert_eq!(status.devices, vec![DeviceState::SafeOpError; NUM_DEVICES]);
+    assert_eq!(
+        status.devices(),
+        vec![DeviceState::SafeOpError; NUM_DEVICES]
+    );
 
     drop(link);
     let _ = handle.join().unwrap();
@@ -236,7 +236,7 @@ impl Link for CountingLink {
         _rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Infallible> {
         self.0.fetch_add(1, Ordering::Relaxed);
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 

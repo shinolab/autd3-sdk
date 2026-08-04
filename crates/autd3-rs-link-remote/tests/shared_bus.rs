@@ -35,7 +35,7 @@ impl Link for EchoLink {
         for (t, r) in tx.iter().zip(rx.iter_mut()) {
             r[0] = t[0];
         }
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 
@@ -226,7 +226,7 @@ fn auto_open_brings_the_bus_up_for_the_first_client() {
     let mut tx = vec![[0u8; TX_FRAME_BYTES]; 1];
     let mut rx = vec![[0u8; RX_FRAME_BYTES]; 1];
     tx[0][0] = 42;
-    assert!(link.cycle(&tx, &mut rx).unwrap().rx_valid);
+    assert!(link.cycle(&tx, &mut rx).unwrap().rx_valid());
     assert_eq!(rx[0][0], 42);
     assert_eq!(bus.snapshot().desired, Desired::Open);
 
@@ -333,7 +333,7 @@ impl Link for PanickingLink {
     ) -> Result<CycleOutcome, Infallible> {
         assert!(self.cycles_left > 0, "the bus link exploded");
         self.cycles_left -= 1;
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 
@@ -401,7 +401,7 @@ fn a_client_that_vanishes_without_closing_does_not_block_the_next_one() {
     let mut tx = vec![[0u8; TX_FRAME_BYTES]; 1];
     let mut rx = vec![[0u8; RX_FRAME_BYTES]; 1];
     tx[0][0] = 7;
-    assert!(link.cycle(&tx, &mut rx).unwrap().rx_valid);
+    assert!(link.cycle(&tx, &mut rx).unwrap().rx_valid());
     assert_eq!(rx[0][0], 7);
 }
 
@@ -502,7 +502,7 @@ impl Link for CountingLink {
         for (t, r) in tx.iter().zip(rx.iter_mut()) {
             r[0] = t[0];
         }
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 
@@ -579,7 +579,7 @@ fn a_client_that_arrives_in_the_retry_window_waits_instead_of_being_refused() {
     let mut tx = vec![[0u8; TX_FRAME_BYTES]; 1];
     let mut rx = vec![[0u8; RX_FRAME_BYTES]; 1];
     tx[0][0] = 5;
-    assert!(link.cycle(&tx, &mut rx).unwrap().rx_valid);
+    assert!(link.cycle(&tx, &mut rx).unwrap().rx_valid());
     assert_eq!(rx[0][0], 5);
     assert!(attempts.load(Ordering::SeqCst) >= 2);
 

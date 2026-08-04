@@ -32,7 +32,7 @@ impl Link for EchoLink {
             r[0] = t[0];
             r[1] = t[1];
         }
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 
@@ -70,7 +70,7 @@ fn loopback_relays_frames() {
 
     let mut rx = vec![[0u8; RX_FRAME_BYTES]; num_devices];
     let outcome = link.cycle(&tx, &mut rx).unwrap();
-    assert!(outcome.rx_valid);
+    assert!(outcome.rx_valid());
     for (d, r) in rx.iter().enumerate() {
         assert_eq!(r[0], u8::try_from(d + 1).unwrap());
         assert_eq!(r[1], u8::try_from(d + 100).unwrap());
@@ -109,7 +109,7 @@ impl Link for DcLink {
     ) -> Result<CycleOutcome, Infallible> {
         let bus = autd3_rs_core::value::DcSysTime::now().with_dc_offset(self.bus_ahead_ns);
         self.dc_clock.observe(bus);
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
 

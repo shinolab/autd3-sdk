@@ -223,6 +223,6 @@ impl Link for TwinCATLink {
             }
         }
 
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }

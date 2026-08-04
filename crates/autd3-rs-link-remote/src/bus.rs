@@ -546,20 +546,20 @@ impl BusShared {
         }
         let num_devices = state.num_devices;
         debug_assert_eq!(
-            status.devices.len(),
+            status.devices().len(),
             num_devices,
             "the state checker must report exactly the devices the bus was opened with",
         );
         state.status.devices.clear();
         state.status.devices.extend(
             status
-                .devices
+                .devices()
                 .iter()
                 .copied()
                 .chain(std::iter::repeat(DeviceState::Lost))
                 .take(num_devices),
         );
-        state.link_recoveries = status.recoveries;
+        state.link_recoveries = status.recoveries();
         state.status.recoveries = state.base.recoveries + state.link_recoveries;
     }
 
@@ -801,7 +801,7 @@ pub(crate) fn run_bus_loop<L, F>(
                     .map_or(wire::DC_TIME_UNAVAILABLE, DcSysTime::sys_time);
                 let waited = shared.publish_cycle(
                     &rx_local,
-                    outcome.rx_valid,
+                    outcome.rx_valid(),
                     dc_time_ns,
                     version,
                     &link_stats,

@@ -129,10 +129,10 @@ impl ClientBackend for TwinCATBackend {
                         .await
                         .map_err(|e| Error::Link(e.to_string()))?;
                     Ok::<LinkStatusData, Error>(LinkStatusData {
-                        device_states: status.devices.iter().map(ToString::to_string).collect(),
+                        device_states: status.devices().iter().map(ToString::to_string).collect(),
                         all_op: status.all_op(),
                         any_lost: status.any_lost(),
-                        recoveries: status.recoveries,
+                        recoveries: status.recoveries(),
                     })
                 })
                 .await

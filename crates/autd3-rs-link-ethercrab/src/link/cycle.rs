@@ -95,7 +95,7 @@ impl Link for EtherCrabLink {
                     );
                     self.rx_was_valid = false;
                 }
-                return Ok(CycleOutcome { rx_valid: false });
+                return Ok(CycleOutcome::new(false));
             }
             Err(e) => return Err(e.into()),
         };
@@ -153,7 +153,7 @@ impl Link for EtherCrabLink {
             frame[..len].copy_from_slice(&inputs[..len]);
         }
 
-        Ok(CycleOutcome { rx_valid })
+        Ok(CycleOutcome::new(rx_valid))
     }
 }
 

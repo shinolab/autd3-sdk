@@ -16,7 +16,7 @@ impl ConstStateChecker {
     #[must_use]
     pub fn new(num_devices: usize) -> Self {
         Self {
-            status: LinkStatus::new(num_devices),
+            status: LinkStatus::op(num_devices),
         }
     }
 }
