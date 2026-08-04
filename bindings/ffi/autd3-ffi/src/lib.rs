@@ -4,8 +4,10 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use autd3_ffi_abi::{
-    CheckerBackend, ClientBackend, ClientOpener, CompletionCallback, CompletionCtx, DevicePattern,
-    ModulationBuffer, PatternBuffer, ResponseTokenData, drop_handle, into_handle,
+    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, CheckerBackend, ClientBackend, ClientOpener,
+    CompletionCallback, CompletionCtx, DevicePattern, ModulationBuffer, PatternBuffer,
+    ResponseTokenData, drop_handle, handle_mut, handle_ref, into_handle, slice_ref, take_handle,
+    to_rt_policy, to_rt_priority, write_cstr, write_out,
 };
 use autd3_rs::commands::{
     BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
@@ -23,8 +25,7 @@ use autd3_rs::value::{
 };
 use autd3_rs::{
     ClientConfig, CoreId, DatagramBuilder as CoreDatagramBuilder, Frames, Geometry, Length, Point3,
-    Response, RtSchedulePolicy, ThreadPriority, ThreadPriorityValue, UnitVector3, Vector3,
-    Velocity,
+    Response, UnitVector3, Vector3, Velocity,
 };
 use autd3_rs::{DeviceState, Telemetry};
 use tokio::runtime::{Builder, Runtime};
@@ -41,41 +42,29 @@ pub(crate) fn runtime() -> &'static Runtime {
     })
 }
 
-pub(crate) unsafe fn write_cstr(buf: *mut c_char, len: usize, s: &str) {
-    if buf.is_null() || len == 0 {
-        return;
-    }
-    let bytes = s.as_bytes();
-    let n = bytes.len().min(len - 1);
-
-    unsafe {
-        std::ptr::copy_nonoverlapping(bytes.as_ptr().cast::<c_char>(), buf, n);
-        *buf.add(n) = 0;
-    }
-}
-
-fn to_pattern_bank(v: u8) -> PatternBank {
-    if v == 1 {
-        PatternBank::B1
-    } else {
-        PatternBank::B0
-    }
-}
-
-fn to_modulation_bank(v: u8) -> ModulationBank {
-    if v == 1 {
-        ModulationBank::B1
-    } else {
-        ModulationBank::B0
-    }
-}
-
-fn to_gpio_in(v: u8) -> GpioIn {
+fn to_pattern_bank(v: u8) -> Option<PatternBank> {
     match v {
-        1 => GpioIn::I1,
-        2 => GpioIn::I2,
-        3 => GpioIn::I3,
-        _ => GpioIn::I0,
+        0 => Some(PatternBank::B0),
+        1 => Some(PatternBank::B1),
+        _ => None,
+    }
+}
+
+fn to_modulation_bank(v: u8) -> Option<ModulationBank> {
+    match v {
+        0 => Some(ModulationBank::B0),
+        1 => Some(ModulationBank::B1),
+        _ => None,
+    }
+}
+
+fn to_gpio_in(v: u8) -> Option<GpioIn> {
+    match v {
+        0 => Some(GpioIn::I0),
+        1 => Some(GpioIn::I1),
+        2 => Some(GpioIn::I2),
+        3 => Some(GpioIn::I3),
+        _ => None,
     }
 }
 
@@ -87,22 +76,24 @@ fn to_telemetry(counter: u8) -> Option<Telemetry> {
         0x03 => Some(Telemetry::DispatchError),
         0x04 => Some(Telemetry::Processed),
         0x05 => Some(Telemetry::Failsafe),
+        0x06 => Some(Telemetry::SyncResync),
         _ => None,
     }
 }
 
-fn to_transition_mode(mode: u8, value: u64, margin_ns: u32) -> TransitionMode {
+pub(crate) fn to_transition_mode(mode: u8, value: u64, margin_ns: u32) -> Option<TransitionMode> {
     match mode {
-        0x01 => TransitionMode::SysTime {
+        0x00 => Some(TransitionMode::SyncIdx),
+        0x01 => Some(TransitionMode::SysTime {
             time: DcSysTime::from_nanos(value),
             margin: (margin_ns != 0).then(|| Duration::from_nanos(u64::from(margin_ns))),
-        },
+        }),
         #[allow(clippy::cast_possible_truncation)]
-        0x02 => TransitionMode::Gpio(to_gpio_in(value as u8)),
-        0xF0 => TransitionMode::Ext,
-        0xFE => TransitionMode::Later,
-        0xFF => TransitionMode::Immediate,
-        _ => TransitionMode::SyncIdx,
+        0x02 => to_gpio_in(value as u8).map(TransitionMode::Gpio),
+        0xF0 => Some(TransitionMode::Ext),
+        0xFE => Some(TransitionMode::Later),
+        0xFF => Some(TransitionMode::Immediate),
+        _ => None,
     }
 }
 
@@ -113,22 +104,23 @@ pub struct Autd3GpioOut {
 }
 
 #[allow(clippy::cast_possible_truncation)]
-fn to_gpio_out(g: &Autd3GpioOut) -> GpioOut {
+fn to_gpio_out(g: &Autd3GpioOut) -> Option<GpioOut> {
     match g.kind {
-        1 => GpioOut::BaseSignal,
-        2 => GpioOut::Thermo,
-        3 => GpioOut::ForceFan,
-        4 => GpioOut::Sync,
-        5 => GpioOut::ModBank,
-        6 => GpioOut::ModIdx(g.value as u16),
-        7 => GpioOut::PatternBank,
-        8 => GpioOut::PatternIdx(g.value as u16),
-        9 => GpioOut::IsStmMode,
-        10 => GpioOut::SysTimeEq(DcSysTime::from_nanos(g.value)),
-        11 => GpioOut::SyncDiff,
-        12 => GpioOut::PwmOut(g.value as u8),
-        13 => GpioOut::Direct(g.value != 0),
-        _ => GpioOut::Off,
+        0 => Some(GpioOut::Off),
+        1 => Some(GpioOut::BaseSignal),
+        2 => Some(GpioOut::Thermo),
+        3 => Some(GpioOut::ForceFan),
+        4 => Some(GpioOut::Sync),
+        5 => Some(GpioOut::ModBank),
+        6 => Some(GpioOut::ModIdx(g.value as u16)),
+        7 => Some(GpioOut::PatternBank),
+        8 => Some(GpioOut::PatternIdx(g.value as u16)),
+        9 => Some(GpioOut::IsStmMode),
+        10 => Some(GpioOut::SysTimeEq(DcSysTime::from_nanos(g.value))),
+        11 => Some(GpioOut::SyncDiff),
+        12 => Some(GpioOut::PwmOut(g.value as u8)),
+        13 => Some(GpioOut::Direct(g.value != 0)),
+        _ => None,
     }
 }
 
@@ -140,11 +132,12 @@ fn rep_to_loop_behavior(rep: u16) -> LoopBehavior {
     }
 }
 
-fn to_pattern_stm_mode(mode: u8) -> PatternStmMode {
+fn to_pattern_stm_mode(mode: u8) -> Option<PatternStmMode> {
     match mode {
-        1 => PatternStmMode::PhaseFull,
-        2 => PatternStmMode::PhaseHalf,
-        _ => PatternStmMode::PhaseIntensityFull,
+        0 => Some(PatternStmMode::PhaseIntensityFull),
+        1 => Some(PatternStmMode::PhaseFull),
+        2 => Some(PatternStmMode::PhaseHalf),
+        _ => None,
     }
 }
 
@@ -223,6 +216,35 @@ macro_rules! foci_points {
                     })*
                 }
             }
+
+            fn boxed_stm(
+                &self,
+                config: StmConfig,
+                option: FociStmOption,
+            ) -> BoxedCommand<'_> {
+                match self {
+                    $(FociPoints::$variant(v) => {
+                        CoreFociStm::new(config, v.as_slice(), option).boxed()
+                    })*
+                }
+            }
+
+            fn boxed_write_foci(
+                &self,
+                bank: PatternBank,
+                index_offset: usize,
+            ) -> BoxedCommand<'_> {
+                match self {
+                    $(FociPoints::$variant(v) => {
+                        WriteFociBuffer {
+                            bank,
+                            index_offset,
+                            points: v.as_slice(),
+                        }
+                        .boxed()
+                    })*
+                }
+            }
         }
     };
 }
@@ -266,12 +288,10 @@ pub unsafe extern "C" fn autd3_stm_config_into_sampling_config(
         return -1;
     }
 
-    // SAFETY: the caller guarantees `config` points to a valid StmConfig handle.
     let Ok(value) = unsafe { *config }.into_sampling_config(size).divide() else {
         return -1;
     };
 
-    // SAFETY: the caller guarantees `out` points to a writable u16.
     unsafe { *out = value };
     0
 }
@@ -352,65 +372,117 @@ pub unsafe extern "C" fn autd3_stm_line(
     0
 }
 
-pub const AUTD3_RT_PRIORITY_DEFAULT: u8 = 0;
-pub const AUTD3_RT_PRIORITY_DISABLED: u8 = 1;
-pub const AUTD3_RT_PRIORITY_EXPLICIT: u8 = 2;
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_client_config_new() -> *mut ClientConfig {
+    into_handle(ClientConfig::default())
+}
+
+macro_rules! client_config_setter {
+    ($set:ident, $field:ident, bool) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $set(config: *mut ClientConfig, value: bool) -> i32 {
+            let Some(config) = (unsafe { handle_mut(config) }) else {
+                return AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            config.$field = value;
+            AUTD3_OK
+        }
+    };
+    ($set:ident, $field:ident, $raw:ty, $nonzero:ty) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $set(config: *mut ClientConfig, value: $raw) -> i32 {
+            let (Some(config), Some(value)) =
+                (unsafe { handle_mut(config) }, <$nonzero>::new(value))
+            else {
+                return AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            config.$field = value;
+            AUTD3_OK
+        }
+    };
+}
+
+client_config_setter!(autd3_client_config_set_low_latency, low_latency, bool);
+client_config_setter!(autd3_client_config_set_validate_state, validate_state, bool);
+client_config_setter!(
+    autd3_client_config_set_require_supported_firmware,
+    require_supported_firmware,
+    bool
+);
+client_config_setter!(
+    autd3_client_config_set_timeout_cycles,
+    timeout_cycles,
+    u32,
+    NonZeroU32
+);
+client_config_setter!(
+    autd3_client_config_set_max_inflight,
+    max_inflight,
+    usize,
+    NonZeroUsize
+);
+client_config_setter!(
+    autd3_client_config_set_max_resync_rounds,
+    max_resync_rounds,
+    u32,
+    NonZeroU32
+);
+client_config_setter!(
+    autd3_client_config_set_reset_resend_cycles,
+    reset_resend_cycles,
+    u32,
+    NonZeroU32
+);
 
 #[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments)]
-pub extern "C" fn autd3_client_config_new(
-    low_latency: bool,
-    timeout_cycles: u32,
-    max_inflight: usize,
-    max_resync_rounds: u32,
-    reset_resend_cycles: u32,
-    rt_priority_mode: u8,
-    rt_priority: u8,
-    has_rt_affinity: bool,
-    rt_affinity: usize,
-    validate_state: bool,
-) -> *mut ClientConfig {
-    let (
-        Some(timeout_cycles),
-        Some(max_inflight),
-        Some(max_resync_rounds),
-        Some(reset_resend_cycles),
-    ) = (
-        NonZeroU32::new(timeout_cycles),
-        NonZeroUsize::new(max_inflight),
-        NonZeroU32::new(max_resync_rounds),
-        NonZeroU32::new(reset_resend_cycles),
-    )
+pub unsafe extern "C" fn autd3_client_config_set_rt_priority(
+    config: *mut ClientConfig,
+    mode: u8,
+    value: u8,
+) -> i32 {
+    let (Some(config), Some(rt_priority)) =
+        (unsafe { handle_mut(config) }, to_rt_priority(mode, value))
     else {
-        return std::ptr::null_mut();
+        return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    let rt_priority = match rt_priority_mode {
-        AUTD3_RT_PRIORITY_DEFAULT => ClientConfig::default().rt_priority,
-        AUTD3_RT_PRIORITY_DISABLED => None,
-        AUTD3_RT_PRIORITY_EXPLICIT => match ThreadPriorityValue::try_from(rt_priority) {
-            Ok(value) => Some(ThreadPriority::Crossplatform(value)),
-            Err(_) => return std::ptr::null_mut(),
-        },
-        _ => return std::ptr::null_mut(),
+    config.rt_priority = rt_priority;
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_set_rt_policy(
+    config: *mut ClientConfig,
+    value: u8,
+) -> i32 {
+    let (Some(config), Some(rt_policy)) = (unsafe { handle_mut(config) }, to_rt_policy(value))
+    else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    let rt_affinity = has_rt_affinity.then_some(CoreId { id: rt_affinity });
-    into_handle(ClientConfig {
-        low_latency,
-        timeout_cycles,
-        max_inflight,
-        max_resync_rounds,
-        reset_resend_cycles,
-        rt_priority,
-        rt_policy: RtSchedulePolicy::default(),
-        rt_affinity,
-        validate_state,
-        ..Default::default()
-    })
+    config.rt_policy = rt_policy;
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_set_rt_affinity(
+    config: *mut ClientConfig,
+    has_affinity: bool,
+    core_id: usize,
+) -> i32 {
+    let Some(config) = (unsafe { handle_mut(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    config.rt_affinity = has_affinity.then_some(CoreId { id: core_id });
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_config_free(config: *mut ClientConfig) {
     unsafe { drop_handle(config) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_opener_free(opener: *mut ClientOpener) {
+    unsafe { drop_handle(opener) }
 }
 
 pub enum Pending {
@@ -513,10 +585,11 @@ pub enum Pending {
     Each(Vec<Option<Pending>>),
 }
 
-fn to_pattern_compression(v: u8) -> PatternCompression {
+fn to_pattern_compression(v: u8) -> Option<PatternCompression> {
     match v {
-        2 => PatternCompression::PhaseHalf,
-        _ => PatternCompression::PhaseFull,
+        1 => Some(PatternCompression::PhaseFull),
+        2 => Some(PatternCompression::PhaseHalf),
+        _ => None,
     }
 }
 
@@ -531,15 +604,17 @@ pub unsafe extern "C" fn autd3_op_pattern(
     if pattern_buffer.is_null() {
         return std::ptr::null_mut();
     }
+    let (Some(bank), Some(transition_mode)) = (
+        to_pattern_bank(bank),
+        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+    ) else {
+        return std::ptr::null_mut();
+    };
 
     into_handle(Pending::Pattern {
         emissions: unsafe { &*pattern_buffer }.0.clone(),
-        bank: to_pattern_bank(bank),
-        transition_mode: to_transition_mode(
-            transition_mode,
-            transition_value,
-            transition_margin_ns,
-        ),
+        bank,
+        transition_mode,
     })
 }
 
@@ -556,6 +631,12 @@ pub unsafe extern "C" fn autd3_op_modulation(
     if sampling_config.is_null() || modulation_buffer.is_null() {
         return std::ptr::null_mut();
     }
+    let (Some(bank), Some(transition_mode)) = (
+        to_modulation_bank(bank),
+        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+    ) else {
+        return std::ptr::null_mut();
+    };
 
     let Ok(divider) = unsafe { &*sampling_config }.divide() else {
         return std::ptr::null_mut();
@@ -564,13 +645,9 @@ pub unsafe extern "C" fn autd3_op_modulation(
     into_handle(Pending::Modulation {
         divider,
         data,
-        bank: to_modulation_bank(bank),
+        bank,
         loop_behavior: rep_to_loop_behavior(loop_rep),
-        transition_mode: to_transition_mode(
-            transition_mode,
-            transition_value,
-            transition_margin_ns,
-        ),
+        transition_mode,
     })
 }
 
@@ -583,10 +660,13 @@ pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
     if pattern_buffer.is_null() {
         return std::ptr::null_mut();
     }
+    let Some(bank) = to_pattern_bank(bank) else {
+        return std::ptr::null_mut();
+    };
 
     let emissions = unsafe { &*pattern_buffer }.0.clone();
     into_handle(Pending::WritePatternBuffer {
-        bank: to_pattern_bank(bank),
+        bank,
         index,
         emissions,
     })
@@ -604,6 +684,9 @@ pub unsafe extern "C" fn autd3_op_write_foci_buffer(
     if points.is_null() || intensities.is_null() || num_foci == 0 {
         return std::ptr::null_mut();
     }
+    let Some(bank) = to_pattern_bank(bank) else {
+        return std::ptr::null_mut();
+    };
 
     let n = usize::from(num_foci);
     let points = unsafe { std::slice::from_raw_parts(points, num_samples * n) };
@@ -628,7 +711,7 @@ pub unsafe extern "C" fn autd3_op_write_foci_buffer(
         return std::ptr::null_mut();
     };
     into_handle(Pending::WriteFociBuffer {
-        bank: to_pattern_bank(bank),
+        bank,
         index_offset: index_offset as usize,
         points,
     })
@@ -645,6 +728,9 @@ pub unsafe extern "C" fn autd3_op_write_pattern_compressed(
     if patterns.is_null() || num_patterns == 0 {
         return std::ptr::null_mut();
     }
+    let (Some(bank), Some(format)) = (to_pattern_bank(bank), to_pattern_compression(format)) else {
+        return std::ptr::null_mut();
+    };
 
     let slice = unsafe { std::slice::from_raw_parts(patterns, num_patterns) };
     if slice.iter().any(|p| p.is_null()) {
@@ -652,16 +738,19 @@ pub unsafe extern "C" fn autd3_op_write_pattern_compressed(
     }
     let patterns = slice.iter().map(|p| unsafe { &**p }.0.clone()).collect();
     into_handle(Pending::WritePatternCompressed {
-        bank: to_pattern_bank(bank),
+        bank,
         index,
-        format: to_pattern_compression(format),
+        format,
         patterns,
     })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_pattern_compression_per_frame(format: u8) -> usize {
-    to_pattern_compression(format).per_frame()
+pub unsafe extern "C" fn autd3_pattern_compression_per_frame(format: u8, out: *mut usize) -> i32 {
+    let Some(format) = to_pattern_compression(format) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe { write_out(out, format.per_frame()) }
 }
 
 #[unsafe(no_mangle)]
@@ -674,8 +763,11 @@ pub unsafe extern "C" fn autd3_op_config_pattern(
     if sampling_config.is_null() {
         return std::ptr::null_mut();
     }
+    let Some(bank) = to_pattern_bank(bank) else {
+        return std::ptr::null_mut();
+    };
     into_handle(Pending::ConfigPattern {
-        bank: to_pattern_bank(bank),
+        bank,
         config: *unsafe { &*sampling_config },
         size,
         loop_behavior: rep_to_loop_behavior(rep),
@@ -694,8 +786,11 @@ pub unsafe extern "C" fn autd3_op_config_foci_stm(
     if sampling_config.is_null() {
         return std::ptr::null_mut();
     }
+    let Some(bank) = to_pattern_bank(bank) else {
+        return std::ptr::null_mut();
+    };
     into_handle(Pending::ConfigFociStm {
-        bank: to_pattern_bank(bank),
+        bank,
         config: *unsafe { &*sampling_config },
         size,
         num_foci,
@@ -711,13 +806,15 @@ pub extern "C" fn autd3_op_change_pattern_bank(
     transition_value: u64,
     transition_margin_ns: u32,
 ) -> *mut Pending {
+    let (Some(bank), Some(transition_mode)) = (
+        to_pattern_bank(bank),
+        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+    ) else {
+        return std::ptr::null_mut();
+    };
     into_handle(Pending::ChangePatternBank {
-        bank: to_pattern_bank(bank),
-        transition_mode: to_transition_mode(
-            transition_mode,
-            transition_value,
-            transition_margin_ns,
-        ),
+        bank,
+        transition_mode,
     })
 }
 
@@ -730,13 +827,12 @@ pub unsafe extern "C" fn autd3_op_write_modulation_buffer(
     if modulation_buffer.is_null() {
         return std::ptr::null_mut();
     }
+    let Some(bank) = to_modulation_bank(bank) else {
+        return std::ptr::null_mut();
+    };
 
     let data = unsafe { &*modulation_buffer }.0.clone();
-    into_handle(Pending::WriteModulationBuffer {
-        bank: to_modulation_bank(bank),
-        offset,
-        data,
-    })
+    into_handle(Pending::WriteModulationBuffer { bank, offset, data })
 }
 
 #[unsafe(no_mangle)]
@@ -749,8 +845,11 @@ pub unsafe extern "C" fn autd3_op_config_modulation(
     if sampling_config.is_null() {
         return std::ptr::null_mut();
     }
+    let Some(bank) = to_modulation_bank(bank) else {
+        return std::ptr::null_mut();
+    };
     into_handle(Pending::ConfigModulation {
-        bank: to_modulation_bank(bank),
+        bank,
         config: *unsafe { &*sampling_config },
         size,
         loop_behavior: rep_to_loop_behavior(rep),
@@ -764,13 +863,15 @@ pub extern "C" fn autd3_op_change_modulation_bank(
     transition_value: u64,
     transition_margin_ns: u32,
 ) -> *mut Pending {
+    let (Some(bank), Some(transition_mode)) = (
+        to_modulation_bank(bank),
+        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+    ) else {
+        return std::ptr::null_mut();
+    };
     into_handle(Pending::ChangeModulationBank {
-        bank: to_modulation_bank(bank),
-        transition_mode: to_transition_mode(
-            transition_mode,
-            transition_value,
-            transition_margin_ns,
-        ),
+        bank,
+        transition_mode,
     })
 }
 
@@ -828,12 +929,15 @@ pub unsafe extern "C" fn autd3_op_set_gpio_out(outputs: *const Autd3GpioOut) -> 
     }
 
     let outputs = unsafe { std::slice::from_raw_parts(outputs, 4) };
-    into_handle(Pending::SetGpioOut([
+    let (Some(o0), Some(o1), Some(o2), Some(o3)) = (
         to_gpio_out(&outputs[0]),
         to_gpio_out(&outputs[1]),
         to_gpio_out(&outputs[2]),
         to_gpio_out(&outputs[3]),
-    ]))
+    ) else {
+        return std::ptr::null_mut();
+    };
+    into_handle(Pending::SetGpioOut([o0, o1, o2, o3]))
 }
 
 #[unsafe(no_mangle)]
@@ -970,6 +1074,12 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
     if config.is_null() || points.is_null() || intensities.is_null() || num_foci == 0 {
         return std::ptr::null_mut();
     }
+    let (Some(bank), Some(transition_mode)) = (
+        to_pattern_bank(bank),
+        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+    ) else {
+        return std::ptr::null_mut();
+    };
 
     let n = usize::from(num_foci);
     let points = unsafe { std::slice::from_raw_parts(points, num_samples * n) };
@@ -996,14 +1106,10 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
     into_handle(Pending::FociStm {
         config: *unsafe { &*config },
         points,
-        bank: to_pattern_bank(bank),
+        bank,
         sound_speed: sound_speed_m_s,
         loop_behavior: rep_to_loop_behavior(loop_rep),
-        transition_mode: to_transition_mode(
-            transition_mode,
-            transition_value,
-            transition_margin_ns,
-        ),
+        transition_mode,
     })
 }
 
@@ -1022,6 +1128,13 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     if config.is_null() || patterns.is_null() {
         return std::ptr::null_mut();
     }
+    let (Some(bank), Some(mode), Some(transition_mode)) = (
+        to_pattern_bank(bank),
+        to_pattern_stm_mode(mode),
+        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+    ) else {
+        return std::ptr::null_mut();
+    };
 
     let slice = unsafe { std::slice::from_raw_parts(patterns, num_patterns) };
     if slice.iter().any(|p| p.is_null()) {
@@ -1031,14 +1144,10 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     into_handle(Pending::PatternStm {
         config: *unsafe { &*config },
         patterns,
-        bank: to_pattern_bank(bank),
-        mode: to_pattern_stm_mode(mode),
+        bank,
+        mode,
         loop_behavior: rep_to_loop_behavior(loop_rep),
-        transition_mode: to_transition_mode(
-            transition_mode,
-            transition_value,
-            transition_margin_ns,
-        ),
+        transition_mode,
     })
 }
 
@@ -1173,7 +1282,64 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
         Pending::SetOutputMask(masks) => SetOutputMask { masks }.boxed(),
         Pending::SetPhaseCorrection(phases) => SetPhaseCorrection { phases }.boxed(),
         Pending::SetPulseWidthTable(t) => SetPulseWidthTable { table: t }.boxed(),
-        _ => return None,
+        Pending::WriteFociBuffer {
+            bank,
+            index_offset,
+            points,
+        } => points.boxed_write_foci(*bank, *index_offset),
+        Pending::WritePatternCompressed {
+            bank,
+            index,
+            format,
+            patterns,
+        } => {
+            let mut arr: [Option<&[DevicePattern]>; 4] = [None; 4];
+            for (slot, buf) in arr.iter_mut().zip(patterns.iter()) {
+                *slot = Some(buf.as_slice());
+            }
+            WritePatternCompressed {
+                bank: *bank,
+                index: usize::try_from(*index).unwrap_or(usize::MAX),
+                format: *format,
+                patterns: arr,
+            }
+            .boxed()
+        }
+        Pending::FociStm {
+            config,
+            points,
+            bank,
+            sound_speed,
+            loop_behavior,
+            transition_mode,
+        } => points.boxed_stm(
+            *config,
+            FociStmOption {
+                bank: *bank,
+                sound_speed: Velocity::from_m_s(*sound_speed),
+                loop_behavior: *loop_behavior,
+                transition_mode: *transition_mode,
+            },
+        ),
+        Pending::PatternStm {
+            config,
+            patterns,
+            bank,
+            mode,
+            loop_behavior,
+            transition_mode,
+        } => PatternStm::new(
+            *config,
+            patterns,
+            PatternStmOption {
+                bank: *bank,
+                mode: *mode,
+                loop_behavior: *loop_behavior,
+                transition_mode: *transition_mode,
+            },
+        )
+        .boxed(),
+        Pending::Each(_) => return None,
     })
 }
 
@@ -1200,14 +1366,27 @@ pub unsafe extern "C" fn autd3_datagram_builder_new(
 pub unsafe extern "C" fn autd3_datagram_builder_push(
     builder: *mut DatagramBuilder,
     op: *mut Pending,
-) {
-    if builder.is_null() || op.is_null() {
-        return;
-    }
+) -> i32 {
+    let (Some(builder), Some(op)) = (unsafe { handle_mut(builder) }, unsafe { take_handle(op) })
+    else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
 
-    let op = unsafe { *Box::from_raw(op) };
+    builder.pending.push(op);
+    AUTD3_OK
+}
 
-    unsafe { &mut *builder }.pending.push(op);
+pub(crate) unsafe fn take_each(
+    ops: *const *mut Pending,
+    num_devices: usize,
+) -> Option<Vec<Option<Pending>>> {
+    let slice = unsafe { slice_ref(ops, num_devices) }?;
+    let devices: Vec<Option<Pending>> = slice.iter().map(|&p| unsafe { take_handle(p) }).collect();
+    devices
+        .iter()
+        .flatten()
+        .all(|pending| !matches!(pending, Pending::Each(_)))
+        .then_some(devices)
 }
 
 #[unsafe(no_mangle)]
@@ -1215,25 +1394,15 @@ pub unsafe extern "C" fn autd3_datagram_builder_push_each(
     builder: *mut DatagramBuilder,
     ops: *const *mut Pending,
     num_devices: usize,
-) {
-    if builder.is_null() || ops.is_null() {
-        return;
-    }
+) -> i32 {
+    let (Some(builder), Some(devices)) = (unsafe { handle_mut(builder) }, unsafe {
+        take_each(ops, num_devices)
+    }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
 
-    let slice = unsafe { std::slice::from_raw_parts(ops, num_devices) };
-    let devices: Vec<Option<Pending>> = slice
-        .iter()
-        .map(|&p| {
-            if p.is_null() {
-                None
-            } else {
-                Some(unsafe { *Box::from_raw(p) })
-            }
-        })
-        .collect();
-    unsafe { &mut *builder }
-        .pending
-        .push(Pending::Each(devices));
+    builder.pending.push(Pending::Each(devices));
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
@@ -1539,20 +1708,21 @@ pub unsafe extern "C" fn autd3_client_open(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if geometry.is_null() || link.is_null() || config.is_null() {
-        ctx.err("null argument");
+    let opener = unsafe { take_handle(link) };
+    let (Some(opener), Some(geometry), Some(config)) =
+        (opener, unsafe { handle_ref(geometry) }, unsafe {
+            handle_ref(config)
+        })
+    else {
+        ctx.invalid_argument("null argument");
         return;
-    }
+    };
 
-    let opener = unsafe { *Box::from_raw(link) };
-
-    let geometry = unsafe { &*geometry }.clone();
-    let config = *unsafe { &*config };
-    let fut = opener(geometry, config);
+    let fut = opener(geometry.clone(), *config);
     runtime().spawn(async move {
         match fut.await {
             Ok(backend) => ctx.ok(into_handle(ClientHandle(backend)).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1586,7 +1756,7 @@ pub unsafe extern "C" fn autd3_client_send_checked(
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1613,7 +1783,7 @@ pub unsafe extern "C" fn autd3_client_send(
     runtime().spawn(async move {
         match fut.await {
             Ok(token) => ctx.ok(into_handle(ResponseToken(token)).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1635,7 +1805,7 @@ pub unsafe extern "C" fn autd3_response_token_await(
     runtime().spawn(async move {
         match fut.await {
             Ok(response) => ctx.ok(into_handle(ByteArray(response.data().to_vec())).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1655,7 +1825,6 @@ pub unsafe extern "C" fn autd3_response_check(
     let response = if data.is_null() || len == 0 {
         Response::default()
     } else {
-        // SAFETY: the caller guarantees `data` points to `len` readable bytes.
         Response::from_slice(unsafe { std::slice::from_raw_parts(data, len) })
     };
     match response.check() {
@@ -1683,7 +1852,7 @@ pub unsafe extern "C" fn autd3_client_read_firmware_version(
     runtime().spawn(async move {
         match fut.await {
             Ok(versions) => ctx.ok(into_handle(StringArray(to_cstrings(versions))).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1704,7 +1873,7 @@ pub unsafe extern "C" fn autd3_client_read_fpga_state(
     runtime().spawn(async move {
         match fut.await {
             Ok(states) => ctx.ok(into_handle(ByteArray(states)).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1730,7 +1899,7 @@ pub unsafe extern "C" fn autd3_client_read_telemetry(
     runtime().spawn(async move {
         match fut.await {
             Ok(values) => ctx.ok(into_handle(ByteArray(values)).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1751,7 +1920,7 @@ pub unsafe extern "C" fn autd3_client_read_error_detail(
     runtime().spawn(async move {
         match fut.await {
             Ok(detail) => ctx.ok(into_handle(ByteArray(detail)).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1810,7 +1979,7 @@ pub unsafe extern "C" fn autd3_checker_check(
                 };
                 ctx.ok(into_handle(status).cast());
             }
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1836,7 +2005,7 @@ pub unsafe extern "C" fn autd3_client_stop(
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1857,7 +2026,7 @@ pub unsafe extern "C" fn autd3_client_close(
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -1947,3 +2116,5 @@ pub unsafe extern "C" fn autd3_link_status_device_state(
 pub unsafe extern "C" fn autd3_link_status_free(status: *mut LinkStatus) {
     unsafe { drop_handle(status) }
 }
+
+autd3_ffi_abi::export_abi_version!();

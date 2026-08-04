@@ -1,6 +1,170 @@
 use std::ffi::{CString, c_char, c_void};
+use std::mem::ManuallyDrop;
+use std::ptr::NonNull;
 
 use autd3_rs_core::value::Emission;
+use autd3_rs_core::{RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
+
+pub const AUTD3_ABI_VERSION_MAJOR: u16 = 1;
+pub const AUTD3_ABI_VERSION_MINOR: u16 = 0;
+
+#[must_use]
+pub const fn abi_version() -> u32 {
+    ((AUTD3_ABI_VERSION_MAJOR as u32) << 16) | AUTD3_ABI_VERSION_MINOR as u32
+}
+
+#[macro_export]
+macro_rules! export_abi_version {
+    () => {
+        #[unsafe(no_mangle)]
+        pub extern "C" fn autd3_abi_version() -> u32 {
+            $crate::abi_version()
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! option_handle_field {
+    ($handle:ty, [$($field:tt).+], duration, $set:ident, $get:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $set(handle: *mut $handle, ns: u64) -> i32 {
+            let Some(option) = (unsafe { $crate::handle_mut(handle) }) else {
+                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            option.0.$($field).+ = ::std::time::Duration::from_nanos(ns);
+            $crate::AUTD3_OK
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $get(handle: *const $handle, out: *mut u64) -> i32 {
+            let Some(option) = (unsafe { $crate::handle_ref(handle) }) else {
+                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            unsafe { $crate::write_out(out, $crate::to_ns(option.0.$($field).+)) }
+        }
+    };
+    ($handle:ty, [$($field:tt).+], $ty:ty, $set:ident, $get:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $set(handle: *mut $handle, value: $ty) -> i32 {
+            let Some(option) = (unsafe { $crate::handle_mut(handle) }) else {
+                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            option.0.$($field).+ = value;
+            $crate::AUTD3_OK
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $get(handle: *const $handle, out: *mut $ty) -> i32 {
+            let Some(option) = (unsafe { $crate::handle_ref(handle) }) else {
+                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            unsafe { $crate::write_out(out, option.0.$($field).+) }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! option_handle_opt_duration_field {
+    ($handle:ty, [$($field:tt).+], $set:ident, $get:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $set(handle: *mut $handle, has_value: bool, ns: u64) -> i32 {
+            let Some(option) = (unsafe { $crate::handle_mut(handle) }) else {
+                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            option.0.$($field).+ = has_value.then(|| ::std::time::Duration::from_nanos(ns));
+            $crate::AUTD3_OK
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $get(
+            handle: *const $handle,
+            out_has_value: *mut bool,
+            out_ns: *mut u64,
+        ) -> i32 {
+            let Some(option) = (unsafe { $crate::handle_ref(handle) }) else {
+                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            let value = option.0.$($field).+;
+            let code = unsafe { $crate::write_out(out_has_value, value.is_some()) };
+            if code != $crate::AUTD3_OK {
+                return code;
+            }
+            unsafe { $crate::write_out(out_ns, $crate::to_ns(value.unwrap_or_default())) }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! option_handle_iface {
+    ($handle:ty, [$($field:tt).+], $set:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $set(
+            handle: *mut $handle,
+            iface: *const ::std::ffi::c_char,
+        ) -> i32 {
+            let Some(option) = (unsafe { $crate::handle_mut(handle) }) else {
+                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            option.0.$($field).+ =
+                ::autd3_rs_core::Interface::from(unsafe { $crate::cstr_to_string(iface) });
+            $crate::AUTD3_OK
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! option_handle_lifecycle {
+    ($handle:ty, $free:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $free(handle: *mut $handle) {
+            unsafe { $crate::drop_handle(handle) }
+        }
+    };
+}
+
+pub const AUTD3_OK: i32 = 0;
+pub const AUTD3_ERR: i32 = -1;
+pub const AUTD3_ERR_TIMEOUT: i32 = -2;
+pub const AUTD3_ERR_DEVICE: i32 = -3;
+pub const AUTD3_ERR_LINK: i32 = -4;
+pub const AUTD3_ERR_INVALID_ARGUMENT: i32 = -5;
+pub const AUTD3_ERR_UNSUPPORTED_FIRMWARE: i32 = -6;
+pub const AUTD3_ERR_ABORTED: i32 = -7;
+
+pub const AUTD3_RT_PRIORITY_DEFAULT: u8 = 0;
+pub const AUTD3_RT_PRIORITY_DISABLED: u8 = 1;
+pub const AUTD3_RT_PRIORITY_EXPLICIT: u8 = 2;
+
+#[must_use]
+pub fn to_rt_priority(mode: u8, value: u8) -> Option<Option<ThreadPriority>> {
+    match mode {
+        AUTD3_RT_PRIORITY_DEFAULT => Some(autd3_rs_core::default_rt_priority()),
+        AUTD3_RT_PRIORITY_DISABLED => Some(None),
+        AUTD3_RT_PRIORITY_EXPLICIT => ThreadPriorityValue::try_from(value)
+            .ok()
+            .map(|v| Some(ThreadPriority::Crossplatform(v))),
+        _ => None,
+    }
+}
+
+#[must_use]
+pub fn to_rt_policy(value: u8) -> Option<RtSchedulePolicy> {
+    match value {
+        0 => Some(RtSchedulePolicy::Normal),
+        1 => Some(RtSchedulePolicy::Fifo),
+        2 => Some(RtSchedulePolicy::RoundRobin),
+        _ => None,
+    }
+}
+
+#[must_use]
+pub fn from_rt_policy(policy: RtSchedulePolicy) -> u8 {
+    match policy {
+        RtSchedulePolicy::Normal => 0,
+        RtSchedulePolicy::RoundRobin => 2,
+        _ => 1,
+    }
+}
 
 pub type DevicePattern = Vec<Emission>;
 
@@ -19,6 +183,61 @@ pub unsafe fn drop_handle<T>(ptr: *mut T) {
     if !ptr.is_null() {
         drop(unsafe { Box::from_raw(ptr) });
     }
+}
+
+pub unsafe fn take_handle<T>(ptr: *mut T) -> Option<T> {
+    let ptr = NonNull::new(ptr)?;
+    Some(*unsafe { Box::from_raw(ptr.as_ptr()) })
+}
+
+pub unsafe fn handle_ref<'a, T>(ptr: *const T) -> Option<&'a T> {
+    unsafe { ptr.as_ref() }
+}
+
+pub unsafe fn handle_mut<'a, T>(ptr: *mut T) -> Option<&'a mut T> {
+    unsafe { ptr.as_mut() }
+}
+
+pub unsafe fn slice_ref<'a, T>(ptr: *const T, len: usize) -> Option<&'a [T]> {
+    if len == 0 {
+        return Some(&[]);
+    }
+    let ptr = NonNull::new(ptr.cast_mut())?;
+    Some(unsafe { std::slice::from_raw_parts(ptr.as_ptr().cast_const(), len) })
+}
+
+#[must_use]
+pub unsafe fn cstr_to_string(ptr: *const c_char) -> Option<String> {
+    let ptr = NonNull::new(ptr.cast_mut())?;
+    Some(
+        unsafe { std::ffi::CStr::from_ptr(ptr.as_ptr().cast_const()) }
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+pub unsafe fn write_cstr(buf: *mut c_char, len: usize, s: &str) {
+    let Some(buf) = NonNull::new(buf) else {
+        return;
+    };
+    if len == 0 {
+        return;
+    }
+    let bytes = s.as_bytes();
+    let n = bytes.len().min(len - 1);
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr().cast::<c_char>(), buf.as_ptr(), n);
+        *buf.as_ptr().add(n) = 0;
+    }
+}
+
+pub unsafe fn write_out<T>(ptr: *mut T, value: T) -> i32 {
+    let Some(ptr) = NonNull::new(ptr) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe { ptr.as_ptr().write(value) };
+    AUTD3_OK
 }
 
 #[must_use]
@@ -51,12 +270,34 @@ impl CompletionCtx {
     }
 
     pub fn ok(self, value: *mut c_void) {
-        (self.cb)(0, value, std::ptr::null(), self.user_data);
+        let this = ManuallyDrop::new(self);
+        (this.cb)(AUTD3_OK, value, std::ptr::null(), this.user_data);
     }
 
     pub fn err(self, message: &str) {
+        self.fail(AUTD3_ERR, message);
+    }
+
+    pub fn invalid_argument(self, message: &str) {
+        self.fail(AUTD3_ERR_INVALID_ARGUMENT, message);
+    }
+
+    pub fn fail(self, code: i32, message: &str) {
+        let this = ManuallyDrop::new(self);
         let msg = CString::new(message.replace('\0', " ")).unwrap_or_default();
-        (self.cb)(-1, std::ptr::null_mut(), msg.as_ptr(), self.user_data);
+        (this.cb)(code, std::ptr::null_mut(), msg.as_ptr(), this.user_data);
+    }
+}
+
+impl Drop for CompletionCtx {
+    fn drop(&mut self) {
+        let msg = c"operation aborted";
+        (self.cb)(
+            AUTD3_ERR_ABORTED,
+            std::ptr::null_mut(),
+            msg.as_ptr(),
+            self.user_data,
+        );
     }
 }
 
@@ -71,6 +312,59 @@ mod client {
     use autd3_rs::{ClientConfig, Frames, Response, ResponseFuture, Telemetry};
     use autd3_rs_core::Geometry;
     use autd3_rs_core::link::DeviceState;
+
+    use super::{
+        AUTD3_ERR, AUTD3_ERR_DEVICE, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_ERR_LINK, AUTD3_ERR_TIMEOUT,
+        AUTD3_ERR_UNSUPPORTED_FIRMWARE, CompletionCtx,
+    };
+
+    pub trait ErrorCategory: std::fmt::Display {
+        fn error_code(&self) -> i32;
+    }
+
+    impl ErrorCategory for Error {
+        fn error_code(&self) -> i32 {
+            match self {
+                Error::Timeout { .. } => AUTD3_ERR_TIMEOUT,
+                Error::DeviceError { .. } => AUTD3_ERR_DEVICE,
+                Error::Link(_) => AUTD3_ERR_LINK,
+                Error::UnsupportedFirmware { .. } => AUTD3_ERR_UNSUPPORTED_FIRMWARE,
+                Error::SilencerConstraint { .. }
+                | Error::TransitionConstraint { .. }
+                | Error::InvalidPayload(_)
+                | Error::Encode(_) => AUTD3_ERR_INVALID_ARGUMENT,
+                _ => AUTD3_ERR,
+            }
+        }
+    }
+
+    impl ErrorCategory for LegacyError {
+        fn error_code(&self) -> i32 {
+            match self {
+                LegacyError::Timeout { .. } | LegacyError::BusNotOperational { .. } => {
+                    AUTD3_ERR_TIMEOUT
+                }
+                LegacyError::Device { .. } | LegacyError::FpgaStateInvalid { .. } => {
+                    AUTD3_ERR_DEVICE
+                }
+                LegacyError::Link(_) => AUTD3_ERR_LINK,
+                LegacyError::UnsupportedFirmware { .. } => AUTD3_ERR_UNSUPPORTED_FIRMWARE,
+                LegacyError::DeviceCountMismatch { .. }
+                | LegacyError::NoDevices
+                | LegacyError::Encode(_)
+                | LegacyError::SamplingConfig(_)
+                | LegacyError::PulseWidth(_)
+                | LegacyError::InvalidPayload(_) => AUTD3_ERR_INVALID_ARGUMENT,
+                _ => AUTD3_ERR,
+            }
+        }
+    }
+
+    impl CompletionCtx {
+        pub fn err_of<E: ErrorCategory>(self, e: &E) {
+            self.fail(e.error_code(), &e.to_string());
+        }
+    }
 
     #[must_use]
     pub fn link_runtime() -> &'static tokio::runtime::Runtime {
@@ -420,7 +714,7 @@ mod client {
 
 #[cfg(feature = "client")]
 pub use client::{
-    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyBoxFuture, LegacyClientBackend,
-    LegacyClientOpener, LinkStatusData, ResponseTokenData, client_opener, join_err,
-    legacy_client_opener, legacy_join_err, link_runtime, to_ns,
+    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, ErrorCategory, LegacyBoxFuture,
+    LegacyClientBackend, LegacyClientOpener, LinkStatusData, ResponseTokenData, client_opener,
+    join_err, legacy_client_opener, legacy_join_err, link_runtime, to_ns,
 };
