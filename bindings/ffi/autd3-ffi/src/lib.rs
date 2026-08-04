@@ -18,13 +18,13 @@ use autd3_rs::commands::{
 };
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
-    DcSysTime, GpioIn, Intensity, LoopBehavior, ModulationBank, Nearest, PatternBank, Phase,
-    SamplingConfig, TransitionMode,
+    ControlPoint, ControlPoints, DcSysTime, GpioIn, Intensity, LoopBehavior, ModulationBank,
+    Nearest, PatternBank, Phase, PulseWidth, SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
-    ClientConfig, ControlPoint, ControlPoints, CoreId, DatagramBuilder as CoreDatagramBuilder,
-    Frames, Geometry, Length, Point3, PulseWidth, Response, RtSchedulePolicy, ThreadPriority,
-    ThreadPriorityValue, UnitVector3, Vector3, Velocity,
+    ClientConfig, CoreId, DatagramBuilder as CoreDatagramBuilder, Frames, Geometry, Length, Point3,
+    Response, RtSchedulePolicy, ThreadPriority, ThreadPriorityValue, UnitVector3, Vector3,
+    Velocity,
 };
 use autd3_rs::{DeviceState, Telemetry};
 use tokio::runtime::{Builder, Runtime};
