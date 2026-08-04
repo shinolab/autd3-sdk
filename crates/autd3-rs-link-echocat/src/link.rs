@@ -179,15 +179,16 @@ impl autd3_rs_core::IntoLink for EchocatLinkOption {
         self,
         geometry: &Geometry,
     ) -> Result<EchocatLink, autd3_rs_core::error::LinkError> {
-        let link =
-            EchocatLink::open(&self).map_err(|e| autd3_rs_core::error::LinkError(e.to_string()))?;
+        let link = EchocatLink::open(&self)
+            .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e))?;
         if link.num_devices() != geometry.num_devices() {
-            return Err(autd3_rs_core::error::LinkError(
-                EchocatError::DeviceCountMismatch {
-                    expected: geometry.num_devices(),
-                    received: link.num_devices(),
-                }
-                .to_string(),
+            let e = EchocatError::DeviceCountMismatch {
+                expected: geometry.num_devices(),
+                received: link.num_devices(),
+            };
+            return Err(autd3_rs_core::error::LinkError::with_source(
+                e.to_string(),
+                e,
             ));
         }
         Ok(link)

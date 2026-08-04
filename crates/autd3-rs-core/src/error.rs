@@ -1,8 +1,37 @@
 use thiserror::Error;
 
+type BoxError = Box<dyn core::error::Error + Send + Sync>;
+
 #[derive(Debug, Error)]
-#[error("link error: {0}")]
-pub struct LinkError(pub String);
+#[error("link error: {message}")]
+pub struct LinkError {
+    message: String,
+    #[source]
+    source: Option<BoxError>,
+}
+
+impl LinkError {
+    #[must_use]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_source(message: impl Into<String>, source: impl Into<BoxError>) -> Self {
+        Self {
+            message: message.into(),
+            source: Some(source.into()),
+        }
+    }
+
+    #[must_use]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Error)]
 #[non_exhaustive]
