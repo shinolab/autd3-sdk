@@ -5,6 +5,7 @@ use autd3_rs_core::protocol::describe_device_error;
 
 use crate::firmware_version::FirmwareVersion;
 use crate::mirror::{BankLoop, SilencerAxis};
+use crate::telemetry::Telemetry;
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError, TransitionMode};
 
 #[derive(Debug, Error)]
@@ -41,6 +42,11 @@ pub enum Error {
         device: usize,
         version: FirmwareVersion,
     },
+
+    #[error(
+        "device {device} rejected telemetry counter {counter:?}; its firmware does not know this counter"
+    )]
+    UnsupportedTelemetry { device: usize, counter: Telemetry },
 
     #[error("ack timeout after {cycles} cycles")]
     Timeout { cycles: u32 },
