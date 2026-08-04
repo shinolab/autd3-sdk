@@ -37,7 +37,7 @@ pub enum SamplingConfigError {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Nearest<T: Copy + Clone + Debug + PartialEq>(pub T);
+pub struct Nearest<T>(pub T);
 
 #[derive(Clone, Copy)]
 enum SamplingConfigInner {
