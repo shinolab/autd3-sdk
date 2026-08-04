@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Subcommand;
 
-use crate::util::{publish_workspace, run, run_built_bin};
+use crate::util::{on_path, publish_workspace, publishable_members, run, run_built_bin};
 
 const PCAP_PACKAGES: &[&str] = &[
     "autd3-rs-perftest",
@@ -29,6 +29,12 @@ pub enum RustCmd {
         /// Rewrite the files instead of only checking them
         #[arg(long)]
         fix: bool,
+    },
+    /// Check the `crates/` workspace API for SemVer violations with cargo-semver-checks
+    Semver {
+        /// Released version to compare against (defaults to the latest one on crates.io)
+        #[arg(long)]
+        baseline: Option<String>,
     },
     /// Publish the `crates/` workspace to crates.io, skipping already-published versions
     Publish {
@@ -128,6 +134,7 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
                 &dir,
             )
         }
+        RustCmd::Semver { baseline } => run_semver(root, baseline.as_deref()),
         RustCmd::Publish { dry_run } => publish_workspace(root, *dry_run),
         RustCmd::Example {
             name,
@@ -136,6 +143,22 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             args,
         } => run_example(root, name, *debug, *no_sudo, args),
     }
+}
+
+fn run_semver(root: &Path, baseline: Option<&str>) -> Result<()> {
+    if !on_path("cargo-semver-checks") {
+        bail!("`cargo-semver-checks` is required");
+    }
+    let mut args = vec!["semver-checks".to_string()];
+    for package in publishable_members(root)? {
+        args.push("--package".to_string());
+        args.push(package.name().to_string());
+    }
+    if let Some(baseline) = baseline {
+        args.push("--baseline-version".to_string());
+        args.push(baseline.to_string());
+    }
+    run("cargo", args, root)
 }
 
 fn run_example(root: &Path, name: &str, debug: bool, no_sudo: bool, args: &[String]) -> Result<()> {
