@@ -39,7 +39,7 @@ SD イメージは SDK 本体とは別の Release ページで配布している
 
 :::caution
 Imager の OS カスタマイズ (ユーザ名・パスワード・Wi-Fi・SSH) は使わないこと.
-イメージ側で設定が完結しており, ルートファイルシステムは読み取り専用で起動するため, カスタマイズは反映されないか起動しなくなる可能性がある.
+カスタマイズは反映されないか起動しなくなる可能性がある.
 :::
 
 Linux / macOS では `dd` でもよい.
@@ -50,10 +50,9 @@ xz -dc autd3-appliance-rp4-*.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync statu
 
 ## 初回起動
 
-書き込んだカードを挿して電源を入れると, 1 回目の起動でカードの残り領域に設定用の領域を作り, 自動的に再起動する.
-これには 1 分程度かかる.
+初回起動には1分程度の時間がかかる.
 
-起動したかどうかは, ホストからアプライアンスを探索して確かめる.
+起動したかどうかは, ホストからアプライアンスを探索して確かめられる.
 
 ```sh
 autd3-appliance scan
@@ -71,12 +70,10 @@ autd3-console の **Appliance** タブで「Scan」を押しても良い.
 
 <CodeTabs rust={excerpt(client, "discover")} python={excerpt(pyClient, "discover")} csharp={excerpt(csClient, "discover")} />
 
-ホストとして Linux を使用する場合はホスト側にリンクローカルアドレスを持つ接続プロファイルが要る.
-
 ## ダッシュボード 
 
 `http://autd3-<serial no.>.local:8081/` でバスの状態が見れる.
-(アドレスは探索結果に出る.)
+(アドレスはscan結果に出る.)
 
 以下の操作が可能.
 |  | |
@@ -124,18 +121,15 @@ autd3-appliance wifi forget --radio-off
 ```
 
 `--radio-off` を付けると, 資格情報を消したうえで無線そのものを止める.
-この状態は再起動後も維持され, `status` の `uplink` 行が `radio blocked` になる.
 
-どちらも有線でつながっていないと拒否される (Wi-Fi しか経路が無い状態で消すと, その場でボードに触れなくなるため).
-承知のうえで実行するなら `--force` を付ける.
-
-`--radio-off` した後でも `wifi set` を投げれば無線は戻る.
+どちらも有線でつながっていないと拒否される.
+Wi-Fi経由で強制的にOffにするならなら `--force` を付ける.
 
 ### API から戻せなくなったとき
 
-`wifi forget --force` でボードに触れなくなった場合や, 有線も Wi-Fi も上がってこない場合は SD カードを抜いて直す.
+`wifi forget --force` でボードに触れなくなった場合や, 有線も Wi-Fi も上がってこない場合は SD カードを直接書き換えて直す必要がある.
 
-カードをホストに挿すと boot パーティションが見えるので, `config.txt` の末尾に次の行を足すと無線が完全に止まる.
+カードをホストに挿すと boot パーティションが見えるので, `config.txt` の末尾に次の行を足すと無線を止められる.
 
 ```
 dtoverlay=disable-wifi
@@ -166,5 +160,5 @@ dtoverlay=disable-wifi
 | `bus.sync0_period` | バスの周期. 既定 1ms. 台数が多く安定しない場合に増やす |
 | `bus.open_on_start` | 電源投入時にバスを開くか. 既定 `true` |
 
-sync0_period は exchange 時間の二倍より長く, かつ, 500μs の倍数の内, 最も小さい値にすることを推奨する.
+sync0_period は exchange 時間の2倍より長く, かつ, 500μs の倍数の内, 最も小さい値にすることを推奨する.
 
