@@ -6,7 +6,7 @@ use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, UnitVector3, Vector3};
 use autd3_rs_core::value::{Emission, Intensity};
 use autd3_rs_pattern_holo::{
-    ControlPoint, Directivity, EmissionConstraint, GsOption, GspatOption, LinAlgBackend,
+    AmplitudeTarget, Directivity, EmissionConstraint, GsOption, GspatOption, LinAlgBackend,
     NaiveOption, NalgebraBackend, Pa, TransducerMask, gs, gs_batch, gspat, gspat_batch, naive,
     naive_batch,
 };
@@ -32,9 +32,9 @@ fn geometry(devices: usize) -> Geometry {
     )
 }
 
-fn problem(g: &Geometry, seed: usize, nf: usize) -> Vec<ControlPoint> {
+fn problem(g: &Geometry, seed: usize, nf: usize) -> Vec<AmplitudeTarget> {
     (0..nf)
-        .map(|i| ControlPoint {
+        .map(|i| AmplitudeTarget {
             point: g.center()
                 + Vector3::new(
                     (seed + i) as f32 * 7.0,
@@ -117,9 +117,9 @@ fn broadcast_batch_operands_match_nalgebra() {
 
         for nf in [1usize, 4] {
             for problems in [2usize, 5] {
-                let owned: Vec<Vec<ControlPoint>> =
+                let owned: Vec<Vec<AmplitudeTarget>> =
                     (0..problems).map(|p| problem(&g, p, nf)).collect();
-                let flat: Vec<ControlPoint> = owned.iter().flatten().copied().collect();
+                let flat: Vec<AmplitudeTarget> = owned.iter().flatten().copied().collect();
                 let label = format!("{devices}dev/{nf}foci/{problems}problems");
 
                 let a_host = cpu.batch_propagation_matrix(
@@ -191,8 +191,8 @@ fn batch_matches_nalgebra_on_pool_size_collision() {
     let g = geometry(1);
     let nf = 1usize;
     let problems = Autd3::NUM_TRANSDUCERS * 2 / nf;
-    let owned: Vec<Vec<ControlPoint>> = (0..problems).map(|k| problem(&g, k, nf)).collect();
-    let foci: Vec<ControlPoint> = owned.concat();
+    let owned: Vec<Vec<AmplitudeTarget>> = (0..problems).map(|k| problem(&g, k, nf)).collect();
+    let foci: Vec<AmplitudeTarget> = owned.concat();
 
     let mut batched = vec![slot(&g); problems];
     let mut one = slot(&g);
@@ -250,9 +250,9 @@ fn batch_matches_nalgebra_per_problem() {
         }
         for nf in [1usize, 4, 16] {
             for problems in [1usize, 2, 3, 9] {
-                let owned: Vec<Vec<ControlPoint>> =
+                let owned: Vec<Vec<AmplitudeTarget>> =
                     (0..problems).map(|k| problem(&g, k, nf)).collect();
-                let foci: Vec<ControlPoint> = owned.concat();
+                let foci: Vec<AmplitudeTarget> = owned.concat();
                 let directivity = Directivity::T4010A1;
 
                 let mut batched = vec![slot(&g); problems];

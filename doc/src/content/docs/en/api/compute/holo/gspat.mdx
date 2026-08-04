@@ -25,7 +25,7 @@ The algorithm is based on the paper by Plasencia et al. ([Plasencia et al., 2020
 | Parameter    | Type                   | Description               |
 | ------------ | ---------------------- | ------------------------- |
 | `geometry`   | `&Geometry`            | Device layout             |
-| `foci`       | `&[ControlPoint]`      | Sequence of focal points (position and target amplitude) |
+| `foci`       | `&[AmplitudeTarget]`      | Sequence of focal points (position and target amplitude) |
 | `wavelength` | `Length`               | Wavelength                |
 | `option`     | `&GspatOption`         | Additional options (see below) |
 | `dst`        | `&mut [[Emission; _]]` | Output buffer             |

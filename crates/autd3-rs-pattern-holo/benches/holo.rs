@@ -7,7 +7,7 @@ use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
 use autd3_rs_core::value::Emission;
 use autd3_rs_pattern_holo::{
-    ControlPoint, GreedyOption, GsOption, GspatOption, NaiveOption, NalgebraBackend, Pa, greedy,
+    AmplitudeTarget, GreedyOption, GsOption, GspatOption, NaiveOption, NalgebraBackend, Pa, greedy,
     gs, gspat, naive,
 };
 
@@ -27,9 +27,9 @@ fn make_geometry(devices: usize) -> Geometry {
     )
 }
 
-fn make_foci(geometry: &Geometry, n: usize) -> Vec<ControlPoint> {
+fn make_foci(geometry: &Geometry, n: usize) -> Vec<AmplitudeTarget> {
     (0..n)
-        .map(|i| ControlPoint {
+        .map(|i| AmplitudeTarget {
             point: geometry.center() + Vector3::new(i as f32 * 10.0, 0.0, 150.0),
             amplitude: 5e3 * Pa,
         })

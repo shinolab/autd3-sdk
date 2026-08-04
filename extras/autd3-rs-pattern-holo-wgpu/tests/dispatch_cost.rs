@@ -5,7 +5,7 @@ use nalgebra::Complex;
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
 use autd3_rs_core::value::Intensity;
 use autd3_rs_pattern_holo::{
-    ControlPoint, Directivity, EmissionConstraint, LinAlgBackend, NalgebraBackend, Pa,
+    AmplitudeTarget, Directivity, EmissionConstraint, LinAlgBackend, NalgebraBackend, Pa,
 };
 use autd3_rs_pattern_holo_wgpu::{GpuMatrix, WgpuBackend};
 
@@ -32,8 +32,8 @@ fn propagation(gpu: &WgpuBackend, foci: usize) -> GpuMatrix {
         tr_pos.extend_from_slice(dev.positions());
         tr_dir.extend_from_slice(dev.directions());
     }
-    let f: Vec<ControlPoint> = (0..foci)
-        .map(|i| ControlPoint {
+    let f: Vec<AmplitudeTarget> = (0..foci)
+        .map(|i| AmplitudeTarget {
             point: geometry.center() + Vector3::new(i as f32 * 10.0, 0.0, 150.0),
             amplitude: 5e3 * Pa,
         })

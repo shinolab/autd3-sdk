@@ -5,8 +5,8 @@ use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
 use crate::amp::Pa;
+use crate::amplitude_target::AmplitudeTarget;
 use crate::backend::NalgebraBackend;
-use crate::control_point::ControlPoint;
 use crate::error::HoloError;
 use crate::linear_synthesis::{
     GsOption, GspatOption, NaiveOption, gs, gs_batch, gspat, gspat_batch, naive, naive_batch,
@@ -26,9 +26,9 @@ fn geometry(devices: usize) -> Geometry {
     )
 }
 
-fn problem(g: &Geometry, seed: usize, nf: usize) -> Vec<ControlPoint> {
+fn problem(g: &Geometry, seed: usize, nf: usize) -> Vec<AmplitudeTarget> {
     (0..nf)
-        .map(|i| ControlPoint {
+        .map(|i| AmplitudeTarget {
             point: g.center()
                 + Vector3::new(
                     (seed + i) as f32 * 7.0,
@@ -52,8 +52,8 @@ fn wl() -> autd3_rs_core::common::Length {
 fn batch_matches_sequential() {
     let g = geometry(2);
     for nf in [1usize, 4] {
-        let owned: Vec<Vec<ControlPoint>> = (0..5).map(|k| problem(&g, k, nf)).collect();
-        let foci: Vec<ControlPoint> = owned.concat();
+        let owned: Vec<Vec<AmplitudeTarget>> = (0..5).map(|k| problem(&g, k, nf)).collect();
+        let foci: Vec<AmplitudeTarget> = owned.concat();
 
         let mut batched = vec![slot(&g); owned.len()];
         let mut one = slot(&g);
@@ -136,8 +136,8 @@ fn parallel_flag_does_not_change_the_result() {
                 .collect()
         })
         .collect();
-    let owned: Vec<Vec<ControlPoint>> = (0..3).map(|k| problem(&g, k, 4)).collect();
-    let foci: Vec<ControlPoint> = owned.concat();
+    let owned: Vec<Vec<AmplitudeTarget>> = (0..3).map(|k| problem(&g, k, 4)).collect();
+    let foci: Vec<AmplitudeTarget> = owned.concat();
 
     for mask in [TransducerMask::AllEnabled, TransducerMask::Masked(&masked)] {
         let mut on = slot(&g);
@@ -207,8 +207,8 @@ fn all_masked_batch_matches_sequential() {
     let g = geometry(2);
     let masked: Vec<Vec<bool>> = vec![vec![false; Autd3::NUM_TRANSDUCERS]; g.num_devices()];
     let mask = TransducerMask::Masked(&masked);
-    let owned: Vec<Vec<ControlPoint>> = (0..3).map(|k| problem(&g, k, 2)).collect();
-    let foci: Vec<ControlPoint> = owned.concat();
+    let owned: Vec<Vec<AmplitudeTarget>> = (0..3).map(|k| problem(&g, k, 2)).collect();
+    let foci: Vec<AmplitudeTarget> = owned.concat();
 
     let dirty = vec![
         vec![

@@ -2,7 +2,7 @@ use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
 use autd3_rs_core::value::{Emission, Intensity};
 use autd3_rs_pattern_holo::{
-    ControlPoint, Directivity, EmissionConstraint, GsOption, GspatOption, NaiveOption,
+    AmplitudeTarget, Directivity, EmissionConstraint, GsOption, GspatOption, NaiveOption,
     NalgebraBackend, Pa, TransducerMask, gs, gspat, naive,
 };
 use autd3_rs_pattern_holo_wgpu::WgpuBackend;
@@ -27,9 +27,9 @@ fn geometry(devices: usize) -> Geometry {
     )
 }
 
-fn foci(g: &Geometry, n: usize) -> Vec<ControlPoint> {
+fn foci(g: &Geometry, n: usize) -> Vec<AmplitudeTarget> {
     (0..n)
-        .map(|i| ControlPoint {
+        .map(|i| AmplitudeTarget {
             point: g.center() + Vector3::new(i as f32 * 10.0, i as f32 * -5.0, 150.0),
             amplitude: (3e3 + i as f32 * 200.0) * Pa,
         })

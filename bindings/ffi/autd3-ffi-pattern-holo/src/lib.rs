@@ -5,13 +5,13 @@ use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::value::Intensity;
 use autd3_rs_core::{Geometry, Length, Point3};
 use autd3_rs_pattern_holo::{
-    ControlPoint, Directivity, EmissionConstraint, GreedyOption, GsOption, GspatOption,
+    AmplitudeTarget, Directivity, EmissionConstraint, GreedyOption, GsOption, GspatOption,
     NaiveOption, NalgebraBackend, Pa, TransducerMask, abs_objective_func, dB, greedy, gs, gspat,
     kPa, naive,
 };
 
 #[repr(C)]
-pub struct Autd3HoloControlPoint {
+pub struct Autd3HoloAmplitudeTarget {
     pub point: [f32; 3],
     pub amplitude_pa: f32,
 }
@@ -56,11 +56,11 @@ fn to_constraint(c: &Autd3EmissionConstraint) -> EmissionConstraint {
     }
 }
 
-unsafe fn build_foci(foci: *const Autd3HoloControlPoint, num_foci: usize) -> Vec<ControlPoint> {
+unsafe fn build_foci(foci: *const Autd3HoloAmplitudeTarget, num_foci: usize) -> Vec<AmplitudeTarget> {
     let slice = unsafe { std::slice::from_raw_parts(foci, num_foci) };
     slice
         .iter()
-        .map(|f| ControlPoint {
+        .map(|f| AmplitudeTarget {
             point: Point3::new(f.point[0], f.point[1], f.point[2]),
             amplitude: f.amplitude_pa * Pa,
         })
@@ -96,7 +96,7 @@ fn mask_ref(mask: Option<&[Vec<bool>]>) -> TransducerMask<'_> {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_holo_naive(
     geometry: *const Geometry,
-    foci: *const Autd3HoloControlPoint,
+    foci: *const Autd3HoloAmplitudeTarget,
     num_foci: usize,
     wavelength_mm: f32,
     constraint: *const Autd3EmissionConstraint,
@@ -137,7 +137,7 @@ pub unsafe extern "C" fn autd3_holo_naive(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_holo_gs(
     geometry: *const Geometry,
-    foci: *const Autd3HoloControlPoint,
+    foci: *const Autd3HoloAmplitudeTarget,
     num_foci: usize,
     wavelength_mm: f32,
     repeat: usize,
@@ -180,7 +180,7 @@ pub unsafe extern "C" fn autd3_holo_gs(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_holo_gspat(
     geometry: *const Geometry,
-    foci: *const Autd3HoloControlPoint,
+    foci: *const Autd3HoloAmplitudeTarget,
     num_foci: usize,
     wavelength_mm: f32,
     repeat: usize,
@@ -223,7 +223,7 @@ pub unsafe extern "C" fn autd3_holo_gspat(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_holo_greedy(
     geometry: *const Geometry,
-    foci: *const Autd3HoloControlPoint,
+    foci: *const Autd3HoloAmplitudeTarget,
     num_foci: usize,
     wavelength_mm: f32,
     phase_quantization_levels: u8,

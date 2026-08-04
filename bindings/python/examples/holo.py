@@ -30,8 +30,8 @@ async def main() -> None:
     center = geometry.center()
     wavelength = pattern.wavelength(340 * m / s)
     foci = [
-        holo.ControlPoint(center + np.array([-20.0, 0.0, 150.0]), 150 * dB),
-        holo.ControlPoint(center + np.array([20.0, 0.0, 150.0]), 150 * dB),
+        holo.AmplitudeTarget(center + np.array([-20.0, 0.0, 150.0]), 150 * dB),
+        holo.AmplitudeTarget(center + np.array([20.0, 0.0, 150.0]), 150 * dB),
     ]
 
     patterns = geometry.pattern_buffer()

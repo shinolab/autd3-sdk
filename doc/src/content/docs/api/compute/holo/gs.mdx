@@ -26,7 +26,7 @@ naive より焦点間の干渉を抑えられるが, 反復回数に応じて計
 | 引数         | 型                     | 説明                      |
 | ------------ | ---------------------- | ------------------------- |
 | `geometry`   | `&Geometry`            | デバイス配置              |
-| `foci`       | `&[ControlPoint]`      | 焦点列 (位置と目標振幅)   |
+| `foci`       | `&[AmplitudeTarget]`      | 焦点列 (位置と目標振幅)   |
 | `wavelength` | `Length`               | 波長                      |
 | `option`     | `&GsOption`            | 追加オプション (下記参照) |
 | `dst`        | `&mut [[Emission; _]]` | 出力バッファ              |

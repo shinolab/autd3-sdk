@@ -11,7 +11,7 @@ use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::SamplingConfig;
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_echocat::EchocatLinkOption;
-use autd3_rs_pattern_holo::{ControlPoint, GspatOption, NalgebraBackend, Pa, gspat};
+use autd3_rs_pattern_holo::{AmplitudeTarget, GspatOption, NalgebraBackend, Pa, gspat};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -30,11 +30,11 @@ async fn main() -> Result<()> {
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let foci = [
-        ControlPoint {
+        AmplitudeTarget {
             point: center + offset(-30.0 * mm, 0.0 * mm, 0.0 * mm),
             amplitude: 2.5e3 * Pa,
         },
-        ControlPoint {
+        AmplitudeTarget {
             point: center + offset(30.0 * mm, 0.0 * mm, 0.0 * mm),
             amplitude: 2.5e3 * Pa,
         },

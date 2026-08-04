@@ -25,12 +25,12 @@ The algorithm is based on the paper by Suzuki et al. ([Suzuki et al., 2021](http
 | Parameter    | Type                   | Description               |
 | ------------ | ---------------------- | ------------------------- |
 | `geometry`   | `&Geometry`            | Device layout             |
-| `foci`       | `&[ControlPoint]`      | Sequence of focal points (position and target amplitude) |
+| `foci`       | `&[AmplitudeTarget]`      | Sequence of focal points (position and target amplitude) |
 | `wavelength` | `Length`               | Wavelength                |
 | `option`     | `&GreedyOption`        | Additional options (see below) |
 | `dst`        | `&mut [[Emission; _]]` | Output buffer             |
 
-For the common elements (`ControlPoint` / `TransducerMask`, etc.), see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
+For the common elements (`AmplitudeTarget` / `TransducerMask`, etc.), see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
 
 ## GreedyOption
 

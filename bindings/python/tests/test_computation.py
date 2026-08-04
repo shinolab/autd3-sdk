@@ -139,8 +139,8 @@ def test_holo_algorithms() -> None:
     wavelength = pattern.wavelength(340 * m / s)
     center = geo.center()
     foci = [
-        holo.ControlPoint(center + np.array([-20.0, 0.0, 150.0]), 5e3 * Pa),
-        holo.ControlPoint(center + np.array([20.0, 0.0, 150.0]), 150 * dB),
+        holo.AmplitudeTarget(center + np.array([-20.0, 0.0, 150.0]), 5e3 * Pa),
+        holo.AmplitudeTarget(center + np.array([20.0, 0.0, 150.0]), 150 * dB),
     ]
     buf = geo.pattern_buffer()
     holo.naive(geo, foci, wavelength, holo.NaiveOption(), buf)
