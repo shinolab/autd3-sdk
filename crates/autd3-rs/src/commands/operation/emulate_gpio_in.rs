@@ -12,6 +12,8 @@ pub struct EmulateGpioIn {
     pub values: [bool; 4],
 }
 
+impl crate::sealed::Sealed for EmulateGpioIn {}
+
 impl Operation for EmulateGpioIn {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast

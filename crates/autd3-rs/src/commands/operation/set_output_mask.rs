@@ -12,6 +12,8 @@ pub struct SetOutputMask<'a> {
     pub masks: &'a [Vec<bool>],
 }
 
+impl crate::sealed::Sealed for SetOutputMask<'_> {}
+
 impl Operation for SetOutputMask<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice

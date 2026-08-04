@@ -12,6 +12,8 @@ use crate::value::{Emission, LoopBehavior, ModulationBank, PatternBank, Sampling
 #[derive(Clone, Copy)]
 struct Marker(u8);
 
+impl crate::sealed::Sealed for Marker {}
+
 impl Operation for Marker {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
@@ -36,6 +38,8 @@ impl<'a> Command<'a> for Multi {
 
 #[derive(Clone, Copy)]
 struct FailAt(usize);
+
+impl crate::sealed::Sealed for FailAt {}
 
 impl Operation for FailAt {
     fn distribution(&self) -> Distribution {

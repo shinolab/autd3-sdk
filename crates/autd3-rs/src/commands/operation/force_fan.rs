@@ -12,6 +12,8 @@ pub struct ForceFan {
     pub value: bool,
 }
 
+impl crate::sealed::Sealed for ForceFan {}
+
 impl Operation for ForceFan {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast

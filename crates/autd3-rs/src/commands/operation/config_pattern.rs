@@ -47,6 +47,8 @@ fn reflect_pattern(
     Ok(())
 }
 
+impl crate::sealed::Sealed for ConfigPattern {}
+
 impl Operation for ConfigPattern {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
@@ -82,6 +84,8 @@ impl Operation for ConfigPattern {
         reflect_pattern(self.config, self.bank, self.loop_behavior, device, state)
     }
 }
+
+impl crate::sealed::Sealed for ConfigFociStm {}
 
 impl Operation for ConfigFociStm {
     fn distribution(&self) -> Distribution {

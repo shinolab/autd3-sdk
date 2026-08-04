@@ -80,6 +80,8 @@ pub struct SetGpioOut {
     pub outputs: [GpioOut; 4],
 }
 
+impl crate::sealed::Sealed for SetGpioOut {}
+
 impl Operation for SetGpioOut {
     fn apply_dc_offset(&mut self, offset_ns: i64) {
         self.outputs = self.outputs.map(|out| out.with_dc_offset(offset_ns));
