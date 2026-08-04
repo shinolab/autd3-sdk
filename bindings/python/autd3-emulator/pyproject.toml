@@ -8,7 +8,7 @@ description = "Python bindings for the hardware-free emulator (emission recordin
 requires-python = ">=3.12"
 license = "MIT"
 version = "0.5.0"
-dependencies = ["autd3-core", "autd3", "polars", "numpy"]
+dependencies = ["autd3-core==0.5.0", "autd3==0.5.0", "polars", "numpy"]
 
 [tool.maturin]
 module-name = "autd3_emulator"

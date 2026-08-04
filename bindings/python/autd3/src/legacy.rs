@@ -23,6 +23,7 @@ use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 
 use crate::client::{Checker, CheckerSource, FpgaState};
+use crate::config::RtSchedulePolicy;
 use crate::datagram::{DatagramBuilder, Pending, validate_pending};
 use crate::future::future_into_py;
 use crate::ops::{PatternBank, TransitionMode};
@@ -36,10 +37,18 @@ pub struct LegacyClientConfig {
 #[pymethods]
 impl LegacyClientConfig {
     #[new]
-    #[pyo3(signature = (timeout_cycles = None, rt_priority = None, rt_affinity = None))]
+    #[pyo3(signature = (
+        timeout_cycles = None,
+        rt_priority = None,
+        disable_rt_priority = false,
+        rt_policy = None,
+        rt_affinity = None,
+    ))]
     fn new(
         timeout_cycles: Option<u32>,
         rt_priority: Option<u8>,
+        disable_rt_priority: bool,
+        rt_policy: Option<RtSchedulePolicy>,
         rt_affinity: Option<usize>,
     ) -> PyResult<Self> {
         let mut inner = CoreLegacyClientConfig::default();
@@ -47,10 +56,21 @@ impl LegacyClientConfig {
             inner.timeout_cycles = NonZeroU32::new(v)
                 .ok_or_else(|| PyValueError::new_err("timeout_cycles must be >= 1"))?;
         }
+        if rt_priority.is_some() && disable_rt_priority {
+            return Err(PyValueError::new_err(
+                "rt_priority and disable_rt_priority are mutually exclusive",
+            ));
+        }
+        if disable_rt_priority {
+            inner.rt_priority = None;
+        }
         if let Some(v) = rt_priority {
             let value = ThreadPriorityValue::try_from(v)
                 .map_err(|e| PyValueError::new_err(format!("invalid rt_priority: {e}")))?;
             inner.rt_priority = Some(ThreadPriority::Crossplatform(value));
+        }
+        if let Some(v) = rt_policy {
+            inner.rt_policy = v.0;
         }
         if let Some(v) = rt_affinity {
             inner.rt_affinity = Some(CoreId { id: v });

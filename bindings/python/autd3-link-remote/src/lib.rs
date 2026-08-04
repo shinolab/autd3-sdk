@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, join_err,
-    legacy_client_opener, legacy_link_into_capsule, link_into_capsule, link_runtime,
+    legacy_client_opener, legacy_link_into_capsule, link_into_capsule, link_runtime, to_pyerr_gil,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -231,7 +231,7 @@ impl RemoteLinkOption {
                     addr: option.addr,
                     timeout: option.timeout,
                 })
-                .map_err(|e| PyValueError::new_err(e.to_string()))
+                .map_err(to_pyerr_gil)
         })
     }
 
