@@ -1,10 +1,11 @@
+use std::ffi::c_char;
 use std::sync::Arc;
 
 use autd3_ffi_abi::{
     AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, BoxFuture, CheckerBackend, ClientBackend, ClientOpener,
-    LegacyClientOpener, LinkStatusData, ResponseTokenData, client_opener, from_rt_policy,
-    handle_mut, handle_ref, into_handle, join_err, legacy_client_opener, link_runtime, take_handle,
-    to_rt_policy, to_rt_priority, write_out,
+    LegacyClientOpener, LinkStatusData, OPTION_HANDLE_CONSUMED, ResponseTokenData, client_opener,
+    from_rt_policy, handle_mut, handle_ref, into_handle, join_err, legacy_client_opener,
+    link_runtime, take_handle, to_rt_policy, to_rt_priority, write_cstr, write_out,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -301,8 +302,11 @@ pub unsafe extern "C" fn autd3_link_ethercrab_option_set_tx_rx_affinity(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_ethercrab_open(
     option: *mut EtherCrabLinkOptionHandle,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> *mut ClientOpener {
     let Some(EtherCrabLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        unsafe { write_cstr(out_err, out_err_len, OPTION_HANDLE_CONSUMED) };
         return std::ptr::null_mut();
     };
     let opener = client_opener(move |geometry, config| async move {
@@ -322,8 +326,11 @@ pub unsafe extern "C" fn autd3_link_ethercrab_open(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_ethercrab_open_legacy(
     option: *mut EtherCrabLinkOptionHandle,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> *mut LegacyClientOpener {
     let Some(EtherCrabLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        unsafe { write_cstr(out_err, out_err_len, OPTION_HANDLE_CONSUMED) };
         return std::ptr::null_mut();
     };
     into_handle(legacy_client_opener(move |_| Ok(option)))

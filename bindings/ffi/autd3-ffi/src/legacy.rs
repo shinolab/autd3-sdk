@@ -120,12 +120,12 @@ pub unsafe extern "C" fn autd3_legacy_client_opener_free(opener: *mut LegacyClie
 pub unsafe extern "C" fn autd3_legacy_datagram_builder_new(
     geometry: *const Geometry,
 ) -> *mut LegacyBuilder {
-    if geometry.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return std::ptr::null_mut();
-    }
+    };
 
     into_handle(LegacyBuilder {
-        geometry: Arc::new(unsafe { &*geometry }.clone()),
+        geometry: Arc::new(geometry.clone()),
         pending: Vec::new(),
     })
 }
@@ -425,17 +425,13 @@ pub unsafe extern "C" fn autd3_legacy_datagram_builder_build(
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> *mut Arc<LegacyFrames> {
-    if builder.is_null() {
+    let Some(builder) = (unsafe { handle_ref(builder) }) else {
         unsafe { write_cstr(out_err, out_err_len, "null builder") };
         return std::ptr::null_mut();
-    }
-
-    let dc_offset_ns = if client.is_null() {
-        0
-    } else {
-        unsafe { &*client }.0.dc_offset_ns()
     };
-    let builder = unsafe { &*builder };
+
+    let dc_offset_ns = unsafe { handle_ref(client) }
+        .map_or(0, |client: &LegacyClientHandle| client.0.dc_offset_ns());
     let mut legacy =
         LegacyDatagramBuilder::with_dc_offset(Arc::clone(&builder.geometry), dc_offset_ns);
     for item in &builder.pending {
@@ -455,11 +451,11 @@ pub unsafe extern "C" fn autd3_legacy_datagram_builder_build(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_legacy_frames_num_frames(frames: *const Arc<LegacyFrames>) -> usize {
-    if frames.is_null() {
+    let Some(frames) = (unsafe { handle_ref(frames) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*frames }.len()
+    frames.len()
 }
 
 #[unsafe(no_mangle)]
@@ -499,11 +495,11 @@ pub unsafe extern "C" fn autd3_legacy_client_open(
 pub unsafe extern "C" fn autd3_legacy_client_num_devices(
     client: *const LegacyClientHandle,
 ) -> usize {
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*client }.0.num_devices()
+    client.0.num_devices()
 }
 
 #[unsafe(no_mangle)]
@@ -515,14 +511,16 @@ pub unsafe extern "C" fn autd3_legacy_client_send(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() || frames.is_null() {
+    let (Some(client), Some(frames)) = (unsafe { handle_ref(client) }, unsafe {
+        handle_ref::<Arc<LegacyFrames>>(frames)
+    }) else {
         ctx.err("null argument");
         return;
-    }
+    };
 
-    let frames = unsafe { &*frames }.clone();
+    let frames = frames.clone();
     let frame = usize::try_from(frame).ok();
-    let fut = unsafe { &*client }.0.send(frames, frame);
+    let fut = client.0.send(frames, frame);
     runtime().spawn(async move {
         match fut.await {
             Ok(data) => ctx.ok(into_handle(ByteArray(data)).cast()),
@@ -540,14 +538,16 @@ pub unsafe extern "C" fn autd3_legacy_client_send_checked(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() || frames.is_null() {
+    let (Some(client), Some(frames)) = (unsafe { handle_ref(client) }, unsafe {
+        handle_ref::<Arc<LegacyFrames>>(frames)
+    }) else {
         ctx.err("null argument");
         return;
-    }
+    };
 
-    let frames = unsafe { &*frames }.clone();
+    let frames = frames.clone();
     let frame = usize::try_from(frame).ok();
-    let fut = unsafe { &*client }.0.send_checked(frames, frame);
+    let fut = client.0.send_checked(frames, frame);
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
@@ -563,12 +563,12 @@ pub unsafe extern "C" fn autd3_legacy_client_read_firmware_version(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
-    }
+    };
 
-    let fut = unsafe { &*client }.0.read_firmware_version();
+    let fut = client.0.read_firmware_version();
     runtime().spawn(async move {
         match fut.await {
             Ok(versions) => ctx.ok(into_handle(StringArray(to_cstrings(versions))).cast()),
@@ -584,12 +584,12 @@ pub unsafe extern "C" fn autd3_legacy_client_read_fpga_state(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
-    }
+    };
 
-    let fut = unsafe { &*client }.0.read_fpga_state();
+    let fut = client.0.read_fpga_state();
     runtime().spawn(async move {
         match fut.await {
             Ok(states) => ctx.ok(into_handle(ByteArray(states)).cast()),
@@ -602,11 +602,11 @@ pub unsafe extern "C" fn autd3_legacy_client_read_fpga_state(
 pub unsafe extern "C" fn autd3_legacy_client_checker(
     client: *const LegacyClientHandle,
 ) -> *mut CheckerHandle {
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         return std::ptr::null_mut();
-    }
+    };
 
-    into_handle(CheckerHandle(unsafe { &*client }.0.checker()))
+    into_handle(CheckerHandle(client.0.checker()))
 }
 
 #[unsafe(no_mangle)]
@@ -616,12 +616,12 @@ pub unsafe extern "C" fn autd3_legacy_client_stop(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
-    }
+    };
 
-    let fut = unsafe { &*client }.0.stop();
+    let fut = client.0.stop();
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
@@ -637,12 +637,12 @@ pub unsafe extern "C" fn autd3_legacy_client_close(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
-    }
+    };
 
-    let fut = unsafe { &*client }.0.close();
+    let fut = client.0.close();
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),

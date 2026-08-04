@@ -1,5 +1,5 @@
 use autd3_python_capsule::{
-    capsule_of, geometry_from_capsule, pattern_from_capsule, pattern_into_capsule, DevicePattern,
+    DevicePattern, capsule_of, geometry_from_capsule, pattern_from_capsule, pattern_into_capsule,
 };
 use autd3_rs_core::common::Angle;
 use autd3_rs_core::geometry::Autd3;

@@ -14,6 +14,11 @@ namespace AUTD3
     {
         private const string Lib = "autd3capi";
 
+        static NativeCommand() => NativeAbi.Verify(Lib, autd3_abi_version());
+
+        [DllImport(Lib)]
+        private static extern uint autd3_abi_version();
+
         [DllImport(Lib)]
         internal static extern IntPtr autd3_op_clear();
 

@@ -1,11 +1,12 @@
-use std::ffi::{CStr, c_char};
+use std::ffi::c_char;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
-    ResponseTokenData, alloc_cstring, client_opener, cstr_to_string, free_cstring, into_handle,
-    join_err, legacy_client_opener, link_runtime, take_handle,
+    OPTION_HANDLE_CONSUMED, ResponseTokenData, alloc_cstring, client_opener, cstr_to_string,
+    free_cstring, into_handle, join_err, legacy_client_opener, link_runtime, take_handle,
+    write_cstr, write_out,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -202,8 +203,11 @@ autd3_ffi_abi::option_handle_lifecycle!(RemoteLinkOptionHandle, autd3_link_remot
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_remote_open(
     option: *mut RemoteLinkOptionHandle,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> *mut ClientOpener {
     let Some(RemoteLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        unsafe { write_cstr(out_err, out_err_len, OPTION_HANDLE_CONSUMED) };
         return std::ptr::null_mut();
     };
     let opener = client_opener(move |geometry, config| async move {
@@ -223,8 +227,11 @@ pub unsafe extern "C" fn autd3_link_remote_open(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_remote_open_legacy(
     option: *mut RemoteLinkOptionHandle,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> *mut LegacyClientOpener {
     let Some(RemoteLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        unsafe { write_cstr(out_err, out_err_len, OPTION_HANDLE_CONSUMED) };
         return std::ptr::null_mut();
     };
     into_handle(legacy_client_opener(move |_| Ok(option)))
@@ -237,17 +244,9 @@ pub unsafe extern "C" fn autd3_link_remote_discover(
     link_timeout_ns: *mut u64,
     err: *mut *mut c_char,
 ) -> *mut c_char {
-    if !err.is_null() {
-        unsafe { *err = std::ptr::null_mut() };
-    }
-    if !link_timeout_ns.is_null() {
-        unsafe { *link_timeout_ns = 0 };
-    }
-    let instance = (!instance.is_null()).then(|| {
-        unsafe { CStr::from_ptr(instance) }
-            .to_string_lossy()
-            .into_owned()
-    });
+    unsafe { write_out(err, std::ptr::null_mut()) };
+    unsafe { write_out(link_timeout_ns, 0) };
+    let instance = unsafe { cstr_to_string(instance) };
     let option = autd3_rs_link_remote::DiscoveryOption {
         timeout: if timeout_ns == 0 {
             autd3_rs_link_remote::DiscoveryOption::default().timeout
@@ -258,19 +257,18 @@ pub unsafe extern "C" fn autd3_link_remote_discover(
     };
     match RemoteLinkOption::discover_with(&option) {
         Ok(option) => {
-            if !link_timeout_ns.is_null() {
-                unsafe {
-                    *link_timeout_ns = option.timeout.map_or(0, |timeout| {
+            unsafe {
+                write_out(
+                    link_timeout_ns,
+                    option.timeout.map_or(0, |timeout| {
                         u64::try_from(timeout.as_nanos()).unwrap_or(u64::MAX)
-                    });
-                }
-            }
+                    }),
+                )
+            };
             alloc_cstring(&option.addr.to_string())
         }
         Err(e) => {
-            if !err.is_null() {
-                unsafe { *err = alloc_cstring(&e.to_string()) };
-            }
+            unsafe { write_out(err, alloc_cstring(&e.to_string())) };
             std::ptr::null_mut()
         }
     }

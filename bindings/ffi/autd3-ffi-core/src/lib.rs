@@ -1,7 +1,7 @@
 use std::num::NonZeroU16;
 use std::time::Duration;
 
-use autd3_ffi_abi::{drop_handle, into_handle};
+use autd3_ffi_abi::{drop_handle, handle_ref, into_handle, slice_mut, slice_ref, write_out};
 use autd3_rs_core::units::Hz;
 use autd3_rs_core::value::{Nearest, Phase, SamplingConfig};
 use autd3_rs_core::{Autd3, Geometry, Point3, Quaternion, UnitQuaternion};
@@ -17,11 +17,10 @@ pub unsafe extern "C" fn autd3_core_geometry_new(
     devices: *const Autd3Device,
     len: usize,
 ) -> *mut Geometry {
-    if devices.is_null() {
+    let Some(slice) = (unsafe { slice_ref(devices, len) }) else {
         return std::ptr::null_mut();
-    }
+    };
 
-    let slice = unsafe { std::slice::from_raw_parts(devices, len) };
     let devices: Vec<Autd3> = slice
         .iter()
         .map(|d| {
@@ -41,35 +40,33 @@ pub unsafe extern "C" fn autd3_core_geometry_new(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_core_geometry_num_devices(geometry: *const Geometry) -> usize {
-    if geometry.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*geometry }.num_devices()
+    geometry.num_devices()
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_core_geometry_center(geometry: *const Geometry, out: *mut f32) {
-    if geometry.is_null() || out.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return;
-    }
+    };
+    let Some(out) = (unsafe { slice_mut(out, 3) }) else {
+        return;
+    };
 
-    let center = unsafe { &*geometry }.center();
-
-    unsafe {
-        *out = center.x;
-        *out.add(1) = center.y;
-        *out.add(2) = center.z;
-    }
+    let center = geometry.center();
+    out.copy_from_slice(&[center.x, center.y, center.z]);
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_core_geometry_num_transducers(geometry: *const Geometry) -> usize {
-    if geometry.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*geometry }.num_transducers()
+    geometry.num_transducers()
 }
 
 #[unsafe(no_mangle)]
@@ -77,11 +74,11 @@ pub unsafe extern "C" fn autd3_core_device_num_transducers(
     geometry: *const Geometry,
     dev: usize,
 ) -> usize {
-    if geometry.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return 0;
-    }
+    };
 
-    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+    let Some(device) = geometry.iter().nth(dev) else {
         return 0;
     };
     device.num_transducers()
@@ -89,11 +86,11 @@ pub unsafe extern "C" fn autd3_core_device_num_transducers(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_core_device_idx(geometry: *const Geometry, dev: usize) -> usize {
-    if geometry.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return 0;
-    }
+    };
 
-    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+    let Some(device) = geometry.iter().nth(dev) else {
         return 0;
     };
     device.idx()
@@ -105,21 +102,18 @@ pub unsafe extern "C" fn autd3_core_device_rotation(
     dev: usize,
     out: *mut f32,
 ) {
-    if geometry.is_null() || out.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return;
-    }
+    };
+    let Some(out) = (unsafe { slice_mut(out, 4) }) else {
+        return;
+    };
 
-    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+    let Some(device) = geometry.iter().nth(dev) else {
         return;
     };
     let rotation = device.rotation();
-
-    unsafe {
-        *out = rotation.w;
-        *out.add(1) = rotation.i;
-        *out.add(2) = rotation.j;
-        *out.add(3) = rotation.k;
-    }
+    out.copy_from_slice(&[rotation.w, rotation.i, rotation.j, rotation.k]);
 }
 
 #[unsafe(no_mangle)]
@@ -128,20 +122,18 @@ pub unsafe extern "C" fn autd3_core_device_center(
     dev: usize,
     out: *mut f32,
 ) {
-    if geometry.is_null() || out.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return;
-    }
+    };
+    let Some(out) = (unsafe { slice_mut(out, 3) }) else {
+        return;
+    };
 
-    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+    let Some(device) = geometry.iter().nth(dev) else {
         return;
     };
     let center = device.center();
-
-    unsafe {
-        *out = center.x;
-        *out.add(1) = center.y;
-        *out.add(2) = center.z;
-    }
+    out.copy_from_slice(&[center.x, center.y, center.z]);
 }
 
 #[unsafe(no_mangle)]
@@ -151,23 +143,21 @@ pub unsafe extern "C" fn autd3_core_transducer_position(
     tr: usize,
     out: *mut f32,
 ) -> i32 {
-    if geometry.is_null() || out.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return -1;
-    }
+    };
+    let Some(out) = (unsafe { slice_mut(out, 3) }) else {
+        return -1;
+    };
 
-    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+    let Some(device) = geometry.iter().nth(dev) else {
         return -1;
     };
     if tr >= device.num_transducers() {
         return -1;
     }
     let p = device.position(tr);
-
-    unsafe {
-        *out = p.x;
-        *out.add(1) = p.y;
-        *out.add(2) = p.z;
-    }
+    out.copy_from_slice(&[p.x, p.y, p.z]);
     0
 }
 
@@ -178,23 +168,21 @@ pub unsafe extern "C" fn autd3_core_transducer_direction(
     tr: usize,
     out: *mut f32,
 ) -> i32 {
-    if geometry.is_null() || out.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return -1;
-    }
+    };
+    let Some(out) = (unsafe { slice_mut(out, 3) }) else {
+        return -1;
+    };
 
-    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+    let Some(device) = geometry.iter().nth(dev) else {
         return -1;
     };
     if tr >= device.num_transducers() {
         return -1;
     }
     let d = device.direction(tr).into_inner();
-
-    unsafe {
-        *out = d.x;
-        *out.add(1) = d.y;
-        *out.add(2) = d.z;
-    }
+    out.copy_from_slice(&[d.x, d.y, d.z]);
     0
 }
 
@@ -204,20 +192,18 @@ pub unsafe extern "C" fn autd3_core_device_direction_x(
     dev: usize,
     out: *mut f32,
 ) {
-    if geometry.is_null() || out.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return;
-    }
+    };
+    let Some(out) = (unsafe { slice_mut(out, 3) }) else {
+        return;
+    };
 
-    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+    let Some(device) = geometry.iter().nth(dev) else {
         return;
     };
     let direction = device.x_direction();
-
-    unsafe {
-        *out = direction.x;
-        *out.add(1) = direction.y;
-        *out.add(2) = direction.z;
-    }
+    out.copy_from_slice(&[direction.x, direction.y, direction.z]);
 }
 
 #[unsafe(no_mangle)]
@@ -226,20 +212,18 @@ pub unsafe extern "C" fn autd3_core_device_direction_y(
     dev: usize,
     out: *mut f32,
 ) {
-    if geometry.is_null() || out.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return;
-    }
+    };
+    let Some(out) = (unsafe { slice_mut(out, 3) }) else {
+        return;
+    };
 
-    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+    let Some(device) = geometry.iter().nth(dev) else {
         return;
     };
     let direction = device.y_direction();
-
-    unsafe {
-        *out = direction.x;
-        *out.add(1) = direction.y;
-        *out.add(2) = direction.z;
-    }
+    out.copy_from_slice(&[direction.x, direction.y, direction.z]);
 }
 
 #[unsafe(no_mangle)]
@@ -248,20 +232,18 @@ pub unsafe extern "C" fn autd3_core_device_direction_axial(
     dev: usize,
     out: *mut f32,
 ) {
-    if geometry.is_null() || out.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return;
-    }
+    };
+    let Some(out) = (unsafe { slice_mut(out, 3) }) else {
+        return;
+    };
 
-    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+    let Some(device) = geometry.iter().nth(dev) else {
         return;
     };
     let direction = device.axial_direction();
-
-    unsafe {
-        *out = direction.x;
-        *out.add(1) = direction.y;
-        *out.add(2) = direction.z;
-    }
+    out.copy_from_slice(&[direction.x, direction.y, direction.z]);
 }
 
 #[unsafe(no_mangle)]
@@ -317,16 +299,15 @@ pub unsafe extern "C" fn autd3_core_sampling_config_freq_value(
     config: *const SamplingConfig,
     out: *mut f32,
 ) -> i32 {
-    if config.is_null() || out.is_null() {
-        return -1;
-    }
-
-    let Ok(freq) = unsafe { &*config }.freq() else {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
         return -1;
     };
 
-    unsafe { *out = freq.hz() };
-    0
+    let Ok(freq) = config.freq() else {
+        return -1;
+    };
+
+    unsafe { write_out(out, freq.hz()) }
 }
 
 #[unsafe(no_mangle)]
@@ -334,11 +315,11 @@ pub unsafe extern "C" fn autd3_core_sampling_config_period_value(
     config: *const SamplingConfig,
     out: *mut u64,
 ) -> i32 {
-    if config.is_null() || out.is_null() {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
         return -1;
-    }
+    };
 
-    let Ok(period) = unsafe { &*config }.period() else {
+    let Ok(period) = config.period() else {
         return -1;
     };
 
@@ -346,8 +327,7 @@ pub unsafe extern "C" fn autd3_core_sampling_config_period_value(
         return -1;
     };
 
-    unsafe { *out = nanos };
-    0
+    unsafe { write_out(out, nanos) }
 }
 
 #[unsafe(no_mangle)]
@@ -355,16 +335,15 @@ pub unsafe extern "C" fn autd3_core_sampling_config_divide_value(
     config: *const SamplingConfig,
     out: *mut u16,
 ) -> i32 {
-    if config.is_null() || out.is_null() {
-        return -1;
-    }
-
-    let Ok(value) = unsafe { &*config }.divide() else {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
         return -1;
     };
 
-    unsafe { *out = value };
-    0
+    let Ok(value) = config.divide() else {
+        return -1;
+    };
+
+    unsafe { write_out(out, value) }
 }
 
 #[unsafe(no_mangle)]

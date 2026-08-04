@@ -22,5 +22,24 @@ internal static class Sample
             syncTimeout
         );
         // ANCHOR_END: api
+
+        var pduTimeout = TimeSpan.FromMilliseconds(30);
+        var stateTransitionTimeout = TimeSpan.FromSeconds(10);
+        var txRxAffinity = 0UL;
+        // ANCHOR: api_extra
+        new EtherCrabLinkOption(
+            iface,
+            sync0Period,
+            sync0Shift,
+            syncTolerance,
+            syncTimeout,
+            pduTimeout,
+            stateTransitionTimeout,
+            txRxPriority: 90,
+            disableTxRxPriority: false,
+            txRxPolicy: RtSchedulePolicy.Fifo,
+            txRxAffinity: txRxAffinity
+        );
+        // ANCHOR_END: api_extra
     }
 }

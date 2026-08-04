@@ -124,7 +124,7 @@ namespace AUTD3
 
         internal delegate int GetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
-        internal delegate IntPtr OpenFn(IntPtr option);
+        internal delegate IntPtr OpenFn(IntPtr option, byte[] outErr, UIntPtr outErrLen);
 
         internal static void Apply(string field, int code)
         {
@@ -161,10 +161,14 @@ namespace AUTD3
 
         internal static IntPtr TakeOpener(string link, IntPtr option, OpenFn open)
         {
-            var opener = open(option);
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var opener = open(option, err, (UIntPtr)err.Length);
             if (opener == IntPtr.Zero)
             {
-                throw new Autd3Exception($"failed to create {link} link");
+                var reason = NativeUtil.Utf8(err);
+                throw new Autd3Exception(reason.Length == 0
+                    ? $"failed to create {link} link"
+                    : $"failed to create {link} link: {reason}");
             }
             return opener;
         }

@@ -1,4 +1,7 @@
-use autd3_ffi_abi::{PatternBuffer, drop_handle, into_handle};
+use autd3_ffi_abi::{
+    PatternBuffer, drop_handle, handle_mut, handle_ref, into_handle, slice_mut, slice_ref,
+    write_out,
+};
 use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 use autd3_rs_core::{Angle, Geometry, Length, Point3, UnitVector3, Vector3, Velocity};
@@ -26,14 +29,14 @@ impl Autd3PatternOption {
     }
 }
 
-unsafe fn point(p: *const f32) -> Point3<f32> {
-    let p = unsafe { std::slice::from_raw_parts(p, 3) };
-    Point3::new(p[0], p[1], p[2])
+unsafe fn point(p: *const f32) -> Option<Point3<f32>> {
+    let p = unsafe { slice_ref(p, 3) }?;
+    Some(Point3::new(p[0], p[1], p[2]))
 }
 
-unsafe fn unit_vector(p: *const f32) -> UnitVector3<f32> {
-    let p = unsafe { std::slice::from_raw_parts(p, 3) };
-    UnitVector3::new_normalize(Vector3::new(p[0], p[1], p[2]))
+unsafe fn unit_vector(p: *const f32) -> Option<UnitVector3<f32>> {
+    let p = unsafe { slice_ref(p, 3) }?;
+    Some(UnitVector3::new_normalize(Vector3::new(p[0], p[1], p[2])))
 }
 
 #[unsafe(no_mangle)]
@@ -45,11 +48,11 @@ pub extern "C" fn autd3_pattern_wavelength(sound_speed_mm_per_s: f32) -> f32 {
 pub unsafe extern "C" fn autd3_core_geometry_pattern_buffer(
     geometry: *const Geometry,
 ) -> *mut PatternBuffer {
-    if geometry.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return std::ptr::null_mut();
-    }
+    };
 
-    into_handle(PatternBuffer(unsafe { &*geometry }.pattern_buffer()))
+    into_handle(PatternBuffer(geometry.pattern_buffer()))
 }
 
 #[unsafe(no_mangle)]
@@ -57,12 +60,11 @@ pub unsafe extern "C" fn autd3_pattern_buffer_from_array(
     emissions: *const Autd3Emission,
     num_devices: usize,
 ) -> *mut PatternBuffer {
-    if emissions.is_null() {
+    let Some(slice) = (unsafe { slice_ref(emissions, num_devices * Autd3::NUM_TRANSDUCERS) })
+    else {
         return std::ptr::null_mut();
-    }
+    };
 
-    let slice =
-        unsafe { std::slice::from_raw_parts(emissions, num_devices * Autd3::NUM_TRANSDUCERS) };
     let buffer = slice
         .chunks_exact(Autd3::NUM_TRANSDUCERS)
         .map(|device| {
@@ -81,11 +83,11 @@ pub unsafe extern "C" fn autd3_pattern_buffer_from_array(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_pattern_buffer_num_devices(buffer: *const PatternBuffer) -> usize {
-    if buffer.is_null() {
+    let Some(buffer) = (unsafe { handle_ref(buffer) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*buffer }.0.len()
+    buffer.0.len()
 }
 
 #[unsafe(no_mangle)]
@@ -93,11 +95,11 @@ pub unsafe extern "C" fn autd3_pattern_buffer_num_transducers(
     buffer: *const PatternBuffer,
     dev: usize,
 ) -> usize {
-    if buffer.is_null() {
+    let Some(buffer) = (unsafe { handle_ref(buffer) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*buffer }.0.get(dev).map_or(0, Vec::len)
+    buffer.0.get(dev).map_or(0, Vec::len)
 }
 
 #[unsafe(no_mangle)]
@@ -107,18 +109,24 @@ pub unsafe extern "C" fn autd3_pattern_buffer_get(
     tr: usize,
     out: *mut Autd3Emission,
 ) -> i32 {
-    if buffer.is_null() || out.is_null() {
-        return -1;
-    }
-
-    let Some(e) = unsafe { &*buffer }.0.get(dev).and_then(|slot| slot.get(tr)) else {
+    let Some(buffer) = (unsafe { handle_ref(buffer) }) else {
         return -1;
     };
-    unsafe {
-        *out = Autd3Emission {
-            phase: e.phase.0,
-            intensity: e.intensity.0,
-        };
+
+    let Some(e) = buffer.0.get(dev).and_then(|slot| slot.get(tr)) else {
+        return -1;
+    };
+    if unsafe {
+        write_out(
+            out,
+            Autd3Emission {
+                phase: e.phase.0,
+                intensity: e.intensity.0,
+            },
+        )
+    } != 0
+    {
+        return -1;
     }
     0
 }
@@ -130,15 +138,11 @@ pub unsafe extern "C" fn autd3_pattern_buffer_set(
     tr: usize,
     emission: Autd3Emission,
 ) -> i32 {
-    if buffer.is_null() {
+    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
         return -1;
-    }
+    };
 
-    let Some(e) = unsafe { &mut *buffer }
-        .0
-        .get_mut(dev)
-        .and_then(|slot| slot.get_mut(tr))
-    else {
+    let Some(e) = buffer.0.get_mut(dev).and_then(|slot| slot.get_mut(tr)) else {
         return -1;
     };
     *e = Emission {
@@ -161,14 +165,15 @@ pub unsafe extern "C" fn autd3_pattern_focus(
     option: *const Autd3PatternOption,
     buffer: *mut PatternBuffer,
 ) -> i32 {
-    if geometry.is_null() || target.is_null() || option.is_null() || buffer.is_null() {
+    let (Some(geometry), Some(target), Some(option), Some(buffer)) = (
+        unsafe { handle_ref(geometry) },
+        unsafe { point(target) },
+        unsafe { handle_ref(option) },
+        unsafe { handle_mut(buffer) },
+    ) else {
         return -1;
-    }
+    };
 
-    let geometry = unsafe { &*geometry };
-    let target = unsafe { point(target) };
-    let option = unsafe { &*option };
-    let buffer = unsafe { &mut *buffer };
     if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
@@ -185,15 +190,17 @@ pub unsafe extern "C" fn autd3_pattern_focus(
     0
 }
 
-unsafe fn write_emissions(src: &[Emission], dst: *mut Autd3Emission) {
-    for (i, e) in src.iter().enumerate() {
-        unsafe {
-            *dst.add(i) = Autd3Emission {
-                phase: e.phase.0,
-                intensity: e.intensity.0,
-            };
-        }
+unsafe fn write_emissions(src: &[Emission], dst: *mut Autd3Emission) -> i32 {
+    let Some(dst) = (unsafe { slice_mut(dst, src.len()) }) else {
+        return -1;
+    };
+    for (d, e) in dst.iter_mut().zip(src) {
+        *d = Autd3Emission {
+            phase: e.phase.0,
+            intensity: e.intensity.0,
+        };
     }
+    0
 }
 
 unsafe fn with_device_dst(
@@ -202,17 +209,16 @@ unsafe fn with_device_dst(
     dst: *mut Autd3Emission,
     f: impl FnOnce(&autd3_rs_core::geometry::Device, &mut [Emission]),
 ) -> i32 {
-    if geometry.is_null() || dst.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return -1;
-    }
+    };
 
-    let Some(device) = unsafe { &*geometry }.iter().nth(dev) else {
+    let Some(device) = geometry.iter().nth(dev) else {
         return -1;
     };
     let mut buf = vec![Emission::default(); device.num_transducers()];
     f(device, &mut buf);
-    unsafe { write_emissions(&buf, dst) };
-    0
+    unsafe { write_emissions(&buf, dst) }
 }
 
 #[unsafe(no_mangle)]
@@ -224,12 +230,11 @@ pub unsafe extern "C" fn autd3_pattern_focus_device(
     option: *const Autd3PatternOption,
     dst: *mut Autd3Emission,
 ) -> i32 {
-    if target.is_null() || option.is_null() {
+    let (Some(target), Some(option)) = (unsafe { point(target) }, unsafe { handle_ref(option) })
+    else {
         return -1;
-    }
+    };
 
-    let target = unsafe { point(target) };
-    let option = unsafe { &*option };
     unsafe {
         with_device_dst(geometry, dev, dst, |device, buf| {
             autd3_rs_pattern::focus_device(
@@ -254,13 +259,14 @@ pub unsafe extern "C" fn autd3_pattern_focus_transducer(
     option: *const Autd3PatternOption,
     out: *mut Autd3Emission,
 ) -> i32 {
-    if position.is_null() || target.is_null() || option.is_null() || out.is_null() {
+    let (Some(position), Some(target), Some(option)) = (
+        unsafe { point(position) },
+        unsafe { point(target) },
+        unsafe { handle_ref(option) },
+    ) else {
         return -1;
-    }
+    };
 
-    let position = unsafe { point(position) };
-    let target = unsafe { point(target) };
-    let option = unsafe { &*option };
     let e = autd3_rs_pattern::focus_transducer(
         position,
         target,
@@ -270,8 +276,7 @@ pub unsafe extern "C" fn autd3_pattern_focus_transducer(
             phase_offset: option.phase_offset(),
         },
     );
-    unsafe { write_emissions(std::slice::from_ref(&e), out) };
-    0
+    unsafe { write_emissions(std::slice::from_ref(&e), out) }
 }
 
 #[unsafe(no_mangle)]
@@ -282,14 +287,15 @@ pub unsafe extern "C" fn autd3_pattern_plane(
     option: *const Autd3PatternOption,
     buffer: *mut PatternBuffer,
 ) -> i32 {
-    if geometry.is_null() || dir.is_null() || option.is_null() || buffer.is_null() {
+    let (Some(geometry), Some(dir), Some(option), Some(buffer)) = (
+        unsafe { handle_ref(geometry) },
+        unsafe { unit_vector(dir) },
+        unsafe { handle_ref(option) },
+        unsafe { handle_mut(buffer) },
+    ) else {
         return -1;
-    }
+    };
 
-    let geometry = unsafe { &*geometry };
-    let dir = unsafe { unit_vector(dir) };
-    let option = unsafe { &*option };
-    let buffer = unsafe { &mut *buffer };
     if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
@@ -315,12 +321,11 @@ pub unsafe extern "C" fn autd3_pattern_plane_device(
     option: *const Autd3PatternOption,
     dst: *mut Autd3Emission,
 ) -> i32 {
-    if dir.is_null() || option.is_null() {
+    let (Some(dir), Some(option)) = (unsafe { unit_vector(dir) }, unsafe { handle_ref(option) })
+    else {
         return -1;
-    }
+    };
 
-    let dir = unsafe { unit_vector(dir) };
-    let option = unsafe { &*option };
     unsafe {
         with_device_dst(geometry, dev, dst, |device, buf| {
             autd3_rs_pattern::plane_device(
@@ -345,13 +350,14 @@ pub unsafe extern "C" fn autd3_pattern_plane_transducer(
     option: *const Autd3PatternOption,
     out: *mut Autd3Emission,
 ) -> i32 {
-    if position.is_null() || dir.is_null() || option.is_null() || out.is_null() {
+    let (Some(position), Some(dir), Some(option)) = (
+        unsafe { point(position) },
+        unsafe { unit_vector(dir) },
+        unsafe { handle_ref(option) },
+    ) else {
         return -1;
-    }
+    };
 
-    let position = unsafe { point(position) };
-    let dir = unsafe { unit_vector(dir) };
-    let option = unsafe { &*option };
     let e = autd3_rs_pattern::plane_transducer(
         position,
         dir,
@@ -361,8 +367,7 @@ pub unsafe extern "C" fn autd3_pattern_plane_transducer(
             phase_offset: option.phase_offset(),
         },
     );
-    unsafe { write_emissions(std::slice::from_ref(&e), out) };
-    0
+    unsafe { write_emissions(std::slice::from_ref(&e), out) }
 }
 
 #[unsafe(no_mangle)]
@@ -375,16 +380,16 @@ pub unsafe extern "C" fn autd3_pattern_bessel(
     option: *const Autd3PatternOption,
     buffer: *mut PatternBuffer,
 ) -> i32 {
-    if geometry.is_null() || apex.is_null() || dir.is_null() || option.is_null() || buffer.is_null()
-    {
+    let (Some(geometry), Some(apex), Some(dir), Some(option), Some(buffer)) = (
+        unsafe { handle_ref(geometry) },
+        unsafe { point(apex) },
+        unsafe { unit_vector(dir) },
+        unsafe { handle_ref(option) },
+        unsafe { handle_mut(buffer) },
+    ) else {
         return -1;
-    }
+    };
 
-    let geometry = unsafe { &*geometry };
-    let apex = unsafe { point(apex) };
-    let dir = unsafe { unit_vector(dir) };
-    let option = unsafe { &*option };
-    let buffer = unsafe { &mut *buffer };
     if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
@@ -414,13 +419,14 @@ pub unsafe extern "C" fn autd3_pattern_bessel_device(
     option: *const Autd3PatternOption,
     dst: *mut Autd3Emission,
 ) -> i32 {
-    if apex.is_null() || dir.is_null() || option.is_null() {
+    let (Some(apex), Some(dir), Some(option)) = (
+        unsafe { point(apex) },
+        unsafe { unit_vector(dir) },
+        unsafe { handle_ref(option) },
+    ) else {
         return -1;
-    }
+    };
 
-    let apex = unsafe { point(apex) };
-    let dir = unsafe { unit_vector(dir) };
-    let option = unsafe { &*option };
     unsafe {
         with_device_dst(geometry, dev, dst, |device, buf| {
             autd3_rs_pattern::bessel_device(
@@ -450,14 +456,15 @@ pub unsafe extern "C" fn autd3_pattern_bessel_transducer(
     option: *const Autd3PatternOption,
     out: *mut Autd3Emission,
 ) -> i32 {
-    if position.is_null() || apex.is_null() || dir.is_null() || option.is_null() || out.is_null() {
+    let (Some(position), Some(apex), Some(dir), Some(option)) = (
+        unsafe { point(position) },
+        unsafe { point(apex) },
+        unsafe { unit_vector(dir) },
+        unsafe { handle_ref(option) },
+    ) else {
         return -1;
-    }
+    };
 
-    let position = unsafe { point(position) };
-    let apex = unsafe { point(apex) };
-    let dir = unsafe { unit_vector(dir) };
-    let option = unsafe { &*option };
     let e = autd3_rs_pattern::bessel_transducer(
         position,
         apex,
@@ -469,8 +476,7 @@ pub unsafe extern "C" fn autd3_pattern_bessel_transducer(
             phase_offset: option.phase_offset(),
         },
     );
-    unsafe { write_emissions(std::slice::from_ref(&e), out) };
-    0
+    unsafe { write_emissions(std::slice::from_ref(&e), out) }
 }
 
 #[unsafe(no_mangle)]
@@ -479,11 +485,10 @@ pub unsafe extern "C" fn autd3_pattern_uniform(
     intensity: u8,
     buffer: *mut PatternBuffer,
 ) -> i32 {
-    if buffer.is_null() {
+    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
         return -1;
-    }
+    };
 
-    let buffer = unsafe { &mut *buffer };
     autd3_rs_pattern::uniform(
         Emission {
             phase: Phase(phase),
@@ -496,11 +501,11 @@ pub unsafe extern "C" fn autd3_pattern_uniform(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_pattern_null(buffer: *mut PatternBuffer) {
-    if buffer.is_null() {
+    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
         return;
-    }
+    };
 
-    autd3_rs_pattern::null(&mut unsafe { &mut *buffer }.0);
+    autd3_rs_pattern::null(&mut buffer.0);
 }
 
 autd3_ffi_abi::export_abi_version!();
