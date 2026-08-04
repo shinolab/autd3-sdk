@@ -7,6 +7,7 @@ use thiserror::Error;
 const ECAT_EPOCH_OFFSET_NANOS: i128 = 946_684_800 * 1_000_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[non_exhaustive]
 pub enum DcSysTimeError {
     #[error("UTC time is out of the representable DcSysTime range (2000-01-01 0:00:00 UTC ..)")]
     OutOfRange,

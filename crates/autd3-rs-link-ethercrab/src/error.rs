@@ -3,6 +3,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum EtherCrabLinkError {
     #[error("ethercrab: {0}")]
     EtherCrab(#[from] ethercrab::error::Error),

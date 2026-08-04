@@ -1,6 +1,7 @@
 use autd3_rs_core::value::Intensity;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum EmissionConstraint {
     Normalize,
     Multiply(f32),

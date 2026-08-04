@@ -1,4 +1,5 @@
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Interface {
     #[default]
     Auto,

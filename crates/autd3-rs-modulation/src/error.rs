@@ -2,6 +2,7 @@ use autd3_rs_core::value::SamplingConfigError;
 use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, PartialEq, Error)]
+#[non_exhaustive]
 pub enum ModulationError {
     #[error("sine modulation value is out of range [0, 255]")]
     SineValueOutOfRange,

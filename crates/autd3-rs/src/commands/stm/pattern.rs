@@ -10,6 +10,7 @@ use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES};
 use crate::value::{Emission, LoopBehavior, PatternBank, TransitionMode};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PatternStmMode {
     #[default]
     PhaseIntensityFull,

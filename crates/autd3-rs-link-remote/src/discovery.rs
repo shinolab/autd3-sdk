@@ -53,6 +53,7 @@ impl Default for DiscoveryOption {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum DiscoveryError {
     #[error("mDNS error: {0}")]
     Mdns(String),

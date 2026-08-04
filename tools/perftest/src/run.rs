@@ -437,12 +437,12 @@ async fn run_stop_and_wait(
             Err(e @ ClientError::TransitionConstraint { .. }) => {
                 anyhow::bail!("rejected by the local transition precheck: {e}");
             }
-            Err(e @ ClientError::UnsupportedFirmware { .. }) => anyhow::bail!("{e}"),
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
                 rt_closed = true;
                 SampleStatus::LinkError
             }
+            Err(e) => anyhow::bail!("{e}"),
         };
 
         recorded.push(Sample { index, rtt, status });
@@ -548,12 +548,12 @@ async fn run_streaming(
             Err(e @ ClientError::TransitionConstraint { .. }) => {
                 anyhow::bail!("rejected by the local transition precheck: {e}");
             }
-            Err(e @ ClientError::UnsupportedFirmware { .. }) => anyhow::bail!("{e}"),
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
                 rt_closed = true;
                 SampleStatus::LinkError
             }
+            Err(e) => anyhow::bail!("{e}"),
         };
         recorded.push(Sample {
             index: sample_index,

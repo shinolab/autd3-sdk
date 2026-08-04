@@ -11,6 +11,7 @@ impl std::fmt::Display for PeerVersion {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum RemoteLinkError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
@@ -56,6 +57,7 @@ pub enum RemoteLinkError {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RejectKind {
     BusClosed,
     DeviceCount,
