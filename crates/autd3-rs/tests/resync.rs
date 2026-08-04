@@ -249,6 +249,33 @@ async fn the_default_config_leaves_the_real_firmware_in_fifo_mode() {
 }
 
 #[tokio::test]
+async fn a_new_session_takes_the_real_firmware_back_out_of_low_latency() {
+    let link = SharedAudit::new(1);
+    let client = open(
+        link.clone(),
+        1,
+        ClientConfig {
+            low_latency: true,
+            ..resilient_config()
+        },
+    )
+    .await;
+    assert_eq!(link.mode(0), Mode::LowLatency);
+    client.close().await.unwrap();
+
+    let client = open(link.clone(), 1, resilient_config()).await;
+    assert_eq!(
+        link.mode(0),
+        Mode::Fifo,
+        "a low-latency device must return to FIFO without a power cycle"
+    );
+    let versions = client.read_firmware_version().await.unwrap();
+    assert_real_firmware(&client, &versions);
+    stream_silencer(&client, 4).await;
+    client.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn a_telemetry_counter_the_firmware_knows_reads_back() {
     let link = SharedAudit::new(1);
     let client = open(link.clone(), 1, resilient_config()).await;
