@@ -19,7 +19,7 @@ pub enum TransitionMode {
 }
 
 impl TransitionMode {
-    pub const fn as_u8(self) -> Result<u8, EncodeError> {
+    pub const fn try_as_u8(self) -> Result<u8, EncodeError> {
         match self {
             TransitionMode::SyncIdx => Ok(autd3_cpu_wire::params::TRANSITION_MODE_SYNC_IDX),
             TransitionMode::SysTime { .. } => Ok(autd3_cpu_wire::params::TRANSITION_MODE_SYS_TIME),
@@ -81,17 +81,17 @@ mod tests {
 
     #[test]
     fn wire_mode_bytes() {
-        assert_eq!(TransitionMode::SyncIdx.as_u8(), Ok(0x00));
-        assert_eq!(sys_time(0).as_u8(), Ok(0x01));
-        assert_eq!(TransitionMode::Gpio(GpioIn::I0).as_u8(), Ok(0x02));
-        assert_eq!(TransitionMode::Ext.as_u8(), Ok(0xF0));
-        assert_eq!(TransitionMode::Immediate.as_u8(), Ok(0xFF));
+        assert_eq!(TransitionMode::SyncIdx.try_as_u8(), Ok(0x00));
+        assert_eq!(sys_time(0).try_as_u8(), Ok(0x01));
+        assert_eq!(TransitionMode::Gpio(GpioIn::I0).try_as_u8(), Ok(0x02));
+        assert_eq!(TransitionMode::Ext.try_as_u8(), Ok(0xF0));
+        assert_eq!(TransitionMode::Immediate.try_as_u8(), Ok(0xFF));
     }
 
     #[test]
     fn later_has_no_wire_byte() {
         assert_eq!(
-            TransitionMode::Later.as_u8(),
+            TransitionMode::Later.try_as_u8(),
             Err(EncodeError::TransitionLaterNotEncodable)
         );
     }

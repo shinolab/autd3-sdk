@@ -38,7 +38,7 @@ fn single_focus_synthesizes_phases() {
     config[12..14].copy_from_slice(&REP_INFINITE.to_le_bytes());
 
     let change = {
-        let mut c = vec![BANK, TransitionMode::Immediate.as_u8().unwrap()];
+        let mut c = vec![BANK, TransitionMode::Immediate.try_as_u8().unwrap()];
         c.extend_from_slice(&0u64.to_le_bytes());
         c
     };
