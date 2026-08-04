@@ -30,9 +30,15 @@ impl Response {
         &self.data[..self.len]
     }
 
-    #[must_use]
-    pub fn data_mut(&mut self) -> &mut [u8] {
-        &mut self.data[..self.len]
+    pub fn merge(&mut self, other: &Response) {
+        self.data[..self.len]
+            .iter_mut()
+            .zip(other.data().iter().copied())
+            .for_each(|(m, d)| {
+                if *m == 0 {
+                    *m = d;
+                }
+            });
     }
 
     pub fn check(&self) -> Result<(), Error> {
