@@ -36,6 +36,8 @@ windows-sys = { version = "0.61.2", features = [
 ] }
 
 [dev-dependencies]
+autd3-cpu-fw.workspace = true
+autd3-rs-firmware-emulator.workspace = true
 tokio = { workspace = true, features = [
     "sync",
     "time",

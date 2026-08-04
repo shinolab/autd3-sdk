@@ -163,8 +163,10 @@ dependencies = [
 name = "autd3-rs"
 version = "0.5.0"
 dependencies = [
+ "autd3-cpu-fw",
  "autd3-cpu-wire",
  "autd3-rs-core",
+ "autd3-rs-firmware-emulator",
  "thiserror 2.0.19",
  "thread-priority",
  "tokio",
