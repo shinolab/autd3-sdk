@@ -123,7 +123,7 @@ mod client {
                     let response = future.await?;
                     match merged.as_mut() {
                         None => merged = Some(response),
-                        Some(m) => merge_response(m.data_mut(), response.data()),
+                        Some(m) => m.merge(&response),
                     }
                 }
                 Ok(merged.unwrap_or_default())
