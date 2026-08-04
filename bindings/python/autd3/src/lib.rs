@@ -24,6 +24,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<client::LinkStatus>()?;
     m.add_class::<client::FpgaState>()?;
     m.add_class::<config::ClientConfig>()?;
+    m.add_class::<config::RtSchedulePolicy>()?;
     m.add_class::<legacy::LegacyClient>()?;
     m.add_class::<legacy::LegacyClientConfig>()?;
     m.add_class::<legacy::LegacyDatagramBuilder>()?;

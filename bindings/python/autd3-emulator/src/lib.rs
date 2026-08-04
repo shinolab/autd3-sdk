@@ -408,8 +408,6 @@ impl Rms {
 
 #[pyclass(name = "Instant", module = "autd3_emulator")]
 pub struct Instant {
-    // `inner` borrows from `_record`; the Arc keeps the record alive for the
-    // lifetime of this struct (see `Record::sound_field`).
     _record: Arc<CoreRecord>,
     inner: CoreInstant<'static>,
 }
@@ -501,11 +499,6 @@ impl Record {
                     },
                 )
                 .map_err(to_pyerr_gil)?;
-            // SAFETY: `instant` borrows from `*self.inner`; cloning the `Arc` into
-            // the returned struct keeps that record alive for as long as the
-            // `Instant` (and any borrow derived from it) lives, and `Record` is
-            // immutable after construction, so extending the borrow to `'static`
-            // is sound.
             let instant: CoreInstant<'static> = unsafe { std::mem::transmute(instant) };
             return Ok(Py::new(
                 py,

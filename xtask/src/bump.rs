@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
@@ -426,13 +427,18 @@ fn bump_python_pyproject(root: &Path, version: &str) -> Result<()> {
         .collect();
     dirs.sort();
 
-    let mut count = 0usize;
-    for dir in dirs {
-        let path = dir.join("pyproject.toml");
-        if !path.is_file() {
-            continue;
-        }
-        let text = std::fs::read_to_string(&path)
+    let manifests: Vec<_> = dirs
+        .iter()
+        .map(|dir| dir.join("pyproject.toml"))
+        .filter(|path| path.is_file())
+        .collect();
+    if manifests.is_empty() {
+        bail!("no pyproject.toml found under {}", py_root.display());
+    }
+
+    let siblings = python_distribution_names(&manifests)?;
+    for path in &manifests {
+        let text = std::fs::read_to_string(path)
             .with_context(|| format!("reading {}", path.display()))?;
         let mut doc: DocumentMut = text
             .parse()
@@ -448,14 +454,44 @@ fn bump_python_pyproject(root: &Path, version: &str) -> Result<()> {
                 project.remove("dynamic");
             }
         }
-        std::fs::write(&path, doc.to_string())
+        if let Some(dependencies) = project.get_mut("dependencies").and_then(Item::as_array_mut) {
+            for dep in dependencies.iter_mut() {
+                let Some(spec) = dep.as_str() else { continue };
+                let name = spec
+                    .split(|c: char| "<>=!~ [;".contains(c))
+                    .next()
+                    .unwrap_or(spec);
+                if siblings.contains(name) {
+                    let prefix = dep.decor().prefix().and_then(|r| r.as_str()).unwrap_or("").to_owned();
+                    let suffix = dep.decor().suffix().and_then(|r| r.as_str()).unwrap_or("").to_owned();
+                    *dep = toml_edit::Value::from(format!("{name}=={version}"))
+                        .decorated(prefix.as_str(), suffix.as_str());
+                }
+            }
+        }
+        std::fs::write(path, doc.to_string())
             .with_context(|| format!("writing {}", path.display()))?;
-        count += 1;
-    }
-    if count == 0 {
-        bail!("no pyproject.toml found under {}", py_root.display());
     }
     Ok(())
+}
+
+fn python_distribution_names(manifests: &[std::path::PathBuf]) -> Result<HashSet<String>> {
+    let mut names = HashSet::new();
+    for path in manifests {
+        let text = std::fs::read_to_string(path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        let doc: DocumentMut = text
+            .parse()
+            .with_context(|| format!("parsing {}", path.display()))?;
+        let name = doc
+            .get("project")
+            .and_then(Item::as_table_like)
+            .and_then(|project| project.get("name"))
+            .and_then(Item::as_str)
+            .with_context(|| format!("missing `project.name` in {}", path.display()))?;
+        names.insert(name.to_owned());
+    }
+    Ok(names)
 }
 
 fn bump_unity(root: &Path, version: &str) -> Result<usize> {

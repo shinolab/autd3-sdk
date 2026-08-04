@@ -378,9 +378,12 @@ fn with_dst_buffer<F>(buffer: &Bound<'_, PyAny>, f: F) -> PyResult<()>
 where
     F: FnOnce(&mut [autd3_python_capsule::DevicePattern]) -> PyResult<()>,
 {
-    let capsule = buffer
-        .call_method0("_capsule_mut")?
-        .cast_into::<PyCapsule>()?;
+    let capsule = match buffer.cast::<PyCapsule>() {
+        Ok(capsule) => capsule.clone(),
+        Err(_) => buffer
+            .call_method0("_capsule_mut")?
+            .cast_into::<PyCapsule>()?,
+    };
     let dst = pattern_from_capsule_mut(&capsule)?;
     f(dst.as_mut_slice())
 }

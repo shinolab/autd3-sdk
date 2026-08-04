@@ -1,5 +1,5 @@
 use autd3_python_capsule::{
-    DevicePattern, capsule_of, geometry_from_capsule, pattern_from_capsule, pattern_into_capsule,
+    capsule_of, geometry_from_capsule, pattern_from_capsule, pattern_into_capsule, DevicePattern,
 };
 use autd3_rs_core::common::Angle;
 use autd3_rs_core::geometry::Autd3;
@@ -203,11 +203,12 @@ impl PatternBuffer {
         pattern_into_capsule(py, self.inner.clone())
     }
 
-    fn _capsule_mut<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
-        let ptr = core::ptr::NonNull::from(&mut self.inner);
-        // SAFETY: `self.inner` lives as long as this `PatternBuffer`, which the caller
-        // keeps alive while the borrowed capsule is in use; no destructor frees it.
-        unsafe { autd3_python_capsule::pattern_capsule_mut(py, ptr) }
+    fn _capsule_mut<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyCapsule>> {
+        let py = slf.py();
+        let ptr = core::ptr::NonNull::from(&mut slf.borrow_mut().inner);
+        unsafe {
+            autd3_python_capsule::pattern_capsule_mut(py, ptr, slf.clone().into_any().unbind())
+        }
     }
 }
 
