@@ -18,6 +18,8 @@ pub enum BusDesired {
     #[default]
     Closed,
     Open,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,6 +31,8 @@ pub enum BusActual {
     Open,
     Recovering,
     Failed,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +52,15 @@ pub struct BusStatus {
     pub exchange_worst_ns: u64,
 }
 
+impl BusStatus {
+    #[must_use]
+    pub fn has_unknown_state(&self) -> bool {
+        self.actual == BusActual::Unknown || self.desired == BusDesired::Unknown
+    }
+}
+
+pub const UNKNOWN_STATE_HINT: &str = "unknown to this client; update it to match the appliance";
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InterfaceStatus {
     pub name: String,
@@ -62,6 +75,8 @@ pub enum UplinkKind {
     #[default]
     Ethernet,
     Wifi,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -215,6 +230,30 @@ mod tests {
         let json = serde_json::to_string(&uplink).unwrap();
         assert!(json.contains(r#""kind":"wifi""#), "{json}");
         assert_eq!(serde_json::from_str::<UplinkStatus>(&json).unwrap(), uplink);
+    }
+
+    #[test]
+    fn a_bus_state_this_client_does_not_know_does_not_fail_the_whole_status() {
+        let json = r#"{
+            "desired": "paused", "actual": "quiescing", "failure": null,
+            "num_devices": 0, "devices": [], "recoveries": 0, "stale_cycles": 0,
+            "lost_cycles": 0, "phase_excursions": 0, "worst_phase_deviation_ns": 0,
+            "exchanges": 0, "exchange_mean_ns": 0, "exchange_worst_ns": 0
+        }"#;
+        let bus: BusStatus = serde_json::from_str(json).unwrap();
+        assert_eq!(bus.desired, BusDesired::Unknown);
+        assert_eq!(bus.actual, BusActual::Unknown);
+        assert!(bus.has_unknown_state());
+    }
+
+    #[test]
+    fn an_uplink_kind_this_client_does_not_know_does_not_fail_the_whole_status() {
+        let json = r#"{
+            "name": "usb0", "kind": "cellular", "operstate": "up",
+            "carrier": true, "addresses": [], "wifi": null
+        }"#;
+        let uplink: UplinkStatus = serde_json::from_str(json).unwrap();
+        assert_eq!(uplink.kind, UplinkKind::Unknown);
     }
 
     #[test]
