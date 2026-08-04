@@ -8,11 +8,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+use autd3_rs_core::CoreId;
 use autd3_rs_core::RtSchedulePolicy;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::link::{DcClock, IntoLink, Link};
 use autd3_rs_core::value::{DcSysTime, Emission};
-use core_affinity::CoreId;
 use thread_priority::ThreadPriority;
 use tokio::sync::{Mutex, MutexGuard, mpsc, oneshot};
 

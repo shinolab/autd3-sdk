@@ -165,7 +165,6 @@ version = "0.5.0"
 dependencies = [
  "autd3-cpu-wire",
  "autd3-rs-core",
- "core_affinity",
  "thiserror 2.0.19",
  "thread-priority",
  "tokio",
@@ -263,7 +262,6 @@ dependencies = [
  "async-io",
  "autd3-rs-core",
  "cc",
- "core_affinity",
  "ethercrab",
  "futures-util",
  "libc",
