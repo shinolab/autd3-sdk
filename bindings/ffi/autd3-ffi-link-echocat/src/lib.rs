@@ -1,14 +1,13 @@
-use std::ffi::{CStr, c_char};
 use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_ffi_abi::{
-    BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
-    ResponseTokenData, client_opener, into_handle, join_err, legacy_client_opener, link_runtime,
+    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, BoxFuture, CheckerBackend, ClientBackend, ClientOpener,
+    LegacyClientOpener, LinkStatusData, ResponseTokenData, client_opener, handle_mut, handle_ref,
+    into_handle, join_err, legacy_client_opener, link_runtime, take_handle, to_ns, write_out,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_core::Interface;
 use autd3_rs_link_echocat::{EchocatLinkOption as CoreOption, SleepStrategy, StateChecker};
 use tokio::sync::Mutex;
 
@@ -173,118 +172,121 @@ impl CheckerBackend for EchocatChecker {
     }
 }
 
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-unsafe fn make_option(
-    iface: *const c_char,
-    has_sync0_period: bool,
-    sync0_period_ns: u64,
-    has_pdu_timeout: bool,
-    pdu_timeout_ns: u64,
-    has_state_transition_timeout: bool,
-    state_transition_timeout_ns: u64,
-    has_dc_static_sync_iterations: bool,
-    dc_static_sync_iterations: u32,
-    has_dc_start_delay: bool,
-    dc_start_delay_ns: u64,
-    has_sync_tolerance: bool,
-    sync_tolerance_ns: u64,
-    has_sync_timeout: bool,
-    sync_timeout_ns: u64,
-    has_process_data_watchdog: bool,
-    process_data_watchdog_ns: u64,
+pub struct EchocatLinkOptionHandle(CoreOption);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_link_echocat_option_new() -> *mut EchocatLinkOptionHandle {
+    into_handle(EchocatLinkOptionHandle(CoreOption::default()))
+}
+
+autd3_ffi_abi::option_handle_iface!(
+    EchocatLinkOptionHandle,
+    [iface],
+    autd3_link_echocat_option_set_iface
+);
+autd3_ffi_abi::option_handle_field!(
+    EchocatLinkOptionHandle,
+    [sync0_period],
+    duration,
+    autd3_link_echocat_option_set_sync0_period,
+    autd3_link_echocat_option_get_sync0_period
+);
+autd3_ffi_abi::option_handle_field!(
+    EchocatLinkOptionHandle,
+    [pdu_timeout],
+    duration,
+    autd3_link_echocat_option_set_pdu_timeout,
+    autd3_link_echocat_option_get_pdu_timeout
+);
+autd3_ffi_abi::option_handle_field!(
+    EchocatLinkOptionHandle,
+    [state_transition_timeout],
+    duration,
+    autd3_link_echocat_option_set_state_transition_timeout,
+    autd3_link_echocat_option_get_state_transition_timeout
+);
+autd3_ffi_abi::option_handle_field!(
+    EchocatLinkOptionHandle,
+    [dc_static_sync_iterations],
+    u32,
+    autd3_link_echocat_option_set_dc_static_sync_iterations,
+    autd3_link_echocat_option_get_dc_static_sync_iterations
+);
+autd3_ffi_abi::option_handle_field!(
+    EchocatLinkOptionHandle,
+    [dc_start_delay],
+    duration,
+    autd3_link_echocat_option_set_dc_start_delay,
+    autd3_link_echocat_option_get_dc_start_delay
+);
+autd3_ffi_abi::option_handle_field!(
+    EchocatLinkOptionHandle,
+    [sync_tolerance],
+    duration,
+    autd3_link_echocat_option_set_sync_tolerance,
+    autd3_link_echocat_option_get_sync_tolerance
+);
+autd3_ffi_abi::option_handle_field!(
+    EchocatLinkOptionHandle,
+    [sync_timeout],
+    duration,
+    autd3_link_echocat_option_set_sync_timeout,
+    autd3_link_echocat_option_get_sync_timeout
+);
+autd3_ffi_abi::option_handle_field!(
+    EchocatLinkOptionHandle,
+    [process_data_watchdog],
+    duration,
+    autd3_link_echocat_option_set_process_data_watchdog,
+    autd3_link_echocat_option_get_process_data_watchdog
+);
+autd3_ffi_abi::option_handle_lifecycle!(EchocatLinkOptionHandle, autd3_link_echocat_option_free);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_echocat_option_set_spin_margin(
+    handle: *mut EchocatLinkOptionHandle,
     has_spin_margin: bool,
-    spin_margin_ns: u64,
-) -> CoreOption {
-    let iface = if iface.is_null() {
-        None
+    margin_ns: u64,
+) -> i32 {
+    let Some(option) = (unsafe { handle_mut(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    option.0.sleep_strategy = if has_spin_margin {
+        SleepStrategy::Spin {
+            margin: Duration::from_nanos(margin_ns),
+        }
     } else {
-        Some(
-            unsafe { CStr::from_ptr(iface) }
-                .to_string_lossy()
-                .into_owned(),
-        )
+        SleepStrategy::Sleep
     };
-    let mut option = CoreOption {
-        iface: Interface::from(iface),
-        ..CoreOption::default()
-    };
-    if has_sync0_period {
-        option.sync0_period = Duration::from_nanos(sync0_period_ns);
-    }
-    if has_pdu_timeout {
-        option.pdu_timeout = Duration::from_nanos(pdu_timeout_ns);
-    }
-    if has_state_transition_timeout {
-        option.state_transition_timeout = Duration::from_nanos(state_transition_timeout_ns);
-    }
-    if has_dc_static_sync_iterations {
-        option.dc_static_sync_iterations = dc_static_sync_iterations;
-    }
-    if has_dc_start_delay {
-        option.dc_start_delay = Duration::from_nanos(dc_start_delay_ns);
-    }
-    if has_sync_tolerance {
-        option.sync_tolerance = Duration::from_nanos(sync_tolerance_ns);
-    }
-    if has_sync_timeout {
-        option.sync_timeout = Duration::from_nanos(sync_timeout_ns);
-    }
-    if has_process_data_watchdog {
-        option.process_data_watchdog = Duration::from_nanos(process_data_watchdog_ns);
-    }
-    if has_spin_margin {
-        option.sleep_strategy = SleepStrategy::Spin {
-            margin: Duration::from_nanos(spin_margin_ns),
-        };
-    }
-    option
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub unsafe extern "C" fn autd3_link_echocat(
-    iface: *const c_char,
-    has_sync0_period: bool,
-    sync0_period_ns: u64,
-    has_pdu_timeout: bool,
-    pdu_timeout_ns: u64,
-    has_state_transition_timeout: bool,
-    state_transition_timeout_ns: u64,
-    has_dc_static_sync_iterations: bool,
-    dc_static_sync_iterations: u32,
-    has_dc_start_delay: bool,
-    dc_start_delay_ns: u64,
-    has_sync_tolerance: bool,
-    sync_tolerance_ns: u64,
-    has_sync_timeout: bool,
-    sync_timeout_ns: u64,
-    has_process_data_watchdog: bool,
-    process_data_watchdog_ns: u64,
-    has_spin_margin: bool,
-    spin_margin_ns: u64,
+pub unsafe extern "C" fn autd3_link_echocat_option_get_spin_margin(
+    handle: *const EchocatLinkOptionHandle,
+    out_has_spin_margin: *mut bool,
+    out_margin_ns: *mut u64,
+) -> i32 {
+    let Some(option) = (unsafe { handle_ref(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let margin = match option.0.sleep_strategy {
+        SleepStrategy::Spin { margin } => Some(margin),
+        _ => None,
+    };
+    let code = unsafe { write_out(out_has_spin_margin, margin.is_some()) };
+    if code != AUTD3_OK {
+        return code;
+    }
+    unsafe { write_out(out_margin_ns, to_ns(margin.unwrap_or_default())) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_echocat_open(
+    option: *mut EchocatLinkOptionHandle,
 ) -> *mut ClientOpener {
-    let option = unsafe {
-        make_option(
-            iface,
-            has_sync0_period,
-            sync0_period_ns,
-            has_pdu_timeout,
-            pdu_timeout_ns,
-            has_state_transition_timeout,
-            state_transition_timeout_ns,
-            has_dc_static_sync_iterations,
-            dc_static_sync_iterations,
-            has_dc_start_delay,
-            dc_start_delay_ns,
-            has_sync_tolerance,
-            sync_tolerance_ns,
-            has_sync_timeout,
-            sync_timeout_ns,
-            has_process_data_watchdog,
-            process_data_watchdog_ns,
-            has_spin_margin,
-            spin_margin_ns,
-        )
+    let Some(EchocatLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        return std::ptr::null_mut();
     };
     let opener = client_opener(move |geometry, config| async move {
         let (client, checker) = link_runtime()
@@ -301,50 +303,13 @@ pub unsafe extern "C" fn autd3_link_echocat(
 }
 
 #[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub unsafe extern "C" fn autd3_link_echocat_legacy(
-    iface: *const c_char,
-    has_sync0_period: bool,
-    sync0_period_ns: u64,
-    has_pdu_timeout: bool,
-    pdu_timeout_ns: u64,
-    has_state_transition_timeout: bool,
-    state_transition_timeout_ns: u64,
-    has_dc_static_sync_iterations: bool,
-    dc_static_sync_iterations: u32,
-    has_dc_start_delay: bool,
-    dc_start_delay_ns: u64,
-    has_sync_tolerance: bool,
-    sync_tolerance_ns: u64,
-    has_sync_timeout: bool,
-    sync_timeout_ns: u64,
-    has_process_data_watchdog: bool,
-    process_data_watchdog_ns: u64,
-    has_spin_margin: bool,
-    spin_margin_ns: u64,
+pub unsafe extern "C" fn autd3_link_echocat_open_legacy(
+    option: *mut EchocatLinkOptionHandle,
 ) -> *mut LegacyClientOpener {
-    let option = unsafe {
-        make_option(
-            iface,
-            has_sync0_period,
-            sync0_period_ns,
-            has_pdu_timeout,
-            pdu_timeout_ns,
-            has_state_transition_timeout,
-            state_transition_timeout_ns,
-            has_dc_static_sync_iterations,
-            dc_static_sync_iterations,
-            has_dc_start_delay,
-            dc_start_delay_ns,
-            has_sync_tolerance,
-            sync_tolerance_ns,
-            has_sync_timeout,
-            sync_timeout_ns,
-            has_process_data_watchdog,
-            process_data_watchdog_ns,
-            has_spin_margin,
-            spin_margin_ns,
-        )
+    let Some(EchocatLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        return std::ptr::null_mut();
     };
     into_handle(legacy_client_opener(move |_| Ok(option)))
 }
+
+autd3_ffi_abi::export_abi_version!();

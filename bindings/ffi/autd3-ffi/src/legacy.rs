@@ -5,9 +5,11 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use autd3_ffi_abi::{
-    CompletionCallback, CompletionCtx, LegacyClientBackend, LegacyClientOpener, drop_handle,
-    into_handle,
+    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, CompletionCallback, CompletionCtx, LegacyClientBackend,
+    LegacyClientOpener, drop_handle, handle_mut, handle_ref, into_handle, take_handle,
+    to_rt_policy, to_rt_priority, write_cstr,
 };
+use autd3_rs::CoreId;
 use autd3_rs::Geometry;
 use autd3_rs::Velocity;
 use autd3_rs::commands::{
@@ -19,11 +21,10 @@ use autd3_rs::legacy::{
     LegacyChangePatternBank, LegacyClientConfig, LegacyDatagramBuilder, LegacyFrames,
 };
 use autd3_rs::value::{PatternBank, SamplingConfig, TransitionMode};
-use autd3_rs::{CoreId, RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
 
 use crate::{
     ByteArray, CheckerHandle, Pending, StringArray, runtime, to_cstrings, to_pattern_bank,
-    to_transition_mode, write_cstr,
+    to_transition_mode,
 };
 
 pub struct LegacyClientHandle(Box<dyn LegacyClientBackend>);
@@ -47,36 +48,72 @@ pub struct LegacyBuilder {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_legacy_client_config_new(
-    timeout_cycles: u32,
-    has_rt_priority: bool,
-    rt_priority: u8,
-    has_rt_affinity: bool,
-    rt_affinity: usize,
-) -> *mut LegacyClientConfig {
-    let Some(timeout_cycles) = NonZeroU32::new(timeout_cycles) else {
-        return std::ptr::null_mut();
+pub extern "C" fn autd3_legacy_client_config_new() -> *mut LegacyClientConfig {
+    into_handle(LegacyClientConfig::default())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_legacy_client_config_set_timeout_cycles(
+    config: *mut LegacyClientConfig,
+    value: u32,
+) -> i32 {
+    let (Some(config), Some(value)) = (unsafe { handle_mut(config) }, NonZeroU32::new(value))
+    else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    let rt_priority = if has_rt_priority {
-        match ThreadPriorityValue::try_from(rt_priority) {
-            Ok(value) => Some(ThreadPriority::Crossplatform(value)),
-            Err(_) => return std::ptr::null_mut(),
-        }
-    } else {
-        None
+    config.timeout_cycles = value;
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_legacy_client_config_set_rt_priority(
+    config: *mut LegacyClientConfig,
+    mode: u8,
+    value: u8,
+) -> i32 {
+    let (Some(config), Some(rt_priority)) =
+        (unsafe { handle_mut(config) }, to_rt_priority(mode, value))
+    else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    let rt_affinity = has_rt_affinity.then_some(CoreId { id: rt_affinity });
-    into_handle(LegacyClientConfig {
-        timeout_cycles,
-        rt_priority,
-        rt_policy: RtSchedulePolicy::default(),
-        rt_affinity,
-    })
+    config.rt_priority = rt_priority;
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_legacy_client_config_set_rt_policy(
+    config: *mut LegacyClientConfig,
+    value: u8,
+) -> i32 {
+    let (Some(config), Some(rt_policy)) = (unsafe { handle_mut(config) }, to_rt_policy(value))
+    else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    config.rt_policy = rt_policy;
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_legacy_client_config_set_rt_affinity(
+    config: *mut LegacyClientConfig,
+    has_affinity: bool,
+    core_id: usize,
+) -> i32 {
+    let Some(config) = (unsafe { handle_mut(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    config.rt_affinity = has_affinity.then_some(CoreId { id: core_id });
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_legacy_client_config_free(config: *mut LegacyClientConfig) {
     unsafe { drop_handle(config) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_legacy_client_opener_free(opener: *mut LegacyClientOpener) {
+    unsafe { drop_handle(opener) }
 }
 
 #[unsafe(no_mangle)]
@@ -97,16 +134,14 @@ pub unsafe extern "C" fn autd3_legacy_datagram_builder_new(
 pub unsafe extern "C" fn autd3_legacy_datagram_builder_push(
     builder: *mut LegacyBuilder,
     op: *mut Pending,
-) {
-    if builder.is_null() || op.is_null() {
-        return;
-    }
+) -> i32 {
+    let (Some(builder), Some(op)) = (unsafe { handle_mut(builder) }, unsafe { take_handle(op) })
+    else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
 
-    let op = unsafe { *Box::from_raw(op) };
-
-    unsafe { &mut *builder }
-        .pending
-        .push(LegacyItem::Current(op));
+    builder.pending.push(LegacyItem::Current(op));
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
@@ -116,10 +151,19 @@ pub extern "C" fn autd3_legacy_op_change_segment(
     transition_mode: u8,
     transition_value: u64,
 ) -> *mut LegacyPending {
+    let (Some(bank), Some(transition_mode)) = (
+        to_pattern_bank(bank),
+        to_transition_mode(transition_mode, transition_value, 0),
+    ) else {
+        return std::ptr::null_mut();
+    };
+    if kind > 2 {
+        return std::ptr::null_mut();
+    }
     into_handle(LegacyPending::LegacyChangePatternBank {
         kind,
-        bank: to_pattern_bank(bank),
-        transition_mode: to_transition_mode(transition_mode, transition_value, 0),
+        bank,
+        transition_mode,
     })
 }
 
@@ -132,16 +176,14 @@ pub unsafe extern "C" fn autd3_legacy_op_free(op: *mut LegacyPending) {
 pub unsafe extern "C" fn autd3_legacy_datagram_builder_push_legacy(
     builder: *mut LegacyBuilder,
     op: *mut LegacyPending,
-) {
-    if builder.is_null() || op.is_null() {
-        return;
-    }
+) -> i32 {
+    let (Some(builder), Some(op)) = (unsafe { handle_mut(builder) }, unsafe { take_handle(op) })
+    else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
 
-    let op = unsafe { *Box::from_raw(op) };
-
-    unsafe { &mut *builder }
-        .pending
-        .push(LegacyItem::Legacy(op));
+    builder.pending.push(LegacyItem::Legacy(op));
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
@@ -149,25 +191,17 @@ pub unsafe extern "C" fn autd3_legacy_datagram_builder_push_each(
     builder: *mut LegacyBuilder,
     ops: *const *mut Pending,
     num_devices: usize,
-) {
-    if builder.is_null() || ops.is_null() {
-        return;
-    }
+) -> i32 {
+    let (Some(builder), Some(devices)) = (unsafe { handle_mut(builder) }, unsafe {
+        crate::take_each(ops, num_devices)
+    }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
 
-    let slice = unsafe { std::slice::from_raw_parts(ops, num_devices) };
-    let devices: Vec<Option<Pending>> = slice
-        .iter()
-        .map(|&p| {
-            if p.is_null() {
-                None
-            } else {
-                Some(unsafe { *Box::from_raw(p) })
-            }
-        })
-        .collect();
-    unsafe { &mut *builder }
+    builder
         .pending
         .push(LegacyItem::Current(Pending::Each(devices)));
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
@@ -442,20 +476,21 @@ pub unsafe extern "C" fn autd3_legacy_client_open(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if geometry.is_null() || link.is_null() || config.is_null() {
-        ctx.err("null argument");
+    let opener = unsafe { take_handle(link) };
+    let (Some(opener), Some(geometry), Some(config)) =
+        (opener, unsafe { handle_ref(geometry) }, unsafe {
+            handle_ref(config)
+        })
+    else {
+        ctx.invalid_argument("null argument");
         return;
-    }
+    };
 
-    let opener = unsafe { *Box::from_raw(link) };
-
-    let geometry = unsafe { &*geometry }.clone();
-    let config = *unsafe { &*config };
-    let fut = opener(geometry, config);
+    let fut = opener(geometry.clone(), *config);
     runtime().spawn(async move {
         match fut.await {
             Ok(backend) => ctx.ok(into_handle(LegacyClientHandle(backend)).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -491,7 +526,7 @@ pub unsafe extern "C" fn autd3_legacy_client_send(
     runtime().spawn(async move {
         match fut.await {
             Ok(data) => ctx.ok(into_handle(ByteArray(data)).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -516,7 +551,7 @@ pub unsafe extern "C" fn autd3_legacy_client_send_checked(
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -537,7 +572,7 @@ pub unsafe extern "C" fn autd3_legacy_client_read_firmware_version(
     runtime().spawn(async move {
         match fut.await {
             Ok(versions) => ctx.ok(into_handle(StringArray(to_cstrings(versions))).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -558,7 +593,7 @@ pub unsafe extern "C" fn autd3_legacy_client_read_fpga_state(
     runtime().spawn(async move {
         match fut.await {
             Ok(states) => ctx.ok(into_handle(ByteArray(states)).cast()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -590,7 +625,7 @@ pub unsafe extern "C" fn autd3_legacy_client_stop(
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }
@@ -611,7 +646,7 @@ pub unsafe extern "C" fn autd3_legacy_client_close(
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
-            Err(e) => ctx.err(&e.to_string()),
+            Err(e) => ctx.err_of(&e),
         }
     });
 }

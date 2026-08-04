@@ -371,3 +371,5 @@ pub unsafe extern "C" fn autd3_core_sampling_config_divide_value(
 pub unsafe extern "C" fn autd3_core_sampling_config_free(config: *mut SamplingConfig) {
     unsafe { drop_handle(config) }
 }
+
+autd3_ffi_abi::export_abi_version!();

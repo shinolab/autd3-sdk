@@ -1,15 +1,12 @@
-use std::ffi::{CStr, c_char};
 use std::sync::Arc;
-use std::time::Duration;
 
 use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
     ResponseTokenData, client_opener, into_handle, join_err, legacy_client_opener, link_runtime,
-    to_ns,
+    take_handle,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_core::Interface;
 use autd3_rs_link_soem::{SoemLinkOption as CoreOption, StateChecker};
 use tokio::sync::Mutex;
 
@@ -173,71 +170,64 @@ impl CheckerBackend for SoemChecker {
     }
 }
 
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-unsafe fn make_option(
-    iface: *const c_char,
-    has_sync0_period: bool,
-    sync0_period_ns: u64,
-    has_sync0_shift: bool,
-    sync0_shift_ns: u64,
-    has_sync_tolerance: bool,
-    sync_tolerance_ns: u64,
-    has_sync_timeout: bool,
-    sync_timeout_ns: u64,
-) -> CoreOption {
-    let iface = if iface.is_null() {
-        None
-    } else {
-        Some(
-            unsafe { CStr::from_ptr(iface) }
-                .to_string_lossy()
-                .into_owned(),
-        )
-    };
-    let mut option = CoreOption {
-        iface: Interface::from(iface),
-        ..CoreOption::default()
-    };
-    if has_sync0_period {
-        option.sync0_period = Duration::from_nanos(sync0_period_ns);
-    }
-    if has_sync0_shift {
-        option.sync0_shift = Duration::from_nanos(sync0_shift_ns);
-    }
-    if has_sync_tolerance {
-        option.sync_tolerance = Duration::from_nanos(sync_tolerance_ns);
-    }
-    if has_sync_timeout {
-        option.sync_timeout = Duration::from_nanos(sync_timeout_ns);
-    }
-    option
+pub struct SoemLinkOptionHandle(CoreOption);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_link_soem_option_new() -> *mut SoemLinkOptionHandle {
+    into_handle(SoemLinkOptionHandle(CoreOption::default()))
 }
 
 #[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub unsafe extern "C" fn autd3_link_soem(
-    iface: *const c_char,
-    has_sync0_period: bool,
-    sync0_period_ns: u64,
-    has_sync0_shift: bool,
-    sync0_shift_ns: u64,
-    has_sync_tolerance: bool,
-    sync_tolerance_ns: u64,
-    has_sync_timeout: bool,
-    sync_timeout_ns: u64,
+pub extern "C" fn autd3_link_soem_option_safe_default() -> *mut SoemLinkOptionHandle {
+    into_handle(SoemLinkOptionHandle(CoreOption::safe_default()))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_link_soem_option_performance_default() -> *mut SoemLinkOptionHandle {
+    into_handle(SoemLinkOptionHandle(CoreOption::performance_default()))
+}
+
+autd3_ffi_abi::option_handle_iface!(
+    SoemLinkOptionHandle,
+    [iface],
+    autd3_link_soem_option_set_iface
+);
+autd3_ffi_abi::option_handle_field!(
+    SoemLinkOptionHandle,
+    [sync0_period],
+    duration,
+    autd3_link_soem_option_set_sync0_period,
+    autd3_link_soem_option_get_sync0_period
+);
+autd3_ffi_abi::option_handle_field!(
+    SoemLinkOptionHandle,
+    [sync0_shift],
+    duration,
+    autd3_link_soem_option_set_sync0_shift,
+    autd3_link_soem_option_get_sync0_shift
+);
+autd3_ffi_abi::option_handle_field!(
+    SoemLinkOptionHandle,
+    [sync_tolerance],
+    duration,
+    autd3_link_soem_option_set_sync_tolerance,
+    autd3_link_soem_option_get_sync_tolerance
+);
+autd3_ffi_abi::option_handle_field!(
+    SoemLinkOptionHandle,
+    [sync_timeout],
+    duration,
+    autd3_link_soem_option_set_sync_timeout,
+    autd3_link_soem_option_get_sync_timeout
+);
+autd3_ffi_abi::option_handle_lifecycle!(SoemLinkOptionHandle, autd3_link_soem_option_free);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_soem_open(
+    option: *mut SoemLinkOptionHandle,
 ) -> *mut ClientOpener {
-    let option = unsafe {
-        make_option(
-            iface,
-            has_sync0_period,
-            sync0_period_ns,
-            has_sync0_shift,
-            sync0_shift_ns,
-            has_sync_tolerance,
-            sync_tolerance_ns,
-            has_sync_timeout,
-            sync_timeout_ns,
-        )
+    let Some(SoemLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        return std::ptr::null_mut();
     };
     let opener = client_opener(move |geometry, config| async move {
         let (client, checker) = link_runtime()
@@ -254,68 +244,13 @@ pub unsafe extern "C" fn autd3_link_soem(
 }
 
 #[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub unsafe extern "C" fn autd3_link_soem_legacy(
-    iface: *const c_char,
-    has_sync0_period: bool,
-    sync0_period_ns: u64,
-    has_sync0_shift: bool,
-    sync0_shift_ns: u64,
-    has_sync_tolerance: bool,
-    sync_tolerance_ns: u64,
-    has_sync_timeout: bool,
-    sync_timeout_ns: u64,
+pub unsafe extern "C" fn autd3_link_soem_open_legacy(
+    option: *mut SoemLinkOptionHandle,
 ) -> *mut LegacyClientOpener {
-    let option = unsafe {
-        make_option(
-            iface,
-            has_sync0_period,
-            sync0_period_ns,
-            has_sync0_shift,
-            sync0_shift_ns,
-            has_sync_tolerance,
-            sync_tolerance_ns,
-            has_sync_timeout,
-            sync_timeout_ns,
-        )
+    let Some(SoemLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        return std::ptr::null_mut();
     };
     into_handle(legacy_client_opener(move |_| Ok(option)))
 }
 
-#[repr(C)]
-pub struct Autd3SoemLinkOptionValues {
-    pub sync0_period_ns: u64,
-    pub sync0_shift_ns: u64,
-    pub sync_tolerance_ns: u64,
-    pub sync_timeout_ns: u64,
-}
-
-unsafe fn write_option(option: &CoreOption, out: *mut Autd3SoemLinkOptionValues) -> i32 {
-    if out.is_null() {
-        return -1;
-    }
-
-    unsafe {
-        *out = Autd3SoemLinkOptionValues {
-            sync0_period_ns: to_ns(option.sync0_period),
-            sync0_shift_ns: to_ns(option.sync0_shift),
-            sync_tolerance_ns: to_ns(option.sync_tolerance),
-            sync_timeout_ns: to_ns(option.sync_timeout),
-        };
-    }
-    0
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_soem_option_safe_default(
-    out: *mut Autd3SoemLinkOptionValues,
-) -> i32 {
-    unsafe { write_option(&CoreOption::safe_default(), out) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_soem_option_performance_default(
-    out: *mut Autd3SoemLinkOptionValues,
-) -> i32 {
-    unsafe { write_option(&CoreOption::performance_default(), out) }
-}
+autd3_ffi_abi::export_abi_version!();
