@@ -1,0 +1,109 @@
+---
+title: ソフトウェア
+description: SDK を構成するパッケージ一覧
+sidebar:
+  order: 3
+slug: 0.6.x/getting-started/setup/software
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+AUTD3 SDK は Rust で実装され, Python / C# 向けのバインディングも提供される.
+[Unity](#unity) 向けパッケージも提供される.
+各言語で提供されるパッケージは以下の通り.
+
+<CodeTabs>
+  <Fragment slot="rust">
+    * [autd3-rs](https://crates.io/crates/autd3-rs): クライアント本体
+    * [autd3-rs-core](https://crates.io/crates/autd3-rs-core): 基盤層
+    * [autd3-rs-pattern](https://crates.io/crates/autd3-rs-pattern): パターン計算 (単一焦点等)
+    * [autd3-rs-pattern-holo](https://crates.io/crates/autd3-rs-pattern-holo): 多焦点最適化
+    * [autd3-rs-pattern-holo-wgpu](https://crates.io/crates/autd3-rs-pattern-holo-wgpu): 多焦点最適化のGPUバックエンド
+    * [autd3-rs-modulation](https://crates.io/crates/autd3-rs-modulation): AM 変調計算
+    * [autd3-rs-emulator](https://crates.io/crates/autd3-rs-emulator): 実機なしで出力データを記録する [Emulator](/autd3-sdk/0.6.x/guide/emulator/)
+    * [autd3-rs-link-echocat](https://crates.io/crates/autd3-rs-link-echocat): AUTD3 専用の EtherCAT Link
+    * [autd3-rs-link-ethercrab](https://crates.io/crates/autd3-rs-link-ethercrab): [EtherCrab](https://github.com/ethercrab-rs/ethercrab) ベースの Link
+    * [autd3-rs-link-soem](https://crates.io/crates/autd3-rs-link-soem): [SOEM](https://github.com/OpenEtherCATsociety/SOEM) ベースの Link ([GPL-3.0-only](/autd3-sdk/0.6.x/misc/license/))
+    * [autd3-rs-link-remote](https://crates.io/crates/autd3-rs-link-remote): リモート接続用の Link
+    * [autd3-rs-link-twincat](https://crates.io/crates/autd3-rs-link-twincat): TwinCAT ベースの Link
+  </Fragment>
+
+  <Fragment slot="python">
+    * [autd3](https://pypi.org/project/autd3/): クライアント本体
+    * [autd3-core](https://pypi.org/project/autd3-core/): 基盤層
+    * [autd3-pattern](https://pypi.org/project/autd3-pattern/): パターン計算 (単一焦点等)
+    * [autd3-pattern-holo](https://pypi.org/project/autd3-pattern-holo/): 多焦点最適化
+    * [autd3-modulation](https://pypi.org/project/autd3-modulation/): AM 変調計算
+    * [autd3-emulator](https://pypi.org/project/autd3-emulator/): 実機なしで出力データを記録する [Emulator](/autd3-sdk/0.6.x/guide/emulator/)
+    * [autd3-link-echocat](https://pypi.org/project/autd3-link-echocat/): AUTD3 専用の EtherCAT Link
+    * [autd3-link-ethercrab](https://pypi.org/project/autd3-link-ethercrab/): [EtherCrab](https://github.com/ethercrab-rs/ethercrab) ベースの Link
+    * [autd3-link-soem](https://pypi.org/project/autd3-link-soem/): [SOEM](https://github.com/OpenEtherCATsociety/SOEM) ベースの Link ([GPL-3.0-only](/autd3-sdk/0.6.x/misc/license/))
+    * [autd3-link-remote](https://pypi.org/project/autd3-link-remote/): リモート接続用の Link
+    * [autd3-link-twincat](https://pypi.org/project/autd3-link-twincat/): TwinCAT ベースの Link
+  </Fragment>
+
+  <Fragment slot="csharp">
+    * [AUTD3](https://www.nuget.org/packages/AUTD3/): クライアント本体
+    * [AUTD3.Core](https://www.nuget.org/packages/AUTD3.Core/): 基盤層
+    * [AUTD3.Pattern](https://www.nuget.org/packages/AUTD3.Pattern/): パターン計算 (単一焦点等)
+    * [AUTD3.Pattern.Holo](https://www.nuget.org/packages/AUTD3.Pattern.Holo/): 多焦点最適化
+    * [AUTD3.Modulation](https://www.nuget.org/packages/AUTD3.Modulation/): AM 変調計算
+    * [AUTD3.Link.Echocat](https://www.nuget.org/packages/AUTD3.Link.Echocat/): AUTD3 専用の EtherCAT Link
+    * [AUTD3.Link.Ethercrab](https://www.nuget.org/packages/AUTD3.Link.Ethercrab/): [EtherCrab](https://github.com/ethercrab-rs/ethercrab) ベースの Link
+    * [AUTD3.Link.Soem](https://www.nuget.org/packages/AUTD3.Link.Soem/): [SOEM](https://github.com/OpenEtherCATsociety/SOEM) ベースの Link ([GPL-3.0-only](/autd3-sdk/0.6.x/misc/license/))
+    * [AUTD3.Link.Remote](https://www.nuget.org/packages/AUTD3.Link.Remote/): リモート接続用の Link
+    * [AUTD3.Link.TwinCAT](https://www.nuget.org/packages/AUTD3.Link.TwinCAT/): TwinCAT ベースの Link
+  </Fragment>
+</CodeTabs>
+
+## Unity
+
+Unity向けのパッケージは npm レジストリ ([npmjs](https://www.npmjs.com/package/com.shinolab.autd3-sdk)) で配布される.
+
+サポートされるUnity のバージョンは 6 (6000.x) 以降である.
+
+* [com.shinolab.autd3-sdk](https://www.npmjs.com/package/com.shinolab.autd3-sdk): クライアント本体
+* [com.shinolab.autd3-sdk.core](https://www.npmjs.com/package/com.shinolab.autd3-sdk.core): 基盤層
+* [com.shinolab.autd3-sdk.pattern](https://www.npmjs.com/package/com.shinolab.autd3-sdk.pattern): パターン計算 (単一焦点等)
+* [com.shinolab.autd3-sdk.pattern.holo](https://www.npmjs.com/package/com.shinolab.autd3-sdk.pattern.holo): 多焦点最適化
+* [com.shinolab.autd3-sdk.modulation](https://www.npmjs.com/package/com.shinolab.autd3-sdk.modulation): AM 変調計算
+* [com.shinolab.autd3-sdk.link.echocat](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.echocat): AUTD3 専用の EtherCAT Link
+* [com.shinolab.autd3-sdk.link.ethercrab](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.ethercrab): [EtherCrab](https://github.com/ethercrab-rs/ethercrab) ベースの Link
+* [com.shinolab.autd3-sdk.link.soem](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.soem): [SOEM](https://github.com/OpenEtherCATsociety/SOEM) ベースの Link ([GPL-3.0-only](/autd3-sdk/0.6.x/misc/license/))
+* [com.shinolab.autd3-sdk.link.remote](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.remote): リモート接続用の Link
+* [com.shinolab.autd3-sdk.link.twincat](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.twincat): TwinCAT ベースの Link
+* [com.shinolab.autd3-sdk.link.nop](https://www.npmjs.com/package/com.shinolab.autd3-sdk.link.nop): 何もしない Link (テスト用)
+
+### インストール
+
+Unity プロジェクトの `Packages/manifest.json` に scoped registry と必要なパッケージを追加する.
+
+```json
+{
+  "scopedRegistries": [
+    { 
+        "name": "npmjs",
+        "url": "https://registry.npmjs.org", 
+        "scopes": ["com.shinolab"]
+    }
+  ],
+  "dependencies": {
+    "com.shinolab.autd3-sdk": "0.6.0",
+    "com.shinolab.autd3-sdk.pattern": "0.6.0",
+    "com.shinolab.autd3-sdk.modulation": "0.6.0",
+    "com.shinolab.autd3-sdk.link.echocat": "0.6.0"
+  }
+}
+```
+
+GUIから行う場合は, **Edit → Project Settings → Package Manager → Scoped Registries** で 以下のレジストリを追加する.
+
+* Name: `npmjs`
+* URL: `https://registry.npmjs.org`
+* Scope(s): `com.shinolab`
+
+その後, **Window → Package Manager → My registries → npmjs** から必要なパッケージを追加する.
+
+:::note
+Unity版のAPIは左手系かつ単位がメートルになっている
+:::

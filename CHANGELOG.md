@@ -2,6 +2,39 @@
 
 # Rust
 
+## [0.6.0] - 2026-08-04
+
+### 💥 Breaking Changes
+
+- [**breaking**] Return RemoteLinkOption from discover() in Python/C# bindings
+- [**breaking**] Make wire enums non-exhaustive and rename Telemetry::COUNT
+- [**breaking**] Mark the public enums non-exhaustive
+- [**breaking**] Rename TransitionMode::as_u8 to try_as_u8
+- [**breaking**] Give LinkError a message accessor and an error source
+- [**breaking**] Encapsulate LinkStatus and CycleOutcome behind accessors
+- [**breaking**] Replace the core_affinity CoreId re-export with a core newtype
+- [**breaking**] Seal the Operation trait
+- [**breaking**] Require a non-zero ClientConfig::timeout_cycles
+- [**breaking**] Rename the holo ControlPoint to AmplitudeTarget
+- [**breaking**] Replace Response::data_mut with Response::merge
+- [**breaking**] Return the emission from null_transducer
+- [**breaking**] Stop re-exporting the value types at the autd3-rs root
+- [**breaking**] Rebuild the C ABI on opaque option handles
+- [**breaking**] Follow the C ABI rework in the C# bindings
+- [**breaking**] Return the reason a link opener could not be created
+
+### 🚀 Features
+
+- Rename `autd3-appliance list` to `scan`
+- Detect firmware outside the supported series
+- Re-export nalgebra from the core and holo crates
+
+### 🐛 Bug Fixes
+
+- *(console)* Bundle twincat-cli again by building it in CI
+- *(appliance)* Tolerate bus and uplink states this client does not know
+- Distinguish a rejected telemetry counter from a counter value of 2
+
 ## [0.5.0] - 2026-08-03
 
 ### 💥 Breaking Changes
@@ -183,6 +216,19 @@
 
 # Python
 
+## [0.6.0] - 2026-08-04
+
+### 💥 Breaking Changes
+
+- [**breaking**] Return RemoteLinkOption from discover() in Python/C# bindings
+- [**breaking**] Make wire enums non-exhaustive and rename Telemetry::COUNT
+- [**breaking**] Encapsulate LinkStatus and CycleOutcome behind accessors
+- [**breaking**] Replace the core_affinity CoreId re-export with a core newtype
+- [**breaking**] Require a non-zero ClientConfig::timeout_cycles
+- [**breaking**] Rename the holo ControlPoint to AmplitudeTarget
+- [**breaking**] Follow the C ABI rework in the Python bindings
+- [**breaking**] Return the reason a link opener could not be created
+
 ## [0.5.0] - 2026-08-03
 
 ### 💥 Breaking Changes
@@ -278,6 +324,16 @@
 - *(py)* Return Response from awaited send instead of implicit check
 
 # C#
+
+## [0.6.0] - 2026-08-04
+
+### 💥 Breaking Changes
+
+- [**breaking**] Return RemoteLinkOption from discover() in Python/C# bindings
+- [**breaking**] Make wire enums non-exhaustive and rename Telemetry::COUNT
+- [**breaking**] Rename the holo ControlPoint to AmplitudeTarget
+- [**breaking**] Follow the C ABI rework in the C# bindings
+- [**breaking**] Return the reason a link opener could not be created
 
 ## [0.5.0] - 2026-08-03
 
@@ -376,6 +432,12 @@
 
 # Simulator
 
+## [0.6.0] - 2026-08-04
+
+### 💥 Breaking Changes
+
+- [**breaking**] Encapsulate LinkStatus and CycleOutcome behind accessors
+
 ## [0.5.0] - 2026-08-03
 
 ### 💥 Breaking Changes
@@ -429,6 +491,16 @@
 
 # Console
 
+## [0.6.0] - 2026-08-04
+
+### 🚀 Features
+
+- Rename `autd3-appliance list` to `scan`
+
+### 🐛 Bug Fixes
+
+- *(appliance)* Tolerate bus and uplink states this client does not know
+
 ## [0.5.0] - 2026-08-03
 
 ### 💥 Breaking Changes
@@ -438,6 +510,10 @@
 ### 🚀 Features
 
 - *(console)* Distribute via cargo-dist with installers and in-app auto-update
+
+### 🐛 Bug Fixes
+
+- *(console)* Bundle twincat-cli again by building it in CI
 
 ## [0.4.0] - 2026-07-27
 
@@ -454,6 +530,16 @@
 
 # Appliance
 
+## [0.6.0] - 2026-08-04
+
+### 🚀 Features
+
+- Rename `autd3-appliance list` to `scan`
+
+### 🐛 Bug Fixes
+
+- *(appliance)* Tolerate bus and uplink states this client does not know
+
 ## [0.5.0] - 2026-08-03
 
 ### 💥 Breaking Changes
@@ -461,6 +547,12 @@
 - *(appliance)* [**breaking**] Ship the EtherCAT master as a zero-config appliance
 
 # Firmware
+
+## [0.6.0] - 2026-08-04
+
+### 💥 Breaking Changes
+
+- [**breaking**] Make wire enums non-exhaustive and rename Telemetry::COUNT
 
 ## [0.4.0] - 2026-07-27
 

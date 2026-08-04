@@ -3,7 +3,7 @@ resolver = "3"
 members = ["examples"]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -23,9 +23,9 @@ missing_panics_doc = "allow"
 cast_precision_loss = "allow"
 
 [workspace.dependencies]
-autd3-rs = { version = "0.5.0", path = "../../crates/autd3-rs" }
-autd3-rs-core = { version = "0.5.0", path = "../../crates/autd3-rs-core" }
-autd3-rs-firmware-emulator = { version = "0.5.0", path = "../../crates/autd3-rs-firmware-emulator" }
+autd3-rs = { version = "0.6.0", path = "../../crates/autd3-rs" }
+autd3-rs-core = { version = "0.6.0", path = "../../crates/autd3-rs-core" }
+autd3-rs-firmware-emulator = { version = "0.6.0", path = "../../crates/autd3-rs-firmware-emulator" }
 autd3-rs-emulator = { path = "." }
 autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
 autd3-rs-modulation = { path = "../../crates/autd3-rs-modulation" }

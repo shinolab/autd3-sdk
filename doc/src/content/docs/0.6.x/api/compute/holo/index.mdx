@@ -1,0 +1,87 @@
+---
+title: Holo
+description: 複数の焦点を同時に生成する多焦点ホログラム最適化
+sidebar:
+  order: 10
+slug: 0.6.x/api/compute/holo
+---
+
+import Math from "@components/Math.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+Holo は複数の焦点 (制御点) を同時に生成するための Pattern 計算群.
+各振動子の位相・振幅を最適化し, 指定した複数点で目標音圧が得られるようにする.
+
+<Install rust="autd3-rs-pattern-holo" python="autd3-pattern-holo" csharp="AUTD3.Pattern.Holo" />
+
+提供するアルゴリズムは以下の通り.
+
+* [Naive](/autd3-sdk/0.6.x/api/compute/holo/naive/) — 単一ステップの逆伝搬
+* [GS](/autd3-sdk/0.6.x/api/compute/holo/gs/) — Gerchberg-Saxton 法
+* [GS-PAT](/autd3-sdk/0.6.x/api/compute/holo/gspat/) — GS-PAT 法
+* [Greedy](/autd3-sdk/0.6.x/api/compute/holo/greedy/) — 位相を貪欲に決定する組合せ最適化
+
+## 共通要素
+
+### AmplitudeTarget
+
+焦点を表す構造体. 位置と目標振幅を持つ.
+
+### 振幅単位 `Pa` / `kPa` / `dB`
+
+目標振幅 `Amplitude` は, `f32` に振幅単位を掛けて構築する.
+
+### EmissionConstraint
+
+最適化で得られた振幅は, そのままでは振動子では出力できない強度の可能性がある.
+そこで, 最適化で得た振幅を, 出力する振動子強度へ変換するための制約を指定する.
+
+|                                 |                                                |
+|---------------------------------|------------------------------------------------|
+| `Normalize`                     | 最大値で正規化する                             |
+| `Multiply(f32)`                 | 正規化後に係数を掛けてクランプする             |
+| `Uniform(Intensity)`            | 全振動子を一定強度にする                       |
+| `Clamp(Intensity, Intensity)`   | 振幅を指定範囲にクランプする                   |
+
+各 Option の `constraint` フィールドで指定する. デフォルトはアルゴリズムにより異なる.
+
+### Directivity
+
+振動子の指向性モデル.
+無指向性の `Sphere` (デフォルト) , または, 実機指向性の `T4010A1` から選べる.
+各 Option の `directivity` フィールドで指定する.
+
+### TransducerMask
+
+最適化に含める振動子を選択する.
+各 Option の `mask` フィールドで指定する (デフォルトは `AllEnabled`).
+
+* `TransducerMask::AllEnabled` — 全振動子を使う (デフォルト).
+* `TransducerMask::Masked(&[Vec<bool>])` — 各振動子ごとに有効/無効を指定する.
+
+### LinAlgBackend (NalgebraBackend)
+
+`naive` / `gs` / `gspat` は線形代数演算を `LinAlgBackend` トレイトに委譲する.
+標準実装としてCPUで計算する `NalgebraBackend` を用いる.
+バックエンドは各関数の第 1 引数で渡す.
+
+`greedy` は行列演算を使わないためバックエンドを取らない.
+
+### GPU Backend (WgpuBackend)
+
+GPUで計算するバックエンドとして `WgpuBackend` を用意している.
+
+<Install rust="autd3-rs-pattern-holo-wgpu" />
+
+#### バッチ API
+
+`naive` / `gs` / `gspat` には, 独立した複数の問題をまとめて解く `naive_batch` / `gs_batch` / `gspat_batch` がある.
+
+<CodeTabs rust={"let problems = 64;\nlet foci: Vec<AmplitudeTarget> = (0..problems)\n    .map(|i| AmplitudeTarget {\n        point: center + offset(i as f32 * 0.5 * mm, 0.0 * mm, 0.0 * mm),\n        amplitude: 5e3 * Pa,\n    })\n    .collect();\n\nlet mut dst = vec![geometry.pattern_buffer(); problems];\ngs_batch(\n    &NalgebraBackend,\n    &geometry,\n    &foci,\n    wavelength,\n    &option,\n    &mut dst,\n)?;"} />
+
+問題数は `dst` の長さで決まる.
+焦点は 問題数 × 各問題あたりの焦点数 の長さのスライスを渡す.
+全問題は焦点数が揃っている必要があり, `dst` の長さで割り切れなければエラーになる.
+
+バッチAPIで計算速度に利があるのはGPU バックエンドのみで, CPU バックエンドでは意味はない.
