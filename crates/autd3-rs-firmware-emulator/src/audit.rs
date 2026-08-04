@@ -48,6 +48,6 @@ impl Link for Audit {
         for ((device, tx), rx) in self.devices.iter_mut().zip(tx).zip(rx) {
             device.send(tx).write_to(rx);
         }
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }

@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::error::Error;
-use crate::link::{CycleOutcome, Link};
+use crate::link::Link;
 use crate::protocol::{Cmd, RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
 use crate::response::Response;
 
@@ -230,10 +230,11 @@ impl<L: Link> RtThread<L> {
 
         let bound = self.config.timeout_cycles.max(2);
         for _ in 0..bound {
-            let CycleOutcome { rx_valid } = self
+            let rx_valid = self
                 .link
                 .cycle(&self.tx_bufs, &mut self.rx_bufs)
-                .map_err(|e| format!("handshake failed: {e}"))?;
+                .map_err(|e| format!("handshake failed: {e}"))?
+                .rx_valid();
             if rx_valid && self.rx_bufs.iter().all(|rx| rx[0] == Seq::ZERO.get()) {
                 tracing::info!("low-latency mode established");
                 return Ok(Seq::new(1));
@@ -257,7 +258,7 @@ impl<L: Link> RtThread<L> {
             }
 
             let rx_valid = match self.link.cycle(&self.tx_bufs, &mut self.rx_bufs) {
-                Ok(CycleOutcome { rx_valid }) => rx_valid,
+                Ok(outcome) => outcome.rx_valid(),
                 Err(e) => {
                     tracing::error!("link cycle failed: {e}");
                     link_error = Some(format!("link cycle failed: {e}"));

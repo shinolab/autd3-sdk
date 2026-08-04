@@ -427,7 +427,7 @@ impl Link for SoemLink {
                 );
                 self.rx_was_valid = false;
             }
-            return Ok(CycleOutcome { rx_valid: false });
+            return Ok(CycleOutcome::new(false));
         }
 
         let dc_time_ns = self.ctx.dc_time();
@@ -481,7 +481,7 @@ impl Link for SoemLink {
             self.ctx.copy_inputs(index, frame);
         }
 
-        Ok(CycleOutcome { rx_valid })
+        Ok(CycleOutcome::new(rx_valid))
     }
 }
 

@@ -1,6 +1,6 @@
 use autd3_cpu_fw::params::{VERSION_NUM_MAJOR, VERSION_NUM_MINOR, VERSION_NUM_PATCH};
 use autd3_cpu_fw::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
-use autd3_rs_core::link::{CycleOutcome, Link};
+use autd3_rs_core::link::Link;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, RX_FRAME_BYTES, Seq, TX_FRAME_BYTES, TxFrame};
 use autd3_rs_firmware_emulator::{Audit, Device};
 
@@ -121,7 +121,7 @@ fn link_drives_multiple_independent_devices() {
 
     let tx = vec![frame(0, Cmd::Reset); 3];
     let mut rx = vec![[0u8; RX_FRAME_BYTES]; 3];
-    let CycleOutcome { rx_valid } = link.cycle(&tx, &mut rx).unwrap();
+    let rx_valid = link.cycle(&tx, &mut rx).unwrap().rx_valid();
     assert!(rx_valid);
     assert!(rx.iter().all(|r| r == &[0xFF, 0x00]));
 }

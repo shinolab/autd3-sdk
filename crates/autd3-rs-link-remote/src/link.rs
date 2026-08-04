@@ -146,7 +146,7 @@ impl RemoteLink {
                 wire::REPLY_HEADER_BYTES + num_devices + num_devices * RX_FRAME_BYTES
             ],
             status: BusStatus::new(num_devices),
-            shared_status: Arc::new(Mutex::new(LinkStatus::new(num_devices))),
+            shared_status: Arc::new(Mutex::new(LinkStatus::op(num_devices))),
             stats: LinkStats::default(),
             counters: [0; 4],
             dc_clock: DcClock::new(),
@@ -172,9 +172,8 @@ impl RemoteLink {
             .shared_status
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        status.devices.clear();
-        status.devices.extend_from_slice(&self.status.devices);
-        status.recoveries = self.status.recoveries;
+        status.set_devices(self.status.devices.iter().copied());
+        status.set_recoveries(self.status.recoveries);
     }
 }
 
@@ -221,7 +220,7 @@ impl Link for RemoteLink {
             self.dc_clock.observe(DcSysTime::from_nanos(dc_time_ns));
         }
 
-        Ok(CycleOutcome { rx_valid })
+        Ok(CycleOutcome::new(rx_valid))
     }
 }
 

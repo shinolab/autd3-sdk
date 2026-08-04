@@ -45,13 +45,13 @@ async fn main() -> Result<()> {
 }
 
 fn print_status(status: &LinkStatus) {
-    for (i, state) in status.devices.iter().enumerate() {
+    for (i, state) in status.devices().iter().enumerate() {
         println!("device[{i}]: {state}");
     }
     println!(
         "all operational: {}, any lost: {}, recoveries: {}",
         status.all_op(),
         status.any_lost(),
-        status.recoveries
+        status.recoveries()
     );
 }

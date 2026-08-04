@@ -99,10 +99,7 @@ impl StateChecker {
             self.recoveries += 1;
             tracing::info!("all devices resumed OP");
         }
-        Ok(LinkStatus {
-            devices: self.states.clone(),
-            recoveries: self.recoveries,
-        })
+        Ok(LinkStatus::new(self.states.clone(), self.recoveries))
     }
 }
 

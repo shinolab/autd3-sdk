@@ -67,6 +67,6 @@ impl Link for EmulatorLink {
         if let Ok(mut guard) = self.device_states.lock() {
             *guard = extract_device_states(&self.devices);
         }
-        Ok(CycleOutcome { rx_valid: true })
+        Ok(CycleOutcome::new(true))
     }
 }
