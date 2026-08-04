@@ -9,6 +9,7 @@ use pyo3::types::{PyCapsule, PyCapsuleMethods};
 
 pub const GEOMETRY_CAPSULE_NAME: &CStr = c"autd3.geometry.v1";
 pub const PATTERN_CAPSULE_NAME: &CStr = c"autd3.pattern.v1";
+pub const PATTERN_MUT_CAPSULE_NAME: &CStr = c"autd3.pattern.mut.v1";
 pub const MODULATION_CAPSULE_NAME: &CStr = c"autd3.modulation.v1";
 
 pub type DevicePattern = Vec<Emission>;
@@ -80,26 +81,33 @@ pub fn pattern_from_capsule<'a>(
     Ok(unsafe { ptr.cast::<Vec<DevicePattern>>().as_ref() })
 }
 
-/// # Safety
-// `ptr` must point to a `Vec<DevicePattern>` that stays alive and uniquely borrowed
-/// for as long as the returned capsule (and any reference derived from it) is used.
+pub struct PatternBufferMut {
+    addr: usize,
+    _owner: Py<PyAny>,
+}
+
 pub unsafe fn pattern_capsule_mut(
     py: Python<'_>,
     ptr: NonNull<Vec<DevicePattern>>,
+    owner: Py<PyAny>,
 ) -> PyResult<Bound<'_, PyCapsule>> {
-    // SAFETY: caller upholds the pointer-validity contract above; no destructor is
-    // attached, so the capsule never frees the borrowed `Vec`.
-    unsafe { PyCapsule::new_with_pointer(py, ptr.cast::<c_void>(), PATTERN_CAPSULE_NAME) }
+    PyCapsule::new_with_value(
+        py,
+        PatternBufferMut {
+            addr: ptr.as_ptr() as usize,
+            _owner: owner,
+        },
+        PATTERN_MUT_CAPSULE_NAME,
+    )
 }
 
 #[allow(clippy::mut_from_ref)]
 pub fn pattern_from_capsule_mut<'a>(
     capsule: &'a Bound<'_, PyCapsule>,
 ) -> PyResult<&'a mut Vec<DevicePattern>> {
-    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(PATTERN_CAPSULE_NAME))?;
-    // SAFETY: name-checked above; produced by `pattern_capsule_mut` pointing at a live,
-    // uniquely-borrowed `Vec<DevicePattern>` whose owner outlives the returned borrow.
-    Ok(unsafe { ptr.cast::<Vec<DevicePattern>>().as_mut() })
+    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(PATTERN_MUT_CAPSULE_NAME))?;
+    let addr = unsafe { ptr.cast::<PatternBufferMut>().as_ref() }.addr;
+    Ok(unsafe { &mut *(addr as *mut Vec<DevicePattern>) })
 }
 
 pub fn modulation_into_capsule(py: Python<'_>, data: Vec<u8>) -> PyResult<Bound<'_, PyCapsule>> {
@@ -157,8 +165,6 @@ mod link {
 
     pub fn frame_from_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<(Arc<Frames>, usize)> {
         let ptr: NonNull<c_void> = capsule.pointer_checked(Some(FRAME_CAPSULE_NAME))?;
-        // SAFETY: name-checked above; produced by `frame_into_capsule` storing a
-        // `(Arc<Frames>, usize)`. Same autd3-rs version across wheels.
         let (frames, index) = unsafe { ptr.cast::<(Arc<Frames>, usize)>().as_ref() };
         Ok((Arc::clone(frames), *index))
     }
@@ -229,8 +235,6 @@ mod link {
 
     pub fn take_client_opener(capsule: &Bound<'_, PyCapsule>) -> PyResult<ClientOpener> {
         let ptr: NonNull<c_void> = capsule.pointer_checked(Some(LINK_CAPSULE_NAME))?;
-        // SAFETY: name-checked above; produced by `link_into_capsule` storing a
-        // `RefCell<Option<ClientOpener>>`. Same autd3-rs version across wheels.
         let cell = unsafe { ptr.cast::<RefCell<Option<ClientOpener>>>().as_ref() };
         cell.borrow_mut()
             .take()
@@ -448,8 +452,6 @@ mod link {
         capsule: &Bound<'_, PyCapsule>,
     ) -> PyResult<LegacyClientOpener> {
         let ptr: NonNull<c_void> = capsule.pointer_checked(Some(LEGACY_LINK_CAPSULE_NAME))?;
-        // SAFETY: name-checked above; produced by `legacy_link_into_capsule` storing a
-        // `RefCell<Option<LegacyClientOpener>>`. Same autd3-rs version across wheels.
         let cell = unsafe { ptr.cast::<RefCell<Option<LegacyClientOpener>>>().as_ref() };
         cell.borrow_mut()
             .take()
@@ -468,8 +470,6 @@ mod link {
         capsule: &Bound<'_, PyCapsule>,
     ) -> PyResult<(Arc<LegacyFrames>, usize)> {
         let ptr: NonNull<c_void> = capsule.pointer_checked(Some(LEGACY_FRAME_CAPSULE_NAME))?;
-        // SAFETY: name-checked above; produced by `legacy_frame_into_capsule` storing a
-        // `(Arc<LegacyFrames>, usize)`. Same autd3-rs version across wheels.
         let (frames, index) = unsafe { ptr.cast::<(Arc<LegacyFrames>, usize)>().as_ref() };
         Ok((Arc::clone(frames), *index))
     }

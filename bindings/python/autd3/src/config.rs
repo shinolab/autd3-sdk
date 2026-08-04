@@ -1,6 +1,9 @@
 use core::num::{NonZeroU32, NonZeroUsize};
 
-use autd3_rs::{ClientConfig as CoreClientConfig, CoreId, ThreadPriority, ThreadPriorityValue};
+use autd3_rs::{
+    ClientConfig as CoreClientConfig, CoreId, RtSchedulePolicy as CoreRtSchedulePolicy,
+    ThreadPriority, ThreadPriorityValue,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -21,8 +24,10 @@ impl ClientConfig {
         reset_resend_cycles = None,
         rt_priority = None,
         disable_rt_priority = false,
+        rt_policy = None,
         rt_affinity = None,
         validate_state = None,
+        require_supported_firmware = None,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -33,8 +38,10 @@ impl ClientConfig {
         reset_resend_cycles: Option<u32>,
         rt_priority: Option<u8>,
         disable_rt_priority: bool,
+        rt_policy: Option<RtSchedulePolicy>,
         rt_affinity: Option<usize>,
         validate_state: Option<bool>,
+        require_supported_firmware: Option<bool>,
     ) -> PyResult<Self> {
         let mut inner = CoreClientConfig {
             low_latency,
@@ -69,12 +76,53 @@ impl ClientConfig {
                 .map_err(|e| PyValueError::new_err(format!("invalid rt_priority: {e}")))?;
             inner.rt_priority = Some(ThreadPriority::Crossplatform(value));
         }
+        if let Some(v) = rt_policy {
+            inner.rt_policy = v.0;
+        }
         if let Some(v) = rt_affinity {
             inner.rt_affinity = Some(CoreId { id: v });
         }
         if let Some(v) = validate_state {
             inner.validate_state = v;
         }
+        if let Some(v) = require_supported_firmware {
+            inner.require_supported_firmware = v;
+        }
         Ok(Self { inner })
+    }
+}
+
+#[pyclass(
+    name = "RtSchedulePolicy",
+    module = "autd3",
+    frozen,
+    eq,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct RtSchedulePolicy(pub(crate) CoreRtSchedulePolicy);
+
+#[pymethods]
+impl RtSchedulePolicy {
+    #[classattr]
+    #[pyo3(name = "Normal")]
+    fn normal() -> Self {
+        Self(CoreRtSchedulePolicy::Normal)
+    }
+
+    #[classattr]
+    #[pyo3(name = "Fifo")]
+    fn fifo() -> Self {
+        Self(CoreRtSchedulePolicy::Fifo)
+    }
+
+    #[classattr]
+    #[pyo3(name = "RoundRobin")]
+    fn round_robin() -> Self {
+        Self(CoreRtSchedulePolicy::RoundRobin)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("RtSchedulePolicy.{:?}", self.0)
     }
 }

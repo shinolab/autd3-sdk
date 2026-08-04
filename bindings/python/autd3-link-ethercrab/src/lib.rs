@@ -8,7 +8,9 @@ use autd3_python_capsule::{
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::Interface;
-use autd3_rs_link_ethercrab::{EtherCrabLinkOption as CoreOption, StateChecker};
+use autd3_rs_link_ethercrab::{
+    EtherCrabLinkOption as SimpleOption, EtherCrabLinkOptionFull as CoreOption, StateChecker,
+};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 use tokio::sync::Mutex;
@@ -197,10 +199,10 @@ impl EtherCrabLinkOption {
             ..CoreOption::default()
         };
         if let Some(v) = opt_duration(sync0_period)? {
-            inner.sync0_period = v;
+            inner.dc_configuration.sync0_period = v;
         }
         if let Some(v) = opt_duration(sync0_shift)? {
-            inner.sync0_shift = v;
+            inner.dc_configuration.sync0_shift = v;
         }
         if let Some(v) = opt_duration(sync_tolerance)? {
             inner.sync_tolerance = v;
@@ -220,15 +222,8 @@ impl EtherCrabLinkOption {
 
     #[staticmethod]
     fn performance_default() -> Self {
-        let full = CoreOption::performance_default();
         Self {
-            inner: CoreOption {
-                iface: full.iface,
-                sync0_period: full.dc_configuration.sync0_period,
-                sync0_shift: full.dc_configuration.sync0_shift,
-                sync_tolerance: full.sync_tolerance,
-                sync_timeout: full.sync_timeout,
-            },
+            inner: SimpleOption::performance_default(),
         }
     }
 
