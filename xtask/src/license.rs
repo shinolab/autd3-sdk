@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use clap::{Subcommand, ValueEnum};
 
-use crate::util::{on_path, run};
+use crate::util::{on_path, publishable_members, run};
 
 const PY_MIT_WHEELS: &[&str] = &[
     "autd3-core",
@@ -63,6 +63,14 @@ const UNITY_PACKAGES: &[(&str, &str)] = &[
     ("com.shinolab.autd3-sdk.link.nop", "autd3-ffi-link-nop"),
 ];
 const UNITY_SOEM_PACKAGE: &str = "com.shinolab.autd3-sdk.link.soem";
+
+const PUBLISH_WORKSPACES: &[&str] = &[
+    ".",
+    "extras/autd3-rs-emulator",
+    "extras/autd3-rs-pattern-holo-wgpu",
+];
+
+const GPL_CRATE: &str = "autd3-rs-link-soem";
 
 const DENY_WORKSPACES: &[&str] = &[
     ".",
@@ -156,6 +164,7 @@ fn generate(root: &Path, target: GenTarget) -> Result<()> {
 }
 
 fn check(root: &Path) -> Result<()> {
+    check_bundled_license(root)?;
     if !on_path("cargo-deny") {
         bail!("`cargo-deny` is required");
     }
@@ -170,6 +179,45 @@ fn check(root: &Path) -> Result<()> {
             &dir,
         )?;
     }
+    Ok(())
+}
+
+fn check_bundled_license(root: &Path) -> Result<()> {
+    println!("== bundled license text ==");
+    let mit = std::fs::read_to_string(root.join("LICENSE"))
+        .with_context(|| format!("reading {}", root.join("LICENSE").display()))?;
+    let gpl_path = root.join("crates").join(GPL_CRATE).join("COPYING");
+    let gpl = std::fs::read_to_string(&gpl_path)
+        .with_context(|| format!("reading {}", gpl_path.display()))?;
+
+    let mut missing = Vec::new();
+    for ws in PUBLISH_WORKSPACES {
+        let ws_dir = if *ws == "." {
+            root.to_path_buf()
+        } else {
+            root.join(ws)
+        };
+        for package in publishable_members(&ws_dir)? {
+            let (file, expected) = if package.name() == GPL_CRATE {
+                ("COPYING", &gpl)
+            } else {
+                ("LICENSE", &mit)
+            };
+            let path = package.dir().join(file);
+            match std::fs::read_to_string(&path) {
+                Ok(text) if &text == expected => {}
+                Ok(_) => missing.push(format!("{}: {} differs from the root text", package.name(), path.display())),
+                Err(_) => missing.push(format!("{}: {} is missing", package.name(), path.display())),
+            }
+        }
+    }
+    if !missing.is_empty() {
+        bail!(
+            "publishable crates must bundle their license text (`cargo package` cannot reach outside the crate directory):\n  {}",
+            missing.join("\n  ")
+        );
+    }
+    println!("bundled license text: ok");
     Ok(())
 }
 
