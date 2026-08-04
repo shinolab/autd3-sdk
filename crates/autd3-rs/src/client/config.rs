@@ -1,7 +1,7 @@
 use std::num::{NonZeroU32, NonZeroUsize};
 
+use autd3_rs_core::CoreId;
 use autd3_rs_core::RtSchedulePolicy;
-use core_affinity::CoreId;
 use thread_priority::ThreadPriority;
 
 use crate::error::{Error, PayloadError};

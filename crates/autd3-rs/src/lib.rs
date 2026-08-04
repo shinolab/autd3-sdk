@@ -21,13 +21,12 @@ pub use error::{Error, PayloadError};
 pub use autd3_rs_core::value::{ControlPoint, ControlPoints, PulseWidth, PulseWidthError};
 
 pub use autd3_rs_core::{
-    Angle, Autd3, ConstStateChecker, CycleOutcome, DcClock, DcObservation, Device, DeviceState,
-    EncodeError, Freq, Geometry, Interface, IntoLink, Length, Link, LinkError, LinkStats,
-    LinkStatus, MAX_INFLIGHT, Point3, Quaternion, RtSchedulePolicy, StateCheck, UnitQuaternion,
-    UnitVector3, Vector3, Velocity, offset, point,
+    Angle, Autd3, ConstStateChecker, CoreId, CycleOutcome, DcClock, DcObservation, Device,
+    DeviceState, EncodeError, Freq, Geometry, Interface, IntoLink, Length, Link, LinkError,
+    LinkStats, LinkStatus, MAX_INFLIGHT, Point3, Quaternion, RtSchedulePolicy, StateCheck,
+    UnitQuaternion, UnitVector3, Vector3, Velocity, offset, point,
 };
 pub use client::{Client, ClientConfig, ResponseFuture};
-pub use core_affinity::CoreId;
 pub use datagram::{Datagram, DatagramBuilder, Frame, Frames};
 pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;

@@ -1,8 +1,24 @@
 #[cfg(feature = "logging")]
 mod logging;
 
-pub use core_affinity::CoreId;
 pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CoreId {
+    pub id: usize,
+}
+
+impl From<CoreId> for core_affinity::CoreId {
+    fn from(v: CoreId) -> Self {
+        core_affinity::CoreId { id: v.id }
+    }
+}
+
+impl From<core_affinity::CoreId> for CoreId {
+    fn from(v: core_affinity::CoreId) -> Self {
+        CoreId { id: v.id }
+    }
+}
 
 #[cfg(feature = "logging")]
 pub use logging::{LogWriter, TracingGuard, TracingOption, init_tracing};
@@ -82,7 +98,7 @@ pub fn apply_thread_tuning(tuning: RtThreadTuning) -> RtThreadTuning {
         }
     }
     if let Some(core) = tuning.affinity {
-        if core_affinity::set_for_current(core) {
+        if core_affinity::set_for_current(core.into()) {
             applied.affinity = Some(core);
         } else {
             tracing::warn!("failed to pin RT thread to core {}", core.id);

@@ -19,7 +19,6 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 zerocopy.workspace = true
 thread-priority.workspace = true
-core_affinity.workspace = true
 tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
