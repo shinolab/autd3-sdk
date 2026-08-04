@@ -213,18 +213,19 @@ impl<L: Link> RtThread<L> {
                 .map_err(|e| format!("handshake failed: {e}"))?;
         }
 
-        self.next_seq = if self.config.low_latency {
-            self.negotiate_low_latency()?
-        } else {
-            Seq::ZERO
-        };
+        self.next_seq = self.negotiate_mode()?;
         Ok(())
     }
 
-    fn negotiate_low_latency(&mut self) -> Result<Seq, String> {
+    fn negotiate_mode(&mut self) -> Result<Seq, String> {
+        let mode = if self.config.low_latency {
+            Mode::LowLatency
+        } else {
+            Mode::Fifo
+        };
         let mut frame = TxFrame::new(Seq::ZERO, Cmd::SetMode);
         let (p, _) = SetModePayload::mut_from_prefix(&mut frame.payload).unwrap();
-        p.mode = Mode::LowLatency.as_u8();
+        p.mode = mode.as_u8();
         for buf in &mut self.tx_bufs {
             frame.write_to(buf);
         }
@@ -237,11 +238,11 @@ impl<L: Link> RtThread<L> {
                 .map_err(|e| format!("handshake failed: {e}"))?
                 .rx_valid();
             if rx_valid && self.rx_bufs.iter().all(|rx| rx[0] == Seq::ZERO.get()) {
-                tracing::info!("low-latency mode established");
+                tracing::info!(?mode, "frame processing mode established");
                 return Ok(Seq::new(1));
             }
         }
-        tracing::warn!("low-latency negotiation failed; staying in FIFO mode");
+        tracing::warn!(?mode, "frame processing mode negotiation failed");
         Ok(Seq::ZERO)
     }
 
