@@ -21,93 +21,117 @@ namespace AUTD3.Link
         }
 
         public static SoemLinkOption SafeDefault(Interface? iface = null) =>
-            FromValues(iface, NativeSoem.autd3_link_soem_option_safe_default);
+            FromPreset(iface, NativeSoem.autd3_link_soem_option_safe_default);
 
         public static SoemLinkOption PerformanceDefault(Interface? iface = null) =>
-            FromValues(iface, NativeSoem.autd3_link_soem_option_performance_default);
+            FromPreset(iface, NativeSoem.autd3_link_soem_option_performance_default);
 
-        private delegate int PresetFn(out SoemLinkOptionValues values);
+        private delegate IntPtr PresetFn();
 
-        private static SoemLinkOption FromValues(Interface? iface, PresetFn preset)
+        private static SoemLinkOption FromPreset(Interface? iface, PresetFn preset)
         {
-            if (preset(out var values) != 0)
+            var handle = preset();
+            if (handle == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to get soem link option preset");
             }
-            return new SoemLinkOption(
-                iface,
-                ToTimeSpan(values.Sync0PeriodNs),
-                ToTimeSpan(values.Sync0ShiftNs),
-                ToTimeSpan(values.SyncToleranceNs),
-                ToTimeSpan(values.SyncTimeoutNs));
-        }
-
-        private static TimeSpan ToTimeSpan(ulong ns) => TimeSpan.FromTicks((long)(ns / 100));
-
-        IntPtr ILink.TakeOpener()
-        {
-            var opener = NativeSoem.autd3_link_soem(
-                Iface.NameValue,
-                Sync0Period.HasValue, (ulong)(Sync0Period?.Ticks * 100 ?? 0),
-                Sync0Shift.HasValue, (ulong)(Sync0Shift?.Ticks * 100 ?? 0),
-                SyncTolerance.HasValue, (ulong)(SyncTolerance?.Ticks * 100 ?? 0),
-                SyncTimeout.HasValue, (ulong)(SyncTimeout?.Ticks * 100 ?? 0));
-            if (opener == IntPtr.Zero)
+            try
             {
-                throw new Autd3Exception("failed to create soem link");
+                return new SoemLinkOption(
+                    iface,
+                    LinkOptionNative.GetDuration(handle, NativeSoem.autd3_link_soem_option_get_sync0_period),
+                    LinkOptionNative.GetDuration(handle, NativeSoem.autd3_link_soem_option_get_sync0_shift),
+                    LinkOptionNative.GetDuration(handle, NativeSoem.autd3_link_soem_option_get_sync_tolerance),
+                    LinkOptionNative.GetDuration(handle, NativeSoem.autd3_link_soem_option_get_sync_timeout));
             }
-            return opener;
-        }
-
-        IntPtr ILegacyLink.TakeLegacyOpener()
-        {
-            var opener = NativeSoem.autd3_link_soem_legacy(
-                Iface.NameValue,
-                Sync0Period.HasValue, (ulong)(Sync0Period?.Ticks * 100 ?? 0),
-                Sync0Shift.HasValue, (ulong)(Sync0Shift?.Ticks * 100 ?? 0),
-                SyncTolerance.HasValue, (ulong)(SyncTolerance?.Ticks * 100 ?? 0),
-                SyncTimeout.HasValue, (ulong)(SyncTimeout?.Ticks * 100 ?? 0));
-            if (opener == IntPtr.Zero)
+            finally
             {
-                throw new Autd3Exception("failed to create soem link");
+                NativeSoem.autd3_link_soem_option_free(handle);
             }
-            return opener;
         }
-    }
 
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct SoemLinkOptionValues
-    {
-        public ulong Sync0PeriodNs;
-        public ulong Sync0ShiftNs;
-        public ulong SyncToleranceNs;
-        public ulong SyncTimeoutNs;
+        private IntPtr CreateHandle()
+        {
+            var handle = NativeSoem.autd3_link_soem_option_new();
+            if (handle == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create soem link option");
+            }
+            try
+            {
+                LinkOptionNative.Apply("iface", NativeSoem.autd3_link_soem_option_set_iface(handle, Iface.NameValue));
+                LinkOptionNative.SetDuration(handle, "sync0Period", Sync0Period, NativeSoem.autd3_link_soem_option_set_sync0_period);
+                LinkOptionNative.SetDuration(handle, "sync0Shift", Sync0Shift, NativeSoem.autd3_link_soem_option_set_sync0_shift);
+                LinkOptionNative.SetDuration(handle, "syncTolerance", SyncTolerance, NativeSoem.autd3_link_soem_option_set_sync_tolerance);
+                LinkOptionNative.SetDuration(handle, "syncTimeout", SyncTimeout, NativeSoem.autd3_link_soem_option_set_sync_timeout);
+            }
+            catch
+            {
+                NativeSoem.autd3_link_soem_option_free(handle);
+                throw;
+            }
+            return handle;
+        }
+
+        IntPtr ILink.TakeOpener() =>
+            LinkOptionNative.TakeOpener("soem", CreateHandle(), NativeSoem.autd3_link_soem_open);
+
+        IntPtr ILegacyLink.TakeLegacyOpener() =>
+            LinkOptionNative.TakeOpener("soem", CreateHandle(), NativeSoem.autd3_link_soem_open_legacy);
     }
 
     internal static class NativeSoem
     {
         private const string Lib = "autd3_link_soem";
 
-        [DllImport(Lib)]
-        internal static extern int autd3_link_soem_option_safe_default(out SoemLinkOptionValues @out);
+        static NativeSoem() => NativeAbi.Verify(Lib, autd3_abi_version());
 
         [DllImport(Lib)]
-        internal static extern int autd3_link_soem_option_performance_default(out SoemLinkOptionValues @out);
+        private static extern uint autd3_abi_version();
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_soem(
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName,
-            [MarshalAs(UnmanagedType.I1)] bool hasSync0Period, ulong sync0PeriodNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSync0Shift, ulong sync0ShiftNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSyncTolerance, ulong syncToleranceNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSyncTimeout, ulong syncTimeoutNs);
+        internal static extern IntPtr autd3_link_soem_option_new();
 
         [DllImport(Lib)]
-        internal static extern IntPtr autd3_link_soem_legacy(
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName,
-            [MarshalAs(UnmanagedType.I1)] bool hasSync0Period, ulong sync0PeriodNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSync0Shift, ulong sync0ShiftNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSyncTolerance, ulong syncToleranceNs,
-            [MarshalAs(UnmanagedType.I1)] bool hasSyncTimeout, ulong syncTimeoutNs);
+        internal static extern IntPtr autd3_link_soem_option_safe_default();
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_soem_option_performance_default();
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_set_iface(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_set_sync0_period(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_get_sync0_period(IntPtr option, out ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_set_sync0_shift(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_get_sync0_shift(IntPtr option, out ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_set_sync_tolerance(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_get_sync_tolerance(IntPtr option, out ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_set_sync_timeout(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_soem_option_get_sync_timeout(IntPtr option, out ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern void autd3_link_soem_option_free(IntPtr option);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_soem_open(IntPtr option);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr autd3_link_soem_open_legacy(IntPtr option);
     }
 }

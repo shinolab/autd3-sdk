@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
@@ -7,7 +8,9 @@ namespace AUTD3
 {
     public sealed class Geometry : IDisposable, IEnumerable<Device>
     {
-        internal IntPtr Handle { get; private set; }
+        private IntPtr _handle;
+
+        internal IntPtr Handle => _handle;
 
         public Geometry(IReadOnlyList<Autd3> devices)
         {
@@ -21,7 +24,7 @@ namespace AUTD3
             {
                 throw new Autd3Exception("failed to create geometry");
             }
-            Handle = handle;
+            _handle = handle;
         }
 
         public int NumDevices => (int)NativeCore.autd3_core_geometry_num_devices(Handle);
@@ -55,19 +58,20 @@ namespace AUTD3
 
         public void Dispose()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeCore.autd3_core_geometry_free(Handle);
-                Handle = IntPtr.Zero;
+                NativeCore.autd3_core_geometry_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~Geometry()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeCore.autd3_core_geometry_free(Handle);
+                NativeCore.autd3_core_geometry_free(handle);
             }
         }
     }

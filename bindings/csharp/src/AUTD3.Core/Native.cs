@@ -8,6 +8,11 @@ namespace AUTD3
     {
         private const string Lib = "autd3_core";
 
+        static NativeCore() => NativeAbi.Verify(Lib, autd3_abi_version());
+
+        [DllImport(Lib)]
+        private static extern uint autd3_abi_version();
+
         [StructLayout(LayoutKind.Sequential)]
         internal struct Autd3Device
         {
@@ -86,6 +91,87 @@ namespace AUTD3
 
         [DllImport(Lib)]
         internal static extern void autd3_core_sampling_config_free(IntPtr config);
+    }
+
+    internal static class NativeAbi
+    {
+        internal const ushort Major = 1;
+        internal const ushort Minor = 0;
+
+        internal const int ErrorBufferLength = 1024;
+
+        internal static void Verify(string library, uint actual)
+        {
+            var expected = ((uint)Major << 16) | Minor;
+            if (actual == expected)
+            {
+                return;
+            }
+            throw new Autd3Exception(
+                $"native library '{library}' reports C ABI version {actual >> 16}.{actual & 0xFFFF}, " +
+                $"but this binding requires {Major}.{Minor}. " +
+                "The managed package and the native library are from different releases.");
+        }
+    }
+
+    internal static class LinkOptionNative
+    {
+        internal delegate int SetDurationFn(IntPtr option, ulong ns);
+
+        internal delegate int GetDurationFn(IntPtr option, out ulong ns);
+
+        internal delegate int SetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
+
+        internal delegate int GetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
+
+        internal delegate IntPtr OpenFn(IntPtr option);
+
+        internal static void Apply(string field, int code)
+        {
+            if (code != 0)
+            {
+                throw new Autd3Exception($"`{field}` is out of the range the native library accepts");
+            }
+        }
+
+        internal static void SetDuration(IntPtr option, string field, TimeSpan? value, SetDurationFn set)
+        {
+            if (value is { } v)
+            {
+                Apply(field, set(option, ToNanos(v)));
+            }
+        }
+
+        internal static void SetOptionalDuration(IntPtr option, string field, TimeSpan? value, SetOptionalDurationFn set)
+        {
+            Apply(field, set(option, value.HasValue, value.HasValue ? ToNanos(value.Value) : 0UL));
+        }
+
+        internal static TimeSpan GetDuration(IntPtr option, GetDurationFn get)
+        {
+            Apply("preset", get(option, out var ns));
+            return FromNanos(ns);
+        }
+
+        internal static TimeSpan? GetOptionalDuration(IntPtr option, GetOptionalDurationFn get)
+        {
+            Apply("preset", get(option, out var hasValue, out var ns));
+            return hasValue ? FromNanos(ns) : (TimeSpan?)null;
+        }
+
+        internal static IntPtr TakeOpener(string link, IntPtr option, OpenFn open)
+        {
+            var opener = open(option);
+            if (opener == IntPtr.Zero)
+            {
+                throw new Autd3Exception($"failed to create {link} link");
+            }
+            return opener;
+        }
+
+        internal static ulong ToNanos(TimeSpan value) => (ulong)value.Ticks * 100UL;
+
+        internal static TimeSpan FromNanos(ulong ns) => TimeSpan.FromTicks((long)(ns / 100));
     }
 
     internal static class NativeUtil

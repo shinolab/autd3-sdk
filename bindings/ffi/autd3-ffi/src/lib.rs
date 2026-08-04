@@ -2118,3 +2118,82 @@ pub unsafe extern "C" fn autd3_link_status_free(status: *mut LinkStatus) {
 }
 
 autd3_ffi_abi::export_abi_version!();
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use autd3_ffi_abi::AUTD3_RT_PRIORITY_DEFAULT;
+
+    #[test]
+    fn a_new_client_config_matches_the_rust_default() {
+        let handle = autd3_client_config_new();
+        let config = unsafe { take_handle(handle) }.unwrap();
+        let expected = ClientConfig::default();
+
+        assert_eq!(expected.timeout_cycles, config.timeout_cycles);
+        assert_eq!(expected.max_inflight, config.max_inflight);
+        assert_eq!(expected.max_resync_rounds, config.max_resync_rounds);
+        assert_eq!(expected.low_latency, config.low_latency);
+        assert_eq!(expected.reset_resend_cycles, config.reset_resend_cycles);
+        assert_eq!(expected.rt_priority, config.rt_priority);
+        assert_eq!(expected.rt_policy, config.rt_policy);
+        assert_eq!(expected.rt_affinity, config.rt_affinity);
+        assert_eq!(expected.validate_state, config.validate_state);
+        assert_eq!(
+            expected.require_supported_firmware,
+            config.require_supported_firmware
+        );
+    }
+
+    #[test]
+    fn the_default_rt_priority_mode_keeps_the_rust_default() {
+        let handle = autd3_client_config_new();
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_set_rt_priority(handle, AUTD3_RT_PRIORITY_DEFAULT, 0)
+        });
+        let config = unsafe { take_handle(handle) }.unwrap();
+        assert_eq!(ClientConfig::default().rt_priority, config.rt_priority);
+        assert!(config.rt_priority.is_some());
+    }
+
+    #[test]
+    fn an_unknown_rt_priority_mode_is_rejected() {
+        let handle = autd3_client_config_new();
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_config_set_rt_priority(handle, 9, 0)
+        });
+        unsafe { autd3_client_config_free(handle) };
+    }
+
+    #[test]
+    fn a_zero_nonzero_setter_argument_is_rejected() {
+        let handle = autd3_client_config_new();
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_config_set_timeout_cycles(handle, 0)
+        });
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_config_set_max_inflight(handle, 0)
+        });
+        unsafe { autd3_client_config_free(handle) };
+    }
+
+    #[test]
+    fn unknown_enum_discriminants_are_rejected() {
+        assert!(to_pattern_bank(2).is_none());
+        assert!(to_modulation_bank(2).is_none());
+        assert!(to_gpio_in(4).is_none());
+        assert!(to_telemetry(0x07).is_none());
+        assert!(to_pattern_stm_mode(3).is_none());
+        assert!(to_pattern_compression(0).is_none());
+        assert!(to_transition_mode(0x03, 0, 0).is_none());
+        assert!(to_gpio_out(&Autd3GpioOut { kind: 14, value: 0 }).is_none());
+    }
+
+    #[test]
+    fn every_telemetry_counter_round_trips() {
+        assert_eq!(Some(Telemetry::SyncResync), to_telemetry(0x06));
+        for counter in 0x00..=0x06u8 {
+            assert!(to_telemetry(counter).is_some());
+        }
+    }
+}

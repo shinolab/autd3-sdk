@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -136,19 +137,20 @@ namespace AUTD3
 
         public void Dispose()
         {
-            if (_handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeClient.autd3_checker_free(_handle);
-                _handle = IntPtr.Zero;
+                NativeClient.autd3_checker_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~Checker()
         {
-            if (_handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeClient.autd3_checker_free(_handle);
+                NativeClient.autd3_checker_free(handle);
             }
         }
     }
@@ -166,7 +168,7 @@ namespace AUTD3
 
         public void Check()
         {
-            var err = new byte[256];
+            var err = new byte[NativeAbi.ErrorBufferLength];
             if (!NativeClient.autd3_response_check(_data, (UIntPtr)_data.Length, err, (UIntPtr)err.Length))
             {
                 throw new Autd3Exception(NativeUtil.Utf8(err));
@@ -185,8 +187,7 @@ namespace AUTD3
 
         public async Task<Response> AwaitAsync()
         {
-            var handle = _handle;
-            _handle = IntPtr.Zero;
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
             if (handle == IntPtr.Zero)
             {
                 throw new Autd3Exception("ResponseToken has already been awaited");
@@ -201,19 +202,20 @@ namespace AUTD3
 
         public void Dispose()
         {
-            if (_handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeClient.autd3_response_token_free(_handle);
-                _handle = IntPtr.Zero;
+                NativeClient.autd3_response_token_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~ResponseToken()
         {
-            if (_handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeClient.autd3_response_token_free(_handle);
+                NativeClient.autd3_response_token_free(handle);
             }
         }
     }
@@ -222,13 +224,15 @@ namespace AUTD3
     {
         public const int MaxInflight = 127;
 
-        internal IntPtr Handle { get; private set; }
+        private IntPtr _handle;
+
+        internal IntPtr Handle => _handle;
 
         private readonly Geometry _geometry;
 
         private Client(IntPtr handle, Geometry geometry)
         {
-            Handle = handle;
+            _handle = handle;
             _geometry = geometry;
         }
 
@@ -236,8 +240,17 @@ namespace AUTD3
         {
             var opener = link.TakeOpener();
 
+            IntPtr configHandle;
+            try
+            {
+                configHandle = config.CreateHandle();
+            }
+            catch
+            {
+                NativeClient.autd3_client_opener_free(opener);
+                throw;
+            }
 
-            var configHandle = config.CreateHandle();
             Task<IntPtr> task;
             try
             {
@@ -347,19 +360,20 @@ namespace AUTD3
 
         public void Dispose()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeClient.autd3_client_free(Handle);
-                Handle = IntPtr.Zero;
+                NativeClient.autd3_client_free(handle);
             }
             GC.SuppressFinalize(this);
         }
 
         ~Client()
         {
-            if (Handle != IntPtr.Zero)
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
             {
-                NativeClient.autd3_client_free(Handle);
+                NativeClient.autd3_client_free(handle);
             }
         }
     }
