@@ -111,7 +111,7 @@ pub enum LegacyError {
 
 impl From<LinkError> for LegacyError {
     fn from(e: LinkError) -> Self {
-        LegacyError::Link(e.0)
+        LegacyError::Link(e.message().to_owned())
     }
 }
 

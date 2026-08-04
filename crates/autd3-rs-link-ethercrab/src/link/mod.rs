@@ -37,7 +37,7 @@ impl autd3_rs_core::IntoLink for EtherCrabLinkOptionFull {
     ) -> Result<EtherCrabLink, autd3_rs_core::error::LinkError> {
         Box::pin(EtherCrabLink::open(self))
             .await
-            .map_err(|e| autd3_rs_core::error::LinkError(e.to_string()))
+            .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e))
     }
 }
 

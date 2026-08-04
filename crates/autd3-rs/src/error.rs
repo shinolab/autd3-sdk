@@ -60,7 +60,7 @@ pub enum Error {
 
 impl From<LinkError> for Error {
     fn from(e: LinkError) -> Self {
-        Error::Link(e.0)
+        Error::Link(e.message().to_owned())
     }
 }
 

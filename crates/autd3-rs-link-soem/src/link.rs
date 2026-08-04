@@ -40,8 +40,10 @@ impl autd3_rs_core::IntoLink for SoemLinkOptionFull {
     ) -> Result<SoemLink, autd3_rs_core::error::LinkError> {
         tokio::task::spawn_blocking(move || SoemLink::open(self))
             .await
-            .map_err(|e| autd3_rs_core::error::LinkError(format!("link open task panicked: {e}")))?
-            .map_err(|e| autd3_rs_core::error::LinkError(e.to_string()))
+            .map_err(|e| {
+                autd3_rs_core::error::LinkError::new(format!("link open task panicked: {e}"))
+            })?
+            .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e))
     }
 }
 
