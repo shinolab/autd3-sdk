@@ -6,8 +6,8 @@ use std::time::Duration;
 use autd3_ffi_abi::{
     AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, CheckerBackend, ClientBackend, ClientOpener,
     CompletionCallback, CompletionCtx, DevicePattern, ModulationBuffer, PatternBuffer,
-    ResponseTokenData, drop_handle, handle_mut, handle_ref, into_handle, slice_ref, take_handle,
-    to_rt_policy, to_rt_priority, write_cstr, write_out,
+    ResponseTokenData, drop_handle, handle_mut, handle_ref, into_handle, slice_mut, slice_ref,
+    take_handle, to_rt_policy, to_rt_priority, write_cstr, write_out,
 };
 use autd3_rs::commands::{
     BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
@@ -284,15 +284,17 @@ pub unsafe extern "C" fn autd3_stm_config_into_sampling_config(
     size: usize,
     out: *mut u16,
 ) -> i32 {
-    if config.is_null() || out.is_null() {
-        return -1;
-    }
-
-    let Ok(value) = unsafe { *config }.into_sampling_config(size).divide() else {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
         return -1;
     };
 
-    unsafe { *out = value };
+    let Ok(value) = config.into_sampling_config(size).divide() else {
+        return -1;
+    };
+
+    if unsafe { write_out(out, value) } != AUTD3_OK {
+        return -1;
+    }
     0
 }
 
@@ -305,17 +307,23 @@ unsafe fn write_control_points(
     points: &[ControlPoints<1>],
     out_points: *mut Autd3StmControlPoint,
     out_intensities: *mut u8,
-) {
-    for (i, cp) in points.iter().enumerate() {
+) -> i32 {
+    let (Some(out_points), Some(out_intensities)) =
+        (unsafe { slice_mut(out_points, points.len()) }, unsafe {
+            slice_mut(out_intensities, points.len())
+        })
+    else {
+        return -1;
+    };
+    for ((out_point, out_intensity), cp) in out_points.iter_mut().zip(out_intensities).zip(points) {
         let p = cp.points[0];
-        unsafe {
-            *out_points.add(i) = Autd3StmControlPoint {
-                point: [p.point.x, p.point.y, p.point.z],
-                phase_offset: p.phase_offset.0,
-            };
-            *out_intensities.add(i) = cp.intensity.0;
-        }
+        *out_point = Autd3StmControlPoint {
+            point: [p.point.x, p.point.y, p.point.z],
+            phase_offset: p.phase_offset.0,
+        };
+        *out_intensity = cp.intensity.0;
     }
+    0
 }
 
 #[unsafe(no_mangle)]
@@ -328,11 +336,11 @@ pub unsafe extern "C" fn autd3_stm_circle(
     out_points: *mut Autd3StmControlPoint,
     out_intensities: *mut u8,
 ) -> i32 {
-    if center.is_null() || normal.is_null() || out_points.is_null() || out_intensities.is_null() {
+    let (Some(center), Some(normal)) = (unsafe { slice_ref(center, 3) }, unsafe {
+        slice_ref(normal, 3)
+    }) else {
         return -1;
-    }
-    let center = unsafe { std::slice::from_raw_parts(center, 3) };
-    let normal = unsafe { std::slice::from_raw_parts(normal, 3) };
+    };
     let mut points = Vec::new();
     circle(
         Point3::new(center[0], center[1], center[2]),
@@ -342,8 +350,7 @@ pub unsafe extern "C" fn autd3_stm_circle(
         Intensity(intensity),
         &mut points,
     );
-    unsafe { write_control_points(&points, out_points, out_intensities) };
-    0
+    unsafe { write_control_points(&points, out_points, out_intensities) }
 }
 
 #[unsafe(no_mangle)]
@@ -355,11 +362,10 @@ pub unsafe extern "C" fn autd3_stm_line(
     out_points: *mut Autd3StmControlPoint,
     out_intensities: *mut u8,
 ) -> i32 {
-    if start.is_null() || end.is_null() || out_points.is_null() || out_intensities.is_null() {
+    let (Some(start), Some(end)) = (unsafe { slice_ref(start, 3) }, unsafe { slice_ref(end, 3) })
+    else {
         return -1;
-    }
-    let start = unsafe { std::slice::from_raw_parts(start, 3) };
-    let end = unsafe { std::slice::from_raw_parts(end, 3) };
+    };
     let mut points = Vec::new();
     line(
         Point3::new(start[0], start[1], start[2]),
@@ -368,8 +374,7 @@ pub unsafe extern "C" fn autd3_stm_line(
         Intensity(intensity),
         &mut points,
     );
-    unsafe { write_control_points(&points, out_points, out_intensities) };
-    0
+    unsafe { write_control_points(&points, out_points, out_intensities) }
 }
 
 #[unsafe(no_mangle)]
@@ -601,9 +606,9 @@ pub unsafe extern "C" fn autd3_op_pattern(
     transition_value: u64,
     transition_margin_ns: u32,
 ) -> *mut Pending {
-    if pattern_buffer.is_null() {
+    let Some(pattern_buffer) = (unsafe { handle_ref(pattern_buffer) }) else {
         return std::ptr::null_mut();
-    }
+    };
     let (Some(bank), Some(transition_mode)) = (
         to_pattern_bank(bank),
         to_transition_mode(transition_mode, transition_value, transition_margin_ns),
@@ -612,7 +617,7 @@ pub unsafe extern "C" fn autd3_op_pattern(
     };
 
     into_handle(Pending::Pattern {
-        emissions: unsafe { &*pattern_buffer }.0.clone(),
+        emissions: pattern_buffer.0.clone(),
         bank,
         transition_mode,
     })
@@ -628,9 +633,13 @@ pub unsafe extern "C" fn autd3_op_modulation(
     transition_value: u64,
     transition_margin_ns: u32,
 ) -> *mut Pending {
-    if sampling_config.is_null() || modulation_buffer.is_null() {
+    let (Some(sampling_config), Some(modulation_buffer)) =
+        (unsafe { handle_ref(sampling_config) }, unsafe {
+            handle_ref(modulation_buffer)
+        })
+    else {
         return std::ptr::null_mut();
-    }
+    };
     let (Some(bank), Some(transition_mode)) = (
         to_modulation_bank(bank),
         to_transition_mode(transition_mode, transition_value, transition_margin_ns),
@@ -638,10 +647,10 @@ pub unsafe extern "C" fn autd3_op_modulation(
         return std::ptr::null_mut();
     };
 
-    let Ok(divider) = unsafe { &*sampling_config }.divide() else {
+    let Ok(divider) = sampling_config.divide() else {
         return std::ptr::null_mut();
     };
-    let data = unsafe { &*modulation_buffer }.0.clone();
+    let data = modulation_buffer.0.clone();
     into_handle(Pending::Modulation {
         divider,
         data,
@@ -657,14 +666,14 @@ pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
     index: u16,
     pattern_buffer: *const PatternBuffer,
 ) -> *mut Pending {
-    if pattern_buffer.is_null() {
+    let Some(pattern_buffer) = (unsafe { handle_ref(pattern_buffer) }) else {
         return std::ptr::null_mut();
-    }
+    };
     let Some(bank) = to_pattern_bank(bank) else {
         return std::ptr::null_mut();
     };
 
-    let emissions = unsafe { &*pattern_buffer }.0.clone();
+    let emissions = pattern_buffer.0.clone();
     into_handle(Pending::WritePatternBuffer {
         bank,
         index,
@@ -681,7 +690,7 @@ pub unsafe extern "C" fn autd3_op_write_foci_buffer(
     num_foci: u8,
     intensities: *const u8,
 ) -> *mut Pending {
-    if points.is_null() || intensities.is_null() || num_foci == 0 {
+    if num_foci == 0 {
         return std::ptr::null_mut();
     }
     let Some(bank) = to_pattern_bank(bank) else {
@@ -689,8 +698,13 @@ pub unsafe extern "C" fn autd3_op_write_foci_buffer(
     };
 
     let n = usize::from(num_foci);
-    let points = unsafe { std::slice::from_raw_parts(points, num_samples * n) };
-    let intensities = unsafe { std::slice::from_raw_parts(intensities, num_samples) };
+    let (Some(points), Some(intensities)) =
+        (unsafe { slice_ref(points, num_samples * n) }, unsafe {
+            slice_ref(intensities, num_samples)
+        })
+    else {
+        return std::ptr::null_mut();
+    };
     let samples = points
         .chunks_exact(n)
         .zip(intensities)
@@ -725,18 +739,23 @@ pub unsafe extern "C" fn autd3_op_write_pattern_compressed(
     patterns: *const *const PatternBuffer,
     num_patterns: usize,
 ) -> *mut Pending {
-    if patterns.is_null() || num_patterns == 0 {
+    if num_patterns == 0 {
         return std::ptr::null_mut();
     }
     let (Some(bank), Some(format)) = (to_pattern_bank(bank), to_pattern_compression(format)) else {
         return std::ptr::null_mut();
     };
 
-    let slice = unsafe { std::slice::from_raw_parts(patterns, num_patterns) };
-    if slice.iter().any(|p| p.is_null()) {
+    let Some(slice) = (unsafe { slice_ref(patterns, num_patterns) }) else {
         return std::ptr::null_mut();
+    };
+    let mut patterns = Vec::with_capacity(slice.len());
+    for p in slice {
+        let Some(pattern) = (unsafe { handle_ref(*p) }) else {
+            return std::ptr::null_mut();
+        };
+        patterns.push(pattern.0.clone());
     }
-    let patterns = slice.iter().map(|p| unsafe { &**p }.0.clone()).collect();
     into_handle(Pending::WritePatternCompressed {
         bank,
         index,
@@ -760,15 +779,15 @@ pub unsafe extern "C" fn autd3_op_config_pattern(
     size: u32,
     rep: u16,
 ) -> *mut Pending {
-    if sampling_config.is_null() {
+    let Some(sampling_config) = (unsafe { handle_ref(sampling_config) }) else {
         return std::ptr::null_mut();
-    }
+    };
     let Some(bank) = to_pattern_bank(bank) else {
         return std::ptr::null_mut();
     };
     into_handle(Pending::ConfigPattern {
         bank,
-        config: *unsafe { &*sampling_config },
+        config: *sampling_config,
         size,
         loop_behavior: rep_to_loop_behavior(rep),
     })
@@ -783,15 +802,15 @@ pub unsafe extern "C" fn autd3_op_config_foci_stm(
     sound_speed_m_s: f32,
     rep: u16,
 ) -> *mut Pending {
-    if sampling_config.is_null() {
+    let Some(sampling_config) = (unsafe { handle_ref(sampling_config) }) else {
         return std::ptr::null_mut();
-    }
+    };
     let Some(bank) = to_pattern_bank(bank) else {
         return std::ptr::null_mut();
     };
     into_handle(Pending::ConfigFociStm {
         bank,
-        config: *unsafe { &*sampling_config },
+        config: *sampling_config,
         size,
         num_foci,
         sound_speed: Velocity::from_m_s(sound_speed_m_s),
@@ -824,14 +843,14 @@ pub unsafe extern "C" fn autd3_op_write_modulation_buffer(
     offset: u32,
     modulation_buffer: *const ModulationBuffer,
 ) -> *mut Pending {
-    if modulation_buffer.is_null() {
+    let Some(modulation_buffer) = (unsafe { handle_ref(modulation_buffer) }) else {
         return std::ptr::null_mut();
-    }
+    };
     let Some(bank) = to_modulation_bank(bank) else {
         return std::ptr::null_mut();
     };
 
-    let data = unsafe { &*modulation_buffer }.0.clone();
+    let data = modulation_buffer.0.clone();
     into_handle(Pending::WriteModulationBuffer { bank, offset, data })
 }
 
@@ -842,15 +861,15 @@ pub unsafe extern "C" fn autd3_op_config_modulation(
     size: u32,
     rep: u16,
 ) -> *mut Pending {
-    if sampling_config.is_null() {
+    let Some(sampling_config) = (unsafe { handle_ref(sampling_config) }) else {
         return std::ptr::null_mut();
-    }
+    };
     let Some(bank) = to_modulation_bank(bank) else {
         return std::ptr::null_mut();
     };
     into_handle(Pending::ConfigModulation {
         bank,
-        config: *unsafe { &*sampling_config },
+        config: *sampling_config,
         size,
         loop_behavior: rep_to_loop_behavior(rep),
     })
@@ -924,11 +943,10 @@ pub extern "C" fn autd3_op_set_silencer_disable() -> *mut Pending {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_set_gpio_out(outputs: *const Autd3GpioOut) -> *mut Pending {
-    if outputs.is_null() {
+    let Some(outputs) = (unsafe { slice_ref(outputs, 4) }) else {
         return std::ptr::null_mut();
-    }
+    };
 
-    let outputs = unsafe { std::slice::from_raw_parts(outputs, 4) };
     let (Some(o0), Some(o1), Some(o2), Some(o3)) = (
         to_gpio_out(&outputs[0]),
         to_gpio_out(&outputs[1]),
@@ -942,11 +960,10 @@ pub unsafe extern "C" fn autd3_op_set_gpio_out(outputs: *const Autd3GpioOut) -> 
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut Pending {
-    if values.is_null() {
+    let Some(values) = (unsafe { slice_ref(values, 4) }) else {
         return std::ptr::null_mut();
-    }
+    };
 
-    let values = unsafe { std::slice::from_raw_parts(values, 4) };
     into_handle(Pending::EmulateGpioIn([
         values[0] != 0,
         values[1] != 0,
@@ -961,12 +978,12 @@ pub unsafe extern "C" fn autd3_op_set_output_mask(
     lens: *const usize,
     num_devices: usize,
 ) -> *mut Pending {
-    if masks.is_null() || lens.is_null() {
+    let Some(lens) = (unsafe { slice_ref(lens, num_devices) }) else {
         return std::ptr::null_mut();
-    }
-
-    let lens = unsafe { std::slice::from_raw_parts(lens, num_devices) };
-    let slice = unsafe { std::slice::from_raw_parts(masks, lens.iter().sum()) };
+    };
+    let Some(slice) = (unsafe { slice_ref(masks, lens.iter().sum()) }) else {
+        return std::ptr::null_mut();
+    };
     let mut offset = 0;
     let masks = lens
         .iter()
@@ -985,12 +1002,12 @@ pub unsafe extern "C" fn autd3_op_set_phase_correction(
     lens: *const usize,
     num_devices: usize,
 ) -> *mut Pending {
-    if phases.is_null() || lens.is_null() {
+    let Some(lens) = (unsafe { slice_ref(lens, num_devices) }) else {
         return std::ptr::null_mut();
-    }
-
-    let lens = unsafe { std::slice::from_raw_parts(lens, num_devices) };
-    let slice = unsafe { std::slice::from_raw_parts(phases, lens.iter().sum()) };
+    };
+    let Some(slice) = (unsafe { slice_ref(phases, lens.iter().sum()) }) else {
+        return std::ptr::null_mut();
+    };
     let mut offset = 0;
     let phases = lens
         .iter()
@@ -1005,11 +1022,10 @@ pub unsafe extern "C" fn autd3_op_set_phase_correction(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_set_pulse_width_table(table: *const u16) -> *mut Pending {
-    if table.is_null() {
+    let Some(slice) = (unsafe { slice_ref(table, PWE_TABLE_SIZE) }) else {
         return std::ptr::null_mut();
-    }
+    };
 
-    let slice = unsafe { std::slice::from_raw_parts(table, PWE_TABLE_SIZE) };
     let mut t = Box::new([PulseWidth::new(0); PWE_TABLE_SIZE]);
     for (dst, &src) in t.iter_mut().zip(slice.iter()) {
         *dst = PulseWidth::new(src);
@@ -1019,42 +1035,32 @@ pub unsafe extern "C" fn autd3_op_set_pulse_width_table(table: *const u16) -> *m
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_set_pulse_width_table_default_table(out: *mut u16) {
-    if out.is_null() {
-        return;
-    }
-
     let table = SetPulseWidthTable::default_table();
-    for (i, pw) in table.iter().enumerate() {
-        unsafe { *out.add(i) = pw.pulse_width().unwrap_or(0) };
+    let Some(out) = (unsafe { slice_mut(out, table.len()) }) else {
+        return;
+    };
+
+    for (dst, pw) in out.iter_mut().zip(table.iter()) {
+        *dst = pw.pulse_width().unwrap_or(0);
     }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_pulse_width_from_duty(duty: f32, out: *mut u16) -> bool {
-    if out.is_null() {
-        return false;
-    }
-
     let Ok(value) = PulseWidth::from_duty(duty).pulse_width() else {
         return false;
     };
 
-    unsafe { *out = value };
-    true
+    unsafe { write_out(out, value) == AUTD3_OK }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_pulse_width_new(pulse_width: u16, out: *mut u16) -> bool {
-    if out.is_null() {
-        return false;
-    }
-
     let Ok(value) = PulseWidth::new(pulse_width).pulse_width() else {
         return false;
     };
 
-    unsafe { *out = value };
-    true
+    unsafe { write_out(out, value) == AUTD3_OK }
 }
 
 #[unsafe(no_mangle)]
@@ -1071,9 +1077,12 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
     transition_value: u64,
     transition_margin_ns: u32,
 ) -> *mut Pending {
-    if config.is_null() || points.is_null() || intensities.is_null() || num_foci == 0 {
+    if num_foci == 0 {
         return std::ptr::null_mut();
     }
+    let Some(config) = (unsafe { handle_ref(config) }) else {
+        return std::ptr::null_mut();
+    };
     let (Some(bank), Some(transition_mode)) = (
         to_pattern_bank(bank),
         to_transition_mode(transition_mode, transition_value, transition_margin_ns),
@@ -1082,8 +1091,13 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
     };
 
     let n = usize::from(num_foci);
-    let points = unsafe { std::slice::from_raw_parts(points, num_samples * n) };
-    let intensities = unsafe { std::slice::from_raw_parts(intensities, num_samples) };
+    let (Some(points), Some(intensities)) =
+        (unsafe { slice_ref(points, num_samples * n) }, unsafe {
+            slice_ref(intensities, num_samples)
+        })
+    else {
+        return std::ptr::null_mut();
+    };
     let samples = points
         .chunks_exact(n)
         .zip(intensities)
@@ -1104,7 +1118,7 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
         return std::ptr::null_mut();
     };
     into_handle(Pending::FociStm {
-        config: *unsafe { &*config },
+        config: *config,
         points,
         bank,
         sound_speed: sound_speed_m_s,
@@ -1125,9 +1139,11 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     transition_value: u64,
     transition_margin_ns: u32,
 ) -> *mut Pending {
-    if config.is_null() || patterns.is_null() {
+    let (Some(config), Some(slice)) = (unsafe { handle_ref(config) }, unsafe {
+        slice_ref(patterns, num_patterns)
+    }) else {
         return std::ptr::null_mut();
-    }
+    };
     let (Some(bank), Some(mode), Some(transition_mode)) = (
         to_pattern_bank(bank),
         to_pattern_stm_mode(mode),
@@ -1136,13 +1152,15 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
         return std::ptr::null_mut();
     };
 
-    let slice = unsafe { std::slice::from_raw_parts(patterns, num_patterns) };
-    if slice.iter().any(|p| p.is_null()) {
-        return std::ptr::null_mut();
+    let mut patterns = Vec::with_capacity(slice.len());
+    for p in slice {
+        let Some(pattern) = (unsafe { handle_ref(*p) }) else {
+            return std::ptr::null_mut();
+        };
+        patterns.push(pattern.0.clone());
     }
-    let patterns = slice.iter().map(|p| unsafe { &**p }.0.clone()).collect();
     into_handle(Pending::PatternStm {
-        config: *unsafe { &*config },
+        config: *config,
         patterns,
         bank,
         mode,
@@ -1352,12 +1370,12 @@ pub struct DatagramBuilder {
 pub unsafe extern "C" fn autd3_datagram_builder_new(
     geometry: *const Geometry,
 ) -> *mut DatagramBuilder {
-    if geometry.is_null() {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return std::ptr::null_mut();
-    }
+    };
 
     into_handle(DatagramBuilder {
-        geometry: Arc::new(unsafe { &*geometry }.clone()),
+        geometry: Arc::new(geometry.clone()),
         pending: Vec::new(),
     })
 }
@@ -1418,17 +1436,13 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> *mut Arc<Frames> {
-    if builder.is_null() {
+    let Some(builder) = (unsafe { handle_ref(builder) }) else {
         unsafe { write_cstr(out_err, out_err_len, "null builder") };
         return std::ptr::null_mut();
-    }
-
-    let dc_offset_ns = if client.is_null() {
-        0
-    } else {
-        unsafe { &*client }.0.dc_offset_ns()
     };
-    let builder = unsafe { &*builder };
+
+    let dc_offset_ns =
+        unsafe { handle_ref(client) }.map_or(0, |client: &ClientHandle| client.0.dc_offset_ns());
     let mut core = CoreDatagramBuilder::with_dc_offset(Arc::clone(&builder.geometry), dc_offset_ns);
     for pending in &builder.pending {
         match pending {
@@ -1667,11 +1681,11 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_datagrams_num_frames(datagrams: *const Arc<Frames>) -> usize {
-    if datagrams.is_null() {
+    let Some(datagrams) = (unsafe { handle_ref::<Arc<Frames>>(datagrams) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*datagrams }.len()
+    datagrams.len()
 }
 
 #[unsafe(no_mangle)]
@@ -1729,11 +1743,11 @@ pub unsafe extern "C" fn autd3_client_open(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_num_devices(client: *const ClientHandle) -> usize {
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*client }.0.num_devices()
+    client.0.num_devices()
 }
 
 #[unsafe(no_mangle)]
@@ -1745,14 +1759,16 @@ pub unsafe extern "C" fn autd3_client_send_checked(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() || datagrams.is_null() {
+    let (Some(client), Some(datagrams)) = (unsafe { handle_ref(client) }, unsafe {
+        handle_ref::<Arc<Frames>>(datagrams)
+    }) else {
         ctx.err("null argument");
         return;
-    }
+    };
 
-    let datagrams = unsafe { &*datagrams }.clone();
+    let datagrams = datagrams.clone();
     let frame = usize::try_from(frame).ok();
-    let fut = unsafe { &*client }.0.send_checked(datagrams, frame);
+    let fut = client.0.send_checked(datagrams, frame);
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
@@ -1772,14 +1788,16 @@ pub unsafe extern "C" fn autd3_client_send(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() || datagrams.is_null() {
+    let (Some(client), Some(datagrams)) = (unsafe { handle_ref(client) }, unsafe {
+        handle_ref::<Arc<Frames>>(datagrams)
+    }) else {
         ctx.err("null argument");
         return;
-    }
+    };
 
-    let datagrams = unsafe { &*datagrams }.clone();
+    let datagrams = datagrams.clone();
     let frame = usize::try_from(frame).ok();
-    let fut = unsafe { &*client }.0.send(datagrams, frame);
+    let fut = client.0.send(datagrams, frame);
     runtime().spawn(async move {
         match fut.await {
             Ok(token) => ctx.ok(into_handle(ResponseToken(token)).cast()),
@@ -1822,10 +1840,9 @@ pub unsafe extern "C" fn autd3_response_check(
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> bool {
-    let response = if data.is_null() || len == 0 {
-        Response::default()
-    } else {
-        Response::from_slice(unsafe { std::slice::from_raw_parts(data, len) })
+    let response = match unsafe { slice_ref(data, len) } {
+        Some(data) if !data.is_empty() => Response::from_slice(data),
+        _ => Response::default(),
     };
     match response.check() {
         Ok(()) => true,
@@ -1843,12 +1860,12 @@ pub unsafe extern "C" fn autd3_client_read_firmware_version(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
-    }
+    };
 
-    let fut = unsafe { &*client }.0.read_firmware_version();
+    let fut = client.0.read_firmware_version();
     runtime().spawn(async move {
         match fut.await {
             Ok(versions) => ctx.ok(into_handle(StringArray(to_cstrings(versions))).cast()),
@@ -1864,12 +1881,12 @@ pub unsafe extern "C" fn autd3_client_read_fpga_state(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
-    }
+    };
 
-    let fut = unsafe { &*client }.0.read_fpga_state();
+    let fut = client.0.read_fpga_state();
     runtime().spawn(async move {
         match fut.await {
             Ok(states) => ctx.ok(into_handle(ByteArray(states)).cast()),
@@ -1886,16 +1903,16 @@ pub unsafe extern "C" fn autd3_client_read_telemetry(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
-    }
+    };
     let Some(counter) = to_telemetry(counter) else {
         ctx.err("unknown telemetry counter");
         return;
     };
 
-    let fut = unsafe { &*client }.0.read_telemetry(counter);
+    let fut = client.0.read_telemetry(counter);
     runtime().spawn(async move {
         match fut.await {
             Ok(values) => ctx.ok(into_handle(ByteArray(values)).cast()),
@@ -1911,12 +1928,12 @@ pub unsafe extern "C" fn autd3_client_read_error_detail(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
-    }
+    };
 
-    let fut = unsafe { &*client }.0.read_error_detail();
+    let fut = client.0.read_error_detail();
     runtime().spawn(async move {
         match fut.await {
             Ok(detail) => ctx.ok(into_handle(ByteArray(detail)).cast()),
@@ -1927,20 +1944,20 @@ pub unsafe extern "C" fn autd3_client_read_error_detail(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_byte_array_len(array: *const ByteArray) -> usize {
-    if array.is_null() {
+    let Some(array) = (unsafe { handle_ref(array) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*array }.0.len()
+    array.0.len()
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_byte_array_data(array: *const ByteArray) -> *const u8 {
-    if array.is_null() {
+    let Some(array) = (unsafe { handle_ref(array) }) else {
         return std::ptr::null();
-    }
+    };
 
-    unsafe { &*array }.0.as_ptr()
+    array.0.as_ptr()
 }
 
 #[unsafe(no_mangle)]
@@ -1950,11 +1967,11 @@ pub unsafe extern "C" fn autd3_byte_array_free(array: *mut ByteArray) {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_checker(client: *const ClientHandle) -> *mut CheckerHandle {
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         return std::ptr::null_mut();
-    }
+    };
 
-    into_handle(CheckerHandle(unsafe { &*client }.0.checker()))
+    into_handle(CheckerHandle(client.0.checker()))
 }
 
 #[unsafe(no_mangle)]
@@ -1964,12 +1981,12 @@ pub unsafe extern "C" fn autd3_checker_check(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if checker.is_null() {
+    let Some(checker) = (unsafe { handle_ref(checker) }) else {
         ctx.err("null checker");
         return;
-    }
+    };
 
-    let fut = unsafe { &*checker }.0.check();
+    let fut = checker.0.check();
     runtime().spawn(async move {
         match fut.await {
             Ok(status) => {
@@ -1996,12 +2013,12 @@ pub unsafe extern "C" fn autd3_client_stop(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
-    }
+    };
 
-    let fut = unsafe { &*client }.0.stop();
+    let fut = client.0.stop();
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
@@ -2017,12 +2034,12 @@ pub unsafe extern "C" fn autd3_client_close(
     user_data: *mut c_void,
 ) {
     let ctx = CompletionCtx::new(cb, user_data);
-    if client.is_null() {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
-    }
+    };
 
-    let fut = unsafe { &*client }.0.close();
+    let fut = client.0.close();
     runtime().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
@@ -2038,11 +2055,11 @@ pub unsafe extern "C" fn autd3_client_free(client: *mut ClientHandle) {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_string_array_len(array: *const StringArray) -> usize {
-    if array.is_null() {
+    let Some(array) = (unsafe { handle_ref(array) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*array }.0.len()
+    array.0.len()
 }
 
 #[unsafe(no_mangle)]
@@ -2050,14 +2067,11 @@ pub unsafe extern "C" fn autd3_string_array_get(
     array: *const StringArray,
     index: usize,
 ) -> *const c_char {
-    if array.is_null() {
+    let Some(array) = (unsafe { handle_ref(array) }) else {
         return std::ptr::null();
-    }
+    };
 
-    unsafe { &*array }
-        .0
-        .get(index)
-        .map_or(std::ptr::null(), |s| s.as_ptr())
+    array.0.get(index).map_or(std::ptr::null(), |s| s.as_ptr())
 }
 
 #[unsafe(no_mangle)]
@@ -2067,20 +2081,20 @@ pub unsafe extern "C" fn autd3_string_array_free(array: *mut StringArray) {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_status_recoveries(status: *const LinkStatus) -> u64 {
-    if status.is_null() {
+    let Some(status) = (unsafe { handle_ref(status) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*status }.recoveries
+    status.recoveries
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_status_num_devices(status: *const LinkStatus) -> usize {
-    if status.is_null() {
+    let Some(status) = (unsafe { handle_ref(status) }) else {
         return 0;
-    }
+    };
 
-    unsafe { &*status }.devices.len()
+    status.devices.len()
 }
 
 #[unsafe(no_mangle)]
@@ -2090,11 +2104,11 @@ pub unsafe extern "C" fn autd3_link_status_device_state(
     out_kind: *mut u8,
     out_bits: *mut u8,
 ) -> bool {
-    if status.is_null() || out_kind.is_null() || out_bits.is_null() {
+    let Some(status) = (unsafe { handle_ref(status) }) else {
         return false;
-    }
+    };
 
-    let Some(state) = unsafe { &*status }.devices.get(index) else {
+    let Some(state) = status.devices.get(index) else {
         return false;
     };
     let (kind, bits) = match state {
@@ -2105,11 +2119,7 @@ pub unsafe extern "C" fn autd3_link_status_device_state(
         DeviceState::Other(bits) => (4, *bits),
     };
 
-    unsafe {
-        *out_kind = kind;
-        *out_bits = bits;
-    }
-    true
+    unsafe { write_out(out_kind, kind) == AUTD3_OK && write_out(out_bits, bits) == AUTD3_OK }
 }
 
 #[unsafe(no_mangle)]

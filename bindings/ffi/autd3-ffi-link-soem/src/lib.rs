@@ -1,9 +1,10 @@
+use std::ffi::c_char;
 use std::sync::Arc;
 
 use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
-    ResponseTokenData, client_opener, into_handle, join_err, legacy_client_opener, link_runtime,
-    take_handle,
+    OPTION_HANDLE_CONSUMED, ResponseTokenData, client_opener, into_handle, join_err,
+    legacy_client_opener, link_runtime, take_handle, write_cstr,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -225,8 +226,11 @@ autd3_ffi_abi::option_handle_lifecycle!(SoemLinkOptionHandle, autd3_link_soem_op
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_soem_open(
     option: *mut SoemLinkOptionHandle,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> *mut ClientOpener {
     let Some(SoemLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        unsafe { write_cstr(out_err, out_err_len, OPTION_HANDLE_CONSUMED) };
         return std::ptr::null_mut();
     };
     let opener = client_opener(move |geometry, config| async move {
@@ -246,8 +250,11 @@ pub unsafe extern "C" fn autd3_link_soem_open(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_soem_open_legacy(
     option: *mut SoemLinkOptionHandle,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> *mut LegacyClientOpener {
     let Some(SoemLinkOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        unsafe { write_cstr(out_err, out_err_len, OPTION_HANDLE_CONSUMED) };
         return std::ptr::null_mut();
     };
     into_handle(legacy_client_opener(move |_| Ok(option)))

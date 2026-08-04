@@ -20,11 +20,13 @@ import Install from "@components/Install.astro";
 - [uniform](/autd3-sdk/api/compute/pattern/uniform/) — 全振動子一様
 - [null](/autd3-sdk/api/compute/pattern/null/) — 無出力
 
-各関数には, デバイス1台分のみを計算する `*_device` 版と, 振動子1素子分のみを計算する `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
+`focus` / `plane` / `bessel` / `null` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分のみを計算する `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
+`uniform` は `uniform_device` のみ.
+いずれも Rust と C# にあり, Python にはない.
 
 ## 波長
 
-位相計算には波長 <Math tex="\lambda = c / f" /> が必要にになる.
+位相計算には波長 <Math tex="\lambda = c / f" /> が必要になる.
 音速 <Math tex="c" /> から `autd3_rs_pattern::wavelength(sound_speed)` で波長を求められる. 
 音速 340 m/s (室温約15°の空気中での音速) では<Math tex="\lambda = 8.5\,\mathrm{mm}" />. 
 
