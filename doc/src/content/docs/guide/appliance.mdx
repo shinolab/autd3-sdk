@@ -66,7 +66,7 @@ autd3-console の **Appliance** タブで「Scan」を押しても良い.
 1. RP4 の オンボード有線ポートをAUTD3に接続し, 追加でUSB イーサネットアダプタを用いてホストとイーサネットで直結する
     - RP4とホストとの接続はLAN (Wi-Fiも可, 下記参照) でもよいが, 直結が推奨
 2. AUTD3 とボードの電源を入れる
-3. ホストから`RemoteLink`でつなぐ
+3. ホストから [`RemoteLink`](/autd3-sdk/api/link/remote/) でつなぐ
 
 <CodeTabs rust={excerpt(client, "discover")} python={excerpt(pyClient, "discover")} csharp={excerpt(csClient, "discover")} />
 
@@ -127,7 +127,7 @@ Wi-Fi経由で強制的にOffにするならなら `--force` を付ける.
 
 ### API から戻せなくなったとき
 
-`wifi forget --force` でボードに触れなくなった場合や, 有線も Wi-Fi も上がってこない場合は SD カードを直接書き換えて直す必要がある.
+`wifi forget --force` でボードに触れなくなった場合や, 有線も Wi-Fi も使えなくなった場合は SD カードを直接書き換えて直す必要がある.
 
 カードをホストに挿すと boot パーティションが見えるので, `config.txt` の末尾に次の行を足すと無線を止められる.
 
@@ -157,7 +157,7 @@ dtoverlay=disable-wifi
 
 | キー | 意味 |
 | --- | --- |
-| `bus.sync0_period` | バスの周期. 既定 1ms. 台数が多く安定しない場合に増やす |
+| `bus.sync0_period` | EtherCAT バスの周期. 既定 1ms. 台数が多く安定しない場合に増やす |
 | `bus.open_on_start` | 電源投入時にバスを開くか. 既定 `true` |
 
 sync0_period は exchange 時間の2倍より長く, かつ, 500μs の倍数の内, 最も小さい値にすることを推奨する.

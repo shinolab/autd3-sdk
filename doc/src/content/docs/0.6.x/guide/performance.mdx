@@ -46,6 +46,18 @@ EtherCAT のリアルタイム性は OS の設定にも左右される. スレ�
 これらは `ClientConfig` の `rt_priority` / `rt_policy` / `rt_affinity`, および Link Option の `sync0_period` / `sync0_shift` として設定できる.
 適切な値は環境によって異なるため, 実測して決めるのがよい.
 
+## Windows のドライバ設定
+
+Windows では NIC のドライバを最新のものにしたうえで, 以下のとおりに設定することを推奨する.
+
+デバイスマネージャーのアダプタのプロパティ → 詳細設定で
+
+* 割り込み調節 (Interrupt Moderation) → 無効
+* 割り込み調節率 (Interrupt Throttle Rate) → 無効
+* DMA Coalescing → 無効
+* 省電力イーサネット (Energy Efficient Ethernet) → 無効
+* フロー制御 (Flow Control) → 無効
+
 ## 計測ツール
 
 リポジトリには, 性能の計測とチューニングのためのツールが用意されている.

@@ -65,7 +65,7 @@ Pressing "Scan" on the **Appliance** tab of autd3-console does the same thing.
 1. Connect the RP4's onboard Ethernet port to the AUTD3 devices, and connect the host directly to the RP4 with an additional USB Ethernet adapter
     - The RP4 and the host may also be connected over a LAN (Wi-Fi works too, see below), but a direct cable is recommended
 2. Power on the AUTD3 devices and the board
-3. Connect from the host with `RemoteLink`
+3. Connect from the host with [`RemoteLink`](/autd3-sdk/en/api/link/remote/)
 
 <CodeTabs rust={excerpt(client, "discover")} python={excerpt(pyClient, "discover")} csharp={excerpt(csClient, "discover")} />
 
@@ -127,7 +127,7 @@ Add `--force` to turn it off over Wi-Fi anyway.
 
 ### When the API can no longer undo it
 
-If `wifi forget --force` left the board unreachable, or neither Ethernet nor Wi-Fi comes up, you have to fix it by editing the SD card directly.
+If `wifi forget --force` left the board unreachable, or neither Ethernet nor Wi-Fi is usable, you have to fix it by editing the SD card directly.
 
 Insert the card into a host, and add this line at the end of `config.txt` on the boot partition to stop the radio.
 
@@ -157,7 +157,7 @@ The two keys you will mainly touch are the following.
 
 | Key | Meaning |
 | --- | --- |
-| `bus.sync0_period` | The bus period, 1ms by default. Lengthen it when there are many devices and the bus is unstable |
+| `bus.sync0_period` | The EtherCAT bus period, 1ms by default. Lengthen it when there are many devices and the bus is unstable |
 | `bus.open_on_start` | Whether to open the bus at power-on. `true` by default |
 
 `sync0_period` is best set to the smallest multiple of 500us that is longer than twice the exchange time.

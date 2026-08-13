@@ -8,23 +8,25 @@ internal static class Sample
     internal static void Run()
     {
         var addr = "127.0.0.1:8080";
+        var timeout = TimeSpan.FromSeconds(1);
 
         // ANCHOR: api
-        new RemoteLinkOption(addr);
+        new RemoteLinkOption(addr, timeout);
         // ANCHOR_END: api
     }
 
     internal static void Discover()
     {
         // ANCHOR: discover
-        var option = RemoteLinkOption.Discover();
+        RemoteLinkOption.Discover();
         // ANCHOR_END: discover
     }
 
     internal static void DiscoverWithOption()
     {
+        var timeout = TimeSpan.FromSeconds(1);
         // ANCHOR: discover_option
-        var option = RemoteLinkOption.Discover(TimeSpan.FromSeconds(5), "autd3-0a1b2c3d");
+        RemoteLinkOption.Discover(timeout, "autd3-0a1b2c3d");
         // ANCHOR_END: discover_option
     }
 }
