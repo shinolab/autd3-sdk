@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::path::Path;
+use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
@@ -12,7 +13,18 @@ use crate::util::capture;
 
 const DOC_COMPONENT: &str = "doc";
 
-const FIRMWARE_VERSIONED_CRATES: &[&str] = &["autd3-cpu-wire", "autd3-cpu-fw"];
+pub const FIRMWARE_VERSIONED_CRATES: &[&str] = &["autd3-cpu-wire", "autd3-cpu-fw"];
+
+const LOCK_WORKSPACES: &[&str] = &[
+    ".",
+    "bindings/ffi",
+    "bindings/python",
+    "console",
+    "extras/autd3-rs-emulator",
+    "extras/autd3-rs-pattern-holo-wgpu",
+    "firmware/cpu/board",
+    "simulator",
+];
 
 #[derive(Args)]
 pub struct BumpVersionCmd {
@@ -54,6 +66,8 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             bump_console(root, &core)?;
             let pages = crate::doc::rewrite_appliance_version(root, &core)?;
             println!("Updated appliance image link in {pages} doc page(s) -> appliance-v{core}");
+            let pins = crate::doc::rewrite_crate_version(root, &core)?;
+            println!("Updated crate version pins in {pins} doc page(s)/README(s) -> {core}");
             println!(
                 "Updated software version -> {core} (crates, ffi, python, csharp, emulator, holo-wgpu, simulator, console)"
             );
@@ -93,6 +107,19 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
         other => bail!("no version-bump implementation for component `{other}`"),
     }
 
+    let refreshed = refresh_locks(root)?;
+    if refreshed.is_empty() {
+        println!("Every Cargo.lock already records the new version");
+    } else {
+        println!(
+            "Refreshed {} Cargo.lock file(s) (git add them together with the version bump):",
+            refreshed.len()
+        );
+        for path in &refreshed {
+            println!("  {path}");
+        }
+    }
+
     if cmd.no_changelog {
         println!("Skipped CHANGELOG.md (--no-changelog).");
     } else {
@@ -111,6 +138,43 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
     }
     println!("  git commit -m \"chore: release {tag}\"");
     Ok(())
+}
+
+fn resolve(dir: &Path, offline: bool) -> Result<bool> {
+    let mut command = Command::new("cargo");
+    command.args(["update", "--workspace"]);
+    if offline {
+        command.arg("--offline");
+    }
+    let status = command
+        .current_dir(dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .with_context(|| format!("failed to spawn `cargo update` in {}", dir.display()))?;
+    Ok(status.success())
+}
+
+fn refresh_locks(root: &Path) -> Result<Vec<String>> {
+    let mut refreshed = Vec::new();
+    for rel in LOCK_WORKSPACES {
+        let dir = root.join(rel);
+        let lock = dir.join("Cargo.lock");
+        if !lock.is_file() {
+            continue;
+        }
+        let before = std::fs::read_to_string(&lock)
+            .with_context(|| format!("reading {}", lock.display()))?;
+        if !resolve(&dir, true)? && !resolve(&dir, false)? {
+            bail!("`cargo update --workspace` failed in {}", dir.display());
+        }
+        let after = std::fs::read_to_string(&lock)
+            .with_context(|| format!("reading {}", lock.display()))?;
+        if before != after {
+            refreshed.push(format!("{rel}/Cargo.lock"));
+        }
+    }
+    Ok(refreshed)
 }
 
 fn bump_doc(root: &Path, version: Option<&str>) -> Result<()> {
@@ -217,23 +281,19 @@ fn parse_version(version: &str, allow_build: bool) -> Result<(String, String)> {
 fn print_next_steps(name: &str) {
     match name {
         "software" => {
-            println!("  cargo xtask rust build         # refresh Cargo.lock");
-            println!("  cargo xtask ffi build          # refresh bindings/ffi/Cargo.lock");
-            println!("  cargo xtask py build           # refresh bindings/python/Cargo.lock");
-            println!(
-                "  cargo xtask emulator build     # refresh extras/autd3-rs-emulator/Cargo.lock"
-            );
-            println!(
-                "  cargo xtask holo-wgpu build    # refresh extras/autd3-rs-pattern-holo-wgpu/Cargo.lock"
-            );
-            println!("  cargo xtask simulator build    # refresh simulator/Cargo.lock");
-            println!("  cargo xtask console build      # refresh console/Cargo.lock");
+            println!("  cargo xtask rust build         # check the bump builds");
+            println!("  cargo xtask ffi build");
+            println!("  cargo xtask py build");
+            println!("  cargo xtask emulator build");
+            println!("  cargo xtask holo-wgpu build");
+            println!("  cargo xtask simulator build");
+            println!("  cargo xtask console build");
             println!(
                 "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock console/dist.toml 'bindings/unity/*/package.json' doc/src/content/docs"
             );
         }
         "python" => {
-            println!("  cargo xtask py build           # refresh bindings/python/Cargo.lock");
+            println!("  cargo xtask py build           # check the bump builds");
             println!(
                 "  git add bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' CHANGELOG.md"
             );
@@ -245,18 +305,18 @@ fn print_next_steps(name: &str) {
             println!("  git add 'bindings/unity/*/package.json' doc/src/content/docs CHANGELOG.md");
         }
         "simulator" => {
-            println!("  cargo xtask simulator build    # refresh simulator/Cargo.lock");
+            println!("  cargo xtask simulator build    # check the bump builds");
             println!("  git add simulator/Cargo.toml simulator/Cargo.lock CHANGELOG.md");
         }
         "console" => {
-            println!("  cargo xtask console build      # refresh console/Cargo.lock");
+            println!("  cargo xtask console build      # check the bump builds");
             println!(
                 "  git add console/Cargo.toml console/Cargo.lock console/dist.toml doc/src/content/docs CHANGELOG.md"
             );
         }
         "firmware" => {
-            println!("  cargo xtask rust build         # refresh Cargo.lock");
-            println!("  cargo xtask cpu build          # refresh firmware/cpu/board/Cargo.lock");
+            println!("  cargo xtask rust build         # check the bump builds");
+            println!("  cargo xtask cpu build");
             println!(
                 "  git add firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/fw/src/params.rs firmware/cpu/fw/Cargo.toml firmware/cpu/wire/Cargo.toml firmware/cpu/board/Cargo.toml firmware/cpu/board/Cargo.lock Cargo.toml Cargo.lock doc/src/content/docs CHANGELOG.md"
             );
@@ -361,11 +421,6 @@ fn bump_package_version(path: &Path, version: &str) -> Result<()> {
     Ok(())
 }
 
-/// Bumps a crate that is its own workspace root but declares everything in
-/// `[package]` / `[dependencies]` rather than workspace tables, so
-/// [`bump_cargo_toml`] has nothing to grab. The sibling requirements have to
-/// move with it: crates.io rejects a package whose path dependency names a
-/// version that was never published.
 fn bump_standalone_crate(path: &Path, version: &str) -> Result<()> {
     bump_package_version(path, version)?;
     let text =
@@ -438,8 +493,8 @@ fn bump_python_pyproject(root: &Path, version: &str) -> Result<()> {
 
     let siblings = python_distribution_names(&manifests)?;
     for path in &manifests {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let mut doc: DocumentMut = text
             .parse()
             .with_context(|| format!("parsing {}", path.display()))?;
@@ -462,8 +517,18 @@ fn bump_python_pyproject(root: &Path, version: &str) -> Result<()> {
                     .next()
                     .unwrap_or(spec);
                 if siblings.contains(name) {
-                    let prefix = dep.decor().prefix().and_then(|r| r.as_str()).unwrap_or("").to_owned();
-                    let suffix = dep.decor().suffix().and_then(|r| r.as_str()).unwrap_or("").to_owned();
+                    let prefix = dep
+                        .decor()
+                        .prefix()
+                        .and_then(|r| r.as_str())
+                        .unwrap_or("")
+                        .to_owned();
+                    let suffix = dep
+                        .decor()
+                        .suffix()
+                        .and_then(|r| r.as_str())
+                        .unwrap_or("")
+                        .to_owned();
                     *dep = toml_edit::Value::from(format!("{name}=={version}"))
                         .decorated(prefix.as_str(), suffix.as_str());
                 }
@@ -478,8 +543,8 @@ fn bump_python_pyproject(root: &Path, version: &str) -> Result<()> {
 fn python_distribution_names(manifests: &[std::path::PathBuf]) -> Result<HashSet<String>> {
     let mut names = HashSet::new();
     for path in manifests {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let doc: DocumentMut = text
             .parse()
             .with_context(|| format!("parsing {}", path.display()))?;

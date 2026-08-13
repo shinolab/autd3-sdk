@@ -46,6 +46,18 @@ The real-time performance of EtherCAT also depends on the OS settings. By adjust
 These can be set as `rt_priority` / `rt_policy` / `rt_affinity` of `ClientConfig`, and `sync0_period` / `sync0_shift` of the Link Option.
 The appropriate values differ by environment, so it is best to measure and decide.
 
+## Windows Driver Settings
+
+On Windows, update the NIC driver to the latest version and then configure it as follows.
+
+In Device Manager, open the adapter properties → Advanced
+
+* Interrupt Moderation → Disabled
+* Interrupt Throttle Rate → Disabled
+* DMA Coalescing → Disabled
+* Energy Efficient Ethernet → Disabled
+* Flow Control → Disabled
+
 ## Measurement Tools
 
 The repository provides tools for measuring and tuning performance.
