@@ -13,6 +13,8 @@ use crate::py::{MIT_WHEELS, develop, ensure_venv, pip_install, venv_python};
 use crate::util::{capture, on_path, run, run_tool};
 
 const FIRMWARE_MARKER: &str = "Firmware v";
+const CRATE_PIN_PREFIX: &str = "autd3-";
+const CRATE_PIN_SKIP_DIRS: &[&str] = &["target", "node_modules", "3rdparty", "dist", "doc"];
 const UNITY_PKG_MARKER: &str = "\"com.shinolab.autd3-sdk";
 const CONSOLE_TAG_MARKER: &str = "console-v";
 const APPLIANCE_TAG_MARKER: &str = "appliance-v";
@@ -53,6 +55,9 @@ pub enum DocCmd {
     FreezeVersion {
         /// Target version slug (e.g. 0.1.x)
         slug: String,
+        /// Regenerate the snapshot from the live docs first, overwriting an already frozen version
+        #[arg(long)]
+        force: bool,
     },
     /// Drop a frozen version: undeclare it and delete its snapshot and config
     RemoveVersion {
@@ -117,9 +122,12 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
             npm_install(&doc)?;
             npm(&doc, &["run", "check"])
         }
-        DocCmd::FreezeVersion { slug } => {
+        DocCmd::FreezeVersion { slug, force } => {
             if !on_path("node") {
                 bail!("`node` is required for `doc freeze-version`");
+            }
+            if *force {
+                regenerate_snapshot(&doc, slug)?;
             }
             run(
                 "node",
@@ -162,8 +170,6 @@ pub fn remove_version(doc: &Path, slug: &str) -> Result<()> {
              stop being versioned"
         );
     }
-    // Undeclare first: `astro build` regenerates the snapshot of any slug that is declared but
-    // has no `src/content/docs/<slug>/`, and refuses to do more than one at a time.
     undeclare_version_slug(doc, slug)?;
     let mut removed = Vec::new();
     remove_dirs_named(
@@ -193,10 +199,123 @@ pub fn remove_version(doc: &Path, slug: &str) -> Result<()> {
     Ok(())
 }
 
-// starlight-versions only skips version directories at the root of `src/content/docs/`, so a
-// snapshot taken from a locale directory swallows every older version living under it
-// (`en/0.4.x/` becomes `en/0.5.x/0.4.x/`). Those copies are duplicates reachable only through
-// nonsense URLs, and they make each new version cost as much as all its predecessors combined.
+fn regenerate_snapshot(doc: &Path, slug: &str) -> Result<()> {
+    if !version_slugs(doc)?.iter().any(|s| s == slug) {
+        bail!(
+            "version {slug} is not declared in astro.config.mjs; run `cargo xtask bump-version doc` \
+             to declare it before freezing"
+        );
+    }
+    let mut removed = Vec::new();
+    remove_dirs_named(
+        &doc.join("src/content/docs"),
+        &[slug.to_string()],
+        &mut removed,
+    )?;
+    if removed.is_empty() {
+        println!("doc: no {slug} snapshot on disk; building the site generates it");
+    } else {
+        for path in &removed {
+            println!("doc: removed stale snapshot {}", path.display());
+        }
+    }
+    npm_install(doc)?;
+    npm(doc, &["run", "build"])?;
+    if !doc.join("src/content/docs").join(slug).is_dir() {
+        bail!(
+            "`astro build` did not regenerate src/content/docs/{slug}/; starlight-versions \
+             generates one version per build, so build again if another version was pending"
+        );
+    }
+    println!("doc: regenerated the {slug} snapshot from the live docs");
+    preserve_snapshot_versions(doc, slug)
+}
+
+fn preserve_snapshot_versions(doc: &Path, slug: &str) -> Result<()> {
+    if !on_path("git") {
+        println!("doc: `git` is not on PATH; the snapshot now carries the live version numbers");
+        return Ok(());
+    }
+    let tracked = capture("git", &["ls-files", "src/content/docs"], doc)?;
+    let tracked: Vec<&str> = tracked.lines().collect();
+    let mut pages = Vec::new();
+    snapshot_pages(&doc.join("src/content/docs"), slug, &mut pages)?;
+    pages.sort();
+    let mut kept = Vec::new();
+    for page in &pages {
+        let rel = page
+            .strip_prefix(doc)
+            .unwrap_or(page)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if !tracked.contains(&rel.as_str()) {
+            continue;
+        }
+        let frozen = capture("git", &["show", &format!(":./{rel}")], doc)?;
+        let mut text =
+            fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
+        for (label, spans) in SNAPSHOT_VERSION_SPANS {
+            let was = spans(&frozen);
+            let now = spans(&text);
+            if was.len() != now.len() {
+                if !was.is_empty() {
+                    println!(
+                        "doc: {rel} no longer has the same {label} markers as the frozen page; \
+                         check them by hand"
+                    );
+                }
+                continue;
+            }
+            let mut out = String::with_capacity(text.len());
+            let mut cursor = 0;
+            for ((o_start, o_end, o_value), (n_start, n_end, n_value)) in was.iter().zip(&now) {
+                out.push_str(&text[cursor..*n_start]);
+                out.push_str(&frozen[*o_start..*o_end]);
+                cursor = *n_end;
+                if o_value != n_value {
+                    kept.push(format!(
+                        "{rel}: {label} {o_value} (live docs say {n_value})"
+                    ));
+                }
+            }
+            out.push_str(&text[cursor..]);
+            text = out;
+        }
+        let current =
+            fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
+        if text != current {
+            fs::write(page, text).with_context(|| format!("writing {}", page.display()))?;
+        }
+    }
+    if kept.is_empty() {
+        println!("doc: the regenerated snapshot already carries the frozen version numbers");
+    } else {
+        println!("doc: kept {} frozen version number(s):", kept.len());
+        for note in &kept {
+            println!("  {note}");
+        }
+    }
+    Ok(())
+}
+
+fn snapshot_pages(dir: &Path, slug: &str, out: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
+        let path = entry?.path();
+        if path.is_dir() {
+            snapshot_pages(&path, slug, out)?;
+        } else if matches!(
+            path.extension().and_then(|e| e.to_str()),
+            Some("md" | "mdx")
+        ) && path
+            .components()
+            .any(|c| c.as_os_str().to_str() == Some(slug))
+        {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
 fn prune_nested_versions(doc: &Path, slug: &str) -> Result<()> {
     let slugs = version_slugs(doc)?;
     let docs = doc.join("src/content/docs");
@@ -475,7 +594,88 @@ fn appliance_version_spans(text: &str) -> Vec<(usize, usize, String)> {
     semver_spans(text, APPLIANCE_TAG_MARKER, false)
 }
 
+fn crate_version_spans(text: &str) -> Vec<(usize, usize, String)> {
+    let mut spans = Vec::new();
+    let mut offset = 0;
+    for line in text.split_inclusive('\n') {
+        let line_start = offset;
+        offset += line.len();
+        let indent = line.len() - line.trim_start().len();
+        let Some(rest) = line[indent..].strip_prefix(CRATE_PIN_PREFIX) else {
+            continue;
+        };
+        let Some(eq) = rest.find('=') else {
+            continue;
+        };
+        let name = rest[..eq].trim_end();
+        if !name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        {
+            continue;
+        }
+        if crate::bump::FIRMWARE_VERSIONED_CRATES.contains(&&*format!("{CRATE_PIN_PREFIX}{name}")) {
+            continue;
+        }
+        let tail = &rest[eq + 1..];
+        let tail_base = match tail.find("version") {
+            Some(pos) => pos,
+            None if tail.contains('{') => continue,
+            None => 0,
+        };
+        let Some(open) = tail[tail_base..].find('"') else {
+            continue;
+        };
+        let start = line_start + indent + CRATE_PIN_PREFIX.len() + eq + 1 + tail_base + open + 1;
+        let Some(len) = text[start..].find('"') else {
+            continue;
+        };
+        let value = &text[start..start + len];
+        if matches!(value.split('.').count(), 2 | 3)
+            && value
+                .split('.')
+                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+        {
+            spans.push((start, start + len, value.to_owned()));
+        }
+    }
+    spans
+}
+
 type Spans = fn(&str) -> Vec<(usize, usize, String)>;
+
+const SNAPSHOT_VERSION_SPANS: &[(&str, Spans)] = &[
+    ("firmware series", firmware_series_spans),
+    ("Unity package version", unity_version_spans),
+    ("console release", console_version_spans),
+    ("appliance release", appliance_version_spans),
+    ("crate version", crate_version_spans),
+];
+
+fn crate_pin_files(root: &Path, doc: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = doc_pages(doc)?;
+    crate_readmes(root, &mut files)?;
+    Ok(files)
+}
+
+fn crate_readmes(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    let entries =
+        fs::read_dir(dir).with_context(|| format!("reading directory {}", dir.display()))?;
+    for entry in entries {
+        let path = entry?.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if path.is_dir() {
+            if !name.starts_with('.') && !CRATE_PIN_SKIP_DIRS.contains(&name) {
+                crate_readmes(&path, out)?;
+            }
+        } else if name == "README.md" && dir.join("Cargo.toml").is_file() {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
 
 fn doc_pages(doc: &Path) -> Result<Vec<PathBuf>> {
     let slugs = version_slugs(doc)?;
@@ -485,24 +685,32 @@ fn doc_pages(doc: &Path) -> Result<Vec<PathBuf>> {
 }
 
 fn rewrite_spans(root: &Path, spans: Spans, new: &str) -> Result<usize> {
+    rewrite_spans_in(&doc_pages(&root.join("doc"))?, spans, &|_| new.to_owned())
+}
+
+fn rewrite_spans_in(
+    files: &[PathBuf],
+    spans: Spans,
+    new: &dyn Fn(&str) -> String,
+) -> Result<usize> {
     let mut count = 0;
-    for page in doc_pages(&root.join("doc"))? {
+    for page in files {
         let text =
-            fs::read_to_string(&page).with_context(|| format!("reading {}", page.display()))?;
+            fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
         let found = spans(&text);
         if found.is_empty() {
             continue;
         }
         let mut out = String::with_capacity(text.len());
         let mut cursor = 0;
-        for (start, end, _) in found {
+        for (start, end, old) in found {
             out.push_str(&text[cursor..start]);
-            out.push_str(new);
+            out.push_str(&new(&old));
             cursor = end;
         }
         out.push_str(&text[cursor..]);
         if out != text {
-            fs::write(&page, out).with_context(|| format!("writing {}", page.display()))?;
+            fs::write(page, out).with_context(|| format!("writing {}", page.display()))?;
         }
         count += 1;
     }
@@ -510,10 +718,14 @@ fn rewrite_spans(root: &Path, spans: Spans, new: &str) -> Result<usize> {
 }
 
 fn collect_spans(doc: &Path, spans: Spans) -> Result<Vec<(PathBuf, String)>> {
+    collect_spans_in(&doc_pages(doc)?, spans)
+}
+
+fn collect_spans_in(files: &[PathBuf], spans: Spans) -> Result<Vec<(PathBuf, String)>> {
     let mut found = Vec::new();
-    for page in doc_pages(doc)? {
+    for page in files {
         let text =
-            fs::read_to_string(&page).with_context(|| format!("reading {}", page.display()))?;
+            fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
         found.extend(
             spans(&text)
                 .into_iter()
@@ -547,11 +759,60 @@ pub fn rewrite_appliance_version(root: &Path, version: &str) -> Result<usize> {
     rewrite_spans(root, appliance_version_spans, version)
 }
 
+pub fn rewrite_crate_version(root: &Path, version: &str) -> Result<usize> {
+    let files = crate_pin_files(root, &root.join("doc"))?;
+    let series = version_series(version);
+    rewrite_spans_in(&files, crate_version_spans, &|old| {
+        if old.split('.').count() == 2 {
+            series.clone()
+        } else {
+            version.to_owned()
+        }
+    })
+}
+
+fn version_series(version: &str) -> String {
+    version
+        .rsplit_once('.')
+        .map_or_else(|| version.to_owned(), |(head, _)| head.to_owned())
+}
+
 fn verify_versions(root: &Path, doc: &Path) -> Result<()> {
     verify_firmware_series(root, doc)?;
     verify_unity_version(root, doc)?;
     verify_console_version(root, doc)?;
-    verify_appliance_version(root, doc)
+    verify_appliance_version(root, doc)?;
+    verify_crate_version(root, doc)
+}
+
+fn verify_crate_version(root: &Path, doc: &Path) -> Result<()> {
+    let expected = component_version(root, "software")?;
+    let series = version_series(&expected);
+    let files = crate_pin_files(root, doc)?;
+    let found = collect_spans_in(&files, crate_version_spans)?;
+    if found.is_empty() {
+        bail!(
+            "no `{CRATE_PIN_PREFIX}<crate> = \"<version>\"` requirement found in the current docs or \
+             crate READMEs; the install snippets must pin a version (kept in sync with the \
+             [workspace.package] version in Cargo.toml)"
+        );
+    }
+    let offenders: Vec<_> = found
+        .iter()
+        .filter(|(_, version)| *version != expected && *version != series)
+        .map(|(page, version)| format!("{}: {version}", page.display()))
+        .collect();
+    if !offenders.is_empty() {
+        bail!(
+            "docs or crate READMEs tell users to depend on a crate version that is not the current \
+             one (expected `{expected}` or `{series}`):\n  {}\n\
+             run `cargo xtask bump-version software <version>` (it rewrites these files), or fix the \
+             version by hand. frozen version snapshots are exempt: they record the crate version of \
+             their own SDK release.",
+            offenders.join("\n  ")
+        );
+    }
+    Ok(())
 }
 
 fn verify_firmware_series(root: &Path, doc: &Path) -> Result<()> {
@@ -699,12 +960,11 @@ fn verify_frozen_versions(doc: &Path) -> Result<()> {
         let Some(slug) = hits.next() else {
             continue;
         };
-        if hits.peek().is_some() {
-            nested.push(rel.to_string());
+        if !doc.join(rel).is_file() {
             continue;
         }
-        // Still in the index but already deleted from the worktree: nothing left to inspect.
-        if !doc.join(rel).is_file() {
+        if hits.peek().is_some() {
+            nested.push(rel.to_string());
             continue;
         }
         let text =

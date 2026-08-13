@@ -302,8 +302,8 @@ fn check_interface_names(root: &Path, board: &Board) -> Result<()> {
 
 fn check_wifi_is_reachable(root: &Path, board: &Board) -> Result<()> {
     let stage = stage_dir(root, board);
-    let state = std::fs::read_to_string(stage.join("02-network/files/NetworkManager.state"))?;
-    if !state
+    let nm_state = std::fs::read_to_string(stage.join("02-network/files/NetworkManager.state"))?;
+    if !nm_state
         .lines()
         .any(|line| line.trim() == "WirelessEnabled=true")
     {

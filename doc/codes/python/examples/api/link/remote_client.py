@@ -1,22 +1,22 @@
-from datetime import timedelta
+from autd3 import Duration
 
 from autd3_link_remote import RemoteLinkOption
 
 addr = "127.0.0.1:8080"
+timeout = Duration.from_secs(1)
+
 # ANCHOR: api
-RemoteLinkOption(addr)
+RemoteLinkOption(addr, timeout)
 # ANCHOR_END: api
 
 
-def discover() -> RemoteLinkOption:
+def discover() -> None:
     # ANCHOR: discover
-    option = RemoteLinkOption.discover()
+    RemoteLinkOption.discover()
     # ANCHOR_END: discover
-    return option
 
 
-def discover_with_option() -> RemoteLinkOption:
+def discover_with_option() -> None:
     # ANCHOR: discover_option
-    option = RemoteLinkOption.discover(timeout=timedelta(seconds=5), instance="autd3-0a1b2c3d")
+    RemoteLinkOption.discover(timeout, "autd3-0a1b2c3d")
     # ANCHOR_END: discover_option
-    return option

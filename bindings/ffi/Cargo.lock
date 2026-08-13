@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-fw"
-version = "0.4.0"
+version = "0.6.0"
 dependencies = [
  "autd3-cpu-wire",
  "zerocopy 0.8.52",
@@ -90,7 +90,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-wire"
-version = "0.4.0"
+version = "0.6.0"
 dependencies = [
  "zerocopy 0.8.52",
 ]
