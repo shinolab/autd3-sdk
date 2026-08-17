@@ -32,7 +32,7 @@ jobs:
             3.12
             3.13
             3.14
-      - uses: taiki-e/install-action@v2.85.10
+      - uses: taiki-e/install-action@v2.85.13
         with:
           tool: cargo-about
       - name: Generate third-party licenses
