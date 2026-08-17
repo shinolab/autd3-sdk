@@ -60,7 +60,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - uses: taiki-e/install-action@v2.85.10
+      - uses: taiki-e/install-action@v2.85.13
         with:
           tool: cargo-about,git-cliff
       - name: Download native libs
