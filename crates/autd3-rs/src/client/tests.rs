@@ -1009,7 +1009,7 @@ fn post_handshake_reset_count(slave: &Arc<StdMutex<Slave>>) -> usize {
         .sent_log
         .iter()
         .position(|(_, cmd)| *cmd != Cmd::Reset)
-        .map_or(s.sent_log.len(), |i| i);
+        .unwrap_or(s.sent_log.len());
     s.sent_log[after_handshake..]
         .iter()
         .filter(|(_, cmd)| *cmd == Cmd::Reset)
