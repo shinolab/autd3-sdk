@@ -711,8 +711,8 @@ fn rewrite_spans_in(
         out.push_str(&text[cursor..]);
         if out != text {
             fs::write(page, out).with_context(|| format!("writing {}", page.display()))?;
+            count += 1;
         }
-        count += 1;
     }
     Ok(count)
 }
@@ -769,6 +769,66 @@ pub fn rewrite_crate_version(root: &Path, version: &str) -> Result<usize> {
             version.to_owned()
         }
     })
+}
+
+type SyncRule<'a> = (&'a str, Spans, &'a dyn Fn(&str) -> String);
+
+pub fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
+    let doc = root.join("doc");
+    if !version_slugs(&doc)?.iter().any(|s| s == slug) {
+        bail!(
+            "version {slug} is not declared in astro.config.mjs; there is no frozen snapshot for \
+             this series yet"
+        );
+    }
+    let mut pages = Vec::new();
+    snapshot_pages(&doc.join("src/content/docs"), slug, &mut pages)?;
+    pages.sort();
+    if pages.is_empty() {
+        bail!(
+            "no {slug} snapshot on disk; run `cargo xtask doc build` and \
+             `cargo xtask doc freeze-version {slug}`"
+        );
+    }
+
+    let software = component_version(root, "software")?;
+    let series = version_series(&software);
+    let firmware = format!("{}.x", crate::bump::firmware_series(root)?);
+    let unity = component_version(root, "unity")?;
+    let console = component_version(root, "console")?;
+
+    let crate_pin = |old: &str| {
+        if old.split('.').count() == 2 {
+            series.clone()
+        } else {
+            software.clone()
+        }
+    };
+    let rules: [SyncRule; 5] = [
+        ("firmware series", firmware_series_spans, &|_| {
+            firmware.clone()
+        }),
+        ("Unity package version", unity_version_spans, &|_| {
+            unity.clone()
+        }),
+        ("console release", console_version_spans, &|_| {
+            console.clone()
+        }),
+        ("appliance release", appliance_version_spans, &|_| {
+            software.clone()
+        }),
+        ("crate version", crate_version_spans, &crate_pin),
+    ];
+
+    let mut total = 0;
+    for (label, spans, new) in rules {
+        let count = rewrite_spans_in(&pages, spans, new)?;
+        if count > 0 {
+            println!("doc: rewrote the {label} in {count} {slug} page(s)");
+        }
+        total += count;
+    }
+    Ok(total)
 }
 
 fn version_series(version: &str) -> String {

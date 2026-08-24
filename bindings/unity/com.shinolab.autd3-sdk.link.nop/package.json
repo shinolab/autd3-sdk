@@ -5,7 +5,7 @@
     "url": "git+https://github.com/shinolab/autd3-sdk.git",
     "directory": "bindings/unity/com.shinolab.autd3-sdk.link.nop"
   },
-  "version": "0.6.0",
+  "version": "0.6.1",
   "displayName": "AUTD3 Link Nop",
   "description": "AUTD3 no-op link for testing (Unity binding).",
   "unity": "6000.0",
@@ -15,6 +15,6 @@
     "url": "https://github.com/shinolab"
   },
   "dependencies": {
-    "com.shinolab.autd3-sdk": "0.6.0"
+    "com.shinolab.autd3-sdk": "0.6.1"
   }
 }

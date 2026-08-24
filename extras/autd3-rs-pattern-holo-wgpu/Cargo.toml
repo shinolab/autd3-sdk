@@ -2,7 +2,7 @@
 
 [package]
 name = "autd3-rs-pattern-holo-wgpu"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -15,8 +15,8 @@ keywords = ["autd3", "haptics"]
 categories = ["science"]
 
 [dependencies]
-autd3-rs-core = { version = "0.6.0", path = "../../crates/autd3-rs-core" }
-autd3-rs-pattern-holo = { version = "0.6.0", path = "../../crates/autd3-rs-pattern-holo" }
+autd3-rs-core = { version = "0.6.1", path = "../../crates/autd3-rs-core" }
+autd3-rs-pattern-holo = { version = "0.6.1", path = "../../crates/autd3-rs-pattern-holo" }
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
 thiserror = "2.0.18"
 wgpu = { version = "30.0.0", default-features = false, features = [

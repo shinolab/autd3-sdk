@@ -20,6 +20,7 @@ const LOCK_WORKSPACES: &[&str] = &[
     "bindings/ffi",
     "bindings/python",
     "console",
+    "doc/codes/rust",
     "extras/autd3-rs-emulator",
     "extras/autd3-rs-pattern-holo-wgpu",
     "firmware/cpu/board",
@@ -130,12 +131,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
     println!();
     println!("Next (do these manually after reviewing the diff):");
     print_next_steps(component.name);
-    if component.name == "software" {
-        println!();
-        println!("Then, to freeze the outgoing doc version series");
-        println!("  cargo xtask bump-version doc");
-        println!();
-    }
+    print_doc_followup(component.name, &core);
     println!("  git commit -m \"chore: release {tag}\"");
     Ok(())
 }
@@ -191,14 +187,11 @@ fn bump_doc(root: &Path, version: Option<&str>) -> Result<()> {
     let (Some(major), Some(minor), Some(patch)) = (parts.next(), parts.next(), parts.next()) else {
         bail!("invalid version `{core}`");
     };
+    let slug = format!("{major}.{minor}.x");
     if patch != "0" {
-        println!(
-            "Skipped doc: {core} is a patch release; the {major}.{minor}.x series is still the live one."
-        );
-        return Ok(());
+        return sync_doc_snapshot(root, &slug, &core);
     }
 
-    let slug = format!("{major}.{minor}.x");
     if !crate::doc::add_version(root, &slug)? {
         return Ok(());
     }
@@ -211,6 +204,19 @@ fn bump_doc(root: &Path, version: Option<&str>) -> Result<()> {
     println!("  cargo xtask doc build                    # generates doc/src/content/docs/{slug}/");
     println!("  cargo xtask doc freeze-version {slug}    # inlines codes + tracks the snapshot");
     println!("  git add doc/");
+    Ok(())
+}
+
+fn sync_doc_snapshot(root: &Path, slug: &str, core: &str) -> Result<()> {
+    let changed = crate::doc::sync_snapshot_versions(root, slug)?;
+    if changed == 0 {
+        println!("The {slug} snapshot already records the current component versions");
+        return Ok(());
+    }
+    println!("Updated {changed} page(s) in the {slug} snapshot -> {core}");
+    println!();
+    println!("Next (do these manually after reviewing the diff):");
+    println!("  git add doc/src/content/docs/{slug} 'doc/src/content/docs/*/{slug}'");
     Ok(())
 }
 
@@ -276,6 +282,21 @@ fn parse_version(version: &str, allow_build: bool) -> Result<(String, String)> {
             )
         }
     }
+}
+
+fn print_doc_followup(name: &str, core: &str) {
+    if !matches!(name, "software" | "console" | "unity" | "firmware") {
+        return;
+    }
+    let purpose = if name == "software" && core.ends_with(".0") {
+        "freeze the outgoing doc version series"
+    } else {
+        "sync the live doc version snapshot"
+    };
+    println!();
+    println!("Then, to {purpose}");
+    println!("  cargo xtask bump-version doc");
+    println!();
 }
 
 fn print_next_steps(name: &str) {

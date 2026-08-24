@@ -2,6 +2,17 @@
 
 # Rust
 
+## [0.6.1] - 2026-08-24
+
+### 🐛 Bug Fixes
+
+- Restore FIFO mode when low_latency is disabled
+- *(tools)* Spawn the resolved vivado/J-Link path so Windows .bat launchers are found (#193)
+
+### 📦 Dependencies
+
+- *(deps)* Bump mdns-sd from 0.20.3 to 0.21.0 in /bindings/ffi
+
 ## [0.6.0] - 2026-08-04
 
 ### 💥 Breaking Changes
@@ -215,6 +226,12 @@
 - *(ffi)* Sync C ABI with autd3-rs response/checker API and add pattern buffer accessors
 
 # Python
+
+## [0.6.1] - 2026-08-24
+
+### 📦 Dependencies
+
+- *(deps)* Bump mdns-sd from 0.20.3 to 0.21.0 in /bindings/python
 
 ## [0.6.0] - 2026-08-04
 
@@ -490,6 +507,13 @@
 - Derive simulator device count from client geometry
 
 # Console
+
+## [0.6.1] - 2026-08-24
+
+### 📦 Dependencies
+
+- *(deps)* Bump eframe from 0.35.0 to 0.36.0 in /console
+- *(deps)* Bump the cargo-minor group across 2 directories with 1 update
 
 ## [0.6.0] - 2026-08-04
 
