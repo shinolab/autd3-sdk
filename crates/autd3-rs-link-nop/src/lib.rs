@@ -23,10 +23,10 @@ impl Nop {
 impl IntoLink for Nop {
     type Link = Audit;
 
-    async fn into_link(
+    fn into_link(
         self,
         geometry: &Geometry,
-    ) -> Result<Audit, autd3_rs_core::error::LinkError> {
-        Ok(Audit::new(geometry.iter().map(Device::num_transducers)))
+    ) -> impl Future<Output = Result<Audit, autd3_rs_core::error::LinkError>> + Send {
+        std::future::ready(Ok(Audit::new(geometry.iter().map(Device::num_transducers))))
     }
 }

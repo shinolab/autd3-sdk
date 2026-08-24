@@ -39,12 +39,14 @@ impl RemoteLinkOption {
 impl IntoLink for RemoteLinkOption {
     type Link = RemoteLink;
 
-    async fn into_link(
+    fn into_link(
         self,
         geometry: &autd3_rs_core::Geometry,
-    ) -> Result<RemoteLink, autd3_rs_core::error::LinkError> {
-        RemoteLink::open(self.addr, self.timeout, geometry)
-            .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e))
+    ) -> impl Future<Output = Result<RemoteLink, autd3_rs_core::error::LinkError>> + Send {
+        std::future::ready(
+            RemoteLink::open(self.addr, self.timeout, geometry)
+                .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e)),
+        )
     }
 }
 

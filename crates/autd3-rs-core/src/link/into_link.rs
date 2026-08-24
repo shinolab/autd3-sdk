@@ -13,7 +13,10 @@ pub trait IntoLink: Send {
 impl<L: Link> IntoLink for L {
     type Link = L;
 
-    async fn into_link(self, _geometry: &Geometry) -> Result<L, crate::error::LinkError> {
-        Ok(self)
+    fn into_link(
+        self,
+        _geometry: &Geometry,
+    ) -> impl Future<Output = Result<L, crate::error::LinkError>> + Send {
+        std::future::ready(Ok(self))
     }
 }
