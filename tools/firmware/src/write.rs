@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::Target;
 use crate::series::Series;
-use crate::util::{on_path, run};
+use crate::util::{run, which};
 
 pub fn write(
     version: &str,
@@ -188,11 +188,7 @@ fn update_cpu(firmware: Option<&Path>) -> Result<()> {
 
 fn update_fpga(firmware: Option<&Path>) -> Result<()> {
     let firmware = firmware.context("FPGA firmware (*.mcs) not found in the bundle")?;
-    let vivado = if on_path("vivado_lab") {
-        "vivado_lab".to_string()
-    } else {
-        resolve_vivado()?
-    };
+    let vivado = resolve_vivado()?;
 
     let script = fpga_script(firmware);
     let script_path = std::env::temp_dir().join("autd3-fpga-configuration.tcl");
@@ -262,8 +258,8 @@ fn resolve_jlink() -> Result<String> {
         ["JLinkExe"].as_slice()
     };
     for name in candidates {
-        if on_path(name) {
-            return Ok((*name).to_string());
+        if let Some(path) = which(name) {
+            return Ok(path.to_string_lossy().into_owned());
         }
     }
     #[cfg(windows)]
@@ -277,8 +273,10 @@ fn resolve_jlink() -> Result<String> {
 }
 
 fn resolve_vivado() -> Result<String> {
-    if on_path("vivado") {
-        return Ok("vivado".to_string());
+    for name in ["vivado_lab", "vivado"] {
+        if let Some(path) = which(name) {
+            return Ok(path.to_string_lossy().into_owned());
+        }
     }
     #[cfg(windows)]
     if let Some(path) = find_vivado_windows() {
@@ -317,6 +315,22 @@ fn find_jlink_windows() -> Option<String> {
 
 #[cfg(windows)]
 fn find_vivado_windows() -> Option<String> {
+    let roots = xilinx_install_locations();
+    for exe in ["vivado_lab.bat", "vivado.bat"] {
+        let mut found = Vec::new();
+        for root in &roots {
+            collect_vivado_bins(root, 0, exe, &mut found);
+        }
+        found.sort();
+        if let Some(path) = found.pop() {
+            return Some(path.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+fn xilinx_install_locations() -> Vec<WinPathBuf> {
     use winreg::RegKey;
     use winreg::enums::HKEY_LOCAL_MACHINE;
 
@@ -327,11 +341,13 @@ fn find_vivado_windows() -> Option<String> {
         "AMDDesignTools",
     ];
 
-    let uninstall = RegKey::predef(HKEY_LOCAL_MACHINE)
+    let Ok(uninstall) = RegKey::predef(HKEY_LOCAL_MACHINE)
         .open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
-        .ok()?;
+    else {
+        return Vec::new();
+    };
 
-    let mut install_location: Option<String> = None;
+    let mut out: Vec<WinPathBuf> = Vec::new();
     for subkey_name in uninstall.enum_keys().flatten() {
         let Ok(subkey) = uninstall.open_subkey(&subkey_name) else {
             continue;
@@ -339,60 +355,33 @@ fn find_vivado_windows() -> Option<String> {
         let display_name: String = subkey.get_value("DisplayName").unwrap_or_default();
         if NEEDLES.iter().any(|n| display_name.contains(n))
             && let Ok(loc) = subkey.get_value::<String, _>("InstallLocation")
+            && !loc.is_empty()
         {
-            install_location = Some(loc);
-        }
-    }
-
-    let install = WinPathBuf::from(install_location?);
-    let vivado_dir = find_vivado_2025(&install).or_else(|| find_vivado_2024(&install))?;
-    Some(
-        vivado_dir
-            .join("bin")
-            .join("vivado.bat")
-            .to_string_lossy()
-            .into_owned(),
-    )
-}
-
-#[cfg(windows)]
-fn find_vivado_2024(install: &Path) -> Option<WinPathBuf> {
-    let vivado = install.join("Vivado");
-    let mut dirs: Vec<WinPathBuf> = std::fs::read_dir(vivado)
-        .ok()?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.is_dir())
-        .collect();
-    dirs.sort();
-    dirs.pop()
-}
-
-#[cfg(windows)]
-fn find_vivado_2025(install: &Path) -> Option<WinPathBuf> {
-    fn recurse(dir: &Path, depth: usize, out: &mut Vec<WinPathBuf>) {
-        if depth > 2 {
-            return;
-        }
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .is_some_and(|n| n.eq_ignore_ascii_case("vivado"))
-                {
-                    out.push(path.clone());
-                }
-                recurse(&path, depth + 1, out);
+            let path = WinPathBuf::from(loc);
+            if path.is_dir() && !out.contains(&path) {
+                out.push(path);
             }
         }
     }
-    let mut found = Vec::new();
-    recurse(install, 0, &mut found);
-    found.sort();
-    found.pop()
+    out
+}
+
+#[cfg(windows)]
+fn collect_vivado_bins(dir: &Path, depth: usize, exe: &str, out: &mut Vec<WinPathBuf>) {
+    let candidate = dir.join("bin").join(exe);
+    if candidate.is_file() {
+        out.push(candidate);
+    }
+    if depth >= 3 {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_vivado_bins(&path, depth + 1, exe, out);
+        }
+    }
 }

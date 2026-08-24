@@ -5,7 +5,7 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use crate::util::{on_path, run, run_built_bin};
+use crate::util::{on_path, run, run_built_bin, which};
 
 #[derive(Subcommand)]
 pub enum ToolCmd {
@@ -331,7 +331,7 @@ fn find_msbuild() -> Option<PathBuf> {
             }
         }
     }
-    on_path("msbuild").then(|| PathBuf::from("msbuild"))
+    which("msbuild")
 }
 
 fn run_bin(
