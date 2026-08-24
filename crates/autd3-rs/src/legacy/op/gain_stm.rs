@@ -74,15 +74,15 @@ impl<'a> GainStm<'a> {
 }
 
 fn write_phase_nibbles(tx: &mut [u8], emissions: &[Emission], slot: usize) {
-    for (dst, emission) in tx.chunks_exact_mut(2).zip(emissions) {
-        let word = u16::from_le_bytes([dst[0], dst[1]])
-            | (u16::from(emission.phase.0 >> 4) & 0x000F) << (4 * slot);
-        dst.copy_from_slice(&word.to_le_bytes());
+    for (dst, emission) in tx.as_chunks_mut::<2>().0.iter_mut().zip(emissions) {
+        let word =
+            u16::from_le_bytes(*dst) | (u16::from(emission.phase.0 >> 4) & 0x000F) << (4 * slot);
+        *dst = word.to_le_bytes();
     }
 }
 
 fn write_phase_bytes(tx: &mut [u8], emissions: &[Emission], slot: usize) {
-    for (dst, emission) in tx.chunks_exact_mut(2).zip(emissions) {
+    for (dst, emission) in tx.as_chunks_mut::<2>().0.iter_mut().zip(emissions) {
         dst[slot] = emission.phase.0;
     }
 }
@@ -227,7 +227,7 @@ mod tests {
         assert_eq!(tx[3], TransitionMode::Immediate.as_u8());
         assert_eq!(&tx[4..6], &0x4321u16.to_le_bytes());
         assert_eq!(&tx[6..8], &0xFFFFu16.to_le_bytes());
-        for (i, chunk) in tx[16..16 + 2 * n].chunks_exact(2).enumerate() {
+        for (i, chunk) in tx[16..16 + 2 * n].as_chunks::<2>().0.iter().enumerate() {
             assert_eq!(chunk[0], patterns[0][0][i].phase.0);
             assert_eq!(chunk[1], patterns[0][0][i].intensity.0);
         }
@@ -263,7 +263,7 @@ mod tests {
                 | GAIN_STM_FLAG_TRANSITION
                 | GAIN_STM_FLAG_SEND_BIT0
         );
-        for (i, chunk) in tx[16..16 + 2 * n].chunks_exact(2).enumerate() {
+        for (i, chunk) in tx[16..16 + 2 * n].as_chunks::<2>().0.iter().enumerate() {
             assert_eq!(chunk[0], patterns[0][0][i].phase.0);
             assert_eq!(chunk[1], patterns[1][0][i].phase.0);
         }
@@ -298,7 +298,7 @@ mod tests {
                 | GAIN_STM_FLAG_SEND_BIT0
                 | GAIN_STM_FLAG_SEND_BIT1
         );
-        for (i, chunk) in tx[16..16 + 2 * n].chunks_exact(2).enumerate() {
+        for (i, chunk) in tx[16..16 + 2 * n].as_chunks::<2>().0.iter().enumerate() {
             let word = u16::from_le_bytes([chunk[0], chunk[1]]);
             for (k, pat) in patterns.iter().enumerate() {
                 assert_eq!(
@@ -348,7 +348,9 @@ mod tests {
                 let payload = &frame.frames()[device.idx()].payload;
                 let offset = if round == 0 { 16 } else { 2 };
                 for (i, chunk) in payload[offset..offset + 2 * device.num_transducers()]
-                    .chunks_exact(2)
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
                     .enumerate()
                 {
                     assert_eq!(chunk[0], expected[device.idx()][i].phase.0);

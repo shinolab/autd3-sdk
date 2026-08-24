@@ -65,6 +65,27 @@ fn prefix(data: &[u8], len: usize) -> Option<&[u8]> {
     data.get(..len)
 }
 
+fn gain_stm_emission(chunk: [u8; 2], mode: u8, shift: u32) -> Emission {
+    if mode == GAIN_STM_MODE_PHASE_INTENSITY_FULL {
+        return Emission {
+            phase: Phase(chunk[0]),
+            intensity: Intensity(chunk[1]),
+        };
+    }
+    let word = u16::from_le_bytes(chunk);
+    #[allow(clippy::cast_possible_truncation)]
+    let phase = if mode == GAIN_STM_MODE_PHASE_FULL {
+        Phase((word >> shift) as u8)
+    } else {
+        let nibble = ((word >> shift) & 0x0F) as u8;
+        Phase(nibble << 4 | nibble)
+    };
+    Emission {
+        phase,
+        intensity: Intensity::MAX,
+    }
+}
+
 fn body(data: &[u8], offset: usize, len: usize) -> Option<&[u8]> {
     data.get(offset..offset.checked_add(len)?)
 }
@@ -648,7 +669,9 @@ impl LegacyDevice {
         };
 
         let emissions = words
-            .chunks_exact(size_of::<Emission>())
+            .as_chunks::<{ size_of::<Emission>() }>()
+            .0
+            .iter()
             .map(|chunk| Emission {
                 phase: Phase(chunk[0]),
                 intensity: Intensity(chunk[1]),
@@ -825,12 +848,10 @@ impl LegacyDevice {
         let Some(buffer) = body(data, offset, words * 8) else {
             return NOT_SUPPORTED_TAG;
         };
-        for chunk in buffer.chunks_exact(8) {
+        for &chunk in buffer.as_chunks::<8>().0 {
             self.segments[segment as usize]
                 .foci
-                .push(u64::from_le_bytes(
-                    chunk.try_into().expect("chunks_exact(8) yields 8 bytes"),
-                ));
+                .push(u64::from_le_bytes(chunk));
         }
         self.stm_write_cursor += u32::try_from(words).unwrap_or(u32::MAX);
 
@@ -919,27 +940,10 @@ impl LegacyDevice {
         let mode = self.gain_stm_mode;
         for &shift in shifts {
             let emissions = words
-                .chunks_exact(2)
-                .map(|chunk| {
-                    let word = u16::from_le_bytes([chunk[0], chunk[1]]);
-                    if mode == GAIN_STM_MODE_PHASE_INTENSITY_FULL {
-                        return Emission {
-                            phase: Phase(chunk[0]),
-                            intensity: Intensity(chunk[1]),
-                        };
-                    }
-                    #[allow(clippy::cast_possible_truncation)]
-                    let phase = if mode == GAIN_STM_MODE_PHASE_FULL {
-                        Phase((word >> shift) as u8)
-                    } else {
-                        let nibble = ((word >> shift) & 0x0F) as u8;
-                        Phase(nibble << 4 | nibble)
-                    };
-                    Emission {
-                        phase,
-                        intensity: Intensity::MAX,
-                    }
-                })
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|&chunk| gain_stm_emission(chunk, mode, shift))
                 .collect::<Vec<_>>();
             let state = &mut self.segments[segment as usize];
             state.emissions.push(emissions);
@@ -1014,8 +1018,10 @@ impl LegacyDevice {
             return NOT_SUPPORTED_TAG;
         };
         self.pulse_width_table = bytes
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&c| u16::from_le_bytes(c))
             .collect();
         NO_ERROR
     }
@@ -1024,8 +1030,8 @@ impl LegacyDevice {
         let Some(bytes) = body(data, 8, 32) else {
             return NOT_SUPPORTED_TAG;
         };
-        for (dst, chunk) in self.gpio_out.iter_mut().zip(bytes.chunks_exact(8)) {
-            *dst = u64::from_le_bytes(chunk.try_into().expect("chunks_exact(8) yields 8 bytes"));
+        for (dst, &chunk) in self.gpio_out.iter_mut().zip(bytes.as_chunks::<8>().0) {
+            *dst = u64::from_le_bytes(chunk);
         }
         NO_ERROR
     }

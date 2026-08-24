@@ -66,7 +66,9 @@ pub unsafe extern "C" fn autd3_pattern_buffer_from_array(
     };
 
     let buffer = slice
-        .chunks_exact(Autd3::NUM_TRANSDUCERS)
+        .as_chunks::<{ Autd3::NUM_TRANSDUCERS }>()
+        .0
+        .iter()
         .map(|device| {
             let mut slot = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
             for (e, src) in slot.iter_mut().zip(device) {
