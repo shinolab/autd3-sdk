@@ -59,12 +59,14 @@ impl TwinCATLinkOption {
 impl IntoLink for TwinCATLinkOption {
     type Link = TwinCATLink;
 
-    async fn into_link(
+    fn into_link(
         self,
         _geometry: &autd3_rs_core::Geometry,
-    ) -> Result<TwinCATLink, autd3_rs_core::error::LinkError> {
-        TwinCATLink::open(self)
-            .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e))
+    ) -> impl Future<Output = Result<TwinCATLink, autd3_rs_core::error::LinkError>> + Send {
+        std::future::ready(
+            TwinCATLink::open(self)
+                .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e)),
+        )
     }
 }
 

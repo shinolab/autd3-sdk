@@ -90,12 +90,12 @@ impl LegacyNop {
 impl IntoLink for LegacyNop {
     type Link = LegacyAudit;
 
-    async fn into_link(
+    fn into_link(
         self,
         geometry: &Geometry,
-    ) -> Result<LegacyAudit, autd3_rs_core::error::LinkError> {
-        Ok(LegacyAudit::new(
+    ) -> impl Future<Output = Result<LegacyAudit, autd3_rs_core::error::LinkError>> + Send {
+        std::future::ready(Ok(LegacyAudit::new(
             geometry.iter().map(Device::num_transducers),
-        ))
+        )))
     }
 }

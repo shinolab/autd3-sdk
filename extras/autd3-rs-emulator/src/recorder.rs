@@ -165,8 +165,8 @@ impl ClientApi for Recorder {
         DatagramBuilder::new(Arc::clone(&self.geometry))
     }
 
-    async fn send_checked(&mut self, frame: Frame<'_>) -> Result<(), Self::Error> {
+    fn send_checked(&mut self, frame: Frame<'_>) -> impl Future<Output = Result<(), Self::Error>> {
         self.stage_and_send(&frame);
-        Ok(())
+        std::future::ready(Ok(()))
     }
 }
