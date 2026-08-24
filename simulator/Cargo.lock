@@ -55,7 +55,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "autd3-cpu-wire",
  "chrono",
@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-firmware-emulator"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "autd3-cpu-fw",
  "autd3-rs-core",
@@ -79,7 +79,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-remote"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "autd3-rs-core",
  "socket2",
@@ -90,7 +90,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-simulator"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "autd3-rs-core",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-simulator-protocol"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "serde",
 ]
