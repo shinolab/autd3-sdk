@@ -710,9 +710,9 @@ impl Renderer {
             (self.axis_range[2].1 - self.axis_range[2].0).clamp(SLICE_MIN_MM, SLICE_MAX_MM),
         );
         self.slice_center = Vec3::new(
-            (self.axis_range[0].0 + self.axis_range[0].1) * 0.5,
-            (self.axis_range[1].0 + self.axis_range[1].1) * 0.5,
-            (self.axis_range[2].0 + self.axis_range[2].1) * 0.5,
+            f32::midpoint(self.axis_range[0].0, self.axis_range[0].1),
+            f32::midpoint(self.axis_range[1].0, self.axis_range[1].1),
+            f32::midpoint(self.axis_range[2].0, self.axis_range[2].1),
         );
         self.apply_slice();
         self.create_field();
