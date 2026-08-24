@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use crate::util::{on_path, run};
+use crate::util::{on_path, run, which};
 
 const PROJECT_NAME: &str = "autd3-fpga";
 
@@ -412,8 +412,8 @@ fn fpga_flash(root: &Path, force: bool) -> Result<()> {
 }
 
 pub fn resolve_vivado() -> Result<String> {
-    if on_path("vivado") {
-        return Ok("vivado".to_string());
+    if let Some(path) = which("vivado") {
+        return Ok(path.to_string_lossy().into_owned());
     }
     #[cfg(windows)]
     if let Some(path) = find_vivado_windows() {

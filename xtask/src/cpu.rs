@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use crate::util::{on_path, run};
+use crate::util::{run, which};
 
 #[derive(Subcommand)]
 pub enum CpuCmd {
@@ -67,8 +67,8 @@ fn cpu_flash(root: &Path, isr_probe: bool) -> Result<()> {
         Ok(v) if !v.is_empty() => v,
         _ => ["JLinkExe", "JLink"]
             .into_iter()
-            .find(|c| on_path(c))
-            .map(str::to_string)
+            .find_map(which)
+            .map(|path| path.to_string_lossy().into_owned())
             .context(
                 "J-Link Commander (JLinkExe) not found on PATH (install J-Link or set JLINK)",
             )?,
