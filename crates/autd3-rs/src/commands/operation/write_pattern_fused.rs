@@ -212,9 +212,9 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
             margin_ns: U32::new(margin_ns),
             reserved: U32::new(0),
         };
-        for (dst, k) in rest.chunks_exact_mut(8).zip(0..total) {
+        for (dst, k) in rest.as_chunks_mut::<8>().0.iter_mut().zip(0..total) {
             let focus = self.points[k / N].focus(device, k % N);
-            dst.copy_from_slice(&focus.encode()?.to_le_bytes());
+            *dst = focus.encode()?.to_le_bytes();
         }
         Ok(Cmd::WritePatternFused)
     }

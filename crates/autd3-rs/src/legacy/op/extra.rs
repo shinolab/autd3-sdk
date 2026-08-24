@@ -150,10 +150,12 @@ impl LegacyOperation for SetPulseWidthTable<'_> {
         };
         tx[..size_of::<TagPair>()].copy_from_slice(head.as_bytes());
         for (dst, entry) in tx[size_of::<TagPair>()..]
-            .chunks_exact_mut(size_of::<u16>())
+            .as_chunks_mut::<{ size_of::<u16>() }>()
+            .0
+            .iter_mut()
             .zip(self.table.iter())
         {
-            dst.copy_from_slice(&entry.pulse_width()?.to_le_bytes());
+            *dst = entry.pulse_width()?.to_le_bytes();
         }
         self.done = true;
         Ok(self.required_size(device))
@@ -192,10 +194,12 @@ impl LegacyOperation for SetGpioOut {
         };
         tx[..size_of::<GpioOutHead>()].copy_from_slice(head.as_bytes());
         for (dst, output) in tx[size_of::<GpioOutHead>()..]
-            .chunks_exact_mut(size_of::<u64>())
+            .as_chunks_mut::<{ size_of::<u64>() }>()
+            .0
+            .iter_mut()
             .zip(self.outputs)
         {
-            dst.copy_from_slice(&output.encode().to_le_bytes());
+            *dst = output.encode().to_le_bytes();
         }
         self.done = true;
         Ok(self.required_size(device))

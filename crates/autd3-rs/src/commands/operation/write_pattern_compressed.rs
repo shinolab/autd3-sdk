@@ -101,11 +101,13 @@ impl Operation for WritePatternCompressed<'_> {
             reserved: 0,
             offset: U32::new(offset),
         };
-        rest.chunks_exact_mut(2)
+        rest.as_chunks_mut::<2>()
+            .0
+            .iter_mut()
             .take(device.num_transducers())
             .enumerate()
             .for_each(|(t, dst)| {
-                dst.copy_from_slice(&self.pack_word(device.idx(), t).to_le_bytes());
+                *dst = self.pack_word(device.idx(), t).to_le_bytes();
             });
         Ok(Cmd::WritePatternCompressed)
     }

@@ -702,10 +702,16 @@ impl WgpuBackend {
             let mut dst = Vec::with_capacity(len * batch);
             for k in 0..batch {
                 let at = k * words * 4;
-                dst.extend(raw[at..at + len * 2].chunks_exact(2).map(|b| Emission {
-                    phase: Phase(b[0]),
-                    intensity: Intensity(b[1]),
-                }));
+                dst.extend(
+                    raw[at..at + len * 2]
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|b| Emission {
+                            phase: Phase(b[0]),
+                            intensity: Intensity(b[1]),
+                        }),
+                );
             }
             dst
         })
