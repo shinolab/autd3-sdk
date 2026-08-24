@@ -70,7 +70,12 @@ pub(super) fn emissions_for<'a>(
 }
 
 pub(super) fn write_emissions(tx: &mut [u8], emissions: &[Emission]) {
-    for (dst, emission) in tx.chunks_exact_mut(size_of::<Emission>()).zip(emissions) {
+    for (dst, emission) in tx
+        .as_chunks_mut::<{ size_of::<Emission>() }>()
+        .0
+        .iter_mut()
+        .zip(emissions)
+    {
         dst.copy_from_slice(emission.as_bytes());
     }
 }
@@ -138,7 +143,7 @@ mod tests {
         assert_eq!(tx[1], Segment::S0.as_u8());
         assert_eq!(tx[2], GAIN_FLAG_UPDATE);
         assert_eq!(tx[3], 0);
-        for (i, chunk) in tx[4..].chunks_exact(2).enumerate() {
+        for (i, chunk) in tx[4..].as_chunks::<2>().0.iter().enumerate() {
             assert_eq!(chunk[0], emissions[0][i].phase.0);
             assert_eq!(chunk[1], emissions[0][i].intensity.0);
         }

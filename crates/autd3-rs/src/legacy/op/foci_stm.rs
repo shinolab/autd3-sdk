@@ -240,9 +240,9 @@ mod tests {
         let mut tx = vec![0u8; PAYLOAD_BYTES];
         op.pack(&geo[0], &mut tx).unwrap();
 
-        for (i, chunk) in tx[24..24 + 16].chunks_exact(8).enumerate() {
+        for (i, &chunk) in tx[24..24 + 16].as_chunks::<8>().0.iter().enumerate() {
             let expected = points[i].focus(&geo[0], 0).encode().unwrap();
-            assert_eq!(u64::from_le_bytes(chunk.try_into().unwrap()), expected);
+            assert_eq!(u64::from_le_bytes(chunk), expected);
             assert_eq!((expected >> 54) & 0xFF, 0xAB);
         }
     }
@@ -310,8 +310,8 @@ mod tests {
             assert_eq!(payload[0], Tag::FociStm.as_u8());
             let offset = if round == 0 { 24 } else { 4 };
             let send_num = usize::from(payload[2]);
-            for chunk in payload[offset..offset + 8 * send_num].chunks_exact(8) {
-                restored.push(u64::from_le_bytes(chunk.try_into().unwrap()));
+            for &chunk in payload[offset..offset + 8 * send_num].as_chunks::<8>().0 {
+                restored.push(u64::from_le_bytes(chunk));
             }
             let is_last = round == frames.len() - 1;
             assert_eq!(payload[1] & FOCI_STM_FLAG_END != 0, is_last);

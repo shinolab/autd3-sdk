@@ -52,9 +52,14 @@ impl<const N: usize> Operation for WriteFociChunk<'_, N> {
             offset: U32::new(word_offset),
             data_len: U16::new(len),
         };
-        for (dst, k) in rest.chunks_exact_mut(8).zip(start..start + self.focus_len) {
+        for (dst, k) in rest
+            .as_chunks_mut::<8>()
+            .0
+            .iter_mut()
+            .zip(start..start + self.focus_len)
+        {
             let focus = self.points[k / N].focus(device, k % N);
-            dst.copy_from_slice(&focus.encode()?.to_le_bytes());
+            *dst = focus.encode()?.to_le_bytes();
         }
         Ok(Cmd::WritePatternBuffer)
     }

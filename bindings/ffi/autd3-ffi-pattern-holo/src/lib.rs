@@ -77,7 +77,9 @@ unsafe fn build_mask(mask: *const u8, num_devices: usize) -> Option<Vec<Vec<bool
     let slice = unsafe { slice_ref(mask, num_devices * Autd3::NUM_TRANSDUCERS) }?;
     Some(
         slice
-            .chunks_exact(Autd3::NUM_TRANSDUCERS)
+            .as_chunks::<{ Autd3::NUM_TRANSDUCERS }>()
+            .0
+            .iter()
             .map(|device| {
                 let mut slot = vec![false; Autd3::NUM_TRANSDUCERS];
                 for (m, src) in slot.iter_mut().zip(device) {
