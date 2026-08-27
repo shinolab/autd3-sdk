@@ -206,8 +206,14 @@ fn check_bundled_license(root: &Path) -> Result<()> {
             let path = package.dir().join(file);
             match std::fs::read_to_string(&path) {
                 Ok(text) if &text == expected => {}
-                Ok(_) => missing.push(format!("{}: {} differs from the root text", package.name(), path.display())),
-                Err(_) => missing.push(format!("{}: {} is missing", package.name(), path.display())),
+                Ok(_) => missing.push(format!(
+                    "{}: {} differs from the root text",
+                    package.name(),
+                    path.display()
+                )),
+                Err(_) => {
+                    missing.push(format!("{}: {} is missing", package.name(), path.display()))
+                }
             }
         }
     }
