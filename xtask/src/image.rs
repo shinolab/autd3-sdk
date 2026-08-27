@@ -4,20 +4,22 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use crate::util::{capture, capture_lenient, copy_dir, copy_file, on_path, run, which};
+use crate::util::{capture, capture_lenient, copy_file, on_path, run};
 
-const PI_GEN_URL: &str = "https://github.com/RPi-Distro/pi-gen";
 const ECAT_INTERFACE: &str = "ecat0";
 const UPLINK_INTERFACE: &str = "up0";
 
 const SERVER_DIST: &str = "appliance/server/dist";
 
+const DRIVER: &str = include_str!("image/driver.sh");
+
+const GROW_MIB: u64 = 1024;
+
+const SLACK_MIB: u64 = 128;
+
 pub struct Board {
-    /// Directory under `appliance/image/`
     dir: &'static str,
-    /// Value the image reports as `BOARD` through `GET /status`
     id: &'static str,
-    /// Kernel flavour the board boots, as Raspberry Pi OS names it
     kernel: &'static str,
 }
 
@@ -54,9 +56,9 @@ const STAGED_DIST: &[(&str, &str)] = &[
 
 #[derive(Subcommand)]
 pub enum ImageCmd {
-    /// Check the pi-gen stages without building an image (every board unless one is named)
+    /// Check the stages without building an image (every board unless one is named)
     Lint(LintArgs),
-    /// Build the appliance SD image with pi-gen (Docker required)
+    /// Build the appliance SD image from the published Raspberry Pi OS image (root required)
     Build(BuildArgs),
     /// Write a built image to an SD card
     Flash(FlashArgs),
@@ -80,13 +82,9 @@ pub struct BuildArgs {
     /// Password for the support account (the account is locked when this is absent)
     #[arg(long)]
     user_pass: Option<String>,
-    /// Keep pi-gen's container so a failed build can be inspected (it holds the work volume)
+    /// Keep the uncompressed image under `.work/` so a failed build can be inspected
     #[arg(long)]
-    keep_container: bool,
-    /// Reuse the previous build's container instead of starting from debootstrap. The stages whose
-    /// rootfs is already there are skipped, which is the difference between minutes and an hour.
-    #[arg(long)]
-    resume: bool,
+    keep_work: bool,
 }
 
 #[derive(clap::Args)]
@@ -157,25 +155,39 @@ fn read_keys(path: &Path) -> Result<BTreeMap<String, String>> {
         .collect())
 }
 
-struct PiGenPin {
-    git_ref: String,
-    sha: String,
+struct BaseImage {
+    url: String,
+    sha256: String,
     release: String,
 }
 
-fn pi_gen_pin(root: &Path, board: &Board) -> Result<PiGenPin> {
-    let path = image_dir(root, board).join("pi-gen.ref");
+impl BaseImage {
+    fn file_name(&self) -> &str {
+        self.url.rsplit('/').next().unwrap_or_default()
+    }
+}
+
+fn base_image(root: &Path, board: &Board) -> Result<BaseImage> {
+    let path = image_dir(root, board).join("base-image.ref");
     let keys = read_keys(&path)?;
     let get = |name: &str| {
         keys.get(name)
             .cloned()
             .with_context(|| format!("{} declares no {name}", path.display()))
     };
-    Ok(PiGenPin {
-        git_ref: get("REF")?,
-        sha: get("SHA")?,
+    let base = BaseImage {
+        url: get("URL")?,
+        sha256: get("SHA256")?,
         release: get("RELEASE")?,
-    })
+    };
+    if !base.file_name().ends_with(".img.xz") {
+        bail!(
+            "{} points at {}, which is not an .img.xz",
+            path.display(),
+            base.url,
+        );
+    }
+    Ok(base)
 }
 
 fn shell_scripts(dir: &Path, found: &mut Vec<PathBuf>) -> Result<()> {
@@ -308,8 +320,8 @@ fn check_wifi_is_reachable(root: &Path, board: &Board) -> Result<()> {
         .any(|line| line.trim() == "WirelessEnabled=true")
     {
         bail!(
-            "02-network/files/NetworkManager.state does not enable the radio. pi-gen's stage2 \
-             writes `WirelessEnabled=false` when the build sets no WPA_COUNTRY, and the \
+            "02-network/files/NetworkManager.state does not enable the radio. The published image \
+             ships `WirelessEnabled=false` unless a regulatory domain was chosen, and the \
              read-only rootfs means nothing done at runtime survives a reboot",
         );
     }
@@ -368,7 +380,7 @@ fn check_kernel_flavor(root: &Path, board: &Board) -> Result<()> {
     if !script.contains(&format!("-{}$", board.kernel)) {
         bail!(
             "04-overlay/00-run.sh does not pick the -{} kernel. The build strips every other \
-             flavour out of pi-gen's stage0, so the stage would find no matching modules",
+             flavour out of the published image, so the stage would find no matching modules",
             board.kernel,
         );
     }
@@ -390,9 +402,10 @@ fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
 }
 
 fn run_scripts(root: &Path, board: &Board) -> Result<Vec<PathBuf>> {
-    let stage = stage_dir(root, board);
-    let mut scripts = vec![stage.join("prerun.sh")];
-    scripts.extend(sorted_entries(&stage)?.iter().map(|d| d.join("00-run.sh")));
+    let mut scripts: Vec<PathBuf> = sorted_entries(&stage_dir(root, board))?
+        .iter()
+        .map(|dir| dir.join("00-run.sh"))
+        .collect();
     scripts.retain(|path| path.is_file());
     Ok(scripts)
 }
@@ -406,7 +419,7 @@ fn check_chroot_capabilities(root: &Path, board: &Board) -> Result<()> {
                 Some(end) if line.trim() == end => delimiter = None,
                 Some(_) if line.trim_start().starts_with("setcap ") => {
                     bail!(
-                        "{} calls setcap inside an on_chroot block. pi-gen drops CAP_SETFCAP \
+                        "{} calls setcap inside an on_chroot block. The driver drops CAP_SETFCAP \
                          there; run it against \"${{ROOTFS_DIR}}/...\" from outside instead",
                         script.display(),
                     );
@@ -429,7 +442,7 @@ fn check_stage_layout(root: &Path, board: &Board) -> Result<()> {
     let stage = stage_dir(root, board);
     if stage.join("00-packages").is_file() {
         bail!(
-            "stage-autd3/00-packages is a file. pi-gen only reads package lists inside a \
+            "stage-autd3/00-packages is a file. Package lists are only read inside a \
              sub-stage, so this one is silently ignored; move it to 00-packages/00-packages",
         );
     }
@@ -437,7 +450,7 @@ fn check_stage_layout(root: &Path, board: &Board) -> Result<()> {
     for script in run_scripts(root, board)? {
         if !is_executable(&script) {
             bail!(
-                "{} is not executable; pi-gen would skip it without saying so",
+                "{} is not executable; the build would skip it without saying so",
                 script.display(),
             );
         }
@@ -459,8 +472,8 @@ fn is_executable(_path: &Path) -> bool {
 
 fn lint(root: &Path, board: &Board) -> Result<()> {
     println!("checking the {} image", board.dir);
-    let pin = pi_gen_pin(root, board)?;
-    println!("pi-gen {} ({})", pin.git_ref, pin.release);
+    let base = base_image(root, board)?;
+    println!("built from {} ({})", base.file_name(), base.release);
 
     check_stage_layout(root, board)?;
 
@@ -478,13 +491,7 @@ fn lint(root: &Path, board: &Board) -> Result<()> {
     check_chroot_capabilities(root, board)?;
 
     let template = std::fs::read_to_string(image_dir(root, board).join("config.in"))?;
-    let known = [
-        "@IMG_NAME@",
-        "@RELEASE@",
-        "@USER_PASS@",
-        "@LOCK_ACCOUNT@",
-        "@SSH_PUBKEY@",
-    ];
+    let known = ["@USER_PASS@", "@LOCK_ACCOUNT@", "@SSH_PUBKEY@"];
     for placeholder in template
         .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '@'))
         .filter(|word| word.starts_with('@') && word.ends_with('@') && word.len() > 2)
@@ -495,23 +502,7 @@ fn lint(root: &Path, board: &Board) -> Result<()> {
     }
     println!("config.in only uses placeholders the builder fills");
 
-    let stage_name = stage_dir(root, board)
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned();
-    let stage_list = template
-        .lines()
-        .find_map(|line| line.trim().strip_prefix("STAGE_LIST="))
-        .unwrap_or_default()
-        .trim_matches('"');
-    if stage_list.split_whitespace().last() != Some(stage_name.as_str()) {
-        bail!(
-            "STAGE_LIST must end with the bare name `{stage_name}`, not a path: the build runs in \
-             a container that has the stage copied to /pi-gen/{stage_name}",
-        );
-    }
-    println!("STAGE_LIST names the stage the way the container will see it");
+    check_driver_reads_config(&template)?;
 
     for script in run_scripts(root, board)? {
         let text = std::fs::read_to_string(&script)?;
@@ -528,6 +519,50 @@ fn lint(root: &Path, board: &Board) -> Result<()> {
         }
     }
     println!("every config variable the stage reads is exported");
+    Ok(())
+}
+
+const CONFIG_SETTINGS: &[&str] = &[
+    "TARGET_HOSTNAME",
+    "LOCALE_DEFAULT",
+    "KEYBOARD_KEYMAP",
+    "TIMEZONE_DEFAULT",
+    "FIRST_USER_NAME",
+    "FIRST_USER_PASS",
+    "AUTD3_LOCK_ACCOUNT",
+];
+
+fn check_driver_reads_config(template: &str) -> Result<()> {
+    for name in CONFIG_SETTINGS {
+        let declared = template.lines().any(|line| {
+            line.trim_start()
+                .trim_start_matches("export ")
+                .starts_with(&format!("{name}="))
+        });
+        if !declared {
+            bail!("config.in declares no {name}, and the driver reads it unset");
+        }
+        if !DRIVER.contains(&format!("${{{name}")) {
+            bail!(
+                "driver.sh no longer reads {name}; take it out of config.in and out of \
+                 CONFIG_SETTINGS rather than leaving a setting that does nothing",
+            );
+        }
+        if !DRIVER
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("export "))
+            .any(|line| line.split(['=', ' ']).any(|word| word == *name))
+        {
+            bail!(
+                "driver.sh sources {name} but does not export it, so a stage script that reads it \
+                 sees the empty string",
+            );
+        }
+    }
+    println!(
+        "{} settings reach the driver from config.in",
+        CONFIG_SETTINGS.len(),
+    );
     Ok(())
 }
 
@@ -628,128 +663,151 @@ fn stage_files(root: &Path, board: &Board, version: &str) -> Result<()> {
     Ok(())
 }
 
-fn pi_gen_checkout(root: &Path, board: &Board, pin: &PiGenPin) -> Result<PathBuf> {
-    let dir = image_dir(root, board).join(".pi-gen");
-    if dir.join(".git").is_dir() {
-        run(
-            "git",
-            ["fetch", "--tags", "--depth", "1", "origin", &pin.git_ref],
-            &dir,
-        )?;
-        run("git", ["checkout", "--force", "FETCH_HEAD"], &dir)?;
-    } else {
-        std::fs::create_dir_all(&dir)?;
-        run(
-            "git",
+fn tool_available(tool: &str) -> bool {
+    on_path(tool)
+        || ["/usr/local/sbin", "/usr/sbin", "/sbin"]
+            .iter()
+            .any(|dir| Path::new(dir).join(tool).is_file())
+}
+
+fn cache_dir(root: &Path, board: &Board) -> PathBuf {
+    image_dir(root, board).join(".cache")
+}
+
+fn work_dir(root: &Path, board: &Board) -> PathBuf {
+    image_dir(root, board).join(".work")
+}
+
+fn sha256(path: &Path, root: &Path) -> Result<String> {
+    let output = capture("sha256sum", &[&path.to_string_lossy()], root)?;
+    Ok(output
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_owned())
+}
+
+fn fetch_base_image(root: &Path, board: &Board, base: &BaseImage) -> Result<PathBuf> {
+    let dir = cache_dir(root, board);
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(base.file_name());
+
+    if path.is_file() && sha256(&path, root)? == base.sha256 {
+        println!("using the cached {}", base.file_name());
+        return Ok(path);
+    }
+    if path.exists() {
+        println!(
+            "the cached {} does not match its pin; fetching again",
+            base.file_name()
+        );
+        std::fs::remove_file(&path)?;
+    }
+
+    println!("fetching {}", base.url);
+    let partial = path.with_extension("part");
+    run(
+        "curl",
+        [
+            "--fail",
+            "--location",
+            "--retry",
+            "3",
+            "--progress-bar",
+            "--output",
+            &partial.to_string_lossy(),
+            &base.url,
+        ],
+        root,
+    )?;
+    let got = sha256(&partial, root)?;
+    if got != base.sha256 {
+        bail!(
+            "{} hashes to {got}, not the pinned {}. Read what changed before moving SHA256 in \
+             base-image.ref",
+            base.file_name(),
+            base.sha256,
+        );
+    }
+    std::fs::rename(&partial, &path)?;
+    Ok(path)
+}
+
+fn unpack_base_image(root: &Path, board: &Board, cached: &Path) -> Result<PathBuf> {
+    let dir = work_dir(root, board);
+    std::fs::create_dir_all(&dir)?;
+    let image = dir.join("autd3.img");
+    println!(
+        "unpacking {}",
+        cached.file_name().unwrap_or_default().to_string_lossy()
+    );
+    let script = format!(
+        "xz -dc -T0 {from} > {to}",
+        from = shell_quote(cached),
+        to = shell_quote(&image),
+    );
+    run("sh", ["-c", &script], root)?;
+    let grown = std::fs::metadata(&image)?.len() + GROW_MIB * 1024 * 1024;
+    run(
+        "truncate",
+        ["-s", &grown.to_string(), &image.to_string_lossy()],
+        root,
+    )?;
+    Ok(image)
+}
+
+fn compress_image(root: &Path, image: &Path, deploy: &Path, name: &str) -> Result<PathBuf> {
+    std::fs::create_dir_all(deploy)?;
+    let out = deploy.join(format!("{name}.img.xz"));
+    println!("compressing to {}", out.display());
+    let script = format!(
+        "xz -c -T0 -6 {from} > {to}",
+        from = shell_quote(image),
+        to = shell_quote(&out),
+    );
+    run("sh", ["-c", &script], root)?;
+    Ok(out)
+}
+
+fn run_driver(root: &Path, board: &Board, image: &Path, config: &Path) -> Result<()> {
+    let work = work_dir(root, board);
+    let driver = work.join("driver.sh");
+    std::fs::write(&driver, DRIVER)?;
+
+    if capture_lenient("id", &["-u"], root)
+        .unwrap_or_default()
+        .trim()
+        == "0"
+    {
+        return run(
+            "bash",
             [
-                "clone",
-                "--depth",
-                "1",
-                "--branch",
-                &pin.git_ref,
-                PI_GEN_URL,
-                &dir.to_string_lossy(),
+                driver.as_os_str(),
+                config.as_os_str(),
+                image.as_os_str(),
+                stage_dir(root, board).as_os_str(),
+                work.as_os_str(),
+                std::ffi::OsStr::new(board.kernel),
+                std::ffi::OsStr::new(&SLACK_MIB.to_string()),
             ],
             root,
-        )?;
-    }
-    let head = capture("git", &["rev-parse", "HEAD"], &dir)?.trim().to_owned();
-    if head != pin.sha {
-        bail!(
-            "pi-gen {} is {head}, not the pinned {}. A tag that moved is a different image; \
-             update SHA in pi-gen.ref once the new contents have been read",
-            pin.git_ref,
-            pin.sha,
         );
     }
-    std::fs::write(dir.join("stage2/SKIP_IMAGES"), "")?;
-    keep_one_kernel(&dir, board)?;
-    fix_loopdev_helpers(&dir)?;
-
-    let staged = dir.join("stage-autd3");
-    if staged.exists() {
-        std::fs::remove_dir_all(&staged)
-            .with_context(|| format!("clearing {}", staged.display()))?;
-    }
-    copy_dir(&stage_dir(root, board), &staged)?;
-    Ok(dir)
-}
-
-fn keep_one_kernel(pi_gen: &Path, board: &Board) -> Result<()> {
-    let list = pi_gen.join("stage0/02-firmware/01-packages");
-    let text = std::fs::read_to_string(&list)
-        .with_context(|| format!("reading {}", list.display()))?;
-    let wanted = format!("linux-image-{}", board.kernel);
-    if !text.lines().any(|line| line.trim() == wanted) {
-        bail!(
-            "pi-gen's stage0 no longer installs {wanted}; the {} board would boot a kernel the \
-             image does not ship",
-            board.dir,
-        );
-    }
-    let mut kept = String::with_capacity(text.len());
-    for line in text.lines().filter(|line| {
-        let name = line.trim();
-        !(name.starts_with("linux-image-") || name.starts_with("linux-headers-"))
-    }) {
-        kept.push_str(line);
-        kept.push('\n');
-    }
-    kept.push_str(&wanted);
-    kept.push('\n');
-    std::fs::write(&list, kept)?;
-    println!("stage0 installs {wanted} alone (no other flavour, no kernel headers)");
-    Ok(())
-}
-
-const LOOPDEV_EDITS: &[(&str, &str, &str)] = &[
-    (
-        r#"loopdev="$(losetup -f)""#,
-        r#"loopdev="$(losetup -f | cut -d ' ' -f 1)""#,
-        "`losetup -f` answers `/dev/loop3 (lost)` when the node it names does not exist, which is \
-         the very case the helper is there to repair, and the suffix then reaches mknod as the \
-         minor number",
-    ),
-    (
-        r#"if [ ! -b "/dev/$partition" ]; then"#,
-        r#"if rm -f "/dev/$partition"; then"#,
-        "a partition node the container's `/dev` inherited from the host names whatever the \
-         kernel had given that minor to when the container started, and keeping it means writing \
-         a filesystem onto an unrelated device",
-    ),
-];
-
-fn fix_loopdev_helpers(pi_gen: &Path) -> Result<()> {
-    let path = pi_gen.join("scripts/common");
-    let mut text =
-        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-    for (from, to, why) in LOOPDEV_EDITS {
-        if text.matches(from).count() != 1 {
-            bail!(
-                "{} no longer holds `{from}` exactly once, so the loop device helpers cannot be \
-                 corrected: {why}. Read pi-gen's helpers again before moving the pin in pi-gen.ref",
-                path.display(),
-            );
-        }
-        text = text.replace(from, to);
-    }
-    std::fs::write(&path, text)?;
-    println!("the loop device helpers name their node and ignore the nodes the host left behind");
-    Ok(())
-}
-
-fn clear_stale_container(root: &Path) {
-    let existing = capture_lenient(
-        "docker",
-        &["ps", "-a", "--filter", "name=pigen_work", "-q"],
+    println!("the loop device, the mounts and the chroot need root; asking sudo once");
+    run(
+        "sudo",
+        [
+            std::ffi::OsStr::new("bash"),
+            driver.as_os_str(),
+            config.as_os_str(),
+            image.as_os_str(),
+            stage_dir(root, board).as_os_str(),
+            work.as_os_str(),
+            std::ffi::OsStr::new(board.kernel),
+            std::ffi::OsStr::new(&SLACK_MIB.to_string()),
+        ],
         root,
     )
-    .unwrap_or_default();
-    if existing.is_empty() {
-        return;
-    }
-    println!("removing the container a previous build left behind");
-    let _ = run("docker", ["rm", "-v", "pigen_work"], root);
 }
 
 fn ssh_pubkey(path: &Path) -> Result<String> {
@@ -788,12 +846,9 @@ fn shell_quote(path: &Path) -> String {
 
 const BINFMT_MISC: &str = "/proc/sys/fs/binfmt_misc";
 
-const EMULATION_FIX: &str = "Register a statically linked emulator instead:\n  \
-     Debian/Ubuntu: sudo apt install qemu-user-static  (the packaged handler names a \
-     /usr/libexec wrapper, so also `sudo ln -sf qemu-aarch64-static /usr/bin/qemu-aarch64` \
-     instead of installing qemu-user)\n  \
-     Arch:          sudo pacman -S qemu-user-static-binfmt  (replaces qemu-user-binfmt; keep \
-     qemu-user, pi-gen looks for qemu-aarch64 by name)\n  \
+const EMULATION_FIX: &str = "Register a statically linked emulator:\n  \
+     Debian/Ubuntu: sudo apt install qemu-user-static\n  \
+     Arch:          sudo pacman -S qemu-user-static-binfmt  (replaces qemu-user-binfmt)\n  \
      Fedora:        sudo dnf install qemu-user-static\n  \
      any distro:    docker run --privileged --rm tonistiigi/binfmt --install arm64\n\
      Then `sudo systemctl restart systemd-binfmt` (or reboot) and re-run. Any leftover \
@@ -832,19 +887,12 @@ fn check_emulation(root: &Path) -> Result<()> {
              enough, `sudo mount binfmt_misc -t binfmt_misc {BINFMT_MISC}`",
         );
     }
-    let Some(qemu) = which("qemu-aarch64") else {
-        bail!(
-            "`qemu-aarch64` is not on PATH. pi-gen's build-docker.sh looks it up by that exact \
-             name before it will start (`qemu-user` on most distributions).",
-        );
-    };
 
     let mut handlers = Vec::new();
-    let mut globbed = Vec::new();
     for entry in std::fs::read_dir(BINFMT_MISC).with_context(|| format!("reading {BINFMT_MISC}"))? {
         let path = entry?.path();
         let name = path.file_name().unwrap_or_default().to_string_lossy();
-        if !(name.contains("aarch64") || name.contains("arm64")) {
+        if !(name.contains("aarch64") || name.contains("arm64")) || name.ends_with("_be") {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap_or_default();
@@ -855,14 +903,7 @@ fn check_emulation(root: &Path) -> Result<()> {
                 .trim()
                 .to_owned()
         };
-        let interpreter = field("interpreter ");
-        if name.starts_with("qemu-aarch64") {
-            globbed.push(interpreter.clone());
-        }
-        if name.ends_with("_be") {
-            continue;
-        }
-        handlers.push((name.into_owned(), interpreter, field("flags:")));
+        handlers.push((name.into_owned(), field("interpreter "), field("flags:")));
     }
     if handlers.is_empty() {
         bail!("no binfmt_misc handler for aarch64 is registered.\n{EMULATION_FIX}");
@@ -871,77 +912,69 @@ fn check_emulation(root: &Path) -> Result<()> {
     for (name, interpreter, flags) in &handlers {
         if !flags.contains('F') {
             bail!(
-                "the binfmt_misc handler `{name}` lacks the F flag, so the container looks the \
-                 interpreter up in its own filesystem and will not find it.\n{EMULATION_FIX}",
+                "the binfmt_misc handler `{name}` lacks the F flag, so the kernel looks the \
+                 interpreter up under the chroot, where an x86 emulator does not \
+                 exist.\n{EMULATION_FIX}",
             );
         }
         let interpreter = Path::new(interpreter);
         if !is_statically_linked(interpreter)? {
             bail!(
-                "the binfmt_misc handler `{name}` runs {}, which is dynamically linked. It works \
-                 on this host and fails inside pi-gen's container, where its shared libraries do \
-                 not exist.\n{EMULATION_FIX}",
+                "the binfmt_misc handler `{name}` runs {}, which is dynamically linked. Its \
+                 loader and its shared libraries are resolved under the chroot, and an arm64 \
+                 rootfs holds neither.\n{EMULATION_FIX}",
                 interpreter.display(),
             );
         }
-    }
-
-    let qemu_prefix = qemu.to_string_lossy().into_owned();
-    if !globbed
-        .iter()
-        .any(|interpreter| interpreter.starts_with(&qemu_prefix))
-        && !is_statically_linked(&qemu)?
-    {
-        bail!(
-            "build-docker.sh registers `qemu-aarch64-rpi` naming {qemu_prefix} whenever no \
-             `qemu-aarch64*` handler already names it, and the entry it adds is the one the \
-             kernel matches first. {qemu_prefix} is dynamically linked, so every handler checked \
-             above is bypassed and the container fails at `arch-test`. Put the static build first \
-             on PATH under that name (`ln -sf qemu-aarch64-static /usr/bin/qemu-aarch64`).\n\
-             {EMULATION_FIX}",
-        );
     }
     Ok(())
 }
 
 fn build(root: &Path, board: &Board, args: &BuildArgs) -> Result<()> {
     if !cfg!(target_os = "linux") {
-        bail!("pi-gen builds a Debian rootfs in a chroot and only runs on Linux");
+        bail!("the build mounts an ext4 filesystem and chroots into it; that only works on Linux");
     }
-    if !on_path("docker") {
-        bail!("`docker` is not on PATH; pi-gen runs in a container");
+    for tool in [
+        "curl",
+        "xz",
+        "sha256sum",
+        "sfdisk",
+        "losetup",
+        "e2fsck",
+        "resize2fs",
+        "dumpe2fs",
+        "capsh",
+        "setcap",
+    ] {
+        if !tool_available(tool) {
+            bail!("`{tool}` is not installed (util-linux, e2fsprogs, xz-utils, libcap)");
+        }
     }
     check_emulation(root)?;
     lint(root, board)?;
 
-    let pin = pi_gen_pin(root, board)?;
+    let base = base_image(root, board)?;
     let version = format!(
         "{}-{}",
         appliance_version(root)?,
         built_on(root).replace('-', "")
     );
+    let name = format!("autd3-appliance-{}-{version}", board.dir);
     println!(
-        "building the {} appliance image {version} on pi-gen {}",
-        board.dir, pin.git_ref,
+        "building {name} from {} ({})",
+        base.file_name(),
+        base.release,
     );
 
     stage_files(root, board, &version)?;
-    let pi_gen = pi_gen_checkout(root, board, &pin)?;
-    if args.resume {
-        println!("resuming in the container the previous build left behind");
-    } else {
-        clear_stale_container(root);
-    }
+    let cached = fetch_base_image(root, board, &base)?;
 
     let (user_pass, lock) = match &args.user_pass {
         None => ("locked-by-the-autd3-stage".to_owned(), "1"),
         Some(pass) => (checked_user_pass(pass)?, "0"),
     };
     let ssh = match &args.ssh_key {
-        Some(path) => format!(
-            "PUBKEY_SSH_FIRST_USER=\"{}\"\nPUBKEY_ONLY_SSH=1",
-            ssh_pubkey(path)?,
-        ),
+        Some(path) => format!("PUBKEY_SSH_FIRST_USER=\"{}\"", ssh_pubkey(path)?),
         None => "# no SSH key was given to the build".to_owned(),
     };
     if args.ssh_key.is_none() && args.user_pass.is_none() {
@@ -951,59 +984,29 @@ fn build(root: &Path, board: &Board, args: &BuildArgs) -> Result<()> {
         );
     }
 
-    let config = std::fs::read_to_string(image_dir(root, board).join("config.in"))?
-        .replace(
-            "@IMG_NAME@",
-            &format!("autd3-appliance-{}-{version}", board.dir),
-        )
-        .replace("@RELEASE@", &pin.release)
-        .replace("@USER_PASS@", &user_pass)
-        .replace("@LOCK_ACCOUNT@", lock)
-        .replace("@SSH_PUBKEY@", &ssh);
-    let config_path = pi_gen.join("config.autd3");
-    std::fs::write(&config_path, config)?;
+    let image = unpack_base_image(root, board, &cached)?;
+    let config = work_dir(root, board).join("config.sh");
+    std::fs::write(
+        &config,
+        std::fs::read_to_string(image_dir(root, board).join("config.in"))?
+            .replace("@USER_PASS@", &user_pass)
+            .replace("@LOCK_ACCOUNT@", lock)
+            .replace("@SSH_PUBKEY@", &ssh),
+    )?;
+
+    run_driver(root, board, &image, &config)?;
 
     let deploy = image_dir(root, board).join("deploy");
-    discard_stale_images(&[pi_gen.join("deploy")])?;
-
-    let config_arg = config_path.to_string_lossy().into_owned();
-    let mut command = vec![
-        "PIGEN_DOCKER_OPTS=--network host",
-        "./build-docker.sh",
-        "-c",
-        &config_arg,
-    ];
-    if args.keep_container || args.resume {
-        command.insert(0, "PRESERVE_CONTAINER=1");
-    }
-    if args.resume {
-        command.insert(0, "CONTINUE=1");
-    }
-    run("env", command, &pi_gen)?;
-
-    let produced = pi_gen.join("deploy");
-    if newest_images(&produced)
-        .context("pi-gen produced no deploy directory; the build log is the last thing it printed")?
-        .is_empty()
-    {
-        bail!(
-            "pi-gen produced no .img.xz; whatever is under {} is the previous build",
-            deploy.display(),
-        );
-    }
-    std::fs::create_dir_all(&deploy)?;
     discard_stale_images(std::slice::from_ref(&deploy))?;
-    for entry in std::fs::read_dir(&produced)? {
-        let from = entry?.path();
-        if from.is_file() {
-            copy_file(&from, &deploy.join(from.file_name().unwrap_or_default()))?;
-        }
+    let out = compress_image(root, &image, &deploy, &name)?;
+    if args.keep_work {
+        println!("the uncompressed image is still at {}", image.display());
+    } else {
+        std::fs::remove_file(&image).ok();
     }
+    std::fs::remove_file(config).ok();
 
-    println!("images in {}", deploy.display());
-    for image in newest_images(&deploy)? {
-        println!("  {}", image.display());
-    }
+    println!("built {}", out.display());
     Ok(())
 }
 
@@ -1032,6 +1035,44 @@ fn newest_images(deploy: &Path) -> Result<Vec<PathBuf>> {
     Ok(images.into_iter().map(|(_, path)| path).collect())
 }
 
+fn check_whole_disk(root: &Path, device: &Path) -> Result<()> {
+    let kind = capture_lenient("lsblk", &["-ndo", "TYPE", &device.to_string_lossy()], root)
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    match kind.as_str() {
+        "disk" | "loop" => Ok(()),
+        "part" => {
+            let whole = capture_lenient(
+                "lsblk",
+                &["-ndo", "PKNAME", &device.to_string_lossy()],
+                root,
+            )
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+            bail!(
+                "{} is a partition, not the card. The image brings its own partition table, so it \
+                 has to be written to the whole device{}",
+                device.display(),
+                if whole.is_empty() {
+                    String::new()
+                } else {
+                    format!(" -- /dev/{whole}")
+                },
+            )
+        }
+        "" => bail!(
+            "lsblk does not recognise {} as a block device",
+            device.display(),
+        ),
+        other => bail!(
+            "{} is a {other}, and the image has to be written to a whole card",
+            device.display(),
+        ),
+    }
+}
+
 fn flash(root: &Path, board: &Board, args: &FlashArgs) -> Result<()> {
     let deploy = image_dir(root, board).join("deploy");
     let image = match &args.image {
@@ -1050,6 +1091,7 @@ fn flash(root: &Path, board: &Board, args: &FlashArgs) -> Result<()> {
     if !args.device.exists() {
         bail!("{} does not exist", args.device.display());
     }
+    check_whole_disk(root, &args.device)?;
 
     let description = capture_lenient(
         "lsblk",
@@ -1064,11 +1106,28 @@ fn flash(root: &Path, board: &Board, args: &FlashArgs) -> Result<()> {
     }
 
     let script = format!(
-        "xz -dc {image} | dd of={device} bs=4M status=progress conv=fsync",
+        "set -e\n\
+         xz -dc {image} | dd of={device} bs=4M status=progress conv=fsync\n\
+         sync\n\
+         blockdev --flushbufs {device} || true\n\
+         sysctl -q -w vm.drop_caches=3\n\
+         size=$(xz --robot -l {image} | awk '$1 == \"totals\" {{ print $5 }}')\n\
+         echo \"verifying ${{size}} bytes\"\n\
+         written=$(head -c \"${{size}}\" {device} | sha256sum | cut -d\" \" -f1)\n\
+         wanted=$(xz -dc {image} | sha256sum | cut -d\" \" -f1)\n\
+         [ \"${{written}}\" = \"${{wanted}}\" ] || {{\n\
+           echo \"the card reads back as ${{written}}, not ${{wanted}}\" >&2\n\
+           exit 1\n\
+         }}",
         image = shell_quote(&image),
         device = shell_quote(&args.device),
     );
-    run("sudo", ["sh", "-c", &script], root)?;
-    println!("written; the card is ready");
+    run("sudo", ["sh", "-c", &script], root).context(
+        "the card does not read back as the image that was written to it. The write reported \
+         success, so suspect the path it took rather than the image: a card reader behind a hub \
+         or dock, the cable, or the card. Writing through a port on the machine itself is the \
+         quickest thing to rule out",
+    )?;
+    println!("written and verified; the card is ready");
     Ok(())
 }
