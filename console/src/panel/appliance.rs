@@ -246,11 +246,14 @@ impl AppliancePanel {
 
 fn base_url(addr: &str) -> String {
     let addr = addr.trim();
-    if addr.starts_with("http://") || addr.starts_with("https://") {
-        addr.to_owned()
-    } else {
-        format!("http://{addr}")
-    }
+    let (scheme, host) = match addr.split_once("://") {
+        Some((scheme, rest)) => (scheme, rest),
+        None => ("http", addr),
+    };
+    let host = host
+        .parse::<std::net::SocketAddr>()
+        .map_or_else(|_| host.to_owned(), autd3_rs_appliance::host_of);
+    format!("{scheme}://{host}")
 }
 
 fn first_control_endpoint(output: &str) -> Option<String> {
@@ -263,11 +266,19 @@ fn first_control_endpoint(output: &str) -> Option<String> {
             .first()
             .cloned()
     })?;
-    let addr = first.get("addr")?.as_str()?;
     let port = first
         .get("control_port")?
         .as_u64()
         .unwrap_or(u64::from(autd3_rs_appliance::DEFAULT_CONTROL_PORT));
+
+    if let Some(host) = first.get("host").and_then(|host| host.as_str()) {
+        let host = host.trim_end_matches('.');
+        if !host.is_empty() {
+            return Some(format!("{host}:{port}"));
+        }
+    }
+
+    let addr = first.get("addr")?.as_str()?;
     let host = addr.rsplit_once(':')?.0;
     Some(format!("{host}:{port}"))
 }
@@ -507,6 +518,27 @@ mod tests {
             first_control_endpoint(output).as_deref(),
             Some("[fe80::1%3]:8081"),
         );
+    }
+
+    #[test]
+    fn the_mdns_name_is_preferred_over_a_link_local_address() {
+        let output = "[{\"addr\": \"[fe80::1%3]:8080\", \"host\": \"autd3-0a1b2c3d.local.\", \
+             \"control_port\": 8081}]";
+        assert_eq!(
+            first_control_endpoint(output).as_deref(),
+            Some("autd3-0a1b2c3d.local:8081"),
+            "a zone index cannot be dialled from a browser; the name can",
+        );
+    }
+
+    #[test]
+    fn a_zone_index_reaches_the_browser_percent_encoded() {
+        assert_eq!(
+            base_url("[fe80::1%3]:8081"),
+            "http://[fe80::1%253]:8081",
+            "a bare `%3]` is not a legal percent-escape, so the URI never parses",
+        );
+        assert_eq!(base_url("[2001:db8::1]:8081"), "http://[2001:db8::1]:8081");
     }
 
     #[test]
