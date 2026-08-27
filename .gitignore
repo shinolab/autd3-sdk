@@ -9,8 +9,8 @@
 /firmware/dist
 /appliance/server/bundle
 
-/appliance/image/*/.pi-gen
-/appliance/image/*/work
+/appliance/image/*/.cache
+/appliance/image/*/.work
 /appliance/image/*/deploy
 
 *.jou
