@@ -6,7 +6,7 @@ use clap::Subcommand;
 
 use crate::util::{cargo_fmt_packages, on_path, run};
 
-pub(crate) const MIT_WHEELS: &[&str] = &[
+pub(crate) const WHEELS: &[&str] = &[
     "autd3-core",
     "autd3-pattern",
     "autd3-pattern-holo",
@@ -19,9 +19,7 @@ pub(crate) const MIT_WHEELS: &[&str] = &[
     "autd3",
     "autd3-emulator",
 ];
-const SOEM_WHEEL: &str = "autd3-link-soem";
-
-const NATIVE_LIB_WHEELS: &[&str] = &["autd3-link-ethercrab", SOEM_WHEEL];
+const NATIVE_LIB_WHEELS: &[&str] = &["autd3-link-ethercrab"];
 
 #[derive(Subcommand)]
 pub enum PyCmd {
@@ -30,18 +28,12 @@ pub enum PyCmd {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
-        /// Also build the SOEM wheel (opt-in: it is GPL-3.0-only)
-        #[arg(long)]
-        soem: bool,
     },
     /// Install the wheels into the local venv in editable mode
     Develop {
         /// Build the release profile instead of dev
         #[arg(long)]
         release: bool,
-        /// Also install the SOEM wheel (opt-in: it is GPL-3.0-only)
-        #[arg(long)]
-        soem: bool,
     },
     /// Clippy the Python binding workspace
     Lint,
@@ -52,11 +44,7 @@ pub enum PyCmd {
         fix: bool,
     },
     /// Install the wheels into the local venv and run pytest
-    Test {
-        /// Also install and exercise the SOEM wheel (opt-in: it is GPL-3.0-only)
-        #[arg(long)]
-        soem: bool,
-    },
+    Test,
     /// Run a Python example from `bindings/python/examples/`
     Example {
         /// Example script name (without `.py`)
@@ -76,10 +64,10 @@ pub enum PyCmd {
 pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
     let dir = root.join("bindings").join("python");
     match cmd {
-        PyCmd::Build { debug, soem } => {
+        PyCmd::Build { debug } => {
             crate::license::generate_python(root)?;
             let out = dir.join("target").join("wheels");
-            for wheel in wheels(soem) {
+            for wheel in WHEELS {
                 drop_stale_native_cdylib(&dir, wheel, !debug);
                 let manifest = manifest(wheel);
                 let mut args = vec!["build", "-m", &manifest, "-o"];
@@ -88,7 +76,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
                 if !debug {
                     args.push("--release");
                 }
-                if NATIVE_LIB_WHEELS.contains(&wheel) {
+                if NATIVE_LIB_WHEELS.contains(wheel) {
                     args.push("--auditwheel");
                     args.push("warn");
                 }
@@ -96,9 +84,9 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             }
             Ok(())
         }
-        PyCmd::Develop { release, soem } => {
+        PyCmd::Develop { release } => {
             let venv = ensure_venv(&dir)?;
-            develop(&dir, &venv, &wheels(soem), release)
+            develop(&dir, &venv, WHEELS, release)
         }
         PyCmd::Lint => {
             let mut args = vec!["clippy", "--workspace", "--all-targets"];
@@ -106,15 +94,15 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             run("cargo", args, &dir)
         }
         PyCmd::Format { fix } => cargo_fmt_packages(&dir, fix),
-        PyCmd::Test { soem } => {
+        PyCmd::Test => {
             let venv = ensure_venv(&dir)?;
-            develop(&dir, &venv, &wheels(soem), false)?;
+            develop(&dir, &venv, WHEELS, false)?;
             let python = venv_python(&venv);
             if dir.join("tests").is_dir() {
                 pip_install(&dir, &venv, &["pytest", "numpy", "scipy", "polars"])?;
                 run(&python.to_string_lossy(), ["-m", "pytest", "tests"], &dir)
             } else {
-                let imports = wheels(soem)
+                let imports = WHEELS
                     .iter()
                     .map(|w| format!("import {}", module_name(w)))
                     .collect::<Vec<_>>()
@@ -129,7 +117,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             args,
         } => {
             let venv = ensure_venv(&dir)?;
-            develop(&dir, &venv, MIT_WHEELS, !debug)?;
+            develop(&dir, &venv, WHEELS, !debug)?;
             pip_install(&dir, &venv, &["numpy", "scipy", "polars"])?;
             let script = dir.join("examples").join(format!("{name}.py"));
             if !script.is_file() {
@@ -137,16 +125,6 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             }
             run_example(&venv_python(&venv), &script, &args, no_sudo, &dir)
         }
-    }
-}
-
-fn wheels(soem: bool) -> Vec<&'static str> {
-    if soem {
-        let mut wheels = MIT_WHEELS.to_vec();
-        wheels.push(SOEM_WHEEL);
-        wheels
-    } else {
-        MIT_WHEELS.to_vec()
     }
 }
 

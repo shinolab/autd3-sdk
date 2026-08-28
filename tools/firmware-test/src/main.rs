@@ -13,7 +13,6 @@ use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use autd3_rs::{Client, ClientConfig, DatagramBuilder};
 use autd3_rs_link_ethercrab::EtherCrabLinkOption;
 use autd3_rs_link_remote::RemoteLinkOption;
-use autd3_rs_link_soem::SoemLinkOption;
 use autd3_rs_link_twincat::TwinCATLinkOption;
 
 use crate::cli::{Cli, LinkKind};
@@ -100,14 +99,6 @@ async fn run(cli: &Cli) -> Result<()> {
 
     let sync0_period = Duration::from_micros(cli.cycle_us);
     let client = match cli.link {
-        LinkKind::Soem => {
-            let option = SoemLinkOption {
-                iface: cli.interface.clone().into(),
-                sync0_period,
-                ..Default::default()
-            };
-            Client::open(&geometry, option, config).await
-        }
         LinkKind::Ethercrab => {
             let option = EtherCrabLinkOption {
                 iface: cli.interface.clone().into(),

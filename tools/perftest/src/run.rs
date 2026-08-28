@@ -16,7 +16,6 @@ use autd3_rs::{
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 use autd3_rs_link_remote::{DiscoveryOption, RemoteLink, discover};
 
-use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
 use autd3_rs_link_twincat::{TwinCATLink, TwinCATLinkOption};
 
 use crate::cli::{Cli, Command, LinkKind, Mode, RtPolicy};
@@ -223,22 +222,6 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             .await
             .expect("open task panicked")
             .context("opening EtherCAT link (echocat)")?;
-            let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_bus_link(link, cli)).await;
-            guard.stop().await;
-            out
-        }
-        LinkKind::Soem => {
-            let link_cfg = SoemLinkOption {
-                iface: cli.interface.clone().into(),
-                sync0_period: cli.sync0_period,
-                sync0_shift: cli.sync0_shift(),
-                ..Default::default()
-            };
-            let link = tokio::task::spawn_blocking(move || SoemLink::open(link_cfg))
-                .await
-                .expect("open task panicked")
-                .context("opening EtherCAT link (SOEM)")?;
             let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
             let out = Box::pin(run_with_bus_link(link, cli)).await;
             guard.stop().await;

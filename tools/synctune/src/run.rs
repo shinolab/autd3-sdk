@@ -14,7 +14,6 @@ use autd3_rs::{
 };
 use autd3_rs_link_echocat::{EchocatLink, EchocatLinkOption};
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption, EtherCrabLinkOptionFull};
-use autd3_rs_link_soem::{SoemLink, SoemLinkOption};
 
 use crate::cli::{Common, LinkKind, Mode, RtPolicy};
 use crate::drift::DriftAccumulator;
@@ -68,27 +67,6 @@ pub async fn measure_candidate(
                 ..Default::default()
             };
             let opened = tokio::task::spawn_blocking(move || EchocatLink::open(&opt))
-                .await
-                .expect("open task panicked");
-            match opened {
-                Ok(link) => Box::pin(measure_with_link(link, common, cand, shutdown)).await,
-                Err(e) => Ok(CandidateResult::failed(
-                    period,
-                    shift,
-                    cand.shift_percent,
-                    CandidateStatus::FailedOpen,
-                    format!("link open: {e}"),
-                )),
-            }
-        }
-        LinkKind::Soem => {
-            let opt = SoemLinkOption {
-                iface: common.interface.clone().into(),
-                sync0_period: period,
-                sync0_shift: shift,
-                ..Default::default()
-            };
-            let opened = tokio::task::spawn_blocking(move || SoemLink::open(opt))
                 .await
                 .expect("open task panicked");
             match opened {

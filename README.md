@@ -46,7 +46,7 @@ If you use this SDK in your research, please consider including the following ci
 
 ## License
 
-This SDK is licensed under the [MIT license](./LICENSE), except for [`crates/autd3-rs-link-soem`](./crates/autd3-rs-link-soem) and its bindings ([`bindings/ffi/autd3-ffi-link-soem`](./bindings/ffi/autd3-ffi-link-soem), [`bindings/python/autd3-link-soem`](./bindings/python/autd3-link-soem), [`bindings/csharp/src/AUTD3.Link.Soem`](./bindings/csharp/src/AUTD3.Link.Soem), and [`bindings/unity/com.shinolab.autd3-sdk.link.soem`](./bindings/unity/com.shinolab.autd3-sdk.link.soem)), which statically link [SOEM](https://github.com/OpenEtherCATsociety/SOEM) and are licensed under GPL-3.0-only.
+This SDK is licensed under the [MIT license](./LICENSE).
 
 ## Author
 

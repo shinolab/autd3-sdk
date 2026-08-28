@@ -32,7 +32,7 @@ Shared by all three subcommands.
 
 | Flag                  | Description |
 |-----------------------|-------------|
-| `--link <KIND>`       | `echocat` (default), `ethercrab`, or `soem`. |
+| `--link <KIND>`       | `echocat` (default) or `ethercrab`. |
 | `--interface <NAME>`  | EtherCAT network interface (`*LinkOption.iface`). |
 | `--devices <N>`       | Expected device count; a mismatch aborts the run. |
 | `--mode <MODE>`       | Load pattern: `streaming` (default) or `stop-and-wait`. Streaming keeps the bus at its one-frame-per-cycle ceiling, which is the condition drops show up under. |

@@ -20,8 +20,6 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - uses: ./.github/actions/setup-rust
         with:
           components: rustfmt, clippy
@@ -30,10 +28,10 @@ jobs:
             xtask
       - name: Install system deps
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - uses: astral-sh/setup-uv@v7
       - name: Format
         if: runner.os == 'Linux'
         run: cargo xtask py format
       - run: cargo xtask py lint
-      - run: cargo xtask py test --soem
+      - run: cargo xtask py test

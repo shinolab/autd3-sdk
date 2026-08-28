@@ -7,7 +7,6 @@ use clap::Subcommand;
 use crate::util::run;
 
 const SOLUTION: &str = "AUTD3.slnx";
-const SOEM_CRATE: &str = "autd3-ffi-link-soem";
 
 const CS_NATIVE: &[(&str, &str)] = &[
     ("AUTD3.Core", "autd3_core"),
@@ -20,7 +19,6 @@ const CS_NATIVE: &[(&str, &str)] = &[
     ("AUTD3.Link.Remote", "autd3_link_remote"),
     ("AUTD3.Link.TwinCAT", "autd3_link_twincat"),
     ("AUTD3.Link.Nop", "autd3_link_nop"),
-    ("AUTD3.Link.Soem", "autd3_link_soem"),
 ];
 
 const RIDS: &[&str] = &["win-x64", "linux-x64", "osx-arm64"];
@@ -49,9 +47,6 @@ pub enum CsCmd {
         /// Skip the tests that need a pcap runtime
         #[arg(long)]
         no_pcap: bool,
-        /// Also build the SOEM cdylib (opt-in: it is GPL-3.0-only)
-        #[arg(long)]
-        soem: bool,
     },
     /// `dotnet format` the C# solution
     Format {
@@ -69,9 +64,6 @@ pub enum CsCmd {
         /// Do not wrap the run in `sudo`
         #[arg(long)]
         no_sudo: bool,
-        /// Also build the SOEM cdylib (opt-in: it is GPL-3.0-only)
-        #[arg(long)]
-        soem: bool,
         /// Arguments forwarded to the example
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -86,8 +78,8 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             run("dotnet", ["build", SOLUTION, "-c", config], &dir)
         }
         CsCmd::Pack { native_dir, out } => pack(root, native_dir, out),
-        CsCmd::Test { no_pcap, soem } => {
-            let native = build_ffi(root, soem)?;
+        CsCmd::Test { no_pcap } => {
+            let native = build_ffi(root)?;
             let filter: &[&str] = if no_pcap {
                 &["--filter", PCAP_TRAIT]
             } else {
@@ -119,10 +111,9 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             name,
             debug,
             no_sudo,
-            soem,
             args,
         } => {
-            let native = build_ffi(root, soem)?;
+            let native = build_ffi(root)?;
             let config = if debug { "Debug" } else { "Release" };
             let project_dir = dir.join("examples").join(&name);
             let project = project_dir.join(format!("{name}.csproj"));
@@ -228,15 +219,9 @@ fn host_rid() -> Result<&'static str> {
     })
 }
 
-fn build_ffi(root: &Path, soem: bool) -> Result<PathBuf> {
+fn build_ffi(root: &Path) -> Result<PathBuf> {
     let ffi = root.join("bindings").join("ffi");
-    let mut args = vec!["build", "--workspace"];
-    if !soem {
-        args.push("--exclude");
-        args.push(SOEM_CRATE);
-    }
-    args.push("--release");
-    run("cargo", args, &ffi)?;
+    run("cargo", ["build", "--workspace", "--release"], &ffi)?;
     Ok(ffi.join("target").join("release"))
 }
 
