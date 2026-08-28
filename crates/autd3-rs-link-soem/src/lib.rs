@@ -1,7 +1,3 @@
-//!
-
-//!
-
 // GPL-3.0-only: statically links SOEM. See README.md.
 
 mod adapters;
