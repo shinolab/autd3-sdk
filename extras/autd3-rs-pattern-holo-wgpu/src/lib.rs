@@ -1,11 +1,3 @@
-//! GPU `LinAlgBackend` for
-//! [`autd3-rs-pattern-holo`](https://docs.rs/autd3-rs-pattern-holo), built on
-//! [wgpu](https://docs.rs/wgpu).
-//!
-//! Drop it in place of the default CPU backend when optimizing large hologram problems.
-//!
-//! See the [documentation site](https://shinolab.github.io/autd3-sdk/en/).
-
 mod buffer;
 mod pipelines;
 
