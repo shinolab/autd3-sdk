@@ -20,8 +20,7 @@ Then add the required packages from Window → Package Manager → My registries
 ## Building the packages
 
 ```bash
-cargo xtask unity build            
-cargo xtask unity build --soem     # also build the SOEM link (GPL-3.0-only)
+cargo xtask unity build
 ```
 
 ## Local install (`file:` references)
@@ -51,4 +50,3 @@ Positions scale by 1000 and flip z, directions flip z and are normalised, and ro
 
 - Targets are Editor + Standalone (Windows / macOS / Linux). Mobile / IL2CPP device builds are not validated yet.
 - On Linux, EtherCAT raw sockets need `CAP_NET_RAW`.
-- `com.shinolab.autd3-sdk.link.soem` is GPL-3.0-only. Installing it makes the resulting build GPL.

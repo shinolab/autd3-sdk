@@ -27,7 +27,6 @@ pub enum LinkKind {
     #[default]
     Echocat,
     Ethercrab,
-    Soem,
     Twincat,
     Remote,
     Nop,

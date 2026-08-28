@@ -11,7 +11,7 @@ defaults:
     shell: bash
 
 env:
-  BEFORE_SCRIPT_LINUX: dnf install -y libpcap-devel cmake clang
+  BEFORE_SCRIPT_LINUX: dnf install -y libpcap-devel
 
 jobs:
   build:
@@ -23,8 +23,6 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - uses: ./.github/actions/setup-rust
       - uses: actions/setup-python@v7
         with:
@@ -108,13 +106,6 @@ jobs:
           manylinux: '2_28'
           before-script-linux: ${{ env.BEFORE_SCRIPT_LINUX }}
           args: --release -m autd3-link-nop/Cargo.toml --find-interpreter -o dist
-      - name: Build autd3-link-soem
-        uses: PyO3/maturin-action@v1
-        with:
-          working-directory: bindings/python
-          manylinux: '2_28'
-          before-script-linux: ${{ env.BEFORE_SCRIPT_LINUX }}
-          args: --release -m autd3-link-soem/Cargo.toml --find-interpreter -o dist --auditwheel warn
 
       - uses: actions/upload-artifact@v7
         with:

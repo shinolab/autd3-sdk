@@ -20,7 +20,6 @@ pub enum LinkKind {
     #[default]
     Echocat,
     Ethercrab,
-    Soem,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]

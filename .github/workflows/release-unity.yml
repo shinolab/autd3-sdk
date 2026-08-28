@@ -25,12 +25,10 @@ jobs:
             rid: osx-arm64
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - uses: ./.github/actions/setup-rust
       - name: Install system deps
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - name: Build native cdylibs
         working-directory: bindings/ffi
         run: cargo build --workspace --release
@@ -55,7 +53,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          submodules: recursive
       - uses: ./.github/actions/setup-rust
       - uses: actions/setup-node@v7
         with:

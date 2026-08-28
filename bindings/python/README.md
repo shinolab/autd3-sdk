@@ -13,18 +13,17 @@ Python bindings for the autd3-rs SDK built with PyO3 and maturin.
 | `autd3-link-ethercrab` | `autd3_link_ethercrab` | `autd3-rs-link-ethercrab` | MIT |
 | `autd3-link-remote` | `autd3_link_remote` | `autd3-rs-link-remote` (TCP transport) | MIT |
 | `autd3-link-twincat` | `autd3_link_twincat` | `autd3-rs-link-twincat` (TwinCAT/ADS) | MIT |
-| `autd3-link-soem` | `autd3_link_soem` | `autd3-rs-link-soem` | GPL-3.0-only |
 
 `autd3-python-capsule` is an internal rlib holding the cross-wheel `PyCapsule` contracts and the `ClientBackend` trait.
 
 ## Build
 
 ```bash
-cargo xtask py build [--debug] [--soem]      # build wheels (release default)
-cargo xtask py develop [--release] [--soem]  # editable-install into .venv
+cargo xtask py build [--debug]              # build wheels (release default)
+cargo xtask py develop [--release]          # editable-install into .venv
 cargo xtask py lint                          # clippy over the binding workspace
 cargo xtask py format [--fix]                # rustfmt
-cargo xtask py test [--soem]                 # develop + pytest / import smoke
+cargo xtask py test                         # develop + pytest / import smoke
 cargo xtask py example focus_sine            # develop + run examples/focus_sine.py (sudo on Unix)
 ```
 

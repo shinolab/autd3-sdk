@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::Subcommand;
 
 use crate::util::{
@@ -9,8 +9,6 @@ use crate::util::{
 
 const PACKAGE: &str = "autd3-remote-server";
 const APPLIANCE_TARGET: &str = "aarch64-unknown-linux-musl";
-
-const FORBIDDEN_CRATES: &[&str] = &["autd3-rs-link-soem"];
 
 const DIST_FILES: &[(&str, bool)] = &[
     ("remote-server.toml", false),
@@ -54,8 +52,6 @@ pub enum ServerCmd {
         #[arg(long)]
         target: Option<String>,
     },
-    /// Fail if a GPL crate reaches the distributed appliance binary
-    CheckLicense,
 }
 
 pub fn run_server(root: &Path, cmd: &ServerCmd) -> Result<()> {
@@ -71,12 +67,10 @@ pub fn run_server(root: &Path, cmd: &ServerCmd) -> Result<()> {
             run_built_bin(&bin, args, *no_sudo, root)
         }
         ServerCmd::Bundle { target } => bundle(root, target.as_deref()),
-        ServerCmd::CheckLicense => check_license(root),
     }
 }
 
 fn build(root: &Path, target: Option<&str>, debug: bool) -> Result<PathBuf> {
-    check_license(root)?;
     if let Some(target) = target {
         ensure_rust_target(target)?;
     }
@@ -113,33 +107,6 @@ fn rust_lld(root: &Path) -> Option<PathBuf> {
 
 pub fn cross_build(root: &Path) -> Result<PathBuf> {
     build(root, Some(APPLIANCE_TARGET), false)
-}
-
-fn check_license(root: &Path) -> Result<()> {
-    let tree = capture(
-        "cargo",
-        &[
-            "tree", "-p", PACKAGE, "--edges", "normal", "--prefix", "none",
-        ],
-        root,
-    )?;
-    let found: Vec<&str> = FORBIDDEN_CRATES
-        .iter()
-        .filter(|name| {
-            tree.lines()
-                .any(|line| line.split_whitespace().next() == Some(*name))
-        })
-        .copied()
-        .collect();
-    if !found.is_empty() {
-        bail!(
-            "{} depends on {}, whose license (GPL-3.0) would follow the distributed \
-             appliance image. The appliance drives the bus with the MIT echocat link",
-            PACKAGE,
-            found.join(", "),
-        );
-    }
-    Ok(())
 }
 
 fn bundle(root: &Path, target: Option<&str>) -> Result<()> {

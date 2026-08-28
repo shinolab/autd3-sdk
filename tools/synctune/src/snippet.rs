@@ -29,7 +29,6 @@ fn render(common: &Common, sync0_period: Duration, sync0_shift: Duration) -> Str
 
 fn link_block(common: &Common, sync0_period: Duration, sync0_shift: Duration, body: &mut String) {
     let (link, option) = match common.link {
-        LinkKind::Soem => ("SoemLink", "SoemLinkOption"),
         LinkKind::Ethercrab => ("EtherCrabLink", "EtherCrabLinkOption"),
         LinkKind::Echocat => ("EchocatLink", "EchocatLinkOption"),
     };
@@ -119,9 +118,6 @@ fn imports_block(link: LinkKind, tx_rx_tuned: bool, imports: &[&str]) -> String 
                 out,
                 "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption}};",
             );
-        }
-        LinkKind::Soem => {
-            let _ = writeln!(out, "use autd3_rs_link_soem::{{SoemLink, SoemLinkOption}};");
         }
     }
     out

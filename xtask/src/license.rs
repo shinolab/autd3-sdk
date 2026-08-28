@@ -5,7 +5,7 @@ use clap::{Subcommand, ValueEnum};
 
 use crate::util::{on_path, publishable_members, run};
 
-const PY_MIT_WHEELS: &[&str] = &[
+const PY_WHEELS: &[&str] = &[
     "autd3-core",
     "autd3",
     "autd3-pattern",
@@ -18,7 +18,6 @@ const PY_MIT_WHEELS: &[&str] = &[
     "autd3-link-nop",
     "autd3-emulator",
 ];
-const PY_SOEM_WHEEL: &str = "autd3-link-soem";
 
 const CS_PACKAGES: &[(&str, &str)] = &[
     ("AUTD3.Core", "autd3-ffi-core"),
@@ -32,8 +31,6 @@ const CS_PACKAGES: &[(&str, &str)] = &[
     ("AUTD3.Link.TwinCAT", "autd3-ffi-link-twincat"),
     ("AUTD3.Link.Nop", "autd3-ffi-link-nop"),
 ];
-const CS_SOEM_PACKAGE: &str = "AUTD3.Link.Soem";
-const CS_SOEM_CRATE: &str = "autd3-ffi-link-soem";
 
 const UNITY_PACKAGES: &[(&str, &str)] = &[
     ("com.shinolab.autd3-sdk.core", "autd3-ffi-core"),
@@ -62,15 +59,12 @@ const UNITY_PACKAGES: &[(&str, &str)] = &[
     ),
     ("com.shinolab.autd3-sdk.link.nop", "autd3-ffi-link-nop"),
 ];
-const UNITY_SOEM_PACKAGE: &str = "com.shinolab.autd3-sdk.link.soem";
 
 const PUBLISH_WORKSPACES: &[&str] = &[
     ".",
     "extras/autd3-rs-emulator",
     "extras/autd3-rs-pattern-holo-wgpu",
 ];
-
-const GPL_CRATE: &str = "autd3-rs-link-soem";
 
 const DENY_WORKSPACES: &[&str] = &[
     ".",
@@ -82,39 +76,6 @@ const DENY_WORKSPACES: &[&str] = &[
 ];
 
 const THIRD_PARTY: &str = "THIRD-PARTY-LICENSES.md";
-
-fn soem_notice(license_file: &str) -> String {
-    SOEM_NOTICE.replace("{LICENSE_FILE}", license_file)
-}
-
-const SOEM_NOTICE: &str = "\
-# NOTICE — SOEM (GPL-3.0-only)
-
-This artifact statically links the Simple Open EtherCAT Master (SOEM) C library
-and is therefore distributed under the **GNU General Public License v3.0 only**.
-The full license text is provided alongside this file as `{LICENSE_FILE}`.
-
-## SOEM copyright
-
-    Copyright (C) 2005-2025 Speciaal Machinefabriek Ketels v.o.f.
-    Copyright (C) 2005-2025 Arthur Ketels
-    Copyright (C) 2009-2025 RT-Labs AB, Sweden
-
-SOEM is dual-licensed (GPLv3 / commercial); this distribution uses it under GPLv3.
-
-## Written offer for corresponding source (GPLv3 §6)
-
-The complete corresponding source for the GPL-covered components of this artifact
-is publicly available at:
-
-- autd3-rs-link-soem (the Rust binding and its build glue):
-  https://github.com/shinolab/autd3-sdk (tag matching this release)
-- SOEM (vendored as a git submodule at the pinned revision):
-  https://github.com/OpenEtherCATsociety/SOEM
-
-The exact SOEM revision used is recorded by the `3rdparty/SOEM` submodule pointer
-in the autd3-sdk repository at the release tag.
-";
 
 #[derive(Subcommand)]
 pub enum LicenseCmd {
@@ -186,9 +147,6 @@ fn check_bundled_license(root: &Path) -> Result<()> {
     println!("== bundled license text ==");
     let mit = std::fs::read_to_string(root.join("LICENSE"))
         .with_context(|| format!("reading {}", root.join("LICENSE").display()))?;
-    let gpl_path = root.join("crates").join(GPL_CRATE).join("COPYING");
-    let gpl = std::fs::read_to_string(&gpl_path)
-        .with_context(|| format!("reading {}", gpl_path.display()))?;
 
     let mut missing = Vec::new();
     for ws in PUBLISH_WORKSPACES {
@@ -198,21 +156,16 @@ fn check_bundled_license(root: &Path) -> Result<()> {
             root.join(ws)
         };
         for package in publishable_members(&ws_dir)? {
-            let (file, expected) = if package.name() == GPL_CRATE {
-                ("COPYING", &gpl)
-            } else {
-                ("LICENSE", &mit)
-            };
-            let path = package.dir().join(file);
+            let path = package.dir().join("LICENSE");
             match std::fs::read_to_string(&path) {
-                Ok(text) if &text == expected => {}
+                Ok(text) if text == mit => {}
                 Ok(_) => missing.push(format!(
                     "{}: {} differs from the root text",
                     package.name(),
                     path.display()
                 )),
                 Err(_) => {
-                    missing.push(format!("{}: {} is missing", package.name(), path.display()))
+                    missing.push(format!("{}: {} is missing", package.name(), path.display()));
                 }
             }
         }
@@ -237,24 +190,18 @@ fn ensure_about() -> Result<()> {
 pub fn generate_python(root: &Path) -> Result<()> {
     ensure_about()?;
     let mit_license = root.join("LICENSE");
-    let gpl_license = root.join("crates/autd3-rs-link-soem/COPYING");
 
     let py = root.join("bindings/python");
-    for wheel in PY_MIT_WHEELS {
+    for wheel in PY_WHEELS {
         let dir = py.join(wheel);
         about(root, &dir.join("Cargo.toml"), &dir.join(THIRD_PARTY))?;
         copy(&mit_license, &dir.join("LICENSE"))?;
     }
-    let dir = py.join(PY_SOEM_WHEEL);
-    about(root, &dir.join("Cargo.toml"), &dir.join(THIRD_PARTY))?;
-    copy(&gpl_license, &dir.join("LICENSE"))?;
-    write(&soem_notice("LICENSE"), &dir.join("NOTICE"))?;
     Ok(())
 }
 
 pub fn generate_csharp(root: &Path) -> Result<()> {
     ensure_about()?;
-    let gpl_license = root.join("crates/autd3-rs-link-soem/COPYING");
 
     let ffi = root.join("bindings/ffi");
     let cs_src = root.join("bindings/csharp/src");
@@ -266,21 +213,12 @@ pub fn generate_csharp(root: &Path) -> Result<()> {
             &dir.join(THIRD_PARTY),
         )?;
     }
-    let dir = cs_src.join(CS_SOEM_PACKAGE);
-    about(
-        root,
-        &ffi.join(CS_SOEM_CRATE).join("Cargo.toml"),
-        &dir.join(THIRD_PARTY),
-    )?;
-    copy(&gpl_license, &dir.join("COPYING"))?;
-    write(&soem_notice("COPYING"), &dir.join("NOTICE"))?;
     Ok(())
 }
 
 pub fn generate_unity(root: &Path) -> Result<()> {
     ensure_about()?;
     let mit_license = root.join("LICENSE");
-    let gpl_license = root.join("crates/autd3-rs-link-soem/COPYING");
 
     let ffi = root.join("bindings/ffi");
     let unity = root.join("bindings/unity");
@@ -293,14 +231,6 @@ pub fn generate_unity(root: &Path) -> Result<()> {
         )?;
         copy(&mit_license, &dir.join("LICENSE.md"))?;
     }
-    let dir = unity.join(UNITY_SOEM_PACKAGE);
-    about(
-        root,
-        &ffi.join(CS_SOEM_CRATE).join("Cargo.toml"),
-        &dir.join(THIRD_PARTY),
-    )?;
-    copy(&gpl_license, &dir.join("LICENSE.md"))?;
-    write(&soem_notice("LICENSE.md"), &dir.join("NOTICE"))?;
     Ok(())
 }
 
@@ -394,13 +324,5 @@ fn copy(src: &Path, dst: &Path) -> Result<()> {
     }
     std::fs::copy(src, dst)
         .with_context(|| format!("copying {} -> {}", src.display(), dst.display()))?;
-    Ok(())
-}
-
-fn write(contents: &str, dst: &Path) -> Result<()> {
-    if let Some(parent) = dst.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(dst, contents).with_context(|| format!("writing {}", dst.display()))?;
     Ok(())
 }

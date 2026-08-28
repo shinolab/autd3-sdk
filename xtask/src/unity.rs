@@ -8,8 +8,6 @@ use tar::Archive;
 
 use crate::util::{on_path, run, run_tool};
 
-const SOEM_CRATE: &str = "autd3-ffi-link-soem";
-
 pub const PKG_PREFIX: &str = "com.shinolab.autd3-sdk";
 
 const RIDS: &[&str] = &["win-x64", "linux-x64", "osx-arm64"];
@@ -30,7 +28,6 @@ struct UnityPkg {
     id: &'static str,
     assembly: &'static str,
     lib: &'static str,
-    gpl: bool,
 }
 
 const PACKAGES: &[UnityPkg] = &[
@@ -38,67 +35,51 @@ const PACKAGES: &[UnityPkg] = &[
         id: "com.shinolab.autd3-sdk.core",
         assembly: "AUTD3.Core",
         lib: "autd3_core",
-        gpl: false,
     },
     UnityPkg {
         id: "com.shinolab.autd3-sdk",
         assembly: "AUTD3",
         lib: "autd3capi",
-        gpl: false,
     },
     UnityPkg {
         id: "com.shinolab.autd3-sdk.pattern",
         assembly: "AUTD3.Pattern",
         lib: "autd3_pattern",
-        gpl: false,
     },
     UnityPkg {
         id: "com.shinolab.autd3-sdk.pattern.holo",
         assembly: "AUTD3.Pattern.Holo",
         lib: "autd3_pattern_holo",
-        gpl: false,
     },
     UnityPkg {
         id: "com.shinolab.autd3-sdk.modulation",
         assembly: "AUTD3.Modulation",
         lib: "autd3_modulation",
-        gpl: false,
     },
     UnityPkg {
         id: "com.shinolab.autd3-sdk.link.echocat",
         assembly: "AUTD3.Link.Echocat",
         lib: "autd3_link_echocat",
-        gpl: false,
     },
     UnityPkg {
         id: "com.shinolab.autd3-sdk.link.ethercrab",
         assembly: "AUTD3.Link.Ethercrab",
         lib: "autd3_link_ethercrab",
-        gpl: false,
     },
     UnityPkg {
         id: "com.shinolab.autd3-sdk.link.nop",
         assembly: "AUTD3.Link.Nop",
         lib: "autd3_link_nop",
-        gpl: false,
     },
     UnityPkg {
         id: "com.shinolab.autd3-sdk.link.remote",
         assembly: "AUTD3.Link.Remote",
         lib: "autd3_link_remote",
-        gpl: false,
     },
     UnityPkg {
         id: "com.shinolab.autd3-sdk.link.twincat",
         assembly: "AUTD3.Link.TwinCAT",
         lib: "autd3_link_twincat",
-        gpl: false,
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.link.soem",
-        assembly: "AUTD3.Link.Soem",
-        lib: "autd3_link_soem",
-        gpl: true,
     },
 ];
 
@@ -106,9 +87,6 @@ const PACKAGES: &[UnityPkg] = &[
 pub enum UnityCmd {
     /// Stage the C# sources and the host-RID native libs into the UPM packages
     Build {
-        /// Also build the SOEM native lib (opt-in: it is GPL-3.0-only)
-        #[arg(long)]
-        soem: bool,
         /// Also write a `Packages/manifest.json` snippet for the staged packages
         #[arg(long)]
         manifest: bool,
@@ -132,32 +110,24 @@ pub enum UnityCmd {
 
 pub fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
     match cmd {
-        UnityCmd::Build { soem, manifest } => build(root, soem, manifest),
+        UnityCmd::Build { manifest } => build(root, manifest),
         UnityCmd::Pack { native_dir, out } => pack(root, native_dir.as_deref(), out),
         UnityCmd::Test { unity_editor } => test(root, unity_editor),
     }
 }
 
-fn build(root: &Path, soem: bool, manifest: bool) -> Result<()> {
+fn build(root: &Path, manifest: bool) -> Result<()> {
     let ffi = root.join("bindings").join("ffi");
     let unity_dir = root.join("bindings").join("unity");
 
-    if soem {
-        run("cargo", ["build", "--workspace", "--release"], &ffi)?;
-    } else {
-        run(
-            "cargo",
-            ["build", "--workspace", "--exclude", SOEM_CRATE, "--release"],
-            &ffi,
-        )?;
-    }
+    run("cargo", ["build", "--workspace", "--release"], &ffi)?;
     let native = ffi.join("target").join("release");
     let rid = host_rid()?;
 
     for pkg in PACKAGES {
         let pkg_dir = unity_dir.join(pkg.id);
         stage_package(root, pkg, &pkg_dir)?;
-        stage_native(&native, rid, pkg, &pkg_dir, true)?;
+        stage_native(&native, rid, pkg, &pkg_dir)?;
     }
 
     println!(
@@ -213,7 +183,7 @@ fn pack(root: &Path, native_dir: Option<&Path>, out: Option<PathBuf>) -> Result<
         for rid in &rids {
             let native =
                 native_dir.map_or_else(|| ffi.join("target").join("release"), |dir| dir.join(rid));
-            stage_native(&native, rid, pkg, &pkg_dir, false)?;
+            stage_native(&native, rid, pkg, &pkg_dir)?;
         }
         npm_pack(&pkg_dir, &out_dir)?;
         let tarball = out_dir.join(format!("{}-{version}.tgz", pkg.id));
@@ -339,24 +309,11 @@ fn stage_sources(src_dir: &Path, pkg_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn stage_native(
-    native: &Path,
-    rid: &str,
-    pkg: &UnityPkg,
-    pkg_dir: &Path,
-    allow_missing_gpl: bool,
-) -> Result<()> {
+fn stage_native(native: &Path, rid: &str, pkg: &UnityPkg, pkg_dir: &Path) -> Result<()> {
     let (prefix, ext) = rid_affix(rid);
     let file = format!("{prefix}{}.{ext}", pkg.lib);
     let src = native.join(&file);
     if !src.is_file() {
-        if pkg.gpl && allow_missing_gpl {
-            println!(
-                "unity build: skipping {} native lib (GPL, build with --soem to include)",
-                pkg.id
-            );
-            return Ok(());
-        }
         bail!("native lib not found: {}", src.display());
     }
 

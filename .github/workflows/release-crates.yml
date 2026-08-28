@@ -21,11 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - uses: ./.github/actions/setup-rust
       - name: Install system deps
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev cmake
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - name: Verify the packages assemble
         run: cargo xtask rust publish --dry-run
       - uses: rust-lang/crates-io-auth-action@v1
