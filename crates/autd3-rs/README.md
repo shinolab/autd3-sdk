@@ -79,7 +79,6 @@ Pick the transport that matches your setup; all of them implement the same `Link
 |-------|-----------|
 | [`autd3-rs-link-echocat`](https://crates.io/crates/autd3-rs-link-echocat) | EtherCAT main device written for AUTD3 |
 | [`autd3-rs-link-ethercrab`](https://crates.io/crates/autd3-rs-link-ethercrab) | EtherCAT via [EtherCrab](https://crates.io/crates/ethercrab) |
-| [`autd3-rs-link-soem`](https://crates.io/crates/autd3-rs-link-soem) | EtherCAT via [SOEM](https://github.com/OpenEtherCATsociety/SOEM) (**GPL-3.0-only**) |
 | [`autd3-rs-link-twincat`](https://crates.io/crates/autd3-rs-link-twincat) | TwinCAT3 via ADS (Windows) |
 | [`autd3-rs-link-remote`](https://crates.io/crates/autd3-rs-link-remote) | TCP relay to a remote server driving a real link |
 | [`autd3-rs-link-nop`](https://crates.io/crates/autd3-rs-link-nop) | Firmware emulator; no hardware needed |

@@ -19,11 +19,5 @@ allow = [
 confidence-threshold = 0.8
 unused-allowed-license = "allow"
 
-exceptions = [
-    { name = "autd3-rs-link-soem", allow = ["GPL-3.0-only"] },
-    { name = "autd3-ffi-link-soem", allow = ["GPL-3.0-only"] },
-    { name = "autd3-python-link-soem", allow = ["GPL-3.0-only"] },
-]
-
 [licenses.private]
 ignore = true

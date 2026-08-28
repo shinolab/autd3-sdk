@@ -1,3 +1,0 @@
-[submodule "crates/autd3-rs-link-soem/3rdparty/SOEM"]
-	path = crates/autd3-rs-link-soem/3rdparty/SOEM
-	url = https://github.com/OpenEtherCATsociety/SOEM.git

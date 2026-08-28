@@ -48,13 +48,12 @@ fn link_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
             let _ = writeln!(body, "    ..Default::default()");
             let _ = writeln!(body, "}})?;");
         }
-        LinkKind::Ethercrab | LinkKind::Soem => {
-            let (link, option) = match cli.link {
-                LinkKind::Soem => ("SoemLink", "SoemLinkOption"),
-                _ => ("EtherCrabLink", "EtherCrabLinkOption"),
-            };
+        LinkKind::Ethercrab => {
             imports.push("std::time::Duration");
-            let _ = writeln!(body, "let link = {link}::open({option} {{");
+            let _ = writeln!(
+                body,
+                "let link = EtherCrabLink::open(EtherCrabLinkOption {{"
+            );
             if let Some(iface) = &cli.interface {
                 let _ = writeln!(body, "    iface: {iface:?}.into(),");
             }
@@ -84,7 +83,7 @@ fn link_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
         LinkKind::Nop => {
             let _ = writeln!(
                 body,
-                "// --link nop is a benchmark stub; use a real link (ethercrab/soem/twincat) here.",
+                "// --link nop is a benchmark stub; use a real link (ethercrab/twincat) here.",
             );
         }
     }
@@ -131,9 +130,6 @@ fn imports_block(link: LinkKind, spin: bool, imports: &[&str]) -> String {
                 "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption{}}};",
                 if spin { ", SleepStrategy" } else { "" },
             );
-        }
-        LinkKind::Soem => {
-            let _ = writeln!(out, "use autd3_rs_link_soem::{{SoemLink, SoemLinkOption}};");
         }
         LinkKind::Twincat => {
             let _ = writeln!(

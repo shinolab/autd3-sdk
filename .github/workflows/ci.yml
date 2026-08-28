@@ -186,7 +186,6 @@ jobs:
               - 'bindings/python/Cargo.lock'
               - 'LICENSE'
               - 'crates/**/LICENSE'
-              - 'crates/autd3-rs-link-soem/COPYING'
               - 'firmware/cpu/**/LICENSE'
               - 'extras/**/LICENSE'
               - 'extras/**/Cargo.toml'

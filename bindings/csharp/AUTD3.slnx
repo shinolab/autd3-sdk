@@ -7,7 +7,6 @@
     <Project Path="src/AUTD3.Modulation/AUTD3.Modulation.csproj" />
     <Project Path="src/AUTD3.Link.Echocat/AUTD3.Link.Echocat.csproj" />
     <Project Path="src/AUTD3.Link.Ethercrab/AUTD3.Link.Ethercrab.csproj" />
-    <Project Path="src/AUTD3.Link.Soem/AUTD3.Link.Soem.csproj" />
     <Project Path="src/AUTD3.Link.Remote/AUTD3.Link.Remote.csproj" />
     <Project Path="src/AUTD3.Link.Nop/AUTD3.Link.Nop.csproj" />
     <Project Path="src/AUTD3.Link.TwinCAT/AUTD3.Link.TwinCAT.csproj" />

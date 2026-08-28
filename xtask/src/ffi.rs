@@ -5,8 +5,6 @@ use clap::Subcommand;
 
 use crate::util::{cargo_fmt_packages, run};
 
-const SOEM_CRATE: &str = "autd3-ffi-link-soem";
-
 #[derive(Subcommand)]
 pub enum FfiCmd {
     /// Build the C ABI cdylibs
@@ -14,9 +12,6 @@ pub enum FfiCmd {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
-        /// Also build the SOEM cdylib (opt-in: it is GPL-3.0-only)
-        #[arg(long)]
-        soem: bool,
     },
     /// Test the FFI workspace
     Test,
@@ -33,22 +28,14 @@ pub enum FfiCmd {
 pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
     let dir = root.join("bindings").join("ffi");
     match cmd {
-        FfiCmd::Build { debug, soem } => {
+        FfiCmd::Build { debug } => {
             let mut args = vec!["build", "--workspace"];
-            if !*soem {
-                args.push("--exclude");
-                args.push(SOEM_CRATE);
-            }
             if !*debug {
                 args.push("--release");
             }
             run("cargo", args, &dir)
         }
-        FfiCmd::Test => run(
-            "cargo",
-            vec!["test", "--workspace", "--exclude", SOEM_CRATE],
-            &dir,
-        ),
+        FfiCmd::Test => run("cargo", vec!["test", "--workspace"], &dir),
         FfiCmd::Lint => {
             let mut args = vec!["clippy", "--workspace", "--all-targets"];
             args.extend(["--", "-D", "warnings"]);

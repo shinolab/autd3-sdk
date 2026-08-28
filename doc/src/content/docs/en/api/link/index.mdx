@@ -14,7 +14,6 @@ import CodeTabs from "@components/CodeTabs.astro";
 - [TwinCAT](/autd3-sdk/en/api/link/twincat/) — Link that uses Beckhoff TwinCAT 3
 - [echocat](/autd3-sdk/en/api/link/echocat/) — EtherCAT Link dedicated to AUTD3
 - [EtherCrab](/autd3-sdk/en/api/link/ethercrab/) — Link based on EtherCrab
-- [SOEM](/autd3-sdk/en/api/link/soem/) — Link based on SOEM ([GPL-3.0-only](/autd3-sdk/en/misc/license/))
 - [Remote](/autd3-sdk/en/api/link/remote/) — Link for remote connections
 
 ## Usage
@@ -29,11 +28,11 @@ Therefore, swapping the link does not require changing the higher-level code.
 The rough performance trends per Link and OS combination are shown below.
 The values depend heavily on the NIC, kernel settings, OS tuning, and so on, so treat them only as a rough guide.
 
-| Metric     | TwinCAT (Windows) | echocat (mac/Linux) | echocat (Windows) | EtherCrab (mac/Linux) | EtherCrab (Windows) | SOEM (mac/Linux) | SOEM (Windows) |
-| ---------- | ----------------- | ------------------- | ----------------- | --------------------- | ------------------- | ---------------- | -------------- |
-| Throughput | ⭐⭐              | ⭐⭐⭐              | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                | ⭐⭐⭐           | ⭐⭐           |
-| Latency    | ⭐                | ⭐⭐⭐              | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                | ⭐⭐⭐           | ⭐⭐           |
-| Stability  | ⭐⭐⭐            | ⭐⭐                | ⭐                | ⭐⭐                  | ⭐                  | ⭐⭐             | ⭐             |
+| Metric     | TwinCAT (Windows) | echocat (mac/Linux) | echocat (Windows) | EtherCrab (mac/Linux) | EtherCrab (Windows) |
+| ---------- | ----------------- | ------------------- | ----------------- | --------------------- | ------------------- |
+| Throughput | ⭐⭐              | ⭐⭐⭐              | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                |
+| Latency    | ⭐                | ⭐⭐⭐              | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                |
+| Stability  | ⭐⭐⭐            | ⭐⭐                | ⭐                | ⭐⭐                  | ⭐                  |
 
 For reference, the measured values for each environment are listed below.
 
@@ -116,57 +115,3 @@ max           : 6.020 ms
 ```
 
 </details>
-<details>
-<summary>SOEM (Linux)</summary>
-
-**Conditions**
-
-- OS: CachyOS 7.1.3-2
-- NIC: Intel 82574L
-- Devices: 2
-
-**throughput (100000 sends, streaming)**
-```
-cmd / sec     :       999.56
-byte / sec    :    625723.62
-```
-
-**latency (10000 sends, stop-and-wait)**
-```
-mean          : 5.002 ms
-p50           : 4.999 ms
-p95           : 5.005 ms
-p99           : 5.017 ms
-min           : 3.855 ms
-max           : 6.142 ms
-```
-
-</details>
-
-<details>
-<summary>SOEM (macOS)</summary>
-
-**Conditions**
-
-- OS: macOS Tahoe 26.5.2
-- NIC: Realtek RTL8153 (USB to Ethernet)
-- Devices: 2
-
-**throughput (100000 sends, streaming)**
-```
-cmd / sec     :       998.05
-byte / sec    :    624777.32
-```
-
-**latency (10000 sends, stop-and-wait)**
-```
-mean          : 4.999 ms
-p50           : 4.999 ms
-p95           : 5.037 ms
-p99           : 5.093 ms
-min           : 3.996 ms
-max           : 5.726 ms
-```
-
-</details>
-

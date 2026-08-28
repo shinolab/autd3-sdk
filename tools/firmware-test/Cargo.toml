@@ -3,8 +3,7 @@ name = "autd3-rs-firmware-test"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-# SOEM (GPLv3) is statically linked, so this tool and its distribution are GPL-3.0-only.
-license = "GPL-3.0-only"
+license.workspace = true
 authors.workspace = true
 repository.workspace = true
 publish = false
@@ -20,7 +19,6 @@ autd3-rs-pattern.workspace = true
 autd3-rs-modulation.workspace = true
 autd3-rs-link-echocat.workspace = true
 autd3-rs-link-ethercrab.workspace = true
-autd3-rs-link-soem.workspace = true
 autd3-rs-link-twincat.workspace = true
 autd3-rs-link-remote.workspace = true
 clap.workspace = true
