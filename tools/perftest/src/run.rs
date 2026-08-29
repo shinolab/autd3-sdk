@@ -213,6 +213,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             let link_cfg = autd3_rs_link_echocat::EchocatLinkOption {
                 iface: cli.interface.clone().into(),
                 sync0_period: cli.sync0_period,
+                frame_phase: cli.echocat_frame_phase(),
                 sleep_strategy: cli.echocat_sleep_strategy(),
                 ..Default::default()
             };

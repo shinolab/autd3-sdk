@@ -108,6 +108,7 @@ dependencies = [
  "anyhow",
  "autd3-rs-appliance",
  "clap",
+ "humantime",
  "serde",
  "serde_json",
 ]
@@ -359,6 +360,7 @@ version = "0.6.1"
 dependencies = [
  "anyhow",
  "autd3-rs",
+ "autd3-rs-appliance",
  "autd3-rs-link-echocat",
  "autd3-rs-link-ethercrab",
  "clap",

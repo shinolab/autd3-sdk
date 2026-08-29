@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use autd3_rs::MAX_INFLIGHT;
-use autd3_rs_link_echocat::SleepStrategy;
+use autd3_rs_link_echocat::{FramePhase, SleepStrategy};
 use autd3_rs_link_twincat::AmsNetId;
 use clap::{ArgGroup, Parser, ValueEnum};
 
@@ -97,8 +97,14 @@ pub struct Cli {
     pub sync0_period: Duration,
     #[arg(
         long,
+        alias = "frame-phase-percent",
         default_value_t = 0,
-        help = "SYNC0 shift as a percent of the period (maps to *LinkOption.sync0_shift = period * percent)."
+        help = "Where the process data sits in the SYNC0 period, as a percent of it. \
+                With --link ethercrab it moves the SYNC0 pulse (EtherCrabLinkOption.sync0_shift \
+                = period * percent) and the frame keeps landing mid-period. \
+                With --link echocat it moves the frame instead \
+                (EchocatLinkOption.frame_phase = period * percent); 0 lets the measured exchange \
+                centre it."
     )]
     pub shift_percent: u8,
     #[arg(
@@ -216,6 +222,14 @@ impl Cli {
                 self.shift_percent
             ));
         }
+        if self.link == LinkKind::Echocat && self.shift_percent == 100 {
+            return Err(
+                "--shift-percent 100 lands the frame on the SYNC0 edge with --link echocat, \
+                 where the firmware drops it as a sequence mismatch; use 1..=99, or 0 to let \
+                 the measured exchange centre it"
+                    .to_string(),
+            );
+        }
         if self.link == LinkKind::Twincat {
             if self.twincat_remote.is_some() && self.ams_net_id.is_none() {
                 return Err("--ams-net-id is required when --twincat-remote is set".to_string());
@@ -223,13 +237,6 @@ impl Cli {
         } else if self.twincat_remote.is_some() || self.ams_net_id.is_some() {
             return Err(
                 "--twincat-remote / --ams-net-id are only valid with --link twincat".to_string(),
-            );
-        }
-        if self.link == LinkKind::Echocat && self.shift_percent != 0 {
-            return Err(
-                "--shift-percent is not valid with --link echocat: it keeps SYNC0 at shift 0 \
-                 and phase-locks the send instant on its own"
-                    .to_string(),
             );
         }
         if self.link != LinkKind::Echocat && self.sleep_strategy != SleepStrategyArg::Sleep {
@@ -294,6 +301,14 @@ impl Cli {
     pub fn sync0_shift(&self) -> Duration {
         let nanos = self.sync0_period.as_nanos() * u128::from(self.shift_percent) / 100;
         Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
+    }
+
+    pub fn echocat_frame_phase(&self) -> FramePhase {
+        if self.shift_percent == 0 {
+            FramePhase::Auto
+        } else {
+            FramePhase::At(self.sync0_shift())
+        }
     }
 
     pub fn echocat_sleep_strategy(&self) -> SleepStrategy {

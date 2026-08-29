@@ -10,6 +10,7 @@ internal static class Sample
     {
         var iface = Interface.Auto;
         var sync0Period = TimeSpan.FromMilliseconds(1);
+        var framePhase = FramePhase.Auto;
         var pduTimeout = TimeSpan.FromMilliseconds(100);
         var stateTransitionTimeout = TimeSpan.FromSeconds(10);
         uint dcStaticSyncIterations = 10000;
@@ -22,6 +23,7 @@ internal static class Sample
         new EchocatLinkOption(
             iface,
             sync0Period,
+            framePhase,
             pduTimeout,
             stateTransitionTimeout,
             dcStaticSyncIterations,
@@ -32,5 +34,10 @@ internal static class Sample
             spinMargin
         );
         // ANCHOR_END: api
+
+        // ANCHOR: frame_phase
+        _ = FramePhase.Auto;
+        _ = FramePhase.At(TimeSpan.FromMicroseconds(500));
+        // ANCHOR_END: frame_phase
     }
 }

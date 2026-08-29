@@ -110,6 +110,22 @@
       </section>
 
       <section>
+        <h2>Tune</h2>
+        <p class="sub" style="margin: 0 0 0.6rem">
+          Sweeps SYNC0 periods against frame landing phases and reports which held OP.
+          The bus is reopened for every candidate, so disconnect the client first.
+        </p>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center">
+          <label>periods <input id="tune-periods" value="1ms, 2ms" size="14" /></label>
+          <label>frame phases <input id="tune-phases" value="auto" size="14" /></label>
+          <label>dwell <input id="tune-dwell" value="30s" size="6" /></label>
+          <button id="tune-start">Start</button>
+          <button id="tune-cancel">Cancel</button>
+        </div>
+        <div class="overflow" style="margin-top: 0.9rem"><table id="tune"></table></div>
+      </section>
+
+      <section>
         <h2>Appliance</h2>
         <div class="overflow"><table id="appliance"></table></div>
         <div style="margin-top: 0.9rem">
@@ -269,9 +285,66 @@
         }
       }
 
+      const NS = { us: 1e3, ms: 1e6, s: 1e9 };
+
+      function nanos(text) {
+        const match = /^\s*([0-9]*\.?[0-9]+)\s*(us|ms|s)\s*$/.exec(text);
+        if (!match) throw new Error("`" + text.trim() + "` is not a duration such as 2ms or 500us");
+        return Math.round(parseFloat(match[1]) * NS[match[2]]);
+      }
+
+      function percent(text) {
+        const trimmed = text.trim();
+        if (/^auto$/i.test(trimmed)) return 0;
+        const value = Number(trimmed.replace(/%$/, ""));
+        if (!Number.isInteger(value) || value < 1 || value > 99) {
+          throw new Error("`" + trimmed + "` is neither `auto` nor a percent between 1 and 99");
+        }
+        return value;
+      }
+
+      const list = (text) => text.split(",").filter((part) => part.trim() !== "");
+
+      function tuneLabel(target) {
+        return target.frame_phase_percent === 0
+          ? "auto"
+          : target.frame_phase_percent + "% (" + us(target.frame_phase_ns) + ")";
+      }
+
+      function renderTune(report) {
+        const entries = report.candidates.map((c, i) => [
+          us(c.target.period_ns) + " @ " + tuneLabel(c.target),
+          c.status === "ok"
+            ? (100 * (c.samples ? c.op_samples / c.samples : 0)).toFixed(1) + "% in OP · " +
+              c.drop_events + " drops · " + c.recoveries + " recoveries · exchange " +
+              us(c.exchange_mean_ns) + " / " + us(c.exchange_worst_ns)
+            : c.status + (c.note ? ": " + c.note : ""),
+          report.best === i ? "ok" : c.status === "ok" ? "" : "bad",
+        ]);
+        if (report.error) {
+          entries.push(["error", report.error, "bad"]);
+        }
+        if (report.running) {
+          entries.push([
+            "running",
+            report.current
+              ? us(report.current.period_ns) + " @ " + tuneLabel(report.current) +
+                " (" + (report.candidates.length + 1) + " of " + report.total + ")"
+              : "starting…",
+            "warn",
+          ]);
+        } else if (entries.length === 0) {
+          entries.push(["", "no sweep has run yet"]);
+        }
+        rows($("tune"), entries);
+        $("tune-start").disabled = !admin || report.running;
+        $("tune-cancel").disabled = !admin || !report.running;
+      }
+
       async function refresh() {
         try {
           render(await call("GET", "/status"));
+          renderTune(await call("GET", "/bus/tune"));
         } catch (e) {
           say("cannot reach the appliance: " + e.message, "bad");
         }
@@ -308,6 +381,29 @@
           refresh();
         });
       }
+
+      $("tune-start").addEventListener("click", async () => {
+        try {
+          const request = {
+            periods_ns: list($("tune-periods").value).map(nanos),
+            frame_phase_percents: list($("tune-phases").value).map(percent),
+            dwell_ns: nanos($("tune-dwell").value),
+          };
+          say((await call("POST", "/bus/tune", request)).message, "ok");
+        } catch (e) {
+          say(e.message, "bad");
+        }
+        refresh();
+      });
+
+      $("tune-cancel").addEventListener("click", async () => {
+        try {
+          say((await call("POST", "/bus/tune/cancel")).message, "ok");
+        } catch (e) {
+          say(e.message, "bad");
+        }
+        refresh();
+      });
 
       $("config-save").addEventListener("click", async () => {
         try {

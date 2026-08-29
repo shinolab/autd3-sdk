@@ -3,10 +3,25 @@ using System.Runtime.InteropServices;
 
 namespace AUTD3.Link
 {
+    public readonly struct FramePhase
+    {
+        internal TimeSpan? Phase { get; }
+
+        private FramePhase(TimeSpan? phase)
+        {
+            Phase = phase;
+        }
+
+        public static FramePhase Auto => new FramePhase(null);
+
+        public static FramePhase At(TimeSpan phase) => new FramePhase(phase);
+    }
+
     public readonly struct EchocatLinkOption : ILink, ILegacyLink
     {
         public Interface Iface { get; }
         public TimeSpan? Sync0Period { get; }
+        public FramePhase FramePhase { get; }
         public TimeSpan? PduTimeout { get; }
         public TimeSpan? StateTransitionTimeout { get; }
         public uint? DcStaticSyncIterations { get; }
@@ -16,10 +31,11 @@ namespace AUTD3.Link
         public TimeSpan? ProcessDataWatchdog { get; }
         public TimeSpan? SpinMargin { get; }
 
-        public EchocatLinkOption(Interface? iface = null, TimeSpan? sync0Period = null, TimeSpan? pduTimeout = null, TimeSpan? stateTransitionTimeout = null, uint? dcStaticSyncIterations = null, TimeSpan? dcStartDelay = null, TimeSpan? syncTolerance = null, TimeSpan? syncTimeout = null, TimeSpan? processDataWatchdog = null, TimeSpan? spinMargin = null)
+        public EchocatLinkOption(Interface? iface = null, TimeSpan? sync0Period = null, FramePhase framePhase = default, TimeSpan? pduTimeout = null, TimeSpan? stateTransitionTimeout = null, uint? dcStaticSyncIterations = null, TimeSpan? dcStartDelay = null, TimeSpan? syncTolerance = null, TimeSpan? syncTimeout = null, TimeSpan? processDataWatchdog = null, TimeSpan? spinMargin = null)
         {
             Iface = iface ?? Interface.Auto;
             Sync0Period = sync0Period;
+            FramePhase = framePhase;
             PduTimeout = pduTimeout;
             StateTransitionTimeout = stateTransitionTimeout;
             DcStaticSyncIterations = dcStaticSyncIterations;
@@ -41,6 +57,8 @@ namespace AUTD3.Link
             {
                 LinkOptionNative.Apply("iface", NativeEchocat.autd3_link_echocat_option_set_iface(handle, Iface.NameValue));
                 LinkOptionNative.SetDuration(handle, "sync0Period", Sync0Period, NativeEchocat.autd3_link_echocat_option_set_sync0_period);
+                var framePhase = FramePhase.Phase;
+                LinkOptionNative.Apply("framePhase", NativeEchocat.autd3_link_echocat_option_set_frame_phase(handle, framePhase.HasValue, framePhase is { } phase ? LinkOptionNative.ToNanos(phase) : 0UL));
                 LinkOptionNative.SetDuration(handle, "pduTimeout", PduTimeout, NativeEchocat.autd3_link_echocat_option_set_pdu_timeout);
                 LinkOptionNative.SetDuration(handle, "stateTransitionTimeout", StateTransitionTimeout, NativeEchocat.autd3_link_echocat_option_set_state_transition_timeout);
                 if (DcStaticSyncIterations is { } iterations)
@@ -88,6 +106,9 @@ namespace AUTD3.Link
 
         [DllImport(Lib)]
         internal static extern int autd3_link_echocat_option_set_sync0_period(IntPtr option, ulong ns);
+
+        [DllImport(Lib)]
+        internal static extern int autd3_link_echocat_option_set_frame_phase(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasFramePhase, ulong ns);
 
         [DllImport(Lib)]
         internal static extern int autd3_link_echocat_option_set_pdu_timeout(IntPtr option, ulong ns);

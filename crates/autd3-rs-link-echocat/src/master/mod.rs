@@ -21,9 +21,19 @@ use cyclic::CyclePlan;
 pub const FIRST_STATION_ADDRESS: u16 = 0x1000;
 
 const PHASE_CORRECTION_DIVISOR: i64 = 4;
+const EXCHANGE_DECAY_DIVISOR: u64 = 16;
+const MIN_LANDING_TARGET_DIVISOR: u64 = 16;
 
 pub(crate) fn is_echo(received: &[u8], sent: &[u8]) -> bool {
     received == sent
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FramePhase {
+    #[default]
+    Auto,
+    At(Duration),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -57,6 +67,7 @@ impl SleepStrategy {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MasterConfig {
     pub cycle: Duration,
+    pub frame_phase: FramePhase,
     pub pdu_timeout: Duration,
     pub state_transition_timeout: Duration,
     pub dc_static_sync_iterations: u32,
@@ -71,6 +82,7 @@ impl Default for MasterConfig {
     fn default() -> Self {
         Self {
             cycle: Duration::from_millis(1),
+            frame_phase: FramePhase::Auto,
             pdu_timeout: Duration::from_millis(100),
             state_transition_timeout: Duration::from_secs(10),
             dc_static_sync_iterations: 10_000,
@@ -100,6 +112,7 @@ pub struct Master<B: RawBus> {
     state: BusState,
     stats: LinkStats,
     phase_bias_ns: i64,
+    exchange_estimate_ns: u64,
     phase_excursions: u64,
     worst_phase_ns: u64,
     last_phase_warn_at: Option<Instant>,
@@ -125,6 +138,7 @@ impl<B: RawBus> Master<B> {
             state: BusState::new(0),
             stats: LinkStats::default(),
             phase_bias_ns: 0,
+            exchange_estimate_ns: 0,
             phase_excursions: 0,
             worst_phase_ns: 0,
             last_phase_warn_at: None,
@@ -141,16 +155,47 @@ impl<B: RawBus> Master<B> {
         Duration::from_nanos(self.phase_bias_ns.unsigned_abs())
     }
 
-    pub(crate) fn update_phase_bias(&mut self, dc_system_time: u64) {
-        let Some(cycle_ns) = i64::try_from(self.config.cycle.as_nanos()).ok() else {
-            return;
+    #[must_use]
+    pub fn landing_target(&self) -> Duration {
+        Duration::from_nanos(self.landing_target_ns())
+    }
+
+    pub(crate) fn cycle_ns(&self) -> u64 {
+        u64::try_from(self.config.cycle.as_nanos()).unwrap_or(u64::MAX)
+    }
+
+    pub(crate) fn landing_target_ns(&self) -> u64 {
+        let cycle_ns = self.cycle_ns();
+        if cycle_ns == 0 {
+            return 0;
+        }
+        match self.config.frame_phase {
+            FramePhase::At(at) => u64::try_from(at.as_nanos()).unwrap_or(u64::MAX) % cycle_ns,
+            FramePhase::Auto => (cycle_ns.saturating_sub(self.exchange_estimate_ns) / 2)
+                .clamp(cycle_ns / MIN_LANDING_TARGET_DIVISOR, cycle_ns / 2),
+        }
+    }
+
+    pub(crate) fn observe_exchange(&mut self, elapsed_ns: u64) {
+        self.exchange_estimate_ns = if elapsed_ns > self.exchange_estimate_ns {
+            elapsed_ns
+        } else {
+            self.exchange_estimate_ns
+                - (self.exchange_estimate_ns - elapsed_ns) / EXCHANGE_DECAY_DIVISOR
         };
+    }
+
+    pub(crate) fn update_phase_bias(&mut self, dc_system_time: u64) {
+        let cycle_ns = self.cycle_ns();
         if cycle_ns == 0 || dc_system_time == 0 {
             return;
         }
-        let phase = i64::try_from(dc_system_time % cycle_ns.unsigned_abs()).expect("phase < cycle");
-        let target = cycle_ns / 2;
-        let error = phase - target;
+        let Ok(cycle) = i64::try_from(cycle_ns) else {
+            return;
+        };
+        let target = i64::try_from(self.landing_target_ns()).unwrap_or(i64::MAX);
+        let phase = i64::try_from(dc_system_time % cycle_ns).expect("phase < cycle");
+        let error = (phase - target + cycle / 2).rem_euclid(cycle) - cycle / 2;
         self.phase_bias_ns =
             (self.phase_bias_ns + error / PHASE_CORRECTION_DIVISOR).clamp(0, target);
     }
@@ -436,7 +481,7 @@ impl<B: RawBus> Master<B> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Address, Command, Master, MasterConfig, SleepStrategy};
+    use super::{Address, Command, FramePhase, Master, MasterConfig, SleepStrategy};
     use crate::bus::RawBus;
     use crate::reg;
     use crate::sim::EscSim;
@@ -534,16 +579,91 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_landing_phase_bias_cancels_a_constant_sleep_overshoot() {
-        let cycle = Duration::from_millis(2);
-        let mut master = Master::new(
+    fn nop_master(cycle: Duration, frame_phase: FramePhase) -> Master<EscSim> {
+        Master::new(
             EscSim::nop(1, cycle),
             MasterConfig {
                 cycle,
+                frame_phase,
                 ..MasterConfig::default()
             },
+        )
+    }
+
+    #[test]
+    fn an_empty_bus_still_lands_in_the_middle_of_the_sync0_period() {
+        let cycle = Duration::from_millis(2);
+        let master = nop_master(cycle, FramePhase::Auto);
+        assert_eq!(
+            master.landing_target_ns(),
+            1_000_000,
+            "with nothing measured yet the target is the mid-period the bus used to assume",
         );
+    }
+
+    #[test]
+    fn a_longer_exchange_pulls_the_landing_earlier_into_the_period() {
+        let cycle = Duration::from_millis(2);
+        let mut master = nop_master(cycle, FramePhase::Auto);
+        for _ in 0..64 {
+            master.observe_exchange(1_000_000);
+        }
+        assert_eq!(
+            master.landing_target_ns(),
+            500_000,
+            "20 devices take about a millisecond to exchange, so the whole train has to \
+             start a quarter of the way in to finish before the next SYNC0",
+        );
+    }
+
+    #[test]
+    fn the_exchange_estimate_jumps_up_and_decays_down() {
+        let cycle = Duration::from_millis(2);
+        let mut master = nop_master(cycle, FramePhase::Auto);
+        master.observe_exchange(100_000);
+        master.observe_exchange(900_000);
+        assert_eq!(
+            master.exchange_estimate_ns, 900_000,
+            "a long exchange has to move the target the same cycle it is seen",
+        );
+        master.observe_exchange(100_000);
+        assert!(
+            master.exchange_estimate_ns > 800_000,
+            "one short exchange must not talk the target back into the danger zone",
+        );
+        for _ in 0..256 {
+            master.observe_exchange(100_000);
+        }
+        assert!(
+            master.exchange_estimate_ns < 110_000,
+            "the estimate never came back down after the load dropped",
+        );
+    }
+
+    #[test]
+    fn an_exchange_that_outlasts_the_cycle_still_keeps_the_landing_off_the_edge() {
+        let cycle = Duration::from_millis(2);
+        let mut master = nop_master(cycle, FramePhase::Auto);
+        master.observe_exchange(5_000_000);
+        assert_eq!(
+            master.landing_target_ns(),
+            2_000_000 / 16,
+            "landing on the SYNC0 edge makes the firmware drop the frame as a sequence mismatch",
+        );
+    }
+
+    #[test]
+    fn an_explicit_landing_phase_overrides_the_measurement() {
+        let cycle = Duration::from_millis(2);
+        let mut master = nop_master(cycle, FramePhase::At(Duration::from_micros(400)));
+        master.observe_exchange(1_500_000);
+        assert_eq!(master.landing_target_ns(), 400_000);
+    }
+
+    #[test]
+    fn the_landing_phase_bias_cancels_a_constant_sleep_overshoot() {
+        let cycle = Duration::from_millis(2);
+        let mut master = nop_master(cycle, FramePhase::At(cycle / 2));
 
         let target = i64::try_from(cycle.as_nanos()).expect("fits") / 2;
         let overshoot = 600_000i64;
@@ -558,6 +678,39 @@ mod tests {
             (phase - target).abs() < 10_000,
             "the landing phase settled at {phase} ns instead of {target} ns; \
              an uncorrected overshoot eats the SYNC0 margin",
+        );
+    }
+
+    #[test]
+    fn the_bias_chases_a_target_that_is_not_the_middle_of_the_period() {
+        let cycle = Duration::from_millis(2);
+        let mut master = nop_master(cycle, FramePhase::At(Duration::from_micros(500)));
+
+        let target = 500_000i64;
+        let overshoot = 300_000i64;
+        let mut phase = target;
+        for _ in 0..64 {
+            let bias = i64::try_from(master.phase_bias().as_nanos()).expect("fits");
+            phase = target + overshoot - bias;
+            master.update_phase_bias(u64::try_from(phase).expect("phase is positive"));
+        }
+
+        assert!(
+            (phase - target).abs() < 10_000,
+            "the landing phase settled at {phase} ns instead of {target} ns",
+        );
+    }
+
+    #[test]
+    fn a_frame_that_slipped_past_the_edge_is_read_as_early_not_as_a_period_late() {
+        let cycle = Duration::from_millis(2);
+        let mut master = nop_master(cycle, FramePhase::At(Duration::from_micros(500)));
+        master.update_phase_bias(1_900_000);
+        assert_eq!(
+            master.phase_bias(),
+            Duration::ZERO,
+            "a frame 100 us ahead of the next period's target must not be corrected as \
+             1.4 ms late",
         );
     }
 }

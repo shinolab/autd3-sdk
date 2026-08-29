@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use super::state::BusState;
-use super::{CycleReport, Master, MasterConfig};
+use super::{CycleReport, Master, MasterConfig, next_cycle_wait};
 use crate::bus::RawBus;
 use crate::error::EchocatError;
 use crate::reg::{self, AlState};
@@ -129,12 +129,18 @@ impl<B: RawBus> Master<B> {
         let exchange_at = Instant::now();
         let report = self.exchange(tx, rx)?;
         self.last_exchange = exchange_at.elapsed();
-        self.stats
-            .record_exchange(u64::try_from(self.last_exchange.as_nanos()).unwrap_or(u64::MAX));
+        let exchange_ns = u64::try_from(self.last_exchange.as_nanos()).unwrap_or(u64::MAX);
+        self.stats.record_exchange(exchange_ns);
+        self.observe_exchange(exchange_ns);
+        let wait = next_cycle_wait(
+            report.dc_system_time,
+            self.config.cycle,
+            self.landing_target_ns(),
+        );
         self.report_landing_phase(report.dc_system_time, anchor);
         self.update_phase_bias(report.dc_system_time);
-        self.next_at = (report.dc_system_time != 0)
-            .then(|| anchor + report.next_cycle_wait.saturating_sub(self.phase_bias()));
+        self.next_at =
+            (report.dc_system_time != 0).then(|| anchor + wait.saturating_sub(self.phase_bias()));
         Ok(report)
     }
 
@@ -142,16 +148,17 @@ impl<B: RawBus> Master<B> {
         if dc_system_time == 0 {
             return;
         }
-        let cycle_ns = u64::try_from(self.config.cycle.as_nanos()).expect("cycle fits in u64");
+        let cycle_ns = self.cycle_ns();
         if cycle_ns == 0 {
             return;
         }
         let phase = dc_system_time % cycle_ns;
-        let target = cycle_ns / 2;
+        let target = self.landing_target_ns();
         tracing::trace!(phase_ns = phase, target_ns = target, "frame landing phase");
 
-        let deviation = phase.abs_diff(target);
-        if deviation <= cycle_ns / 4 {
+        let forward = (phase + cycle_ns - target) % cycle_ns;
+        let deviation = forward.min(cycle_ns - forward);
+        if deviation <= target / 2 {
             return;
         }
         self.phase_excursions += 1;
@@ -169,7 +176,8 @@ impl<B: RawBus> Master<B> {
             worst_deviation_ns = self.worst_phase_ns,
             target_ns = target,
             cycle_ns,
-            "frames are landing away from the middle of the SYNC0 period",
+            exchange_ns = self.exchange_estimate_ns,
+            "frames are landing away from their target phase in the SYNC0 period",
         );
         self.phase_excursions = 0;
         self.worst_phase_ns = 0;
@@ -232,5 +240,10 @@ impl<B: RawBus> Master<B> {
     #[must_use]
     pub fn cycle_time(&self) -> Duration {
         self.config.cycle
+    }
+
+    #[must_use]
+    pub fn exchange_estimate(&self) -> Duration {
+        Duration::from_nanos(self.exchange_estimate_ns)
     }
 }
