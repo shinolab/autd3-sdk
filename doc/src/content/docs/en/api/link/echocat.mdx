@@ -35,7 +35,7 @@ On Windows, [npcap](https://nmap.org/npcap/) must be installed in "WinPcap API-c
 | `sync_tolerance`            | `Duration`  | tolerance considered as synchronization complete                                 |
 | `sync_timeout`              | `Duration`  | timeout to wait for synchronization to complete                                  |
 | `process_data_watchdog`     | `Duration`  | time after which a subdevice detects that process data has stopped               |
-| `sleep_strategy`            | `SleepStrategy` | how to wait for the next cycle                                               |
+| `sleep_strategy`            | `SleepStrategy` | how to wait for the next cycle (Rust only)                                   |
 
 The default `sync0_period` is 2 ms on Windows and 1 ms elsewhere.
 
@@ -52,7 +52,7 @@ Decides how long after the SYNC0 edge the frame lands.
 
 The default is `Auto`.
 
-## Waiting (`SleepStrategy`)
+## Waiting (`SleepStrategy`, Rust only)
 
 Selects how the RT thread waits for the next cycle.
 

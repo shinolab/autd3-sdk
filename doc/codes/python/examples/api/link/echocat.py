@@ -12,7 +12,6 @@ dc_start_delay = Duration.from_millis(100)
 sync_tolerance = Duration.from_micros(1)
 sync_timeout = Duration.from_secs(10)
 process_data_watchdog = Duration.from_millis(100)
-spin_margin = None
 # ANCHOR: api
 EchocatLinkOption(
     iface,
@@ -25,7 +24,6 @@ EchocatLinkOption(
     sync_tolerance,
     sync_timeout,
     process_data_watchdog,
-    spin_margin,
 )
 # ANCHOR_END: api
 

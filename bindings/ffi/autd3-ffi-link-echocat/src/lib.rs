@@ -10,9 +10,7 @@ use autd3_ffi_abi::{
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_link_echocat::{
-    EchocatLinkOption as CoreOption, FramePhase, SleepStrategy, StateChecker,
-};
+use autd3_rs_link_echocat::{EchocatLinkOption as CoreOption, FramePhase, StateChecker};
 use tokio::sync::Mutex;
 
 struct EchocatBackend {
@@ -281,45 +279,6 @@ pub unsafe extern "C" fn autd3_link_echocat_option_get_frame_phase(
         return code;
     }
     unsafe { write_out(out_phase_ns, to_ns(phase.unwrap_or_default())) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_echocat_option_set_spin_margin(
-    handle: *mut EchocatLinkOptionHandle,
-    has_spin_margin: bool,
-    margin_ns: u64,
-) -> i32 {
-    let Some(option) = (unsafe { handle_mut(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    option.0.sleep_strategy = if has_spin_margin {
-        SleepStrategy::Spin {
-            margin: Duration::from_nanos(margin_ns),
-        }
-    } else {
-        SleepStrategy::Sleep
-    };
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_echocat_option_get_spin_margin(
-    handle: *const EchocatLinkOptionHandle,
-    out_has_spin_margin: *mut bool,
-    out_margin_ns: *mut u64,
-) -> i32 {
-    let Some(option) = (unsafe { handle_ref(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    let margin = match option.0.sleep_strategy {
-        SleepStrategy::Spin { margin } => Some(margin),
-        _ => None,
-    };
-    let code = unsafe { write_out(out_has_spin_margin, margin.is_some()) };
-    if code != AUTD3_OK {
-        return code;
-    }
-    unsafe { write_out(out_margin_ns, to_ns(margin.unwrap_or_default())) }
 }
 
 #[unsafe(no_mangle)]

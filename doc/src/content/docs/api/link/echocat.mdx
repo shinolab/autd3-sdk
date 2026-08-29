@@ -35,7 +35,7 @@ Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mo
 | `sync_tolerance`            | `Duration`  | 同期完了とみなす許容誤差                                                        |
 | `sync_timeout`              | `Duration`  | 同期完了を待つタイムアウト                                                      |
 | `process_data_watchdog`     | `Duration`  | サブデバイスがプロセスデータの途絶を検出するまでの時間                          |
-| `sleep_strategy`            | `SleepStrategy` | 次のサイクルまでの待ち方                                                    |
+| `sleep_strategy`            | `SleepStrategy` | 次のサイクルまでの待ち方 (Rust のみ)                                        |
 
 `sync0_period` の既定値は Windows で 2 ms, それ以外で 1 ms.
 
@@ -52,7 +52,7 @@ SYNC0 の立ち上がりから何秒後にフレームを着地させるかを�
 
 デフォルトは `Auto`.
 
-## `SleepStrategy`
+## `SleepStrategy` (Rust のみ)
 
 RT スレッドが次のサイクルまで待つ方法を選ぶ.
 
