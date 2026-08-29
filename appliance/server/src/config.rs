@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use autd3_rs_core::{CoreId, Interface, RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs_link_echocat::{EchocatLinkOption, FramePhase};
 use autd3_rs_link_remote::{BusOption, BusPacing, BusServerOption};
 use serde::Deserialize;
 
@@ -45,6 +45,8 @@ pub struct Bus {
     pub open_on_start: bool,
     #[serde(deserialize_with = "duration")]
     pub sync0_period: Option<Duration>,
+    #[serde(deserialize_with = "frame_phase")]
+    pub frame_phase: Option<FramePhase>,
     #[serde(deserialize_with = "duration")]
     pub pdu_timeout: Option<Duration>,
     #[serde(deserialize_with = "duration")]
@@ -61,6 +63,7 @@ impl Default for Bus {
             interface: None,
             open_on_start: true,
             sync0_period: None,
+            frame_phase: None,
             pdu_timeout: None,
             state_transition_timeout: None,
             process_data_watchdog: None,
@@ -201,6 +204,18 @@ impl Default for Mdns {
     }
 }
 
+fn frame_phase<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Option<FramePhase>, D::Error> {
+    let Some(text) = Option::<String>::deserialize(de)? else {
+        return Ok(None);
+    };
+    if text.eq_ignore_ascii_case("auto") {
+        return Ok(Some(FramePhase::Auto));
+    }
+    humantime::parse_duration(&text)
+        .map(|at| Some(FramePhase::At(at)))
+        .map_err(|e| serde::de::Error::custom(format!("{e}; use a duration or \"auto\"")))
+}
+
 fn duration<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Option<Duration>, D::Error> {
     let text = Option::<String>::deserialize(de)?;
     text.map(|text| humantime::parse_duration(&text).map_err(serde::de::Error::custom))
@@ -257,6 +272,19 @@ impl Config {
                 bail!("{name} must be greater than zero");
             }
         }
+        if let Some(FramePhase::At(at)) = self.bus.frame_phase {
+            let period = self
+                .bus
+                .sync0_period
+                .unwrap_or_else(|| EchocatLinkOption::default().sync0_period);
+            if at.is_zero() || at >= period {
+                bail!(
+                    "bus.frame_phase must land inside the SYNC0 period (0 < phase < {period:?}), \
+                     got {at:?}. A frame landing on the SYNC0 edge is dropped as a sequence \
+                     mismatch"
+                );
+            }
+        }
         Ok(())
     }
 
@@ -269,6 +297,7 @@ impl Config {
                 .clone()
                 .map_or(Interface::Auto, Interface::Name),
             sync0_period: self.bus.sync0_period.unwrap_or(defaults.sync0_period),
+            frame_phase: self.bus.frame_phase.unwrap_or(defaults.frame_phase),
             pdu_timeout: self.bus.pdu_timeout.unwrap_or(defaults.pdu_timeout),
             state_transition_timeout: self
                 .bus
@@ -466,6 +495,71 @@ mod tests {
         .unwrap();
         let err = config.validate().unwrap_err().to_string();
         assert!(err.contains("health.report_interval"), "{err}");
+    }
+
+    #[test]
+    fn the_landing_phase_defaults_to_following_the_exchange() {
+        let config: Config = toml::from_str(
+            r#"
+            [bus]
+            interface = "eth0"
+            "#,
+        )
+        .unwrap();
+        config.validate().unwrap();
+        assert_eq!(config.link_option().frame_phase, FramePhase::Auto);
+    }
+
+    #[test]
+    fn the_landing_phase_can_be_pinned_or_left_to_the_exchange() {
+        for (text, expected) in [
+            ("\"500us\"", FramePhase::At(Duration::from_micros(500))),
+            ("\"auto\"", FramePhase::Auto),
+            ("\"AUTO\"", FramePhase::Auto),
+        ] {
+            let config: Config = toml::from_str(&format!(
+                r#"
+                [bus]
+                interface = "eth0"
+                sync0_period = "2ms"
+                frame_phase = {text}
+                "#,
+            ))
+            .unwrap();
+            config.validate().unwrap();
+            assert_eq!(config.link_option().frame_phase, expected);
+        }
+    }
+
+    #[test]
+    fn a_landing_phase_outside_the_sync0_period_is_rejected() {
+        for text in ["\"0s\"", "\"2ms\"", "\"5ms\""] {
+            let config: Config = toml::from_str(&format!(
+                r#"
+                [bus]
+                interface = "eth0"
+                sync0_period = "2ms"
+                frame_phase = {text}
+                "#,
+            ))
+            .unwrap();
+            let err = config.validate().unwrap_err().to_string();
+            assert!(err.contains("bus.frame_phase"), "{text}: {err}");
+        }
+    }
+
+    #[test]
+    fn a_landing_phase_that_is_neither_a_duration_nor_auto_is_an_error() {
+        let err = toml::from_str::<Config>(
+            r#"
+            [bus]
+            interface = "eth0"
+            frame_phase = "middle"
+            "#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("auto"), "{err}");
     }
 
     #[test]

@@ -12,5 +12,5 @@ mod timer;
 pub use bus::{RawBus, RawSocket};
 pub use error::EchocatError;
 pub use link::{EchocatLink, StateChecker};
-pub use master::{CycleReport, Master, MasterConfig, SleepStrategy};
+pub use master::{CycleReport, FramePhase, Master, MasterConfig, SleepStrategy};
 pub use option::EchocatLinkOption;

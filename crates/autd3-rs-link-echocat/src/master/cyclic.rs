@@ -45,18 +45,17 @@ pub(crate) struct CyclePlan {
 pub struct CycleReport {
     pub rx_valid: bool,
     pub dc_system_time: u64,
-    pub next_cycle_wait: Duration,
     pub al_status: u16,
 }
 
 #[must_use]
-pub fn next_cycle_wait(dc_system_time: u64, cycle: Duration) -> Duration {
+pub fn next_cycle_wait(dc_system_time: u64, cycle: Duration, landing_target_ns: u64) -> Duration {
     let cycle_ns = u64::try_from(cycle.as_nanos()).expect("cycle fits in u64 nanoseconds");
     if cycle_ns == 0 {
         return Duration::ZERO;
     }
     let phase = dc_system_time % cycle_ns;
-    Duration::from_nanos((cycle_ns - phase) + cycle_ns / 2)
+    Duration::from_nanos((cycle_ns - phase) + landing_target_ns % cycle_ns)
 }
 
 fn overlapping_devices(offset: usize, len: usize, devices: usize) -> u16 {
@@ -331,7 +330,6 @@ impl<B: RawBus> Master<B> {
         Ok(CycleReport {
             rx_valid,
             dc_system_time,
-            next_cycle_wait: next_cycle_wait(dc_system_time, self.config.cycle),
             al_status,
         })
     }
@@ -345,27 +343,49 @@ mod tests {
     #[test]
     fn the_landing_phase_is_half_a_cycle_past_the_sync0_edge() {
         let cycle = Duration::from_millis(1);
+        let target = 500_000;
         assert_eq!(
-            next_cycle_wait(0, cycle),
+            next_cycle_wait(0, cycle, target),
             Duration::from_micros(1500),
             "at the latch edge the next landing is a cycle and a half away"
         );
-        assert_eq!(next_cycle_wait(500_000, cycle), Duration::from_millis(1));
         assert_eq!(
-            next_cycle_wait(999_999, cycle),
+            next_cycle_wait(500_000, cycle, target),
+            Duration::from_millis(1)
+        );
+        assert_eq!(
+            next_cycle_wait(999_999, cycle, target),
             Duration::from_nanos(500_001)
+        );
+    }
+
+    #[test]
+    fn a_quarter_cycle_target_lands_a_quarter_cycle_past_the_sync0_edge() {
+        let cycle = Duration::from_millis(2);
+        let target = 500_000;
+        assert_eq!(
+            next_cycle_wait(0, cycle, target),
+            Duration::from_micros(2500),
+            "the wait carries to the next edge and then to the target"
+        );
+        assert_eq!(
+            next_cycle_wait(500_000, cycle, target),
+            Duration::from_millis(2),
+            "landing on the target asks for exactly one more cycle"
         );
     }
 
     #[test]
     fn the_landing_phase_never_bunches_two_frames_into_one_sync0_period() {
         let cycle = Duration::from_millis(1);
-        for phase in (0..1_000_000).step_by(9_973) {
-            let wait = next_cycle_wait(phase, cycle);
-            assert!(
-                wait > cycle / 2 && wait <= cycle + cycle / 2,
-                "wait {wait:?} for phase {phase} escapes the (cycle/2, 3cycle/2] window"
-            );
+        for target in [1u64, 250_000, 500_000, 999_999] {
+            for phase in (0..1_000_000).step_by(9_973) {
+                let wait = next_cycle_wait(phase, cycle, target);
+                assert!(
+                    wait > Duration::ZERO && wait <= cycle * 2,
+                    "wait {wait:?} for phase {phase} and target {target} escapes (0, 2 cycles]"
+                );
+            }
         }
     }
 

@@ -2,12 +2,13 @@ use std::time::Duration;
 
 use autd3_rs_core::Interface;
 
-use crate::master::{MasterConfig, SleepStrategy};
+use crate::master::{FramePhase, MasterConfig, SleepStrategy};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EchocatLinkOption {
     pub iface: Interface,
     pub sync0_period: Duration,
+    pub frame_phase: FramePhase,
     pub pdu_timeout: Duration,
     pub state_transition_timeout: Duration,
     pub dc_static_sync_iterations: u32,
@@ -28,6 +29,7 @@ impl Default for EchocatLinkOption {
         Self {
             iface: Interface::Auto,
             sync0_period: DEFAULT_SYNC0_PERIOD,
+            frame_phase: FramePhase::Auto,
             pdu_timeout: Duration::from_millis(100),
             state_transition_timeout: Duration::from_secs(10),
             dc_static_sync_iterations: 10_000,
@@ -44,6 +46,7 @@ impl From<&EchocatLinkOption> for MasterConfig {
     fn from(option: &EchocatLinkOption) -> Self {
         Self {
             cycle: option.sync0_period,
+            frame_phase: option.frame_phase,
             pdu_timeout: option.pdu_timeout,
             state_transition_timeout: option.state_transition_timeout,
             dc_static_sync_iterations: option.dc_static_sync_iterations,
@@ -58,7 +61,7 @@ impl From<&EchocatLinkOption> for MasterConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{EchocatLinkOption, MasterConfig, SleepStrategy};
+    use super::{EchocatLinkOption, FramePhase, MasterConfig, SleepStrategy};
     use std::time::Duration;
 
     #[test]
@@ -91,6 +94,27 @@ mod tests {
     fn the_sync0_period_drives_the_master_cycle() {
         let option = EchocatLinkOption::default();
         assert_eq!(MasterConfig::from(&option).cycle, option.sync0_period);
+    }
+
+    #[test]
+    fn the_landing_phase_follows_the_exchange_by_default() {
+        assert_eq!(
+            EchocatLinkOption::default().frame_phase,
+            FramePhase::Auto,
+            "a fixed mid-period landing leaves 20 devices no room to finish before SYNC0",
+        );
+    }
+
+    #[test]
+    fn the_chosen_landing_phase_reaches_the_master() {
+        let option = EchocatLinkOption {
+            frame_phase: FramePhase::At(Duration::from_micros(500)),
+            ..EchocatLinkOption::default()
+        };
+        assert_eq!(
+            MasterConfig::from(&option).frame_phase,
+            FramePhase::At(Duration::from_micros(500)),
+        );
     }
 
     #[test]

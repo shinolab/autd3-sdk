@@ -20,6 +20,7 @@ fn render(cli: &Cli) -> String {
     let mut out = imports_block(
         cli.link,
         cli.sleep_strategy == SleepStrategyArg::Spin,
+        cli.shift_percent != 0,
         &imports,
     );
     out.push('\n');
@@ -38,6 +39,13 @@ fn link_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
                 let _ = writeln!(body, "    iface: {iface:?}.into(),");
             }
             let _ = writeln!(body, "    sync0_period: {},", fmt_duration(sync0_period));
+            if cli.shift_percent != 0 {
+                let _ = writeln!(
+                    body,
+                    "    frame_phase: FramePhase::At({}),",
+                    fmt_duration(cli.sync0_shift()),
+                );
+            }
             if cli.sleep_strategy == SleepStrategyArg::Spin {
                 let _ = writeln!(
                     body,
@@ -106,7 +114,7 @@ impl From<&Cli> for Config {
     }
 }
 
-fn imports_block(link: LinkKind, spin: bool, imports: &[&str]) -> String {
+fn imports_block(link: LinkKind, spin: bool, frame_phase: bool, imports: &[&str]) -> String {
     let mut out = String::new();
     for imp in imports.iter().filter(|s| s.starts_with("std::")) {
         let _ = writeln!(out, "use {imp};");
@@ -127,7 +135,8 @@ fn imports_block(link: LinkKind, spin: bool, imports: &[&str]) -> String {
         LinkKind::Echocat => {
             let _ = writeln!(
                 out,
-                "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption{}}};",
+                "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption{}{}}};",
+                if frame_phase { ", FramePhase" } else { "" },
                 if spin { ", SleepStrategy" } else { "" },
             );
         }

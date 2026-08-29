@@ -1,5 +1,6 @@
 mod admin;
 mod system;
+pub mod tune;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,7 +9,8 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use autd3_rs_appliance::{
     Accepted, ApiError, ApplianceStatus, BusActual, BusDesired, BusStatus, ClientStatus,
-    ConfigDocument, ImageRelease, LogLines, ProbeResult, UplinkKind, UplinkStatus, WifiCredentials,
+    ConfigDocument, ImageRelease, LogLines, ProbeResult, TuneReport, TuneRequest, UplinkKind,
+    UplinkStatus, WifiCredentials,
 };
 use autd3_rs_link_remote::{Actual, BusSnapshot, Desired, RemoteLinkError, Sessions, SharedBus};
 use axum::Router;
@@ -19,6 +21,7 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post, put};
 use serde::Deserialize;
 
+use crate::api::tune::{LinkSettings, Sweep, TuneJob};
 use crate::config::Config;
 
 const UI: &str = include_str!("ui.html");
@@ -31,6 +34,8 @@ const OTHER_LOG_UNITS: &[&str] = &["NetworkManager", "autd3-wifi-init", "autd3-f
 pub struct AppState {
     bus: Arc<SharedBus>,
     sessions: Arc<Sessions>,
+    settings: Arc<LinkSettings>,
+    tune: Arc<TuneJob>,
     config_path: PathBuf,
     instance: String,
     interface: String,
@@ -49,10 +54,13 @@ impl AppState {
         instance: String,
         bus: Arc<SharedBus>,
         sessions: Arc<Sessions>,
+        settings: Arc<LinkSettings>,
     ) -> Self {
         Self {
             bus,
             sessions,
+            settings,
+            tune: Arc::new(TuneJob::default()),
             config_path,
             instance,
             interface: config.bus.interface.clone().unwrap_or_default(),
@@ -259,6 +267,49 @@ async fn bus_probe(State(state): State<Arc<AppState>>) -> ApiResult<ProbeResult>
         .map_err(|e| Error::internal(format!("the task panicked: {e}")))?
         .map_err(probe_error)?;
     Ok(axum::Json(ProbeResult { num_devices }))
+}
+
+async fn tune_start(
+    State(state): State<Arc<AppState>>,
+    axum::Json(request): axum::Json<TuneRequest>,
+) -> ApiResult<Accepted> {
+    require_admin(&state)?;
+    let targets = tune::validate(&request).map_err(Error::bad_request)?;
+    if let Some(session) = state.sessions.current() {
+        return Err(Error::new(
+            StatusCode::CONFLICT,
+            format!(
+                "{} is driving the bus; a sweep closes and reopens it, so disconnect first",
+                session.peer,
+            ),
+        ));
+    }
+    let total = targets.len();
+    tune::spawn(
+        Sweep {
+            job: Arc::clone(&state.tune),
+            bus: Arc::clone(&state.bus),
+            sessions: Arc::clone(&state.sessions),
+            settings: Arc::clone(&state.settings),
+        },
+        request,
+        targets,
+    )
+    .map_err(|e| Error::new(StatusCode::CONFLICT, e))?;
+    Ok(accepted(format!("sweeping {total} candidate(s)")))
+}
+
+async fn tune_status(State(state): State<Arc<AppState>>) -> ApiResult<TuneReport> {
+    Ok(axum::Json(state.tune.report()))
+}
+
+async fn tune_cancel(State(state): State<Arc<AppState>>) -> ApiResult<Accepted> {
+    require_admin(&state)?;
+    Ok(accepted(if state.tune.cancel() {
+        "the sweep was asked to stop"
+    } else {
+        "no sweep is running"
+    }))
 }
 
 fn probe_error(error: RemoteLinkError) -> Error {
@@ -509,6 +560,8 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/bus/open", post(bus_open))
         .route("/bus/close", post(bus_close))
         .route("/bus/probe", post(bus_probe))
+        .route("/bus/tune", get(tune_status).post(tune_start))
+        .route("/bus/tune/cancel", post(tune_cancel))
         .route("/restart", post(restart))
         .route("/reboot", post(reboot))
         .route("/shutdown", post(shutdown))

@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{Client, ClientConfig, Interface};
-use autd3_rs_link_echocat::{EchocatLinkOption, SleepStrategy};
+use autd3_rs_link_echocat::{EchocatLinkOption, FramePhase, SleepStrategy};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -12,6 +12,7 @@ async fn main() -> Result<()> {
 
     let iface = Interface::Auto;
     let sync0_period = Duration::from_millis(1);
+    let frame_phase = FramePhase::Auto;
     let pdu_timeout = Duration::from_millis(100);
     let state_transition_timeout = Duration::from_secs(10);
     let dc_static_sync_iterations = 10_000;
@@ -24,6 +25,7 @@ async fn main() -> Result<()> {
     EchocatLinkOption {
         iface,
         sync0_period,
+        frame_phase,
         pdu_timeout,
         state_transition_timeout,
         dc_static_sync_iterations,
@@ -34,6 +36,11 @@ async fn main() -> Result<()> {
         sleep_strategy,
     };
     // ANCHOR_END: api
+
+    // ANCHOR: frame_phase
+    FramePhase::Auto;
+    FramePhase::At(Duration::from_micros(500));
+    // ANCHOR_END: frame_phase
 
     // ANCHOR: sleep_strategy
     SleepStrategy::Sleep;

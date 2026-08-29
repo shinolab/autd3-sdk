@@ -184,6 +184,7 @@ struct BusState {
     reopen_pending: bool,
     probe: Probe,
     applied_tuning: Option<RtThreadTuning>,
+    hold: Option<String>,
 }
 
 impl BusState {
@@ -229,6 +230,7 @@ impl BusShared {
                 reopen_pending: false,
                 probe: Probe::Idle,
                 applied_tuning: None,
+                hold: None,
             }),
             cv: Condvar::new(),
             stopped: AtomicBool::new(false),
@@ -315,6 +317,43 @@ impl BusShared {
             .stats
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = stats.clone();
+    }
+
+    pub(crate) fn set_hold(&self, reason: Option<String>) {
+        let mut state = self.lock();
+        state.hold = reason;
+        self.cv.notify_all();
+    }
+
+    pub(crate) fn hold_reason(&self) -> Option<String> {
+        self.lock().hold.clone()
+    }
+
+    pub(crate) fn wait_actual(
+        &self,
+        timeout: Duration,
+        reached: impl Fn(&Actual) -> bool,
+        give_up: impl Fn() -> bool,
+    ) -> bool {
+        let deadline = Instant::now() + timeout;
+        let mut state = self.lock();
+        loop {
+            if reached(&state.actual) {
+                return true;
+            }
+            if self.is_stopped() || give_up() {
+                return false;
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return false;
+            }
+            state = self
+                .cv
+                .wait_timeout(state, remaining.min(OPEN_WAIT_PERIOD))
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .0;
+        }
     }
 
     pub(crate) fn wait_for_open(&self, timeout: Duration) -> Result<usize, RemoteLinkError> {
@@ -983,6 +1022,23 @@ impl SharedBus {
 
     pub fn set_desired(&self, desired: Desired) {
         self.shared.set_desired(desired);
+    }
+
+    pub fn hold(&self, reason: impl Into<String>) {
+        self.shared.set_hold(Some(reason.into()));
+    }
+
+    pub fn release(&self) {
+        self.shared.set_hold(None);
+    }
+
+    pub fn wait_actual(
+        &self,
+        timeout: Duration,
+        reached: impl Fn(&Actual) -> bool,
+        give_up: impl Fn() -> bool,
+    ) -> bool {
+        self.shared.wait_actual(timeout, reached, give_up)
     }
 
     #[must_use]

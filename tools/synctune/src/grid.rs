@@ -63,18 +63,17 @@ pub fn candidates(args: &TuneArgs) -> Vec<Candidate> {
 
 #[must_use]
 pub fn select_best(results: &[CandidateResult]) -> Option<usize> {
-    results
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| r.status == CandidateStatus::Ok && r.total_samples > 0)
-        .max_by(|(_, a), (_, b)| {
-            a.op_ratio()
-                .total_cmp(&b.op_ratio())
-                .then(b.drop_events.cmp(&a.drop_events))
-                .then(b.shift.cmp(&a.shift))
-                .then(b.period.cmp(&a.period))
+    let ns = |d: Duration| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX);
+    autd3_rs_appliance::best_tune_score(results, |r| {
+        (r.status == CandidateStatus::Ok && r.total_samples > 0).then(|| {
+            autd3_rs_appliance::TuneScore {
+                op_ratio: r.op_ratio(),
+                drop_events: r.drop_events,
+                tie_break_ns: ns(r.shift),
+                period_ns: ns(r.period),
+            }
         })
-        .map(|(i, _)| i)
+    })
 }
 
 #[cfg(test)]
