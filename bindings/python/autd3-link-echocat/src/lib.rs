@@ -9,7 +9,7 @@ use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::Interface;
 use autd3_rs_link_echocat::{
-    EchocatLinkOption as CoreOption, FramePhase as CoreFramePhase, SleepStrategy, StateChecker,
+    EchocatLinkOption as CoreOption, FramePhase as CoreFramePhase, StateChecker,
 };
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
@@ -211,7 +211,6 @@ impl EchocatLinkOption {
         sync_tolerance = None,
         sync_timeout = None,
         process_data_watchdog = None,
-        spin_margin = None,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -225,7 +224,6 @@ impl EchocatLinkOption {
         sync_tolerance: Option<&Bound<'_, PyAny>>,
         sync_timeout: Option<&Bound<'_, PyAny>>,
         process_data_watchdog: Option<&Bound<'_, PyAny>>,
-        spin_margin: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let mut inner = CoreOption {
             iface: Interface::from(iface),
@@ -257,9 +255,6 @@ impl EchocatLinkOption {
         }
         if let Some(v) = opt_duration(process_data_watchdog)? {
             inner.process_data_watchdog = v;
-        }
-        if let Some(v) = opt_duration(spin_margin)? {
-            inner.sleep_strategy = SleepStrategy::Spin { margin: v };
         }
         Ok(Self { inner })
     }
