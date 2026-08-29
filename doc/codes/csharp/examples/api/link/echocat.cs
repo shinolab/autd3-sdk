@@ -18,7 +18,6 @@ internal static class Sample
         var syncTolerance = TimeSpan.FromMicroseconds(1);
         var syncTimeout = TimeSpan.FromSeconds(10);
         var processDataWatchdog = TimeSpan.FromMilliseconds(100);
-        TimeSpan? spinMargin = null;
         // ANCHOR: api
         new EchocatLinkOption(
             iface,
@@ -30,8 +29,7 @@ internal static class Sample
             dcStartDelay,
             syncTolerance,
             syncTimeout,
-            processDataWatchdog,
-            spinMargin
+            processDataWatchdog
         );
         // ANCHOR_END: api
 

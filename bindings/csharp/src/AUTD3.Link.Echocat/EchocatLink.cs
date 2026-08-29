@@ -29,9 +29,8 @@ namespace AUTD3.Link
         public TimeSpan? SyncTolerance { get; }
         public TimeSpan? SyncTimeout { get; }
         public TimeSpan? ProcessDataWatchdog { get; }
-        public TimeSpan? SpinMargin { get; }
 
-        public EchocatLinkOption(Interface? iface = null, TimeSpan? sync0Period = null, FramePhase framePhase = default, TimeSpan? pduTimeout = null, TimeSpan? stateTransitionTimeout = null, uint? dcStaticSyncIterations = null, TimeSpan? dcStartDelay = null, TimeSpan? syncTolerance = null, TimeSpan? syncTimeout = null, TimeSpan? processDataWatchdog = null, TimeSpan? spinMargin = null)
+        public EchocatLinkOption(Interface? iface = null, TimeSpan? sync0Period = null, FramePhase framePhase = default, TimeSpan? pduTimeout = null, TimeSpan? stateTransitionTimeout = null, uint? dcStaticSyncIterations = null, TimeSpan? dcStartDelay = null, TimeSpan? syncTolerance = null, TimeSpan? syncTimeout = null, TimeSpan? processDataWatchdog = null)
         {
             Iface = iface ?? Interface.Auto;
             Sync0Period = sync0Period;
@@ -43,7 +42,6 @@ namespace AUTD3.Link
             SyncTolerance = syncTolerance;
             SyncTimeout = syncTimeout;
             ProcessDataWatchdog = processDataWatchdog;
-            SpinMargin = spinMargin;
         }
 
         private IntPtr CreateHandle()
@@ -69,10 +67,6 @@ namespace AUTD3.Link
                 LinkOptionNative.SetDuration(handle, "syncTolerance", SyncTolerance, NativeEchocat.autd3_link_echocat_option_set_sync_tolerance);
                 LinkOptionNative.SetDuration(handle, "syncTimeout", SyncTimeout, NativeEchocat.autd3_link_echocat_option_set_sync_timeout);
                 LinkOptionNative.SetDuration(handle, "processDataWatchdog", ProcessDataWatchdog, NativeEchocat.autd3_link_echocat_option_set_process_data_watchdog);
-                if (SpinMargin is { } margin)
-                {
-                    LinkOptionNative.Apply("spinMargin", NativeEchocat.autd3_link_echocat_option_set_spin_margin(handle, true, LinkOptionNative.ToNanos(margin)));
-                }
             }
             catch
             {
@@ -130,9 +124,6 @@ namespace AUTD3.Link
 
         [DllImport(Lib)]
         internal static extern int autd3_link_echocat_option_set_process_data_watchdog(IntPtr option, ulong ns);
-
-        [DllImport(Lib)]
-        internal static extern int autd3_link_echocat_option_set_spin_margin(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasSpinMargin, ulong ns);
 
         [DllImport(Lib)]
         internal static extern void autd3_link_echocat_option_free(IntPtr option);
