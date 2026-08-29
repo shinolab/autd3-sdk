@@ -6,6 +6,7 @@ auto_open = true
 interface = "eth0"
 open_on_start = true
 sync0_period = "1ms"
+frame_phase = "auto"
 pdu_timeout = "100ms"
 state_transition_timeout = "10s"
 process_data_watchdog = "100ms"
@@ -29,3 +30,4 @@ unit = "autd3-remote-server.service"
 
 [mdns]
 enabled = true
+# instance = "autd3-lab-1"
