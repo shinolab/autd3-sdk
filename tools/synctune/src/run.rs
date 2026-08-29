@@ -12,7 +12,7 @@ use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, Frames, Link, ResponseFuture,
     RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
 };
-use autd3_rs_link_echocat::{EchocatLink, EchocatLinkOption};
+use autd3_rs_link_echocat::{EchocatLink, EchocatLinkOption, FramePhase};
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption, EtherCrabLinkOptionFull};
 
 use crate::cli::{Common, LinkKind, Mode, RtPolicy};
@@ -64,6 +64,11 @@ pub async fn measure_candidate(
             let opt = EchocatLinkOption {
                 iface: common.interface.clone().into(),
                 sync0_period: period,
+                frame_phase: if cand.shift_percent == 0 {
+                    FramePhase::Auto
+                } else {
+                    FramePhase::At(shift)
+                },
                 ..Default::default()
             };
             let opened = tokio::task::spawn_blocking(move || EchocatLink::open(&opt))

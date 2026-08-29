@@ -161,3 +161,16 @@ The two keys you will mainly touch are the following.
 | `bus.open_on_start` | Whether to open the bus at power-on. `true` by default |
 
 `sync0_period` is best set to the smallest multiple of 500us that is longer than twice the exchange time.
+
+## Tuning
+
+Tries `sync0_period` and `frame_phase` combinations in turn and tables the ones that stayed in OP.
+
+```sh
+autd3-appliance tune run --period 1ms --period 2ms --frame-phase auto --frame-phase 25
+```
+
+`--frame-phase` takes `auto` or a percent between 1 and 99.
+Together with `--period` it makes one candidate per combination, and each candidate costs `--warmup` (5s by default) plus `--dwell` (30s by default).
+
+Disconnect the client before tuning.

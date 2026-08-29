@@ -7,8 +7,8 @@ use ureq::unversioned::resolver::{DefaultResolver, ResolvedSocketAddrs, Resolver
 use ureq::unversioned::transport::{DefaultConnector, NextTimeout};
 
 use crate::{
-    Accepted, ApiError, ApplianceStatus, ConfigDocument, LogLines, ProbeResult, WifiCredentials,
-    WifiForget,
+    Accepted, ApiError, ApplianceStatus, ConfigDocument, LogLines, ProbeResult, TuneReport,
+    TuneRequest, WifiCredentials, WifiForget,
 };
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -130,6 +130,18 @@ impl ApplianceClient {
         self.post("/bus/probe")
     }
 
+    pub fn tune_start(&self, request: &TuneRequest) -> Result<Accepted, ClientError> {
+        self.post_json("/bus/tune", request)
+    }
+
+    pub fn tune_report(&self) -> Result<TuneReport, ClientError> {
+        self.get("/bus/tune")
+    }
+
+    pub fn tune_cancel(&self) -> Result<Accepted, ClientError> {
+        self.post("/bus/tune/cancel")
+    }
+
     pub fn restart(&self) -> Result<Accepted, ClientError> {
         self.post("/restart")
     }
@@ -201,6 +213,15 @@ impl ApplianceClient {
 
     fn post<T: DeserializeOwned>(&self, path: &str) -> Result<T, ClientError> {
         let response = self.agent.post(self.url(path)).send_empty();
+        self.finish("POST", path, response)
+    }
+
+    fn post_json<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &impl serde::Serialize,
+    ) -> Result<T, ClientError> {
+        let response = self.agent.post(self.url(path)).send_json(body);
         self.finish("POST", path, response)
     }
 

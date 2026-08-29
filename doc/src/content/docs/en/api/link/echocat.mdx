@@ -27,6 +27,7 @@ On Windows, [npcap](https://nmap.org/npcap/) must be installed in "WinPcap API-c
 | --------------------------- | ----------- | -------------------------------------------------------------------------------- |
 | `iface`                     | `Interface` | network interface to use. `Interface::Auto` for automatic selection, `Interface::Name(..)` to specify by name |
 | `sync0_period`              | `Duration`  | period of the SYNC0 signal (= the cyclic frame period)                           |
+| `frame_phase`               | `FramePhase` | where in the SYNC0 period the frame lands                                       |
 | `pdu_timeout`               | `Duration`  | timeout to wait for the response to a single PDU         |
 | `state_transition_timeout`  | `Duration`  | timeout to wait for an EtherCAT state transition (INIT → PRE-OP → SAFE-OP → OP)  |
 | `dc_static_sync_iterations` | `u32`       | number of frames used for DC static drift compensation                           |
@@ -37,6 +38,19 @@ On Windows, [npcap](https://nmap.org/npcap/) must be installed in "WinPcap API-c
 | `sleep_strategy`            | `SleepStrategy` | how to wait for the next cycle                                               |
 
 The default `sync0_period` is 2 ms on Windows and 1 ms elsewhere.
+
+## Landing phase (`FramePhase`)
+
+Decides how long after the SYNC0 edge the frame lands.
+
+<CodeTabs rust={excerpt(sample, "frame_phase")} python={excerpt(pySample, "frame_phase")} csharp={excerpt(csSample, "frame_phase")} />
+
+| Variant      | Description                                                                |
+| ------------ | -------------------------------------------------------------------------- |
+| `Auto`       | decided automatically from the measured duration of one exchange           |
+| `At(phase)`  | lands `phase` after SYNC0. Keep it inside `0 < phase < sync0_period`       |
+
+The default is `Auto`.
 
 ## Waiting (`SleepStrategy`)
 

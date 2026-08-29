@@ -343,6 +343,9 @@ fn attach(
     client_devices: usize,
     auto_open: bool,
 ) -> Result<usize, RemoteLinkError> {
+    if let Some(reason) = shared.hold_reason() {
+        return Err(RemoteLinkError::BusUnavailable { reason });
+    }
     if shared.desired() == Desired::Closed {
         if !auto_open {
             return Err(RemoteLinkError::BusClosed);

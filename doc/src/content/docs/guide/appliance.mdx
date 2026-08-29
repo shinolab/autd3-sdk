@@ -162,3 +162,15 @@ dtoverlay=disable-wifi
 
 sync0_period は exchange 時間の2倍より長く, かつ, 500μs の倍数の内, 最も小さい値にすることを推奨する.
 
+## チューニング
+
+`sync0_period` と `frame_phase`の組み合わせを順に試し, OP 状態を保てたものを表にする.
+
+```sh
+autd3-appliance tune run --period 1ms --period 2ms --frame-phase auto --frame-phase 25
+```
+
+`--frame-phase` には `auto` か 1〜99 の百分率を渡す.
+`--period` と合わせて指定した数だけ候補が作られ, 1 候補につき `--warmup` (既定 5s) + `--dwell` (既定 30s) かかる.
+
+チューニング中はクライアントは切断しておくこと.

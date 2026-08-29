@@ -72,9 +72,13 @@ fn main() -> Result<()> {
     let server_option = config.server_option();
     let interface = link_option.iface.name().unwrap_or("?").to_owned();
     let sync0_period = link_option.sync0_period;
+    let frame_phase = link_option.frame_phase;
     let bus_option = config.bus_option();
+    let settings = Arc::new(api::tune::LinkSettings::new(link_option));
+    let factory_settings = Arc::clone(&settings);
     let bus = SharedBus::new(bus_option, move || {
-        EchocatLink::open(&link_option).map_err(|e| RemoteLinkError::Link(e.to_string()))
+        EchocatLink::open(&factory_settings.current())
+            .map_err(|e| RemoteLinkError::Link(e.to_string()))
     })
     .context("failed to start the bus")?;
     if config.bus.open_on_start {
@@ -104,6 +108,7 @@ fn main() -> Result<()> {
             mdns::instance(&config),
             Arc::clone(&bus),
             server.sessions(),
+            Arc::clone(&settings),
         ));
         api::spawn(&config, state).context("failed to start the control API")?;
     }
@@ -114,6 +119,7 @@ fn main() -> Result<()> {
         bind = %server_option.bind,
         interface,
         ?sync0_period,
+        ?frame_phase,
         auto_open = server_option.auto_open,
         rt_affinity = ?rt_affinity.map(|c| c.id),
         "remote master appliance ready; waiting for a client",

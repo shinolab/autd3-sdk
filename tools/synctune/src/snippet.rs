@@ -21,7 +21,12 @@ fn render(common: &Common, sync0_period: Duration, sync0_shift: Duration) -> Str
     link_block(common, sync0_period, sync0_shift, &mut body);
     push_config(&mut body, &mut imports, &Config::from(common));
 
-    let mut out = imports_block(common.link, tx_rx_tuned(common), &imports);
+    let mut out = imports_block(
+        common.link,
+        tx_rx_tuned(common),
+        !sync0_shift.is_zero(),
+        &imports,
+    );
     out.push('\n');
     out.push_str(&body);
     out
@@ -49,7 +54,15 @@ fn link_block(common: &Common, sync0_period: Duration, sync0_shift: Duration, bo
         let _ = writeln!(body, "    iface: {iface:?}.into(),");
     }
     let _ = writeln!(body, "    sync0_period: {},", fmt_duration(sync0_period));
-    if common.link != LinkKind::Echocat {
+    if common.link == LinkKind::Echocat {
+        if !sync0_shift.is_zero() {
+            let _ = writeln!(
+                body,
+                "    frame_phase: FramePhase::At({}),",
+                fmt_duration(sync0_shift),
+            );
+        }
+    } else {
         let _ = writeln!(body, "    sync0_shift: {},", fmt_duration(sync0_shift));
     }
     let _ = writeln!(body, "    ..Default::default()");
@@ -88,7 +101,7 @@ fn tx_rx_tuned(common: &Common) -> bool {
             || common.tx_rx_affinity.is_some())
 }
 
-fn imports_block(link: LinkKind, tx_rx_tuned: bool, imports: &[&str]) -> String {
+fn imports_block(link: LinkKind, tx_rx_tuned: bool, frame_phase: bool, imports: &[&str]) -> String {
     let mut out = String::new();
     for imp in imports.iter().filter(|s| s.starts_with("std::")) {
         let _ = writeln!(out, "use {imp};");
@@ -116,7 +129,8 @@ fn imports_block(link: LinkKind, tx_rx_tuned: bool, imports: &[&str]) -> String 
         LinkKind::Echocat => {
             let _ = writeln!(
                 out,
-                "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption}};",
+                "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption{}}};",
+                if frame_phase { ", FramePhase" } else { "" },
             );
         }
     }

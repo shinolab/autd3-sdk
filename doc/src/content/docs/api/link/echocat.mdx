@@ -27,6 +27,7 @@ Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mo
 | --------------------------- | ----------- | ------------------------------------------------------------------------------- |
 | `iface`                     | `Interface` | 使用するネットワークインターフェース. `Interface::Auto` で自動選択, `Interface::Name(..)` で名前指定 |
 | `sync0_period`              | `Duration`  | SYNC0 信号の周期 (= フレームの送出周期)                             |
+| `frame_phase`               | `FramePhase` | SYNC0 周期内のどこにフレームを着地させるか                                     |
 | `pdu_timeout`               | `Duration`  | 1 つの PDU の応答を待つタイムアウト                   |
 | `state_transition_timeout`  | `Duration`  | EtherCAT 状態遷移 (INIT → PRE-OP → SAFE-OP → OP) を待つタイムアウト             |
 | `dc_static_sync_iterations` | `u32`       | DC の静的ドリフト補正で回すフレーム数                                           |
@@ -37,6 +38,19 @@ Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mo
 | `sleep_strategy`            | `SleepStrategy` | 次のサイクルまでの待ち方                                                    |
 
 `sync0_period` の既定値は Windows で 2 ms, それ以外で 1 ms.
+
+## `FramePhase`
+
+SYNC0 の立ち上がりから何秒後にフレームを着地させるかを決める.
+
+<CodeTabs rust={excerpt(sample, "frame_phase")} python={excerpt(pySample, "frame_phase")} csharp={excerpt(csSample, "frame_phase")} />
+
+| バリアント   | 説明                                                                       |
+| ------------ | -------------------------------------------------------------------------- |
+| `Auto`       | 実測した 1 サイクルの交換時間から自動で決める                              |
+| `At(phase)`  | SYNC0 から `phase` 後に着地させる. `0 < phase < sync0_period` にすること    |
+
+デフォルトは `Auto`.
 
 ## `SleepStrategy`
 

@@ -8,20 +8,42 @@ use autd3_python_capsule::{
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
 use autd3_rs_core::Interface;
-use autd3_rs_link_echocat::{EchocatLinkOption as CoreOption, SleepStrategy, StateChecker};
+use autd3_rs_link_echocat::{
+    EchocatLinkOption as CoreOption, FramePhase as CoreFramePhase, SleepStrategy, StateChecker,
+};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 use tokio::sync::Mutex;
 
+fn duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
+    let ns: u128 = obj.call_method0("as_nanos")?.extract()?;
+    Ok(Duration::from_nanos(u64::try_from(ns).unwrap_or(u64::MAX)))
+}
+
 fn opt_duration(obj: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Duration>> {
-    match obj {
-        None => Ok(None),
-        Some(o) => {
-            let ns: u128 = o.call_method0("as_nanos")?.extract()?;
-            Ok(Some(Duration::from_nanos(
-                u64::try_from(ns).unwrap_or(u64::MAX),
-            )))
-        }
+    obj.map(duration).transpose()
+}
+
+#[pyclass(name = "FramePhase", module = "autd3_link_echocat", from_py_object)]
+#[derive(Clone, Copy)]
+pub struct FramePhase(CoreFramePhase);
+
+#[pymethods]
+impl FramePhase {
+    #[classattr]
+    #[pyo3(name = "Auto")]
+    fn auto() -> Self {
+        Self(CoreFramePhase::Auto)
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "At")]
+    fn at(phase: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Self(CoreFramePhase::At(duration(phase)?)))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("FramePhase.{:?}", self.0)
     }
 }
 
@@ -181,6 +203,7 @@ impl EchocatLinkOption {
     #[pyo3(signature = (
         iface = None,
         sync0_period = None,
+        frame_phase = None,
         pdu_timeout = None,
         state_transition_timeout = None,
         dc_static_sync_iterations = None,
@@ -194,6 +217,7 @@ impl EchocatLinkOption {
     fn new(
         iface: Option<String>,
         sync0_period: Option<&Bound<'_, PyAny>>,
+        frame_phase: Option<FramePhase>,
         pdu_timeout: Option<&Bound<'_, PyAny>>,
         state_transition_timeout: Option<&Bound<'_, PyAny>>,
         dc_static_sync_iterations: Option<u32>,
@@ -209,6 +233,9 @@ impl EchocatLinkOption {
         };
         if let Some(v) = opt_duration(sync0_period)? {
             inner.sync0_period = v;
+        }
+        if let Some(v) = frame_phase {
+            inner.frame_phase = v.0;
         }
         if let Some(v) = opt_duration(pdu_timeout)? {
             inner.pdu_timeout = v;
@@ -262,5 +289,6 @@ impl EchocatLinkOption {
 #[pymodule]
 fn autd3_link_echocat(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<EchocatLinkOption>()?;
+    m.add_class::<FramePhase>()?;
     Ok(())
 }

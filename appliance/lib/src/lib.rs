@@ -168,6 +168,154 @@ pub struct WifiForget {
     pub force: bool,
 }
 
+pub const FRAME_PHASE_AUTO: u8 = 0;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TuneRequest {
+    pub periods_ns: Vec<u64>,
+    pub frame_phase_percents: Vec<u8>,
+    pub warmup_ns: u64,
+    pub dwell_ns: u64,
+    pub settle_ns: u64,
+    pub poll_ns: u64,
+}
+
+impl Default for TuneRequest {
+    fn default() -> Self {
+        Self {
+            periods_ns: vec![1_000_000, 2_000_000],
+            frame_phase_percents: vec![FRAME_PHASE_AUTO],
+            warmup_ns: 5_000_000_000,
+            dwell_ns: 30_000_000_000,
+            settle_ns: 20_000_000_000,
+            poll_ns: 100_000_000,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TuneStatus {
+    #[default]
+    Ok,
+    FailedOpen,
+    Aborted,
+    #[serde(other)]
+    Unknown,
+}
+
+impl TuneStatus {
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::FailedOpen => "failed-open",
+            Self::Aborted => "aborted",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TuneTarget {
+    pub period_ns: u64,
+    pub frame_phase_percent: u8,
+    pub frame_phase_ns: u64,
+}
+
+impl TuneTarget {
+    #[must_use]
+    pub fn is_auto(&self) -> bool {
+        self.frame_phase_percent == FRAME_PHASE_AUTO
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TuneCandidate {
+    pub target: TuneTarget,
+    pub status: TuneStatus,
+    pub note: Option<String>,
+    pub num_devices: usize,
+    pub samples: u64,
+    pub op_samples: u64,
+    pub drop_events: u64,
+    pub recoveries: u64,
+    pub stale_cycles: u64,
+    pub lost_cycles: u64,
+    pub phase_excursions: u64,
+    pub exchanges: u64,
+    pub exchange_mean_ns: u64,
+    pub exchange_worst_ns: u64,
+}
+
+impl TuneCandidate {
+    #[must_use]
+    pub fn op_ratio(&self) -> f64 {
+        if self.samples == 0 {
+            0.0
+        } else {
+            self.op_samples as f64 / self.samples as f64
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TuneReport {
+    pub running: bool,
+    pub cancelled: bool,
+    pub total: usize,
+    pub current: Option<TuneTarget>,
+    pub candidates: Vec<TuneCandidate>,
+    pub best: Option<usize>,
+    pub error: Option<String>,
+}
+
+impl TuneReport {
+    #[must_use]
+    pub fn best_candidate(&self) -> Option<&TuneCandidate> {
+        self.best.and_then(|index| self.candidates.get(index))
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TuneScore {
+    pub op_ratio: f64,
+    pub drop_events: u64,
+    pub tie_break_ns: u64,
+    pub period_ns: u64,
+}
+
+pub fn best_tune_score<T>(
+    candidates: &[T],
+    score: impl Fn(&T) -> Option<TuneScore>,
+) -> Option<usize> {
+    candidates
+        .iter()
+        .enumerate()
+        .filter_map(|(index, candidate)| score(candidate).map(|score| (index, score)))
+        .max_by(|(_, a), (_, b)| {
+            a.op_ratio
+                .total_cmp(&b.op_ratio)
+                .then(b.drop_events.cmp(&a.drop_events))
+                .then(b.tie_break_ns.cmp(&a.tie_break_ns))
+                .then(b.period_ns.cmp(&a.period_ns))
+        })
+        .map(|(index, _)| index)
+}
+
+#[must_use]
+pub fn best_tune_candidate(candidates: &[TuneCandidate]) -> Option<usize> {
+    best_tune_score(candidates, |c| {
+        (c.status == TuneStatus::Ok && c.samples > 0).then(|| TuneScore {
+            op_ratio: c.op_ratio(),
+            drop_events: c.drop_events,
+            tie_break_ns: c.exchange_worst_ns,
+            period_ns: c.target.period_ns,
+        })
+    })
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Accepted {
     pub message: String,
@@ -254,6 +402,49 @@ mod tests {
         }"#;
         let uplink: UplinkStatus = serde_json::from_str(json).unwrap();
         assert_eq!(uplink.kind, UplinkKind::Unknown);
+    }
+
+    #[test]
+    fn the_best_candidate_is_the_one_that_held_op_longest() {
+        let candidate = |period_ns: u64, samples: u64, op: u64| TuneCandidate {
+            target: TuneTarget {
+                period_ns,
+                ..TuneTarget::default()
+            },
+            samples,
+            op_samples: op,
+            ..TuneCandidate::default()
+        };
+        let candidates = vec![
+            candidate(1_000_000, 100, 54),
+            candidate(2_000_000, 100, 100),
+            candidate(3_000_000, 100, 100),
+        ];
+        assert_eq!(
+            best_tune_candidate(&candidates),
+            Some(1),
+            "a tie on OP retention goes to the shorter period, which costs less latency",
+        );
+    }
+
+    #[test]
+    fn a_candidate_that_never_opened_is_never_the_best() {
+        let candidates = vec![TuneCandidate {
+            status: TuneStatus::FailedOpen,
+            samples: 0,
+            ..TuneCandidate::default()
+        }];
+        assert_eq!(best_tune_candidate(&candidates), None);
+    }
+
+    #[test]
+    fn a_tune_status_this_client_does_not_know_does_not_fail_the_whole_report() {
+        let json = r#"{"target":{"period_ns":1,"frame_phase_percent":0,"frame_phase_ns":0},
+            "status":"melted","note":null,"num_devices":0,"samples":0,"op_samples":0,
+            "drop_events":0,"recoveries":0,"stale_cycles":0,"lost_cycles":0,
+            "phase_excursions":0,"exchanges":0,"exchange_mean_ns":0,"exchange_worst_ns":0}"#;
+        let candidate: TuneCandidate = serde_json::from_str(json).unwrap();
+        assert_eq!(candidate.status, TuneStatus::Unknown);
     }
 
     #[test]

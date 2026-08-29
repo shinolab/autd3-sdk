@@ -10,7 +10,9 @@ use autd3_ffi_abi::{
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_link_echocat::{EchocatLinkOption as CoreOption, SleepStrategy, StateChecker};
+use autd3_rs_link_echocat::{
+    EchocatLinkOption as CoreOption, FramePhase, SleepStrategy, StateChecker,
+};
 use tokio::sync::Mutex;
 
 struct EchocatBackend {
@@ -245,6 +247,43 @@ autd3_ffi_abi::option_handle_field!(
 autd3_ffi_abi::option_handle_lifecycle!(EchocatLinkOptionHandle, autd3_link_echocat_option_free);
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_echocat_option_set_frame_phase(
+    handle: *mut EchocatLinkOptionHandle,
+    has_frame_phase: bool,
+    phase_ns: u64,
+) -> i32 {
+    let Some(option) = (unsafe { handle_mut(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    option.0.frame_phase = if has_frame_phase {
+        FramePhase::At(Duration::from_nanos(phase_ns))
+    } else {
+        FramePhase::Auto
+    };
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_echocat_option_get_frame_phase(
+    handle: *const EchocatLinkOptionHandle,
+    out_has_frame_phase: *mut bool,
+    out_phase_ns: *mut u64,
+) -> i32 {
+    let Some(option) = (unsafe { handle_ref(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let phase = match option.0.frame_phase {
+        FramePhase::At(at) => Some(at),
+        _ => None,
+    };
+    let code = unsafe { write_out(out_has_frame_phase, phase.is_some()) };
+    if code != AUTD3_OK {
+        return code;
+    }
+    unsafe { write_out(out_phase_ns, to_ns(phase.unwrap_or_default())) }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_link_echocat_option_set_spin_margin(
     handle: *mut EchocatLinkOptionHandle,
     has_spin_margin: bool,
@@ -321,3 +360,68 @@ pub unsafe extern "C" fn autd3_link_echocat_open_legacy(
 }
 
 autd3_ffi_abi::export_abi_version!();
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frame_phase(handle: *const EchocatLinkOptionHandle) -> Option<Duration> {
+        let mut present = false;
+        let mut ns = 0u64;
+        assert_eq!(
+            unsafe {
+                autd3_link_echocat_option_get_frame_phase(handle, &raw mut present, &raw mut ns)
+            },
+            AUTD3_OK,
+        );
+        present.then(|| Duration::from_nanos(ns))
+    }
+
+    #[test]
+    fn the_landing_phase_survives_the_c_boundary_in_both_shapes() {
+        let handle = autd3_link_echocat_option_new();
+        assert_eq!(
+            frame_phase(handle),
+            None,
+            "the default has to reach C as `auto`"
+        );
+
+        assert_eq!(
+            unsafe { autd3_link_echocat_option_set_frame_phase(handle, true, 500_000) },
+            AUTD3_OK,
+        );
+        assert_eq!(frame_phase(handle), Some(Duration::from_micros(500)));
+
+        assert_eq!(
+            unsafe { autd3_link_echocat_option_set_frame_phase(handle, false, 500_000) },
+            AUTD3_OK,
+        );
+        assert_eq!(
+            frame_phase(handle),
+            None,
+            "clearing it has to go back to `auto`, not to a zero phase on the SYNC0 edge",
+        );
+
+        unsafe { autd3_link_echocat_option_free(handle) };
+    }
+
+    #[test]
+    fn a_null_handle_is_an_argument_error_not_a_crash() {
+        let mut present = false;
+        let mut ns = 0u64;
+        assert_eq!(
+            unsafe { autd3_link_echocat_option_set_frame_phase(std::ptr::null_mut(), true, 1) },
+            AUTD3_ERR_INVALID_ARGUMENT,
+        );
+        assert_eq!(
+            unsafe {
+                autd3_link_echocat_option_get_frame_phase(
+                    std::ptr::null(),
+                    &raw mut present,
+                    &raw mut ns,
+                )
+            },
+            AUTD3_ERR_INVALID_ARGUMENT,
+        );
+    }
+}

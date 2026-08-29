@@ -210,6 +210,52 @@ fn a_client_is_refused_while_the_bus_is_closed() {
 }
 
 #[test]
+fn a_held_bus_refuses_clients_until_it_is_released() {
+    let bus = shared_bus(1);
+    let mut server = BusServer::new(
+        BusServerOption::new(SocketAddr::from((Ipv4Addr::LOCALHOST, 0))),
+        Arc::clone(&bus),
+    )
+    .unwrap();
+    let addr = server.local_addr().unwrap();
+    let handle = std::thread::spawn(move || {
+        let _ = server.serve_once();
+        server.serve_once()
+    });
+
+    bus.hold("a tune sweep is driving the bus");
+    let Err(err) = RemoteLink::open(addr, None, &geometry(1)) else {
+        panic!("a held bus must not accept a client");
+    };
+    let RemoteLinkError::SessionRejected { kind, .. } = err else {
+        panic!("expected a session rejection, got {err}");
+    };
+    assert_eq!(kind, RejectKind::BusUnavailable);
+    assert_eq!(bus.snapshot().actual, Actual::Closed);
+
+    bus.release();
+    let link = RemoteLink::open(addr, None, &geometry(1)).unwrap();
+    drop(link);
+    let _ = handle.join().unwrap();
+}
+
+#[test]
+fn waiting_on_the_actual_state_sees_the_open_and_honours_a_give_up() {
+    let bus = shared_bus(1);
+    bus.set_desired(Desired::Open);
+    assert!(bus.wait_actual(
+        Duration::from_secs(20),
+        |actual| matches!(actual, Actual::Open),
+        || false,
+    ));
+    assert!(!bus.wait_actual(
+        Duration::from_secs(20),
+        |actual| matches!(actual, Actual::Failed { .. }),
+        || true,
+    ));
+}
+
+#[test]
 fn auto_open_brings_the_bus_up_for_the_first_client() {
     let bus = shared_bus(1);
     let mut server = BusServer::new(

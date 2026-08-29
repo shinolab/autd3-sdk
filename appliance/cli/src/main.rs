@@ -5,8 +5,8 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use autd3_rs_appliance::{
     Appliance, ApplianceClient, ApplianceStatus, ConfigDocument, DEFAULT_CONTROL_PORT,
-    DiscoveryOption, LogLines, UNKNOWN_STATE_HINT, UplinkStatus, WifiCredentials, WifiForget,
-    discover_all,
+    DiscoveryOption, FRAME_PHASE_AUTO, LogLines, TuneCandidate, TuneReport, TuneRequest,
+    UNKNOWN_STATE_HINT, UplinkStatus, WifiCredentials, WifiForget, discover_all,
 };
 use clap::{Parser, Subcommand};
 
@@ -47,6 +47,11 @@ enum Command {
     Close,
     /// Count the devices on the bus
     Probe,
+    /// Sweep SYNC0 periods and frame phases, and report which held OP
+    Tune {
+        #[command(subcommand)]
+        action: TuneAction,
+    },
     /// Read or replace the configuration
     Config {
         #[command(subcommand)]
@@ -76,6 +81,83 @@ enum Command {
         #[command(subcommand)]
         action: WifiAction,
     },
+}
+
+#[derive(Subcommand)]
+enum TuneAction {
+    /// Run a sweep and report the result
+    Run(TuneRunArgs),
+    /// Show the running or last sweep
+    Status,
+    /// Stop the running sweep
+    Cancel,
+}
+
+#[derive(clap::Args)]
+struct TuneRunArgs {
+    /// SYNC0 period to try; repeat the flag for a sweep
+    #[arg(long = "period", value_parser = humantime::parse_duration, default_values = tune_default_periods())]
+    periods: Vec<Duration>,
+    /// Frame landing phase as a percent of the period, or `auto`; repeat the flag for a sweep
+    #[arg(long = "frame-phase", value_parser = parse_frame_phase, default_values = tune_default_frame_phases())]
+    frame_phases: Vec<u8>,
+    /// Time to let each candidate settle before it is measured
+    #[arg(long, value_parser = humantime::parse_duration, default_value = tune_default_ns(|r| r.warmup_ns))]
+    warmup: Duration,
+    /// Time each candidate is measured for
+    #[arg(long, value_parser = humantime::parse_duration, default_value = tune_default_ns(|r| r.dwell_ns))]
+    dwell: Duration,
+    /// How long the bus is given to open or close between candidates
+    #[arg(long, value_parser = humantime::parse_duration, default_value = tune_default_ns(|r| r.settle_ns))]
+    settle: Duration,
+    /// How often the bus state is sampled
+    #[arg(long, value_parser = humantime::parse_duration, default_value = tune_default_ns(|r| r.poll_ns))]
+    poll: Duration,
+    /// Start the sweep and return instead of waiting for it
+    #[arg(long)]
+    detach: bool,
+}
+
+fn tune_default_ns(pick: fn(&TuneRequest) -> u64) -> String {
+    fmt_ns(pick(&TuneRequest::default()))
+}
+
+fn tune_default_periods() -> Vec<String> {
+    TuneRequest::default()
+        .periods_ns
+        .iter()
+        .map(|&ns| fmt_ns(ns))
+        .collect()
+}
+
+fn tune_default_frame_phases() -> Vec<String> {
+    TuneRequest::default()
+        .frame_phase_percents
+        .iter()
+        .map(|&percent| {
+            if percent == FRAME_PHASE_AUTO {
+                "auto".to_owned()
+            } else {
+                format!("{percent}%")
+            }
+        })
+        .collect()
+}
+
+fn parse_frame_phase(text: &str) -> Result<u8, String> {
+    if text.eq_ignore_ascii_case("auto") {
+        return Ok(FRAME_PHASE_AUTO);
+    }
+    let percent: u8 = text
+        .trim_end_matches('%')
+        .parse()
+        .map_err(|_| format!("`{text}` is neither a percent nor `auto`"))?;
+    if !(1..=99).contains(&percent) {
+        return Err(format!(
+            "a frame phase of {percent}% lands on the SYNC0 edge; use 1..=99, or `auto`",
+        ));
+    }
+    Ok(percent)
 }
 
 #[derive(Subcommand)]
@@ -167,6 +249,13 @@ fn main() -> Result<()> {
             }
             emit(&cli, &client.update(&bytes)?, |a| println!("{}", a.message))?;
         }
+        Command::Tune { action } => match action {
+            TuneAction::Run(args) => tune(&cli, &client, args)?,
+            TuneAction::Status => emit(&cli, &client.tune_report()?, print_tune_report)?,
+            TuneAction::Cancel => emit(&cli, &client.tune_cancel()?, |a| {
+                println!("{}", a.message);
+            })?,
+        },
         Command::Wifi { action } => match action {
             WifiAction::Set {
                 ssid,
@@ -202,6 +291,136 @@ fn main() -> Result<()> {
         },
     }
     Ok(())
+}
+
+const TUNE_POLL: Duration = Duration::from_secs(2);
+
+fn tune(cli: &Cli, client: &ApplianceClient, args: &TuneRunArgs) -> Result<()> {
+    let request = TuneRequest {
+        periods_ns: args.periods.iter().map(as_ns).collect(),
+        frame_phase_percents: args.frame_phases.clone(),
+        warmup_ns: as_ns(&args.warmup),
+        dwell_ns: as_ns(&args.dwell),
+        settle_ns: as_ns(&args.settle),
+        poll_ns: as_ns(&args.poll),
+    };
+    let started = client.tune_start(&request)?;
+    if args.detach {
+        return emit(cli, &started, |a| println!("{}", a.message));
+    }
+    if !cli.json {
+        let per = args.warmup + args.dwell + args.settle;
+        println!(
+            "{}; about {} at worst",
+            started.message,
+            humantime::format_duration(
+                per * u32::try_from(request.periods_ns.len() * request.frame_phase_percents.len())
+                    .unwrap_or(u32::MAX)
+            ),
+        );
+    }
+
+    let mut reported = 0usize;
+    loop {
+        std::thread::sleep(TUNE_POLL);
+        let report = client.tune_report()?;
+        if !cli.json {
+            for candidate in report.candidates.iter().skip(reported) {
+                println!("{}", tune_row(candidate));
+            }
+            reported = report.candidates.len();
+        }
+        if !report.running {
+            return emit(cli, &report, print_tune_summary);
+        }
+    }
+}
+
+fn as_ns(duration: &Duration) -> u64 {
+    u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX)
+}
+
+fn fmt_ns(ns: u64) -> String {
+    humantime::format_duration(Duration::from_nanos(ns)).to_string()
+}
+
+fn fmt_frame_phase(candidate: &TuneCandidate) -> String {
+    if candidate.target.is_auto() {
+        "auto".to_owned()
+    } else {
+        format!(
+            "{}% ({})",
+            candidate.target.frame_phase_percent,
+            fmt_ns(candidate.target.frame_phase_ns),
+        )
+    }
+}
+
+fn tune_row(candidate: &TuneCandidate) -> String {
+    format!(
+        "{:>8}  {:>14}  {:>6.1}%  drops {:>3}  recov {:>3}  stale {:>4}  lost {:>4}  \
+         phase-exc {:>5}  exchange {:>9}/{:<9}  {}{}",
+        fmt_ns(candidate.target.period_ns),
+        fmt_frame_phase(candidate),
+        candidate.op_ratio() * 100.0,
+        candidate.drop_events,
+        candidate.recoveries,
+        candidate.stale_cycles,
+        candidate.lost_cycles,
+        candidate.phase_excursions,
+        fmt_ns(candidate.exchange_mean_ns),
+        fmt_ns(candidate.exchange_worst_ns),
+        candidate.status.label(),
+        candidate
+            .note
+            .as_ref()
+            .map_or_else(String::new, |note| format!(" ({note})")),
+    )
+}
+
+fn print_tune_report(report: &TuneReport) {
+    for candidate in &report.candidates {
+        println!("{}", tune_row(candidate));
+    }
+    print_tune_summary(report);
+}
+
+fn print_tune_summary(report: &TuneReport) {
+    if let Some(error) = &report.error {
+        println!("the sweep stopped: {error}");
+    }
+    if report.candidates.is_empty() {
+        if report.running {
+            println!("the sweep is running; no candidate has finished yet");
+        } else if report.error.is_none() {
+            println!("no sweep has run on this appliance");
+        }
+        return;
+    }
+    if report.cancelled {
+        println!("the sweep was cancelled; the remaining candidates were not measured");
+    }
+    let Some(best) = report.best_candidate() else {
+        println!("no candidate held the bus long enough to recommend");
+        return;
+    };
+    println!(
+        "\nbest: {} at {}, {:.1}% in OP over {} sample(s)",
+        fmt_ns(best.target.period_ns),
+        fmt_frame_phase(best),
+        best.op_ratio() * 100.0,
+        best.samples,
+    );
+    println!("\n[bus]");
+    println!("sync0_period = \"{}\"", fmt_ns(best.target.period_ns));
+    println!(
+        "frame_phase = \"{}\"",
+        if best.target.is_auto() {
+            "auto".to_owned()
+        } else {
+            fmt_ns(best.target.frame_phase_ns)
+        },
+    );
 }
 
 fn emit<T: serde::Serialize>(cli: &Cli, value: &T, plain: impl FnOnce(&T)) -> Result<()> {
