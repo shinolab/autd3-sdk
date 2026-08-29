@@ -573,4 +573,14 @@ mod tests {
         .unwrap_err();
         assert!(err.to_string().contains("iface"), "{err}");
     }
+
+    #[test]
+    fn the_shipped_config_is_still_a_valid_one() {
+        let mut config: Config =
+            toml::from_str(include_str!("../dist/remote-server.toml")).unwrap();
+        config.rt.affinity = default_affinity();
+        config.validate().unwrap();
+        assert_eq!(config.link_option().frame_phase, FramePhase::Auto);
+        assert_eq!(config.bus.interface.as_deref(), Some("eth0"));
+    }
 }
