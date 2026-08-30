@@ -4,6 +4,7 @@ use crate::emu_fpga::FpgaEmulator;
 use crate::fw;
 use autd3_cpu_fw::Cpu;
 use autd3_cpu_fw::proto::Mode;
+use autd3_cpu_fw::proto::Telemetry;
 
 const WIRE_GAP_START: usize = fw::WIRE_RX_GAP_START;
 const WIRE_RX_FRAME_BYTES: usize = fw::WIRE_RX_FRAME_BYTES;
@@ -53,6 +54,11 @@ impl Device {
     #[must_use]
     pub fn mode(&self) -> Mode {
         self.cpu.mode()
+    }
+
+    #[must_use]
+    pub fn telemetry(&self, id: Telemetry) -> u8 {
+        self.cpu.telemetry(id)
     }
 
     #[must_use]

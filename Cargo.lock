@@ -145,6 +145,7 @@ name = "autd3-remote-server"
 version = "0.6.1"
 dependencies = [
  "anyhow",
+ "autd3-cpu-wire",
  "autd3-rs-appliance",
  "autd3-rs-core",
  "autd3-rs-link-echocat",

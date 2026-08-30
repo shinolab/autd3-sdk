@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use autd3_rs_appliance::{
     Appliance, ApplianceClient, ApplianceStatus, ConfigDocument, DEFAULT_CONTROL_PORT,
     DiscoveryOption, FRAME_PHASE_AUTO, LogLines, TuneCandidate, TuneReport, TuneRequest,
-    UNKNOWN_STATE_HINT, UplinkStatus, WifiCredentials, WifiForget, discover_all,
+    TuneStatus, UNKNOWN_STATE_HINT, UplinkStatus, WifiCredentials, WifiForget, discover_all,
 };
 use clap::{Parser, Subcommand};
 
@@ -356,10 +356,20 @@ fn fmt_frame_phase(candidate: &TuneCandidate) -> String {
     }
 }
 
+fn fmt_frames(candidate: &TuneCandidate) -> String {
+    if !candidate.telemetry_read {
+        return String::new();
+    }
+    format!(
+        "delivered {:>6}  skipped {:>4}  ",
+        candidate.frames_delivered, candidate.frames_skipped,
+    )
+}
+
 fn tune_row(candidate: &TuneCandidate) -> String {
     format!(
         "{:>8}  {:>14}  {:>6.1}%  drops {:>3}  recov {:>3}  stale {:>4}  lost {:>4}  \
-         phase-exc {:>5}  exchange {:>9}/{:<9}  {}{}",
+         phase-exc {:>5}  exchange {:>9}/{:<9}  {}{}{}",
         fmt_ns(candidate.target.period_ns),
         fmt_frame_phase(candidate),
         candidate.op_ratio() * 100.0,
@@ -370,6 +380,7 @@ fn tune_row(candidate: &TuneCandidate) -> String {
         candidate.phase_excursions,
         fmt_ns(candidate.exchange_mean_ns),
         fmt_ns(candidate.exchange_worst_ns),
+        fmt_frames(candidate),
         candidate.status.label(),
         candidate
             .note
@@ -401,15 +412,28 @@ fn print_tune_summary(report: &TuneReport) {
         println!("the sweep was cancelled; the remaining candidates were not measured");
     }
     let Some(best) = report.best_candidate() else {
-        println!("no candidate held the bus long enough to recommend");
+        if report
+            .candidates
+            .iter()
+            .all(|c| c.status == TuneStatus::Infeasible)
+        {
+            println!(
+                "every period was too short to carry one exchange; sweep longer periods, or \
+                 drive fewer devices from this appliance",
+            );
+        } else {
+            println!("no candidate held the bus long enough to recommend");
+        }
         return;
     };
     println!(
-        "\nbest: {} at {}, {:.1}% in OP over {} sample(s)",
+        "\nbest: {} at {}, {:.1}% in OP over {} sample(s), {:.2}% of exchanges off their \
+         landing phase",
         fmt_ns(best.target.period_ns),
         fmt_frame_phase(best),
         best.op_ratio() * 100.0,
         best.samples,
+        best.per_exchange(best.phase_excursions) * 100.0,
     );
     println!("\n[bus]");
     println!("sync0_period = \"{}\"", fmt_ns(best.target.period_ns));

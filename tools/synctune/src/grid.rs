@@ -71,6 +71,8 @@ pub fn select_best(results: &[CandidateResult]) -> Option<usize> {
                 drop_events: r.drop_events,
                 tie_break_ns: ns(r.shift),
                 period_ns: ns(r.period),
+                is_auto: r.shift_percent == autd3_rs_appliance::FRAME_PHASE_AUTO,
+                ..autd3_rs_appliance::TuneScore::default()
             }
         })
     })
