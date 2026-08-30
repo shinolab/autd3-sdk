@@ -1,13 +1,27 @@
 use std::time::{Duration, Instant};
 
 use super::state::BusState;
-use super::{CycleReport, Master, MasterConfig, next_cycle_wait};
+use super::{CycleReport, Master, MasterConfig, PHASE_TOLERANCE_DIVISOR, next_cycle_wait};
 use crate::bus::RawBus;
 use crate::error::EchocatError;
 use crate::reg::{self, AlState};
 use crate::wire::{Address, Command};
 
 const OP_PRIMING_CYCLES: usize = 8;
+
+#[must_use]
+pub fn phase_deviation_ns(phase_ns: u64, target_ns: u64, cycle_ns: u64) -> u64 {
+    if cycle_ns == 0 {
+        return 0;
+    }
+    let forward = (phase_ns + cycle_ns - target_ns % cycle_ns) % cycle_ns;
+    forward.min(cycle_ns - forward)
+}
+
+#[must_use]
+pub fn phase_tolerance_ns(cycle_ns: u64) -> u64 {
+    cycle_ns / PHASE_TOLERANCE_DIVISOR
+}
 const PHASE_WARN_INTERVAL: Duration = Duration::from_secs(5);
 
 impl<B: RawBus> Master<B> {
@@ -156,9 +170,8 @@ impl<B: RawBus> Master<B> {
         let target = self.landing_target_ns();
         tracing::trace!(phase_ns = phase, target_ns = target, "frame landing phase");
 
-        let forward = (phase + cycle_ns - target) % cycle_ns;
-        let deviation = forward.min(cycle_ns - forward);
-        if deviation <= target / 2 {
+        let deviation = phase_deviation_ns(phase, target, cycle_ns);
+        if deviation <= phase_tolerance_ns(cycle_ns) {
             return;
         }
         self.phase_excursions += 1;
@@ -245,5 +258,53 @@ impl<B: RawBus> Master<B> {
     #[must_use]
     pub fn exchange_estimate(&self) -> Duration {
         Duration::from_nanos(self.exchange_estimate_ns)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CYCLE: u64 = 1_000_000;
+
+    #[test]
+    fn the_deviation_is_the_shorter_way_round_the_period() {
+        assert_eq!(phase_deviation_ns(500_000, 500_000, CYCLE), 0);
+        assert_eq!(phase_deviation_ns(600_000, 500_000, CYCLE), 100_000);
+        assert_eq!(phase_deviation_ns(400_000, 500_000, CYCLE), 100_000);
+        assert_eq!(
+            phase_deviation_ns(10_000, 990_000, CYCLE),
+            20_000,
+            "a deviation across the SYNC0 edge is the short way round, not 980 us",
+        );
+        assert_eq!(
+            phase_deviation_ns(0, 500_000, CYCLE),
+            500_000,
+            "the far side"
+        );
+    }
+
+    #[test]
+    fn the_tolerance_does_not_depend_on_the_requested_landing_phase() {
+        let tolerance = phase_tolerance_ns(CYCLE);
+        assert_eq!(tolerance, CYCLE / 16);
+        for target in [10_000u64, 250_000, 500_000, 750_000, 990_000] {
+            let just_outside =
+                phase_deviation_ns((target + tolerance + 1_000) % CYCLE, target, CYCLE);
+            assert!(
+                just_outside > tolerance,
+                "a {}, us miss went unreported at a {} us target",
+                just_outside / 1_000,
+                target / 1_000,
+            );
+        }
+    }
+
+    #[test]
+    fn the_tolerance_scales_with_the_period() {
+        assert_eq!(
+            phase_tolerance_ns(2_000_000),
+            2 * phase_tolerance_ns(1_000_000)
+        );
     }
 }

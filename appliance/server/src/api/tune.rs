@@ -2,17 +2,23 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use autd3_cpu_wire::{Cmd, Telemetry};
 use autd3_rs_appliance::{
     FRAME_PHASE_AUTO, TuneCandidate, TuneReport, TuneRequest, TuneStatus, TuneTarget,
     best_tune_candidate,
 };
 use autd3_rs_core::DeviceState;
+use autd3_rs_core::protocol::{RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs_link_echocat::master::budget::{WireTiming, exchange_budget};
 use autd3_rs_link_echocat::{EchocatLinkOption, FramePhase};
-use autd3_rs_link_remote::{Actual, Desired, Sessions, SharedBus};
+use autd3_rs_link_remote::{Actual, Desired, RemoteLinkError, Sessions, SharedBus};
 
 const POLL_STEP: Duration = Duration::from_millis(50);
 const MAX_CANDIDATES: usize = 256;
 const MAX_SWEEP: Duration = Duration::from_hours(6);
+const MTU_BYTES: usize = 1500;
+const TELEMETRY_TIMEOUT: Duration = Duration::from_millis(200);
+const RESET_RESEND_CYCLES: usize = 4;
 
 pub struct LinkSettings {
     base: EchocatLinkOption,
@@ -174,6 +180,7 @@ pub struct Sweep {
     pub bus: Arc<SharedBus>,
     pub sessions: Arc<Sessions>,
     pub settings: Arc<LinkSettings>,
+    pub timing: WireTiming,
 }
 
 pub fn spawn(sweep: Sweep, request: TuneRequest, targets: Vec<TuneTarget>) -> Result<(), String> {
@@ -271,6 +278,212 @@ fn option_for(base: &EchocatLinkOption, target: TuneTarget) -> EchocatLinkOption
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Counters {
+    processed: u64,
+    seq_mismatch: u64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DeviceTelemetry {
+    processed: u8,
+    seq_mismatch: u8,
+}
+
+struct Driver {
+    seq: u8,
+    tx: Vec<[u8; TX_FRAME_BYTES]>,
+    rx: Vec<[u8; RX_FRAME_BYTES]>,
+}
+
+impl Driver {
+    fn new(devices: usize) -> Self {
+        Self {
+            seq: 0,
+            tx: vec![[0u8; TX_FRAME_BYTES]; devices],
+            rx: vec![[0u8; RX_FRAME_BYTES]; devices],
+        }
+    }
+
+    fn write(&mut self, cmd: Cmd, payload: impl Fn(&mut [u8])) -> Seq {
+        self.seq = self.seq.wrapping_add(1);
+        let seq = Seq::new(self.seq);
+        let mut frame = TxFrame::new(seq, cmd);
+        payload(&mut frame.payload);
+        for slot in &mut self.tx {
+            frame.write_to(slot);
+        }
+        seq
+    }
+
+    fn handshake(&mut self, sweep: &Sweep) -> bool {
+        let frame = TxFrame::new(Seq::ZERO, Cmd::Reset);
+        for slot in &mut self.tx {
+            frame.write_to(slot);
+        }
+        for _ in 0..RESET_RESEND_CYCLES {
+            if let Err(e) = sweep.bus.exchange_while_held(&self.tx, &mut self.rx) {
+                tracing::warn!(error = %e, "could not reset the devices for the sweep");
+                return false;
+            }
+        }
+        self.seq = u8::MAX;
+        true
+    }
+
+    fn drive(&mut self, sweep: &Sweep) -> Result<(), RemoteLinkError> {
+        self.write(Cmd::Nop, |_| {});
+        sweep
+            .bus
+            .exchange_while_held(&self.tx, &mut self.rx)
+            .map(|_| ())
+    }
+
+    fn acknowledged(&self, seq: Seq) -> bool {
+        self.rx.iter().all(|slot| RxFrame::parse(slot).ack == seq)
+    }
+
+    fn read_counter(&mut self, sweep: &Sweep, counter: Telemetry) -> Option<Vec<u8>> {
+        let seq = self.write(Cmd::ReadTelemetry, |payload| {
+            payload[0] = counter.as_u8();
+        });
+        let deadline = Instant::now() + TELEMETRY_TIMEOUT;
+        loop {
+            if let Err(e) = sweep.bus.exchange_while_held(&self.tx, &mut self.rx) {
+                tracing::warn!(error = %e, ?counter, "could not drive a telemetry read");
+                return None;
+            }
+            if self.acknowledged(seq) {
+                return Some(
+                    self.rx
+                        .iter()
+                        .map(|slot| RxFrame::parse(slot).data)
+                        .collect(),
+                );
+            }
+            if Instant::now() >= deadline {
+                tracing::warn!(
+                    ?counter,
+                    timeout = ?TELEMETRY_TIMEOUT,
+                    "no device acknowledged the telemetry read",
+                );
+                return None;
+            }
+        }
+    }
+
+    fn read_telemetry(&mut self, sweep: &Sweep) -> Option<Vec<DeviceTelemetry>> {
+        let processed = self.read_counter(sweep, Telemetry::Processed)?;
+        let seq_mismatch = self.read_counter(sweep, Telemetry::SeqMismatch)?;
+        Some(
+            processed
+                .into_iter()
+                .zip(seq_mismatch)
+                .map(|(processed, seq_mismatch)| DeviceTelemetry {
+                    processed,
+                    seq_mismatch,
+                })
+                .collect(),
+        )
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct Observed {
+    samples: u64,
+    op_samples: u64,
+    drop_events: u64,
+    counters: Counters,
+    telemetry_read: bool,
+    error: Option<String>,
+}
+
+fn observe(sweep: &Sweep, request: &TuneRequest, driver: &mut Driver) -> Observed {
+    let poll = Duration::from_nanos(request.poll_ns);
+    let dwell = Duration::from_nanos(request.dwell_ns);
+    let started = Instant::now();
+    let mut next_sample = started;
+    let mut seen = Observed::default();
+    let mut previously_op = true;
+    let mut last = driver.read_telemetry(sweep);
+    seen.telemetry_read = last.is_some();
+    let mut totals = vec![Counters::default(); last.as_ref().map_or(0, Vec::len)];
+
+    while started.elapsed() < dwell {
+        if sweep.job.cancelled() {
+            break;
+        }
+        if let Err(e) = driver.drive(sweep) {
+            tracing::warn!(error = %e, "the bus failed under the sweep's frames");
+            seen.error = Some(format!("the bus failed during the dwell: {e}"));
+            break;
+        }
+        if Instant::now() < next_sample {
+            continue;
+        }
+        next_sample += poll;
+        if let Some(before) = last.take() {
+            match driver.read_telemetry(sweep) {
+                Some(after) => {
+                    for ((total, before), after) in totals.iter_mut().zip(&before).zip(&after) {
+                        total.processed +=
+                            u64::from(after.processed.wrapping_sub(before.processed));
+                        total.seq_mismatch +=
+                            u64::from(after.seq_mismatch.wrapping_sub(before.seq_mismatch));
+                    }
+                    last = Some(after);
+                }
+                None => seen.telemetry_read = false,
+            }
+        }
+        let snapshot = sweep.bus.sampled();
+        let all_op = matches!(snapshot.actual, Actual::Open)
+            && !snapshot.devices.is_empty()
+            && snapshot
+                .devices
+                .iter()
+                .all(|state| *state == DeviceState::Op);
+        seen.samples += 1;
+        if all_op {
+            seen.op_samples += 1;
+        } else if previously_op {
+            seen.drop_events += 1;
+        }
+        previously_op = all_op;
+    }
+    seen.counters = Counters {
+        processed: totals.iter().map(|t| t.processed).min().unwrap_or(0),
+        seq_mismatch: totals.iter().map(|t| t.seq_mismatch).max().unwrap_or(0),
+    };
+    seen
+}
+
+fn infeasible_note(devices: usize, budget: Duration, target: TuneTarget) -> Option<String> {
+    let period = Duration::from_nanos(target.period_ns);
+    let us = |d: Duration| d.as_micros();
+    if budget >= period {
+        return Some(format!(
+            "{devices} devices need about {} us on the wire, which does not fit in a {} us \
+             period; one exchange cannot finish before the next SYNC0",
+            us(budget),
+            us(period),
+        ));
+    }
+    if target.is_auto() {
+        return None;
+    }
+    let landing = Duration::from_nanos(target.frame_phase_ns);
+    (landing + budget > period).then(|| {
+        format!(
+            "a landing at {} us leaves {} us before the next SYNC0, but {devices} devices need \
+             about {} us on the wire; the exchange would run past the edge",
+            us(landing),
+            us(period.saturating_sub(landing)),
+            us(budget),
+        )
+    })
+}
+
 fn measure(sweep: &Sweep, request: &TuneRequest, target: TuneTarget) -> TuneCandidate {
     let candidate = TuneCandidate {
         target,
@@ -302,6 +515,17 @@ fn measure(sweep: &Sweep, request: &TuneRequest, target: TuneTarget) -> TuneCand
         };
     }
 
+    let devices = sweep.bus.snapshot().num_devices;
+    let budget = exchange_budget(devices, MTU_BYTES, sweep.timing);
+    if let Some(note) = infeasible_note(devices, budget, target) {
+        return TuneCandidate {
+            status: TuneStatus::Infeasible,
+            note: Some(note),
+            num_devices: devices,
+            ..candidate
+        };
+    }
+
     if !sleep_interruptibly(sweep, Duration::from_nanos(request.warmup_ns)) {
         return TuneCandidate {
             status: TuneStatus::Aborted,
@@ -310,34 +534,25 @@ fn measure(sweep: &Sweep, request: &TuneRequest, target: TuneTarget) -> TuneCand
         };
     }
 
-    let base = sweep.bus.sampled();
-    let poll = Duration::from_nanos(request.poll_ns);
-    let dwell = Duration::from_nanos(request.dwell_ns);
-    let started = Instant::now();
-    let mut samples = 0u64;
-    let mut op_samples = 0u64;
-    let mut drop_events = 0u64;
-    let mut previously_op = true;
+    let mut driver = Driver::new(devices);
+    if !driver.handshake(sweep) {
+        return TuneCandidate {
+            status: TuneStatus::Aborted,
+            note: Some("the devices never accepted the sweep's reset".to_owned()),
+            num_devices: devices,
+            ..candidate
+        };
+    }
 
-    while started.elapsed() < dwell {
-        if sweep.job.cancelled() {
-            break;
-        }
-        let snapshot = sweep.bus.sampled();
-        let all_op = matches!(snapshot.actual, Actual::Open)
-            && !snapshot.devices.is_empty()
-            && snapshot
-                .devices
-                .iter()
-                .all(|state| *state == DeviceState::Op);
-        samples += 1;
-        if all_op {
-            op_samples += 1;
-        } else if previously_op {
-            drop_events += 1;
-        }
-        previously_op = all_op;
-        std::thread::sleep(poll);
+    let base = sweep.bus.sampled();
+    let observed = observe(sweep, request, &mut driver);
+    if let Some(note) = observed.error {
+        return TuneCandidate {
+            status: TuneStatus::Aborted,
+            note: Some(note),
+            num_devices: devices,
+            ..candidate
+        };
     }
 
     let end = sweep.bus.sampled();
@@ -350,9 +565,9 @@ fn measure(sweep: &Sweep, request: &TuneRequest, target: TuneTarget) -> TuneCand
         },
         note: cancelled.then(|| "cancelled during the dwell".to_owned()),
         num_devices: end.num_devices,
-        samples,
-        op_samples,
-        drop_events,
+        samples: observed.samples,
+        op_samples: observed.op_samples,
+        drop_events: observed.drop_events,
         recoveries: end.recoveries.saturating_sub(base.recoveries),
         stale_cycles: end.stale_cycles.saturating_sub(base.stale_cycles),
         lost_cycles: end.lost_cycles.saturating_sub(base.lost_cycles),
@@ -360,6 +575,9 @@ fn measure(sweep: &Sweep, request: &TuneRequest, target: TuneTarget) -> TuneCand
         exchanges: end.exchanges,
         exchange_mean_ns: end.exchange_mean_ns,
         exchange_worst_ns: end.exchange_worst_ns,
+        frames_delivered: observed.counters.processed,
+        frames_skipped: observed.counters.seq_mismatch,
+        telemetry_read: observed.telemetry_read,
         ..candidate
     }
 }
@@ -483,6 +701,110 @@ mod tests {
             ..TuneRequest::default()
         });
         assert_eq!(targets[0].frame_phase_ns, u64::MAX / 100);
+    }
+
+    fn budget_20() -> Duration {
+        exchange_budget(20, MTU_BYTES, WireTiming::default())
+    }
+
+    fn target(micros: u64, percent: u8) -> TuneTarget {
+        let period_ns = micros * 1_000;
+        TuneTarget {
+            period_ns,
+            frame_phase_percent: percent,
+            frame_phase_ns: period_ns * u64::from(percent) / 100,
+        }
+    }
+
+    #[test]
+    fn a_period_that_cannot_carry_one_exchange_is_refused_at_every_phase() {
+        for percent in [FRAME_PHASE_AUTO, 1, 25, 50, 75, 99] {
+            let note = infeasible_note(20, budget_20(), target(1_000, percent))
+                .unwrap_or_else(|| panic!("1 ms / 20 devices was accepted at {percent}%"));
+            assert!(note.contains("does not fit"), "{note}");
+        }
+    }
+
+    #[test]
+    fn a_landing_that_runs_the_exchange_past_the_sync0_edge_is_refused() {
+        for percent in [FRAME_PHASE_AUTO, 1, 25] {
+            assert!(
+                infeasible_note(20, budget_20(), target(2_000, percent)).is_none(),
+                "2 ms at {percent}% leaves room for the exchange",
+            );
+        }
+        for percent in [50, 75, 99] {
+            let note = infeasible_note(20, budget_20(), target(2_000, percent))
+                .unwrap_or_else(|| panic!("2 ms at {percent}% was accepted"));
+            assert!(note.contains("past the edge"), "{note}");
+        }
+    }
+
+    #[test]
+    fn the_measured_sweep_no_longer_recommends_the_worst_candidate() {
+        let rows: [(u64, u8, u64, u64, u64, u64); 12] = [
+            (1_000, FRAME_PHASE_AUTO, 15, 25_069, 27_200, 1_133_484),
+            (1_000, 1, 13, 26_446, 27_200, 1_126_969),
+            (1_000, 25, 12, 20_952, 27_200, 1_146_119),
+            (1_000, 50, 9, 13_221, 27_200, 1_142_083),
+            (1_000, 75, 4, 11, 27_200, 1_145_212),
+            (1_000, 99, 3, 0, 27_200, 1_149_268),
+            (2_000, FRAME_PHASE_AUTO, 1, 5, 15_000, 2_122_814),
+            (2_000, 1, 0, 108, 15_000, 1_140_273),
+            (2_000, 25, 0, 0, 15_000, 1_138_942),
+            (2_000, 50, 1, 0, 15_000, 2_114_296),
+            (2_000, 75, 0, 0, 15_000, 1_139_649),
+            (2_000, 99, 0, 0, 15_000, 1_132_447),
+        ];
+        let candidates: Vec<TuneCandidate> = rows
+            .iter()
+            .map(
+                |&(period_us, percent, stale, excursions, exchanges, worst)| {
+                    let target = target(period_us, percent);
+                    let status = if infeasible_note(20, budget_20(), target).is_some() {
+                        TuneStatus::Infeasible
+                    } else {
+                        TuneStatus::Ok
+                    };
+                    TuneCandidate {
+                        target,
+                        status,
+                        num_devices: 20,
+                        samples: if status == TuneStatus::Ok { 300 } else { 0 },
+                        op_samples: if status == TuneStatus::Ok { 300 } else { 0 },
+                        stale_cycles: stale,
+                        phase_excursions: excursions,
+                        exchanges,
+                        exchange_worst_ns: worst,
+                        exchange_mean_ns: 1_103_700,
+                        ..TuneCandidate::default()
+                    }
+                },
+            )
+            .collect();
+
+        let feasible: Vec<&TuneCandidate> = candidates
+            .iter()
+            .filter(|c| c.status == TuneStatus::Ok)
+            .collect();
+        assert_eq!(
+            feasible.len(),
+            3,
+            "only 2 ms at auto / 1% / 25% leaves room for a 1059 us exchange",
+        );
+
+        let best = best_tune_candidate(&candidates).expect("a feasible candidate remains");
+        assert_eq!(
+            candidates[best].target,
+            target(2_000, 25),
+            "the recommendation is the candidate that held its landing phase, not the one with \
+             the smallest worst exchange",
+        );
+        assert_ne!(
+            candidates[best].target,
+            target(1_000, 1),
+            "the old score picked the row with the most phase excursions in the whole table",
+        );
     }
 
     #[test]

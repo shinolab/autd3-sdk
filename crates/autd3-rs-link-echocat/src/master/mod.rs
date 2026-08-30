@@ -1,9 +1,11 @@
+pub mod budget;
 mod cyclic;
 pub mod dc;
 pub mod init;
 mod open;
 mod state;
 
+pub use budget::{WireTiming, exchange_budget, frame_wire_bytes};
 pub use cyclic::{CycleReport, LOSE_CONTACT_AFTER_CYCLES, next_cycle_wait};
 pub use state::{BusState, device_state};
 
@@ -23,6 +25,7 @@ pub const FIRST_STATION_ADDRESS: u16 = 0x1000;
 const PHASE_CORRECTION_DIVISOR: i64 = 4;
 const EXCHANGE_DECAY_DIVISOR: u64 = 16;
 const MIN_LANDING_TARGET_DIVISOR: u64 = 16;
+const PHASE_TOLERANCE_DIVISOR: u64 = 16;
 
 pub(crate) fn is_echo(received: &[u8], sent: &[u8]) -> bool {
     received == sent

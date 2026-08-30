@@ -157,10 +157,8 @@ The two keys you will mainly touch are the following.
 
 | Key | Meaning |
 | --- | --- |
-| `bus.sync0_period` | The EtherCAT bus period, 1ms by default. Lengthen it when there are many devices and the bus is unstable |
+| `bus.sync0_period` | The EtherCAT bus period, 1ms by default. Lengthen it when there are many devices |
 | `bus.open_on_start` | Whether to open the bus at power-on. `true` by default |
-
-`sync0_period` is best set to the smallest multiple of 500us that is longer than twice the exchange time.
 
 ## Tuning
 

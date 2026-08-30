@@ -107,34 +107,30 @@ impl<B: RawBus> Master<B> {
                 role: Role::Inputs,
             },
         ];
-        let mut used: usize = current
-            .iter()
-            .map(|d| DATAGRAM_OVERHEAD_BYTES + d.len)
-            .sum();
+        debug_assert_eq!(
+            current
+                .iter()
+                .map(|d| DATAGRAM_OVERHEAD_BYTES + d.len)
+                .sum::<usize>(),
+            super::budget::fixed_datagram_bytes(devices),
+        );
 
-        let total_outputs = devices * usize::from(OUTPUT_BYTES);
-        let mut offset = 0usize;
-        while offset < total_outputs {
-            let available = capacity
-                .saturating_sub(used)
-                .saturating_sub(DATAGRAM_OVERHEAD_BYTES);
-            if available == 0 {
+        let (chunks, _) = super::budget::split_outputs(devices, capacity + ECAT_HEADER_BYTES);
+        for chunk in chunks {
+            if chunk.breaks_frame {
                 frames.push(std::mem::take(&mut current));
-                used = 0;
-                continue;
             }
-            let len = available.min(total_outputs - offset);
             current.push(PlannedDatagram {
                 command: Command::Lwr,
                 address: Address::Logical(
-                    OUTPUT_LOGICAL_BASE + u32::try_from(offset).expect("offset fits in u32"),
+                    OUTPUT_LOGICAL_BASE + u32::try_from(chunk.offset).expect("offset fits in u32"),
                 ),
-                len,
-                expected_wkc: overlapping_devices(offset, len, devices),
-                role: Role::Outputs { offset },
+                len: chunk.len,
+                expected_wkc: overlapping_devices(chunk.offset, chunk.len, devices),
+                role: Role::Outputs {
+                    offset: chunk.offset,
+                },
             });
-            used += DATAGRAM_OVERHEAD_BYTES + len;
-            offset += len;
         }
         if !current.is_empty() {
             frames.push(current);

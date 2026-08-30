@@ -316,8 +316,14 @@
           us(c.target.period_ns) + " @ " + tuneLabel(c.target),
           c.status === "ok"
             ? (100 * (c.samples ? c.op_samples / c.samples : 0)).toFixed(1) + "% in OP · " +
-              c.drop_events + " drops · " + c.recoveries + " recoveries · exchange " +
-              us(c.exchange_mean_ns) + " / " + us(c.exchange_worst_ns)
+              c.drop_events + " drops · " + c.recoveries + " recoveries · " +
+              c.stale_cycles + " / " + c.lost_cycles + " stale / lost · " +
+              c.phase_excursions + " phase excursions" +
+              (c.exchanges ? " (" + (100 * c.phase_excursions / c.exchanges).toFixed(1) + "% of exchanges)" : "") +
+              " · exchange " + us(c.exchange_mean_ns) + " / " + us(c.exchange_worst_ns) +
+              (c.telemetry_read
+                ? " · " + c.frames_delivered + " frames delivered · " + c.frames_skipped + " skipped"
+                : "")
             : c.status + (c.note ? ": " + c.note : ""),
           report.best === i ? "ok" : c.status === "ok" ? "" : "bad",
         ]);

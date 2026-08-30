@@ -157,10 +157,8 @@ dtoverlay=disable-wifi
 
 | キー | 意味 |
 | --- | --- |
-| `bus.sync0_period` | EtherCAT バスの周期. 既定 1ms. 台数が多く安定しない場合に増やす |
+| `bus.sync0_period` | EtherCAT バスの周期. 既定 1ms. 台数が多い場合は伸ばす |
 | `bus.open_on_start` | 電源投入時にバスを開くか. 既定 `true` |
-
-sync0_period は exchange 時間の2倍より長く, かつ, 500μs の倍数の内, 最も小さい値にすることを推奨する.
 
 ## チューニング
 

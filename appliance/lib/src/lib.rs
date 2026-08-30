@@ -201,6 +201,7 @@ pub enum TuneStatus {
     Ok,
     FailedOpen,
     Aborted,
+    Infeasible,
     #[serde(other)]
     Unknown,
 }
@@ -212,6 +213,7 @@ impl TuneStatus {
             Self::Ok => "ok",
             Self::FailedOpen => "failed-open",
             Self::Aborted => "aborted",
+            Self::Infeasible => "infeasible",
             Self::Unknown => "unknown",
         }
     }
@@ -247,6 +249,12 @@ pub struct TuneCandidate {
     pub exchanges: u64,
     pub exchange_mean_ns: u64,
     pub exchange_worst_ns: u64,
+    #[serde(default)]
+    pub frames_delivered: u64,
+    #[serde(default)]
+    pub frames_skipped: u64,
+    #[serde(default)]
+    pub telemetry_read: bool,
 }
 
 impl TuneCandidate {
@@ -256,6 +264,15 @@ impl TuneCandidate {
             0.0
         } else {
             self.op_samples as f64 / self.samples as f64
+        }
+    }
+
+    #[must_use]
+    pub fn per_exchange(&self, count: u64) -> f64 {
+        if self.exchanges == 0 {
+            0.0
+        } else {
+            count as f64 / self.exchanges as f64
         }
     }
 }
@@ -278,12 +295,17 @@ impl TuneReport {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TuneScore {
     pub op_ratio: f64,
     pub drop_events: u64,
+    pub recoveries: u64,
+    pub lost_per_exchange: f64,
+    pub stale_per_exchange: f64,
+    pub excursions_per_exchange: f64,
     pub tie_break_ns: u64,
     pub period_ns: u64,
+    pub is_auto: bool,
 }
 
 pub fn best_tune_score<T>(
@@ -298,8 +320,16 @@ pub fn best_tune_score<T>(
             a.op_ratio
                 .total_cmp(&b.op_ratio)
                 .then(b.drop_events.cmp(&a.drop_events))
+                .then(b.recoveries.cmp(&a.recoveries))
+                .then(b.lost_per_exchange.total_cmp(&a.lost_per_exchange))
+                .then(b.stale_per_exchange.total_cmp(&a.stale_per_exchange))
+                .then(
+                    b.excursions_per_exchange
+                        .total_cmp(&a.excursions_per_exchange),
+                )
                 .then(b.tie_break_ns.cmp(&a.tie_break_ns))
                 .then(b.period_ns.cmp(&a.period_ns))
+                .then(a.is_auto.cmp(&b.is_auto))
         })
         .map(|(index, _)| index)
 }
@@ -310,8 +340,13 @@ pub fn best_tune_candidate(candidates: &[TuneCandidate]) -> Option<usize> {
         (c.status == TuneStatus::Ok && c.samples > 0).then(|| TuneScore {
             op_ratio: c.op_ratio(),
             drop_events: c.drop_events,
-            tie_break_ns: c.exchange_worst_ns,
+            recoveries: c.recoveries,
+            lost_per_exchange: c.per_exchange(c.lost_cycles),
+            stale_per_exchange: c.per_exchange(c.stale_cycles),
+            excursions_per_exchange: c.per_exchange(c.phase_excursions),
+            tie_break_ns: 0,
             period_ns: c.target.period_ns,
+            is_auto: c.target.is_auto(),
         })
     })
 }
@@ -425,6 +460,156 @@ mod tests {
             Some(1),
             "a tie on OP retention goes to the shorter period, which costs less latency",
         );
+    }
+
+    #[test]
+    fn a_tie_on_op_is_broken_by_the_phase_excursions_not_by_exchange_noise() {
+        let candidate = |period_ns: u64, excursions: u64, worst_ns: u64| TuneCandidate {
+            target: TuneTarget {
+                period_ns,
+                ..TuneTarget::default()
+            },
+            samples: 300,
+            op_samples: 300,
+            exchanges: 27_000,
+            phase_excursions: excursions,
+            exchange_worst_ns: worst_ns,
+            ..TuneCandidate::default()
+        };
+        // 実機 (20 台) の報告と同じ形: 全候補が OP 100% / 0 drops で並び, worst exchange だけが
+        // 数 us ばらつく. 旧スコアは worst が最小の候補を選んでいた.
+        let candidates = vec![
+            candidate(1_000_000, 25_069, 1_133_484),
+            candidate(2_000_000, 12, 1_146_000),
+            candidate(2_000_000, 8, 1_132_000),
+        ];
+        assert_eq!(
+            best_tune_candidate(&candidates),
+            Some(2),
+            "the candidate that stayed on its landing phase wins",
+        );
+
+        let noisy = vec![
+            candidate(2_000_000, 8, 1_190_000),
+            candidate(1_000_000, 25_069, 1_100_000),
+        ];
+        assert_eq!(
+            best_tune_candidate(&noisy),
+            Some(0),
+            "a smaller worst exchange no longer outranks a candidate that held its phase",
+        );
+    }
+
+    #[test]
+    fn counters_are_compared_per_exchange_so_a_long_period_gets_no_free_pass() {
+        let candidate = |period_ns: u64, exchanges: u64, stale: u64| TuneCandidate {
+            target: TuneTarget {
+                period_ns,
+                ..TuneTarget::default()
+            },
+            samples: 300,
+            op_samples: 300,
+            exchanges,
+            stale_cycles: stale,
+            ..TuneCandidate::default()
+        };
+        // 同じ dwell では 1ms 候補が 2ms 候補の 2 倍回る. 生カウンタでは 2ms が機械的に有利になる.
+        let candidates = vec![
+            candidate(1_000_000, 30_000, 30),
+            candidate(2_000_000, 15_000, 20),
+        ];
+        assert_eq!(
+            best_tune_candidate(&candidates),
+            Some(0),
+            "0.10% stale beats 0.13% stale even though the raw count is higher",
+        );
+    }
+
+    #[test]
+    fn an_automatic_landing_phase_wins_a_dead_heat() {
+        // 実機 (20 台 / 2 ms) では auto と 25% が全指標で同点になった.
+        // auto は台数が変わっても着地を再センタリングするので, 同点ならこちらを推す.
+        let candidate = |percent: u8| TuneCandidate {
+            target: TuneTarget {
+                period_ns: 2_000_000,
+                frame_phase_percent: percent,
+                frame_phase_ns: 2_000_000 * u64::from(percent) / 100,
+            },
+            samples: 300,
+            op_samples: 300,
+            exchanges: 15_000,
+            ..TuneCandidate::default()
+        };
+        assert_eq!(
+            best_tune_candidate(&[candidate(FRAME_PHASE_AUTO), candidate(25)]),
+            Some(0),
+        );
+        assert_eq!(
+            best_tune_candidate(&[candidate(25), candidate(FRAME_PHASE_AUTO)]),
+            Some(1),
+            "the order the candidates were swept in must not decide it",
+        );
+    }
+
+    #[test]
+    fn a_fixed_landing_phase_still_wins_when_it_actually_measured_better() {
+        let auto = TuneCandidate {
+            target: TuneTarget {
+                period_ns: 2_000_000,
+                ..TuneTarget::default()
+            },
+            samples: 300,
+            op_samples: 300,
+            exchanges: 15_000,
+            phase_excursions: 40,
+            ..TuneCandidate::default()
+        };
+        let fixed = TuneCandidate {
+            target: TuneTarget {
+                period_ns: 2_000_000,
+                frame_phase_percent: 25,
+                frame_phase_ns: 500_000,
+            },
+            phase_excursions: 0,
+            ..auto.clone()
+        };
+        assert_eq!(best_tune_candidate(&[auto, fixed]), Some(1));
+    }
+
+    #[test]
+    fn a_period_that_cannot_carry_one_exchange_is_never_the_best() {
+        let candidates = vec![
+            TuneCandidate {
+                status: TuneStatus::Infeasible,
+                note: Some("20 devices need about 1059 us on the wire".to_owned()),
+                samples: 0,
+                ..TuneCandidate::default()
+            },
+            TuneCandidate {
+                target: TuneTarget {
+                    period_ns: 2_000_000,
+                    ..TuneTarget::default()
+                },
+                samples: 300,
+                op_samples: 300,
+                exchanges: 15_000,
+                ..TuneCandidate::default()
+            },
+        ];
+        assert_eq!(best_tune_candidate(&candidates), Some(1));
+    }
+
+    #[test]
+    fn an_infeasible_candidate_survives_a_round_trip_through_the_wire() {
+        let candidate = TuneCandidate {
+            status: TuneStatus::Infeasible,
+            ..TuneCandidate::default()
+        };
+        let json = serde_json::to_string(&candidate).unwrap();
+        assert!(json.contains("\"infeasible\""), "{json}");
+        let back: TuneCandidate = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.status, TuneStatus::Infeasible);
+        assert_eq!(TuneStatus::Infeasible.label(), "infeasible");
     }
 
     #[test]
