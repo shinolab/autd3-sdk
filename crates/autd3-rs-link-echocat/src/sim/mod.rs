@@ -6,7 +6,7 @@ pub use subdevice::{SmConfig, SubDevice};
 
 use std::collections::VecDeque;
 use std::io;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::bus::RawBus;
 use crate::reg;
@@ -22,7 +22,34 @@ pub const AUTD3_IDENTITY: Identity = Identity {
     serial: 0,
 };
 
-pub const DEFAULT_HOP_NS: u64 = 300;
+pub use crate::master::budget::{DEFAULT_HOP_NS, DEFAULT_LINK_SPEED_MBPS, WireTiming};
+
+const MAX_CATCHUP_EDGES: u64 = 1024;
+const SPIN_THRESHOLD: Duration = Duration::from_micros(200);
+
+fn wait_until(deadline: Instant) {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if let Some(coarse) = remaining.checked_sub(SPIN_THRESHOLD) {
+        std::thread::sleep(coarse);
+    }
+    while Instant::now() < deadline {
+        std::hint::spin_loop();
+    }
+}
+
+struct Wire {
+    timing: WireTiming,
+    base: Instant,
+    origin_ns: u64,
+    free_at: Instant,
+    next_edge_ns: u64,
+}
+
+struct Pending {
+    frame: Vec<u8>,
+    ready_at: Option<Instant>,
+    processed: bool,
+}
 
 pub trait ProcessData: Send {
     fn exchange(&mut self, outputs: &[u8], inputs: &mut [u8]);
@@ -39,9 +66,10 @@ pub struct EscSim {
     now_ns: u64,
     hop_ns: u64,
     cycle_ns: u64,
-    pending: VecDeque<Vec<u8>>,
+    pending: VecDeque<Pending>,
     mtu: usize,
     dropped_frames: usize,
+    wire: Option<Wire>,
 }
 
 impl EscSim {
@@ -59,6 +87,7 @@ impl EscSim {
             pending: VecDeque::new(),
             mtu: 1500,
             dropped_frames: 0,
+            wire: None,
         }
     }
 
@@ -97,6 +126,48 @@ impl EscSim {
 
     pub fn drop_next_frames(&mut self, count: usize) {
         self.dropped_frames = count;
+    }
+
+    pub fn set_wire_timing(&mut self, timing: Option<WireTiming>) {
+        self.wire = timing.map(|timing| {
+            let base = Instant::now();
+            Wire {
+                timing,
+                base,
+                origin_ns: self.now_ns,
+                free_at: base,
+                next_edge_ns: self.now_ns.saturating_add(self.cycle_ns),
+            }
+        });
+    }
+
+    #[must_use]
+    pub fn wire_timing(&self) -> Option<WireTiming> {
+        self.wire.as_ref().map(|wire| wire.timing)
+    }
+
+    fn pump_time(&mut self) {
+        let (base, origin_ns, mut edge) = match self.wire.as_ref() {
+            Some(wire) => (wire.base, wire.origin_ns, wire.next_edge_ns),
+            None => return,
+        };
+        if self.cycle_ns == 0 {
+            return;
+        }
+        let elapsed = u64::try_from(base.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        let target = origin_ns.saturating_add(elapsed);
+        edge = edge.max(target.saturating_sub(self.cycle_ns.saturating_mul(MAX_CATCHUP_EDGES)));
+        while edge <= target {
+            self.now_ns = edge;
+            for device in &mut self.devices {
+                device.sync0(edge);
+            }
+            edge = edge.saturating_add(self.cycle_ns);
+        }
+        self.now_ns = target;
+        if let Some(wire) = self.wire.as_mut() {
+            wire.next_edge_ns = edge;
+        }
     }
 
     pub fn latch_al_error(&mut self, state: reg::AlState, code: u16) {
@@ -151,7 +222,7 @@ impl EscSim {
 
     fn process(&mut self, frame: &mut [u8]) {
         let (advances, latches) = Self::scan(frame);
-        if advances {
+        if advances && self.wire.is_none() {
             self.advance_cycle();
         }
         if latches {
@@ -159,6 +230,7 @@ impl EscSim {
         }
 
         let now = self.now_ns;
+        let hop = self.hop_ns;
         let mut at = FRAME_HEADER_BYTES;
         while at + DATAGRAM_HEADER_BYTES + WKC_BYTES <= frame.len() {
             let Some(command) = Command::from_code(frame[at]) else {
@@ -176,7 +248,8 @@ impl EscSim {
             let (head, tail) = frame.split_at_mut(data_at);
             let data = &mut tail[..len];
             for (index, device) in self.devices.iter_mut().enumerate() {
-                device.handle(command, &mut address, data, &mut wkc, now, index == 0);
+                let arrival = now + u64::try_from(index).expect("device index fits in u64") * hop;
+                device.handle(command, &mut address, data, &mut wkc, arrival, index == 0);
             }
             head[at + 2..at + 6].copy_from_slice(&address);
             frame[data_at + len..data_at + len + WKC_BYTES].copy_from_slice(&wkc.to_le_bytes());
@@ -204,23 +277,58 @@ impl RawBus for EscSim {
             self.dropped_frames -= 1;
             return Ok(());
         }
-        let mut response = frame.to_vec();
-        self.process(&mut response);
-        self.pending.push_back(response);
+        self.pump_time();
+        let devices = self.devices.len();
+        let Some(wire) = self.wire.as_mut() else {
+            let mut response = frame.to_vec();
+            self.process(&mut response);
+            self.pending.push_back(Pending {
+                frame: response,
+                ready_at: None,
+                processed: true,
+            });
+            return Ok(());
+        };
+        let done = wire.free_at.max(Instant::now()) + wire.timing.transmit(frame.len());
+        wire.free_at = done;
+        let ready_at = done + wire.timing.propagation(devices);
+        self.pending.push_back(Pending {
+            frame: frame.to_vec(),
+            ready_at: Some(ready_at),
+            processed: false,
+        });
         Ok(())
     }
 
-    fn receive(&mut self, buf: &mut [u8], _timeout: Duration) -> io::Result<Option<usize>> {
-        let Some(frame) = self.pending.pop_front() else {
+    fn receive(&mut self, buf: &mut [u8], timeout: Duration) -> io::Result<Option<usize>> {
+        self.pump_time();
+        let Some(ready_at) = self.pending.front().map(|pending| pending.ready_at) else {
             return Ok(None);
         };
-        if frame.len() > buf.len() {
+        if let Some(ready_at) = ready_at {
+            let now = Instant::now();
+            if ready_at.saturating_duration_since(now) > timeout {
+                wait_until(now + timeout);
+                self.pump_time();
+                return Ok(None);
+            }
+            wait_until(ready_at);
+            self.pump_time();
+        }
+        let mut pending = self
+            .pending
+            .pop_front()
+            .expect("a pending frame was just observed");
+        if !pending.processed {
+            self.process(&mut pending.frame);
+        }
+        if pending.frame.len() > buf.len() {
             return Err(io::Error::other(
                 "simulated frame exceeds the receive buffer",
             ));
         }
-        buf[..frame.len()].copy_from_slice(&frame);
-        Ok(Some(frame.len()))
+        buf[..pending.frame.len()].copy_from_slice(&pending.frame);
+        Ok(Some(pending.frame.len()))
     }
 
     fn mtu(&self) -> usize {

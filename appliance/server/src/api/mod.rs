@@ -2,6 +2,7 @@ mod admin;
 mod system;
 pub mod tune;
 
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -12,6 +13,7 @@ use autd3_rs_appliance::{
     ConfigDocument, ImageRelease, LogLines, ProbeResult, TuneReport, TuneRequest, UplinkKind,
     UplinkStatus, WifiCredentials,
 };
+use autd3_rs_link_echocat::master::budget::WireTiming;
 use autd3_rs_link_remote::{Actual, BusSnapshot, Desired, RemoteLinkError, Sessions, SharedBus};
 use axum::Router;
 use axum::body::Bytes;
@@ -291,6 +293,7 @@ async fn tune_start(
             bus: Arc::clone(&state.bus),
             sessions: Arc::clone(&state.sessions),
             settings: Arc::clone(&state.settings),
+            timing: link_timing(&state.interface),
         },
         request,
         targets,
@@ -550,6 +553,17 @@ async fn logs(
     };
     let lines = blocking(move || system::journal_tail(&unit, count)).await?;
     Ok(axum::Json(LogLines { lines }))
+}
+
+fn link_timing(interface: &str) -> WireTiming {
+    let speed = system::interface_status(interface)
+        .speed_mbps
+        .and_then(NonZeroU32::new)
+        .unwrap_or_else(|| WireTiming::default().speed);
+    WireTiming {
+        speed,
+        ..WireTiming::default()
+    }
 }
 
 fn router(state: Arc<AppState>) -> Router {

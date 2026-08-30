@@ -1060,6 +1060,33 @@ impl SharedBus {
         self.shared.request_probe()
     }
 
+    pub fn exchange_while_held(
+        &self,
+        tx: &[[u8; TX_FRAME_BYTES]],
+        rx: &mut [[u8; RX_FRAME_BYTES]],
+    ) -> Result<bool, RemoteLinkError> {
+        if self.shared.hold_reason().is_none() {
+            return Err(RemoteLinkError::Link(
+                "the bus is not held; take it with hold() before driving frames".to_owned(),
+            ));
+        }
+        if tx.len() != rx.len() {
+            return Err(RemoteLinkError::DeviceCountChanged {
+                expected: tx.len(),
+                found: rx.len(),
+            });
+        }
+        let mut status = BusStatus::default();
+        self.shared
+            .exchange(
+                tx.len(),
+                tx.as_flattened(),
+                rx.as_flattened_mut(),
+                &mut status,
+            )
+            .map(|reply| reply.rx_valid)
+    }
+
     pub fn shutdown(&self) {
         self.shared.stop();
         for thread in std::mem::take(
