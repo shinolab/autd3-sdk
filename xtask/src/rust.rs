@@ -74,7 +74,9 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             let mut args = vec![
                 "test",
                 "--workspace",
-                "--all-targets",
+                "--lib",
+                "--bins",
+                "--tests",
                 "--features",
                 "autd3-rs/legacy",
             ];
