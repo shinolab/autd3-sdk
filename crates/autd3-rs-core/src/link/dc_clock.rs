@@ -1,7 +1,7 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 
-use crate::value::DcSysTime;
+use crate::value::{DcSysTime, DcSysTimeError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DcObservation {
@@ -22,6 +22,7 @@ struct DcClockInner {
     prev_max_ns: AtomicI64,
     cur_max_ns: AtomicI64,
     samples: AtomicU64,
+    host_clock_warned: AtomicBool,
 }
 
 impl Default for DcClockInner {
@@ -31,6 +32,7 @@ impl Default for DcClockInner {
             prev_max_ns: AtomicI64::new(i64::MIN),
             cur_max_ns: AtomicI64::new(i64::MIN),
             samples: AtomicU64::new(0),
+            host_clock_warned: AtomicBool::new(false),
         }
     }
 }
@@ -41,8 +43,21 @@ impl DcClock {
         Self::default()
     }
 
-    pub fn observe(&self, bus: DcSysTime) {
-        self.observe_against(bus, DcSysTime::now());
+    pub fn observe(&self, bus: DcSysTime) -> Result<(), DcSysTimeError> {
+        match DcSysTime::now() {
+            Ok(host) => {
+                self.observe_against(bus, host);
+                Ok(())
+            }
+            Err(e) => {
+                if !self.inner.host_clock_warned.swap(true, Ordering::Relaxed) {
+                    tracing::warn!(
+                        "the host clock is outside the DcSysTime range, so the bus offset cannot be observed: {e}"
+                    );
+                }
+                Err(e)
+            }
+        }
     }
 
     pub fn observe_against(&self, bus: DcSysTime, host: DcSysTime) {
@@ -79,7 +94,7 @@ impl DcClock {
     #[must_use]
     pub fn now(&self) -> Option<DcSysTime> {
         let offset_ns = self.offset_ns()?;
-        let host = DcSysTime::now().sys_time().cast_signed();
+        let host = DcSysTime::now().ok()?.sys_time().cast_signed();
         u64::try_from(host + offset_ns)
             .ok()
             .map(DcSysTime::from_nanos)
@@ -176,9 +191,9 @@ mod tests {
     fn now_applies_the_observed_offset() {
         let clock = DcClock::new();
         clock.observe_against(DcSysTime::from_nanos(500), DcSysTime::from_nanos(500));
-        let before = DcSysTime::now();
+        let before = DcSysTime::now().unwrap();
         let now = clock.now().expect("observed");
-        let after = DcSysTime::now();
+        let after = DcSysTime::now().unwrap();
         assert!(now >= before && now <= after);
     }
 }

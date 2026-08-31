@@ -219,7 +219,7 @@ impl Link for RemoteLink {
         self.publish_status();
 
         if dc_time_ns != wire::DC_TIME_UNAVAILABLE {
-            self.dc_clock.observe(DcSysTime::from_nanos(dc_time_ns));
+            let _ = self.dc_clock.observe(DcSysTime::from_nanos(dc_time_ns));
         }
 
         Ok(CycleOutcome::new(rx_valid))

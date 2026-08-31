@@ -107,8 +107,10 @@ impl Link for DcLink {
         _tx: &[[u8; TX_FRAME_BYTES]],
         _rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Infallible> {
-        let bus = autd3_rs_core::value::DcSysTime::now().with_dc_offset(self.bus_ahead_ns);
-        self.dc_clock.observe(bus);
+        let bus = autd3_rs_core::value::DcSysTime::now()
+            .unwrap()
+            .with_dc_offset(self.bus_ahead_ns);
+        self.dc_clock.observe(bus).unwrap();
         Ok(CycleOutcome::new(true))
     }
 }

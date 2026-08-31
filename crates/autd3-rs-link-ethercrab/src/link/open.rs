@@ -218,13 +218,14 @@ async fn enumerate(
     pdu_timeout: Duration,
 ) -> Result<Groups<PreOp, NoDc>, EtherCrabLinkError> {
     fn ethercat_now() -> u64 {
-        DcSysTime::now().sys_time()
+        DcSysTime::now().map_or(0, DcSysTime::sys_time)
     }
 
     #[derive(Default)]
     struct GroupsArray {
         groups: [SubGroup<PreOp, NoDc>; MAX_GROUPS],
     }
+    DcSysTime::now()?;
     Box::pin(probe_bus(maindevice, pdu_timeout)).await?;
 
     let started = Instant::now();

@@ -71,7 +71,7 @@ impl<B: RawBus> Master<B> {
             Address::broadcast(reg::DC_RECEIVE_TIME_PORT0),
             0,
         )?;
-        let host_time = DcSysTime::now().sys_time();
+        let host_time = DcSysTime::now()?.sys_time();
         Self::expect_wkc(wkc, expected)?;
 
         let mut round_trips = Vec::with_capacity(self.devices);

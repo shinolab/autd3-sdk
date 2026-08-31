@@ -20,6 +20,9 @@ pub enum EtherCrabLinkError {
     #[error("EtherCrabLink::open must be called from within a tokio runtime")]
     NoTokioRuntime,
 
+    #[error("the host clock cannot be read as an EtherCAT system time: {0}")]
+    HostClock(#[from] autd3_rs_core::value::DcSysTimeError),
+
     #[error("pcap: {0}")]
     Pcap(#[from] pcap::Error),
 

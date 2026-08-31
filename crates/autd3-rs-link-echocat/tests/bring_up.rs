@@ -187,7 +187,7 @@ fn every_device_reads_the_same_system_time_so_sync0_fires_together() {
 #[test]
 fn the_bus_clock_is_aligned_to_the_host_dc_epoch() {
     let master = open(2);
-    let host = autd3_rs_core::value::DcSysTime::now().sys_time();
+    let host = autd3_rs_core::value::DcSysTime::now().unwrap().sys_time();
     let now = master.bus().now_ns();
     for (index, device) in master.bus().devices().iter().enumerate() {
         let skew = device.system_time(now).abs_diff(host);
@@ -391,7 +391,7 @@ fn a_bus_left_in_an_error_state_by_the_previous_session_is_acknowledged_on_open(
 
 #[test]
 fn the_cyclic_dc_time_is_anchored_to_the_host_wall_clock() {
-    let opened_at = DcSysTime::now().sys_time();
+    let opened_at = DcSysTime::now().unwrap().sys_time();
     let mut master = open(1);
 
     let tx = vec![0u8; usize::from(OUTPUT_BYTES)];
@@ -406,6 +406,8 @@ fn the_cyclic_dc_time_is_anchored_to_the_host_wall_clock() {
     );
 
     let clock = DcClock::new();
-    clock.observe(DcSysTime::from_nanos(report.dc_system_time));
+    clock
+        .observe(DcSysTime::from_nanos(report.dc_system_time))
+        .unwrap();
     assert_eq!(clock.observation().map(|o| o.samples), Some(1));
 }

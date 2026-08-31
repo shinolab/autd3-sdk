@@ -54,6 +54,9 @@ pub enum Error {
     #[error("link error: {0}")]
     Link(String),
 
+    #[error(transparent)]
+    DcSysTime(#[from] autd3_rs_core::value::DcSysTimeError),
+
     #[error("invalid payload: {0}")]
     InvalidPayload(PayloadError),
 

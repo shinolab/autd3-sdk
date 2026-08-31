@@ -36,6 +36,11 @@ This time is a 64-bit counter in ns units, counted from 2000-01-01 00:00:00 (UTC
 The Python version does not have `from_utc` / `to_utc`.
 :::
 
+:::caution
+`now()` fails when the host clock is before 2000-01-01 00:00:00 (UTC): Rust returns `Err` and Python raises.
+This happens on an embedded host that boots before NTP has synchronized. Set the clock before connecting.
+:::
+
 ## Arithmetic
 
 `DcSysTime` defines operations that add and subtract time differences.

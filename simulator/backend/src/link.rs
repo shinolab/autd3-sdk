@@ -55,7 +55,7 @@ impl Link for EmulatorLink {
         tx: &[[u8; TX_FRAME_BYTES]],
         rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Self::Error> {
-        let sys_time_ns = DcSysTime::now().sys_time();
+        let sys_time_ns = DcSysTime::now().map_or(0, DcSysTime::sys_time);
         for ((device, t), r) in self.devices.iter_mut().zip(tx).zip(rx) {
             device.fpga_mut().update_with_sys_time(sys_time_ns);
             device.send(t).write_to(r);
