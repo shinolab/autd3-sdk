@@ -7,6 +7,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 description = "Wire protocol shared by the simulator backend and browser frontend."
+publish = false
 
 [dependencies]
 serde.workspace = true
