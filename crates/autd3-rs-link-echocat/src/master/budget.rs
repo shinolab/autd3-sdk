@@ -44,9 +44,12 @@ pub(crate) struct OutputChunk {
     pub(crate) breaks_frame: bool,
 }
 
+pub(crate) const AL_STATUS_SPAN: usize = 6;
+
 pub(crate) fn fixed_datagram_bytes(devices: usize) -> usize {
     (DATAGRAM_OVERHEAD_BYTES + 8)
         + (DATAGRAM_OVERHEAD_BYTES + 2)
+        + (DATAGRAM_OVERHEAD_BYTES + AL_STATUS_SPAN)
         + (DATAGRAM_OVERHEAD_BYTES + 2)
         + (DATAGRAM_OVERHEAD_BYTES + devices * usize::from(INPUT_BYTES))
 }
