@@ -23,6 +23,7 @@ const MAX_BINDINGS: usize = 6;
 const BIND_CACHE_LIMIT: usize = 64;
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum WgpuError {
     #[error("no suitable GPU adapter was found")]
     NoAdapter,

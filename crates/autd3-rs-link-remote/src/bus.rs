@@ -30,6 +30,7 @@ const DIAG_LOCK_ALERT: Duration = Duration::from_micros(100);
 const DIAG_SLOW_ITERATION: Duration = Duration::from_millis(2);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum BusPacing {
     LinkPaced,
     Period(Duration),
@@ -113,6 +114,7 @@ impl Desired {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Actual {
     #[default]
     Closed,
@@ -137,6 +139,7 @@ impl std::fmt::Display for Actual {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct BusSnapshot {
     pub desired: Desired,
     pub actual: Actual,

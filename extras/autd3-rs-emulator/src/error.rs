@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum EmulatorError {
     #[error("tick must be a non-zero multiple of the ultrasound period")]
     InvalidTick,

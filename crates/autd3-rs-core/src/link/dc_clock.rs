@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use crate::value::{DcSysTime, DcSysTimeError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DcObservation {
     pub offset_ns: i64,
     pub samples: u64,

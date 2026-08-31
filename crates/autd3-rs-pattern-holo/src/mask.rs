@@ -3,6 +3,7 @@ use autd3_rs_core::geometry::{Device, Geometry};
 use crate::error::HoloError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum TransducerMask<'a> {
     #[default]
     AllEnabled,
