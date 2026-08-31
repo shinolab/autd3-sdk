@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use autd3_rs_core::{CoreId, Interface, RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
-use autd3_rs_link_echocat::{EchocatLinkOption, FramePhase};
+use autd3_rs_link_echocat::{EchocatLinkOption, FramePhase, MAX_SYNC0_PERIOD};
 use autd3_rs_link_remote::{BusOption, BusPacing, BusServerOption};
 use serde::Deserialize;
 
@@ -188,6 +188,8 @@ impl Default for Control {
 
 const DEFAULT_UNIT: &str = "autd3-remote-server.service";
 
+const MAX_TIMEOUT: Duration = Duration::from_hours(1);
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Mdns {
@@ -257,19 +259,32 @@ impl Config {
                 );
             }
         }
-        for (name, value) in [
-            ("bus.sync0_period", self.bus.sync0_period),
-            ("bus.pdu_timeout", self.bus.pdu_timeout),
+        for (name, value, max) in [
+            ("bus.sync0_period", self.bus.sync0_period, MAX_SYNC0_PERIOD),
+            ("bus.pdu_timeout", self.bus.pdu_timeout, MAX_TIMEOUT),
             (
                 "bus.state_transition_timeout",
                 self.bus.state_transition_timeout,
+                MAX_TIMEOUT,
             ),
-            ("bus.process_data_watchdog", self.bus.process_data_watchdog),
-            ("bus.sync_timeout", self.bus.sync_timeout),
-            ("health.report_interval", self.health.report_interval),
+            (
+                "bus.process_data_watchdog",
+                self.bus.process_data_watchdog,
+                MAX_TIMEOUT,
+            ),
+            ("bus.sync_timeout", self.bus.sync_timeout, MAX_TIMEOUT),
+            (
+                "health.report_interval",
+                self.health.report_interval,
+                MAX_TIMEOUT,
+            ),
         ] {
-            if value == Some(Duration::ZERO) {
+            let Some(value) = value else { continue };
+            if value.is_zero() {
                 bail!("{name} must be greater than zero");
+            }
+            if value > max {
+                bail!("{name} must be at most {max:?}, got {value:?}");
             }
         }
         if let Some(FramePhase::At(at)) = self.bus.frame_phase {
@@ -285,6 +300,9 @@ impl Config {
                 );
             }
         }
+        self.link_option()
+            .validate()
+            .map_err(|e| anyhow::anyhow!("[bus] {e}"))?;
         Ok(())
     }
 
@@ -461,6 +479,43 @@ mod tests {
             available_cores()
                 >= std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
         );
+    }
+
+    #[test]
+    fn an_absurdly_long_duration_is_rejected() {
+        for (key, value) in [
+            ("sync0_period", "5s"),
+            ("pdu_timeout", "2h"),
+            ("state_transition_timeout", "2h"),
+            ("process_data_watchdog", "2h"),
+            ("sync_timeout", "2h"),
+        ] {
+            let config: Config = toml::from_str(&format!(
+                r#"
+                [bus]
+                interface = "eth0"
+                {key} = "{value}"
+                "#,
+            ))
+            .unwrap();
+            let err = config.validate().unwrap_err().to_string();
+            assert!(err.contains(key), "{err}");
+        }
+    }
+
+    #[test]
+    fn a_config_that_validates_yields_a_link_option_the_link_accepts() {
+        let config: Config = toml::from_str(
+            r#"
+            [bus]
+            interface = "eth0"
+            sync0_period = "2ms"
+            pdu_timeout = "50ms"
+            "#,
+        )
+        .unwrap();
+        config.validate().unwrap();
+        assert!(config.link_option().validate().is_ok());
     }
 
     #[test]
