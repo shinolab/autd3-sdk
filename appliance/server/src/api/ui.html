@@ -179,6 +179,16 @@
     .overflow {
       overflow-x: auto;
     }
+
+    #tune td.pick {
+      width: 1.5rem;
+      padding-right: 0.5rem;
+    }
+
+    #tune td.name {
+      color: var(--muted);
+      width: 13rem;
+    }
   </style>
 </head>
 
@@ -208,12 +218,9 @@
         <label>dwell <input id="tune-dwell" value="30s" size="6" /></label>
         <button id="tune-start">Start</button>
         <button id="tune-cancel">Cancel</button>
-      </div>
-      <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-top: 0.6rem">
-        <label>apply <select id="tune-choice"></select></label>
-        <button id="tune-apply">Apply to configuration</button>
-        <span class="sub" style="margin: 0">writes <code>sync0_period</code> and <code>frame_phase</code>; applied on
-          the next restart</span>
+        <button id="tune-apply">Apply</button>
+        <span class="sub" style="margin: 0">writes the selected candidate's <code>sync0_period</code> and
+          <code>frame_phase</code>; applied on the next restart</span>
       </div>
       <div class="overflow" style="margin-top: 0.9rem">
         <table id="tune"></table>
@@ -285,22 +292,26 @@
       return payload;
     }
 
+    function valueCell(value, kind) {
+      const td = document.createElement("td");
+      if (kind) {
+        const pill = document.createElement("span");
+        pill.className = "pill " + kind;
+        pill.textContent = value;
+        td.append(pill);
+      } else {
+        td.textContent = value;
+      }
+      return td;
+    }
+
     function rows(table, entries) {
       table.replaceChildren(
         ...entries.map(([label, value, kind]) => {
           const tr = document.createElement("tr");
           const key = document.createElement("td");
           key.textContent = label;
-          const val = document.createElement("td");
-          if (kind) {
-            const pill = document.createElement("span");
-            pill.className = "pill " + kind;
-            pill.textContent = value;
-            val.append(pill);
-          } else {
-            val.textContent = value;
-          }
-          tr.append(key, val);
+          tr.append(key, valueCell(value, kind));
           return tr;
         }),
       );
@@ -408,24 +419,38 @@
         : target.frame_phase_percent + "% (" + us(target.frame_phase_ns) + ")";
     }
 
+    let tunePick = null;
+    let tuneSelected = null;
+
+    function tuneDetail(c) {
+      if (c.status !== "ok") {
+        return c.status + (c.note ? ": " + c.note : "");
+      }
+      return (100 * (c.samples ? c.op_samples / c.samples : 0)).toFixed(1) + "% in OP · " +
+        c.drop_events + " drops · " + c.recoveries + " recoveries · " +
+        c.stale_cycles + " / " + c.lost_cycles + " stale / lost · " +
+        c.phase_excursions + " phase excursions" +
+        (c.exchanges ? " (" + (100 * c.phase_excursions / c.exchanges).toFixed(1) + "% of exchanges)" : "") +
+        " · exchange " + us(c.exchange_mean_ns) + " / " + us(c.exchange_worst_ns) +
+        (c.telemetry_read
+          ? " · " + c.frames_delivered + " frames delivered · " + c.frames_skipped + " skipped"
+          : "");
+    }
+
     function renderTune(report) {
+      const applicable = (i) => report.candidates[i] && report.candidates[i].status === "ok";
+      if (tunePick !== null && !applicable(tunePick)) tunePick = null;
+      const ready = admin && !report.running;
+      tuneSelected = tunePick !== null ? tunePick : applicable(report.best) ? report.best : null;
+
       const entries = report.candidates.map((c, i) => [
         us(c.target.period_ns) + " @ " + tuneLabel(c.target),
-        c.status === "ok"
-          ? (100 * (c.samples ? c.op_samples / c.samples : 0)).toFixed(1) + "% in OP · " +
-          c.drop_events + " drops · " + c.recoveries + " recoveries · " +
-          c.stale_cycles + " / " + c.lost_cycles + " stale / lost · " +
-          c.phase_excursions + " phase excursions" +
-          (c.exchanges ? " (" + (100 * c.phase_excursions / c.exchanges).toFixed(1) + "% of exchanges)" : "") +
-          " · exchange " + us(c.exchange_mean_ns) + " / " + us(c.exchange_worst_ns) +
-          (c.telemetry_read
-            ? " · " + c.frames_delivered + " frames delivered · " + c.frames_skipped + " skipped"
-            : "")
-          : c.status + (c.note ? ": " + c.note : ""),
+        tuneDetail(c),
         report.best === i ? "ok" : c.status === "ok" ? "" : "bad",
+        applicable(i) ? i : null,
       ]);
       if (report.error) {
-        entries.push(["error", report.error, "bad"]);
+        entries.push(["error", report.error, "bad", null]);
       }
       if (report.running) {
         entries.push([
@@ -435,47 +460,47 @@
             " (" + (report.candidates.length + 1) + " of " + report.total + ")"
             : "starting…",
           "warn",
+          null,
         ]);
       } else if (entries.length === 0) {
-        entries.push(["", "no sweep has run yet"]);
+        entries.push(["", "no sweep has run yet", "", null]);
       }
-      rows($("tune"), entries);
+      tuneRows(entries, tuneSelected, ready);
+
       $("tune-start").disabled = !admin || report.running;
       $("tune-cancel").disabled = !admin || !report.running;
-      renderChoices(report);
+      $("tune-apply").disabled = !ready || tuneSelected === null;
     }
 
-    function renderChoices(report) {
-      const choice = $("tune-choice");
-      const applicable = report.candidates
-        .map((c, i) => [i, c])
-        .filter(([, c]) => c.status === "ok");
-      const options = [];
-      if (typeof report.best === "number") {
-        options.push(["", "recommended · " + us(report.candidates[report.best].target.period_ns) +
-          " @ " + tuneLabel(report.candidates[report.best].target)]);
-      }
-      for (const [i, c] of applicable) {
-        options.push([String(i), us(c.target.period_ns) + " @ " + tuneLabel(c.target)]);
-      }
-      if (options.length === 0) {
-        options.push(["", "no candidate to apply"]);
-      }
-      const keys = options.map((option) => option.join("=")).join("\u0000");
-      if (keys !== choice.dataset.keys) {
-        const wanted = choice.value;
-        choice.replaceChildren(...options.map(([value, label]) => {
-          const option = document.createElement("option");
-          option.value = value;
-          option.textContent = label;
-          return option;
-        }));
-        choice.dataset.keys = keys;
-        if (options.some(([value]) => value === wanted)) choice.value = wanted;
-      }
-      const ready = admin && !report.running && applicable.length > 0;
-      choice.disabled = !ready;
-      $("tune-apply").disabled = !ready;
+    function tuneRows(entries, selected, ready) {
+      const table = $("tune");
+      const state = JSON.stringify([entries, selected, ready]);
+      if (state === table.dataset.state) return;
+      table.dataset.state = state;
+      table.replaceChildren(...entries.map(([label, value, kind, index]) => {
+        const tr = document.createElement("tr");
+        const pick = document.createElement("td");
+        pick.className = "pick";
+        if (index !== null) {
+          const radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = "tune-pick";
+          radio.value = String(index);
+          radio.checked = index === selected;
+          radio.disabled = !ready;
+          radio.title = "apply this candidate";
+          radio.addEventListener("change", () => {
+            tunePick = index;
+            tuneSelected = index;
+          });
+          pick.append(radio);
+        }
+        const name = document.createElement("td");
+        name.className = "name";
+        name.textContent = label;
+        tr.append(pick, name, valueCell(value, kind));
+        return tr;
+      }));
     }
 
     async function refresh() {
@@ -520,6 +545,7 @@
     }
 
     $("tune-start").addEventListener("click", async () => {
+      tunePick = null;
       try {
         const request = {
           periods_ns: list($("tune-periods").value).map(nanos),
@@ -547,9 +573,10 @@
         "Write the tuned sync0_period and frame_phase into the saved configuration?\n" +
         "Unsaved edits in the Configuration box are lost.",
       )) return;
-      const candidate = $("tune-choice").value;
       try {
-        const path = "/bus/tune/apply" + (candidate ? "?candidate=" + candidate : "");
+        const path = tuneSelected === null
+          ? "/bus/tune/apply"
+          : "/bus/tune/apply?candidate=" + tuneSelected;
         say((await call("POST", path)).message, "ok");
         await loadConfig();
       } catch (e) {
