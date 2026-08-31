@@ -434,6 +434,29 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn a_tune_request_the_bus_cannot_carry_is_the_callers_fault() {
+        for request in [
+            TuneRequest {
+                periods_ns: vec![5_000_000_000],
+                ..TuneRequest::default()
+            },
+            TuneRequest {
+                periods_ns: vec![0],
+                ..TuneRequest::default()
+            },
+            TuneRequest {
+                frame_phase_percents: vec![100],
+                ..TuneRequest::default()
+            },
+        ] {
+            let err = tune::validate(&request)
+                .map_err(Error::bad_request)
+                .expect_err("{request:?} must be refused");
+            assert_eq!(err.status, StatusCode::BAD_REQUEST, "{}", err.message);
+        }
+    }
+
     fn uplink(kind: UplinkKind, carrier: bool, addresses: &[&str]) -> UplinkStatus {
         UplinkStatus {
             name: "eth0".to_owned(),
