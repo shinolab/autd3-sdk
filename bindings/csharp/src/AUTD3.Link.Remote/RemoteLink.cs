@@ -72,28 +72,28 @@ namespace AUTD3.Link
 
         static NativeRemote() => NativeAbi.Verify(Lib, autd3_abi_version());
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_remote_option_new([MarshalAs(UnmanagedType.LPUTF8Str)] string addr);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_remote_option_set_timeout(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_link_remote_option_free(IntPtr option);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_remote_open(IntPtr option, byte[] outErr, UIntPtr outErrLen);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_remote_open_legacy(IntPtr option, byte[] outErr, UIntPtr outErrLen);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_remote_discover(ulong timeoutNs, [MarshalAs(UnmanagedType.LPUTF8Str)] string? instance, ref ulong linkTimeoutNs, ref IntPtr err);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_link_remote_free_string(IntPtr ptr);
     }
 }

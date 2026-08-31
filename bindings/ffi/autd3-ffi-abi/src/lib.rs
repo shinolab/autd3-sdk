@@ -262,11 +262,13 @@ pub unsafe fn free_cstring(ptr: *mut c_char) {
     }
 }
 
-pub type CompletionCallback =
+pub type CompletionFn =
     extern "C" fn(code: i32, value: *mut c_void, msg: *const c_char, user_data: *mut c_void);
 
+pub type CompletionCallback = Option<CompletionFn>;
+
 pub struct CompletionCtx {
-    cb: CompletionCallback,
+    cb: CompletionFn,
     user_data: *mut c_void,
 }
 
@@ -274,8 +276,8 @@ unsafe impl Send for CompletionCtx {}
 
 impl CompletionCtx {
     #[must_use]
-    pub fn new(cb: CompletionCallback, user_data: *mut c_void) -> Self {
-        Self { cb, user_data }
+    pub fn new(cb: CompletionCallback, user_data: *mut c_void) -> Option<Self> {
+        Some(Self { cb: cb?, user_data })
     }
 
     pub fn ok(self, value: *mut c_void) {

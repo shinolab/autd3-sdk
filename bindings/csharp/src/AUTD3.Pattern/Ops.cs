@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 
 namespace AUTD3
 {
@@ -47,12 +48,13 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp()
         {
-            var handles = new IntPtr[_patterns.Length];
+            var handles = new SafeHandle[_patterns.Length];
             for (var i = 0; i < _patterns.Length; i++)
             {
                 handles[i] = _patterns[i].Handle;
             }
-            return NativePattern.autd3_op_write_pattern_compressed((byte)_bank, _index, (byte)_format, handles, (UIntPtr)handles.Length);
+            using var lease = new HandleArray(handles);
+            return NativePattern.autd3_op_write_pattern_compressed((byte)_bank, _index, (byte)_format, lease.Pointers, (UIntPtr)lease.Pointers.Length);
         }
     }
 

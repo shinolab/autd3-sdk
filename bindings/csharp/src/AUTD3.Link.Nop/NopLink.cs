@@ -36,13 +36,13 @@ namespace AUTD3.Link
 
         static NativeNop() => NativeAbi.Verify(Lib, autd3_abi_version());
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_nop();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_nop_legacy();
     }
 }

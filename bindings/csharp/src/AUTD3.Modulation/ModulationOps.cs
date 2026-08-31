@@ -15,16 +15,16 @@ namespace AUTD3
 
         static NativeModulationOp() => NativeAbi.Verify(Lib, autd3_abi_version());
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
-        [DllImport(Lib)]
-        internal static extern IntPtr autd3_op_write_modulation_buffer(byte bank, uint offset, IntPtr modulationBuffer);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_write_modulation_buffer(byte bank, uint offset, ModulationBufferHandle modulationBuffer);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_config_modulation(byte bank, IntPtr samplingConfig, uint size, ushort rep);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_change_modulation_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
     }
 

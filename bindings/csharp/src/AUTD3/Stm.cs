@@ -27,43 +27,43 @@ namespace AUTD3
 
         static NativeStm() => NativeAbi.Verify(Lib, autd3_abi_version());
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_stm_config_freq(float hz);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_stm_config_freq_nearest(float hz);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_stm_config_period(float secs);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_stm_config_period_nearest(float secs);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_stm_config_sampling(ushort divide);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_stm_config_into_sampling_config(IntPtr config, UIntPtr size, out ushort @out);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_stm_config_free(IntPtr config);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_foci_stm(IntPtr config, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint indexOffset, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] patterns, UIntPtr numPatterns, byte bank, byte mode, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_stm_circle(float[] center, float radiusMm, UIntPtr numPoints, float[] normal, byte intensity, Autd3StmControlPointNative[] outPoints, byte[] outIntensities);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_stm_line(float[] start, float[] end, UIntPtr numPoints, byte intensity, Autd3StmControlPointNative[] outPoints, byte[] outIntensities);
     }
 
@@ -288,15 +288,16 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp()
         {
-            var handles = new IntPtr[_patterns.Length];
+            var handles = new SafeHandle[_patterns.Length];
             for (var i = 0; i < _patterns.Length; i++)
             {
                 handles[i] = _patterns[i].Handle;
             }
+            using var lease = new HandleArray(handles);
             var configHandle = _config.CreateHandle();
             try
             {
-                return NativeStm.autd3_op_pattern_stm(configHandle, handles, (UIntPtr)handles.Length,
+                return NativeStm.autd3_op_pattern_stm(configHandle, lease.Pointers, (UIntPtr)lease.Pointers.Length,
                     (byte)_option.Bank, (byte)_option.Mode, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value, _option.TransitionMode.MarginNs);
             }
             finally

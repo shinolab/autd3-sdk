@@ -90,98 +90,111 @@ namespace AUTD3
             NativeAbi.Verify(ClientLib, autd3capi_abi_version());
         }
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
-        [DllImport(ClientLib, EntryPoint = "autd3_abi_version")]
+        [DllImport(ClientLib, EntryPoint = "autd3_abi_version", CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3capi_abi_version();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern float autd3_pattern_wavelength(float soundSpeedMmPerS);
 
-        [DllImport(Lib)]
-        internal static extern IntPtr autd3_core_geometry_pattern_buffer(IntPtr geometry);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_core_geometry_pattern_buffer(GeometryHandle geometry);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_pattern_buffer_from_array(EmissionNative[] emissions, UIntPtr numDevices);
 
-        [DllImport(Lib)]
-        internal static extern UIntPtr autd3_pattern_buffer_num_devices(IntPtr buffer);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_pattern_buffer_num_devices(PatternBufferHandle buffer);
 
-        [DllImport(Lib)]
-        internal static extern UIntPtr autd3_pattern_buffer_num_transducers(IntPtr buffer, UIntPtr dev);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_pattern_buffer_num_transducers(PatternBufferHandle buffer, UIntPtr dev);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_pattern_buffer_get(IntPtr buffer, UIntPtr dev, UIntPtr tr, out EmissionNative @out);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_buffer_get(PatternBufferHandle buffer, UIntPtr dev, UIntPtr tr, out EmissionNative @out);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_pattern_buffer_set(IntPtr buffer, UIntPtr dev, UIntPtr tr, EmissionNative emission);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_buffer_set(PatternBufferHandle buffer, UIntPtr dev, UIntPtr tr, EmissionNative emission);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_pattern_buffer_free(IntPtr buffer);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_pattern_focus(IntPtr geometry, float[] target, float wavelengthMm, in PatternOptionNative option, IntPtr buffer);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_focus(GeometryHandle geometry, float[] target, float wavelengthMm, in PatternOptionNative option, PatternBufferHandle buffer);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_pattern_focus_device(IntPtr geometry, UIntPtr dev, float[] target, float wavelengthMm, in PatternOptionNative option, [Out] EmissionNative[] dst);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_focus_device(GeometryHandle geometry, UIntPtr dev, float[] target, float wavelengthMm, in PatternOptionNative option, [Out] EmissionNative[] dst);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_focus_transducer(float[] position, float[] target, float wavelengthMm, in PatternOptionNative option, out EmissionNative @out);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_pattern_plane(IntPtr geometry, float[] dir, float wavelengthMm, in PatternOptionNative option, IntPtr buffer);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_plane(GeometryHandle geometry, float[] dir, float wavelengthMm, in PatternOptionNative option, PatternBufferHandle buffer);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_pattern_plane_device(IntPtr geometry, UIntPtr dev, float[] dir, float wavelengthMm, in PatternOptionNative option, [Out] EmissionNative[] dst);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_plane_device(GeometryHandle geometry, UIntPtr dev, float[] dir, float wavelengthMm, in PatternOptionNative option, [Out] EmissionNative[] dst);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_plane_transducer(float[] position, float[] dir, float wavelengthMm, in PatternOptionNative option, out EmissionNative @out);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_pattern_bessel(IntPtr geometry, float[] apex, float[] dir, float thetaRad, float wavelengthMm, in PatternOptionNative option, IntPtr buffer);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_bessel(GeometryHandle geometry, float[] apex, float[] dir, float thetaRad, float wavelengthMm, in PatternOptionNative option, PatternBufferHandle buffer);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_pattern_bessel_device(IntPtr geometry, UIntPtr dev, float[] apex, float[] dir, float thetaRad, float wavelengthMm, in PatternOptionNative option, [Out] EmissionNative[] dst);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_bessel_device(GeometryHandle geometry, UIntPtr dev, float[] apex, float[] dir, float thetaRad, float wavelengthMm, in PatternOptionNative option, [Out] EmissionNative[] dst);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_bessel_transducer(float[] position, float[] apex, float[] dir, float thetaRad, float wavelengthMm, in PatternOptionNative option, out EmissionNative @out);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_pattern_uniform(byte phase, byte intensity, IntPtr buffer);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_uniform(byte phase, byte intensity, PatternBufferHandle buffer);
 
-        [DllImport(Lib)]
-        internal static extern void autd3_pattern_null(IntPtr buffer);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_pattern_null(PatternBufferHandle buffer);
 
 
-        [DllImport(ClientLib)]
-        internal static extern IntPtr autd3_op_pattern(byte bank, IntPtr patternBuffer, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_pattern(byte bank, PatternBufferHandle patternBuffer, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
-        [DllImport(ClientLib)]
-        internal static extern IntPtr autd3_op_write_pattern_buffer(byte bank, ushort index, IntPtr patternBuffer);
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_write_pattern_buffer(byte bank, ushort index, PatternBufferHandle patternBuffer);
 
-        [DllImport(ClientLib)]
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_write_pattern_compressed(byte bank, uint index, byte format, IntPtr[] patterns, UIntPtr numPatterns);
 
-        [DllImport(ClientLib)]
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_config_pattern(byte bank, IntPtr samplingConfig, uint size, ushort rep);
 
-        [DllImport(ClientLib)]
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_config_foci_stm(byte bank, IntPtr samplingConfig, uint size, byte numFoci, float soundSpeedMPerS, ushort rep);
 
-        [DllImport(ClientLib)]
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_change_pattern_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
-        [DllImport(ClientLib)]
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_compression_per_frame(byte format, out UIntPtr @out);
+    }
+
+    internal sealed class PatternBufferHandle : Autd3SafeHandle
+    {
+        internal PatternBufferHandle(IntPtr handle) : base(handle)
+        {
+        }
+
+        protected override bool ReleaseHandle()
+        {
+            NativePattern.autd3_pattern_buffer_free(handle);
+            return true;
+        }
     }
 
     public readonly struct DevicePattern : IEnumerable<Emission>
     {
-        private readonly IntPtr _buffer;
+        private readonly PatternBufferHandle _buffer;
         private readonly UIntPtr _dev;
 
-        internal DevicePattern(IntPtr buffer, UIntPtr dev)
+        internal DevicePattern(PatternBufferHandle buffer, UIntPtr dev)
         {
             _buffer = buffer;
             _dev = dev;
@@ -221,9 +234,9 @@ namespace AUTD3
     {
         internal const int NumTransducers = 249;
 
-        private IntPtr _handle;
+        private readonly PatternBufferHandle _handle;
 
-        internal IntPtr Handle => _handle;
+        internal PatternBufferHandle Handle => _handle;
 
         internal PatternBuffer(IntPtr handle)
         {
@@ -231,7 +244,7 @@ namespace AUTD3
             {
                 throw new Autd3Exception("failed to create pattern buffer");
             }
-            _handle = handle;
+            _handle = new PatternBufferHandle(handle);
         }
 
         public static PatternBuffer FromArray(Emission[][] emissions)
@@ -279,24 +292,7 @@ namespace AUTD3
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-        public void Dispose()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativePattern.autd3_pattern_buffer_free(handle);
-            }
-            GC.SuppressFinalize(this);
-        }
-
-        ~PatternBuffer()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativePattern.autd3_pattern_buffer_free(handle);
-            }
-        }
+        public void Dispose() => _handle.Dispose();
     }
 
     public static class GeometryPatternBufferExtensions
@@ -304,9 +300,6 @@ namespace AUTD3
         public static PatternBuffer PatternBuffer(this Geometry geometry) =>
             new PatternBuffer(NativePattern.autd3_core_geometry_pattern_buffer(geometry.Handle));
     }
-
-
-
 
     public sealed class Pattern : ICommand
     {

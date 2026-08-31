@@ -135,8 +135,10 @@ pub unsafe extern "C" fn autd3_legacy_datagram_builder_push(
     builder: *mut LegacyBuilder,
     op: *mut Pending,
 ) -> i32 {
-    let (Some(builder), Some(op)) = (unsafe { handle_mut(builder) }, unsafe { take_handle(op) })
-    else {
+    let Some(builder) = (unsafe { handle_mut(builder) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let Some(op) = (unsafe { take_handle(op) }) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
@@ -177,8 +179,10 @@ pub unsafe extern "C" fn autd3_legacy_datagram_builder_push_legacy(
     builder: *mut LegacyBuilder,
     op: *mut LegacyPending,
 ) -> i32 {
-    let (Some(builder), Some(op)) = (unsafe { handle_mut(builder) }, unsafe { take_handle(op) })
-    else {
+    let Some(builder) = (unsafe { handle_mut(builder) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let Some(op) = (unsafe { take_handle(op) }) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
@@ -192,9 +196,10 @@ pub unsafe extern "C" fn autd3_legacy_datagram_builder_push_each(
     ops: *const *mut Pending,
     num_devices: usize,
 ) -> i32 {
-    let (Some(builder), Some(devices)) = (unsafe { handle_mut(builder) }, unsafe {
-        crate::take_each(ops, num_devices)
-    }) else {
+    let Some(builder) = (unsafe { handle_mut(builder) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let Some(devices) = (unsafe { crate::take_each(ops, num_devices) }) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
@@ -471,13 +476,16 @@ pub unsafe extern "C" fn autd3_legacy_client_open(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
-    let opener = unsafe { take_handle(link) };
-    let (Some(opener), Some(geometry), Some(config)) =
-        (opener, unsafe { handle_ref(geometry) }, unsafe {
-            handle_ref(config)
-        })
-    else {
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
+    let (Some(geometry), Some(config)) = (unsafe { handle_ref(geometry) }, unsafe {
+        handle_ref::<LegacyClientConfig>(config)
+    }) else {
+        ctx.invalid_argument("null argument");
+        return;
+    };
+    let Some(opener) = (unsafe { take_handle(link) }) else {
         ctx.invalid_argument("null argument");
         return;
     };
@@ -510,7 +518,9 @@ pub unsafe extern "C" fn autd3_legacy_client_send(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let (Some(client), Some(frames)) = (unsafe { handle_ref(client) }, unsafe {
         handle_ref::<Arc<LegacyFrames>>(frames)
     }) else {
@@ -537,7 +547,9 @@ pub unsafe extern "C" fn autd3_legacy_client_send_checked(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let (Some(client), Some(frames)) = (unsafe { handle_ref(client) }, unsafe {
         handle_ref::<Arc<LegacyFrames>>(frames)
     }) else {
@@ -562,7 +574,9 @@ pub unsafe extern "C" fn autd3_legacy_client_read_firmware_version(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
@@ -583,7 +597,9 @@ pub unsafe extern "C" fn autd3_legacy_client_read_fpga_state(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
@@ -615,7 +631,9 @@ pub unsafe extern "C" fn autd3_legacy_client_stop(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
@@ -636,7 +654,9 @@ pub unsafe extern "C" fn autd3_legacy_client_close(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;

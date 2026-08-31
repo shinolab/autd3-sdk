@@ -38,6 +38,9 @@ autd3-rs-link-remote = { path = "../../crates/autd3-rs-link-remote" }
 autd3-rs-link-twincat = { path = "../../crates/autd3-rs-link-twincat" }
 autd3-ffi-abi = { path = "autd3-ffi-abi" }
 
+[profile.release]
+panic = "abort"
+
 [workspace.lints.rust]
 warnings = "deny"
 
