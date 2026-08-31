@@ -349,6 +349,10 @@ fn slave_pair() -> (LoopbackLink, Arc<StdMutex<Slave>>) {
     (link, slaves.pop().expect("one slave"))
 }
 
+fn seq_after_open(slave: &Arc<StdMutex<Slave>>) -> u8 {
+    slave.lock().unwrap().expected_seq
+}
+
 async fn open_client() -> (Client, Arc<StdMutex<Slave>>) {
     let (link, slave) = slave_pair();
     let client = Client::open(&geometry(1), link, ClientConfig::default())
@@ -360,11 +364,12 @@ async fn open_client() -> (Client, Arc<StdMutex<Slave>>) {
 #[tokio::test]
 async fn successful_send_advances_seq_and_leaves_no_error() {
     let (client, slave) = open_client().await;
+    let base = seq_after_open(&slave);
     send_nop(&client).await.unwrap();
 
     let s = slave.lock().unwrap();
-    assert_eq!(s.ack, 3);
-    assert_eq!(s.expected_seq, 4);
+    assert_eq!(s.ack, base);
+    assert_eq!(s.expected_seq, base + 1);
     assert_eq!(s.error_detail, 0);
 }
 
@@ -723,6 +728,7 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
     )
     .await
     .unwrap();
+    let base = seq_after_open(&slaves[0]);
     slaves[1].lock().unwrap().drop_next = 1;
 
     let mut futs = Vec::new();
@@ -741,8 +747,8 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
             "resync must recover as success with per-device data"
         );
     }
-    assert_eq!(slaves[0].lock().unwrap().expected_seq, 11);
-    assert_eq!(slaves[1].lock().unwrap().expected_seq, 11);
+    assert_eq!(slaves[0].lock().unwrap().expected_seq, base + 8);
+    assert_eq!(slaves[1].lock().unwrap().expected_seq, base + 8);
 }
 
 #[tokio::test]
@@ -767,8 +773,116 @@ async fn handshake_sends_reset_resend_cycles_seq_zero_resets() {
     assert!(s.sent_log.len() >= 2);
     assert_eq!(s.sent_log[0], (0, Cmd::Reset));
     assert_eq!(s.sent_log[1], (0, Cmd::Reset));
-    assert!(s.sent_log.contains(&(1, Cmd::Clear)));
-    assert!(s.sent_log.contains(&(2, Cmd::Synchronize)));
+    let clear = s.sent_log.iter().position(|(_, c)| *c == Cmd::Clear);
+    let synchronize = s.sent_log.iter().position(|(_, c)| *c == Cmd::Synchronize);
+    assert!(clear.is_some() && synchronize < Some(s.sent_log.len()));
+    assert!(clear < synchronize, "{:?}", s.sent_log);
+}
+
+#[derive(Clone)]
+struct CapturedLog(Arc<StdMutex<Vec<u8>>>);
+
+impl std::io::Write for CapturedLog {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CapturedLog {
+    type Writer = Self;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        self.clone()
+    }
+}
+
+impl CapturedLog {
+    fn mark(&self) -> usize {
+        self.0.lock().unwrap().len()
+    }
+
+    fn since(&self, mark: usize) -> String {
+        String::from_utf8_lossy(&self.0.lock().unwrap()[mark..]).into_owned()
+    }
+}
+
+fn captured_warnings() -> &'static CapturedLog {
+    static LOG: std::sync::OnceLock<CapturedLog> = std::sync::OnceLock::new();
+    LOG.get_or_init(|| {
+        let log = CapturedLog(Arc::new(StdMutex::new(Vec::new())));
+        let _ = tracing::subscriber::set_global_default(
+            tracing_subscriber::fmt()
+                .with_writer(log.clone())
+                .with_max_level(tracing::Level::WARN)
+                .with_ansi(false)
+                .finish(),
+        );
+        log
+    })
+}
+
+#[tokio::test]
+async fn a_foreign_series_warns_at_open_without_refusing_it() {
+    let log = captured_warnings();
+
+    let (link, slave) = slave_pair();
+    set_supported_series(&slave);
+    {
+        let mut s = slave.lock().unwrap();
+        s.fw_version_minor = FirmwareVersion::SUPPORTED_SERIES.1.wrapping_add(1);
+        s.fw_version_patch = 0x5A;
+        s.fpga_version_patch = 0x5B;
+    }
+
+    let mark = log.mark();
+    let client = Client::open(&geometry(1), link, ClientConfig::default())
+        .await
+        .expect("a foreign series must not refuse the default open");
+    let captured = log.since(mark);
+    client.close().await.unwrap();
+
+    let (major, minor) = FirmwareVersion::SUPPORTED_SERIES;
+    let version = format!(
+        "CPU: {major}.{}.90, FPGA: {major}.{minor}.91",
+        minor.wrapping_add(1),
+    );
+    assert!(
+        captured.contains("outside the series supported by this SDK")
+            && captured.contains(&version),
+        "open did not warn about the series mismatch of {version}: {captured}",
+    );
+}
+
+#[tokio::test]
+async fn open_reads_the_firmware_version_even_when_the_check_is_off() {
+    let (link, slave) = slave_pair();
+    set_supported_series(&slave);
+    slave.lock().unwrap().fw_version_minor = FirmwareVersion::SUPPORTED_SERIES.1.wrapping_add(1);
+
+    let client = Client::open(&geometry(1), link, ClientConfig::default())
+        .await
+        .unwrap();
+
+    {
+        let s = slave.lock().unwrap();
+        for cmd in [
+            Cmd::ReadCpuFwVersionMajor,
+            Cmd::ReadCpuFwVersionMinor,
+            Cmd::ReadFpgaFwVersionMajor,
+            Cmd::ReadFpgaFwVersionMinor,
+        ] {
+            assert!(
+                s.sent_log.iter().any(|(_, c)| *c == cmd),
+                "{cmd:?} never reached the device, so the series mismatch cannot be warned about",
+            );
+        }
+    }
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -787,10 +901,10 @@ async fn low_latency_handshake_switches_slave_mode_and_continues_traffic() {
             "slave must switch to low-latency"
         );
         assert!(s.sent_log.contains(&(0, Cmd::SetMode)));
-        assert_eq!(s.expected_seq, 3);
     }
+    let base = seq_after_open(&slave);
     send_nop(&client).await.unwrap();
-    assert_eq!(slave.lock().unwrap().expected_seq, 4);
+    assert_eq!(slave.lock().unwrap().expected_seq, base + 1);
 }
 
 #[tokio::test]
@@ -832,13 +946,17 @@ async fn handshake_resets_slave_proto_state() {
     let client = Client::open(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
-    {
+    let base = {
         let s = slave.lock().unwrap();
-        assert_eq!(s.expected_seq, 3);
-        assert_eq!(s.ack, 2);
-    }
+        assert!(
+            s.expected_seq < 42,
+            "the handshake must restart the sequence, not continue the stale one",
+        );
+        assert_eq!(s.ack, s.expected_seq - 1);
+        s.expected_seq
+    };
     send_nop(&client).await.unwrap();
-    assert_eq!(slave.lock().unwrap().expected_seq, 4);
+    assert_eq!(slave.lock().unwrap().expected_seq, base + 1);
 }
 
 #[tokio::test]
@@ -914,6 +1032,7 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
     )
     .await
     .unwrap();
+    let base = seq_after_open(&slave);
     slave.lock().unwrap().drop_next = 1;
 
     let mut futs = Vec::new();
@@ -932,7 +1051,7 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
             "resync must recover as success"
         );
     }
-    assert_eq!(slave.lock().unwrap().expected_seq, 11);
+    assert_eq!(slave.lock().unwrap().expected_seq, base + 8);
 }
 
 #[tokio::test]
@@ -994,13 +1113,14 @@ async fn stale_cycles_block_false_positive_ack_match() {
 #[tokio::test]
 async fn recovers_after_transient_stale_cycles() {
     let (client, slave) = open_client().await;
+    let base = seq_after_open(&slave);
     slave.lock().unwrap().stale_for_next = 3;
     send_nop(&client)
         .await
         .expect("send should recover after the stale burst");
     let s = slave.lock().unwrap();
-    assert_eq!(s.expected_seq, 4);
-    assert_eq!(s.ack, 3);
+    assert_eq!(s.expected_seq, base + 1);
+    assert_eq!(s.ack, base);
 }
 
 fn post_handshake_reset_count(slave: &Arc<StdMutex<Slave>>) -> usize {
@@ -1023,6 +1143,7 @@ async fn inflight_held_across_stale_recovers_without_reset() {
     let client = Client::open(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
+    let base = seq_after_open(&slave);
     slave.lock().unwrap().stale_for_next = 40;
 
     let fut = client
@@ -1036,10 +1157,11 @@ async fn inflight_held_across_stale_recovers_without_reset() {
     );
     let s = slave.lock().unwrap();
     assert_eq!(
-        s.expected_seq, 4,
-        "SetMode(seq0) + Clear(seq1) + Synchronize(seq2) + one command, each once"
+        s.expected_seq,
+        base + 1,
+        "the open sequence plus one command, each sent once"
     );
-    assert_eq!(s.ack, 3);
+    assert_eq!(s.ack, base);
     drop(s);
     assert_eq!(
         post_handshake_reset_count(&slave),
@@ -1070,6 +1192,7 @@ async fn streaming_holds_window_across_stale_and_recovers() {
     )
     .await
     .unwrap();
+    let base = seq_after_open(&slave);
     slave.lock().unwrap().stale_for_next = 30;
 
     let mut futs = Vec::new();
@@ -1088,7 +1211,7 @@ async fn streaming_holds_window_across_stale_and_recovers() {
             "every held in-flight must recover after the stale burst"
         );
     }
-    assert_eq!(slave.lock().unwrap().expected_seq, 11);
+    assert_eq!(slave.lock().unwrap().expected_seq, base + 8);
     assert_eq!(
         post_handshake_reset_count(&slave),
         0,

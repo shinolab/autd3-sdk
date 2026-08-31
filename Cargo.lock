@@ -173,6 +173,7 @@ dependencies = [
  "thread-priority",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "windows-sys 0.61.2",
  "zerocopy 0.8.55",
 ]
