@@ -331,7 +331,7 @@ namespace AUTD3
 
 
         public static Length Wavelength(Velocity soundSpeed) =>
-            new Length(NativePattern.autd3_pattern_wavelength(soundSpeed.MmPerS));
+            new Length(NativePattern.autd3_pattern_wavelength(soundSpeed.MmS));
 
 
         public static void Focus(Geometry geometry, Vector3 target, Length wavelength, FocusOption option, PatternBuffer dst)
@@ -410,7 +410,7 @@ namespace AUTD3
             var a = Coords.PointArray(apex);
             var d = Coords.DirArray(dir);
             var o = option.ToNative();
-            if (NativePattern.autd3_pattern_bessel(geometry.Handle, a, d, theta.Radian, wavelength.Mm, in o, dst.Handle) != 0)
+            if (NativePattern.autd3_pattern_bessel(geometry.Handle, a, d, theta.Rad, wavelength.Mm, in o, dst.Handle) != 0)
             {
                 throw new Autd3Exception("bessel failed (buffer device count must match geometry)");
             }
@@ -422,7 +422,7 @@ namespace AUTD3
             var o = option.ToNative();
             if (NativePattern.autd3_pattern_bessel_device(device.GeometryHandle, device.DeviceIndex,
                 Coords.PointArray(apex),
-                Coords.DirArray(dir), theta.Radian, wavelength.Mm, in o, native) != 0)
+                Coords.DirArray(dir), theta.Rad, wavelength.Mm, in o, native) != 0)
             {
                 throw new Autd3Exception("bessel_device failed");
             }
@@ -435,7 +435,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_bessel_transducer(
                 Coords.PointArray(position),
                 Coords.PointArray(apex),
-                Coords.DirArray(dir), theta.Radian, wavelength.Mm, in o, out var e) != 0)
+                Coords.DirArray(dir), theta.Rad, wavelength.Mm, in o, out var e) != 0)
             {
                 throw new Autd3Exception("bessel_transducer failed");
             }

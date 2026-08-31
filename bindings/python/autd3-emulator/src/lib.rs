@@ -23,7 +23,7 @@ fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
 }
 
 fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
-    let mm_per_s: f32 = obj.getattr("mm_per_s").and_then(|v| v.extract()).map_err(|_| {
+    let mm_per_s: f32 = obj.getattr("mm_s").and_then(|v| v.extract()).map_err(|_| {
         PyValueError::new_err(
             "sound speed must be a Velocity, e.g. 340 * m / s (bare numbers are no longer accepted)",
         )
@@ -34,7 +34,7 @@ fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
 fn velocity_to_py(py: Python<'_>, v: Velocity) -> PyResult<Bound<'_, PyAny>> {
     py.import("autd3_core")?
         .getattr("Velocity")?
-        .call_method1("from_mm_s", (v.mm_per_s(),))
+        .call_method1("from_mm_s", (v.mm_s(),))
 }
 
 fn raw_to_polars(py: Python<'_>, frame: RawFrame) -> PyResult<Bound<'_, PyAny>> {

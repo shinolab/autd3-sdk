@@ -247,7 +247,7 @@ impl Instant<'_> {
             .init(self.cache_size, &mut self.cursor, &mut self.rem_frame);
 
         let time_step = self.option.time_step;
-        let sound_speed = self.option.sound_speed.mm_per_s();
+        let sound_speed = self.option.sound_speed.mm_s();
         let target = self.last_frame + num_frames;
         let mut cur_frame = self.last_frame;
         let mut out = Vec::new();
@@ -351,7 +351,7 @@ impl Record {
         let positions = self.transducer_positions();
 
         let period_secs = ULTRASOUND_PERIOD.as_secs_f32();
-        let sound_speed = option.sound_speed.mm_per_s();
+        let sound_speed = option.sound_speed.mm_s();
         let min_dist = aabb_min_dist(&self.aabb, &range.aabb());
         let max_dist = aabb_max_dist(&self.aabb, &range.aabb());
         let required_frame_size = (max_dist / sound_speed / period_secs).ceil() as usize

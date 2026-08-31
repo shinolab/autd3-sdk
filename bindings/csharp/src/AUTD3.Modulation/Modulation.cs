@@ -309,7 +309,7 @@ namespace AUTD3
             try
             {
                 var optionHandle = NativeModulation.autd3_modulation_sine_option_new(
-                    option.Amplitude, option.Offset, option.Phase.Radian, option.Clamp, sampling);
+                    option.Amplitude, option.Offset, option.Phase.Rad, option.Clamp, sampling);
                 try
                 {
                     var err = new byte[NativeAbi.ErrorBufferLength];
@@ -382,7 +382,7 @@ namespace AUTD3
                     var sampling = c.Option.SamplingConfig.CreateHandle();
                     samplingHandles.Add(sampling);
                     var optionHandle = NativeModulation.autd3_modulation_sine_option_new(
-                        c.Option.Amplitude, c.Option.Offset, c.Option.Phase.Radian, c.Option.Clamp, sampling);
+                        c.Option.Amplitude, c.Option.Offset, c.Option.Phase.Rad, c.Option.Clamp, sampling);
                     optionHandles.Add(optionHandle);
                     native[i] = new SineComponentNative
                     {

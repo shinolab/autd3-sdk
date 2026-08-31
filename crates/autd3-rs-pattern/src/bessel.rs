@@ -37,7 +37,7 @@ fn bessel_phase(
     wavelength: Length,
 ) -> Phase {
     let r = rot * (position - apex);
-    let dist = theta.radian().cos() * r.xy().norm() - theta.radian().sin() * r.z;
+    let dist = theta.rad().cos() * r.xy().norm() - theta.rad().sin() * r.z;
     Phase::from(-dist / wavelength.mm() * 2.0 * PI * rad)
 }
 
@@ -107,7 +107,7 @@ mod tests {
         let lambda = 8.5 * mm;
         let apex = Point3::new(10.0, 20.0, 150.0);
         let dir = UnitVector3::new_normalize(Vector3::new(0.1, -0.2, 1.0));
-        let theta = Angle::from_radian(0.3);
+        let theta = Angle::from_rad(0.3);
 
         let rot = {
             let v: Vector3<f32> = Vector3::new(dir.y, -dir.x, 0.0);
@@ -121,8 +121,7 @@ mod tests {
         for &pos in dev.positions() {
             let e = bessel_transducer(pos, apex, dir, theta, lambda, &BesselOption::default());
             let r = rot * (pos - apex);
-            let dist =
-                theta.radian().cos() * (r.x * r.x + r.y * r.y).sqrt() - theta.radian().sin() * r.z;
+            let dist = theta.rad().cos() * (r.x * r.x + r.y * r.y).sqrt() - theta.rad().sin() * r.z;
             let expected = Phase::from(-dist / lambda.mm() * 2.0 * PI * rad) + Phase::ZERO;
             assert_eq!(e.phase, expected);
             assert_eq!(e.intensity, Intensity::MAX);
@@ -152,7 +151,7 @@ mod tests {
         let lambda = 8.5 * mm;
         let apex = Point3::new(30.0, 40.0, 120.0);
         let dir = UnitVector3::new_normalize(Vector3::new(0.2, 0.3, 1.0));
-        let theta = Angle::from_radian(0.5);
+        let theta = Angle::from_rad(0.5);
         let option = BesselOption {
             intensity: Intensity::MAX,
             phase_offset: Phase(0x20),

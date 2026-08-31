@@ -28,7 +28,7 @@ impl Velocity {
     }
 
     #[must_use]
-    pub const fn mm_per_s(self) -> f32 {
+    pub const fn mm_s(self) -> f32 {
         self.mm_per_s
     }
 
@@ -54,15 +54,15 @@ mod tests {
 
     #[test]
     fn from_length_per_s() {
-        approx::assert_abs_diff_eq!((340.0 * m / s).mm_per_s(), 340_000.0);
-        approx::assert_abs_diff_eq!((340 * m / s).mm_per_s(), 340_000.0);
-        approx::assert_abs_diff_eq!((340_000.0 * mm / s).mm_per_s(), 340_000.0);
+        approx::assert_abs_diff_eq!((340.0 * m / s).mm_s(), 340_000.0);
+        approx::assert_abs_diff_eq!((340 * m / s).mm_s(), 340_000.0);
+        approx::assert_abs_diff_eq!((340_000.0 * mm / s).mm_s(), 340_000.0);
     }
 
     #[test]
     fn constructors() {
-        approx::assert_abs_diff_eq!(Velocity::from_m_s(340.0).mm_per_s(), 340_000.0);
-        approx::assert_abs_diff_eq!(Velocity::from_mm_s(340_000.0).mm_per_s(), 340_000.0);
+        approx::assert_abs_diff_eq!(Velocity::from_m_s(340.0).mm_s(), 340_000.0);
+        approx::assert_abs_diff_eq!(Velocity::from_mm_s(340_000.0).mm_s(), 340_000.0);
         approx::assert_abs_diff_eq!(Velocity::from_mm_s(340_000.0).m_s(), 340.0);
     }
 

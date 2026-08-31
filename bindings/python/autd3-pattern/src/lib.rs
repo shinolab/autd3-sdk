@@ -58,7 +58,7 @@ fn extract_phase(obj: &Bound<'_, PyAny>) -> PyResult<Phase> {
 }
 
 fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
-    let mm_per_s: f32 = obj.getattr("mm_per_s").and_then(|v| v.extract()).map_err(|_| {
+    let mm_per_s: f32 = obj.getattr("mm_s").and_then(|v| v.extract()).map_err(|_| {
         PyValueError::new_err(
             "sound speed must be a Velocity, e.g. 340 * m / s (bare numbers are no longer accepted)",
         )
@@ -68,10 +68,10 @@ fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
 
 fn extract_angle(obj: &Bound<'_, PyAny>) -> PyResult<Angle> {
     let radian: f32 = obj
-        .getattr("radian")
+        .getattr("rad")
         .and_then(|v| v.extract())
         .map_err(|_| PyValueError::new_err("theta must be an Angle, e.g. 18 * deg"))?;
-    Ok(Angle::from_radian(radian))
+    Ok(Angle::from_rad(radian))
 }
 
 fn extract_emission(obj: &Bound<'_, PyAny>) -> PyResult<Emission> {
@@ -264,7 +264,7 @@ fn focus(
     autd3_rs_pattern::focus(
         geometry,
         target,
-        Length::millimeters(wavelength),
+        Length::from_mm(wavelength),
         &option.0,
         &mut dst.inner,
     );
@@ -286,7 +286,7 @@ fn plane(
     autd3_rs_pattern::plane(
         geometry,
         direction,
-        Length::millimeters(wavelength),
+        Length::from_mm(wavelength),
         &option.0,
         &mut dst.inner,
     );
@@ -314,7 +314,7 @@ fn bessel(
         apex,
         direction,
         theta,
-        Length::millimeters(wavelength),
+        Length::from_mm(wavelength),
         &option.0,
         &mut dst.inner,
     );

@@ -48,10 +48,10 @@ fn freq_mode(freq: &Bound<'_, PyAny>) -> PyResult<SamplingMode> {
 
 fn extract_angle(obj: &Bound<'_, PyAny>) -> PyResult<Angle> {
     let radian: f32 = obj
-        .getattr("radian")
+        .getattr("rad")
         .and_then(|v| v.extract())
         .map_err(|_| PyValueError::new_err("phase must be an Angle, e.g. 90 * deg"))?;
-    Ok(Angle::from_radian(radian))
+    Ok(Angle::from_rad(radian))
 }
 
 #[pyclass(name = "SineOption", module = "autd3_modulation", skip_from_py_object)]

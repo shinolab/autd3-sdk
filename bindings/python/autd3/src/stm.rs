@@ -44,7 +44,7 @@ fn extract_u8(obj: &Bound<'_, PyAny>) -> PyResult<u8> {
 }
 
 fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
-    let mm_per_s: f32 = obj.getattr("mm_per_s").and_then(|v| v.extract()).map_err(|_| {
+    let mm_per_s: f32 = obj.getattr("mm_s").and_then(|v| v.extract()).map_err(|_| {
         PyValueError::new_err(
             "sound speed must be a Velocity, e.g. 340 * m / s (bare numbers are no longer accepted)",
         )
@@ -215,7 +215,7 @@ impl FociStmOption {
     fn sound_speed<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         py.import("autd3_core")?
             .getattr("Velocity")?
-            .call_method1("from_mm_s", (self.inner.sound_speed.mm_per_s(),))
+            .call_method1("from_mm_s", (self.inner.sound_speed.mm_s(),))
     }
 
     #[getter]

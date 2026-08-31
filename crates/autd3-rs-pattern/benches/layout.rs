@@ -74,7 +74,7 @@ fn pack_vec(buf: &[Vec<Emission>], dst: &mut [u8]) {
 }
 
 fn bench(c: &mut Criterion) {
-    let wl = Length::millimeters(8.5);
+    let wl = Length::from_mm(8.5);
     let opt = FocusOption::default();
     let target = Point3::new(90.0, 70.0, 150.0);
 

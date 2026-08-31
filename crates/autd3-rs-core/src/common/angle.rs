@@ -23,24 +23,24 @@ impl Angle {
     };
 
     #[must_use]
-    pub const fn from_radian(radian: f32) -> Self {
+    pub const fn from_rad(radian: f32) -> Self {
         Self { radian }
     }
 
     #[must_use]
-    pub const fn from_degree(degree: f32) -> Self {
+    pub const fn from_deg(degree: f32) -> Self {
         Self {
             radian: degree.to_radians(),
         }
     }
 
     #[must_use]
-    pub const fn radian(self) -> f32 {
+    pub const fn rad(self) -> f32 {
         self.radian
     }
 
     #[must_use]
-    pub const fn degree(self) -> f32 {
+    pub const fn deg(self) -> f32 {
         self.radian.to_degrees()
     }
 }
@@ -48,14 +48,14 @@ impl Angle {
 impl core::ops::Mul<deg> for f32 {
     type Output = Angle;
     fn mul(self, _rhs: deg) -> Self::Output {
-        Self::Output::from_degree(self)
+        Self::Output::from_deg(self)
     }
 }
 
 impl core::ops::Mul<rad> for f32 {
     type Output = Angle;
     fn mul(self, _rhs: rad) -> Self::Output {
-        Self::Output::from_radian(self)
+        Self::Output::from_rad(self)
     }
 }
 
@@ -153,20 +153,20 @@ mod tests {
         let mut a = 1.0 * rad;
         let b = 2.0 * rad;
 
-        assert_abs_diff_eq!((-a).radian(), -1.0);
-        assert_abs_diff_eq!((a + b).radian(), 3.0);
-        assert_abs_diff_eq!((a - b).radian(), -1.0);
-        assert_abs_diff_eq!((a * 2.0).radian(), 2.0);
-        assert_abs_diff_eq!((a / 2.0).radian(), 0.5);
-        assert_abs_diff_eq!((2.0 * a).radian(), 2.0);
+        assert_abs_diff_eq!((-a).rad(), -1.0);
+        assert_abs_diff_eq!((a + b).rad(), 3.0);
+        assert_abs_diff_eq!((a - b).rad(), -1.0);
+        assert_abs_diff_eq!((a * 2.0).rad(), 2.0);
+        assert_abs_diff_eq!((a / 2.0).rad(), 0.5);
+        assert_abs_diff_eq!((2.0 * a).rad(), 2.0);
 
         a += b;
-        assert_abs_diff_eq!(a.radian(), 3.0);
+        assert_abs_diff_eq!(a.rad(), 3.0);
         a -= b;
-        assert_abs_diff_eq!(a.radian(), 1.0);
+        assert_abs_diff_eq!(a.rad(), 1.0);
         a *= 2.0;
-        assert_abs_diff_eq!(a.radian(), 2.0);
+        assert_abs_diff_eq!(a.rad(), 2.0);
         a /= 2.0;
-        assert_abs_diff_eq!(a.radian(), 1.0);
+        assert_abs_diff_eq!(a.rad(), 1.0);
     }
 }
