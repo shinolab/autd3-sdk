@@ -1,5 +1,5 @@
 [package]
-name = "autd3-firmware"
+name = "autd3-firmware-writer"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,7 +10,7 @@ publish = false
 description = "CLI tool for flashing AUTD3 CPU/FPGA firmware (downloads released images and writes them via SEGGER J-Link / Xilinx Vivado)."
 
 [[bin]]
-name = "autd3-firmware"
+name = "autd3-firmware-writer"
 path = "src/main.rs"
 
 [dependencies]
