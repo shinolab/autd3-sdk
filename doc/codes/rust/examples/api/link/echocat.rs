@@ -34,6 +34,7 @@ async fn main() -> Result<()> {
         sync_timeout,
         process_data_watchdog,
         sleep_strategy,
+        ..Default::default()
     };
     // ANCHOR_END: api
 

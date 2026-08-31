@@ -17,6 +17,7 @@ fn main() -> Result<()> {
             high,
             duty,
             sampling_config,
+            ..Default::default()
         }
         // ANCHOR_END: option
         ;

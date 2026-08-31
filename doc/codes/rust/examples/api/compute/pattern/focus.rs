@@ -15,6 +15,7 @@ fn main() {
         FocusOption {
             intensity,
             phase_offset,
+            ..Default::default()
         }
         // ANCHOR_END: option
         ;

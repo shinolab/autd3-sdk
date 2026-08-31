@@ -32,6 +32,7 @@ async fn main() -> anyhow::Result<()> {
             sound_speed: 340.0 * m / s,
             loop_behavior: LoopBehavior::Infinite,
             transition_mode: TransitionMode::Immediate,
+            ..Default::default()
         },
     ));
     let frames = builder.build()?;

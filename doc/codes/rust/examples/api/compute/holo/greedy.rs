@@ -39,6 +39,7 @@ fn main() -> Result<()> {
             directivity,
             objective_func,
             mask,
+            ..Default::default()
         }
         // ANCHOR_END: option
         ;

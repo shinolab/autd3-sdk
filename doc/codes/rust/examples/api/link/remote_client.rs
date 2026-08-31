@@ -24,6 +24,7 @@ async fn main() -> Result<()> {
     RemoteLinkOption::discover_with(&DiscoveryOption {
         timeout,
         instance: Some("autd3-0a1b2c3d".to_string()),
+        ..Default::default()
     })?;
     // ANCHOR_END: discover_option
 

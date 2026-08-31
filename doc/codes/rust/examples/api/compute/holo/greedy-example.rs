@@ -35,6 +35,7 @@ fn main() -> anyhow::Result<()> {
             directivity: Directivity::Sphere,
             objective_func: abs_objective_func,
             mask: TransducerMask::AllEnabled,
+            ..Default::default()
         },
         &mut dst,
     )?;
