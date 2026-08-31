@@ -1,5 +1,5 @@
 pub mod budget;
-mod cyclic;
+pub(crate) mod cyclic;
 pub mod dc;
 pub mod init;
 mod open;
@@ -119,6 +119,8 @@ pub struct Master<B: RawBus> {
     phase_excursions: u64,
     worst_phase_ns: u64,
     last_phase_warn_at: Option<Instant>,
+    recovery_attempts: u64,
+    last_recovery_log_at: Option<Instant>,
 }
 
 impl<B: RawBus> Master<B> {
@@ -145,6 +147,8 @@ impl<B: RawBus> Master<B> {
             phase_excursions: 0,
             worst_phase_ns: 0,
             last_phase_warn_at: None,
+            recovery_attempts: 0,
+            last_recovery_log_at: None,
         }
     }
 

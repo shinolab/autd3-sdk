@@ -17,8 +17,17 @@ enum Role {
     DcTime,
     AlStatus,
     DeviceAlStatus,
+    AlControl,
     Inputs,
     Outputs { offset: usize },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Recovery {
+    pub(crate) device: usize,
+    pub(crate) status: u8,
+    pub(crate) code: u16,
+    pub(crate) control: u16,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -95,9 +104,16 @@ impl<B: RawBus> Master<B> {
             PlannedDatagram {
                 command: Command::Fprd,
                 address: Address::node(Self::station_address(0), reg::AL_STATUS),
-                len: 2,
+                len: super::budget::AL_STATUS_SPAN,
                 expected_wkc: 1,
                 role: Role::DeviceAlStatus,
+            },
+            PlannedDatagram {
+                command: Command::Nop,
+                address: Address::node(Self::station_address(0), reg::AL_CONTROL),
+                len: 2,
+                expected_wkc: 0,
+                role: Role::AlControl,
             },
             PlannedDatagram {
                 command: Command::Lrd,
@@ -195,15 +211,21 @@ impl<B: RawBus> Master<B> {
             return Err(EchocatError::Closed);
         }
         let observed = self.rotation;
-        self.send_cycle(tx, observed)?;
-        let report = self.collect_cycle(rx, observed)?;
+        let recovery = self.plan_recovery();
+        self.send_cycle(tx, observed, recovery)?;
+        let report = self.collect_cycle(rx, observed, recovery)?;
         if self.devices > 0 {
             self.rotation = (self.rotation + 1) % self.devices;
         }
         Ok(report)
     }
 
-    fn send_cycle(&mut self, tx: &[u8], observed: usize) -> Result<(), EchocatError> {
+    fn send_cycle(
+        &mut self,
+        tx: &[u8],
+        observed: usize,
+        recovery: Option<Recovery>,
+    ) -> Result<(), EchocatError> {
         for frame in 0..self.plan.frames.len() {
             self.index = self.index.wrapping_add(1);
             let index = self.index;
@@ -215,16 +237,26 @@ impl<B: RawBus> Master<B> {
             let buffer = &mut self.plan.buffers[frame];
             let mut builder = FrameBuilder::new(buffer, index);
             for datagram in &self.plan.frames[frame] {
-                let address = if datagram.role == Role::DeviceAlStatus {
-                    Address::node(Self::station_address(observed), reg::AL_STATUS)
-                } else {
-                    datagram.address
+                let (command, address) = match (datagram.role, recovery) {
+                    (Role::DeviceAlStatus, _) => (
+                        datagram.command,
+                        Address::node(Self::station_address(observed), reg::AL_STATUS),
+                    ),
+                    (Role::AlControl, Some(recovery)) => (
+                        Command::Fpwr,
+                        Address::node(Self::station_address(recovery.device), reg::AL_CONTROL),
+                    ),
+                    _ => (datagram.command, datagram.address),
                 };
-                let slot = builder.push(datagram.command, address, datagram.len)?;
-                if let Role::Outputs { offset } = datagram.role {
-                    builder
+                let slot = builder.push(command, address, datagram.len)?;
+                match (datagram.role, recovery) {
+                    (Role::Outputs { offset }, _) => builder
                         .data_mut(slot)
-                        .copy_from_slice(&tx[offset..offset + datagram.len]);
+                        .copy_from_slice(&tx[offset..offset + datagram.len]),
+                    (Role::AlControl, Some(recovery)) => builder
+                        .data_mut(slot)
+                        .copy_from_slice(&recovery.control.to_le_bytes()),
+                    _ => {}
                 }
                 self.plan.slots[frame].push(slot);
             }
@@ -239,11 +271,13 @@ impl<B: RawBus> Master<B> {
         &mut self,
         rx: &mut [u8],
         observed: usize,
+        recovery: Option<Recovery>,
     ) -> Result<CycleReport, EchocatError> {
         let mut rx_valid = true;
         let mut dc_system_time = 0u64;
         let mut al_status = 0u16;
         let mut al_status_observed = false;
+        let mut recovery_delivered = false;
         let mut outstanding = self.plan.frames.len();
         let deadline = std::time::Instant::now() + self.cyclic_deadline();
 
@@ -288,7 +322,7 @@ impl<B: RawBus> Master<B> {
 
             for (datagram, slot) in self.plan.frames[frame].iter().zip(&self.plan.slots[frame]) {
                 let wkc = view.wkc(*slot)?;
-                if wkc != datagram.expected_wkc {
+                if wkc != datagram.expected_wkc && datagram.role != Role::AlControl {
                     rx_valid = false;
                 }
                 match datagram.role {
@@ -305,11 +339,13 @@ impl<B: RawBus> Master<B> {
                         al_status_observed = true;
                         if wkc == datagram.expected_wkc {
                             let data = view.data(*slot)?;
-                            self.state.observe(observed, data[0]);
+                            let code = u16::from_le_bytes([data[4], data[5]]);
+                            self.state.observe(observed, data[0], code);
                         } else {
                             self.state.lose(observed);
                         }
                     }
+                    Role::AlControl => recovery_delivered = wkc == 1,
                     Role::Inputs => {
                         let data = view.data(*slot)?;
                         rx[..data.len()].copy_from_slice(data);
@@ -322,6 +358,9 @@ impl<B: RawBus> Master<B> {
             rx_valid = false;
         }
         self.account_for_al_status(al_status_observed);
+        if let Some(recovery) = recovery {
+            self.account_for_recovery(recovery, recovery_delivered);
+        }
 
         Ok(CycleReport {
             rx_valid,
