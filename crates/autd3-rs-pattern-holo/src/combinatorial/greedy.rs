@@ -53,13 +53,9 @@ pub fn greedy(
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
-    assert_eq!(
-        dst.len(),
-        geometry.num_devices(),
-        "dst must have one slot per device"
-    );
+    crate::mask::validate_dst_len(dst.len(), geometry)?;
     let mask = option.mask;
-    mask.validate(geometry);
+    mask.validate(geometry)?;
 
     let wavenumber = 2.0 * PI / wavelength.mm();
     let m = foci.len();
@@ -164,6 +160,58 @@ mod tests {
                 &mut dst
             ),
             Err(HoloError::NoFoci)
+        );
+    }
+
+    #[test]
+    fn a_mask_that_does_not_match_the_geometry_is_an_error_not_a_panic() {
+        let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
+        let mut dst = buffer(&geometry);
+
+        let one_device = vec![vec![true; Autd3::NUM_TRANSDUCERS]];
+        let option = GreedyOption {
+            mask: TransducerMask::Masked(&one_device),
+            ..GreedyOption::default()
+        };
+        assert_eq!(
+            greedy(&geometry, &single_focus(), wavelength(), &option, &mut dst),
+            Err(HoloError::MaskDeviceCountMismatch {
+                got: 1,
+                expected: 2
+            }),
+        );
+
+        let short_row = vec![vec![true; Autd3::NUM_TRANSDUCERS], vec![true; 3]];
+        let option = GreedyOption {
+            mask: TransducerMask::Masked(&short_row),
+            ..GreedyOption::default()
+        };
+        assert_eq!(
+            greedy(&geometry, &single_focus(), wavelength(), &option, &mut dst),
+            Err(HoloError::MaskTransducerCountMismatch {
+                device: 1,
+                got: 3,
+                expected: Autd3::NUM_TRANSDUCERS,
+            }),
+        );
+    }
+
+    #[test]
+    fn a_dst_that_does_not_match_the_geometry_is_an_error_not_a_panic() {
+        let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
+        let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]];
+        assert_eq!(
+            greedy(
+                &geometry,
+                &single_focus(),
+                wavelength(),
+                &GreedyOption::default(),
+                &mut dst
+            ),
+            Err(HoloError::DstDeviceCountMismatch {
+                got: 1,
+                expected: 2
+            }),
         );
     }
 

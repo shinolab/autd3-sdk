@@ -26,6 +26,13 @@ impl PatternCompression {
         }
     }
 
+    const fn name(self) -> &'static str {
+        match self {
+            PatternCompression::PhaseFull => "PhaseFull",
+            PatternCompression::PhaseHalf => "PhaseHalf",
+        }
+    }
+
     const fn as_u8(self) -> u8 {
         match self {
             PatternCompression::PhaseFull => 1,
@@ -55,6 +62,14 @@ impl Operation for WritePatternCompressed<'_> {
             return Err(PayloadError::PatternSizeTooSmall {
                 size: count,
                 min: 1,
+            }
+            .into());
+        }
+        if count > self.format.per_frame() {
+            return Err(PayloadError::PatternCountExceedsFormat {
+                count,
+                format: self.format.name(),
+                max: self.format.per_frame(),
             }
             .into());
         }
@@ -228,6 +243,49 @@ mod tests {
             op.encode(&test_device(0), &mut out),
             Err(Error::InvalidPayload(_))
         ));
+    }
+
+    #[test]
+    fn rejects_more_patterns_than_the_format_can_pack() {
+        let patterns = [vec![Emission::default(); Autd3::NUM_TRANSDUCERS]];
+        let op = WritePatternCompressed {
+            bank: PatternBank::B0,
+            index: 0,
+            format: PatternCompression::PhaseFull,
+            patterns: [
+                Some(&patterns[..]),
+                Some(&patterns[..]),
+                Some(&patterns[..]),
+                None,
+            ],
+        };
+        let mut out = [0u8; PAYLOAD_BYTES];
+        let err = op.encode(&test_device(0), &mut out).unwrap_err();
+        assert!(matches!(err, Error::InvalidPayload(_)), "{err}");
+        assert!(err.to_string().contains("PhaseFull"), "{err}");
+    }
+
+    #[test]
+    fn the_full_count_each_format_advertises_is_still_accepted() {
+        let patterns = [vec![Emission::default(); Autd3::NUM_TRANSDUCERS]];
+        let mut out = [0u8; PAYLOAD_BYTES];
+        for (format, count) in [
+            (PatternCompression::PhaseFull, 2),
+            (PatternCompression::PhaseHalf, 4),
+        ] {
+            let mut slots: [Option<&[Vec<Emission>]>; PATTERN_MAX_PER_FRAME] =
+                [None; PATTERN_MAX_PER_FRAME];
+            for slot in slots.iter_mut().take(count) {
+                *slot = Some(&patterns[..]);
+            }
+            let op = WritePatternCompressed {
+                bank: PatternBank::B0,
+                index: 0,
+                format,
+                patterns: slots,
+            };
+            assert!(op.encode(&test_device(0), &mut out).is_ok(), "{count}");
+        }
     }
 
     #[test]
