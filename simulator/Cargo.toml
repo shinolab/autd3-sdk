@@ -25,7 +25,7 @@ cast_precision_loss = "allow"
 [workspace.dependencies]
 autd3-rs-core = { path = "../crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { path = "../crates/autd3-rs-firmware-emulator" }
-autd3-rs-link-remote = { path = "../crates/autd3-rs-link-remote" }
+autd3-rs-link-remote = { path = "../crates/autd3-rs-link-remote", default-features = false }
 autd3-rs-simulator-protocol = { path = "protocol" }
 tokio = { version = "1.52.3", default-features = false, features = [
     "sync",

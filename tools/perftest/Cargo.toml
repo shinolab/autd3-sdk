@@ -21,7 +21,7 @@ autd3-rs = { workspace = true, features = ["logging"] }
 autd3-rs-link-echocat.workspace = true
 autd3-rs-link-ethercrab.workspace = true
 autd3-rs-link-nop.workspace = true
-autd3-rs-link-remote = { workspace = true, features = ["discovery"] }
+autd3-rs-link-remote.workspace = true
 autd3-rs-link-twincat.workspace = true
 clap.workspace = true
 humantime.workspace = true

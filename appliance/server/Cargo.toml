@@ -18,7 +18,7 @@ autd3-rs-appliance.workspace = true
 autd3-cpu-wire.workspace = true
 autd3-rs-core = { workspace = true, features = ["logging"] }
 autd3-rs-link-echocat.workspace = true
-autd3-rs-link-remote = { workspace = true, features = ["discovery"] }
+autd3-rs-link-remote.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 humantime.workspace = true

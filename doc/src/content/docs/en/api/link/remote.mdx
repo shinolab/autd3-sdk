@@ -34,11 +34,6 @@ Connection to the [`Simulator`](/autd3-sdk/en/guide/simulator/) is also done wit
 ### Discovery
 
 The server can be found over mDNS.
-In Rust this needs the `discovery` feature; Python and C# need no extra setup.
-
-```toml
-autd3-rs-link-remote = { version = "0.6", features = ["discovery"] }
-```
 
 <CodeTabs rust={excerpt(client, "discover")} python={excerpt(pyClient, "discover")} csharp={excerpt(csClient, "discover")} />
 

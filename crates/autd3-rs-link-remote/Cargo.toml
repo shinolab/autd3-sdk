@@ -16,6 +16,7 @@ categories = ["science"]
 all-features = true
 
 [features]
+default = ["discovery"]
 discovery = ["dep:mdns-sd"]
 
 [dependencies]
