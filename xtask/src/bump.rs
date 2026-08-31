@@ -58,6 +58,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             bump_cargo_toml(&root.join("bindings/python/Cargo.toml"), &core)?;
             bump_python_pyproject(root, &core)?;
             bump_csharp_props(&root.join("bindings/csharp/Directory.Build.props"), &core)?;
+            bump_csharp_abi(root, &core)?;
             bump_cargo_toml(&root.join("extras/autd3-rs-emulator/Cargo.toml"), &core)?;
             bump_standalone_crate(
                 &root.join("extras/autd3-rs-pattern-holo-wgpu/Cargo.toml"),
@@ -81,7 +82,8 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
         }
         "cs" => {
             bump_csharp_props(&root.join("bindings/csharp/Directory.Build.props"), &full)?;
-            println!("Updated C# version -> {full}");
+            bump_csharp_abi(root, &core)?;
+            println!("Updated C# version -> {full} (C ABI expectation {core})");
         }
         "unity" => {
             let count = bump_unity(root, &core)?;
@@ -310,7 +312,7 @@ fn print_next_steps(name: &str) {
             println!("  cargo xtask simulator build");
             println!("  cargo xtask console build");
             println!(
-                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock console/dist.toml 'bindings/unity/*/package.json' doc/src/content/docs"
+                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props bindings/csharp/src/AUTD3.Core/Native.cs extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock console/dist.toml 'bindings/unity/*/package.json' doc/src/content/docs"
             );
         }
         "python" => {
@@ -320,7 +322,9 @@ fn print_next_steps(name: &str) {
             );
         }
         "cs" => {
-            println!("  git add bindings/csharp/Directory.Build.props CHANGELOG.md");
+            println!(
+                "  git add bindings/csharp/Directory.Build.props bindings/csharp/src/AUTD3.Core/Native.cs CHANGELOG.md"
+            );
         }
         "unity" => {
             println!("  git add 'bindings/unity/*/package.json' doc/src/content/docs CHANGELOG.md");
@@ -634,6 +638,35 @@ fn replace_json_string_value(line: &str, new: &str) -> String {
     };
     let close = after_open + rel_close;
     format!("{key}{}\"{new}\"{}", &rest[..open], &rest[close + 1..])
+}
+
+const CSHARP_ABI_PATH: &str = "bindings/csharp/src/AUTD3.Core/Native.cs";
+
+fn bump_csharp_abi(root: &Path, version: &str) -> Result<()> {
+    let path = root.join(CSHARP_ABI_PATH);
+    let parts = version_parts(version)?;
+    let text =
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+
+    let mut out = text;
+    for (name, value) in ["Major", "Minor", "Patch"].into_iter().zip(parts) {
+        if value > 0x3FF {
+            bail!("version component {value} does not fit in the 10-bit C ABI version field");
+        }
+        let prefix = format!("internal const ushort {name} = ");
+        let start = out
+            .find(&prefix)
+            .with_context(|| format!("`{prefix}` not found in {}", path.display()))?
+            + prefix.len();
+        let end = out[start..]
+            .find(';')
+            .with_context(|| format!("unterminated `{prefix}` in {}", path.display()))?
+            + start;
+        out = format!("{}{value}{}", &out[..start], &out[end..]);
+    }
+
+    std::fs::write(&path, out).with_context(|| format!("writing {}", path.display()))?;
+    Ok(())
 }
 
 fn bump_csharp_props(path: &Path, version: &str) -> Result<()> {
