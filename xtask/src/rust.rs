@@ -42,8 +42,6 @@ pub enum RustCmd {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Regenerate the legacy golden TSV with the old SDK (v38.1.0)
-    Golden,
     /// Build and run an example from `examples/`
     Example {
         /// Example binary name (one binary per feature; see `examples/`)
@@ -116,7 +114,19 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
                 "-D",
                 "warnings",
             ];
-            run("cargo", no_discovery_args, root)
+            run("cargo", no_discovery_args, root)?;
+
+            let no_parallel_args = vec![
+                "clippy",
+                "-p",
+                "autd3-rs-pattern-holo",
+                "--no-default-features",
+                "--all-targets",
+                "--",
+                "-D",
+                "warnings",
+            ];
+            run("cargo", no_parallel_args, root)
         }
         RustCmd::Format { fix } => {
             let mut args = vec!["fmt", "--all"];
@@ -125,14 +135,6 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
                 args.push("--check");
             }
             run("cargo", args, root)
-        }
-        RustCmd::Golden => {
-            let dir = root.join("crates/autd3-rs/tests/golden/generator");
-            run(
-                "cargo",
-                ["run", "--release", "--", "../legacy_v38_pack.tsv"],
-                &dir,
-            )
         }
         RustCmd::Semver { baseline } => run_semver(root, baseline.as_deref()),
         RustCmd::Publish { dry_run } => publish_workspace(root, *dry_run),
