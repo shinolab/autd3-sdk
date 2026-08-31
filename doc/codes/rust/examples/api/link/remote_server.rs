@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use anyhow::Result;
 
-use autd3_rs::{RtSchedulePolicy, ThreadPriority, rt::default_rt_priority};
+use autd3_rs::{RtSchedulePolicy, rt::default_rt_priority};
 use autd3_rs_link_echocat::{EchocatLink, EchocatLinkOption};
 use autd3_rs_link_remote::{
     BusOption, BusPacing, DeviceLayout, RemoteLinkError, RemoteServer, RemoteServerOption,

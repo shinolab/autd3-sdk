@@ -1,8 +1,8 @@
 use std::num::{NonZeroU32, NonZeroUsize};
 
 use autd3_rs_core::CoreId;
+use autd3_rs_core::RtPriority;
 use autd3_rs_core::RtSchedulePolicy;
-use thread_priority::ThreadPriority;
 
 use crate::error::{Error, PayloadError};
 use crate::protocol::MAX_INFLIGHT;
@@ -16,7 +16,7 @@ pub struct ClientConfig {
     pub max_resync_rounds: NonZeroU32,
     pub low_latency: bool,
     pub reset_resend_cycles: NonZeroU32,
-    pub rt_priority: Option<ThreadPriority>,
+    pub rt_priority: Option<RtPriority>,
     pub rt_policy: RtSchedulePolicy,
     pub rt_affinity: Option<CoreId>,
     pub validate_state: bool,

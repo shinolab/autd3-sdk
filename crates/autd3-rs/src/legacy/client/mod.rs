@@ -9,11 +9,11 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use autd3_rs_core::CoreId;
+use autd3_rs_core::RtPriority;
 use autd3_rs_core::RtSchedulePolicy;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::link::{DcClock, IntoLink, Link};
 use autd3_rs_core::value::{DcSysTime, Emission};
-use thread_priority::ThreadPriority;
 use tokio::sync::{Mutex, MutexGuard, mpsc, oneshot};
 
 use crate::legacy::datagram::{LegacyDatagramBuilder, LegacyFrame, LegacyFrames};
@@ -32,7 +32,7 @@ const SHUTDOWN_POLL: Duration = Duration::from_micros(100);
 #[derive(Clone, Copy, Debug)]
 pub struct LegacyClientConfig {
     pub timeout_cycles: NonZeroU32,
-    pub rt_priority: Option<ThreadPriority>,
+    pub rt_priority: Option<RtPriority>,
     pub rt_policy: RtSchedulePolicy,
     pub rt_affinity: Option<CoreId>,
 }

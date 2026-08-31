@@ -1,15 +1,14 @@
-pub use autd3_rs_core::{CoreId, RtSchedulePolicy};
-pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
+pub use autd3_rs_core::{CoreId, RtPriority, RtSchedulePolicy};
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct PumpTuning {
-    pub(crate) priority: Option<ThreadPriority>,
+    pub(crate) priority: Option<RtPriority>,
     pub(crate) policy: RtSchedulePolicy,
     pub(crate) affinity: Option<CoreId>,
 }
 
 pub(crate) fn apply_thread_tuning(
-    priority: Option<ThreadPriority>,
+    priority: Option<RtPriority>,
     policy: RtSchedulePolicy,
     affinity: Option<CoreId>,
 ) {

@@ -92,7 +92,7 @@ For a real example, see the [appliance documentation](/autd3-sdk/en/guide/applia
 | Field         | Type                     | Description                                                                              |
 | ------------- | ------------------------ | ---------------------------------------------------------------------------------------- |
 | `pacing`      | `BusPacing`              | EtherCAT bus cycle period. Leave the pacing to the link with `LinkPaced` for a real-hardware link |
-| `rt_priority` | `Option<ThreadPriority>` | priority of the bus thread. A real-time priority by default                              |
+| `rt_priority` | `Option<RtPriority>` | priority of the bus thread. A real-time priority by default                              |
 | `rt_policy`   | `RtSchedulePolicy`       | scheduling policy of the bus thread                                                      |
 | `rt_affinity` | `Option<CoreId>`         | CPU core to pin the bus thread to                                                        |
 | `stack_prefault_bytes` | `usize`         | bytes of the bus thread stack to page in at start-up. 0 by default                       |
