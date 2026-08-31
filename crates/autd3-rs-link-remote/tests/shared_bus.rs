@@ -106,6 +106,42 @@ fn a_failing_bus_is_retried_until_the_link_appears() {
 }
 
 #[test]
+fn a_panicking_bus_thread_leaves_an_observable_failure_instead_of_a_silent_stop() {
+    let bus = SharedBus::new(
+        bus_option(),
+        move || -> Result<EchoLink, RemoteLinkError> { panic!("the link factory blew up") },
+    )
+    .unwrap();
+
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    bus.set_desired(Desired::Open);
+
+    let reason = spin("the panic to surface as a failure", || {
+        match bus.snapshot().actual {
+            Actual::Failed { reason } => Some(reason),
+            _ => None,
+        }
+    });
+    std::panic::set_hook(previous);
+
+    assert!(reason.contains("panicked"), "{reason}");
+    assert!(reason.contains("the link factory blew up"), "{reason}");
+    assert!(
+        spin("the loop to stop", || bus
+            .snapshot()
+            .stopped
+            .then_some(true)),
+        "a panicking bus thread must stop the loop",
+    );
+
+    assert!(
+        bus.probe().is_err(),
+        "a request on a dead bus must fail rather than block",
+    );
+}
+
+#[test]
 fn closing_the_bus_drops_the_link_and_probing_opens_it_briefly() {
     let opens = Arc::new(AtomicUsize::new(0));
     let counted = Arc::clone(&opens);

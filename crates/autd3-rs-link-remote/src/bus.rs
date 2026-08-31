@@ -768,7 +768,36 @@ impl Drop for StopOnDrop<'_> {
     }
 }
 
+fn panic_reason(payload: &Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&'static str>() {
+        (*s).to_owned()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "unknown payload".to_owned()
+    }
+}
+
 pub(crate) fn run_bus_loop<L, F>(
+    shared: &BusShared,
+    option: &BusOption,
+    factory: F,
+    checker_tx: &Sender<L::Checker>,
+) where
+    L: Link,
+    F: FnMut() -> Result<L, RemoteLinkError>,
+{
+    let _stop = StopOnDrop(shared);
+    if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        bus_loop(shared, option, factory, checker_tx);
+    })) {
+        let reason = format!("the bus thread panicked: {}", panic_reason(&payload));
+        tracing::error!(reason, "the bus thread panicked; the bus stays down");
+        shared.enter_failed(&reason);
+    }
+}
+
+fn bus_loop<L, F>(
     shared: &BusShared,
     option: &BusOption,
     mut factory: F,
@@ -777,7 +806,6 @@ pub(crate) fn run_bus_loop<L, F>(
     L: Link,
     F: FnMut() -> Result<L, RemoteLinkError>,
 {
-    let _stop = StopOnDrop(shared);
     shared.publish_tuning(autd3_rs_core::apply_thread_tuning(option.tuning()));
     prefault_stack(option.stack_prefault_bytes);
 
