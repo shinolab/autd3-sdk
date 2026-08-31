@@ -3,7 +3,7 @@ use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 
 use autd3_rs_core::value::Emission;
-use autd3_rs_core::{RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
+use autd3_rs_core::{RtPriority, RtSchedulePolicy};
 
 pub const AUTD3_ABI_VERSION_MAJOR: u16 = 1;
 pub const AUTD3_ABI_VERSION_MINOR: u16 = 0;
@@ -139,13 +139,11 @@ pub const AUTD3_RT_PRIORITY_DISABLED: u8 = 1;
 pub const AUTD3_RT_PRIORITY_EXPLICIT: u8 = 2;
 
 #[must_use]
-pub fn to_rt_priority(mode: u8, value: u8) -> Option<Option<ThreadPriority>> {
+pub fn to_rt_priority(mode: u8, value: u8) -> Option<Option<RtPriority>> {
     match mode {
         AUTD3_RT_PRIORITY_DEFAULT => Some(autd3_rs_core::default_rt_priority()),
         AUTD3_RT_PRIORITY_DISABLED => Some(None),
-        AUTD3_RT_PRIORITY_EXPLICIT => ThreadPriorityValue::try_from(value)
-            .ok()
-            .map(|v| Some(ThreadPriority::Crossplatform(v))),
+        AUTD3_RT_PRIORITY_EXPLICIT => RtPriority::new(value).map(Some),
         _ => None,
     }
 }

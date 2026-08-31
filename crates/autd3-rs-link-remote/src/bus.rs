@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use autd3_rs_core::link::{DcClock, DeviceState, Link, LinkStats, LinkStatus, StateCheck};
 use autd3_rs_core::value::DcSysTime;
 use autd3_rs_core::{
-    CoreId, RX_FRAME_BYTES, RtSchedulePolicy, RtThreadTuning, TX_FRAME_BYTES, ThreadPriority,
+    CoreId, RX_FRAME_BYTES, RtPriority, RtSchedulePolicy, RtThreadTuning, TX_FRAME_BYTES,
 };
 
 use crate::error::RemoteLinkError;
@@ -57,7 +57,7 @@ impl BusPacing {
 #[derive(Clone, Copy, Debug)]
 pub struct BusOption {
     pub pacing: BusPacing,
-    pub rt_priority: Option<ThreadPriority>,
+    pub rt_priority: Option<RtPriority>,
     pub rt_policy: RtSchedulePolicy,
     pub rt_affinity: Option<CoreId>,
     pub stack_prefault_bytes: usize,
@@ -86,7 +86,7 @@ impl BusOption {
 
     pub(crate) fn session_tuning(&self) -> RtThreadTuning {
         RtThreadTuning {
-            priority: self.rt_priority.and_then(autd3_rs_core::step_below),
+            priority: self.rt_priority.and_then(RtPriority::step_below),
             policy: self.rt_policy,
             affinity: None,
         }

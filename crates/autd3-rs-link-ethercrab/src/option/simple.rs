@@ -4,7 +4,7 @@ use autd3_rs_core::Interface;
 use ethercrab::{MainDeviceConfig, RetryBehaviour, Timeouts, subdevice_group::DcConfiguration};
 
 use super::EtherCrabLinkOptionFull;
-use crate::osal::thread::{RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
+use crate::osal::thread::{RtPriority, RtSchedulePolicy};
 
 const PERFORMANCE_TX_RX_PRIORITY: u8 = 90;
 
@@ -42,10 +42,9 @@ impl EtherCrabLinkOption {
     #[must_use]
     pub fn performance_default() -> EtherCrabLinkOptionFull {
         let mut full: EtherCrabLinkOptionFull = Self::performance_base().into();
-        full.tx_rx_priority = Some(ThreadPriority::Crossplatform(
-            ThreadPriorityValue::try_from(PERFORMANCE_TX_RX_PRIORITY)
-                .expect("0..=99 is a valid thread priority"),
-        ));
+        full.tx_rx_priority = Some(
+            RtPriority::new(PERFORMANCE_TX_RX_PRIORITY).expect("0..=99 is a valid thread priority"),
+        );
         full.tx_rx_policy = RtSchedulePolicy::Fifo;
         full
     }
@@ -86,10 +85,10 @@ impl From<EtherCrabLinkOption> for EtherCrabLinkOptionFull {
             sync_tolerance: opt.sync_tolerance,
             sync_timeout: opt.sync_timeout,
             #[cfg(not(target_os = "windows"))]
-            tx_rx_priority: Some(ThreadPriority::Crossplatform(
-                ThreadPriorityValue::try_from(PERFORMANCE_TX_RX_PRIORITY)
+            tx_rx_priority: Some(
+                RtPriority::new(PERFORMANCE_TX_RX_PRIORITY)
                     .expect("0..=99 is a valid thread priority"),
-            )),
+            ),
             #[cfg(target_os = "windows")]
             tx_rx_priority: None,
             tx_rx_policy: autd3_rs_core::RtSchedulePolicy::default(),
@@ -116,9 +115,7 @@ mod tests {
         assert_eq!(opt.dc_configuration.sync0_shift, Duration::ZERO);
         assert_eq!(
             opt.tx_rx_priority,
-            Some(ThreadPriority::Crossplatform(
-                ThreadPriorityValue::try_from(PERFORMANCE_TX_RX_PRIORITY).unwrap()
-            ))
+            Some(RtPriority::new(PERFORMANCE_TX_RX_PRIORITY).unwrap())
         );
         assert_eq!(opt.tx_rx_policy, RtSchedulePolicy::Fifo);
     }

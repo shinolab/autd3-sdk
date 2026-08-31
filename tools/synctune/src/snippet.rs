@@ -76,8 +76,7 @@ fn link_block(common: &Common, sync0_period: Duration, sync0_shift: Duration, bo
     } else if let Some(p) = common.tx_rx_priority {
         let _ = writeln!(
             body,
-            "link_option.tx_rx_priority = Some(ThreadPriority::Crossplatform(\
-             ThreadPriorityValue::try_from({p}).unwrap()));",
+            "link_option.tx_rx_priority = Some(RtPriority::new({p}).unwrap());",
         );
     }
     let _ = writeln!(
@@ -196,12 +195,10 @@ fn push_config(body: &mut String, imports: &mut Vec<&'static str>, c: &Config) {
     if c.no_rt_priority {
         let _ = writeln!(body, "    rt_priority: None,");
     } else if let Some(p) = c.rt_priority {
-        need("ThreadPriority");
-        need("ThreadPriorityValue");
+        need("RtPriority");
         let _ = writeln!(
             body,
-            "    rt_priority: Some(ThreadPriority::Crossplatform(\
-             ThreadPriorityValue::try_from({p}).unwrap())),",
+            "    rt_priority: Some(RtPriority::new({p}).unwrap()),",
         );
     }
     let _ = writeln!(body, "    rt_policy: {},", rt_policy(c.rt_policy));

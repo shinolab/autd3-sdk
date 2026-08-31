@@ -91,7 +91,7 @@ autd3-rs-link-remote = { version = "0.6", features = ["discovery"] }
 | フィールド     | 型                       | 説明                                                                       |
 | -------------- | ------------------------ | -------------------------------------------------------------------------- |
 | `pacing`       | `BusPacing`              | EtherCAT バスの周期. 実機リンクは `LinkPaced` でリンクに任せること.       |
-| `rt_priority`  | `Option<ThreadPriority>` | バススレッドの優先度. 既定ではリアルタイム優先度.                          |
+| `rt_priority`  | `Option<RtPriority>` | バススレッドの優先度. 既定ではリアルタイム優先度.                          |
 | `rt_policy`    | `RtSchedulePolicy`       | バススレッドのスケジューリングポリシー                                     |
 | `rt_affinity`  | `Option<CoreId>`         | バススレッドを固定する CPU コア                                            |
 | `stack_prefault_bytes` | `usize`          | 起動時にページインしておくバススレッドのスタックのバイト数. デフォルトは0. |

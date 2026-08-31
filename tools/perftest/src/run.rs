@@ -11,7 +11,7 @@ use autd3_rs::protocol::TX_FRAME_BYTES;
 use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, Frames, IntoLink, Link, LinkStats,
-    ResponseFuture, RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
+    ResponseFuture, RtPriority, RtSchedulePolicy, StateCheck,
 };
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 use autd3_rs_link_remote::{DiscoveryOption, RemoteLink, discover};
@@ -309,9 +309,7 @@ async fn run_with_link<T: IntoLink>(
             low_latency: cli.low_latency,
             reset_resend_cycles: NonZeroU32::new(2).unwrap(),
             rt_priority: match cli.rt_priority {
-                Some(p) => Some(ThreadPriority::Crossplatform(
-                    ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),
-                )),
+                Some(p) => Some(RtPriority::new(p).expect("validated to 0..=99")),
                 None => ClientConfig::default().rt_priority,
             },
             rt_policy: match cli.rt_policy {

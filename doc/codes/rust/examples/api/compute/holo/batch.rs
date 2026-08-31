@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use autd3_rs::geometry::{offset, Autd3, Geometry};
+use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Emission;
-use autd3_rs_pattern_holo::{gs_batch, AmplitudeTarget, GsOption, NalgebraBackend, Pa};
+use autd3_rs_pattern_holo::{AmplitudeTarget, GsOption, NalgebraBackend, Pa, gs_batch};
 
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);

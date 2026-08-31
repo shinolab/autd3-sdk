@@ -8,10 +8,10 @@ pub mod rt;
 pub mod value;
 
 pub use rt::{
-    CoreId, RtSchedulePolicy, RtThreadTuning, ThreadPriority, ThreadPriorityValue,
-    apply_thread_tuning, default_rt_priority, step_below,
+    CoreId, RtPriority, RtSchedulePolicy, RtThreadTuning, apply_thread_tuning, default_rt_priority,
 };
 
+pub use chrono;
 pub use nalgebra;
 
 pub use common::units;

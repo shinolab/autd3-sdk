@@ -18,7 +18,7 @@ use autd3_rs::legacy::{
     LegacyDatagramBuilder as CoreLegacyBuilder, LegacyFrames as CoreLegacyFrames,
 };
 use autd3_rs::value::{SamplingConfig, TransitionMode as CoreTransitionMode};
-use autd3_rs::{CoreId, ThreadPriority, ThreadPriorityValue};
+use autd3_rs::{CoreId, RtPriority};
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 
@@ -65,9 +65,9 @@ impl LegacyClientConfig {
             inner.rt_priority = None;
         }
         if let Some(v) = rt_priority {
-            let value = ThreadPriorityValue::try_from(v)
-                .map_err(|e| PyValueError::new_err(format!("invalid rt_priority: {e}")))?;
-            inner.rt_priority = Some(ThreadPriority::Crossplatform(value));
+            let value = RtPriority::new(v)
+                .ok_or_else(|| PyValueError::new_err(format!("invalid rt_priority: {v}")))?;
+            inner.rt_priority = Some(value);
         }
         if let Some(v) = rt_policy {
             inner.rt_policy = v.0;

@@ -5,8 +5,8 @@ use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs_pattern::wavelength;
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, GsOption, NalgebraBackend, Pa, TransducerMask,
-    gs,
+    AmplitudeTarget, Directivity, EmissionConstraint, GsOption, NalgebraBackend, Pa,
+    TransducerMask, gs,
 };
 
 // HIDE

@@ -1,8 +1,7 @@
 use core::num::{NonZeroU32, NonZeroUsize};
 
 use autd3_rs::{
-    ClientConfig as CoreClientConfig, CoreId, RtSchedulePolicy as CoreRtSchedulePolicy,
-    ThreadPriority, ThreadPriorityValue,
+    ClientConfig as CoreClientConfig, CoreId, RtPriority, RtSchedulePolicy as CoreRtSchedulePolicy,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -72,9 +71,9 @@ impl ClientConfig {
             inner.rt_priority = None;
         }
         if let Some(v) = rt_priority {
-            let value = ThreadPriorityValue::try_from(v)
-                .map_err(|e| PyValueError::new_err(format!("invalid rt_priority: {e}")))?;
-            inner.rt_priority = Some(ThreadPriority::Crossplatform(value));
+            let value = RtPriority::new(v)
+                .ok_or_else(|| PyValueError::new_err(format!("invalid rt_priority: {v}")))?;
+            inner.rt_priority = Some(value);
         }
         if let Some(v) = rt_policy {
             inner.rt_policy = v.0;
