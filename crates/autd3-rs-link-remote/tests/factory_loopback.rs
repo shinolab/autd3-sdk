@@ -31,7 +31,7 @@ impl Link for EchoLink {
         for (t, r) in tx.iter().zip(rx.iter_mut()) {
             r[0] = t[0];
         }
-        Ok(CycleOutcome::new(true))
+        Ok(CycleOutcome::valid())
     }
 }
 

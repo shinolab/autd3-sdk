@@ -222,7 +222,11 @@ impl Link for RemoteLink {
             let _ = self.dc_clock.observe(DcSysTime::from_nanos(dc_time_ns));
         }
 
-        Ok(CycleOutcome::new(rx_valid))
+        Ok(if rx_valid {
+            CycleOutcome::valid()
+        } else {
+            CycleOutcome::stale()
+        })
     }
 }
 

@@ -32,7 +32,7 @@ impl Link for EchoLink {
             r[0] = t[0];
             r[1] = t[1];
         }
-        Ok(CycleOutcome::new(true))
+        Ok(CycleOutcome::valid())
     }
 }
 
@@ -111,7 +111,7 @@ impl Link for DcLink {
             .unwrap()
             .with_dc_offset(self.bus_ahead_ns);
         self.dc_clock.observe(bus).unwrap();
-        Ok(CycleOutcome::new(true))
+        Ok(CycleOutcome::valid())
     }
 }
 
