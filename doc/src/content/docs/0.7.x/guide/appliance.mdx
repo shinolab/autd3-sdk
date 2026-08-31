@@ -1,0 +1,171 @@
+---
+title: Appliance
+description: EtherCAT マスタ専用ボードを使い, ホストの負荷や OS 設定からバスを切り離す
+sidebar:
+  order: 10
+slug: 0.7.x/guide/appliance
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+Appliance は, EtherCAT マスタだけを動かす専用ボード.
+AUTD3 との配線をボードが持ち, ユーザのマシンは [`RemoteLink`](/autd3-sdk/0.7.x/api/link/remote/) で TCP 接続する.
+
+現在サポートしているのはRaspberry Pi 4 (以下, RP4) のみ.
+
+## 用意するもの
+
+| | |
+| --- | --- |
+| ボード | Raspberry Pi 4 Model B |
+| microSD カード | 8GB 以上 |
+| 電源 | RP4 用の USB-C 電源 (5V/3A) |
+| USB イーサネットアダプタ | ホストとつなぐ 2 つ目の有線ポート. 動作を確認しているのは AX88179 系 |
+| Ethernet ケーブル | CAT 5e 以上を 2 本 (AUTD3 用とホスト用) |
+
+## イメージの入手
+
+SD イメージは SDK 本体とは別の Release ページで配布している.
+[appliance-v0.7.0](https://github.com/shinolab/autd3-sdk/releases/tag/appliance-v0.7.0) を開き, `autd3-appliance-rp4-<バージョン>-<日付>.img.xz` をダウンロードする.
+使用するクライアントと同じバージョンのイメージを使うこと.
+
+## SD カードへの書き込み
+
+[Raspberry Pi Imager](https://www.raspberrypi.com/software/) を使う場合は,
+「Use custom / カスタムイメージを使う」で `.img.xz` をそのまま選ぶ.
+
+:::caution
+Imager の OS カスタマイズ (ユーザ名・パスワード・Wi-Fi・SSH) は使わないこと.
+カスタマイズは反映されないか起動しなくなる可能性がある.
+:::
+
+Linux / macOS では `dd` でもよい.
+
+```sh
+xz -dc autd3-appliance-rp4-*.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
+```
+
+## 初回起動
+
+初回起動には1分程度の時間がかかる.
+
+起動したかどうかは, ホストからアプライアンスを探索して確かめられる.
+
+```sh
+autd3-appliance scan
+```
+
+`autd3-appliance` は autd3-console のバンドルに同梱されている ([コンソール](/autd3-sdk/0.7.x/getting-started/setup/console/)).
+autd3-console の **Appliance** タブで「Scan」を押しても良い.
+
+## 使い始める
+
+1. RP4 の オンボード有線ポートをAUTD3に接続し, 追加でUSB イーサネットアダプタを用いてホストとイーサネットで直結する
+   * RP4とホストとの接続はLAN (Wi-Fiも可, 下記参照) でもよいが, 直結が推奨
+2. AUTD3 とボードの電源を入れる
+3. ホストから [`RemoteLink`](/autd3-sdk/0.7.x/api/link/remote/) でつなぐ
+
+<CodeTabs rust={"RemoteLinkOption::discover()?;"} python={"RemoteLinkOption.discover()"} csharp={"RemoteLinkOption.Discover();"} />
+
+## ダッシュボード
+
+`http://autd3-<serial no.>.local:8081/` でバスの状態が見れる.
+(アドレスはscan結果に出る.)
+
+以下の操作が可能.
+|  | |
+| --- | --- |
+| 状態監視 | バスの開閉状態, 各デバイスの EtherCAT 状態, 位相逸脱と exchange 時間, 接続中のクライアント, アップリンクのアドレスと Wi-Fi の状態 |
+| バス操作 | 開く / 閉じる / 接続台数の確認 |
+| 設定 | 設定ファイルの取得と差し替え (反映は再起動後) |
+| ログ監視 | ボードのログ |
+| 保守 | サーバの再起動, ボードの再起動・電源断, サーババイナリの更新, Wi-Fi 資格情報の設定と削除 |
+
+同じ操作は `autd3-appliance` コマンドからもできる.
+探索・状態表示・バスの開閉・再起動は autd3-console の **Appliance** タブからも行える.
+
+```sh
+autd3-appliance scan
+autd3-appliance status
+autd3-appliance config get > appliance.toml
+autd3-appliance config set appliance.toml
+autd3-appliance logs --lines 500
+```
+
+## Wi-Fi
+
+Wi-Fi を使う場合は, まず有線 (直結でも LAN でもよい) でつないでから資格情報を入れる必要がある.
+
+```sh
+autd3-appliance wifi set --ssid <SSID> --psk <PASSPHRASE> --country JP
+```
+
+`--country` には 2 文字の国コードを渡す (日本なら `JP`).
+省略すると 5GHz 帯と 12/13ch が使えない.
+
+つながったかどうかは `autd3-appliance status` の `uplink` 行で見れる.
+`radio blocked` はボードで無線が無効になっている状態, `domain unset` は国コードが入っていない状態.
+
+Wi-Fi は有線より遅く不安定になりやすいので, 可能なら有線での接続を推奨する.
+
+### 無効化
+
+保存した資格情報を消すには `wifi forget` を使う.
+
+```sh
+autd3-appliance wifi forget
+autd3-appliance wifi forget --radio-off
+```
+
+`--radio-off` を付けると, 資格情報を消したうえで無線そのものを止める.
+
+どちらも有線でつながっていないと拒否される.
+Wi-Fi経由で強制的にOffにするならなら `--force` を付ける.
+
+### API から戻せなくなったとき
+
+`wifi forget --force` でボードに触れなくなった場合や, 有線も Wi-Fi も使えなくなった場合は SD カードを直接書き換えて直す必要がある.
+
+カードをホストに挿すと boot パーティションが見えるので, `config.txt` の末尾に次の行を足すと無線を止められる.
+
+```
+dtoverlay=disable-wifi
+```
+
+無線を戻すときはこの行を消す.
+資格情報だけを消したいなら, `autd3-data` パーティションの `network/autd3-wifi.nmconnection` と `wifi-radio-off` を削除する.
+
+## セキュリティ
+
+コントロール API にも Remote Link にも認証は無い.
+
+書き込み系だけを止めるなら, 設定の `control.allow_admin` を `false` にする.
+これにより状態の取得とバスの開閉は残り, ボードの再起動・電源断・バイナリ更新・Wi-Fi の設定と削除・設定の差し替えが拒否される.
+サーバプロセスの再起動は拒否されない.
+`control.enabled` を `false` にすると HTTP 通信自体が無効になる.
+
+## 設定
+
+設定ファイルはボードの `/data/autd3/remote-server.toml`にある.
+ブラウザか `autd3-appliance config` で読み書きする.
+変更が効くのはサーバの再起動後.
+
+ユーザが主に触るのは次の 2 つ.
+
+| キー | 意味 |
+| --- | --- |
+| `bus.sync0_period` | EtherCAT バスの周期. 既定 1ms. 台数が多い場合は伸ばす |
+| `bus.open_on_start` | 電源投入時にバスを開くか. 既定 `true` |
+
+## チューニング
+
+`sync0_period` と `frame_phase`の組み合わせを順に試し, OP 状態を保てたものを表にする.
+
+```sh
+autd3-appliance tune run --period 1ms --period 2ms --frame-phase auto --frame-phase 25
+```
+
+`--frame-phase` には `auto` か 1〜99 の百分率を渡す.
+`--period` と合わせて指定した数だけ候補が作られ, 1 候補につき `--warmup` (既定 5s) + `--dwell` (既定 30s) かかる.
+
+チューニング中はクライアントは切断しておくこと.

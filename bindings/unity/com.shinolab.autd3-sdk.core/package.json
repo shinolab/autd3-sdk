@@ -5,7 +5,7 @@
     "url": "git+https://github.com/shinolab/autd3-sdk.git",
     "directory": "bindings/unity/com.shinolab.autd3-sdk.core"
   },
-  "version": "0.6.1",
+  "version": "0.7.0",
   "displayName": "AUTD3 Core",
   "description": "AUTD3 core types, geometry and units (Unity binding).",
   "unity": "6000.0",

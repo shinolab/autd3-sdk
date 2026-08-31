@@ -1,0 +1,109 @@
+---
+title: Silencer
+description: 強度/位相の急激な変化を抑えて静音化する Silencer モジュール
+sidebar:
+  order: 4
+slug: 0.7.x/developer/fpga/silencer
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import Mermaid from "@components/Mermaid.astro";
+
+<Mermaid
+  title="Silencer モジュール"
+  code={`flowchart LR
+IN(["INTENSITY_IN / PHASE_IN"])
+SC["Step Calculator"]
+INT["Interpolator"]
+OUT(["INTENSITY_OUT / PHASE_OUT"])
+IN --> SC
+IN -- delay --> INT
+SC -- "UPDATE_RATE" --> INT
+INT --> OUT`}
+/>
+
+| Name                          | In/Out | Width | Description               |
+| ----------------------------- | ------ | ----- | ------------------------- |
+| CLK                           | In     | 1     | メインクロック            |
+| SILENCER\_SETTINGS             | In     | -     |                           |
+| ├─ FLAG                       | In     | 8     | フラグ                    |
+| ├─ UPDATE\_RATE\_INTENSITY      | In     | 16    | 固定更新幅 (強度)         |
+| ├─ UPDATE\_RATE\_PHASE          | In     | 16    | 固定更新幅 (位相)         |
+| ├─ COMPLETION\_STEPS\_INTENSITY | In     | 16    | 固定完了ステップ (強度)   |
+| └─ COMPLETION\_STEPS\_PHASE     | In     | 16    | 固定完了ステップ (位相)   |
+| DIN\_VALID                     | In     | 1     | 強度/位相データ有効フラグ |
+| INTENSITY\_IN                  | In     | 8     | 強度                      |
+| PHASE\_IN                      | In     | 8     | 位相                      |
+| INTENSITY\_OUT                 | Out    | 8     | 強度                      |
+| PHASE\_OUT                     | Out    | 8     | 位相                      |
+| DOUT\_VALID                    | Out    | 1     | 強度/位相データ有効フラグ |
+
+このモジュールは, 強度/位相データの急激な変化を抑え, 静音化するためのモジュールである.
+
+強度データ <Math tex="D" /> に対しては, 現在の値 <Math tex="D_c" /> と, 目標値 <Math tex="D_t" /> に対して, 以下のように更新する.
+
+<MathBlock
+  tex={String.raw`
+D_c \leftarrow D_c + \mathrm{sign}(D_t \times 256 - D_c) \min (|D_t \times 256 - D_c|, \Delta_I)
+`}
+/>
+
+出力は <Math tex="D_c/256" /> となる.
+
+また, 位相データ <Math tex="P" /> に対しては, 現在の値 <Math tex="P_c" /> と, 目標値 <Math tex="P_t" /> に対して, 以下のように更新する.
+
+<MathBlock
+  tex={String.raw`
+P_c \leftarrow \begin{cases}
+  P_c + \mathrm{sign}(P_t \times 256 - P_c) \min (|P_t \times 256 - P_c|, \Delta_P) & (|P_t \times 256 - P_c| \le T/2 \times 256)\\
+  P_c - \mathrm{sign}(P_t \times 256 - P_c) \min (|P_t \times 256 - P_c|, \Delta_P) & (\text{otherwise})\\
+\end{cases}
+`}
+/>
+
+出力は <Math tex="P_c/256" /> となる.
+ここで, <Math tex="\Delta_I,\Delta_P" /> はそれぞれ強度, 位相に対する 1 ステップ当たりの更新量, <Math tex="T" /> は超音波周期 (<Math tex="=256" />) である.
+なお, 更新は <Math tex="\ufreq" /> の周波数で行われる.
+
+:::note
+強度, 位相データを 256 倍しているのは, より細かい更新を可能にするためである.
+:::
+
+:::note
+位相データの場合分けは, 位相の周期性によるものである.
+位相変化が半周期より大きい場合は, 逆方向に変化したほうが早く変化が完了する.
+:::
+
+<Math tex="\Delta" /> の決定方法に 2 つのモードがある.
+
+1. 固定更新幅モード: すべての振動子に対して, 強度, 位相それぞれ固定の <Math tex="\Delta_I=" />`UPDATE_RATE_INTENSITY`, <Math tex="\Delta_P=" />`UPDATE_RATE_PHASE` を用いる.
+2. 固定完了ステップモード: すべての振動子に対して同一のステップで変化が完了するように <Math tex="\Delta" /> を決定する.
+   すなわち, 強度, 位相のステップ数 <Math tex="S_I=" />`COMPLETION_STEPS_INTENSITY`, <Math tex="S_P=" />`COMPLETION_STEPS_PHASE` に対して,
+   <MathBlock
+     tex={String.raw`
+   \Delta_I = \frac{|D_t \times 256 - D_c|}{S_I}, \quad \Delta_P = \frac{|P_t \times 256 - P_c|}{S_P}
+   `}
+   />
+   を, 目標値が変化したタイミングで個々の振動子に対して設定する.
+
+これらのモードは `FLAG` の <Math tex="\SI{0}{bit}" /> 目 (`SILENCER_FLAG_BIT_FIXED_UPDATE_RATE_MODE`) にて切り替える.
+
+このモジュールの処理もパイプライン的に行われる.
+入力として, `DIN_VALID` は 249 クロックの間 1 であり, その間 `INTENSITY_IN`, `PHASE_IN` から強度/位相データが順番に流れてくることを想定している.
+処理が終わったら, `DOUT_VALID` を 1 とし, 順次 `INTENSITY_OUT`, `PHASE_OUT` から強度/位相データを流す.
+
+## Step Calculator
+
+このサブモジュールは, 固定完了ステップモードにおける <Math tex="\Delta" /> を計算する.
+
+ただし, 整数を用いるため, 余りの処理が問題になる.
+これに関しては, 例えば強度の場合, <Math tex="S_I" /> ステップの内, 最初の <Math tex="|D_t - D_c|\,\%\,S_I" /> ステップにおいては <Math tex="\lfloor|D_t - D_c|/S_I\rfloor+1" />, それ以降では <Math tex="\lfloor|D_t - D_c|/S_I\rfloor" /> を <Math tex="\Delta_I" /> として使用することで対処している.
+位相も同様である.
+
+なお, 固定更新幅モードの場合は, このサブモジュールの出力は使用されない.
+
+## Interpolator
+
+このサブモジュールは, 現在の強度/位相データに対して, 更新量 <Math tex="\Delta" /> を加算しているだけである.
+ただし, 位相に関しては前述の通り, 目標値 (の 256 倍) と現在値との差の大きさに応じて加算するか減算するかを決定している.

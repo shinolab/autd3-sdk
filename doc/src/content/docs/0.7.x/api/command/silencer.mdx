@@ -1,0 +1,44 @@
+---
+title: SetSilencer
+description: 位相・強度の急変を補間してノイズを抑える SetSilencer
+sidebar:
+  order: 5
+slug: 0.7.x/api/command/silencer
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetSilencer` は, 位相・強度の急激な変化を線形補間し出力ノイズを抑える `Silencer` を設定するコマンド.
+
+補間方式は, 補間完了時間を指定する `FixedCompletionTime` と, 1補間ステップあたりの更新量を指定する `FixedUpdateRate` の 2 つ.
+
+## API
+
+<CodeTabs rust={"SetSilencer::default();\n\nSetSilencer::disable();\n\nSetSilencer::new(FixedCompletionTime {\n    intensity,\n    phase,\n    strict_mode,\n});\n\nSetSilencer::new(FixedUpdateRate { intensity, phase });"} python={"SetSilencer()\n\nSetSilencer.disable()\n\nSetSilencer(\n    FixedCompletionTime(\n        intensity,\n        phase,\n        strict_mode,\n    )\n)\n\nSetSilencer(FixedUpdateRate(intensity, phase))"} csharp={"new SetSilencer();\n\nSetSilencer.Disable();\n\nnew SetSilencer(new FixedCompletionTime(\n    intensity: intensity,\n    phase: phase,\n    strictMode: strictMode\n));\n\nnew SetSilencer(new FixedUpdateRate(intensity: intensityRate, phase: phaseRate));"} />
+
+`SetSilencer::default()` は `FixedCompletionTime` のデフォルトを渡すのと等価.
+`SetSilencer::disable()` は `Silencer` による補間を無効化する (25 μs で補間を完了するのと等価).
+
+## FixedCompletionTime
+
+目標値へ到達するまでの完了時間を指定する.
+各更新ステップは超音波周期 (25 µs) 単位であり, 指定時間がその整数倍でないとエラーになる.
+
+| フィールド    | 型         | デフォルト | 説明                                                     |
+| ------------- | ---------- | ---------- | -------------------------------------------------------- |
+| `intensity`   | `Duration` | `250 µs`   | 強度が目標へ到達するまでの完了時間                       |
+| `phase`       | `Duration` | `1000 µs`  | 位相が目標へ到達するまでの完了時間                       |
+| `strict_mode` | `bool`     | `true`     | 完了時間が変調・STM のサンプリング周期に収まらない場合にエラーとするか |
+
+## FixedUpdateRate
+
+1 補間ステップあたり (25 μs毎) の更新量を固定する.
+
+| フィールド  | 型           | 説明                          |
+| ----------- | ------------ | ----------------------------- |
+| `intensity` | `NonZeroU16` | 強度の 1 ステップあたり更新量 |
+| `phase`     | `NonZeroU16` | 位相の 1 ステップあたり更新量 |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::SetSilencer;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_nop::Nop;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet client = Client::open(&geometry, Nop, ClientConfig::default()).await?;\n\nlet mut builder = client.datagram_builder();\nbuilder.push(SetSilencer::default());\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import SetSilencer\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3_link_nop import Nop\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    client = await Client.open(geometry, Nop(), ClientConfig())\n\n    builder = client.datagram_builder()\n    builder.push(SetSilencer())\n    frames = builder.build()\n    for frame in frames:\n        await client.send_checked(frame)\n\n    await client.close()\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing Nop = AUTD3.Link.Nop;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new SetSilencer());\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nawait client.CloseAsync();"} />

@@ -50,7 +50,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "autd3-cpu-wire",
  "chrono",
@@ -64,14 +64,14 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "autd3-rs-core",
 ]
 
 [[package]]
 name = "autd3-rs-pattern-holo"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "autd3-rs-core",
  "nalgebra",
@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern-holo-wgpu"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "autd3-rs-core",
  "autd3-rs-pattern",
