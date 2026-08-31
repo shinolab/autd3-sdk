@@ -262,12 +262,18 @@ pub extern "C" fn autd3_stm_config_freq_nearest(hz: f32) -> *mut StmConfig {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_period(secs: f32) -> *mut StmConfig {
-    into_handle(StmConfig::new(Duration::from_secs_f32(secs)))
+    match Duration::try_from_secs_f32(secs) {
+        Ok(period) => into_handle(StmConfig::new(period)),
+        Err(_) => std::ptr::null_mut(),
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_period_nearest(secs: f32) -> *mut StmConfig {
-    into_handle(StmConfig::new(Nearest(Duration::from_secs_f32(secs))))
+    match Duration::try_from_secs_f32(secs) {
+        Ok(period) => into_handle(StmConfig::new(Nearest(period))),
+        Err(_) => std::ptr::null_mut(),
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -287,6 +293,10 @@ pub unsafe extern "C" fn autd3_stm_config_into_sampling_config(
     let Some(config) = (unsafe { handle_ref(config) }) else {
         return -1;
     };
+
+    if u32::try_from(size).is_err() {
+        return -1;
+    }
 
     let Ok(value) = config.into_sampling_config(size).divide() else {
         return -1;
@@ -972,6 +982,11 @@ pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut Pen
     ]))
 }
 
+fn total_len(lens: &[usize]) -> Option<usize> {
+    lens.iter()
+        .try_fold(0usize, |acc, &len| acc.checked_add(len))
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_set_output_mask(
     masks: *const u8,
@@ -981,7 +996,10 @@ pub unsafe extern "C" fn autd3_op_set_output_mask(
     let Some(lens) = (unsafe { slice_ref(lens, num_devices) }) else {
         return std::ptr::null_mut();
     };
-    let Some(slice) = (unsafe { slice_ref(masks, lens.iter().sum()) }) else {
+    let Some(total) = total_len(lens) else {
+        return std::ptr::null_mut();
+    };
+    let Some(slice) = (unsafe { slice_ref(masks, total) }) else {
         return std::ptr::null_mut();
     };
     let mut offset = 0;
@@ -1005,7 +1023,10 @@ pub unsafe extern "C" fn autd3_op_set_phase_correction(
     let Some(lens) = (unsafe { slice_ref(lens, num_devices) }) else {
         return std::ptr::null_mut();
     };
-    let Some(slice) = (unsafe { slice_ref(phases, lens.iter().sum()) }) else {
+    let Some(total) = total_len(lens) else {
+        return std::ptr::null_mut();
+    };
+    let Some(slice) = (unsafe { slice_ref(phases, total) }) else {
         return std::ptr::null_mut();
     };
     let mut offset = 0;
@@ -1385,8 +1406,10 @@ pub unsafe extern "C" fn autd3_datagram_builder_push(
     builder: *mut DatagramBuilder,
     op: *mut Pending,
 ) -> i32 {
-    let (Some(builder), Some(op)) = (unsafe { handle_mut(builder) }, unsafe { take_handle(op) })
-    else {
+    let Some(builder) = (unsafe { handle_mut(builder) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let Some(op) = (unsafe { take_handle(op) }) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
@@ -1399,12 +1422,14 @@ pub(crate) unsafe fn take_each(
     num_devices: usize,
 ) -> Option<Vec<Option<Pending>>> {
     let slice = unsafe { slice_ref(ops, num_devices) }?;
-    let devices: Vec<Option<Pending>> = slice.iter().map(|&p| unsafe { take_handle(p) }).collect();
-    devices
+    if slice
         .iter()
-        .flatten()
-        .all(|pending| !matches!(pending, Pending::Each(_)))
-        .then_some(devices)
+        .filter_map(|&p| unsafe { handle_ref(p.cast_const()) })
+        .any(|pending| matches!(pending, Pending::Each(_)))
+    {
+        return None;
+    }
+    Some(slice.iter().map(|&p| unsafe { take_handle(p) }).collect())
 }
 
 #[unsafe(no_mangle)]
@@ -1413,9 +1438,10 @@ pub unsafe extern "C" fn autd3_datagram_builder_push_each(
     ops: *const *mut Pending,
     num_devices: usize,
 ) -> i32 {
-    let (Some(builder), Some(devices)) = (unsafe { handle_mut(builder) }, unsafe {
-        take_each(ops, num_devices)
-    }) else {
+    let Some(builder) = (unsafe { handle_mut(builder) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let Some(devices) = (unsafe { take_each(ops, num_devices) }) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
@@ -1721,13 +1747,16 @@ pub unsafe extern "C" fn autd3_client_open(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
-    let opener = unsafe { take_handle(link) };
-    let (Some(opener), Some(geometry), Some(config)) =
-        (opener, unsafe { handle_ref(geometry) }, unsafe {
-            handle_ref(config)
-        })
-    else {
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
+    let (Some(geometry), Some(config)) = (unsafe { handle_ref(geometry) }, unsafe {
+        handle_ref::<ClientConfig>(config)
+    }) else {
+        ctx.invalid_argument("null argument");
+        return;
+    };
+    let Some(opener) = (unsafe { take_handle(link) }) else {
         ctx.invalid_argument("null argument");
         return;
     };
@@ -1758,7 +1787,9 @@ pub unsafe extern "C" fn autd3_client_send_checked(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let (Some(client), Some(datagrams)) = (unsafe { handle_ref(client) }, unsafe {
         handle_ref::<Arc<Frames>>(datagrams)
     }) else {
@@ -1787,7 +1818,9 @@ pub unsafe extern "C" fn autd3_client_send(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let (Some(client), Some(datagrams)) = (unsafe { handle_ref(client) }, unsafe {
         handle_ref::<Arc<Frames>>(datagrams)
     }) else {
@@ -1812,7 +1845,9 @@ pub unsafe extern "C" fn autd3_response_token_await(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     if token.is_null() {
         ctx.err("null token");
         return;
@@ -1859,7 +1894,9 @@ pub unsafe extern "C" fn autd3_client_read_firmware_version(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
@@ -1880,7 +1917,9 @@ pub unsafe extern "C" fn autd3_client_read_fpga_state(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
@@ -1902,7 +1941,9 @@ pub unsafe extern "C" fn autd3_client_read_telemetry(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
@@ -1927,7 +1968,9 @@ pub unsafe extern "C" fn autd3_client_read_error_detail(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
@@ -1980,7 +2023,9 @@ pub unsafe extern "C" fn autd3_checker_check(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(checker) = (unsafe { handle_ref(checker) }) else {
         ctx.err("null checker");
         return;
@@ -2012,7 +2057,9 @@ pub unsafe extern "C" fn autd3_client_stop(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
@@ -2033,7 +2080,9 @@ pub unsafe extern "C" fn autd3_client_close(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let ctx = CompletionCtx::new(cb, user_data);
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return;
@@ -2205,5 +2254,125 @@ mod tests {
         for counter in 0x00..=0x06u8 {
             assert!(to_telemetry(counter).is_some());
         }
+    }
+
+    #[test]
+    fn a_non_representable_period_is_rejected_instead_of_panicking() {
+        for secs in [-1.0, f32::NAN, f32::INFINITY, -f32::MAX, f32::MAX] {
+            assert!(autd3_stm_config_period(secs).is_null());
+            assert!(autd3_stm_config_period_nearest(secs).is_null());
+        }
+
+        let handle = autd3_stm_config_period(0.001);
+        assert!(!handle.is_null());
+        unsafe { autd3_stm_config_free(handle) };
+    }
+
+    #[test]
+    fn a_size_wider_than_u32_is_rejected_instead_of_dividing_by_zero() {
+        let handle = autd3_stm_config_period(1.0);
+        let mut out = 0u16;
+        assert_eq!(-1, unsafe {
+            autd3_stm_config_into_sampling_config(handle, 1usize << 32, &raw mut out)
+        });
+        unsafe { autd3_stm_config_free(handle) };
+    }
+
+    #[test]
+    fn a_total_length_that_overflows_is_rejected() {
+        assert_eq!(Some(6), total_len(&[1, 2, 3]));
+        assert!(total_len(&[usize::MAX, 1]).is_none());
+    }
+
+    #[test]
+    fn an_overflowing_device_length_yields_a_null_handle() {
+        let lens = [usize::MAX, 1usize];
+        let values = [0u8; 4];
+        assert!(
+            unsafe { autd3_op_set_output_mask(values.as_ptr(), lens.as_ptr(), lens.len()) }
+                .is_null()
+        );
+        assert!(
+            unsafe { autd3_op_set_phase_correction(values.as_ptr(), lens.as_ptr(), lens.len()) }
+                .is_null()
+        );
+    }
+
+    fn one_device_geometry() -> *mut Geometry {
+        into_handle(Geometry::new(vec![autd3_rs::Autd3::new(
+            Point3::origin(),
+            autd3_rs::UnitQuaternion::identity(),
+        )]))
+    }
+
+    #[test]
+    fn a_push_that_fails_leaves_the_op_handle_with_the_caller() {
+        let op = autd3_op_clear();
+        assert!(!op.is_null());
+
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_datagram_builder_push(std::ptr::null_mut(), op)
+        });
+
+        let geometry = one_device_geometry();
+        let builder = unsafe { autd3_datagram_builder_new(geometry) };
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_datagram_builder_push(builder, op)
+        });
+
+        unsafe { autd3_datagram_builder_free(builder) };
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_rejected_push_each_leaves_every_op_handle_with_the_caller() {
+        let nested: *mut Pending = into_handle(Pending::Each(vec![None]));
+        let ops = [nested];
+
+        assert!(unsafe { take_each(ops.as_ptr(), ops.len()) }.is_none());
+
+        let geometry = one_device_geometry();
+        let builder = unsafe { autd3_datagram_builder_new(geometry) };
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_datagram_builder_push_each(builder, ops.as_ptr(), ops.len())
+        });
+
+        unsafe { autd3_op_free(nested) };
+        unsafe { autd3_datagram_builder_free(builder) };
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_failed_open_leaves_the_link_handle_with_the_caller() {
+        extern "C" fn never_reports_success(
+            code: i32,
+            _value: *mut c_void,
+            _msg: *const c_char,
+            _user_data: *mut c_void,
+        ) {
+            assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        }
+
+        let opener: ClientOpener = Box::new(|_geometry, _config| unreachable!());
+        let opener = into_handle(opener);
+        let config = autd3_client_config_new();
+
+        unsafe {
+            autd3_client_open(
+                std::ptr::null(),
+                opener,
+                config,
+                Some(never_reports_success),
+                std::ptr::null_mut(),
+            );
+        }
+
+        assert!(unsafe { take_handle(opener) }.is_some());
+        unsafe { autd3_client_config_free(config) };
+    }
+
+    #[test]
+    fn a_null_completion_callback_is_ignored() {
+        unsafe { autd3_client_close(std::ptr::null(), None, std::ptr::null_mut()) };
     }
 }

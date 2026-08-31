@@ -53,6 +53,7 @@ namespace AUTD3.Link
         public static EtherCrabLinkOption PerformanceDefault(Interface? iface = null) =>
             FromPreset(iface, NativeEthercrab.autd3_link_ethercrab_option_performance_default);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate IntPtr PresetFn();
 
         private static EtherCrabLinkOption FromPreset(Interface? iface, PresetFn preset)
@@ -137,76 +138,76 @@ namespace AUTD3.Link
 
         static NativeEthercrab() => NativeAbi.Verify(Lib, autd3_abi_version());
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_ethercrab_option_new();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_ethercrab_option_safe_default();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_ethercrab_option_performance_default();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_set_iface(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_set_sync0_period(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_get_sync0_period(IntPtr option, out ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_set_sync0_shift(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_get_sync0_shift(IntPtr option, out ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_set_sync_tolerance(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_get_sync_tolerance(IntPtr option, out ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_set_sync_timeout(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_get_sync_timeout(IntPtr option, out ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_set_pdu_timeout(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_get_pdu_timeout(IntPtr option, out ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_set_state_transition_timeout(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_get_state_transition_timeout(IntPtr option, out ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_set_tx_rx_priority(IntPtr option, byte mode, byte value);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_set_tx_rx_policy(IntPtr option, byte value);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_get_tx_rx_policy(IntPtr option, out byte value);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_ethercrab_option_set_tx_rx_affinity(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasAffinity, UIntPtr coreId);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_link_ethercrab_option_free(IntPtr option);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_ethercrab_open(IntPtr option, byte[] outErr, UIntPtr outErrLen);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_ethercrab_open_legacy(IntPtr option, byte[] outErr, UIntPtr outErrLen);
     }
 }

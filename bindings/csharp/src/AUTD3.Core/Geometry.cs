@@ -1,5 +1,4 @@
 using System;
-using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
@@ -8,9 +7,9 @@ namespace AUTD3
 {
     public sealed class Geometry : IDisposable, IEnumerable<Device>
     {
-        private IntPtr _handle;
+        private readonly GeometryHandle _handle;
 
-        internal IntPtr Handle => _handle;
+        internal GeometryHandle Handle => _handle;
 
         public Geometry(IReadOnlyList<Autd3> devices)
         {
@@ -24,7 +23,7 @@ namespace AUTD3
             {
                 throw new Autd3Exception("failed to create geometry");
             }
-            _handle = handle;
+            _handle = new GeometryHandle(handle);
         }
 
         public int NumDevices => (int)NativeCore.autd3_core_geometry_num_devices(Handle);
@@ -56,38 +55,21 @@ namespace AUTD3
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-        public void Dispose()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeCore.autd3_core_geometry_free(handle);
-            }
-            GC.SuppressFinalize(this);
-        }
-
-        ~Geometry()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeCore.autd3_core_geometry_free(handle);
-            }
-        }
+        public void Dispose() => _handle.Dispose();
     }
 
     public readonly struct Device
     {
-        private readonly IntPtr _geometry;
+        private readonly GeometryHandle _geometry;
         private readonly UIntPtr _dev;
 
-        internal Device(IntPtr geometry, UIntPtr dev)
+        internal Device(GeometryHandle geometry, UIntPtr dev)
         {
             _geometry = geometry;
             _dev = dev;
         }
 
-        internal IntPtr GeometryHandle => _geometry;
+        internal GeometryHandle GeometryHandle => _geometry;
 
         internal UIntPtr DeviceIndex => _dev;
 
@@ -163,7 +145,7 @@ namespace AUTD3
             }
         }
 
-        private Vector3 DeviceDirection(Action<IntPtr, UIntPtr, float[]> native)
+        private Vector3 DeviceDirection(Action<GeometryHandle, UIntPtr, float[]> native)
         {
             var xyz = new float[3];
             native(_geometry, _dev, xyz);

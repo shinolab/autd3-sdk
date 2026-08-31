@@ -89,49 +89,49 @@ namespace AUTD3.Link
 
         static NativeEchocat() => NativeAbi.Verify(Lib, autd3_abi_version());
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_echocat_option_new();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_echocat_option_set_iface(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_echocat_option_set_sync0_period(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_echocat_option_set_frame_phase(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasFramePhase, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_echocat_option_set_pdu_timeout(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_echocat_option_set_state_transition_timeout(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_echocat_option_set_dc_static_sync_iterations(IntPtr option, uint value);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_echocat_option_set_dc_start_delay(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_echocat_option_set_sync_tolerance(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_echocat_option_set_sync_timeout(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_echocat_option_set_process_data_watchdog(IntPtr option, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_link_echocat_option_free(IntPtr option);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_echocat_open(IntPtr option, byte[] outErr, UIntPtr outErrLen);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_echocat_open_legacy(IntPtr option, byte[] outErr, UIntPtr outErrLen);
     }
 }
