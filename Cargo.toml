@@ -16,7 +16,7 @@ members = [
     "firmware/cpu/fw",
     "tools/perftest",
     "tools/synctune",
-    "tools/firmware",
+    "tools/firmware-writer",
     "tools/firmware-test",
     "examples",
     "appliance/lib",
