@@ -128,7 +128,7 @@ jobs:
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
       - name: "Install cargo-binstall and cargo-about"
-        uses: "taiki-e/install-action@v2.86.5"
+        uses: "taiki-e/install-action@v2.87.0"
         with:
           "tool": "cargo-binstall,cargo-about"
       - name: "Install dioxus-cli"
