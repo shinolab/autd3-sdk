@@ -41,8 +41,9 @@ pub fn naive<B: LinAlgBackend>(
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
+    crate::mask::validate_dst_len(dst.len(), geometry)?;
     let mask = option.mask;
-    mask.validate(geometry);
+    mask.validate(geometry)?;
 
     let g = make_propagation_matrix(
         backend,

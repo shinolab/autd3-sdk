@@ -34,7 +34,10 @@ where
 {
     let foci_per_problem = batch_shape(foci, dst.len())?;
     let mask = setup.mask;
-    mask.validate(geometry);
+    mask.validate(geometry)?;
+    for dst in dst.iter() {
+        crate::mask::validate_dst_len(dst.len(), geometry)?;
+    }
 
     let k = wavenumber(wavelength);
     let (tr_pos, tr_dir) = enabled_transducers(geometry, mask);
