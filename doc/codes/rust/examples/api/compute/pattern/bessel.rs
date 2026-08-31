@@ -17,6 +17,7 @@ fn main() {
         BesselOption {
             intensity,
             phase_offset,
+            ..Default::default()
         }
         // ANCHOR_END: option
         ;

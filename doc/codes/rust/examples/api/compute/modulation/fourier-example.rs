@@ -15,6 +15,7 @@ fn main() -> anyhow::Result<()> {
             scale_factor: None,
             clamp: false,
             offset: 0x00,
+            ..Default::default()
         },
         &mut dst,
     )?;

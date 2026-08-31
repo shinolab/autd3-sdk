@@ -22,6 +22,7 @@ async fn main() -> Result<()> {
         sync0_shift,
         sync_tolerance,
         sync_timeout,
+        ..Default::default()
     };
     // ANCHOR_END: api
 
@@ -33,12 +34,14 @@ async fn main() -> Result<()> {
         wait_loop_delay: Duration::from_millis(1),
         mailbox_echo: Duration::from_secs(10),
         mailbox_response: Duration::from_secs(10),
+        ..Default::default()
     };
     let main_device_config = ethercrab::MainDeviceConfig::default();
     let dc_configuration = ethercrab::subdevice_group::DcConfiguration {
         start_delay: Duration::from_millis(0),
         sync0_period,
         sync0_shift,
+        ..Default::default()
     };
     let tx_rx_priority = None;
     let tx_rx_policy = RtSchedulePolicy::Fifo;
@@ -54,6 +57,7 @@ async fn main() -> Result<()> {
         tx_rx_priority,
         tx_rx_policy,
         tx_rx_affinity,
+        ..Default::default()
     };
     // ANCHOR_END: api_full
 

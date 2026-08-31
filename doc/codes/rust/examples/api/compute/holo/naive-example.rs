@@ -33,6 +33,7 @@ fn main() -> anyhow::Result<()> {
             directivity: Directivity::Sphere,
             mask: TransducerMask::AllEnabled,
             parallel: true,
+            ..Default::default()
         },
         &mut dst,
     )?;

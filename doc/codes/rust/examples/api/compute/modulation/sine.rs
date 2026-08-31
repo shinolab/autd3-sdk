@@ -19,6 +19,7 @@ fn main() -> Result<()> {
             phase,
             clamp,
             sampling_config,
+            ..Default::default()
         }
         // ANCHOR_END: option
         ;

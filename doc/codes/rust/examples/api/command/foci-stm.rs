@@ -35,6 +35,7 @@ fn main() {
             sound_speed,
             loop_behavior,
             transition_mode,
+            ..Default::default()
         }
         // ANCHOR_END: option
         ;

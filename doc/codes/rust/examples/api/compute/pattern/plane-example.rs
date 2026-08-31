@@ -17,6 +17,7 @@ fn main() {
         &PlaneOption {
             intensity: Intensity::MAX,
             phase_offset: Phase::ZERO,
+            ..Default::default()
         },
         &mut dst,
     );
