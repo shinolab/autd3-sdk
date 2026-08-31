@@ -209,26 +209,19 @@ dpkg-query -W -f='\${Package}\n' 'linux-image-*' | grep -q -- '-${KERNEL}\$'
 run_stage() {
   say "running $(basename "${STAGE_DIR}")"
   in_chroot "apt-get -o Acquire::Retries=3 -y update"
-  local substage name list
-  for substage in "${STAGE_DIR}"/*/; do
-    name=$(basename "${substage%/}")
-    for list in "${substage}"*-packages-nr "${substage}"*-packages; do
-      [ -f "${list}" ] || continue
-      local recommends="" packages
-      case "${list}" in *-packages-nr) recommends="--no-install-recommends" ;; esac
-      packages=$(sed 's/#.*//' "${list}" | tr '\n' ' ')
-      [ -n "${packages// /}" ] || continue
-      say "  ${name}: $(basename "${list}")"
-      in_chroot "
+
+  local packages
+  packages=$(sed 's/#.*//' "${STAGE_DIR}/packages" | tr '\n' ' ')
+  if [ -n "${packages// /}" ]; then
+    say "  installing the stage packages"
+    in_chroot "
 export DEBIAN_FRONTEND=noninteractive
-apt-get -o Acquire::Retries=3 install ${recommends} -y ${packages}
+apt-get -o Acquire::Retries=3 install -y ${packages}
 "
-    done
-    if [ -x "${substage}/00-run.sh" ]; then
-      say "  ${name}: 00-run.sh"
-      (cd "${substage}" && ./00-run.sh)
-    fi
-  done
+  fi
+
+  say "  running run.sh"
+  (cd "${STAGE_DIR}" && ./run.sh)
 }
 
 cleanup_rootfs() {

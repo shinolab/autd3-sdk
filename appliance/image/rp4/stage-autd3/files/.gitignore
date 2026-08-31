@@ -1,6 +1,9 @@
-autd3-remote-server
 autd3-admin
+autd3-remote-server
 autd3-remote-server.service
+autd3-wifi-init
+autd3-wifi-init.service
+cmdline-append.txt
 image-release
 remote-server.toml
 run-server
