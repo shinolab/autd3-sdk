@@ -18,6 +18,7 @@ pub(crate) const AUTD_INDEX_OFFSET_RX: u32 = AUTD_INDEX_OFFSET_INPUT_BASE + CFG_
 const AUTD_AMS_PORT: u16 = 301;
 const MAX_DEVICES: usize = 128;
 
+#[non_exhaustive]
 pub enum TwinCATServer {
     Local,
     Remote { addr: IpAddr, ams_net_id: AmsNetId },
