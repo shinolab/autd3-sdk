@@ -133,7 +133,8 @@ impl Link for EchocatLink {
             .cycle(tx.as_flattened(), rx.as_flattened_mut())?;
 
         if report.dc_system_time != 0 {
-            self.dc_clock
+            let _ = self
+                .dc_clock
                 .observe(DcSysTime::from_nanos(report.dc_system_time));
         }
         if !report.rx_valid {

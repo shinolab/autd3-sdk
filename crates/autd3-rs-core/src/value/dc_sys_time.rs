@@ -29,15 +29,18 @@ impl DcSysTime {
         self.0
     }
 
-    #[must_use]
-    pub fn now() -> Self {
-        let unix_nanos = SystemTime::now()
+    fn from_unix_nanos(unix_nanos: i128) -> Result<Self, DcSysTimeError> {
+        u64::try_from(unix_nanos - ECAT_EPOCH_OFFSET_NANOS)
+            .map(Self)
+            .map_err(|_| DcSysTimeError::OutOfRange)
+    }
+
+    pub fn now() -> Result<Self, DcSysTimeError> {
+        let unix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("system clock is set before the UNIX epoch")
-            .as_nanos();
-        let nanos = i128::try_from(unix_nanos).expect("current time exceeds i128 range")
-            - ECAT_EPOCH_OFFSET_NANOS;
-        Self(u64::try_from(nanos).expect("current time exceeds the DcSysTime range"))
+            .map_err(|_| DcSysTimeError::OutOfRange)?;
+        let unix_nanos = i128::try_from(unix.as_nanos()).map_err(|_| DcSysTimeError::OutOfRange)?;
+        Self::from_unix_nanos(unix_nanos)
     }
 
     pub fn from_utc(utc: DateTime<Utc>) -> Result<Self, DcSysTimeError> {
@@ -57,8 +60,8 @@ impl DcSysTime {
 
     #[must_use]
     pub fn to_utc(self) -> DateTime<Utc> {
-        let unix_nanos = i64::try_from(ECAT_EPOCH_OFFSET_NANOS + i128::from(self.0))
-            .expect("DcSysTime exceeds chrono's representable range");
+        let unix_nanos =
+            i64::try_from(ECAT_EPOCH_OFFSET_NANOS + i128::from(self.0)).unwrap_or(i64::MAX);
         DateTime::from_timestamp_nanos(unix_nanos)
     }
 }
@@ -67,7 +70,10 @@ impl core::ops::Add<Duration> for DcSysTime {
     type Output = Self;
 
     fn add(self, rhs: Duration) -> Self::Output {
-        Self(self.0 + u64::try_from(rhs.as_nanos()).expect("duration exceeds the DcSysTime range"))
+        Self(
+            self.0
+                .saturating_add(u64::try_from(rhs.as_nanos()).unwrap_or(u64::MAX)),
+        )
     }
 }
 
@@ -81,7 +87,10 @@ impl core::ops::Sub<Duration> for DcSysTime {
     type Output = Self;
 
     fn sub(self, rhs: Duration) -> Self::Output {
-        Self(self.0 - u64::try_from(rhs.as_nanos()).expect("duration exceeds the DcSysTime range"))
+        Self(
+            self.0
+                .saturating_sub(u64::try_from(rhs.as_nanos()).unwrap_or(u64::MAX)),
+        )
     }
 }
 
@@ -95,7 +104,7 @@ impl core::ops::Sub for DcSysTime {
     type Output = Duration;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Duration::from_nanos(self.0 - rhs.0)
+        Duration::from_nanos(self.0.saturating_sub(rhs.0))
     }
 }
 
@@ -114,7 +123,60 @@ mod tests {
 
     #[test]
     fn now_is_after_epoch() {
-        assert!(DcSysTime::now().sys_time() > 0);
+        assert!(DcSysTime::now().unwrap().sys_time() > 0);
+    }
+
+    #[test]
+    fn a_clock_before_the_ecat_epoch_is_an_error_rather_than_a_panic() {
+        for (unix_nanos, what) in [
+            (0, "1970-01-01"),
+            (-1_000_000_000_000_000_000, "before the UNIX epoch"),
+            (
+                ECAT_EPOCH_OFFSET_NANOS - 1,
+                "one nanosecond short of the epoch",
+            ),
+        ] {
+            assert_eq!(
+                DcSysTime::from_unix_nanos(unix_nanos),
+                Err(DcSysTimeError::OutOfRange),
+                "{what}"
+            );
+        }
+        assert_eq!(
+            DcSysTime::from_unix_nanos(ECAT_EPOCH_OFFSET_NANOS),
+            Ok(DcSysTime::ZERO)
+        );
+        assert_eq!(
+            DcSysTime::from_unix_nanos(ECAT_EPOCH_OFFSET_NANOS + 1)
+                .unwrap()
+                .sys_time(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_clock_beyond_the_dc_sys_time_range_is_an_error() {
+        assert_eq!(
+            DcSysTime::from_unix_nanos(i128::MAX),
+            Err(DcSysTimeError::OutOfRange)
+        );
+    }
+
+    #[test]
+    fn arithmetic_saturates_instead_of_panicking() {
+        assert_eq!(DcSysTime::ZERO - Duration::from_secs(1), DcSysTime::ZERO);
+        let mut t = DcSysTime::ZERO;
+        t -= Duration::from_secs(1);
+        assert_eq!(t, DcSysTime::ZERO);
+        assert_eq!(DcSysTime::ZERO - DcSysTime::from_nanos(1), Duration::ZERO);
+        assert_eq!(
+            (DcSysTime::from_nanos(u64::MAX) + Duration::from_secs(1)).sys_time(),
+            u64::MAX
+        );
+        assert_eq!(
+            (DcSysTime::ZERO + Duration::from_secs(u64::MAX)).sys_time(),
+            u64::MAX
+        );
     }
 
     #[test]

@@ -115,8 +115,10 @@ impl DcSysTime {
 
     #[staticmethod]
     #[pyo3(name = "now")]
-    fn now() -> Self {
-        Self(CoreDcSysTime::now())
+    fn now() -> PyResult<Self> {
+        CoreDcSysTime::now()
+            .map(Self)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     }
 
     #[getter]
