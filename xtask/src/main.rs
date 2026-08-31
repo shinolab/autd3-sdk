@@ -1,3 +1,4 @@
+mod appliance;
 mod bump;
 mod changelog;
 mod component;
@@ -12,11 +13,9 @@ mod firmware;
 mod fpga;
 mod fpga_codegen;
 mod holo_wgpu;
-mod image;
 mod license;
 mod py;
 mod rust;
-mod server;
 mod simulator;
 mod tool;
 mod unity;
@@ -25,6 +24,7 @@ mod util;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+use appliance::{ApplianceCmd, run_appliance};
 use bump::{BumpVersionCmd, run_bump_version};
 use changelog::{ChangelogCmd, run_changelog};
 use console::{ConsoleCmd, run_console};
@@ -36,11 +36,9 @@ use ffi::{FfiCmd, run_ffi};
 use firmware::{FirmwareCmd, run_firmware};
 use fpga::{FpgaCmd, run_fpga};
 use holo_wgpu::{HoloWgpuCmd, run_holo_wgpu};
-use image::{ImageCmd, run_image};
 use license::{LicenseCmd, run_license, set_generate};
 use py::{PyCmd, run_py};
 use rust::{RustCmd, run_rust};
-use server::{ServerCmd, run_server};
 use simulator::{SimulatorCmd, run_simulator};
 use tool::{ToolCmd, run_tool};
 use unity::{UnityCmd, run_unity};
@@ -78,15 +76,10 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: HoloWgpuCmd,
     },
-    /// The EtherCAT master appliance server (`appliance/server/`).
-    Server {
+    /// The EtherCAT master appliance (`appliance/`): its server and its SD image.
+    Appliance {
         #[command(subcommand)]
-        cmd: ServerCmd,
-    },
-    /// The appliance SD image (`appliance/image/<board>/`, pi-gen + Docker).
-    Image {
-        #[command(subcommand)]
-        cmd: ImageCmd,
+        cmd: ApplianceCmd,
     },
     /// The sound-field simulator (`simulator/`).
     Simulator {
@@ -158,8 +151,7 @@ fn main() -> Result<()> {
         TopCmd::Cpu { cmd } => run_cpu(&root, &cmd),
         TopCmd::Tool { cmd } => run_tool(&root, cmd),
         TopCmd::HoloWgpu { cmd } => run_holo_wgpu(&root, &cmd),
-        TopCmd::Server { cmd } => run_server(&root, &cmd),
-        TopCmd::Image { cmd } => run_image(&root, &cmd),
+        TopCmd::Appliance { cmd } => run_appliance(&root, &cmd),
         TopCmd::Simulator { cmd } => run_simulator(&root, &cmd),
         TopCmd::Console { cmd } => run_console(&root, &cmd),
         TopCmd::Emulator { cmd } => run_emulator(&root, &cmd),

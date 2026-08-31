@@ -98,9 +98,8 @@ jobs:
             image:
               - *shared
               - *xtask-core
-              - 'xtask/src/image.rs'
-              - 'xtask/src/image/**'
-              - 'xtask/src/server.rs'
+              - 'xtask/src/appliance.rs'
+              - 'xtask/src/appliance/**'
               - 'appliance/**'
               - 'crates/autd3-rs-core/**'
               - 'crates/autd3-rs-link-echocat/**'

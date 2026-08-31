@@ -16,5 +16,5 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           workspaces: xtask
-      - run: cargo xtask image lint
-      - run: cargo xtask server cross
+      - run: cargo xtask appliance image lint
+      - run: cargo xtask appliance server cross
