@@ -13,4 +13,4 @@ pub use bus::{RawBus, RawSocket};
 pub use error::EchocatError;
 pub use link::{EchocatLink, StateChecker};
 pub use master::{CycleReport, FramePhase, Master, MasterConfig, SleepStrategy};
-pub use option::EchocatLinkOption;
+pub use option::{EchocatLinkOption, MAX_DC_START_DELAY, MAX_SYNC_TOLERANCE, MAX_SYNC0_PERIOD};
