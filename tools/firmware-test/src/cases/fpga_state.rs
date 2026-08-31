@@ -19,9 +19,6 @@ use crate::Ctx;
 use crate::cases::pattern_util::write_foci_bank;
 use crate::io::wait_enter;
 
-// 2 Hz sampling x 4 points: the requested bank's index wraps every 2 s, so
-// transition-pending stays observable for up to 2 s and a single finite loop
-// completes 2 s after the transition fires.
 const SAMPLING_DIVIDER: u16 = 20_000;
 const POLL_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -149,7 +146,6 @@ async fn pattern_gpio_pending(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> 
         transition_mode: TransitionMode::Gpio(GpioIn::I0),
     })
     .await?;
-    // without the GPIO trigger the transition stays pending indefinitely
     tokio::time::sleep(Duration::from_secs(1)).await;
     expect_state(
         ctx,

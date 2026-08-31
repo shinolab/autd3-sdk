@@ -50,7 +50,6 @@ impl TxRxWorker {
                     }
                 };
                 runtime.block_on(async move {
-                    // `AsyncFd` registers with this runtime's IO driver on construction.
                     let tx_rx_fut = match tx_rx_task(&interface, pdu_tx, pdu_rx) {
                         Ok(fut) => {
                             let _ = ready_tx.send(Ok(()));

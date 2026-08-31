@@ -47,7 +47,6 @@ namespace AUTD3.Unity.Tests
         [Fact]
         public void RotationMirrorsAxis()
         {
-            // UnityEngine.Quaternion ctor is (x, y, z, w).
             var q = new Quaternion(0.1f, 0.2f, 0.3f, 0.4f);
             var c = Coords.Rotation(q);
             Assert.Equal(-0.1, c.X, 4);

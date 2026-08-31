@@ -136,7 +136,6 @@ namespace AUTD3
 
         public FixedCompletionTime(TimeSpan? intensity = null, TimeSpan? phase = null, bool strictMode = true)
         {
-            // defaults: intensity = 25us * 10 = 250us, phase = 25us * 40 = 1000us
             Intensity = intensity ?? TimeSpan.FromTicks(2500);
             Phase = phase ?? TimeSpan.FromTicks(10000);
             StrictMode = strictMode;

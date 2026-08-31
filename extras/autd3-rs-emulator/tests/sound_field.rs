@@ -117,7 +117,6 @@ mod gpu {
         }
     }
 
-    // A plane close enough that the ultrasound reaches it within the recording.
     fn near_range() -> autd3_rs_emulator::RangeXY {
         autd3_rs_emulator::RangeXY {
             x: -10.0..=10.0,

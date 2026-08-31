@@ -21,7 +21,6 @@ internal static class Sample
             ;
         var dst = Modulation.ModulationBuffer();
 
-        // Shown standalone in the SineComponent section of the docs.
         // ANCHOR: components
         new SineComponent(
             100 * Hz,
