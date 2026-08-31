@@ -382,7 +382,6 @@ fn a_device_that_fell_out_of_op_while_silent_is_recovered_once_it_answers_again(
         vec![autd3_rs_core::DeviceState::Lost; devices]
     );
 
-    // The cycle itself carries the recovery; the caller only has to keep cycling.
     for _ in 0..8 * devices {
         master.cycle(&tx, &mut rx).expect("a cycle completes");
     }

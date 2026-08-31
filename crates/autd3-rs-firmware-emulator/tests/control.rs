@@ -104,7 +104,6 @@ fn read_fpga_state_reports_thermal_and_default_banks() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
 
-    // Default: banks B0, pattern mode (pattern cycle 1), thermal clear.
     let rx = device.send(&frame(0, Cmd::ReadFpgaState, &[]));
     assert_eq!(rx.data, 0b0000_1000);
 

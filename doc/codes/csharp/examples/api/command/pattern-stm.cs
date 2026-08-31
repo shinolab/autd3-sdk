@@ -14,7 +14,6 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        // Compute the Pattern (emission of all transducers) for each sample point on the host.
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var wavelength = Pattern.Wavelength(340.0f * m / s);
         var patterns = new PatternBuffer[NumPoints];

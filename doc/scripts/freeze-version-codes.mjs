@@ -120,7 +120,6 @@ function processFile(path) {
   const names = Object.keys(imports);
   if (names.length === 0) return false;
 
-  // 2a. rust={excerpt(NAME, ...)} -> rust={"...inlined..."}
   text = text.replace(
     /=\{\s*excerpt\(\s*(\w+)\s*(?:,\s*([^)]+?))?\s*\)\s*\}/g,
     (full, name, argRaw) => {

@@ -766,8 +766,6 @@ mod tests {
             assert_eq!(old, new, "only the tuned keys may move");
         }
         let (mut config, unknown) = Config::parse(&after).unwrap();
-        // 配布 config は 4 コアのボード向けに `affinity = 3` を持つ. CI のランナーは
-        // それより小さいことがあるので, ここで見たいのは affinity ではないと明示する.
         config.rt.affinity = default_affinity();
         config.validate().unwrap();
         assert_eq!(unknown, Vec::<String>::new());
