@@ -7,6 +7,7 @@ license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"
 description = "GUI console that launches AUTD3 tools (simulator / TwinCAT setup)"
+publish = false
 
 [[bin]]
 name = "autd3-console"

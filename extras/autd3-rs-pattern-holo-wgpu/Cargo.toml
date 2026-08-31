@@ -1,5 +1,16 @@
 [workspace]
 
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_precision_loss = "allow"
+
 [package]
 name = "autd3-rs-pattern-holo-wgpu"
 version = "0.6.1"
@@ -18,22 +29,19 @@ categories = ["science"]
 autd3-rs-core = { version = "0.6.1", path = "../../crates/autd3-rs-core" }
 autd3-rs-pattern-holo = { version = "0.6.1", path = "../../crates/autd3-rs-pattern-holo" }
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
-thiserror = "2.0.18"
+thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 wgpu = { version = "30.0.0", default-features = false, features = [
     "wgsl",
     "vulkan",
     "metal",
     "dx12",
 ] }
-pollster = "1.0.1"
-bytemuck = "1.25.0"
+pollster = { version = "1.0.1", default-features = false }
+bytemuck = { version = "1.25.0", default-features = false }
 tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
 
-[lints.clippy]
-all = { level = "deny", priority = -1 }
-pedantic = { level = "deny", priority = -1 }
-cast_precision_loss = "allow"
-missing_errors_doc = "allow"
+[lints]
+workspace = true

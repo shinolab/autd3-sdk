@@ -32,12 +32,12 @@ autd3-rs-modulation = { path = "../../crates/autd3-rs-modulation" }
 anyhow = { version = "1.0.102", default-features = false, features = ["std"] }
 bytemuck = { version = "1.25.0", default-features = false, features = ["derive"] }
 wgpu = { version = "30.0.0", default-features = false, features = ["std", "parking_lot", "dx12", "vulkan", "metal", "wgsl"] }
-textplots = { version = "0.8.7" }
+textplots = { version = "0.8.7", default-features = false }
 thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
-pollster = { version = "1.0.1" }
+pollster = { version = "1.0.1", default-features = false }
 polars = { version = "0.55.2", default-features = false, features = ["dtype-u8", "dtype-u16"] }
-rayon = { version = "1.10.0" }
+rayon = { version = "1.11.0", default-features = false }
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
 
 [package]
