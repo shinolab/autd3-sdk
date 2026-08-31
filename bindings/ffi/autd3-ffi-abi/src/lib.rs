@@ -5,12 +5,27 @@ use std::ptr::NonNull;
 use autd3_rs_core::value::Emission;
 use autd3_rs_core::{RtPriority, RtSchedulePolicy};
 
-pub const AUTD3_ABI_VERSION_MAJOR: u16 = 1;
-pub const AUTD3_ABI_VERSION_MINOR: u16 = 0;
+const fn parse_version_field(s: &str) -> u16 {
+    let bytes = s.as_bytes();
+    let mut value = 0u16;
+    let mut i = 0;
+    while i < bytes.len() {
+        value = value * 10 + (bytes[i] - b'0') as u16;
+        i += 1;
+    }
+    assert!(value <= 0x3FF, "version field does not fit in 10 bits");
+    value
+}
+
+pub const AUTD3_ABI_VERSION_MAJOR: u16 = parse_version_field(env!("CARGO_PKG_VERSION_MAJOR"));
+pub const AUTD3_ABI_VERSION_MINOR: u16 = parse_version_field(env!("CARGO_PKG_VERSION_MINOR"));
+pub const AUTD3_ABI_VERSION_PATCH: u16 = parse_version_field(env!("CARGO_PKG_VERSION_PATCH"));
 
 #[must_use]
 pub const fn abi_version() -> u32 {
-    ((AUTD3_ABI_VERSION_MAJOR as u32) << 16) | AUTD3_ABI_VERSION_MINOR as u32
+    ((AUTD3_ABI_VERSION_MAJOR as u32) << 20)
+        | ((AUTD3_ABI_VERSION_MINOR as u32) << 10)
+        | AUTD3_ABI_VERSION_PATCH as u32
 }
 
 #[macro_export]

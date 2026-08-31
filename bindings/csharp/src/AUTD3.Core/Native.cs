@@ -95,21 +95,22 @@ namespace AUTD3
 
     internal static class NativeAbi
     {
-        internal const ushort Major = 1;
-        internal const ushort Minor = 0;
+        internal const ushort Major = 0;
+        internal const ushort Minor = 6;
+        internal const ushort Patch = 1;
 
         internal const int ErrorBufferLength = 1024;
 
         internal static void Verify(string library, uint actual)
         {
-            var expected = ((uint)Major << 16) | Minor;
+            var expected = ((uint)Major << 20) | ((uint)Minor << 10) | Patch;
             if (actual == expected)
             {
                 return;
             }
             throw new Autd3Exception(
-                $"native library '{library}' reports C ABI version {actual >> 16}.{actual & 0xFFFF}, " +
-                $"but this binding requires {Major}.{Minor}. " +
+                $"native library '{library}' reports C ABI version {actual >> 20}.{(actual >> 10) & 0x3FF}.{actual & 0x3FF}, " +
+                $"but this binding requires exactly {Major}.{Minor}.{Patch}. " +
                 "The managed package and the native library are from different releases.");
         }
     }
