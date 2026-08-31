@@ -89,7 +89,7 @@ jobs:
             appliance/image/*/deploy/SHA256SUMS
           retention-days: 30
 
-      - uses: taiki-e/install-action@v2.86.5
+      - uses: taiki-e/install-action@v2.87.0
         if: steps.tag.outputs.publish == 'true'
         with:
           tool: git-cliff
