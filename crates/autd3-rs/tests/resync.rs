@@ -4,11 +4,11 @@ use std::sync::{Arc, Mutex};
 
 use autd3_cpu_fw::proto::Mode;
 use autd3_cpu_fw::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
+use autd3_rs::Telemetry;
 use autd3_rs::commands::SetSilencer;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::link::{CycleOutcome, Link, LinkStats};
 use autd3_rs::protocol::{Cmd, RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
-use autd3_rs::telemetry::Telemetry;
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_firmware_emulator::{Audit, Fault};
 
@@ -131,7 +131,7 @@ async fn stream_silencer(client: &Client, rounds: usize) {
     }
 }
 
-fn assert_real_firmware(client: &Client, versions: &[autd3_rs::firmware_version::FirmwareVersion]) {
+fn assert_real_firmware(client: &Client, versions: &[autd3_rs::FirmwareVersion]) {
     assert_eq!(versions.len(), client.num_devices());
     for (i, v) in versions.iter().enumerate() {
         assert_eq!(
