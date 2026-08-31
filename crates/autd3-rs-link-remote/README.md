@@ -8,7 +8,7 @@ Use it to keep the realtime bus on a dedicated machine (an EtherCAT appliance, f
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `discovery` | no | Discover remote servers over mDNS |
+| `discovery` | yes | Discover remote servers over mDNS |
 
 ## Documentation
 

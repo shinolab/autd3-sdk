@@ -111,6 +111,7 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
                 "clippy",
                 "-p",
                 "autd3-rs-link-remote",
+                "--no-default-features",
                 "--all-targets",
                 "--",
                 "-D",
