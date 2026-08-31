@@ -9,8 +9,8 @@ use autd3_rs_appliance::{
 };
 use autd3_rs_core::DeviceState;
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
-use autd3_rs_link_echocat::master::budget::{WireTiming, exchange_budget};
 use autd3_rs_link_echocat::{EchocatLinkOption, FramePhase, MAX_SYNC0_PERIOD};
+use autd3_rs_link_echocat::{WireTiming, exchange_budget};
 use autd3_rs_link_remote::{Actual, Desired, RemoteLinkError, Sessions, SharedBus};
 
 const POLL_STEP: Duration = Duration::from_millis(50);

@@ -1,5 +1,6 @@
 #![no_std]
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! wire_enum {
     ($vis:vis enum $name:ident { $($variant:ident = $value:expr,)+ }) => {

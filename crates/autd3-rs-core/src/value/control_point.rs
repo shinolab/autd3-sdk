@@ -45,6 +45,7 @@ impl<const N: usize> ControlPoints<N> {
         Self { points, intensity }
     }
 
+    #[doc(hidden)]
     #[must_use]
     pub fn focus(&self, device: &Device, j: usize) -> Focus {
         let cp = self.points[j];

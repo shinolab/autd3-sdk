@@ -19,6 +19,7 @@ pub enum TransitionMode {
 }
 
 impl TransitionMode {
+    #[doc(hidden)]
     pub const fn try_as_u8(self) -> Result<u8, EncodeError> {
         match self {
             TransitionMode::SyncIdx => Ok(autd3_cpu_wire::params::TRANSITION_MODE_SYNC_IDX),
@@ -35,6 +36,7 @@ impl TransitionMode {
         matches!(self, TransitionMode::Later)
     }
 
+    #[doc(hidden)]
     #[must_use]
     pub const fn value(self) -> u64 {
         match self {
@@ -55,6 +57,7 @@ impl TransitionMode {
         }
     }
 
+    #[doc(hidden)]
     pub fn margin_ns(self) -> Result<u32, EncodeError> {
         let TransitionMode::SysTime {
             margin: Some(margin),

@@ -28,8 +28,8 @@ pub use autd3_rs_core::{
     LinkStats, LinkStatus, MAX_INFLIGHT, Point3, Quaternion, RtPriority, RtSchedulePolicy,
     StateCheck, UnitQuaternion, UnitVector3, Vector3, Velocity, offset, point,
 };
-pub use client::{Client, ClientConfig, ResponseFuture};
-pub use datagram::{Datagram, DatagramBuilder, Frame, Frames};
+pub use client::{Client, ClientConfig, MAX_DEVICES, ResponseFuture};
+pub use datagram::{Datagram, DatagramBuilder, Frame, FrameIter, Frames};
 pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;
 pub use response::Response;

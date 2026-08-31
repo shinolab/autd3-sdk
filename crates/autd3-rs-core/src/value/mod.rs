@@ -15,6 +15,7 @@ pub use bank::{ModulationBank, PatternBank};
 pub use control_point::{ControlPoint, ControlPoints};
 pub use dc_sys_time::{DcSysTime, DcSysTimeError};
 pub use emission::Emission;
+#[doc(hidden)]
 pub use focus::Focus;
 pub use gpio::GpioIn;
 pub use intensity::Intensity;
