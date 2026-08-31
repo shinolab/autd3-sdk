@@ -27,7 +27,10 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
 }
 
 fn lcm(a: usize, b: usize) -> usize {
-    a / gcd(a, b) * b
+    match gcd(a, b) {
+        0 => 0,
+        g => a / g * b,
+    }
 }
 
 pub fn fourier<S: Into<SamplingMode> + Copy>(
@@ -88,6 +91,22 @@ mod tests {
     use autd3_rs_core::units::Hz;
 
     use super::*;
+
+    #[test]
+    fn a_pair_of_empty_buffers_folds_to_zero_instead_of_dividing_by_zero() {
+        assert_eq!(gcd(0, 0), 0);
+        assert_eq!(lcm(0, 0), 0);
+        assert_eq!(lcm(1, 0), 0);
+        assert_eq!(lcm(0, 7), 0);
+        assert_eq!([0usize, 0].iter().fold(1, |acc, b| lcm(acc, *b)), 0);
+    }
+
+    #[test]
+    fn the_period_of_several_components_is_their_least_common_multiple() {
+        assert_eq!(lcm(4, 6), 12);
+        assert_eq!(lcm(3, 5), 15);
+        assert_eq!([1usize, 4, 6].iter().fold(1, |acc, b| lcm(acc, *b)), 12);
+    }
 
     #[test]
     fn fourier_single_component_matches_sine() {

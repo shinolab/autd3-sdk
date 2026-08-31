@@ -129,6 +129,13 @@ pub enum PayloadError {
     #[error("pattern size {size} must be >= {min}")]
     PatternSizeTooSmall { size: usize, min: usize },
 
+    #[error("{count} patterns do not fit the {format} compression, which carries {max} per frame")]
+    PatternCountExceedsFormat {
+        count: usize,
+        format: &'static str,
+        max: usize,
+    },
+
     #[error("a {size}-sample bank never advances its index, so it requires an infinite loop")]
     FiniteLoopNeedsMultipleSamples { size: usize },
 

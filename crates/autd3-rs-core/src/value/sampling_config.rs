@@ -34,6 +34,8 @@ pub enum SamplingConfigError {
     PeriodOutOfRange(Duration, Duration, Duration),
     #[error("STM period ({0:?}) must be divisible by the number of samples ({1})")]
     StmPeriodIndivisible(Duration, usize),
+    #[error("Sampling frequency must be a number, but {0:?} was given")]
+    FreqNotANumber(Freq<f32>),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -154,10 +156,15 @@ impl SamplingConfig {
                 }
                 Ok((duration.as_nanos() / ULTRASOUND_PERIOD.as_nanos()) as u16)
             }
-            SamplingConfigInner::FreqNearest(freq) => Ok(
-                ((ULTRASOUND_FREQ.hz() as f32 / freq.hz()).clamp(1.0, u16::MAX as f32)).round()
-                    as u16,
-            ),
+            SamplingConfigInner::FreqNearest(freq) => {
+                if freq.hz().is_nan() {
+                    return Err(SamplingConfigError::FreqNotANumber(freq));
+                }
+                Ok(
+                    ((ULTRASOUND_FREQ.hz() as f32 / freq.hz()).clamp(1.0, u16::MAX as f32)).round()
+                        as u16,
+                )
+            }
             SamplingConfigInner::PeriodNearest(period) => {
                 Ok(((period.as_nanos() + ULTRASOUND_PERIOD.as_nanos() / 2)
                     / ULTRASOUND_PERIOD.as_nanos())
@@ -243,6 +250,31 @@ mod tests {
         assert_eq!(
             Ok(1),
             SamplingConfig::new(Nearest(ULTRASOUND_PERIOD / 2)).divide()
+        );
+    }
+
+    #[test]
+    fn a_not_a_number_frequency_never_reaches_the_wire_as_divider_zero() {
+        let config = SamplingConfig::new(Nearest(f32::NAN * Hz));
+        assert!(
+            matches!(config.divide(), Err(SamplingConfigError::FreqNotANumber(_))),
+            "{:?}",
+            config.divide(),
+        );
+        assert!(SamplingConfig::new(f32::NAN * Hz).divide().is_err());
+        assert_eq!(
+            Ok(u16::MAX),
+            SamplingConfig::new(Nearest(f32::INFINITY.recip() * Hz)).divide(),
+            "an infinite divider still clamps",
+        );
+        assert_eq!(
+            Ok(1),
+            SamplingConfig::new(Nearest(f32::INFINITY * Hz)).divide(),
+        );
+        assert_eq!(
+            Ok(1),
+            SamplingConfig::new(Nearest(-1.0 * Hz)).divide(),
+            "a negative frequency clamps rather than wrapping",
         );
     }
 
