@@ -2,7 +2,12 @@ use std::time::Duration;
 
 use autd3_rs_core::Interface;
 
+use crate::error::EchocatError;
 use crate::master::{FramePhase, MasterConfig, SleepStrategy};
+
+pub const MAX_SYNC0_PERIOD: Duration = Duration::from_nanos(u32::MAX as u64);
+pub const MAX_SYNC_TOLERANCE: Duration = Duration::from_nanos(u32::MAX as u64);
+pub const MAX_DC_START_DELAY: Duration = Duration::from_nanos(u32::MAX as u64);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EchocatLinkOption {
@@ -42,6 +47,53 @@ impl Default for EchocatLinkOption {
     }
 }
 
+impl EchocatLinkOption {
+    pub fn validate(&self) -> Result<(), EchocatError> {
+        fn check(
+            field: &'static str,
+            value: Duration,
+            min: Duration,
+            max: Duration,
+        ) -> Result<(), EchocatError> {
+            if value < min || value > max {
+                return Err(EchocatError::InvalidOption {
+                    field,
+                    value,
+                    min,
+                    max,
+                });
+            }
+            Ok(())
+        }
+
+        check(
+            "sync0_period",
+            self.sync0_period,
+            Duration::from_nanos(1),
+            MAX_SYNC0_PERIOD,
+        )?;
+        check(
+            "sync_tolerance",
+            self.sync_tolerance,
+            Duration::ZERO,
+            MAX_SYNC_TOLERANCE,
+        )?;
+        check(
+            "dc_start_delay",
+            self.dc_start_delay,
+            Duration::ZERO,
+            MAX_DC_START_DELAY,
+        )?;
+        check(
+            "pdu_timeout",
+            self.pdu_timeout,
+            Duration::from_nanos(1),
+            Duration::from_secs(60),
+        )?;
+        Ok(())
+    }
+}
+
 impl From<&EchocatLinkOption> for MasterConfig {
     fn from(option: &EchocatLinkOption) -> Self {
         Self {
@@ -61,8 +113,96 @@ impl From<&EchocatLinkOption> for MasterConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{EchocatLinkOption, FramePhase, MasterConfig, SleepStrategy};
+    use super::{EchocatError, EchocatLinkOption, FramePhase, MasterConfig, SleepStrategy};
     use std::time::Duration;
+
+    #[test]
+    fn the_default_option_validates() {
+        assert!(EchocatLinkOption::default().validate().is_ok());
+    }
+
+    #[test]
+    fn a_zero_sync0_period_is_rejected_before_it_divides_by_zero() {
+        let option = EchocatLinkOption {
+            sync0_period: Duration::ZERO,
+            ..EchocatLinkOption::default()
+        };
+        assert!(matches!(
+            option.validate(),
+            Err(EchocatError::InvalidOption {
+                field: "sync0_period",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_sync0_period_beyond_u32_nanoseconds_is_rejected() {
+        assert!(
+            EchocatLinkOption {
+                sync0_period: super::MAX_SYNC0_PERIOD,
+                ..EchocatLinkOption::default()
+            }
+            .validate()
+            .is_ok()
+        );
+        assert!(matches!(
+            EchocatLinkOption {
+                sync0_period: super::MAX_SYNC0_PERIOD + Duration::from_nanos(1),
+                ..EchocatLinkOption::default()
+            }
+            .validate(),
+            Err(EchocatError::InvalidOption {
+                field: "sync0_period",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn an_out_of_range_sync_tolerance_is_rejected() {
+        assert!(matches!(
+            EchocatLinkOption {
+                sync_tolerance: Duration::from_secs(5),
+                ..EchocatLinkOption::default()
+            }
+            .validate(),
+            Err(EchocatError::InvalidOption {
+                field: "sync_tolerance",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn an_out_of_range_dc_start_delay_is_rejected() {
+        assert!(matches!(
+            EchocatLinkOption {
+                dc_start_delay: Duration::from_secs(5),
+                ..EchocatLinkOption::default()
+            }
+            .validate(),
+            Err(EchocatError::InvalidOption {
+                field: "dc_start_delay",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_zero_pdu_timeout_is_rejected() {
+        assert!(matches!(
+            EchocatLinkOption {
+                pdu_timeout: Duration::ZERO,
+                ..EchocatLinkOption::default()
+            }
+            .validate(),
+            Err(EchocatError::InvalidOption {
+                field: "pdu_timeout",
+                ..
+            })
+        ));
+    }
 
     #[test]
     fn the_default_wait_never_burns_a_core() {
