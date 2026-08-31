@@ -62,7 +62,7 @@ impl SamplingMode {
         let nyquist = config.freq()?.hz() / 2.;
         if freq.hz() as f32 >= nyquist {
             return Err(ModulationError::FrequencyAboveNyquist {
-                hz: f64::from(freq.hz()),
+                hz: freq.hz() as f32,
                 nyquist,
             });
         }
@@ -88,7 +88,7 @@ impl SamplingMode {
         let nyquist = config.freq()?.hz() / 2.;
         if freq.hz() >= nyquist {
             return Err(ModulationError::FrequencyAboveNyquist {
-                hz: f64::from(freq.hz()),
+                hz: freq.hz(),
                 nyquist,
             });
         }

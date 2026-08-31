@@ -265,7 +265,8 @@ fn radiation_pressure_inplace(mut buffer: PyRefMut<'_, ModulationBuffer>) {
 
 #[pyfunction]
 fn samples_per_period(divider: u16, freq_hz: u32) -> Option<u32> {
-    autd3_rs_modulation::samples_per_period(divider, freq_hz)
+    let divider = core::num::NonZeroU16::new(divider)?;
+    autd3_rs_modulation::samples_per_period(divider, autd3_rs_core::Freq::from_hz(freq_hz))
 }
 
 #[pyfunction]

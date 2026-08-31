@@ -1,8 +1,8 @@
-pub fn constant(intensity: u8, dst: &mut Vec<u8>) {
+pub fn constant(amplitude: u8, dst: &mut Vec<u8>) {
     dst.clear();
     dst.reserve(2);
-    dst.push(intensity);
-    dst.push(intensity);
+    dst.push(amplitude);
+    dst.push(amplitude);
 }
 
 #[cfg(test)]

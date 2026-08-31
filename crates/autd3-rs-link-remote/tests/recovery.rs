@@ -68,7 +68,7 @@ impl Link for FlakyLink {
         for (t, r) in tx.iter().zip(rx.iter_mut()) {
             r[0] = t[0];
         }
-        Ok(CycleOutcome::new(true))
+        Ok(CycleOutcome::valid())
     }
 }
 
@@ -169,7 +169,7 @@ impl Link for WatchedLink {
         _tx: &[[u8; TX_FRAME_BYTES]],
         _rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Infallible> {
-        Ok(CycleOutcome::new(true))
+        Ok(CycleOutcome::valid())
     }
 }
 
@@ -236,7 +236,7 @@ impl Link for CountingLink {
         _rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Infallible> {
         self.0.fetch_add(1, Ordering::Relaxed);
-        Ok(CycleOutcome::new(true))
+        Ok(CycleOutcome::valid())
     }
 }
 

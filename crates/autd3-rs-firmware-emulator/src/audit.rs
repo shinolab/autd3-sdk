@@ -76,6 +76,10 @@ impl Link for Audit {
                 device.send(tx).write_to(rx);
             }
         }
-        Ok(CycleOutcome::new(!invalid))
+        Ok(if invalid {
+            CycleOutcome::stale()
+        } else {
+            CycleOutcome::valid()
+        })
     }
 }

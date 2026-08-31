@@ -5,8 +5,13 @@ pub struct CycleOutcome {
 
 impl CycleOutcome {
     #[must_use]
-    pub const fn new(rx_valid: bool) -> Self {
-        Self { rx_valid }
+    pub const fn valid() -> Self {
+        Self { rx_valid: true }
+    }
+
+    #[must_use]
+    pub const fn stale() -> Self {
+        Self { rx_valid: false }
     }
 
     #[must_use]

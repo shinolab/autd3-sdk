@@ -35,7 +35,7 @@ impl Link for EchoLink {
         for (t, r) in tx.iter().zip(rx.iter_mut()) {
             r[0] = t[0];
         }
-        Ok(CycleOutcome::new(true))
+        Ok(CycleOutcome::valid())
     }
 }
 
@@ -415,7 +415,7 @@ impl Link for PanickingLink {
     ) -> Result<CycleOutcome, Infallible> {
         assert!(self.cycles_left > 0, "the bus link exploded");
         self.cycles_left -= 1;
-        Ok(CycleOutcome::new(true))
+        Ok(CycleOutcome::valid())
     }
 }
 
@@ -584,7 +584,7 @@ impl Link for CountingLink {
         for (t, r) in tx.iter().zip(rx.iter_mut()) {
             r[0] = t[0];
         }
-        Ok(CycleOutcome::new(true))
+        Ok(CycleOutcome::valid())
     }
 }
 

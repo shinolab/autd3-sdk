@@ -153,7 +153,11 @@ impl Link for EchocatLink {
             self.rx_was_valid = report.rx_valid;
         }
 
-        Ok(CycleOutcome::new(report.rx_valid))
+        Ok(if report.rx_valid {
+            CycleOutcome::valid()
+        } else {
+            CycleOutcome::stale()
+        })
     }
 }
 

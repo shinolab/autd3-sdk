@@ -226,6 +226,6 @@ impl Link for TwinCATLink {
             }
         }
 
-        Ok(CycleOutcome::new(true))
+        Ok(CycleOutcome::valid())
     }
 }
