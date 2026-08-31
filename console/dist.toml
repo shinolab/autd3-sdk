@@ -15,4 +15,5 @@ build-command = [
     "--",
     "console",
     "stage",
+    "--license",
 ]

@@ -65,7 +65,7 @@ jobs:
         with:
           path: bindings/ffi/target/native
       - name: Pack
-        run: cargo xtask unity pack --native-dir bindings/ffi/target/native
+        run: cargo xtask unity pack --license --native-dir bindings/ffi/target/native
       - name: Generate release notes
         run: cargo xtask changelog --tag "${GITHUB_REF_NAME}" --release-notes --output RELEASE_NOTES.md
       - name: Create GitHub Release
