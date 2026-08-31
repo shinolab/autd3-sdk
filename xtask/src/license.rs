@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result, bail};
 use clap::{Subcommand, ValueEnum};
@@ -77,6 +78,18 @@ const DENY_WORKSPACES: &[&str] = &[
 
 const THIRD_PARTY: &str = "THIRD-PARTY-LICENSES.md";
 
+const PLACEHOLDER: &str = "# Third-party licenses\n\nThis notice was not generated for this build.\nRun `cargo xtask license generate`, or pass `--license` to the packaging command,\nto produce the real notices with cargo-about.\n";
+
+static GENERATE: AtomicBool = AtomicBool::new(false);
+
+pub fn set_generate(generate: bool) {
+    GENERATE.store(generate, Ordering::Relaxed);
+}
+
+fn generate_enabled() -> bool {
+    GENERATE.load(Ordering::Relaxed)
+}
+
 #[derive(Subcommand)]
 pub enum LicenseCmd {
     /// Generate the third-party license notices with cargo-about
@@ -107,6 +120,7 @@ pub fn run_license(root: &Path, cmd: &LicenseCmd) -> Result<()> {
 }
 
 fn generate(root: &Path, target: GenTarget) -> Result<()> {
+    set_generate(true);
     match target {
         GenTarget::All => {
             generate_python(root)?;
@@ -181,7 +195,7 @@ fn check_bundled_license(root: &Path) -> Result<()> {
 }
 
 fn ensure_about() -> Result<()> {
-    if !on_path("cargo-about") {
+    if generate_enabled() && !on_path("cargo-about") {
         bail!("`cargo-about` is required");
     }
     Ok(())
@@ -298,6 +312,9 @@ pub fn generate_simulator(root: &Path) -> Result<()> {
 }
 
 fn about(root: &Path, manifest: &Path, out: &Path) -> Result<()> {
+    if !generate_enabled() {
+        return placeholder(manifest, out);
+    }
     let about_toml = root.join("about.toml");
     let template = root.join("about.hbs");
     println!("== cargo-about: {} ==", manifest.display());
@@ -316,6 +333,14 @@ fn about(root: &Path, manifest: &Path, out: &Path) -> Result<()> {
         ],
         root,
     )
+}
+
+fn placeholder(manifest: &Path, out: &Path) -> Result<()> {
+    println!("== cargo-about skipped: {} ==", manifest.display());
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(out, PLACEHOLDER).with_context(|| format!("writing {}", out.display()))
 }
 
 fn copy(src: &Path, dst: &Path) -> Result<()> {
