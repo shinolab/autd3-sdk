@@ -34,9 +34,9 @@ impl EulerAngles {
         third: Angle,
     ) -> Self {
         Self(
-            UnitQuaternion::from_axis_angle(&a1, first.0.radian())
-                * UnitQuaternion::from_axis_angle(&a2, second.0.radian())
-                * UnitQuaternion::from_axis_angle(&a3, third.0.radian()),
+            UnitQuaternion::from_axis_angle(&a1, first.0.rad())
+                * UnitQuaternion::from_axis_angle(&a2, second.0.rad())
+                * UnitQuaternion::from_axis_angle(&a3, third.0.rad()),
         )
     }
 }

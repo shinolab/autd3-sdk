@@ -30,7 +30,7 @@ namespace AUTD3.Tests
         [Fact]
         public void VelocityNoParentheses()
         {
-            Assert.Equal(340000f, (340 * m / s).MmPerS);
+            Assert.Equal(340000f, (340 * m / s).MmS);
         }
 
         [Fact]
@@ -43,8 +43,8 @@ namespace AUTD3.Tests
         [Fact]
         public void AngleConversions()
         {
-            Assert.Equal((float)(Math.PI / 2.0), (90 * deg).Radian, 4);
-            Assert.Equal(1f, (1 * rad).Radian);
+            Assert.Equal((float)(Math.PI / 2.0), (90 * deg).Rad, 4);
+            Assert.Equal(1f, (1 * rad).Rad);
         }
 
         [Fact]

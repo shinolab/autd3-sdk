@@ -126,7 +126,7 @@ namespace AUTD3
             var sampling = _config.CreateHandle();
             try
             {
-                return NativePattern.autd3_op_config_foci_stm((byte)_bank, sampling, _size, _numFoci, _soundSpeed.MPerS, _loopBehavior.Rep);
+                return NativePattern.autd3_op_config_foci_stm((byte)_bank, sampling, _size, _numFoci, _soundSpeed.MS, _loopBehavior.Rep);
             }
             finally
             {

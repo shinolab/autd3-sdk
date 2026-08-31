@@ -73,8 +73,8 @@ impl Velocity {
     }
 
     #[getter]
-    fn mm_per_s(&self) -> f32 {
-        self.0.mm_per_s()
+    fn mm_s(&self) -> f32 {
+        self.0.mm_s()
     }
 
     #[getter]
@@ -98,23 +98,23 @@ pub struct Angle(pub CoreAngle);
 #[pymethods]
 impl Angle {
     #[staticmethod]
-    fn from_radian(radian: f32) -> Self {
-        Self(CoreAngle::from_radian(radian))
+    fn from_rad(radian: f32) -> Self {
+        Self(CoreAngle::from_rad(radian))
     }
 
     #[staticmethod]
-    fn from_degree(degree: f32) -> Self {
-        Self(CoreAngle::from_degree(degree))
+    fn from_deg(degree: f32) -> Self {
+        Self(CoreAngle::from_deg(degree))
     }
 
     #[getter]
-    fn radian(&self) -> f32 {
-        self.0.radian()
+    fn rad(&self) -> f32 {
+        self.0.rad()
     }
 
     #[getter]
-    fn degree(&self) -> f32 {
-        self.0.degree()
+    fn deg(&self) -> f32 {
+        self.0.deg()
     }
 
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
@@ -204,7 +204,7 @@ impl LengthUnit {
 #[pymethods]
 impl LengthUnit {
     fn __rmul__(&self, lhs: &Bound<'_, PyAny>) -> PyResult<Length> {
-        Ok(Length(CoreLength::millimeters(
+        Ok(Length(CoreLength::from_mm(
             number_f32(lhs)? * self.scale_mm,
         )))
     }
@@ -226,9 +226,9 @@ impl AngleUnit {
     fn __rmul__(&self, lhs: &Bound<'_, PyAny>) -> PyResult<Angle> {
         let v = number_f32(lhs)?;
         Ok(Angle(if self.degree {
-            CoreAngle::from_degree(v)
+            CoreAngle::from_deg(v)
         } else {
-            CoreAngle::from_radian(v)
+            CoreAngle::from_rad(v)
         }))
     }
 }

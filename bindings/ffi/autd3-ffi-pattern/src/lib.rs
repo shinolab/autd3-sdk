@@ -182,7 +182,7 @@ pub unsafe extern "C" fn autd3_pattern_focus(
     autd3_rs_pattern::focus(
         geometry,
         target,
-        Length::millimeters(wavelength_mm),
+        Length::from_mm(wavelength_mm),
         &FocusOption {
             intensity: option.intensity(),
             phase_offset: option.phase_offset(),
@@ -242,7 +242,7 @@ pub unsafe extern "C" fn autd3_pattern_focus_device(
             autd3_rs_pattern::focus_device(
                 device,
                 target,
-                Length::millimeters(wavelength_mm),
+                Length::from_mm(wavelength_mm),
                 &FocusOption {
                     intensity: option.intensity(),
                     phase_offset: option.phase_offset(),
@@ -272,7 +272,7 @@ pub unsafe extern "C" fn autd3_pattern_focus_transducer(
     let e = autd3_rs_pattern::focus_transducer(
         position,
         target,
-        Length::millimeters(wavelength_mm),
+        Length::from_mm(wavelength_mm),
         &FocusOption {
             intensity: option.intensity(),
             phase_offset: option.phase_offset(),
@@ -304,7 +304,7 @@ pub unsafe extern "C" fn autd3_pattern_plane(
     autd3_rs_pattern::plane(
         geometry,
         dir,
-        Length::millimeters(wavelength_mm),
+        Length::from_mm(wavelength_mm),
         &PlaneOption {
             intensity: option.intensity(),
             phase_offset: option.phase_offset(),
@@ -333,7 +333,7 @@ pub unsafe extern "C" fn autd3_pattern_plane_device(
             autd3_rs_pattern::plane_device(
                 device,
                 dir,
-                Length::millimeters(wavelength_mm),
+                Length::from_mm(wavelength_mm),
                 &PlaneOption {
                     intensity: option.intensity(),
                     phase_offset: option.phase_offset(),
@@ -363,7 +363,7 @@ pub unsafe extern "C" fn autd3_pattern_plane_transducer(
     let e = autd3_rs_pattern::plane_transducer(
         position,
         dir,
-        Length::millimeters(wavelength_mm),
+        Length::from_mm(wavelength_mm),
         &PlaneOption {
             intensity: option.intensity(),
             phase_offset: option.phase_offset(),
@@ -399,8 +399,8 @@ pub unsafe extern "C" fn autd3_pattern_bessel(
         geometry,
         apex,
         dir,
-        Angle::from_radian(theta_rad),
-        Length::millimeters(wavelength_mm),
+        Angle::from_rad(theta_rad),
+        Length::from_mm(wavelength_mm),
         &BesselOption {
             intensity: option.intensity(),
             phase_offset: option.phase_offset(),
@@ -435,8 +435,8 @@ pub unsafe extern "C" fn autd3_pattern_bessel_device(
                 device,
                 apex,
                 dir,
-                Angle::from_radian(theta_rad),
-                Length::millimeters(wavelength_mm),
+                Angle::from_rad(theta_rad),
+                Length::from_mm(wavelength_mm),
                 &BesselOption {
                     intensity: option.intensity(),
                     phase_offset: option.phase_offset(),
@@ -471,8 +471,8 @@ pub unsafe extern "C" fn autd3_pattern_bessel_transducer(
         position,
         apex,
         dir,
-        Angle::from_radian(theta_rad),
-        Length::millimeters(wavelength_mm),
+        Angle::from_rad(theta_rad),
+        Length::from_mm(wavelength_mm),
         &BesselOption {
             intensity: option.intensity(),
             phase_offset: option.phase_offset(),

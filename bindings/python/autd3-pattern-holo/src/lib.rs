@@ -409,7 +409,7 @@ fn naive(
             &autd3_rs_pattern_holo::NalgebraBackend,
             geometry,
             &foci,
-            Length::millimeters(wavelength),
+            Length::from_mm(wavelength),
             &option,
             dst,
         )
@@ -438,7 +438,7 @@ fn gs(
             &autd3_rs_pattern_holo::NalgebraBackend,
             geometry,
             &foci,
-            Length::millimeters(wavelength),
+            Length::from_mm(wavelength),
             &option,
             dst,
         )
@@ -467,7 +467,7 @@ fn gspat(
             &autd3_rs_pattern_holo::NalgebraBackend,
             geometry,
             &foci,
-            Length::millimeters(wavelength),
+            Length::from_mm(wavelength),
             &option,
             dst,
         )
@@ -492,14 +492,8 @@ fn greedy(
         ..option.inner
     };
     with_dst_buffer(dst, |dst| {
-        autd3_rs_pattern_holo::greedy(
-            geometry,
-            &foci,
-            Length::millimeters(wavelength),
-            &option,
-            dst,
-        )
-        .map_err(holo_err)
+        autd3_rs_pattern_holo::greedy(geometry, &foci, Length::from_mm(wavelength), &option, dst)
+            .map_err(holo_err)
     })
 }
 

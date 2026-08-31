@@ -264,7 +264,7 @@ namespace AUTD3
             try
             {
                 return NativeStm.autd3_op_foci_stm(configHandle, points, (UIntPtr)_points.Length, numFoci, intensities,
-                    (byte)_option.Bank, _option.SoundSpeed.MPerS, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value, _option.TransitionMode.MarginNs);
+                    (byte)_option.Bank, _option.SoundSpeed.MS, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value, _option.TransitionMode.MarginNs);
             }
             finally
             {

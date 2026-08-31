@@ -253,7 +253,7 @@ pub unsafe extern "C" fn autd3_core_geometry_free(geometry: *mut Geometry) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_core_phase_radian(value: u8) -> f32 {
-    Phase(value).radian()
+    Phase(value).rad()
 }
 
 #[unsafe(no_mangle)]

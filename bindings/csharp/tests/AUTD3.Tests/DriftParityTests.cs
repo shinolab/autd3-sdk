@@ -156,12 +156,12 @@ namespace AUTD3.Tests
         public void UnitAccessors()
         {
             Assert.Equal(1f, (1000 * mm).M);
-            Assert.Equal(90f, Angle.FromDegree(90f).Degree, 3);
-            Assert.Equal(Angle.Pi.Radian, Angle.FromRadian(MathF.PI).Radian);
-            Assert.Equal(0f, Angle.Zero.Radian);
-            Assert.Equal(340f, Velocity.FromMS(340f).MPerS);
-            Assert.Equal(340000f, Velocity.FromMmS(340000f).MmPerS);
-            Assert.Equal(5f, Length.Millimeters(5f).Mm);
+            Assert.Equal(90f, Angle.FromDeg(90f).Deg, 3);
+            Assert.Equal(Angle.Pi.Rad, Angle.FromRad(MathF.PI).Rad);
+            Assert.Equal(0f, Angle.Zero.Rad);
+            Assert.Equal(340f, Velocity.FromMS(340f).MS);
+            Assert.Equal(340000f, Velocity.FromMmS(340000f).MmS);
+            Assert.Equal(5f, Length.FromMm(5f).Mm);
             Assert.Equal(300f, ((200 * Hz) + (100 * Hz)).Hz);
             Assert.Equal(100f, ((200 * Hz) - (100 * Hz)).Hz);
             Assert.Equal(400f, ((200 * Hz) * 2u).Hz);

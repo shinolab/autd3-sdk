@@ -369,7 +369,7 @@ impl ConfigFociStm {
     ) -> PyResult<Self> {
         let divider = config.call_method0("divide")?.extract::<u16>()?;
         let mm_per_s: f32 = sound_speed
-            .getattr("mm_per_s")
+            .getattr("mm_s")
             .and_then(|v| v.extract())
             .map_err(|_| {
                 PyValueError::new_err(

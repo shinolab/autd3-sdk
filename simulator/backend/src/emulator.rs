@@ -138,7 +138,7 @@ pub fn extract_states_into(devices: &[EmuDevice], out: &mut Vec<TransState>, mod
             let amp = (PI * f32::from(pulse_width) / ULTRASOUND_PERIOD_COUNT).sin();
             out.push(TransState {
                 amp,
-                phase: d.phase.radian(),
+                phase: d.phase.rad(),
                 enable: fpga.output_mask_enabled(i),
             });
         }

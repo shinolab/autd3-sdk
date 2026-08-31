@@ -20,14 +20,14 @@ impl Phase {
     pub const PI: Self = Self(0x80);
 
     #[must_use]
-    pub const fn radian(&self) -> f32 {
+    pub const fn rad(&self) -> f32 {
         self.0 as f32 / 256.0 * 2.0 * PI
     }
 }
 
 impl From<Angle> for Phase {
     fn from(v: Angle) -> Self {
-        let p = (v.radian() / (2.0 * PI) * 256.0).round();
+        let p = (v.rad() / (2.0 * PI) * 256.0).round();
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         Self(((p as i32) & 0xFF) as u8)
     }
@@ -138,13 +138,13 @@ mod tests {
     }
 
     #[test]
-    fn radian() {
+    fn rad() {
         for (expect, value) in [
             (0.0, 0u8),
             (2.0 * PI / 256.0 * 128.0, 128),
             (2.0 * PI / 256.0 * 255.0, 255),
         ] {
-            approx::assert_abs_diff_eq!(expect, Phase(value).radian());
+            approx::assert_abs_diff_eq!(expect, Phase(value).rad());
         }
     }
 

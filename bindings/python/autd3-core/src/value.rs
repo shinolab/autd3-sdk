@@ -90,7 +90,7 @@ impl Phase {
     }
 
     fn radian(&self) -> f32 {
-        self.0.radian()
+        self.0.rad()
     }
 
     fn __int__(&self) -> u8 {

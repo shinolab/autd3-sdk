@@ -13,39 +13,41 @@ namespace AUTD3
 
         public float M => Mm / 1000f;
 
-        public static Length Millimeters(float mm) => new Length(mm);
+        public static Length FromMm(float mm) => new Length(mm);
+
+        public static Length FromM(float m) => new Length(m * 1000f);
     }
 
     public readonly struct Angle
     {
-        public float Radian { get; }
+        public float Rad { get; }
 
         internal Angle(float radian)
         {
-            Radian = radian;
+            Rad = radian;
         }
 
-        public float Degree => Radian * (180f / MathF.PI);
+        public float Deg => Rad * (180f / MathF.PI);
 
         public static Angle Zero => new Angle(0f);
 
         public static Angle Pi => new Angle(MathF.PI);
 
-        public static Angle FromRadian(float radian) => new Angle(radian);
+        public static Angle FromRad(float radian) => new Angle(radian);
 
-        public static Angle FromDegree(float degree) => new Angle(degree * (MathF.PI / 180f));
+        public static Angle FromDeg(float degree) => new Angle(degree * (MathF.PI / 180f));
     }
 
     public readonly struct Velocity
     {
-        public float MmPerS { get; }
+        public float MmS { get; }
 
         internal Velocity(float mmPerS)
         {
-            MmPerS = mmPerS;
+            MmS = mmPerS;
         }
 
-        public float MPerS => MmPerS / 1000f;
+        public float MS => MmS / 1000f;
 
         public static Velocity FromMmS(float mmPerS) => new Velocity(mmPerS);
 
