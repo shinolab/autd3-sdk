@@ -46,6 +46,7 @@ pub struct EchocatLink {
 
 impl EchocatLink {
     pub fn open(option: &EchocatLinkOption) -> Result<Self, EchocatError> {
+        option.validate()?;
         let timer_resolution = TimerResolutionGuard::new(TIMER_RESOLUTION_MS);
         let config = MasterConfig::from(option);
         let master = match option.iface.name() {

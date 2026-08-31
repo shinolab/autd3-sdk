@@ -51,4 +51,11 @@ pub enum EchocatError {
     ImplausiblePropagationDelay { index: usize, delay_ns: u32 },
     #[error("the link is closed")]
     Closed,
+    #[error("{field} must be in {min:?}..={max:?}, but {value:?} was given")]
+    InvalidOption {
+        field: &'static str,
+        value: Duration,
+        min: Duration,
+        max: Duration,
+    },
 }
