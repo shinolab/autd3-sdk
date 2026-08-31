@@ -125,8 +125,9 @@ impl Client {
                     },
                     dc_clock,
                 };
-                if config.require_supported_firmware
-                    && let Err(e) = client.check_firmware_version().await
+                if let Err(e) = client
+                    .check_firmware_version(config.require_supported_firmware)
+                    .await
                 {
                     let _ = client.close().await;
                     return Err(e);
@@ -361,9 +362,22 @@ impl Client {
         Ok(versions)
     }
 
-    async fn check_firmware_version(&self) -> Result<(), Error> {
-        self.read_firmware_version()
-            .await?
+    async fn check_firmware_version(&self, require_supported: bool) -> Result<(), Error> {
+        let versions = match self.read_firmware_version().await {
+            Ok(versions) => versions,
+            Err(e) if require_supported => return Err(e),
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "could not read the firmware version, so the series check was skipped"
+                );
+                return Ok(());
+            }
+        };
+        if !require_supported {
+            return Ok(());
+        }
+        versions
             .into_iter()
             .enumerate()
             .find(|(_, version)| !version.is_supported())
