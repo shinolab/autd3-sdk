@@ -36,6 +36,7 @@ pub enum BusActual {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct BusStatus {
     pub desired: BusDesired,
     pub actual: BusActual,
@@ -62,6 +63,7 @@ impl BusStatus {
 pub const UNKNOWN_STATE_HINT: &str = "unknown to this client; update it to match the appliance";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct InterfaceStatus {
     pub name: String,
     pub operstate: String,
@@ -80,6 +82,7 @@ pub enum UplinkKind {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct WifiStatus {
     pub blocked: bool,
     pub ssid: Option<String>,
@@ -88,6 +91,7 @@ pub struct WifiStatus {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct UplinkStatus {
     pub name: String,
     pub kind: UplinkKind,
@@ -98,6 +102,7 @@ pub struct UplinkStatus {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct StorageStatus {
     pub path: String,
     pub total_mb: u64,
@@ -220,6 +225,7 @@ impl TuneStatus {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TuneTarget {
     pub period_ns: u64,
     pub frame_phase_percent: u8,
@@ -234,6 +240,7 @@ impl TuneTarget {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TuneCandidate {
     pub target: TuneTarget,
     pub status: TuneStatus,
@@ -249,11 +256,8 @@ pub struct TuneCandidate {
     pub exchanges: u64,
     pub exchange_mean_ns: u64,
     pub exchange_worst_ns: u64,
-    #[serde(default)]
     pub frames_delivered: u64,
-    #[serde(default)]
     pub frames_skipped: u64,
-    #[serde(default)]
     pub telemetry_read: bool,
 }
 
@@ -278,6 +282,7 @@ impl TuneCandidate {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TuneReport {
     pub running: bool,
     pub cancelled: bool,
@@ -396,6 +401,41 @@ mod tests {
     }
 
     #[test]
+    fn a_status_struct_an_older_server_sent_short_still_parses() {
+        let bus: BusStatus = serde_json::from_str(r#"{"actual":"open"}"#).unwrap();
+        assert_eq!(bus.actual, BusActual::Open);
+        assert_eq!(bus.exchange_worst_ns, 0);
+
+        let nic: InterfaceStatus = serde_json::from_str(r#"{"name":"eth0"}"#).unwrap();
+        assert_eq!(nic.name, "eth0");
+        assert!(!nic.carrier);
+
+        let uplink: UplinkStatus = serde_json::from_str(r#"{"name":"wlan0"}"#).unwrap();
+        assert_eq!(uplink.kind, UplinkKind::Ethernet);
+        assert_eq!(uplink.wifi, None);
+
+        let wifi: WifiStatus = serde_json::from_str(r#"{"ssid":"lab"}"#).unwrap();
+        assert_eq!(wifi.ssid.as_deref(), Some("lab"));
+        assert_eq!(wifi.signal_dbm, None);
+
+        let storage: StorageStatus = serde_json::from_str(r#"{"path":"/data"}"#).unwrap();
+        assert_eq!(storage.total_mb, 0);
+
+        let target: TuneTarget = serde_json::from_str(r#"{"period_ns":2000000}"#).unwrap();
+        assert_eq!(target.period_ns, 2_000_000);
+        assert!(target.is_auto());
+
+        let candidate: TuneCandidate = serde_json::from_str(r#"{"status":"ok"}"#).unwrap();
+        assert_eq!(candidate.status, TuneStatus::Ok);
+        assert_eq!(candidate.samples, 0);
+
+        let report: TuneReport = serde_json::from_str(r#"{"running":true}"#).unwrap();
+        assert!(report.running);
+        assert_eq!(report.candidates, vec![]);
+        assert_eq!(report.best, None);
+    }
+
+    #[test]
     fn an_uplink_names_its_kind_in_lowercase_on_the_wire() {
         let uplink = UplinkStatus {
             name: "wlan0".to_owned(),
@@ -476,8 +516,6 @@ mod tests {
             exchange_worst_ns: worst_ns,
             ..TuneCandidate::default()
         };
-        // 実機 (20 台) の報告と同じ形: 全候補が OP 100% / 0 drops で並び, worst exchange だけが
-        // 数 us ばらつく. 旧スコアは worst が最小の候補を選んでいた.
         let candidates = vec![
             candidate(1_000_000, 25_069, 1_133_484),
             candidate(2_000_000, 12, 1_146_000),
@@ -513,7 +551,6 @@ mod tests {
             stale_cycles: stale,
             ..TuneCandidate::default()
         };
-        // 同じ dwell では 1ms 候補が 2ms 候補の 2 倍回る. 生カウンタでは 2ms が機械的に有利になる.
         let candidates = vec![
             candidate(1_000_000, 30_000, 30),
             candidate(2_000_000, 15_000, 20),
@@ -527,8 +564,6 @@ mod tests {
 
     #[test]
     fn an_automatic_landing_phase_wins_a_dead_heat() {
-        // 実機 (20 台 / 2 ms) では auto と 25% が全指標で同点になった.
-        // auto は台数が変わっても着地を再センタリングするので, 同点ならこちらを推す.
         let candidate = |percent: u8| TuneCandidate {
             target: TuneTarget {
                 period_ns: 2_000_000,

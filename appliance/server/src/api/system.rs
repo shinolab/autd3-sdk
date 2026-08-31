@@ -155,8 +155,6 @@ pub fn uplinks(bus_interface: &str) -> Vec<UplinkStatus> {
 pub fn storage(path: &str) -> Option<StorageStatus> {
     let c_path = std::ffi::CString::new(path).ok()?;
     let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
-    // SAFETY: `c_path` is a live NUL-terminated string for the duration of the call and
-    // `stat` is a correctly sized `statvfs` that the call only writes to.
     if unsafe { libc::statvfs(c_path.as_ptr(), &raw mut stat) } != 0 {
         return None;
     }

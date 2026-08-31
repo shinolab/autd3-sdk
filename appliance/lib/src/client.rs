@@ -16,6 +16,7 @@ const UPDATE_TIMEOUT: Duration = Duration::from_mins(2);
 const WIFI_TIMEOUT: Duration = Duration::from_mins(2);
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ClientError {
     #[error("cannot reach the appliance at {base}: {source}")]
     Transport {
@@ -140,6 +141,14 @@ impl ApplianceClient {
 
     pub fn tune_cancel(&self) -> Result<Accepted, ClientError> {
         self.post("/bus/tune/cancel")
+    }
+
+    pub fn tune_apply(&self, candidate: Option<usize>) -> Result<Accepted, ClientError> {
+        let path = match candidate {
+            Some(index) => format!("/bus/tune/apply?candidate={index}"),
+            None => "/bus/tune/apply".to_owned(),
+        };
+        self.post(&path)
     }
 
     pub fn restart(&self) -> Result<Accepted, ClientError> {

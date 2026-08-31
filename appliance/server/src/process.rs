@@ -1,7 +1,5 @@
 #[cfg(target_os = "linux")]
 pub fn lock_memory() {
-    // SAFETY: mlockall takes only a flag word and touches no caller-owned memory.
-    // Failures are reported through the return value and handled below.
     let rc = unsafe { libc::mlockall(libc::MCL_CURRENT | libc::MCL_FUTURE) };
     if rc == 0 {
         tracing::debug!("locked the process pages into RAM");
