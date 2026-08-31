@@ -3,12 +3,15 @@ use std::time::{Duration, Instant};
 
 use autd3_rs_core::value::DcSysTime;
 use autd3_rs_core::{CycleOutcome, DcClock, Link, RX_FRAME_BYTES, TX_FRAME_BYTES};
+use ethercrab::MainDevice;
+use ethercrab::subdevice_group::{HasDc, Op};
 
 use crate::diagnostics::{CycleDiagnostics, store_cycle_diagnostics};
 use crate::error::EtherCrabLinkError;
 use crate::state_check::StateChecker;
 
 use super::EtherCrabLink;
+use super::group::Groups;
 
 impl Link for EtherCrabLink {
     type Error = EtherCrabLinkError;
@@ -95,7 +98,7 @@ impl Link for EtherCrabLink {
                     );
                     self.rx_was_valid = false;
                 }
-                return Ok(CycleOutcome::new(false));
+                return Ok(CycleOutcome::stale());
             }
             Err(e) => return Err(e.into()),
         };
@@ -142,18 +145,30 @@ impl Link for EtherCrabLink {
             self.rx_was_valid = rx_valid;
         }
 
-        for (subdevice, frame) in group
-            .groups
-            .iter()
-            .flat_map(|g| g.iter(maindevice))
-            .zip(rx.iter_mut())
-        {
-            let inputs = subdevice.inputs_raw();
-            let len = frame.len().min(inputs.len());
-            frame[..len].copy_from_slice(&inputs[..len]);
-        }
+        copy_inputs(group, maindevice, rx);
 
-        Ok(CycleOutcome::new(rx_valid))
+        Ok(if rx_valid {
+            CycleOutcome::valid()
+        } else {
+            CycleOutcome::stale()
+        })
+    }
+}
+
+fn copy_inputs(
+    group: &Groups<Op, HasDc>,
+    maindevice: &MainDevice<'_>,
+    rx: &mut [[u8; RX_FRAME_BYTES]],
+) {
+    for (subdevice, frame) in group
+        .groups
+        .iter()
+        .flat_map(|g| g.iter(maindevice))
+        .zip(rx.iter_mut())
+    {
+        let inputs = subdevice.inputs_raw();
+        let len = frame.len().min(inputs.len());
+        frame[..len].copy_from_slice(&inputs[..len]);
     }
 }
 

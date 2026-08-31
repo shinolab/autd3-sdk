@@ -1,8 +1,13 @@
 use autd3_rs_core::value::Emission;
 
+#[must_use]
+pub fn uniform_transducer(emission: Emission) -> Emission {
+    emission
+}
+
 pub fn uniform_device(emission: Emission, dst: &mut [Emission]) {
     for slot in dst.iter_mut() {
-        *slot = emission;
+        *slot = uniform_transducer(emission);
     }
 }
 

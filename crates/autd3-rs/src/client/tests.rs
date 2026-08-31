@@ -280,7 +280,11 @@ impl Link for LoopbackLink {
             let mut s = slave.lock().unwrap();
             rx_valid &= slave_cycle(&mut s, tx, rx);
         }
-        Ok(CycleOutcome::new(rx_valid))
+        Ok(if rx_valid {
+            CycleOutcome::valid()
+        } else {
+            CycleOutcome::stale()
+        })
     }
 }
 

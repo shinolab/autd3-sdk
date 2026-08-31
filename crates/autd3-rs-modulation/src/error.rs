@@ -23,7 +23,7 @@ pub enum ModulationError {
     SampleCountOverflow,
 
     #[error("frequency {hz} Hz is equal to or greater than the Nyquist frequency ({nyquist} Hz)")]
-    FrequencyAboveNyquist { hz: f64, nyquist: f32 },
+    FrequencyAboveNyquist { hz: f32, nyquist: f32 },
 
     #[error("modulation frequency must not be zero")]
     FrequencyZero,

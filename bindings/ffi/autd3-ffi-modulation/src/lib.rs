@@ -43,7 +43,12 @@ pub unsafe extern "C" fn autd3_modulation_samples_per_period(
     freq_hz: u32,
     out: *mut u32,
 ) -> bool {
-    let Some(value) = autd3_rs_modulation::samples_per_period(divider, freq_hz) else {
+    let Some(divider) = core::num::NonZeroU16::new(divider) else {
+        return false;
+    };
+    let Some(value) =
+        autd3_rs_modulation::samples_per_period(divider, autd3_rs_core::Freq::from_hz(freq_hz))
+    else {
         return false;
     };
 
