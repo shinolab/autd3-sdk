@@ -10,7 +10,7 @@ use autd3_rs_appliance::{
 use autd3_rs_core::DeviceState;
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
 use autd3_rs_link_echocat::master::budget::{WireTiming, exchange_budget};
-use autd3_rs_link_echocat::{EchocatLinkOption, FramePhase};
+use autd3_rs_link_echocat::{EchocatLinkOption, FramePhase, MAX_SYNC0_PERIOD};
 use autd3_rs_link_remote::{Actual, Desired, RemoteLinkError, Sessions, SharedBus};
 
 const POLL_STEP: Duration = Duration::from_millis(50);
@@ -142,6 +142,16 @@ pub fn validate(request: &TuneRequest) -> Result<Vec<TuneTarget>, String> {
     }
     if request.periods_ns.contains(&0) {
         return Err("every period must be greater than zero".to_owned());
+    }
+    if let Some(period_ns) = request
+        .periods_ns
+        .iter()
+        .find(|period_ns| u128::from(**period_ns) > MAX_SYNC0_PERIOD.as_nanos())
+    {
+        return Err(format!(
+            "a period of {period_ns} ns is past the {MAX_SYNC0_PERIOD:?} the SYNC0 cycle time \
+             register can hold",
+        ));
     }
     if let Some(percent) = request
         .frame_phase_percents
@@ -658,6 +668,43 @@ mod tests {
         })
         .unwrap_err();
         assert!(err.contains("candidates"), "{err}");
+    }
+
+    #[test]
+    fn a_period_the_sync0_register_cannot_hold_is_refused_before_it_reaches_the_bus() {
+        let err = validate(&TuneRequest {
+            periods_ns: vec![5_000_000_000],
+            ..TuneRequest::default()
+        })
+        .unwrap_err();
+        assert!(err.contains("5000000000 ns"), "{err}");
+        assert!(
+            validate(&TuneRequest {
+                periods_ns: vec![u64::try_from(MAX_SYNC0_PERIOD.as_nanos()).unwrap()],
+                ..TuneRequest::default()
+            })
+            .is_ok(),
+        );
+    }
+
+    #[test]
+    fn every_accepted_candidate_option_passes_the_link_validation() {
+        let request = TuneRequest {
+            periods_ns: vec![
+                1,
+                1_000_000,
+                u64::try_from(MAX_SYNC0_PERIOD.as_nanos()).unwrap(),
+            ],
+            frame_phase_percents: vec![FRAME_PHASE_AUTO, 1, 99],
+            ..TuneRequest::default()
+        };
+        let base = EchocatLinkOption::default();
+        for target in validate(&request).unwrap() {
+            assert!(
+                option_for(&base, target).validate().is_ok(),
+                "{target:?} was accepted by the sweep but rejected by the link",
+            );
+        }
     }
 
     #[test]
