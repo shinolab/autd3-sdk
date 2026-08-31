@@ -11,7 +11,7 @@ use serde::Deserialize;
 pub const RT_PRIORITY_OFF: u8 = 0;
 
 #[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields, default)]
+#[serde(default)]
 pub struct Config {
     pub server: Server,
     pub bus: Bus,
@@ -22,7 +22,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, default)]
+#[serde(default)]
 pub struct Server {
     pub bind: SocketAddr,
     pub auto_open: bool,
@@ -39,7 +39,7 @@ impl Default for Server {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, default)]
+#[serde(default)]
 pub struct Bus {
     pub interface: Option<String>,
     pub open_on_start: bool,
@@ -73,7 +73,7 @@ impl Default for Bus {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, default)]
+#[serde(default)]
 pub struct Rt {
     pub priority: u8,
     pub policy: Policy,
@@ -150,7 +150,7 @@ impl From<Policy> for RtSchedulePolicy {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, default)]
+#[serde(default)]
 pub struct Health {
     #[serde(deserialize_with = "duration")]
     pub report_interval: Option<Duration>,
@@ -165,7 +165,7 @@ impl Default for Health {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, default)]
+#[serde(default)]
 pub struct Control {
     pub enabled: bool,
     pub bind: SocketAddr,
@@ -192,7 +192,7 @@ const DEFAULT_UNIT: &str = "autd3-remote-server.service";
 const MAX_TIMEOUT: Duration = Duration::from_hours(1);
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, default)]
+#[serde(default)]
 pub struct Mdns {
     pub enabled: bool,
     pub instance: Option<String>,
@@ -226,11 +226,27 @@ fn duration<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Option<Duration>,
 }
 
 impl Config {
+    pub fn parse(text: &str) -> Result<(Self, Vec<String>), toml::de::Error> {
+        let mut unknown = Vec::new();
+        let config = serde_ignored::deserialize(toml::Deserializer::parse(text)?, |path| {
+            unknown.push(path.to_string());
+        })?;
+        Ok((config, unknown))
+    }
+
     pub fn load(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read the config file {}", path.display()))?;
-        toml::from_str(&text)
-            .with_context(|| format!("failed to parse the config file {}", path.display()))
+        let (config, unknown) = Self::parse(&text)
+            .with_context(|| format!("failed to parse the config file {}", path.display()))?;
+        for key in &unknown {
+            tracing::warn!(
+                key,
+                path = %path.display(),
+                "the config has a key this server does not know; it was ignored",
+            );
+        }
+        Ok(config)
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -353,6 +369,93 @@ impl Config {
         }
         RtPriority::new(self.rt.priority)
     }
+}
+
+const BUS_SECTION: &str = "bus";
+
+pub fn set_bus_timing(text: &str, sync0_period: &str, frame_phase: &str) -> String {
+    set_keys(
+        text,
+        BUS_SECTION,
+        &[("sync0_period", sync0_period), ("frame_phase", frame_phase)],
+    )
+}
+
+fn set_keys(text: &str, section: &str, entries: &[(&str, &str)]) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut written = vec![false; entries.len()];
+    let mut in_section = false;
+    let mut section_found = false;
+    let mut insert_at = None;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if let Some(name) = header_name(trimmed) {
+            in_section = name == section;
+            out.push(line.to_owned());
+            if in_section {
+                section_found = true;
+                insert_at = Some(out.len());
+            }
+            continue;
+        }
+        let entry = (in_section && !trimmed.starts_with('#'))
+            .then(|| key_of(trimmed))
+            .flatten()
+            .and_then(|key| entries.iter().position(|(name, _)| *name == key));
+        match entry {
+            Some(index) => {
+                let indent = &line[..line.len() - line.trim_start().len()];
+                out.push(format!(
+                    "{indent}{} = \"{}\"",
+                    entries[index].0, entries[index].1,
+                ));
+                written[index] = true;
+            }
+            None => out.push(line.to_owned()),
+        }
+        if in_section && !trimmed.is_empty() {
+            insert_at = Some(out.len());
+        }
+    }
+
+    let missing: Vec<String> = entries
+        .iter()
+        .zip(&written)
+        .filter(|(_, written)| !**written)
+        .map(|((key, value), _)| format!("{key} = \"{value}\""))
+        .collect();
+    if !missing.is_empty() {
+        if let Some(at) = insert_at.filter(|_| section_found) {
+            out.splice(at..at, missing);
+        } else {
+            if out.last().is_some_and(|line| !line.trim().is_empty()) {
+                out.push(String::new());
+            }
+            out.push(format!("[{section}]"));
+            out.extend(missing);
+        }
+    }
+
+    let mut result = out.join("\n");
+    if !result.is_empty() && (text.is_empty() || text.ends_with('\n')) {
+        result.push('\n');
+    }
+    result
+}
+
+fn header_name(trimmed: &str) -> Option<&str> {
+    let inner = trimmed.strip_prefix('[')?.strip_suffix(']')?;
+    (!inner.starts_with('[')).then(|| inner.trim().trim_matches('"'))
+}
+
+fn key_of(trimmed: &str) -> Option<&str> {
+    let key = trimmed.split_once('=')?.0.trim();
+    (!key.is_empty()
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'))
+    .then_some(key)
 }
 
 #[cfg(test)]
@@ -615,15 +718,122 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_key_is_an_error_rather_than_a_silent_default() {
-        let err = toml::from_str::<Config>(
+    fn an_unknown_key_is_reported_but_does_not_stop_the_load() {
+        let (config, unknown) = Config::parse(
             r#"
             [bus]
-            iface = "eth0"
+            interface = "eth0"
+            iface = "eth1"
+
+            [future]
+            knob = 1
             "#,
         )
-        .unwrap_err();
-        assert!(err.to_string().contains("iface"), "{err}");
+        .unwrap();
+        config.validate().unwrap();
+        assert_eq!(config.bus.interface.as_deref(), Some("eth0"));
+        assert_eq!(unknown, vec!["bus.iface".to_owned(), "future".to_owned()]);
+    }
+
+    #[test]
+    fn a_config_this_server_fully_understands_reports_nothing() {
+        let (_, unknown) = Config::parse(include_str!("../dist/remote-server.toml")).unwrap();
+        assert_eq!(unknown, Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_malformed_config_is_still_an_error() {
+        assert!(Config::parse("[bus").is_err());
+    }
+
+    #[test]
+    fn applying_a_tuned_candidate_touches_only_the_two_keys_it_owns() {
+        let before = include_str!("../dist/remote-server.toml");
+        let after = set_bus_timing(before, "2ms", "auto");
+        assert!(after.contains("sync0_period = \"2ms\""), "{after}");
+        assert!(after.contains("frame_phase = \"auto\""), "{after}");
+        assert!(after.contains("# instance = \"autd3-lab-1\""), "{after}");
+        assert_eq!(
+            before.lines().count(),
+            after.lines().count(),
+            "no line may be added or dropped when both keys already exist",
+        );
+        for (old, new) in before.lines().zip(after.lines()) {
+            let key = old.split_once('=').map(|(key, _)| key.trim());
+            if key == Some("sync0_period") || key == Some("frame_phase") {
+                continue;
+            }
+            assert_eq!(old, new, "only the tuned keys may move");
+        }
+        let (mut config, unknown) = Config::parse(&after).unwrap();
+        // 配布 config は 4 コアのボード向けに `affinity = 3` を持つ. CI のランナーは
+        // それより小さいことがあるので, ここで見たいのは affinity ではないと明示する.
+        config.rt.affinity = default_affinity();
+        config.validate().unwrap();
+        assert_eq!(unknown, Vec::<String>::new());
+        assert_eq!(config.bus.sync0_period, Some(Duration::from_millis(2)));
+        assert_eq!(config.link_option().frame_phase, FramePhase::Auto);
+    }
+
+    #[test]
+    fn applying_a_tuned_candidate_adds_the_keys_the_config_does_not_carry_yet() {
+        let after = set_bus_timing(
+            "[bus]\ninterface = \"eth0\"\n\n[mdns]\nenabled = true\n",
+            "500us",
+            "125us",
+        );
+        assert_eq!(
+            after,
+            "[bus]\ninterface = \"eth0\"\nsync0_period = \"500us\"\nframe_phase = \"125us\"\n\n\
+             [mdns]\nenabled = true\n",
+        );
+        let (config, _) = Config::parse(&after).unwrap();
+        config.validate().unwrap();
+        assert_eq!(
+            config.link_option().frame_phase,
+            FramePhase::At(Duration::from_micros(125)),
+        );
+    }
+
+    #[test]
+    fn applying_a_tuned_candidate_writes_a_bus_section_when_there_is_none() {
+        assert_eq!(
+            set_bus_timing("[mdns]\nenabled = true\n", "1ms", "auto"),
+            "[mdns]\nenabled = true\n\n[bus]\nsync0_period = \"1ms\"\nframe_phase = \"auto\"\n",
+        );
+        assert_eq!(
+            set_bus_timing("", "1ms", "auto"),
+            "[bus]\nsync0_period = \"1ms\"\nframe_phase = \"auto\"\n",
+        );
+    }
+
+    #[test]
+    fn applying_a_tuned_candidate_leaves_commented_out_keys_alone() {
+        let after = set_bus_timing(
+            "[bus]\n  # sync0_period = \"1ms\"\n  sync0_period = \"1ms\"\n",
+            "3ms",
+            "auto",
+        );
+        assert_eq!(
+            after,
+            "[bus]\n  # sync0_period = \"1ms\"\n  sync0_period = \"3ms\"\n\
+             frame_phase = \"auto\"\n",
+            "the comment records what the user wrote; only the live key is the setting",
+        );
+    }
+
+    #[test]
+    fn a_key_in_another_section_is_never_mistaken_for_the_bus_one() {
+        let after = set_bus_timing(
+            "[health]\nsync0_period = \"9ms\"\n\n[bus]\nsync0_period = \"1ms\"\nframe_phase = \"auto\"\n",
+            "2ms",
+            "25%",
+        );
+        assert!(
+            after.contains("[health]\nsync0_period = \"9ms\""),
+            "{after}"
+        );
+        assert!(after.contains("[bus]\nsync0_period = \"2ms\""), "{after}");
     }
 
     #[test]

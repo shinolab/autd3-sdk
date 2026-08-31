@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use autd3_rs_appliance::{
     Accepted, ApiError, ApplianceStatus, BusActual, BusDesired, BusStatus, ClientStatus,
-    ConfigDocument, ImageRelease, LogLines, ProbeResult, TuneReport, TuneRequest, UplinkKind,
-    UplinkStatus, WifiCredentials,
+    ConfigDocument, ImageRelease, LogLines, ProbeResult, TuneReport, TuneRequest, TuneStatus,
+    TuneTarget, UplinkKind, UplinkStatus, WifiCredentials,
 };
 use autd3_rs_link_echocat::WireTiming;
 use autd3_rs_link_remote::{Actual, BusSnapshot, Desired, RemoteLinkError, Sessions, SharedBus};
@@ -78,6 +78,7 @@ impl AppState {
     }
 }
 
+#[derive(Debug)]
 struct Error {
     status: StatusCode,
     message: String,
@@ -230,11 +231,7 @@ async fn put_config(
 ) -> ApiResult<Accepted> {
     require_admin(&state)?;
 
-    let parsed: Config = toml::from_str(&document.toml)
-        .map_err(|e| Error::bad_request(format!("the config does not parse: {e}")))?;
-    parsed
-        .validate()
-        .map_err(|e| Error::bad_request(format!("the config is not usable: {e}")))?;
+    let unknown = check_config(&document.toml)?;
 
     let path = state.config_path.clone();
     blocking(move || {
@@ -248,7 +245,27 @@ async fn put_config(
     .await?;
 
     tracing::info!(path = %state.config_path.display(), "the config was replaced over the API");
-    Ok(accepted("saved; restart the server to apply it"))
+    Ok(accepted(saved_message(&unknown)))
+}
+
+fn check_config(toml: &str) -> std::result::Result<Vec<String>, Error> {
+    let (parsed, unknown) = Config::parse(toml)
+        .map_err(|e| Error::bad_request(format!("the config does not parse: {e}")))?;
+    parsed
+        .validate()
+        .map_err(|e| Error::bad_request(format!("the config is not usable: {e}")))?;
+    Ok(unknown)
+}
+
+fn saved_message(unknown: &[String]) -> String {
+    if unknown.is_empty() {
+        return "saved; restart the server to apply it".to_owned();
+    }
+    format!(
+        "saved; restart the server to apply it. {} is not a key this server knows and will be \
+         ignored",
+        unknown.join(", "),
+    )
 }
 
 async fn bus_open(State(state): State<Arc<AppState>>) -> ApiResult<Accepted> {
@@ -314,6 +331,118 @@ async fn tune_cancel(State(state): State<Arc<AppState>>) -> ApiResult<Accepted> 
     } else {
         "no sweep is running"
     }))
+}
+
+#[derive(Deserialize)]
+struct TuneApplyQuery {
+    candidate: Option<usize>,
+}
+
+fn fmt_ns(ns: u64) -> String {
+    humantime::format_duration(Duration::from_nanos(ns)).to_string()
+}
+
+fn chosen_target(
+    report: &TuneReport,
+    candidate: Option<usize>,
+) -> std::result::Result<TuneTarget, Error> {
+    if report.running {
+        return Err(Error::new(
+            StatusCode::CONFLICT,
+            "a sweep is running; wait for it to finish before applying a candidate",
+        ));
+    }
+    let index = match candidate {
+        Some(index) => index,
+        None => report.best.ok_or_else(|| {
+            Error::bad_request(if report.candidates.is_empty() {
+                "no sweep has run on this appliance, so there is nothing to apply"
+            } else {
+                "no candidate held the bus long enough to recommend; pick one explicitly \
+                 if you know better"
+            })
+        })?,
+    };
+    let candidate = report.candidates.get(index).ok_or_else(|| {
+        Error::bad_request(format!(
+            "there is no candidate {index}; the last sweep measured {}",
+            match report.candidates.len() {
+                0 => "none".to_owned(),
+                n => format!("{n}"),
+            },
+        ))
+    })?;
+    if candidate.status != TuneStatus::Ok {
+        return Err(Error::bad_request(format!(
+            "candidate {index} came back `{}`, so applying it would configure a bus that \
+             did not hold",
+            candidate.status.label(),
+        )));
+    }
+    Ok(candidate.target)
+}
+
+fn write_bus_timing(
+    path: &std::path::Path,
+    sync0_period: &str,
+    frame_phase: &str,
+) -> std::result::Result<(), Error> {
+    let current = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => {
+            return Err(Error::internal(format!(
+                "failed to read {}: {e}",
+                path.display(),
+            )));
+        }
+    };
+    let next = crate::config::set_bus_timing(&current, sync0_period, frame_phase);
+    check_config(&next).map_err(|e| {
+        Error::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!(
+                "the tuned settings could not be written into this config without \
+                 breaking it ({}); set `[bus] sync0_period` and `frame_phase` by hand",
+                e.message,
+            ),
+        )
+    })?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| Error::internal(format!("failed to create {}: {e}", dir.display())))?;
+    }
+    std::fs::write(path, next)
+        .map_err(|e| Error::internal(format!("failed to write {}: {e}", path.display())))
+}
+
+async fn tune_apply(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<TuneApplyQuery>,
+) -> ApiResult<Accepted> {
+    require_admin(&state)?;
+    let target = chosen_target(&state.tune.report(), query.candidate)?;
+    let sync0_period = fmt_ns(target.period_ns);
+    let frame_phase = if target.is_auto() {
+        "auto".to_owned()
+    } else {
+        fmt_ns(target.frame_phase_ns)
+    };
+
+    let path = state.config_path.clone();
+    let (period, phase) = (sync0_period.clone(), frame_phase.clone());
+    blocking_api(move || write_bus_timing(&path, &period, &phase)).await?;
+
+    tracing::info!(
+        sync0_period,
+        frame_phase,
+        path = %state.config_path.display(),
+        "a tuned candidate was written into the config over the API",
+    );
+    Ok(accepted(format!(
+        "wrote sync0_period = \"{sync0_period}\" and frame_phase = \"{frame_phase}\"; \
+         restart the server to apply them",
+    )))
 }
 
 fn probe_error(error: RemoteLinkError) -> Error {
@@ -420,6 +549,8 @@ fn stage_and_install(
 
 #[cfg(test)]
 mod tests {
+    use autd3_rs_appliance::{TuneCandidate, best_tune_candidate};
+
     use super::*;
 
     #[test]
@@ -456,6 +587,140 @@ mod tests {
                 .expect_err("{request:?} must be refused");
             assert_eq!(err.status, StatusCode::BAD_REQUEST, "{}", err.message);
         }
+    }
+
+    fn report(candidates: Vec<TuneCandidate>) -> TuneReport {
+        TuneReport {
+            best: best_tune_candidate(&candidates),
+            candidates,
+            ..TuneReport::default()
+        }
+    }
+
+    fn measured(period_ns: u64, status: TuneStatus) -> TuneCandidate {
+        TuneCandidate {
+            target: TuneTarget {
+                period_ns,
+                ..TuneTarget::default()
+            },
+            status,
+            samples: 300,
+            op_samples: 300,
+            exchanges: 15_000,
+            ..TuneCandidate::default()
+        }
+    }
+
+    #[test]
+    fn applying_a_sweep_picks_the_best_candidate_unless_one_is_named() {
+        let report = report(vec![
+            measured(1_000_000, TuneStatus::Infeasible),
+            measured(2_000_000, TuneStatus::Ok),
+        ]);
+        assert_eq!(chosen_target(&report, None).unwrap().period_ns, 2_000_000);
+        assert_eq!(
+            chosen_target(&report, Some(1)).unwrap().period_ns,
+            2_000_000
+        );
+    }
+
+    #[test]
+    fn a_candidate_that_did_not_hold_is_never_written_into_the_config() {
+        let report = report(vec![measured(1_000_000, TuneStatus::FailedOpen)]);
+        for (candidate, status) in [
+            (None, StatusCode::BAD_REQUEST),
+            (Some(0), StatusCode::BAD_REQUEST),
+            (Some(7), StatusCode::BAD_REQUEST),
+        ] {
+            let err = chosen_target(&report, candidate).unwrap_err();
+            assert_eq!(err.status, status, "{}", err.message);
+        }
+
+        let err = chosen_target(&TuneReport::default(), None).unwrap_err();
+        assert!(err.message.contains("no sweep has run"), "{}", err.message);
+    }
+
+    #[test]
+    fn a_running_sweep_owns_the_bus_settings_so_nothing_may_be_applied_under_it() {
+        let err = chosen_target(
+            &TuneReport {
+                running: true,
+                ..report(vec![measured(2_000_000, TuneStatus::Ok)])
+            },
+            Some(0),
+        )
+        .unwrap_err();
+        assert_eq!(err.status, StatusCode::CONFLICT, "{}", err.message);
+    }
+
+    #[test]
+    fn a_landing_phase_the_sweep_centred_is_written_back_as_auto() {
+        assert!(TuneTarget::default().is_auto());
+        assert_eq!(fmt_ns(2_000_000), "2ms");
+        assert_eq!(fmt_ns(500_000), "500us");
+    }
+
+    #[test]
+    fn a_key_this_server_does_not_know_is_saved_but_named_back_to_the_caller() {
+        let unknown = check_config("[bus]\ninterface = \"eth0\"\niface = \"eth1\"\n").unwrap();
+        assert_eq!(unknown, vec!["bus.iface".to_owned()]);
+        assert!(saved_message(&unknown).contains("bus.iface"));
+        assert!(!saved_message(&[]).contains("ignored"));
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("autd3-apply-{}-{name}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("remote-server.toml")
+    }
+
+    #[test]
+    fn applying_a_candidate_rewrites_the_saved_config_in_place() {
+        let path = scratch("in-place");
+        std::fs::write(
+            &path,
+            "[bus]\ninterface = \"eth0\"\nsync0_period = \"1ms\"\n# keep me\n",
+        )
+        .unwrap();
+        write_bus_timing(&path, "2ms", "auto").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "[bus]\ninterface = \"eth0\"\nsync0_period = \"2ms\"\n# keep me\n\
+             frame_phase = \"auto\"\n",
+        );
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_config_the_rewrite_would_break_is_never_written() {
+        let path = scratch("rejected");
+        let original = "bus.interface = \"eth0\"\nbus.sync0_period = \"1ms\"\n";
+        std::fs::write(&path, original).unwrap();
+        let err = write_bus_timing(&path, "2ms", "auto").unwrap_err();
+        assert_eq!(
+            err.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{}",
+            err.message
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_config_that_would_no_longer_open_the_bus_is_never_written() {
+        let path = scratch("unusable");
+        let original = "[bus]\ninterface = \"eth0\"\n";
+        std::fs::write(&path, original).unwrap();
+        let err = write_bus_timing(&path, "5s", "auto").unwrap_err();
+        assert_eq!(
+            err.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{}",
+            err.message
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
     fn uplink(kind: UplinkKind, carrier: bool, addresses: &[&str]) -> UplinkStatus {
@@ -600,6 +865,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/bus/probe", post(bus_probe))
         .route("/bus/tune", get(tune_status).post(tune_start))
         .route("/bus/tune/cancel", post(tune_cancel))
+        .route("/bus/tune/apply", post(tune_apply))
         .route("/restart", post(restart))
         .route("/reboot", post(reboot))
         .route("/shutdown", post(shutdown))

@@ -91,6 +91,12 @@ enum TuneAction {
     Status,
     /// Stop the running sweep
     Cancel,
+    /// Write a measured candidate into the appliance configuration
+    Apply {
+        /// Candidate index from `tune status`; the recommended one by default
+        #[arg(long)]
+        candidate: Option<usize>,
+    },
 }
 
 #[derive(clap::Args)]
@@ -255,6 +261,11 @@ fn main() -> Result<()> {
             TuneAction::Cancel => emit(&cli, &client.tune_cancel()?, |a| {
                 println!("{}", a.message);
             })?,
+            TuneAction::Apply { candidate } => {
+                emit(&cli, &client.tune_apply(*candidate)?, |a| {
+                    println!("{}", a.message);
+                })?;
+            }
         },
         Command::Wifi { action } => match action {
             WifiAction::Set {
@@ -445,6 +456,7 @@ fn print_tune_summary(report: &TuneReport) {
             fmt_ns(best.target.frame_phase_ns)
         },
     );
+    println!("\nrun `tune apply` to write those two keys into the appliance configuration");
 }
 
 fn emit<T: serde::Serialize>(cli: &Cli, value: &T, plain: impl FnOnce(&T)) -> Result<()> {

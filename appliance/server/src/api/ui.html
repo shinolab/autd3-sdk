@@ -209,6 +209,12 @@
         <button id="tune-start">Start</button>
         <button id="tune-cancel">Cancel</button>
       </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-top: 0.6rem">
+        <label>apply <select id="tune-choice"></select></label>
+        <button id="tune-apply">Apply to configuration</button>
+        <span class="sub" style="margin: 0">writes <code>sync0_period</code> and <code>frame_phase</code>; applied on
+          the next restart</span>
+      </div>
       <div class="overflow" style="margin-top: 0.9rem">
         <table id="tune"></table>
       </div>
@@ -436,6 +442,40 @@
       rows($("tune"), entries);
       $("tune-start").disabled = !admin || report.running;
       $("tune-cancel").disabled = !admin || !report.running;
+      renderChoices(report);
+    }
+
+    function renderChoices(report) {
+      const choice = $("tune-choice");
+      const applicable = report.candidates
+        .map((c, i) => [i, c])
+        .filter(([, c]) => c.status === "ok");
+      const options = [];
+      if (typeof report.best === "number") {
+        options.push(["", "recommended · " + us(report.candidates[report.best].target.period_ns) +
+          " @ " + tuneLabel(report.candidates[report.best].target)]);
+      }
+      for (const [i, c] of applicable) {
+        options.push([String(i), us(c.target.period_ns) + " @ " + tuneLabel(c.target)]);
+      }
+      if (options.length === 0) {
+        options.push(["", "no candidate to apply"]);
+      }
+      const keys = options.map((option) => option.join("=")).join("\u0000");
+      if (keys !== choice.dataset.keys) {
+        const wanted = choice.value;
+        choice.replaceChildren(...options.map(([value, label]) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = label;
+          return option;
+        }));
+        choice.dataset.keys = keys;
+        if (options.some(([value]) => value === wanted)) choice.value = wanted;
+      }
+      const ready = admin && !report.running && applicable.length > 0;
+      choice.disabled = !ready;
+      $("tune-apply").disabled = !ready;
     }
 
     async function refresh() {
@@ -500,6 +540,21 @@
         say(e.message, "bad");
       }
       refresh();
+    });
+
+    $("tune-apply").addEventListener("click", async () => {
+      if (!confirm(
+        "Write the tuned sync0_period and frame_phase into the saved configuration?\n" +
+        "Unsaved edits in the Configuration box are lost.",
+      )) return;
+      const candidate = $("tune-choice").value;
+      try {
+        const path = "/bus/tune/apply" + (candidate ? "?candidate=" + candidate : "");
+        say((await call("POST", path)).message, "ok");
+        await loadConfig();
+      } catch (e) {
+        say(e.message, "bad");
+      }
     });
 
     $("config-save").addEventListener("click", async () => {
