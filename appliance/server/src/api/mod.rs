@@ -13,7 +13,7 @@ use autd3_rs_appliance::{
     ConfigDocument, ImageRelease, LogLines, ProbeResult, TuneReport, TuneRequest, UplinkKind,
     UplinkStatus, WifiCredentials,
 };
-use autd3_rs_link_echocat::master::budget::WireTiming;
+use autd3_rs_link_echocat::WireTiming;
 use autd3_rs_link_remote::{Actual, BusSnapshot, Desired, RemoteLinkError, Sessions, SharedBus};
 use axum::Router;
 use axum::body::Bytes;
