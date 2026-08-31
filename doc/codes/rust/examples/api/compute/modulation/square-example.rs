@@ -14,6 +14,7 @@ fn main() -> anyhow::Result<()> {
             high: u8::MAX,
             duty: 0.5,
             sampling_config: SamplingConfig::FREQ_4K,
+            ..Default::default()
         },
         &mut dst,
     )?;

@@ -39,6 +39,7 @@ fn main() -> Result<()> {
             directivity,
             mask,
             parallel,
+            ..Default::default()
         }
         // ANCHOR_END: option
         ;

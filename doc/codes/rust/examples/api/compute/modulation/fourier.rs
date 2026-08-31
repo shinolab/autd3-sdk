@@ -13,6 +13,7 @@ fn main() -> Result<()> {
             scale_factor,
             clamp,
             offset,
+            ..Default::default()
         }
         // ANCHOR_END: option
         ;

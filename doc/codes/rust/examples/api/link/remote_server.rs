@@ -23,11 +23,13 @@ fn main() -> Result<()> {
         rt_policy,
         rt_affinity,
         stack_prefault_bytes,
+        ..Default::default()
     };
     let option = RemoteServerOption {
         bind,
         bus,
         idle_timeout,
+        ..Default::default()
     };
     RemoteServer::new(option, |_: &[DeviceLayout]| {
         EchocatLink::open(&EchocatLinkOption::default())
