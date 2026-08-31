@@ -191,7 +191,8 @@ impl LegacyDevice {
             cpu_version: (crate::legacy::wire::params::CPU_VERSION_V12_1, 0x00),
             fpga_version: (crate::legacy::wire::params::CPU_VERSION_V12_1, 0x00),
             fpga_functions: 0,
-            dc_sys_time_ns: autd3_rs_core::value::DcSysTime::now().sys_time(),
+            dc_sys_time_ns: autd3_rs_core::value::DcSysTime::now()
+                .map_or(0, autd3_rs_core::value::DcSysTime::sys_time),
             cycle_period_ns: DEFAULT_CYCLE_PERIOD_NS,
             segments: [SegmentState::default(), SegmentState::default()],
             stm_segment: 0,

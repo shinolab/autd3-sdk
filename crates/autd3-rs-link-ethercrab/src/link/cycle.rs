@@ -162,7 +162,7 @@ impl EtherCrabLink {
         if dc_system_time == 0 {
             return;
         }
-        self.dc_clock.observe(DcSysTime::from_nanos(dc_system_time));
+        let _ = self.dc_clock.observe(DcSysTime::from_nanos(dc_system_time));
         let deviation = crate::pacing::phase_deviation_ns(dc_system_time, self.cycle, self.shift);
         if u128::from(deviation) > self.cycle.as_nanos() / 4 {
             self.stats.record_phase_excursion(deviation);

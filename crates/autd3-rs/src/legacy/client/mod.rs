@@ -213,9 +213,8 @@ impl LegacyClient {
             .unwrap_or(0)
     }
 
-    #[must_use]
-    pub fn bus_time_now(&self) -> DcSysTime {
-        DcSysTime::now().with_dc_offset(self.dc_offset_ns())
+    pub fn bus_time_now(&self) -> Result<DcSysTime, LegacyError> {
+        Ok(DcSysTime::now()?.with_dc_offset(self.dc_offset_ns()))
     }
 
     #[must_use]

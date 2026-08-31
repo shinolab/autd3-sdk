@@ -51,6 +51,8 @@ pub enum EchocatError {
     ImplausiblePropagationDelay { index: usize, delay_ns: u32 },
     #[error("the link is closed")]
     Closed,
+    #[error("the host clock cannot be read as an EtherCAT system time: {0}")]
+    HostClock(#[from] autd3_rs_core::value::DcSysTimeError),
     #[error("{field} must be in {min:?}..={max:?}, but {value:?} was given")]
     InvalidOption {
         field: &'static str,

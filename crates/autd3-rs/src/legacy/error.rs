@@ -99,6 +99,9 @@ pub enum LegacyError {
     #[error(transparent)]
     PulseWidth(#[from] PulseWidthError),
 
+    #[error(transparent)]
+    DcSysTime(#[from] autd3_rs_core::value::DcSysTimeError),
+
     #[error("invalid payload: {0}")]
     InvalidPayload(#[from] PayloadError),
 
