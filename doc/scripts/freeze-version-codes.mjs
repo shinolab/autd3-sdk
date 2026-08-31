@@ -16,9 +16,9 @@ function dedent(lines) {
   const min = indents.length ? Math.min(...indents) : 0;
   return lines.map((l) => l.slice(min));
 }
-// Keep these in sync with the runtime `src/lib/excerpt.ts` so frozen output
-// matches the live render. Both `//` (Rust/C#) and `#` (Python) comment
-// markers are recognized.
+
+
+
 const anchorRe = /^\s*(?:\/\/|#)\s*ANCHOR(_END)?\s*:/;
 const hideStartRe = /^\s*(?:\/\/|#)\s*HIDE\b/;
 const hideEndRe = /^\s*(?:\/\/|#)\s*HIDE_END\b/;
@@ -159,8 +159,6 @@ if (!slug) {
   process.exit(1);
 }
 const docsRoot = join(DOC_ROOT, "src", "content", "docs");
-// A version snapshot exists once per locale: `docs/<slug>` (root locale) and
-// `docs/<locale>/<slug>` for each additional locale.
 const versionDirs = [];
 if (existsSync(join(docsRoot, slug))) versionDirs.push(join(docsRoot, slug));
 for (const entry of readdirSync(docsRoot)) {
