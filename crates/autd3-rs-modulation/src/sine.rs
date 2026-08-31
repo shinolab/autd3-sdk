@@ -43,7 +43,7 @@ pub(crate) fn sine_raw<S: Into<SamplingMode>>(
 
     let amplitude = f32::from(option.amplitude);
     let offset = f32::from(option.offset);
-    let phase = option.phase.radian();
+    let phase = option.phase.rad();
 
     Ok((0..n)
         .map(|i| {

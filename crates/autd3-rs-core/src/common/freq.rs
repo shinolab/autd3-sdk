@@ -18,6 +18,11 @@ where
 }
 
 impl<T: Copy> Freq<T> {
+    #[must_use]
+    pub const fn from_hz(freq: T) -> Self {
+        Self { freq }
+    }
+
     #[inline]
     #[must_use]
     pub const fn hz(&self) -> T {

@@ -91,7 +91,7 @@ impl Directivity {
     pub fn value(self, theta: Angle) -> f32 {
         match self {
             Directivity::Sphere => 1.0,
-            Directivity::T4010A1 => value_t4010a1(theta.radian()),
+            Directivity::T4010A1 => value_t4010a1(theta.rad()),
         }
     }
 }

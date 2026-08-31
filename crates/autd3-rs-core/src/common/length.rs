@@ -17,8 +17,15 @@ impl core::fmt::Debug for Length {
 
 impl Length {
     #[must_use]
-    pub const fn millimeters(millimetres: f32) -> Self {
+    pub const fn from_mm(millimetres: f32) -> Self {
         Self { millimetres }
+    }
+
+    #[must_use]
+    pub const fn from_m(metres: f32) -> Self {
+        Self {
+            millimetres: metres * 1000.0,
+        }
     }
 
     #[must_use]

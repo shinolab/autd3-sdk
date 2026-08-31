@@ -4,7 +4,7 @@ use autd3_rs_core::params::ULTRASOUND_FREQ_HZ;
 #[must_use]
 pub fn wavelength(sound_speed: Velocity) -> Length {
     let freq = ULTRASOUND_FREQ_HZ as f32;
-    Length::millimeters(sound_speed.mm_per_s() / freq)
+    Length::from_mm(sound_speed.mm_s() / freq)
 }
 
 #[cfg(test)]

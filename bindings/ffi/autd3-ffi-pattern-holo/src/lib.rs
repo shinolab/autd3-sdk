@@ -215,7 +215,7 @@ pub unsafe extern "C" fn autd3_holo_naive(
         &NalgebraBackend,
         common.geometry,
         &common.foci,
-        Length::millimeters(wavelength_mm),
+        Length::from_mm(wavelength_mm),
         &option,
         &mut common.buffer.0,
     );
@@ -269,7 +269,7 @@ pub unsafe extern "C" fn autd3_holo_gs(
         &NalgebraBackend,
         common.geometry,
         &common.foci,
-        Length::millimeters(wavelength_mm),
+        Length::from_mm(wavelength_mm),
         &option,
         &mut common.buffer.0,
     );
@@ -323,7 +323,7 @@ pub unsafe extern "C" fn autd3_holo_gspat(
         &NalgebraBackend,
         common.geometry,
         &common.foci,
-        Length::millimeters(wavelength_mm),
+        Length::from_mm(wavelength_mm),
         &option,
         &mut common.buffer.0,
     );
@@ -381,7 +381,7 @@ pub unsafe extern "C" fn autd3_holo_greedy(
     let result = greedy(
         common.geometry,
         &common.foci,
-        Length::millimeters(wavelength_mm),
+        Length::from_mm(wavelength_mm),
         &option,
         &mut common.buffer.0,
     );

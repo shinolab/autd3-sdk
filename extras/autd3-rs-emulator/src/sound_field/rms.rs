@@ -127,7 +127,7 @@ impl Rms {
 
     pub fn next_raw(&mut self, duration: Duration) -> Result<RawFrame, EmulatorError> {
         let num_frames = self.advance(duration)?;
-        let wavenumber = 2.0 * PI * ULTRASOUND_FREQ_HZ as f32 / self.option.sound_speed.mm_per_s();
+        let wavenumber = 2.0 * PI * ULTRASOUND_FREQ_HZ as f32 / self.option.sound_speed.mm_s();
         let rows = self.x.len();
         let columns = (0..num_frames)
             .map(|i| {
@@ -173,7 +173,7 @@ impl Record {
                     .iter()
                     .map(|&w| P0 * (PI * f32::from(w) / ULTRASOUND_PERIOD_COUNT as f32).sin())
                     .collect(),
-                phase: tr.phase.iter().map(|&p| Phase(p).radian()).collect(),
+                phase: tr.phase.iter().map(|&p| Phase(p).rad()).collect(),
             })
             .collect();
 

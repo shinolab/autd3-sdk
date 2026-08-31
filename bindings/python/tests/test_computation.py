@@ -23,9 +23,9 @@ def test_unit_dsl() -> None:
     assert not (200.0 * Hz).is_int
     assert (340 * m / s) == (340_000 * mm / s)
     assert (340 * m / s).m_s == 340.0
-    assert (340 * m / s).mm_per_s == 340_000.0
-    assert (180 * deg).radian == pytest.approx(np.pi)
-    assert (np.pi * rad).degree == pytest.approx(180.0)
+    assert (340 * m / s).mm_s == 340_000.0
+    assert (180 * deg).rad == pytest.approx(np.pi)
+    assert (np.pi * rad).deg == pytest.approx(180.0)
 
     assert (2.5 * kPa).as_pascal == pytest.approx(2500.0)
 

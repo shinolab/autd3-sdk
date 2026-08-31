@@ -129,7 +129,7 @@ pub unsafe extern "C" fn autd3_modulation_sine_option_new(
     into_handle(SineOption {
         amplitude,
         offset,
-        phase: Angle::from_radian(phase),
+        phase: Angle::from_rad(phase),
         clamp,
         sampling_config,
     })

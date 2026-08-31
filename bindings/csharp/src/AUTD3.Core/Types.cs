@@ -88,11 +88,11 @@ namespace AUTD3
         public static Phase Zero => new Phase(0x00);
         public static Phase Pi => new Phase(0x80);
 
-        public float Radian() => NativeCore.autd3_core_phase_radian(Value);
+        public float Rad() => NativeCore.autd3_core_phase_radian(Value);
 
         public static explicit operator Phase(Angle angle)
         {
-            var p = (int)MathF.Round(angle.Radian / (2f * MathF.PI) * 256f);
+            var p = (int)MathF.Round(angle.Rad / (2f * MathF.PI) * 256f);
             return new Phase((byte)(p & 0xFF));
         }
 

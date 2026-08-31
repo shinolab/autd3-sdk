@@ -344,7 +344,7 @@ pub unsafe extern "C" fn autd3_stm_circle(
     let mut points = Vec::new();
     circle(
         Point3::new(center[0], center[1], center[2]),
-        Length::millimeters(radius_mm),
+        Length::from_mm(radius_mm),
         num_points,
         UnitVector3::new_normalize(Vector3::new(normal[0], normal[1], normal[2])),
         Intensity(intensity),
