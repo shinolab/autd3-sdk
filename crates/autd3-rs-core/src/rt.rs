@@ -1,7 +1,35 @@
 #[cfg(feature = "logging")]
 mod logging;
 
-pub use thread_priority::{ThreadPriority, ThreadPriorityValue};
+use thread_priority::{ThreadPriority, ThreadPriorityValue};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RtPriority(ThreadPriority);
+
+impl RtPriority {
+    pub const MIN: Self = Self(ThreadPriority::Min);
+    pub const MAX: Self = Self(ThreadPriority::Max);
+
+    #[must_use]
+    pub fn new(value: u8) -> Option<Self> {
+        ThreadPriorityValue::try_from(value)
+            .ok()
+            .map(|v| Self(ThreadPriority::Crossplatform(v)))
+    }
+
+    #[must_use]
+    pub fn value(self) -> Option<u8> {
+        match self.0 {
+            ThreadPriority::Crossplatform(v) => Some(u8::from(v)),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn step_below(self) -> Option<Self> {
+        Self::new(self.value()?.checked_sub(1)?)
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CoreId {
@@ -34,13 +62,13 @@ pub enum RtSchedulePolicy {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RtThreadTuning {
-    pub priority: Option<ThreadPriority>,
+    pub priority: Option<RtPriority>,
     pub policy: RtSchedulePolicy,
     pub affinity: Option<CoreId>,
 }
 
 #[cfg(not(target_os = "windows"))]
-pub const RT_THREAD_PRIORITY: u8 = 80;
+const RT_THREAD_PRIORITY: u8 = 80;
 
 #[cfg(target_os = "linux")]
 const RT_PRIORITY_REMEDY: &str = "Grant the capability with \
@@ -86,7 +114,7 @@ pub fn apply_thread_tuning(tuning: RtThreadTuning) -> RtThreadTuning {
         affinity: None,
     };
     if let Some(priority) = tuning.priority {
-        match set_rt_priority(priority, tuning.policy) {
+        match set_rt_priority(priority.0, tuning.policy) {
             Ok(()) => {
                 tracing::debug!(?priority, policy = ?tuning.policy, "applied RT thread scheduling");
                 applied.priority = Some(priority);
@@ -108,31 +136,17 @@ pub fn apply_thread_tuning(tuning: RtThreadTuning) -> RtThreadTuning {
 }
 
 #[must_use]
-pub fn step_below(priority: ThreadPriority) -> Option<ThreadPriority> {
-    let ThreadPriority::Crossplatform(value) = priority else {
-        return None;
-    };
-    let below = u8::from(value).checked_sub(1)?;
-    ThreadPriorityValue::try_from(below)
-        .ok()
-        .map(ThreadPriority::Crossplatform)
-}
-
-#[must_use]
 #[allow(clippy::unnecessary_wraps)]
-pub fn default_rt_priority() -> Option<ThreadPriority> {
+pub fn default_rt_priority() -> Option<RtPriority> {
     #[cfg(target_os = "windows")]
     {
-        Some(ThreadPriority::Os(
+        Some(RtPriority(ThreadPriority::Os(
             thread_priority::WinAPIThreadPriority::TimeCritical.into(),
-        ))
+        )))
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Some(ThreadPriority::Crossplatform(
-            ThreadPriorityValue::try_from(RT_THREAD_PRIORITY)
-                .expect("0..=99 is a valid thread priority"),
-        ))
+        Some(RtPriority::new(RT_THREAD_PRIORITY).expect("0..=99 is a valid thread priority"))
     }
 }
 
@@ -140,19 +154,26 @@ pub fn default_rt_priority() -> Option<ThreadPriority> {
 mod tests {
     use super::*;
 
-    fn crossplatform(value: u8) -> ThreadPriority {
-        ThreadPriority::Crossplatform(ThreadPriorityValue::try_from(value).unwrap())
+    fn crossplatform(value: u8) -> RtPriority {
+        RtPriority::new(value).unwrap()
     }
 
     #[test]
     fn a_step_below_is_one_lower() {
-        assert_eq!(step_below(crossplatform(80)), Some(crossplatform(79)));
+        assert_eq!(crossplatform(80).step_below(), Some(crossplatform(79)));
     }
 
     #[test]
     fn only_the_crossplatform_ladder_steps_down() {
-        assert_eq!(step_below(ThreadPriority::Max), None);
-        assert_eq!(step_below(ThreadPriority::Min), None);
-        assert_eq!(step_below(crossplatform(0)), None);
+        assert_eq!(RtPriority::MAX.step_below(), None);
+        assert_eq!(RtPriority::MIN.step_below(), None);
+        assert_eq!(crossplatform(0).step_below(), None);
+    }
+
+    #[test]
+    fn only_the_crossplatform_ladder_has_a_value() {
+        assert_eq!(crossplatform(80).value(), Some(80));
+        assert_eq!(RtPriority::MAX.value(), None);
+        assert_eq!(RtPriority::MIN.value(), None);
     }
 }

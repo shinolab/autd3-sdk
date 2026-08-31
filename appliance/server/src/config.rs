@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use autd3_rs_core::{CoreId, Interface, RtSchedulePolicy, ThreadPriority, ThreadPriorityValue};
+use autd3_rs_core::{CoreId, Interface, RtPriority, RtSchedulePolicy};
 use autd3_rs_link_echocat::{EchocatLinkOption, FramePhase, MAX_SYNC0_PERIOD};
 use autd3_rs_link_remote::{BusOption, BusPacing, BusServerOption};
 use serde::Deserialize;
@@ -85,7 +85,7 @@ pub struct Rt {
 impl Default for Rt {
     fn default() -> Self {
         Self {
-            priority: DEFAULT_RT_PRIORITY,
+            priority: default_rt_priority(),
             policy: Policy::Fifo,
             affinity: default_affinity(),
             lock_memory: true,
@@ -124,10 +124,11 @@ fn default_affinity() -> Option<usize> {
     (cores != usize::MAX && cores > 1).then(|| cores - 1)
 }
 
-#[cfg(not(target_os = "windows"))]
-const DEFAULT_RT_PRIORITY: u8 = autd3_rs_core::rt::RT_THREAD_PRIORITY;
-#[cfg(target_os = "windows")]
-const DEFAULT_RT_PRIORITY: u8 = RT_PRIORITY_OFF;
+fn default_rt_priority() -> u8 {
+    autd3_rs_core::default_rt_priority()
+        .and_then(RtPriority::value)
+        .unwrap_or(RT_PRIORITY_OFF)
+}
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -241,9 +242,7 @@ impl Config {
                  Set `bus.interface` in the config file or pass --interface"
             );
         }
-        if self.rt.priority != RT_PRIORITY_OFF
-            && ThreadPriorityValue::try_from(self.rt.priority).is_err()
-        {
+        if self.rt.priority != RT_PRIORITY_OFF && RtPriority::new(self.rt.priority).is_none() {
             bail!(
                 "rt.priority must be 0 (off) or a valid scheduling priority, got {}",
                 self.rt.priority
@@ -348,13 +347,11 @@ impl Config {
         }
     }
 
-    fn rt_priority(&self) -> Option<ThreadPriority> {
+    fn rt_priority(&self) -> Option<RtPriority> {
         if self.rt.priority == RT_PRIORITY_OFF {
             return None;
         }
-        ThreadPriorityValue::try_from(self.rt.priority)
-            .ok()
-            .map(ThreadPriority::Crossplatform)
+        RtPriority::new(self.rt.priority)
     }
 }
 

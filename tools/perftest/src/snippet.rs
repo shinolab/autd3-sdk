@@ -213,12 +213,10 @@ fn push_config(body: &mut String, imports: &mut Vec<&'static str>, c: &Config) {
         let _ = writeln!(body, "    low_latency: true,");
     }
     if let Some(p) = c.rt_priority {
-        need("ThreadPriority");
-        need("ThreadPriorityValue");
+        need("RtPriority");
         let _ = writeln!(
             body,
-            "    rt_priority: Some(ThreadPriority::Crossplatform(\
-             ThreadPriorityValue::try_from({p}).unwrap())),",
+            "    rt_priority: Some(RtPriority::new({p}).unwrap()),",
         );
     }
     let _ = writeln!(body, "    rt_policy: {},", rt_policy(c.rt_policy));

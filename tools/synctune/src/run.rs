@@ -9,8 +9,8 @@ use autd3_rs::commands::{ConfigPattern, Pattern};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
-    Client, ClientConfig, CoreId, Error as ClientError, Frames, Link, ResponseFuture,
-    RtSchedulePolicy, StateCheck, ThreadPriority, ThreadPriorityValue,
+    Client, ClientConfig, CoreId, Error as ClientError, Frames, Link, ResponseFuture, RtPriority,
+    RtSchedulePolicy, StateCheck,
 };
 use autd3_rs_link_echocat::{EchocatLink, EchocatLinkOption, FramePhase};
 use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption, EtherCrabLinkOptionFull};
@@ -39,9 +39,7 @@ pub async fn measure_candidate(
             if common.no_tx_rx_priority {
                 opt.tx_rx_priority = None;
             } else if let Some(p) = common.tx_rx_priority {
-                opt.tx_rx_priority = Some(ThreadPriority::Crossplatform(
-                    ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),
-                ));
+                opt.tx_rx_priority = Some(RtPriority::new(p).expect("validated to 0..=99"));
             }
             opt.tx_rx_policy = match common.tx_rx_policy {
                 RtPolicy::Normal => RtSchedulePolicy::Normal,
@@ -222,9 +220,7 @@ fn client_config(common: &Common, max_inflight: usize) -> ClientConfig {
             None
         } else {
             match common.rt_priority {
-                Some(p) => Some(ThreadPriority::Crossplatform(
-                    ThreadPriorityValue::try_from(p).expect("validated to 0..=99"),
-                )),
+                Some(p) => Some(RtPriority::new(p).expect("validated to 0..=99")),
                 None => ClientConfig::default().rt_priority,
             }
         },

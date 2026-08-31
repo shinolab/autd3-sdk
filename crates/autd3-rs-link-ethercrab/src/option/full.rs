@@ -3,7 +3,7 @@ use std::time::Duration;
 use autd3_rs_core::Interface;
 use ethercrab::{MainDeviceConfig, Timeouts, subdevice_group::DcConfiguration};
 
-use crate::osal::thread::{CoreId, RtSchedulePolicy, ThreadPriority};
+use crate::osal::thread::{CoreId, RtPriority, RtSchedulePolicy};
 
 use super::EtherCrabLinkOption;
 
@@ -15,7 +15,7 @@ pub struct EtherCrabLinkOptionFull {
     pub dc_configuration: DcConfiguration,
     pub sync_tolerance: Duration,
     pub sync_timeout: Duration,
-    pub tx_rx_priority: Option<ThreadPriority>,
+    pub tx_rx_priority: Option<RtPriority>,
     pub tx_rx_policy: RtSchedulePolicy,
     pub tx_rx_affinity: Option<CoreId>,
 }
