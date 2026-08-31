@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use autd3_rs::units::Hz;
-use autd3_rs_modulation::{FourierOption, SineComponent, SineOption, fourier};
+use autd3_rs_modulation::{fourier, FourierOption, SineComponent, SineOption};
 
 fn main() -> Result<()> {
     let scale_factor = None;
@@ -19,7 +19,6 @@ fn main() -> Result<()> {
         ;
     let mut dst = Vec::new();
 
-    // Shown standalone in the SineComponent section of the docs.
     // ANCHOR: components
     SineComponent {
         freq: 100 * Hz,

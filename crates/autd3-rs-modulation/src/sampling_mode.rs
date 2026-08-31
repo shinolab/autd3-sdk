@@ -46,7 +46,6 @@ impl From<Nearest<Freq<f32>>> for SamplingMode {
 }
 
 impl SamplingMode {
-    // Returns `(n, rep)`: `n` samples span `rep` full periods of the waveform.
     pub(crate) fn validate(self, config: SamplingConfig) -> Result<(u64, u64), ModulationError> {
         match self {
             SamplingMode::ExactFreq(freq) => Self::validate_exact(freq, config),

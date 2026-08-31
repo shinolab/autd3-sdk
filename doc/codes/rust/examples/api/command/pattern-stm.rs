@@ -2,8 +2,8 @@ use autd3_rs::commands::{
     ChangePatternBank, ConfigPattern, PatternStm, PatternStmMode, PatternStmOption, StmConfig,
     WritePatternBuffer,
 };
-use autd3_rs::geometry::{Autd3, Geometry, offset};
-use autd3_rs::units::{Hz, m, mm, s};
+use autd3_rs::geometry::{offset, Autd3, Geometry};
+use autd3_rs::units::{m, mm, s, Hz};
 use autd3_rs::value::{LoopBehavior, PatternBank, TransitionMode};
 
 const NUM_POINTS: usize = 200;
@@ -12,7 +12,6 @@ const RADIUS_MM: f32 = 30.0;
 fn main() {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    // Compute the Pattern (emission of all transducers) for each sample point on the host.
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
     let patterns = (0..NUM_POINTS)

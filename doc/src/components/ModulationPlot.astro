@@ -65,7 +65,6 @@ const fixedText = fixed ?? `freq = ${freq} Hz`;
         return c.radiation ? Math.round(255 * Math.sqrt(raw / 255)) : raw;
       };
     }
-    // sine
     return (t) =>
       clampByte(
         c.offset +

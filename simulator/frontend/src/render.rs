@@ -218,10 +218,6 @@ impl Renderer {
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
 
-        // `Drop for WebTexture` is a no-op on the WebGPU backend: dropping a texture only releases
-        // the JS handle and leaves the GPU memory to the browser's GC. Without an explicit destroy,
-        // every resize leaks a full-size depth+MSAA pair until the device reports
-        // "Not enough memory left" and every later texture comes back invalid.
         self.depth_tex.destroy();
         if let Some(msaa) = &self.msaa_tex {
             msaa.destroy();
@@ -305,8 +301,6 @@ impl Renderer {
         self.directions_buf = Some(directions_buf);
         self.states_buf = Some(states_buf);
 
-        // Every client that connects re-sends the geometry, so the slice and the camera are only
-        // reset when the layout actually changed — reconnecting must not throw away the user's view.
         let key = geometry_key(positions, directions);
         if self.geometry_key != Some(key) {
             self.geometry_key = Some(key);
@@ -487,8 +481,6 @@ impl Renderer {
     }
 
     fn create_field(&mut self) {
-        // Both axes share one scale factor so that hitting FIELD_MAX_DIM lowers the resolution
-        // isotropically instead of squashing the texels of the longer axis.
         let wanted = self.slice_size * self.texels_per_mm;
         let cap = f32::from(u16::try_from(FIELD_MAX_DIM).unwrap_or(u16::MAX));
         let scale = (cap / wanted.x.max(1.0))
@@ -516,8 +508,6 @@ impl Renderer {
             usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
-        // The storage view (compute writes) and the sampled view (slice reads) are kept in separate
-        // bind groups: a single one would put both usages in the same pass usage scope and conflict.
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.field_compute_bg = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("field-compute-bg"),

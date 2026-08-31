@@ -26,7 +26,6 @@ impl Reply {
 }
 
 pub(super) struct Completion {
-    // `None` for the heap fallback handed out when the pool is empty.
     index: Option<usize>,
     refs: AtomicUsize,
     inner: Mutex<Inner>,
@@ -129,7 +128,6 @@ impl CompletionPool {
         )
     }
 
-    // Recycled by whichever of the two halves is dropped last.
     fn release(&self, completion: &Arc<Completion>) {
         if completion.refs.fetch_sub(1, Ordering::AcqRel) != 1 {
             return;
@@ -275,7 +273,6 @@ mod tests {
 
         tx2.send(Ok(Response::from_slice(&[2])));
         assert_eq!(rx2.await.unwrap().data(), [2]);
-        // The fallback is not pooled, so nothing is handed back for it.
         assert_eq!(free_len(&pool), 0);
 
         tx1.send(Ok(Response::from_slice(&[1])));

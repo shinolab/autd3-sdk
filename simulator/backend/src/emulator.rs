@@ -67,7 +67,6 @@ fn gpio_waveform(fpga: &FpgaEmulator, raw: u64) -> Vec<u8> {
         }
         GPIO_TYPE_PWM_OUT => pwm_waveform(fpga, value as usize),
         GPIO_TYPE_DIRECT => constant_wave(u8::from(value != 0)),
-        // None / Sync / SyncDiff and unknown tags output constant low.
         _ => constant_wave(0),
     }
 }
