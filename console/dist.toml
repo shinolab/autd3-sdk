@@ -4,7 +4,7 @@ version = "0.6.1"
 description = "GUI console that launches AUTD3 tools (simulator / firmware / TwinCAT setup)"
 repository = "https://github.com/shinolab/autd3-sdk"
 license = "MIT"
-binaries = ["autd3-console", "autd3-rs-simulator", "autd3-firmware", "autd3-appliance"]
+binaries = ["autd3-console", "autd3-rs-simulator", "autd3-firmware-writer", "autd3-appliance"]
 out-dir = "target/distrib"
 build-command = [
     "cargo",

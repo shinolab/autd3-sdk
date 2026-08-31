@@ -8,7 +8,7 @@ use clap::{Parser, ValueEnum};
 
 #[derive(Parser)]
 #[command(
-    name = "autd3-firmware",
+    name = "autd3-firmware-writer",
     about = "Flash AUTD3 CPU/FPGA firmware",
     long_about = "Download a released AUTD3 firmware bundle and write it to the device. \
                   CPU images (*.bin) are flashed via SEGGER J-Link and FPGA images (*.mcs) \

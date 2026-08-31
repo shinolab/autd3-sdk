@@ -5,7 +5,7 @@ use crate::launch::tool_bin;
 use crate::process::ManagedProcess;
 
 const SUBDIR: &str = "firmware";
-const BIN: &str = "autd3-firmware";
+const BIN: &str = "autd3-firmware-writer";
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Target {

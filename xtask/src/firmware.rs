@@ -89,13 +89,13 @@ fn write_zip(archive: &Path, entries: &[(String, PathBuf)]) -> Result<()> {
 fn write(root: &Path, args: &WriteArgs) -> Result<()> {
     run(
         "cargo",
-        ["build", "-p", "autd3-firmware", "--release"],
+        ["build", "-p", "autd3-firmware-writer", "--release"],
         root,
     )?;
     let bin = root.join("target").join("release").join(if cfg!(windows) {
-        "autd3-firmware.exe"
+        "autd3-firmware-writer.exe"
     } else {
-        "autd3-firmware"
+        "autd3-firmware-writer"
     });
 
     let mut cli_args: Vec<String> = Vec::new();

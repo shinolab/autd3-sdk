@@ -13,7 +13,7 @@ pub fn print_available_versions(series: Series) -> Result<()> {
 
 fn fetch_versions(series: Series) -> Result<Vec<String>> {
     let resp = ureq::get(series.releases_api())
-        .header("User-Agent", "autd3-firmware")
+        .header("User-Agent", "autd3-firmware-writer")
         .header("Accept", "application/vnd.github+json")
         .call()
         .context("querying GitHub releases")?;

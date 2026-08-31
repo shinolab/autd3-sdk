@@ -51,7 +51,7 @@ pub enum ConsoleCmd {
 const BINARIES: &[&str] = &[
     "autd3-console",
     "autd3-rs-simulator",
-    "autd3-firmware",
+    "autd3-firmware-writer",
     "autd3-appliance",
 ];
 
@@ -112,8 +112,8 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
 
     let (sim_bin, _) = build_backend_and_frontend(root, debug, target)?;
 
-    run_cargo(cargo_build_args("autd3-firmware", target, debug), root)?;
-    let fw_bin = cargo_bin(root, target, debug, "autd3-firmware");
+    run_cargo(cargo_build_args("autd3-firmware-writer", target, debug), root)?;
+    let fw_bin = cargo_bin(root, target, debug, "autd3-firmware-writer");
 
     run_cargo(cargo_build_args("autd3-appliance", target, debug), root)?;
     let appliance_bin = cargo_bin(root, target, debug, "autd3-appliance");
