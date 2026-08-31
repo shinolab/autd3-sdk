@@ -75,7 +75,6 @@ fn default_state_is_pattern_mode_bank_zero() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
 
-    // Fresh device: pattern cycle 1 (pattern mode), banks B0, thermal clear.
     assert_eq!(BIT_PATTERN_MODE, read_state(&mut device, 0));
 }
 
@@ -130,7 +129,6 @@ fn pattern_bank_switch_reflects_in_state() {
     device.send(&frame(3, Cmd::ChangePatternBank, &change_pattern_bank(1)));
     assert_eq!(1, device.fpga().current_pattern_bank());
     let state = read_state(&mut device, 4);
-    // Bank B1, single index → still pattern mode.
     assert_eq!(BIT_PATTERN_BANK | BIT_PATTERN_MODE, state);
 }
 
@@ -139,8 +137,6 @@ fn multi_index_pattern_reports_stm_mode() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
 
-    // A multi-index pattern (cycle > 1) is STM mode; the pattern-mode bit derives from
-    // the pattern cycle register, so the buffer contents are irrelevant here.
     device.send(&frame(
         0,
         Cmd::ConfigPattern,
@@ -149,6 +145,5 @@ fn multi_index_pattern_reports_stm_mode() {
     device.send(&frame(1, Cmd::ChangePatternBank, &change_pattern_bank(0)));
 
     assert!(!device.fpga().is_pattern_mode());
-    // Bank B0, multi index → STM mode (pattern-mode bit clear).
     assert_eq!(0, read_state(&mut device, 2) & BIT_PATTERN_MODE);
 }

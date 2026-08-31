@@ -46,9 +46,9 @@ struct BpfProgram {
     bf_insns: *const BpfInsn,
 }
 
-const BPF_LDH_ABS: u16 = 0x28; // BPF_LD | BPF_H | BPF_ABS
-const BPF_JEQ_K: u16 = 0x15; // BPF_JMP | BPF_JEQ | BPF_K
-const BPF_RET_K: u16 = 0x06; // BPF_RET | BPF_K
+const BPF_LDH_ABS: u16 = 0x28;
+const BPF_JEQ_K: u16 = 0x15;
+const BPF_RET_K: u16 = 0x06;
 
 static ETHERCAT_FILTER: [BpfInsn; 4] = [
     BpfInsn {

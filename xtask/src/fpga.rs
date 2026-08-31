@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 
 use crate::util::{on_path, run, which};
@@ -195,7 +195,7 @@ fn summarize_saif_tc(saif: &Path, scope: &str) -> Result<()> {
         .with_context(|| format!("cannot read SAIF at {}", saif.display()))?;
 
     let mut nodes: Vec<SaifNode> = Vec::new();
-    let mut stack: Vec<(usize, usize)> = Vec::new(); // (node index, paren depth at open)
+    let mut stack: Vec<(usize, usize)> = Vec::new();
     let mut names: Vec<String> = Vec::new();
     let mut paren_depth = 0usize;
 
@@ -427,8 +427,8 @@ pub fn resolve_vivado() -> Result<String> {
 
 #[cfg(windows)]
 fn find_vivado_windows() -> Option<String> {
-    use winreg::RegKey;
     use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
 
     const NEEDLES: [&str; 4] = [
         "Vivado",

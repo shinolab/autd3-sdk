@@ -47,7 +47,6 @@ const { code, title } = Astro.props;
     const graph = box.querySelector<HTMLElement>(".mermaid-lightbox-graph");
     if (!graph) return;
     graph.innerHTML = svg;
-    // Mermaid pins the rendered width; drop it so the diagram fills the overlay.
     const el = graph.querySelector("svg");
     if (el) {
       el.removeAttribute("width");

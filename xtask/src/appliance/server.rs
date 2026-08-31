@@ -120,8 +120,6 @@ pub fn cross_build(root: &Path) -> Result<PathBuf> {
     build(root, Some(APPLIANCE_TARGET), false)
 }
 
-// アップロード自体は CLI の `update` に任せる. mDNS 探索も版数チェックも
-// そちらが持っているので, xtask は「クロスビルドして CLI に渡す」だけでよい.
 fn update(root: &Path, no_build: bool, args: &[String]) -> Result<()> {
     let binary = if no_build {
         let built = cargo_bin(root, Some(APPLIANCE_TARGET), false, PACKAGE);

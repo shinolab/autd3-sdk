@@ -22,8 +22,6 @@ mod imp {
 
     use super::{MemProfile, SizeBucket};
 
-    // Allocations smaller than this get an exact-size bucket; the hot path only
-    // ever asks for a few hundred bytes, so this is where the answers live.
     const HIST_LIMIT: usize = 8192;
     const TOP_SIZES: usize = 10;
 
@@ -51,9 +49,6 @@ mod imp {
         }
     }
 
-    // SAFETY: every method forwards to `System` with the same layout it was given
-    // and returns its pointer unchanged; the counters are plain atomics that never
-    // allocate, so no re-entrancy into the allocator is possible.
     unsafe impl GlobalAlloc for Histogram {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             if RECORDING.load(Ordering::Relaxed) {
