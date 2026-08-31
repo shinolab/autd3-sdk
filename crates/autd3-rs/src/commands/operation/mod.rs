@@ -35,14 +35,13 @@ pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, Silenc
 pub use synchronize::Synchronize;
 pub(crate) use write_foci_chunk::WriteFociChunk;
 pub(crate) use write_modulation_chunk::WriteModulationChunk;
-pub use write_modulation_fused::WriteModulationFused;
+pub(crate) use write_modulation_fused::WriteModulationFused;
 pub use write_pattern_buffer::WritePatternBuffer;
-pub use write_pattern_compressed::{
-    PATTERN_MAX_PER_FRAME, PatternCompression, WritePatternCompressed,
-};
-pub use write_pattern_fused::{WriteFociStmFused, WritePatternFused};
+pub(crate) use write_pattern_compressed::PATTERN_MAX_PER_FRAME;
+pub use write_pattern_compressed::{PatternCompression, WritePatternCompressed};
+pub(crate) use write_pattern_fused::{WriteFociStmFused, WritePatternFused};
 
-pub use autd3_cpu_wire::layout::{MAX_FOCI_PER_FRAME, MOD_WRITE_MAX_DATA_LEN};
+pub(crate) use autd3_cpu_wire::layout::{MAX_FOCI_PER_FRAME, MOD_WRITE_MAX_DATA_LEN};
 
 #[cfg(test)]
 pub(crate) use write_modulation_fused::MOD_FUSED_MAX_DATA_LEN;

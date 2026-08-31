@@ -5,7 +5,7 @@ mod frame;
 mod mirror;
 
 pub use builder::DatagramBuilder;
-pub use frame::{Datagram, Frame, Frames};
+pub use frame::{Datagram, Frame, FrameIter, Frames};
 pub(crate) use mirror::{Mirror, MirrorHandle};
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ use crate::params::{
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[doc(hidden)]
 pub struct Focus {
     pub x: i32,
     pub y: i32,
