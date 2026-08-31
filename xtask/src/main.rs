@@ -37,7 +37,7 @@ use firmware::{FirmwareCmd, run_firmware};
 use fpga::{FpgaCmd, run_fpga};
 use holo_wgpu::{HoloWgpuCmd, run_holo_wgpu};
 use image::{ImageCmd, run_image};
-use license::{LicenseCmd, run_license};
+use license::{LicenseCmd, run_license, set_generate};
 use py::{PyCmd, run_py};
 use rust::{RustCmd, run_rust};
 use server::{ServerCmd, run_server};
@@ -49,6 +49,9 @@ use util::workspace_root;
 #[derive(Parser)]
 #[command(name = "xtask", about = "autd3-sdk dev task runner")]
 struct Cli {
+    /// Generate the third-party license notices with cargo-about (slow; use it for release artifacts)
+    #[arg(long, global = true)]
+    license: bool,
     #[command(subcommand)]
     cmd: TopCmd,
 }
@@ -149,6 +152,7 @@ enum TopCmd {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let root = workspace_root();
+    set_generate(cli.license);
     match cli.cmd {
         TopCmd::Rust { cmd } => run_rust(&root, &cmd),
         TopCmd::Cpu { cmd } => run_cpu(&root, &cmd),

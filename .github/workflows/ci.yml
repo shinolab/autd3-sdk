@@ -163,8 +163,6 @@ jobs:
               - 'bindings/ffi/**'
               - 'crates/**'
               - 'Cargo.toml'
-              - 'about.toml'
-              - 'about.hbs'
               - '.github/workflows/ci-unity.yml'
             license:
               - *shared
