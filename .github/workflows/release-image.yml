@@ -73,7 +73,7 @@ jobs:
           df -h /
 
       - name: Build the image
-        run: cargo xtask image build
+        run: cargo xtask appliance image build
 
       - name: Checksum
         run: |

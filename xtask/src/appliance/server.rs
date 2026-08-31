@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::util::{
-    capture, cargo_bin, cargo_build_args, ensure_rust_target, run_built_bin, run_cargo,
+    capture, cargo_bin, cargo_build_args, ensure_rust_target, run, run_built_bin, run_cargo,
 };
 
 const PACKAGE: &str = "autd3-remote-server";
+const CLI_PACKAGE: &str = "autd3-appliance";
 const APPLIANCE_TARGET: &str = "aarch64-unknown-linux-musl";
 
 const DIST_FILES: &[(&str, bool)] = &[
@@ -46,6 +47,15 @@ pub enum ServerCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Cross-build the server and install it on a running appliance over its control API
+    Update {
+        /// Upload the binary that is already cross-built instead of building it again
+        #[arg(long)]
+        no_build: bool,
+        /// Arguments forwarded to `autd3-appliance` (e.g. `--addr 192.168.0.5:8081`)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// Zip the server, the systemd unit and the tuning scripts into `appliance/server/bundle/`
     Bundle {
         /// Target triple to bundle (defaults to the Raspberry Pi 4 target)
@@ -66,6 +76,7 @@ pub fn run_server(root: &Path, cmd: &ServerCmd) -> Result<()> {
             let bin = build(root, None, *debug)?;
             run_built_bin(&bin, args, *no_sudo, root)
         }
+        ServerCmd::Update { no_build, args } => update(root, *no_build, args),
         ServerCmd::Bundle { target } => bundle(root, target.as_deref()),
     }
 }
@@ -107,6 +118,30 @@ fn rust_lld(root: &Path) -> Option<PathBuf> {
 
 pub fn cross_build(root: &Path) -> Result<PathBuf> {
     build(root, Some(APPLIANCE_TARGET), false)
+}
+
+// アップロード自体は CLI の `update` に任せる. mDNS 探索も版数チェックも
+// そちらが持っているので, xtask は「クロスビルドして CLI に渡す」だけでよい.
+fn update(root: &Path, no_build: bool, args: &[String]) -> Result<()> {
+    let binary = if no_build {
+        let built = cargo_bin(root, Some(APPLIANCE_TARGET), false, PACKAGE);
+        if !built.is_file() {
+            bail!(
+                "{} is not there; drop --no-build to cross-build it first",
+                built.display(),
+            );
+        }
+        built
+    } else {
+        cross_build(root)?
+    };
+
+    run_cargo(cargo_build_args(CLI_PACKAGE, None, false), root)?;
+    let cli = cargo_bin(root, None, false, CLI_PACKAGE);
+
+    let mut forwarded: Vec<String> = vec!["update".to_owned(), binary.display().to_string()];
+    forwarded.extend(args.iter().cloned());
+    run(&cli.to_string_lossy(), &forwarded, root)
 }
 
 fn bundle(root: &Path, target: Option<&str>) -> Result<()> {
