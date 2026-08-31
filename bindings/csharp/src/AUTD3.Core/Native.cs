@@ -10,7 +10,7 @@ namespace AUTD3
 
         static NativeCore() => NativeAbi.Verify(Lib, autd3_abi_version());
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
         [StructLayout(LayoutKind.Sequential)]
@@ -20,76 +20,76 @@ namespace AUTD3
             public float Rw, Rx, Ry, Rz;
         }
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_core_geometry_new(Autd3Device[] devices, UIntPtr len);
 
-        [DllImport(Lib)]
-        internal static extern UIntPtr autd3_core_geometry_num_devices(IntPtr geometry);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_geometry_num_devices(GeometryHandle geometry);
 
-        [DllImport(Lib)]
-        internal static extern void autd3_core_geometry_center(IntPtr geometry, [Out] float[] outXyz);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_core_geometry_center(GeometryHandle geometry, [Out] float[] outXyz);
 
-        [DllImport(Lib)]
-        internal static extern UIntPtr autd3_core_geometry_num_transducers(IntPtr geometry);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_geometry_num_transducers(GeometryHandle geometry);
 
-        [DllImport(Lib)]
-        internal static extern UIntPtr autd3_core_device_num_transducers(IntPtr geometry, UIntPtr dev);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_device_num_transducers(GeometryHandle geometry, UIntPtr dev);
 
-        [DllImport(Lib)]
-        internal static extern UIntPtr autd3_core_device_idx(IntPtr geometry, UIntPtr dev);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_device_idx(GeometryHandle geometry, UIntPtr dev);
 
-        [DllImport(Lib)]
-        internal static extern void autd3_core_device_rotation(IntPtr geometry, UIntPtr dev, [Out] float[] outWijk);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_core_device_rotation(GeometryHandle geometry, UIntPtr dev, [Out] float[] outWijk);
 
-        [DllImport(Lib)]
-        internal static extern void autd3_core_device_center(IntPtr geometry, UIntPtr dev, [Out] float[] outXyz);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_core_device_center(GeometryHandle geometry, UIntPtr dev, [Out] float[] outXyz);
 
-        [DllImport(Lib)]
-        internal static extern void autd3_core_device_direction_x(IntPtr geometry, UIntPtr dev, [Out] float[] outXyz);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_core_device_direction_x(GeometryHandle geometry, UIntPtr dev, [Out] float[] outXyz);
 
-        [DllImport(Lib)]
-        internal static extern void autd3_core_device_direction_y(IntPtr geometry, UIntPtr dev, [Out] float[] outXyz);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_core_device_direction_y(GeometryHandle geometry, UIntPtr dev, [Out] float[] outXyz);
 
-        [DllImport(Lib)]
-        internal static extern void autd3_core_device_direction_axial(IntPtr geometry, UIntPtr dev, [Out] float[] outXyz);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_core_device_direction_axial(GeometryHandle geometry, UIntPtr dev, [Out] float[] outXyz);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_core_transducer_position(IntPtr geometry, UIntPtr dev, UIntPtr tr, [Out] float[] outXyz);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_core_transducer_position(GeometryHandle geometry, UIntPtr dev, UIntPtr tr, [Out] float[] outXyz);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_core_transducer_direction(IntPtr geometry, UIntPtr dev, UIntPtr tr, [Out] float[] outXyz);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_core_transducer_direction(GeometryHandle geometry, UIntPtr dev, UIntPtr tr, [Out] float[] outXyz);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_core_geometry_free(IntPtr geometry);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern float autd3_core_phase_radian(byte value);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_core_sampling_config_divide(ushort divide);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_core_sampling_config_freq(float hz);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_core_sampling_config_freq_nearest(float hz);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_core_sampling_config_period(ulong nanos);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_core_sampling_config_period_nearest(ulong nanos);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_core_sampling_config_divide_value(IntPtr config, out ushort outValue);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_core_sampling_config_freq_value(IntPtr config, out float outValue);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_core_sampling_config_period_value(IntPtr config, out ulong outValue);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_core_sampling_config_free(IntPtr config);
     }
 
@@ -116,14 +116,19 @@ namespace AUTD3
 
     internal static class LinkOptionNative
     {
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int SetDurationFn(IntPtr option, ulong ns);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int GetDurationFn(IntPtr option, out ulong ns);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int SetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int GetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate IntPtr OpenFn(IntPtr option, byte[] outErr, UIntPtr outErrLen);
 
         internal static void Apply(string field, int code)

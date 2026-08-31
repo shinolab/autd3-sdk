@@ -27,79 +27,92 @@ namespace AUTD3
             NativeAbi.Verify(ClientLib, autd3capi_abi_version());
         }
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
-        [DllImport(ClientLib, EntryPoint = "autd3_abi_version")]
+        [DllImport(ClientLib, EntryPoint = "autd3_abi_version", CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3capi_abi_version();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_buffer_new();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_buffer_from_bytes(byte[] data, UIntPtr len);
 
-        [DllImport(Lib)]
-        internal static extern UIntPtr autd3_modulation_buffer_len(IntPtr buffer);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_modulation_buffer_len(ModulationBufferHandle buffer);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_modulation_buffer_get(IntPtr buffer, UIntPtr index, out byte @out);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_buffer_get(ModulationBufferHandle buffer, UIntPtr index, out byte @out);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_modulation_buffer_set(IntPtr buffer, UIntPtr index, byte value);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_buffer_set(ModulationBufferHandle buffer, UIntPtr index, byte value);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_modulation_buffer_free(IntPtr buffer);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
         internal static extern bool autd3_modulation_samples_per_period(ushort divider, uint freqHz, out uint outValue);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_sine_option_new(byte amplitude, byte offset, float phase, [MarshalAs(UnmanagedType.I1)] bool clamp, IntPtr samplingConfig);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_modulation_sine_option_free(IntPtr option);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_modulation_sine(byte mode, float freq, uint freqInt, IntPtr option, IntPtr buffer, byte[] outErr, UIntPtr outErrLen);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_sine(byte mode, float freq, uint freqInt, IntPtr option, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_square_option_new(byte low, byte high, float duty, IntPtr samplingConfig);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_modulation_square_option_free(IntPtr option);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_modulation_square(byte mode, float freq, uint freqInt, IntPtr option, IntPtr buffer, byte[] outErr, UIntPtr outErrLen);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_square(byte mode, float freq, uint freqInt, IntPtr option, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_fourier_option_new([MarshalAs(UnmanagedType.I1)] bool hasScaleFactor, float scaleFactor, [MarshalAs(UnmanagedType.I1)] bool clamp, byte offset);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_modulation_fourier_option_free(IntPtr option);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, IntPtr option, IntPtr buffer, byte[] outErr, UIntPtr outErrLen);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, IntPtr option, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_modulation_constant(byte intensity, IntPtr buffer);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_constant(byte intensity, ModulationBufferHandle buffer);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_modulation_radiation_pressure(IntPtr src, IntPtr dst);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_radiation_pressure(ModulationBufferHandle src, ModulationBufferHandle dst);
 
-        [DllImport(Lib)]
-        internal static extern int autd3_modulation_radiation_pressure_inplace(IntPtr buffer);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_radiation_pressure_inplace(ModulationBufferHandle buffer);
 
-        [DllImport(ClientLib)]
-        internal static extern IntPtr autd3_op_modulation(byte bank, IntPtr samplingConfig, IntPtr modulationBuffer, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_modulation(byte bank, IntPtr samplingConfig, ModulationBufferHandle modulationBuffer, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+    }
+
+    internal sealed class ModulationBufferHandle : Autd3SafeHandle
+    {
+        internal ModulationBufferHandle(IntPtr handle) : base(handle)
+        {
+        }
+
+        protected override bool ReleaseHandle()
+        {
+            NativeModulation.autd3_modulation_buffer_free(handle);
+            return true;
+        }
     }
 
     public sealed class ModulationBuffer : IDisposable, IEnumerable<byte>
     {
-        private IntPtr _handle;
+        private readonly ModulationBufferHandle _handle;
 
-        internal IntPtr Handle => _handle;
+        internal ModulationBufferHandle Handle => _handle;
 
         private ModulationBuffer(IntPtr handle)
         {
@@ -107,7 +120,7 @@ namespace AUTD3
             {
                 throw new Autd3Exception("failed to create modulation buffer");
             }
-            _handle = handle;
+            _handle = new ModulationBufferHandle(handle);
         }
 
         internal ModulationBuffer() : this(NativeModulation.autd3_modulation_buffer_new())
@@ -151,24 +164,7 @@ namespace AUTD3
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-        public void Dispose()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeModulation.autd3_modulation_buffer_free(handle);
-            }
-            GC.SuppressFinalize(this);
-        }
-
-        ~ModulationBuffer()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeModulation.autd3_modulation_buffer_free(handle);
-            }
-        }
+        public void Dispose() => _handle.Dispose();
     }
 
     public readonly struct SineOption

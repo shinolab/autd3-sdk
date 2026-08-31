@@ -1,5 +1,4 @@
 using System;
-using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -117,26 +116,27 @@ namespace AUTD3
     {
         private readonly Geometry _geometry;
         private readonly int _numDevices;
-        private readonly IntPtr _client;
+        private readonly Client? _client;
 
-        private IntPtr _handle;
+        private readonly DatagramBuilderHandle _handle;
 
-        internal IntPtr Handle => _handle;
+        internal DatagramBuilderHandle Handle => _handle;
 
-        public DatagramBuilder(Geometry geometry) : this(geometry, IntPtr.Zero)
+        public DatagramBuilder(Geometry geometry) : this(geometry, null)
         {
         }
 
-        internal DatagramBuilder(Geometry geometry, IntPtr client)
+        internal DatagramBuilder(Geometry geometry, Client? client)
         {
             _geometry = geometry;
             _numDevices = geometry.NumDevices;
             _client = client;
-            _handle = NativeClient.autd3_datagram_builder_new(geometry.Handle);
-            if (Handle == IntPtr.Zero)
+            var handle = NativeClient.autd3_datagram_builder_new(geometry.Handle);
+            if (handle == IntPtr.Zero)
             {
                 throw new Autd3Exception("failed to create datagram builder");
             }
+            _handle = new DatagramBuilderHandle(handle);
         }
 
         public DatagramBuilder Push(ICommand command)
@@ -181,7 +181,8 @@ namespace AUTD3
         public Frames Build()
         {
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var handle = NativeClient.autd3_datagram_builder_build(Handle, _client, err, (UIntPtr)err.Length);
+            using var client = new HandleLease(_client?.Handle);
+            var handle = NativeClient.autd3_datagram_builder_build(Handle, client.Pointer, err, (UIntPtr)err.Length);
             if (handle == IntPtr.Zero)
             {
                 throw new Autd3Exception(NativeUtil.Utf8(err));
@@ -189,24 +190,7 @@ namespace AUTD3
             return new Frames(handle);
         }
 
-        public void Dispose()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeClient.autd3_datagram_builder_free(handle);
-            }
-            GC.SuppressFinalize(this);
-        }
-
-        ~DatagramBuilder()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeClient.autd3_datagram_builder_free(handle);
-            }
-        }
+        public void Dispose() => _handle.Dispose();
     }
 
 
@@ -224,13 +208,13 @@ namespace AUTD3
 
     public sealed class Frames : IDisposable, IEnumerable<Frame>
     {
-        private IntPtr _handle;
+        private readonly FramesHandle _handle;
 
-        internal IntPtr Handle => _handle;
+        internal FramesHandle Handle => _handle;
 
         internal Frames(IntPtr handle)
         {
-            _handle = handle;
+            _handle = new FramesHandle(handle);
         }
 
         public int Length => (int)NativeClient.autd3_datagrams_num_frames(Handle);
@@ -258,23 +242,6 @@ namespace AUTD3
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-        public void Dispose()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeClient.autd3_datagrams_free(handle);
-            }
-            GC.SuppressFinalize(this);
-        }
-
-        ~Frames()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeClient.autd3_datagrams_free(handle);
-            }
-        }
+        public void Dispose() => _handle.Dispose();
     }
 }

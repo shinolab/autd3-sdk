@@ -80,33 +80,33 @@ namespace AUTD3.Link
 
         static NativeTwincat() => NativeAbi.Verify(Lib, autd3_abi_version());
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_twincat_option_local();
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_twincat_option_remote(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string addr,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string amsNetId);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_twincat_option_set_connect_timeout(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_twincat_option_set_read_timeout(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_link_twincat_option_set_write_timeout(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_link_twincat_option_free(IntPtr option);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_twincat_open(IntPtr option, byte[] outErr, UIntPtr outErrLen);
 
-        [DllImport(Lib)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_twincat_open_legacy(IntPtr option, byte[] outErr, UIntPtr outErrLen);
     }
 }

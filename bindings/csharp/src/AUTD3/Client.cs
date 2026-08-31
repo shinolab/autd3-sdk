@@ -103,18 +103,17 @@ namespace AUTD3
 
     public sealed class Checker : IDisposable
     {
-        private IntPtr _handle;
+        private readonly CheckerHandle _handle;
 
         internal Checker(IntPtr handle)
         {
-            _handle = handle;
+            _handle = new CheckerHandle(handle);
         }
 
         public async Task<LinkStatus> CheckAsync()
         {
-            var handle = _handle;
             var status = await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_checker_check(handle, cb, ud)).ConfigureAwait(false);
+                NativeClient.autd3_checker_check(_handle, cb, ud)).ConfigureAwait(false);
             try
             {
                 var count = (int)NativeClient.autd3_link_status_num_devices(status);
@@ -135,24 +134,7 @@ namespace AUTD3
             }
         }
 
-        public void Dispose()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeClient.autd3_checker_free(handle);
-            }
-            GC.SuppressFinalize(this);
-        }
-
-        ~Checker()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeClient.autd3_checker_free(handle);
-            }
-        }
+        public void Dispose() => _handle.Dispose();
     }
 
     public sealed class Response
@@ -224,15 +206,14 @@ namespace AUTD3
     {
         public const int MaxInflight = 127;
 
-        private IntPtr _handle;
-
-        internal IntPtr Handle => _handle;
-
+        private readonly ClientHandle _handle;
         private readonly Geometry _geometry;
 
-        private Client(IntPtr handle, Geometry geometry)
+        internal ClientHandle Handle => _handle;
+
+        internal Client(IntPtr handle, Geometry geometry)
         {
-            _handle = handle;
+            _handle = new ClientHandle(handle);
             _geometry = geometry;
         }
 
@@ -279,10 +260,7 @@ namespace AUTD3
 
         public int NumDevices => (int)NativeClient.autd3_client_num_devices(Handle);
 
-
-        public DatagramBuilder DatagramBuilder() => new DatagramBuilder(_geometry, Handle);
-
-
+        public DatagramBuilder DatagramBuilder() => new DatagramBuilder(_geometry, this);
 
         public Task SendCheckedAsync(Frame frame) =>
             AsyncOps.InvokeAsync((cb, ud) =>
@@ -358,23 +336,6 @@ namespace AUTD3
         public Task CloseAsync() =>
             AsyncOps.InvokeAsync((cb, ud) => NativeClient.autd3_client_close(Handle, cb, ud));
 
-        public void Dispose()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeClient.autd3_client_free(handle);
-            }
-            GC.SuppressFinalize(this);
-        }
-
-        ~Client()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeClient.autd3_client_free(handle);
-            }
-        }
+        public void Dispose() => _handle.Dispose();
     }
 }
