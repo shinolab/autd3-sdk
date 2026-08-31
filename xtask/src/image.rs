@@ -31,27 +31,15 @@ const BOARDS: &[Board] = &[Board {
 
 const DEFAULT_BOARD: &str = "rp4";
 
-const STAGED_DIST: &[(&str, &str)] = &[
-    ("autd3-admin", "01-appliance/files/autd3-admin"),
-    (
-        "autd3-remote-server.service",
-        "01-appliance/files/autd3-remote-server.service",
-    ),
-    (
-        "remote-server.toml",
-        "01-appliance/files/remote-server.toml",
-    ),
-    ("autd3-wifi-init", "02-network/files/autd3-wifi-init"),
-    (
-        "autd3-wifi-init.service",
-        "02-network/files/autd3-wifi-init.service",
-    ),
-    ("run-server", "01-appliance/files/run-server"),
-    (
-        "sudoers-autd3-admin",
-        "01-appliance/files/sudoers-autd3-admin",
-    ),
-    ("tune-appliance.sh", "01-appliance/files/tune-appliance.sh"),
+const STAGED_DIST: &[&str] = &[
+    "autd3-admin",
+    "autd3-remote-server.service",
+    "remote-server.toml",
+    "autd3-wifi-init",
+    "autd3-wifi-init.service",
+    "run-server",
+    "sudoers-autd3-admin",
+    "tune-appliance.sh",
 ];
 
 #[derive(Subcommand)]
@@ -227,41 +215,29 @@ fn check_syntax(_scripts: &[PathBuf], _root: &Path) -> Result<()> {
 fn check_referenced_files(root: &Path, board: &Board) -> Result<()> {
     let staged: Vec<&str> = STAGED_DIST
         .iter()
-        .map(|(_, to)| *to)
-        .chain(["01-appliance/files/image-release"])
-        .chain(["01-appliance/files/autd3-remote-server"])
-        .chain(["03-system/files/cmdline-append.txt"])
+        .copied()
+        .chain(["image-release", "autd3-remote-server", "cmdline-append.txt"])
         .collect();
 
-    let stage = stage_dir(root, board);
+    let files = stage_dir(root, board).join("files");
+    let text = std::fs::read_to_string(run_script(root, board))?;
     let mut missing = Vec::new();
-    for substage in sorted_entries(&stage)? {
-        let script = substage.join("00-run.sh");
-        if !script.is_file() {
+    for reference in text
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .flat_map(str::split_whitespace)
+        .filter_map(|word| word.strip_prefix("files/"))
+        .map(|word| {
+            word.trim_end_matches(|c: char| {
+                !(c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+            })
+        })
+        .filter(|word| !word.is_empty())
+    {
+        if files.join(reference).exists() || staged.contains(&reference) {
             continue;
         }
-        let name = substage.file_name().unwrap_or_default().to_string_lossy();
-        let text = std::fs::read_to_string(&script)?;
-        for reference in text
-            .lines()
-            .filter(|line| !line.trim_start().starts_with('#'))
-            .flat_map(str::split_whitespace)
-            .filter_map(|word| word.strip_prefix("files/"))
-            .map(|word| {
-                word.trim_end_matches(|c: char| {
-                    !(c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
-                })
-            })
-            .filter(|word| !word.is_empty())
-        {
-            let relative = format!("{name}/files/{reference}");
-            if substage.join("files").join(reference).exists()
-                || staged.contains(&relative.as_str())
-            {
-                continue;
-            }
-            missing.push(relative);
-        }
+        missing.push(format!("files/{reference}"));
     }
     if !missing.is_empty() {
         bail!(
@@ -276,7 +252,7 @@ fn check_referenced_files(root: &Path, board: &Board) -> Result<()> {
 
 fn check_interface_names(root: &Path, board: &Board) -> Result<()> {
     let stage = stage_dir(root, board);
-    let rules = std::fs::read_to_string(stage.join("02-network/files/76-autd3-interfaces.rules"))?;
+    let rules = std::fs::read_to_string(stage.join("files/76-autd3-interfaces.rules"))?;
     for (name, role) in [(ECAT_INTERFACE, "EtherCAT"), (UPLINK_INTERFACE, "uplink")] {
         if !rules.contains(&format!("NAME=\"{name}\"")) {
             bail!("the udev rules do not name the {role} port {name}");
@@ -285,15 +261,15 @@ fn check_interface_names(root: &Path, board: &Board) -> Result<()> {
 
     let expected = [
         (
-            "02-network/files/10-autd3-ecat.conf",
+            "files/10-autd3-ecat.conf",
             format!("interface-name:{ECAT_INTERFACE}"),
         ),
         (
-            "02-network/files/autd3-uplink.nmconnection",
+            "files/autd3-uplink.nmconnection",
             format!("interface-name={UPLINK_INTERFACE}"),
         ),
         (
-            "03-system/files/10-autd3-image.conf",
+            "files/10-autd3-image.conf",
             format!("AUTD3_ECAT_IFACE={ECAT_INTERFACE}"),
         ),
     ];
@@ -314,25 +290,25 @@ fn check_interface_names(root: &Path, board: &Board) -> Result<()> {
 
 fn check_wifi_is_reachable(root: &Path, board: &Board) -> Result<()> {
     let stage = stage_dir(root, board);
-    let nm_state = std::fs::read_to_string(stage.join("02-network/files/NetworkManager.state"))?;
+    let nm_state = std::fs::read_to_string(stage.join("files/NetworkManager.state"))?;
     if !nm_state
         .lines()
         .any(|line| line.trim() == "WirelessEnabled=true")
     {
         bail!(
-            "02-network/files/NetworkManager.state does not enable the radio. The published image \
+            "files/NetworkManager.state does not enable the radio. The published image \
              ships `WirelessEnabled=false` unless a regulatory domain was chosen, and the \
              read-only rootfs means nothing done at runtime survives a reboot",
         );
     }
 
-    let run = std::fs::read_to_string(stage.join("02-network/00-run.sh"))?;
+    let run = std::fs::read_to_string(run_script(root, board))?;
     for needle in [
         "/var/lib/NetworkManager/NetworkManager.state",
         "systemctl enable autd3-wifi-init.service",
     ] {
         if !run.contains(needle) {
-            bail!("02-network/00-run.sh no longer carries `{needle}`; Wi-Fi would stay down");
+            bail!("run.sh no longer carries `{needle}`; Wi-Fi would stay down");
         }
     }
 
@@ -342,32 +318,25 @@ fn check_wifi_is_reachable(root: &Path, board: &Board) -> Result<()> {
 
 fn check_keyfile_enums(root: &Path, board: &Board) -> Result<()> {
     const NUMERIC: &[&str] = &["link-local", "dhcp-timeout", "route-metric", "dad-timeout"];
-    let stage = stage_dir(root, board);
     let mut checked = 0;
-    for substage in sorted_entries(&stage)? {
-        let files = substage.join("files");
-        if !files.is_dir() {
+    for entry in std::fs::read_dir(stage_dir(root, board).join("files"))? {
+        let path = entry?.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("nmconnection") {
             continue;
         }
-        for entry in std::fs::read_dir(&files)? {
-            let path = entry?.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("nmconnection") {
+        checked += 1;
+        let text = std::fs::read_to_string(&path)?;
+        for line in text.lines().map(str::trim) {
+            let Some((key, value)) = line.split_once('=') else {
                 continue;
-            }
-            checked += 1;
-            let text = std::fs::read_to_string(&path)?;
-            for line in text.lines().map(str::trim) {
-                let Some((key, value)) = line.split_once('=') else {
-                    continue;
-                };
-                if NUMERIC.contains(&key) && value.trim().parse::<i64>().is_err() {
-                    bail!(
-                        "{}: {key} must be a number in a keyfile, got `{}`. NetworkManager drops \
-                         the setting and says so in one log line nobody reads",
-                        path.display(),
-                        value.trim(),
-                    );
-                }
+            };
+            if NUMERIC.contains(&key) && value.trim().parse::<i64>().is_err() {
+                bail!(
+                    "{}: {key} must be a number in a keyfile, got `{}`. NetworkManager drops the \
+                     setting and says so in one log line nobody reads",
+                    path.display(),
+                    value.trim(),
+                );
             }
         }
     }
@@ -376,86 +345,74 @@ fn check_keyfile_enums(root: &Path, board: &Board) -> Result<()> {
 }
 
 fn check_kernel_flavor(root: &Path, board: &Board) -> Result<()> {
-    let script = std::fs::read_to_string(stage_dir(root, board).join("04-overlay/00-run.sh"))?;
+    let script = std::fs::read_to_string(run_script(root, board))?;
     if !script.contains(&format!("-{}$", board.kernel)) {
         bail!(
-            "04-overlay/00-run.sh does not pick the -{} kernel. The build strips every other \
-             flavour out of the published image, so the stage would find no matching modules",
+            "run.sh does not pick the -{} kernel. The build strips every other flavour out of the \
+             published image, so the stage would find no matching modules",
             board.kernel,
         );
     }
     println!(
-        "the overlay stage builds its initramfs for the -{} kernel the image ships",
+        "the stage builds its initramfs for the -{} kernel the image ships",
         board.kernel,
     );
     Ok(())
 }
 
-fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)
-        .with_context(|| format!("reading {}", dir.display()))?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.is_dir())
-        .collect();
-    entries.sort();
-    Ok(entries)
-}
-
-fn run_scripts(root: &Path, board: &Board) -> Result<Vec<PathBuf>> {
-    let mut scripts: Vec<PathBuf> = sorted_entries(&stage_dir(root, board))?
-        .iter()
-        .map(|dir| dir.join("00-run.sh"))
-        .collect();
-    scripts.retain(|path| path.is_file());
-    Ok(scripts)
+fn run_script(root: &Path, board: &Board) -> PathBuf {
+    stage_dir(root, board).join("run.sh")
 }
 
 fn check_chroot_capabilities(root: &Path, board: &Board) -> Result<()> {
-    for script in run_scripts(root, board)? {
-        let text = std::fs::read_to_string(&script)?;
-        let mut delimiter: Option<String> = None;
-        for line in text.lines() {
-            match &delimiter {
-                Some(end) if line.trim() == end => delimiter = None,
-                Some(_) if line.trim_start().starts_with("setcap ") => {
-                    bail!(
-                        "{} calls setcap inside an on_chroot block. The driver drops CAP_SETFCAP \
-                         there; run it against \"${{ROOTFS_DIR}}/...\" from outside instead",
-                        script.display(),
-                    );
-                }
-                Some(_) => {}
-                None => {
-                    if let Some((_, tail)) = line.split_once("on_chroot <<") {
-                        delimiter =
-                            Some(tail.trim().trim_matches('\'').trim_matches('"').to_owned());
-                    }
+    let script = run_script(root, board);
+    let text = std::fs::read_to_string(&script)?;
+    let mut delimiter: Option<String> = None;
+    for line in text.lines() {
+        match &delimiter {
+            Some(end) if line.trim() == end => delimiter = None,
+            Some(_) if line.trim_start().starts_with("setcap ") => {
+                bail!(
+                    "{} calls setcap inside an on_chroot block. The driver drops CAP_SETFCAP \
+                     there; run it against \"${{ROOTFS_DIR}}/...\" from outside instead",
+                    script.display(),
+                );
+            }
+            Some(_) => {}
+            None => {
+                if let Some((_, tail)) = line.split_once("on_chroot <<") {
+                    delimiter = Some(tail.trim().trim_matches('\'').trim_matches('"').to_owned());
                 }
             }
         }
     }
-    println!("no stage asks the chroot for a capability it cannot have");
+    println!("the stage asks the chroot for no capability it cannot have");
     Ok(())
 }
 
 fn check_stage_layout(root: &Path, board: &Board) -> Result<()> {
-    let stage = stage_dir(root, board);
-    if stage.join("00-packages").is_file() {
+    let packages = stage_dir(root, board).join("packages");
+    if !packages.is_file() {
         bail!(
-            "stage-autd3/00-packages is a file. Package lists are only read inside a \
-             sub-stage, so this one is silently ignored; move it to 00-packages/00-packages",
+            "{} is missing; the driver reads the stage's package list from it",
+            packages.display(),
         );
     }
 
-    for script in run_scripts(root, board)? {
-        if !is_executable(&script) {
-            bail!(
-                "{} is not executable; the build would skip it without saying so",
-                script.display(),
-            );
-        }
+    let script = run_script(root, board);
+    if !script.is_file() {
+        bail!(
+            "{} is missing; the driver runs it as the stage",
+            script.display()
+        );
     }
-    println!("every stage script is executable and the package list is in a sub-stage");
+    if !is_executable(&script) {
+        bail!(
+            "{} is not executable; the build would stop at it",
+            script.display()
+        );
+    }
+    println!("the stage holds an executable run.sh next to its package list");
     Ok(())
 }
 
@@ -504,18 +461,17 @@ fn lint(root: &Path, board: &Board) -> Result<()> {
 
     check_driver_reads_config(&template)?;
 
-    for script in run_scripts(root, board)? {
-        let text = std::fs::read_to_string(&script)?;
-        for name in text
-            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-            .filter(|word| word.starts_with("AUTD3_") && word.len() > 6)
-        {
-            if !template.contains(&format!("export {name}=")) {
-                bail!(
-                    "{} reads {name}, which config.in does not export",
-                    script.display(),
-                );
-            }
+    let script = run_script(root, board);
+    let text = std::fs::read_to_string(&script)?;
+    for name in text
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .filter(|word| word.starts_with("AUTD3_") && word.len() > 6)
+    {
+        if !template.contains(&format!("export {name}=")) {
+            bail!(
+                "{} reads {name}, which config.in does not export",
+                script.display(),
+            );
         }
     }
     println!("every config variable the stage reads is exported");
@@ -612,20 +568,17 @@ fn built_on(root: &Path) -> String {
 }
 
 fn stage_files(root: &Path, board: &Board, version: &str) -> Result<()> {
-    let stage = stage_dir(root, board);
+    let files = stage_dir(root, board).join("files");
     let dist = root.join(SERVER_DIST);
 
     let binary = crate::server::cross_build(root)?;
-    copy_file(
-        &binary,
-        &stage.join("01-appliance/files/autd3-remote-server"),
-    )?;
+    copy_file(&binary, &files.join("autd3-remote-server"))?;
 
-    for (from, to) in STAGED_DIST {
-        copy_file(&dist.join(from), &stage.join(to))?;
+    for name in STAGED_DIST {
+        copy_file(&dist.join(name), &files.join(name))?;
     }
 
-    let seed = stage.join("01-appliance/files/remote-server.toml");
+    let seed = files.join("remote-server.toml");
     let text = std::fs::read_to_string(&seed)?;
     let renamed = rename_bus_interface(&text)?;
     std::fs::write(&seed, renamed)?;
@@ -642,10 +595,7 @@ fn stage_files(root: &Path, board: &Board, version: &str) -> Result<()> {
             params.len(),
         );
     }
-    std::fs::write(
-        stage.join("03-system/files/cmdline-append.txt"),
-        params[0].as_bytes(),
-    )?;
+    std::fs::write(files.join("cmdline-append.txt"), params[0].as_bytes())?;
 
     let stamp = format!(
         "# Written by `cargo xtask image build`. Read by GET /status.\n\
@@ -659,7 +609,7 @@ fn stage_files(root: &Path, board: &Board, version: &str) -> Result<()> {
         built = built_on(root),
         commit = commit(root),
     );
-    std::fs::write(stage.join("01-appliance/files/image-release"), stamp)?;
+    std::fs::write(files.join("image-release"), stamp)?;
     Ok(())
 }
 
