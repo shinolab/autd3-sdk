@@ -1,0 +1,65 @@
+---
+title: Client
+description: デバイスとの接続・送信を司る Client
+sidebar:
+  order: 2
+slug: 0.7.x/api/basics/client
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
+`Client` を含む基礎・コマンドの API は本体パッケージが提供する.
+実機等への接続には, これとは別に [Link](/autd3-sdk/0.7.x/api/link/) が必要.
+
+<Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
+
+<CodeTabs rust={"Client::open(&geometry, link, option).await?;"} python={"await Client.open(geometry, link, option)"} csharp={"await Client.OpenAsync(geometry, link, option);"} />
+
+| 引数       | 型             | 説明                 |
+| ---------- | -------------- | -------------------- |
+| `geometry` | `&Geometry`    | デバイスの物理配置   |
+| `link`     | `impl IntoLink`| リンク               |
+| `config`   | `ClientConfig` | 下記参照             |
+
+リンクの稼働状態を継続的に監視したい場合は `open_with_checker` を使い, 返り値の `Checker` を駆動する ([リンクの状態監視](/autd3-sdk/0.7.x/guide/state-check/) 参照).
+
+## API
+
+<CodeTabs rust={"let num_devices = client.num_devices();\n\nlet firmware = client.read_firmware_version().await?;\nlet fpga_state = client.read_fpga_state().await?;\nlet error_detail = client.read_error_detail().await?;\n\nlet datagram_builder = client.datagram_builder();\nlet resp = client.send(frame).await?.await?;\nclient.send_checked(frame).await?;\n\nclient.stop().await?;\nclient.close().await?;"} python={"num_devices = client.num_devices()\n\nfirmware = await client.read_firmware_version()\nfpga_state = await client.read_fpga_state()\nerror_detail = await client.read_error_detail()\n\ndatagram_builder = client.datagram_builder()\nresp = await (await client.send(frame))\nawait client.send_checked(frame)\n\nawait client.stop()\nawait client.close()"} csharp={"var numDevices = client.NumDevices;\n\nvar firmware = await client.ReadFirmwareVersionAsync();\nvar fpgaState = await client.ReadFpgaStateAsync();\nvar errorDetail = await client.ReadErrorDetailAsync();\n\nvar datagramBuilder = client.DatagramBuilder();\nvar resp = await await client.SendAsync(frame);\nawait client.SendCheckedAsync(frame);\n\nawait client.StopAsync();\nawait client.CloseAsync();"} />
+
+| メソッド                  | async | 返り値                                | 説明                                                       |
+| ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
+| `num_devices()`           | —     | `usize`                               | 接続中のデバイス台数                                       |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
+| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
+| `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | 各デバイスのエラー詳細                                     |
+| `datagram_builder()`      | —     | `DatagramBuilder`                     | [DatagramBuilder](/autd3-sdk/0.7.x/api/basics/datagram-builder/) |
+| `send(frame)`             | ✓     | `Result<ResponseFuture, Error>`       | フレームを送信キューにいれる. `ResponseFuture` を await すると応答 (`Response`) が得られる |
+| `send_checked(frame)`     | ✓     | `Result<(), Error>`                   | 送信し, 応答確認まで行う                                   |
+| `stop()`                  | ✓     | `Result<(), Error>`                   | 全振動子を停止                                             |
+| `close()`                 | ✓     | `Result<(), Error>`                   | 接続を閉じる                                               |
+
+`send_checked(frame).await?` は, `send(frame).await?.await?.check()` と等価である.
+
+## ClientConfig
+
+<CodeTabs rust={"ClientConfig {\n    timeout_cycles: NonZeroU32::new(10).unwrap(),\n    max_inflight: NonZeroUsize::new(MAX_INFLIGHT).unwrap(),\n    max_resync_rounds: NonZeroU32::new(8).unwrap(),\n    low_latency: false,\n    reset_resend_cycles: NonZeroU32::new(2).unwrap(),\n    rt_priority: Some(RtPriority::new(80).unwrap()),\n    rt_policy: RtSchedulePolicy::Fifo,\n    rt_affinity: None,\n    validate_state: true,\n    require_supported_firmware: false,\n    ..Default::default()\n}"} python={"ClientConfig(\n    timeout_cycles=10,\n    max_inflight=MAX_INFLIGHT,\n    max_resync_rounds=8,\n    low_latency=False,\n    reset_resend_cycles=2,\n    rt_priority=80,\n    disable_rt_priority=False,\n    rt_affinity=None,\n    validate_state=True,\n)"} csharp={"new ClientConfig(\n    timeoutCycles: 10,\n    maxInflight: (uint)Client.MaxInflight,\n    maxResyncRounds: 8,\n    lowLatency: false,\n    resetResendCycles: 2,\n    rtPriority: 80,\n    disableRtPriority: false,\n    rtAffinity: null,\n    validateState: true\n)"} />
+
+| フィールド             | 型                    | デフォルト          | 説明                                                       |
+| ---------------------- | --------------------- | --------------- | ---------------------------------------------------------- |
+| `timeout_cycles`       | `NonZeroU32`          | `10`            | 応答待ちのタイムアウト (送信サイクル数)                    |
+| `max_inflight`         | `NonZeroUsize`        | `127`           | 送信キューサイズ                     |
+| `max_resync_rounds`    | `NonZeroU32`          | `8`             | 再同期を試みる最大ラウンド数                               |
+| `low_latency`          | `bool`                | `false`         | 低レイテンシモード          |
+| `reset_resend_cycles`  | `NonZeroU32`          | `2`             | リセット命令の送信サイクル数                             |
+| `rt_priority`          | `Option<RtPriority>` | Windows: `TimeCritical` / その他: `80` | RT スレッドの優先度. `None` にすると OS 既定. |
+| `rt_policy`            | `RtSchedulePolicy`    | `Fifo`          | `rt_priority` 指定時のスケジューリングポリシー. `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
+| `rt_affinity`          | `Option<CoreId>`      | `None`          | RT スレッドの CPU affinity (`None` なら OS 既定)      |
+| `validate_state`       | `bool`                | `true`          | 送信前検証を有効にする                     |
+| `require_supported_firmware` | `bool`          | `false`         | `true`なら接続時にファームウェアがサポートされているか検査する |
+
+`max_inflight` は `MAX_INFLIGHT (127)` を超えるとエラーになる.
+
+`low_latency` を有効にすると, ファームウェア内部での受信バッファをバイパスするため, レイテンシが改善する. ただし, 動作が不安定になる可能性がある.

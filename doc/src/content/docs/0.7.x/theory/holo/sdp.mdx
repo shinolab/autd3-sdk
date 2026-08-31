@@ -1,0 +1,167 @@
+---
+title: 半正定値緩和法
+description: 半正定値緩和法による焦点位相の最適化と行列方程式の解法
+sidebar:
+  order: 3
+slug: 0.7.x/theory/holo/sdp
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+
+:::note
+この手法は現在SDKでは実装されていない.
+:::
+
+ここでは, 件の行列方程式を解く方法を述べる.
+ただし, 行列方程式を解くにはまず焦点の位相を決定する必要がある.
+
+行列方程式を解いて得られた解が振動子出力の制約を満たさないのなら, 出力を一律に抑える必要がある.
+そのため, 一部の振動子が突出して強いパワーで駆動するような解が得られたとしたら, 上限に合わせて全体をスケールしなければならず, 弱い場が生成されてしまう.
+このような制約の下で, "良い"解を見つけるために, 焦点における位相を最適化する手法がこれまでにいくつか提案されている.
+
+以下に, 井上らによる半正定値緩和法によるを紹介する\[^inoue2014siggraph] \[^inoue2014asia] \[^inoue2015active].
+
+まず, <Math tex="P = \diag(|p_0|, ..., |p_{M-1}|), \bu = [\rme^{-\im \psi_0}, ..., \rme^{-\im \psi_{M-1}}]\trans" />として, この問題を次のような最適化問題に書き換える.
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  \min_{|u_i|=1} \| G\bq - P\bu \|^2.
+\end{aligned}
+`}
+/>
+
+ここで<Math tex="\bu" />は位相成分を表すため<Math tex="|u_i|=1" />なる制約が付く.
+
+ここで,
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  \bq               & = G^{-1}P\bu, \\
+  G^{-1}GG^{-1}     & = G^{-1},     \\
+  (GG^{-1})\hermite & = GG^{-1},
+\end{aligned}
+`}
+/>
+
+を満たすような<Math tex="G^{-1}" />が存在するとすると
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  \min_{|u_i|=1} \| G\bq - P\bu \|^2
+   & = \| (GG^{-1} - I) P\bu \|^2                                    \\
+   & = \bu\hermite P\hermite(GG^{-1} - I)\hermite (GG^{-1} - I)P\bu \\
+   & = \bu\hermite P(GG^{-1} - I) (GG^{-1} - I )P\bu                \\
+   & = \bu\hermite P(GG^{-1}GG^{-1} - 2GG^{-1} + I )P\bu             \\
+   & = \bu\hermite P(I-GG^{-1})P\bu,
+\end{aligned}
+`}
+/>
+
+となる.
+ここで, <Math tex="\cdot\hermite" />はエルミート転置をあらわす.
+
+<Math tex="M= P(I-GG^{-1})P" />と置くと, 最適化問題は以下のように書き下せる.
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  \min_{|u_i|=1} \bu\hermite M \bu.
+\end{aligned}
+`}
+/>
+
+(以下の議論は文献\[^phase]の2.4. Complex MaxCut.による.)
+上記最適化は制約条件により凸問題ではない.
+そこで, <Math tex="U=uu\hermite" />と置くと,
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  \min\                  & \mathrm{Tr}(UM),                   \\
+  \mathrm{subject\ to}\  & \mathrm{diag}(U) = I,             \\
+                         & U \succeq 0, \mathrm{Rank}(U) = 1,
+\end{aligned}
+`}
+/>
+
+となる.
+ここで, ランク制限を落とすと半正定値問題となり, 効率的に解くことができる.
+<Math tex="\mathrm{Rank}(U) = 1" />ではない場合は<Math tex="U" />の最大固有値に対応する固有ベクトルが<Math tex="\bu" />の近似解となる.
+
+ブロック座標降下法を用いて<Math tex="U" />を求めるアルゴリズムは文献\[^phase] Algorithm 3を参照.
+
+あとは,
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  \bq               & = G^{-1}P\bu, \\
+  G^{-1}GG^{-1}     & = G^{-1},     \\
+  (GG^{-1})\hermite & = GG^{-1},
+\end{aligned}
+`}
+/>
+
+を満たす<Math tex="G^{-1}" />を求めればいい.
+この<Math tex="G^{-1}" />はMoore-Penroseの擬似逆行列と呼ばれていて, <Math tex="G" />の特異値分解<Math tex="G=U\Sigma V\hermite" />から
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  G^{-1} = V\Sigma^{-1} U\hermite,
+\end{aligned}
+`}
+/>
+
+として計算できる.
+ただし,
+<Math tex="\Sigma^{-1}" />は<Math tex="\Sigma=\diag(\sigma_1,...)" />に対して
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  \Sigma^{-1} = \diag\left(\frac{1}{\sigma_1},...\right),
+\end{aligned}
+`}
+/>
+
+である.
+
+井上らの方法では, ここにさらにTikhonov正則化が入る[^7].
+すなわち, 最小化問題に以下の正則化項を加える.
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  \min_{|\bu_i|=1} \| G\bq - P\bu \|^2 + \alpha\|\bq\|^2.
+\end{aligned}
+`}
+/>
+
+この正則化には, 解の大きさを抑えるような効果がある.
+この場合の解は, 以下で与えられる
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+  \bq & = (G\hermite G + \alpha I)^{-1}G\hermite  P\bu \\
+      & = (V\Sigma\hermite U\hermite U\Sigma V\hermite + \alpha V I V\hermite)^{-1}V\Sigma\hermite  U\hermite P\bu \\
+      & = V(\Sigma\hermite \Sigma + \alpha I)^{-1}\Sigma\hermite U\hermite P\bu                                    \\
+      & = V \diag\left(\frac{\sigma_1}{\sigma_1^2 + \alpha},...\right) U\hermite P\bu.
+\end{aligned}
+`}
+/>
+
+\[^inoue2014siggraph]: Inoue, Seki, et al. "HORN: the hapt-optic reconstruction." ACM SIGGRAPH 2014 Emerging Technologies. 2014. 1-1.
+
+\[^inoue2014asia]: Inoue, S., et al. "HORN: Stationary airborne ultrasound 3d haptic image." Asia Haptics (2014): 18-20.
+
+\[^inoue2015active]: Inoue, Seki, Yasutoshi Makino, and Hiroyuki Shinoda. "Active touch perception produced by airborne ultrasonic haptic hologram." 2015 IEEE World Haptics Conference (WHC). IEEE, 2015.
+
+\[^phase]: Waldspurger, Irene, Alexandre d’Aspremont, and Stéphane Mallat. "Phase recovery, maxcut and complex semidefinite programming." Mathematical Programming 149 (2015): 47-81.
+
+[^7]: 論文には具体的な正則化の方法は書かれていない.

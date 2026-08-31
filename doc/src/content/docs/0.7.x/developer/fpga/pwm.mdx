@@ -1,0 +1,84 @@
+---
+title: PWM
+description: パルス幅と位相から PWM 波形を生成する PWM モジュール
+sidebar:
+  order: 2
+slug: 0.7.x/developer/fpga/pwm
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import Mermaid from "@components/Mermaid.astro";
+
+<Mermaid
+  title="PWM モジュール"
+  code={`flowchart LR
+IN(["PULSE_WIDTH / PHASE"])
+PRE["Preconditioner"]
+BUF["Buffer"]
+GEN["Generator"]
+OUT(["PWM_OUT"])
+IN --> PRE
+PRE -- "R / F" --> BUF
+BUF -- "R / F" --> GEN
+GEN --> OUT`}
+/>
+
+| Name        | In/Out | Width | Description                                        |
+| ----------- | ------ | ----- | -------------------------------------------------- |
+| CLK         | In     | 1     | メインクロック                                     |
+| TIME\_CNT    | In     | 9     | 超音波周期カウンタ                                 |
+| UPDATE      | In     | 1     | 超音波周期トリガ                                   |
+| DIN\_VALID   | In     | 1     | パルス幅/位相データ有効フラグ                      |
+| PULSE\_WIDTH | In     | 9     | パルス幅                                           |
+| PHASE       | In     | 8     | 位相                                               |
+| PWM\_OUT     | Out    | 1x249 | PWM 信号                                           |
+| DOUT\_VALID  | Out    | 1     | 立ち上がり/立ち下がりデータ有効フラグ (デバッグ用) |
+
+このモジュールは, パルス幅と位相から PWM 波形を生成する.
+
+## Preconditioner
+
+このサブモジュールでは, 後の処理を楽にするために, パルス幅 <Math tex="D" /> / 位相 <Math tex="P" /> を信号の立ち上がり時刻 <Math tex="R" /> と立ち下がり時刻 <Math tex="F" /> に変換する.
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+R &= \left[2P - \left\lfloor\frac{D}{2}\right\rfloor\right] \%\, T\\
+F &= \left[2P + \left\lceil\frac{D}{2}\right\rceil\right] \%\, T
+\end{aligned}
+`}
+/>
+
+ここで, <Math tex="T(=512)" /> は周期である.
+
+:::note
+<Math tex="T=512" /> とし, 位相として <Math tex="2P" /> を使用しているのは, 振幅パラメータ (パルス幅) を約 <Math tex="\SI{8}{bit}" /> で指定できるようにするためである.
+パルス幅は <Math tex="0" /> から <Math tex="T/2" /> までしか意味がないので, <Math tex="T=512" /> とすることで <Math tex="D=0" /> から <Math tex="D=256" /> の 257 段階で指定できるようにしている.
+:::
+
+:::note
+立ち下がり時刻の計算で切り上げを使っているのは, <Math tex="D" /> が奇数の場合を考慮するためである.
+:::
+
+なお, Preconditioner の計算はパイプライン的に行われる.
+入力として, `DIN_VALID` は 249 クロックの間 1 であり, その間 `PULSE_WIDTH`, `PHASE` からパルス幅/位相データが順番に流れてくることを想定している.
+出力に関して, 中間データを出力しないようにするために, 一旦バッファに格納している.
+
+## Buffer
+
+Buffer は, `UPDATE` がアサートされるまで <Math tex="R, F" /> の更新を遅らせる.
+すなわち, 超音波周期の途中で <Math tex="R, F" /> が更新されることを防ぐためにある.
+
+## Generator
+
+Generator は `TIME_CNT` の値 <Math tex="t" /> と Buffer から出力された <Math tex="R, F" /> を用いて, PWM の出力 <Math tex="v" /> を計算する.
+
+<MathBlock
+  tex={String.raw`
+v = \begin{cases}
+      (R \le t) \land (t < F) & (\text{If } R \le F) \\
+      (t < F) \lor (R \le t)  & (\text{Otherwise})   \\
+  \end{cases}
+`}
+/>

@@ -1,0 +1,88 @@
+---
+title: Remote
+description: 実機につながる別ホストへ TCP 接続する Remote Link
+sidebar:
+  order: 5
+slug: 0.7.x/api/link/remote
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`RemoteLink` は, AUTD3 デバイスに接続された別ホストへ TCP 接続して送受信する Link 実装.
+AUTD3 を操作したいマシンと実機を配線したマシンが異なる場合に使う.
+
+<Install rust="autd3-rs-link-remote" python="autd3-link-remote" csharp="AUTD3.Link.Remote" />
+
+[`Simulator`](/autd3-sdk/0.7.x/guide/simulator/) への接続も`RemoteLink`で行う.
+
+## API
+
+### RemoteLink
+
+<CodeTabs rust={"RemoteLinkOption { addr, timeout };"} python={"RemoteLinkOption(addr, timeout)"} csharp={"new RemoteLinkOption(addr, timeout);"} />
+
+| フィールド | 型                 | 説明                       |
+| ---------- | ------------------ | -------------------------- |
+| `addr`     | `SocketAddr`       | 接続先サーバのアドレス     |
+| `timeout`  | `Option<Duration>` | 接続と 1 フレームごとの待ち時間. `None` は OS 既定. |
+
+### 探索
+
+mDNS でネットワーク上のサーバを探すことができる.
+
+<CodeTabs rust={"RemoteLinkOption::discover()?;"} python={"RemoteLinkOption.discover()"} csharp={"RemoteLinkOption.Discover();"} />
+
+サーバが 1 つも見つからないか複数見つかった場合はエラーになる.
+複数見つかったときのエラーには見つかったサーバの一覧が入るので, その中から `discover_with` で選ぶ.
+
+<CodeTabs rust={"RemoteLinkOption::discover_with(&DiscoveryOption {\n    timeout,\n    instance: Some(\"autd3-0a1b2c3d\".to_string()),\n    ..Default::default()\n})?;"} python={"RemoteLinkOption.discover(timeout, \"autd3-0a1b2c3d\")"} csharp={"RemoteLinkOption.Discover(timeout, \"autd3-0a1b2c3d\");"} />
+
+| フィールド | 型                 | 説明                                                       |
+| ---------- | ------------------ | ---------------------------------------------------------- |
+| `timeout`  | `Duration`         | 応答を待つ時間. デフォルトは 2 秒.                                 |
+| `instance` | `Option<String>`   | 探すサーバの名前. `None` ならすべて                        |
+
+一覧だけが要るなら `discover_all` を使う.
+
+<CodeTabs rust={"for appliance in autd3_rs_link_remote::discover_all(&DiscoveryOption::default())? {\n    println!(\"{} at {}\", appliance.instance, appliance.addr);\n}"} />
+
+## RemoteServer
+
+`RemoteServer` を用いると, `RemoteLink` で接続するサーバを自分で立てることができる.
+
+サーバ側のホストには, 実機を駆動する Link のパッケージ ([Echocat](/autd3-sdk/0.7.x/api/link/echocat/) 等) も併せて追加する.
+
+`RemoteServer::new` に待ち受け設定と実機リンクを開くクロージャを渡し, `serve` で中継を始める.
+
+クライアントの `Geometry` の台数はサーバ側のバスの台数と一致していなければならない.
+
+`rt_priority` の設定には特権が要る場合がある (Linux では `CAP_SYS_NICE`).
+権限が無いと警告を出して素のスケジューリングで動くが, 負荷時にバスが不安定になる可能性がある.
+
+実際の使用例は [applianceのドキュメント](/autd3-sdk/0.7.x/guide/appliance/) と [applianceの実装](https://github.com/shinolab/autd3-sdk/tree/main/appliance) を参照.
+
+<CodeTabs rust={"let bus = BusOption {\n    pacing,\n    rt_priority,\n    rt_policy,\n    rt_affinity,\n    stack_prefault_bytes,\n    ..Default::default()\n};\nlet option = RemoteServerOption {\n    bind,\n    bus,\n    idle_timeout,\n    ..Default::default()\n};\nRemoteServer::new(option, |_: &[DeviceLayout]| {\n    EchocatLink::open(&EchocatLinkOption::default())\n        .map_err(|e| RemoteLinkError::Link(e.to_string()))\n})?\n.serve()?;"} />
+
+| 引数      | 型                                            | 説明                                       |
+| --------- | --------------------------------------------- | ------------------------------------------ |
+| `option`  | `RemoteServerOption`                          | 待ち受けアドレスとバススレッドの設定       |
+| `factory` | `FnMut(&[DeviceLayout]) -> Result<impl Link>` | 実機リンクを開くクロージャ                 |
+
+### RemoteServerOption
+
+| フィールド      | 型                   | 説明                                                          |
+| --------------- | -------------------- | ------------------------------------------------------------- |
+| `bind`          | `SocketAddr`         | サーバが待ち受ける TCP アドレス                                |
+| `bus`           | `BusOption`          | バススレッドの設定                                             |
+| `idle_timeout`  | `Duration`           | クライアントとの送受信が途切れてからセッションを切るまでの時間. デフォルトは10 秒. |
+
+### BusOption
+
+| フィールド     | 型                       | 説明                                                                       |
+| -------------- | ------------------------ | -------------------------------------------------------------------------- |
+| `pacing`       | `BusPacing`              | EtherCAT バスの周期. 実機リンクは `LinkPaced` でリンクに任せること.       |
+| `rt_priority`  | `Option<RtPriority>` | バススレッドの優先度. 既定ではリアルタイム優先度.                          |
+| `rt_policy`    | `RtSchedulePolicy`       | バススレッドのスケジューリングポリシー                                     |
+| `rt_affinity`  | `Option<CoreId>`         | バススレッドを固定する CPU コア                                            |
+| `stack_prefault_bytes` | `usize`          | 起動時にページインしておくバススレッドのスタックのバイト数. デフォルトは0. |

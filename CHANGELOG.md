@@ -2,6 +2,43 @@
 
 # Rust
 
+## [0.7.0] - 2026-08-31
+
+### 💥 Breaking Changes
+
+- [**breaking**] Remove the SOEM link and its bindings
+- [**breaking**] Make echocat SleepStrategy a Rust-only option
+- [**breaking**] Return a Result from DcSysTime::now instead of saturating a bad host clock
+- [**breaking**] Mark growable public error enums and observation snapshots as non_exhaustive
+- [**breaking**] Wrap thread-priority in an RtPriority newtype and re-export the 0.x crates on the public surface
+- [**breaking**] Narrow the public surface — hide echocat internals, encode-layer types, and dead re-exports
+- [**breaking**] Unify unit accessors on the DSL symbol names across Rust, C#, and Python
+- [**breaking**] Type and name the remaining API rough edges (CycleOutcome, samples_per_period, Nyquist error, uniform_transducer)
+- [**breaking**] Drop redundant single-item modules and re-export autd3-cpu-fw from the emulator
+- [**breaking**] Tie the C ABI version to the crate version and require an exact match
+
+### 🚀 Features
+
+- *(echocat)* Make the frame landing phase in the SYNC0 period configurable
+- *(tune)* Gate candidates on the exchange budget and report device frame counters
+- *(client)* Read the firmware version at open so a foreign series always warns
+- *(link-remote)* Enable the discovery feature by default
+- *(appliance)* Apply a tuned candidate to the saved config and tolerate unknown keys
+- *(appliance)* Pick the candidate to apply with a radio next to each sweep result
+
+### 🐛 Bug Fixes
+
+- *(echocat)* Validate the link option before sync0_period divides by zero
+- *(remote)* Surface a bus-thread panic as a failed state instead of a silent stop
+- *(server)* Bound the tune periods and the config durations at the API boundary
+- Reject the inputs that reach a panic in the pattern, sampling and holo paths
+- *(echocat)* Carry the OP recovery on the cyclic frames instead of acyclic transfers
+- Hold every native handle in a SafeHandle
+
+### 📦 Dependencies
+
+- *(deps)* Bump pcap in the cargo-minor group across 1 directory
+
 ## [0.6.1] - 2026-08-24
 
 ### 🐛 Bug Fixes
@@ -227,6 +264,26 @@
 
 # Python
 
+## [0.7.0] - 2026-08-31
+
+### 💥 Breaking Changes
+
+- [**breaking**] Remove the SOEM link and its bindings
+- [**breaking**] Make echocat SleepStrategy a Rust-only option
+- [**breaking**] Return a Result from DcSysTime::now instead of saturating a bad host clock
+- [**breaking**] Wrap thread-priority in an RtPriority newtype and re-export the 0.x crates on the public surface
+- [**breaking**] Unify unit accessors on the DSL symbol names across Rust, C#, and Python
+- [**breaking**] Type and name the remaining API rough edges (CycleOutcome, samples_per_period, Nyquist error, uniform_transducer)
+
+### 🚀 Features
+
+- *(echocat)* Make the frame landing phase in the SYNC0 period configurable
+- *(link-remote)* Enable the discovery feature by default
+
+### 📦 Dependencies
+
+- *(deps)* Bump pcap in the cargo-minor group across 1 directory
+
 ## [0.6.1] - 2026-08-24
 
 ### 📦 Dependencies
@@ -342,6 +399,23 @@
 
 # C#
 
+## [0.7.0] - 2026-08-31
+
+### 💥 Breaking Changes
+
+- [**breaking**] Remove the SOEM link and its bindings
+- [**breaking**] Make echocat SleepStrategy a Rust-only option
+- [**breaking**] Unify unit accessors on the DSL symbol names across Rust, C#, and Python
+- [**breaking**] Tie the C ABI version to the crate version and require an exact match
+
+### 🚀 Features
+
+- *(echocat)* Make the frame landing phase in the SYNC0 period configurable
+
+### 🐛 Bug Fixes
+
+- Hold every native handle in a SafeHandle
+
 ## [0.6.0] - 2026-08-04
 
 ### 💥 Breaking Changes
@@ -433,6 +507,12 @@
 
 # Unity
 
+## [0.7.0] - 2026-08-31
+
+### 💥 Breaking Changes
+
+- [**breaking**] Remove the SOEM link and its bindings
+
 ## [0.5.0] - 2026-08-03
 
 ### 🚀 Features
@@ -448,6 +528,18 @@
 ## [0.1.0] - 2026-07-06
 
 # Simulator
+
+## [0.7.0] - 2026-08-31
+
+### 💥 Breaking Changes
+
+- [**breaking**] Return a Result from DcSysTime::now instead of saturating a bad host clock
+- [**breaking**] Unify unit accessors on the DSL symbol names across Rust, C#, and Python
+- [**breaking**] Type and name the remaining API rough edges (CycleOutcome, samples_per_period, Nyquist error, uniform_transducer)
+
+### 🚀 Features
+
+- *(link-remote)* Enable the discovery feature by default
 
 ## [0.6.0] - 2026-08-04
 
@@ -508,6 +600,12 @@
 
 # Console
 
+## [0.7.0] - 2026-08-31
+
+### 🐛 Bug Fixes
+
+- Open the appliance in a browser by its mDNS name
+
 ## [0.6.1] - 2026-08-24
 
 ### 📦 Dependencies
@@ -554,6 +652,26 @@
 
 # Appliance
 
+## [0.7.0] - 2026-08-31
+
+### 💥 Breaking Changes
+
+- [**breaking**] Mark growable public error enums and observation snapshots as non_exhaustive
+- [**breaking**] Wrap thread-priority in an RtPriority newtype and re-export the 0.x crates on the public surface
+- [**breaking**] Narrow the public surface — hide echocat internals, encode-layer types, and dead re-exports
+
+### 🚀 Features
+
+- *(echocat)* Make the frame landing phase in the SYNC0 period configurable
+- *(tune)* Gate candidates on the exchange budget and report device frame counters
+- *(link-remote)* Enable the discovery feature by default
+- *(appliance)* Apply a tuned candidate to the saved config and tolerate unknown keys
+- *(appliance)* Pick the candidate to apply with a radio next to each sweep result
+
+### 🐛 Bug Fixes
+
+- *(server)* Bound the tune periods and the config durations at the API boundary
+
 ## [0.6.0] - 2026-08-04
 
 ### 🚀 Features
@@ -571,6 +689,10 @@
 - *(appliance)* [**breaking**] Ship the EtherCAT master as a zero-config appliance
 
 # Firmware
+
+### 💥 Breaking Changes
+
+- [**breaking**] Narrow the public surface — hide echocat internals, encode-layer types, and dead re-exports
 
 ## [0.6.0] - 2026-08-04
 

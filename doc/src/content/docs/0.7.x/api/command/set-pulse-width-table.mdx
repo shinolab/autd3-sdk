@@ -1,0 +1,26 @@
+---
+title: SetPulseWidthTable
+description: 強度から PWM パルス幅への変換テーブルを設定する SetPulseWidthTable
+sidebar:
+  order: 9.5
+slug: 0.7.x/api/command/set-pulse-width-table
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetPulseWidthTable` は, 強度 (0–255) から PWM のパルス幅への変換テーブルを設定するコマンド.
+
+## API
+
+<CodeTabs rust={"SetPulseWidthTable { table: &table };"} python={"SetPulseWidthTable(table)"} csharp={"new SetPulseWidthTable(table);"} />
+
+| フィールド | 型                      | 説明                                                 |
+| ---------- | ----------------------- | ---------------------------------------------------- |
+| `table`    | `&[u16; PWE_TABLE_SIZE]` | 強度インデックス (0–255) ごとのパルス幅 (256 要素) |
+
+`SetPulseWidthTable::default_table()` は arcsin 形状のデフォルトテーブルを返す.
+これは出力音圧が強度に対して (理論的に) 線形になるようなテーブルである.
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::SetPulseWidthTable;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs_link_nop::Nop;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet client = Client::open(&geometry, Nop, ClientConfig::default()).await?;\n\nlet table = SetPulseWidthTable::default_table();\n\nlet mut builder = client.datagram_builder();\nbuilder.push(SetPulseWidthTable { table: &table });\nlet frames = builder.build()?;\nfor frame in &frames {\n    client.send_checked(frame).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig\nfrom autd3.commands import SetPulseWidthTable\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3_link_nop import Nop\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    client = await Client.open(geometry, Nop(), ClientConfig())\n\n    table = SetPulseWidthTable.default_table()\n\n    builder = client.datagram_builder()\n    builder.push(SetPulseWidthTable(table=table))\n    frames = builder.build()\n    for frame in frames:\n        await client.send_checked(frame)\n\n    await client.close()\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing AUTD3.Link;\nusing Nop = AUTD3.Link.Nop;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());\n\nvar table = SetPulseWidthTable.DefaultTable();\n\nvar builder = client.DatagramBuilder();\nbuilder.Push(new SetPulseWidthTable(table));\nvar frames = builder.Build();\nforeach (var frame in frames)\n{\n    await client.SendCheckedAsync(frame);\n}\n\nawait client.CloseAsync();"} />

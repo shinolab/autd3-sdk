@@ -1,0 +1,24 @@
+---
+title: "null"
+description: 全振動子を無出力にする Pattern
+sidebar:
+  order: 6
+srcPath: crates/autd3-rs-pattern/src/null.rs
+slug: 0.7.x/api/compute/pattern/null
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`null` は全振動子の振幅を 0 にし, 出力を停止する.
+
+## API
+
+<CodeTabs rust={"null(&mut dst);"} python={"null(dst)"} csharp={"Pattern.Null(dst);"} />
+
+| 引数  | 型                     | 説明         |
+| ----- | ---------------------- | ------------ |
+| `dst` | `&mut [[Emission; _]]` | 出力バッファ |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs_pattern::null;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\n\nlet mut dst = geometry.pattern_buffer();\n\nnull(&mut dst);"} python={"from autd3.geometry import Autd3, Geometry\nfrom autd3_pattern import null\n\ngeometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n\ndst = geometry.pattern_buffer()\n\nnull(dst)"} csharp={"using System.Numerics;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\n\nvar dst = geometry.PatternBuffer();\n\nPattern.Null(dst);"} />
