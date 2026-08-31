@@ -12,7 +12,6 @@ use crate::master::{BusState, Master, MasterConfig};
 use crate::option::EchocatLinkOption;
 use crate::timer::TimerResolutionGuard;
 
-const RECOVERY_BACKOFF_CYCLES: u32 = 8;
 const TIMER_RESOLUTION_MS: u32 = 1;
 
 pub struct StateChecker {
@@ -40,7 +39,6 @@ pub struct EchocatLink {
     stats: LinkStats,
     dc_clock: DcClock,
     rx_was_valid: bool,
-    recovery_backoff: u32,
     _timer_resolution: TimerResolutionGuard,
 }
 
@@ -61,7 +59,6 @@ impl EchocatLink {
             stats: link_stats,
             dc_clock: DcClock::new(),
             rx_was_valid: true,
-            recovery_backoff: 0,
             _timer_resolution: timer_resolution,
         })
     }
@@ -154,15 +151,6 @@ impl Link for EchocatLink {
                 );
             }
             self.rx_was_valid = report.rx_valid;
-        }
-
-        if self.recovery_backoff > 0 {
-            self.recovery_backoff -= 1;
-        } else if self.master.is_op() && !self.state.all_op() {
-            if let Err(e) = self.master.recover_op() {
-                tracing::warn!("bus recovery did not go through this cycle: {e}");
-            }
-            self.recovery_backoff = RECOVERY_BACKOFF_CYCLES;
         }
 
         Ok(CycleOutcome::new(report.rx_valid))

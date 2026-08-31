@@ -5,8 +5,8 @@ use autd3_rs_core::DcClock;
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
 use autd3_rs_core::value::DcSysTime;
 use autd3_rs_firmware_emulator::Device;
-use autd3_rs_link_echocat::master::LOSE_CONTACT_AFTER_CYCLES;
 use autd3_rs_link_echocat::master::init::{INPUT_BYTES, OUTPUT_BYTES};
+use autd3_rs_link_echocat::master::{LOSE_CONTACT_AFTER_CYCLES, frame_wire_bytes};
 use autd3_rs_link_echocat::reg::AlState;
 use autd3_rs_link_echocat::sim::{EscSim, ProcessData, SubDevice};
 use autd3_rs_link_echocat::wire::{
@@ -43,6 +43,36 @@ fn open_safe_op(devices: usize) -> Master<EscSim> {
         Box::new(FirmwareProcessData(Device::new(NUM_TRANSDUCERS)))
     });
     Master::open(sim, test_config()).expect("the simulated bus reaches SAFE-OP")
+}
+
+struct CountingBus {
+    inner: EscSim,
+    sends: usize,
+}
+
+impl CountingBus {
+    fn take_sends(&mut self) -> usize {
+        std::mem::take(&mut self.sends)
+    }
+
+    fn inner_mut(&mut self) -> &mut EscSim {
+        &mut self.inner
+    }
+}
+
+impl RawBus for CountingBus {
+    fn send(&mut self, frame: &[u8]) -> std::io::Result<()> {
+        self.sends += 1;
+        self.inner.send(frame)
+    }
+
+    fn receive(&mut self, buf: &mut [u8], timeout: Duration) -> std::io::Result<Option<usize>> {
+        self.inner.receive(buf, timeout)
+    }
+
+    fn mtu(&self) -> usize {
+        self.inner.mtu()
+    }
 }
 
 fn open(devices: usize) -> Master<EscSim> {
@@ -313,7 +343,7 @@ fn a_bus_that_stops_answering_is_reported_as_lost_instead_of_still_op() {
         state.states(),
         vec![autd3_rs_core::DeviceState::Lost; devices],
         "a bus that answers nothing must not keep publishing the last AL status it \
-         happened to see; all_op() staying true is what stops recover_op from ever running",
+         happened to see; all_op() staying true is what stops the recovery from ever running",
     );
     assert!(!state.all_op());
 
@@ -352,21 +382,105 @@ fn a_device_that_fell_out_of_op_while_silent_is_recovered_once_it_answers_again(
         vec![autd3_rs_core::DeviceState::Lost; devices]
     );
 
-    // What EchocatLink drives every cycle: observe, and act on anything below OP.
+    // The cycle itself carries the recovery; the caller only has to keep cycling.
     for _ in 0..8 * devices {
         master.cycle(&tx, &mut rx).expect("a cycle completes");
-        if !state.all_op() {
-            master.recover_op().expect("recovery goes through");
-        }
     }
 
     assert_eq!(
         state.states(),
         vec![autd3_rs_core::DeviceState::Op; devices],
         "the devices dropped to SAFE-OP with a sync error while the frames were gone; \
-         recover_op has to acknowledge that and ask for OP again once they answer",
+         the cycle has to acknowledge that and ask for OP again once they answer",
     );
     assert!(state.recoveries() > 0);
+}
+
+#[test]
+fn recovering_a_device_does_not_put_another_frame_on_the_wire() {
+    let devices = 4;
+    let sim = EscSim::with_process_data(devices, Duration::from_millis(1), |_| {
+        Box::new(FirmwareProcessData(Device::new(NUM_TRANSDUCERS)))
+    });
+    let mut master = Master::open(
+        CountingBus {
+            inner: sim,
+            sends: 0,
+        },
+        test_config(),
+    )
+    .expect("the simulated bus reaches SAFE-OP");
+    let tx = vec![0u8; devices * usize::from(OUTPUT_BYTES)];
+    let mut rx = vec![0u8; devices * usize::from(INPUT_BYTES)];
+    master.cycle(&tx, &mut rx).expect("the bus enters OP");
+    let state = master.state();
+
+    master.bus_mut().take_sends();
+    for _ in 0..devices {
+        master.cycle(&tx, &mut rx).expect("a cycle completes");
+    }
+    let healthy = master.bus_mut().take_sends();
+    assert_eq!(state.recoveries(), 0);
+
+    master
+        .bus_mut()
+        .inner_mut()
+        .latch_al_error(AlState::SafeOp, 0x001a);
+    for _ in 0..devices {
+        master.cycle(&tx, &mut rx).expect("a cycle completes");
+    }
+
+    let before = state.recoveries();
+    master.bus_mut().take_sends();
+    for _ in 0..devices {
+        master.cycle(&tx, &mut rx).expect("a cycle completes");
+    }
+    let recovering = master.bus_mut().take_sends();
+
+    assert!(
+        state.recoveries() > before,
+        "the measured window has to contain real recovery traffic",
+    );
+    assert_eq!(
+        recovering, healthy,
+        "OP recovery rides the cyclic frames; an acyclic FPWR per device would put \
+         {devices} more frames on the wire inside the cycle",
+    );
+}
+
+#[test]
+fn a_cycle_that_has_devices_to_recover_never_waits_out_the_pdu_timeout() {
+    let devices = 4;
+    let config = test_config();
+    let mut master = open(devices);
+    let tx = vec![0u8; devices * usize::from(OUTPUT_BYTES)];
+    let mut rx = vec![0u8; devices * usize::from(INPUT_BYTES)];
+    let state = master.state();
+
+    master.bus_mut().latch_al_error(AlState::SafeOp, 0x001a);
+    for _ in 0..devices {
+        master.cycle(&tx, &mut rx).expect("a cycle completes");
+    }
+    assert!(
+        !state.all_op(),
+        "every device has to be known to be below OP before the bus goes quiet",
+    );
+
+    master
+        .bus_mut()
+        .drop_next_frames(frame_wire_bytes(devices, 1500).len());
+    let started = Instant::now();
+    master
+        .cycle(&tx, &mut rx)
+        .expect("a silent bus is not an error");
+    let elapsed = started.elapsed();
+
+    assert!(
+        elapsed < config.pdu_timeout,
+        "a cycle that had {devices} devices to recover took {elapsed:?}; an acyclic \
+         transfer per device would block up to {:?} x {devices} inside one cycle",
+        config.pdu_timeout,
+    );
 }
 
 #[test]

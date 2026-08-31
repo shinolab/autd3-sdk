@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use super::cyclic::Recovery;
 use super::state::BusState;
 use super::{CycleReport, Master, MasterConfig, PHASE_TOLERANCE_DIVISOR, next_cycle_wait};
 use crate::bus::RawBus;
@@ -23,6 +24,7 @@ pub fn phase_tolerance_ns(cycle_ns: u64) -> u64 {
     cycle_ns / PHASE_TOLERANCE_DIVISOR
 }
 const PHASE_WARN_INTERVAL: Duration = Duration::from_secs(5);
+const RECOVERY_LOG_INTERVAL: Duration = Duration::from_secs(1);
 
 impl<B: RawBus> Master<B> {
     pub fn open(bus: B, config: MasterConfig) -> Result<Self, EchocatError> {
@@ -196,48 +198,61 @@ impl<B: RawBus> Master<B> {
         self.worst_phase_ns = 0;
     }
 
-    pub fn recover_op(&mut self) -> Result<(), EchocatError> {
-        let mut recovered = false;
-        for index in 0..self.devices {
-            let Some(raw) = self.state.al_status(index) else {
-                continue;
-            };
-            if raw == AlState::Op.code() {
-                continue;
-            }
-            let node = Self::station_address(index);
-            let errored = raw & AlState::ERROR_FLAG != 0;
-            let control = if errored {
+    pub(crate) fn plan_recovery(&mut self) -> Option<Recovery> {
+        if !self.op_entered || self.devices == 0 {
+            return None;
+        }
+        let device = (self.rotation + self.devices - 1) % self.devices;
+        let raw = self.state.al_status(device)?;
+        if raw == AlState::Op.code() {
+            return None;
+        }
+        let errored = raw & AlState::ERROR_FLAG != 0;
+        Some(Recovery {
+            device,
+            status: raw,
+            code: self.state.al_status_code(device).unwrap_or(0),
+            control: if errored {
                 u16::from(raw)
             } else {
                 u16::from(AlState::Op.code())
-            };
-            if errored {
-                let (code, _) =
-                    self.read_u16(Command::Fprd, Address::node(node, reg::AL_STATUS_CODE))?;
-                tracing::warn!(
-                    device = index,
-                    state = ?AlState::from_code(raw),
-                    al_status_code = format_args!("{code:#06x}"),
-                    reason = reg::al_status_code_str(code),
-                    al_control = format_args!("{control:#06x}"),
-                    "device left OP with an error; acknowledging it",
-                );
-            } else {
-                tracing::debug!(
-                    device = index,
-                    state = ?AlState::from_code(raw),
-                    al_control = format_args!("{control:#06x}"),
-                    "device is below OP; requesting OP again",
-                );
-            }
-            self.write_u16(Command::Fpwr, Address::node(node, reg::AL_CONTROL), control)?;
-            recovered = true;
+            },
+        })
+    }
+
+    pub(crate) fn account_for_recovery(&mut self, recovery: Recovery, delivered: bool) {
+        if !delivered {
+            return;
         }
-        if recovered {
-            self.state.record_recovery();
+        self.state.record_recovery();
+        self.recovery_attempts = self.recovery_attempts.saturating_add(1);
+        if self
+            .last_recovery_log_at
+            .is_some_and(|last| last.elapsed() < RECOVERY_LOG_INTERVAL)
+        {
+            return;
         }
-        Ok(())
+        self.last_recovery_log_at = Some(Instant::now());
+        let attempts = std::mem::take(&mut self.recovery_attempts);
+        if recovery.status & AlState::ERROR_FLAG != 0 {
+            tracing::warn!(
+                device = recovery.device,
+                state = ?AlState::from_code(recovery.status),
+                al_status_code = format_args!("{:#06x}", recovery.code),
+                reason = reg::al_status_code_str(recovery.code),
+                al_control = format_args!("{:#06x}", recovery.control),
+                attempts,
+                "device left OP with an error; acknowledging it",
+            );
+        } else {
+            tracing::debug!(
+                device = recovery.device,
+                state = ?AlState::from_code(recovery.status),
+                al_control = format_args!("{:#06x}", recovery.control),
+                attempts,
+                "device is below OP; requesting OP again",
+            );
+        }
     }
 
     pub fn close(&mut self) -> Result<(), EchocatError> {
