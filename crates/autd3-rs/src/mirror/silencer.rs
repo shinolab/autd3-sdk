@@ -7,6 +7,7 @@ pub use crate::params::{
 pub const FREQ_DIV_NO_LIMIT: u16 = 0xFFFF;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SilencerAxis {
     Intensity,
     Phase,

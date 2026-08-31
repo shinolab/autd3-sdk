@@ -156,6 +156,7 @@ fn bus_status(snapshot: &BusSnapshot) -> BusStatus {
         Actual::Open => (BusActual::Open, None),
         Actual::Recovering => (BusActual::Recovering, None),
         Actual::Failed { reason } => (BusActual::Failed, Some(reason.clone())),
+        _ => (BusActual::Unknown, None),
     };
     BusStatus {
         desired: match snapshot.desired {

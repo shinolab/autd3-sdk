@@ -5,6 +5,7 @@ use autd3_rs_core::value::{PulseWidthError, SamplingConfigError};
 use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TimeoutPhase {
     Handshake,
     Command { tag: u8 },
@@ -46,6 +47,7 @@ pub const fn describe_device_error(code: u8) -> &'static str {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum LegacyError {
     #[error("device {device} firmware error {code:#04x}: {}", describe_device_error(*code))]
     Device { device: usize, code: u8 },
@@ -119,6 +121,7 @@ impl From<LinkError> for LegacyError {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
+#[non_exhaustive]
 pub enum PayloadError {
     #[error("the link must expose 1..={max} devices, got {got}")]
     DeviceCountOutOfRange { got: usize, max: usize },

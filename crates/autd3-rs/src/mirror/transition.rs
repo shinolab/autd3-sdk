@@ -3,6 +3,7 @@ use crate::params::NUM_BANKS;
 use crate::value::{LoopBehavior, TransitionMode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum BankLoop {
     Infinite,
     Finite,
