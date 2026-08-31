@@ -26,5 +26,8 @@ jobs:
       - name: Format
         if: runner.os == 'Linux'
         run: cargo xtask rust format
+      - uses: taiki-e/install-action@v2.87.0
+        with:
+          tool: cargo-nextest
       - run: cargo xtask rust lint
       - run: cargo xtask rust test ${{ runner.os == 'Windows' && '--no-pcap' || '' }}

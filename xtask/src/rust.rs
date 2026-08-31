@@ -71,8 +71,12 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             run("cargo", args, root)
         }
         RustCmd::Test { no_pcap } => {
+            if !on_path("cargo-nextest") {
+                bail!("`cargo-nextest` is required");
+            }
             let mut args = vec![
-                "test",
+                "nextest",
+                "run",
                 "--workspace",
                 "--lib",
                 "--bins",
