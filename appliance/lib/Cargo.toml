@@ -15,9 +15,7 @@ discovery = ["dep:autd3-rs-link-remote"]
 
 [dependencies]
 serde.workspace = true
-autd3-rs-link-remote = { workspace = true, features = [
-    "discovery",
-], optional = true }
+autd3-rs-link-remote = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 ureq = { version = "3.3.0", default-features = false, features = [

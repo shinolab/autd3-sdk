@@ -34,11 +34,6 @@ AUTD3 を操作したいマシンと実機を配線したマシンが異なる�
 ### 探索
 
 mDNS でネットワーク上のサーバを探すことができる.
-Rust では `discovery` feature が要る (Python と C# は追加設定は不要).
-
-```toml
-autd3-rs-link-remote = { version = "0.6", features = ["discovery"] }
-```
 
 <CodeTabs rust={excerpt(client, "discover")} python={excerpt(pyClient, "discover")} csharp={excerpt(csClient, "discover")} />
 

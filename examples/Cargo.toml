@@ -62,7 +62,7 @@ autd3-rs = { workspace = true, features = ["legacy", "logging"] }
 autd3-rs-pattern.workspace = true
 autd3-rs-pattern-holo.workspace = true
 autd3-rs-link-echocat.workspace = true
-autd3-rs-link-remote = { workspace = true, features = ["discovery"] }
+autd3-rs-link-remote.workspace = true
 autd3-rs-modulation.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = [
