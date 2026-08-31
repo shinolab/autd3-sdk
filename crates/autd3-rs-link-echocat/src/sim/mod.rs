@@ -6,7 +6,7 @@ pub use subdevice::{SmConfig, SubDevice};
 
 use std::collections::VecDeque;
 use std::io;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::bus::RawBus;
 use crate::reg;
@@ -24,30 +24,23 @@ pub const AUTD3_IDENTITY: Identity = Identity {
 
 pub use crate::master::budget::{DEFAULT_HOP_NS, DEFAULT_LINK_SPEED_MBPS, WireTiming};
 
-const MAX_CATCHUP_EDGES: u64 = 1024;
-const SPIN_THRESHOLD: Duration = Duration::from_micros(200);
-
-fn wait_until(deadline: Instant) {
-    let remaining = deadline.saturating_duration_since(Instant::now());
-    if let Some(coarse) = remaining.checked_sub(SPIN_THRESHOLD) {
-        std::thread::sleep(coarse);
-    }
-    while Instant::now() < deadline {
-        std::hint::spin_loop();
-    }
+fn to_nanos(duration: Duration) -> u64 {
+    u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX)
 }
 
 struct Wire {
     timing: WireTiming,
-    base: Instant,
-    origin_ns: u64,
-    free_at: Instant,
+    free_ns: u64,
     next_edge_ns: u64,
+    burst_start_ns: Option<u64>,
+    burst_received: usize,
+    previous_burst_start_ns: Option<u64>,
+    last_exchange_ns: u64,
 }
 
 struct Pending {
     frame: Vec<u8>,
-    ready_at: Option<Instant>,
+    ready_ns: Option<u64>,
     processed: bool,
 }
 
@@ -129,15 +122,14 @@ impl EscSim {
     }
 
     pub fn set_wire_timing(&mut self, timing: Option<WireTiming>) {
-        self.wire = timing.map(|timing| {
-            let base = Instant::now();
-            Wire {
-                timing,
-                base,
-                origin_ns: self.now_ns,
-                free_at: base,
-                next_edge_ns: self.now_ns.saturating_add(self.cycle_ns),
-            }
+        self.wire = timing.map(|timing| Wire {
+            timing,
+            free_ns: self.now_ns,
+            next_edge_ns: self.now_ns.saturating_add(self.cycle_ns),
+            burst_start_ns: None,
+            burst_received: 0,
+            previous_burst_start_ns: None,
+            last_exchange_ns: 0,
         });
     }
 
@@ -146,27 +138,60 @@ impl EscSim {
         self.wire.as_ref().map(|wire| wire.timing)
     }
 
-    fn pump_time(&mut self) {
-        let (base, origin_ns, mut edge) = match self.wire.as_ref() {
-            Some(wire) => (wire.base, wire.origin_ns, wire.next_edge_ns),
-            None => return,
-        };
-        if self.cycle_ns == 0 {
+    #[must_use]
+    pub fn last_exchange_wire_time(&self) -> Duration {
+        Duration::from_nanos(self.wire.as_ref().map_or(0, |wire| wire.last_exchange_ns))
+    }
+
+    fn advance_to(&mut self, target: u64) {
+        let Some(mut edge) = self.wire.as_ref().map(|wire| wire.next_edge_ns) else {
             return;
-        }
-        let elapsed = u64::try_from(base.elapsed().as_nanos()).unwrap_or(u64::MAX);
-        let target = origin_ns.saturating_add(elapsed);
-        edge = edge.max(target.saturating_sub(self.cycle_ns.saturating_mul(MAX_CATCHUP_EDGES)));
-        while edge <= target {
-            self.now_ns = edge;
-            for device in &mut self.devices {
-                device.sync0(edge);
+        };
+        if self.cycle_ns > 0 {
+            while edge <= target {
+                self.now_ns = edge;
+                for device in &mut self.devices {
+                    device.sync0(edge);
+                }
+                edge = edge.saturating_add(self.cycle_ns);
             }
-            edge = edge.saturating_add(self.cycle_ns);
         }
-        self.now_ns = target;
+        self.now_ns = self.now_ns.max(target);
         if let Some(wire) = self.wire.as_mut() {
             wire.next_edge_ns = edge;
+        }
+    }
+
+    fn open_burst(&mut self) {
+        let Some(wire) = self.wire.as_ref() else {
+            return;
+        };
+        if wire.burst_start_ns.is_some() {
+            return;
+        }
+        let start = wire
+            .previous_burst_start_ns
+            .map_or(self.now_ns, |previous| {
+                previous.saturating_add(self.cycle_ns).max(self.now_ns)
+            });
+        self.advance_to(start);
+        let wire = self.wire.as_mut().expect("the wire model stays configured");
+        wire.burst_start_ns = Some(start);
+        wire.free_ns = start;
+        wire.burst_received = 0;
+    }
+
+    fn close_burst(&mut self, end_ns: Option<u64>) {
+        let Some(wire) = self.wire.as_mut() else {
+            return;
+        };
+        let Some(start) = wire.burst_start_ns.take() else {
+            return;
+        };
+        wire.previous_burst_start_ns = Some(start);
+        wire.burst_received = 0;
+        if let Some(end_ns) = end_ns {
+            wire.last_exchange_ns = end_ns.saturating_sub(start);
         }
     }
 
@@ -277,43 +302,47 @@ impl RawBus for EscSim {
             self.dropped_frames -= 1;
             return Ok(());
         }
-        self.pump_time();
         let devices = self.devices.len();
-        let Some(wire) = self.wire.as_mut() else {
+        if self.wire.is_none() {
             let mut response = frame.to_vec();
             self.process(&mut response);
             self.pending.push_back(Pending {
                 frame: response,
-                ready_at: None,
+                ready_ns: None,
                 processed: true,
             });
             return Ok(());
-        };
-        let done = wire.free_at.max(Instant::now()) + wire.timing.transmit(frame.len());
-        wire.free_at = done;
-        let ready_at = done + wire.timing.propagation(devices);
+        }
+        if self
+            .wire
+            .as_ref()
+            .is_some_and(|wire| wire.burst_received > 0)
+        {
+            self.pending.clear();
+            self.close_burst(None);
+        }
+        self.open_burst();
+        let wire = self.wire.as_mut().expect("the wire model stays configured");
+        wire.free_ns = wire
+            .free_ns
+            .saturating_add(to_nanos(wire.timing.transmit(frame.len())));
+        let ready_ns = wire
+            .free_ns
+            .saturating_add(to_nanos(wire.timing.propagation(devices)));
         self.pending.push_back(Pending {
             frame: frame.to_vec(),
-            ready_at: Some(ready_at),
+            ready_ns: Some(ready_ns),
             processed: false,
         });
         Ok(())
     }
 
-    fn receive(&mut self, buf: &mut [u8], timeout: Duration) -> io::Result<Option<usize>> {
-        self.pump_time();
-        let Some(ready_at) = self.pending.front().map(|pending| pending.ready_at) else {
+    fn receive(&mut self, buf: &mut [u8], _timeout: Duration) -> io::Result<Option<usize>> {
+        let Some(ready_ns) = self.pending.front().map(|pending| pending.ready_ns) else {
             return Ok(None);
         };
-        if let Some(ready_at) = ready_at {
-            let now = Instant::now();
-            if ready_at.saturating_duration_since(now) > timeout {
-                wait_until(now + timeout);
-                self.pump_time();
-                return Ok(None);
-            }
-            wait_until(ready_at);
-            self.pump_time();
+        if let Some(ready_ns) = ready_ns {
+            self.advance_to(ready_ns);
         }
         let mut pending = self
             .pending
@@ -321,6 +350,12 @@ impl RawBus for EscSim {
             .expect("a pending frame was just observed");
         if !pending.processed {
             self.process(&mut pending.frame);
+        }
+        if let Some(wire) = self.wire.as_mut() {
+            wire.burst_received += 1;
+        }
+        if self.pending.is_empty() {
+            self.close_burst(Some(self.now_ns));
         }
         if pending.frame.len() > buf.len() {
             return Err(io::Error::other(

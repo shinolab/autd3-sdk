@@ -81,15 +81,12 @@ fn twenty_devices_take_about_eleven_hundred_microseconds_on_the_wire() {
     let mut master = open(devices, cycle, |_| {
         Box::new(autd3_rs_link_echocat::sim::NopProcessData)
     });
-    run(&mut master, devices, 64);
+    run(&mut master, devices, 4);
 
-    let mean = Duration::from_nanos(master.stats().mean_exchange_ns());
-    let budget = exchange_budget(devices, MTU, WireTiming::default());
-    let low = budget.mul_f64(0.95);
-    let high = budget.mul_f64(1.15);
-    assert!(
-        mean >= low && mean <= high,
-        "measured {mean:?} against a {budget:?} budget",
+    assert_eq!(
+        master.bus().last_exchange_wire_time(),
+        Duration::from_nanos(1_060_480),
+        "20 devices split into nine frames and cross 40 hops",
     );
 }
 
@@ -100,13 +97,13 @@ fn the_exchange_time_follows_the_budget_across_device_counts() {
         let mut master = open(devices, cycle, |_| {
             Box::new(autd3_rs_link_echocat::sim::NopProcessData)
         });
-        run(&mut master, devices, 32);
+        run(&mut master, devices, 4);
 
-        let mean = Duration::from_nanos(master.stats().mean_exchange_ns());
+        let measured = master.bus().last_exchange_wire_time();
         let budget = exchange_budget(devices, MTU, WireTiming::default());
-        assert!(
-            mean >= budget.mul_f64(0.95) && mean <= budget.mul_f64(1.15),
-            "{devices} devices measured {mean:?} against a {budget:?} budget",
+        assert_eq!(
+            measured, budget,
+            "{devices} devices spent {measured:?} on the wire against a {budget:?} budget",
         );
     }
 }
@@ -129,7 +126,7 @@ fn a_period_shorter_than_the_exchange_fires_sync0_more_often_than_frames_arrive(
         "the premise of this test is that {budget:?} does not fit in {cycle:?}",
     );
 
-    let cycles = 200;
+    let cycles = 64;
     run(&mut master, devices, cycles);
 
     let sync0 = master.bus().devices()[0].sync0_count();
@@ -154,7 +151,7 @@ fn an_oversubscribed_period_makes_the_firmware_reread_the_same_frame() {
         }
     });
 
-    run(&mut master, devices, 200);
+    run(&mut master, devices, 64);
 
     let device = first.lock().expect("the emulator is not poisoned");
     let dedup = device.telemetry(Telemetry::Dedup);
@@ -179,7 +176,7 @@ fn a_period_that_fits_the_exchange_does_not_starve_the_firmware() {
         }
     });
 
-    run(&mut master, devices, 50);
+    run(&mut master, devices, 16);
 
     let device = first.lock().expect("the emulator is not poisoned");
     let processed = device.telemetry(Telemetry::Processed);
