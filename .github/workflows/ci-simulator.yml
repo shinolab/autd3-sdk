@@ -31,7 +31,7 @@ jobs:
       - run: cargo xtask simulator lint
       - name: Install cargo-binstall and cargo-about
         if: runner.os == 'Linux'
-        uses: taiki-e/install-action@v2.86.5
+        uses: taiki-e/install-action@v2.87.0
         with:
           tool: cargo-binstall,cargo-about
       - name: Install dioxus-cli

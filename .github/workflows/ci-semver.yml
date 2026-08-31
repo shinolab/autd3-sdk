@@ -16,7 +16,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - name: Install pcap
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev
-      - uses: taiki-e/install-action@v2.86.5
+      - uses: taiki-e/install-action@v2.87.0
         with:
           tool: cargo-semver-checks
       - run: cargo xtask rust semver
