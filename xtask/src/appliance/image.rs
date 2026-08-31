@@ -571,7 +571,7 @@ fn stage_files(root: &Path, board: &Board, version: &str) -> Result<()> {
     let files = stage_dir(root, board).join("files");
     let dist = root.join(SERVER_DIST);
 
-    let binary = crate::server::cross_build(root)?;
+    let binary = super::server::cross_build(root)?;
     copy_file(&binary, &files.join("autd3-remote-server"))?;
 
     for name in STAGED_DIST {
