@@ -14,7 +14,5 @@ const dir = join(DOC_ROOT, "src", "content", "versions");
 mkdirSync(dir, { recursive: true });
 const file = join(dir, `${slug}.json`);
 
-// Byte-for-byte what starlight-versions' `makeVersionConfig` would write, so a
-// later `astro build` regenerating it leaves no diff.
 writeFileSync(file, JSON.stringify({ sidebar }, null, 2));
 console.log(`version-config: wrote ${file}`);
