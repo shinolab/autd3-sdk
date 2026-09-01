@@ -95,61 +95,32 @@ pub fn frame_wire_bytes(devices: usize, mtu: usize) -> Vec<usize> {
         .collect()
 }
 
-#[must_use]
-pub fn exchange_budget(devices: usize, mtu: usize, timing: WireTiming) -> Duration {
-    frame_wire_bytes(devices, mtu)
-        .into_iter()
-        .map(|bytes| timing.transmit(bytes))
-        .sum::<Duration>()
-        + timing.propagation(devices)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn twenty_devices_do_not_fit_in_a_one_millisecond_period() {
-        let budget = exchange_budget(20, 1500, WireTiming::default());
-        assert!(
-            budget > Duration::from_millis(1),
-            "20 devices need {budget:?} on the wire",
-        );
-    }
-
-    #[test]
-    fn the_budget_tracks_the_measured_exchange_within_a_tenth() {
-        let budget = exchange_budget(20, 1500, WireTiming::default());
-        let measured = Duration::from_micros(1103);
-        let low = measured.mul_f64(0.9);
-        let high = measured.mul_f64(1.1);
-        assert!(
-            budget >= low && budget <= high,
-            "{budget:?} is outside 10% of the measured {measured:?}",
-        );
-    }
-
-    #[test]
-    fn the_budget_grows_with_the_device_count() {
-        let timing = WireTiming::default();
-        let mut previous = Duration::ZERO;
-        for devices in [1usize, 2, 4, 8, 10, 16, 20] {
-            let budget = exchange_budget(devices, 1500, timing);
-            assert!(
-                budget > previous,
-                "{devices} devices did not grow the budget"
-            );
-            previous = budget;
-        }
-    }
-
-    #[test]
-    fn a_faster_link_shortens_the_budget() {
+    fn a_faster_link_shortens_the_time_a_frame_takes() {
         let fast = WireTiming {
             speed: NonZeroU32::new(1_000).expect("non-zero"),
             ..WireTiming::default()
         };
-        assert!(exchange_budget(20, 1500, fast) < exchange_budget(20, 1500, WireTiming::default()));
+        assert!(fast.transmit(1500) < WireTiming::default().transmit(1500));
+        assert!(
+            WireTiming::default().propagation(20) > WireTiming::default().propagation(10),
+            "more devices means more hops",
+        );
+    }
+
+    #[test]
+    fn the_frame_count_grows_with_the_device_count() {
+        let mut previous = 0;
+        for devices in [1usize, 2, 4, 8, 10, 16, 20] {
+            let bytes = frame_wire_bytes(devices, 1500);
+            let total: usize = bytes.iter().sum();
+            assert!(total > previous, "{devices} devices did not grow the wire");
+            previous = total;
+        }
     }
 
     #[test]

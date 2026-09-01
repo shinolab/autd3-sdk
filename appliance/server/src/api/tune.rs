@@ -4,19 +4,21 @@ use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::{Cmd, Telemetry};
 use autd3_rs_appliance::{
-    FRAME_PHASE_AUTO, TuneCandidate, TuneReport, TuneRequest, TuneStatus, TuneTarget,
-    best_tune_candidate,
+    FRAME_PHASE_AUTO, TuneCalibration, TuneCandidate, TuneReport, TuneRequest, TuneStatus,
+    TuneTarget, best_tune_candidate,
 };
 use autd3_rs_core::DeviceState;
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
 use autd3_rs_link_echocat::{EchocatLinkOption, FramePhase, MAX_SYNC0_PERIOD};
-use autd3_rs_link_echocat::{WireTiming, exchange_budget};
-use autd3_rs_link_remote::{Actual, Desired, RemoteLinkError, Sessions, SharedBus};
+use autd3_rs_link_remote::{Actual, BusSnapshot, Desired, RemoteLinkError, Sessions, SharedBus};
 
 const POLL_STEP: Duration = Duration::from_millis(50);
 const MAX_CANDIDATES: usize = 256;
 const MAX_SWEEP: Duration = Duration::from_hours(6);
-const MTU_BYTES: usize = 1500;
+const PROBE_EXCHANGES: u64 = 256;
+const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
+const CALIBRATED: &str = "measured on this bus before the sweep";
+const DWELLED: &str = "measured during the dwell";
 const TELEMETRY_TIMEOUT: Duration = Duration::from_millis(200);
 const RESET_RESEND_CYCLES: usize = 4;
 
@@ -97,6 +99,10 @@ impl TuneJob {
 
     fn begin_candidate(&self, target: TuneTarget) {
         self.lock().current = Some(target);
+    }
+
+    fn set_calibration(&self, calibration: Option<TuneCalibration>) {
+        self.lock().calibration = calibration;
     }
 
     fn finish_candidate(&self, candidate: TuneCandidate) {
@@ -190,7 +196,6 @@ pub struct Sweep {
     pub bus: Arc<SharedBus>,
     pub sessions: Arc<Sessions>,
     pub settings: Arc<LinkSettings>,
-    pub timing: WireTiming,
 }
 
 pub fn spawn(sweep: Sweep, request: TuneRequest, targets: Vec<TuneTarget>) -> Result<(), String> {
@@ -225,13 +230,74 @@ fn run(sweep: &Sweep, request: &TuneRequest, targets: &[TuneTarget]) {
         return;
     }
 
+    let calibration = calibrate(sweep, request, targets);
+    sweep.job.set_calibration(calibration);
+
     for target in targets {
         if sweep.job.cancelled() {
             break;
         }
         sweep.job.begin_candidate(*target);
-        sweep.job.finish_candidate(measure(sweep, request, *target));
+        sweep
+            .job
+            .finish_candidate(measure(sweep, request, *target, calibration));
     }
+}
+
+fn calibrate(
+    sweep: &Sweep,
+    request: &TuneRequest,
+    targets: &[TuneTarget],
+) -> Option<TuneCalibration> {
+    let period_ns = targets.iter().map(|target| target.period_ns).max()?;
+    sweep.settings.set(EchocatLinkOption {
+        sync0_period: Duration::from_nanos(period_ns),
+        frame_phase: FramePhase::Auto,
+        ..sweep.settings.base().clone()
+    });
+    let settle = Duration::from_nanos(request.settle_ns);
+    if !close(sweep, settle) {
+        tracing::warn!("the bus never went back to closed for the calibration");
+        return None;
+    }
+    sweep.bus.set_desired(Desired::Open);
+    if !wait_until(sweep, settle, |actual| matches!(actual, Actual::Open)) {
+        tracing::warn!(
+            period_ns,
+            "the bus did not open for the calibration; the sweep will judge every candidate \
+             from its own dwell instead",
+        );
+        return None;
+    }
+
+    let deadline = Instant::now() + PROBE_TIMEOUT;
+    while sweep.bus.snapshot().exchanges < PROBE_EXCHANGES {
+        if sweep.job.cancelled() || Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(POLL_STEP);
+    }
+
+    let snapshot = sweep.bus.snapshot();
+    if snapshot.exchanges == 0 {
+        tracing::warn!("the calibration saw no exchange; nothing was measured");
+        return None;
+    }
+    let calibration = TuneCalibration {
+        num_devices: snapshot.num_devices,
+        period_ns,
+        exchanges: snapshot.exchanges,
+        exchange_mean_ns: snapshot.exchange_mean_ns,
+        exchange_worst_ns: snapshot.exchange_worst_ns,
+    };
+    tracing::info!(
+        devices = calibration.num_devices,
+        exchanges = calibration.exchanges,
+        mean_us = calibration.exchange_mean_ns / 1_000,
+        worst_us = calibration.exchange_worst_ns / 1_000,
+        "measured the exchange time this bus actually needs",
+    );
+    Some(calibration)
 }
 
 struct SweepGuard<'a> {
@@ -468,14 +534,19 @@ fn observe(sweep: &Sweep, request: &TuneRequest, driver: &mut Driver) -> Observe
     seen
 }
 
-fn infeasible_note(devices: usize, budget: Duration, target: TuneTarget) -> Option<String> {
+fn overrun_note(
+    devices: usize,
+    measured: Duration,
+    target: TuneTarget,
+    source: &str,
+) -> Option<String> {
     let period = Duration::from_nanos(target.period_ns);
     let us = |d: Duration| d.as_micros();
-    if budget >= period {
+    if measured >= period {
         return Some(format!(
-            "{devices} devices need about {} us on the wire, which does not fit in a {} us \
+            "{devices} devices took {} us on the wire ({source}), which does not fit in a {} us \
              period; one exchange cannot finish before the next SYNC0",
-            us(budget),
+            us(measured),
             us(period),
         ));
     }
@@ -483,18 +554,23 @@ fn infeasible_note(devices: usize, budget: Duration, target: TuneTarget) -> Opti
         return None;
     }
     let landing = Duration::from_nanos(target.frame_phase_ns);
-    (landing + budget > period).then(|| {
+    (landing + measured > period).then(|| {
         format!(
-            "a landing at {} us leaves {} us before the next SYNC0, but {devices} devices need \
-             about {} us on the wire; the exchange would run past the edge",
+            "a landing at {} us leaves {} us before the next SYNC0, but {devices} devices took \
+             {} us on the wire ({source}); the exchange would run past the edge",
             us(landing),
             us(period.saturating_sub(landing)),
-            us(budget),
+            us(measured),
         )
     })
 }
 
-fn measure(sweep: &Sweep, request: &TuneRequest, target: TuneTarget) -> TuneCandidate {
+fn measure(
+    sweep: &Sweep,
+    request: &TuneRequest,
+    target: TuneTarget,
+    calibration: Option<TuneCalibration>,
+) -> TuneCandidate {
     let candidate = TuneCandidate {
         target,
         ..TuneCandidate::default()
@@ -526,8 +602,14 @@ fn measure(sweep: &Sweep, request: &TuneRequest, target: TuneTarget) -> TuneCand
     }
 
     let devices = sweep.bus.snapshot().num_devices;
-    let budget = exchange_budget(devices, MTU_BYTES, sweep.timing);
-    if let Some(note) = infeasible_note(devices, budget, target) {
+    if let Some(note) = calibration.and_then(|calibration| {
+        overrun_note(
+            devices,
+            Duration::from_nanos(calibration.exchange_mean_ns),
+            target,
+            CALIBRATED,
+        )
+    }) {
         return TuneCandidate {
             status: TuneStatus::Infeasible,
             note: Some(note),
@@ -565,15 +647,21 @@ fn measure(sweep: &Sweep, request: &TuneRequest, target: TuneTarget) -> TuneCand
         };
     }
 
+    summarise(sweep, target, &base, &observed)
+}
+
+fn summarise(
+    sweep: &Sweep,
+    target: TuneTarget,
+    base: &BusSnapshot,
+    observed: &Observed,
+) -> TuneCandidate {
     let end = sweep.bus.sampled();
-    let cancelled = sweep.job.cancelled();
+    let (status, note) = verdict(sweep.job.cancelled(), target, &end);
     TuneCandidate {
-        status: if cancelled {
-            TuneStatus::Aborted
-        } else {
-            TuneStatus::Ok
-        },
-        note: cancelled.then(|| "cancelled during the dwell".to_owned()),
+        target,
+        status,
+        note,
         num_devices: end.num_devices,
         samples: observed.samples,
         op_samples: observed.op_samples,
@@ -588,8 +676,29 @@ fn measure(sweep: &Sweep, request: &TuneRequest, target: TuneTarget) -> TuneCand
         frames_delivered: observed.counters.processed,
         frames_skipped: observed.counters.seq_mismatch,
         telemetry_read: observed.telemetry_read,
-        ..candidate
     }
+}
+
+fn verdict(cancelled: bool, target: TuneTarget, end: &BusSnapshot) -> (TuneStatus, Option<String>) {
+    if cancelled {
+        return (
+            TuneStatus::Aborted,
+            Some("cancelled during the dwell".to_owned()),
+        );
+    }
+    let overrun = (end.exchanges > 0)
+        .then(|| {
+            overrun_note(
+                end.num_devices,
+                Duration::from_nanos(end.exchange_mean_ns),
+                target,
+                DWELLED,
+            )
+        })
+        .flatten();
+    overrun.map_or((TuneStatus::Ok, None), |note| {
+        (TuneStatus::Infeasible, Some(note))
+    })
 }
 
 fn close(sweep: &Sweep, settle: Duration) -> bool {
@@ -750,8 +859,8 @@ mod tests {
         assert_eq!(targets[0].frame_phase_ns, u64::MAX / 100);
     }
 
-    fn budget_20() -> Duration {
-        exchange_budget(20, MTU_BYTES, WireTiming::default())
+    fn measured_20() -> Duration {
+        Duration::from_nanos(1_103_700)
     }
 
     fn target(micros: u64, percent: u8) -> TuneTarget {
@@ -766,9 +875,11 @@ mod tests {
     #[test]
     fn a_period_that_cannot_carry_one_exchange_is_refused_at_every_phase() {
         for percent in [FRAME_PHASE_AUTO, 1, 25, 50, 75, 99] {
-            let note = infeasible_note(20, budget_20(), target(1_000, percent))
+            let note = overrun_note(20, measured_20(), target(1_000, percent), CALIBRATED)
                 .unwrap_or_else(|| panic!("1 ms / 20 devices was accepted at {percent}%"));
             assert!(note.contains("does not fit"), "{note}");
+            assert!(note.contains("1103 us"), "{note}");
+            assert!(note.contains(CALIBRATED), "{note}");
         }
     }
 
@@ -776,15 +887,30 @@ mod tests {
     fn a_landing_that_runs_the_exchange_past_the_sync0_edge_is_refused() {
         for percent in [FRAME_PHASE_AUTO, 1, 25] {
             assert!(
-                infeasible_note(20, budget_20(), target(2_000, percent)).is_none(),
+                overrun_note(20, measured_20(), target(2_000, percent), CALIBRATED).is_none(),
                 "2 ms at {percent}% leaves room for the exchange",
             );
         }
         for percent in [50, 75, 99] {
-            let note = infeasible_note(20, budget_20(), target(2_000, percent))
+            let note = overrun_note(20, measured_20(), target(2_000, percent), DWELLED)
                 .unwrap_or_else(|| panic!("2 ms at {percent}% was accepted"));
             assert!(note.contains("past the edge"), "{note}");
+            assert!(note.contains(DWELLED), "{note}");
         }
+    }
+
+    #[test]
+    fn a_verdict_only_ever_repeats_what_was_measured() {
+        let slow = Duration::from_nanos(1_103_700);
+        let fast = Duration::from_micros(200);
+        assert!(
+            overrun_note(20, slow, target(1_000, FRAME_PHASE_AUTO), CALIBRATED).is_some(),
+            "a measured 1103 us exchange does not fit a 1 ms period",
+        );
+        assert!(
+            overrun_note(20, fast, target(1_000, FRAME_PHASE_AUTO), CALIBRATED).is_none(),
+            "the same 20 devices on a faster wire fit, and nothing else may overrule that",
+        );
     }
 
     #[test]
@@ -808,7 +934,7 @@ mod tests {
             .map(
                 |&(period_us, percent, stale, excursions, exchanges, worst)| {
                     let target = target(period_us, percent);
-                    let status = if infeasible_note(20, budget_20(), target).is_some() {
+                    let status = if overrun_note(20, measured_20(), target, CALIBRATED).is_some() {
                         TuneStatus::Infeasible
                     } else {
                         TuneStatus::Ok

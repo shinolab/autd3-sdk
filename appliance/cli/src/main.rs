@@ -400,7 +400,29 @@ fn tune_row(candidate: &TuneCandidate) -> String {
     )
 }
 
+fn print_tune_calibration(report: &TuneReport) {
+    let Some(calibration) = &report.calibration else {
+        if !report.candidates.is_empty() {
+            println!(
+                "the exchange time was never measured up front; every candidate was judged from \
+                 its own dwell",
+            );
+        }
+        return;
+    };
+    println!(
+        "measured {} devices at {}/exchange (worst {}) over {} exchanges at {}; every verdict \
+         below comes from this bus, not from a model",
+        calibration.num_devices,
+        fmt_ns(calibration.exchange_mean_ns),
+        fmt_ns(calibration.exchange_worst_ns),
+        calibration.exchanges,
+        fmt_ns(calibration.period_ns),
+    );
+}
+
 fn print_tune_report(report: &TuneReport) {
+    print_tune_calibration(report);
     for candidate in &report.candidates {
         println!("{}", tune_row(candidate));
     }
