@@ -60,6 +60,8 @@ Provides retrieval of information about the whole layout and access to each `Dev
 | `pattern_buffer()`     | `Vec<Vec<Emission>>`         | Allocate an output buffer for Pattern computation |
 | `iter()` / `&geometry` | `Iterator<Item = &Device>`   | Iterate over each `Device`           |
 | `geometry[i]`          | `&Device`                    | Get the `i`-th `Device`              |
+| `to_json()`            | `String`                     | Convert the layout to a JSON string  |
+| `from_json()`          | `Result<Geometry, Error>`     | Construct `Geometry` from a JSON string   |
 
 ## Device
 

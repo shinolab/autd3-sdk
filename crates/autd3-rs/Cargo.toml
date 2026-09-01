@@ -16,8 +16,10 @@ categories = ["science"]
 all-features = true
 
 [features]
+default = ["serde"]
 legacy = []
 logging = ["autd3-rs-core/logging"]
+serde = ["autd3-rs-core/serde"]
 
 [dependencies]
 autd3-cpu-wire.workspace = true

@@ -2,6 +2,7 @@ use nalgebra::{Point3, UnitQuaternion, Vector3};
 
 use super::Device;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Autd3 {
     pub origin: Point3<f32>,
     pub rotation: UnitQuaternion<f32>,

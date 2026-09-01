@@ -17,6 +17,8 @@ pub use nalgebra;
 pub use common::units;
 pub use common::{Angle, Freq, Length, Velocity};
 pub use error::{EncodeError, LinkError};
+#[cfg(feature = "serde")]
+pub use geometry::LayoutError;
 pub use geometry::{
     Autd3, Device, Geometry, Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3, offset,
     point,

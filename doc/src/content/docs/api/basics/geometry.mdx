@@ -60,6 +60,8 @@ import { excerpt } from "@lib/excerpt";
 | `pattern_buffer()`   | `Vec<Vec<Emission>>` | Pattern 計算用の出力バッファを確保    |
 | `iter()` / `&geometry` | `Iterator<Item = &Device>`       | 各 `Device` を走査                    |
 | `geometry[i]`        | `&Device`                          | `i` 番目の `Device` を取得            |
+| `to_json()`          | `String`                           | 配置を JSON 文字列にする              |
+| `from_json(&str)`    | `Result<Geometry, Error>` | JSON 文字列から`Geometry`を生成          |
 
 ## Device
 

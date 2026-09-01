@@ -17,12 +17,15 @@ all-features = true
 
 [features]
 logging = ["dep:tracing-appender", "dep:tracing-subscriber"]
+serde = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
 autd3-cpu-wire.workspace = true
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 core_affinity.workspace = true
 nalgebra.workspace = true
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 thiserror.workspace = true
 thread-priority.workspace = true
 tracing.workspace = true

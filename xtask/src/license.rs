@@ -262,7 +262,10 @@ pub fn generate_console(root: &Path) -> Result<()> {
     let firmware_tmp = console.join(".third-party-firmware.md");
     about(
         root,
-        &root.join("tools").join("firmware-writer").join("Cargo.toml"),
+        &root
+            .join("tools")
+            .join("firmware-writer")
+            .join("Cargo.toml"),
         &firmware_tmp,
     )?;
     let firmware = std::fs::read_to_string(&firmware_tmp)

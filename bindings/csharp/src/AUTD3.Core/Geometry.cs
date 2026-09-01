@@ -26,6 +26,40 @@ namespace AUTD3
             _handle = new GeometryHandle(handle);
         }
 
+        private Geometry(GeometryHandle handle)
+        {
+            _handle = handle;
+        }
+
+        public static Geometry FromJson(string json)
+        {
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var handle = NativeCore.autd3_core_geometry_from_json(json, err, (UIntPtr)err.Length);
+            if (handle == IntPtr.Zero)
+            {
+                throw new Autd3Exception(NativeUtil.Utf8(err));
+            }
+            return new Geometry(new GeometryHandle(handle));
+        }
+
+        public string ToJson()
+        {
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var ptr = NativeCore.autd3_core_geometry_to_json(Handle, err, (UIntPtr)err.Length);
+            if (ptr == IntPtr.Zero)
+            {
+                throw new Autd3Exception(NativeUtil.Utf8(err));
+            }
+            try
+            {
+                return NativeUtil.PtrToString(ptr);
+            }
+            finally
+            {
+                NativeCore.autd3_core_free_string(ptr);
+            }
+        }
+
         public int NumDevices => (int)NativeCore.autd3_core_geometry_num_devices(Handle);
 
         public int NumTransducers => (int)NativeCore.autd3_core_geometry_num_transducers(Handle);
