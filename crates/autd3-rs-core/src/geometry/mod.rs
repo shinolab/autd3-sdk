@@ -1,8 +1,12 @@
 mod autd3;
 mod device;
+#[cfg(feature = "serde")]
+mod layout;
 
 pub use autd3::Autd3;
 pub use device::Device;
+#[cfg(feature = "serde")]
+pub use layout::LayoutError;
 pub use nalgebra::{Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3};
 
 use crate::common::Length;

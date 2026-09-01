@@ -6,6 +6,7 @@ use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 
+use crate::error::to_pyerr;
 use crate::units::Angle;
 
 fn np_vec3(py: Python<'_>, x: f32, y: f32, z: f32) -> PyResult<Bound<'_, PyAny>> {
@@ -155,6 +156,17 @@ impl Geometry {
         Self {
             inner: CoreGeometry::new(devices),
         }
+    }
+
+    #[staticmethod]
+    fn from_json(json: &str) -> PyResult<Self> {
+        CoreGeometry::from_json(json)
+            .map(|inner| Self { inner })
+            .map_err(to_pyerr)
+    }
+
+    fn to_json(&self) -> PyResult<String> {
+        self.inner.to_json().map_err(to_pyerr)
     }
 
     fn center<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

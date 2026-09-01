@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::util::{on_path, run, which};
@@ -427,8 +427,8 @@ pub fn resolve_vivado() -> Result<String> {
 
 #[cfg(windows)]
 fn find_vivado_windows() -> Option<String> {
-    use winreg::enums::HKEY_LOCAL_MACHINE;
     use winreg::RegKey;
+    use winreg::enums::HKEY_LOCAL_MACHINE;
 
     const NEEDLES: [&str; 4] = [
         "Vivado",

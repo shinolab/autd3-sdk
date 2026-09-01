@@ -112,7 +112,10 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
 
     let (sim_bin, _) = build_backend_and_frontend(root, debug, target)?;
 
-    run_cargo(cargo_build_args("autd3-firmware-writer", target, debug), root)?;
+    run_cargo(
+        cargo_build_args("autd3-firmware-writer", target, debug),
+        root,
+    )?;
     let fw_bin = cargo_bin(root, target, debug, "autd3-firmware-writer");
 
     run_cargo(cargo_build_args("autd3-appliance", target, debug), root)?;

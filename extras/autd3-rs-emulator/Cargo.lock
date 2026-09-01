@@ -191,6 +191,8 @@ dependencies = [
  "chrono",
  "core_affinity",
  "nalgebra",
+ "serde",
+ "serde_json",
  "thiserror",
  "thread-priority",
  "tracing",

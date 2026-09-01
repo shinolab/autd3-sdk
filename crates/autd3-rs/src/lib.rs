@@ -22,6 +22,8 @@ mod test_utils;
 pub use autd3_rs_core::{common, geometry, link, nalgebra, params, protocol, rt, units, value};
 pub use error::{Error, PayloadError};
 
+#[cfg(feature = "serde")]
+pub use autd3_rs_core::LayoutError;
 pub use autd3_rs_core::{
     Angle, Autd3, ConstStateChecker, CoreId, CycleOutcome, DcClock, DcObservation, Device,
     DeviceState, EncodeError, Freq, Geometry, Interface, IntoLink, Length, Link, LinkError,

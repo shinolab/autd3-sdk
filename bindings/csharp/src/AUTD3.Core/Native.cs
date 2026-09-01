@@ -24,6 +24,15 @@ namespace AUTD3
         internal static extern IntPtr autd3_core_geometry_new(Autd3Device[] devices, UIntPtr len);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_core_geometry_from_json([MarshalAs(UnmanagedType.LPUTF8Str)] string json, byte[] outErr, UIntPtr outErrLen);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_core_geometry_to_json(GeometryHandle geometry, byte[] outErr, UIntPtr outErrLen);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_core_free_string(IntPtr ptr);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern UIntPtr autd3_core_geometry_num_devices(GeometryHandle geometry);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

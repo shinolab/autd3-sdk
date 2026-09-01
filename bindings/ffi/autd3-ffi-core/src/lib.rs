@@ -1,7 +1,11 @@
+use std::ffi::c_char;
 use std::num::NonZeroU16;
 use std::time::Duration;
 
-use autd3_ffi_abi::{drop_handle, handle_ref, into_handle, slice_mut, slice_ref, write_out};
+use autd3_ffi_abi::{
+    alloc_cstring, cstr_to_string, drop_handle, free_cstring, handle_ref, into_handle, slice_mut,
+    slice_ref, write_cstr, write_out,
+};
 use autd3_rs_core::units::Hz;
 use autd3_rs_core::value::{Nearest, Phase, SamplingConfig};
 use autd3_rs_core::{Autd3, Geometry, Point3, Quaternion, UnitQuaternion};
@@ -21,21 +25,73 @@ pub unsafe extern "C" fn autd3_core_geometry_new(
         return std::ptr::null_mut();
     };
 
-    let devices: Vec<Autd3> = slice
-        .iter()
-        .map(|d| {
-            Autd3::new(
-                Point3::new(d.origin[0], d.origin[1], d.origin[2]),
-                UnitQuaternion::from_quaternion(Quaternion::new(
-                    d.rotation[0],
-                    d.rotation[1],
-                    d.rotation[2],
-                    d.rotation[3],
-                )),
-            )
-        })
-        .collect();
+    let devices: Vec<Autd3> = slice.iter().map(to_autd3).collect();
     into_handle(Geometry::new(devices))
+}
+
+fn to_autd3(device: &Autd3Device) -> Autd3 {
+    Autd3::new(
+        Point3::new(device.origin[0], device.origin[1], device.origin[2]),
+        UnitQuaternion::from_quaternion(Quaternion::new(
+            device.rotation[0],
+            device.rotation[1],
+            device.rotation[2],
+            device.rotation[3],
+        )),
+    )
+}
+
+unsafe fn finish_geometry<E: std::fmt::Display>(
+    geometry: Result<Geometry, E>,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> *mut Geometry {
+    match geometry {
+        Ok(geometry) => into_handle(geometry),
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_geometry_from_json(
+    json: *const c_char,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> *mut Geometry {
+    let Some(json) = (unsafe { cstr_to_string(json) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null layout json") };
+        return std::ptr::null_mut();
+    };
+
+    unsafe { finish_geometry(Geometry::from_json(&json), out_err, out_err_len) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_geometry_to_json(
+    geometry: *const Geometry,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> *mut c_char {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null geometry") };
+        return std::ptr::null_mut();
+    };
+
+    match geometry.to_json() {
+        Ok(json) => alloc_cstring(&json),
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_free_string(ptr: *mut c_char) {
+    unsafe { free_cstring(ptr) };
 }
 
 #[unsafe(no_mangle)]
