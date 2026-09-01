@@ -19,6 +19,7 @@ serde_json = { version = "1.0.150", default-features = false, features = ["std"]
 eframe = { version = "0.36.0", default-features = false, features = [
     "glow",
     "default_fonts",
+    "links",
     "persistence",
     "wayland",
     "x11",
