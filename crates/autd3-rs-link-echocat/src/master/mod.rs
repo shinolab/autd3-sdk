@@ -5,7 +5,7 @@ pub mod init;
 mod open;
 mod state;
 
-pub use budget::{WireTiming, exchange_budget, frame_wire_bytes};
+pub use budget::{WireTiming, frame_wire_bytes};
 pub use cyclic::{CycleReport, LOSE_CONTACT_AFTER_CYCLES, next_cycle_wait};
 pub use state::{BusState, device_state};
 

@@ -5,13 +5,12 @@ use std::time::Duration;
 use autd3_cpu_wire::{Cmd, Telemetry};
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, Seq, TX_FRAME_BYTES, TxFrame};
 use autd3_rs_firmware_emulator::Device;
-use autd3_rs_link_echocat::master::budget::{WireTiming, exchange_budget};
+use autd3_rs_link_echocat::master::budget::WireTiming;
 use autd3_rs_link_echocat::master::init::{INPUT_BYTES, OUTPUT_BYTES};
 use autd3_rs_link_echocat::sim::{EscSim, ProcessData};
 use autd3_rs_link_echocat::{Master, MasterConfig};
 
 const NUM_TRANSDUCERS: usize = 249;
-const MTU: usize = 1500;
 
 struct Counted {
     exchanges: Arc<AtomicU64>,
@@ -91,8 +90,8 @@ fn twenty_devices_take_about_eleven_hundred_microseconds_on_the_wire() {
 }
 
 #[test]
-fn the_exchange_time_follows_the_budget_across_device_counts() {
-    for devices in [4usize, 10, 20] {
+fn the_exchange_time_grows_with_the_device_count() {
+    for (devices, expected_ns) in [(4usize, 217_920u64), (10, 535_440), (20, 1_060_480)] {
         let cycle = Duration::from_millis(4);
         let mut master = open(devices, cycle, |_| {
             Box::new(autd3_rs_link_echocat::sim::NopProcessData)
@@ -100,10 +99,10 @@ fn the_exchange_time_follows_the_budget_across_device_counts() {
         run(&mut master, devices, 4);
 
         let measured = master.bus().last_exchange_wire_time();
-        let budget = exchange_budget(devices, MTU, WireTiming::default());
         assert_eq!(
-            measured, budget,
-            "{devices} devices spent {measured:?} on the wire against a {budget:?} budget",
+            measured,
+            Duration::from_nanos(expected_ns),
+            "{devices} devices spent {measured:?} on the wire",
         );
     }
 }
@@ -120,10 +119,10 @@ fn a_period_shorter_than_the_exchange_fires_sync0_more_often_than_frames_arrive(
         })
     });
 
-    let budget = exchange_budget(devices, MTU, WireTiming::default());
+    let wire = master.bus().last_exchange_wire_time();
     assert!(
-        budget > cycle,
-        "the premise of this test is that {budget:?} does not fit in {cycle:?}",
+        wire > cycle,
+        "the premise of this test is that {wire:?} does not fit in {cycle:?}",
     );
 
     let cycles = 64;

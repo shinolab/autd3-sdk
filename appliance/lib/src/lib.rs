@@ -281,6 +281,16 @@ impl TuneCandidate {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TuneCalibration {
+    pub num_devices: usize,
+    pub period_ns: u64,
+    pub exchanges: u64,
+    pub exchange_mean_ns: u64,
+    pub exchange_worst_ns: u64,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TuneReport {
@@ -288,6 +298,7 @@ pub struct TuneReport {
     pub cancelled: bool,
     pub total: usize,
     pub current: Option<TuneTarget>,
+    pub calibration: Option<TuneCalibration>,
     pub candidates: Vec<TuneCandidate>,
     pub best: Option<usize>,
     pub error: Option<String>,
@@ -645,6 +656,26 @@ mod tests {
         let back: TuneCandidate = serde_json::from_str(&json).unwrap();
         assert_eq!(back.status, TuneStatus::Infeasible);
         assert_eq!(TuneStatus::Infeasible.label(), "infeasible");
+    }
+
+    #[test]
+    fn a_report_without_a_calibration_still_parses_and_carries_one_when_it_has_it() {
+        let report: TuneReport = serde_json::from_str(r#"{"running":false}"#).unwrap();
+        assert_eq!(report.calibration, None);
+
+        let measured = TuneReport {
+            calibration: Some(TuneCalibration {
+                num_devices: 20,
+                period_ns: 2_000_000,
+                exchanges: 512,
+                exchange_mean_ns: 1_103_700,
+                exchange_worst_ns: 1_146_119,
+            }),
+            ..TuneReport::default()
+        };
+        let json = serde_json::to_string(&measured).unwrap();
+        let back: TuneReport = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.calibration, measured.calibration);
     }
 
     #[test]

@@ -16,7 +16,7 @@ mod timer;
 
 pub use error::EchocatError;
 pub use link::{EchocatLink, StateChecker};
-pub use master::{FramePhase, SleepStrategy, WireTiming, exchange_budget};
+pub use master::{FramePhase, SleepStrategy, WireTiming};
 pub use option::{EchocatLinkOption, MAX_DC_START_DELAY, MAX_SYNC_TOLERANCE, MAX_SYNC0_PERIOD};
 
 #[doc(hidden)]

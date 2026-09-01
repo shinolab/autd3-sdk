@@ -447,6 +447,24 @@
         report.best === i ? "ok" : c.status === "ok" ? "" : "bad",
         applicable(i) ? i : null,
       ]);
+      if (report.calibration) {
+        const cal = report.calibration;
+        entries.unshift([
+          "measured",
+          cal.num_devices + " devices · exchange " + us(cal.exchange_mean_ns) + " / " +
+          us(cal.exchange_worst_ns) + " over " + cal.exchanges + " exchanges at " +
+          us(cal.period_ns) + " · every verdict below comes from this bus",
+          "",
+          null,
+        ]);
+      } else if (report.candidates.length) {
+        entries.unshift([
+          "measured",
+          "the exchange time was never measured up front; each candidate was judged from its own dwell",
+          "warn",
+          null,
+        ]);
+      }
       if (report.error) {
         entries.push(["error", report.error, "bad", null]);
       }
