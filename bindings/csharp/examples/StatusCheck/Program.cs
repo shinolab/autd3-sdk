@@ -31,7 +31,7 @@ internal static class Program
         string? last = null;
         while (!cts.IsCancellationRequested)
         {
-            var status = await checker.CheckAsync();
+            var status = checker.Check();
             var key = string.Join(",", status.Devices) + $"|{status.Recoveries}";
             if (key != last)
             {

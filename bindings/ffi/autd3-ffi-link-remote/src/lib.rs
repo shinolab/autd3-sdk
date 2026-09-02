@@ -11,7 +11,7 @@ use autd3_ffi_abi::{
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
 use autd3_rs_link_remote::{RemoteLinkOption, RemoteStateChecker};
-use tokio::sync::Mutex;
+use std::sync::Mutex;
 
 struct RemoteBackend {
     client: Arc<Client>,
@@ -152,24 +152,16 @@ impl ClientBackend for RemoteBackend {
 struct RemoteChecker(Arc<Mutex<RemoteStateChecker>>);
 
 impl CheckerBackend for RemoteChecker {
-    fn check(&self) -> BoxFuture<LinkStatusData> {
-        let checker = Arc::clone(&self.0);
-        Box::pin(async move {
-            link_runtime()
-                .spawn(async move {
-                    let status = checker
-                        .lock()
-                        .await
-                        .check()
-                        .await
-                        .map_err(|e| Error::Link(e.to_string()))?;
-                    Ok::<LinkStatusData, Error>(LinkStatusData {
-                        devices: status.devices().to_vec(),
-                        recoveries: status.recoveries(),
-                    })
-                })
-                .await
-                .map_err(join_err)?
+    fn check(&self) -> Result<LinkStatusData, Error> {
+        let status = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .check()
+            .map_err(|e| Error::Link(e.to_string()))?;
+        Ok(LinkStatusData {
+            devices: status.devices().to_vec(),
+            recoveries: status.recoveries(),
         })
     }
 }

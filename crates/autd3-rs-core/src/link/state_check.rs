@@ -5,7 +5,7 @@ use super::LinkStatus;
 pub trait StateCheck: Send + 'static {
     type Error: core::fmt::Display + Send + Sync + 'static;
 
-    fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Self::Error>> + Send;
+    fn check(&mut self) -> Result<LinkStatus, Self::Error>;
 }
 
 pub struct ConstStateChecker {
@@ -24,7 +24,7 @@ impl ConstStateChecker {
 impl StateCheck for ConstStateChecker {
     type Error = Infallible;
 
-    fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Self::Error>> + Send {
-        std::future::ready(Ok(self.status.clone()))
+    fn check(&mut self) -> Result<LinkStatus, Self::Error> {
+        Ok(self.status.clone())
     }
 }

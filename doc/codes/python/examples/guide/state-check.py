@@ -24,7 +24,7 @@ async def main() -> None:
         # ANCHOR: poll
         last = None
         while True:
-            status = await checker.check()
+            status = checker.check()
             if status != last:
                 for i, state in enumerate(status.device_states):
                     print(f"device[{i}]: {state}")

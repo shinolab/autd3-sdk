@@ -181,7 +181,7 @@ fn spawn_state_check<C: StateCheck>(mut checker: C, interval: Duration) -> State
         let stop = Arc::clone(&stop);
         async move {
             while !stop.load(Ordering::Relaxed) {
-                if checker.check().await.is_err() {
+                if checker.check().is_err() {
                     break;
                 }
                 tokio::time::sleep(interval).await;

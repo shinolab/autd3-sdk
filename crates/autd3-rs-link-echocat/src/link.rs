@@ -19,16 +19,18 @@ pub struct StateChecker {
 }
 
 impl StateChecker {
-    pub fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Infallible>> + Send + use<> {
-        let status = LinkStatus::new(self.state.states(), self.state.recoveries());
-        std::future::ready(Ok(status))
+    pub fn check(&mut self) -> Result<LinkStatus, Infallible> {
+        Ok(LinkStatus::new(
+            self.state.states(),
+            self.state.recoveries(),
+        ))
     }
 }
 
 impl StateCheck for StateChecker {
     type Error = Infallible;
 
-    fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Self::Error>> + Send {
+    fn check(&mut self) -> Result<LinkStatus, Self::Error> {
         StateChecker::check(self)
     }
 }
@@ -167,24 +169,22 @@ impl autd3_rs_core::IntoLink for EchocatLinkOption {
     fn into_link(
         self,
         geometry: &Geometry,
-    ) -> impl Future<Output = Result<EchocatLink, autd3_rs_core::error::LinkError>> + Send {
-        std::future::ready(
-            EchocatLink::open(&self)
-                .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e))
-                .and_then(|link| {
-                    if link.num_devices() == geometry.num_devices() {
-                        Ok(link)
-                    } else {
-                        let e = EchocatError::DeviceCountMismatch {
-                            expected: geometry.num_devices(),
-                            received: link.num_devices(),
-                        };
-                        Err(autd3_rs_core::error::LinkError::with_source(
-                            e.to_string(),
-                            e,
-                        ))
-                    }
-                }),
-        )
+    ) -> Result<EchocatLink, autd3_rs_core::error::LinkError> {
+        EchocatLink::open(&self)
+            .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e))
+            .and_then(|link| {
+                if link.num_devices() == geometry.num_devices() {
+                    Ok(link)
+                } else {
+                    let e = EchocatError::DeviceCountMismatch {
+                        expected: geometry.num_devices(),
+                        received: link.num_devices(),
+                    };
+                    Err(autd3_rs_core::error::LinkError::with_source(
+                        e.to_string(),
+                        e,
+                    ))
+                }
+            })
     }
 }

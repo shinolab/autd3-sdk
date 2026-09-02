@@ -911,17 +911,6 @@ pub(crate) fn run_status_loop<C: StateCheck>(
     checker_rx: &Receiver<C>,
 ) {
     autd3_rs_core::apply_thread_tuning(option.session_tuning());
-    let runtime = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(runtime) => Some(runtime),
-        Err(e) => {
-            tracing::warn!(error = %e, "no runtime for bus status sampling; \
-                 the client will not see the real bus state");
-            None
-        }
-    };
 
     let mut checker = None;
     loop {
@@ -939,8 +928,8 @@ pub(crate) fn run_status_loop<C: StateCheck>(
                 }
             }
         }
-        if let (Some(runtime), Some(checker)) = (runtime.as_ref(), checker.as_mut()) {
-            match runtime.block_on(checker.check()) {
+        if let Some(checker) = checker.as_mut() {
+            match checker.check() {
                 Ok(status) => shared.publish_status(&status),
                 Err(e) => tracing::debug!(error = %e, "bus state check failed"),
             }

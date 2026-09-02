@@ -107,7 +107,7 @@ async fn measure_with_link<L: Link>(
                 if shutdown.load(Ordering::Relaxed) || start.elapsed() >= total {
                     break;
                 }
-                match Box::pin(checker.check()).await {
+                match checker.check() {
                     Ok(status) => acc.observe(&status, start.elapsed()),
                     Err(_) => break,
                 }

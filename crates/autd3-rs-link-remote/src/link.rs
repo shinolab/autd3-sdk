@@ -42,11 +42,9 @@ impl IntoLink for RemoteLinkOption {
     fn into_link(
         self,
         geometry: &autd3_rs_core::Geometry,
-    ) -> impl Future<Output = Result<RemoteLink, autd3_rs_core::error::LinkError>> + Send {
-        std::future::ready(
-            RemoteLink::open(self.addr, self.timeout, geometry)
-                .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e)),
-        )
+    ) -> Result<RemoteLink, autd3_rs_core::error::LinkError> {
+        RemoteLink::open(self.addr, self.timeout, geometry)
+            .map_err(|e| autd3_rs_core::error::LinkError::with_source(e.to_string(), e))
     }
 }
 
@@ -56,20 +54,19 @@ pub struct RemoteStateChecker {
 }
 
 impl RemoteStateChecker {
-    pub fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Infallible>> + Send + use<> {
-        let status = self
+    pub fn check(&mut self) -> Result<LinkStatus, Infallible> {
+        Ok(self
             .status
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone();
-        std::future::ready(Ok(status))
+            .clone())
     }
 }
 
 impl StateCheck for RemoteStateChecker {
     type Error = Infallible;
 
-    fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Self::Error>> + Send {
+    fn check(&mut self) -> Result<LinkStatus, Self::Error> {
         RemoteStateChecker::check(self)
     }
 }

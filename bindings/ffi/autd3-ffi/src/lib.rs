@@ -2020,30 +2020,24 @@ pub unsafe extern "C" fn autd3_client_checker(client: *const ClientHandle) -> *m
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_checker_check(
     checker: *const CheckerHandle,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
-        return;
-    };
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> *mut LinkStatus {
     let Some(checker) = (unsafe { handle_ref(checker) }) else {
-        ctx.err("null checker");
-        return;
+        unsafe { write_cstr(out_err, out_err_len, "null checker") };
+        return std::ptr::null_mut();
     };
 
-    let fut = checker.0.check();
-    runtime().spawn(async move {
-        match fut.await {
-            Ok(status) => {
-                let status = LinkStatus {
-                    devices: status.devices,
-                    recoveries: status.recoveries,
-                };
-                ctx.ok(into_handle(status).cast());
-            }
-            Err(e) => ctx.err_of(&e),
+    match checker.0.check() {
+        Ok(status) => into_handle(LinkStatus {
+            devices: status.devices,
+            recoveries: status.recoveries,
+        }),
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            std::ptr::null_mut()
         }
-    });
+    }
 }
 
 #[unsafe(no_mangle)]

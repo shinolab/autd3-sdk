@@ -28,7 +28,7 @@ internal static class Sample
             LinkStatus? last = null;
             while (true)
             {
-                var status = await checker.CheckAsync();
+                var status = checker.Check();
                 if (status != last)
                 {
                     for (var i = 0; i < status.Devices.Count; i++)

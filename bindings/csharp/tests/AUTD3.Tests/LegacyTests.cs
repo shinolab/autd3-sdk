@@ -74,7 +74,7 @@ namespace AUTD3.Tests
             using var k = checker;
 
             Assert.Equal(1, client.NumDevices);
-            var status = await checker.CheckAsync();
+            var status = checker.Check();
             Assert.Equal(DeviceState.Op, Assert.Single(status.Devices));
             Assert.True(status.AllOp);
             Assert.False(status.AnyLost);

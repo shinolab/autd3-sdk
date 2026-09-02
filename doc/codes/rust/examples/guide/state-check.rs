@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR: poll
     let mut last: Option<LinkStatus> = None;
     loop {
-        let status = checker.check().await?;
+        let status = checker.check()?;
         if last.as_ref() != Some(&status) {
             for (i, state) in status.devices().iter().enumerate() {
                 println!("device[{i}]: {state}");
