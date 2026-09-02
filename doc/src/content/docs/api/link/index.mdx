@@ -34,31 +34,3 @@ Link と OS の組み合わせごとの大まかな性能の傾向を以下に�
 | レイテンシ   | ⭐                | ⭐⭐⭐              | ⭐⭐              |
 | 安定性       | ⭐⭐⭐            | ⭐⭐                | ⭐                |
 
-参考として, 以下に各環境での実測値を載せる.
-
-<details>
-<summary>TwinCAT (Windows)</summary>
-
-**測定条件**
-
-- OS: Windows 11 Pro 25H2
-- NIC: Intel I219-LM
-- デバイス数: 2
-
-**throughput (100000 sends, streaming)**
-```
-cmd / sec     :       815.15
-byte / sec    :    510286.19
-```
-
-**latency (10000 sends, stop-and-wait)**
-```
-mean          : 9.261 ms
-p50           : 9.009 ms
-p95           : 11.459 ms
-p99           : 12.045 ms
-min           : 7.129 ms
-max           : 17.021 ms
-```
-
-</details>
