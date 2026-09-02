@@ -33,31 +33,3 @@ The values depend heavily on the NIC, kernel settings, OS tuning, and so on, so 
 | Latency    | ⭐                | ⭐⭐⭐              | ⭐⭐              |
 | Stability  | ⭐⭐⭐            | ⭐⭐                | ⭐                |
 
-For reference, the measured values for each environment are listed below.
-
-<details>
-<summary>TwinCAT (Windows)</summary>
-
-**Conditions**
-
-- OS: Windows 11 Pro 25H2
-- NIC: Intel I219-LM
-- Devices: 2
-
-**throughput (100000 sends, streaming)**
-```
-cmd / sec     :       815.15
-byte / sec    :    510286.19
-```
-
-**latency (10000 sends, stop-and-wait)**
-```
-mean          : 9.261 ms
-p50           : 9.009 ms
-p95           : 11.459 ms
-p99           : 12.045 ms
-min           : 7.129 ms
-max           : 17.021 ms
-```
-
-</details>
