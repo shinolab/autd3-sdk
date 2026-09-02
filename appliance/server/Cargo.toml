@@ -26,6 +26,7 @@ serde.workspace = true
 serde_ignored.workspace = true
 toml.workspace = true
 axum.workspace = true
+pcap-file.workspace = true
 if-addrs = { version = "0.15.0", default-features = false, features = [
     "link-local",
 ] }

@@ -1,0 +1,31 @@
+[package]
+name = "autd3-rs-wiretrace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+description = "Offline replay and analysis of AUTD3 EtherCAT wire captures (pcap/pcapng)."
+
+[lib]
+name = "autd3_rs_wiretrace"
+path = "src/lib.rs"
+
+[[bin]]
+name = "autd3-rs-wiretrace"
+path = "src/main.rs"
+
+[dependencies]
+autd3-rs-core.workspace = true
+autd3-rs-firmware-emulator.workspace = true
+autd3-rs-link-echocat.workspace = true
+autd3-cpu-wire.workspace = true
+pcap-file.workspace = true
+thiserror.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+
+[lints]
+workspace = true

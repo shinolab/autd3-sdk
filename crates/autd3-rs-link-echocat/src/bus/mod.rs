@@ -9,7 +9,7 @@ mod macos;
 mod windows;
 
 #[cfg(target_os = "linux")]
-pub use linux::{RawSocket, interface_candidates};
+pub use linux::{CaptureSocket, RawSocket, interface_candidates};
 #[cfg(target_os = "macos")]
 pub use macos::{RawSocket, interface_candidates};
 #[cfg(target_os = "windows")]

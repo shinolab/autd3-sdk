@@ -173,6 +173,48 @@ pub struct WifiForget {
     pub force: bool,
 }
 
+pub const DEFAULT_CAPTURE_MAX_BYTES: u64 = 64 * 1024 * 1024;
+pub const MAX_CAPTURE_MAX_BYTES: u64 = 512 * 1024 * 1024;
+pub const DEFAULT_CAPTURE_MAX_SECONDS: u64 = 60;
+pub const MAX_CAPTURE_MAX_SECONDS: u64 = 3600;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CaptureRequest {
+    pub max_bytes: u64,
+    pub max_seconds: u64,
+}
+
+impl Default for CaptureRequest {
+    fn default() -> Self {
+        Self {
+            max_bytes: DEFAULT_CAPTURE_MAX_BYTES,
+            max_seconds: DEFAULT_CAPTURE_MAX_SECONDS,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CaptureState {
+    #[default]
+    Idle,
+    Running,
+    Finished,
+    Failed,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CaptureStatus {
+    pub state: CaptureState,
+    pub interface: String,
+    pub frames: u64,
+    pub bytes: u64,
+    pub elapsed_seconds: u64,
+    pub stopped_because: Option<String>,
+    pub error: Option<String>,
+}
+
 pub const FRAME_PHASE_AUTO: u8 = 0;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -15,9 +15,9 @@ pub const SOURCE_MAC_OFFSET: usize = 6;
 pub const LOCALLY_ADMINISTERED_BIT: u8 = 0x02;
 
 const BROADCAST_MAC: [u8; 6] = [0xff; 6];
-const ECAT_TYPE_DLPDU: u16 = 1;
-const LENGTH_MASK: u16 = 0x07ff;
-const MORE_DATAGRAMS: u16 = 0x8000;
+pub const ECAT_TYPE_DLPDU: u16 = 1;
+pub const LENGTH_MASK: u16 = 0x07ff;
+pub const MORE_DATAGRAMS: u16 = 0x8000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
