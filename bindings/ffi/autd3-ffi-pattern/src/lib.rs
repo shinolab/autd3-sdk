@@ -5,7 +5,7 @@ use autd3_ffi_abi::{
 use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 use autd3_rs_core::{Angle, Geometry, Length, Point3, UnitVector3, Vector3, Velocity};
-use autd3_rs_pattern::{BesselOption, FocusOption, PlaneOption};
+use autd3_rs_pattern::{BesselOption, FocusOption, PlaneOption, TwinTrapOption, VortexOption};
 
 #[repr(C)]
 pub struct Autd3Emission {
@@ -474,6 +474,217 @@ pub unsafe extern "C" fn autd3_pattern_bessel_transducer(
         Angle::from_rad(theta_rad),
         Length::from_mm(wavelength_mm),
         &BesselOption {
+            intensity: option.intensity(),
+            phase_offset: option.phase_offset(),
+        },
+    );
+    unsafe { write_emissions(std::slice::from_ref(&e), out) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_twin_trap(
+    geometry: *const Geometry,
+    target: *const f32,
+    normal: *const f32,
+    wavelength_mm: f32,
+    option: *const Autd3PatternOption,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    let (Some(geometry), Some(target), Some(normal), Some(option), Some(buffer)) = (
+        unsafe { handle_ref(geometry) },
+        unsafe { point(target) },
+        unsafe { unit_vector(normal) },
+        unsafe { handle_ref(option) },
+        unsafe { handle_mut(buffer) },
+    ) else {
+        return -1;
+    };
+
+    if buffer.0.len() != geometry.num_devices() {
+        return -1;
+    }
+    autd3_rs_pattern::twin_trap(
+        geometry,
+        target,
+        normal,
+        Length::from_mm(wavelength_mm),
+        &TwinTrapOption {
+            intensity: option.intensity(),
+            phase_offset: option.phase_offset(),
+        },
+        &mut buffer.0,
+    );
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_twin_trap_device(
+    geometry: *const Geometry,
+    dev: usize,
+    target: *const f32,
+    normal: *const f32,
+    wavelength_mm: f32,
+    option: *const Autd3PatternOption,
+    dst: *mut Autd3Emission,
+) -> i32 {
+    let (Some(target), Some(normal), Some(option)) = (
+        unsafe { point(target) },
+        unsafe { unit_vector(normal) },
+        unsafe { handle_ref(option) },
+    ) else {
+        return -1;
+    };
+
+    unsafe {
+        with_device_dst(geometry, dev, dst, |device, buf| {
+            autd3_rs_pattern::twin_trap_device(
+                device,
+                target,
+                normal,
+                Length::from_mm(wavelength_mm),
+                &TwinTrapOption {
+                    intensity: option.intensity(),
+                    phase_offset: option.phase_offset(),
+                },
+                buf,
+            );
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_twin_trap_transducer(
+    position: *const f32,
+    target: *const f32,
+    normal: *const f32,
+    wavelength_mm: f32,
+    option: *const Autd3PatternOption,
+    out: *mut Autd3Emission,
+) -> i32 {
+    let (Some(position), Some(target), Some(normal), Some(option)) = (
+        unsafe { point(position) },
+        unsafe { point(target) },
+        unsafe { unit_vector(normal) },
+        unsafe { handle_ref(option) },
+    ) else {
+        return -1;
+    };
+
+    let e = autd3_rs_pattern::twin_trap_transducer(
+        position,
+        target,
+        normal,
+        Length::from_mm(wavelength_mm),
+        &TwinTrapOption {
+            intensity: option.intensity(),
+            phase_offset: option.phase_offset(),
+        },
+    );
+    unsafe { write_emissions(std::slice::from_ref(&e), out) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_vortex(
+    geometry: *const Geometry,
+    target: *const f32,
+    axis: *const f32,
+    order: i32,
+    wavelength_mm: f32,
+    option: *const Autd3PatternOption,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    let (Some(geometry), Some(target), Some(axis), Some(option), Some(buffer)) = (
+        unsafe { handle_ref(geometry) },
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        unsafe { handle_ref(option) },
+        unsafe { handle_mut(buffer) },
+    ) else {
+        return -1;
+    };
+
+    if buffer.0.len() != geometry.num_devices() {
+        return -1;
+    }
+    autd3_rs_pattern::vortex(
+        geometry,
+        target,
+        axis,
+        order,
+        Length::from_mm(wavelength_mm),
+        &VortexOption {
+            intensity: option.intensity(),
+            phase_offset: option.phase_offset(),
+        },
+        &mut buffer.0,
+    );
+    0
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_pattern_vortex_device(
+    geometry: *const Geometry,
+    dev: usize,
+    target: *const f32,
+    axis: *const f32,
+    order: i32,
+    wavelength_mm: f32,
+    option: *const Autd3PatternOption,
+    dst: *mut Autd3Emission,
+) -> i32 {
+    let (Some(target), Some(axis), Some(option)) = (
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        unsafe { handle_ref(option) },
+    ) else {
+        return -1;
+    };
+
+    unsafe {
+        with_device_dst(geometry, dev, dst, |device, buf| {
+            autd3_rs_pattern::vortex_device(
+                device,
+                target,
+                axis,
+                order,
+                Length::from_mm(wavelength_mm),
+                &VortexOption {
+                    intensity: option.intensity(),
+                    phase_offset: option.phase_offset(),
+                },
+                buf,
+            );
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_vortex_transducer(
+    position: *const f32,
+    target: *const f32,
+    axis: *const f32,
+    order: i32,
+    wavelength_mm: f32,
+    option: *const Autd3PatternOption,
+    out: *mut Autd3Emission,
+) -> i32 {
+    let (Some(position), Some(target), Some(axis), Some(option)) = (
+        unsafe { point(position) },
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        unsafe { handle_ref(option) },
+    ) else {
+        return -1;
+    };
+
+    let e = autd3_rs_pattern::vortex_transducer(
+        position,
+        target,
+        axis,
+        order,
+        Length::from_mm(wavelength_mm),
+        &VortexOption {
             intensity: option.intensity(),
             phase_offset: option.phase_offset(),
         },

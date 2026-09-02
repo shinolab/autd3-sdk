@@ -1,8 +1,8 @@
 use core::f32::consts::PI;
 
-use autd3_rs_core::common::Length;
 use autd3_rs_core::common::units::rad;
-use autd3_rs_core::geometry::{Device, Geometry, Point3};
+use autd3_rs_core::common::{Angle, Length};
+use autd3_rs_core::geometry::{Device, Geometry, Point3, Vector3};
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -20,6 +20,10 @@ impl Default for FocusOption {
     }
 }
 
+pub(crate) fn focus_phase(offset: Vector3<f32>, wavelength: Length) -> Angle {
+    -offset.norm() / wavelength.mm() * 2.0 * PI * rad
+}
+
 #[must_use]
 pub fn focus_transducer(
     position: Point3<f32>,
@@ -27,9 +31,8 @@ pub fn focus_transducer(
     wavelength: Length,
     option: &FocusOption,
 ) -> Emission {
-    let dist = (target - position).norm();
     Emission {
-        phase: Phase::from(-dist / wavelength.mm() * 2.0 * PI * rad) + option.phase_offset,
+        phase: Phase::from(focus_phase(position - target, wavelength)) + option.phase_offset,
         intensity: option.intensity,
     }
 }

@@ -8,7 +8,8 @@ use autd3_rs_core::value::{Emission, Intensity, Phase};
 use autd3_rs_core::{Length, Point3, Velocity};
 use autd3_rs_pattern::{
     BesselOption as CoreBesselOption, FocusOption as CoreFocusOption,
-    PlaneOption as CorePlaneOption,
+    PlaneOption as CorePlaneOption, TwinTrapOption as CoreTwinTrapOption,
+    VortexOption as CoreVortexOption,
 };
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
@@ -141,6 +142,44 @@ impl BesselOption {
         #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
     ) -> Self {
         Self(CoreBesselOption {
+            intensity,
+            phase_offset,
+        })
+    }
+}
+
+#[pyclass(name = "TwinTrapOption", module = "autd3_pattern", from_py_object)]
+#[derive(Clone, Copy)]
+pub struct TwinTrapOption(pub(crate) CoreTwinTrapOption);
+
+#[pymethods]
+impl TwinTrapOption {
+    #[new]
+    #[pyo3(signature = (intensity = Intensity::MAX, phase_offset = Phase::ZERO))]
+    fn new(
+        #[pyo3(from_py_with = extract_intensity)] intensity: Intensity,
+        #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
+    ) -> Self {
+        Self(CoreTwinTrapOption {
+            intensity,
+            phase_offset,
+        })
+    }
+}
+
+#[pyclass(name = "VortexOption", module = "autd3_pattern", from_py_object)]
+#[derive(Clone, Copy)]
+pub struct VortexOption(pub(crate) CoreVortexOption);
+
+#[pymethods]
+impl VortexOption {
+    #[new]
+    #[pyo3(signature = (intensity = Intensity::MAX, phase_offset = Phase::ZERO))]
+    fn new(
+        #[pyo3(from_py_with = extract_intensity)] intensity: Intensity,
+        #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
+    ) -> Self {
+        Self(CoreVortexOption {
             intensity,
             phase_offset,
         })
@@ -322,6 +361,58 @@ fn bessel(
 }
 
 #[pyfunction]
+#[pyo3(signature = (geometry, target, normal, wavelength, option, dst))]
+fn twin_trap(
+    geometry: &Bound<'_, PyAny>,
+    target: &Bound<'_, PyAny>,
+    normal: &Bound<'_, PyAny>,
+    wavelength: f32,
+    option: TwinTrapOption,
+    mut dst: PyRefMut<'_, PatternBuffer>,
+) -> PyResult<()> {
+    let capsule = capsule_of(geometry)?;
+    let geometry = geometry_from_capsule(&capsule)?;
+    let target = extract_point(target)?;
+    let normal = extract_direction(normal)?;
+    autd3_rs_pattern::twin_trap(
+        geometry,
+        target,
+        normal,
+        Length::from_mm(wavelength),
+        &option.0,
+        &mut dst.inner,
+    );
+    Ok(())
+}
+
+#[pyfunction]
+#[pyo3(signature = (geometry, target, axis, order, wavelength, option, dst))]
+fn vortex(
+    geometry: &Bound<'_, PyAny>,
+    target: &Bound<'_, PyAny>,
+    axis: &Bound<'_, PyAny>,
+    order: i32,
+    wavelength: f32,
+    option: VortexOption,
+    mut dst: PyRefMut<'_, PatternBuffer>,
+) -> PyResult<()> {
+    let capsule = capsule_of(geometry)?;
+    let geometry = geometry_from_capsule(&capsule)?;
+    let target = extract_point(target)?;
+    let axis = extract_direction(axis)?;
+    autd3_rs_pattern::vortex(
+        geometry,
+        target,
+        axis,
+        order,
+        Length::from_mm(wavelength),
+        &option.0,
+        &mut dst.inner,
+    );
+    Ok(())
+}
+
+#[pyfunction]
 #[pyo3(signature = (emission, dst))]
 fn uniform(emission: &Bound<'_, PyAny>, mut dst: PyRefMut<'_, PatternBuffer>) -> PyResult<()> {
     autd3_rs_pattern::uniform(extract_emission(emission)?, &mut dst.inner);
@@ -345,10 +436,14 @@ fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FocusOption>()?;
     m.add_class::<PlaneOption>()?;
     m.add_class::<BesselOption>()?;
+    m.add_class::<TwinTrapOption>()?;
+    m.add_class::<VortexOption>()?;
     m.add_function(wrap_pyfunction!(wavelength, m)?)?;
     m.add_function(wrap_pyfunction!(focus, m)?)?;
     m.add_function(wrap_pyfunction!(plane, m)?)?;
     m.add_function(wrap_pyfunction!(bessel, m)?)?;
+    m.add_function(wrap_pyfunction!(twin_trap, m)?)?;
+    m.add_function(wrap_pyfunction!(vortex, m)?)?;
     m.add_function(wrap_pyfunction!(uniform, m)?)?;
     m.add_function(wrap_pyfunction!(null, m)?)?;
     m.add_function(wrap_pyfunction!(_read_pattern_capsule, m)?)?;

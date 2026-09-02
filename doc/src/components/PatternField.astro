@@ -1,6 +1,6 @@
 ---
 interface Props {
-  kind?: "focus" | "plane" | "bessel";
+  kind?: "focus" | "plane" | "bessel" | "twin-trap" | "vortex";
 }
 const { kind = "focus" } = Astro.props;
 const config = JSON.stringify({ kind });
@@ -86,6 +86,26 @@ const config = JSON.stringify({ kind });
     bessel: [
       { key: "theta", label: "theta", unit: "°", min: 50, max: 88, step: 1, def: 72 },
     ],
+    "twin-trap": [
+      { key: "fz", label: "target.z", unit: "mm", min: 20, max: 260, step: 1, def: 150 },
+    ],
+    vortex: [
+      { key: "fz", label: "target.z", unit: "mm", min: 20, max: 260, step: 1, def: 150 },
+      { key: "order", label: "order", unit: "", min: 1, max: 4, step: 1, def: 1 },
+    ],
+  };
+
+  interface View {
+    plane: "xz" | "xy";
+    half: number;
+  }
+
+  const VIEWS: Record<string, View> = {
+    focus: { plane: "xz", half: 110 },
+    plane: { plane: "xz", half: 110 },
+    bessel: { plane: "xz", half: 110 },
+    "twin-trap": { plane: "xy", half: 20 },
+    vortex: { plane: "xy", half: 20 },
   };
 
   function phaseFor(kind: string, cfg: Cfg): Float32Array {
@@ -113,6 +133,20 @@ const config = JSON.stringify({ kind });
         const rxy = Math.sqrt(rx * rx + ry * ry);
         ph[i] = (-(ca * rxy) / WAVELEN) * TWO_PI;
       }
+    } else if (kind === "twin-trap" || kind === "vortex") {
+      const fz = cfg.fz;
+      for (let i = 0; i < N; i++) {
+        const rx = txs[i] - CX;
+        const ry = tys[i] - CY;
+        const d = Math.sqrt(rx * rx + ry * ry + fz * fz);
+        const extra =
+          kind === "twin-trap"
+            ? rx >= 0
+              ? Math.PI
+              : 0
+            : cfg.order * Math.atan2(ry, rx);
+        ph[i] = (-d / WAVELEN) * TWO_PI - extra;
+      }
     }
     return ph;
   }
@@ -124,24 +158,26 @@ const config = JSON.stringify({ kind });
     canvas.height = H;
     const ctx = canvas.getContext("2d")!;
 
-    const xmin = CX - 110;
-    const xmax = CX + 110;
-    const zmin = 0;
-    const zmax = 260;
+    const view = VIEWS[kind] ?? { plane: "xz", half: 110 };
+    const xmin = CX - view.half;
+    const xmax = CX + view.half;
+    const vmin = view.plane === "xz" ? 0 : CY - view.half;
+    const vmax = view.plane === "xz" ? 260 : CY + view.half;
 
     const phase = phaseFor(kind, cfg);
 
     const mag = new Float32Array(W * H);
     let maxMag = 1e-9;
     for (let py = 0; py < H; py++) {
-      const wz = zmax - ((zmax - zmin) * py) / (H - 1);
+      const wv = vmax - ((vmax - vmin) * py) / (H - 1);
       for (let px = 0; px < W; px++) {
         const wx = xmin + ((xmax - xmin) * px) / (W - 1);
         let re = 0;
         let im = 0;
         for (let i = 0; i < N; i++) {
           const dx = wx - txs[i];
-          const dy = CY - tys[i];
+          const dy = view.plane === "xz" ? CY - tys[i] : wv - tys[i];
+          const wz = view.plane === "xz" ? wv : cfg.fz;
           const d = Math.sqrt(dx * dx + dy * dy + wz * wz);
           const p = -phase[i] - K * d;
           const a = 1 / d;
@@ -166,7 +202,7 @@ const config = JSON.stringify({ kind });
 
     if (kind === "focus") {
       const mx = ((CX + cfg.fx - xmin) / (xmax - xmin)) * W;
-      const my = ((zmax - cfg.fz) / (zmax - zmin)) * H;
+      const my = ((vmax - cfg.fz) / (vmax - vmin)) * H;
       ctx.strokeStyle = "rgba(255,255,255,0.9)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();

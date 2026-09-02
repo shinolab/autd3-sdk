@@ -75,6 +75,7 @@ bytemuck = { workspace = true, optional = true }
 
 [dev-dependencies]
 approx.workspace = true
+autd3-rs-pattern.workspace = true
 
 [lints]
 workspace = true
