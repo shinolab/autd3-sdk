@@ -25,9 +25,9 @@ cargo xtask tool perftest --mem-profile -- --interface enp3s0 --count 10000
 
 | Flag                  | Description |
 |-----------------------|-------------|
-| `--link <KIND>`       | `echocat` (default), `ethercrab`, `twincat`, or `nop`. |
+| `--link <KIND>`       | `echocat` (default), `twincat`, `remote`, or `nop`. |
 | `--command <CMD>`     | `pattern` (default), `write-pattern-buffer`, or `nop`. See the table below. |
-| `--interface <NAME>`  | EtherCAT network interface (for `echocat` / `ethercrab`). Not valid with `--link nop`. |
+| `--interface <NAME>`  | EtherCAT network interface (for `echocat`). Not valid with `--link nop`. |
 | `--devices <N>`       | Expected device count. Required for `nop` (nothing to scan); a mismatch guard otherwise. |
 | `--twincat-remote <IP>` | Connect to a remote TwinCAT host over ADS (requires `--ams-net-id`). Omit for a local TwinCAT runtime. `--link twincat` only. |
 | `--ams-net-id <ID>`   | AMS Net ID of the remote target, e.g. `192.168.0.1.1.1`. `--link twincat` only. |

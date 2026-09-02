@@ -30,7 +30,6 @@ fn render(cli: &Cli) -> String {
 
 fn link_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
     let sync0_period = cli.sync0_period;
-    let sync0_shift = cli.sync0_shift();
     match cli.link {
         LinkKind::Echocat => {
             imports.push("std::time::Duration");
@@ -56,20 +55,6 @@ fn link_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
             let _ = writeln!(body, "    ..Default::default()");
             let _ = writeln!(body, "}})?;");
         }
-        LinkKind::Ethercrab => {
-            imports.push("std::time::Duration");
-            let _ = writeln!(
-                body,
-                "let link = EtherCrabLink::open(EtherCrabLinkOption {{"
-            );
-            if let Some(iface) = &cli.interface {
-                let _ = writeln!(body, "    iface: {iface:?}.into(),");
-            }
-            let _ = writeln!(body, "    sync0_period: {},", fmt_duration(sync0_period));
-            let _ = writeln!(body, "    sync0_shift: {},", fmt_duration(sync0_shift));
-            let _ = writeln!(body, "    ..Default::default()");
-            let _ = writeln!(body, "}})?;");
-        }
         LinkKind::Twincat => {
             let _ = writeln!(
                 body,
@@ -91,7 +76,7 @@ fn link_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
         LinkKind::Nop => {
             let _ = writeln!(
                 body,
-                "// --link nop is a benchmark stub; use a real link (ethercrab/twincat) here.",
+                "// --link nop is a benchmark stub; use a real link (echocat/twincat) here.",
             );
         }
     }
@@ -126,12 +111,6 @@ fn imports_block(link: LinkKind, spin: bool, frame_phase: bool, imports: &[&str]
         .collect();
     let _ = writeln!(out, "use autd3_rs::{{{}}};", autd.join(", "));
     match link {
-        LinkKind::Ethercrab => {
-            let _ = writeln!(
-                out,
-                "use autd3_rs_link_ethercrab::{{EtherCrabLink, EtherCrabLinkOption}};",
-            );
-        }
         LinkKind::Echocat => {
             let _ = writeln!(
                 out,

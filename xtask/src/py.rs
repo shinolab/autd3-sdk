@@ -12,14 +12,13 @@ pub(crate) const WHEELS: &[&str] = &[
     "autd3-pattern-holo",
     "autd3-modulation",
     "autd3-link-echocat",
-    "autd3-link-ethercrab",
     "autd3-link-remote",
     "autd3-link-twincat",
     "autd3-link-nop",
     "autd3",
     "autd3-emulator",
 ];
-const NATIVE_LIB_WHEELS: &[&str] = &["autd3-link-ethercrab"];
+const NATIVE_LIB_WHEELS: &[&str] = &[];
 
 #[derive(Subcommand)]
 pub enum PyCmd {

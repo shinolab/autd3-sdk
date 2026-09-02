@@ -11,7 +11,7 @@ namespace AUTD3.Samples
     // Coordinates are in the Unity frame (metres, left-handed): a device emits along its
     // local -z, so the focus that the dotnet sample writes as new Vector3(0, 0, 150) is
     // new Vector3(0, 0, -0.15f) here.
-    // The Nop link runs without hardware; swap it for new EtherCrab(...) on a real device.
+    // The Nop link runs without hardware; swap it for new Echocat(...) on a real device.
     public sealed class FocusSineSample : MonoBehaviour
     {
         private Client _client;

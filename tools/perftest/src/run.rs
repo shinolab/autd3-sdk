@@ -13,7 +13,6 @@ use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, Frames, IntoLink, Link, LinkStats,
     ResponseFuture, RtPriority, RtSchedulePolicy, StateCheck,
 };
-use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption};
 use autd3_rs_link_remote::{DiscoveryOption, RemoteLink, discover};
 
 use autd3_rs_link_twincat::{TwinCATLink, TwinCATLinkOption};
@@ -194,21 +193,6 @@ fn spawn_state_check<C: StateCheck>(mut checker: C, interval: Duration) -> State
 
 pub async fn run(cli: &Cli) -> Result<RunOutput> {
     match cli.link {
-        LinkKind::Ethercrab => {
-            let link_cfg = EtherCrabLinkOption {
-                iface: cli.interface.clone().into(),
-                sync0_period: cli.sync0_period,
-                sync0_shift: cli.sync0_shift(),
-                ..Default::default()
-            };
-            let link = Box::pin(EtherCrabLink::open(link_cfg))
-                .await
-                .context("opening EtherCAT link (ethercrab)")?;
-            let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_bus_link(link, cli)).await;
-            guard.stop().await;
-            out
-        }
         LinkKind::Echocat => {
             let link_cfg = autd3_rs_link_echocat::EchocatLinkOption {
                 iface: cli.interface.clone().into(),

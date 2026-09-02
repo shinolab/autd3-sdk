@@ -15,7 +15,6 @@ const CS_NATIVE: &[(&str, &str)] = &[
     ("AUTD3.Pattern.Holo", "autd3_pattern_holo"),
     ("AUTD3.Modulation", "autd3_modulation"),
     ("AUTD3.Link.Echocat", "autd3_link_echocat"),
-    ("AUTD3.Link.Ethercrab", "autd3_link_ethercrab"),
     ("AUTD3.Link.Remote", "autd3_link_remote"),
     ("AUTD3.Link.TwinCAT", "autd3_link_twincat"),
     ("AUTD3.Link.Nop", "autd3_link_nop"),

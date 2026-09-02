@@ -1,6 +1,6 @@
 # autd3-rs-synctune
 
-A CLI tool that measures how well a real EtherCAT link holds OP state under load, and sweeps `sync0_period` / `sync0_shift` to find the setting that holds it best.
+A CLI tool that measures how well a real EtherCAT link holds OP state under load, and sweeps `sync0_period` / `frame_phase` to find the setting that holds it best.
 
 ## Run
 
@@ -12,7 +12,7 @@ The link uses raw sockets, so it needs privileges: root or `CAP_NET_RAW` on Linu
 cargo xtask tool synctune -- measure --interface enp3s0
 
 # Sweep period 1ms..2ms x shift 0..100% and report the best candidate
-cargo xtask tool synctune -- tune --link ethercrab --interface enp3s0
+cargo xtask tool synctune -- tune --interface enp3s0
 
 # Long single-configuration run for the bus-clock vs host-clock rate only
 cargo xtask tool synctune -- drift --interface enp3s0 --duration 300s
@@ -32,7 +32,6 @@ Shared by all three subcommands.
 
 | Flag                  | Description |
 |-----------------------|-------------|
-| `--link <KIND>`       | `echocat` (default) or `ethercrab`. |
 | `--interface <NAME>`  | EtherCAT network interface (`*LinkOption.iface`). |
 | `--devices <N>`       | Expected device count; a mismatch aborts the run. |
 | `--mode <MODE>`       | Load pattern: `streaming` (default) or `stop-and-wait`. Streaming keeps the bus at its one-frame-per-cycle ceiling, which is the condition drops show up under. |
@@ -42,8 +41,6 @@ Shared by all three subcommands.
 | `--low-latency`       | Request the slave's low-latency (inline ISR) processing mode instead of the default FIFO path (`ClientConfig.low_latency`). Default: off. |
 | `--rt-priority <N>` / `--rt-policy <P>` / `--rt-affinity <CORE>` | RT thread scheduling (`ClientConfig.rt_priority` / `rt_policy` / `rt_affinity`). `--rt-priority` is 0..=99; omit it to keep the library default (TimeCritical on Windows, SCHED_FIFO 80 elsewhere). `--rt-affinity` alias: `--rt-core`. |
 | `--no-rt-priority`    | Force `rt_priority = None` (no RT scheduling), overriding the library default. Use it to compare against the pre-default behaviour. Conflicts with `--rt-priority`. |
-| `--tx-rx-priority <N>` / `--tx-rx-policy <P>` / `--tx-rx-affinity <CORE>` | `--link ethercrab` only: the tx/rx pump thread (`EtherCrabLinkOptionFull.tx_rx_*`). Omit `--tx-rx-priority` to keep the library default (90 outside Windows). |
-| `--no-tx-rx-priority` | `--link ethercrab` only: leave the pump thread at the OS default. Conflicts with `--tx-rx-priority`. |
 | `--dwell <DUR>`       | Measurement window per candidate. Default = `30s`. |
 | `--warmup <DUR>`      | Time excluded from the statistics at the start of each candidate. Default = `5s`. |
 | `--poll-interval <DUR>` | How often the AL state and DC time are sampled. Default = `100ms`. |
@@ -54,13 +51,13 @@ Shared by all three subcommands.
 
 | Subcommand | Flag | Description |
 |------------|------|-------------|
-| `measure` / `drift` | `--sync0-period <DUR>` | SYNC0 / EtherCAT cycle period, e.g. `1ms` / `500us` (`*LinkOption.sync0_period`). Default = `1ms`. |
-| `measure` / `drift` | `--shift-percent <N>` | SYNC0 shift as a percent of the period (`*LinkOption.sync0_shift = period * percent`). Default = 0. |
+| `measure` / `drift` | `--sync0-period <DUR>` | SYNC0 / EtherCAT cycle period, e.g. `1ms` / `500us` (`EchocatLinkOption.sync0_period`). Default = `1ms`. |
+| `measure` / `drift` | `--shift-percent <N>` | Frame phase as a percent of the period (`EchocatLinkOption.frame_phase = period * percent`). Default = 0, which lets the measured exchange centre it. |
 | `drift`    | `--duration <DUR>` | Sampling window; overrides `--dwell`. Longer windows tighten the ppm estimate. Default = `120s`. |
 | `tune`     | `--period-min` / `--period-max` / `--period-step` | Period grid. Defaults = `1ms` / `2ms` / `1ms`. |
 | `tune`     | `--shift-min` / `--shift-max` / `--shift-step` | Shift grid in percent. Defaults = 0 / 100 / 50. |
 
-A SYNC0 shift is not valid with `--link echocat`: it keeps SYNC0 at shift 0 and phase-locks the send instant on its own.
+The link keeps SYNC0 at shift 0 and phase-locks the send instant on its own, so `--shift-percent` moves the frame rather than the SYNC0 pulse.
 Use `--shift-max 0` when sweeping over echocat.
 
 The total run time of `tune` is `candidates * (--warmup + --dwell)`.

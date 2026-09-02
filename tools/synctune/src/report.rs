@@ -6,7 +6,7 @@ use std::time::Duration;
 use autd3_rs::protocol::TX_FRAME_BYTES;
 use clap::ValueEnum;
 
-use crate::cli::{Common, LinkKind};
+use crate::cli::Common;
 use crate::monitor::{CandidateResult, CandidateStatus};
 
 fn micros(d: Duration) -> u128 {
@@ -36,21 +36,15 @@ fn fmt_horizon(d: Option<Duration>) -> String {
     }
 }
 
-#[must_use]
-pub fn phase_label(link: LinkKind) -> &'static str {
-    match link {
-        LinkKind::Echocat => "frame_phase",
-        LinkKind::Ethercrab => "sync0_shift",
-    }
-}
+const PHASE_LABEL: &str = "frame_phase";
 
-pub fn print_drift(r: &CandidateResult, link: LinkKind) {
+pub fn print_drift(r: &CandidateResult) {
     let d = &r.drift;
     println!("\n=== synctune: drift (bus DC time vs host wall clock) ===");
     println!(
         "sync0_period : {}us\n{:<13}: {}us ({}% of period)",
         micros(r.period),
-        phase_label(link),
+        PHASE_LABEL,
         micros(r.shift),
         r.shift_percent,
     );
@@ -105,10 +99,6 @@ NTP/chrony was\n      running (`timedatectl` on Linux, `w32tm /query /status` on
 }
 
 fn perftest_command(common: &Common, period_us: u128, shift_percent: u8) -> String {
-    let link = common
-        .link
-        .to_possible_value()
-        .map_or_else(|| "ethercrab".to_string(), |v| v.get_name().to_string());
     let mode = common
         .mode
         .to_possible_value()
@@ -121,7 +111,7 @@ fn perftest_command(common: &Common, period_us: u128, shift_percent: u8) -> Stri
         .devices
         .map_or_else(String::new, |d| format!(" --devices {d}"));
     format!(
-        "cargo xtask tool perftest -- --link {link} --mode {mode} \
+        "cargo xtask tool perftest -- --link echocat --mode {mode} \
 --sync0-period {period_us}us --shift-percent {shift_percent}{iface}{devices} --duration 60s"
     )
 }
@@ -131,7 +121,7 @@ pub fn print_measure(r: &CandidateResult, common: &Common) {
     println!(
         "sync0_period : {}us\n{:<13}: {}us ({}% of period)",
         micros(r.period),
-        phase_label(common.link),
+        PHASE_LABEL,
         micros(r.shift),
         r.shift_percent,
     );
@@ -184,14 +174,14 @@ pub fn print_measure(r: &CandidateResult, common: &Common) {
     );
 }
 
-pub fn print_table(results: &[CandidateResult], best: Option<usize>, link: LinkKind) {
+pub fn print_table(results: &[CandidateResult], best: Option<usize>) {
     println!("\n=== synctune: tune results ===");
     println!(
         "{:<3} {:>9} {:>8} {:>8} {:>11} {:>9} {:>5} {:>5} {:>6} {:>10} {:>9}",
         "",
         "period",
-        phase_label(link),
-        phase_label(link),
+        PHASE_LABEL,
+        PHASE_LABEL,
         "status",
         "op_ret",
         "drop",
@@ -230,7 +220,7 @@ pub fn print_best(results: &[CandidateResult], best: Option<usize>, common: &Com
             println!(
                 "\nbest: sync0_period={}us  {}={}us ({}% of period)  ->  OP retention {:.2}%",
                 micros(r.period),
-                phase_label(common.link),
+                PHASE_LABEL,
                 micros(r.shift),
                 r.shift_percent,
                 r.op_ratio() * 100.0,
@@ -245,8 +235,7 @@ pub fn print_best(results: &[CandidateResult], best: Option<usize>, common: &Com
                 perftest_command(common, micros(r.period), r.shift_percent),
             );
             println!(
-                "  (tie-break: higher op_ratio, fewer drops, lower {}, lower period)",
-                phase_label(common.link),
+                "  (tie-break: higher op_ratio, fewer drops, lower {PHASE_LABEL}, lower period)"
             );
         }
         None => println!("\nbest: none (no candidate produced measurable samples)"),

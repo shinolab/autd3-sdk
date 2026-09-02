@@ -37,7 +37,6 @@ import Mermaid from "@components/Mermaid.astro";
 | `autd3-rs-pattern-holo`      | 多焦点音場再構成. 理論は[理論と考察](/autd3-sdk/theory/holo/)を参照.  |
 | `autd3-rs-modulation`        | AM 波形計算.                                                          |
 | `autd3-rs-link-echocat`      | 自前の EtherCAT Link                                                  |
-| `autd3-rs-link-ethercrab`    | ethercrab ベースの EtherCAT Link 実装.                                |
 | `autd3-rs-link-twincat`      | EtherCAT マスタを TwinCAT に委譲する Link 実装 (Windows 専用).        |
 | `autd3-rs-link-remote`       | ネットワーク越しに別ホストの Link を駆動する Link 実装.               |
 | `autd3-rs-link-nop`          | 何もしない Link 実装 (テスト・ドキュメント用).                        |
@@ -60,7 +59,7 @@ EtherCAT マスタが要求する定周期処理と, ユーザーの非同期 AP
 - **ユーザースレッド**: tokio 上で動作する. `.await` で RT スレッドの完了通知を待つ.
 
 `Link` トレイトの `cycle(tx, rx)` が 1 サイクル分の PDO 送受信を担う.
-`EchocatLink` / `EtherCrabLink` はホスト自身が EtherCAT マスタとなり raw socket で PDO を直接回す.
+`EchocatLink` はホスト自身が EtherCAT マスタとなり raw socket で PDO を直接回す.
 `TwinCATLink` は EtherCAT マスタを TwinCAT の RT カーネルに委譲する.
 
 ## ユーザー API からデバイスまで

@@ -26,7 +26,6 @@ pub enum Mode {
 pub enum LinkKind {
     #[default]
     Echocat,
-    Ethercrab,
     Twincat,
     Remote,
     Nop,
@@ -100,9 +99,7 @@ pub struct Cli {
         alias = "frame-phase-percent",
         default_value_t = 0,
         help = "Where the process data sits in the SYNC0 period, as a percent of it. \
-                With --link ethercrab it moves the SYNC0 pulse (EtherCrabLinkOption.sync0_shift \
-                = period * percent) and the frame keeps landing mid-period. \
-                With --link echocat it moves the frame instead \
+                With --link echocat it moves the frame \
                 (EchocatLinkOption.frame_phase = period * percent); 0 lets the measured exchange \
                 centre it."
     )]
