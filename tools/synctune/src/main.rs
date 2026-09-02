@@ -88,7 +88,7 @@ async fn run_drift(args: &DriftArgs, shutdown: &Arc<AtomicBool>) -> Result<()> {
         common.dwell, common.warmup, common.poll_interval,
     );
     let result = Box::pin(measure_candidate(&common, cand, shutdown)).await?;
-    report::print_drift(&result, args.common.link);
+    report::print_drift(&result);
     write_csv_if_requested(&common, std::slice::from_ref(&result));
     Ok(())
 }
@@ -156,7 +156,7 @@ async fn run_tune(args: &TuneArgs, shutdown: &Arc<AtomicBool>) -> Result<()> {
     if let Some(r) = best.map(|i| &results[i]) {
         snippet::print(&args.common, r.period, r.shift);
     }
-    report::print_table(&results, best, args.common.link);
+    report::print_table(&results, best);
     report::print_best(&results, best, &args.common);
     write_csv_if_requested(&args.common, &results);
     Ok(())

@@ -2,7 +2,7 @@ use core::num::NonZeroU32;
 use std::fmt::Write;
 use std::time::Duration;
 
-use crate::cli::{Common, LinkKind, Mode, RtPolicy};
+use crate::cli::{Common, Mode, RtPolicy};
 
 pub fn print(common: &Common, sync0_period: Duration, sync0_shift: Duration) {
     println!("\n=== reproduce this configuration in your app ===");
@@ -21,86 +21,30 @@ fn render(common: &Common, sync0_period: Duration, sync0_shift: Duration) -> Str
     link_block(common, sync0_period, sync0_shift, &mut body);
     push_config(&mut body, &mut imports, &Config::from(common));
 
-    let mut out = imports_block(
-        common.link,
-        tx_rx_tuned(common),
-        !sync0_shift.is_zero(),
-        &imports,
-    );
+    let mut out = imports_block(!sync0_shift.is_zero(), &imports);
     out.push('\n');
     out.push_str(&body);
     out
 }
 
 fn link_block(common: &Common, sync0_period: Duration, sync0_shift: Duration, body: &mut String) {
-    let (link, option) = match common.link {
-        LinkKind::Ethercrab => ("EtherCrabLink", "EtherCrabLinkOption"),
-        LinkKind::Echocat => ("EchocatLink", "EchocatLinkOption"),
-    };
-    let open_arg = if common.link == LinkKind::Echocat {
-        "&"
-    } else {
-        ""
-    };
-    if tx_rx_tuned(common) {
-        let _ = writeln!(
-            body,
-            "let mut link_option: EtherCrabLinkOptionFull = {option} {{"
-        );
-    } else {
-        let _ = writeln!(body, "let link = {link}::open({open_arg}{option} {{");
-    }
+    let _ = writeln!(body, "let link = EchocatLink::open(&EchocatLinkOption {{");
     if let Some(iface) = &common.interface {
         let _ = writeln!(body, "    iface: {iface:?}.into(),");
     }
     let _ = writeln!(body, "    sync0_period: {},", fmt_duration(sync0_period));
-    if common.link == LinkKind::Echocat {
-        if !sync0_shift.is_zero() {
-            let _ = writeln!(
-                body,
-                "    frame_phase: FramePhase::At({}),",
-                fmt_duration(sync0_shift),
-            );
-        }
-    } else {
-        let _ = writeln!(body, "    sync0_shift: {},", fmt_duration(sync0_shift));
+    if !sync0_shift.is_zero() {
+        let _ = writeln!(
+            body,
+            "    frame_phase: FramePhase::At({}),",
+            fmt_duration(sync0_shift),
+        );
     }
     let _ = writeln!(body, "    ..Default::default()");
-    if !tx_rx_tuned(common) {
-        let _ = writeln!(body, "}})?;");
-        return;
-    }
-    let _ = writeln!(body, "}}.into();");
-    if common.no_tx_rx_priority {
-        let _ = writeln!(body, "link_option.tx_rx_priority = None;");
-    } else if let Some(p) = common.tx_rx_priority {
-        let _ = writeln!(
-            body,
-            "link_option.tx_rx_priority = Some(RtPriority::new({p}).unwrap());",
-        );
-    }
-    let _ = writeln!(
-        body,
-        "link_option.tx_rx_policy = {};",
-        rt_policy(common.tx_rx_policy)
-    );
-    if let Some(id) = common.tx_rx_affinity {
-        let _ = writeln!(
-            body,
-            "link_option.tx_rx_affinity = Some(CoreId {{ id: {id} }});"
-        );
-    }
-    let _ = writeln!(body, "let link = EtherCrabLink::open(link_option).await?;");
+    let _ = writeln!(body, "}})?;");
 }
 
-fn tx_rx_tuned(common: &Common) -> bool {
-    common.link == LinkKind::Ethercrab
-        && (common.no_tx_rx_priority
-            || common.tx_rx_priority.is_some()
-            || common.tx_rx_affinity.is_some())
-}
-
-fn imports_block(link: LinkKind, tx_rx_tuned: bool, frame_phase: bool, imports: &[&str]) -> String {
+fn imports_block(frame_phase: bool, imports: &[&str]) -> String {
     let mut out = String::new();
     for imp in imports.iter().filter(|s| s.starts_with("std::")) {
         let _ = writeln!(out, "use {imp};");
@@ -111,28 +55,11 @@ fn imports_block(link: LinkKind, tx_rx_tuned: bool, frame_phase: bool, imports: 
         .filter(|s| !s.starts_with("std::"))
         .collect();
     let _ = writeln!(out, "use autd3_rs::{{{}}};", autd.join(", "));
-    match link {
-        LinkKind::Ethercrab if tx_rx_tuned => {
-            let _ = writeln!(
-                out,
-                "use autd3_rs_link_ethercrab::{{EtherCrabLink, EtherCrabLinkOption, \
-                 EtherCrabLinkOptionFull}};",
-            );
-        }
-        LinkKind::Ethercrab => {
-            let _ = writeln!(
-                out,
-                "use autd3_rs_link_ethercrab::{{EtherCrabLink, EtherCrabLinkOption}};",
-            );
-        }
-        LinkKind::Echocat => {
-            let _ = writeln!(
-                out,
-                "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption{}}};",
-                if frame_phase { ", FramePhase" } else { "" },
-            );
-        }
-    }
+    let _ = writeln!(
+        out,
+        "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption{}}};",
+        if frame_phase { ", FramePhase" } else { "" },
+    );
     out
 }
 

@@ -13,9 +13,8 @@ use autd3_rs::{
     RtSchedulePolicy, StateCheck,
 };
 use autd3_rs_link_echocat::{EchocatLink, EchocatLinkOption, FramePhase};
-use autd3_rs_link_ethercrab::{EtherCrabLink, EtherCrabLinkOption, EtherCrabLinkOptionFull};
 
-use crate::cli::{Common, LinkKind, Mode, RtPolicy};
+use crate::cli::{Common, Mode, RtPolicy};
 use crate::drift::DriftAccumulator;
 use crate::grid::Candidate;
 use crate::monitor::{CandidateResult, CandidateStatus, LoadStats, OpAccumulator};
@@ -27,62 +26,28 @@ pub async fn measure_candidate(
 ) -> Result<CandidateResult> {
     let period = cand.period;
     let shift = cand.shift();
-    match common.link {
-        LinkKind::Ethercrab => {
-            let mut opt: EtherCrabLinkOptionFull = EtherCrabLinkOption {
-                iface: common.interface.clone().into(),
-                sync0_period: period,
-                sync0_shift: shift,
-                ..Default::default()
-            }
-            .into();
-            if common.no_tx_rx_priority {
-                opt.tx_rx_priority = None;
-            } else if let Some(p) = common.tx_rx_priority {
-                opt.tx_rx_priority = Some(RtPriority::new(p).expect("validated to 0..=99"));
-            }
-            opt.tx_rx_policy = match common.tx_rx_policy {
-                RtPolicy::Normal => RtSchedulePolicy::Normal,
-                RtPolicy::Fifo => RtSchedulePolicy::Fifo,
-                RtPolicy::RoundRobin => RtSchedulePolicy::RoundRobin,
-            };
-            opt.tx_rx_affinity = common.tx_rx_affinity.map(|id| CoreId { id });
-            match Box::pin(EtherCrabLink::open(opt)).await {
-                Ok(link) => Box::pin(measure_with_link(link, common, cand, shutdown)).await,
-                Err(e) => Ok(CandidateResult::failed(
-                    period,
-                    shift,
-                    cand.shift_percent,
-                    CandidateStatus::FailedOpen,
-                    format!("link open: {e}"),
-                )),
-            }
-        }
-        LinkKind::Echocat => {
-            let opt = EchocatLinkOption {
-                iface: common.interface.clone().into(),
-                sync0_period: period,
-                frame_phase: if cand.shift_percent == 0 {
-                    FramePhase::Auto
-                } else {
-                    FramePhase::At(shift)
-                },
-                ..Default::default()
-            };
-            let opened = tokio::task::spawn_blocking(move || EchocatLink::open(&opt))
-                .await
-                .expect("open task panicked");
-            match opened {
-                Ok(link) => Box::pin(measure_with_link(link, common, cand, shutdown)).await,
-                Err(e) => Ok(CandidateResult::failed(
-                    period,
-                    shift,
-                    cand.shift_percent,
-                    CandidateStatus::FailedOpen,
-                    format!("link open: {e}"),
-                )),
-            }
-        }
+    let opt = EchocatLinkOption {
+        iface: common.interface.clone().into(),
+        sync0_period: period,
+        frame_phase: if cand.shift_percent == 0 {
+            FramePhase::Auto
+        } else {
+            FramePhase::At(shift)
+        },
+        ..Default::default()
+    };
+    let opened = tokio::task::spawn_blocking(move || EchocatLink::open(&opt))
+        .await
+        .expect("open task panicked");
+    match opened {
+        Ok(link) => Box::pin(measure_with_link(link, common, cand, shutdown)).await,
+        Err(e) => Ok(CandidateResult::failed(
+            period,
+            shift,
+            cand.shift_percent,
+            CandidateStatus::FailedOpen,
+            format!("link open: {e}"),
+        )),
     }
 }
 

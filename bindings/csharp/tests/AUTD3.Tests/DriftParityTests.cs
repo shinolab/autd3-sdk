@@ -54,20 +54,6 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        [Trait("Category", "Pcap")]
-        public void EtherCrabLinkOptionPresets()
-        {
-            var safe = AUTD3.Link.EtherCrabLinkOption.SafeDefault();
-            Assert.Equal(TimeSpan.FromMilliseconds(2), safe.Sync0Period);
-            Assert.Equal(TimeSpan.Zero, safe.Sync0Shift);
-            Assert.Equal(TimeSpan.FromSeconds(10), safe.SyncTimeout);
-
-            var perf = AUTD3.Link.EtherCrabLinkOption.PerformanceDefault();
-            Assert.Equal(TimeSpan.FromMilliseconds(1), perf.Sync0Period);
-            Assert.Equal(TimeSpan.Zero, perf.Sync0Shift);
-        }
-
-        [Fact]
         public void PatternCompressionPerFrame()
         {
             Assert.Equal(2, PatternCompression.PhaseFull.PerFrame());

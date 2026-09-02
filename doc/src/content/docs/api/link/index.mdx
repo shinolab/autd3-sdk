@@ -13,7 +13,6 @@ import CodeTabs from "@components/CodeTabs.astro";
 
 - [TwinCAT](/autd3-sdk/api/link/twincat/) — Beckhoff TwinCAT 3 を使用する Link
 - [echocat](/autd3-sdk/api/link/echocat/) — AUTD3 専用の EtherCAT Link
-- [EtherCrab](/autd3-sdk/api/link/ethercrab/) — EtherCrab ベースの Link
 - [Remote](/autd3-sdk/api/link/remote/) — リモート接続用の Link
 
 ## 使い方
@@ -29,11 +28,11 @@ Link は `Client::open` に Link Option を渡すことで構築する. Option �
 Link と OS の組み合わせごとの大まかな性能の傾向を以下に示す. 
 値は NIC・カーネル設定・OS チューニングなどに強く依存するため, あくまで目安である. 
 
-| 指標         | TwinCAT (Windows) | echocat (mac/Linux) | echocat (Windows) | EtherCrab (mac/Linux) | EtherCrab (Windows) |
-| ------------ | ----------------- | ------------------- | ----------------- | --------------------- | ------------------- |
-| スループット | ⭐⭐              | ⭐⭐⭐              | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                |
-| レイテンシ   | ⭐                | ⭐⭐⭐              | ⭐⭐              | ⭐⭐⭐                | ⭐⭐                |
-| 安定性       | ⭐⭐⭐            | ⭐⭐                | ⭐                | ⭐⭐                  | ⭐                  |
+| 指標         | TwinCAT (Windows) | echocat (mac/Linux) | echocat (Windows) |
+| ------------ | ----------------- | ------------------- | ----------------- |
+| スループット | ⭐⭐              | ⭐⭐⭐              | ⭐⭐              |
+| レイテンシ   | ⭐                | ⭐⭐⭐              | ⭐⭐              |
+| 安定性       | ⭐⭐⭐            | ⭐⭐                | ⭐                |
 
 参考として, 以下に各環境での実測値を載せる.
 
@@ -60,59 +59,6 @@ p95           : 11.459 ms
 p99           : 12.045 ms
 min           : 7.129 ms
 max           : 17.021 ms
-```
-
-</details>
-<details>
-<summary>EtherCrab (Linux)</summary>
-
-**測定条件**
-
-- OS: CachyOS 7.1.3-2
-- NIC: Intel 82574L
-- デバイス数: 2
-
-**throughput (100000 sends, streaming)**
-```
-cmd / sec     :       996.46
-byte / sec    :    623784.98
-```
-
-**latency (10000 sends, stop-and-wait)**
-```
-mean          : 5.000 ms
-p50           : 4.999 ms
-p95           : 5.006 ms
-p99           : 5.021 ms
-min           : 3.993 ms
-max           : 6.032 ms
-```
-
-</details>
-
-<details>
-<summary>EtherCrab (macOS)</summary>
-
-**測定条件**
-
-- OS: macOS Tahoe 26.5.2 
-- NIC: Realtek RTL8153 (USB to Ethernet)
-- デバイス数: 2
-
-**throughput (100000 sends, streaming)**
-```
-cmd / sec     :       993.96
-byte / sec    :    622218.07
-```
-
-**latency (10000 sends, stop-and-wait)**
-```
-mean          : 4.999 ms
-p50           : 4.999 ms
-p95           : 5.124 ms
-p99           : 5.160 ms
-min           : 3.897 ms
-max           : 6.020 ms
 ```
 
 </details>

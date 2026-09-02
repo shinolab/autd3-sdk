@@ -5,29 +5,19 @@ use std::time::Duration;
 use autd3_rs::MAX_INFLIGHT;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-const ECHOCAT_EDGE_ERR: &str = "100% lands the frame on the SYNC0 edge with --link echocat, \
-                                where the firmware drops it as a sequence mismatch; use 1..=99, \
-                                or 0 to let the measured exchange centre it";
+const ECHOCAT_EDGE_ERR: &str = "100% lands the frame on the SYNC0 edge, where the firmware drops \
+                                it as a sequence mismatch; use 1..=99, or 0 to let the measured \
+                                exchange centre it";
 
 const SHIFT_HELP: &str = "Where the process data sits in the SYNC0 period, as a percent of it. \
-                          With --link ethercrab it moves the SYNC0 pulse \
-                          (EtherCrabLinkOption.sync0_shift = period * percent) and the frame keeps \
-                          landing mid-period. With --link echocat it moves the frame instead \
-                          (EchocatLinkOption.frame_phase = period * percent); 0 lets the measured \
-                          exchange centre it.";
+                          It moves the frame (EchocatLinkOption.frame_phase = period * percent); \
+                          0 lets the measured exchange centre it.";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
     StopAndWait,
     #[default]
     Streaming,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum LinkKind {
-    #[default]
-    Echocat,
-    Ethercrab,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -122,8 +112,6 @@ pub struct TuneArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct Common {
-    #[arg(long, value_enum, default_value_t = LinkKind::Echocat)]
-    pub link: LinkKind,
     #[arg(
         long,
         default_value = None,
@@ -182,32 +170,6 @@ pub struct Common {
     )]
     pub rt_affinity: Option<usize>,
 
-    #[arg(
-        long,
-        help = "--link ethercrab only: maps to EtherCrabLinkOptionFull.tx_rx_priority (0..=99). \
-                Omit to keep the library default (90 outside Windows)."
-    )]
-    pub tx_rx_priority: Option<u8>,
-    #[arg(
-        long,
-        default_value_t = false,
-        conflicts_with = "tx_rx_priority",
-        help = "--link ethercrab only: force tx_rx_priority = None (pump thread left at OS default)."
-    )]
-    pub no_tx_rx_priority: bool,
-    #[arg(
-        long,
-        value_enum,
-        default_value_t = RtPolicy::Fifo,
-        help = "--link ethercrab only: maps to EtherCrabLinkOptionFull.tx_rx_policy"
-    )]
-    pub tx_rx_policy: RtPolicy,
-    #[arg(
-        long,
-        help = "--link ethercrab only: pin the tx/rx pump thread to this CPU core."
-    )]
-    pub tx_rx_affinity: Option<usize>,
-
     #[arg(long, value_parser = humantime::parse_duration, default_value = "30s")]
     pub dwell: Duration,
 
@@ -236,11 +198,6 @@ impl Common {
         {
             return Err(format!("--rt-priority {p} must be in 0..=99"));
         }
-        if let Some(p) = self.tx_rx_priority
-            && p > 99
-        {
-            return Err(format!("--tx-rx-priority {p} must be in 0..=99"));
-        }
         if self.poll_interval.is_zero() {
             return Err("--poll-interval must be greater than zero".to_string());
         }
@@ -263,7 +220,7 @@ impl MeasureArgs {
                 self.shift_percent
             ));
         }
-        if self.common.link == LinkKind::Echocat && self.shift_percent == 100 {
+        if self.shift_percent == 100 {
             return Err(ECHOCAT_EDGE_ERR.to_string());
         }
         Ok(())
@@ -282,7 +239,7 @@ impl DriftArgs {
                 self.shift_percent
             ));
         }
-        if self.common.link == LinkKind::Echocat && self.shift_percent == 100 {
+        if self.shift_percent == 100 {
             return Err(ECHOCAT_EDGE_ERR.to_string());
         }
         if self.duration.is_zero() {
@@ -327,7 +284,7 @@ impl TuneArgs {
         if self.shift_step == 0 {
             return Err("--shift-step must be greater than zero".to_string());
         }
-        if self.common.link == LinkKind::Echocat && self.shift_max == 100 {
+        if self.shift_max == 100 {
             return Err(ECHOCAT_EDGE_ERR.to_string());
         }
         Ok(())

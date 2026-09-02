@@ -22,7 +22,6 @@
     <ProjectReference Include="../../src/AUTD3.Pattern.Holo/AUTD3.Pattern.Holo.csproj" />
     <ProjectReference Include="../../src/AUTD3.Modulation/AUTD3.Modulation.csproj" />
     <ProjectReference Include="../../src/AUTD3.Link.Nop/AUTD3.Link.Nop.csproj" />
-    <ProjectReference Include="../../src/AUTD3.Link.Ethercrab/AUTD3.Link.Ethercrab.csproj" />
   </ItemGroup>
 
 </Project>

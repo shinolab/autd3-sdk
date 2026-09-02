@@ -16,7 +16,6 @@ path = "src/main.rs"
 [dependencies]
 autd3-rs = { workspace = true, features = ["logging"] }
 autd3-rs-link-echocat.workspace = true
-autd3-rs-link-ethercrab.workspace = true
 autd3-rs-appliance.workspace = true
 clap.workspace = true
 humantime.workspace = true
