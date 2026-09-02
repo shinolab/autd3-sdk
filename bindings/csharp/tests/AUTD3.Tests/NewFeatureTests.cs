@@ -33,6 +33,72 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void TwinTrapAndVortexFillBuffers()
+        {
+            using var geometry = SingleDevice();
+            var wavelength = Pattern.Wavelength(340 * m / s);
+            var target = geometry.Center + new Vector3(0f, 0f, 150f);
+
+            using var trapped = geometry.PatternBuffer();
+            Pattern.TwinTrap(geometry, target, Vector3.UnitX, wavelength, new TwinTrapOption(), trapped);
+            Assert.Equal(1, trapped.NumDevices);
+
+            using var spun = geometry.PatternBuffer();
+            Pattern.Vortex(geometry, target, Vector3.UnitZ, 1, wavelength, new VortexOption(), spun);
+            Assert.Equal(1, spun.NumDevices);
+        }
+
+        [Fact]
+        public void VortexOrderZeroMatchesFocus()
+        {
+            using var geometry = SingleDevice();
+            var wavelength = Pattern.Wavelength(340 * m / s);
+            var device = geometry[0];
+            var target = device.Center + new Vector3(0f, 0f, 150f);
+
+            var focused = new Emission[Autd3.NumTransducers];
+            Pattern.FocusDevice(device, target, wavelength, new FocusOption(), focused);
+
+            var spun = new Emission[Autd3.NumTransducers];
+            Pattern.VortexDevice(device, target, Vector3.UnitZ, 0, wavelength, new VortexOption(), spun);
+
+            for (var i = 0; i < Autd3.NumTransducers; i++)
+            {
+                Assert.Equal(focused[i].Phase.Value, spun[i].Phase.Value);
+            }
+        }
+
+        [Fact]
+        public void TwinTrapSplitsThePlaneByPi()
+        {
+            using var geometry = SingleDevice();
+            var wavelength = Pattern.Wavelength(340 * m / s);
+            var device = geometry[0];
+            var target = device.Center + new Vector3(0f, 0f, 150f);
+
+            var focused = new Emission[Autd3.NumTransducers];
+            Pattern.FocusDevice(device, target, wavelength, new FocusOption(), focused);
+
+            var trapped = new Emission[Autd3.NumTransducers];
+            Pattern.TwinTrapDevice(device, target, Vector3.UnitX, wavelength, new TwinTrapOption(), trapped);
+
+            var diffs = new HashSet<int>();
+            for (var i = 0; i < Autd3.NumTransducers; i++)
+            {
+                diffs.Add((trapped[i].Phase.Value - focused[i].Phase.Value + 256) % 256);
+            }
+            Assert.Equal(new HashSet<int> { 0, 128 }, diffs);
+
+            var e = Pattern.TwinTrapTransducer(device.Position(0), target, Vector3.UnitX, wavelength, new TwinTrapOption());
+            Assert.Equal(trapped[0].Phase.Value, e.Phase.Value);
+
+            var v = Pattern.VortexTransducer(device.Position(0), target, Vector3.UnitZ, 1, wavelength, new VortexOption());
+            var spun = new Emission[Autd3.NumTransducers];
+            Pattern.VortexDevice(device, target, Vector3.UnitZ, 1, wavelength, new VortexOption(), spun);
+            Assert.Equal(spun[0].Phase.Value, v.Phase.Value);
+        }
+
+        [Fact]
         public void UniformFillsBuffer()
         {
             using var geometry = SingleDevice();

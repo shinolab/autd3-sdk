@@ -207,6 +207,7 @@ dependencies = [
  "autd3-rs",
  "autd3-rs-core",
  "autd3-rs-firmware-emulator",
+ "autd3-rs-pattern",
  "bytemuck",
  "polars",
  "pollster",

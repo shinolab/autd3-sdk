@@ -1,0 +1,54 @@
+---
+title: twin_trap
+description: twin trap Pattern
+sidebar:
+  order: 5
+srcPath: crates/autd3-rs-pattern/src/twin_trap.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import PatternField from "@components/PatternField.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/twin-trap.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/twin-trap.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/twin-trap-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/twin-trap-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/pattern/twin-trap.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/pattern/twin-trap-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`twin_trap` は 音響浮遊用の twin trap を生成する. 詳細は([Marzo et al., 2015](https://doi.org/10.1038/ncomms9661))を参照.
+
+<PatternField kind="twin-trap" />
+
+位相は `focus` と同じ焦点位相 <Math tex="\phi_i" /> に対し, 振動子位置 <Math tex="\bp_i" /> が
+target <Math tex="\boldsymbol{t}" /> を通り normal <Math tex="\boldsymbol{n}" /> を法線とする平面のどちら側にあるかで決まる.
+
+<MathBlock tex="\phi_i^\mathrm{twin} = \phi_i + \begin{cases} \pi & ((\bp_i - \boldsymbol{t}) \cdot \boldsymbol{n} \geq 0) \\ 0 & (\text{otherwise}) \end{cases}" />
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| 引数         | 型                     | 説明                                         |
+| ------------ | ---------------------- | -------------------------------------------- |
+| `geometry`   | `&Geometry`            | デバイス配置                                 |
+| `target`     | `Point3<f32>`          | トラップ位置座標 [mm]                        |
+| `normal`     | `UnitVector3<f32>`     | `target` を通る分割平面の法線 (単位ベクトル) |
+| `wavelength` | `Length`               | 波長                                         |
+| `option`     | `&TwinTrapOption`      | 追加オプション (下記参照)                    |
+| `dst`        | `&mut [[Emission; _]]` | 出力バッファ                                 |
+
+## TwinTrapOption
+
+<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
+
+| フィールド     | 型          | デフォルト       | 説明                         |
+| -------------- | ----------- | ---------------- | ---------------------------- |
+| `intensity`    | `Intensity` | `Intensity::MAX` | 全振動子の振幅               |
+| `phase_offset` | `Phase`     | `Phase::ZERO`    | 全振動子へ一律に加算する位相 |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

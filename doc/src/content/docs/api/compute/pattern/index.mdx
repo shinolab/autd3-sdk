@@ -8,7 +8,7 @@ sidebar:
 import Math from "@components/Math.astro";
 import Install from "@components/Install.astro";
 
-単一焦点・平面波・ベッセルビームなどの代表的な音場計算ユーティリティ.
+単一焦点・平面波・ベッセルビーム・音響浮揚向けのトラップ場など, 代表的な音場計算ユーティリティ.
 
 <Install rust="autd3-rs-pattern" python="autd3-pattern" csharp="AUTD3.Pattern" />
 
@@ -17,10 +17,12 @@ import Install from "@components/Install.astro";
 - [focus](/autd3-sdk/api/compute/pattern/focus/) — 単一焦点
 - [plane](/autd3-sdk/api/compute/pattern/plane/) — 平面波
 - [bessel](/autd3-sdk/api/compute/pattern/bessel/) — ベッセルビーム
+- [twin_trap](/autd3-sdk/api/compute/pattern/twin-trap/) — 双子トラップ (節を挟む 2 つのローブ)
+- [vortex](/autd3-sdk/api/compute/pattern/vortex/) — 音響渦 (軸上に谷を持つドーナツ状分布)
 - [uniform](/autd3-sdk/api/compute/pattern/uniform/) — 全振動子一様
 - [null](/autd3-sdk/api/compute/pattern/null/) — 無出力
 
-`focus` / `plane` / `bessel` / `null` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分のみを計算する `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
+`focus` / `plane` / `bessel` / `twin_trap` / `vortex` / `null` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分のみを計算する `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
 `uniform` は `uniform_device` のみ.
 いずれも Rust と C# にあり, Python にはない.
 

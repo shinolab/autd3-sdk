@@ -277,12 +277,28 @@ name = "api_compute_pattern_plane"
 path = "examples/api/compute/pattern/plane.rs"
 
 [[example]]
+name = "api_compute_pattern_twin_trap_example"
+path = "examples/api/compute/pattern/twin-trap-example.rs"
+
+[[example]]
+name = "api_compute_pattern_twin_trap"
+path = "examples/api/compute/pattern/twin-trap.rs"
+
+[[example]]
 name = "api_compute_pattern_uniform_example"
 path = "examples/api/compute/pattern/uniform-example.rs"
 
 [[example]]
 name = "api_compute_pattern_uniform"
 path = "examples/api/compute/pattern/uniform.rs"
+
+[[example]]
+name = "api_compute_pattern_vortex_example"
+path = "examples/api/compute/pattern/vortex-example.rs"
+
+[[example]]
+name = "api_compute_pattern_vortex"
+path = "examples/api/compute/pattern/vortex.rs"
 
 [[example]]
 name = "api_link_echocat"

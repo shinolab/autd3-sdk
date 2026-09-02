@@ -60,6 +60,30 @@ def test_pattern_focus_plane_bessel_uniform_null() -> None:
     assert len(buf) == geo.num_devices()
 
 
+def test_pattern_twin_trap_vortex() -> None:
+    geo = geometry()
+    wavelength = pattern.wavelength(340 * m / s)
+    target = geo.center() + np.array([0.0, 0.0, 150.0])
+    num = len(geo.pattern_buffer()[0])
+
+    def phases(buf: object) -> list[int]:
+        return [buf[0][i].phase.value for i in range(num)]  # type: ignore[index]
+
+    focused = geo.pattern_buffer()
+    pattern.focus(geo, target, wavelength, pattern.FocusOption(), focused)
+
+    spun = geo.pattern_buffer()
+    pattern.vortex(geo, target, [0.0, 0.0, 1.0], 0, wavelength, pattern.VortexOption(), spun)
+    assert phases(spun) == phases(focused)
+
+    pattern.vortex(geo, target, [0.0, 0.0, 1.0], 1, wavelength, pattern.VortexOption(), spun)
+    assert phases(spun) != phases(focused)
+
+    trapped = geo.pattern_buffer()
+    pattern.twin_trap(geo, target, [1.0, 0.0, 0.0], wavelength, pattern.TwinTrapOption(), trapped)
+    assert {(t - f) % 256 for t, f in zip(phases(trapped), phases(focused))} == {0, 128}
+
+
 def test_modulation_sine_square_fourier_radiation() -> None:
     buf = modulation.modulation_buffer()
     modulation.sine(200 * Hz, modulation.SineOption(), buf)

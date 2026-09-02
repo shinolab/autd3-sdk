@@ -325,6 +325,7 @@ dependencies = [
 name = "autd3-rs-pattern"
 version = "0.7.0"
 dependencies = [
+ "approx",
  "autd3-rs-core",
  "criterion 0.8.2",
 ]
