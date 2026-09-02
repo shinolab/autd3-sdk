@@ -2,12 +2,12 @@
 title: TwinCAT のインストール
 description: TwinCAT を EtherCAT マスタとして用いる場合のインストール・セットアップ手順
 sidebar:
-  order: 2
+  order: 3
 ---
 
 :::note
 TwinCAT は Windows における EtherCAT マスタの選択肢の一つであり, [TwinCATLink](/autd3-sdk/api/link/twincat/) を使う場合にのみ必要.
-Linux/macOS や [echocat](/autd3-sdk/api/link/echocat/) など他の Link を使う場合, このページの手順は不要.
+[Appliance](/autd3-sdk/getting-started/appliance/) や [echocat](/autd3-sdk/api/link/echocat/) を使う場合はこのページの手順は不要.
 :::
 
 TwinCAT は PC で EtherCAT を使用する際の唯一の公式の方法であり, Windows をリアルタイム化する Windows 専用のソフトウェアである.
@@ -41,7 +41,7 @@ Package Manager の初回起動時には, 以下の初期設定が必要にな�
 ## autd3-console の入手
 
 TwinCAT のセットアップには, GUI ツールである `autd3-console` を用いる.
-[コンソール](/autd3-sdk/getting-started/setup/console/) の手順で入手して起動し, 上部の「TwinCAT」タブを開く.
+[コンソール](/autd3-sdk/guide/console/) の手順で入手して起動し, 上部の「TwinCAT」タブを開く.
 
 ## 初回セットアップ
 
@@ -96,11 +96,6 @@ AUTD3 と PC を接続し, AUTD3 の電源が入った状態で, 「TwinCAT」�
 | Task (x base time)   | タスクサイクルタイム (Base time 単位).                           | 1          |
 | Base time            | CPU 基準時間.                                                     | 1 ms       |
 | Keep XAE Shell open  | XAE Shell を開いたままにするか.                                   | オン       |
-
-:::caution
-TwinCAT は PC の電源を切る, スリープモードに入る等で接続が途切れる.
-その場合「Run」を実行し直すこと.
-:::
 
 一度構成したプロジェクトを再度開くだけなら, 「Open」から開ける.
 

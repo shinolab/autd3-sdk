@@ -2,7 +2,7 @@
 title: Remote
 description: 実機につながる別ホストへ TCP 接続する Remote Link
 sidebar:
-  order: 5
+  order: 3
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
@@ -14,11 +14,10 @@ import csClient from "@codes/csharp/examples/api/link/remote_client.cs?raw";
 import server from "@codes/rust/examples/api/link/remote_server.rs?raw";
 
 `RemoteLink` は, AUTD3 デバイスに接続された別ホストへ TCP 接続して送受信する Link 実装. 
-AUTD3 を操作したいマシンと実機を配線したマシンが異なる場合に使う.
+
+[Appliance](/autd3-sdk/getting-started/appliance/) や [Simulator](/autd3-sdk/guide/simulator/) への接続に使う.
 
 <Install rust="autd3-rs-link-remote" python="autd3-link-remote" csharp="AUTD3.Link.Remote" />
-
-[`Simulator`](/autd3-sdk/guide/simulator/) への接続も`RemoteLink`で行う.
 
 ## API
 
@@ -64,7 +63,7 @@ mDNS でネットワーク上のサーバを探すことができる.
 `rt_priority` の設定には特権が要る場合がある (Linux では `CAP_SYS_NICE`).
 権限が無いと警告を出して素のスケジューリングで動くが, 負荷時にバスが不安定になる可能性がある.
 
-実際の使用例は [applianceのドキュメント](/autd3-sdk/guide/appliance/) と [applianceの実装](https://github.com/shinolab/autd3-sdk/tree/main/appliance) を参照.
+実際の使用例は [applianceのドキュメント](/autd3-sdk/getting-started/appliance/) と [applianceの実装](https://github.com/shinolab/autd3-sdk/tree/main/appliance) を参照.
 
 <CodeTabs rust={excerpt(server, "api")} />
 

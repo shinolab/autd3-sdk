@@ -44,7 +44,8 @@ import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
 
 ## OS チューニング
 
-EtherCAT のリアルタイム性は OS の設定にも左右される. スレッドの優先度・CPU アフィニティ・タイマ精度などを調整することで, ジッタを抑えてより安定した高レート送信ができる可能性がある.
+ホストで EtherCAT を動かす場合, EtherCAT のリアルタイム性は OS の設定にも左右される.
+スレッドの優先度・CPU アフィニティ・タイマ精度などを調整することで, ジッタを抑えてより安定した高レート送信ができる可能性がある.
 
 これらは `ClientConfig` の `rt_priority` / `rt_policy` / `rt_affinity`, および Link Option の `sync0_period` / `sync0_shift` (echocat では `frame_phase`) として設定できる.
 適切な値は環境によって異なるため, 実測して決めるのがよい.

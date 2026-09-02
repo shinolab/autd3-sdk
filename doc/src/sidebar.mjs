@@ -11,18 +11,22 @@ const usersManual = [
           { label: "ハードウェア", translations: { en: "Hardware" }, link: "/getting-started/setup/hardware/" },
           { label: "ファームウェア", translations: { en: "Firmware" }, link: "/getting-started/setup/firmware/" },
           { label: "ソフトウェア", translations: { en: "Software" }, link: "/getting-started/setup/software/" },
-          { label: "コンソール", translations: { en: "Console" }, link: "/getting-started/setup/console/" },
         ],
-      },
-      {
-        label: "TwinCAT のインストール",
-        translations: { en: "Installing TwinCAT" },
-        link: "/getting-started/twincat/",
       },
       {
         label: "チュートリアル",
         translations: { en: "Tutorial" },
         items: [{ autogenerate: { directory: "getting-started/tutorial" } }],
+      },
+      {
+        label: "Appliance のセットアップ",
+        translations: { en: "Appliance Setup" },
+        link: "/getting-started/appliance/",
+      },
+      {
+        label: "TwinCAT のセットアップ",
+        translations: { en: "TwinCAT Setup" },
+        link: "/getting-started/twincat/",
       },
     ],
   },

@@ -11,9 +11,9 @@ import CodeTabs from "@components/CodeTabs.astro";
 
 ## Link List
 
-- [TwinCAT](/autd3-sdk/en/api/link/twincat/) — Link that uses Beckhoff TwinCAT 3
-- [echocat](/autd3-sdk/en/api/link/echocat/) — EtherCAT Link dedicated to AUTD3
-- [Remote](/autd3-sdk/en/api/link/remote/) — Link for remote connections
+- [TwinCAT](/autd3-sdk/en/api/link/twincat/) — Link that uses Beckhoff TwinCAT 3 on Windows as the EtherCAT master
+- [echocat](/autd3-sdk/en/api/link/echocat/) — EtherCAT Link dedicated to AUTD3. The host itself becomes the EtherCAT master
+- [Remote](/autd3-sdk/en/api/link/remote/) — Link that connects over TCP to another host. Used to reach the [Appliance](/autd3-sdk/en/getting-started/appliance/) and the [Simulator](/autd3-sdk/en/guide/simulator/)
 
 ## Usage
 
@@ -21,15 +21,4 @@ A Link is constructed by passing a Link Option to `Client::open`. The Option spe
 
 The send/receive interface seen from the `Client` is common across Link implementations.
 Therefore, swapping the link does not require changing the higher-level code.
-
-## Performance
-
-The rough performance trends per Link and OS combination are shown below.
-The values depend heavily on the NIC, kernel settings, OS tuning, and so on, so treat them only as a rough guide.
-
-| Metric     | TwinCAT (Windows) | echocat (mac/Linux) | echocat (Windows) |
-| ---------- | ----------------- | ------------------- | ----------------- |
-| Throughput | ⭐⭐              | ⭐⭐⭐              | ⭐⭐              |
-| Latency    | ⭐                | ⭐⭐⭐              | ⭐⭐              |
-| Stability  | ⭐⭐⭐            | ⭐⭐                | ⭐                |
 

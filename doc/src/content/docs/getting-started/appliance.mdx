@@ -1,8 +1,8 @@
 ---
 title: Appliance
-description: EtherCAT マスタ専用ボードを使い, ホストの負荷や OS 設定からバスを切り離す
+description: EtherCAT マスタ専用ボードでバスを駆動する, 推奨のセットアップ
 sidebar:
-  order: 10
+  order: 2
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
@@ -11,8 +11,16 @@ import client from "@codes/rust/examples/api/link/remote_client.rs?raw";
 import pyClient from "@codes/python/examples/api/link/remote_client.py?raw";
 import csClient from "@codes/csharp/examples/api/link/remote_client.cs?raw";
 
+:::note
+[TwinCAT](/autd3-sdk/getting-started/twincat/) や [echocat](/autd3-sdk/api/link/echocat/) を使う場合はこのページの手順は不要.
+:::
+
 Appliance は, EtherCAT マスタだけを動かす専用ボード.
 AUTD3 との配線をボードが持ち, ユーザのマシンは [`RemoteLink`](/autd3-sdk/api/link/remote/) で TCP 接続する.
+
+EtherCAT バスはホストから切り離されてボードの上で閉じるので, ホスト側の OS のリアルタイム性・NIC・負荷にバスの安定性が左右されない.
+ホストは Windows / Linux / macOS のいずれでもよく, [TwinCAT](/autd3-sdk/getting-started/twincat/) や npcap も不要.
+特に理由がなければ, AUTD3 を駆動する方法としては, これを推奨する.
 
 現在サポートしているのはRaspberry Pi 4 (以下, RP4) のみ.
 
@@ -58,7 +66,7 @@ xz -dc autd3-appliance-rp4-*.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync statu
 autd3-appliance scan
 ```
 
-`autd3-appliance` は autd3-console のバンドルに同梱されている ([コンソール](/autd3-sdk/getting-started/setup/console/)).
+`autd3-appliance` は autd3-console のバンドルに同梱されている ([コンソール](/autd3-sdk/guide/console/)).
 autd3-console の **Appliance** タブで「Scan」を押しても良い.
 
 ## 使い始める

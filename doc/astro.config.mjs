@@ -9,6 +9,12 @@ import { sidebar } from "./src/sidebar.mjs";
 export default defineConfig({
   site: "https://shinolab.github.io",
   base: "/autd3-sdk",
+  redirects: {
+    "/guide/appliance": "/autd3-sdk/getting-started/appliance/",
+    "/en/guide/appliance": "/autd3-sdk/en/getting-started/appliance/",
+    "/getting-started/setup/console": "/autd3-sdk/guide/console/",
+    "/en/getting-started/setup/console": "/autd3-sdk/en/guide/console/",
+  },
   vite: {
     resolve: {
       alias: {
