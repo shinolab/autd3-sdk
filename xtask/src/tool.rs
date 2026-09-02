@@ -48,6 +48,19 @@ pub enum ToolCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    #[command(
+        about = "Replay and analyse an AUTD3 EtherCAT wire capture (pcap/pcapng) offline"
+    )]
+    Wiretrace {
+        #[arg(long, help = "Build the dev profile instead of release")]
+        debug: bool,
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the tool"
+        )]
+        args: Vec<String>,
+    },
     /// Set up TwinCAT (Windows only: .NET Framework 4.8 + the TwinCAT XAE COM API)
     Twincat {
         #[command(subcommand)]
@@ -126,6 +139,9 @@ pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
             no_sudo,
             args,
         } => run_bin(root, "autd3-rs-firmware-test", debug, no_sudo, &[], &args),
+        ToolCmd::Wiretrace { debug, args } => {
+            run_bin(root, "autd3-rs-wiretrace", debug, true, &[], &args)
+        }
         ToolCmd::Twincat { cmd } => run_twincat(root, cmd),
     }
 }

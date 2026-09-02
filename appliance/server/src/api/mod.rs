@@ -1,4 +1,5 @@
 mod admin;
+mod capture;
 mod system;
 pub mod tune;
 
@@ -8,9 +9,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use autd3_rs_appliance::{
-    Accepted, ApiError, ApplianceStatus, BusActual, BusDesired, BusStatus, ClientStatus,
-    ConfigDocument, ImageRelease, LogLines, ProbeResult, TuneReport, TuneRequest, TuneStatus,
-    TuneTarget, UplinkKind, UplinkStatus, WifiCredentials,
+    Accepted, ApiError, ApplianceStatus, BusActual, BusDesired, BusStatus, CaptureRequest,
+    CaptureState, CaptureStatus, ClientStatus, ConfigDocument, ImageRelease, LogLines,
+    MAX_CAPTURE_MAX_BYTES, MAX_CAPTURE_MAX_SECONDS, ProbeResult, TuneReport, TuneRequest,
+    TuneStatus, TuneTarget, UplinkKind, UplinkStatus, WifiCredentials,
 };
 use autd3_rs_link_remote::{Actual, BusSnapshot, Desired, RemoteLinkError, Sessions, SharedBus};
 use axum::Router;
@@ -21,6 +23,7 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post, put};
 use serde::Deserialize;
 
+use crate::api::capture::CaptureJob;
 use crate::api::tune::{LinkSettings, Sweep, TuneJob};
 use crate::config::Config;
 
@@ -33,6 +36,7 @@ const OTHER_LOG_UNITS: &[&str] = &["NetworkManager", "autd3-wifi-init", "autd3-f
 
 pub struct AppState {
     bus: Arc<SharedBus>,
+    capture: Arc<CaptureJob>,
     sessions: Arc<Sessions>,
     settings: Arc<LinkSettings>,
     tune: Arc<TuneJob>,
@@ -47,6 +51,8 @@ pub struct AppState {
     updating: tokio::sync::Mutex<()>,
 }
 
+pub const CAPTURE_PATH: &str = "/data/autd3/capture.pcap";
+
 impl AppState {
     pub fn new(
         config: &Config,
@@ -58,6 +64,7 @@ impl AppState {
     ) -> Self {
         Self {
             bus,
+            capture: Arc::new(CaptureJob::new(PathBuf::from(CAPTURE_PATH))),
             sessions,
             settings,
             tune: Arc::new(TuneJob::default()),
@@ -821,6 +828,78 @@ struct LogQuery {
     unit: Option<String>,
 }
 
+async fn capture_start(
+    State(state): State<Arc<AppState>>,
+    body: Option<axum::Json<CaptureRequest>>,
+) -> ApiResult<Accepted> {
+    require_admin(&state)?;
+    let mut request = body.map(|axum::Json(request)| request).unwrap_or_default();
+    request.max_bytes = request.max_bytes.clamp(1, MAX_CAPTURE_MAX_BYTES);
+    request.max_seconds = request.max_seconds.clamp(1, MAX_CAPTURE_MAX_SECONDS);
+    if state.interface.is_empty() {
+        return Err(Error::bad_request(
+            "this appliance has no bus interface configured, so there is nothing to capture",
+        ));
+    }
+    if state.capture.status().state == CaptureState::Running {
+        return Err(Error::bad_request("a capture is already running"));
+    }
+    let job = Arc::clone(&state.capture);
+    let interface = state.interface.clone();
+    std::thread::spawn(move || {
+        if let Err(e) = capture::run(&job, &interface, request) {
+            tracing::warn!(error = e, "diagnostic capture failed");
+        }
+    });
+    Ok(axum::Json(Accepted {
+        message: format!(
+            "capturing on {} for up to {} s or {} MiB",
+            state.interface,
+            request.max_seconds,
+            request.max_bytes / (1024 * 1024)
+        ),
+    }))
+}
+
+async fn capture_stop(State(state): State<Arc<AppState>>) -> ApiResult<Accepted> {
+    require_admin(&state)?;
+    let message = if state.capture.stop() {
+        "stopping the capture".to_owned()
+    } else {
+        "no capture is running".to_owned()
+    };
+    Ok(axum::Json(Accepted { message }))
+}
+
+async fn capture_status(State(state): State<Arc<AppState>>) -> ApiResult<CaptureStatus> {
+    Ok(axum::Json(state.capture.status()))
+}
+
+async fn capture_download(State(state): State<Arc<AppState>>) -> Response {
+    let status = state.capture.status();
+    if status.state == CaptureState::Running {
+        return Error::bad_request("the capture is still running; stop it first").into_response();
+    }
+    let path = state.capture.path().to_path_buf();
+    match std::fs::read(&path) {
+        Ok(bytes) => (
+            [
+                (
+                    axum::http::header::CONTENT_TYPE,
+                    "application/vnd.tcpdump.pcap",
+                ),
+                (
+                    axum::http::header::CONTENT_DISPOSITION,
+                    "attachment; filename=\"autd3-capture.pcap\"",
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(e) => Error::bad_request(format!("no capture to download: {e}")).into_response(),
+    }
+}
+
 async fn logs(
     State(state): State<Arc<AppState>>,
     Query(query): Query<LogQuery>,
@@ -861,6 +940,9 @@ fn router(state: Arc<AppState>) -> Router {
         )
         .route("/network/wifi", put(set_wifi).delete(forget_wifi))
         .route("/logs", get(logs))
+        .route("/diag/capture", get(capture_status).post(capture_start))
+        .route("/diag/capture/stop", post(capture_stop))
+        .route("/diag/capture/download", get(capture_download))
         .with_state(state)
 }
 

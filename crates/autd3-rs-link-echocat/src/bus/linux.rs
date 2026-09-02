@@ -3,7 +3,7 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::time::{Duration, Instant};
 
 use super::RawBus;
-use crate::wire::ETHERTYPE_ETHERCAT;
+use crate::wire::{ETH_HEADER_BYTES, ETHERTYPE_ETHERCAT};
 
 const PACKET_OUTGOING: u8 = 4;
 
@@ -202,9 +202,107 @@ impl RawBus for RawSocket {
     }
 }
 
+fn is_ethercat(frame: &[u8]) -> bool {
+    frame.len() >= ETH_HEADER_BYTES
+        && u16::from_be_bytes([frame[12], frame[13]]) == ETHERTYPE_ETHERCAT
+}
+
+pub struct CaptureSocket {
+    fd: OwnedFd,
+}
+
+impl CaptureSocket {
+    pub fn open(interface: &str) -> io::Result<Self> {
+        let mut ifreq = ifreq_for(interface)?;
+
+        let protocol = u16::try_from(libc::ETH_P_ALL).expect("ETH_P_ALL fits in u16");
+        let fd = unsafe {
+            libc::socket(
+                libc::AF_PACKET,
+                libc::SOCK_RAW | libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC,
+                i32::from(protocol.to_be()),
+            )
+        };
+        if fd == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+
+        let index = ifreq_ioctl(fd.as_raw_fd(), &mut ifreq, libc::SIOCGIFINDEX)?;
+        let sockaddr = libc::sockaddr_ll {
+            sll_family: u16::try_from(libc::AF_PACKET).expect("AF_PACKET fits in u16"),
+            sll_protocol: protocol.to_be(),
+            sll_ifindex: index,
+            sll_hatype: 1,
+            sll_pkttype: 0,
+            sll_halen: 6,
+            sll_addr: [0; 8],
+        };
+        let res = unsafe {
+            libc::bind(
+                fd.as_raw_fd(),
+                std::ptr::from_ref(&sockaddr).cast(),
+                libc::socklen_t::try_from(size_of::<libc::sockaddr_ll>())
+                    .expect("sockaddr_ll fits in socklen_t"),
+            )
+        };
+        if res == -1 {
+            return Err(io::Error::last_os_error());
+        }
+
+        Ok(Self { fd })
+    }
+
+    pub fn receive(&self, buf: &mut [u8], timeout: Duration) -> io::Result<Option<usize>> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let len =
+                unsafe { libc::read(self.fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len()) };
+            if len >= 0 {
+                let len = usize::try_from(len)
+                    .map_err(|_| io::Error::other("read returned a negative length"))?;
+                if is_ethercat(&buf[..len]) {
+                    return Ok(Some(len));
+                }
+            } else {
+                let err = io::Error::last_os_error();
+                if err.kind() != io::ErrorKind::WouldBlock
+                    && err.kind() != io::ErrorKind::Interrupted
+                {
+                    return Err(err);
+                }
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return Ok(None);
+            }
+            let _ = self.wait_readable_fd(deadline - now)?;
+        }
+    }
+
+    fn wait_readable_fd(&self, timeout: Duration) -> io::Result<bool> {
+        let mut pollfd = libc::pollfd {
+            fd: self.fd.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let millis = libc::c_int::try_from(timeout.as_nanos().div_ceil(1_000_000))
+            .unwrap_or(libc::c_int::MAX);
+        let res = unsafe { libc::poll(&raw mut pollfd, 1, millis) };
+        if res == -1 {
+            let err = io::Error::last_os_error();
+            if err.kind() == io::ErrorKind::Interrupted {
+                return Ok(false);
+            }
+            return Err(err);
+        }
+        Ok(res > 0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{RawSocket, ifreq_for, interface_candidates};
+    use super::{CaptureSocket, RawSocket, ifreq_for, interface_candidates};
     use crate::bus::RawBus;
     use crate::wire::ETHERTYPE_ETHERCAT;
     use std::time::Duration;
@@ -254,6 +352,36 @@ mod tests {
             received,
             Some(frame.len()),
             "loopback delivers the frame back as PACKET_HOST"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs CAP_NET_RAW: run under `unshare -rn`"]
+    fn the_capture_socket_keeps_the_frames_the_host_sent() {
+        let mut sender = RawSocket::open("lo").expect("open lo");
+        let capture = CaptureSocket::open("lo").expect("open lo for capture");
+
+        let mut frame = [0u8; 60];
+        frame[0..6].copy_from_slice(&[0xff; 6]);
+        frame[6..12].copy_from_slice(&[0x10; 6]);
+        frame[12..14].copy_from_slice(&ETHERTYPE_ETHERCAT.to_be_bytes());
+        sender.send(&frame).expect("send");
+
+        let mut buf = [0u8; 128];
+        let mut seen = 0;
+        while capture
+            .receive(&mut buf, Duration::from_millis(200))
+            .expect("receive")
+            .is_some()
+        {
+            seen += 1;
+            if seen == 2 {
+                break;
+            }
+        }
+        assert_eq!(
+            seen, 2,
+            "a capture needs the outgoing copy as well as the one that came back"
         );
     }
 }

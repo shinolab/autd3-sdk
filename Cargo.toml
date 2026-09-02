@@ -15,6 +15,7 @@ members = [
     "firmware/cpu/wire",
     "firmware/cpu/fw",
     "tools/perftest",
+    "tools/wiretrace",
     "tools/synctune",
     "tools/firmware-writer",
     "tools/firmware-test",
@@ -88,6 +89,7 @@ toml = { version = "1.1.4", default-features = false, features = [
 ] }
 serde_ignored = { version = "0.1.14", default-features = false }
 anyhow = { version = "1.0.102", default-features = false, features = ["std"] }
+pcap-file = { version = "2.0.0", default-features = false }
 tracing = { version = "0.1.44", default-features = false }
 tracing-appender = { version = "0.2.3", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = [

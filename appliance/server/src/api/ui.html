@@ -211,21 +211,6 @@
     </section>
 
     <section>
-      <h2>Tune</h2>
-      <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center">
-        <label><code>sync0_period</code>s <input id="tune-periods" value="1ms, 2ms" size="14" /></label>
-        <label><code>frame_phase</code>s <input id="tune-phases" value="auto" size="14" /></label>
-        <label>dwell <input id="tune-dwell" value="30s" size="6" /></label>
-        <button id="tune-start">Start</button>
-        <button id="tune-cancel">Cancel</button>
-        <button id="tune-apply">Apply</button>
-      </div>
-      <div class="overflow" style="margin-top: 0.9rem">
-        <table id="tune"></table>
-      </div>
-    </section>
-
-    <section>
       <h2>Appliance</h2>
       <div class="overflow">
         <table id="appliance"></table>
@@ -248,6 +233,21 @@
     </section>
 
     <section>
+      <h2>Tune</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center">
+        <label><code>sync0_period</code>s <input id="tune-periods" value="1ms, 2ms" size="14" /></label>
+        <label><code>frame_phase</code>s <input id="tune-phases" value="auto" size="14" /></label>
+        <label>dwell <input id="tune-dwell" value="30s" size="6" /></label>
+        <button id="tune-start">Start</button>
+        <button id="tune-cancel">Cancel</button>
+        <button id="tune-apply">Apply</button>
+      </div>
+      <div class="overflow" style="margin-top: 0.9rem">
+        <table id="tune"></table>
+      </div>
+    </section>
+
+    <section>
       <h2>Log</h2>
       <pre id="logs">…</pre>
       <div style="margin-top: 0.6rem">
@@ -258,6 +258,20 @@
           <option value="autd3-wifi-init">autd3-wifi-init</option>
           <option value="autd3-firstboot">autd3-firstboot</option>
         </select>
+      </div>
+    </section>
+
+    <section>
+      <h2>Capture</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center">
+        <label>for <input id="capture-seconds" value="30" size="4" /> s</label>
+        <label>or <input id="capture-mib" value="64" size="4" /> MiB</label>
+        <button id="capture-start">Start</button>
+        <button id="capture-stop">Stop</button>
+        <button id="capture-download">Download</button>
+      </div>
+      <div class="overflow" style="margin-top: 0.9rem">
+        <table id="capture"></table>
       </div>
     </section>
   </main>
@@ -519,12 +533,38 @@
       }));
     }
 
+    function renderCapture(c) {
+      const kind =
+        c.state === "running" ? "warn" : c.state === "failed" ? "bad" : c.state === "finished" ? "ok" : "";
+      const entries = [["state", c.error ? c.state + ": " + c.error : c.state, kind]];
+      if (c.interface) entries.push(["interface", c.interface]);
+      if (c.state !== "idle") {
+        entries.push(["frames", c.frames.toLocaleString()]);
+        entries.push(["size", (c.bytes / 1048576).toFixed(1) + " MiB"]);
+        entries.push(["elapsed", c.elapsed_seconds + " s"]);
+      }
+      if (c.stopped_because) entries.push(["stopped", c.stopped_because]);
+      if (entries.length === 1) entries.push(["", "no capture has run yet"]);
+      rows($("capture"), entries);
+
+      const running = c.state === "running";
+      $("capture-start").disabled = !admin || running;
+      $("capture-stop").disabled = !admin || !running;
+      $("capture-download").disabled = running || c.state === "idle";
+    }
+
     async function refresh() {
       try {
         render(await call("GET", "/status"));
         renderTune(await call("GET", "/bus/tune"));
       } catch (e) {
         say("cannot reach the appliance: " + e.message, "bad");
+        return;
+      }
+      try {
+        renderCapture(await call("GET", "/diag/capture"));
+      } catch (e) {
+        rows($("capture"), [["state", e.message, "bad"]]);
       }
     }
 
@@ -598,6 +638,36 @@
       } catch (e) {
         say(e.message, "bad");
       }
+    });
+
+    $("capture-start").addEventListener("click", async () => {
+      const positive = (raw, fallback) => {
+        const value = Number(raw);
+        return Number.isFinite(value) && value > 0 ? value : fallback;
+      };
+      try {
+        const request = {
+          max_seconds: Math.round(positive($("capture-seconds").value, 30)),
+          max_bytes: Math.round(positive($("capture-mib").value, 64) * 1048576),
+        };
+        say((await call("POST", "/diag/capture", request)).message, "ok");
+      } catch (e) {
+        say(e.message, "bad");
+      }
+      refresh();
+    });
+
+    $("capture-stop").addEventListener("click", async () => {
+      try {
+        say((await call("POST", "/diag/capture/stop")).message, "ok");
+      } catch (e) {
+        say(e.message, "bad");
+      }
+      refresh();
+    });
+
+    $("capture-download").addEventListener("click", () => {
+      window.location.href = "/diag/capture/download";
     });
 
     $("config-save").addEventListener("click", async () => {
