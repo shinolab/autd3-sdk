@@ -278,26 +278,16 @@ pub struct Checker {
 
 #[pymethods]
 impl Checker {
-    fn check<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let source = match &self.source {
-            CheckerSource::Current(backend) => CheckerSource::Current(Arc::clone(backend)),
-            CheckerSource::Legacy(backend) => CheckerSource::Legacy(Arc::clone(backend)),
-        };
-        future_into_py(py, async move {
-            let status = match source {
-                CheckerSource::Current(backend) => {
-                    backend.check_status().await.map_err(to_pyerr_gil)
-                }
-                CheckerSource::Legacy(backend) => {
-                    backend.check_status().await.map_err(to_pyerr_gil)
-                }
-            }?;
-            Ok(LinkStatus {
-                device_states: status.device_states,
-                all_op: status.all_op,
-                any_lost: status.any_lost,
-                recoveries: status.recoveries,
-            })
+    fn check(&self, py: Python<'_>) -> PyResult<LinkStatus> {
+        let status = match &self.source {
+            CheckerSource::Current(backend) => backend.check_status().map_err(|e| to_pyerr(py, e)),
+            CheckerSource::Legacy(backend) => backend.check_status().map_err(|e| to_pyerr(py, e)),
+        }?;
+        Ok(LinkStatus {
+            device_states: status.device_states,
+            all_op: status.all_op,
+            any_lost: status.any_lost,
+            recoveries: status.recoveries,
         })
     }
 }

@@ -211,7 +211,7 @@ mod link {
         fn read_telemetry(&self, counter: autd3_rs::Telemetry) -> BoxFuture<Vec<u8>>;
         fn send(&self, datagrams: Arc<Frames>, index: usize) -> BoxFuture<ResponseToken>;
         fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()>;
-        fn check_status(&self) -> BoxFuture<LinkStatusData>;
+        fn check_status(&self) -> Result<LinkStatusData, Error>;
         fn stop(&self) -> BoxFuture<()>;
         fn close(&self) -> BoxFuture<()>;
     }
@@ -261,7 +261,7 @@ mod link {
             frames: Arc<LegacyFrames>,
             frame: Option<usize>,
         ) -> LegacyBoxFuture<()>;
-        fn check_status(&self) -> LegacyBoxFuture<LinkStatusData>;
+        fn check_status(&self) -> Result<LinkStatusData, LegacyError>;
         fn stop(&self) -> LegacyBoxFuture<()>;
         fn close(&self) -> LegacyBoxFuture<()>;
     }
@@ -279,7 +279,7 @@ mod link {
 
     struct LegacyBackend<C> {
         client: Arc<LegacyClient>,
-        checker: Arc<tokio::sync::Mutex<C>>,
+        checker: Arc<std::sync::Mutex<C>>,
     }
 
     fn legacy_frame_range(
@@ -370,30 +370,18 @@ mod link {
             })
         }
 
-        fn check_status(&self) -> LegacyBoxFuture<LinkStatusData> {
-            let checker = Arc::clone(&self.checker);
-            Box::pin(async move {
-                link_runtime()
-                    .spawn(async move {
-                        let status = checker
-                            .lock()
-                            .await
-                            .check()
-                            .await
-                            .map_err(|e| LegacyError::Link(e.to_string()))?;
-                        Ok::<LinkStatusData, LegacyError>(LinkStatusData {
-                            device_states: status
-                                .devices()
-                                .iter()
-                                .map(ToString::to_string)
-                                .collect(),
-                            all_op: status.all_op(),
-                            any_lost: status.any_lost(),
-                            recoveries: status.recoveries(),
-                        })
-                    })
-                    .await
-                    .map_err(legacy_join_err)?
+        fn check_status(&self) -> Result<LinkStatusData, LegacyError> {
+            let status = self
+                .checker
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .check()
+                .map_err(|e| LegacyError::Link(e.to_string()))?;
+            Ok(LinkStatusData {
+                device_states: status.devices().iter().map(ToString::to_string).collect(),
+                all_op: status.all_op(),
+                any_lost: status.any_lost(),
+                recoveries: status.recoveries(),
             })
         }
 
@@ -435,7 +423,7 @@ mod link {
                         .map_err(legacy_join_err)??;
                 let backend: Box<dyn LegacyClientBackend> = Box::new(LegacyBackend {
                     client: Arc::new(client),
-                    checker: Arc::new(tokio::sync::Mutex::new(checker)),
+                    checker: Arc::new(std::sync::Mutex::new(checker)),
                 });
                 Ok(backend)
             })

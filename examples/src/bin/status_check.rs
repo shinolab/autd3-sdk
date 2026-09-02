@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     println!("watching link status — press Ctrl+C to stop");
     let mut last: Option<LinkStatus> = None;
     loop {
-        let status = checker.check().await?;
+        let status = checker.check()?;
         if last.as_ref() != Some(&status) {
             print_status(&status);
             last = Some(status);

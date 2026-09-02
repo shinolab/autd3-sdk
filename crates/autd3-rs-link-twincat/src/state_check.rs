@@ -93,8 +93,8 @@ impl TwinCATStateChecker {
 impl autd3_rs_core::StateCheck for TwinCATStateChecker {
     type Error = TwinCATLinkError;
 
-    fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Self::Error>> + Send {
-        std::future::ready(TwinCATStateChecker::check(self))
+    fn check(&mut self) -> Result<LinkStatus, Self::Error> {
+        TwinCATStateChecker::check(self)
     }
 }
 

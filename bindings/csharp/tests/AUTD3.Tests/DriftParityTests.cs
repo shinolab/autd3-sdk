@@ -178,7 +178,7 @@ namespace AUTD3.Tests
             var (client, checker) = await Client.OpenWithCheckerAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
             using var c = client;
             using var k = checker;
-            var status = await checker.CheckAsync();
+            var status = checker.Check();
             Assert.Equal(DeviceState.Op, Assert.Single(status.Devices));
             Assert.True(status.AllOp);
             Assert.False(status.AnyLost);

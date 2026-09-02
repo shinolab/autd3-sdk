@@ -9,7 +9,7 @@ use autd3_rs::{Client, ConstStateChecker, Frames, StateCheck};
 use autd3_rs_link_nop::Nop as CoreNop;
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
-use tokio::sync::Mutex;
+use std::sync::Mutex;
 
 struct NopBackend {
     client: Arc<Client>,
@@ -112,26 +112,18 @@ impl ClientBackend for NopBackend {
         })
     }
 
-    fn check_status(&self) -> BoxFuture<LinkStatusData> {
-        let checker = Arc::clone(&self.checker);
-        Box::pin(async move {
-            link_runtime()
-                .spawn(async move {
-                    let status = checker
-                        .lock()
-                        .await
-                        .check()
-                        .await
-                        .map_err(|e| Error::Link(e.to_string()))?;
-                    Ok::<LinkStatusData, Error>(LinkStatusData {
-                        device_states: status.devices().iter().map(ToString::to_string).collect(),
-                        all_op: status.all_op(),
-                        any_lost: status.any_lost(),
-                        recoveries: status.recoveries(),
-                    })
-                })
-                .await
-                .map_err(join_err)?
+    fn check_status(&self) -> Result<LinkStatusData, Error> {
+        let status = self
+            .checker
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .check()
+            .map_err(|e| Error::Link(e.to_string()))?;
+        Ok(LinkStatusData {
+            device_states: status.devices().iter().map(ToString::to_string).collect(),
+            all_op: status.all_op(),
+            any_lost: status.any_lost(),
+            recoveries: status.recoveries(),
         })
     }
 

@@ -110,10 +110,14 @@ namespace AUTD3
             _handle = new CheckerHandle(handle);
         }
 
-        public async Task<LinkStatus> CheckAsync()
+        public LinkStatus Check()
         {
-            var status = await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_checker_check(_handle, cb, ud)).ConfigureAwait(false);
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var status = NativeClient.autd3_checker_check(_handle, err, (UIntPtr)err.Length);
+            if (status == IntPtr.Zero)
+            {
+                throw new Autd3Exception(NativeUtil.Utf8(err));
+            }
             try
             {
                 var count = (int)NativeClient.autd3_link_status_num_devices(status);

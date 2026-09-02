@@ -96,7 +96,7 @@ impl LegacyClient {
         link: T,
         config: LegacyClientConfig,
     ) -> Result<(Self, <T::Link as Link>::Checker), LegacyError> {
-        let link = link.into_link(geometry).await?;
+        let link = link.into_link(geometry)?;
         let num_devices = link.num_devices();
         if num_devices == 0 {
             return Err(LegacyError::NoDevices);

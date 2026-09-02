@@ -19,9 +19,9 @@ impl PacedNop {
 impl IntoLink for PacedNop {
     type Link = Paced;
 
-    async fn into_link(self, geometry: &Geometry) -> Result<Paced, LinkError> {
+    fn into_link(self, geometry: &Geometry) -> Result<Paced, LinkError> {
         Ok(Paced {
-            inner: Nop.into_link(geometry).await?,
+            inner: Nop.into_link(geometry)?,
             period: self.period,
             next: None,
         })

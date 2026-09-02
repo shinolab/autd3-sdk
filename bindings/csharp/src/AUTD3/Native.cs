@@ -145,7 +145,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_client_checker(ClientHandle client);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_checker_check(CheckerHandle checker, CompletionCallback cb, IntPtr userData);
+        internal static extern IntPtr autd3_checker_check(CheckerHandle checker, byte[] err, UIntPtr errLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_checker_free(IntPtr checker);

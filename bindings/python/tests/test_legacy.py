@@ -69,7 +69,7 @@ def test_open_with_checker_reports_the_link_status() -> None:
         )
         assert client.num_devices() == 1
 
-        status = await checker.check()
+        status = checker.check()
         assert len(status.device_states) == 1
         assert status.all_op
         assert not status.any_lost

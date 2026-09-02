@@ -30,7 +30,7 @@ async def main() -> None:
 
     last = None
     while not stop.is_set():
-        status = await checker.check()
+        status = checker.check()
         key = (tuple(status.device_states), status.recoveries)
         if key != last:
             for i, state in enumerate(status.device_states):

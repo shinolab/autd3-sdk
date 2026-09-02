@@ -452,7 +452,7 @@ mod client {
     }
 
     pub trait CheckerBackend: Send + Sync {
-        fn check(&self) -> BoxFuture<LinkStatusData>;
+        fn check(&self) -> Result<LinkStatusData, Error>;
     }
 
     pub trait ClientBackend: Send + Sync {
@@ -520,30 +520,22 @@ mod client {
 
     struct LegacyBackend<C> {
         client: Arc<LegacyClient>,
-        checker: Arc<tokio::sync::Mutex<C>>,
+        checker: Arc<std::sync::Mutex<C>>,
     }
 
-    struct LegacyChecker<C>(Arc<tokio::sync::Mutex<C>>);
+    struct LegacyChecker<C>(Arc<std::sync::Mutex<C>>);
 
     impl<C: StateCheck> CheckerBackend for LegacyChecker<C> {
-        fn check(&self) -> BoxFuture<LinkStatusData> {
-            let checker = Arc::clone(&self.0);
-            Box::pin(async move {
-                link_runtime()
-                    .spawn(async move {
-                        let status = checker
-                            .lock()
-                            .await
-                            .check()
-                            .await
-                            .map_err(|e| Error::Link(e.to_string()))?;
-                        Ok::<LinkStatusData, Error>(LinkStatusData {
-                            devices: status.devices().to_vec(),
-                            recoveries: status.recoveries(),
-                        })
-                    })
-                    .await
-                    .map_err(join_err)?
+        fn check(&self) -> Result<LinkStatusData, Error> {
+            let status = self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .check()
+                .map_err(|e| Error::Link(e.to_string()))?;
+            Ok(LinkStatusData {
+                devices: status.devices().to_vec(),
+                recoveries: status.recoveries(),
             })
         }
     }
@@ -691,7 +683,7 @@ mod client {
                         .map_err(legacy_join_err)??;
                 let backend: Box<dyn LegacyClientBackend> = Box::new(LegacyBackend {
                     client: Arc::new(client),
-                    checker: Arc::new(tokio::sync::Mutex::new(checker)),
+                    checker: Arc::new(std::sync::Mutex::new(checker)),
                 });
                 Ok(backend)
             })

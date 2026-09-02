@@ -120,7 +120,7 @@ fn the_bus_loop_reopens_the_link_and_the_server_survives() {
     let status = spin("the recovery to show up in the bus status", || {
         tx[0][0] = tx[0][0].wrapping_add(1);
         let _ = link.cycle(&tx, &mut rx);
-        let status: LinkStatus = futures_lite_block_on(checker.check()).unwrap();
+        let status: LinkStatus = checker.check().unwrap();
         (status.recoveries() > 0).then_some(status)
     });
     assert!(status.all_op());
@@ -140,13 +140,13 @@ struct WatchedChecker {
 impl StateCheck for WatchedChecker {
     type Error = Infallible;
 
-    fn check(&mut self) -> impl Future<Output = Result<LinkStatus, Self::Error>> + Send {
+    fn check(&mut self) -> Result<LinkStatus, Self::Error> {
         let devices = self
             .states
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
-        std::future::ready(Ok(LinkStatus::new(devices, 0)))
+        Ok(LinkStatus::new(devices, 0))
     }
 }
 
@@ -193,7 +193,7 @@ fn the_real_bus_state_reaches_the_remote_client() {
 
     link.cycle(&tx, &mut rx).unwrap();
     assert!(
-        futures_lite_block_on(checker.check()).unwrap().all_op(),
+        checker.check().unwrap().all_op(),
         "a healthy bus reads as OP",
     );
 
@@ -204,7 +204,7 @@ fn the_real_bus_state_reaches_the_remote_client() {
     let status = spin("the SAFE-OP + ERROR state to reach the client", || {
         tx[0][0] = tx[0][0].wrapping_add(1);
         link.cycle(&tx, &mut rx).unwrap();
-        let status = futures_lite_block_on(checker.check()).unwrap();
+        let status = checker.check().unwrap();
         (!status.all_op()).then_some(status)
     });
     assert_eq!(
@@ -270,16 +270,4 @@ fn the_bus_pacing_bounds_the_cycle_rate() {
         count <= 40,
         "a 20 ms period must not run more than ~10 cycles in 200 ms, ran {count}",
     );
-}
-
-fn futures_lite_block_on<F: Future>(fut: F) -> F::Output {
-    let mut fut = std::pin::pin!(fut);
-    let waker = std::task::Waker::noop();
-    let mut cx = std::task::Context::from_waker(waker);
-    loop {
-        if let std::task::Poll::Ready(v) = fut.as_mut().poll(&mut cx) {
-            return v;
-        }
-        std::thread::yield_now();
-    }
 }
