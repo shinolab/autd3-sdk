@@ -40,6 +40,7 @@ export default defineConfig({
         Sidebar: "./src/components/Sidebar.astro",
         PageTitle: "./src/components/PageTitle.astro",
         Banner: "./src/components/Banner.astro",
+        ThemeSelect: "./src/components/ThemeSelect.astro",
         Head: "./src/components/Head.astro",
       },
       locales: {
