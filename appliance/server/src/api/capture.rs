@@ -169,7 +169,7 @@ pub fn run(job: &CaptureJob, interface: &str, _request: CaptureRequest) -> Resul
     Err(message)
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::{CaptureJob, run};
     use autd3_rs_appliance::{CaptureRequest, CaptureState};
