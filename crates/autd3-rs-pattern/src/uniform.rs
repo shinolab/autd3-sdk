@@ -1,6 +1,7 @@
 use autd3_rs_core::value::Emission;
 
 #[must_use]
+#[inline]
 pub fn uniform_transducer(emission: Emission) -> Emission {
     emission
 }

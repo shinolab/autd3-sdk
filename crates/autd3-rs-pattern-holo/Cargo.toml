@@ -19,6 +19,9 @@ all-features = true
 default = ["parallel"]
 parallel = ["dep:rayon"]
 
+[lib]
+bench = false
+
 [dependencies]
 autd3-rs-core.workspace = true
 nalgebra.workspace = true

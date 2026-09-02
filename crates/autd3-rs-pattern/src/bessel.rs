@@ -42,6 +42,7 @@ fn bessel_phase(
 }
 
 #[must_use]
+#[inline]
 pub fn bessel_transducer(
     position: Point3<f32>,
     apex: Point3<f32>,

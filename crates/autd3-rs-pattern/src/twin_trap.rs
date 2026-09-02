@@ -35,6 +35,7 @@ fn twin_trap_phase(
 }
 
 #[must_use]
+#[inline]
 pub fn twin_trap_transducer(
     position: Point3<f32>,
     target: Point3<f32>,
