@@ -6,7 +6,7 @@ const { id, lang, locale } = Astro.locals.starlightRoute;
 
 const version = pageVersion(id, locale);
 const latest = latestVersion();
-const href = versionHref(latest, locale);
+const href = await versionHref(latest, id, locale);
 const label = latest.label ?? latest.slug;
 const ja = lang === "ja";
 
