@@ -21,6 +21,7 @@ impl Default for PlaneOption {
 }
 
 #[must_use]
+#[inline]
 pub fn plane_transducer(
     position: Point3<f32>,
     direction: UnitVector3<f32>,

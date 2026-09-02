@@ -25,11 +25,26 @@ impl Phase {
     }
 }
 
+const RAD_PER_LSB: f32 = 2.0 * PI / 256.0;
+const LSB_LIMIT: f32 = 2_147_483_648.0;
+const ROUND_TO_MULTIPLE_OF_512: f32 = 6_442_450_944.0;
+const ROUND_TO_INTEGER: f32 = 12_582_912.0;
+
 impl From<Angle> for Phase {
+    #[inline]
     fn from(v: Angle) -> Self {
-        let p = (v.rad() / (2.0 * PI) * 256.0).round();
+        #[allow(clippy::manual_clamp)]
+        let lsb = (v.rad() / RAD_PER_LSB).max(-LSB_LIMIT).min(LSB_LIMIT);
+        let turns = (lsb + ROUND_TO_MULTIPLE_OF_512) - ROUND_TO_MULTIPLE_OF_512;
+        let within_turns = lsb - turns;
+        let rounded = within_turns + ROUND_TO_INTEGER;
+        #[allow(clippy::float_cmp)]
+        let away_from_zero = {
+            let frac = within_turns - (rounded - ROUND_TO_INTEGER);
+            i32::from(frac == 0.5 && lsb > 0.0) - i32::from(frac == -0.5 && lsb < 0.0)
+        };
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        Self(((p as i32) & 0xFF) as u8)
+        Self(rounded.to_bits().wrapping_add(away_from_zero as u32) as u8)
     }
 }
 
@@ -145,6 +160,136 @@ mod tests {
             (2.0 * PI / 256.0 * 255.0, 255),
         ] {
             approx::assert_abs_diff_eq!(expect, Phase(value).rad());
+        }
+    }
+
+    fn quantized_exactly(v: Angle) -> Phase {
+        let lsb = f64::from(v.rad() / RAD_PER_LSB);
+        if !lsb.is_finite() || lsb.abs() >= f64::from(LSB_LIMIT) {
+            return Phase::ZERO;
+        }
+        let truncated = lsb.trunc();
+        let frac = lsb - truncated;
+        let rounded = if frac >= 0.5 {
+            truncated + 1.0
+        } else if frac <= -0.5 {
+            truncated - 1.0
+        } else {
+            truncated
+        };
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        Phase(((rounded as i64) & 0xFF) as u8)
+    }
+
+    fn quantized_by_saturating_round(v: Angle) -> Phase {
+        let p = (v.rad() / (2.0 * PI) * 256.0).round();
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        Phase(((p as i32) & 0xFF) as u8)
+    }
+
+    #[test]
+    fn from_angle() {
+        for (expect, value) in [
+            (Phase(0x00), 0.0),
+            (Phase(0x40), PI / 2.0),
+            (Phase(0x80), PI),
+            (Phase(0xC0), -PI / 2.0),
+            (Phase(0x00), 2.0 * PI),
+            (Phase(0x01), 2.0 * PI / 256.0),
+            (Phase(0xFF), -2.0 * PI / 256.0),
+        ] {
+            assert_eq!(expect, Phase::from(Angle::from_rad(value)));
+        }
+    }
+
+    #[test]
+    fn from_angle_matches_exact_at_edges() {
+        for value in [
+            f32::NAN,
+            -f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::MAX,
+            f32::MIN,
+            f32::MIN_POSITIVE,
+            -f32::MIN_POSITIVE,
+            f32::from_bits(1),
+            f32::from_bits(0x8000_0001),
+            0.0,
+            -0.0,
+            RAD_PER_LSB / 2.0,
+            -RAD_PER_LSB / 2.0,
+            RAD_PER_LSB * 1.5,
+            -RAD_PER_LSB * 1.5,
+            RAD_PER_LSB * 2.5,
+            -RAD_PER_LSB * 2.5,
+            RAD_PER_LSB * 255.5,
+            RAD_PER_LSB * 256.5,
+            RAD_PER_LSB * 511.5,
+            RAD_PER_LSB * 512.5,
+            RAD_PER_LSB * LSB_LIMIT,
+            -RAD_PER_LSB * LSB_LIMIT,
+        ] {
+            let v = Angle::from_rad(value);
+            assert_eq!(
+                quantized_exactly(v),
+                Phase::from(v),
+                "{value:e} (0x{:08X})",
+                value.to_bits()
+            );
+        }
+    }
+
+    #[test]
+    fn from_angle_wraps_beyond_the_saturating_boundary() {
+        let boundary = RAD_PER_LSB * LSB_LIMIT;
+        assert_eq!(Phase::ZERO, Phase::from(Angle::from_rad(boundary)));
+        assert_eq!(
+            Phase(0xFF),
+            quantized_by_saturating_round(Angle::from_rad(boundary))
+        );
+        assert_eq!(Phase::ZERO, Phase::from(Angle::from_rad(f32::INFINITY)));
+        assert_eq!(Phase::ZERO, Phase::from(Angle::from_rad(f32::NEG_INFINITY)));
+        assert_eq!(Phase::ZERO, Phase::from(Angle::from_rad(f32::NAN)));
+    }
+
+    #[test]
+    #[ignore = "sweeps all 2^32 f32 inputs"]
+    fn from_angle_matches_exact_for_every_f32() {
+        let mut bits = 0u32;
+        loop {
+            let value = f32::from_bits(bits);
+            let v = Angle::from_rad(value);
+            assert_eq!(
+                quantized_exactly(v),
+                Phase::from(v),
+                "{value:e} (0x{bits:08X})"
+            );
+            if bits == u32::MAX {
+                break;
+            }
+            bits += 1;
+        }
+    }
+
+    #[test]
+    #[ignore = "sweeps all 2^32 f32 inputs"]
+    fn from_angle_matches_saturating_round_below_the_boundary() {
+        let mut bits = 0u32;
+        loop {
+            let value = f32::from_bits(bits);
+            if value.abs() < RAD_PER_LSB * LSB_LIMIT {
+                let v = Angle::from_rad(value);
+                assert_eq!(
+                    quantized_by_saturating_round(v),
+                    Phase::from(v),
+                    "{value:e} (0x{bits:08X})"
+                );
+            }
+            if bits == u32::MAX {
+                break;
+            }
+            bits += 1;
         }
     }
 

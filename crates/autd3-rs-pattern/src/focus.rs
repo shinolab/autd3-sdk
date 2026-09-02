@@ -20,11 +20,13 @@ impl Default for FocusOption {
     }
 }
 
+#[inline]
 pub(crate) fn focus_phase(offset: Vector3<f32>, wavelength: Length) -> Angle {
     -offset.norm() / wavelength.mm() * 2.0 * PI * rad
 }
 
 #[must_use]
+#[inline]
 pub fn focus_transducer(
     position: Point3<f32>,
     target: Point3<f32>,

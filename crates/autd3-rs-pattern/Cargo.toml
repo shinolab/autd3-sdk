@@ -12,6 +12,9 @@ readme = "README.md"
 keywords = ["autd3", "haptics"]
 categories = ["science"]
 
+[lib]
+bench = false
+
 [dependencies]
 autd3-rs-core.workspace = true
 

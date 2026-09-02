@@ -52,6 +52,7 @@ fn vortex_phase(
 }
 
 #[must_use]
+#[inline]
 pub fn vortex_transducer(
     position: Point3<f32>,
     target: Point3<f32>,

@@ -30,6 +30,20 @@ pub enum RustCmd {
         #[arg(long)]
         fix: bool,
     },
+    /// Run the `crates/` workspace criterion benchmarks
+    Bench {
+        /// Only run benchmarks whose id contains this string
+        filter: Option<String>,
+        /// Only benchmark this package
+        #[arg(long, short)]
+        package: Option<String>,
+        /// Save the results under this criterion baseline name
+        #[arg(long)]
+        save_baseline: Option<String>,
+        /// Compare the results against this saved criterion baseline
+        #[arg(long)]
+        baseline: Option<String>,
+    },
     /// Check the `crates/` workspace API for SemVer violations with cargo-semver-checks
     Semver {
         /// Released version to compare against (defaults to the latest one on crates.io)
@@ -136,6 +150,30 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             if !*fix {
                 args.push("--");
                 args.push("--check");
+            }
+            run("cargo", args, root)
+        }
+        RustCmd::Bench {
+            filter,
+            package,
+            save_baseline,
+            baseline,
+        } => {
+            let mut args = vec!["bench".to_string()];
+            match package {
+                Some(package) => args.extend(["--package".to_string(), package.clone()]),
+                None => args.push("--workspace".to_string()),
+            }
+            args.push("--benches".to_string());
+            args.push("--".to_string());
+            if let Some(filter) = filter {
+                args.push(filter.clone());
+            }
+            if let Some(name) = save_baseline {
+                args.extend(["--save-baseline".to_string(), name.clone()]);
+            }
+            if let Some(name) = baseline {
+                args.extend(["--baseline".to_string(), name.clone()]);
             }
             run("cargo", args, root)
         }
