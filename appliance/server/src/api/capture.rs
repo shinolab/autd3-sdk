@@ -1,13 +1,18 @@
+#[cfg(target_os = "linux")]
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
+#[cfg(target_os = "linux")]
 use std::time::{Duration, Instant};
 
 use autd3_rs_appliance::{CaptureRequest, CaptureState, CaptureStatus};
+#[cfg(target_os = "linux")]
 use pcap_file::pcap::{PcapPacket, PcapWriter};
 
+#[cfg(target_os = "linux")]
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
+#[cfg(target_os = "linux")]
 const MAX_FRAME_BYTES: usize = 2048;
 
 pub struct CaptureJob {
@@ -60,6 +65,7 @@ impl CaptureJob {
         true
     }
 
+    #[cfg(target_os = "linux")]
     fn finish(&self, reason: &str) {
         let mut status = self.lock();
         status.state = CaptureState::Finished;
