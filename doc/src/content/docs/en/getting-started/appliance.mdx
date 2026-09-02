@@ -1,8 +1,8 @@
 ---
 title: Appliance
-description: Run the EtherCAT master on a dedicated board to decouple the bus from your host's load and OS settings
+description: The recommended setup, driving the bus from a dedicated EtherCAT master board
 sidebar:
-  order: 10
+  order: 2
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
@@ -11,8 +11,16 @@ import client from "@codes/rust/examples/api/link/remote_client.rs?raw";
 import pyClient from "@codes/python/examples/api/link/remote_client.py?raw";
 import csClient from "@codes/csharp/examples/api/link/remote_client.cs?raw";
 
+:::note
+If you use [TwinCAT](/autd3-sdk/en/getting-started/twincat/) or [echocat](/autd3-sdk/en/api/link/echocat/), the steps on this page are not needed.
+:::
+
 The appliance is a dedicated board that runs nothing but the EtherCAT master.
 The board owns the cable to the AUTD3 devices, and your machine connects over TCP with [`RemoteLink`](/autd3-sdk/en/api/link/remote/).
+
+The EtherCAT bus is detached from the host and closes on the board, so the stability of the bus does not depend on the host's real-time behaviour, NIC, or load.
+The host can be Windows, Linux, or macOS, and needs neither [TwinCAT](/autd3-sdk/en/getting-started/twincat/) nor npcap.
+Unless there is a reason not to, this is the recommended way to drive AUTD3.
 
 Only the Raspberry Pi 4 (RP4) is currently supported.
 
@@ -57,7 +65,7 @@ Discovering the appliance from the host tells you whether it came up.
 autd3-appliance scan
 ```
 
-`autd3-appliance` is bundled with autd3-console ([Console](/autd3-sdk/en/getting-started/setup/console/)).
+`autd3-appliance` is bundled with autd3-console ([Console](/autd3-sdk/en/guide/console/)).
 Pressing "Scan" on the **Appliance** tab of autd3-console does the same thing.
 
 ## Getting started

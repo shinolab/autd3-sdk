@@ -2,7 +2,7 @@
 title: Remote
 description: Remote Link that connects over TCP to a separate host wired to the real hardware
 sidebar:
-  order: 5
+  order: 3
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
@@ -14,11 +14,10 @@ import csClient from "@codes/csharp/examples/api/link/remote_client.cs?raw";
 import server from "@codes/rust/examples/api/link/remote_server.rs?raw";
 
 `RemoteLink` is a Link implementation that connects over TCP to a separate host connected to the AUTD3 devices for sending and receiving.
-Use it when the machine that operates AUTD3 differs from the machine wired to the real hardware.
+
+Used to connect to the [Appliance](/autd3-sdk/en/getting-started/appliance/) or the [Simulator](/autd3-sdk/en/guide/simulator/).
 
 <Install rust="autd3-rs-link-remote" python="autd3-link-remote" csharp="AUTD3.Link.Remote" />
-
-Connection to the [`Simulator`](/autd3-sdk/en/guide/simulator/) is also done with `RemoteLink`.
 
 ## API
 
@@ -65,7 +64,7 @@ The device count of the client's `Geometry` has to match the device count of the
 Setting `rt_priority` may require privileges (`CAP_SYS_NICE` on Linux).
 Without them the server warns and runs with plain scheduling, which may make the bus unstable under load.
 
-For a real example, see the [appliance documentation](/autd3-sdk/en/guide/appliance/) and the [appliance implementation](https://github.com/shinolab/autd3-sdk/tree/main/appliance).
+For a real example, see the [appliance documentation](/autd3-sdk/en/getting-started/appliance/) and the [appliance implementation](https://github.com/shinolab/autd3-sdk/tree/main/appliance).
 
 <CodeTabs rust={excerpt(server, "api")} />
 

@@ -19,6 +19,11 @@ import { excerpt } from "@lib/excerpt";
 本チュートリアルでは[echocat](/autd3-sdk/api/link/echocat/)を利用する.
 Windowsを使用する場合, [Npcap](https://npcap.com/)を「**WinPcap API-compatible Mode**」でインストールしておくこと.
 
+:::note
+`echocat` の代わりに [Remote link](/autd3-sdk/api/link/remote/) や [TwinCAT link](/autd3-sdk/api/link/twincat/) を使用することもできる.
+その場合は, link の部分を適宜変更すること.
+:::
+
 以下は, 1台のAUTD3デバイスでアレイの中心から150 mm直上に焦点を生成し, 200 Hzの正弦波AMかける例である.
 
 <CodeTabs>

@@ -2,12 +2,12 @@
 title: Installing TwinCAT
 description: Installation and setup steps when using TwinCAT as the EtherCAT master
 sidebar:
-  order: 2
+  order: 3
 ---
 
 :::note
 TwinCAT is one option for an EtherCAT master on Windows, and is only required when using [TwinCATLink](/autd3-sdk/en/api/link/twincat/).
-When using Linux/macOS or another Link such as [echocat](/autd3-sdk/en/api/link/echocat/), the steps on this page are not needed.
+If you use the [Appliance](/autd3-sdk/en/getting-started/appliance/) or [echocat](/autd3-sdk/en/api/link/echocat/), the steps on this page are not needed.
 :::
 
 TwinCAT is the only official way to use EtherCAT on a PC, and it is Windows-only software that makes Windows real-time capable.
@@ -41,7 +41,7 @@ Once the initial configuration is complete, install "TwinCAT Standard" (both Eng
 ## Obtaining autd3-console
 
 The GUI tool `autd3-console` is used to set up TwinCAT.
-Obtain it as described in [Console](/autd3-sdk/en/getting-started/setup/console/), launch it, and open the "TwinCAT" tab at the top.
+Obtain it as described in [Console](/autd3-sdk/en/guide/console/), launch it, and open the "TwinCAT" tab at the top.
 
 ## Initial Setup
 
@@ -96,11 +96,6 @@ Set the following parameters as needed, and press "Run" to scan the devices and 
 | Task (x base time)   | Task cycle time (in units of base time).                          | 1          |
 | Base time            | CPU base time.                                                     | 1 ms       |
 | Keep XAE Shell open  | Whether to keep the XAE Shell open.                               | On         |
-
-:::caution
-The TwinCAT connection is lost when the PC is turned off, enters sleep mode, etc.
-In that case, run "Run" again.
-:::
 
 To simply reopen a project that has already been configured, open it from "Open".
 

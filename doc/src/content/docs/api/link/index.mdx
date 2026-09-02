@@ -11,9 +11,9 @@ import CodeTabs from "@components/CodeTabs.astro";
 
 ## Link 一覧
 
-- [TwinCAT](/autd3-sdk/api/link/twincat/) — Beckhoff TwinCAT 3 を使用する Link
-- [echocat](/autd3-sdk/api/link/echocat/) — AUTD3 専用の EtherCAT Link
-- [Remote](/autd3-sdk/api/link/remote/) — リモート接続用の Link
+- [TwinCAT](/autd3-sdk/api/link/twincat/) — Windows 上の Beckhoff TwinCAT 3 を EtherCAT マスタとして使用する Link
+- [echocat](/autd3-sdk/api/link/echocat/) — AUTD3 専用の EtherCAT Link. ホスト自身が EtherCAT マスタになる
+- [Remote](/autd3-sdk/api/link/remote/) — 別ホストへ TCP 接続する Link. [Appliance](/autd3-sdk/getting-started/appliance/) と [Simulator](/autd3-sdk/guide/simulator/) にはこれでつなぐ
 
 ## 使い方
 
@@ -22,15 +22,4 @@ Link は `Client::open` に Link Option を渡すことで構築する. Option �
 
 `Client` から見た送受信のインターフェースは Link 実装によらず共通である. 
 そのため, リンクを差し替えても上位コードを変更する必要はない. 
-
-## 性能
-
-Link と OS の組み合わせごとの大まかな性能の傾向を以下に示す. 
-値は NIC・カーネル設定・OS チューニングなどに強く依存するため, あくまで目安である. 
-
-| 指標         | TwinCAT (Windows) | echocat (mac/Linux) | echocat (Windows) |
-| ------------ | ----------------- | ------------------- | ----------------- |
-| スループット | ⭐⭐              | ⭐⭐⭐              | ⭐⭐              |
-| レイテンシ   | ⭐                | ⭐⭐⭐              | ⭐⭐              |
-| 安定性       | ⭐⭐⭐            | ⭐⭐                | ⭐                |
 
