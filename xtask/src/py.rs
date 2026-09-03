@@ -68,6 +68,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             let out = dir.join("target").join("wheels");
             for wheel in WHEELS {
                 drop_stale_native_cdylib(&dir, wheel, !debug);
+                drop_stale_extension_modules(&dir, wheel);
                 let manifest = manifest(wheel);
                 let mut args = vec!["build", "-m", &manifest, "-o"];
                 let out = out.to_string_lossy().into_owned();
@@ -154,9 +155,28 @@ fn drop_stale_native_cdylib(dir: &Path, wheel: &str, release: bool) {
     }
 }
 
+fn drop_stale_extension_modules(dir: &Path, wheel: &str) {
+    let module = module_name(wheel);
+    let package = dir.join(wheel).join("python").join(&module);
+    let Ok(entries) = std::fs::read_dir(package) else {
+        return;
+    };
+    let prefix = format!("_{module}.");
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with(&prefix)
+            && (name.ends_with(".so") || name.ends_with(".pyd") || name.ends_with(".dylib"))
+        {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
 pub(crate) fn develop(dir: &Path, venv: &Path, wheels: &[&str], release: bool) -> Result<()> {
     for wheel in wheels {
         drop_stale_native_cdylib(dir, wheel, release);
+        drop_stale_extension_modules(dir, wheel);
         let manifest = manifest(wheel);
         let mut args = vec!["develop", "-m", &manifest];
         if release {
