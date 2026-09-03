@@ -6,6 +6,7 @@ use clap::Subcommand;
 use crate::util::{on_path, publish_workspace, publishable_members, run, run_built_bin};
 
 const PCAP_PACKAGES: &[&str] = &[
+    "autd3-rs-link-echocat",
     "autd3-rs-perftest",
     "autd3-rs-synctune",
     "autd3-rs-examples",

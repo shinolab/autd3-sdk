@@ -153,7 +153,12 @@ mod link {
     #[allow(clippy::needless_pass_by_value)]
     #[must_use]
     pub fn join_err(e: tokio::task::JoinError) -> Error {
-        Error::Link(e.to_string())
+        Error::Link(autd3_rs::LinkCause::new(e))
+    }
+
+    #[must_use]
+    pub fn link_err(message: impl Into<String>) -> Error {
+        autd3_rs_core::error::LinkError::new(message).into()
     }
 
     pub fn frame_into_capsule(
@@ -193,12 +198,7 @@ mod link {
         #[must_use]
         pub fn wait(self) -> BoxFuture<Response> {
             let Self { fut, handle } = self;
-            Box::pin(async move {
-                handle
-                    .spawn(fut)
-                    .await
-                    .map_err(|e| Error::Link(e.to_string()))?
-            })
+            Box::pin(async move { handle.spawn(fut).await.map_err(join_err)? })
         }
     }
 
@@ -470,6 +470,6 @@ pub use link::{
     LEGACY_LINK_CAPSULE_NAME, LINK_CAPSULE_NAME, LegacyBoxFuture, LegacyClientBackend,
     LegacyClientOpener, LinkStatusData, ResponseToken, client_opener, frame_from_capsule,
     frame_into_capsule, join_err, legacy_client_opener, legacy_frame_from_capsule,
-    legacy_frame_into_capsule, legacy_join_err, legacy_link_into_capsule, link_into_capsule,
-    link_runtime, take_client_opener, take_legacy_client_opener,
+    legacy_frame_into_capsule, legacy_join_err, legacy_link_into_capsule, link_err,
+    link_into_capsule, link_runtime, take_client_opener, take_legacy_client_opener,
 };

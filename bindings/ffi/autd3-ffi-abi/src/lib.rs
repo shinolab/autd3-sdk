@@ -406,7 +406,12 @@ mod client {
     #[allow(clippy::needless_pass_by_value)]
     #[must_use]
     pub fn join_err(e: tokio::task::JoinError) -> Error {
-        Error::Link(e.to_string())
+        Error::Link(autd3_rs::LinkCause::new(e))
+    }
+
+    #[must_use]
+    pub fn link_err(message: impl Into<String>) -> Error {
+        autd3_rs_core::error::LinkError::new(message).into()
     }
 
     #[must_use]
@@ -532,7 +537,7 @@ mod client {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .check()
-                .map_err(|e| Error::Link(e.to_string()))?;
+                .map_err(|e| link_err(e.to_string()))?;
             Ok(LinkStatusData {
                 devices: status.devices().to_vec(),
                 recoveries: status.recoveries(),
@@ -734,5 +739,5 @@ mod client {
 pub use client::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, ErrorCategory, LegacyBoxFuture,
     LegacyClientBackend, LegacyClientOpener, LinkStatusData, ResponseTokenData, client_opener,
-    join_err, legacy_client_opener, legacy_join_err, link_runtime, to_ns,
+    join_err, legacy_client_opener, legacy_join_err, link_err, link_runtime, to_ns,
 };

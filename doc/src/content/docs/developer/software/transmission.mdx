@@ -386,19 +386,19 @@ dev1 は seq4 の ACK を報告していないが, `ack=5` から遡って処理
 RT ループは毎サイクル, 送受信の結果に応じて 3 つの経路へ分岐する.
 
 ```rust
-let mut link_error = None;
+let mut link_error: Option<LinkCause> = None;
 loop {
     if closed { break }
     if matches!(stage_tx(), StageOutcome::Disconnected) { break }
     let rx_valid = match self.link.cycle(&self.tx_bufs, &mut self.rx_bufs) {
         Ok(CycleOutcome { rx_valid }) => rx_valid,
-        Err(e) => { link_error = Some(format!("link cycle failed: {e}")); break }
+        Err(e) => { link_error = Some(LinkCause::new(e)); break }
     };
     if reset_remaining > 0 { advance_reset_phase() }
     else if rx_valid { handle_healthy() }   // 正常系 = route_acks
     else { handle_stale() }
 }
-teardown(link_error.as_deref());
+teardown(link_error.as_ref());
 ```
 
 異常は主に3つのパターンに分かれる.
@@ -414,8 +414,8 @@ Link 側の異常は Client 側ではどうすることもできないので, �
 終了処理は理由によらず `teardown` に一本化されている.
 
 ```rust
-fn teardown(&mut self, link_error: Option<&str>) {
-    let cause = || link_error.map_or(Error::RtClosed, |msg| Error::Link(msg.to_owned()));
+fn teardown(&mut self, link_error: Option<&LinkCause>) {
+    let cause = || link_error.map_or(Error::RtClosed, |cause| Error::Link(cause.clone()));
     if let Some(msg) = self.held_exclusive.take() { /* cause() を返して Slot を戻す */ }
     for entry in self.pending.drain(..) { /* 同上 */ }
     while let Ok(msg) = self.cmd_rx.try_recv() { /* 同上 */ }

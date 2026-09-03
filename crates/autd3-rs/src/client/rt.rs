@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::error::Error;
+use crate::error::{Error, LinkCause};
 use crate::link::Link;
 use crate::protocol::{Cmd, RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
 use crate::response::Response;
@@ -113,11 +113,16 @@ impl ResyncState {
     }
 }
 
+fn handshake_failed<E: core::error::Error + Send + Sync + 'static>(e: E) -> LinkCause {
+    tracing::error!("handshake failed: {e}");
+    LinkCause::new(e)
+}
+
 pub(super) fn run_rt_thread<L: Link>(
     link: L,
     cmd_rx: mpsc::Receiver<CmdMessage>,
     config: ClientConfig,
-    hs_done_tx: oneshot::Sender<Result<(), String>>,
+    hs_done_tx: oneshot::Sender<Result<(), LinkCause>>,
     closed: Arc<AtomicBool>,
 ) {
     autd3_rs_core::apply_thread_tuning(autd3_rs_core::RtThreadTuning {
@@ -198,7 +203,7 @@ impl<L: Link> RtThread<L> {
         }
     }
 
-    fn handshake(&mut self) -> Result<(), String> {
+    fn handshake(&mut self) -> Result<(), LinkCause> {
         tracing::debug!(
             cycles = self.config.reset_resend_cycles.get(),
             low_latency = self.config.low_latency,
@@ -210,14 +215,14 @@ impl<L: Link> RtThread<L> {
         for _ in 0..self.config.reset_resend_cycles.get() {
             self.link
                 .cycle(&self.tx_bufs, &mut self.rx_bufs)
-                .map_err(|e| format!("handshake failed: {e}"))?;
+                .map_err(handshake_failed)?;
         }
 
         self.next_seq = self.negotiate_mode()?;
         Ok(())
     }
 
-    fn negotiate_mode(&mut self) -> Result<Seq, String> {
+    fn negotiate_mode(&mut self) -> Result<Seq, LinkCause> {
         let mode = if self.config.low_latency {
             Mode::LowLatency
         } else {
@@ -235,7 +240,7 @@ impl<L: Link> RtThread<L> {
             let rx_valid = self
                 .link
                 .cycle(&self.tx_bufs, &mut self.rx_bufs)
-                .map_err(|e| format!("handshake failed: {e}"))?
+                .map_err(handshake_failed)?
                 .rx_valid();
             if rx_valid && self.rx_bufs.iter().all(|rx| rx[0] == Seq::ZERO.get()) {
                 tracing::info!(?mode, "frame processing mode established");
@@ -247,7 +252,7 @@ impl<L: Link> RtThread<L> {
     }
 
     fn run(&mut self) {
-        let mut link_error = None;
+        let mut link_error: Option<LinkCause> = None;
         loop {
             if self.closed.load(Ordering::Acquire) {
                 break;
@@ -263,7 +268,7 @@ impl<L: Link> RtThread<L> {
                 Ok(outcome) => outcome.rx_valid(),
                 Err(e) => {
                     tracing::error!("link cycle failed: {e}");
-                    link_error = Some(format!("link cycle failed: {e}"));
+                    link_error = Some(LinkCause::new(e));
                     break;
                 }
             };
@@ -277,7 +282,7 @@ impl<L: Link> RtThread<L> {
             }
         }
 
-        self.teardown(link_error.as_deref());
+        self.teardown(link_error.as_ref());
     }
 
     fn stage_tx(&mut self) -> StageOutcome {
@@ -439,9 +444,9 @@ impl<L: Link> RtThread<L> {
         }
     }
 
-    fn teardown(&mut self, link_error: Option<&str>) {
+    fn teardown(&mut self, link_error: Option<&LinkCause>) {
         tracing::debug!(pending = self.pending.len(), "RT thread stopping");
-        let cause = || link_error.map_or(Error::RtClosed, |msg| Error::Link(msg.to_owned()));
+        let cause = || link_error.map_or(Error::RtClosed, |cause| Error::Link(cause.clone()));
         self.cmd_rx.close();
         if let Some(msg) = self.held_exclusive.take() {
             msg.response_tx.send(Err(cause()));
