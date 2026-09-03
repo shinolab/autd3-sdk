@@ -38,6 +38,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | メソッド                  | async | 返り値                                | 説明                                                       |
 | ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
 | `num_devices()`           | —     | `usize`                               | 接続中のデバイス台数                                       |
+| `geometry()`              | —     | `&Geometry`                           | 接続時のデバイスの物理配置                                 |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
 | `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | 各デバイスのエラー詳細                                     |

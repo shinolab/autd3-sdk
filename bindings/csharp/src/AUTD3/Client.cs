@@ -264,6 +264,8 @@ namespace AUTD3
 
         public int NumDevices => (int)NativeClient.autd3_client_num_devices(Handle);
 
+        public Geometry Geometry => _geometry;
+
         public DatagramBuilder DatagramBuilder() => new DatagramBuilder(_geometry, this);
 
         public Task SendCheckedAsync(Frame frame) =>

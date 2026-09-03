@@ -16,6 +16,7 @@ async def main() -> None:
 
     # ANCHOR: api
     num_devices = client.num_devices()
+    geometry = client.geometry()
 
     firmware = await client.read_firmware_version()
     fpga_state = await client.read_fpga_state()
@@ -29,7 +30,7 @@ async def main() -> None:
     await client.close()
     # ANCHOR_END: api
 
-    _ = (num_devices, firmware, fpga_state, error_detail, datagram_builder, resp)
+    _ = (num_devices, geometry, firmware, fpga_state, error_detail, datagram_builder, resp)
 
 
 asyncio.run(main())

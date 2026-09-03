@@ -10,14 +10,15 @@ internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
-        var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
+        var layout = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var client = await Client.OpenAsync(layout, new Nop(), new ClientConfig());
 
         var frames = client.DatagramBuilder().Build();
         var frame = frames[0];
 
         // ANCHOR: api
         var numDevices = client.NumDevices;
+        var geometry = client.Geometry;
 
         var firmware = await client.ReadFirmwareVersionAsync();
         var fpgaState = await client.ReadFpgaStateAsync();
@@ -31,6 +32,6 @@ internal static class Sample
         await client.CloseAsync();
         // ANCHOR_END: api
 
-        _ = (numDevices, firmware, fpgaState, errorDetail, datagramBuilder);
+        _ = (numDevices, geometry, firmware, fpgaState, errorDetail, datagramBuilder);
     }
 }

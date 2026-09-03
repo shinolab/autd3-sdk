@@ -186,6 +186,16 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public async System.Threading.Tasks.Task GeometryIsReachableThroughTheClient()
+        {
+            using var geometry = SingleDevice();
+            using var client = await Client.OpenAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            Assert.Equal(client.NumDevices, client.Geometry.NumDevices);
+            Assert.Equal(geometry.NumTransducers, client.Geometry.NumTransducers);
+            await client.CloseAsync();
+        }
+
+        [Fact]
         public async System.Threading.Tasks.Task ResponseTokenIsDirectlyAwaitable()
         {
             using var geometry = SingleDevice();

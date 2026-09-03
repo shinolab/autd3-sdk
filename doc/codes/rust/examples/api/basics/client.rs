@@ -14,6 +14,7 @@ async fn main() -> Result<()> {
 
     // ANCHOR: api
     let num_devices = client.num_devices();
+    let geometry = client.geometry();
 
     let firmware = client.read_firmware_version().await?;
     let fpga_state = client.read_fpga_state().await?;
@@ -27,6 +28,6 @@ async fn main() -> Result<()> {
     client.close().await?;
     // ANCHOR_END: api
 
-    let _ = (num_devices, firmware, fpga_state, error_detail);
+    let _ = (num_devices, geometry, firmware, fpga_state, error_detail);
     Ok(())
 }
