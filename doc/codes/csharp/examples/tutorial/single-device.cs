@@ -18,7 +18,7 @@ internal static class Sample
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
 // Open the client over an echocat link.
-var client = await Client.OpenAsync(
+await using var client = await Client.OpenAsync(
     geometry,
     new EchocatLinkOption(),
     new ClientConfig()
@@ -67,11 +67,6 @@ try
 }
 catch (OperationCanceledException)
 {
-}
-finally
-{
-    await client.StopAsync();
-    await client.CloseAsync();
 }
         // HIDE
     }

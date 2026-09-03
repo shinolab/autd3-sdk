@@ -15,7 +15,7 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
-var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
+await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
 var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
 var dst = new List<ControlPoints>();
@@ -45,8 +45,6 @@ foreach (var frame in frames)
 {
     await client.SendCheckedAsync(frame);
 }
-
-await client.CloseAsync();
         // HIDE
     }
 }

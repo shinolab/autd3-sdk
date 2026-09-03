@@ -22,7 +22,7 @@ internal static class Sample
         );
         // ANCHOR_END: open
 
-        try
+        await using (client)
         {
             // ANCHOR: poll
             LinkStatus? last = null;
@@ -41,10 +41,6 @@ internal static class Sample
                 await Task.Delay(CheckInterval);
             }
             // ANCHOR_END: poll
-        }
-        finally
-        {
-            await client.CloseAsync();
         }
     }
 }

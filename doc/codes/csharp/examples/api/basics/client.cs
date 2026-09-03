@@ -33,5 +33,14 @@ internal static class Sample
         // ANCHOR_END: api
 
         _ = (numDevices, geometry, firmware, fpgaState, errorDetail, datagramBuilder);
+
+        var scopedLayout = new Geometry(new[] { new Autd3(Vector3.Zero) });
+
+        // ANCHOR: context_manager
+        await using (var scoped = await Client.OpenAsync(scopedLayout, new Nop(), new ClientConfig()))
+        {
+            await scoped.SendCheckedAsync(frame);
+        }
+        // ANCHOR_END: context_manager
     }
 }

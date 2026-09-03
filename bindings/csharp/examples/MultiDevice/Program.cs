@@ -18,7 +18,7 @@ internal static class Program
             new Autd3(new Vector3(Autd3.DeviceWidth, 0f, 0f)),
         });
 
-        using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
         var versions = await client.ReadFirmwareVersionAsync();
@@ -29,7 +29,5 @@ internal static class Program
 
         var center = geometry.Center;
         Console.WriteLine($"array center: ({center.X:F2}, {center.Y:F2}, {center.Z:F2}) mm");
-
-        await client.CloseAsync();
     }
 }

@@ -17,7 +17,7 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
 
         var builder = client.DatagramBuilder();
         builder.Push(new SetSilencer());
@@ -41,9 +41,6 @@ internal static class Sample
 
         await StopAndWait(client, geometry, targets, wavelength);
         await Streaming(client, geometry, targets, wavelength);
-
-        await client.StopAsync();
-        await client.CloseAsync();
     }
 
     private static async Task StopAndWait(Client client, Geometry geometry, Vector3[] targets, Length wavelength)
