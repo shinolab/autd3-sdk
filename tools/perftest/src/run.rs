@@ -254,7 +254,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
         LinkKind::Nop => {
             let num_devices = cli.devices.expect("--devices validated for --link nop");
             let link = PacedNop::new(cli.sync0_period);
-            Box::pin(run_with_link(link, num_devices, LinkStats::default(), cli)).await
+            Box::pin(run_with_link(link, num_devices, cli)).await
         }
     }
 }
@@ -266,16 +266,10 @@ async fn run_with_bus_link<L: Link>(link: L, cli: &Cli) -> Result<RunOutput> {
     {
         anyhow::bail!("expected {expected} device(s) on the bus, found {num_devices}");
     }
-    let link_stats = link.stats();
-    run_with_link(link, num_devices, link_stats, cli).await
+    run_with_link(link, num_devices, cli).await
 }
 
-async fn run_with_link<T: IntoLink>(
-    link: T,
-    num_devices: usize,
-    link_stats: LinkStats,
-    cli: &Cli,
-) -> Result<RunOutput> {
+async fn run_with_link<T: IntoLink>(link: T, num_devices: usize, cli: &Cli) -> Result<RunOutput> {
     eprintln!("devices: {num_devices}");
 
     let max_inflight = match cli.mode {
@@ -333,6 +327,7 @@ async fn run_with_link<T: IntoLink>(
     spawn_signal_listener(Arc::clone(&shutdown));
 
     let sender = Sender::new(&client, &geometry, cli)?;
+    let link_stats = client.link_stats();
 
     let output = match cli.mode {
         Mode::StopAndWait => run_stop_and_wait(&client, cli, sender, shutdown, &link_stats).await,

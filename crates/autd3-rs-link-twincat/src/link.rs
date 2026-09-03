@@ -1,9 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ads::notif::{Attributes, Handle, Notification, TransmissionMode};
 use ads::{AmsAddr, AmsNetId, Client, Source, Timeouts};
-use autd3_rs_core::{CycleOutcome, IntoLink, Link, RX_FRAME_BYTES, TX_FRAME_BYTES};
+use autd3_rs_core::{CycleOutcome, IntoLink, Link, LinkStats, RX_FRAME_BYTES, TX_FRAME_BYTES};
 use crossbeam_channel::Receiver;
 
 use crate::error::TwinCATLinkError;
@@ -86,6 +86,7 @@ pub struct TwinCATLink {
     conn_addr: SocketAddr,
     source: Source,
     timeouts: Timeouts,
+    stats: LinkStats,
 }
 
 impl TwinCATLink {
@@ -139,6 +140,7 @@ impl TwinCATLink {
             conn_addr,
             source,
             timeouts,
+            stats: LinkStats::default(),
         })
     }
 
@@ -187,6 +189,10 @@ impl Link for TwinCATLink {
         self.num_devices
     }
 
+    fn stats(&self) -> LinkStats {
+        self.stats.clone()
+    }
+
     fn state_checker(&self) -> TwinCATStateChecker {
         TwinCATStateChecker::new(
             self.conn_addr,
@@ -202,6 +208,7 @@ impl Link for TwinCATLink {
         tx: &[[u8; TX_FRAME_BYTES]],
         rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Self::Error> {
+        let started = Instant::now();
         let device = self.client.device(self.ams_addr);
 
         device.write(AUTD_INDEX_GROUP, AUTD_INDEX_OFFSET_TX, tx.as_flattened())?;
@@ -224,6 +231,19 @@ impl Link for TwinCATLink {
             }
         }
 
+        self.stats
+            .record_exchange(u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX));
         Ok(CycleOutcome::valid())
+    }
+
+    fn close(&mut self) -> Result<(), Self::Error> {
+        if let RxSource::Notify { handle, .. } = &self.rx {
+            let handle = *handle;
+            self.rx = RxSource::Ads;
+            self.client
+                .device(self.ams_addr)
+                .delete_notification(handle)?;
+        }
+        Ok(())
     }
 }
