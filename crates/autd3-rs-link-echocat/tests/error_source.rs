@@ -24,8 +24,12 @@ fn opening_an_interface_that_cannot_be_used_keeps_the_echocat_error() {
         .expect("no such interface exists");
 
     assert!(
-        matches!(echocat_cause(&e), EchocatError::Io(_)),
-        "a refused or missing interface must arrive as EchocatError::Io, got {e}"
+        matches!(
+            echocat_cause(&e),
+            EchocatError::Io(_) | EchocatError::PermissionDenied { .. }
+        ),
+        "a refused or missing interface must arrive as the OS error or the permission \
+         diagnosis, got {e}"
     );
 }
 
