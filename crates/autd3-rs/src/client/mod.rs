@@ -165,6 +165,11 @@ impl Client {
     }
 
     #[must_use]
+    pub fn geometry(&self) -> &Geometry {
+        &self.geometry
+    }
+
+    #[must_use]
     pub fn link_stats(&self) -> LinkStats {
         self.stats.clone()
     }

@@ -2082,6 +2082,20 @@ async fn a_link_rejected_by_the_device_count_check_is_still_closed() {
 }
 
 #[tokio::test]
+async fn geometry_is_reachable_through_the_client() {
+    let (link, _tracker) = tracked_pair();
+    let client = Client::open(&geometry(1), link, ClientConfig::default())
+        .await
+        .unwrap();
+    assert_eq!(client.geometry().num_devices(), 1);
+    assert_eq!(
+        client.geometry().iter().next().unwrap().num_transducers(),
+        geometry(1).iter().next().unwrap().num_transducers()
+    );
+    client.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn link_stats_are_reachable_through_the_client() {
     let (link, _tracker) = tracked_pair();
     let client = Client::open(&geometry(1), link, ClientConfig::default())

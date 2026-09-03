@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
     )
     .await?;
 
-    configure(&client, &geometry).await?;
+    configure(&client).await?;
 
     let center = geometry.center();
     let radius = 30.0 * mm;
@@ -45,10 +45,10 @@ async fn main() -> Result<()> {
 
     println!("sweeping a focus through {TOTAL_POINTS} positions, twice");
 
-    let elapsed = run_stop_and_wait(&client, &geometry, &targets, wavelength).await?;
+    let elapsed = run_stop_and_wait(&client, &targets, wavelength).await?;
     report("stop-and-wait", elapsed);
 
-    let elapsed = run_streaming(&client, &geometry, &targets, wavelength, MAX_INFLIGHT).await?;
+    let elapsed = run_streaming(&client, &targets, wavelength, MAX_INFLIGHT).await?;
     report("streaming", elapsed);
 
     client.stop().await?;
@@ -60,10 +60,10 @@ async fn main() -> Result<()> {
 // One round-trip per frame: confirm each update lands before issuing the next.
 async fn run_stop_and_wait(
     client: &Client,
-    geometry: &Geometry,
     targets: &[Point3<f32>],
     wavelength: Length,
 ) -> Result<Duration> {
+    let geometry = client.geometry();
     let mut emissions = geometry.pattern_buffer();
     let mut buf = Frames::default();
 
@@ -87,11 +87,11 @@ async fn run_stop_and_wait(
 // Keep `max_inflight` frames on the wire; drain responses behind the send cursor.
 async fn run_streaming(
     client: &Client,
-    geometry: &Geometry,
     targets: &[Point3<f32>],
     wavelength: Length,
     max_inflight: usize,
 ) -> Result<Duration> {
+    let geometry = client.geometry();
     let mut emissions = geometry.pattern_buffer();
     let mut buf = Frames::default();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(max_inflight);
@@ -119,8 +119,8 @@ async fn run_streaming(
     Ok(start.elapsed())
 }
 
-async fn configure(client: &Client, geometry: &Geometry) -> Result<()> {
-    let mut emissions = geometry.pattern_buffer();
+async fn configure(client: &Client) -> Result<()> {
+    let mut emissions = client.geometry().pattern_buffer();
     autd3_rs_pattern::null(&mut emissions);
     let mut builder = client.datagram_builder();
     builder

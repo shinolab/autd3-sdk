@@ -38,6 +38,7 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 | Method                    | async | Returns                               | Description                                                |
 | ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
 | `num_devices()`           | —     | `usize`                               | Number of connected devices                                |
+| `geometry()`              | —     | `&Geometry`                           | Device layout given at open time                           |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
 | `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | Error detail of each device                                |

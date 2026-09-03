@@ -139,6 +139,13 @@ impl Client {
         self.backend.num_devices()
     }
 
+    fn geometry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let capsule = autd3_python_capsule::geometry_into_capsule(py, (*self.geometry).clone())?;
+        py.import("autd3_core")?
+            .getattr("Geometry")?
+            .call_method1("_from_capsule", (capsule,))
+    }
+
     fn datagram_builder(&self) -> DatagramBuilder {
         DatagramBuilder::with_backend(Arc::clone(&self.geometry), Some(Arc::clone(&self.backend)))
     }
