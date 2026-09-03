@@ -45,19 +45,20 @@ impl LinkStats {
 
     #[must_use]
     pub fn mean_exchange_ns(&self) -> u64 {
-        let exchanges = self.exchanges();
+        let total = self.exchange_ns_total.load(Ordering::Acquire);
+        let exchanges = self.exchanges.load(Ordering::Acquire);
         if exchanges == 0 {
             return 0;
         }
-        self.exchange_ns_total.load(Ordering::Acquire) / exchanges
+        total / exchanges
     }
 
     pub fn record_exchange(&self, elapsed_ns: u64) {
-        self.exchanges.fetch_add(1, Ordering::Relaxed);
-        self.exchange_ns_total
-            .fetch_add(elapsed_ns, Ordering::Relaxed);
         self.worst_exchange_ns
             .fetch_max(elapsed_ns, Ordering::Relaxed);
+        self.exchanges.fetch_add(1, Ordering::Relaxed);
+        self.exchange_ns_total
+            .fetch_add(elapsed_ns, Ordering::Release);
     }
 
     pub fn record_stale_cycle(&self) {
@@ -65,8 +66,8 @@ impl LinkStats {
     }
 
     pub fn record_lost_cycle(&self) {
-        self.lost_cycles.fetch_add(1, Ordering::Relaxed);
         self.stale_cycles.fetch_add(1, Ordering::Relaxed);
+        self.lost_cycles.fetch_add(1, Ordering::Release);
     }
 
     pub fn record_phase_excursion(&self, deviation_ns: u64) {
@@ -92,6 +93,8 @@ impl LinkStats {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::AtomicBool;
+
     use super::*;
 
     #[test]
@@ -139,5 +142,29 @@ mod tests {
         assert_eq!(stats.lost_cycles(), 2);
         assert_eq!(stats.phase_excursions(), 8);
         assert_eq!(stats.worst_phase_deviation_ns(), 900);
+    }
+
+    #[test]
+    fn the_mean_never_exceeds_the_worst_sample_while_a_writer_is_running() {
+        const SAMPLE_NS: u64 = 1_000_000_000;
+
+        let stats = LinkStats::default();
+        let observer = stats.clone();
+        let stop = Arc::new(AtomicBool::new(false));
+        let writer_stop = stop.clone();
+        let writer = std::thread::spawn(move || {
+            while !writer_stop.load(Ordering::Acquire) {
+                stats.record_exchange(SAMPLE_NS);
+            }
+        });
+        for _ in 0..100_000 {
+            let mean = observer.mean_exchange_ns();
+            assert!(
+                mean <= SAMPLE_NS,
+                "the mean must stay within the samples, got {mean}"
+            );
+        }
+        stop.store(true, Ordering::Release);
+        writer.join().unwrap();
     }
 }

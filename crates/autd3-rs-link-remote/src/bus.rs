@@ -570,8 +570,9 @@ impl BusShared {
         state.rx_valid = rx_valid;
         state.dc_time_ns = dc_time_ns;
         state.applied_version = version;
+        let lost_cycles = counters.lost_cycles();
         state.status.stale_cycles = state.base.stale_cycles + counters.stale_cycles();
-        state.status.lost_cycles = state.base.lost_cycles + counters.lost_cycles();
+        state.status.lost_cycles = state.base.lost_cycles + lost_cycles;
         state.status.phase_excursions = state.base.phase_excursions + counters.phase_excursions();
         state.status.worst_phase_deviation_ns = state
             .base
