@@ -14,48 +14,44 @@ from autd3.value import Intensity, SamplingConfig
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client = await Client.open(
+    async with await Client.open(
         geometry,
         echocat.EchocatLinkOption(),
         ClientConfig(),
-    )
+    ) as client:
+        target = geometry.center() + np.array([0.0, 0.0, 150.0])
+        wavelength = pattern.wavelength(340 * m / s)
 
-    target = geometry.center() + np.array([0.0, 0.0, 150.0])
-    wavelength = pattern.wavelength(340 * m / s)
+        # ANCHOR: pattern_intensity
+        patterns = geometry.pattern_buffer()
+        pattern.focus(
+            geometry,
+            target,
+            wavelength,
+            pattern.FocusOption(intensity=Intensity(0x80)),
+            patterns,
+        )
+        # ANCHOR_END: pattern_intensity
 
-    # ANCHOR: pattern_intensity
-    patterns = geometry.pattern_buffer()
-    pattern.focus(
-        geometry,
-        target,
-        wavelength,
-        pattern.FocusOption(intensity=Intensity(0x80)),
-        patterns,
-    )
-    # ANCHOR_END: pattern_intensity
+        # ANCHOR: modulation
+        mod_buf = modulation.modulation_buffer()
+        modulation.sine(
+            200.0 * Hz,
+            modulation.SineOption(
+                amplitude=0xFF,
+                offset=0x80,
+                sampling_config=SamplingConfig.FREQ_4K,
+            ),
+            mod_buf,
+        )
+        # ANCHOR_END: modulation
 
-    # ANCHOR: modulation
-    mod_buf = modulation.modulation_buffer()
-    modulation.sine(
-        200.0 * Hz,
-        modulation.SineOption(
-            amplitude=0xFF,
-            offset=0x80,
-            sampling_config=SamplingConfig.FREQ_4K,
-        ),
-        mod_buf,
-    )
-    # ANCHOR_END: modulation
-
-    builder = client.datagram_builder()
-    builder.push(SetSilencer())
-    builder.push(Pattern(patterns))
-    builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
-    for frame in builder.build():
-        await client.send_checked(frame)
-
-    await client.stop()
-    await client.close()
+        builder = client.datagram_builder()
+        builder.push(SetSilencer())
+        builder.push(Pattern(patterns))
+        builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
+        for frame in builder.build():
+            await client.send_checked(frame)
 
 
 if __name__ == "__main__":

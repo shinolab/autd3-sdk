@@ -16,33 +16,32 @@ from autd3.units import m, s
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client = await Client.open(
+    async with await Client.open(
         geometry,
         echocat.EchocatLinkOption(),
         ClientConfig(),
-    )
+    ) as client:
+        center = geometry.center() + np.array([0.0, 0.0, 150.0])
+        wavelength = pattern.wavelength(340 * m / s)
 
-    center = geometry.center() + np.array([0.0, 0.0, 150.0])
-    wavelength = pattern.wavelength(340 * m / s)
-
-    # ANCHOR: loop
-    patterns = geometry.pattern_buffer()
-    while True:
-        for sign in (1.0, -1.0):
-            target = center + np.array([sign * 20.0, 0.0, 0.0])
-            pattern.focus(
-                geometry,
-                target,
-                wavelength,
-                pattern.FocusOption(),
-                patterns,
-            )
-            builder = client.datagram_builder()
-            builder.push(Pattern(patterns))
-            for frame in builder.build():
-                await client.send_checked(frame)
-            await asyncio.sleep(1.0)
-    # ANCHOR_END: loop
+        # ANCHOR: loop
+        patterns = geometry.pattern_buffer()
+        while True:
+            for sign in (1.0, -1.0):
+                target = center + np.array([sign * 20.0, 0.0, 0.0])
+                pattern.focus(
+                    geometry,
+                    target,
+                    wavelength,
+                    pattern.FocusOption(),
+                    patterns,
+                )
+                builder = client.datagram_builder()
+                builder.push(Pattern(patterns))
+                for frame in builder.build():
+                    await client.send_checked(frame)
+                await asyncio.sleep(1.0)
+        # ANCHOR_END: loop
 
 
 if __name__ == "__main__":

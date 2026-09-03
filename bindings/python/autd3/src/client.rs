@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::config::ClientConfig;
 use crate::datagram::{DatagramBuilder, Frame};
-use crate::future::future_into_py;
+use crate::future::{completed_into_py, future_into_py};
 use autd3_python_capsule::{
     ClientBackend, LegacyClientBackend, ResponseToken, capsule_of, geometry_from_capsule,
     take_client_opener, to_pyerr, to_pyerr_gil,
@@ -231,6 +231,21 @@ impl Client {
             py,
             async move { backend.close().await.map_err(to_pyerr_gil) },
         )
+    }
+
+    fn __aenter__(slf: Bound<'_, Self>) -> PyResult<Bound<'_, PyAny>> {
+        completed_into_py(slf.py(), slf.clone().into_any())
+    }
+
+    #[pyo3(signature = (_exc_type = None, _exc_value = None, _traceback = None))]
+    fn __aexit__<'py>(
+        &self,
+        py: Python<'py>,
+        _exc_type: Option<Bound<'py, PyAny>>,
+        _exc_value: Option<Bound<'py, PyAny>>,
+        _traceback: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.close(py)
     }
 }
 

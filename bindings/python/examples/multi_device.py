@@ -22,20 +22,17 @@ async def main() -> None:
         ]
     )
 
-    client = await autd3.Client.open(
+    async with await autd3.Client.open(
         geometry,
         echocat.EchocatLinkOption(),
         autd3.ClientConfig(),
-    )
+    ) as client:
+        print("devices:", client.num_devices())
+        for i, fw in enumerate(await client.read_firmware_version()):
+            print(f"device[{i}] firmware version: {fw}")
 
-    print("devices:", client.num_devices())
-    for i, fw in enumerate(await client.read_firmware_version()):
-        print(f"device[{i}] firmware version: {fw}")
-
-    center = geometry.center()
-    print(f"array center: ({center[0]:.2f}, {center[1]:.2f}, {center[2]:.2f}) mm")
-
-    await client.close()
+        center = geometry.center()
+        print(f"array center: ({center[0]:.2f}, {center[1]:.2f}, {center[2]:.2f}) mm")
 
 
 if __name__ == "__main__":

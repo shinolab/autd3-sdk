@@ -25,7 +25,7 @@ use pyo3::prelude::*;
 use crate::client::{Checker, CheckerSource, FpgaState};
 use crate::config::RtSchedulePolicy;
 use crate::datagram::{DatagramBuilder, Pending, validate_pending};
-use crate::future::future_into_py;
+use crate::future::{completed_into_py, future_into_py};
 use crate::ops::{PatternBank, TransitionMode};
 
 #[pyclass(name = "LegacyClientConfig", module = "autd3", skip_from_py_object)]
@@ -478,5 +478,20 @@ impl LegacyClient {
             py,
             async move { backend.close().await.map_err(to_pyerr_gil) },
         )
+    }
+
+    fn __aenter__(slf: Bound<'_, Self>) -> PyResult<Bound<'_, PyAny>> {
+        completed_into_py(slf.py(), slf.clone().into_any())
+    }
+
+    #[pyo3(signature = (_exc_type = None, _exc_value = None, _traceback = None))]
+    fn __aexit__<'py>(
+        &self,
+        py: Python<'py>,
+        _exc_type: Option<Bound<'py, PyAny>>,
+        _exc_value: Option<Bound<'py, PyAny>>,
+        _traceback: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.close(py)
     }
 }

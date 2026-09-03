@@ -8,20 +8,17 @@ from autd3_link_nop import Nop
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-    client = await Client.open(geometry, Nop(), ClientConfig())
+    async with await Client.open(geometry, Nop(), ClientConfig()) as client:
+        masks = [
+            [True] * geometry.device(i).num_transducers()
+            for i in range(geometry.num_devices())
+        ]
 
-    masks = [
-        [True] * geometry.device(i).num_transducers()
-        for i in range(geometry.num_devices())
-    ]
-
-    builder = client.datagram_builder()
-    builder.push(SetOutputMask(masks=masks))
-    frames = builder.build()
-    for frame in frames:
-        await client.send_checked(frame)
-
-    await client.close()
+        builder = client.datagram_builder()
+        builder.push(SetOutputMask(masks=masks))
+        frames = builder.build()
+        for frame in frames:
+            await client.send_checked(frame)
 
 
 asyncio.run(main())

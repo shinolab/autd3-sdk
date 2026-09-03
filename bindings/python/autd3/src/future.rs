@@ -69,3 +69,13 @@ where
     }));
     Ok(py_fut)
 }
+
+pub(crate) fn completed_into_py<'py, T>(py: Python<'py>, value: T) -> PyResult<Bound<'py, PyAny>>
+where
+    T: IntoPyObject<'py>,
+{
+    let event_loop = py.import("asyncio")?.call_method0("get_running_loop")?;
+    let py_fut = event_loop.call_method0("create_future")?;
+    py_fut.call_method1("set_result", (value.into_py_any(py)?,))?;
+    Ok(py_fut)
+}

@@ -32,5 +32,12 @@ async def main() -> None:
 
     _ = (num_devices, geometry, firmware, fpga_state, error_detail, datagram_builder, resp)
 
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+
+    # ANCHOR: context_manager
+    async with await Client.open(geometry, nop.Nop(), ClientConfig()) as client:
+        await client.send_checked(frame)
+    # ANCHOR_END: context_manager
+
 
 asyncio.run(main())
