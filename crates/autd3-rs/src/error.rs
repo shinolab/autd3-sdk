@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use thiserror::Error;
 
 use autd3_rs_core::error::{EncodeError, LinkError};
@@ -7,6 +9,36 @@ use crate::firmware_version::FirmwareVersion;
 use crate::mirror::{BankLoop, SilencerAxis};
 use crate::telemetry::Telemetry;
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError, TransitionMode};
+
+#[derive(Clone)]
+pub struct LinkCause(Arc<dyn core::error::Error + Send + Sync>);
+
+impl LinkCause {
+    #[must_use]
+    pub fn new<E: core::error::Error + Send + Sync + 'static>(source: E) -> Self {
+        Self(Arc::new(source))
+    }
+}
+
+impl core::ops::Deref for LinkCause {
+    type Target = dyn core::error::Error + Send + Sync + 'static;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+impl core::fmt::Debug for LinkCause {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(&*self.0, f)
+    }
+}
+
+impl core::fmt::Display for LinkCause {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(&*self.0, f)
+    }
+}
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -52,7 +84,7 @@ pub enum Error {
     Timeout { cycles: u32 },
 
     #[error("link error: {0}")]
-    Link(String),
+    Link(#[source] LinkCause),
 
     #[error(transparent)]
     DcSysTime(#[from] autd3_rs_core::value::DcSysTimeError),
@@ -65,11 +97,14 @@ pub enum Error {
 
     #[error("client RT worker is no longer alive")]
     RtClosed,
+
+    #[error("RT thread panicked")]
+    RtPanicked,
 }
 
 impl From<LinkError> for Error {
     fn from(e: LinkError) -> Self {
-        Error::Link(e.message().to_owned())
+        Error::Link(LinkCause::new(e))
     }
 }
 
@@ -183,4 +218,54 @@ pub enum PayloadError {
 
     #[error(transparent)]
     PulseWidth(#[from] PulseWidthError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn chain(e: &Error) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut cur: Option<&(dyn core::error::Error + 'static)> = core::error::Error::source(e);
+        while let Some(e) = cur {
+            out.push(e.to_string());
+            cur = e.source();
+        }
+        out
+    }
+
+    #[test]
+    fn a_link_error_keeps_its_source_when_it_becomes_a_client_error() {
+        let io = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        let e = Error::from(LinkError::with_source("failed to open the link", io));
+
+        assert_eq!(e.to_string(), "link error: failed to open the link");
+        assert_eq!(
+            chain(&e),
+            vec![
+                "failed to open the link".to_owned(),
+                std::io::Error::from(std::io::ErrorKind::PermissionDenied).to_string(),
+            ]
+        );
+
+        let link_error = core::error::Error::source(&e)
+            .expect("the cause must be reachable through source()")
+            .downcast_ref::<LinkError>()
+            .expect("the LinkError itself must survive the conversion");
+        assert_eq!(
+            core::error::Error::source(link_error)
+                .expect("the source must survive")
+                .downcast_ref::<std::io::Error>()
+                .map(std::io::Error::kind),
+            Some(std::io::ErrorKind::PermissionDenied)
+        );
+    }
+
+    #[test]
+    fn a_link_error_without_a_source_ends_the_chain() {
+        let e = Error::from(LinkError::new("the bus is gone"));
+
+        assert_eq!(e.to_string(), "link error: the bus is gone");
+        assert_eq!(chain(&e), vec!["the bus is gone".to_owned()]);
+    }
 }

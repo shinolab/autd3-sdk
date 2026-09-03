@@ -3,7 +3,7 @@ use thiserror::Error;
 type BoxError = Box<dyn core::error::Error + Send + Sync>;
 
 #[derive(Debug, Error)]
-#[error("link error: {message}")]
+#[error("{message}")]
 pub struct LinkError {
     message: String,
     #[source]

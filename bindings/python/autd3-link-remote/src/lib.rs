@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use autd3_python_capsule::{
     BoxFuture, ClientBackend, LinkStatusData, ResponseToken, client_opener, join_err,
-    legacy_client_opener, legacy_link_into_capsule, link_into_capsule, link_runtime, to_pyerr_gil,
+    legacy_client_opener, legacy_link_into_capsule, link_err, link_into_capsule, link_runtime,
+    to_pyerr_gil,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -93,7 +94,7 @@ impl ClientBackend for RemoteBackend {
                 .spawn(async move {
                     let frame = datagrams
                         .frame(index)
-                        .ok_or_else(|| Error::Link(format!("frame {index} out of range")))?;
+                        .ok_or_else(|| link_err(format!("frame {index} out of range")))?;
                     client.send(frame).await
                 })
                 .await
@@ -109,9 +110,9 @@ impl ClientBackend for RemoteBackend {
                 .spawn(async move {
                     match frame {
                         Some(index) => {
-                            let frame = datagrams.frame(index).ok_or_else(|| {
-                                Error::Link(format!("frame {index} out of range"))
-                            })?;
+                            let frame = datagrams
+                                .frame(index)
+                                .ok_or_else(|| link_err(format!("frame {index} out of range")))?;
                             client.send_checked(frame).await?;
                         }
                         None => {
@@ -133,7 +134,7 @@ impl ClientBackend for RemoteBackend {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .check()
-            .map_err(|e| Error::Link(e.to_string()))?;
+            .map_err(|e| link_err(e.to_string()))?;
         Ok(LinkStatusData {
             device_states: status.devices().iter().map(ToString::to_string).collect(),
             all_op: status.all_op(),

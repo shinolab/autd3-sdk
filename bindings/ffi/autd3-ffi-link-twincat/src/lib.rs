@@ -5,7 +5,7 @@ use std::sync::Arc;
 use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
     OPTION_HANDLE_CONSUMED, ResponseTokenData, client_opener, cstr_to_string, into_handle,
-    join_err, legacy_client_opener, link_runtime, take_handle, write_cstr,
+    join_err, legacy_client_opener, link_err, link_runtime, take_handle, write_cstr,
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
@@ -81,9 +81,9 @@ impl ClientBackend for TwinCATBackend {
                     let mut futures = Vec::new();
                     match frame {
                         Some(index) => {
-                            let frame = datagrams.frame(index).ok_or_else(|| {
-                                Error::Link(format!("frame {index} out of range"))
-                            })?;
+                            let frame = datagrams
+                                .frame(index)
+                                .ok_or_else(|| link_err(format!("frame {index} out of range")))?;
                             futures.push(client.send(frame).await?);
                         }
                         None => {
@@ -106,9 +106,9 @@ impl ClientBackend for TwinCATBackend {
                 .spawn(async move {
                     match frame {
                         Some(index) => {
-                            let frame = datagrams.frame(index).ok_or_else(|| {
-                                Error::Link(format!("frame {index} out of range"))
-                            })?;
+                            let frame = datagrams
+                                .frame(index)
+                                .ok_or_else(|| link_err(format!("frame {index} out of range")))?;
                             client.send_checked(frame).await?;
                         }
                         None => {
@@ -158,7 +158,7 @@ impl CheckerBackend for TwinCATChecker {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .check()
-            .map_err(|e| Error::Link(e.to_string()))?;
+            .map_err(|e| link_err(e.to_string()))?;
         Ok(LinkStatusData {
             devices: status.devices().to_vec(),
             recoveries: status.recoveries(),

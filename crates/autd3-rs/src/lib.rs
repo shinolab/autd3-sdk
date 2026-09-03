@@ -20,7 +20,7 @@ mod sealed {
 mod test_utils;
 
 pub use autd3_rs_core::{common, geometry, link, nalgebra, params, protocol, rt, units, value};
-pub use error::{Error, PayloadError};
+pub use error::{Error, LinkCause, PayloadError};
 
 #[cfg(feature = "serde")]
 pub use autd3_rs_core::LayoutError;

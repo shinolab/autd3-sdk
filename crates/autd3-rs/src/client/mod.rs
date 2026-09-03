@@ -21,7 +21,7 @@ use zerocopy::FromBytes;
 use crate::commands::Pattern;
 use crate::commands::operation::{Clear, Distribution, Synchronize};
 use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
-use crate::error::{Error, PayloadError};
+use crate::error::{Error, LinkCause, PayloadError};
 use crate::firmware_version::{FirmwareVersion, Version};
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
@@ -98,7 +98,7 @@ impl Client {
         let completions = CompletionPool::new(config.max_inflight.get());
 
         let (cmd_tx, cmd_rx) = mpsc::channel::<CmdMessage>(1);
-        let (hs_done_tx, hs_done_rx) = oneshot::channel::<Result<(), String>>();
+        let (hs_done_tx, hs_done_rx) = oneshot::channel::<Result<(), LinkCause>>();
         let closed = Arc::new(AtomicBool::new(false));
         let closed_for_rt = Arc::clone(&closed);
 
@@ -107,7 +107,7 @@ impl Client {
             .spawn(move || {
                 rt::run_rt_thread(link, cmd_rx, config, hs_done_tx, closed_for_rt);
             })
-            .map_err(|e| Error::Link(format!("failed to spawn RT thread: {e}")))?;
+            .map_err(|e| Error::Link(LinkCause::new(e)))?;
 
         match hs_done_rx.await {
             Ok(Ok(())) => {
@@ -145,9 +145,9 @@ impl Client {
                 tracing::info!(num_devices, "client opened");
                 Ok((client, checker))
             }
-            Ok(Err(msg)) => {
+            Ok(Err(cause)) => {
                 let _ = wait_thread(join).await;
-                Err(Error::Link(msg))
+                Err(Error::Link(cause))
             }
             Err(_) => {
                 let _ = wait_thread(join).await;
@@ -477,6 +477,6 @@ fn warn_unknown(device: usize, what: &str, pre_latched: bool) {
 async fn wait_thread(join: JoinHandle<()>) -> Result<(), Error> {
     tokio::task::spawn_blocking(move || join.join())
         .await
-        .map_err(|e| Error::Link(format!("RT thread join failed: {e}")))?
-        .map_err(|_| Error::Link("RT thread panicked".to_owned()))
+        .map_err(|e| Error::Link(LinkCause::new(e)))?
+        .map_err(|_| Error::RtPanicked)
 }

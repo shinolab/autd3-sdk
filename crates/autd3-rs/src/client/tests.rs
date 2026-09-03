@@ -288,13 +288,16 @@ impl Link for LoopbackLink {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("link failure")]
 struct LinkFailure;
 
-impl std::fmt::Display for LinkFailure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("link failure")
-    }
+fn link_cause_is<E: core::error::Error + Send + Sync + 'static>(e: &Error) -> bool {
+    let Error::Link(cause) = e else {
+        return false;
+    };
+    cause.downcast_ref::<E>().is_some()
+        && core::error::Error::source(e).is_some_and(|s| s.downcast_ref::<E>().is_some())
 }
 
 struct FailingLink {
@@ -1548,9 +1551,12 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
         max_inflight.get(),
         "every slot must be back in the pool once the RT thread has torn down"
     );
-    assert!(matches!(inflight_err, Error::Link(_)));
     assert!(
-        matches!(queued_err, Error::Link(_)),
+        link_cause_is::<LinkFailure>(&inflight_err),
+        "the link failure must reach the caller as a typed cause, got {inflight_err:?}"
+    );
+    assert!(
+        link_cause_is::<LinkFailure>(&queued_err),
         "a command still queued in the channel must be failed with the link error, got {queued_err:?}"
     );
 }
@@ -1587,14 +1593,21 @@ async fn sending_after_the_rt_thread_died_fails_instead_of_blocking() {
             .await
             .expect("a send must not block once the RT thread is gone")
             .unwrap_err();
-        assert!(matches!(err, Error::RtClosed | Error::Link(_)), "{err:?}");
+        assert!(
+            matches!(err, Error::RtClosed) || link_cause_is::<LinkFailure>(&err),
+            "{err:?}"
+        );
     }
 
     let closed = tokio::time::timeout(Duration::from_secs(5), client.close())
         .await
         .expect("close must return once the RT thread is gone");
     assert!(
-        matches!(closed, Err(Error::RtClosed | Error::Link(_))),
+        matches!(closed, Err(Error::RtClosed))
+            || closed
+                .as_ref()
+                .err()
+                .is_some_and(link_cause_is::<LinkFailure>),
         "{closed:?}"
     );
     assert_eq!(

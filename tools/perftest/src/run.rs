@@ -387,8 +387,8 @@ async fn run_stop_and_wait(
             Ok(()) => SampleStatus::Ok,
             Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),
             Err(ClientError::Timeout { .. }) => SampleStatus::Timeout,
-            Err(ClientError::Link(msg)) => {
-                eprintln!("link error: {msg}");
+            Err(ClientError::Link(cause)) => {
+                eprintln!("link error: {cause}");
                 SampleStatus::LinkError
             }
             Err(ClientError::InvalidPayload(e)) => {
@@ -497,8 +497,8 @@ async fn run_streaming(
                 Some(&code) => SampleStatus::DeviceError(code),
             },
             Err(ClientError::Timeout { .. }) => SampleStatus::Timeout,
-            Err(ClientError::Link(msg)) => {
-                eprintln!("link error: {msg}");
+            Err(ClientError::Link(cause)) => {
+                eprintln!("link error: {cause}");
                 SampleStatus::LinkError
             }
             Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),

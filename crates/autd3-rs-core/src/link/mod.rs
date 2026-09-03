@@ -19,7 +19,7 @@ pub use status::LinkStatus;
 use crate::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES};
 
 pub trait Link: Send + 'static {
-    type Error: core::fmt::Display + Send + Sync + 'static;
+    type Error: core::error::Error + Send + Sync + 'static;
     type Checker: StateCheck;
 
     fn num_devices(&self) -> usize;
