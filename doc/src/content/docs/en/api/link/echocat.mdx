@@ -16,8 +16,38 @@ import csSample from "@codes/csharp/examples/api/link/echocat.cs?raw";
 
 <Install rust="autd3-rs-link-echocat" python="autd3-link-echocat" csharp="AUTD3.Link.Echocat" />
 
-Because it handles an Ethernet raw socket, running it on Linux/macOS requires root privileges (or `CAP_NET_RAW`).
-On Windows, [npcap](https://nmap.org/npcap/) must be installed in "WinPcap API-compatible mode".
+## Privileges
+
+Using echocat requires privileges, which differ per OS.
+
+### Linux
+
+Either run as root, or grant the capabilities to the executable.
+
+```sh
+sudo setcap cap_net_raw,cap_net_admin,cap_sys_nice+ep ./target/release/my_app
+```
+The capabilities are attached to the binary, so they are lost on a rebuild.
+
+When granting the capabilities for Python or C#, the target is the interpreter itself (`python3`, `dotnet`).
+
+### macOS
+
+Either run as root, or grant read/write access to `/dev/bpf*`.
+
+```sh
+sudo chgrp admin /dev/bpf*
+sudo chmod g+rw /dev/bpf*
+```
+
+`/dev/bpf*` is recreated on boot, so the permissions have to be granted again after every reboot.
+
+### Windows
+
+Install [npcap](https://nmap.org/npcap/) in "WinPcap API-compatible mode".
+If "Restrict Npcap driver's access to Administrators only" was selected in the installer, the program must be run with administrator privileges.
+
+Without npcap, `wpcap.dll` is missing and the process fails to start at all (error code `0xc0000135`).
 
 ## API
 
