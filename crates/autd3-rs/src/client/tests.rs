@@ -2103,9 +2103,9 @@ async fn link_stats_are_reachable_through_the_client() {
         .unwrap();
     let stats = client.link_stats();
     assert!(stats.exchanges() > 0);
-    assert_eq!(stats.mean_exchange_ns(), 1_000);
     let before = stats.exchanges();
     send_nop(&client).await.unwrap();
     assert!(client.link_stats().exchanges() > before);
     client.close().await.unwrap();
+    assert_eq!(client.link_stats().mean_exchange_ns(), 1_000);
 }
