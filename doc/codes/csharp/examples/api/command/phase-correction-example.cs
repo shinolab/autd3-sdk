@@ -13,7 +13,7 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
-var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
+await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
 var phases = new Phase[geometry.NumDevices][];
 for (var i = 0; i < geometry.NumDevices; i++)
@@ -33,8 +33,6 @@ foreach (var frame in frames)
 {
     await client.SendCheckedAsync(frame);
 }
-
-await client.CloseAsync();
         // HIDE
     }
 }

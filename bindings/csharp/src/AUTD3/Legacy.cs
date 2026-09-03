@@ -233,7 +233,7 @@ namespace AUTD3.Legacy
         public void Dispose() => _handle.Dispose();
     }
 
-    public sealed class LegacyClient : IDisposable
+    public sealed class LegacyClient : IDisposable, IAsyncDisposable
     {
         private readonly LegacyClientHandle _handle;
         private readonly Geometry _geometry;
@@ -337,6 +337,36 @@ namespace AUTD3.Legacy
         public Task CloseAsync() =>
             AsyncOps.InvokeAsync((cb, ud) => NativeLegacyClient.autd3_legacy_client_close(Handle, cb, ud));
 
-        public void Dispose() => _handle.Dispose();
+        public void Dispose()
+        {
+            if (_handle.IsClosed)
+            {
+                return;
+            }
+            try
+            {
+                CloseAsync().GetAwaiter().GetResult();
+            }
+            finally
+            {
+                _handle.Dispose();
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_handle.IsClosed)
+            {
+                return;
+            }
+            try
+            {
+                await CloseAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _handle.Dispose();
+            }
+        }
     }
 }

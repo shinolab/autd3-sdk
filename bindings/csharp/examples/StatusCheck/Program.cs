@@ -17,7 +17,7 @@ internal static class Program
     {
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
         var (client, checker) = await Client.OpenWithCheckerAsync(geometry, new EchocatLinkOption(), new ClientConfig());
-        using var _client = client;
+        await using var _client = client;
         using var _checker = checker;
 
         Console.WriteLine("watching link status — press Ctrl+C to stop");
@@ -51,7 +51,5 @@ internal static class Program
             {
             }
         }
-
-        await client.CloseAsync();
     }
 }

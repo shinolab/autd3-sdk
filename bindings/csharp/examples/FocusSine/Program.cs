@@ -14,7 +14,7 @@ internal static class Program
     {
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
 
-        using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
         var versions = await client.ReadFirmwareVersionAsync();
@@ -52,8 +52,5 @@ internal static class Program
             stop.TrySetResult();
         };
         await stop.Task;
-
-        await client.StopAsync();
-        await client.CloseAsync();
     }
 }

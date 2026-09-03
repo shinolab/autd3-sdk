@@ -44,7 +44,7 @@ internal static class Program
     private static async Task Main()
     {
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
-        using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
 
         var center = geometry.Center;
         const float radius = 30f;
@@ -94,9 +94,6 @@ internal static class Program
             (await pending.Dequeue()).Check();
         }
         Report("streaming", sw.Elapsed.TotalSeconds);
-
-        await client.StopAsync();
-        await client.CloseAsync();
 
         foreach (var dg in frames)
         {

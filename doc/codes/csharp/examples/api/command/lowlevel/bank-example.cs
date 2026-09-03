@@ -14,7 +14,7 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
-var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
+await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
 var emissions = geometry.PatternBuffer();
 Pattern.Focus(
@@ -48,8 +48,6 @@ foreach (var frame in frames)
 {
     await client.SendCheckedAsync(frame);
 }
-
-await client.CloseAsync();
         // HIDE
     }
 }

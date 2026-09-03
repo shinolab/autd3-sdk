@@ -12,7 +12,7 @@ internal static class Sample
     internal static async Task Run()
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero), new Autd3(Vector3.Zero) });
-        var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
         var option = new FocusOption();
@@ -52,7 +52,5 @@ internal static class Sample
             await client.SendCheckedAsync(frame);
         }
         }
-
-        await client.CloseAsync();
     }
 }

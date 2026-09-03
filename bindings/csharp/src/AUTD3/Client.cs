@@ -206,7 +206,7 @@ namespace AUTD3
         }
     }
 
-    public sealed class Client : IDisposable
+    public sealed class Client : IDisposable, IAsyncDisposable
     {
         public const int MaxInflight = 127;
 
@@ -342,6 +342,36 @@ namespace AUTD3
         public Task CloseAsync() =>
             AsyncOps.InvokeAsync((cb, ud) => NativeClient.autd3_client_close(Handle, cb, ud));
 
-        public void Dispose() => _handle.Dispose();
+        public void Dispose()
+        {
+            if (_handle.IsClosed)
+            {
+                return;
+            }
+            try
+            {
+                CloseAsync().GetAwaiter().GetResult();
+            }
+            finally
+            {
+                _handle.Dispose();
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_handle.IsClosed)
+            {
+                return;
+            }
+            try
+            {
+                await CloseAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _handle.Dispose();
+            }
+        }
     }
 }

@@ -19,7 +19,7 @@ internal static class Program
     private static async Task Main()
     {
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
-        using var client = await Client.OpenAsync(
+        await using var client = await Client.OpenAsync(
             geometry, new EchocatLinkOption(), new ClientConfig(lowLatency: EnableLowLatency));
 
         Console.WriteLine($"devices: {client.NumDevices}");
@@ -60,7 +60,5 @@ internal static class Program
         Console.WriteLine(
             $"  min={latencies[0]:F1}us  p50={latencies[Iterations / 2]:F1}us  avg={avg:F1}us"
             + $"  p99={latencies[Iterations * 99 / 100]:F1}us  max={latencies[^1]:F1}us");
-
-        await client.CloseAsync();
     }
 }
