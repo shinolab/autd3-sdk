@@ -16,8 +16,38 @@ import csSample from "@codes/csharp/examples/api/link/echocat.cs?raw";
 
 <Install rust="autd3-rs-link-echocat" python="autd3-link-echocat" csharp="AUTD3.Link.Echocat" />
 
-Ethernet の raw socket を扱うため, Linux/macOS では実行に root 権限 (または `CAP_NET_RAW`) が必要.
-Windows では, [npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mode」でインストールする必要がある.
+## 実行権限
+
+echocat を使うには, OSごとに権限が必要になる.
+
+### Linux
+
+root で実行するか, 実行バイナリに capability を付与する.
+
+```sh
+sudo setcap cap_net_raw,cap_net_admin,cap_sys_nice+ep ./target/release/my_app
+```
+capability はバイナリに付くので, リビルドすると消える.
+
+Python や C# から capability を付ける場合は, 対象がインタプリタ本体 (`python3`, `dotnet`) になる.
+
+### macOS
+
+root で実行するか, `/dev/bpf*` に読み書き権限を与える.
+
+```sh
+sudo chgrp admin /dev/bpf*
+sudo chmod g+rw /dev/bpf*
+```
+
+`/dev/bpf*` は再起動時に作り直されるので, 再起動するたびに権限を付与する必要がある.
+
+### Windows
+
+[npcap](https://nmap.org/npcap/) を「WinPcap API-compatible mode」でインストールする.
+インストーラで「Restrict Npcap driver's access to Administrators only」を選んだ場合は, 管理者権限で実行する必要がある.
+
+npcap が入っていないと `wpcap.dll` が見つからず, プロセスが起動時点で落ちる (エラーコード `0xc0000135`).
 
 ## API
 

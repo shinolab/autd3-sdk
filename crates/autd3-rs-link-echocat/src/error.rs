@@ -3,6 +3,16 @@ use std::time::Duration;
 use crate::reg::AlState;
 use crate::wire::FrameError;
 
+#[cfg(target_os = "linux")]
+const PERMISSION_HINT: &str = "run as root, or grant the binary the capabilities it needs: \
+     sudo setcap cap_net_raw,cap_net_admin,cap_sys_nice+ep <binary> \
+     (the capabilities are lost every time the binary is rebuilt)";
+#[cfg(target_os = "macos")]
+const PERMISSION_HINT: &str = "run as root, or grant the user read/write access to /dev/bpf*";
+#[cfg(target_os = "windows")]
+const PERMISSION_HINT: &str = "install npcap in WinPcap API-compatible mode, \
+     and run as administrator if its driver is restricted to administrators";
+
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum EchocatError {
@@ -18,6 +28,8 @@ pub enum EchocatError {
     NoSubDevices(String),
     #[error("no interface has an EtherCAT subdevice attached")]
     NoInterfaceFound,
+    #[error("cannot open a raw socket on {}: {}", .interface.as_deref().unwrap_or("any interface"), PERMISSION_HINT)]
+    PermissionDenied { interface: Option<String> },
     #[error(
         "subdevice {index} is not an AUTD3 device (vendor {vendor:#010x}, product {product:#010x})"
     )]
