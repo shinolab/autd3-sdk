@@ -43,6 +43,7 @@ pub struct Client {
     completions: Arc<CompletionPool>,
     join: std::sync::Mutex<Option<JoinHandle<()>>>,
     closed: Arc<AtomicBool>,
+    stopping: AtomicBool,
     mirror: MirrorHandle,
     dc_clock: Option<DcClock>,
 }
@@ -119,6 +120,7 @@ impl Client {
                     completions,
                     join: std::sync::Mutex::new(Some(join)),
                     closed,
+                    stopping: AtomicBool::new(false),
                     mirror: MirrorHandle {
                         state: Arc::new(std::sync::Mutex::new(Mirror::Desynced)),
                         enabled: config.validate_state,
@@ -129,15 +131,15 @@ impl Client {
                     .check_firmware_version(config.require_supported_firmware)
                     .await
                 {
-                    let _ = client.close().await;
+                    let _ = client.close_impl(false).await;
                     return Err(e);
                 }
                 if let Err(e) = client.clear().await {
-                    let _ = client.close().await;
+                    let _ = client.close_impl(false).await;
                     return Err(e);
                 }
                 if let Err(e) = client.synchronize().await {
-                    let _ = client.close().await;
+                    let _ = client.close_impl(false).await;
                     return Err(e);
                 }
                 tracing::info!(num_devices, "client opened");
@@ -419,18 +421,28 @@ impl Client {
     }
 
     pub async fn close(&self) -> Result<(), Error> {
+        self.close_impl(true).await
+    }
+
+    async fn close_impl(&self, stop: bool) -> Result<(), Error> {
         tracing::debug!("closing client");
+        let stopped = if stop && !self.stopping.swap(true, Ordering::AcqRel) {
+            self.stop().await
+        } else {
+            Ok(())
+        };
         self.closed.store(true, Ordering::Release);
         let join = self
             .join
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
-        if let Some(join) = join {
+        let joined = if let Some(join) = join {
             wait_thread(join).await
         } else {
             Ok(())
-        }
+        };
+        stopped.and(joined)
     }
 }
 

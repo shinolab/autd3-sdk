@@ -1255,7 +1255,11 @@ async fn close_resolves_pending_with_rt_closed() {
         .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
         .await
         .unwrap();
-    client.close().await.unwrap();
+    let closed = client.close().await;
+    assert!(
+        matches!(closed, Err(Error::Timeout { .. })),
+        "close must report the stop frame the device dropped, got {closed:?}",
+    );
     let err = f.await.unwrap_err();
     assert!(
         matches!(err, Error::RtClosed) || matches!(err, Error::Timeout { .. }),
@@ -1534,7 +1538,11 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
     let inflight_err = inflight.await.unwrap_err();
     let queued_err = queued.await.unwrap_err();
 
-    client.close().await.unwrap();
+    let closed = client.close().await;
+    assert!(
+        matches!(closed, Err(Error::RtClosed)),
+        "close must report the stop frame the dead link refused, got {closed:?}"
+    );
     assert_eq!(
         client.pool.available_permits(),
         max_inflight.get(),
@@ -1582,10 +1590,13 @@ async fn sending_after_the_rt_thread_died_fails_instead_of_blocking() {
         assert!(matches!(err, Error::RtClosed | Error::Link(_)), "{err:?}");
     }
 
-    tokio::time::timeout(Duration::from_secs(5), client.close())
+    let closed = tokio::time::timeout(Duration::from_secs(5), client.close())
         .await
-        .expect("close must return once the RT thread is gone")
-        .unwrap();
+        .expect("close must return once the RT thread is gone");
+    assert!(
+        matches!(closed, Err(Error::RtClosed | Error::Link(_))),
+        "{closed:?}"
+    );
     assert_eq!(
         client.pool.available_permits(),
         max_inflight.get(),
@@ -1792,6 +1803,80 @@ async fn stop_leaves_the_link_synced_for_later_frames() {
 
     let s = slave.lock().unwrap();
     assert_eq!(s.ack, s.expected_seq.wrapping_sub(1));
+}
+
+fn distinct_pattern_frames(slave: &Arc<StdMutex<Slave>>) -> usize {
+    let mut seqs: Vec<u8> = slave
+        .lock()
+        .unwrap()
+        .sent_log
+        .iter()
+        .filter(|(_, cmd)| *cmd == Cmd::WritePatternFused)
+        .map(|(seq, _)| *seq)
+        .collect();
+    seqs.sort_unstable();
+    seqs.dedup();
+    seqs.len()
+}
+
+#[tokio::test]
+async fn close_mutes_before_it_joins_the_rt_thread() {
+    let (client, slave) = open_client().await;
+
+    client.close().await.unwrap();
+
+    assert!(
+        slave.lock().unwrap().muted,
+        "close must leave every emission at zero"
+    );
+    assert_eq!(distinct_pattern_frames(&slave), 1);
+}
+
+#[tokio::test]
+async fn close_joins_the_rt_thread_even_when_the_stop_frame_fails() {
+    let (link, slave) = slave_pair();
+    let max_inflight = NonZeroUsize::new(3).unwrap();
+    let client = Client::open(
+        &geometry(1),
+        link,
+        ClientConfig {
+            max_inflight,
+            ..ClientConfig::default()
+        },
+    )
+    .await
+    .unwrap();
+    slave.lock().unwrap().drop_next = u32::MAX;
+
+    let closed = client.close().await;
+
+    assert!(
+        matches!(closed, Err(Error::Timeout { .. })),
+        "close must surface the stop failure, got {closed:?}"
+    );
+    assert_eq!(
+        client.pool.available_permits(),
+        max_inflight.get(),
+        "a failed stop must not keep the RT thread from being joined"
+    );
+    assert!(matches!(
+        send_nop(&client).await.unwrap_err(),
+        Error::RtClosed
+    ));
+}
+
+#[tokio::test]
+async fn a_second_close_does_not_send_another_stop() {
+    let (client, slave) = open_client().await;
+
+    client.close().await.unwrap();
+    client.close().await.unwrap();
+
+    assert_eq!(
+        distinct_pattern_frames(&slave),
+        1,
+        "the stop sequence must run once per client"
+    );
 }
 
 #[tokio::test]

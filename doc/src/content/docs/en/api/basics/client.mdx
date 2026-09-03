@@ -45,7 +45,7 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 | `send(frame)`             | ✓     | `Result<ResponseFuture, Error>`       | Enqueue a frame into the send queue. Awaiting the `ResponseFuture` yields the response (`Response`) |
 | `send_checked(frame)`     | ✓     | `Result<(), Error>`                   | Send and confirm the response                              |
 | `stop()`                  | ✓     | `Result<(), Error>`                   | Stop all transducers                                       |
-| `close()`                 | ✓     | `Result<(), Error>`                   | Close the connection                                       |
+| `close()`                 | ✓     | `Result<(), Error>`                   | Stop all transducers and close the connection              |
 
 ## ClientConfig
 

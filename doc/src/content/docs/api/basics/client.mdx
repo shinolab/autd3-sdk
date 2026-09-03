@@ -45,7 +45,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | `send(frame)`             | ✓     | `Result<ResponseFuture, Error>`       | フレームを送信キューにいれる. `ResponseFuture` を await すると応答 (`Response`) が得られる |
 | `send_checked(frame)`     | ✓     | `Result<(), Error>`                   | 送信し, 応答確認まで行う                                   |
 | `stop()`                  | ✓     | `Result<(), Error>`                   | 全振動子を停止                                             |
-| `close()`                 | ✓     | `Result<(), Error>`                   | 接続を閉じる                                               |
+| `close()`                 | ✓     | `Result<(), Error>`                   | 全振動子を停止して接続を閉じる                             |
 
 `send_checked(frame).await?` は, `send(frame).await?.await?.check()` と等価である.
 
