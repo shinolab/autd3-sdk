@@ -25,40 +25,36 @@ async def main() -> None:
         ]
     )
 
-    client = await autd3.Client.open(
+    async with await autd3.Client.open(
         geometry,
         echocat.EchocatLinkOption(),
         autd3.ClientConfig(),
-    )
+    ) as client:
+        print("devices:", client.num_devices())
 
-    print("devices:", client.num_devices())
+        wavelength = pattern.wavelength(340 * m / s)
+        focus_option = pattern.FocusOption()
 
-    wavelength = pattern.wavelength(340 * m / s)
-    focus_option = pattern.FocusOption()
+        left_target = geometry.center() + np.array([-40.0, 0.0, 150.0])
+        left = geometry.pattern_buffer()
+        pattern.focus(geometry, left_target, wavelength, focus_option, left)
 
-    left_target = geometry.center() + np.array([-40.0, 0.0, 150.0])
-    left = geometry.pattern_buffer()
-    pattern.focus(geometry, left_target, wavelength, focus_option, left)
+        right_target = geometry.center() + np.array([40.0, 0.0, 150.0])
+        right = geometry.pattern_buffer()
+        pattern.focus(geometry, right_target, wavelength, focus_option, right)
 
-    right_target = geometry.center() + np.array([40.0, 0.0, 150.0])
-    right = geometry.pattern_buffer()
-    pattern.focus(geometry, right_target, wavelength, focus_option, right)
+        builder = client.datagram_builder()
+        builder.push(autd3.commands.SetSilencer())
+        builder.push_each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right))
+        for frame in builder.build():
+            await client.send_checked(frame)
 
-    builder = client.datagram_builder()
-    builder.push(autd3.commands.SetSilencer())
-    builder.push_each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right))
-    for frame in builder.build():
-        await client.send_checked(frame)
-
-    print("even devices -> left target, odd devices -> right target — press Ctrl+C to stop")
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
-    await stop.wait()
-
-    await client.stop()
-    await client.close()
+        print("even devices -> left target, odd devices -> right target — press Ctrl+C to stop")
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
+        await stop.wait()
 
 
 if __name__ == "__main__":

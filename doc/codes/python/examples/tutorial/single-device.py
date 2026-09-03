@@ -19,44 +19,39 @@ async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     # Open the client over an echocat link.
-    client = await Client.open(
+    async with await Client.open(
         geometry,
         echocat.EchocatLinkOption(),
         ClientConfig(),
-    )
+    ) as client:
+        # Generate a focus 150 mm above the array center.
+        target = geometry.center() + np.array([0.0, 0.0, 150.0])
+        wavelength = pattern.wavelength(340 * m / s)
+        patterns = geometry.pattern_buffer()
+        pattern.focus(
+            geometry,
+            target,
+            wavelength,
+            pattern.FocusOption(),
+            patterns,
+        )
 
-    # Generate a focus 150 mm above the array center.
-    target = geometry.center() + np.array([0.0, 0.0, 150.0])
-    wavelength = pattern.wavelength(340 * m / s)
-    patterns = geometry.pattern_buffer()
-    pattern.focus(
-        geometry,
-        target,
-        wavelength,
-        pattern.FocusOption(),
-        patterns,
-    )
+        # Apply a 200 Hz sine-wave AM.
+        mod_buf = modulation.modulation_buffer()
+        modulation.sine(
+            200 * Hz,
+            modulation.SineOption(sampling_config=SamplingConfig.FREQ_4K),
+            mod_buf,
+        )
 
-    # Apply a 200 Hz sine-wave AM.
-    mod_buf = modulation.modulation_buffer()
-    modulation.sine(
-        200 * Hz,
-        modulation.SineOption(sampling_config=SamplingConfig.FREQ_4K),
-        mod_buf,
-    )
+        builder = client.datagram_builder()
+        builder.push(SetSilencer())
+        builder.push(Pattern(patterns))
+        builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
+        for frame in builder.build():
+            await client.send_checked(frame)
 
-    builder = client.datagram_builder()
-    builder.push(SetSilencer())
-    builder.push(Pattern(patterns))
-    builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
-    for frame in builder.build():
-        await client.send_checked(frame)
-
-    try:
         await asyncio.Event().wait()
-    finally:
-        await client.stop()
-        await client.close()
 
 
 if __name__ == "__main__":

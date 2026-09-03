@@ -22,30 +22,29 @@ async def main() -> None:
         autd3.ClientConfig(),
     )
 
-    print("watching link status — press Ctrl+C to stop")
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
+    async with client:
+        print("watching link status — press Ctrl+C to stop")
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
 
-    last = None
-    while not stop.is_set():
-        status = checker.check()
-        key = (tuple(status.device_states), status.recoveries)
-        if key != last:
-            for i, state in enumerate(status.device_states):
-                print(f"device[{i}]: {state}")
-            print(
-                f"all operational: {status.all_op}, "
-                f"any lost: {status.any_lost}, recoveries: {status.recoveries}"
-            )
-            last = key
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=CHECK_INTERVAL)
-        except asyncio.TimeoutError:
-            pass
-
-    await client.close()
+        last = None
+        while not stop.is_set():
+            status = checker.check()
+            key = (tuple(status.device_states), status.recoveries)
+            if key != last:
+                for i, state in enumerate(status.device_states):
+                    print(f"device[{i}]: {state}")
+                print(
+                    f"all operational: {status.all_op}, "
+                    f"any lost: {status.any_lost}, recoveries: {status.recoveries}"
+                )
+                last = key
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=CHECK_INTERVAL)
+            except asyncio.TimeoutError:
+                pass
 
 
 if __name__ == "__main__":

@@ -18,40 +18,36 @@ RADIUS_MM = 30.0
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client = await Client.open(
+    async with await Client.open(
         geometry,
         echocat.EchocatLinkOption(),
         ClientConfig(),
-    )
+    ) as client:
+        builder = client.datagram_builder()
+        builder.push(SetSilencer())
+        for frame in builder.build():
+            await client.send_checked(frame)
 
-    builder = client.datagram_builder()
-    builder.push(SetSilencer())
-    for frame in builder.build():
-        await client.send_checked(frame)
+        wavelength = pattern.wavelength(340 * m / s)
 
-    wavelength = pattern.wavelength(340 * m / s)
+        # ANCHOR: targets
+        # Prepare 1000 focus points along a circle 150 mm above the array center.
+        center = geometry.center() + np.array([0.0, 0.0, 150.0])
+        targets = [
+            center
+            + np.array(
+                [
+                    RADIUS_MM * math.cos(2.0 * math.pi * i / NUM_POINTS),
+                    RADIUS_MM * math.sin(2.0 * math.pi * i / NUM_POINTS),
+                    0.0,
+                ]
+            )
+            for i in range(NUM_POINTS)
+        ]
+        # ANCHOR_END: targets
 
-    # ANCHOR: targets
-    # Prepare 1000 focus points along a circle 150 mm above the array center.
-    center = geometry.center() + np.array([0.0, 0.0, 150.0])
-    targets = [
-        center
-        + np.array(
-            [
-                RADIUS_MM * math.cos(2.0 * math.pi * i / NUM_POINTS),
-                RADIUS_MM * math.sin(2.0 * math.pi * i / NUM_POINTS),
-                0.0,
-            ]
-        )
-        for i in range(NUM_POINTS)
-    ]
-    # ANCHOR_END: targets
-
-    await stop_and_wait(client, geometry, targets, wavelength)
-    await streaming(client, geometry, targets, wavelength)
-
-    await client.stop()
-    await client.close()
+        await stop_and_wait(client, geometry, targets, wavelength)
+        await streaming(client, geometry, targets, wavelength)
 
 
 async def stop_and_wait(client, geometry, targets, wavelength) -> None:

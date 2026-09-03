@@ -22,48 +22,45 @@ ENABLE_LOW_LATENCY = True
 async def main() -> None:
     geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client = await autd3.Client.open(
+    async with await autd3.Client.open(
         geometry,
         echocat.EchocatLinkOption(),
         autd3.ClientConfig(low_latency=ENABLE_LOW_LATENCY),
-    )
+    ) as client:
+        print("devices:", client.num_devices())
 
-    print("devices:", client.num_devices())
+        target = geometry.center() + np.array([0.0, 0.0, 150.0])
+        wavelength = pattern.wavelength(340 * m / s)
+        patterns = geometry.pattern_buffer()
+        pattern.focus(geometry, target, wavelength, pattern.FocusOption(intensity=0), patterns)
+        builder = client.datagram_builder()
+        builder.push(autd3.commands.Pattern(patterns))
+        datagrams = builder.build()
 
-    target = geometry.center() + np.array([0.0, 0.0, 150.0])
-    wavelength = pattern.wavelength(340 * m / s)
-    patterns = geometry.pattern_buffer()
-    pattern.focus(geometry, target, wavelength, pattern.FocusOption(intensity=0), patterns)
-    builder = client.datagram_builder()
-    builder.push(autd3.commands.Pattern(patterns))
-    datagrams = builder.build()
+        frame = datagrams[0]
+        for _ in range(WARMUP):
+            await client.send_checked(frame)
 
-    frame = datagrams[0]
-    for _ in range(WARMUP):
-        await client.send_checked(frame)
+        latencies = []
+        for _ in range(ITERATIONS):
+            t = time.perf_counter()
+            await client.send_checked(frame)
+            latencies.append(time.perf_counter() - t)
 
-    latencies = []
-    for _ in range(ITERATIONS):
-        t = time.perf_counter()
-        await client.send_checked(frame)
-        latencies.append(time.perf_counter() - t)
+        latencies.sort()
 
-    latencies.sort()
+        def us(seconds: float) -> float:
+            return seconds * 1e6
 
-    def us(seconds: float) -> float:
-        return seconds * 1e6
-
-    avg = us(sum(latencies) / ITERATIONS)
-    print(f"one-shot latency over {ITERATIONS} sends (low_latency={ENABLE_LOW_LATENCY}):")
-    print(
-        f"  min={us(latencies[0]):.1f}us"
-        f"  p50={us(latencies[ITERATIONS // 2]):.1f}us"
-        f"  avg={avg:.1f}us"
-        f"  p99={us(latencies[ITERATIONS * 99 // 100]):.1f}us"
-        f"  max={us(latencies[-1]):.1f}us"
-    )
-
-    await client.close()
+        avg = us(sum(latencies) / ITERATIONS)
+        print(f"one-shot latency over {ITERATIONS} sends (low_latency={ENABLE_LOW_LATENCY}):")
+        print(
+            f"  min={us(latencies[0]):.1f}us"
+            f"  p50={us(latencies[ITERATIONS // 2]):.1f}us"
+            f"  avg={avg:.1f}us"
+            f"  p99={us(latencies[ITERATIONS * 99 // 100]):.1f}us"
+            f"  max={us(latencies[-1]):.1f}us"
+        )
 
 
 if __name__ == "__main__":

@@ -42,50 +42,46 @@ def write_focus(client: autd3.Client, patterns: object) -> object:
 async def main() -> None:
     geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client = await autd3.Client.open(
+    async with await autd3.Client.open(
         geometry,
         echocat.EchocatLinkOption(),
         autd3.ClientConfig(),
-    )
+    ) as client:
+        center = geometry.center()
+        radius = 30.0
+        wavelength = pattern.wavelength(340 * m / s)
 
-    center = geometry.center()
-    radius = 30.0
-    wavelength = pattern.wavelength(340 * m / s)
+        patterns = geometry.pattern_buffer()
+        await configure(client, patterns)
 
-    patterns = geometry.pattern_buffer()
-    await configure(client, patterns)
+        datagrams = []
+        for i in range(TOTAL_POINTS):
+            theta = 2.0 * math.pi * i / TOTAL_POINTS
+            target = center + np.array([radius * math.cos(theta), radius * math.sin(theta), 150.0])
+            pattern.focus(geometry, target, wavelength, pattern.FocusOption(), patterns)
+            datagrams.append(write_focus(client, patterns))
 
-    datagrams = []
-    for i in range(TOTAL_POINTS):
-        theta = 2.0 * math.pi * i / TOTAL_POINTS
-        target = center + np.array([radius * math.cos(theta), radius * math.sin(theta), 150.0])
-        pattern.focus(geometry, target, wavelength, pattern.FocusOption(), patterns)
-        datagrams.append(write_focus(client, patterns))
+        print(f"sweeping a focus through {TOTAL_POINTS} positions, twice")
 
-    print(f"sweeping a focus through {TOTAL_POINTS} positions, twice")
+        # stop-and-wait: confirm each frame lands before issuing the next.
+        start = time.perf_counter()
+        for dg in datagrams:
+            for frame in dg:
+                await client.send_checked(frame)
+        report("stop-and-wait", time.perf_counter() - start)
 
-    # stop-and-wait: confirm each frame lands before issuing the next.
-    start = time.perf_counter()
-    for dg in datagrams:
-        for frame in dg:
-            await client.send_checked(frame)
-    report("stop-and-wait", time.perf_counter() - start)
-
-    # streaming: keep MAX_INFLIGHT frames on the wire, draining the oldest response
-    # once the window is full.
-    start = time.perf_counter()
-    pending = collections.deque()
-    for dg in datagrams:
-        for frame in dg:
-            if len(pending) >= autd3.MAX_INFLIGHT:
-                (await pending.popleft()).check()
-            pending.append(await client.send(frame))
-    while pending:
-        (await pending.popleft()).check()
-    report("streaming", time.perf_counter() - start)
-
-    await client.stop()
-    await client.close()
+        # streaming: keep MAX_INFLIGHT frames on the wire, draining the oldest response
+        # once the window is full.
+        start = time.perf_counter()
+        pending = collections.deque()
+        for dg in datagrams:
+            for frame in dg:
+                if len(pending) >= autd3.MAX_INFLIGHT:
+                    (await pending.popleft()).check()
+                pending.append(await client.send(frame))
+        while pending:
+            (await pending.popleft()).check()
+        report("streaming", time.perf_counter() - start)
 
 
 if __name__ == "__main__":

@@ -12,26 +12,23 @@ from autd3.value import ControlPoint, ControlPoints
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client = await Client.open(
+    async with await Client.open(
         geometry,
         echocat.EchocatLinkOption(),
         ClientConfig(),
-    )
+    ) as client:
+        center = geometry.center() + np.array([0.0, 0.0, 150.0])
 
-    center = geometry.center() + np.array([0.0, 0.0, 150.0])
-
-    # ANCHOR: stm
-    points = [
-        ControlPoints([ControlPoint(center + np.array([20.0, 0.0, 0.0]))]),
-        ControlPoints([ControlPoint(center + np.array([-20.0, 0.0, 0.0]))]),
-    ]
-    builder = client.datagram_builder()
-    builder.push(FociStm(0.5 * Hz, points, FociStmOption()))
-    for frame in builder.build():
-        await client.send_checked(frame)
-    # ANCHOR_END: stm
-
-    await client.close()
+        # ANCHOR: stm
+        points = [
+            ControlPoints([ControlPoint(center + np.array([20.0, 0.0, 0.0]))]),
+            ControlPoints([ControlPoint(center + np.array([-20.0, 0.0, 0.0]))]),
+        ]
+        builder = client.datagram_builder()
+        builder.push(FociStm(0.5 * Hz, points, FociStmOption()))
+        for frame in builder.build():
+            await client.send_checked(frame)
+        # ANCHOR_END: stm
 
 
 if __name__ == "__main__":

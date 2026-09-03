@@ -20,7 +20,7 @@ async def main() -> None:
     )
     # ANCHOR_END: open
 
-    try:
+    async with client:
         # ANCHOR: poll
         last = None
         while True:
@@ -32,8 +32,6 @@ async def main() -> None:
                 last = status
             await asyncio.sleep(CHECK_INTERVAL)
         # ANCHOR_END: poll
-    finally:
-        await client.close()
 
 
 if __name__ == "__main__":
