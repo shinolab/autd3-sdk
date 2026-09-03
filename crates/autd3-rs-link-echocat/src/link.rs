@@ -41,6 +41,7 @@ pub struct EchocatLink {
     stats: LinkStats,
     dc_clock: DcClock,
     rx_was_valid: bool,
+    closed: bool,
     _timer_resolution: TimerResolutionGuard,
 }
 
@@ -61,6 +62,7 @@ impl EchocatLink {
             stats: link_stats,
             dc_clock: DcClock::new(),
             rx_was_valid: true,
+            closed: false,
             _timer_resolution: timer_resolution,
         })
     }
@@ -82,14 +84,13 @@ impl EchocatLink {
         }
         Err(EchocatError::NoInterfaceFound)
     }
-
-    pub fn close(&mut self) -> Result<(), EchocatError> {
-        self.master.close()
-    }
 }
 
 impl Drop for EchocatLink {
     fn drop(&mut self) {
+        if self.closed {
+            return;
+        }
         if let Err(e) = self.master.close() {
             tracing::warn!("failed to return the bus to INIT: {e}");
         }
@@ -160,6 +161,14 @@ impl Link for EchocatLink {
         } else {
             CycleOutcome::stale()
         })
+    }
+
+    fn close(&mut self) -> Result<(), Self::Error> {
+        if self.closed {
+            return Ok(());
+        }
+        self.closed = true;
+        self.master.close()
     }
 }
 

@@ -25,7 +25,7 @@ use crate::error::{Error, LinkCause, PayloadError};
 use crate::firmware_version::{FirmwareVersion, Version};
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
-use crate::link::{DcClock, IntoLink, Link};
+use crate::link::{DcClock, IntoLink, Link, LinkStats};
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, DeviceErrorCode};
 use crate::telemetry::Telemetry;
@@ -41,11 +41,12 @@ pub struct Client {
     num_devices: usize,
     pool: Arc<SlotPool>,
     completions: Arc<CompletionPool>,
-    join: std::sync::Mutex<Option<JoinHandle<()>>>,
+    join: std::sync::Mutex<Option<JoinHandle<Option<LinkCause>>>>,
     closed: Arc<AtomicBool>,
     stopping: AtomicBool,
     mirror: MirrorHandle,
     dc_clock: Option<DcClock>,
+    stats: LinkStats,
 }
 
 impl Client {
@@ -75,9 +76,10 @@ impl Client {
         config: ClientConfig,
     ) -> Result<(Self, <T::Link as Link>::Checker), Error> {
         let config = config.validate()?;
-        let link = link.into_link(geometry)?;
+        let mut link = link.into_link(geometry)?;
         let num_devices = link.num_devices();
         if num_devices == 0 || num_devices > MAX_DEVICES {
+            close_unopened(&mut link);
             return Err(PayloadError::DeviceCountOutOfRange {
                 got: num_devices,
                 max: MAX_DEVICES,
@@ -85,6 +87,7 @@ impl Client {
             .into());
         }
         if geometry.num_devices() != num_devices {
+            close_unopened(&mut link);
             return Err(PayloadError::GeometryDeviceMismatch {
                 geometry: geometry.num_devices(),
                 link: num_devices,
@@ -94,6 +97,7 @@ impl Client {
 
         let checker = link.state_checker();
         let dc_clock = link.dc_clock();
+        let stats = link.stats();
         let pool = SlotPool::new(num_devices, config.max_inflight.get());
         let completions = CompletionPool::new(config.max_inflight.get());
 
@@ -104,9 +108,7 @@ impl Client {
 
         let join = std::thread::Builder::new()
             .name("autd3-rs-rt".to_owned())
-            .spawn(move || {
-                rt::run_rt_thread(link, cmd_rx, config, hs_done_tx, closed_for_rt);
-            })
+            .spawn(move || rt::run_rt_thread(link, cmd_rx, config, hs_done_tx, closed_for_rt))
             .map_err(|e| Error::Link(LinkCause::new(e)))?;
 
         match hs_done_rx.await {
@@ -126,6 +128,7 @@ impl Client {
                         enabled: config.validate_state,
                     },
                     dc_clock,
+                    stats,
                 };
                 if let Err(e) = client
                     .check_firmware_version(config.require_supported_firmware)
@@ -159,6 +162,11 @@ impl Client {
     #[must_use]
     pub fn num_devices(&self) -> usize {
         self.num_devices
+    }
+
+    #[must_use]
+    pub fn link_stats(&self) -> LinkStats {
+        self.stats.clone()
     }
 
     #[must_use]
@@ -460,6 +468,12 @@ impl Drop for Client {
     }
 }
 
+fn close_unopened<L: Link>(link: &mut L) {
+    if let Err(e) = link.close() {
+        tracing::warn!(error = %e, "failed to close the link that never opened");
+    }
+}
+
 fn warn_unknown(device: usize, what: &str, pre_latched: bool) {
     if pre_latched {
         tracing::warn!(
@@ -474,9 +488,10 @@ fn warn_unknown(device: usize, what: &str, pre_latched: bool) {
     }
 }
 
-async fn wait_thread(join: JoinHandle<()>) -> Result<(), Error> {
+async fn wait_thread(join: JoinHandle<Option<LinkCause>>) -> Result<(), Error> {
     tokio::task::spawn_blocking(move || join.join())
         .await
         .map_err(|e| Error::Link(LinkCause::new(e)))?
-        .map_err(|_| Error::RtPanicked)
+        .map_err(|_| Error::RtPanicked)?
+        .map_or(Ok(()), |cause| Err(Error::Link(cause)))
 }

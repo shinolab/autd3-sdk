@@ -41,4 +41,8 @@ pub trait Link: Send + 'static {
         tx: &[[u8; TX_FRAME_BYTES]],
         rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Self::Error>;
+
+    fn close(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }

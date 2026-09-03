@@ -98,6 +98,18 @@ fn open_stops_at_safe_op_so_op_is_entered_under_the_caller_cadence() {
 }
 
 #[test]
+fn close_returns_the_bus_to_init_and_tolerates_a_second_call() {
+    let mut master = open(1);
+    assert_eq!(master.bus().devices()[0].al_state(), Some(AlState::Op));
+
+    master.close().expect("the bus returns to INIT");
+    assert_eq!(master.bus().devices()[0].al_state(), Some(AlState::Init));
+
+    master.close().expect("closing twice stays harmless");
+    assert_eq!(master.bus().devices()[0].al_state(), Some(AlState::Init));
+}
+
+#[test]
 fn a_single_device_bus_reaches_op() {
     let master = open(1);
     assert_eq!(master.num_devices(), 1);

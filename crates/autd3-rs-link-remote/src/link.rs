@@ -80,6 +80,7 @@ pub struct RemoteLink {
     stats: LinkStats,
     counters: [u64; 4],
     dc_clock: DcClock,
+    closed: bool,
 }
 
 impl RemoteLink {
@@ -149,6 +150,7 @@ impl RemoteLink {
             stats: LinkStats::default(),
             counters: [0; 4],
             dc_clock: DcClock::new(),
+            closed: false,
         })
     }
 
@@ -225,10 +227,23 @@ impl Link for RemoteLink {
             CycleOutcome::stale()
         })
     }
+
+    fn close(&mut self) -> Result<(), RemoteLinkError> {
+        if self.closed {
+            return Ok(());
+        }
+        self.closed = true;
+        self.stream.write_all(&[wire::TAG_CLOSE])?;
+        self.stream.flush()?;
+        Ok(())
+    }
 }
 
 impl Drop for RemoteLink {
     fn drop(&mut self) {
+        if self.closed {
+            return;
+        }
         let _ = self.stream.write_all(&[wire::TAG_CLOSE]);
         let _ = self.stream.flush();
     }

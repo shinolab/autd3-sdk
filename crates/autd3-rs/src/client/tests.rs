@@ -1,7 +1,7 @@
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
-use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
 use std::time::Duration;
 
 use crate::commands::operation::{Distribution, Nop, Operation, PATTERN_FUSED_HEADER_BYTES};
@@ -10,7 +10,7 @@ use crate::error::Error;
 use crate::firmware_version::{FirmwareVersion, Version};
 use crate::geometry::Device;
 use crate::geometry::{Autd3, Geometry};
-use crate::link::{CycleOutcome, Link};
+use crate::link::{CycleOutcome, Link, LinkStats};
 use crate::protocol::{Cmd, MAX_INFLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
 
 use crate::telemetry::Telemetry;
@@ -1956,4 +1956,142 @@ async fn read_firmware_version_ignores_emulator_bit_when_fpga_unknown() {
 
     let v = client.read_firmware_version().await.unwrap();
     assert!(!v[0].is_emulator());
+}
+
+#[derive(Default)]
+struct CloseTracker {
+    closes: AtomicUsize,
+    close_fails: AtomicBool,
+    cycle_fails: AtomicBool,
+}
+
+impl CloseTracker {
+    fn closes(&self) -> usize {
+        self.closes.load(AtomicOrdering::Acquire)
+    }
+}
+
+struct TrackedLink {
+    inner: LoopbackLink,
+    tracker: Arc<CloseTracker>,
+    stats: LinkStats,
+}
+
+fn tracked_pair() -> (TrackedLink, Arc<CloseTracker>) {
+    let (inner, _slave) = slave_pair();
+    let tracker = Arc::new(CloseTracker::default());
+    (
+        TrackedLink {
+            inner,
+            tracker: Arc::clone(&tracker),
+            stats: LinkStats::default(),
+        },
+        tracker,
+    )
+}
+
+impl Link for TrackedLink {
+    type Error = LinkFailure;
+    type Checker = crate::link::ConstStateChecker;
+
+    fn num_devices(&self) -> usize {
+        self.inner.num_devices()
+    }
+
+    fn stats(&self) -> LinkStats {
+        self.stats.clone()
+    }
+
+    fn state_checker(&self) -> Self::Checker {
+        self.inner.state_checker()
+    }
+
+    fn cycle(
+        &mut self,
+        tx: &[[u8; TX_FRAME_BYTES]],
+        rx: &mut [[u8; RX_FRAME_BYTES]],
+    ) -> Result<CycleOutcome, Self::Error> {
+        if self.tracker.cycle_fails.load(AtomicOrdering::Acquire) {
+            return Err(LinkFailure);
+        }
+        self.stats.record_exchange(1_000);
+        Ok(self.inner.cycle(tx, rx).expect("loopback never fails"))
+    }
+
+    fn close(&mut self) -> Result<(), Self::Error> {
+        self.tracker.closes.fetch_add(1, AtomicOrdering::AcqRel);
+        if self.tracker.close_fails.load(AtomicOrdering::Acquire) {
+            return Err(LinkFailure);
+        }
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn close_calls_the_link_close_exactly_once() {
+    let (link, tracker) = tracked_pair();
+    let client = Client::open(&geometry(1), link, ClientConfig::default())
+        .await
+        .unwrap();
+    client.close().await.unwrap();
+    assert_eq!(tracker.closes(), 1);
+    client.close().await.unwrap();
+    drop(client);
+    assert_eq!(tracker.closes(), 1);
+}
+
+#[tokio::test]
+async fn dropping_the_client_still_closes_the_link() {
+    let (link, tracker) = tracked_pair();
+    let client = Client::open(&geometry(1), link, ClientConfig::default())
+        .await
+        .unwrap();
+    drop(client);
+    assert_eq!(tracker.closes(), 1);
+}
+
+#[tokio::test]
+async fn link_close_failure_surfaces_from_client_close() {
+    let (link, tracker) = tracked_pair();
+    let client = Client::open(&geometry(1), link, ClientConfig::default())
+        .await
+        .unwrap();
+    tracker.close_fails.store(true, AtomicOrdering::Release);
+    let closed = client.close().await;
+    assert!(link_cause_is::<LinkFailure>(&closed.unwrap_err()));
+    assert_eq!(tracker.closes(), 1);
+}
+
+#[tokio::test]
+async fn the_link_is_closed_even_when_the_handshake_fails() {
+    let (link, tracker) = tracked_pair();
+    tracker.cycle_fails.store(true, AtomicOrdering::Release);
+    let opened = Client::open(&geometry(1), link, ClientConfig::default()).await;
+    assert!(link_cause_is::<LinkFailure>(
+        &opened.err().expect("open fails")
+    ));
+    assert_eq!(tracker.closes(), 1);
+}
+
+#[tokio::test]
+async fn a_link_rejected_by_the_device_count_check_is_still_closed() {
+    let (link, tracker) = tracked_pair();
+    let opened = Client::open(&geometry(2), link, ClientConfig::default()).await;
+    assert!(matches!(opened, Err(Error::InvalidPayload(_))));
+    assert_eq!(tracker.closes(), 1);
+}
+
+#[tokio::test]
+async fn link_stats_are_reachable_through_the_client() {
+    let (link, _tracker) = tracked_pair();
+    let client = Client::open(&geometry(1), link, ClientConfig::default())
+        .await
+        .unwrap();
+    let stats = client.link_stats();
+    assert!(stats.exchanges() > 0);
+    assert_eq!(stats.mean_exchange_ns(), 1_000);
+    let before = stats.exchanges();
+    send_nop(&client).await.unwrap();
+    assert!(client.link_stats().exchanges() > before);
+    client.close().await.unwrap();
 }

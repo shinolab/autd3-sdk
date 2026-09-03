@@ -124,7 +124,7 @@ pub(super) fn run_rt_thread<L: Link>(
     config: ClientConfig,
     hs_done_tx: oneshot::Sender<Result<(), LinkCause>>,
     closed: Arc<AtomicBool>,
-) {
+) -> Option<LinkCause> {
     autd3_rs_core::apply_thread_tuning(autd3_rs_core::RtThreadTuning {
         priority: config.rt_priority,
         policy: config.rt_policy,
@@ -135,13 +135,15 @@ pub(super) fn run_rt_thread<L: Link>(
         Ok(()) => {}
         Err(e) => {
             let _ = hs_done_tx.send(Err(e));
-            return;
+            return rt.close_link();
         }
     }
     if hs_done_tx.send(Ok(())).is_err() {
-        return;
+        return rt.close_link();
     }
-    rt.run();
+    let link_error = rt.run();
+    let closed = rt.close_link();
+    link_error.or(closed)
 }
 
 struct RtThread<L: Link> {
@@ -251,7 +253,7 @@ impl<L: Link> RtThread<L> {
         Ok(Seq::ZERO)
     }
 
-    fn run(&mut self) {
+    fn run(&mut self) -> Option<LinkCause> {
         let mut link_error: Option<LinkCause> = None;
         loop {
             if self.closed.load(Ordering::Acquire) {
@@ -283,6 +285,7 @@ impl<L: Link> RtThread<L> {
         }
 
         self.teardown(link_error.as_ref());
+        link_error
     }
 
     fn stage_tx(&mut self) -> StageOutcome {
@@ -441,6 +444,16 @@ impl<L: Link> RtThread<L> {
             entry.response_tx.send(Err(Error::Timeout {
                 cycles: self.config.timeout_cycles.get(),
             }));
+        }
+    }
+
+    fn close_link(&mut self) -> Option<LinkCause> {
+        match self.link.close() {
+            Ok(()) => None,
+            Err(e) => {
+                tracing::error!("link close failed: {e}");
+                Some(LinkCause::new(e))
+            }
         }
     }
 

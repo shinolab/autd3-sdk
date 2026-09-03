@@ -588,6 +588,71 @@ impl Link for CountingLink {
     }
 }
 
+struct ClosingLink {
+    closes: Arc<AtomicUsize>,
+}
+
+impl Link for ClosingLink {
+    type Error = Infallible;
+    type Checker = ConstStateChecker;
+
+    fn num_devices(&self) -> usize {
+        1
+    }
+
+    fn state_checker(&self) -> ConstStateChecker {
+        ConstStateChecker::new(1)
+    }
+
+    fn cycle(
+        &mut self,
+        tx: &[[u8; TX_FRAME_BYTES]],
+        rx: &mut [[u8; RX_FRAME_BYTES]],
+    ) -> Result<CycleOutcome, Infallible> {
+        for (t, r) in tx.iter().zip(rx.iter_mut()) {
+            r[0] = t[0];
+        }
+        Ok(CycleOutcome::valid())
+    }
+
+    fn close(&mut self) -> Result<(), Infallible> {
+        self.closes.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+#[test]
+fn the_bus_closes_the_link_before_letting_go_of_it() {
+    let closes = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&closes);
+    let bus = SharedBus::new(bus_option(), move || {
+        Ok::<_, RemoteLinkError>(ClosingLink {
+            closes: Arc::clone(&counted),
+        })
+    })
+    .unwrap();
+
+    bus.set_desired(Desired::Open);
+    spin("the bus to open", || {
+        (bus.snapshot().actual == Actual::Open).then_some(())
+    });
+    assert_eq!(closes.load(Ordering::SeqCst), 0);
+
+    bus.set_desired(Desired::Closed);
+    spin("the link to be closed", || {
+        (closes.load(Ordering::SeqCst) == 1).then_some(())
+    });
+
+    bus.set_desired(Desired::Open);
+    spin("the bus to reopen", || {
+        (bus.snapshot().actual == Actual::Open).then_some(())
+    });
+    drop(bus);
+    spin("the bus thread to close the second link", || {
+        (closes.load(Ordering::SeqCst) == 2).then_some(())
+    });
+}
+
 #[test]
 fn the_bus_counters_do_not_rewind_when_the_link_is_reopened() {
     let opens = Arc::new(AtomicUsize::new(0));

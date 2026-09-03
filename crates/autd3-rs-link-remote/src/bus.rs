@@ -752,7 +752,10 @@ where
                 link: opened,
             });
         }
-        Ok(_) => "no device found on the bus".to_owned(),
+        Ok(mut empty) => {
+            let _ = empty.close();
+            "no device found on the bus".to_owned()
+        }
         Err(e) => {
             tracing::warn!(error = %e, "failed to open the bus link; retrying");
             e.to_string()
@@ -761,6 +764,16 @@ where
     shared.enter_failed(&reason);
     shared.wait_backoff(REOPEN_RETRY_PERIOD);
     None
+}
+
+fn close_link<L: Link>(link: &mut Option<L>) -> bool {
+    let Some(mut link) = link.take() else {
+        return false;
+    };
+    if let Err(e) = link.close() {
+        tracing::warn!(error = %e, "failed to close the bus link");
+    }
+    true
 }
 
 struct StopOnDrop<'a>(&'a BusShared);
@@ -822,14 +835,18 @@ fn bus_loop<L, F>(
 
     while !shared.is_stopped() {
         if shared.desired() == Desired::Closed {
-            if link.take().is_some() {
+            if close_link(&mut link) {
                 tracing::info!("bus closed on request");
             }
             shared.enter_closed();
             published = None;
             if shared.take_probe_request() {
                 let result = match factory() {
-                    Ok(probed) => Ok(probed.num_devices()),
+                    Ok(mut probed) => {
+                        let devices = probed.num_devices();
+                        let _ = probed.close();
+                        Ok(devices)
+                    }
                     Err(e) => Err(e.to_string()),
                 };
                 tracing::info!(?result, "probed the bus");
@@ -894,7 +911,7 @@ fn bus_loop<L, F>(
             }
             Err(e) => {
                 tracing::error!(error = %e, "bus cycle failed; reopening the bus link");
-                link = None;
+                close_link(&mut link);
                 shared.enter_recovering();
                 continue;
             }
@@ -903,6 +920,8 @@ fn bus_loop<L, F>(
         diag.report(&link_stats);
         option.pacing.wait_after(start);
     }
+
+    close_link(&mut link);
 }
 
 pub(crate) fn run_status_loop<C: StateCheck>(
