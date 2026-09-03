@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "autd3-pattern-holo"
 description = "Python bindings for autd3-rs-pattern-holo (naive, gs, gspat, greedy)."
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 license = "MIT"
 version = "0.7.0"
 dependencies = ["autd3-core==0.7.0", "autd3-pattern==0.7.0"]

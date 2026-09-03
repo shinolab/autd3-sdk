@@ -26,10 +26,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: actions/setup-python@v7
         with:
-          python-version: |
-            3.12
-            3.13
-            3.14
+          python-version: '3.10'
       - uses: taiki-e/install-action@v2.87.0
         with:
           tool: cargo-about
