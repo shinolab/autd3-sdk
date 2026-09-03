@@ -15,7 +15,6 @@ cast_precision_loss = "allow"
 name = "autd3-rs-pattern-holo-wgpu"
 version = "0.7.0"
 edition = "2024"
-rust-version = "1.96"
 license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"

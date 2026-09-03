@@ -2,7 +2,6 @@
 name = "autd3-cpu"
 version = "0.6.0"
 edition = "2024"
-rust-version = "1.96"
 license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"

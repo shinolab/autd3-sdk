@@ -4,7 +4,6 @@
 name = "autd3-rs-simulator-frontend"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.96"
 license = "MIT"
 publish = false
 description = "Browser frontend for the AUTD3 simulator"
