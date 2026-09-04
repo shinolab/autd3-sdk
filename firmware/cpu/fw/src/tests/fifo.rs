@@ -1,4 +1,4 @@
-use crate::app::FIFO_DEPTH;
+use crate::fifo::{FIFO_DEPTH, Fifo};
 use zerocopy::FromZeros;
 
 use crate::cmd::set_mode::SetModePayload;
@@ -164,4 +164,42 @@ fn reset_inline_flushes_in_low_latency_mode() {
     h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
     assert_eq!(h.ack(), 0);
     assert_eq!(h.expected_seq(), 1);
+}
+
+#[test]
+fn fifo_indices_wrap_without_confusing_full_and_empty() {
+    let fifo = Fifo::new();
+    let start = u16::MAX - 2;
+    fifo.seed(start, start);
+    assert!(fifo.next().is_none());
+
+    let mut head = start;
+    let mut pushed = 0;
+    while !Fifo::is_full(head, fifo.tail_acquire()) {
+        fifo.publish(head);
+        head = head.wrapping_add(1);
+        pushed += 1;
+    }
+    assert_eq!(pushed, FIFO_DEPTH - 1);
+    assert!(Fifo::is_full(fifo.head(), fifo.tail_acquire()));
+
+    let mut drained = 0;
+    while let Some(tail) = fifo.next() {
+        fifo.commit(tail);
+        drained += 1;
+    }
+    assert_eq!(drained, pushed);
+    assert!(!Fifo::is_full(fifo.head(), fifo.tail_acquire()));
+}
+
+#[test]
+fn fifo_slots_stay_distinct_across_the_index_wrap() {
+    let start = u16::MAX - 3;
+    let mut seen = [false; FIFO_DEPTH as usize];
+    for i in 0..FIFO_DEPTH {
+        let slot = Fifo::slot(start.wrapping_add(i));
+        assert!(!seen[slot]);
+        seen[slot] = true;
+    }
+    assert!(seen.iter().all(|&s| s));
 }

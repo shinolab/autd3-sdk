@@ -20,7 +20,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
       - run: cargo xtask cpu format
       - run: cargo xtask cpu lint
+      - run: cargo xtask cpu lint --loom
       - run: cargo xtask cpu test
+      - run: cargo xtask cpu test --loom
       - run: cargo xtask cpu build
       - name: Verify the committed params.rs is up to date
         run: git diff --exit-code firmware/cpu/fw/src/params.rs firmware/cpu/wire/src/params.rs

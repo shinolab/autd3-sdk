@@ -15,5 +15,8 @@ categories = ["science"]
 autd3-cpu-wire.workspace = true
 zerocopy.workspace = true
 
+[target.'cfg(loom)'.dev-dependencies]
+loom = { version = "0.7.2", default-features = false }
+
 [lints]
 workspace = true

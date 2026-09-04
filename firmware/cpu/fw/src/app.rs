@@ -6,6 +6,7 @@ use zerocopy::FromBytes;
 pub use autd3_cpu_wire::payload::ReadTelemetryPayload;
 
 use crate::cmd;
+use crate::fifo::{FIFO_DEPTH, Fifo};
 use crate::fpga;
 use crate::params::{
     ADDR_FPGA_STATE, ADDR_VERSION_NUM_MAJOR, ADDR_VERSION_NUM_MINOR, ADDR_VERSION_NUM_PATCH,
@@ -17,20 +18,12 @@ use crate::proto::{
     ProtoState, RxFrame, Telemetry, TxFrame, WIRE_RX_FRAME_BYTES,
 };
 
-pub const FIFO_DEPTH: u16 = 8;
-const FIFO_MASK: u16 = FIFO_DEPTH - 1;
-const FIFO_CAPACITY: u16 = FIFO_DEPTH - 1;
-
 pub struct Cpu {
     mode: AtomicU8,
     last_seq: AtomicU8,
     last_cmd: AtomicU8,
-    fifo: [Cell<RxFrame>; FIFO_DEPTH as usize],
-    fifo_head: AtomicU16,
-    fifo_tail: AtomicU16,
-    fifo_flush_head: AtomicU16,
-    fifo_flush_gen: AtomicU16,
-    fifo_flush_seen: AtomicU16,
+    slots: [Cell<RxFrame>; FIFO_DEPTH as usize],
+    fifo: Fifo,
     preempt_tx: AtomicU16,
     preempt_expected: AtomicU8,
     telemetry: [AtomicU8; Telemetry::CPU_COUNTER_COUNT],
@@ -50,19 +43,14 @@ impl Default for Cpu {
     }
 }
 
-impl Cpu {
-    #[must_use]
-    pub const fn new() -> Self {
+macro_rules! cpu_new {
+    () => {
         Self {
             mode: AtomicU8::new(Mode::Fifo as u8),
             last_seq: AtomicU8::new(0xFF),
             last_cmd: AtomicU8::new(0xFF),
-            fifo: [const { Cell::new(RxFrame::ZERO) }; FIFO_DEPTH as usize],
-            fifo_head: AtomicU16::new(0),
-            fifo_tail: AtomicU16::new(0),
-            fifo_flush_head: AtomicU16::new(0),
-            fifo_flush_gen: AtomicU16::new(0),
-            fifo_flush_seen: AtomicU16::new(0),
+            slots: [const { Cell::new(RxFrame::ZERO) }; FIFO_DEPTH as usize],
+            fifo: Fifo::new(),
             preempt_tx: AtomicU16::new(0),
             preempt_expected: AtomicU8::new(0),
             telemetry: [const { AtomicU8::new(0) }; Telemetry::CPU_COUNTER_COUNT],
@@ -71,8 +59,26 @@ impl Cpu {
             silencer: cmd::silencer::SilencerGuard::new(),
             tx: AtomicU16::new(0),
         }
-    }
+    };
+}
 
+#[cfg(not(loom))]
+impl Cpu {
+    #[must_use]
+    pub const fn new() -> Self {
+        cpu_new!()
+    }
+}
+
+#[cfg(loom)]
+impl Cpu {
+    #[must_use]
+    pub fn new() -> Self {
+        cpu_new!()
+    }
+}
+
+impl Cpu {
     pub fn init<P: Port>(&self, port: &mut P) {
         self.set_mode(Mode::Fifo);
         self.proto.init();
@@ -84,11 +90,7 @@ impl Cpu {
         self.tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
         self.last_seq.store(0xFF, Ordering::Relaxed);
         self.last_cmd.store(0xFF, Ordering::Relaxed);
-        self.fifo_head.store(0, Ordering::Relaxed);
-        self.fifo_tail.store(0, Ordering::Relaxed);
-        self.fifo_flush_head.store(0, Ordering::Relaxed);
-        self.fifo_flush_gen.store(0, Ordering::Relaxed);
-        self.fifo_flush_seen.store(0, Ordering::Relaxed);
+        self.fifo.reset();
         self.preempt_tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
         self.preempt_expected.store(0, Ordering::Relaxed);
     }
@@ -136,19 +138,19 @@ impl Cpu {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, not(loom)))]
     pub(crate) fn expected_seq(&self) -> u8 {
         self.proto.expected_seq.load(Ordering::Relaxed)
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, not(loom)))]
     pub(crate) fn set_fw_version(&self, major: u8, minor: u8, patch: u8) {
         self.proto.fw_version_major.set(major);
         self.proto.fw_version_minor.set(minor);
         self.proto.fw_version_patch.set(patch);
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, not(loom)))]
     pub(crate) fn set_error_detail(&self, err: Error) {
         self.proto.error_detail.set(Some(err));
     }
@@ -172,20 +174,16 @@ impl Cpu {
             return;
         }
 
-        let head = self.fifo_head.load(Ordering::Relaxed);
+        let head = self.fifo.head();
         let cmd = Cmd::from_u8(raw_cmd);
         let preempt = cmd == Some(Cmd::Reset);
         if preempt {
             self.preempt_tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
             self.preempt_expected.store(0, Ordering::Relaxed);
-            self.fifo_flush_head.store(head, Ordering::Relaxed);
-            self.fifo_flush_gen.store(
-                self.fifo_flush_gen.load(Ordering::Relaxed).wrapping_add(1),
-                Ordering::Release,
-            );
+            self.fifo.request_flush(head);
         }
 
-        let tail = self.fifo_tail.load(Ordering::Acquire);
+        let tail = self.fifo.tail_acquire();
         let inline_ok = preempt || (self.mode() == Mode::LowLatency && tail == head);
         if inline_ok {
             self.handle_frame(port, &RxFrame::from_wire(frame));
@@ -194,35 +192,25 @@ impl Cpu {
             return;
         }
 
-        if head.wrapping_sub(tail) >= FIFO_CAPACITY {
+        if Fifo::is_full(head, tail) {
             self.bump(Telemetry::FifoDrop);
             return;
         }
-        self.fifo[(head & FIFO_MASK) as usize].set(RxFrame::from_wire(frame));
-        self.fifo_head
-            .store(head.wrapping_add(1), Ordering::Release);
+        self.slots[Fifo::slot(head)].set(RxFrame::from_wire(frame));
+        self.fifo.publish(head);
         self.last_seq.store(seq, Ordering::Relaxed);
         self.last_cmd.store(raw_cmd, Ordering::Relaxed);
     }
 
     pub fn process_one<P: Port>(&self, port: &mut P) -> bool {
-        let flush_gen = self.fifo_flush_gen.load(Ordering::Acquire);
-        if flush_gen != self.fifo_flush_seen.load(Ordering::Relaxed) {
-            self.fifo_flush_seen.store(flush_gen, Ordering::Relaxed);
-            let flush_head = self.fifo_flush_head.load(Ordering::Relaxed);
-            if flush_head.wrapping_sub(self.fifo_tail.load(Ordering::Relaxed)) < FIFO_DEPTH {
-                self.fifo_tail.store(flush_head, Ordering::Release);
-            }
-        }
-        let tail = self.fifo_tail.load(Ordering::Relaxed);
-        if tail == self.fifo_head.load(Ordering::Acquire) {
+        let flush_gen = self.fifo.begin_drain();
+        let Some(tail) = self.fifo.next() else {
             return false;
-        }
-        let in_frame = self.fifo[(tail & FIFO_MASK) as usize].get();
+        };
+        let in_frame = self.slots[Fifo::slot(tail)].get();
         self.handle_frame(port, &in_frame);
-        self.fifo_tail
-            .store(tail.wrapping_add(1), Ordering::Release);
-        if self.fifo_flush_gen.load(Ordering::Acquire) != flush_gen {
+        self.fifo.commit(tail);
+        if self.fifo.flush_gen() != flush_gen {
             self.apply_preempt();
         }
         true

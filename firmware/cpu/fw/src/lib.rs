@@ -6,11 +6,15 @@ extern crate std;
 
 mod app;
 mod cmd;
+mod fifo;
 pub mod fpga;
+#[cfg(all(test, loom))]
+mod loom_tests;
 pub mod params;
 pub mod port;
 pub mod proto;
-#[cfg(test)]
+mod sync;
+#[cfg(all(test, not(loom)))]
 mod tests;
 pub mod version;
 
