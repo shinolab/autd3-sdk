@@ -70,6 +70,13 @@ const DENY_WORKSPACES: &[&str] = &[
     "bindings/python",
 ];
 
+const AUDIT_ONLY_WORKSPACES: &[&str] = &[
+    "xtask",
+    "extras/autd3-rs-emulator",
+    "extras/autd3-rs-pattern-holo-wgpu",
+    "firmware/cpu/board",
+];
+
 const THIRD_PARTY: &str = "THIRD-PARTY-LICENSES.md";
 
 const PLACEHOLDER: &str = "# Third-party licenses\n\nThis notice was not generated for this build.\nRun `cargo xtask license generate`, or pass `--license` to the packaging command,\nto produce the real notices with cargo-about.\n";
@@ -94,6 +101,8 @@ pub enum LicenseCmd {
     },
     /// Check the dependency licenses of every workspace with cargo-deny
     Check,
+    /// Check every workspace for security advisories, duplicates and unknown sources
+    Audit,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -110,6 +119,7 @@ pub fn run_license(root: &Path, cmd: &LicenseCmd) -> Result<()> {
     match cmd {
         LicenseCmd::Generate { target } => generate(root, *target),
         LicenseCmd::Check => check(root),
+        LicenseCmd::Audit => audit(root),
     }
 }
 
@@ -134,19 +144,43 @@ fn generate(root: &Path, target: GenTarget) -> Result<()> {
 
 fn check(root: &Path) -> Result<()> {
     check_bundled_license(root)?;
+    deny(root, DENY_WORKSPACES.iter().copied(), &["licenses"])
+}
+
+fn audit(root: &Path) -> Result<()> {
+    deny(
+        root,
+        DENY_WORKSPACES
+            .iter()
+            .chain(AUDIT_ONLY_WORKSPACES)
+            .copied(),
+        &["advisories", "bans", "sources"],
+    )
+}
+
+fn deny<'a>(
+    root: &Path,
+    workspaces: impl Iterator<Item = &'a str>,
+    checks: &[&str],
+) -> Result<()> {
     if !on_path("cargo-deny") {
         bail!("`cargo-deny` is required");
     }
     let config = root.join("deny.toml");
     let config = config.to_string_lossy().into_owned();
-    for ws in DENY_WORKSPACES {
+    let mut failed = Vec::new();
+    for ws in workspaces {
         let dir = root.join(ws);
-        println!("== cargo-deny check licenses: {} ==", dir.display());
-        run(
-            "cargo",
-            ["deny", "--config", &config, "check", "licenses"],
-            &dir,
-        )?;
+        println!("== cargo-deny check {}: {} ==", checks.join(" "), dir.display());
+        let args = ["deny", "--config", config.as_str(), "check"]
+            .into_iter()
+            .chain(checks.iter().copied());
+        if run("cargo", args, &dir).is_err() {
+            failed.push(ws.to_owned());
+        }
+    }
+    if !failed.is_empty() {
+        bail!("cargo-deny failed in: {}", failed.join(", "));
     }
     Ok(())
 }
