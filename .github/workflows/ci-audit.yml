@@ -36,3 +36,26 @@ jobs:
         with:
           tool: cargo-deny
       - run: cargo xtask license audit
+
+  links:
+    name: links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop
+      - uses: ./.github/actions/setup-rust
+        with:
+          workspaces: xtask
+          shared-key: links
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: doc/package-lock.json
+      - uses: taiki-e/install-action@v2.87.0
+        with:
+          tool: cargo-binstall
+      - run: cargo binstall -y lychee@0.24.2
+      - run: cargo xtask doc build --no-samples
+      - run: cargo xtask doc link-check

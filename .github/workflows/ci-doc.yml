@@ -30,8 +30,13 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: doc/package-lock.json
+      - uses: taiki-e/install-action@v2.87.0
+        with:
+          tool: cargo-binstall
+      - run: cargo binstall -y lychee@0.24.2
       - run: cargo xtask doc check
       - run: cargo xtask doc build --no-samples
+      - run: cargo xtask doc link-check --offline
 
   samples:
     name: samples
