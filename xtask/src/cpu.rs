@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use crate::util::{run, which};
+use crate::util::{run, run_env, which};
 
 #[derive(Subcommand)]
 pub enum CpuCmd {
@@ -20,11 +20,19 @@ pub enum CpuCmd {
         isr_probe: bool,
     },
     /// Run the portable firmware logic (`autd3-cpu-fw`) tests on the host
-    Test,
+    Test {
+        /// Model-check the ISR/main-loop FIFO handoff with loom instead of the regular tests
+        #[arg(long)]
+        loom: bool,
+    },
     /// Regenerate `fw/src/params.rs` from the FPGA `params.svh`
     GenParam,
     /// Clippy the firmware
-    Lint,
+    Lint {
+        /// Clippy the loom model instead of the regular targets
+        #[arg(long)]
+        loom: bool,
+    },
     /// Rustfmt the firmware
     Format {
         /// Rewrite the files instead of only checking them
@@ -37,9 +45,9 @@ pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
     match cmd {
         CpuCmd::Build { isr_probe } => cpu_build(root, *isr_probe).map(|_| ()),
         CpuCmd::Flash { isr_probe } => cpu_flash(root, *isr_probe),
-        CpuCmd::Test => cpu_test(root),
+        CpuCmd::Test { loom } => cpu_test(root, *loom),
         CpuCmd::GenParam => gen_param(root),
-        CpuCmd::Lint => cpu_lint(root),
+        CpuCmd::Lint { loom } => cpu_lint(root, *loom),
         CpuCmd::Format { fix } => cpu_format(root, *fix),
     }
 }
@@ -190,13 +198,39 @@ pub fn gen_param(root: &Path) -> Result<()> {
     crate::cpu_codegen::gen_param(root)
 }
 
-fn cpu_test(root: &Path) -> Result<()> {
+fn cpu_test(root: &Path, loom: bool) -> Result<()> {
     gen_param(root)?;
-    run("cargo", ["test", "-p", "autd3-cpu-fw"], root)
+    if !loom {
+        return run("cargo", ["test", "-p", "autd3-cpu-fw"], root);
+    }
+    run_env(
+        "cargo",
+        ["test", "-p", "autd3-cpu-fw", "--lib"],
+        root,
+        &[("RUSTFLAGS", Path::new("--cfg loom"))],
+    )
 }
 
-fn cpu_lint(root: &Path) -> Result<()> {
+fn cpu_lint(root: &Path, loom: bool) -> Result<()> {
     gen_param(root)?;
+    if loom {
+        return run_env(
+            "cargo",
+            [
+                "clippy",
+                "-p",
+                "autd3-cpu-fw",
+                "--lib",
+                "--profile",
+                "test",
+                "--",
+                "-D",
+                "warnings",
+            ],
+            root,
+            &[("RUSTFLAGS", Path::new("--cfg loom"))],
+        );
+    }
     run(
         "cargo",
         [

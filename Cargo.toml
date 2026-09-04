@@ -115,7 +115,8 @@ autd3-rs-modulation = { version = "0.7.0", path = "crates/autd3-rs-modulation" }
 macro_now_doc_hidden = "allow"
 
 [workspace.lints.rust]
-warnings = "deny"
+warnings = { level = "deny", priority = -1 }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

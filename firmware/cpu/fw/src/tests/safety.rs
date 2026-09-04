@@ -1,6 +1,6 @@
 use std::vec;
 
-use crate::app::FIFO_DEPTH;
+use crate::fifo::FIFO_DEPTH;
 use crate::fpga::TransitionMode;
 use crate::params::{
     ADDR_FPGA_STATE, ADDR_MOD_REQ_RD_BANK, ADDR_VERSION_NUM_MAJOR, NUM_TRANSDUCERS,
