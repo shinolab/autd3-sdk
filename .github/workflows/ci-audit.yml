@@ -1,0 +1,38 @@
+name: ci-audit
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  audit:
+    name: audit (${{ matrix.branch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [main, develop]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.branch }}
+      - uses: ./.github/actions/setup-rust
+        with:
+          workspaces: xtask
+          shared-key: audit-${{ matrix.branch }}
+      - uses: taiki-e/install-action@v2.87.0
+        with:
+          tool: cargo-deny
+      - run: cargo xtask license audit

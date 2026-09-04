@@ -21,3 +21,19 @@ unused-allowed-license = "allow"
 
 [licenses.private]
 ignore = true
+
+[advisories]
+version = 2
+yanked = "deny"
+unmaintained = "all"
+ignore = [
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml is reached only through wayland-scanner, a build-time code generator that parses the Wayland protocol XML bundled inside the wayland-client/wayland-protocols crates; the input is trusted and never reaches the shipped binary. wayland-scanner requires ^0.39, so the fixed 0.41 is unreachable until upstream moves." },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml is reached only through wayland-scanner, a build-time code generator that parses the Wayland protocol XML bundled inside the wayland-client/wayland-protocols crates; the input is trusted and never reaches the shipped binary. wayland-scanner requires ^0.39, so the fixed 0.41 is unreachable until upstream moves." },
+]
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
