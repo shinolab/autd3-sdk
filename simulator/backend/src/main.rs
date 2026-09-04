@@ -1,5 +1,7 @@
 mod control;
 mod emulator;
+#[cfg(test)]
+mod harness;
 mod link;
 mod server;
 
