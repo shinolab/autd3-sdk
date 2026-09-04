@@ -140,6 +140,7 @@ jobs:
               - *xtask-core
               - 'xtask/src/ffi.rs'
               - 'bindings/ffi/**'
+              - 'bindings/csharp/src/**'
               - 'crates/**'
               - 'Cargo.toml'
               - '.github/workflows/ci-ffi.yml'
