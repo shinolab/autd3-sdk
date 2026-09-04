@@ -51,6 +51,11 @@ pub enum DocCmd {
     },
     /// Type-check the site without building it
     Check,
+    #[command(about = "Check the built site under doc/dist for broken links")]
+    LinkCheck {
+        #[arg(long, help = "Only check links inside the site (no network requests)")]
+        offline: bool,
+    },
     /// Inline a version snapshot's code examples to drop its `@codes` dependency
     FreezeVersion {
         /// Target version slug (e.g. 0.1.x)
@@ -122,6 +127,7 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
             npm_install(&doc)?;
             npm(&doc, &["run", "check"])
         }
+        DocCmd::LinkCheck { offline } => link_check(&doc, *offline),
         DocCmd::FreezeVersion { slug, force } => {
             if !on_path("node") {
                 bail!("`node` is required for `doc freeze-version`");
@@ -138,6 +144,56 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
             track_frozen_version(&doc, slug)
         }
         DocCmd::RemoveVersion { slug } => remove_version(&doc, slug),
+    }
+}
+
+const SITE_BASE: &str = "/autd3-sdk";
+const SITE_ORIGIN: &str = "^https://shinolab\\.github\\.io/autd3-sdk";
+const LINK_ACCEPT: &str = "200..=299,403,429";
+
+fn link_check(doc: &Path, offline: bool) -> Result<()> {
+    if !on_path("lychee") {
+        bail!("`lychee` is required for `doc link-check` (`cargo install lychee --locked`)");
+    }
+    let dist = doc.join("dist");
+    if !dist.is_dir() {
+        bail!(
+            "{} does not exist; run `cargo xtask doc build` first",
+            dist.display()
+        );
+    }
+    let base = file_uri(&dist);
+    let mut args = vec![
+        "--no-progress".to_string(),
+        "--root-dir".to_string(),
+        dist.to_string_lossy().into_owned(),
+        "--remap".to_string(),
+        format!("{base}{SITE_BASE}/?(.*) {base}/$1"),
+        "--index-files".to_string(),
+        "index.html".to_string(),
+        "--include-fragments".to_string(),
+        "--exclude".to_string(),
+        SITE_ORIGIN.to_string(),
+        "--accept".to_string(),
+        LINK_ACCEPT.to_string(),
+    ];
+    for slug in version_slugs(doc)? {
+        args.push("--exclude-path".to_string());
+        args.push(format!("dist/(en/)?{}", slug.replace('.', "\\.")));
+    }
+    if offline {
+        args.push("--offline".to_string());
+    }
+    args.push("dist/**/*.html".to_string());
+    run_tool("lychee", args, doc)
+}
+
+fn file_uri(path: &Path) -> String {
+    let path = path.to_string_lossy().replace('\\', "/");
+    if path.starts_with('/') {
+        format!("file://{path}")
+    } else {
+        format!("file:///{path}")
     }
 }
 
