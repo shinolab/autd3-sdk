@@ -23,6 +23,18 @@ pub enum RustCmd {
         #[arg(long)]
         no_pcap: bool,
     },
+    /// Measure `crates/` workspace test coverage with cargo-llvm-cov
+    Coverage {
+        /// Skip the packages that need a pcap runtime (Npcap/WinPcap, libpcap)
+        #[arg(long)]
+        no_pcap: bool,
+        /// Include `tools/` and `examples/`, which carry no tests by convention
+        #[arg(long)]
+        all: bool,
+        /// Open the HTML report in a browser
+        #[arg(long)]
+        open: bool,
+    },
     /// Clippy the `crates/` workspace
     Lint,
     /// Rustfmt the `crates/` workspace
@@ -100,52 +112,8 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             }
             run("cargo", args, root)
         }
-        RustCmd::Lint => {
-            let mut args = vec![
-                "clippy",
-                "--workspace",
-                "--all-targets",
-                "--features",
-                "autd3-rs/legacy",
-            ];
-            args.extend(["--", "-D", "warnings"]);
-            run("cargo", args, root)?;
-
-            let default_feature_args = vec![
-                "clippy",
-                "-p",
-                "autd3-rs",
-                "--all-targets",
-                "--",
-                "-D",
-                "warnings",
-            ];
-            run("cargo", default_feature_args, root)?;
-
-            let no_discovery_args = vec![
-                "clippy",
-                "-p",
-                "autd3-rs-link-remote",
-                "--no-default-features",
-                "--all-targets",
-                "--",
-                "-D",
-                "warnings",
-            ];
-            run("cargo", no_discovery_args, root)?;
-
-            let no_parallel_args = vec![
-                "clippy",
-                "-p",
-                "autd3-rs-pattern-holo",
-                "--no-default-features",
-                "--all-targets",
-                "--",
-                "-D",
-                "warnings",
-            ];
-            run("cargo", no_parallel_args, root)
-        }
+        RustCmd::Coverage { no_pcap, all, open } => run_coverage(root, *no_pcap, *all, *open),
+        RustCmd::Lint => run_lint(root),
         RustCmd::Format { fix } => {
             let mut args = vec!["fmt", "--all"];
             if !*fix {
@@ -187,6 +155,95 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             args,
         } => run_example(root, name, *debug, *no_sudo, args),
     }
+}
+
+fn run_lint(root: &Path) -> Result<()> {
+    let mut args = vec![
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--features",
+        "autd3-rs/legacy",
+    ];
+    args.extend(["--", "-D", "warnings"]);
+    run("cargo", args, root)?;
+
+    let default_feature_args = vec![
+        "clippy",
+        "-p",
+        "autd3-rs",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings",
+    ];
+    run("cargo", default_feature_args, root)?;
+
+    let no_discovery_args = vec![
+        "clippy",
+        "-p",
+        "autd3-rs-link-remote",
+        "--no-default-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings",
+    ];
+    run("cargo", no_discovery_args, root)?;
+
+    let no_parallel_args = vec![
+        "clippy",
+        "-p",
+        "autd3-rs-pattern-holo",
+        "--no-default-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings",
+    ];
+    run("cargo", no_parallel_args, root)
+}
+
+const COVERAGE_IGNORE: &str = "/(tools|examples)/";
+
+pub fn coverage(dir: &Path, test_args: &[&str], filter: &[&str], open: bool) -> Result<()> {
+    if !on_path("cargo-llvm-cov") {
+        bail!("`cargo-llvm-cov` is required (`cargo install cargo-llvm-cov --locked`)");
+    }
+    run("cargo", test_args, dir)?;
+
+    let mut html_args = vec!["llvm-cov", "report", "--html"];
+    html_args.extend_from_slice(filter);
+    if open {
+        html_args.push("--open");
+    }
+    run("cargo", html_args, dir)?;
+
+    let mut summary_args = vec!["llvm-cov", "report", "--summary-only"];
+    summary_args.extend_from_slice(filter);
+    run("cargo", summary_args, dir)
+}
+
+fn run_coverage(root: &Path, no_pcap: bool, all: bool, open: bool) -> Result<()> {
+    let mut test_args = vec![
+        "llvm-cov",
+        "--no-report",
+        "--workspace",
+        "--lib",
+        "--bins",
+        "--tests",
+        "--features",
+        "autd3-rs/legacy",
+    ];
+    if no_pcap {
+        test_args.extend(PCAP_PACKAGES.iter().flat_map(|pkg| ["--exclude", *pkg]));
+    }
+    let filter: &[&str] = if all {
+        &[]
+    } else {
+        &["--ignore-filename-regex", COVERAGE_IGNORE]
+    };
+    coverage(root, &test_args, filter, open)
 }
 
 fn run_semver(root: &Path, baseline: Option<&str>) -> Result<()> {
