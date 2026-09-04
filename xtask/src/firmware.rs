@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use crate::util::{run, run_built_bin};
+use crate::util::{capture_lenient, run, run_built_bin};
 
 #[derive(Subcommand)]
 pub enum FirmwareCmd {
@@ -18,6 +18,9 @@ pub struct BundleArgs {
     /// Re-synthesize the FPGA even when a bitstream already exists
     #[arg(long)]
     force: bool,
+    /// Upload the bundle to the `firmware-vX.Y.Z` GitHub Release (requires `gh`)
+    #[arg(long)]
+    upload: bool,
 }
 
 #[derive(clap::Args)]
@@ -67,6 +70,59 @@ fn bundle(root: &Path, args: &BundleArgs) -> Result<()> {
     )?;
 
     println!("firmware bundle: {}", archive.display());
+
+    if args.upload {
+        upload(root, &version, &archive)?;
+    }
+
+    Ok(())
+}
+
+fn upload(root: &Path, version: &str, archive: &Path) -> Result<()> {
+    let tag = format!("firmware-v{version}");
+
+    if capture_lenient("gh", &["--version"], root).is_err() {
+        bail!(
+            "`gh` is required for --upload but was not found on PATH; install the GitHub CLI (https://cli.github.com/) or upload {} manually to the `{tag}` release",
+            archive.display()
+        );
+    }
+
+    let status = std::process::Command::new("gh")
+        .args(["auth", "status"])
+        .current_dir(root)
+        .status()
+        .context("failed to spawn `gh`")?;
+    if !status.success() {
+        bail!("`gh` is not authenticated; run `gh auth login` and retry");
+    }
+
+    let exists = std::process::Command::new("gh")
+        .args(["release", "view", &tag])
+        .current_dir(root)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .context("failed to spawn `gh`")?;
+    if !exists.success() {
+        bail!(
+            "no `{tag}` release on GitHub; push the `{tag}` tag first and wait for `release.yml` to create the release, then rerun with --upload"
+        );
+    }
+
+    run(
+        "gh",
+        [
+            "release",
+            "upload",
+            &tag,
+            &archive.display().to_string(),
+            "--clobber",
+        ],
+        root,
+    )?;
+
+    println!("uploaded {} to {tag}", archive.display());
     Ok(())
 }
 
