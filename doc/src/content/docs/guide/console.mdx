@@ -18,6 +18,22 @@ GitHub Releases (`console-v*`) から配布している.
 インストーラを使わない場合は, 同じリリースのアーカイブ (`console-<target>.tar.xz` / `.zip`) をダウンロードし,
 展開して `autd3-console` を実行してもよい.
 
+### macOS
+
+macOS 版のバイナリは Apple の署名 (codesign / notarization) をしていないため, そのままでは Gatekeeper に阻まれ,
+「開発元を確認できないため開けません」と表示される.
+インストール後に quarantine 属性を外すと実行できる:
+
+```console
+xattr -d com.apple.quarantine ~/.autd3/bin/autd3-console
+```
+
+アーカイブを展開して使う場合は, 展開したディレクトリ全体に対して実行する:
+
+```console
+xattr -dr com.apple.quarantine <展開先ディレクトリ>
+```
+
 ## 同梱されるコマンド
 
 GUI を使わずに直接叩けるコマンドも同じアーカイブに入っている.
