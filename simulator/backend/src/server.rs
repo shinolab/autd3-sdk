@@ -118,12 +118,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let recv_task = async move {
         while let Some(Ok(message)) = receiver.next().await {
             if let Message::Text(text) = message {
-                match serde_json::from_str::<ClientMsg>(&text) {
-                    Ok(ClientMsg::SetModulationEnabled { enabled }) => {
-                        control.mod_enabled.store(enabled, Ordering::Relaxed);
-                    }
-                    Err(e) => tracing::error!("failed to decode client message: {e}"),
-                }
+                apply_client_message(&control, &text);
             }
         }
     };
@@ -131,5 +126,49 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     tokio::select! {
         () = send_task => {}
         () = recv_task => {}
+    }
+}
+
+fn apply_client_message(control: &ControlState, text: &str) {
+    match serde_json::from_str::<ClientMsg>(text) {
+        Ok(ClientMsg::SetModulationEnabled { enabled }) => {
+            control.mod_enabled.store(enabled, Ordering::Relaxed);
+        }
+        Err(e) => tracing::error!("failed to decode client message: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_modulation_enabled_updates_the_control_state() {
+        let control = ControlState::default();
+        apply_client_message(
+            &control,
+            r#"{"type":"set_modulation_enabled","enabled":false}"#,
+        );
+        assert!(!control.mod_enabled.load(Ordering::Relaxed));
+        apply_client_message(
+            &control,
+            r#"{"type":"set_modulation_enabled","enabled":true}"#,
+        );
+        assert!(control.mod_enabled.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn undecodable_client_message_leaves_the_control_state_untouched() {
+        let control = ControlState::default();
+        control.mod_enabled.store(false, Ordering::Relaxed);
+        for text in [
+            "",
+            "{}",
+            r#"{"type":"unknown"}"#,
+            r#"{"type":"set_modulation_enabled"}"#,
+        ] {
+            apply_client_message(&control, text);
+            assert!(!control.mod_enabled.load(Ordering::Relaxed));
+        }
     }
 }

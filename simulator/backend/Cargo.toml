@@ -33,5 +33,9 @@ tokio = { workspace = true, features = [
     "signal",
 ] }
 
+[dev-dependencies]
+approx.workspace = true
+autd3-rs.workspace = true
+
 [lints]
 workspace = true

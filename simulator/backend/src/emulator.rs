@@ -143,3 +143,233 @@ pub fn extract_states_into(devices: &[EmuDevice], out: &mut Vec<TransState>, mod
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use core::num::NonZeroU16;
+
+    use approx::assert_relative_eq;
+    use autd3_rs::commands::{Modulation, Nop, Pattern, SetPulseWidthTable};
+    use autd3_rs::value::{Emission, Intensity, Phase, SamplingConfig};
+    use autd3_rs_link_remote::TransducerLayout;
+
+    use crate::harness::Harness;
+
+    const FULL_INTENSITY_PULSE_WIDTH: u16 = 256;
+
+    fn raw(gpio_type: u8, value: u64) -> u64 {
+        (u64::from(gpio_type) << 56) | value
+    }
+
+    fn driven(phase: Phase, modulation: u8) -> Harness {
+        let mut h = Harness::new(1);
+        let table = SetPulseWidthTable::default_table();
+        h.send(SetPulseWidthTable { table: &table });
+        h.send(Modulation::new(
+            SamplingConfig::new(NonZeroU16::MAX),
+            &[modulation, modulation],
+        ));
+        let emissions = vec![vec![
+            Emission {
+                phase,
+                intensity: Intensity(0xFF),
+            };
+            h.fpga().num_transducers()
+        ]];
+        h.send(Pattern::new(&emissions));
+        h
+    }
+
+    #[test]
+    fn base_signal_gpio_is_a_square_wave() {
+        let h = Harness::new(1);
+        let wave = gpio_waveform(h.fpga(), raw(GPIO_TYPE_BASE_SIG, 0));
+        assert_eq!(wave.len(), GPIO_SAMPLES);
+        assert!(wave[..GPIO_SAMPLES / 2].iter().all(|&v| v == 0));
+        assert!(wave[GPIO_SAMPLES / 2..].iter().all(|&v| v == 1));
+    }
+
+    #[test]
+    fn thermo_gpio_follows_the_fpga_flag() {
+        let mut h = Harness::new(1);
+        assert_eq!(
+            gpio_waveform(h.fpga(), raw(GPIO_TYPE_THERMO, 0)),
+            constant_wave(0)
+        );
+        h.fpga_mut().set_thermal(true);
+        assert_eq!(
+            gpio_waveform(h.fpga(), raw(GPIO_TYPE_THERMO, 0)),
+            constant_wave(1)
+        );
+    }
+
+    #[test]
+    fn bank_and_index_gpios_report_the_current_selection() {
+        let h = Harness::new(1);
+        for (gpio_type, expected) in [
+            (GPIO_TYPE_FORCE_FAN, 0),
+            (GPIO_TYPE_MOD_BANK, 0),
+            (GPIO_TYPE_MOD_IDX, 1),
+            (GPIO_TYPE_PATTERN_BANK, 0),
+            (GPIO_TYPE_PATTERN_IDX, 1),
+        ] {
+            assert_eq!(
+                gpio_waveform(h.fpga(), raw(gpio_type, 0)),
+                constant_wave(expected),
+                "gpio type {gpio_type:#04x}"
+            );
+        }
+    }
+
+    #[test]
+    fn is_stm_mode_gpio_is_low_for_a_single_pattern() {
+        let h = driven(Phase(0), 0xFF);
+        assert_eq!(
+            gpio_waveform(h.fpga(), raw(GPIO_TYPE_IS_STM_MODE, 0)),
+            constant_wave(0)
+        );
+    }
+
+    #[test]
+    fn sys_time_eq_gpio_compares_against_the_scaled_value() {
+        let h = Harness::new(1);
+        assert_eq!(
+            gpio_waveform(h.fpga(), raw(GPIO_TYPE_SYS_TIME_EQ, 0)),
+            constant_wave(1)
+        );
+        assert_eq!(
+            gpio_waveform(h.fpga(), raw(GPIO_TYPE_SYS_TIME_EQ, 1)),
+            constant_wave(0)
+        );
+    }
+
+    #[test]
+    fn direct_gpio_reports_the_raw_value() {
+        let h = Harness::new(1);
+        assert_eq!(
+            gpio_waveform(h.fpga(), raw(GPIO_TYPE_DIRECT, 0)),
+            constant_wave(0)
+        );
+        assert_eq!(
+            gpio_waveform(h.fpga(), raw(GPIO_TYPE_DIRECT, 1)),
+            constant_wave(1)
+        );
+    }
+
+    #[test]
+    fn unknown_gpio_type_is_low() {
+        let h = Harness::new(1);
+        assert_eq!(gpio_waveform(h.fpga(), raw(0x7F, 1)), constant_wave(0));
+    }
+
+    #[test]
+    fn pwm_gpio_of_an_out_of_range_transducer_is_low() {
+        let h = driven(Phase(0), 0xFF);
+        let tr = h.fpga().num_transducers() as u64;
+        assert_eq!(
+            gpio_waveform(h.fpga(), raw(GPIO_TYPE_PWM_OUT, tr)),
+            constant_wave(0)
+        );
+    }
+
+    #[test]
+    fn pwm_gpio_wraps_around_the_period_boundary() {
+        let h = driven(Phase(0), 0xFF);
+        let wave = gpio_waveform(h.fpga(), raw(GPIO_TYPE_PWM_OUT, 0));
+        assert_eq!(wave.len(), GPIO_PERIOD as usize);
+        let half = FULL_INTENSITY_PULSE_WIDTH / 2;
+        let rise = usize::from(GPIO_PERIOD - half);
+        let fall = usize::from(half);
+        let expected: Vec<u8> = (0..GPIO_PERIOD as usize)
+            .map(|i| u8::from(i < fall || rise <= i))
+            .collect();
+        assert_eq!(wave, expected);
+    }
+
+    #[test]
+    fn pwm_gpio_is_shifted_by_the_phase() {
+        let h = driven(Phase(64), 0xFF);
+        let wave = gpio_waveform(h.fpga(), raw(GPIO_TYPE_PWM_OUT, 0));
+        let half = usize::from(FULL_INTENSITY_PULSE_WIDTH / 2);
+        let expected: Vec<u8> = (0..GPIO_PERIOD as usize)
+            .map(|i| u8::from(i < 128 + half))
+            .collect();
+        assert_eq!(wave, expected);
+    }
+
+    #[test]
+    fn geometry_message_flattens_every_device() {
+        let layout = vec![
+            DeviceLayout {
+                transducers: vec![
+                    TransducerLayout {
+                        pos: [0.0, 0.0, 0.0],
+                        dir: [0.0, 0.0, 1.0],
+                    },
+                    TransducerLayout {
+                        pos: [10.16, 0.0, 0.0],
+                        dir: [0.0, 0.0, 1.0],
+                    },
+                ],
+            },
+            DeviceLayout {
+                transducers: vec![TransducerLayout {
+                    pos: [0.0, 200.0, 0.0],
+                    dir: [0.0, 0.0, -1.0],
+                }],
+            },
+        ];
+        let ServerMsg::Geometry { transducers } = geometry_msg_from_layout(&layout) else {
+            panic!("expected a geometry message");
+        };
+        assert_eq!(transducers.len(), 3);
+        assert_relative_eq!(transducers[1].pos[..], [10.16, 0.0, 0.0][..]);
+        assert_relative_eq!(transducers[2].dir[..], [0.0, 0.0, -1.0][..]);
+    }
+
+    #[test]
+    fn geometry_message_of_an_empty_layout_is_empty() {
+        let ServerMsg::Geometry { transducers } = geometry_msg_from_layout(&[]) else {
+            panic!("expected a geometry message");
+        };
+        assert!(transducers.is_empty());
+    }
+
+    #[test]
+    fn modulation_gating_only_changes_the_amplitude() {
+        let mut h = driven(Phase(0), 0x00);
+        let modulated = h.states();
+        assert!(modulated.iter().all(|s| s.amp == 0.0));
+
+        h.set_mod_enabled(false);
+        h.send(Nop);
+        let unmodulated = h.states();
+        for state in &unmodulated {
+            assert_relative_eq!(state.amp, 1.0);
+        }
+        assert_eq!(
+            modulated.iter().map(|s| s.phase).collect::<Vec<_>>(),
+            unmodulated.iter().map(|s| s.phase).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn device_state_reports_the_configured_pattern_and_modulation() {
+        let h = driven(Phase(0), 0xFF);
+        let states = h.device_states();
+        assert_eq!(states.len(), 1);
+        let state = &states[0];
+        assert_eq!(
+            usize::from(state.num_transducers),
+            h.fpga().num_transducers()
+        );
+        assert_eq!(state.stm_cycle, 1);
+        assert_eq!(state.stm_idx, 0);
+        assert_eq!(state.mod_cycle, 2);
+        assert_eq!(state.mod_buffer, vec![0xFF, 0xFF]);
+        assert_eq!(state.gpio_types, [0, 0, 0, 0]);
+        assert!(state.gpio_out.iter().all(|w| w == &constant_wave(0)));
+    }
+}

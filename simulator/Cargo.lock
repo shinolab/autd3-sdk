@@ -54,6 +54,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-rs"
+version = "0.7.0"
+dependencies = [
+ "autd3-cpu-wire",
+ "autd3-rs-core",
+ "thiserror",
+ "thread-priority",
+ "tokio",
+ "tracing",
+ "windows-sys",
+ "zerocopy",
+]
+
+[[package]]
 name = "autd3-rs-core"
 version = "0.7.0"
 dependencies = [
@@ -93,6 +107,8 @@ name = "autd3-rs-simulator"
 version = "0.7.0"
 dependencies = [
  "anyhow",
+ "approx",
+ "autd3-rs",
  "autd3-rs-core",
  "autd3-rs-firmware-emulator",
  "autd3-rs-link-remote",
@@ -112,6 +128,7 @@ name = "autd3-rs-simulator-protocol"
 version = "0.7.0"
 dependencies = [
  "serde",
+ "serde_json",
 ]
 
 [[package]]

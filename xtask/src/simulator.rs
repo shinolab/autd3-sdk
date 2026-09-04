@@ -67,6 +67,8 @@ pub enum SimulatorCmd {
         #[arg(long)]
         debug: bool,
     },
+    /// Run the backend workspace tests
+    Test,
     /// Clippy the backend workspace and the (wasm) frontend
     Lint,
     /// Rustfmt the backend workspace and the frontend
@@ -100,6 +102,11 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
     let frontend = sim.join("frontend");
     match cmd {
         SimulatorCmd::Build { debug } => build_backend_and_frontend(root, *debug, None).map(|_| ()),
+        SimulatorCmd::Test => run(
+            "cargo",
+            ["test", "--workspace", "--lib", "--bins", "--tests"],
+            &sim,
+        ),
         SimulatorCmd::Lint => {
             run(
                 "cargo",
