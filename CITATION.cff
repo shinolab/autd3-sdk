@@ -1,0 +1,59 @@
+cff-version: 1.2.0
+message: "If you use this SDK in your research, please cite the preferred-citation below."
+title: "AUTD3 SDK"
+abstract: "Client libraries, firmware, and tools to drive Airborne Ultrasound Tactile Display version 3 (AUTD3) devices."
+type: software
+license: MIT
+repository-code: "https://github.com/shinolab/autd3-sdk"
+url: "https://shinolab.github.io/autd3-sdk/en/"
+authors:
+  - family-names: Suzuki
+    given-names: Shun
+    email: suzuki@hapis.k.u-tokyo.ac.jp
+    affiliation: "The University of Tokyo"
+    orcid: "https://orcid.org/0000-0002-8431-6664"
+keywords:
+  - airborne ultrasound
+  - haptics
+  - midair haptics
+  - phased array
+  - AUTD3
+preferred-citation:
+  type: article
+  title: "AUTD3: Scalable Airborne Ultrasound Tactile Display"
+  authors:
+    - family-names: Suzuki
+      given-names: Shun
+      orcid: "https://orcid.org/0000-0002-8431-6664"
+    - family-names: Inoue
+      given-names: Seki
+      orcid: "https://orcid.org/0000-0002-9713-0551"
+    - family-names: Fujiwara
+      given-names: Masahiro
+      orcid: "https://orcid.org/0000-0002-5042-1773"
+    - family-names: Makino
+      given-names: Yasutoshi
+      orcid: "https://orcid.org/0000-0002-9362-4407"
+    - family-names: Shinoda
+      given-names: Hiroyuki
+      orcid: "https://orcid.org/0000-0002-3006-430X"
+  journal: "IEEE Transactions on Haptics"
+  year: 2021
+  volume: 14
+  issue: 4
+  start: 740
+  end: 749
+  doi: "10.1109/TOH.2021.3069976"
+  url: "https://ieeexplore.ieee.org/document/9392322"
+references:
+  - type: conference-paper
+    title: "Scalable Architecture for Airborne Ultrasound Tactile Display"
+    authors:
+      - family-names: Inoue
+        given-names: Seki
+      - family-names: Makino
+        given-names: Yasutoshi
+      - family-names: Shinoda
+        given-names: Hiroyuki
+    collection-title: "Asia Haptics 2016"
+    year: 2016
