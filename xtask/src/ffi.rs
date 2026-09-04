@@ -15,6 +15,12 @@ pub enum FfiCmd {
     },
     /// Test the FFI workspace
     Test,
+    /// Measure FFI workspace test coverage with cargo-llvm-cov
+    Coverage {
+        /// Open the HTML report in a browser
+        #[arg(long)]
+        open: bool,
+    },
     /// Clippy the FFI workspace
     Lint,
     /// Rustfmt the FFI workspace
@@ -36,6 +42,12 @@ pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
             run("cargo", args, &dir)
         }
         FfiCmd::Test => run("cargo", vec!["test", "--workspace"], &dir),
+        FfiCmd::Coverage { open } => crate::rust::coverage(
+            &dir,
+            &["llvm-cov", "--no-report", "--workspace", "--lib", "--tests"],
+            &[],
+            *open,
+        ),
         FfiCmd::Lint => {
             let mut args = vec!["clippy", "--workspace", "--all-targets"];
             args.extend(["--", "-D", "warnings"]);
