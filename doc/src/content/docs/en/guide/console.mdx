@@ -18,6 +18,22 @@ Reopen the shell (the terminal on Windows) for the `PATH` change to take effect.
 If you do not use the installer, download the archive from the same release (`console-<target>.tar.xz` / `.zip`),
 extract it, and run `autd3-console`.
 
+### macOS
+
+The macOS binaries are not signed or notarized with an Apple Developer ID, so Gatekeeper blocks them
+with "cannot be opened because the developer cannot be verified".
+Remove the quarantine attribute after installing to run it:
+
+```console
+xattr -d com.apple.quarantine ~/.autd3/bin/autd3-console
+```
+
+If you are running an extracted archive, apply it to the extracted directory instead:
+
+```console
+xattr -dr com.apple.quarantine <extracted directory>
+```
+
 ## Bundled commands
 
 The same archive carries the commands you can run directly without the GUI.

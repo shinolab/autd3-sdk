@@ -15,18 +15,22 @@ permissions:
   contents: write
 
 jobs:
-  simplify-powershell-command:
+  rewrite-release-notes:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAG: ${{ github.ref_name }}
     steps:
-      - name: Rewrite the PowerShell install command
+      - uses: actions/checkout@v7
+
+      - name: Rewrite the PowerShell install command and append the macOS note
         run: |
           body=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body)
           fixed=$(printf '%s' "$body" | sed -E 's/powershell -ExecutionPolicy Bypass -c "(.*)"$/\1/')
           if [ "$body" = "$fixed" ]; then
-            echo "::warning::PowerShell install snippet not found; release notes left as dist generated them"
-            exit 0
+            echo "::warning::PowerShell install snippet not found; install command left as dist generated it"
           fi
-          printf '%s' "$fixed" | gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file -
+          {
+            printf '%s\n\n' "$fixed"
+            cat .github/console-macos-note.md
+          } | gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file -
