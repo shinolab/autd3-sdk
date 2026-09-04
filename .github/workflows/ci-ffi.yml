@@ -30,6 +30,9 @@ jobs:
       - name: Format
         if: runner.os == 'Linux'
         run: cargo xtask ffi format
+      - name: Drift
+        if: runner.os == 'Linux'
+        run: cargo xtask ffi drift
       - run: cargo xtask ffi lint
       - run: cargo xtask ffi test
       - run: cargo xtask ffi build
