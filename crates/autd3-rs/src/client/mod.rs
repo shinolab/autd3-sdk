@@ -13,7 +13,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, PoisonError};
 use std::thread::JoinHandle;
 
-use tokio::sync::{mpsc, oneshot};
+use std::sync::mpsc;
+
+use autd3_rs_core::rt::oneshot;
 
 use autd3_cpu_wire::payload::ReadTelemetryPayload;
 use zerocopy::FromBytes;
@@ -41,7 +43,8 @@ pub struct Client {
     num_devices: usize,
     pool: Arc<SlotPool>,
     completions: Arc<CompletionPool>,
-    join: std::sync::Mutex<Option<JoinHandle<Option<LinkCause>>>>,
+    join: std::sync::Mutex<Option<JoinHandle<()>>>,
+    done: std::sync::Mutex<Option<oneshot::Receiver<Option<LinkCause>>>>,
     closed: Arc<AtomicBool>,
     stopping: AtomicBool,
     mirror: MirrorHandle,
@@ -101,14 +104,17 @@ impl Client {
         let pool = SlotPool::new(num_devices, config.max_inflight.get());
         let completions = CompletionPool::new(config.max_inflight.get());
 
-        let (cmd_tx, cmd_rx) = mpsc::channel::<CmdMessage>(1);
+        let (cmd_tx, cmd_rx) = mpsc::channel::<CmdMessage>();
         let (hs_done_tx, hs_done_rx) = oneshot::channel::<Result<(), LinkCause>>();
+        let (done_tx, done_rx) = oneshot::channel::<Option<LinkCause>>();
         let closed = Arc::new(AtomicBool::new(false));
         let closed_for_rt = Arc::clone(&closed);
 
         let join = std::thread::Builder::new()
             .name("autd3-rs-rt".to_owned())
-            .spawn(move || rt::run_rt_thread(link, cmd_rx, config, hs_done_tx, closed_for_rt))
+            .spawn(move || {
+                rt::run_rt_thread(link, cmd_rx, config, hs_done_tx, done_tx, closed_for_rt);
+            })
             .map_err(|e| Error::Link(LinkCause::new(e)))?;
 
         match hs_done_rx.await {
@@ -121,6 +127,7 @@ impl Client {
                     pool,
                     completions,
                     join: std::sync::Mutex::new(Some(join)),
+                    done: std::sync::Mutex::new(Some(done_rx)),
                     closed,
                     stopping: AtomicBool::new(false),
                     mirror: MirrorHandle {
@@ -149,11 +156,11 @@ impl Client {
                 Ok((client, checker))
             }
             Ok(Err(cause)) => {
-                let _ = wait_thread(join).await;
+                let _ = wait_rt(done_rx, join).await;
                 Err(Error::Link(cause))
             }
             Err(_) => {
-                let _ = wait_thread(join).await;
+                let _ = wait_rt(done_rx, join).await;
                 Err(Error::RtClosed)
             }
         }
@@ -231,7 +238,7 @@ impl Client {
             slot.payload_mut(device).copy_from_slice(&datagram.payload);
             slot.set_cmd(device, datagram.cmd);
         }
-        self.dispatch(slot, Reply::Ack).await
+        self.dispatch(slot, Reply::Ack)
     }
 
     async fn send_broadcast(&self, datagram: &Datagram) -> Result<ResponseFuture, Error> {
@@ -240,7 +247,7 @@ impl Client {
         slot.reset(Distribution::Broadcast);
         slot.payload_mut(0).copy_from_slice(&datagram.payload);
         slot.set_cmd(0, datagram.cmd);
-        self.dispatch(slot, Reply::Ack).await
+        self.dispatch(slot, Reply::Ack)
     }
 
     async fn send_broadcast_exclusive(&self, datagram: &Datagram) -> Result<ResponseFuture, Error> {
@@ -249,7 +256,7 @@ impl Client {
         slot.reset(Distribution::Broadcast);
         slot.payload_mut(0).copy_from_slice(&datagram.payload);
         slot.set_cmd(0, datagram.cmd);
-        self.dispatch(slot, Reply::Value).await
+        self.dispatch(slot, Reply::Value)
     }
 
     pub async fn send(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {
@@ -263,7 +270,7 @@ impl Client {
         self.send(frame).await?.await?.check()
     }
 
-    async fn dispatch(&self, slot: pool::Slot, reply: Reply) -> Result<ResponseFuture, Error> {
+    fn dispatch(&self, slot: pool::Slot, reply: Reply) -> Result<ResponseFuture, Error> {
         let (response_tx, response_rx) =
             self.completions.channel(self.mirror_for_response(), reply);
         if self
@@ -273,7 +280,6 @@ impl Client {
                 response_tx,
                 exclusive: reply.exclusive(),
             })
-            .await
             .is_err()
         {
             tracing::warn!("RT thread is closed; frame dropped");
@@ -445,13 +451,13 @@ impl Client {
             Ok(())
         };
         self.closed.store(true, Ordering::Release);
-        let join = self
-            .join
+        let done = self
+            .done
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
-        let joined = if let Some(join) = join {
-            wait_thread(join).await
+        let joined = if let Some(done) = done {
+            rt_outcome(done.await)
         } else {
             Ok(())
         };
@@ -493,10 +499,19 @@ fn warn_unknown(device: usize, what: &str, pre_latched: bool) {
     }
 }
 
-async fn wait_thread(join: JoinHandle<Option<LinkCause>>) -> Result<(), Error> {
-    tokio::task::spawn_blocking(move || join.join())
-        .await
-        .map_err(|e| Error::Link(LinkCause::new(e)))?
-        .map_err(|_| Error::RtPanicked)?
-        .map_or(Ok(()), |cause| Err(Error::Link(cause)))
+fn rt_outcome(done: Result<Option<LinkCause>, oneshot::Canceled>) -> Result<(), Error> {
+    match done {
+        Ok(None) => Ok(()),
+        Ok(Some(cause)) => Err(Error::Link(cause)),
+        Err(oneshot::Canceled) => Err(Error::RtPanicked),
+    }
+}
+
+async fn wait_rt(
+    done: oneshot::Receiver<Option<LinkCause>>,
+    join: JoinHandle<()>,
+) -> Result<(), Error> {
+    let outcome = rt_outcome(done.await);
+    let _ = join.join();
+    outcome
 }

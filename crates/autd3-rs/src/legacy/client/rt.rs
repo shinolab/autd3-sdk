@@ -3,7 +3,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use autd3_rs_core::link::{CycleOutcome, Link};
-use tokio::sync::{mpsc, oneshot};
+use std::sync::mpsc::{Receiver, TryRecvError};
+
+use autd3_rs_core::rt::oneshot;
 
 use crate::legacy::datagram::LegacyFrame;
 use crate::legacy::error::{INVALID_MSG_ID, LegacyError, TimeoutPhase, check_device_error};
@@ -20,7 +22,19 @@ pub(super) struct CmdMessage {
 
 pub(super) fn run_rt_thread<L: Link>(
     link: L,
-    cmd_rx: mpsc::Receiver<CmdMessage>,
+    cmd_rx: Receiver<CmdMessage>,
+    config: LegacyClientConfig,
+    closed: Arc<AtomicBool>,
+    handshake_tx: oneshot::Sender<Result<(), LegacyError>>,
+    done_tx: oneshot::Sender<()>,
+) {
+    run_rt_loop(link, cmd_rx, config, closed, handshake_tx);
+    let _ = done_tx.send(());
+}
+
+fn run_rt_loop<L: Link>(
+    link: L,
+    cmd_rx: Receiver<CmdMessage>,
     config: LegacyClientConfig,
     closed: Arc<AtomicBool>,
     handshake_tx: oneshot::Sender<Result<(), LegacyError>>,
@@ -64,7 +78,7 @@ fn unused_msg_ids(observed: &[u8]) -> Vec<MsgId> {
 
 struct RtThread<L: Link> {
     link: L,
-    cmd_rx: mpsc::Receiver<CmdMessage>,
+    cmd_rx: Receiver<CmdMessage>,
     timeout_cycles: NonZeroU32,
     closed: Arc<AtomicBool>,
     msg_id: MsgId,
@@ -75,7 +89,7 @@ struct RtThread<L: Link> {
 impl<L: Link> RtThread<L> {
     fn new(
         link: L,
-        cmd_rx: mpsc::Receiver<CmdMessage>,
+        cmd_rx: Receiver<CmdMessage>,
         timeout_cycles: NonZeroU32,
         closed: Arc<AtomicBool>,
     ) -> Self {
@@ -156,7 +170,7 @@ impl<L: Link> RtThread<L> {
                         break;
                     }
                 }
-                Err(mpsc::error::TryRecvError::Empty) => {
+                Err(TryRecvError::Empty) => {
                     if let Err(e) = self.cycle() {
                         tracing::error!("{e}");
                         link_error = Some(match e {
@@ -166,7 +180,7 @@ impl<L: Link> RtThread<L> {
                         break;
                     }
                 }
-                Err(mpsc::error::TryRecvError::Disconnected) => break,
+                Err(TryRecvError::Disconnected) => break,
             }
         }
         self.teardown(link_error.as_deref());
@@ -178,7 +192,6 @@ impl<L: Link> RtThread<L> {
                 LegacyError::Link(msg.to_owned())
             })
         };
-        self.cmd_rx.close();
         while let Ok(msg) = self.cmd_rx.try_recv() {
             let _ = msg.reply.send(Err(cause()));
         }

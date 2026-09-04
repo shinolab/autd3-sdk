@@ -32,7 +32,7 @@ import Mermaid from "@components/Mermaid.astro";
 | クレート                     | 役割                                                                 |
 | ---------------------------- | -------------------------------------------------------------------- |
 | `autd3-rs-core`              | 基盤層. geometry / value / params / protocol / error と `Link` 抽象.   |
-| `autd3-rs`                   | クライアント本体 (tokio 非同期). `core` を再エクスポートするファサードも兼ねる. |
+| `autd3-rs`                   | クライアント本体.                                                     |
 | `autd3-rs-pattern`           | Emission パターン計算 (焦点合成等).                                   |
 | `autd3-rs-pattern-holo`      | 多焦点音場再構成. 理論は[理論と考察](/autd3-sdk/theory/holo/)を参照.  |
 | `autd3-rs-modulation`        | AM 波形計算.                                                          |
@@ -49,14 +49,14 @@ EtherCAT マスタが要求する定周期処理と, ユーザーの非同期 AP
 <Mermaid
   title="スレッドモデル"
   code={`flowchart LR
-  U["ユーザースレッド (tokio)"]
+  U["ユーザースレッド (非同期)"]
   RT["RT スレッド (定周期 EtherCAT)"]
   U -- "mpsc: コマンド" --> RT
   RT -- "oneshot: 完了通知" --> U`}
 />
 
-- **RT スレッド**: EtherCAT マスタが要求する定周期で動作する. tokio ランタイム外で独立して動き, レイテンシを最小化する.
-- **ユーザースレッド**: tokio 上で動作する. `.await` で RT スレッドの完了通知を待つ.
+- **RT スレッド**: EtherCAT マスタが要求する定周期で動作する. 非同期ランタイムの外で独立した OS スレッドとして動き, レイテンシを最小化する.
+- **ユーザースレッド**: `.await` で RT スレッドの完了通知を待つ. 待機は自前の `Waker` 実装だけで組まれており, 特定の非同期ランタイムに依存しない.
 
 `Link` トレイトの `cycle(tx, rx)` が 1 サイクル分の PDO 送受信を担う.
 `EchocatLink` はホスト自身が EtherCAT マスタとなり raw socket で PDO を直接回す.

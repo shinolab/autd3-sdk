@@ -331,7 +331,7 @@ impl Drop for CompletionCtx {
 mod client {
     use std::future::Future;
     use std::pin::Pin;
-    use std::sync::{Arc, OnceLock};
+    use std::sync::Arc;
     use std::time::Duration;
 
     use autd3_rs::Error;
@@ -390,23 +390,6 @@ mod client {
         pub fn err_of<E: ErrorCategory>(self, e: &E) {
             self.fail(e.error_code(), &e.to_string());
         }
-    }
-
-    #[must_use]
-    pub fn link_runtime() -> &'static tokio::runtime::Runtime {
-        static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-        RT.get_or_init(|| {
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .expect("failed to build tokio runtime")
-        })
-    }
-
-    #[allow(clippy::needless_pass_by_value)]
-    #[must_use]
-    pub fn join_err(e: tokio::task::JoinError) -> Error {
-        Error::Link(autd3_rs::LinkCause::new(e))
     }
 
     #[must_use]
@@ -517,12 +500,6 @@ mod client {
             + Send,
     >;
 
-    #[allow(clippy::needless_pass_by_value)]
-    #[must_use]
-    pub fn legacy_join_err(e: tokio::task::JoinError) -> LegacyError {
-        LegacyError::Link(e.to_string())
-    }
-
     struct LegacyBackend<C> {
         client: Arc<LegacyClient>,
         checker: Arc<std::sync::Mutex<C>>,
@@ -570,28 +547,16 @@ mod client {
         fn read_firmware_version(&self) -> LegacyBoxFuture<Vec<String>> {
             let client = Arc::clone(&self.client);
             Box::pin(async move {
-                link_runtime()
-                    .spawn(async move {
-                        let versions = client.read_firmware_version().await?;
-                        Ok::<Vec<String>, LegacyError>(
-                            versions.iter().map(ToString::to_string).collect(),
-                        )
-                    })
-                    .await
-                    .map_err(legacy_join_err)?
+                let versions = client.read_firmware_version().await?;
+                Ok::<Vec<String>, LegacyError>(versions.iter().map(ToString::to_string).collect())
             })
         }
 
         fn read_fpga_state(&self) -> LegacyBoxFuture<Vec<u8>> {
             let client = Arc::clone(&self.client);
             Box::pin(async move {
-                link_runtime()
-                    .spawn(async move {
-                        let states = client.read_fpga_state().await?;
-                        Ok::<Vec<u8>, LegacyError>(states.iter().map(|s| s.0).collect())
-                    })
-                    .await
-                    .map_err(legacy_join_err)?
+                let states = client.read_fpga_state().await?;
+                Ok::<Vec<u8>, LegacyError>(states.iter().map(|s| s.0).collect())
             })
         }
 
@@ -602,24 +567,19 @@ mod client {
         ) -> LegacyBoxFuture<Vec<u8>> {
             let client = Arc::clone(&self.client);
             Box::pin(async move {
-                link_runtime()
-                    .spawn(async move {
-                        let (start, end) = frame_range(&frames, frame)?;
-                        let mut merged: Option<Vec<u8>> = None;
-                        for index in start..end {
-                            let frame = frames.frame(index).ok_or_else(|| {
-                                LegacyError::Link(format!("frame {index} out of range"))
-                            })?;
-                            let data = client.send(frame).await?.data().to_vec();
-                            match merged.as_mut() {
-                                None => merged = Some(data),
-                                Some(m) => merge_response(m, &data),
-                            }
-                        }
-                        Ok::<Vec<u8>, LegacyError>(merged.unwrap_or_default())
-                    })
-                    .await
-                    .map_err(legacy_join_err)?
+                let (start, end) = frame_range(&frames, frame)?;
+                let mut merged: Option<Vec<u8>> = None;
+                for index in start..end {
+                    let frame = frames
+                        .frame(index)
+                        .ok_or_else(|| LegacyError::Link(format!("frame {index} out of range")))?;
+                    let data = client.send(frame).await?.data().to_vec();
+                    match merged.as_mut() {
+                        None => merged = Some(data),
+                        Some(m) => merge_response(m, &data),
+                    }
+                }
+                Ok::<Vec<u8>, LegacyError>(merged.unwrap_or_default())
             })
         }
 
@@ -630,19 +590,14 @@ mod client {
         ) -> LegacyBoxFuture<()> {
             let client = Arc::clone(&self.client);
             Box::pin(async move {
-                link_runtime()
-                    .spawn(async move {
-                        let (start, end) = frame_range(&frames, frame)?;
-                        for index in start..end {
-                            let frame = frames.frame(index).ok_or_else(|| {
-                                LegacyError::Link(format!("frame {index} out of range"))
-                            })?;
-                            client.send_checked(frame).await?;
-                        }
-                        Ok::<(), LegacyError>(())
-                    })
-                    .await
-                    .map_err(legacy_join_err)?
+                let (start, end) = frame_range(&frames, frame)?;
+                for index in start..end {
+                    let frame = frames
+                        .frame(index)
+                        .ok_or_else(|| LegacyError::Link(format!("frame {index} out of range")))?;
+                    client.send_checked(frame).await?;
+                }
+                Ok::<(), LegacyError>(())
             })
         }
 
@@ -652,22 +607,12 @@ mod client {
 
         fn stop(&self) -> LegacyBoxFuture<()> {
             let client = Arc::clone(&self.client);
-            Box::pin(async move {
-                link_runtime()
-                    .spawn(async move { client.stop().await })
-                    .await
-                    .map_err(legacy_join_err)?
-            })
+            Box::pin(async move { client.stop().await })
         }
 
         fn close(&self) -> LegacyBoxFuture<()> {
             let client = Arc::clone(&self.client);
-            Box::pin(async move {
-                link_runtime()
-                    .spawn(async move { client.close().await })
-                    .await
-                    .map_err(legacy_join_err)?
-            })
+            Box::pin(async move { client.close().await })
         }
     }
 
@@ -680,12 +625,7 @@ mod client {
             Box::pin(async move {
                 let link = make_link(&geometry)?;
                 let (client, checker) =
-                    link_runtime()
-                        .spawn(async move {
-                            LegacyClient::open_with_checker(&geometry, link, config).await
-                        })
-                        .await
-                        .map_err(legacy_join_err)??;
+                    LegacyClient::open_with_checker(&geometry, link, config).await?;
                 let backend: Box<dyn LegacyClientBackend> = Box::new(LegacyBackend {
                     client: Arc::new(client),
                     checker: Arc::new(std::sync::Mutex::new(checker)),
@@ -739,5 +679,5 @@ mod client {
 pub use client::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, ErrorCategory, LegacyBoxFuture,
     LegacyClientBackend, LegacyClientOpener, LinkStatusData, ResponseTokenData, client_opener,
-    join_err, legacy_client_opener, legacy_join_err, link_err, link_runtime, to_ns,
+    legacy_client_opener, link_err, to_ns,
 };

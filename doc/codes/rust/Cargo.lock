@@ -199,7 +199,6 @@ dependencies = [
  "autd3-rs-core",
  "thiserror 2.0.18",
  "thread-priority",
- "tokio",
  "tracing",
  "windows-sys 0.61.2",
  "zerocopy 0.8.52",
@@ -271,7 +270,6 @@ dependencies = [
  "mdns-sd",
  "socket2",
  "thiserror 2.0.18",
- "tokio",
  "tracing",
 ]
 

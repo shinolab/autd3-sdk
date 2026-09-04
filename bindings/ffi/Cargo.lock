@@ -54,7 +54,6 @@ version = "0.7.0"
 dependencies = [
  "autd3-ffi-abi",
  "autd3-rs",
- "tokio",
 ]
 
 [[package]]
@@ -63,7 +62,6 @@ version = "0.7.0"
 dependencies = [
  "autd3-rs",
  "autd3-rs-core",
- "tokio",
 ]
 
 [[package]]
@@ -82,7 +80,6 @@ dependencies = [
  "autd3-rs",
  "autd3-rs-core",
  "autd3-rs-link-echocat",
- "tokio",
 ]
 
 [[package]]
@@ -93,7 +90,6 @@ dependencies = [
  "autd3-rs",
  "autd3-rs-core",
  "autd3-rs-link-nop",
- "tokio",
 ]
 
 [[package]]
@@ -104,7 +100,6 @@ dependencies = [
  "autd3-rs",
  "autd3-rs-core",
  "autd3-rs-link-remote",
- "tokio",
 ]
 
 [[package]]
@@ -115,7 +110,6 @@ dependencies = [
  "autd3-rs",
  "autd3-rs-core",
  "autd3-rs-link-twincat",
- "tokio",
 ]
 
 [[package]]
@@ -153,7 +147,6 @@ dependencies = [
  "autd3-rs-core",
  "thiserror 2.0.18",
  "thread-priority",
- "tokio",
  "tracing",
  "windows-sys 0.61.2",
  "zerocopy 0.8.52",
@@ -212,7 +205,6 @@ dependencies = [
  "mdns-sd",
  "socket2",
  "thiserror 2.0.18",
- "tokio",
  "tracing",
 ]
 
@@ -945,27 +937,6 @@ dependencies = [
  "log",
  "rustversion",
  "windows",
-]
-
-[[package]]
-name = "tokio"
-version = "1.53.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d988bcd52dbe076d3d46903332f58c912b87a2c49b1428419a5845154762ffee"
-dependencies = [
- "pin-project-lite",
- "tokio-macros",
-]
-
-[[package]]
-name = "tokio-macros"
-version = "2.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

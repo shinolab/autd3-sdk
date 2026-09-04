@@ -31,7 +31,8 @@ The following is an example that generates a focal point 150 mm directly above t
 First, create an appropriate project and add the `autd3-rs` library as a dependency.
 For focus computation and AM modulation, also add `autd3-rs-pattern` and `autd3-rs-modulation`.
 Also add the autd3-rs-link-echocat library, which handles communication with the device.
-An asynchronous runtime is also required, so add tokio as well.
+The `autd3-rs` API is asynchronous but runtime-agnostic. 
+Here tokio is added because the example waits for Ctrl+C.
 
 ```
 cargo new --bin autd3-sample && cd autd3-sample

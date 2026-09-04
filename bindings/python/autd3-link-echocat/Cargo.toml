@@ -17,7 +17,6 @@ autd3-rs-link-echocat.workspace = true
 autd3-rs-core.workspace = true
 autd3-python-capsule = { workspace = true, features = ["client"] }
 pyo3.workspace = true
-tokio.workspace = true
 
 [lints]
 workspace = true

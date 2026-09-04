@@ -1,7 +1,6 @@
 use std::future::Future;
 
 use pyo3::IntoPyObjectExt;
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
 use crate::runtime;
@@ -52,21 +51,16 @@ where
     let py_fut = event_loop.call_method0("create_future")?;
     let event_loop_tx = event_loop.unbind();
     let future_tx = py_fut.clone().unbind();
-    let handle = runtime::handle()?;
-    let completion_handle = handle.clone();
-    let inner = handle.spawn(fut);
-    drop(handle.spawn(async move {
-        let result = match inner.await {
-            Ok(result) => result,
-            Err(e) => Err(PyRuntimeError::new_err(format!("rust future failed: {e}"))),
-        };
-        drop(completion_handle.spawn_blocking(move || {
+    let completions = runtime::completions()?;
+    runtime::spawn(async move {
+        let result = fut.await;
+        completions.post(move || {
             Python::attach(|py| {
                 let result = result.and_then(|val| val.into_py_any(py));
                 let _ = set_result(event_loop_tx.bind(py), future_tx.bind(py), result);
             });
-        }));
-    }));
+        });
+    })?;
     Ok(py_fut)
 }
 

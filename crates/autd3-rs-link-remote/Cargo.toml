@@ -23,7 +23,6 @@ autd3-rs-core.workspace = true
 mdns-sd = { workspace = true, optional = true }
 socket2.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt"] }
 tracing.workspace = true
 
 [dev-dependencies]

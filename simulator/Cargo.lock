@@ -61,7 +61,6 @@ dependencies = [
  "autd3-rs-core",
  "thiserror",
  "thread-priority",
- "tokio",
  "tracing",
  "windows-sys",
  "zerocopy",
@@ -98,7 +97,6 @@ dependencies = [
  "autd3-rs-core",
  "socket2",
  "thiserror",
- "tokio",
  "tracing",
 ]
 

@@ -16,7 +16,6 @@ autd3-rs.workspace = true
 autd3-rs-link-echocat.workspace = true
 autd3-rs-core.workspace = true
 autd3-ffi-abi = { workspace = true, features = ["client"] }
-tokio.workspace = true
 
 [lints]
 workspace = true

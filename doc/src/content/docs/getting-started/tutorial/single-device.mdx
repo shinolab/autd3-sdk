@@ -31,7 +31,8 @@ Windowsを使用する場合, [Npcap](https://npcap.com/)を「**WinPcap API-com
 まずは適当なプロジェクトを作成し, `autd3-rs`ライブラリを依存関係に追加する.
 焦点計算やAM変調のために, `autd3-rs-pattern`と`autd3-rs-modulation`も依存関係に追加する.
 また, デバイスとの通信を行うautd3-rs-link-echocatライブラリも依存関係に追加する.
-非同期ランタイムも必要なので, tokioも追加する.
+`autd3-rs` の API は非同期だが特定のランタイムに依存しない.
+ここでは Ctrl+C の待ち受けに使うため tokio を追加する.
 
 ```
 cargo new --bin autd3-sample && cd autd3-sample

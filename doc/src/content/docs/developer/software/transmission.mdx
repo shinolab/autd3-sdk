@@ -30,7 +30,7 @@ for frame in &frames {
 <Mermaid
   title="2 つのスレッド"
   code={`flowchart LR
-  U["ユーザースレッド (tokio)"]
+  U["ユーザースレッド (非同期)"]
   R["RT スレッド (専用 OS スレッド)"]
   D["デバイス"]
   U -- "mpsc" --> R

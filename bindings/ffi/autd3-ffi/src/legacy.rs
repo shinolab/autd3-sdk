@@ -23,7 +23,7 @@ use autd3_rs::legacy::{
 use autd3_rs::value::{PatternBank, SamplingConfig, TransitionMode};
 
 use crate::{
-    ByteArray, CheckerHandle, Pending, StringArray, runtime, to_cstrings, to_pattern_bank,
+    ByteArray, CheckerHandle, Pending, StringArray, executor, to_cstrings, to_pattern_bank,
     to_transition_mode,
 };
 
@@ -491,7 +491,7 @@ pub unsafe extern "C" fn autd3_legacy_client_open(
     };
 
     let fut = opener(geometry.clone(), *config);
-    runtime().spawn(async move {
+    executor().spawn(async move {
         match fut.await {
             Ok(backend) => ctx.ok(into_handle(LegacyClientHandle(backend)).cast()),
             Err(e) => ctx.err_of(&e),
@@ -531,7 +531,7 @@ pub unsafe extern "C" fn autd3_legacy_client_send(
     let frames = frames.clone();
     let frame = usize::try_from(frame).ok();
     let fut = client.0.send(frames, frame);
-    runtime().spawn(async move {
+    executor().spawn(async move {
         match fut.await {
             Ok(data) => ctx.ok(into_handle(ByteArray(data)).cast()),
             Err(e) => ctx.err_of(&e),
@@ -560,7 +560,7 @@ pub unsafe extern "C" fn autd3_legacy_client_send_checked(
     let frames = frames.clone();
     let frame = usize::try_from(frame).ok();
     let fut = client.0.send_checked(frames, frame);
-    runtime().spawn(async move {
+    executor().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
             Err(e) => ctx.err_of(&e),
@@ -583,7 +583,7 @@ pub unsafe extern "C" fn autd3_legacy_client_read_firmware_version(
     };
 
     let fut = client.0.read_firmware_version();
-    runtime().spawn(async move {
+    executor().spawn(async move {
         match fut.await {
             Ok(versions) => ctx.ok(into_handle(StringArray(to_cstrings(versions))).cast()),
             Err(e) => ctx.err_of(&e),
@@ -606,7 +606,7 @@ pub unsafe extern "C" fn autd3_legacy_client_read_fpga_state(
     };
 
     let fut = client.0.read_fpga_state();
-    runtime().spawn(async move {
+    executor().spawn(async move {
         match fut.await {
             Ok(states) => ctx.ok(into_handle(ByteArray(states)).cast()),
             Err(e) => ctx.err_of(&e),
@@ -640,7 +640,7 @@ pub unsafe extern "C" fn autd3_legacy_client_stop(
     };
 
     let fut = client.0.stop();
-    runtime().spawn(async move {
+    executor().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
             Err(e) => ctx.err_of(&e),
@@ -663,7 +663,7 @@ pub unsafe extern "C" fn autd3_legacy_client_close(
     };
 
     let fut = client.0.close();
-    runtime().spawn(async move {
+    executor().spawn(async move {
         match fut.await {
             Ok(()) => ctx.ok(std::ptr::null_mut()),
             Err(e) => ctx.err_of(&e),
