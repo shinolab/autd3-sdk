@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
-use tokio::sync::Semaphore;
+use autd3_rs_core::rt::Semaphore;
 
 use crate::commands::operation::Distribution;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -116,11 +116,7 @@ impl SlotPool {
     }
 
     pub(super) async fn acquire(self: &Arc<Self>) -> Slot {
-        self.permits
-            .acquire()
-            .await
-            .expect("pool semaphore is never closed")
-            .forget();
+        self.permits.acquire().await.forget();
         let data = self
             .free
             .lock()

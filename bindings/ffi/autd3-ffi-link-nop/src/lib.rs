@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use autd3_ffi_abi::{
     BoxFuture, CheckerBackend, ClientBackend, ClientOpener, LegacyClientOpener, LinkStatusData,
-    ResponseTokenData, client_opener, into_handle, join_err, legacy_client_opener, link_err,
-    link_runtime,
+    ResponseTokenData, client_opener, into_handle, legacy_client_opener, link_err,
 };
 use autd3_rs::Error;
 use autd3_rs::legacy::emulator::LegacyAudit;
@@ -28,97 +27,67 @@ impl ClientBackend for NopBackend {
     fn read_firmware_version(&self) -> BoxFuture<Vec<String>> {
         let client = Arc::clone(&self.client);
         Box::pin(async move {
-            link_runtime()
-                .spawn(async move {
-                    let versions = client.read_firmware_version().await?;
-                    Ok::<Vec<String>, Error>(versions.into_iter().map(|v| v.to_string()).collect())
-                })
-                .await
-                .map_err(join_err)?
+            let versions = client.read_firmware_version().await?;
+            Ok::<Vec<String>, Error>(versions.into_iter().map(|v| v.to_string()).collect())
         })
     }
 
     fn read_fpga_state(&self) -> BoxFuture<Vec<u8>> {
         let client = Arc::clone(&self.client);
         Box::pin(async move {
-            link_runtime()
-                .spawn(async move {
-                    let states = client.read_fpga_state().await?;
-                    Ok::<Vec<u8>, Error>(states.into_iter().map(autd3_rs::FpgaState::raw).collect())
-                })
-                .await
-                .map_err(join_err)?
+            let states = client.read_fpga_state().await?;
+            Ok::<Vec<u8>, Error>(states.into_iter().map(autd3_rs::FpgaState::raw).collect())
         })
     }
 
     fn read_error_detail(&self) -> BoxFuture<Vec<u8>> {
         let client = Arc::clone(&self.client);
-        Box::pin(async move {
-            link_runtime()
-                .spawn(async move { client.read_error_detail().await })
-                .await
-                .map_err(join_err)?
-        })
+        Box::pin(async move { client.read_error_detail().await })
     }
 
     fn read_telemetry(&self, counter: autd3_rs::Telemetry) -> BoxFuture<Vec<u8>> {
         let client = Arc::clone(&self.client);
-        Box::pin(async move {
-            link_runtime()
-                .spawn(async move { client.read_telemetry(counter).await })
-                .await
-                .map_err(join_err)?
-        })
+        Box::pin(async move { client.read_telemetry(counter).await })
     }
 
     fn send(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<ResponseTokenData> {
         let client = Arc::clone(&self.client);
         Box::pin(async move {
-            link_runtime()
-                .spawn(async move {
-                    let mut futures = Vec::new();
-                    match frame {
-                        Some(index) => {
-                            let frame = datagrams
-                                .frame(index)
-                                .ok_or_else(|| link_err(format!("frame {index} out of range")))?;
-                            futures.push(client.send(frame).await?);
-                        }
-                        None => {
-                            for frame in datagrams.iter() {
-                                futures.push(client.send(frame).await?);
-                            }
-                        }
+            let mut futures = Vec::new();
+            match frame {
+                Some(index) => {
+                    let frame = datagrams
+                        .frame(index)
+                        .ok_or_else(|| link_err(format!("frame {index} out of range")))?;
+                    futures.push(client.send(frame).await?);
+                }
+                None => {
+                    for frame in datagrams.iter() {
+                        futures.push(client.send(frame).await?);
                     }
-                    Ok::<ResponseTokenData, Error>(ResponseTokenData::from_futures(futures))
-                })
-                .await
-                .map_err(join_err)?
+                }
+            }
+            Ok::<ResponseTokenData, Error>(ResponseTokenData::from_futures(futures))
         })
     }
 
     fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()> {
         let client = Arc::clone(&self.client);
         Box::pin(async move {
-            link_runtime()
-                .spawn(async move {
-                    match frame {
-                        Some(index) => {
-                            let frame = datagrams
-                                .frame(index)
-                                .ok_or_else(|| link_err(format!("frame {index} out of range")))?;
-                            client.send_checked(frame).await?;
-                        }
-                        None => {
-                            for frame in datagrams.iter() {
-                                client.send_checked(frame).await?;
-                            }
-                        }
+            match frame {
+                Some(index) => {
+                    let frame = datagrams
+                        .frame(index)
+                        .ok_or_else(|| link_err(format!("frame {index} out of range")))?;
+                    client.send_checked(frame).await?;
+                }
+                None => {
+                    for frame in datagrams.iter() {
+                        client.send_checked(frame).await?;
                     }
-                    Ok::<(), Error>(())
-                })
-                .await
-                .map_err(join_err)?
+                }
+            }
+            Ok::<(), Error>(())
         })
     }
 
@@ -128,22 +97,12 @@ impl ClientBackend for NopBackend {
 
     fn stop(&self) -> BoxFuture<()> {
         let client = Arc::clone(&self.client);
-        Box::pin(async move {
-            link_runtime()
-                .spawn(async move { client.stop().await })
-                .await
-                .map_err(join_err)?
-        })
+        Box::pin(async move { client.stop().await })
     }
 
     fn close(&self) -> BoxFuture<()> {
         let client = Arc::clone(&self.client);
-        Box::pin(async move {
-            link_runtime()
-                .spawn(async move { client.close().await })
-                .await
-                .map_err(join_err)?
-        })
+        Box::pin(async move { client.close().await })
     }
 }
 
@@ -167,12 +126,8 @@ impl CheckerBackend for NopChecker {
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_link_nop() -> *mut ClientOpener {
     let opener = client_opener(move |geometry, config| async move {
-        let (client, checker) = link_runtime()
-            .spawn(async move {
-                Client::open_with_checker(&geometry, autd3_rs_link_nop::Nop::new(), config).await
-            })
-            .await
-            .map_err(join_err)??;
+        let (client, checker) =
+            Client::open_with_checker(&geometry, autd3_rs_link_nop::Nop::new(), config).await?;
         let backend: Box<dyn ClientBackend> = Box::new(NopBackend {
             client: Arc::new(client),
             checker: Arc::new(Mutex::new(checker)),

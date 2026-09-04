@@ -14,7 +14,9 @@ use autd3_rs_core::RtSchedulePolicy;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::link::{DcClock, IntoLink, Link};
 use autd3_rs_core::value::{DcSysTime, Emission};
-use tokio::sync::{Mutex, MutexGuard, mpsc, oneshot};
+use std::sync::mpsc;
+
+use autd3_rs_core::rt::{Semaphore, SemaphorePermit, oneshot};
 
 use crate::legacy::datagram::{LegacyDatagramBuilder, LegacyFrame, LegacyFrames};
 use crate::legacy::error::{LegacyError, PayloadError};
@@ -62,11 +64,12 @@ impl LegacyResponse {
 
 pub struct LegacyClient {
     cmd_tx: mpsc::Sender<CmdMessage>,
-    send_lock: Mutex<()>,
+    send_lock: Semaphore,
     geometry: Arc<Geometry>,
     firmware_version: Vec<FirmwareVersion>,
     reads_fpga_state: AtomicBool,
     join: std::sync::Mutex<Option<JoinHandle<()>>>,
+    done: std::sync::Mutex<Option<oneshot::Receiver<()>>>,
     closed: Arc<AtomicBool>,
     shutting_down: AtomicBool,
     dc_clock: Option<DcClock>,
@@ -118,24 +121,26 @@ impl LegacyClient {
         let checker = link.state_checker();
         let dc_clock = link.dc_clock();
 
-        let (cmd_tx, cmd_rx) = mpsc::channel::<CmdMessage>(1);
+        let (cmd_tx, cmd_rx) = mpsc::channel::<CmdMessage>();
         let (handshake_tx, handshake_rx) = oneshot::channel();
+        let (done_tx, done_rx) = oneshot::channel::<()>();
         let closed = Arc::new(AtomicBool::new(false));
         let closed_for_rt = Arc::clone(&closed);
         let join = std::thread::Builder::new()
             .name("autd3-rs-legacy-rt".to_owned())
             .spawn(move || {
-                rt::run_rt_thread(link, cmd_rx, config, closed_for_rt, handshake_tx);
+                rt::run_rt_thread(link, cmd_rx, config, closed_for_rt, handshake_tx, done_tx);
             })
             .map_err(|e| LegacyError::Link(format!("failed to spawn RT thread: {e}")))?;
 
         let mut client = Self {
             cmd_tx,
-            send_lock: Mutex::new(()),
+            send_lock: Semaphore::new(1),
             geometry: Arc::new(geometry.clone()),
             firmware_version: Vec::new(),
             reads_fpga_state: AtomicBool::new(false),
             join: std::sync::Mutex::new(Some(join)),
+            done: std::sync::Mutex::new(Some(done_rx)),
             closed,
             shutting_down: AtomicBool::new(false),
             dc_clock,
@@ -234,8 +239,8 @@ impl LegacyClient {
         self.send(frame).await.map(|_| ())
     }
 
-    async fn acquire(&self) -> Result<MutexGuard<'_, ()>, LegacyError> {
-        let guard = self.send_lock.lock().await;
+    async fn acquire(&self) -> Result<SemaphorePermit<'_>, LegacyError> {
+        let guard = self.send_lock.acquire().await;
         if self.shutting_down.load(Ordering::Acquire) {
             return Err(LegacyError::Closed);
         }
@@ -256,7 +261,6 @@ impl LegacyClient {
                 round: frame,
                 reply,
             })
-            .await
             .map_err(|_| LegacyError::RtClosed)?;
         let data = response.await.map_err(|_| LegacyError::RtClosed)??;
         Ok(LegacyResponse { data })
@@ -277,25 +281,17 @@ impl LegacyClient {
 
     fn dispatch_blocking(&self, frame: LegacyFrame) -> Result<(), LegacyError> {
         let (reply, mut response) = oneshot::channel();
-        let mut pending = CmdMessage {
-            round: frame,
-            reply,
-        };
-        loop {
-            match self.cmd_tx.try_send(pending) {
-                Ok(()) => break,
-                Err(mpsc::error::TrySendError::Full(msg)) => {
-                    pending = msg;
-                    std::thread::sleep(SHUTDOWN_POLL);
-                }
-                Err(mpsc::error::TrySendError::Closed(_)) => return Err(LegacyError::RtClosed),
-            }
-        }
+        self.cmd_tx
+            .send(CmdMessage {
+                round: frame,
+                reply,
+            })
+            .map_err(|_| LegacyError::RtClosed)?;
         loop {
             match response.try_recv() {
-                Ok(result) => return result.map(|_| ()),
-                Err(oneshot::error::TryRecvError::Empty) => std::thread::sleep(SHUTDOWN_POLL),
-                Err(oneshot::error::TryRecvError::Closed) => return Err(LegacyError::RtClosed),
+                Some(Ok(result)) => return result.map(|_| ()),
+                Some(Err(oneshot::Canceled)) => return Err(LegacyError::RtClosed),
+                None => std::thread::sleep(SHUTDOWN_POLL),
             }
         }
     }
@@ -418,7 +414,7 @@ impl LegacyClient {
     pub async fn close(&self) -> Result<(), LegacyError> {
         tracing::debug!("closing legacy client");
         let shutdown = {
-            let _guard = self.send_lock.lock().await;
+            let _guard = self.send_lock.acquire().await;
             if self.shutting_down.swap(true, Ordering::AcqRel) {
                 Ok(())
             } else {
@@ -426,13 +422,13 @@ impl LegacyClient {
             }
         };
         self.closed.store(true, Ordering::Release);
-        let join = self
-            .join
+        let done = self
+            .done
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
-        let joined = match join {
-            Some(join) => wait_thread(join).await,
+        let joined = match done {
+            Some(done) => rt_outcome(done.await),
             None => Ok(()),
         };
         shutdown.and(joined)
@@ -489,6 +485,7 @@ impl core::fmt::Debug for LegacyClient {
             .field("firmware_version", &self.firmware_version)
             .field("reads_fpga_state", &self.reads_fpga_state)
             .field("join", &self.join)
+            .field("done", &self.done)
             .field("closed", &self.closed)
             .field("shutting_down", &self.shutting_down)
             .field("dc_clock", &self.dc_clock)
@@ -533,9 +530,6 @@ fn first_invalid(states: &[FpgaState]) -> Option<(usize, FpgaState)> {
         .map(|(device, state)| (device, *state))
 }
 
-async fn wait_thread(join: JoinHandle<()>) -> Result<(), LegacyError> {
-    tokio::task::spawn_blocking(move || join.join())
-        .await
-        .map_err(|e| LegacyError::Link(format!("RT thread join failed: {e}")))?
-        .map_err(|_| LegacyError::Link("RT thread panicked".to_owned()))
+fn rt_outcome(done: Result<(), oneshot::Canceled>) -> Result<(), LegacyError> {
+    done.map_err(|_| LegacyError::Link("RT thread panicked".to_owned()))
 }

@@ -2,7 +2,9 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tokio::sync::{mpsc, oneshot};
+use std::sync::mpsc::{Receiver, TryRecvError};
+
+use autd3_rs_core::rt::oneshot;
 
 use crate::error::{Error, LinkCause};
 use crate::link::Link;
@@ -120,7 +122,19 @@ fn handshake_failed<E: core::error::Error + Send + Sync + 'static>(e: E) -> Link
 
 pub(super) fn run_rt_thread<L: Link>(
     link: L,
-    cmd_rx: mpsc::Receiver<CmdMessage>,
+    cmd_rx: Receiver<CmdMessage>,
+    config: ClientConfig,
+    hs_done_tx: oneshot::Sender<Result<(), LinkCause>>,
+    done_tx: oneshot::Sender<Option<LinkCause>>,
+    closed: Arc<AtomicBool>,
+) {
+    let cause = run_rt_loop(link, cmd_rx, config, hs_done_tx, closed);
+    let _ = done_tx.send(cause);
+}
+
+fn run_rt_loop<L: Link>(
+    link: L,
+    cmd_rx: Receiver<CmdMessage>,
     config: ClientConfig,
     hs_done_tx: oneshot::Sender<Result<(), LinkCause>>,
     closed: Arc<AtomicBool>,
@@ -148,7 +162,7 @@ pub(super) fn run_rt_thread<L: Link>(
 
 struct RtThread<L: Link> {
     link: L,
-    cmd_rx: mpsc::Receiver<CmdMessage>,
+    cmd_rx: Receiver<CmdMessage>,
     config: ClientConfig,
     closed: Arc<AtomicBool>,
 
@@ -173,7 +187,7 @@ enum StageOutcome {
 impl<L: Link> RtThread<L> {
     fn new(
         link: L,
-        cmd_rx: mpsc::Receiver<CmdMessage>,
+        cmd_rx: Receiver<CmdMessage>,
         config: ClientConfig,
         closed: Arc<AtomicBool>,
     ) -> Self {
@@ -318,8 +332,8 @@ impl<L: Link> RtThread<L> {
                     self.held_exclusive = Some(msg);
                 }
                 Ok(msg) => self.stage_new(msg),
-                Err(mpsc::error::TryRecvError::Empty) => {}
-                Err(mpsc::error::TryRecvError::Disconnected) => return StageOutcome::Disconnected,
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => return StageOutcome::Disconnected,
             }
         }
         StageOutcome::Staged
@@ -460,7 +474,6 @@ impl<L: Link> RtThread<L> {
     fn teardown(&mut self, link_error: Option<&LinkCause>) {
         tracing::debug!(pending = self.pending.len(), "RT thread stopping");
         let cause = || link_error.map_or(Error::RtClosed, |cause| Error::Link(cause.clone()));
-        self.cmd_rx.close();
         if let Some(msg) = self.held_exclusive.take() {
             msg.response_tx.send(Err(cause()));
         }

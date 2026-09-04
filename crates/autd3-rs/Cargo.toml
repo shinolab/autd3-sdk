@@ -24,7 +24,6 @@ serde = ["autd3-rs-core/serde"]
 autd3-cpu-wire.workspace = true
 autd3-rs-core.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["sync"] }
 zerocopy.workspace = true
 thread-priority.workspace = true
 tracing.workspace = true

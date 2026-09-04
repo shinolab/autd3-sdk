@@ -14,7 +14,6 @@ crate-type = ["cdylib"]
 [dependencies]
 autd3-rs.workspace = true
 autd3-ffi-abi = { workspace = true, features = ["client"] }
-tokio.workspace = true
 
 [lints]
 workspace = true

@@ -177,7 +177,6 @@ dependencies = [
  "autd3-rs-core",
  "thiserror",
  "thread-priority",
- "tokio",
  "tracing",
  "windows-sys 0.61.2",
  "zerocopy",
