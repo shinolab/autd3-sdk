@@ -1,6 +1,7 @@
 mod appliance;
 mod bump;
 mod changelog;
+mod check;
 mod component;
 mod console;
 mod cpu;
@@ -27,6 +28,7 @@ use clap::{Parser, Subcommand};
 use appliance::{ApplianceCmd, run_appliance};
 use bump::{BumpVersionCmd, run_bump_version};
 use changelog::{ChangelogCmd, run_changelog};
+use check::{CheckCmd, run_check};
 use console::{ConsoleCmd, run_console};
 use cpu::{CpuCmd, run_cpu};
 use cs::{CsCmd, run_cs};
@@ -136,6 +138,13 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: DocCmd,
     },
+    #[command(
+        about = "The soundness and mutation checkers (Miri, sanitizers, cargo-careful, cargo-mutants)."
+    )]
+    Check {
+        #[command(subcommand)]
+        cmd: CheckCmd,
+    },
     /// Generate CHANGELOG.md / release notes with git-cliff.
     Changelog(ChangelogCmd),
     /// Bump a component's version and regenerate CHANGELOG.md (no git operations).
@@ -163,6 +172,7 @@ fn main() -> Result<()> {
         TopCmd::Unity { cmd } => run_unity(&root, cmd),
         TopCmd::License { cmd } => run_license(&root, &cmd),
         TopCmd::Doc { cmd } => run_doc(&root, &cmd),
+        TopCmd::Check { cmd } => run_check(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),
     }

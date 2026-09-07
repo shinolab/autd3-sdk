@@ -1,0 +1,124 @@
+name: ci-check
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  miri:
+    name: miri
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - uses: ./.github/actions/setup-rust
+        with:
+          shared-key: check-miri
+      - run: cargo xtask check miri
+
+  sanitizer:
+    name: sanitizer (${{ matrix.kind }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [address, leak, thread]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - uses: ./.github/actions/setup-rust
+        with:
+          shared-key: check-sanitizer-${{ matrix.kind }}
+      - name: Install pcap
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+      - run: cargo xtask check sanitizer ${{ matrix.kind }}
+
+  careful:
+    name: careful
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: ./.github/actions/setup-rust
+        with:
+          shared-key: check-careful
+      - uses: taiki-e/install-action@v2.87.5
+        with:
+          tool: cargo-binstall
+      - run: cargo binstall -y cargo-careful@0.4.10
+      - name: Install pcap
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+      - run: cargo xtask check careful
+
+  mutants:
+    name: mutants (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['1/4', '2/4', '3/4', '4/4']
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop
+      - uses: ./.github/actions/setup-rust
+        with:
+          shared-key: check-mutants
+      - uses: taiki-e/install-action@v2.87.5
+        with:
+          tool: cargo-binstall
+      - run: cargo binstall -y cargo-mutants@27.1.0
+      - name: Install pcap
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+      - name: Mutate
+        id: mutate
+        continue-on-error: true
+        run: cargo xtask check mutants --shard ${{ matrix.shard }}
+      - name: Summarize
+        run: |
+          shard="${{ matrix.shard }}"
+          missed="target/mutants/missed.txt"
+          {
+            echo "### mutants ${shard//\//-}"
+            echo
+            if [ -s "$missed" ]; then
+              echo "$(wc -l < "$missed") mutants survived:"
+              echo
+              echo '```'
+              head -50 "$missed"
+              echo '```'
+            else
+              echo "every mutant was caught"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mutants-${{ strategy.job-index }}
+          path: target/mutants
+          retention-days: 30

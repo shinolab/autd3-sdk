@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -207,7 +208,7 @@ fn cpu_test(root: &Path, loom: bool) -> Result<()> {
         "cargo",
         ["test", "-p", "autd3-cpu-fw", "--lib"],
         root,
-        &[("RUSTFLAGS", Path::new("--cfg loom"))],
+        &[("RUSTFLAGS", OsStr::new("--cfg loom"))],
     )
 }
 
@@ -228,7 +229,7 @@ fn cpu_lint(root: &Path, loom: bool) -> Result<()> {
                 "warnings",
             ],
             root,
-            &[("RUSTFLAGS", Path::new("--cfg loom"))],
+            &[("RUSTFLAGS", OsStr::new("--cfg loom"))],
         );
     }
     run(

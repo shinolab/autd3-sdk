@@ -193,7 +193,7 @@ fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
     if !debug {
         dx_args.extend(["--release", "--debug-symbols", "false"]);
     }
-    run_env("dx", dx_args, frontend, &[("DX_HOME", &dx_home)])
+    run_env("dx", dx_args, frontend, &[("DX_HOME", dx_home.as_os_str())])
 }
 
 fn ensure_wasm_opt(frontend: &Path, dx_home: &Path) -> Result<()> {
