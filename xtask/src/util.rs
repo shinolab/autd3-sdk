@@ -395,7 +395,7 @@ where
     Ok(())
 }
 
-pub fn run_env<I, S>(program: &str, args: I, cwd: &Path, env: &[(&str, &Path)]) -> Result<()>
+pub fn run_env<I, S>(program: &str, args: I, cwd: &Path, env: &[(&str, &OsStr)]) -> Result<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -426,4 +426,13 @@ where
     } else {
         run(program, args, cwd)
     }
+}
+
+pub fn host_triple() -> Result<String> {
+    let verbose = capture("rustc", &["-vV"], &workspace_root())?;
+    verbose
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .map(str::to_string)
+        .context("`rustc -vV` reported no host triple")
 }
