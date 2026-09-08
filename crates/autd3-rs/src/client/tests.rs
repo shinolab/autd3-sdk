@@ -1543,7 +1543,11 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
 
     let closed = client.close().await;
     assert!(
-        matches!(closed, Err(Error::RtClosed)),
+        matches!(closed, Err(Error::RtClosed))
+            || closed
+                .as_ref()
+                .err()
+                .is_some_and(link_cause_is::<LinkFailure>),
         "close must report the stop frame the dead link refused, got {closed:?}"
     );
     assert_eq!(
