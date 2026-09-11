@@ -2,6 +2,38 @@
 
 # Rust
 
+## [0.8.0] - 2026-09-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Judge tune candidates by the measured exchange time instead of a wire-time estimate
+- [**breaking**] Remove the EtherCrab-backed Link and all of its bindings
+- [**breaking**] Make IntoLink::into_link and StateCheck::check synchronous
+- [**breaking**] Keep the link error cause as a type
+
+### 🚀 Features
+
+- *(geometry)* Convert Geometry to and from JSON
+- *(pattern)* Add twin_trap and vortex patterns
+- *(appliance)* Add a diagnostic EtherCAT capture and an offline wiretrace tool
+- Stop the output in Client::close
+- *(link)* Add a close hook to the Link trait and expose link stats on Client
+- Expose the client's geometry through Client::geometry()
+- *(echocat)* Report a missing raw-socket privilege
+- *(core)* Add runtime-agnostic waiting primitives and a minimal executor
+
+### 🐛 Bug Fixes
+
+- Keep the link stats mean within the recorded samples
+
+### ⚡ Performance
+
+- Quantize Phase without libm calls or saturating casts
+
+### 📦 Dependencies
+
+- *(deps)* Bump anyhow, crossbeam-epoch and chacha20 to clear RustSec advisories
+
 ## [0.7.0] - 2026-08-31
 
 ### 💥 Breaking Changes
@@ -264,6 +296,26 @@
 
 # Python
 
+## [0.8.0] - 2026-09-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Remove the EtherCrab-backed Link and all of its bindings
+- [**breaking**] Make IntoLink::into_link and StateCheck::check synchronous
+- [**breaking**] Keep the link error cause as a type
+
+### 🚀 Features
+
+- *(geometry)* Convert Geometry to and from JSON
+- *(pattern)* Add twin_trap and vortex patterns
+- Expose the client's geometry through Client::geometry()
+- *(python)* Make Client and LegacyClient async context managers
+- *(core)* Add runtime-agnostic waiting primitives and a minimal executor
+
+### 📦 Dependencies
+
+- *(deps)* Bump anyhow, crossbeam-epoch and chacha20 to clear RustSec advisories
+
 ## [0.7.0] - 2026-08-31
 
 ### 💥 Breaking Changes
@@ -399,6 +451,20 @@
 
 # C#
 
+## [0.8.0] - 2026-09-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Remove the EtherCrab-backed Link and all of its bindings
+- [**breaking**] Make IntoLink::into_link and StateCheck::check synchronous
+
+### 🚀 Features
+
+- *(geometry)* Convert Geometry to and from JSON
+- *(pattern)* Add twin_trap and vortex patterns
+- Expose the client's geometry through Client::geometry()
+- *(csharp)* Make Client and LegacyClient async disposable
+
 ## [0.7.0] - 2026-08-31
 
 ### 💥 Breaking Changes
@@ -507,6 +573,12 @@
 
 # Unity
 
+## [0.8.0] - 2026-09-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Remove the EtherCrab-backed Link and all of its bindings
+
 ## [0.7.0] - 2026-08-31
 
 ### 💥 Breaking Changes
@@ -528,6 +600,16 @@
 ## [0.1.0] - 2026-07-06
 
 # Simulator
+
+## [0.8.0] - 2026-09-11
+
+### 🚀 Features
+
+- *(core)* Add runtime-agnostic waiting primitives and a minimal executor
+
+### 📦 Dependencies
+
+- *(deps)* Bump anyhow, crossbeam-epoch and chacha20 to clear RustSec advisories
 
 ## [0.7.0] - 2026-08-31
 
@@ -600,6 +682,16 @@
 
 # Console
 
+## [0.8.0] - 2026-09-11
+
+### 🐛 Bug Fixes
+
+- *(console)* Enable eframe links feature so Open in browser works
+
+### 📦 Dependencies
+
+- *(deps)* Bump anyhow, crossbeam-epoch and chacha20 to clear RustSec advisories
+
 ## [0.7.0] - 2026-08-31
 
 ### 🐛 Bug Fixes
@@ -651,6 +743,16 @@
 - Derive simulator device count from client geometry
 
 # Appliance
+
+## [0.8.0] - 2026-09-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Judge tune candidates by the measured exchange time instead of a wire-time estimate
+
+### 🚀 Features
+
+- *(appliance)* Add a diagnostic EtherCAT capture and an offline wiretrace tool
 
 ## [0.7.0] - 2026-08-31
 

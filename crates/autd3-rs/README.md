@@ -15,10 +15,10 @@ This crate drives AUTD3 devices over EtherCAT: it owns the realtime bus thread, 
 
 ```toml
 [dependencies]
-autd3-rs = "0.7.0"
-autd3-rs-link-echocat = "0.7.0"
-autd3-rs-pattern = "0.7.0"
-autd3-rs-modulation = "0.7.0"
+autd3-rs = "0.8.0"
+autd3-rs-link-echocat = "0.8.0"
+autd3-rs-pattern = "0.8.0"
+autd3-rs-modulation = "0.8.0"
 ```
 
 ```rust,no_run

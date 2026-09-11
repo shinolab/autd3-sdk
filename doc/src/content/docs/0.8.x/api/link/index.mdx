@@ -1,0 +1,25 @@
+---
+title: Link
+description: AUTD3 デバイスとの物理通信路を抽象化する Link
+sidebar:
+  order: 0
+slug: 0.8.x/api/link
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Link` は AUTD3 デバイスとの物理的な通信路を抽象化したもの.
+
+## Link 一覧
+
+* [TwinCAT](/autd3-sdk/0.8.x/api/link/twincat/) — Windows 上の Beckhoff TwinCAT 3 を EtherCAT マスタとして使用する Link
+* [echocat](/autd3-sdk/0.8.x/api/link/echocat/) — AUTD3 専用の EtherCAT Link. ホスト自身が EtherCAT マスタになる
+* [Remote](/autd3-sdk/0.8.x/api/link/remote/) — 別ホストへ TCP 接続する Link. [Appliance](/autd3-sdk/0.8.x/getting-started/appliance/) と [Simulator](/autd3-sdk/0.8.x/guide/simulator/) にはこれでつなぐ
+
+## 使い方
+
+Link は `Client::open` に Link Option を渡すことで構築する. Option には接続先や
+同期パラメータなどを指定する.
+
+`Client` から見た送受信のインターフェースは Link 実装によらず共通である.
+そのため, リンクを差し替えても上位コードを変更する必要はない.
