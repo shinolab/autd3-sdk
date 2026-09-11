@@ -15,6 +15,7 @@ impl ManagedProcess {
         let mut command = Command::new(program);
         command
             .args(args)
+            .env("NO_COLOR", "1")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         no_window(&mut command);
