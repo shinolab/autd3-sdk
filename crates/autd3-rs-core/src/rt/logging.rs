@@ -1,4 +1,4 @@
-use std::io::{Stderr, Stdout, Write};
+use std::io::{IsTerminal, Stderr, Stdout, Write};
 
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -33,6 +33,15 @@ enum Sink {
     Stderr(Stderr),
 }
 
+impl Sink {
+    fn is_terminal(&self) -> bool {
+        match self {
+            Self::Stdout(w) => w.is_terminal(),
+            Self::Stderr(w) => w.is_terminal(),
+        }
+    }
+}
+
 impl Write for Sink {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
@@ -56,12 +65,15 @@ pub fn init_tracing(option: TracingOption) -> TracingGuard {
         LogWriter::Stdout => Sink::Stdout(std::io::stdout()),
         LogWriter::Stderr => Sink::Stderr(std::io::stderr()),
     };
+    let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
+    let ansi = sink.is_terminal() && !no_color;
     let (writer, guard) = tracing_appender::non_blocking(sink);
     let builder = tracing_subscriber::fmt()
         .with_env_filter(filter)
-        .with_writer(writer);
+        .with_writer(writer)
+        .with_ansi(ansi);
     if std::env::var_os("JOURNAL_STREAM").is_some() {
-        builder.without_time().with_ansi(false).init();
+        builder.without_time().init();
     } else {
         builder.init();
     }
