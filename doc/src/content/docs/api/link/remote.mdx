@@ -32,19 +32,26 @@ import server from "@codes/rust/examples/api/link/remote_server.rs?raw";
 
 ### 探索
 
-mDNS でネットワーク上のサーバを探すことができる.
+mDNS でネットワーク上のサーバ ([Appliance](/autd3-sdk/getting-started/appliance/) と [Simulator](/autd3-sdk/guide/simulator/)) を探すことができる.
 
 <CodeTabs rust={excerpt(client, "discover")} python={excerpt(pyClient, "discover")} csharp={excerpt(csClient, "discover")} />
 
-サーバが 1 つも見つからないか複数見つかった場合はエラーになる.
+見つかったサーバは次の優先順位で選ばれる.
+
+1. ローカルで起動している Simulator
+2. Appliance
+3. 別のホストで起動している Simulator
+
+サーバが 1 つも見つからないか, 最も優先順位の高いサーバが複数見つかった場合はエラーになる.
 複数見つかったときのエラーには見つかったサーバの一覧が入るので, その中から `discover_with` で選ぶ.
 
 <CodeTabs rust={excerpt(client, "discover_option")} python={excerpt(pyClient, "discover_option")} csharp={excerpt(csClient, "discover_option")} />
 
-| フィールド | 型                 | 説明                                                       |
-| ---------- | ------------------ | ---------------------------------------------------------- |
-| `timeout`  | `Duration`         | 応答を待つ時間. デフォルトは 2 秒.                                 |
-| `instance` | `Option<String>`   | 探すサーバの名前. `None` ならすべて                        |
+| フィールド | 型                   | 説明                                                                 |
+| ---------- | -------------------- | -------------------------------------------------------------------- |
+| `timeout`  | `Duration`           | 応答を待つ時間. デフォルトは 2 秒.                                   |
+| `instance` | `Option<String>`     | 探すサーバの名前. `None` ならすべて                                  |
+| `kind`     | `Option<ServerKind>` | 探すサーバの種類 (`Appliance` / `Simulator`). `None` なら両方. Rust のみ |
 
 一覧だけが要るなら `discover_all` を使う.
 

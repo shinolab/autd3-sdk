@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
         None => match RemoteLinkOption::discover() {
             Ok(option) => option,
             Err(e) => {
-                println!("discovery found no appliance ({e}); falling back to {LOCAL_ADDR}");
+                println!("discovery picked no server ({e}); falling back to {LOCAL_ADDR}");
                 RemoteLinkOption::new(LOCAL_ADDR.parse::<SocketAddr>()?)
             }
         },

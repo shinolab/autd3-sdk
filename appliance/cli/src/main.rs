@@ -5,8 +5,9 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use autd3_rs_appliance::{
     Appliance, ApplianceClient, ApplianceStatus, ConfigDocument, DEFAULT_CONTROL_PORT,
-    DiscoveryOption, FRAME_PHASE_AUTO, LogLines, TuneCandidate, TuneReport, TuneRequest,
-    TuneStatus, UNKNOWN_STATE_HINT, UplinkStatus, WifiCredentials, WifiForget, discover_all,
+    DiscoveryOption, FRAME_PHASE_AUTO, LogLines, ServerKind, TuneCandidate, TuneReport,
+    TuneRequest, TuneStatus, UNKNOWN_STATE_HINT, UplinkStatus, WifiCredentials, WifiForget,
+    discover_all,
 };
 use clap::{Parser, Subcommand};
 
@@ -494,6 +495,7 @@ fn discovery_option(cli: &Cli) -> DiscoveryOption {
     DiscoveryOption {
         timeout: Duration::from_secs(cli.discovery_timeout),
         instance: cli.instance.clone(),
+        kind: Some(ServerKind::Appliance),
     }
 }
 

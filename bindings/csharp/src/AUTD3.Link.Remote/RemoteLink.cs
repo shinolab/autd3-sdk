@@ -14,12 +14,23 @@ namespace AUTD3.Link
             Timeout = timeout;
         }
 
-        public static RemoteLinkOption Discover(TimeSpan? timeout = null, string? instance = null)
+        public static RemoteLinkOption Discover(TimeSpan? timeout = null, string? instance = null) =>
+            DiscoverWith(NativeRemote.autd3_link_remote_discover, timeout, instance);
+
+        public static RemoteLinkOption DiscoverAppliance(TimeSpan? timeout = null, string? instance = null) =>
+            DiscoverWith(NativeRemote.autd3_link_remote_discover_appliance, timeout, instance);
+
+        public static RemoteLinkOption DiscoverSimulator(TimeSpan? timeout = null, string? instance = null) =>
+            DiscoverWith(NativeRemote.autd3_link_remote_discover_simulator, timeout, instance);
+
+        private delegate IntPtr DiscoverFn(ulong timeoutNs, string? instance, ref ulong linkTimeoutNs, ref IntPtr err);
+
+        private static RemoteLinkOption DiscoverWith(DiscoverFn discover, TimeSpan? timeout, string? instance)
         {
             var timeoutNs = timeout.HasValue ? LinkOptionNative.ToNanos(timeout.Value) : 0UL;
             var linkTimeoutNs = 0UL;
             var err = IntPtr.Zero;
-            var found = NativeRemote.autd3_link_remote_discover(timeoutNs, instance, ref linkTimeoutNs, ref err);
+            var found = discover(timeoutNs, instance, ref linkTimeoutNs, ref err);
             if (found != IntPtr.Zero)
             {
                 try
@@ -92,6 +103,12 @@ namespace AUTD3.Link
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_link_remote_discover(ulong timeoutNs, [MarshalAs(UnmanagedType.LPUTF8Str)] string? instance, ref ulong linkTimeoutNs, ref IntPtr err);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_link_remote_discover_appliance(ulong timeoutNs, [MarshalAs(UnmanagedType.LPUTF8Str)] string? instance, ref ulong linkTimeoutNs, ref IntPtr err);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_link_remote_discover_simulator(ulong timeoutNs, [MarshalAs(UnmanagedType.LPUTF8Str)] string? instance, ref ulong linkTimeoutNs, ref IntPtr err);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_link_remote_free_string(IntPtr ptr);

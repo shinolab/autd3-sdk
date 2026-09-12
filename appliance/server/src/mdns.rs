@@ -1,4 +1,4 @@
-use autd3_rs_link_remote::{Advertisement, AdvertisementHandle};
+use autd3_rs_link_remote::{Advertisement, AdvertisementHandle, ServerKind};
 
 use crate::config::Config;
 
@@ -53,6 +53,7 @@ pub fn advertisement(config: &Config) -> Option<Advertisement> {
         port: config.server.bind.port(),
         control_port: config.control.enabled.then(|| config.control.bind.port()),
         exclude_interfaces: config.bus.interface.clone().into_iter().collect(),
+        kind: ServerKind::Appliance,
     })
 }
 

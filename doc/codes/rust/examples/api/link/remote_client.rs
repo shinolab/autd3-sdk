@@ -29,8 +29,8 @@ async fn main() -> Result<()> {
     // ANCHOR_END: discover_option
 
     // ANCHOR: discover_list
-    for appliance in autd3_rs_link_remote::discover_all(&DiscoveryOption::default())? {
-        println!("{} at {}", appliance.instance, appliance.addr);
+    for server in autd3_rs_link_remote::discover_all(&DiscoveryOption::default())? {
+        println!("{} ({}) at {}", server.instance, server.kind, server.addr);
     }
     // ANCHOR_END: discover_list
 

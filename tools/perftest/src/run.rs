@@ -13,7 +13,7 @@ use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, Frames, IntoLink, Link, LinkStats,
     ResponseFuture, RtPriority, RtSchedulePolicy, StateCheck,
 };
-use autd3_rs_link_remote::{DiscoveryOption, RemoteLink, discover};
+use autd3_rs_link_remote::{DiscoveryOption, RemoteLink, ServerKind, discover};
 
 use autd3_rs_link_twincat::{TwinCATLink, TwinCATLinkOption};
 
@@ -233,6 +233,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             } else {
                 let appliance = discover(&DiscoveryOption {
                     instance: cli.instance.clone(),
+                    kind: Some(ServerKind::Appliance),
                     ..Default::default()
                 })
                 .context("finding the appliance over mDNS")?;

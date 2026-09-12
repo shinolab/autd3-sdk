@@ -249,6 +249,7 @@ dependencies = [
  "autd3-rs",
  "autd3-rs-core",
  "autd3-rs-firmware-emulator",
+ "if-addrs",
  "mdns-sd",
  "socket2",
  "thiserror 2.0.20",

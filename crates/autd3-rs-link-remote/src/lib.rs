@@ -12,8 +12,8 @@ pub use bus::{Actual, BusOption, BusPacing, BusSnapshot, Desired, SharedBus};
 #[cfg(feature = "discovery")]
 pub use discovery::{
     Advertisement, AdvertisementHandle, Appliance, DiscoveryError, DiscoveryOption, SERVICE_TYPE,
-    TXT_CONTROL_PORT, TXT_SDK_VERSION, TXT_WIRE_VERSION, advertise, discover, discover_all,
-    instance_name,
+    SIM_SERVICE_TYPE, ServerKind, TXT_CONTROL_PORT, TXT_SDK_VERSION, TXT_WIRE_VERSION, advertise,
+    discover, discover_all, instance_name,
 };
 pub use error::{PeerVersion, RejectKind, RemoteLinkError};
 pub use link::{RemoteLink, RemoteLinkOption, RemoteStateChecker};

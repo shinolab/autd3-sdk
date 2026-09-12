@@ -1,13 +1,17 @@
-use std::collections::BTreeMap;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6};
+use std::collections::{BTreeMap, HashSet};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::time::{Duration, Instant};
 
-use mdns_sd::{IfKind, ResolvedService, ScopedIp, ServiceDaemon, ServiceEvent, ServiceInfo};
+use mdns_sd::{
+    IfKind, Receiver, ResolvedService, ScopedIp, ServiceDaemon, ServiceEvent, ServiceInfo,
+    TryRecvError,
+};
 
 use crate::link::RemoteLinkOption;
 use crate::wire;
 
 pub const SERVICE_TYPE: &str = "_autd3._tcp.local.";
+pub const SIM_SERVICE_TYPE: &str = "_autd3-sim._tcp.local.";
 pub const TXT_CONTROL_PORT: &str = "ctrl";
 pub const TXT_WIRE_VERSION: &str = "wire";
 pub const TXT_SDK_VERSION: &str = "sdk";
@@ -15,6 +19,36 @@ pub const TXT_SDK_VERSION: &str = "sdk";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
 const UNREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
 const DEFAULT_LINK_TIMEOUT: Duration = Duration::from_secs(10);
+const POLL_INTERVAL: Duration = Duration::from_millis(20);
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum ServerKind {
+    #[default]
+    Appliance,
+    Simulator,
+}
+
+impl ServerKind {
+    const ALL: [Self; 2] = [Self::Appliance, Self::Simulator];
+
+    #[must_use]
+    pub const fn service_type(self) -> &'static str {
+        match self {
+            Self::Appliance => SERVICE_TYPE,
+            Self::Simulator => SIM_SERVICE_TYPE,
+        }
+    }
+}
+
+impl std::fmt::Display for ServerKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Appliance => write!(f, "appliance"),
+            Self::Simulator => write!(f, "simulator"),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Appliance {
@@ -25,11 +59,18 @@ pub struct Appliance {
     pub control_port: Option<u16>,
     pub wire: Option<u8>,
     pub sdk: Option<String>,
+    pub kind: ServerKind,
+    pub local: bool,
 }
 
 impl std::fmt::Display for Appliance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} at {}", self.instance, self.addr)?;
+        match (self.kind, self.local) {
+            (ServerKind::Simulator, true) => write!(f, " [local simulator]")?,
+            (ServerKind::Simulator, false) => write!(f, " [simulator]")?,
+            (ServerKind::Appliance, _) => {}
+        }
         if let Some(sdk) = &self.sdk {
             write!(f, " (autd3-sdk {sdk})")?;
         }
@@ -41,6 +82,7 @@ impl std::fmt::Display for Appliance {
 pub struct DiscoveryOption {
     pub timeout: Duration,
     pub instance: Option<String>,
+    pub kind: Option<ServerKind>,
 }
 
 impl Default for DiscoveryOption {
@@ -48,6 +90,7 @@ impl Default for DiscoveryOption {
         Self {
             timeout: DEFAULT_TIMEOUT,
             instance: None,
+            kind: None,
         }
     }
 }
@@ -58,13 +101,13 @@ pub enum DiscoveryError {
     #[error("mDNS error: {0}")]
     Mdns(String),
     #[error(
-        "no AUTD3 appliance answered on {SERVICE_TYPE} within {timeout:?}. \
-         Check that the appliance is powered up and on the same link, \
+        "no AUTD3 server answered within {timeout:?}. \
+         Check that the appliance is powered up and on the same link or that the simulator is running, \
          or pass its address to `RemoteLinkOption::new`"
     )]
     NotFound { timeout: Duration },
     #[error(
-        "{} AUTD3 appliances answered on {SERVICE_TYPE}: {}. \
+        "{} AUTD3 servers answered with the same priority: {}. \
          Pick one with `DiscoveryOption::instance`, or pass its address to `RemoteLinkOption::new`",
         found.len(),
         found.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "),
@@ -78,8 +121,9 @@ fn mdns(err: &mdns_sd::Error) -> DiscoveryError {
 
 #[must_use]
 pub fn instance_name(fullname: &str) -> String {
-    fullname
-        .strip_suffix(&format!(".{SERVICE_TYPE}"))
+    ServerKind::ALL
+        .iter()
+        .find_map(|kind| fullname.strip_suffix(&format!(".{}", kind.service_type())))
         .unwrap_or(fullname)
         .replace("\\.", ".")
 }
@@ -132,13 +176,52 @@ fn reachable_addrs(service: &ResolvedService) -> Vec<SocketAddr> {
     candidates.into_iter().map(|(_, addr)| addr).collect()
 }
 
-fn appliance(service: &ResolvedService) -> Option<Appliance> {
+fn local_ips() -> HashSet<IpAddr> {
+    match if_addrs::get_if_addrs() {
+        Ok(interfaces) => interfaces.iter().map(if_addrs::Interface::ip).collect(),
+        Err(err) => {
+            tracing::warn!(
+                %err,
+                "cannot list the local interfaces; every discovered server is treated as remote",
+            );
+            HashSet::new()
+        }
+    }
+}
+
+fn is_local(service: &ResolvedService, local_ips: &HashSet<IpAddr>) -> bool {
+    service
+        .addresses
+        .iter()
+        .any(|ip| local_ips.contains(&ip.to_ip_addr()))
+}
+
+fn loopback(service: &ResolvedService) -> SocketAddr {
+    let advertises_v4 = service.addresses.iter().any(|ip| ip.to_ip_addr().is_ipv4());
+    if advertises_v4 {
+        SocketAddr::from((Ipv4Addr::LOCALHOST, service.port))
+    } else {
+        SocketAddr::from((Ipv6Addr::LOCALHOST, service.port))
+    }
+}
+
+fn appliance(
+    service: &ResolvedService,
+    kind: ServerKind,
+    local_ips: &HashSet<IpAddr>,
+) -> Option<Appliance> {
     let instance = instance_name(&service.fullname);
-    let addresses = reachable_addrs(service);
+    let local = is_local(service, local_ips);
+    let mut addresses = reachable_addrs(service);
+    if local {
+        let loopback = loopback(service);
+        addresses.retain(|addr| *addr != loopback);
+        addresses.insert(0, loopback);
+    }
     let Some(addr) = addresses.first().copied() else {
         tracing::warn!(
             instance,
-            "an AUTD3 appliance answered but advertises no usable address",
+            "an AUTD3 server answered but advertises no usable address",
         );
         return None;
     };
@@ -156,51 +239,112 @@ fn appliance(service: &ResolvedService) -> Option<Appliance> {
         control_port: text(TXT_CONTROL_PORT).and_then(|port| port.parse().ok()),
         wire: text(TXT_WIRE_VERSION).and_then(|version| version.parse().ok()),
         sdk: text(TXT_SDK_VERSION),
+        kind,
+        local,
     })
 }
 
+fn priority(server: &Appliance) -> u8 {
+    match (server.kind, server.local) {
+        (ServerKind::Simulator, true) => 0,
+        (ServerKind::Appliance, _) => 1,
+        (ServerKind::Simulator, false) => 2,
+    }
+}
+
+fn by_priority(mut found: Vec<Appliance>) -> Vec<Appliance> {
+    found.sort_by(|a, b| {
+        priority(a)
+            .cmp(&priority(b))
+            .then_with(|| a.instance.cmp(&b.instance))
+    });
+    found
+}
+
+fn select(found: Vec<Appliance>, timeout: Duration) -> Result<Appliance, DiscoveryError> {
+    let Some(best) = found.iter().map(priority).min() else {
+        return Err(DiscoveryError::NotFound { timeout });
+    };
+    let mut candidates: Vec<_> = by_priority(found)
+        .into_iter()
+        .filter(|server| priority(server) == best)
+        .collect();
+    if candidates.len() == 1 {
+        Ok(candidates.remove(0))
+    } else {
+        Err(DiscoveryError::Ambiguous { found: candidates })
+    }
+}
+
+fn apply(
+    event: ServiceEvent,
+    kind: ServerKind,
+    local_ips: &HashSet<IpAddr>,
+    found: &mut BTreeMap<String, Appliance>,
+) {
+    match event {
+        ServiceEvent::ServiceResolved(service) => {
+            if let Some(server) = appliance(&service, kind, local_ips) {
+                found.insert(service.fullname.clone(), server);
+            }
+        }
+        ServiceEvent::ServiceRemoved(_, fullname) => {
+            found.remove(&fullname);
+        }
+        _ => {}
+    }
+}
+
 pub fn discover_all(option: &DiscoveryOption) -> Result<Vec<Appliance>, DiscoveryError> {
+    let kinds = option
+        .kind
+        .map_or_else(|| ServerKind::ALL.to_vec(), |kind| vec![kind]);
     let daemon = ServiceDaemon::new().map_err(|err| mdns(&err))?;
-    let receiver = daemon.browse(SERVICE_TYPE).map_err(|err| mdns(&err))?;
+    let receivers: Vec<(ServerKind, Receiver<ServiceEvent>)> = kinds
+        .into_iter()
+        .map(|kind| daemon.browse(kind.service_type()).map(|rx| (kind, rx)))
+        .collect::<Result<_, _>>()
+        .map_err(|err| mdns(&err))?;
+    let local_ips = local_ips();
 
     let deadline = Instant::now() + option.timeout;
     let mut found: BTreeMap<String, Appliance> = BTreeMap::new();
     while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
-        match receiver.recv_timeout(remaining) {
-            Ok(ServiceEvent::ServiceResolved(service)) => {
-                if let Some(appliance) = appliance(&service) {
-                    found.insert(appliance.instance.clone(), appliance);
+        let mut disconnected = 0;
+        for (kind, receiver) in &receivers {
+            loop {
+                match receiver.try_recv() {
+                    Ok(event) => apply(event, *kind, &local_ips, &mut found),
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        disconnected += 1;
+                        break;
+                    }
                 }
             }
-            Ok(ServiceEvent::ServiceRemoved(_, fullname)) => {
-                found.remove(&instance_name(&fullname));
-            }
-            Ok(_) => {}
-            Err(_) => break,
         }
+        if disconnected == receivers.len() {
+            break;
+        }
+        std::thread::sleep(remaining.min(POLL_INTERVAL));
     }
     let _ = daemon.shutdown();
 
-    Ok(found
-        .into_values()
-        .filter(|found| {
-            option
-                .instance
-                .as_ref()
-                .is_none_or(|wanted| *wanted == found.instance)
-        })
-        .collect())
+    Ok(by_priority(
+        found
+            .into_values()
+            .filter(|found| {
+                option
+                    .instance
+                    .as_ref()
+                    .is_none_or(|wanted| *wanted == found.instance)
+            })
+            .collect(),
+    ))
 }
 
 pub fn discover(option: &DiscoveryOption) -> Result<Appliance, DiscoveryError> {
-    let mut found = discover_all(option)?;
-    match found.len() {
-        0 => Err(DiscoveryError::NotFound {
-            timeout: option.timeout,
-        }),
-        1 => Ok(found.remove(0)),
-        _ => Err(DiscoveryError::Ambiguous { found }),
-    }
+    select(discover_all(option)?, option.timeout)
 }
 
 fn link_option(appliance: &Appliance) -> RemoteLinkOption {
@@ -218,6 +362,29 @@ impl RemoteLinkOption {
     pub fn discover_with(option: &DiscoveryOption) -> Result<Self, DiscoveryError> {
         Ok(link_option(&discover(option)?))
     }
+
+    pub fn discover_appliance() -> Result<Self, DiscoveryError> {
+        Self::discover_appliance_with(&DiscoveryOption::default())
+    }
+
+    pub fn discover_appliance_with(option: &DiscoveryOption) -> Result<Self, DiscoveryError> {
+        Self::discover_with(&with_kind(option, ServerKind::Appliance))
+    }
+
+    pub fn discover_simulator() -> Result<Self, DiscoveryError> {
+        Self::discover_simulator_with(&DiscoveryOption::default())
+    }
+
+    pub fn discover_simulator_with(option: &DiscoveryOption) -> Result<Self, DiscoveryError> {
+        Self::discover_with(&with_kind(option, ServerKind::Simulator))
+    }
+}
+
+fn with_kind(option: &DiscoveryOption, kind: ServerKind) -> DiscoveryOption {
+    DiscoveryOption {
+        kind: Some(kind),
+        ..option.clone()
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -226,6 +393,7 @@ pub struct Advertisement {
     pub port: u16,
     pub control_port: Option<u16>,
     pub exclude_interfaces: Vec<String>,
+    pub kind: ServerKind,
 }
 
 pub struct AdvertisementHandle {
@@ -250,7 +418,7 @@ fn service_info(advertisement: &Advertisement) -> Result<ServiceInfo, DiscoveryE
     }
 
     Ok(ServiceInfo::new(
-        SERVICE_TYPE,
+        advertisement.kind.service_type(),
         &advertisement.instance,
         &format!("{}.local.", advertisement.instance),
         "",
@@ -287,8 +455,6 @@ impl Drop for AdvertisementHandle {
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
-
     use mdns_sd::{InterfaceId, ScopedIpV4};
 
     use super::*;
@@ -303,6 +469,10 @@ mod tests {
         assert_eq!(
             instance_name(&format!("autd3-0a1b2c3d.{SERVICE_TYPE}")),
             "autd3-0a1b2c3d",
+        );
+        assert_eq!(
+            instance_name(&format!("autd3-sim-lab-pc-8080.{SIM_SERVICE_TYPE}")),
+            "autd3-sim-lab-pc-8080",
         );
         assert_eq!(instance_name("autd3-0a1b2c3d"), "autd3-0a1b2c3d");
     }
@@ -340,7 +510,7 @@ mod tests {
 
     #[test]
     fn a_discovered_endpoint_carries_a_timeout_so_an_unreachable_answer_cannot_hang() {
-        let found = appliance(&resolved("169.254.1.5")).unwrap();
+        let found = remote(&resolved("169.254.1.5")).unwrap();
         assert_eq!(link_option(&found).timeout, Some(DEFAULT_LINK_TIMEOUT));
         assert!(
             RemoteLinkOption::new(found.addr).timeout.is_none(),
@@ -396,6 +566,24 @@ mod tests {
         assert_eq!(info.get_property_val_str(TXT_CONTROL_PORT), None);
     }
 
+    #[test]
+    fn a_simulator_advertises_under_its_own_service_type() {
+        let info = service_info(&Advertisement {
+            instance: "autd3-sim-lab-pc-8080".to_owned(),
+            port: 8080,
+            kind: ServerKind::Simulator,
+            ..Advertisement::default()
+        })
+        .unwrap();
+        assert_eq!(info.get_type(), SIM_SERVICE_TYPE);
+        assert_eq!(
+            info.get_fullname(),
+            format!("autd3-sim-lab-pc-8080.{SIM_SERVICE_TYPE}"),
+            "a client that only browses {SERVICE_TYPE} never sees a simulator",
+        );
+        assert_eq!(info.get_property_val_str(TXT_CONTROL_PORT), None);
+    }
+
     fn resolved(addresses: &str) -> ResolvedService {
         ServiceInfo::new(
             SERVICE_TYPE,
@@ -409,20 +597,30 @@ mod tests {
         .as_resolved_service()
     }
 
+    fn remote(service: &ResolvedService) -> Option<Appliance> {
+        appliance(service, ServerKind::Appliance, &HashSet::new())
+    }
+
+    fn ips(addresses: &[&str]) -> HashSet<IpAddr> {
+        addresses.iter().map(|ip| ip.parse().unwrap()).collect()
+    }
+
     #[test]
     fn an_answer_becomes_an_endpoint_plus_the_versions_behind_it() {
-        let appliance = appliance(&resolved("169.254.1.5")).unwrap();
+        let appliance = remote(&resolved("169.254.1.5")).unwrap();
         assert_eq!(appliance.instance, "autd3-0a1b2c3d");
         assert_eq!(appliance.host, "autd3-0a1b2c3d.local.");
         assert_eq!(appliance.addr, "169.254.1.5:8080".parse().unwrap());
         assert_eq!(appliance.wire, Some(6));
         assert_eq!(appliance.sdk.as_deref(), Some("0.4.0"));
         assert_eq!(appliance.control_port, Some(8081));
+        assert_eq!(appliance.kind, ServerKind::Appliance);
+        assert!(!appliance.local);
     }
 
     #[test]
     fn the_routable_answer_is_the_one_we_connect_to() {
-        let appliance = appliance(&resolved("169.254.1.5,192.168.1.5,127.0.0.1")).unwrap();
+        let appliance = remote(&resolved("169.254.1.5,192.168.1.5,127.0.0.1")).unwrap();
         assert_eq!(appliance.addr, "192.168.1.5:8080".parse().unwrap());
         assert_eq!(
             appliance.addresses,
@@ -437,6 +635,165 @@ mod tests {
 
     #[test]
     fn an_appliance_without_a_usable_address_is_dropped() {
-        assert!(appliance(&resolved("fe80::1")).is_none());
+        assert!(remote(&resolved("fe80::1")).is_none());
+    }
+
+    #[test]
+    fn a_server_answering_with_one_of_our_addresses_is_local_and_reached_over_loopback() {
+        let server = appliance(
+            &resolved("192.168.1.5,169.254.1.5"),
+            ServerKind::Simulator,
+            &ips(&["127.0.0.1", "192.168.1.5"]),
+        )
+        .unwrap();
+        assert!(server.local);
+        assert_eq!(server.addr, "127.0.0.1:8080".parse().unwrap());
+        assert_eq!(
+            server.addresses,
+            [
+                "127.0.0.1:8080".parse().unwrap(),
+                "192.168.1.5:8080".parse().unwrap(),
+                "169.254.1.5:8080".parse().unwrap(),
+            ],
+            "loopback survives a VPN or Wi-Fi switch, and the advertised addresses stay as fallbacks",
+        );
+    }
+
+    #[test]
+    fn a_server_sharing_none_of_our_addresses_is_remote() {
+        let server = appliance(
+            &resolved("192.168.1.5"),
+            ServerKind::Simulator,
+            &ips(&["127.0.0.1", "192.168.1.7", "172.17.0.1"]),
+        )
+        .unwrap();
+        assert!(!server.local);
+        assert_eq!(server.addr, "192.168.1.5:8080".parse().unwrap());
+    }
+
+    #[test]
+    fn a_local_server_advertising_only_ipv6_is_reached_over_ipv6_loopback() {
+        let server = appliance(
+            &resolved("2001:db8::5"),
+            ServerKind::Simulator,
+            &ips(&["::1", "2001:db8::5"]),
+        )
+        .unwrap();
+        assert_eq!(server.addr, "[::1]:8080".parse().unwrap());
+    }
+
+    #[test]
+    fn a_local_server_with_only_a_scopeless_link_local_answer_is_still_reachable() {
+        let server = appliance(
+            &resolved("fe80::1"),
+            ServerKind::Simulator,
+            &ips(&["fe80::1"]),
+        )
+        .unwrap();
+        assert_eq!(server.addr, "[::1]:8080".parse().unwrap());
+    }
+
+    fn server(instance: &str, kind: ServerKind, local: bool) -> Appliance {
+        Appliance {
+            instance: instance.to_owned(),
+            host: format!("{instance}.local."),
+            addr: "192.168.1.5:8080".parse().unwrap(),
+            addresses: Vec::new(),
+            control_port: None,
+            wire: None,
+            sdk: None,
+            kind,
+            local,
+        }
+    }
+
+    fn pick(found: Vec<Appliance>) -> Result<Appliance, DiscoveryError> {
+        select(found, DEFAULT_TIMEOUT)
+    }
+
+    #[test]
+    fn a_local_simulator_wins_over_everything() {
+        let picked = pick(vec![
+            server("autd3-0a1b2c3d", ServerKind::Appliance, false),
+            server("autd3-sim-other-8080", ServerKind::Simulator, false),
+            server("autd3-sim-mine-8080", ServerKind::Simulator, true),
+        ])
+        .unwrap();
+        assert_eq!(picked.instance, "autd3-sim-mine-8080");
+    }
+
+    #[test]
+    fn an_appliance_wins_over_a_simulator_on_another_host() {
+        let picked = pick(vec![
+            server("autd3-sim-other-8080", ServerKind::Simulator, false),
+            server("autd3-0a1b2c3d", ServerKind::Appliance, false),
+        ])
+        .unwrap();
+        assert_eq!(picked.instance, "autd3-0a1b2c3d");
+    }
+
+    #[test]
+    fn a_simulator_on_another_host_is_the_last_resort() {
+        let picked = pick(vec![server(
+            "autd3-sim-other-8080",
+            ServerKind::Simulator,
+            false,
+        )])
+        .unwrap();
+        assert_eq!(picked.instance, "autd3-sim-other-8080");
+    }
+
+    #[test]
+    fn two_servers_at_the_top_priority_are_ambiguous_whatever_sits_below() {
+        let Err(DiscoveryError::Ambiguous { found }) = pick(vec![
+            server("autd3-0a1b2c3d", ServerKind::Appliance, false),
+            server("autd3-sim-mine-8081", ServerKind::Simulator, true),
+            server("autd3-sim-mine-8080", ServerKind::Simulator, true),
+        ]) else {
+            panic!("two local simulators must not be resolved by picking one");
+        };
+        let names: Vec<_> = found.iter().map(|s| s.instance.as_str()).collect();
+        assert_eq!(names, ["autd3-sim-mine-8080", "autd3-sim-mine-8081"]);
+    }
+
+    #[test]
+    fn a_kind_specific_entry_point_overrides_the_kind_and_keeps_the_rest() {
+        let option = DiscoveryOption {
+            timeout: Duration::from_millis(500),
+            instance: Some("autd3-sim-lab-pc-8080".to_owned()),
+            kind: Some(ServerKind::Appliance),
+        };
+        let simulator = with_kind(&option, ServerKind::Simulator);
+        assert_eq!(simulator.kind, Some(ServerKind::Simulator));
+        assert_eq!(simulator.timeout, option.timeout);
+        assert_eq!(simulator.instance, option.instance);
+    }
+
+    #[test]
+    fn nothing_found_is_not_found() {
+        assert!(matches!(
+            pick(Vec::new()),
+            Err(DiscoveryError::NotFound { .. })
+        ));
+    }
+
+    #[test]
+    fn the_full_listing_is_in_priority_order() {
+        let listed = by_priority(vec![
+            server("autd3-sim-other-8080", ServerKind::Simulator, false),
+            server("autd3-b", ServerKind::Appliance, false),
+            server("autd3-a", ServerKind::Appliance, false),
+            server("autd3-sim-mine-8080", ServerKind::Simulator, true),
+        ]);
+        let names: Vec<_> = listed.iter().map(|s| s.instance.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "autd3-sim-mine-8080",
+                "autd3-a",
+                "autd3-b",
+                "autd3-sim-other-8080"
+            ],
+        );
     }
 }

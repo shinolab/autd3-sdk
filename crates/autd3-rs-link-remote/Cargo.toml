@@ -16,10 +16,11 @@ all-features = true
 
 [features]
 default = ["discovery"]
-discovery = ["dep:mdns-sd"]
+discovery = ["dep:mdns-sd", "dep:if-addrs"]
 
 [dependencies]
 autd3-rs-core.workspace = true
+if-addrs = { workspace = true, optional = true }
 mdns-sd = { workspace = true, optional = true }
 socket2.workspace = true
 thiserror.workspace = true

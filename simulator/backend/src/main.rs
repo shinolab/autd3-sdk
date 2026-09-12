@@ -3,6 +3,7 @@ mod emulator;
 #[cfg(test)]
 mod harness;
 mod link;
+mod mdns;
 mod server;
 
 use std::net::{Ipv4Addr, SocketAddr};
@@ -32,6 +33,8 @@ struct Args {
     link_port: u16,
     #[arg(long)]
     web_dir: Option<PathBuf>,
+    #[arg(long)]
+    no_mdns: bool,
 }
 
 #[tokio::main]
@@ -50,6 +53,7 @@ async fn main() -> Result<()> {
     let (geometry_tx, geometry_rx) = watch::channel(empty_geometry);
 
     let link_addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, args.link_port));
+    let advertise = !args.no_mdns;
     {
         let states = Arc::clone(&states);
         let device_states = Arc::clone(&device_states);
@@ -78,7 +82,18 @@ async fn main() -> Result<()> {
                 },
                 ..RemoteServerOption::new(link_addr)
             };
-            if let Err(e) = RemoteServer::serve_with_factory(option, factory) {
+            let mut server = match RemoteServer::new(option, factory) {
+                Ok(server) => server,
+                Err(e) => {
+                    tracing::error!("remote link server stopped: {e}");
+                    return;
+                }
+            };
+            let port = server
+                .local_addr()
+                .map_or(link_addr.port(), |addr| addr.port());
+            let _advertisement = advertise.then(|| mdns::advertise(port)).flatten();
+            if let Err(e) = server.serve() {
                 tracing::error!("remote link server stopped: {e}");
             }
         });
