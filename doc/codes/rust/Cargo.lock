@@ -267,6 +267,7 @@ name = "autd3-rs-link-remote"
 version = "0.8.0"
 dependencies = [
  "autd3-rs-core",
+ "if-addrs",
  "mdns-sd",
  "socket2",
  "thiserror 2.0.18",

@@ -15,10 +15,11 @@ path = "src/main.rs"
 [dependencies]
 autd3-rs-core = { workspace = true, features = ["logging"] }
 autd3-rs-firmware-emulator.workspace = true
-autd3-rs-link-remote.workspace = true
+autd3-rs-link-remote = { workspace = true, features = ["discovery"] }
 autd3-rs-simulator-protocol.workspace = true
 axum.workspace = true
 futures-util.workspace = true
+gethostname.workspace = true
 rust-embed.workspace = true
 tower-http.workspace = true
 serde_json.workspace = true

@@ -28,8 +28,8 @@ def link_option() -> remote.RemoteLinkOption:
         return remote.RemoteLinkOption(sys.argv[1])
     try:
         return remote.RemoteLinkOption.discover()
-    except ValueError as e:
-        print(f"discovery found no appliance ({e}); falling back to {LOCAL_ADDR}")
+    except autd3.Autd3Error as e:
+        print(f"discovery picked no server ({e}); falling back to {LOCAL_ADDR}")
         return remote.RemoteLinkOption(LOCAL_ADDR)
 
 

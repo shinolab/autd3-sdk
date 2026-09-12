@@ -3,7 +3,7 @@ mod client;
 
 #[cfg(feature = "discovery")]
 pub use autd3_rs_link_remote::{
-    Appliance, DiscoveryError, DiscoveryOption, SERVICE_TYPE, discover, discover_all,
+    Appliance, DiscoveryError, DiscoveryOption, SERVICE_TYPE, ServerKind, discover, discover_all,
 };
 #[cfg(feature = "client")]
 pub use client::{ApplianceClient, ClientError, host_of};

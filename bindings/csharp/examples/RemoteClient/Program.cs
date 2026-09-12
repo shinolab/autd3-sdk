@@ -29,7 +29,7 @@ internal static class Program
         }
         catch (Autd3Exception e)
         {
-            Console.WriteLine($"discovery found no appliance ({e.Message}); falling back to {LocalAddr}");
+            Console.WriteLine($"discovery picked no server ({e.Message}); falling back to {LocalAddr}");
             return new RemoteLinkOption(LocalAddr);
         }
     }

@@ -9,7 +9,7 @@ use autd3_ffi_abi::{
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_link_remote::{RemoteLinkOption, RemoteStateChecker};
+use autd3_rs_link_remote::{RemoteLinkOption, RemoteStateChecker, ServerKind};
 use std::sync::Mutex;
 
 struct RemoteBackend {
@@ -185,24 +185,26 @@ pub unsafe extern "C" fn autd3_link_remote_open_legacy(
     into_handle(legacy_client_opener(move |_| Ok(option)))
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_remote_discover(
+unsafe fn discover_endpoint(
     timeout_ns: u64,
     instance: *const c_char,
+    kind: Option<ServerKind>,
     link_timeout_ns: *mut u64,
     err: *mut *mut c_char,
 ) -> *mut c_char {
     unsafe { write_out(err, std::ptr::null_mut()) };
     unsafe { write_out(link_timeout_ns, 0) };
     let instance = unsafe { cstr_to_string(instance) };
-    let option = autd3_rs_link_remote::DiscoveryOption {
+    let mut option = autd3_rs_link_remote::DiscoveryOption {
         timeout: if timeout_ns == 0 {
             autd3_rs_link_remote::DiscoveryOption::default().timeout
         } else {
             std::time::Duration::from_nanos(timeout_ns)
         },
         instance,
+        ..Default::default()
     };
+    option.kind = kind;
     match RemoteLinkOption::discover_with(&option) {
         Ok(option) => {
             unsafe {
@@ -219,6 +221,52 @@ pub unsafe extern "C" fn autd3_link_remote_discover(
             unsafe { write_out(err, alloc_cstring(&e.to_string())) };
             std::ptr::null_mut()
         }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_remote_discover(
+    timeout_ns: u64,
+    instance: *const c_char,
+    link_timeout_ns: *mut u64,
+    err: *mut *mut c_char,
+) -> *mut c_char {
+    unsafe { discover_endpoint(timeout_ns, instance, None, link_timeout_ns, err) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_remote_discover_appliance(
+    timeout_ns: u64,
+    instance: *const c_char,
+    link_timeout_ns: *mut u64,
+    err: *mut *mut c_char,
+) -> *mut c_char {
+    unsafe {
+        discover_endpoint(
+            timeout_ns,
+            instance,
+            Some(ServerKind::Appliance),
+            link_timeout_ns,
+            err,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_link_remote_discover_simulator(
+    timeout_ns: u64,
+    instance: *const c_char,
+    link_timeout_ns: *mut u64,
+    err: *mut *mut c_char,
+) -> *mut c_char {
+    unsafe {
+        discover_endpoint(
+            timeout_ns,
+            instance,
+            Some(ServerKind::Simulator),
+            link_timeout_ns,
+            err,
+        )
     }
 }
 

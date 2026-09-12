@@ -8,7 +8,9 @@ use autd3_python_capsule::{
 };
 use autd3_rs::Error;
 use autd3_rs::{Client, Frames};
-use autd3_rs_link_remote::{RemoteLinkOption as CoreOption, RemoteStateChecker};
+use autd3_rs_link_remote::{
+    DiscoveryOption, RemoteLinkOption as CoreOption, RemoteStateChecker, ServerKind,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
@@ -24,6 +26,22 @@ fn opt_duration(obj: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Duration>> {
             )))
         }
     }
+}
+
+fn discover_endpoint(
+    py: Python<'_>,
+    timeout: Option<&Bound<'_, PyAny>>,
+    instance: Option<String>,
+    kind: Option<ServerKind>,
+) -> PyResult<CoreOption> {
+    let default = DiscoveryOption::default();
+    let mut option = DiscoveryOption {
+        timeout: opt_duration(timeout)?.unwrap_or(default.timeout),
+        instance,
+        ..default
+    };
+    option.kind = kind;
+    py.detach(|| CoreOption::discover_with(&option).map_err(to_pyerr_gil))
 }
 
 struct RemoteBackend {
@@ -132,6 +150,15 @@ pub struct RemoteLinkOption {
     timeout: Option<Duration>,
 }
 
+impl RemoteLinkOption {
+    fn from_core(option: CoreOption) -> Self {
+        Self {
+            addr: option.addr,
+            timeout: option.timeout,
+        }
+    }
+}
+
 #[pymethods]
 impl RemoteLinkOption {
     #[new]
@@ -172,19 +199,27 @@ impl RemoteLinkOption {
         timeout: Option<&Bound<'_, PyAny>>,
         instance: Option<String>,
     ) -> PyResult<Self> {
-        let default = autd3_rs_link_remote::DiscoveryOption::default();
-        let option = autd3_rs_link_remote::DiscoveryOption {
-            timeout: opt_duration(timeout)?.unwrap_or(default.timeout),
-            instance,
-        };
-        py.detach(|| {
-            CoreOption::discover_with(&option)
-                .map(|option| Self {
-                    addr: option.addr,
-                    timeout: option.timeout,
-                })
-                .map_err(to_pyerr_gil)
-        })
+        discover_endpoint(py, timeout, instance, None).map(Self::from_core)
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (timeout = None, instance = None))]
+    fn discover_appliance(
+        py: Python<'_>,
+        timeout: Option<&Bound<'_, PyAny>>,
+        instance: Option<String>,
+    ) -> PyResult<Self> {
+        discover_endpoint(py, timeout, instance, Some(ServerKind::Appliance)).map(Self::from_core)
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (timeout = None, instance = None))]
+    fn discover_simulator(
+        py: Python<'_>,
+        timeout: Option<&Bound<'_, PyAny>>,
+        instance: Option<String>,
+    ) -> PyResult<Self> {
+        discover_endpoint(py, timeout, instance, Some(ServerKind::Simulator)).map(Self::from_core)
     }
 
     fn _legacy_capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {

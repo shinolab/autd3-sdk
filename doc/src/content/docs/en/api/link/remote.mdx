@@ -32,19 +32,26 @@ Used to connect to the [Appliance](/autd3-sdk/en/getting-started/appliance/) or 
 
 ### Discovery
 
-The server can be found over mDNS.
+The server (an [Appliance](/autd3-sdk/en/getting-started/appliance/) or the [Simulator](/autd3-sdk/en/guide/simulator/)) can be found over mDNS.
 
 <CodeTabs rust={excerpt(client, "discover")} python={excerpt(pyClient, "discover")} csharp={excerpt(csClient, "discover")} />
 
-Finding no server, and finding more than one, are both errors.
+The servers found are picked in this order.
+
+1. a Simulator running on the local host
+2. an Appliance
+3. a Simulator running on another host
+
+Finding no server, and finding more than one at the highest priority, are both errors.
 The error for the latter lists what was found, so one of them can be picked with `discover_with`.
 
 <CodeTabs rust={excerpt(client, "discover_option")} python={excerpt(pyClient, "discover_option")} csharp={excerpt(csClient, "discover_option")} />
 
-| Field      | Type             | Description                                                        |
-| ---------- | ---------------- | ------------------------------------------------------------------ |
-| `timeout`  | `Duration`       | how long to wait for answers. 2 seconds by default.                |
-| `instance` | `Option<String>` | name of the server to look for. `None` means every server          |
+| Field      | Type                 | Description                                                                  |
+| ---------- | -------------------- | ---------------------------------------------------------------------------- |
+| `timeout`  | `Duration`           | how long to wait for answers. 2 seconds by default.                          |
+| `instance` | `Option<String>`     | name of the server to look for. `None` means every server                    |
+| `kind`     | `Option<ServerKind>` | kind of server to look for (`Appliance` / `Simulator`). `None` means both. Rust only |
 
 Use `discover_all` when only the list is wanted.
 
