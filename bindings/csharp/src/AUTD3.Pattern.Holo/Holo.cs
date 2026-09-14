@@ -102,20 +102,6 @@ namespace AUTD3.Holo
         public float Multiply;
     }
 
-    public readonly struct TransducerMask
-    {
-        internal bool[][]? Mask { get; }
-
-        private TransducerMask(bool[][]? mask)
-        {
-            Mask = mask;
-        }
-
-        public static TransducerMask AllEnabled => new TransducerMask(null);
-
-        public static TransducerMask Masked(bool[][] mask) => new TransducerMask(mask);
-    }
-
     public readonly struct NaiveOption
     {
         public EmissionConstraint Constraint { get; }
@@ -277,6 +263,10 @@ namespace AUTD3.Holo
             if (mask == null)
             {
                 return null;
+            }
+            if (mask.Length != numDevices)
+            {
+                throw new Autd3Exception($"the mask has {mask.Length} device slots but the buffer has {numDevices} devices");
             }
             var flat = new byte[numDevices * Autd3.NumTransducers];
             for (var d = 0; d < numDevices; d++)

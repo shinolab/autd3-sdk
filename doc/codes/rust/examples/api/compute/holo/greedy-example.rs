@@ -1,12 +1,12 @@
 use std::num::NonZeroU8;
 
-use autd3_rs::geometry::{Autd3, Geometry, offset};
+use autd3_rs::geometry::{Autd3, Geometry, TransducerMask, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs_pattern::wavelength;
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, GreedyOption, Pa, TransducerMask,
-    abs_objective_func, greedy,
+    AmplitudeTarget, Directivity, EmissionConstraint, GreedyOption, Pa, abs_objective_func,
+    greedy,
 };
 
 // HIDE

@@ -20,8 +20,8 @@ pub use error::{EncodeError, LinkError};
 #[cfg(feature = "serde")]
 pub use geometry::LayoutError;
 pub use geometry::{
-    Autd3, Device, Geometry, Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3, offset,
-    point,
+    Autd3, Device, Geometry, Point3, Quaternion, TransducerGroups, TransducerMask,
+    TransducerMaskError, UnitQuaternion, UnitVector3, Vector3, offset, point,
 };
 pub use link::{
     ConstStateChecker, CycleOutcome, DcClock, DcObservation, DeviceState, Interface, IntoLink,

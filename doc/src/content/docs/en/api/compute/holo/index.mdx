@@ -62,6 +62,7 @@ It is specified via the `mask` field of each Option (the default is `AllEnabled`
 
 - `TransducerMask::AllEnabled` — uses all transducers (default).
 - `TransducerMask::Masked(&[Vec<bool>])` — specifies enabled/disabled for each transducer individually.
+- `groups.mask(key)` — uses only the transducers assigned the key `key` in `TransducerGroups` (see [group](/autd3-sdk/en/api/compute/pattern/group/)).
 
 ### LinAlgBackend (NalgebraBackend)
 

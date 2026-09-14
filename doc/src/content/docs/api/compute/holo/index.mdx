@@ -60,6 +60,7 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 
 - `TransducerMask::AllEnabled` — 全振動子を使う (デフォルト). 
 - `TransducerMask::Masked(&[Vec<bool>])` — 各振動子ごとに有効/無効を指定する. 
+- `groups.mask(key)` — `TransducerGroups` でキー `key` を割り当てた振動子だけを使う ([group](/autd3-sdk/api/compute/pattern/group/) を参照). 
 
 ### LinAlgBackend (NalgebraBackend)
 

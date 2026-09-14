@@ -2,7 +2,7 @@ use autd3_ffi_abi::{
     PatternBuffer, drop_handle, handle_mut, handle_ref, into_handle, slice_mut, slice_ref,
     write_out,
 };
-use autd3_rs_core::geometry::Autd3;
+use autd3_rs_core::geometry::{Autd3, TransducerGroups};
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 use autd3_rs_core::{Angle, Geometry, Length, Point3, UnitVector3, Vector3, Velocity};
 use autd3_rs_pattern::{BesselOption, FocusOption, PlaneOption, TwinTrapOption, VortexOption};
@@ -721,4 +721,360 @@ pub unsafe extern "C" fn autd3_pattern_null(buffer: *mut PatternBuffer) {
     autd3_rs_pattern::null(&mut buffer.0);
 }
 
+fn matches_geometry(geometry: &Geometry, buffer: &PatternBuffer) -> bool {
+    buffer.0.len() == geometry.num_devices()
+        && geometry
+            .iter()
+            .zip(&buffer.0)
+            .all(|(device, slot)| slot.len() == device.num_transducers())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_group(
+    geometry: *const Geometry,
+    keys: *const i32,
+    sources: *const *const PatternBuffer,
+    num_sources: usize,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+        return -1;
+    };
+    let (Some(keys), Some(source_ptrs)) = (
+        unsafe { slice_ref(keys, geometry.num_transducers()) },
+        unsafe { slice_ref(sources, num_sources) },
+    ) else {
+        return -1;
+    };
+    if source_ptrs
+        .iter()
+        .any(|&ptr| std::ptr::eq(ptr, buffer.cast_const()))
+    {
+        return -1;
+    }
+    let Some(sources) = source_ptrs
+        .iter()
+        .map(|&ptr| unsafe { handle_ref(ptr) })
+        .collect::<Option<Vec<&PatternBuffer>>>()
+    else {
+        return -1;
+    };
+    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
+        return -1;
+    };
+
+    if !matches_geometry(geometry, buffer)
+        || !sources
+            .iter()
+            .all(|source| matches_geometry(geometry, source))
+        || keys
+            .iter()
+            .any(|&key| usize::try_from(key).is_ok_and(|key| key >= num_sources))
+    {
+        return -1;
+    }
+
+    let mut next = 0;
+    let offsets: Vec<usize> = geometry
+        .iter()
+        .map(|device| {
+            let start = next;
+            next += device.num_transducers();
+            start
+        })
+        .collect();
+    let groups = TransducerGroups::new(geometry, |device, tr| {
+        usize::try_from(keys[offsets[device.idx()] + tr]).ok()
+    });
+    autd3_rs_pattern::group(
+        geometry,
+        &groups,
+        |key| sources[key].0.as_slice(),
+        &mut buffer.0,
+    );
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_group_null(
+    geometry: *const Geometry,
+    indices: *const i32,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+        return -1;
+    };
+    let (Some(indices), Some(buffer)) = (
+        unsafe { slice_ref(indices, geometry.num_transducers()) },
+        unsafe { handle_mut(buffer) },
+    ) else {
+        return -1;
+    };
+    if !matches_geometry(geometry, buffer) {
+        return -1;
+    }
+
+    for (out, &index) in buffer.0.iter_mut().flatten().zip(indices) {
+        if index < 0 {
+            *out = autd3_rs_pattern::null_transducer();
+        }
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pattern_group_copy(
+    geometry: *const Geometry,
+    indices: *const i32,
+    index: i32,
+    source: *const PatternBuffer,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+        return -1;
+    };
+    if index < 0 || std::ptr::eq(source, buffer.cast_const()) {
+        return -1;
+    }
+    let (Some(indices), Some(source), Some(buffer)) = (
+        unsafe { slice_ref(indices, geometry.num_transducers()) },
+        unsafe { handle_ref(source) },
+        unsafe { handle_mut(buffer) },
+    ) else {
+        return -1;
+    };
+    if !matches_geometry(geometry, source) || !matches_geometry(geometry, buffer) {
+        return -1;
+    }
+
+    for ((out, &e), &i) in buffer
+        .0
+        .iter_mut()
+        .flatten()
+        .zip(source.0.iter().flatten())
+        .zip(indices)
+    {
+        if i == index {
+            *out = e;
+        }
+    }
+    0
+}
+
 autd3_ffi_abi::export_abi_version!();
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn geometry() -> Geometry {
+        Geometry::new(vec![Autd3::default(), Autd3::default()])
+    }
+
+    fn filled(geometry: &Geometry, phase: u8) -> PatternBuffer {
+        let mut buffer = PatternBuffer(geometry.pattern_buffer());
+        autd3_rs_pattern::uniform(
+            Emission {
+                phase: Phase(phase),
+                intensity: Intensity::MAX,
+            },
+            &mut buffer.0,
+        );
+        buffer
+    }
+
+    fn keys(geometry: &Geometry, key: impl Fn(usize, usize) -> i32) -> Vec<i32> {
+        let key = &key;
+        geometry
+            .iter()
+            .flat_map(|device| (0..device.num_transducers()).map(move |tr| key(device.idx(), tr)))
+            .collect()
+    }
+
+    #[test]
+    fn group_writes_the_source_of_each_key_across_devices() {
+        let geometry = geometry();
+        let left = filled(&geometry, 0x10);
+        let right = filled(&geometry, 0x20);
+        let mut dst = filled(&geometry, 0xFF);
+        let keys = keys(&geometry, |dev, tr| match (dev, tr % 3) {
+            (_, 0) => 0,
+            (1, 1) => 1,
+            _ => -1,
+        });
+        let sources = [&raw const left, &raw const right];
+
+        let result = unsafe {
+            autd3_pattern_group(
+                &raw const geometry,
+                keys.as_ptr(),
+                sources.as_ptr(),
+                sources.len(),
+                &raw mut dst,
+            )
+        };
+
+        assert_eq!(result, 0);
+        for (dev, slot) in dst.0.iter().enumerate() {
+            for (tr, &e) in slot.iter().enumerate() {
+                let expected = match (dev, tr % 3) {
+                    (_, 0) => Emission {
+                        phase: Phase(0x10),
+                        intensity: Intensity::MAX,
+                    },
+                    (1, 1) => Emission {
+                        phase: Phase(0x20),
+                        intensity: Intensity::MAX,
+                    },
+                    _ => Emission::default(),
+                };
+                assert_eq!(e, expected, "dev {dev} tr {tr}");
+            }
+        }
+    }
+
+    #[test]
+    fn group_rejects_invalid_arguments_without_writing() {
+        let geometry = geometry();
+        let left = filled(&geometry, 0x10);
+        let mut dst = filled(&geometry, 0xFF);
+        let zeros = keys(&geometry, |_, _| 0);
+        let out_of_range = keys(&geometry, |_, tr| i32::from(tr == 5));
+        let single_geometry = Geometry::new(vec![Autd3::default()]);
+        let single = filled(&single_geometry, 0x10);
+        let dst_ptr = &raw mut dst;
+
+        let call = |keys: &[i32], sources: &[*const PatternBuffer]| unsafe {
+            autd3_pattern_group(
+                &raw const geometry,
+                keys.as_ptr(),
+                sources.as_ptr(),
+                sources.len(),
+                dst_ptr,
+            )
+        };
+        assert_eq!(call(&zeros, &[dst_ptr.cast_const()]), -1);
+        assert_eq!(call(&out_of_range, &[&raw const left]), -1);
+        assert_eq!(call(&zeros, &[&raw const single]), -1);
+        assert_eq!(call(&zeros, &[std::ptr::null()]), -1);
+        assert_eq!(
+            unsafe {
+                autd3_pattern_group(
+                    std::ptr::null(),
+                    zeros.as_ptr(),
+                    [&raw const left].as_ptr(),
+                    1,
+                    dst_ptr,
+                )
+            },
+            -1
+        );
+
+        assert!(dst.0.iter().flatten().all(|e| e.phase == Phase(0xFF)));
+    }
+
+    #[test]
+    fn group_null_and_copy_write_only_the_selected_transducers() {
+        let geometry = geometry();
+        let source = filled(&geometry, 0x10);
+        let mut dst = filled(&geometry, 0xFF);
+        let indices = keys(&geometry, |dev, tr| match (dev, tr % 3) {
+            (_, 0) => 0,
+            (1, 1) => 1,
+            _ => -1,
+        });
+
+        assert_eq!(
+            unsafe {
+                autd3_pattern_group_null(&raw const geometry, indices.as_ptr(), &raw mut dst)
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                autd3_pattern_group_copy(
+                    &raw const geometry,
+                    indices.as_ptr(),
+                    1,
+                    &raw const source,
+                    &raw mut dst,
+                )
+            },
+            0
+        );
+
+        for (dev, slot) in dst.0.iter().enumerate() {
+            for (tr, &e) in slot.iter().enumerate() {
+                let expected = match (dev, tr % 3) {
+                    (_, 0) => Emission {
+                        phase: Phase(0xFF),
+                        intensity: Intensity::MAX,
+                    },
+                    (1, 1) => Emission {
+                        phase: Phase(0x10),
+                        intensity: Intensity::MAX,
+                    },
+                    _ => Emission::default(),
+                };
+                assert_eq!(e, expected, "dev {dev} tr {tr}");
+            }
+        }
+    }
+
+    #[test]
+    fn group_null_and_copy_reject_invalid_arguments() {
+        let geometry = geometry();
+        let source = filled(&geometry, 0x10);
+        let mut dst = filled(&geometry, 0xFF);
+        let indices = keys(&geometry, |_, _| 0);
+        let single_geometry = Geometry::new(vec![Autd3::default()]);
+        let single = filled(&single_geometry, 0x10);
+        let dst_ptr = &raw mut dst;
+
+        let copy = |index: i32, source: *const PatternBuffer| unsafe {
+            autd3_pattern_group_copy(
+                &raw const geometry,
+                indices.as_ptr(),
+                index,
+                source,
+                dst_ptr,
+            )
+        };
+        assert_eq!(copy(0, dst_ptr.cast_const()), -1);
+        assert_eq!(copy(-1, &raw const source), -1);
+        assert_eq!(copy(0, &raw const single), -1);
+        assert_eq!(copy(0, std::ptr::null()), -1);
+        assert_eq!(
+            unsafe {
+                autd3_pattern_group_copy(
+                    &raw const geometry,
+                    std::ptr::null(),
+                    0,
+                    &raw const source,
+                    dst_ptr,
+                )
+            },
+            -1
+        );
+        assert_eq!(
+            unsafe { autd3_pattern_group_null(std::ptr::null(), indices.as_ptr(), dst_ptr) },
+            -1
+        );
+        assert_eq!(
+            unsafe { autd3_pattern_group_null(&raw const geometry, std::ptr::null(), dst_ptr) },
+            -1
+        );
+        assert_eq!(
+            unsafe {
+                autd3_pattern_group_null(
+                    &raw const geometry,
+                    indices.as_ptr(),
+                    std::ptr::null_mut(),
+                )
+            },
+            -1
+        );
+
+        assert!(dst.0.iter().flatten().all(|e| e.phase == Phase(0xFF)));
+    }
+}

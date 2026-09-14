@@ -258,6 +258,14 @@ name = "api_compute_pattern_focus"
 path = "examples/api/compute/pattern/focus.rs"
 
 [[example]]
+name = "api_compute_pattern_group_example"
+path = "examples/api/compute/pattern/group-example.rs"
+
+[[example]]
+name = "api_compute_pattern_group"
+path = "examples/api/compute/pattern/group.rs"
+
+[[example]]
 name = "api_compute_pattern_null_example"
 path = "examples/api/compute/pattern/null-example.rs"
 

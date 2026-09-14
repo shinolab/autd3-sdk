@@ -1,12 +1,16 @@
 mod autd3;
 mod device;
+mod groups;
 #[cfg(feature = "serde")]
 mod layout;
+mod mask;
 
 pub use autd3::Autd3;
 pub use device::Device;
+pub use groups::TransducerGroups;
 #[cfg(feature = "serde")]
 pub use layout::LayoutError;
+pub use mask::{TransducerMask, TransducerMaskError};
 pub use nalgebra::{Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3};
 
 use crate::common::Length;

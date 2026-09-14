@@ -1,5 +1,6 @@
 mod bessel;
 mod focus;
+mod group;
 mod null;
 mod plane;
 mod twin_trap;
@@ -9,6 +10,7 @@ mod wavelength;
 
 pub use bessel::{BesselOption, bessel, bessel_device, bessel_transducer};
 pub use focus::{FocusOption, focus, focus_device, focus_transducer};
+pub use group::{group, group_compute, group_compute_with, group_device};
 pub use null::{null, null_device, null_transducer};
 pub use plane::{PlaneOption, plane, plane_device, plane_transducer};
 pub use twin_trap::{TwinTrapOption, twin_trap, twin_trap_device, twin_trap_transducer};

@@ -1,0 +1,62 @@
+---
+title: group
+description: 振動子毎に出力するパターンを選ぶ Pattern
+sidebar:
+  order: 9
+srcPath: crates/autd3-rs-pattern/src/group.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/group.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/group.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/group-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/group-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/pattern/group.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/pattern/group-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+振動子毎に, どのパターンの emission を出力するかを選ぶ.
+振動子の振り分けは `TransducerGroups` でキー (enum など) を割り当てて決める. どのキーも割り当てられていない振動子は無出力になる.
+
+合成には 2 つの API がある.
+
+- `group_compute` — キー毎にキーと `TransducerMask` を受け取って計算し, 合成する.
+- `group` — 計算済みのバッファをキーから選んで合成する. 計算結果を使い回したい場合やグループ毎に並列に計算したい場合に使う.
+
+:::note
+デバイス単位で切り替えるだけなら, これらではなく `DatagramBuilder` の `push_each` でデバイス毎にコマンドを送ればよい.
+:::
+
+## group_compute
+
+<CodeTabs rust={excerpt(sample, "compute")} python={excerpt(pySample, "compute")} csharp={excerpt(csSample, "compute")} />
+
+| 引数       | 型                                                                   | 説明                                             |
+| ---------- | -------------------------------------------------------------------- | ------------------------------------------------ |
+| `geometry` | `&Geometry`                                                          | ジオメトリ                                       |
+| `groups`   | `&TransducerGroups<K>`                                               | 振動子毎のキー                                   |
+| `compute`  | `FnMut(K, TransducerMask, &mut [Vec<Emission>]) -> Result<(), E>`    | キーとマスクを受け取り, 作業バッファへ計算する   |
+| `dst`      | `&mut [Vec<Emission>]`                                               | 出力バッファ                                     |
+
+`compute` はキー毎に 1 回 (キーの初出順) 呼ばれ, 計算結果のうちそのキーの振動子分だけが `dst` に書き込まれる.
+
+## group
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| 引数       | 型                                          | 説明                                   |
+| ---------- | ------------------------------------------- | -------------------------------------- |
+| `geometry` | `&Geometry`                                 | ジオメトリ                             |
+| `groups`   | `&TransducerGroups<K>`                      | 振動子毎のキー                         |
+| `source`   | `FnMut(K) -> impl AsRef<[Vec<Emission>]>`   | キーから出力元バッファを返す           |
+| `dst`      | `&mut [Vec<Emission>]`                      | 出力バッファ                           |
+
+## TransducerGroups
+
+`TransducerGroups::new(&geometry, |device, tr| ...)` がデバイスと振動子インデックスからキー (`None` = どのグループにも属さない) を返し, 振動子毎のキーを保持する.
+キーは Rust では `Copy + Eq` な型, C# では値型 (`struct`), Python ではハッシュ可能な値.
+`mask(key)` でキー `key` の振動子だけを有効にした [Holo](/autd3-sdk/api/compute/holo/) 用の `TransducerMask`を取得できる. 
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

@@ -109,6 +109,100 @@ namespace AUTD3
             new PatternOptionNative { Intensity = Intensity.Value, PhaseOffset = PhaseOffset.Value };
     }
 
+    public readonly struct TransducerMask
+    {
+        internal bool[][]? Mask { get; }
+
+        private TransducerMask(bool[][]? mask)
+        {
+            Mask = mask;
+        }
+
+        public static TransducerMask AllEnabled => new TransducerMask(null);
+
+        public static TransducerMask Masked(bool[][] mask) => new TransducerMask(mask);
+    }
+
+    public sealed class TransducerGroups<TKey> where TKey : struct
+    {
+        private readonly int[] _numTransducers;
+        private readonly List<TKey> _keys = new List<TKey>();
+        private readonly Dictionary<TKey, int> _lookup = new Dictionary<TKey, int>();
+
+        internal int[] Indices { get; }
+
+        public IReadOnlyList<TKey> Keys => _keys;
+
+        public int NumDevices => _numTransducers.Length;
+
+        public TransducerGroups(Geometry geometry, Func<Device, int, TKey?> key)
+        {
+            _numTransducers = new int[geometry.NumDevices];
+            Indices = new int[geometry.NumTransducers];
+            var k = 0;
+            var dev = 0;
+            foreach (var device in geometry)
+            {
+                var numTransducers = device.NumTransducers;
+                _numTransducers[dev++] = numTransducers;
+                for (var tr = 0; tr < numTransducers; tr++)
+                {
+                    var value = key(device, tr);
+                    if (value == null)
+                    {
+                        Indices[k++] = -1;
+                        continue;
+                    }
+                    if (!_lookup.TryGetValue(value.Value, out var index))
+                    {
+                        index = _keys.Count;
+                        _lookup.Add(value.Value, index);
+                        _keys.Add(value.Value);
+                    }
+                    Indices[k++] = index;
+                }
+            }
+        }
+
+        public TKey? Key(int device, int transducer)
+        {
+            if (device < 0 || device >= _numTransducers.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(device));
+            }
+            if (transducer < 0 || transducer >= _numTransducers[device])
+            {
+                throw new ArgumentOutOfRangeException(nameof(transducer));
+            }
+            var offset = 0;
+            for (var dev = 0; dev < device; dev++)
+            {
+                offset += _numTransducers[dev];
+            }
+            var index = Indices[offset + transducer];
+            return index < 0 ? (TKey?)null : _keys[index];
+        }
+
+        public TransducerMask Mask(TKey key)
+        {
+            if (!_lookup.TryGetValue(key, out var index))
+            {
+                throw new ArgumentException($"no transducer is assigned the key {key}", nameof(key));
+            }
+            var mask = new bool[_numTransducers.Length][];
+            var k = 0;
+            for (var dev = 0; dev < mask.Length; dev++)
+            {
+                mask[dev] = new bool[_numTransducers[dev]];
+                for (var tr = 0; tr < mask[dev].Length; tr++)
+                {
+                    mask[dev][tr] = Indices[k++] == index;
+                }
+            }
+            return TransducerMask.Masked(mask);
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct EmissionNative
     {
@@ -208,6 +302,15 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_pattern_null(PatternBufferHandle buffer);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_group(GeometryHandle geometry, int[] keys, IntPtr[] sources, UIntPtr numSources, PatternBufferHandle buffer);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_group_null(GeometryHandle geometry, int[] indices, PatternBufferHandle buffer);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_group_copy(GeometryHandle geometry, int[] indices, int index, PatternBufferHandle source, PatternBufferHandle buffer);
 
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
@@ -590,6 +693,61 @@ namespace AUTD3
         }
 
         public static void NullTransducer(ref Emission dst) => dst = Emission.Null;
+
+        public static void Group<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Func<TKey, PatternBuffer> source, PatternBuffer dst) where TKey : struct
+        {
+            if (groups.Indices.Length != geometry.NumTransducers)
+            {
+                throw new Autd3Exception("groups must be built from the same geometry");
+            }
+            var keys = groups.Keys;
+            var handles = new SafeHandle[keys.Count];
+            for (var i = 0; i < keys.Count; i++)
+            {
+                var buffer = source(keys[i]);
+                if (buffer == null)
+                {
+                    throw new Autd3Exception($"no source was given for the key {keys[i]}");
+                }
+                if (ReferenceEquals(buffer, dst))
+                {
+                    throw new Autd3Exception("dst must not be one of the sources");
+                }
+                handles[i] = buffer.Handle;
+            }
+            using var lease = new HandleArray(handles);
+            if (NativePattern.autd3_pattern_group(geometry.Handle, groups.Indices, lease.Pointers, (UIntPtr)keys.Count, dst.Handle) != 0)
+            {
+                throw new Autd3Exception("group failed (every buffer must match the geometry)");
+            }
+        }
+
+        public static void GroupCompute<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Action<TKey, TransducerMask, PatternBuffer> compute, PatternBuffer dst) where TKey : struct
+        {
+            if (compute == null)
+            {
+                throw new ArgumentNullException(nameof(compute));
+            }
+            if (groups.Indices.Length != geometry.NumTransducers)
+            {
+                throw new Autd3Exception("groups must be built from the same geometry");
+            }
+            if (NativePattern.autd3_pattern_group_null(geometry.Handle, groups.Indices, dst.Handle) != 0)
+            {
+                throw new Autd3Exception("group_compute failed (dst must match the geometry)");
+            }
+            using var scratch = geometry.PatternBuffer();
+            var keys = groups.Keys;
+            for (var i = 0; i < keys.Count; i++)
+            {
+                Null(scratch);
+                compute(keys[i], groups.Mask(keys[i]), scratch);
+                if (NativePattern.autd3_pattern_group_copy(geometry.Handle, groups.Indices, i, scratch.Handle, dst.Handle) != 0)
+                {
+                    throw new Autd3Exception("group_compute failed (dst must match the geometry)");
+                }
+            }
+        }
 
         private static EmissionNative[] ToNativeDst(Emission[] dst)
         {

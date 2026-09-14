@@ -3,12 +3,13 @@ use core::f32::consts::PI;
 use nalgebra::Complex;
 
 use autd3_rs_core::common::units::{m, s};
-use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, UnitVector3, Vector3};
+use autd3_rs_core::geometry::{
+    Autd3, Geometry, Point3, TransducerMask, UnitQuaternion, UnitVector3, Vector3,
+};
 use autd3_rs_core::value::{Emission, Intensity};
 use autd3_rs_pattern_holo::{
     AmplitudeTarget, Directivity, EmissionConstraint, GsOption, GspatOption, LinAlgBackend,
-    NaiveOption, NalgebraBackend, Pa, TransducerMask, gs, gs_batch, gspat, gspat_batch, naive,
-    naive_batch,
+    NaiveOption, NalgebraBackend, Pa, gs, gs_batch, gspat, gspat_batch, naive, naive_batch,
 };
 use autd3_rs_pattern_holo_wgpu::WgpuBackend;
 

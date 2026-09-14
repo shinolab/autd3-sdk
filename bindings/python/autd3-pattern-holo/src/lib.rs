@@ -2,14 +2,13 @@ use core::num::{NonZeroU8, NonZeroUsize};
 
 use autd3_python_capsule::{capsule_of, geometry_from_capsule, pattern_from_capsule_mut};
 use autd3_rs_core::Length;
-use autd3_rs_core::geometry::Autd3;
-use autd3_rs_core::geometry::Point3;
+use autd3_rs_core::geometry::{Point3, TransducerMask};
 use autd3_rs_core::value::Intensity;
 use autd3_rs_pattern_holo::{
     Amplitude as CoreAmplitude, AmplitudeTarget as CoreAmplitudeTarget,
     Directivity as CoreDirectivity, EmissionConstraint as CoreEmissionConstraint,
     GreedyOption as CoreGreedyOption, GsOption as CoreGsOption, GspatOption as CoreGspatOption,
-    NaiveOption as CoreNaiveOption, Pa, TransducerMask, dB, kPa,
+    NaiveOption as CoreNaiveOption, Pa, dB, kPa,
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyValueError};
@@ -178,35 +177,16 @@ impl Directivity {
     }
 }
 
-#[pyclass(name = "TransducerMask", module = "autd3_pattern_holo", from_py_object)]
-#[derive(Clone)]
-pub struct PyTransducerMask {
-    pub(crate) mask: Option<Vec<Vec<bool>>>,
-}
-
-#[pymethods]
-impl PyTransducerMask {
-    #[classattr]
-    #[pyo3(name = "AllEnabled")]
-    fn all_enabled() -> Self {
-        Self { mask: None }
+fn extract_mask(mask: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Vec<Vec<bool>>>> {
+    let Some(mask) = mask.filter(|mask| !mask.is_none()) else {
+        return Ok(None);
+    };
+    if !mask.hasattr("_mask")? {
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "mask must be an autd3_pattern.TransducerMask",
+        ));
     }
-
-    #[staticmethod]
-    fn masked(mask: Vec<Vec<bool>>) -> PyResult<Self> {
-        let mut out = Vec::with_capacity(mask.len());
-        for device in mask {
-            if device.len() != Autd3::NUM_TRANSDUCERS {
-                return Err(PyValueError::new_err(format!(
-                    "each device mask needs {} entries, got {}",
-                    Autd3::NUM_TRANSDUCERS,
-                    device.len()
-                )));
-            }
-            out.push(device);
-        }
-        Ok(Self { mask: Some(out) })
-    }
+    mask.call_method0("_mask")?.extract()
 }
 
 #[pyclass(
@@ -225,24 +205,24 @@ impl NaiveOption {
     #[pyo3(signature = (
         constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
-        mask = PyTransducerMask::all_enabled(),
+        mask = None,
         parallel = true,
     ))]
     fn new(
         constraint: EmissionConstraint,
         directivity: Directivity,
-        mask: PyTransducerMask,
+        mask: Option<&Bound<'_, PyAny>>,
         parallel: bool,
-    ) -> Self {
-        Self {
+    ) -> PyResult<Self> {
+        Ok(Self {
             inner: CoreNaiveOption {
                 constraint: constraint.0,
                 directivity: directivity.0,
                 parallel,
                 ..CoreNaiveOption::default()
             },
-            mask: mask.mask,
-        }
+            mask: extract_mask(mask)?,
+        })
     }
 }
 
@@ -259,14 +239,14 @@ impl GsOption {
         repeat = 100,
         constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
-        mask = PyTransducerMask::all_enabled(),
+        mask = None,
         parallel = true,
     ))]
     fn new(
         repeat: usize,
         constraint: EmissionConstraint,
         directivity: Directivity,
-        mask: PyTransducerMask,
+        mask: Option<&Bound<'_, PyAny>>,
         parallel: bool,
     ) -> PyResult<Self> {
         Ok(Self {
@@ -278,7 +258,7 @@ impl GsOption {
                 parallel,
                 ..CoreGsOption::default()
             },
-            mask: mask.mask,
+            mask: extract_mask(mask)?,
         })
     }
 }
@@ -300,14 +280,14 @@ impl GspatOption {
         repeat = 100,
         constraint = EmissionConstraint(CoreEmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
-        mask = PyTransducerMask::all_enabled(),
+        mask = None,
         parallel = true,
     ))]
     fn new(
         repeat: usize,
         constraint: EmissionConstraint,
         directivity: Directivity,
-        mask: PyTransducerMask,
+        mask: Option<&Bound<'_, PyAny>>,
         parallel: bool,
     ) -> PyResult<Self> {
         Ok(Self {
@@ -319,7 +299,7 @@ impl GspatOption {
                 parallel,
                 ..CoreGspatOption::default()
             },
-            mask: mask.mask,
+            mask: extract_mask(mask)?,
         })
     }
 }
@@ -341,13 +321,13 @@ impl GreedyOption {
         phase_quantization_levels = 16,
         constraint = EmissionConstraint(CoreEmissionConstraint::Uniform(Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
-        mask = PyTransducerMask::all_enabled(),
+        mask = None,
     ))]
     fn new(
         phase_quantization_levels: u8,
         constraint: EmissionConstraint,
         directivity: Directivity,
-        mask: PyTransducerMask,
+        mask: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         Ok(Self {
             inner: CoreGreedyOption {
@@ -358,7 +338,7 @@ impl GreedyOption {
                 directivity: directivity.0,
                 ..CoreGreedyOption::default()
             },
-            mask: mask.mask,
+            mask: extract_mask(mask)?,
         })
     }
 }
@@ -504,7 +484,6 @@ fn autd3_pattern_holo(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AmplitudeTarget>()?;
     m.add_class::<EmissionConstraint>()?;
     m.add_class::<Directivity>()?;
-    m.add_class::<PyTransducerMask>()?;
     m.add_class::<NaiveOption>()?;
     m.add_class::<GsOption>()?;
     m.add_class::<GspatOption>()?;
