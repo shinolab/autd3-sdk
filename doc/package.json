@@ -21,7 +21,7 @@
     "mermaid": "^11.17.0",
     "sharp": "^0.35.0",
     "starlight-versions": "^0.10.1",
-    "three": "^0.185.1",
+    "three": "^0.186.0",
     "typescript": "^6.0.3"
   },
   "allowScripts": {
