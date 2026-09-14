@@ -1,3 +1,4 @@
+use autd3_rs_core::geometry::TransducerMaskError;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
@@ -21,4 +22,26 @@ pub enum HoloError {
     },
     #[error("dst has {got} device slots but the geometry has {expected} devices")]
     DstDeviceCountMismatch { got: usize, expected: usize },
+    #[error(transparent)]
+    Mask(TransducerMaskError),
+}
+
+impl From<TransducerMaskError> for HoloError {
+    fn from(e: TransducerMaskError) -> Self {
+        match e {
+            TransducerMaskError::DeviceCountMismatch { got, expected } => {
+                Self::MaskDeviceCountMismatch { got, expected }
+            }
+            TransducerMaskError::TransducerCountMismatch {
+                device,
+                got,
+                expected,
+            } => Self::MaskTransducerCountMismatch {
+                device,
+                got,
+                expected,
+            },
+            e => Self::Mask(e),
+        }
+    }
 }

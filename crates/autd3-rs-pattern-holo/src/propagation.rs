@@ -188,11 +188,11 @@ fn scatter(e: &[Emission], mask: TransducerMask<'_>, dst: &mut [Vec<Emission>]) 
                 at += n;
             }
         }
-        TransducerMask::Masked(m) => {
+        mask => {
             let mut idx = 0;
             for (d, slot) in dst.iter_mut().enumerate() {
                 for (t, out) in slot.iter_mut().enumerate() {
-                    *out = if m[d][t] {
+                    *out = if mask.is_enabled(d, t) {
                         idx += 1;
                         e[idx - 1]
                     } else {

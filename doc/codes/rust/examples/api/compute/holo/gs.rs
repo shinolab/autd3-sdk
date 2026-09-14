@@ -2,12 +2,11 @@ use std::num::NonZeroUsize;
 
 use anyhow::Result;
 
-use autd3_rs::geometry::{Autd3, Geometry, offset};
+use autd3_rs::geometry::{Autd3, Geometry, TransducerMask, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Emission, Intensity};
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, GsOption, NalgebraBackend, Pa,
-    TransducerMask, gs,
+    AmplitudeTarget, Directivity, EmissionConstraint, GsOption, NalgebraBackend, Pa, gs,
 };
 
 fn main() -> Result<()> {

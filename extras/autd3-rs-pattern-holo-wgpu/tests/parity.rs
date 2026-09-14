@@ -1,9 +1,9 @@
 use autd3_rs_core::common::units::{m, s};
-use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
+use autd3_rs_core::geometry::{Autd3, Geometry, Point3, TransducerMask, UnitQuaternion, Vector3};
 use autd3_rs_core::value::{Emission, Intensity};
 use autd3_rs_pattern_holo::{
     AmplitudeTarget, Directivity, EmissionConstraint, GsOption, GspatOption, NaiveOption,
-    NalgebraBackend, Pa, TransducerMask, gs, gspat, naive,
+    NalgebraBackend, Pa, gs, gspat, naive,
 };
 use autd3_rs_pattern_holo_wgpu::WgpuBackend;
 

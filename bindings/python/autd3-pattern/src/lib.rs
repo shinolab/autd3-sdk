@@ -3,6 +3,7 @@ use autd3_python_capsule::{
 };
 use autd3_rs_core::common::Angle;
 use autd3_rs_core::geometry::Autd3;
+use autd3_rs_core::geometry::TransducerGroups as CoreTransducerGroups;
 use autd3_rs_core::geometry::{UnitVector3, Vector3};
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 use autd3_rs_core::{Length, Point3, Velocity};
@@ -11,9 +12,9 @@ use autd3_rs_pattern::{
     PlaneOption as CorePlaneOption, TwinTrapOption as CoreTwinTrapOption,
     VortexOption as CoreVortexOption,
 };
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyCapsule;
+use pyo3::types::{PyCapsule, PyDict};
 
 fn emission_to_py(py: Python<'_>, emission: Emission) -> PyResult<Py<PyAny>> {
     let core = py.import("autd3_core")?;
@@ -424,6 +425,251 @@ fn null(mut dst: PyRefMut<'_, PatternBuffer>) {
     autd3_rs_pattern::null(&mut dst.inner);
 }
 
+fn matches_geometry(geometry: &autd3_rs_core::Geometry, buffer: &[DevicePattern]) -> bool {
+    buffer.len() == geometry.num_devices()
+        && geometry
+            .iter()
+            .zip(buffer)
+            .all(|(device, slot)| slot.len() == device.num_transducers())
+}
+
+#[pyclass(name = "TransducerMask", module = "autd3_pattern", from_py_object)]
+#[derive(Clone)]
+pub struct TransducerMask {
+    mask: Option<Vec<Vec<bool>>>,
+}
+
+#[pymethods]
+impl TransducerMask {
+    #[classattr]
+    #[pyo3(name = "AllEnabled")]
+    fn all_enabled() -> Self {
+        Self { mask: None }
+    }
+
+    #[staticmethod]
+    fn masked(mask: Vec<Vec<bool>>) -> PyResult<Self> {
+        if let Some(device) = mask
+            .iter()
+            .find(|device| device.len() != Autd3::NUM_TRANSDUCERS)
+        {
+            return Err(PyValueError::new_err(format!(
+                "each device mask needs {} entries, got {}",
+                Autd3::NUM_TRANSDUCERS,
+                device.len()
+            )));
+        }
+        Ok(Self { mask: Some(mask) })
+    }
+
+    fn _mask(&self) -> Option<Vec<Vec<bool>>> {
+        self.mask.clone()
+    }
+}
+
+#[pyclass(name = "TransducerGroups", module = "autd3_pattern")]
+pub struct TransducerGroups {
+    inner: CoreTransducerGroups<usize>,
+    keys: Vec<Py<PyAny>>,
+    lookup: Py<PyDict>,
+}
+
+#[pymethods]
+impl TransducerGroups {
+    #[new]
+    fn new(geometry: &Bound<'_, PyAny>, key: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let py = geometry.py();
+        let capsule = capsule_of(geometry)?;
+        let core_geometry = geometry_from_capsule(&capsule)?;
+        let devices = (0..core_geometry.num_devices())
+            .map(|dev| geometry.get_item(dev))
+            .collect::<PyResult<Vec<_>>>()?;
+        let lookup = PyDict::new(py);
+        let mut keys = Vec::new();
+        let mut error = None;
+        let inner = CoreTransducerGroups::new(core_geometry, |device, tr| {
+            if error.is_some() {
+                return None;
+            }
+            key.call1((&devices[device.idx()], tr))
+                .and_then(|k| {
+                    if k.is_none() {
+                        return Ok(None);
+                    }
+                    if let Some(index) = lookup.get_item(&k)? {
+                        return index.extract::<usize>().map(Some);
+                    }
+                    let index = keys.len();
+                    lookup.set_item(&k, index)?;
+                    keys.push(k.unbind());
+                    Ok(Some(index))
+                })
+                .unwrap_or_else(|e| {
+                    error = Some(e);
+                    None
+                })
+        });
+        if let Some(e) = error {
+            return Err(e);
+        }
+        Ok(Self {
+            inner,
+            keys,
+            lookup: lookup.unbind(),
+        })
+    }
+
+    fn keys(&self, py: Python<'_>) -> Vec<Py<PyAny>> {
+        self.keys.iter().map(|key| key.clone_ref(py)).collect()
+    }
+
+    fn key(&self, py: Python<'_>, device: usize, transducer: usize) -> PyResult<Option<Py<PyAny>>> {
+        if device >= self.inner.num_devices() || transducer >= self.inner.num_transducers(device) {
+            return Err(PyIndexError::new_err("transducer index out of range"));
+        }
+        Ok(self
+            .inner
+            .index(device, transducer)
+            .map(|index| self.keys[index].clone_ref(py)))
+    }
+
+    fn mask(&self, key: &Bound<'_, PyAny>) -> PyResult<TransducerMask> {
+        let index: usize = self
+            .lookup
+            .bind(key.py())
+            .get_item(key)?
+            .ok_or_else(|| PyKeyError::new_err(key.clone().unbind()))?
+            .extract()?;
+        Ok(self.mask_at(index))
+    }
+}
+
+impl TransducerGroups {
+    fn mask_at(&self, index: usize) -> TransducerMask {
+        TransducerMask {
+            mask: Some(
+                (0..self.inner.num_devices())
+                    .map(|dev| {
+                        (0..self.inner.num_transducers(dev))
+                            .map(|tr| self.inner.key(dev, tr) == Some(index))
+                            .collect()
+                    })
+                    .collect(),
+            ),
+        }
+    }
+}
+
+fn groups_match(geometry: &autd3_rs_core::Geometry, groups: &CoreTransducerGroups<usize>) -> bool {
+    groups.num_devices() == geometry.num_devices()
+        && geometry
+            .iter()
+            .enumerate()
+            .all(|(dev, device)| groups.num_transducers(dev) == device.num_transducers())
+}
+
+#[pyfunction]
+#[pyo3(signature = (geometry, groups, sources, dst))]
+fn group(
+    geometry: &Bound<'_, PyAny>,
+    groups: PyRef<'_, TransducerGroups>,
+    sources: &Bound<'_, PyAny>,
+    dst: &Bound<'_, PatternBuffer>,
+) -> PyResult<()> {
+    let py = geometry.py();
+    let capsule = capsule_of(geometry)?;
+    let core_geometry = geometry_from_capsule(&capsule)?;
+    let buffers = groups
+        .keys
+        .iter()
+        .map(|key| {
+            let source = sources
+                .get_item(key.bind(py))?
+                .cast_into::<PatternBuffer>()
+                .map_err(|_| PyTypeError::new_err("every source must be a PatternBuffer"))?;
+            if source.is(dst) {
+                return Err(PyValueError::new_err("dst must not be one of the sources"));
+            }
+            Ok(source)
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    let borrowed = buffers
+        .iter()
+        .map(Bound::try_borrow)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut dst = dst.try_borrow_mut()?;
+    if !groups_match(core_geometry, &groups.inner)
+        || !matches_geometry(core_geometry, &dst.inner)
+        || !borrowed
+            .iter()
+            .all(|source| matches_geometry(core_geometry, &source.inner))
+    {
+        return Err(PyValueError::new_err(
+            "the groups and every pattern buffer must match the geometry",
+        ));
+    }
+
+    autd3_rs_pattern::group(
+        core_geometry,
+        &groups.inner,
+        |index| borrowed[index].inner.as_slice(),
+        &mut dst.inner,
+    );
+    Ok(())
+}
+
+#[pyfunction]
+#[pyo3(signature = (geometry, groups, compute, dst))]
+fn group_compute(
+    geometry: &Bound<'_, PyAny>,
+    groups: PyRef<'_, TransducerGroups>,
+    compute: &Bound<'_, PyAny>,
+    dst: &Bound<'_, PatternBuffer>,
+) -> PyResult<()> {
+    let py = geometry.py();
+    let capsule = capsule_of(geometry)?;
+    let core_geometry = geometry_from_capsule(&capsule)?;
+    if !compute.is_callable() {
+        return Err(PyTypeError::new_err("compute must be callable"));
+    }
+    if !groups_match(core_geometry, &groups.inner)
+        || !matches_geometry(core_geometry, &dst.try_borrow()?.inner)
+    {
+        return Err(PyValueError::new_err(
+            "the groups and dst must match the geometry",
+        ));
+    }
+
+    for (dev, slot) in dst.try_borrow_mut()?.inner.iter_mut().enumerate() {
+        for (tr, out) in slot.iter_mut().enumerate() {
+            if groups.inner.key(dev, tr).is_none() {
+                *out = Emission::default();
+            }
+        }
+    }
+
+    let scratch = Bound::new(
+        py,
+        PatternBuffer {
+            inner: core_geometry.pattern_buffer(),
+        },
+    )?;
+    for (index, key) in groups.keys.iter().enumerate() {
+        autd3_rs_pattern::null(&mut scratch.try_borrow_mut()?.inner);
+        compute.call1((key.bind(py), groups.mask_at(index), &scratch))?;
+        let source = scratch.try_borrow()?;
+        let mut out = dst.try_borrow_mut()?;
+        for (dev, (slot, src)) in out.inner.iter_mut().zip(&source.inner).enumerate() {
+            for (tr, (o, &e)) in slot.iter_mut().zip(src).enumerate() {
+                if groups.inner.key(dev, tr) == Some(index) {
+                    *o = e;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[pyfunction]
 fn _read_pattern_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
     Ok(pattern_from_capsule(capsule)?.len())
@@ -438,6 +684,8 @@ fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BesselOption>()?;
     m.add_class::<TwinTrapOption>()?;
     m.add_class::<VortexOption>()?;
+    m.add_class::<TransducerMask>()?;
+    m.add_class::<TransducerGroups>()?;
     m.add_function(wrap_pyfunction!(wavelength, m)?)?;
     m.add_function(wrap_pyfunction!(focus, m)?)?;
     m.add_function(wrap_pyfunction!(plane, m)?)?;
@@ -446,6 +694,8 @@ fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vortex, m)?)?;
     m.add_function(wrap_pyfunction!(uniform, m)?)?;
     m.add_function(wrap_pyfunction!(null, m)?)?;
+    m.add_function(wrap_pyfunction!(group, m)?)?;
+    m.add_function(wrap_pyfunction!(group_compute, m)?)?;
     m.add_function(wrap_pyfunction!(_read_pattern_capsule, m)?)?;
     Ok(())
 }

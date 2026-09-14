@@ -5,13 +5,12 @@ use autd3_ffi_abi::{
     AUTD3_ERR, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, PatternBuffer, handle_mut, handle_ref,
     slice_ref, write_cstr,
 };
-use autd3_rs_core::geometry::Autd3;
+use autd3_rs_core::geometry::{Autd3, TransducerMask};
 use autd3_rs_core::value::Intensity;
 use autd3_rs_core::{Geometry, Length, Point3};
 use autd3_rs_pattern_holo::{
     AmplitudeTarget, Directivity, EmissionConstraint, GreedyOption, GsOption, GspatOption,
-    NaiveOption, NalgebraBackend, Pa, TransducerMask, abs_objective_func, dB, greedy, gs, gspat,
-    kPa, naive,
+    NaiveOption, NalgebraBackend, Pa, abs_objective_func, dB, greedy, gs, gspat, kPa, naive,
 };
 
 #[repr(C)]

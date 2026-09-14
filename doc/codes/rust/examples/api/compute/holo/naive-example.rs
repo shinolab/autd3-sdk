@@ -1,10 +1,9 @@
-use autd3_rs::geometry::{Autd3, Geometry, offset};
+use autd3_rs::geometry::{Autd3, Geometry, TransducerMask, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs_pattern::wavelength;
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, NaiveOption, NalgebraBackend, Pa,
-    TransducerMask, naive,
+    AmplitudeTarget, Directivity, EmissionConstraint, NaiveOption, NalgebraBackend, Pa, naive,
 };
 
 // HIDE

@@ -21,13 +21,14 @@ pub use error::HoloError;
 pub use linear_synthesis::{
     GsOption, GspatOption, NaiveOption, gs, gs_batch, gspat, gspat_batch, naive, naive_batch,
 };
-pub use mask::TransducerMask;
 
 #[cfg(test)]
 mod tests {
     use autd3_rs_core::common::units::{m, s};
-    use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion};
-    use autd3_rs_core::value::{Emission, Intensity};
+    use autd3_rs_core::geometry::{
+        Autd3, Geometry, Point3, TransducerGroups, TransducerMask, UnitQuaternion,
+    };
+    use autd3_rs_core::value::{Emission, Intensity, Phase};
 
     use super::*;
 
@@ -279,6 +280,90 @@ mod tests {
                     Emission::default(),
                     "disabled transducer {t} must be NULL"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn group_mask_restricts_the_optimization_to_the_group() {
+        let geometry = single_device();
+        let foci = [AmplitudeTarget {
+            point: focus_target(&geometry),
+            amplitude: 5e3 * Pa,
+        }];
+        let groups = TransducerGroups::new(&geometry, |_, tr| Some(tr % 2));
+
+        let mut dst = buffer(&geometry);
+        naive(
+            &NalgebraBackend,
+            &geometry,
+            &foci,
+            wavelength(),
+            &NaiveOption {
+                constraint: EmissionConstraint::Uniform(Intensity::MAX),
+                directivity: Directivity::Sphere,
+                mask: groups.mask(1).unwrap(),
+                ..Default::default()
+            },
+            &mut dst,
+        )
+        .unwrap();
+
+        for (t, e) in dst[0].iter().enumerate() {
+            if t % 2 == 1 {
+                assert_eq!(e.intensity, Intensity::MAX, "group transducer {t}");
+            } else {
+                assert_eq!(*e, Emission::default(), "transducer {t} outside the group");
+            }
+        }
+    }
+
+    #[test]
+    fn group_compute_optimizes_each_group_over_its_own_transducers() {
+        let geometry = single_device();
+        let foci = [AmplitudeTarget {
+            point: focus_target(&geometry),
+            amplitude: 5e3 * Pa,
+        }];
+        let groups = TransducerGroups::new(&geometry, |_, tr| Some(tr % 2 == 0));
+        let other = Emission {
+            phase: Phase(0x40),
+            intensity: Intensity(0x20),
+        };
+
+        let mut dst = buffer(&geometry);
+        autd3_rs_pattern::group_compute(
+            &geometry,
+            &groups,
+            |even, mask, buffer| {
+                if even {
+                    naive(
+                        &NalgebraBackend,
+                        &geometry,
+                        &foci,
+                        wavelength(),
+                        &NaiveOption {
+                            constraint: EmissionConstraint::Uniform(Intensity::MAX),
+                            directivity: Directivity::Sphere,
+                            mask,
+                            ..Default::default()
+                        },
+                        buffer,
+                    )
+                } else {
+                    autd3_rs_pattern::uniform(other, buffer);
+                    Ok(())
+                }
+            },
+            &mut dst,
+        )
+        .unwrap();
+
+        for (t, e) in dst[0].iter().enumerate() {
+            if t % 2 == 0 {
+                assert_eq!(e.intensity, Intensity::MAX, "even transducer {t}");
+            } else {
+                assert_eq!(*e, other, "odd transducer {t}");
             }
         }
     }

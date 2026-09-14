@@ -60,6 +60,116 @@ def test_pattern_focus_plane_bessel_uniform_null() -> None:
     assert len(buf) == geo.num_devices()
 
 
+def test_pattern_group() -> None:
+    geo = autd3.geometry.Geometry(
+        [
+            autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+            autd3.geometry.Autd3([200.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+        ]
+    )
+    left = geo.pattern_buffer()
+    pattern.uniform(autd3.value.Emission(autd3.value.Phase(0x10), autd3.value.Intensity(0x20)), left)
+    right = geo.pattern_buffer()
+    pattern.uniform(autd3.value.Emission(autd3.value.Phase(0x30), autd3.value.Intensity(0x40)), right)
+    dst = geo.pattern_buffer()
+
+    def key(device: autd3.geometry.Device, tr: int) -> str | None:
+        if tr % 3 == 0:
+            return "left"
+        if device.idx() == 1 and tr % 3 == 1:
+            return "right"
+        return None
+
+    groups = pattern.TransducerGroups(geo, key)
+    assert groups.keys() == ["left", "right"]
+    assert groups.key(1, 1) == "right"
+    assert groups.key(0, 1) is None
+
+    pattern.group(geo, groups, {"left": left, "right": right}, dst)
+
+    for dev in range(2):
+        for tr in range(len(dst[dev])):
+            e = dst[dev][tr]
+            if tr % 3 == 0:
+                expected = (0x10, 0x20)
+            elif dev == 1 and tr % 3 == 1:
+                expected = (0x30, 0x40)
+            else:
+                expected = (0x00, 0x00)
+            assert (e.phase.value, e.intensity.value) == expected
+
+    with pytest.raises(ValueError):
+        pattern.group(geo, groups, {"left": left, "right": dst}, dst)
+    with pytest.raises(KeyError):
+        pattern.group(geo, groups, {"left": left}, dst)
+    single = geometry().pattern_buffer()
+    with pytest.raises(ValueError):
+        pattern.group(geo, groups, {"left": left, "right": single}, dst)
+    with pytest.raises(TypeError):
+        pattern.group(geo, groups, {"left": left, "right": 1}, dst)
+    with pytest.raises(TypeError):
+        pattern.TransducerGroups(geo, lambda device, tr: [])
+    with pytest.raises(KeyError):
+        groups.mask("center")
+
+    holo_dst = geo.pattern_buffer()
+    holo.gspat(
+        geo,
+        [holo.AmplitudeTarget(point=geo.center() + np.array([0.0, 0.0, 150.0]), amplitude=5e3 * Pa)],
+        pattern.wavelength(340 * m / s),
+        holo.GspatOption(constraint=holo.EmissionConstraint.Uniform(0xFF), mask=groups.mask("right")),
+        holo_dst,
+    )
+    for dev in range(2):
+        for tr in range(len(holo_dst[dev])):
+            expected = 0xFF if dev == 1 and tr % 3 == 1 else 0x00
+            assert holo_dst[dev][tr].intensity.value == expected
+
+    seen = []
+
+    def compute(side: str, mask: object, buffer: object) -> None:
+        seen.append(side)
+        if side == "left":
+            holo.gspat(
+                geo,
+                [holo.AmplitudeTarget(point=geo.center() + np.array([0.0, 0.0, 150.0]), amplitude=5e3 * Pa)],
+                pattern.wavelength(340 * m / s),
+                holo.GspatOption(constraint=holo.EmissionConstraint.Uniform(0xFF), mask=mask),
+                buffer,
+            )
+        else:
+            pattern.uniform(autd3.value.Emission(autd3.value.Phase(0x30), autd3.value.Intensity(0x40)), buffer)
+
+    computed = geo.pattern_buffer()
+    pattern.uniform(autd3.value.Emission(autd3.value.Phase(0xFF), autd3.value.Intensity(0xFF)), computed)
+    pattern.group_compute(geo, groups, compute, computed)
+    assert seen == ["left", "right"]
+    for dev in range(2):
+        for tr in range(len(computed[dev])):
+            e = computed[dev][tr]
+            if tr % 3 == 0:
+                assert e.intensity.value == 0xFF
+            elif dev == 1 and tr % 3 == 1:
+                assert (e.phase.value, e.intensity.value) == (0x30, 0x40)
+            else:
+                assert (e.phase.value, e.intensity.value) == (0x00, 0x00)
+
+    def fail(side: str, mask: object, buffer: object) -> None:
+        raise RuntimeError(side)
+
+    with pytest.raises(RuntimeError):
+        pattern.group_compute(geo, groups, fail, computed)
+    with pytest.raises(ValueError):
+        pattern.group_compute(geometry(), groups, compute, single)
+    with pytest.raises(TypeError):
+        pattern.group_compute(geo, groups, None, computed)
+
+    pattern.group_compute(geo, groups, lambda side, mask, buffer: None, computed)
+    for dev in range(2):
+        for tr in range(len(computed[dev])):
+            assert computed[dev][tr].intensity.value == 0x00
+
+
 def test_pattern_twin_trap_vortex() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340 * m / s)

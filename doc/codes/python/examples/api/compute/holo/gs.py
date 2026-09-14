@@ -1,6 +1,7 @@
 import numpy as np
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
+from autd3_pattern import TransducerMask
 from autd3_pattern import wavelength as calc_wavelength
 from autd3_pattern_holo import (
     AmplitudeTarget,
@@ -8,7 +9,6 @@ from autd3_pattern_holo import (
     EmissionConstraint,
     GsOption,
     Pa,
-    TransducerMask,
     gs,
 )
 
