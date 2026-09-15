@@ -129,6 +129,6 @@ impl Cpu {
             ADDR_PATTERN_REP0 + bank_offset,
             cfg.rep,
         );
-        self.silencer.note_pattern_div(cfg.bank, cfg.divider);
+        self.silencer.pattern_freq_div[usize::from(cfg.bank)].set(cfg.divider);
     }
 }

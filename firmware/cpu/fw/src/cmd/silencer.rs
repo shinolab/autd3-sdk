@@ -21,10 +21,10 @@ pub(crate) struct SilencerGuard {
     strict_mode: Cell<bool>,
     completion_intensity: Cell<u16>,
     completion_phase: Cell<u16>,
-    mod_freq_div: [Cell<u16>; NUM_BANKS],
-    pattern_freq_div: [Cell<u16>; NUM_BANKS],
-    mod_bank: Cell<u8>,
-    pattern_bank: Cell<u8>,
+    pub(crate) mod_freq_div: [Cell<u16>; NUM_BANKS],
+    pub(crate) pattern_freq_div: [Cell<u16>; NUM_BANKS],
+    pub(crate) mod_bank: Cell<u8>,
+    pub(crate) pattern_bank: Cell<u8>,
 }
 
 impl SilencerGuard {
@@ -63,30 +63,6 @@ impl SilencerGuard {
     pub(crate) fn violates_pattern_div(&self, divider: u16) -> bool {
         self.strict_mode.get()
             && (divider < self.completion_intensity.get() || divider < self.completion_phase.get())
-    }
-
-    pub(crate) fn mod_div(&self, bank: u8) -> u16 {
-        self.mod_freq_div[bank as usize].get()
-    }
-
-    pub(crate) fn pattern_div(&self, bank: u8) -> u16 {
-        self.pattern_freq_div[bank as usize].get()
-    }
-
-    pub(crate) fn note_mod_div(&self, bank: u8, divider: u16) {
-        self.mod_freq_div[bank as usize].set(divider);
-    }
-
-    pub(crate) fn note_pattern_div(&self, bank: u8, divider: u16) {
-        self.pattern_freq_div[bank as usize].set(divider);
-    }
-
-    pub(crate) fn note_mod_bank(&self, bank: u8) {
-        self.mod_bank.set(bank);
-    }
-
-    pub(crate) fn note_pattern_bank(&self, bank: u8) {
-        self.pattern_bank.set(bank);
     }
 }
 

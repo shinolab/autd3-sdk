@@ -41,9 +41,11 @@ pub(crate) fn fpga_snapshot(h: &Harness) -> FpgaSnapshot {
         latch_count: h.port.latch_count,
         pattern_div: banks
             .clone()
-            .map(|b| h.cpu.silencer.pattern_div(b))
+            .map(|b| h.cpu.silencer.pattern_freq_div[usize::from(b)].get())
             .collect(),
-        mod_div: banks.map(|b| h.cpu.silencer.mod_div(b)).collect(),
+        mod_div: banks
+            .map(|b| h.cpu.silencer.mod_freq_div[usize::from(b)].get())
+            .collect(),
     }
 }
 

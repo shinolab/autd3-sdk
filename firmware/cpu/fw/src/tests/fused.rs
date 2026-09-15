@@ -263,7 +263,7 @@ fn fused_pattern_missed_sys_time_leaves_fpga_untouched() {
     assert_fpga_unchanged(&before, &h);
     assert_eq!(h.emission_word(bank, 0), seed[0]);
     assert_eq!(h.ctl(ADDR_PATTERN_FREQ_DIV0 + u16::from(bank)), 10);
-    assert_eq!(h.cpu.silencer.pattern_div(bank), 10);
+    assert_eq!(h.cpu.silencer.pattern_freq_div[usize::from(bank)].get(), 10);
 }
 
 #[test]
@@ -292,7 +292,7 @@ fn fused_modulation_silencer_violation_leaves_fpga_untouched() {
     assert_eq!(h.data(), Error::InvalidSilencerSetting as u8);
     assert_fpga_unchanged(&before, &h);
     assert_eq!(h.ctl(ADDR_MOD_FREQ_DIV0 + u16::from(bank)), 10);
-    assert_eq!(h.cpu.silencer.mod_div(bank), 10);
+    assert_eq!(h.cpu.silencer.mod_freq_div[usize::from(bank)].get(), 10);
 }
 
 #[test]
@@ -319,7 +319,7 @@ fn fused_modulation_judges_strict_guard_by_payload_divider_not_stale_mirror() {
     ));
 
     assert_eq!(h.data(), 0);
-    assert_eq!(h.cpu.silencer.mod_div(bank), 100);
+    assert_eq!(h.cpu.silencer.mod_freq_div[usize::from(bank)].get(), 100);
 }
 
 #[test]
