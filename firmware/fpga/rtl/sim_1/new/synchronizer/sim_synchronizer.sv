@@ -69,6 +69,81 @@ module sim_synchronizer ();
       .SYNC_TIME_DIFF(SYNC_TIME_DIFF_m50)
   );
 
+  logic ECAT_SYNC_REF;
+  logic [56:0] SYS_TIME_REF, SYS_TIME_p50_REF, SYS_TIME_m50_REF;
+  logic signed [57:0] offset, offset_p50, offset_m50;
+  logic signed [57:0] offset_before, offset_p50_before, offset_m50_before;
+
+  localparam int OffsetBound = 1;
+  localparam int AnomalyDriftBound = 4;
+
+  assign offset = SYS_TIME - SYS_TIME_REF;
+  assign offset_p50 = SYS_TIME_p50 - SYS_TIME_p50_REF;
+  assign offset_m50 = SYS_TIME_m50 - SYS_TIME_m50_REF;
+
+  synchronizer synchronizer_ref (
+      .CLK(CLK),
+      .SYNC_SETTINGS(SYNC_SETTINGS),
+      .ECAT_SYNC(ECAT_SYNC_REF),
+      .SYS_TIME(SYS_TIME_REF),
+      .SYNC(),
+      .SKIP_ONE_ASSERT(),
+      .SYNC_TIME_DIFF()
+  );
+
+  synchronizer synchronizer_p50_ref (
+      .CLK(CLK_p50),
+      .SYNC_SETTINGS(SYNC_SETTINGS),
+      .ECAT_SYNC(ECAT_SYNC_REF),
+      .SYS_TIME(SYS_TIME_p50_REF),
+      .SYNC(),
+      .SKIP_ONE_ASSERT(),
+      .SYNC_TIME_DIFF()
+  );
+
+  synchronizer synchronizer_m50_ref (
+      .CLK(CLK_m50),
+      .SYNC_SETTINGS(SYNC_SETTINGS),
+      .ECAT_SYNC(ECAT_SYNC_REF),
+      .SYS_TIME(SYS_TIME_m50_REF),
+      .SYNC(),
+      .SKIP_ONE_ASSERT(),
+      .SYNC_TIME_DIFF()
+  );
+
+  task record_offset();
+    @(negedge ECAT_SYNC);
+    offset_before = offset;
+    offset_p50_before = offset_p50;
+    offset_m50_before = offset_m50;
+    $display("offset before anomaly: %0d / %0d / %0d", offset_before, offset_p50_before, offset_m50_before);
+  endtask
+
+  task check_offset_restored(input string label);
+    logic signed [57:0] d, d_p50, d_m50;
+    int bound_ppm;
+    bound_ppm = OffsetBound + AnomalyDriftBound;
+    for (int i = 0; i < 4; i++) begin
+      @(negedge ECAT_SYNC);
+      d = offset - offset_before;
+      d_p50 = offset_p50 - offset_p50_before;
+      d_m50 = offset_m50 - offset_m50_before;
+      $display("offset shift %s: %0d / %0d / %0d", label, d, d_p50, d_m50);
+      if ((d > OffsetBound) || (d < -OffsetBound)) begin
+        $error("%s:%d: nominal sys_time offset shift %s: expected is within +-%0d, but actual is %0d", `__FILE__, `__LINE__, label, OffsetBound, d);
+        $finish();
+      end
+      if ((d_p50 > bound_ppm) || (d_p50 < -bound_ppm)) begin
+        $error("%s:%d: +50ppm sys_time offset shift %s: expected is within +-%0d, but actual is %0d", `__FILE__, `__LINE__, label, bound_ppm, d_p50);
+        $finish();
+      end
+      if ((d_m50 > bound_ppm) || (d_m50 < -bound_ppm)) begin
+        $error("%s:%d: -50ppm sys_time offset shift %s: expected is within +-%0d, but actual is %0d", `__FILE__, `__LINE__, label, bound_ppm, d_m50);
+        $finish();
+      end
+    end
+  endtask
+
   always @(posedge CLK_m50) begin
     sync_tri_m50 <= {sync_tri_m50[1:0], ECAT_SYNC};
     if (sync_tri_m50 == 3'b011) period_pos_m50 <= 0;
@@ -181,6 +256,8 @@ module sim_synchronizer ();
       $finish();
     end
 
+    record_offset();
+
     // A single dropped Sync0 pulse must not leave sync_time_diff saturated forever:
     // sys_time free-runs, so the missing edge is a period slip and the synchronizer
     // hard-rebuilds next_sync_time on the first edge back, converging to ~0.
@@ -190,11 +267,14 @@ module sim_synchronizer ();
     ecat_sync_en = 1;
     repeat (2) @(negedge ECAT_SYNC);
     check_diff_converged("after dropped Sync0");
+    check_offset_restored("after dropped Sync0");
     // Exactly one slip -> exactly one hard-resync counted.
     if (SYNC_RESYNC_COUNT != 8'd1) begin
       $error("%s:%d: resync_count after dropped Sync0: expected is 1, but actual is %0d", `__FILE__, `__LINE__, SYNC_RESYNC_COUNT);
       $finish();
     end
+
+    record_offset();
 
     // A single spurious Sync0 edge is an over-count; it must also resync to ~0.
     @(negedge ECAT_SYNC);
@@ -205,6 +285,7 @@ module sim_synchronizer ();
     release ECAT_SYNC;
     repeat (3) @(negedge ECAT_SYNC);
     check_diff_converged("after spurious Sync0");
+    check_offset_restored("after spurious Sync0");
     // The spurious edge (and the now-early real edge) trip further resyncs.
     if (SYNC_RESYNC_COUNT <= 8'd1) begin
       $error("%s:%d: resync_count after spurious Sync0: expected is > 1, but actual is %0d", `__FILE__, `__LINE__, SYNC_RESYNC_COUNT);
@@ -239,8 +320,14 @@ module sim_synchronizer ();
   always #24.415 CLK_m50 = ~CLK_m50;
 
   always begin
-    #800 ECAT_SYNC = 0;
-    #(ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS - 800) ECAT_SYNC = ecat_sync_en;
+    #800 begin
+      ECAT_SYNC = 0;
+      ECAT_SYNC_REF = 0;
+    end
+    #(ECAT_SYNC_BASE * ECAT_SYNC_CYCLE_TICKS - 800) begin
+      ECAT_SYNC = ecat_sync_en;
+      ECAT_SYNC_REF = 1;
+    end
   end
 
   always @(posedge CLK) SYS_TIME_WO_SYNC <= SYS_TIME_WO_SYNC + 1;
