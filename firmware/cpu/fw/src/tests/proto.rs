@@ -1,6 +1,7 @@
 use crate::proto::{Cmd, Error};
 use crate::tests::builders::write_pattern_buffer;
 use crate::tests::mock::{Frame, Harness};
+use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
 #[test]
 fn initial_ack_is_sentinel_byte() {
@@ -12,7 +13,6 @@ fn initial_ack_is_sentinel_byte() {
 #[test]
 fn matching_seq_advances_ack_and_expected_seq() {
     let mut h = Harness::new();
-    h.cpu.set_fw_version(0xAB, 0x12, 0x34);
     h.cpu.set_error_detail(Error::MissTransitionTime);
 
     h.deliver(&Frame::new(0, Cmd::Nop));
@@ -23,17 +23,17 @@ fn matching_seq_advances_ack_and_expected_seq() {
     h.deliver(&Frame::new(1, Cmd::ReadCpuFwVersionMajor));
     assert_eq!(h.ack(), 1);
     assert_eq!(h.expected_seq(), 2);
-    assert_eq!(h.data(), 0xAB);
+    assert_eq!(h.data(), FW_VERSION_MAJOR);
 
     h.deliver(&Frame::new(2, Cmd::ReadCpuFwVersionMinor));
     assert_eq!(h.ack(), 2);
     assert_eq!(h.expected_seq(), 3);
-    assert_eq!(h.data(), 0x12);
+    assert_eq!(h.data(), FW_VERSION_MINOR);
 
     h.deliver(&Frame::new(3, Cmd::ReadCpuFwVersionPatch));
     assert_eq!(h.ack(), 3);
     assert_eq!(h.expected_seq(), 4);
-    assert_eq!(h.data(), 0x34);
+    assert_eq!(h.data(), FW_VERSION_PATCH);
 
     h.deliver(&Frame::new(4, Cmd::ReadErrorDetail));
     assert_eq!(h.ack(), 4);
@@ -102,7 +102,6 @@ fn reset_during_inflight_drain_overrides_stale_frame() {
 #[test]
 fn reset_returns_proto_state_to_post_boot_baseline() {
     let mut h = Harness::new();
-    h.cpu.set_fw_version(0x42, 0x05, 0x99);
     h.cpu.set_error_detail(Error::SyncNotReady);
 
     h.deliver(&Frame::new(0, Cmd::Nop));
@@ -115,11 +114,11 @@ fn reset_returns_proto_state_to_post_boot_baseline() {
     assert_eq!(h.expected_seq(), 0);
 
     h.deliver(&Frame::new(0, Cmd::ReadCpuFwVersionMajor));
-    assert_eq!(h.data(), 0x42);
+    assert_eq!(h.data(), FW_VERSION_MAJOR);
     h.deliver(&Frame::new(1, Cmd::ReadCpuFwVersionMinor));
-    assert_eq!(h.data(), 0x05);
+    assert_eq!(h.data(), FW_VERSION_MINOR);
     h.deliver(&Frame::new(2, Cmd::ReadCpuFwVersionPatch));
-    assert_eq!(h.data(), 0x99);
+    assert_eq!(h.data(), FW_VERSION_PATCH);
     h.deliver(&Frame::new(3, Cmd::ReadErrorDetail));
     assert_eq!(h.data(), Error::SyncNotReady as u8);
 }

@@ -3,7 +3,7 @@ use crate::params::{
     ADDR_MOD_CYCLE0, CTL_FLAG_SYNC_SET,
 };
 use crate::proto::{
-    Cmd, Error, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES, WIRE_RX_FRAME_BYTES,
+    Cmd, DEVICE_TO_HOST_BYTES, Error, HOST_TO_DEVICE_BYTES, PAYLOAD_BYTES, WIRE_RX_FRAME_BYTES,
     WIRE_RX_GAP_END, WIRE_RX_GAP_START,
 };
 use crate::tests::builders::{config_mod, write_mod_buffer, write_pattern_buffer};
@@ -148,10 +148,10 @@ fn fpga_state_survives_reset() {
 
 #[test]
 fn struct_sizes_match_spec() {
-    assert_eq!(RX_FRAME_BYTES, 626);
-    assert_eq!(RX_FRAME_BYTES, 2 + PAYLOAD_BYTES);
-    assert_eq!(TX_FRAME_BYTES, 2);
+    assert_eq!(HOST_TO_DEVICE_BYTES, 626);
+    assert_eq!(HOST_TO_DEVICE_BYTES, 2 + PAYLOAD_BYTES);
+    assert_eq!(DEVICE_TO_HOST_BYTES, 2);
     assert_eq!(WIRE_RX_FRAME_BYTES, 628);
-    assert_eq!(WIRE_RX_FRAME_BYTES, RX_FRAME_BYTES + 2);
+    assert_eq!(WIRE_RX_FRAME_BYTES, HOST_TO_DEVICE_BYTES + 2);
     assert_eq!(WIRE_RX_GAP_END - WIRE_RX_GAP_START, 2);
 }

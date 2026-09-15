@@ -4,7 +4,9 @@ pub use autd3_cpu_wire::payload::ChangePatternBankPayload;
 
 use crate::app::Cpu;
 use crate::cmd::BankChange;
-use crate::fpga::{self, TransitionMode, sys_time_margin_ns, transition_mode_violates_loop};
+use crate::fpga::{
+    self, SYS_TIME_TRANSITION_MARGIN_NS, TransitionMode, transition_mode_violates_loop,
+};
 use crate::params::{
     ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_TRANSITION_MODE,
     ADDR_PATTERN_TRANSITION_VALUE_0, BRAM_SELECT_CONTROLLER, CTL_FLAG_PATTERN_SET, NUM_BANKS,
@@ -33,7 +35,7 @@ impl Cpu {
         let change = self.validate_pattern_change(
             port,
             bank,
-            self.silencer.pattern_div(bank),
+            self.silencer.pattern_freq_div[usize::from(bank)].get(),
             rep,
             p.transition_mode,
             p.transition_value.get(),
@@ -54,7 +56,11 @@ impl Cpu {
         transition_value: u64,
         margin_ns_raw: u32,
     ) -> Result<BankChange, Error> {
-        let margin_ns = sys_time_margin_ns(margin_ns_raw);
+        let margin_ns = if margin_ns_raw == 0 {
+            SYS_TIME_TRANSITION_MARGIN_NS
+        } else {
+            u64::from(margin_ns_raw)
+        };
 
         if usize::from(bank) >= NUM_BANKS {
             return Err(Error::InvalidPayload);
@@ -81,15 +87,23 @@ impl Cpu {
     }
 
     pub(crate) fn write_pattern_change<P: Port>(&self, port: &mut P, change: &BankChange) {
-        fpga::write_change_bank(
+        fpga::write(
             port,
-            ADDR_PATTERN_REQ_RD_BANK,
+            BRAM_SELECT_CONTROLLER,
             ADDR_PATTERN_TRANSITION_MODE,
+            change.transition_mode as u16,
+        );
+        fpga::write_u64(
+            port,
             ADDR_PATTERN_TRANSITION_VALUE_0,
-            change.bank,
-            change.transition_mode,
             change.transition_value,
         );
-        self.silencer.note_pattern_bank(change.bank);
+        fpga::write(
+            port,
+            BRAM_SELECT_CONTROLLER,
+            ADDR_PATTERN_REQ_RD_BANK,
+            u16::from(change.bank),
+        );
+        self.silencer.pattern_bank.set(change.bank);
     }
 }

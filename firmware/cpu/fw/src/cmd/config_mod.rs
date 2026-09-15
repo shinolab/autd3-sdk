@@ -72,6 +72,6 @@ impl Cpu {
             ADDR_MOD_REP0 + bank_offset,
             cfg.rep,
         );
-        self.silencer.note_mod_div(cfg.bank, cfg.divider);
+        self.silencer.mod_freq_div[usize::from(cfg.bank)].set(cfg.divider);
     }
 }

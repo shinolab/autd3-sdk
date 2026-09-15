@@ -15,8 +15,9 @@ use crate::params::{
 use crate::port::Port;
 use crate::proto::{
     AL_STATUS_CODE_SM_WATCHDOG, AL_STATUS_CODE_SYNC_ERROR, Cmd, Error, FAILSAFE_TICKS, Mode,
-    ProtoState, RxFrame, Telemetry, TxFrame, WIRE_RX_FRAME_BYTES,
+    RxFrame, Telemetry, TxFrame, WIRE_RX_FRAME_BYTES,
 };
+use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
 pub struct Cpu {
     mode: AtomicU8,
@@ -28,7 +29,8 @@ pub struct Cpu {
     preempt_expected: AtomicU8,
     telemetry: [AtomicU8; Telemetry::CPU_COUNTER_COUNT],
     al_err_ticks: Cell<u16>,
-    proto: ProtoState,
+    expected_seq: AtomicU8,
+    error_detail: Cell<Option<Error>>,
     pub(crate) silencer: cmd::silencer::SilencerGuard,
     tx: AtomicU16,
 }
@@ -55,7 +57,8 @@ macro_rules! cpu_new {
             preempt_expected: AtomicU8::new(0),
             telemetry: [const { AtomicU8::new(0) }; Telemetry::CPU_COUNTER_COUNT],
             al_err_ticks: Cell::new(0),
-            proto: ProtoState::new(),
+            expected_seq: AtomicU8::new(0),
+            error_detail: Cell::new(None),
             silencer: cmd::silencer::SilencerGuard::new(),
             tx: AtomicU16::new(0),
         }
@@ -81,9 +84,10 @@ impl Cpu {
 impl Cpu {
     pub fn init<P: Port>(&self, port: &mut P) {
         self.set_mode(Mode::Fifo);
-        self.proto.init();
+        self.expected_seq.store(0, Ordering::Relaxed);
+        self.error_detail.set(None);
         if let Err(err) = fpga::init(port, self.mode()) {
-            self.proto.error_detail.set(Some(err));
+            self.error_detail.set(Some(err));
         }
         self.silencer.init();
         self.reset_telemetry();
@@ -140,19 +144,12 @@ impl Cpu {
 
     #[cfg(all(test, not(loom)))]
     pub(crate) fn expected_seq(&self) -> u8 {
-        self.proto.expected_seq.load(Ordering::Relaxed)
-    }
-
-    #[cfg(all(test, not(loom)))]
-    pub(crate) fn set_fw_version(&self, major: u8, minor: u8, patch: u8) {
-        self.proto.fw_version_major.set(major);
-        self.proto.fw_version_minor.set(minor);
-        self.proto.fw_version_patch.set(patch);
+        self.expected_seq.load(Ordering::Relaxed)
     }
 
     #[cfg(all(test, not(loom)))]
     pub(crate) fn set_error_detail(&self, err: Error) {
-        self.proto.error_detail.set(Some(err));
+        self.error_detail.set(Some(err));
     }
 
     #[must_use]
@@ -221,7 +218,7 @@ impl Cpu {
     }
 
     fn apply_preempt(&self) {
-        self.proto.expected_seq.store(
+        self.expected_seq.store(
             self.preempt_expected.load(Ordering::Relaxed),
             Ordering::Relaxed,
         );
@@ -235,9 +232,8 @@ impl Cpu {
             self.apply_preempt();
             return;
         }
-        if in_frame.seq == self.proto.expected_seq.load(Ordering::Relaxed) {
-            self.proto
-                .expected_seq
+        if in_frame.seq == self.expected_seq.load(Ordering::Relaxed) {
+            self.expected_seq
                 .store(in_frame.seq.wrapping_add(1), Ordering::Relaxed);
             let data = match cmd {
                 Some(cmd) => self.dispatch(port, cmd, &in_frame.payload),
@@ -252,7 +248,7 @@ impl Cpu {
     }
 
     fn latch_error(&self, err: Error) -> u8 {
-        self.proto.error_detail.set(Some(err));
+        self.error_detail.set(Some(err));
         self.bump(Telemetry::DispatchError);
         err as u8
     }
@@ -273,9 +269,9 @@ impl Cpu {
     fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> u8 {
         let result = match cmd {
             Cmd::Reset | Cmd::Nop => Ok(()),
-            Cmd::ReadCpuFwVersionMajor => return self.proto.fw_version_major.get(),
-            Cmd::ReadCpuFwVersionMinor => return self.proto.fw_version_minor.get(),
-            Cmd::ReadCpuFwVersionPatch => return self.proto.fw_version_patch.get(),
+            Cmd::ReadCpuFwVersionMajor => return FW_VERSION_MAJOR,
+            Cmd::ReadCpuFwVersionMinor => return FW_VERSION_MINOR,
+            Cmd::ReadCpuFwVersionPatch => return FW_VERSION_PATCH,
             Cmd::ReadFpgaFwVersionMajor => {
                 return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR) as u8;
             }
@@ -286,7 +282,7 @@ impl Cpu {
                 return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_PATCH) as u8;
             }
             Cmd::ReadErrorDetail => {
-                return self.proto.error_detail.get().map_or(0, |err| err as u8);
+                return self.error_detail.get().map_or(0, |err| err as u8);
             }
             Cmd::ReadFpgaState => {
                 return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_FPGA_STATE) as u8;

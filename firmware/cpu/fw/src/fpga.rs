@@ -37,15 +37,6 @@ wire_enum! {
 
 pub const SYS_TIME_TRANSITION_MARGIN_NS: u64 = 10_000_000;
 
-#[must_use]
-pub fn sys_time_margin_ns(margin_ns: u32) -> u64 {
-    if margin_ns == 0 {
-        SYS_TIME_TRANSITION_MARGIN_NS
-    } else {
-        u64::from(margin_ns)
-    }
-}
-
 pub use autd3_cpu_wire::payload::{
     SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
     SILENCER_DEFAULT_UPDATE_RATE,
@@ -100,30 +91,6 @@ pub fn write_u64<P: Port>(port: &mut P, addr: u16, value: u64) {
             (value >> (16 * i)) as u16,
         );
     }
-}
-
-pub fn write_change_bank<P: Port>(
-    port: &mut P,
-    req_rd_bank_addr: u16,
-    transition_mode_addr: u16,
-    transition_value_addr: u16,
-    bank: u8,
-    transition_mode: TransitionMode,
-    transition_value: u64,
-) {
-    write(
-        port,
-        BRAM_SELECT_CONTROLLER,
-        transition_mode_addr,
-        transition_mode as u16,
-    );
-    write_u64(port, transition_value_addr, transition_value);
-    write(
-        port,
-        BRAM_SELECT_CONTROLLER,
-        req_rd_bank_addr,
-        u16::from(bank),
-    );
 }
 
 #[must_use]

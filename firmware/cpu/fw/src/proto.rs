@@ -1,12 +1,9 @@
-use core::cell::Cell;
-use core::sync::atomic::AtomicU8;
-
 pub use autd3_cpu_wire::{
-    Cmd, DEVICE_TO_HOST_BYTES as TX_FRAME_BYTES, Error, HOST_TO_DEVICE_BYTES as RX_FRAME_BYTES,
-    Mode, PAYLOAD_BYTES, Telemetry, wire_enum,
+    Cmd, DEVICE_TO_HOST_BYTES, Error, HOST_TO_DEVICE_BYTES, Mode, PAYLOAD_BYTES, Telemetry,
+    wire_enum,
 };
 
-pub const WIRE_RX_FRAME_BYTES: usize = RX_FRAME_BYTES + 2;
+pub const WIRE_RX_FRAME_BYTES: usize = HOST_TO_DEVICE_BYTES + 2;
 pub const WIRE_RX_GAP_START: usize = 498;
 pub const WIRE_RX_GAP_END: usize = 500;
 
@@ -14,7 +11,6 @@ pub const BUFFER_SIZE_MIN: u32 = autd3_cpu_wire::layout::BUFFER_SIZE_MIN as u32;
 pub const MOD_BUFFER_SAMPLES: u32 = autd3_cpu_wire::layout::MOD_BUFFER_SAMPLES as u32;
 pub const EMISSION_RAM_WORDS: u32 = autd3_cpu_wire::layout::EMISSION_RAM_WORDS as u32;
 pub const EMISSION_SLOT_WORDS: u32 = autd3_cpu_wire::layout::EMISSION_SLOT_WORDS as u32;
-pub const FOCUS_WORDS: u32 = autd3_cpu_wire::layout::FOCUS_WORDS as u32;
 pub const MAX_FOCI_TOTAL: u32 = autd3_cpu_wire::layout::MAX_FOCI_TOTAL as u32;
 
 pub const OUTPUT_MASK_WORDS: usize = autd3_cpu_wire::layout::OUTPUT_MASK_WORDS;
@@ -62,33 +58,4 @@ impl Default for RxFrame {
 pub struct TxFrame {
     pub ack: u8,
     pub data: u8,
-}
-
-pub(crate) struct ProtoState {
-    pub expected_seq: AtomicU8,
-    pub fw_version_major: Cell<u8>,
-    pub fw_version_minor: Cell<u8>,
-    pub fw_version_patch: Cell<u8>,
-    pub error_detail: Cell<Option<Error>>,
-}
-
-impl ProtoState {
-    pub(crate) const fn new() -> Self {
-        Self {
-            expected_seq: AtomicU8::new(0),
-            fw_version_major: Cell::new(crate::version::FW_VERSION_MAJOR),
-            fw_version_minor: Cell::new(crate::version::FW_VERSION_MINOR),
-            fw_version_patch: Cell::new(crate::version::FW_VERSION_PATCH),
-            error_detail: Cell::new(None),
-        }
-    }
-
-    pub(crate) fn init(&self) {
-        self.expected_seq
-            .store(0, core::sync::atomic::Ordering::Relaxed);
-        self.fw_version_major.set(crate::version::FW_VERSION_MAJOR);
-        self.fw_version_minor.set(crate::version::FW_VERSION_MINOR);
-        self.fw_version_patch.set(crate::version::FW_VERSION_PATCH);
-        self.error_detail.set(None);
-    }
 }
