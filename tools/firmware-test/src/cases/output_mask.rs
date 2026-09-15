@@ -2,11 +2,13 @@ use anyhow::Result;
 
 use autd3_rs::commands::SetOutputMask;
 use autd3_rs::units::Hz;
-use autd3_rs::value::SamplingConfig;
+use autd3_rs::value::{PatternBank, SamplingConfig};
 use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{focus_at, send_pattern_mod};
+use crate::cases::pattern_util::{
+    change_pattern_bank, focus_at, report_fpga_state, send_pattern_mod, write_pattern_bank,
+};
 use crate::io::wait_enter;
 
 fn half_mask(ctx: &Ctx<'_>, left_dev0: bool) -> Vec<Vec<bool>> {
@@ -58,5 +60,32 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     })
     .await?;
     wait_enter("Only the right half of device 0 and the left half of the others output").await;
+
+    write_pattern_bank(ctx, PatternBank::B1, &focus).await?;
+    change_pattern_bank(ctx, PatternBank::B1).await?;
+    wait_enter(
+        "Still only the right half of device 0 and the left half of the others output (pattern bank 1)",
+    )
+    .await;
+    report_fpga_state(ctx, "B1 mask kept", None, Some(PatternBank::B1), Some(true)).await?;
+
+    ctx.send(SetOutputMask {
+        masks: &half_mask(ctx, true),
+    })
+    .await?;
+    wait_enter(
+        "Only the left half of device 0 and the right half of the others output (pattern bank 1)",
+    )
+    .await;
+
+    ctx.send(SetOutputMask {
+        masks: &all_on(ctx),
+    })
+    .await?;
+    wait_enter("A focus is formed 150 mm above the centre of each device again (pattern bank 1)")
+        .await;
+
+    change_pattern_bank(ctx, PatternBank::B0).await?;
+    report_fpga_state(ctx, "back to B0", None, Some(PatternBank::B0), Some(true)).await?;
     Ok(())
 }

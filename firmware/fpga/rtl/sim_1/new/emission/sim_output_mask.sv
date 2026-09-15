@@ -26,7 +26,7 @@ module sim_output_mask ();
   logic [7:0] intensity_buf[params::NumBanks][SIZE][DEPTH];
   logic [7:0] phase_buf[params::NumBanks][SIZE][DEPTH];
 
-  logic [255:0] output_mask_buf[params::NumBanks];
+  logic [255:0] output_mask;
 
   cnt_bus_if cnt_bus ();
   phase_corr_bus_if phase_corr_bus ();
@@ -80,27 +80,37 @@ module sim_output_mask ();
       .DEBUG_BANK(debug_bank)
   );
 
-  task automatic update(input logic req_bank, input logic [15:0] rep);
+  task automatic update(input logic req_bank);
     @(posedge CLK);
     pattern_settings.UPDATE <= 1'b1;
     pattern_settings.REQ_RD_BANK <= req_bank;
-    pattern_settings.REP[req_bank] <= rep;
+    pattern_settings.REP[req_bank] <= 16'hFFFF;
     pattern_settings.CYCLE[req_bank] <= cycle_buf[req_bank] - 1;
     pattern_settings.FREQ_DIV[req_bank] <= freq_div_buf[req_bank];
     @(posedge CLK);
     pattern_settings.UPDATE <= 1'b0;
   endtask
 
-  task automatic wait_bank(input logic bank);
-    while (1) begin
-      @(posedge CLK);
-      if (debug_bank === bank) begin
-        break;
+  task automatic switch_bank(input logic bank);
+    fork
+      update(bank);
+      while (1) begin
+        @(posedge CLK);
+        if (debug_bank === bank) begin
+          break;
+        end
       end
+    join
+  endtask
+
+  task automatic random_mask();
+    for (int i = 0; i < 256; i++) begin
+      output_mask[i] = sim_helper_random.range(1'b1, 1'b0);
     end
   endtask
 
-  task automatic check(input logic bank);
+  task automatic check(input logic bank, input string label);
+    $display("check: %s", label);
     while (1) begin
       @(posedge CLK);
       if (~dout_valid) begin
@@ -115,9 +125,9 @@ module sim_output_mask ();
           break;
         end
       end
-      $display("check %d/%d", j + 1, cycle_buf[bank]);
+      `ASSERT_EQ(bank, debug_bank);
       for (int i = 0; i < DEPTH; i++) begin
-        if (output_mask_buf[bank][i]) begin
+        if (output_mask[i]) begin
           `ASSERT_EQ(intensity_buf[bank][debug_idx][i], intensity);
         end else begin
           `ASSERT_EQ(8'h00, intensity);
@@ -155,25 +165,33 @@ module sim_output_mask ();
         end
       end
       sim_helper_bram.write_emission_raw_intensity_phase(bank, intensity_buf[bank], phase_buf[bank], cycle_buf[bank]);
-      for (int i = 0; i < DEPTH; i++) begin
-        output_mask_buf[bank][i] = sim_helper_random.range(1'b1, 1'b0);
-      end
-      sim_helper_bram.write_output_mask(bank, output_mask_buf[bank]);
     end
 
     $display("memory initialized");
 
-    fork
-      update(0, 32'hFFFFFFFF);
-      wait_bank(0);
-    join
-    check(0);
+    output_mask = '1;
+    switch_bank(1);
+    check(1, "bank 1, boot default mask");
+    switch_bank(0);
+    check(0, "bank 0, boot default mask");
 
-    fork
-      update(1, 32'd0);
-      wait_bank(1);
-    join
-    check(1);
+    random_mask();
+    sim_helper_bram.write_output_mask(output_mask);
+    check(0, "bank 0, mask written while bank 0 is playing");
+
+    switch_bank(1);
+    check(1, "bank 1, mask kept across the bank switch");
+
+    random_mask();
+    sim_helper_bram.write_output_mask(output_mask);
+    check(1, "bank 1, mask rewritten while bank 1 is playing");
+
+    output_mask = '0;
+    sim_helper_bram.write_output_mask(output_mask);
+    check(1, "bank 1, all muted while bank 1 is playing");
+
+    switch_bank(0);
+    check(0, "bank 0, mute kept across the bank switch");
 
     $display("OK! sim_output_mask");
     $finish();

@@ -81,23 +81,10 @@ module sim_helper_bram #(
     end
   endtask
 
-  task automatic write_output_mask(input logic bank, input logic [255:0] value);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd0}}, value[15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd1}}, value[31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd2}}, value[47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd3}}, value[63:48]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd4}}, value[79:64]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd5}}, value[95:80]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd6}}, value[111:96]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd7}}, value[127:112]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd8}}, value[143:128]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd9}}, value[159:144]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd10}}, value[175:160]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd11}}, value[191:176]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd12}}, value[207:192]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd13}}, value[223:208]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd14}}, value[239:224]);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 3'b000, {bank, 4'd15}}, value[255:240]);
+  task automatic write_output_mask(input logic [255:0] value);
+    for (int j = 0; j < 16; j++) begin
+      bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 4'b0000, j[3:0]}, value[16*j+:16]);
+    end
   endtask
 
   task automatic write_pwe_table(input logic [8:0] value[256]);

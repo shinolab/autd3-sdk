@@ -32,7 +32,6 @@ module emission #(
 
   assign EMISSION_BUS.MODE = mode;
   assign EMISSION_BUS.BANK = bank;
-  assign OUTPUT_MASK_BUS.BANK = bank;
   assign OUTPUT_MASK_BUS.RD_EN = EMISSION_BUS.RD_EN;
 
   logic update_settings;

@@ -81,23 +81,21 @@ module memory (
   //////////////////////////// Output mask ////////////////////////////
   logic output_mask_en;
 
-  logic output_mask_idx;
   logic [255:0] output_mask_dout;
 
   assign output_mask_en = (cnt_sel == BRAM_CNT_SELECT_OUTPUT_MASK) & (select == BRAM_SELECT_CONTROLLER) & en;
-  assign output_mask_idx = OUTPUT_MASK_BUS.BANK;
   assign OUTPUT_MASK_BUS.VALUE = output_mask_dout;
   BRAM_OUTPUT_MASK output_mask_bram (
       .clka (bus_clk),
       .ena  (output_mask_en),
       .wea  (we),
-      .addra({addr[4:0]}),
+      .addra(addr[4:0]),
       .dina (data_in),
       .douta(),
       .clkb (CLK),
       .enb  (OUTPUT_MASK_BUS.RD_EN),
       .web  (1'b0),
-      .addrb(output_mask_idx),
+      .addrb(1'b0),
       .dinb (),
       .doutb(output_mask_dout)
   );

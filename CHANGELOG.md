@@ -2,6 +2,18 @@
 
 # Rust
 
+### 💥 Breaking Changes
+
+- [**breaking**] Add per-transducer pattern grouping and move TransducerMask to core
+
+### 🚀 Features
+
+- *(link-remote)* Discover the simulator over mDNS alongside the appliance
+
+### 🐛 Bug Fixes
+
+- *(core)* Disable ANSI colors in init_tracing when the output is not a terminal
+
 ## [0.8.0] - 2026-09-11
 
 ### 💥 Breaking Changes
@@ -296,6 +308,14 @@
 
 # Python
 
+### 💥 Breaking Changes
+
+- [**breaking**] Add per-transducer pattern grouping and move TransducerMask to core
+
+### 🚀 Features
+
+- *(link-remote)* Discover the simulator over mDNS alongside the appliance
+
 ## [0.8.0] - 2026-09-11
 
 ### 💥 Breaking Changes
@@ -451,6 +471,14 @@
 
 # C#
 
+### 💥 Breaking Changes
+
+- [**breaking**] Add per-transducer pattern grouping and move TransducerMask to core
+
+### 🚀 Features
+
+- *(link-remote)* Discover the simulator over mDNS alongside the appliance
+
 ## [0.8.0] - 2026-09-11
 
 ### 💥 Breaking Changes
@@ -601,6 +629,10 @@
 
 # Simulator
 
+### 🚀 Features
+
+- *(link-remote)* Discover the simulator over mDNS alongside the appliance
+
 ## [0.8.0] - 2026-09-11
 
 ### 🚀 Features
@@ -682,6 +714,10 @@
 
 # Console
 
+### 🐛 Bug Fixes
+
+- *(core)* Disable ANSI colors in init_tracing when the output is not a terminal
+
 ## [0.8.0] - 2026-09-11
 
 ### 🐛 Bug Fixes
@@ -744,6 +780,10 @@
 
 # Appliance
 
+### 🚀 Features
+
+- *(link-remote)* Discover the simulator over mDNS alongside the appliance
+
 ## [0.8.0] - 2026-09-11
 
 ### 💥 Breaking Changes
@@ -791,6 +831,8 @@
 - *(appliance)* [**breaking**] Ship the EtherCAT master as a zero-config appliance
 
 # Firmware
+
+## [0.6.1] - 2026-09-15
 
 ### 💥 Breaking Changes
 
