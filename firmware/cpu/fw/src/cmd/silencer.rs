@@ -65,12 +65,12 @@ impl SilencerGuard {
             && (divider < self.completion_intensity.get() || divider < self.completion_phase.get())
     }
 
-    pub(crate) fn violates_mod_bank(&self, bank: u8) -> bool {
-        self.violates_mod_div(self.mod_freq_div[bank as usize].get())
+    pub(crate) fn mod_div(&self, bank: u8) -> u16 {
+        self.mod_freq_div[bank as usize].get()
     }
 
-    pub(crate) fn violates_pattern_bank(&self, bank: u8) -> bool {
-        self.violates_pattern_div(self.pattern_freq_div[bank as usize].get())
+    pub(crate) fn pattern_div(&self, bank: u8) -> u16 {
+        self.pattern_freq_div[bank as usize].get()
     }
 
     pub(crate) fn note_mod_div(&self, bank: u8, divider: u16) {

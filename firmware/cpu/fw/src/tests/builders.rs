@@ -18,8 +18,42 @@ use crate::cmd::write_pattern::WritePatternPayload;
 use crate::cmd::write_pattern_compressed::WritePatternCompressedPayload;
 use crate::cmd::write_pattern_fused::WritePatternFusedPayload;
 use crate::fpga::{REP_INFINITE, TransitionMode};
+use crate::params::NUM_BANKS;
 use crate::proto::Cmd;
-use crate::tests::mock::Frame;
+use crate::tests::mock::{Frame, Harness};
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct FpgaSnapshot {
+    ctl: std::vec::Vec<u16>,
+    em_ram: std::vec::Vec<std::vec::Vec<u16>>,
+    mod_ram: std::vec::Vec<std::vec::Vec<u16>>,
+    latch_count: [u32; 16],
+    pattern_div: std::vec::Vec<u16>,
+    mod_div: std::vec::Vec<u16>,
+}
+
+pub(crate) fn fpga_snapshot(h: &Harness) -> FpgaSnapshot {
+    let banks = 0..u8::try_from(NUM_BANKS).unwrap();
+    FpgaSnapshot {
+        ctl: h.port.ctl.to_vec(),
+        em_ram: h.port.em_ram.clone(),
+        mod_ram: h.port.mod_ram.clone(),
+        latch_count: h.port.latch_count,
+        pattern_div: banks
+            .clone()
+            .map(|b| h.cpu.silencer.pattern_div(b))
+            .collect(),
+        mod_div: banks.map(|b| h.cpu.silencer.mod_div(b)).collect(),
+    }
+}
+
+pub(crate) fn assert_fpga_unchanged(before: &FpgaSnapshot, h: &Harness) {
+    let after = fpga_snapshot(h);
+    assert!(
+        *before == after,
+        "rejected frame must not touch RAM, controller registers, latches or silencer mirrors"
+    );
+}
 
 fn words_to_bytes(words: &[u16]) -> std::vec::Vec<u8> {
     words.iter().flat_map(|w| w.to_le_bytes()).collect()
