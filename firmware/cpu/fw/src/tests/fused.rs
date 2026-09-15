@@ -9,12 +9,13 @@ use crate::params::{
     EMISSION_TYPE_RAW, NUM_BANKS, NUM_TRANSDUCERS,
 };
 
+use crate::cmd::silencer::SILENCER_FLAG_STRICT_MODE;
 use crate::fpga::TransitionMode;
 use crate::proto::{EMISSION_SLOT_WORDS, Error};
 use crate::tests::builders::{
-    FusedMod, FusedPattern, change_mod_bank, change_pattern_bank, config_mod_rep,
-    config_pattern_rep, write_mod_buffer, write_mod_fused, write_pattern_buffer,
-    write_pattern_fused,
+    FusedMod, FusedPattern, assert_fpga_unchanged, change_mod_bank, change_pattern_bank,
+    config_mod, config_mod_rep, config_pattern_rep, fpga_snapshot, set_silencer, write_mod_buffer,
+    write_mod_fused, write_pattern_buffer, write_pattern_fused,
 };
 use crate::tests::mock::Harness;
 
@@ -222,12 +223,138 @@ fn fused_modulation_rejects_bad_bank() {
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 }
 
+fn foci_fused(bank: u8, divider: u16, size: u32) -> FusedPattern {
+    let mut f = FusedPattern::raw(bank, divider, size);
+    f.emission_type = EMISSION_TYPE_FOCI;
+    f.num_foci = 1;
+    f.sound_speed = 21760;
+    f
+}
+
 #[test]
 fn fused_pattern_rejects_invalid_transition_mode_for_finite_loop() {
     let mut h = Harness::new();
-    let mut f = FusedPattern::raw(1, 10, 2);
+    let mut f = foci_fused(1, 10, 2);
     f.rep = 4;
     f.transition_mode = TransitionMode::Immediate;
     h.deliver(&write_pattern_fused(0, &f, &pattern_words()));
     assert_eq!(h.data(), Error::InvalidTransitionMode as u8);
+}
+
+#[test]
+fn fused_pattern_missed_sys_time_leaves_fpga_untouched() {
+    let mut h = Harness::new();
+    let bank = 0;
+    let seed: Vec<u16> = (0..40u16).map(|i| i.wrapping_mul(0x2468)).collect();
+    h.deliver(&write_pattern_fused(0, &foci_fused(bank, 10, 10), &seed));
+    assert_eq!(h.data(), 0);
+
+    h.port.dc_sys_time = 1_000_000_000;
+    let before = fpga_snapshot(&h);
+
+    let mut f = foci_fused(bank, 30, 20);
+    f.rep = 4;
+    f.transition_mode = TransitionMode::SysTime;
+    f.transition_value = 1_000;
+    let data: Vec<u16> = (0..80u16).map(|i| !i).collect();
+    h.deliver(&write_pattern_fused(1, &f, &data));
+
+    assert_eq!(h.data(), Error::MissTransitionTime as u8);
+    assert_fpga_unchanged(&before, &h);
+    assert_eq!(h.emission_word(bank, 0), seed[0]);
+    assert_eq!(h.ctl(ADDR_PATTERN_FREQ_DIV0 + u16::from(bank)), 10);
+    assert_eq!(h.cpu.silencer.pattern_div(bank), 10);
+}
+
+#[test]
+fn fused_modulation_silencer_violation_leaves_fpga_untouched() {
+    let mut h = Harness::new();
+    let bank = 1;
+    let seed: Vec<u8> = (0..64u8).collect();
+    h.deliver(&write_mod_fused(
+        0,
+        &FusedMod::new(bank, 10, seed.len() as u32),
+        &seed,
+    ));
+    assert_eq!(h.data(), 0);
+    h.deliver(&set_silencer(1, SILENCER_FLAG_STRICT_MODE, 256, 256, 8, 8));
+    assert_eq!(h.data(), 0);
+
+    let before = fpga_snapshot(&h);
+
+    let data: Vec<u8> = (0..64u8).map(|i| !i).collect();
+    h.deliver(&write_mod_fused(
+        2,
+        &FusedMod::new(bank, 4, data.len() as u32),
+        &data,
+    ));
+
+    assert_eq!(h.data(), Error::InvalidSilencerSetting as u8);
+    assert_fpga_unchanged(&before, &h);
+    assert_eq!(h.ctl(ADDR_MOD_FREQ_DIV0 + u16::from(bank)), 10);
+    assert_eq!(h.cpu.silencer.mod_div(bank), 10);
+}
+
+#[test]
+fn fused_modulation_judges_strict_guard_by_payload_divider_not_stale_mirror() {
+    let mut h = Harness::new();
+    let bank = 1;
+    h.deliver(&config_mod(0, bank, 5, 64));
+    assert_eq!(h.data(), 0);
+    h.deliver(&set_silencer(
+        1,
+        SILENCER_FLAG_STRICT_MODE,
+        256,
+        256,
+        10,
+        10,
+    ));
+    assert_eq!(h.data(), 0);
+
+    let data: Vec<u8> = (0..64u8).collect();
+    h.deliver(&write_mod_fused(
+        2,
+        &FusedMod::new(bank, 100, data.len() as u32),
+        &data,
+    ));
+
+    assert_eq!(h.data(), 0);
+    assert_eq!(h.cpu.silencer.mod_div(bank), 100);
+}
+
+#[test]
+fn fused_modulation_transition_mode_violation_leaves_fpga_untouched() {
+    let mut h = Harness::new();
+    let bank = 1;
+    let seed: Vec<u8> = (0..64u8).collect();
+    h.deliver(&write_mod_fused(
+        0,
+        &FusedMod::new(bank, 10, seed.len() as u32),
+        &seed,
+    ));
+    assert_eq!(h.data(), 0);
+
+    let before = fpga_snapshot(&h);
+
+    let mut f = FusedMod::new(bank, 20, 32);
+    f.rep = 4;
+    f.transition_mode = TransitionMode::Immediate;
+    let data: Vec<u8> = (0..32u8).map(|i| !i).collect();
+    h.deliver(&write_mod_fused(1, &f, &data));
+
+    assert_eq!(h.data(), Error::InvalidTransitionMode as u8);
+    assert_fpga_unchanged(&before, &h);
+}
+
+#[test]
+fn fused_raw_pattern_requires_size_one() {
+    let mut h = Harness::new();
+    let before = fpga_snapshot(&h);
+    h.deliver(&write_pattern_fused(
+        0,
+        &FusedPattern::raw(0, 10, 2),
+        &pattern_words(),
+    ));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_fpga_unchanged(&before, &h);
 }

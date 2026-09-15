@@ -18,3 +18,11 @@ pub(crate) mod write_mod_fused;
 pub(crate) mod write_pattern;
 pub(crate) mod write_pattern_compressed;
 pub(crate) mod write_pattern_fused;
+
+use crate::fpga::TransitionMode;
+
+pub(crate) struct BankChange {
+    pub(crate) bank: u8,
+    pub(crate) transition_mode: TransitionMode,
+    pub(crate) transition_value: u64,
+}
