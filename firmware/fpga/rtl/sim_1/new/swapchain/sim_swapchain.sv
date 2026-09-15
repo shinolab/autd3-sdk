@@ -738,6 +738,232 @@ module sim_swapchain ();
     `ASSERT_EQ(0, idx[1]);
   endtask
 
+  task automatic latch(input logic req, input logic [7:0] mode, input logic [63:0] value);
+    @(posedge CLK);
+    req_rd_bank <= req;
+    transition_mode <= mode;
+    transition_value <= value;
+    update_settings <= 1;
+    @(posedge CLK);
+    update_settings <= 0;
+    @(negedge CLK);
+  endtask
+
+  task automatic step_idx(input int b, input logic [15:0] v);
+    @(posedge CLK);
+    sync_idx[b] <= v;
+    @(posedge CLK);
+    @(negedge CLK);
+  endtask
+
+  task automatic arm_finite_bank0(input logic [15:0] r);
+    @(posedge CLK);
+    sync_idx[0] <= 0;
+    sync_idx[1] <= 1;
+    rep[1] <= 16'hFFFF;
+    latch(1, params::TRANSITION_MODE_IMMEDIATE, 0);
+    `ASSERT_EQ(1, bank);
+    `ASSERT_EQ(0, transition_pending);
+
+    @(posedge CLK);
+    rep[0] <= r;
+    latch(0, params::TRANSITION_MODE_SYNC_IDX, 0);
+    `ASSERT_EQ(1, bank);
+    `ASSERT_EQ(1, transition_pending);
+
+    step_idx(0, 1);
+    `ASSERT_EQ(1, bank);
+    step_idx(0, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
+  endtask
+
+  task automatic test_hold_stopped_finite_bank();
+    arm_finite_bank0(16'h0000);
+
+    step_idx(0, 1);
+    `ASSERT_EQ(0, stop);
+    step_idx(0, 2);
+    `ASSERT_EQ(0, stop);
+    step_idx(0, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, stop);
+
+    @(posedge CLK);
+    rep[1] <= 16'h0001;
+    latch(0, params::TRANSITION_MODE_SYNC_IDX, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, stop);
+    `ASSERT_EQ(0, transition_pending);
+
+    for (int i = 0; i < 9; i++) begin
+      step_idx(0, 16'((i + 1) % 3));
+      step_idx(1, 16'((i + 2) % 3));
+      `ASSERT_EQ(0, bank);
+      `ASSERT_EQ(1, stop);
+      `ASSERT_EQ(0, transition_pending);
+    end
+  endtask
+
+  task automatic test_hold_running_finite_loop();
+    arm_finite_bank0(16'h0001);
+
+    step_idx(0, 1);
+    step_idx(0, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(0, stop);
+
+    step_idx(0, 1);
+    @(posedge CLK);
+    rep[1] <= 16'h0000;
+    latch(0, params::TRANSITION_MODE_SYNC_IDX, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
+
+    step_idx(0, 2);
+    `ASSERT_EQ(0, stop);
+    step_idx(0, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, stop);
+    `ASSERT_EQ(0, transition_pending);
+  endtask
+
+  task automatic test_pending_transition_params_latched();
+    logic [63:0] far_future;
+    @(posedge CLK);
+    sync_idx[0] <= 1;
+    sync_idx[1] <= 1;
+    rep[0] <= 16'hFFFF;
+    rep[1] <= 16'h0000;
+    far_future = (SYS_TIME / ECAT_SYNC_BASE_CNT + 1000) * 500000;
+    latch(1, params::TRANSITION_MODE_SYS_TIME, far_future);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, transition_pending);
+
+    repeat (32) @(posedge CLK);
+    latch(1, params::TRANSITION_MODE_SYS_TIME, far_future);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, transition_pending);
+
+    @(posedge CLK);
+    rep[0] <= 16'h0000;
+    transition_mode <= params::TRANSITION_MODE_SYNC_IDX;
+    transition_value <= 0;
+    req_rd_bank <= 0;
+    step_idx(1, 2);
+    step_idx(1, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, transition_pending);
+    step_idx(1, 1);
+
+    latch(0, params::TRANSITION_MODE_SYNC_IDX, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, transition_pending);
+
+    step_idx(1, 2);
+    step_idx(1, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, transition_pending);
+
+    step_idx(0, 2);
+    step_idx(0, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
+
+    step_idx(0, 1);
+    step_idx(0, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, stop);
+  endtask
+
+  task automatic latch_with_idx(input int b, input logic [15:0] v, input logic req, input logic [7:0] mode, input logic [63:0] value);
+    @(posedge CLK);
+    sync_idx[b] <= v;
+    req_rd_bank <= req;
+    transition_mode <= mode;
+    transition_value <= value;
+    update_settings <= 1;
+    @(posedge CLK);
+    update_settings <= 0;
+    @(negedge CLK);
+  endtask
+
+  task automatic test_hold_coincident_wrap();
+    arm_finite_bank0(16'h0001);
+
+    step_idx(0, 1);
+    @(posedge CLK);
+    rep[1] <= 16'h0000;
+    latch_with_idx(0, 0, 0, params::TRANSITION_MODE_SYNC_IDX, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
+
+    step_idx(0, 1);
+    `ASSERT_EQ(0, stop);
+    latch_with_idx(0, 0, 0, params::TRANSITION_MODE_SYNC_IDX, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, stop);
+    `ASSERT_EQ(0, transition_pending);
+  endtask
+
+  task automatic test_gpio_pin_latched_and_coincident_tic();
+    @(posedge CLK);
+    sync_idx[0] <= 0;
+    sync_idx[1] <= 1;
+    rep[1] <= 16'hFFFF;
+    gpio_in <= {1'b0, 1'b0, 1'b0, 1'b0};
+    latch(1, params::TRANSITION_MODE_IMMEDIATE, 0);
+    `ASSERT_EQ(1, bank);
+
+    @(posedge CLK);
+    rep[0] <= 16'h0001;
+    latch(0, params::TRANSITION_MODE_GPIO, 2);
+    `ASSERT_EQ(1, bank);
+    `ASSERT_EQ(1, transition_pending);
+
+    @(posedge CLK);
+    transition_value <= 1;
+    gpio_in[1] <= 1'b1;
+    step_idx(0, 1);
+    `ASSERT_EQ(1, bank);
+    `ASSERT_EQ(1, transition_pending);
+
+    @(posedge CLK);
+    gpio_in[2] <= 1'b1;
+    step_idx(0, 2);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
+    `ASSERT_EQ(0, idx[0]);
+
+    @(posedge CLK);
+    rep[1] <= 16'h0000;
+    latch_with_idx(0, 0, 0, params::TRANSITION_MODE_GPIO, 2);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(0, transition_pending);
+    `ASSERT_EQ(1, idx[0]);
+
+    step_idx(0, 1);
+    `ASSERT_EQ(2, idx[0]);
+    step_idx(0, 2);
+    `ASSERT_EQ(0, idx[0]);
+    `ASSERT_EQ(0, stop);
+    step_idx(0, 0);
+    `ASSERT_EQ(1, idx[0]);
+    step_idx(0, 1);
+    `ASSERT_EQ(2, idx[0]);
+    step_idx(0, 2);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, stop);
+
+    @(posedge CLK);
+    gpio_in <= {1'b0, 1'b0, 1'b0, 1'b0};
+  endtask
+
   initial begin
     update_settings = 0;
     transition_mode = params::TRANSITION_MODE_SYNC_IDX;
@@ -764,6 +990,21 @@ module sim_swapchain ();
 
     reset();
     test_ext();
+
+    reset();
+    test_hold_stopped_finite_bank();
+
+    reset();
+    test_hold_running_finite_loop();
+
+    reset();
+    test_pending_transition_params_latched();
+
+    reset();
+    test_hold_coincident_wrap();
+
+    reset();
+    test_gpio_pin_latched_and_coincident_tic();
 
     reset();
 

@@ -82,29 +82,28 @@ impl Swapchain {
         transition_mode: u8,
         transition_value: u64,
     ) {
-        if self.cur_bank == req_bank {
-            self.stop = false;
-            self.ext_mode = transition_mode == MODE_EXT;
-            self.ext_last_lap = self.lap_and_idx(req_bank, sys_time_ns).0;
-            self.tic_idx_offset[req_bank] = 0;
-            self.state = State::InfiniteLoop;
-        } else if rep == REP_INFINITE {
+        let target_bank = if self.state == State::WaitStart {
+            self.req_bank
+        } else {
+            self.cur_bank
+        };
+        self.freq_div[req_bank] = freq_div;
+        self.cycle[req_bank] = cycle;
+        if rep == REP_INFINITE {
             self.stop = false;
             self.cur_bank = req_bank;
             self.ext_mode = transition_mode == MODE_EXT;
             self.ext_last_lap = self.lap_and_idx(req_bank, sys_time_ns).0;
             self.tic_idx_offset[req_bank] = 0;
             self.state = State::InfiniteLoop;
-        } else {
+        } else if req_bank != target_bank {
             self.rep = rep;
             self.req_bank = req_bank;
+            self.sys_time_ns = sys_time_ns;
+            self.transition_mode = transition_mode;
+            self.transition_value = transition_value;
             self.state = State::WaitStart;
         }
-        self.sys_time_ns = sys_time_ns;
-        self.freq_div[req_bank] = freq_div;
-        self.cycle[req_bank] = cycle;
-        self.transition_mode = transition_mode;
-        self.transition_value = transition_value;
         self.recompute_cur_idx(sys_time_ns);
     }
 
@@ -201,5 +200,83 @@ mod tests {
             sc.cur_idx(),
             sc.cycle[sc.cur_bank()]
         );
+    }
+
+    const CYCLE: usize = 4;
+    const LAP_NS: u64 = 100_000;
+
+    fn run(sc: &mut Swapchain, from_ns: u64, to_ns: u64) {
+        let mut t = from_ns;
+        while t <= to_ns {
+            sc.update([false; 4], t);
+            t += LAP_NS / 8;
+        }
+    }
+
+    fn start_finite_on_bank0(sc: &mut Swapchain, rep: u16) -> u64 {
+        sc.set(0, REP_INFINITE, 1, CYCLE, 1, MODE_IMMEDIATE, 0);
+        sc.set(LAP_NS / 2, rep, 1, CYCLE, 0, MODE_SYNC_IDX, 0);
+        assert!(sc.transition_pending());
+        run(sc, LAP_NS / 2, LAP_NS + LAP_NS / 8);
+        assert_eq!(0, sc.cur_bank());
+        assert!(!sc.transition_pending());
+        assert!(!sc.stopped());
+        LAP_NS + LAP_NS / 8
+    }
+
+    #[test]
+    fn stopped_finite_bank_is_not_replayed_by_other_bank_config() {
+        let mut sc = Swapchain::new();
+        let t = start_finite_on_bank0(&mut sc, 0);
+        run(&mut sc, t, 3 * LAP_NS);
+        assert!(sc.stopped());
+        assert_eq!(CYCLE - 1, sc.cur_idx());
+
+        sc.set(3 * LAP_NS, 0, 1, CYCLE, 0, MODE_SYNC_IDX, 0);
+        let mut t = 3 * LAP_NS;
+        while t <= 10 * LAP_NS {
+            sc.update([false; 4], t);
+            assert_eq!(0, sc.cur_bank());
+            assert!(sc.stopped());
+            assert!(!sc.transition_pending());
+            assert_eq!(CYCLE - 1, sc.cur_idx());
+            t += LAP_NS / 8;
+        }
+    }
+
+    #[test]
+    fn running_finite_loop_is_not_restarted_by_same_bank_request() {
+        let mut sc = Swapchain::new();
+        let t = start_finite_on_bank0(&mut sc, 1);
+        run(&mut sc, t, 2 * LAP_NS + LAP_NS / 2);
+        assert!(!sc.stopped());
+
+        sc.set(2 * LAP_NS + LAP_NS / 2, 1, 1, CYCLE, 0, MODE_SYNC_IDX, 0);
+        assert!(!sc.transition_pending());
+        run(&mut sc, 2 * LAP_NS + LAP_NS / 2, 2 * LAP_NS + 7 * LAP_NS / 8);
+        assert!(!sc.stopped());
+        run(&mut sc, 3 * LAP_NS, 3 * LAP_NS + LAP_NS / 8);
+        assert!(sc.stopped());
+        assert_eq!(0, sc.cur_bank());
+    }
+
+    #[test]
+    fn pending_transition_is_replaced_by_request_to_previous_bank() {
+        let mut sc = Swapchain::new();
+        sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
+        sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, MODE_SYS_TIME, 1_000 * LAP_NS);
+        assert!(sc.transition_pending());
+
+        sc.set(LAP_NS / 2 + 1, 0, 1, CYCLE, 1, MODE_SYNC_IDX, 0);
+        run(&mut sc, LAP_NS / 2 + 1, 2 * LAP_NS + LAP_NS / 2);
+        assert_eq!(0, sc.cur_bank());
+        assert!(sc.transition_pending());
+
+        sc.set(2 * LAP_NS + LAP_NS / 2, 0, 1, CYCLE, 0, MODE_SYNC_IDX, 0);
+        assert!(sc.transition_pending());
+        run(&mut sc, 2 * LAP_NS + LAP_NS / 2, 3 * LAP_NS + LAP_NS / 8);
+        assert_eq!(0, sc.cur_bank());
+        assert!(!sc.transition_pending());
+        assert!(!sc.stopped());
     }
 }

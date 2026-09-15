@@ -46,9 +46,14 @@ module swapchain (
   idx_mode_t idx_mode = IDX_MODE_SYNC_IDX;
   state_t state = INFINITE_LOOP;
 
+  logic [7:0] transition_mode;
+  logic [1:0] gpio_pin;
+  logic target_bank;
+
   assign BANK = bank;
   assign STOP = stop;
   assign TRANSITION_PENDING = state == WAIT_START;
+  assign target_bank = (state == WAIT_START) ? req_bank : bank;
 
   logic [$clog2(Latency)-1:0] addsub_latency;
   logic wait_transition;
@@ -76,25 +81,25 @@ module swapchain (
   end
 
   always_ff @(posedge CLK) begin
-    if (UPDATE_SETTINGS) begin
-      if (REP[REQ_RD_BANK] == params::RepInfinite) begin
-        stop <= 1'b0;
-        bank <= REQ_RD_BANK;
-        idx_mode <= IDX_MODE_SYNC_IDX;
-        ext_mode <= TRANSITION_MODE == params::TRANSITION_MODE_EXT;
-        state <= INFINITE_LOOP;
-      end else begin
-        rep <= REP[REQ_RD_BANK];
-        req_bank <= REQ_RD_BANK;
-        transition_time_din_valid <= TRANSITION_MODE == params::TRANSITION_MODE_SYS_TIME;
-        wait_transition <= 1'b1;
-        addsub_latency <= '0;
-        state <= WAIT_START;
-      end
+    if (UPDATE_SETTINGS && (REP[REQ_RD_BANK] == params::RepInfinite)) begin
+      stop <= 1'b0;
+      bank <= REQ_RD_BANK;
+      idx_mode <= IDX_MODE_SYNC_IDX;
+      ext_mode <= TRANSITION_MODE == params::TRANSITION_MODE_EXT;
+      state <= INFINITE_LOOP;
+    end else if (UPDATE_SETTINGS && (REQ_RD_BANK != target_bank)) begin
+      rep <= REP[REQ_RD_BANK];
+      req_bank <= REQ_RD_BANK;
+      transition_mode <= TRANSITION_MODE;
+      gpio_pin <= TRANSITION_VALUE[1:0];
+      transition_time_din_valid <= TRANSITION_MODE == params::TRANSITION_MODE_SYS_TIME;
+      wait_transition <= 1'b1;
+      addsub_latency <= '0;
+      state <= WAIT_START;
     end else begin
       case (state)
         WAIT_START: begin
-          case (TRANSITION_MODE)
+          case (transition_mode)
             params::TRANSITION_MODE_SYNC_IDX: begin
               if (idx_changed[req_bank] && (SYNC_IDX[req_bank] == '0)) begin
                 stop <= 1'b0;
@@ -126,7 +131,7 @@ module swapchain (
               end
             end
             params::TRANSITION_MODE_GPIO: begin
-              if (idx_changed[req_bank] && GPIO_IN[TRANSITION_VALUE[1:0]]) begin
+              if (idx_changed[req_bank] && GPIO_IN[gpio_pin]) begin
                 stop <= 1'b0;
                 loop_cnt <= '0;
                 bank <= req_bank;
