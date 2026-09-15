@@ -152,7 +152,7 @@ module synchronizer (
           sync_time_diff <= sync_time_diff - 1;
         end
       end else if (diff_cnt == AddSubLatency) begin
-        sync_time_diff <= diff_overflow ? 14'sd0 : saturate_diff(s_diff);
+        sync_time_diff <= diff_overflow ? 14'sd0 : 14'(s_diff);
         if (locked && diff_overflow && (resync_count != 8'hFF)) resync_count <= resync_count + 8'd1;
         diff_cnt <= diff_cnt + 1;
         sys_time <= sys_time + 1;
@@ -166,7 +166,7 @@ module synchronizer (
       if (next_cnt == AddSubLatency + 1) begin
         next_cnt <= next_cnt;
       end else if (next_cnt == AddSubLatency) begin
-        next_sync_time <= diff_overflow ? (sys_time + cycle_ticks) : s_next;
+        next_sync_time <= diff_overflow ? (b_diff + cycle_ticks) : s_next;
         next_cnt <= next_cnt + 1;
       end else begin
         next_cnt <= next_cnt + 1;
@@ -189,16 +189,6 @@ module synchronizer (
   always_ff @(posedge CLK) adjust_cnt <= adjust_cnt == adjust_cnt_cyc ? '0 : adjust_cnt + 1;
 
   always_ff @(posedge CLK) sync_tri <= {sync_tri[1:0], ECAT_SYNC};
-
-  function automatic logic signed [13:0] saturate_diff(input logic signed [57:0] diff);
-    if (diff > DiffMax) begin
-      saturate_diff = 14'sd8191;
-    end else if (diff < -DiffMax) begin
-      saturate_diff = -14'sd8191;
-    end else begin
-      saturate_diff = 14'(diff);
-    end
-  endfunction
 
 endmodule
 `default_nettype wire
