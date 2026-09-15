@@ -253,7 +253,11 @@ mod tests {
 
         sc.set(2 * LAP_NS + LAP_NS / 2, 1, 1, CYCLE, 0, MODE_SYNC_IDX, 0);
         assert!(!sc.transition_pending());
-        run(&mut sc, 2 * LAP_NS + LAP_NS / 2, 2 * LAP_NS + 7 * LAP_NS / 8);
+        run(
+            &mut sc,
+            2 * LAP_NS + LAP_NS / 2,
+            2 * LAP_NS + 7 * LAP_NS / 8,
+        );
         assert!(!sc.stopped());
         run(&mut sc, 3 * LAP_NS, 3 * LAP_NS + LAP_NS / 8);
         assert!(sc.stopped());
