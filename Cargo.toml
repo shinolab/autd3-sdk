@@ -99,8 +99,8 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 ] }
 
 autd3-rs = { version = "0.8.0", path = "crates/autd3-rs" }
-autd3-cpu-wire = { version = "0.6.0", path = "firmware/cpu/wire" }
-autd3-cpu-fw = { version = "0.6.0", path = "firmware/cpu/fw" }
+autd3-cpu-wire = { version = "0.6.1", path = "firmware/cpu/wire" }
+autd3-cpu-fw = { version = "0.6.1", path = "firmware/cpu/fw" }
 autd3-rs-appliance = { version = "0.8.0", path = "appliance/lib" }
 autd3-rs-core = { version = "0.8.0", path = "crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { version = "0.8.0", path = "crates/autd3-rs-firmware-emulator" }
