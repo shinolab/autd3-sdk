@@ -5,8 +5,16 @@ module sim_controller ();
 
   localparam int DEPTH = 249;
 
+  localparam bit [15:0] PersistentFlags = (16'd1 << params::CTL_FLAG_BIT_FORCE_FAN)
+      | (16'd1 << params::CTL_FLAG_BIT_GPIO_IN_1) | (16'd1 << params::CTL_FLAG_BIT_GPIO_IN_3);
+
   logic CLK;
   logic locked;
+  logic enable_gate;
+  logic enable;
+  logic enable_d = 1'b0;
+
+  assign enable = locked & enable_gate;
 
   sim_helper_random sim_helper_random ();
   sim_helper_bram #(.DEPTH(DEPTH)) sim_helper_bram ();
@@ -53,7 +61,7 @@ module sim_controller ();
 
   controller controller (
       .CLK(CLK),
-      .ENABLE(locked),
+      .ENABLE(enable),
       .THERMO(thermo),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
@@ -72,11 +80,52 @@ module sim_controller ();
       .GPIO_IN(gpio_in)
   );
 
+  always_ff @(posedge CLK) enable_d <= enable;
+
   always @(posedge CLK) begin
-    if (!locked) begin
+    if (!enable && !enable_d) begin
       `ASSERT_EQ(1'b0, cnt_bus.WE);
     end
   end
+
+  logic idle_check;
+  logic expected_force_fan;
+  logic expected_gpio_in[4];
+
+  always @(posedge CLK) begin
+    if (idle_check === 1'b1) begin
+      `ASSERT_EQ(1'b0, mod_settings.UPDATE);
+      `ASSERT_EQ(1'b0, pattern_settings.UPDATE);
+      `ASSERT_EQ(1'b0, silencer_settings.UPDATE);
+      `ASSERT_EQ(1'b0, debug_settings.UPDATE);
+      `ASSERT_EQ(1'b0, sync_settings.UPDATE);
+      `ASSERT_EQ(expected_force_fan, FORCE_FAN);
+      `ASSERT_EQ(expected_gpio_in[0], gpio_in[0]);
+      `ASSERT_EQ(expected_gpio_in[1], gpio_in[1]);
+      `ASSERT_EQ(expected_gpio_in[2], gpio_in[2]);
+      `ASSERT_EQ(expected_gpio_in[3], gpio_in[3]);
+    end
+  end
+
+  logic [15:0] glitch_value;
+
+  task automatic inject_ctl_flag_glitch(input logic [15:0] value);
+    @(posedge CLK);
+    #1;
+    glitch_value = value;
+    force cnt_bus.DOUT = glitch_value;
+    @(posedge CLK);
+    #1;
+    release cnt_bus.DOUT;
+  endtask
+
+  task automatic assert_persistent_flags();
+    `ASSERT_EQ(1'b1, FORCE_FAN);
+    `ASSERT_EQ(1'b0, gpio_in[0]);
+    `ASSERT_EQ(1'b1, gpio_in[1]);
+    `ASSERT_EQ(1'b0, gpio_in[2]);
+    `ASSERT_EQ(1'b1, gpio_in[3]);
+  endtask
 
   settings::mod_settings_t mod_settings_in;
   settings::pattern_settings_t pattern_settings_in;
@@ -85,8 +134,14 @@ module sim_controller ();
   settings::debug_settings_t debug_settings_in;
 
   logic [15:0] fpga_state;
+  logic [15:0] ctl_flag;
 
   initial begin
+
+    enable_gate = 1'b1;
+    idle_check = 1'b0;
+    expected_force_fan = 1'b0;
+    expected_gpio_in = '{1'b0, 1'b0, 1'b0, 1'b0};
 
     thermo = 1'b1;
     mod_bank = 1'b1;
@@ -175,6 +230,97 @@ module sim_controller ();
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, fpga_state);
     `ASSERT_EQ({sync_resync_count, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
                fpga_state);
+
+    repeat (32) @(posedge CLK);
+    sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, ctl_flag);
+    `ASSERT_EQ(16'd0, ctl_flag);
+
+    sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_MOD_SET));
+    @(posedge mod_settings.UPDATE);
+    repeat (32) @(posedge CLK);
+    assert_persistent_flags();
+    sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, ctl_flag);
+    `ASSERT_EQ(PersistentFlags, ctl_flag);
+    $display("OK! persistent CTL_FLAG bits survive a latch sequence");
+
+    @(negedge CLK);
+    expected_force_fan = 1'b1;
+    expected_gpio_in = '{1'b0, 1'b1, 1'b0, 1'b1};
+    idle_check = 1'b1;
+    for (int i = 0; i < 4; i++) begin
+      repeat (i) @(posedge CLK);
+      inject_ctl_flag_glitch(16'hFFFF);
+      repeat (64) @(posedge CLK);
+      inject_ctl_flag_glitch(16'h0000);
+      repeat (64) @(posedge CLK);
+    end
+    @(negedge CLK);
+    idle_check = 1'b0;
+    sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, ctl_flag);
+    `ASSERT_EQ(PersistentFlags, ctl_flag);
+    $display("OK! a corrupted CTL_FLAG read is rejected");
+
+    for (int i = 0; i < 8; i++) begin
+      sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_MOD_SET));
+      @(posedge mod_settings.UPDATE);
+      `ASSERT_EQ(mod_settings_in, mod_settings);
+      @(negedge mod_settings.UPDATE);
+      repeat (i) @(posedge CLK);
+      inject_ctl_flag_glitch(PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_MOD_SET));
+      @(negedge CLK);
+      idle_check = 1'b1;
+      repeat (64) @(posedge CLK);
+      @(negedge CLK);
+      idle_check = 1'b0;
+    end
+    sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, ctl_flag);
+    `ASSERT_EQ(PersistentFlags, ctl_flag);
+    $display("OK! a stale candidate cannot re-arm the sequence just cleared");
+
+    sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_PATTERN_SET));
+    wait (controller.ctl_flags[params::CTL_FLAG_BIT_PATTERN_SET] === 1'b1);
+    repeat (6) @(posedge CLK);
+    `ASSERT_EQ(1'b0, pattern_settings.UPDATE);
+    enable_gate = 1'b0;
+    repeat (2) @(posedge CLK);
+    `ASSERT_EQ(16'd0, controller.ctl_flags);
+    `ASSERT_EQ(1'b0, pattern_settings.UPDATE);
+    `ASSERT_EQ(1'b0, FORCE_FAN);
+    repeat (8) @(posedge CLK);
+    enable_gate = 1'b1;
+    @(posedge pattern_settings.UPDATE);
+    `ASSERT_EQ(pattern_settings_in, pattern_settings);
+    repeat (32) @(posedge CLK);
+    assert_persistent_flags();
+    $display("OK! losing ENABLE mid-sequence replays the latch after relock");
+
+    sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_PATTERN_SET));
+    @(posedge pattern_settings.UPDATE);
+    enable_gate = 1'b0;
+    repeat (2) @(posedge CLK);
+    `ASSERT_EQ(16'd0, controller.ctl_flags);
+    `ASSERT_EQ(1'b0, mod_settings.UPDATE);
+    `ASSERT_EQ(1'b0, pattern_settings.UPDATE);
+    `ASSERT_EQ(1'b0, silencer_settings.UPDATE);
+    `ASSERT_EQ(1'b0, debug_settings.UPDATE);
+    `ASSERT_EQ(1'b0, sync_settings.UPDATE);
+    `ASSERT_EQ(1'b0, FORCE_FAN);
+    `ASSERT_EQ(1'b0, gpio_in[1]);
+    `ASSERT_EQ(1'b0, gpio_in[3]);
+
+    repeat (8) @(posedge CLK);
+    enable_gate = 1'b1;
+    repeat (128) @(posedge CLK);
+    assert_persistent_flags();
+    $display("OK! losing ENABLE clears ctl_flags and every UPDATE");
+
+    sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_PATTERN_SET));
+    @(posedge pattern_settings.UPDATE);
+    `ASSERT_EQ(pattern_settings_in, pattern_settings);
+    repeat (32) @(posedge CLK);
+    assert_persistent_flags();
+    sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, ctl_flag);
+    `ASSERT_EQ(PersistentFlags, ctl_flag);
 
     $display("OK! sim_controller");
     $finish();

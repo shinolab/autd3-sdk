@@ -74,6 +74,9 @@ module sim_cpu_readback ();
 
   logic [15:0] value;
 
+  localparam bit [15:0] PersistentFlags = (16'd1 << params::CTL_FLAG_BIT_FORCE_FAN)
+      | (16'd1 << params::CTL_FLAG_BIT_GPIO_IN_0) | (16'd1 << params::CTL_FLAG_BIT_GPIO_IN_2);
+
   initial begin
 
     thermo = 1'b1;
@@ -102,6 +105,17 @@ module sim_cpu_readback ();
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
     `ASSERT_EQ({sync_resync_count, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
                value);
+
+    sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags);
+    repeat (32) @(posedge CLK);
+    `ASSERT_EQ(1'b1, FORCE_FAN);
+    `ASSERT_EQ(1'b1, gpio_in[0]);
+    `ASSERT_EQ(1'b0, gpio_in[1]);
+    `ASSERT_EQ(1'b1, gpio_in[2]);
+    `ASSERT_EQ(1'b0, gpio_in[3]);
+
+    sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, value);
+    `ASSERT_EQ(PersistentFlags, value);
 
     $display("OK! sim_cpu_readback");
     $finish();

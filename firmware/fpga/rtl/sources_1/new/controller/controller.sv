@@ -24,6 +24,7 @@ module controller (
   localparam bit [7:0] FunctionBits = (1'b0 << params::FuncDynamicFreqBit) | (1'b0 << params::FuncEmulatorBit);
 
   logic [15:0] ctl_flags = '0;
+  logic [15:0] ctl_flags_cand = '0;
 
   logic we = 1'b0;
   logic [7:0] addr;
@@ -151,6 +152,13 @@ module controller (
       state <= REQ_WR_VER_PATCH;
       we <= 1'b0;
       fpga_state_prev <= 16'hFFFF;
+      ctl_flags <= '0;
+      ctl_flags_cand <= '0;
+      MOD_SETTINGS.UPDATE <= 1'b0;
+      PATTERN_SETTINGS.UPDATE <= 1'b0;
+      SILENCER_SETTINGS.UPDATE <= 1'b0;
+      DEBUG_SETTINGS.UPDATE <= 1'b0;
+      SYNC_SETTINGS.UPDATE <= 1'b0;
     end else
       case (state)
         REQ_WR_VER_PATCH: begin
@@ -212,7 +220,10 @@ module controller (
             ctl_flags <= ctl_flags & ~(1 << params::CTL_FLAG_BIT_SYNC_SET);
             state <= REQ_ECAT_SYNC_TIME_0;
           end else begin
-            ctl_flags <= dout;
+            ctl_flags_cand <= dout;
+            if (dout == ctl_flags_cand) begin
+              ctl_flags <= dout;
+            end
             state <= WAIT_1;
           end
         end
@@ -307,7 +318,10 @@ module controller (
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
           fpga_state_prev <= fpga_state_din();
-          ctl_flags <= dout;
+          ctl_flags_cand <= dout;
+          if (dout == ctl_flags_cand) begin
+            ctl_flags <= dout;
+          end
           MOD_SETTINGS.UPDATE <= 1'b0;
           state <= WAIT_1;
         end
@@ -427,7 +441,10 @@ module controller (
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
           fpga_state_prev <= fpga_state_din();
-          ctl_flags <= dout;
+          ctl_flags_cand <= dout;
+          if (dout == ctl_flags_cand) begin
+            ctl_flags <= dout;
+          end
           PATTERN_SETTINGS.UPDATE <= 1'b0;
           state <= WAIT_1;
         end
@@ -482,7 +499,10 @@ module controller (
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
           fpga_state_prev <= fpga_state_din();
-          ctl_flags <= dout;
+          ctl_flags_cand <= dout;
+          if (dout == ctl_flags_cand) begin
+            ctl_flags <= dout;
+          end
           SILENCER_SETTINGS.UPDATE <= 1'b0;
           state <= WAIT_1;
         end
@@ -592,7 +612,10 @@ module controller (
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
           fpga_state_prev <= fpga_state_din();
-          ctl_flags <= dout;
+          ctl_flags_cand <= dout;
+          if (dout == ctl_flags_cand) begin
+            ctl_flags <= dout;
+          end
           DEBUG_SETTINGS.UPDATE <= 1'b0;
           state <= WAIT_1;
         end
@@ -652,7 +675,10 @@ module controller (
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
           fpga_state_prev <= fpga_state_din();
-          ctl_flags <= dout;
+          ctl_flags_cand <= dout;
+          if (dout == ctl_flags_cand) begin
+            ctl_flags <= dout;
+          end
           SYNC_SETTINGS.UPDATE <= 1'b0;
           state <= WAIT_1;
         end

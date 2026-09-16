@@ -20,15 +20,22 @@ module gpio_output #(
     output wire GPIO_OUT[4]
 );
 
+  logic [63:0] debug_value[4] = '{4{{params::GPIO_O_TYPE_NONE, 56'd0}}};
   logic gpio_out[4];
 
   assign GPIO_OUT = gpio_out;
 
   always_ff @(posedge CLK) begin
-    gpio_out[0] <= debug_signal(DEBUG_SETTINGS.VALUE[0][63:56], DEBUG_SETTINGS.VALUE[0][55:0]);
-    gpio_out[1] <= debug_signal(DEBUG_SETTINGS.VALUE[1][63:56], DEBUG_SETTINGS.VALUE[1][55:0]);
-    gpio_out[2] <= debug_signal(DEBUG_SETTINGS.VALUE[2][63:56], DEBUG_SETTINGS.VALUE[2][55:0]);
-    gpio_out[3] <= debug_signal(DEBUG_SETTINGS.VALUE[3][63:56], DEBUG_SETTINGS.VALUE[3][55:0]);
+    if (DEBUG_SETTINGS.UPDATE) begin
+      debug_value <= DEBUG_SETTINGS.VALUE;
+    end
+  end
+
+  always_ff @(posedge CLK) begin
+    gpio_out[0] <= debug_signal(debug_value[0][63:56], debug_value[0][55:0]);
+    gpio_out[1] <= debug_signal(debug_value[1][63:56], debug_value[1][55:0]);
+    gpio_out[2] <= debug_signal(debug_value[2][63:56], debug_value[2][55:0]);
+    gpio_out[3] <= debug_signal(debug_value[3][63:56], debug_value[3][55:0]);
   end
 
   function automatic logic debug_signal(input logic [7:0] o_type, input logic [55:0] value);
