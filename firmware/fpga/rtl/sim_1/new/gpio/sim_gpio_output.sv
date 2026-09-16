@@ -48,15 +48,27 @@ module sim_gpio_output ();
       .GPIO_OUT(gpio_out)
   );
 
+  logic no_pulse_check;
+
+  always @(posedge CLK) begin
+    if (no_pulse_check === 1'b1) begin
+      `ASSERT_EQ(1'b0, gpio_out[0]);
+    end
+  end
+
   task automatic check(input logic [7:0] o_type, input logic [55:0] value, input logic expected);
     @(posedge CLK);
     debug_settings.VALUE[0] <= {o_type, value};
+    debug_settings.UPDATE   <= 1'b1;
+    @(posedge CLK);
+    debug_settings.UPDATE <= 1'b0;
     repeat (2) @(posedge CLK);
     @(negedge CLK);
     `ASSERT_EQ(expected, gpio_out[0]);
   endtask
 
   initial begin
+    no_pulse_check = 1'b0;
     debug_settings.UPDATE = 1'b0;
     debug_settings.VALUE[0] = {params::GPIO_O_TYPE_NONE, 56'd0};
     debug_settings.VALUE[1] = {params::GPIO_O_TYPE_NONE, 56'd0};
@@ -148,6 +160,29 @@ module sim_gpio_output ();
 
     // unknown type falls back to 0
     check(8'h7F, 56'd1, 1'b0);
+
+    sys_time = {48'h0000_0000_1234, 9'd5};
+    check(params::GPIO_O_TYPE_SYS_TIME_EQ, {8'd0, 48'h0000_0000_FFFF}, 1'b0);
+
+    @(negedge CLK);
+    no_pulse_check = 1'b1;
+    @(posedge CLK);
+    debug_settings.VALUE[0][15:0] <= 16'h1234;
+    @(posedge CLK);
+    debug_settings.VALUE[0][31:16] <= 16'hBBBB;
+    @(posedge CLK);
+    debug_settings.VALUE[0][47:32] <= 16'hAAAA;
+    @(posedge CLK);
+    debug_settings.VALUE[0][63:48] <= {params::GPIO_O_TYPE_SYS_TIME_EQ, 8'h00};
+    debug_settings.UPDATE <= 1'b1;
+    @(posedge CLK);
+    debug_settings.UPDATE <= 1'b0;
+    repeat (4) @(posedge CLK);
+    @(negedge CLK);
+    no_pulse_check = 1'b0;
+    $display("OK! a half-assembled DEBUG_VALUE does not pulse GPIO_OUT");
+
+    check(params::GPIO_O_TYPE_SYS_TIME_EQ, {8'd0, 48'h0000_0000_1234}, 1'b1);
 
     $display("OK! sim_gpio_output");
     $finish();
