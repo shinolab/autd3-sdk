@@ -6,6 +6,8 @@ use loom::thread;
 
 use crate::fifo::{FIFO_DEPTH, Fifo};
 
+const RESET_ACK: u16 = u16::MAX;
+
 struct Ring {
     fifo: Fifo,
     slots: Vec<AtomicU16>,
@@ -40,6 +42,18 @@ impl Ring {
         self.fifo.begin_drain();
         let tail = self.fifo.next()?;
         let value = self.slots[Fifo::slot(tail)].load(Ordering::Relaxed);
+        self.fifo.commit(tail);
+        Some(value)
+    }
+
+    fn drain_step(&self, tx: &AtomicU16) -> Option<u16> {
+        let flush_gen = self.fifo.begin_drain();
+        let tail = self.fifo.next()?;
+        let value = self.slots[Fifo::slot(tail)].load(Ordering::Relaxed);
+        tx.store(value, Ordering::Relaxed);
+        if self.fifo.is_before_flush(flush_gen, tail) {
+            tx.store(RESET_ACK, Ordering::Relaxed);
+        }
         self.fifo.commit(tail);
         Some(value)
     }
@@ -134,5 +148,36 @@ fn a_flush_requested_mid_drain_discards_only_the_queued_slots() {
         assert!(ring.pop().is_none());
         assert!(drained.iter().all(|&value| value == 1 || value == 2));
         assert!(drained.windows(2).all(|w| w[0] < w[1]));
+    });
+}
+
+#[test]
+fn a_frame_published_right_after_a_reset_keeps_its_ack() {
+    loom::model(|| {
+        let ring = Arc::new(Ring::new());
+        let tx = Arc::new(AtomicU16::new(RESET_ACK));
+        assert!(ring.push(1));
+
+        let producer = {
+            let ring = Arc::clone(&ring);
+            let tx = Arc::clone(&tx);
+            thread::spawn(move || {
+                ring.fifo.request_flush(ring.fifo.head());
+                tx.store(RESET_ACK, Ordering::Relaxed);
+                assert!(ring.push(2));
+            })
+        };
+
+        loop {
+            match ring.drain_step(&tx) {
+                Some(2) => break,
+                Some(_) => {}
+                None => thread::yield_now(),
+            }
+        }
+        producer.join().unwrap();
+
+        assert_eq!(tx.load(Ordering::Relaxed), 2);
+        assert!(ring.pop().is_none());
     });
 }

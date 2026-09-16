@@ -108,6 +108,55 @@ fn reset_flush_discards_queued_frames_mid_drain() {
 }
 
 #[test]
+fn reset_and_next_frame_landing_inside_one_drain_step_keep_the_next_ack() {
+    let mut h = Harness::new();
+
+    let flush_gen = h.cpu.begin_drain();
+    h.deliver_no_drain(&Frame::new(0, Cmd::Reset));
+    h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
+
+    assert!(h.cpu.drain_step(&mut h.port, flush_gen));
+    assert_eq!(h.ack(), 0);
+    assert_eq!(h.expected_seq(), 1);
+
+    assert!(!h.process_one());
+    assert_eq!(h.ack(), 0);
+    assert_eq!(h.expected_seq(), 1);
+}
+
+#[test]
+fn reset_landing_inside_a_drain_step_still_rolls_back_the_discarded_frame() {
+    let mut h = Harness::new();
+
+    h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
+    let flush_gen = h.cpu.begin_drain();
+    h.deliver_no_drain(&Frame::new(0, Cmd::Reset));
+    h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
+
+    assert!(h.cpu.drain_step(&mut h.port, flush_gen));
+    assert_eq!(h.ack(), 0xFF);
+    assert_eq!(h.expected_seq(), 0);
+
+    assert!(h.process_one());
+    assert_eq!(h.ack(), 0);
+    assert_eq!(h.expected_seq(), 1);
+    assert!(!h.process_one());
+}
+
+#[test]
+fn reset_between_tx_store_and_publish_is_republished_by_the_same_drain_step() {
+    let mut h = Harness::new();
+
+    h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
+    h.arm_isr_reset();
+
+    assert!(h.process_one());
+    assert_eq!(h.ack(), 0xFF);
+    assert_eq!(h.expected_seq(), 0);
+    assert!(!h.process_one());
+}
+
+#[test]
 fn fifo_overflow_drops_beyond_capacity_and_accepts_after_drain() {
     let mut h = Harness::new();
 

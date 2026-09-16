@@ -25,10 +25,8 @@ pub struct Cpu {
     last_cmd: AtomicU8,
     slots: [Cell<RxFrame>; FIFO_DEPTH as usize],
     fifo: Fifo,
-    preempt_tx: AtomicU16,
-    preempt_expected: AtomicU8,
     telemetry: [AtomicU8; Telemetry::CPU_COUNTER_COUNT],
-    al_err_ticks: Cell<u16>,
+    al_err_ticks: AtomicU16,
     expected_seq: AtomicU8,
     error_detail: Cell<Option<Error>>,
     pub(crate) silencer: cmd::silencer::SilencerGuard,
@@ -53,10 +51,8 @@ macro_rules! cpu_new {
             last_cmd: AtomicU8::new(0xFF),
             slots: [const { Cell::new(RxFrame::ZERO) }; FIFO_DEPTH as usize],
             fifo: Fifo::new(),
-            preempt_tx: AtomicU16::new(0),
-            preempt_expected: AtomicU8::new(0),
             telemetry: [const { AtomicU8::new(0) }; Telemetry::CPU_COUNTER_COUNT],
-            al_err_ticks: Cell::new(0),
+            al_err_ticks: AtomicU16::new(0),
             expected_seq: AtomicU8::new(0),
             error_detail: Cell::new(None),
             silencer: cmd::silencer::SilencerGuard::new(),
@@ -91,19 +87,17 @@ impl Cpu {
         }
         self.silencer.init();
         self.reset_telemetry();
-        self.tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
+        self.set_tx(port, 0xFF, 0);
         self.last_seq.store(0xFF, Ordering::Relaxed);
         self.last_cmd.store(0xFF, Ordering::Relaxed);
         self.fifo.reset();
-        self.preempt_tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
-        self.preempt_expected.store(0, Ordering::Relaxed);
     }
 
     pub(crate) fn reset_telemetry(&self) {
         for counter in &self.telemetry {
             counter.store(0, Ordering::Relaxed);
         }
-        self.al_err_ticks.set(0);
+        self.al_err_ticks.store(0, Ordering::Relaxed);
     }
 
     fn bump(&self, id: Telemetry) {
@@ -122,11 +116,16 @@ impl Cpu {
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
         let code = port.al_status_code();
         if code != AL_STATUS_CODE_SYNC_ERROR && code != AL_STATUS_CODE_SM_WATCHDOG {
-            self.al_err_ticks.set(0);
+            self.al_err_ticks.store(0, Ordering::Relaxed);
             return;
         }
-        let ticks = self.al_err_ticks.get().saturating_add(1);
-        self.al_err_ticks.set(ticks);
+        let update = self
+            .al_err_ticks
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |t| {
+                Some(t.saturating_add(1))
+            });
+        let (Ok(prev) | Err(prev)) = update;
+        let ticks = prev.saturating_add(1);
         if ticks == FAILSAFE_TICKS {
             cmd::failsafe::mute(port);
             self.bump(Telemetry::Failsafe);
@@ -175,8 +174,6 @@ impl Cpu {
         let cmd = Cmd::from_u8(raw_cmd);
         let preempt = cmd == Some(Cmd::Reset);
         if preempt {
-            self.preempt_tx.store(pack_tx(0xFF, 0), Ordering::Relaxed);
-            self.preempt_expected.store(0, Ordering::Relaxed);
             self.fifo.request_flush(head);
         }
 
@@ -201,15 +198,24 @@ impl Cpu {
 
     pub fn process_one<P: Port>(&self, port: &mut P) -> bool {
         let flush_gen = self.fifo.begin_drain();
+        self.drain_step(port, flush_gen)
+    }
+
+    #[cfg(all(test, not(loom)))]
+    pub(crate) fn begin_drain(&self) -> u16 {
+        self.fifo.begin_drain()
+    }
+
+    pub(crate) fn drain_step<P: Port>(&self, port: &mut P, flush_gen: u16) -> bool {
         let Some(tail) = self.fifo.next() else {
             return false;
         };
         let in_frame = self.slots[Fifo::slot(tail)].get();
         self.handle_frame(port, &in_frame);
-        self.fifo.commit(tail);
-        if self.fifo.flush_gen() != flush_gen {
-            self.apply_preempt();
+        if self.fifo.is_before_flush(flush_gen, tail) {
+            self.apply_preempt(port);
         }
+        self.fifo.commit(tail);
         true
     }
 
@@ -217,19 +223,20 @@ impl Cpu {
         while self.process_one(port) {}
     }
 
-    fn apply_preempt(&self) {
-        self.expected_seq.store(
-            self.preempt_expected.load(Ordering::Relaxed),
-            Ordering::Relaxed,
-        );
-        self.tx
-            .store(self.preempt_tx.load(Ordering::Relaxed), Ordering::Relaxed);
+    fn apply_preempt<P: Port>(&self, port: &mut P) {
+        self.expected_seq.store(0, Ordering::Relaxed);
+        self.set_tx(port, 0xFF, 0);
+    }
+
+    fn set_tx<P: Port>(&self, port: &mut P, ack: u8, data: u8) {
+        self.tx.store(pack_tx(ack, data), Ordering::Relaxed);
+        port.publish_tx(TxFrame { ack, data });
     }
 
     fn handle_frame<P: Port>(&self, port: &mut P, in_frame: &RxFrame) {
         let cmd = Cmd::from_u8(in_frame.cmd);
         if cmd == Some(Cmd::Reset) {
-            self.apply_preempt();
+            self.apply_preempt(port);
             return;
         }
         if in_frame.seq == self.expected_seq.load(Ordering::Relaxed) {
@@ -239,8 +246,7 @@ impl Cpu {
                 Some(cmd) => self.dispatch(port, cmd, &in_frame.payload),
                 None => self.latch_error(Error::UnknownCmd),
             };
-            self.tx
-                .store(pack_tx(in_frame.seq, data), Ordering::Relaxed);
+            self.set_tx(port, in_frame.seq, data);
             self.bump(Telemetry::Processed);
         } else {
             self.bump(Telemetry::SeqMismatch);

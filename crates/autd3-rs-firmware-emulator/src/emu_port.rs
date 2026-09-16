@@ -1,5 +1,6 @@
 use crate::emu_fpga::FpgaEmulator;
 use autd3_cpu_fw::Port;
+use autd3_cpu_fw::proto::TxFrame;
 
 impl Port for FpgaEmulator {
     fn fpga_write(&mut self, addr: u16, value: u16) {
@@ -27,4 +28,6 @@ impl Port for FpgaEmulator {
     fn al_status_code(&mut self) -> u16 {
         FpgaEmulator::al_status_code(self)
     }
+
+    fn publish_tx(&mut self, _tx: TxFrame) {}
 }

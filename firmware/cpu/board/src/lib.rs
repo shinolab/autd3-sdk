@@ -8,19 +8,9 @@ use core::arch::asm;
 use core::panic::PanicInfo;
 
 use autd3_cpu_fw::Cpu;
-use autd3_cpu_fw::proto::{TxFrame, WIRE_RX_FRAME_BYTES};
+use autd3_cpu_fw::proto::WIRE_RX_FRAME_BYTES;
 
 use crate::port::HwPort;
-
-#[repr(C)]
-struct TxWire {
-    _reserved: u16,
-    ack_data: u16,
-}
-
-unsafe extern "C" {
-    static mut _sTx: TxWire;
-}
 
 struct StaticCpu(Cpu);
 
@@ -28,15 +18,9 @@ unsafe impl Sync for StaticCpu {}
 
 static CPU: StaticCpu = StaticCpu(Cpu::new());
 
-fn publish_tx(tx: TxFrame) {
-    let packed = u16::from(tx.ack) | (u16::from(tx.data) << 8);
-    unsafe { (&raw mut _sTx.ack_data).write_volatile(packed) };
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn init_app() {
     CPU.0.init(&mut HwPort);
-    publish_tx(CPU.0.tx());
 }
 
 #[unsafe(no_mangle)]
@@ -45,16 +29,13 @@ pub extern "C" fn recv_ethercat(frame: *const u8) {
     bsp::io::isr_probe_high();
     let frame = unsafe { &*(frame.cast::<[u8; WIRE_RX_FRAME_BYTES]>()) };
     CPU.0.recv_ethercat(&mut HwPort, frame);
-    publish_tx(CPU.0.tx());
     #[cfg(feature = "isr-probe")]
     bsp::io::isr_probe_low();
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn app_process_pending() {
-    while CPU.0.process_one(&mut HwPort) {
-        publish_tx(CPU.0.tx());
-    }
+    CPU.0.process_pending(&mut HwPort);
 }
 
 #[unsafe(no_mangle)]
