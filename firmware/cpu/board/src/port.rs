@@ -1,6 +1,7 @@
 use core::arch::asm;
 
 use autd3_cpu_fw::Port;
+use autd3_cpu_fw::proto::TxFrame;
 
 use crate::regs::{
     ECATC_AL_STATUS_CODE, ECATC_DC_CYC_START_TIME_HI, ECATC_DC_CYC_START_TIME_LO,
@@ -8,6 +9,16 @@ use crate::regs::{
 };
 
 const FPGA_BASE: usize = 0x4400_0000;
+
+#[repr(C)]
+struct TxWire {
+    _reserved: u16,
+    ack_data: u16,
+}
+
+unsafe extern "C" {
+    static mut _sTx: TxWire;
+}
 
 const MICROSECONDS: u64 = 1000;
 const SYNC0_GUARD_NS: u64 = 250 * MICROSECONDS;
@@ -73,5 +84,10 @@ impl Port for HwPort {
 
     fn al_status_code(&mut self) -> u16 {
         read16(ECATC_AL_STATUS_CODE)
+    }
+
+    fn publish_tx(&mut self, tx: TxFrame) {
+        let packed = u16::from(tx.ack) | (u16::from(tx.data) << 8);
+        unsafe { (&raw mut _sTx.ack_data).write_volatile(packed) };
     }
 }

@@ -2,7 +2,10 @@ use std::vec;
 use std::vec::Vec;
 
 use crate::fpga::FPGA_PAGE_WORDS;
-use crate::params::{ADDR_MOD_MEM_WR_PAGE, ADDR_PATTERN_MEM_WR_PAGE, NUM_BANKS, NUM_TRANSDUCERS};
+use crate::params::{
+    ADDR_MOD_MEM_WR_PAGE, ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, NUM_BANKS,
+    NUM_TRANSDUCERS,
+};
 use zerocopy::little_endian::{U16, U32};
 
 use crate::cmd::write_mod::{MOD_WRITE_MAX_DATA_LEN, WriteModPayload};
@@ -77,6 +80,21 @@ fn write_pattern_buffer_empty_data_is_no_op_success() {
     h.deliver(&write_pattern_buffer(0, 0, 0, &[]));
     assert_eq!(h.ack(), 0);
     assert_eq!(h.data(), 0);
+}
+
+#[test]
+fn write_pattern_buffer_empty_data_at_ram_end_does_not_switch_bank_or_page() {
+    const UNTOUCHED: u16 = 0xBEEF;
+    let mut h = Harness::new();
+    h.set_ctl(ADDR_PATTERN_MEM_WR_BANK, UNTOUCHED);
+    h.set_ctl(ADDR_PATTERN_MEM_WR_PAGE, UNTOUCHED);
+
+    h.deliver(&write_pattern_buffer(0, 1, EMISSION_RAM_WORDS, &[]));
+
+    assert_eq!(h.ack(), 0);
+    assert_eq!(h.data(), 0);
+    assert_eq!(h.ctl(ADDR_PATTERN_MEM_WR_BANK), UNTOUCHED);
+    assert_eq!(h.ctl(ADDR_PATTERN_MEM_WR_PAGE), UNTOUCHED);
 }
 
 #[test]

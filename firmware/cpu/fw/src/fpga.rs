@@ -117,6 +117,9 @@ pub fn write_ram<P: Port>(
     offset: u32,
     src: &[u8],
 ) {
+    if src.is_empty() {
+        return;
+    }
     write_switch(port, wr_bank_reg, u16::from(bank));
     let mut page = offset / FPGA_PAGE_WORDS;
     write_switch(port, wr_page_reg, page as u16);

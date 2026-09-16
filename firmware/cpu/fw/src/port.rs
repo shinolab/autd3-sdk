@@ -1,3 +1,5 @@
+use crate::proto::TxFrame;
+
 pub trait Port {
     fn fpga_write(&mut self, addr: u16, value: u16);
 
@@ -12,4 +14,6 @@ pub trait Port {
     fn sync0_cycle_ns(&mut self) -> u32;
 
     fn al_status_code(&mut self) -> u16;
+
+    fn publish_tx(&mut self, tx: TxFrame);
 }

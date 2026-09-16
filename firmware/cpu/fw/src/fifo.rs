@@ -100,8 +100,14 @@ impl Fifo {
         self.tail.store(tail.wrapping_add(1), Ordering::Release);
     }
 
-    pub(crate) fn flush_gen(&self) -> u16 {
-        self.flush_gen.load(Ordering::Acquire)
+    pub(crate) fn is_before_flush(&self, flush_gen: u16, tail: u16) -> bool {
+        self.flush_gen.load(Ordering::Acquire) != flush_gen
+            && self
+                .flush_head
+                .load(Ordering::Relaxed)
+                .wrapping_sub(tail)
+                .wrapping_sub(1)
+                < FIFO_DEPTH
     }
 
     #[cfg(test)]

@@ -1,3 +1,4 @@
+use core::cell::Cell;
 use std::boxed::Box;
 use std::rc::Rc;
 use std::vec;
@@ -17,7 +18,7 @@ use crate::params::{
 use crate::port::Port;
 use crate::proto::{
     Cmd, EMISSION_RAM_WORDS, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS, PAYLOAD_BYTES, Telemetry,
-    WIRE_RX_FRAME_BYTES, WIRE_RX_GAP_END, WIRE_RX_GAP_START,
+    TxFrame, WIRE_RX_FRAME_BYTES, WIRE_RX_GAP_END, WIRE_RX_GAP_START,
 };
 
 pub(crate) const MOD_RAM_WORDS: usize = (MOD_BUFFER_SAMPLES / 2) as usize;
@@ -29,9 +30,11 @@ const LATCH_MASK: u16 = CTL_FLAG_MOD_SET
     | CTL_FLAG_DEBUG_SET
     | CTL_FLAG_SYNC_SET;
 
-struct NullPort;
+struct IsrPort {
+    published_tx: Rc<Cell<Option<TxFrame>>>,
+}
 
-impl Port for NullPort {
+impl Port for IsrPort {
     fn fpga_write(&mut self, _addr: u16, _value: u16) {}
     fn fpga_read(&mut self, _addr: u16) -> u16 {
         0
@@ -49,6 +52,9 @@ impl Port for NullPort {
     fn al_status_code(&mut self) -> u16 {
         0
     }
+    fn publish_tx(&mut self, tx: TxFrame) {
+        self.published_tx.set(Some(tx));
+    }
 }
 
 pub(crate) struct MockPort {
@@ -64,6 +70,7 @@ pub(crate) struct MockPort {
     pub sync0_cycle_ns: u32,
     pub al_status_code: u16,
     pub latch_stuck: bool,
+    published_tx: Rc<Cell<Option<TxFrame>>>,
     isr_frame: Option<(Rc<Cpu>, u8, u8)>,
 }
 
@@ -82,6 +89,7 @@ impl MockPort {
             sync0_cycle_ns: 1_000_000,
             al_status_code: 0,
             latch_stuck: false,
+            published_tx: Rc::new(Cell::new(None)),
             isr_frame: None,
         }
     }
@@ -125,7 +133,10 @@ impl MockPort {
         let mut wire = [0u8; WIRE_RX_FRAME_BYTES];
         wire[0] = seq;
         wire[1] = cmd;
-        cpu.recv_ethercat(&mut NullPort, &wire);
+        let mut isr_port = IsrPort {
+            published_tx: Rc::clone(&self.published_tx),
+        };
+        cpu.recv_ethercat(&mut isr_port, &wire);
     }
 }
 
@@ -176,6 +187,11 @@ impl Port for MockPort {
 
     fn al_status_code(&mut self) -> u16 {
         self.al_status_code
+    }
+
+    fn publish_tx(&mut self, tx: TxFrame) {
+        self.fire_isr_frame();
+        self.published_tx.set(Some(tx));
     }
 }
 
@@ -262,12 +278,18 @@ impl Harness {
         self.cpu.process_one(&mut self.port)
     }
 
+    fn tx(&self) -> TxFrame {
+        let tx = self.cpu.tx();
+        assert_eq!(self.port.published_tx.get(), Some(tx));
+        tx
+    }
+
     pub(crate) fn ack(&self) -> u8 {
-        self.cpu.tx().ack
+        self.tx().ack
     }
 
     pub(crate) fn data(&self) -> u8 {
-        self.cpu.tx().data
+        self.tx().data
     }
 
     pub(crate) fn expected_seq(&self) -> u8 {
