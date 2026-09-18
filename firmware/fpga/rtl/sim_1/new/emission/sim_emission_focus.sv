@@ -33,6 +33,7 @@ module sim_emission_focus ();
   modulation_bus_if mod_bus ();
   emission_bus_if emission_bus ();
   pwe_table_bus_if pwe_table_bus ();
+  flash_bus_if flash_bus ();
   output_mask_bus_if output_mask_bus ();
 
   memory memory (
@@ -43,7 +44,8 @@ module sim_emission_focus ();
       .OUTPUT_MASK_BUS(output_mask_bus.in_port),
       .MOD_BUS(mod_bus.in_port),
       .EMISSION_BUS(emission_bus.in_port),
-      .PWE_TABLE_BUS(pwe_table_bus.in_port)
+      .PWE_TABLE_BUS(pwe_table_bus.in_port),
+      .FLASH_BUS(flash_bus.host_port)
   );
 
   sim_helper_clk sim_helper_clk (

@@ -7,3 +7,12 @@
 !/scripts/*.tcl
 !/coe/
 !/coe/*.coe
+!/flash-probe/
+!/flash-probe/rtl/
+!/flash-probe/rtl/*.sv
+!/flash-probe/sim/
+!/flash-probe/sim/*.sv
+!/flash-probe/constrs/
+!/flash-probe/constrs/*.xdc
+!/flash-probe/scripts/
+!/flash-probe/scripts/*.tcl

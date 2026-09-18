@@ -3,6 +3,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use autd3_cpu_wire::fpga_update::{
+    FPGA_BARRIER_BASE, FPGA_IMAGE_BASE, FpgaBootImage, fpga_barrier_image, summarize_bitstream,
+    validate_update_image,
+};
+
 use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{on_path, run, which};
 
@@ -14,13 +19,13 @@ pub const VERIBLE_COLUMN_LIMIT: &str = "--column_limit=150";
 pub enum FpgaCmd {
     /// Generate the Vivado project
     Project,
-    /// Synthesize, implement, and write the bitstream / `autd3-fpga.mcs`
+    /// Synthesize, implement, and write the golden + update bitstreams, `autd3-fpga.mcs` and `autd3-fpga-update.img`
     Build {
         /// Re-synthesize even when a bitstream already exists
         #[arg(long)]
         force: bool,
     },
-    /// Build, then configure the SPI flash of the device
+    /// Build, then configure the SPI flash of the device (golden + update image)
     Flash {
         /// Re-synthesize even when a bitstream already exists
         #[arg(long)]
@@ -59,6 +64,11 @@ pub enum FpgaCmd {
     CommitIps,
     #[command(about = "Remove the Vivado project and its build outputs")]
     Clean(CleanArgs),
+    #[command(about = "Standalone probe bitstream that reads the configuration flash over JTAG")]
+    FlashProbe {
+        #[command(subcommand)]
+        cmd: crate::fpga_probe::FlashProbeCmd,
+    },
 }
 
 pub fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
@@ -78,6 +88,7 @@ pub fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
         FpgaCmd::GenController => crate::fpga_codegen::gen_controller(&fpga_dir),
         FpgaCmd::CommitIps => fpga_commit_ips(&fpga_dir),
         FpgaCmd::Clean(args) => crate::clean::scope(root, *args, clean),
+        FpgaCmd::FlashProbe { cmd } => crate::fpga_probe::run_flash_probe(&fpga_dir, cmd),
     }
 }
 
@@ -314,6 +325,9 @@ fn fpga_format(fpga_dir: &Path, fix: bool) -> Result<()> {
     let rtl_dir = fpga_dir.join("rtl");
     let mut files = Vec::new();
     collect_rtl_sources(&rtl_dir, &mut files)?;
+    for dir in ["flash-probe/rtl", "flash-probe/sim"] {
+        collect_rtl_sources(&fpga_dir.join(dir), &mut files)?;
+    }
     files.sort();
     if files.is_empty() {
         bail!("no SystemVerilog sources found under {}", rtl_dir.display());
@@ -367,13 +381,25 @@ fn fpga_project(fpga_dir: &Path) -> Result<()> {
     )
 }
 
-pub fn fpga_build(root: &Path, force: bool) -> Result<PathBuf> {
+pub struct FpgaArtifacts {
+    pub mcs: PathBuf,
+    pub update_image: PathBuf,
+}
+
+pub const UPDATE_IMAGE_NAME: &str = "autd3-fpga-update.img";
+const BARRIER_IMAGE_NAME: &str = "autd3-fpga-barrier.bin";
+
+pub fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
     let fpga_dir = root.join("firmware/fpga");
     let vivado = resolve_vivado()?;
 
     if !fpga_dir.join(format!("{PROJECT_NAME}.xpr")).exists() {
         fpga_project(&fpga_dir)?;
     }
+
+    let barrier = fpga_dir.join(BARRIER_IMAGE_NAME);
+    std::fs::write(&barrier, fpga_barrier_image())
+        .with_context(|| format!("writing {}", barrier.display()))?;
 
     let jobs = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
     let mut args = vec![
@@ -384,6 +410,9 @@ pub fn fpga_build(root: &Path, force: bool) -> Result<PathBuf> {
         "-tclargs".to_string(),
         jobs.to_string(),
     ];
+    args.push(format!("barrier={}", barrier.display()));
+    args.push(format!("barrier_address=0x{FPGA_BARRIER_BASE:08X}"));
+    args.push(format!("update_address=0x{FPGA_IMAGE_BASE:08X}"));
     if force {
         args.push("force".to_string());
     }
@@ -393,12 +422,67 @@ pub fn fpga_build(root: &Path, force: bool) -> Result<PathBuf> {
     if !mcs.is_file() {
         bail!("Vivado finished but {} was not created", mcs.display());
     }
+    let update_image = fpga_dir.join(UPDATE_IMAGE_NAME);
+    split_flash_image(&mcs, &update_image)?;
     println!("fpga built: {}", mcs.display());
-    Ok(mcs)
+    println!("fpga update image: {}", update_image.display());
+    Ok(FpgaArtifacts { mcs, update_image })
+}
+
+fn split_flash_image(mcs: &Path, update_image: &Path) -> Result<()> {
+    let (start, flash) = crate::fpga_probe::read_mcs(mcs)?;
+    if start != 0 {
+        bail!("{} starts at 0x{start:X}, expected the golden image at 0x0", mcs.display());
+    }
+    let barrier_base = FPGA_BARRIER_BASE as usize;
+    let golden = summarize_bitstream(flash.get(..barrier_base).unwrap_or(&flash));
+    if golden.boot_image() != FpgaBootImage::Golden
+        || !golden.iprog
+        || golden.wbstar != Some(FPGA_BARRIER_BASE)
+    {
+        bail!(
+            "the image at 0x0 is not a golden image that jumps to the barrier at 0x{FPGA_BARRIER_BASE:X}: {golden:?}"
+        );
+    }
+    if !golden.monitors_configuration() {
+        bail!("the golden image does not arm the configuration watchdog: {golden:?}");
+    }
+    let barrier = fpga_barrier_image();
+    let barrier_end = barrier_base + barrier.len();
+    if flash.get(barrier_base..barrier_end) != Some(&barrier[..]) {
+        bail!("the mcs does not hold the barrier at 0x{FPGA_BARRIER_BASE:X}");
+    }
+    if flash
+        .get(barrier_end..FPGA_IMAGE_BASE as usize)
+        .is_none_or(|gap| gap.iter().any(|&b| b != 0xFF))
+    {
+        bail!("the gap between the barrier and the update slot is not empty, or the mcs has no update image");
+    }
+    let slot = &flash[FPGA_IMAGE_BASE as usize..];
+    let used = slot
+        .iter()
+        .rposition(|&b| b != 0xFF)
+        .map_or(0, |last| (last + 1).next_multiple_of(4));
+    let update = &slot[..used.min(slot.len())];
+    let summary = validate_update_image(update)
+        .map_err(|e| anyhow::anyhow!("the update image is not valid for OTA: {e:?}"))?;
+    if !summary.monitors_configuration() {
+        bail!("the update image does not arm the configuration watchdog: {summary:?}");
+    }
+    std::fs::write(update_image, update)
+        .with_context(|| format!("writing {}", update_image.display()))?;
+    println!(
+        "barrier at 0x{FPGA_BARRIER_BASE:06X}, update: {} bytes (USR_ACCESS 0x{:08X}), TIMER 0x{:08X} / 0x{:08X}",
+        update.len(),
+        summary.usr_access.unwrap_or_default(),
+        golden.timer.unwrap_or_default(),
+        summary.timer.unwrap_or_default()
+    );
+    Ok(())
 }
 
 fn fpga_flash(root: &Path, force: bool) -> Result<()> {
-    let mcs = fpga_build(root, force)?;
+    let artifacts = fpga_build(root, force)?;
     let vivado = resolve_vivado()?;
     let fpga_dir = root.join("firmware/fpga");
     println!("Make sure the configuration cable is connected and the AUTD3 power is on.");
@@ -408,7 +492,7 @@ fn fpga_flash(root: &Path, force: bool) -> Result<()> {
         &fpga_dir,
     )
     .context("Vivado failed. Make sure the AUTD3 is connected and powered on.")?;
-    println!("flash complete: {}", mcs.display());
+    println!("flash complete: {}", artifacts.mcs.display());
     Ok(())
 }
 
@@ -541,7 +625,9 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
-    const FILE_EXTS: [&str; 8] = ["jou", "log", "zip", "prm", "str", "pb", "mcs", "xpr"];
+    const FILE_EXTS: [&str; 12] = [
+        "jou", "log", "zip", "prm", "str", "pb", "mcs", "xpr", "bit", "img", "stamp", "bin",
+    ];
 
     let fpga_dir = cleaner.root().join("firmware/fpga");
     let entries =

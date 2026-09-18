@@ -3,6 +3,8 @@ set project_name      "autd3-fpga"
 
 cd $project_directory
 open_project [file join $project_directory "$project_name.xpr"]
+source [file join $project_directory scripts sync_sources.tcl]
+sync_project_sources $project_directory
 
 set_property -name {xsim.compile.tcl.pre} -value {} -objects [get_filesets sim_1]
 set_property -name {xsim.simulate.xsim.more_options} -value {-sv_seed random} -objects [get_filesets sim_1]

@@ -299,6 +299,15 @@ pub fn generate_console(root: &Path) -> Result<()> {
     let firmware = std::fs::read_to_string(&firmware_tmp)
         .with_context(|| format!("reading {}", firmware_tmp.display()))?;
 
+    let ota_tmp = console.join(".third-party-firmware-ota.md");
+    about(
+        root,
+        &root.join("tools").join("firmware-ota").join("Cargo.toml"),
+        &ota_tmp,
+    )?;
+    let ota = std::fs::read_to_string(&ota_tmp)
+        .with_context(|| format!("reading {}", ota_tmp.display()))?;
+
     let appliance_tmp = console.join(".third-party-appliance.md");
     about(
         root,
@@ -314,10 +323,13 @@ pub fn generate_console(root: &Path) -> Result<()> {
     combined.push_str(&simulator);
     combined.push_str("\n\n---\n\n# Firmware tool dependencies\n\n");
     combined.push_str(&firmware);
+    combined.push_str("\n\n---\n\n# Firmware OTA tool dependencies\n\n");
+    combined.push_str(&ota);
     combined.push_str("\n\n---\n\n# Appliance CLI dependencies\n\n");
     combined.push_str(&appliance);
     std::fs::write(&out, combined).with_context(|| format!("writing {}", out.display()))?;
     std::fs::remove_file(&firmware_tmp).ok();
+    std::fs::remove_file(&ota_tmp).ok();
     std::fs::remove_file(&appliance_tmp).ok();
     Ok(())
 }

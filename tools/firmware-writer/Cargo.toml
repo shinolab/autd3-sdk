@@ -8,6 +8,10 @@ repository.workspace = true
 publish = false
 description = "CLI tool for flashing AUTD3 CPU/FPGA firmware (downloads released images and writes them via SEGGER J-Link / Xilinx Vivado)."
 
+[lib]
+name = "autd3_firmware_writer"
+path = "src/lib.rs"
+
 [[bin]]
 name = "autd3-firmware-writer"
 path = "src/main.rs"
@@ -16,6 +20,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 autd3-cpu-wire.workspace = true
 clap.workspace = true
+thiserror.workspace = true
 serde_json = { version = "1.0.150", default-features = false, features = ["std"] }
 ureq = "3.3.0"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }

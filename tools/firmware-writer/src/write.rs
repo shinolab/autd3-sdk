@@ -1,12 +1,14 @@
-use std::io::{BufRead, Read, Write};
+use std::io::{BufRead, Write};
+use std::path::Path;
 #[cfg(windows)]
 use std::path::PathBuf as WinPathBuf;
-use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
+use autd3_firmware_writer::bundle::{self, Bundle};
+use autd3_firmware_writer::series::Series;
+
 use crate::Target;
-use crate::series::Series;
 use crate::util::{run, which};
 
 pub fn write(
@@ -17,8 +19,11 @@ pub fn write(
 ) -> Result<()> {
     let version = version.trim_start_matches('v');
 
-    let dir = download_and_extract(version, force_download, series)?;
-    let (cpu, fpga) = find_firmwares(&dir)?;
+    let Bundle {
+        cpu,
+        fpga_mcs: fpga,
+        ..
+    } = bundle::fetch(version, force_download, series)?;
 
     eprintln!("Found firmwares ({} v{version}):", series.label());
     match &cpu {
@@ -46,87 +51,6 @@ pub fn write(
     }
 
     eprintln!("Done. Power-cycle the AUTD3 to load the new firmware.");
-    Ok(())
-}
-
-fn download_and_extract(version: &str, force: bool, series: Series) -> Result<PathBuf> {
-    let dest = std::env::temp_dir().join(series.cache_dir_name(version));
-    if dest.is_dir() && !force {
-        eprintln!("Using cached firmware at {}", dest.display());
-        return Ok(dest);
-    }
-    if dest.exists() {
-        std::fs::remove_dir_all(&dest)
-            .with_context(|| format!("removing stale cache {}", dest.display()))?;
-    }
-
-    let url = series.bundle_url(version);
-    eprintln!("Downloading {url}");
-    let resp = ureq::get(&url)
-        .call()
-        .with_context(|| format!("downloading {url}"))?;
-    let mut bytes = Vec::new();
-    resp.into_body()
-        .into_reader()
-        .read_to_end(&mut bytes)
-        .context("reading firmware bundle")?;
-
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
-        .context("opening firmware zip (was the version correct?)")?;
-    archive
-        .extract(&dest)
-        .with_context(|| format!("extracting firmware to {}", dest.display()))?;
-    Ok(dest)
-}
-
-fn find_firmwares(dir: &Path) -> Result<(Option<PathBuf>, Option<PathBuf>)> {
-    let mut files = Vec::new();
-    collect_files(dir, &mut files)?;
-
-    let mut cpu = Vec::new();
-    let mut fpga = Vec::new();
-    for f in files {
-        match f.extension().and_then(|e| e.to_str()) {
-            Some("bin") => cpu.push(f),
-            Some("mcs") => fpga.push(f),
-            _ => {}
-        }
-    }
-    if cpu.is_empty() && fpga.is_empty() {
-        bail!(
-            "no firmware images (*.bin / *.mcs) found in {}",
-            dir.display()
-        );
-    }
-    Ok((single(cpu, "bin", dir)?, single(fpga, "mcs", dir)?))
-}
-
-fn single(mut candidates: Vec<PathBuf>, ext: &str, dir: &Path) -> Result<Option<PathBuf>> {
-    if candidates.len() > 1 {
-        candidates.sort();
-        let list = candidates
-            .iter()
-            .map(|p| format!("  {}", p.display()))
-            .collect::<Vec<_>>()
-            .join("\n");
-        bail!(
-            "multiple *.{ext} firmware images found in {}; cannot tell which one to write:\n{list}",
-            dir.display()
-        );
-    }
-    Ok(candidates.pop())
-}
-
-fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    let entries = std::fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))?;
-    for entry in entries {
-        let path = entry?.path();
-        if path.is_dir() {
-            collect_files(&path, out)?;
-        } else {
-            out.push(path);
-        }
-    }
     Ok(())
 }
 

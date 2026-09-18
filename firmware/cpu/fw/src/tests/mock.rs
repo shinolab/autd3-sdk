@@ -9,18 +9,23 @@ use zerocopy::{Immutable, IntoBytes};
 use crate::app::Cpu;
 use crate::fpga::PWE_TABLE_SIZE;
 use crate::params::{
-    ADDR_CTL_FLAG, ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE, ADDR_PATTERN_MEM_WR_BANK,
-    ADDR_PATTERN_MEM_WR_PAGE, BRAM_CNT_SELECT_MAIN, BRAM_CNT_SELECT_OUTPUT_MASK,
+    ADDR_CTL_FLAG, ADDR_FLASH_ADDR_0, ADDR_FLASH_ADDR_1, ADDR_FLASH_CMD, ADDR_FLASH_LEN_0,
+    ADDR_FLASH_LEN_1, ADDR_FLASH_RESULT_0, ADDR_FLASH_RESULT_1, ADDR_FLASH_STATUS,
+    ADDR_FLASH_USR_ACCESS_0, ADDR_FLASH_USR_ACCESS_1, ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE,
+    ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, BRAM_CNT_SELECT_FLASH,
+    BRAM_CNT_SELECT_FLASH_BUF, BRAM_CNT_SELECT_MAIN, BRAM_CNT_SELECT_OUTPUT_MASK,
     BRAM_CNT_SELECT_PHASE_CORR, BRAM_SELECT_CONTROLLER, BRAM_SELECT_EMISSION, BRAM_SELECT_MOD,
     BRAM_SELECT_PWE_TABLE, CTL_FLAG_DEBUG_SET, CTL_FLAG_MOD_SET, CTL_FLAG_PATTERN_SET,
-    CTL_FLAG_SILENCER_SET, CTL_FLAG_SYNC_SET, NUM_BANKS,
+    CTL_FLAG_SILENCER_SET, CTL_FLAG_SYNC_SET, FLASH_BUF_BYTES, FLASH_ERR_INVALID, FLASH_ERR_NONE,
+    FLASH_OP_CRC32, FLASH_OP_ERASE, FLASH_OP_PROGRAM, FLASH_OP_READ_ID, FLASH_OP_REBOOT, NUM_BANKS,
 };
 use crate::port::{FlashError, Port};
 use crate::proto::{
     Cmd, EMISSION_RAM_WORDS, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS, PAYLOAD_BYTES, Telemetry,
     TxFrame, WIRE_RX_FRAME_BYTES, WIRE_RX_GAP_END, WIRE_RX_GAP_START,
 };
-use autd3_cpu_wire::update::{FLASH_BYTES, FLASH_SECTOR_BYTES, LOADER_REGION_END};
+use autd3_cpu_wire::fpga_update::{FPGA_FLASH_BYTES, FPGA_GOLDEN_REGION_END, FPGA_SECTOR_BYTES};
+use autd3_cpu_wire::update::{FLASH_BYTES, FLASH_SECTOR_BYTES, LOADER_REGION_END, crc32};
 
 pub(crate) const MOD_RAM_WORDS: usize = (MOD_BUFFER_SAMPLES / 2) as usize;
 pub(crate) const EM_RAM_WORDS: usize = EMISSION_RAM_WORDS as usize;
@@ -91,6 +96,18 @@ pub(crate) struct MockPort {
     pub flash_write_silent: bool,
     pub erased: Vec<(u32, u32)>,
     pub reset_count: u32,
+    pub fpga_flash: Vec<u8>,
+    pub fpga_flash_reg: [u16; 16],
+    pub fpga_flash_buf: Box<[u16; FLASH_BUF_BYTES / 2]>,
+    pub fpga_flash_ops: Vec<(u8, u32, u32)>,
+    pub fpga_flash_err: Option<u8>,
+    pub fpga_flash_hang: bool,
+    pub fpga_flash_dropped_reg: Option<u16>,
+    pub fpga_flash_target_unflushed: bool,
+    pub fpga_flash_cmds_before_flush: u32,
+    pub fpga_usr_access: u32,
+    pub fpga_reboots: u32,
+    pub fpga_reboots_to_ignore: u32,
     published_tx: Rc<Cell<Option<TxFrame>>>,
     isr_frame: Option<(Rc<Cpu>, u8, u8)>,
 }
@@ -116,6 +133,18 @@ impl MockPort {
             flash_write_silent: false,
             erased: Vec::new(),
             reset_count: 0,
+            fpga_flash: Vec::new(),
+            fpga_flash_reg: [0; 16],
+            fpga_flash_buf: Box::new([0; FLASH_BUF_BYTES / 2]),
+            fpga_flash_ops: Vec::new(),
+            fpga_flash_err: None,
+            fpga_flash_hang: false,
+            fpga_flash_dropped_reg: None,
+            fpga_flash_target_unflushed: false,
+            fpga_flash_cmds_before_flush: 0,
+            fpga_usr_access: 0,
+            fpga_reboots: 0,
+            fpga_reboots_to_ignore: 0,
             published_tx: Rc::new(Cell::new(None)),
             isr_frame: None,
         }
@@ -145,12 +174,94 @@ impl MockPort {
                     self.ctl[(addr & 0xFF) as usize] = value;
                 }
             }
+            BRAM_CNT_SELECT_FLASH if self.fpga_flash_dropped_reg == Some(addr & 0xFF) => {}
+            BRAM_CNT_SELECT_FLASH => {
+                self.fpga_flash_reg[(addr & 0xF) as usize] = value;
+                if addr & 0xFF != ADDR_FLASH_CMD {
+                    self.fpga_flash_target_unflushed = true;
+                } else if self.fpga_flash_target_unflushed {
+                    self.fpga_flash_cmds_before_flush += 1;
+                }
+                if addr & 0xFF == ADDR_FLASH_CMD {
+                    self.run_flash_command(value as u8);
+                }
+            }
+            sel if sel >> 1 == BRAM_CNT_SELECT_FLASH_BUF >> 1 => {
+                self.fpga_flash_buf[(addr & 0x1FF) as usize] = value;
+            }
             BRAM_CNT_SELECT_PHASE_CORR => self.phase_corr[(addr & 0xFF) as usize] = value,
             BRAM_CNT_SELECT_OUTPUT_MASK => {
                 self.output_mask[(addr as usize) & (OUTPUT_MASK_WORDS - 1)] = value;
             }
             _ => {}
         }
+    }
+
+    pub(crate) fn fpga_flash_mut(&mut self) -> &mut Vec<u8> {
+        if self.fpga_flash.is_empty() {
+            self.fpga_flash = vec![0xFF; FPGA_FLASH_BYTES as usize];
+        }
+        &mut self.fpga_flash
+    }
+
+    fn flash_reg24(&self, lo: u16, hi: u16) -> u32 {
+        u32::from(self.fpga_flash_reg[lo as usize])
+            | (u32::from(self.fpga_flash_reg[hi as usize] & 0xFF) << 16)
+    }
+
+    fn run_flash_command(&mut self, op: u8) {
+        let addr = self.flash_reg24(ADDR_FLASH_ADDR_0, ADDR_FLASH_ADDR_1);
+        let len = self.flash_reg24(ADDR_FLASH_LEN_0, ADDR_FLASH_LEN_1);
+        self.fpga_flash_ops.push((op, addr, len));
+        let end = (addr + len) as usize;
+        let mut err = FLASH_ERR_NONE;
+        let mut result = 0u32;
+        match op {
+            FLASH_OP_READ_ID => result = 0x0020_BA18,
+            FLASH_OP_CRC32 => {
+                let flash = self.fpga_flash_mut();
+                result = crc32(&flash[addr as usize..end]);
+            }
+            FLASH_OP_ERASE => {
+                assert!(addr >= FPGA_GOLDEN_REGION_END, "erase of the golden image");
+                assert!(end <= FPGA_FLASH_BYTES as usize);
+                let first = addr - addr % FPGA_SECTOR_BYTES;
+                let last = end.div_ceil(FPGA_SECTOR_BYTES as usize);
+                self.fpga_flash_mut()[first as usize..last * FPGA_SECTOR_BYTES as usize].fill(0xFF);
+            }
+            FLASH_OP_PROGRAM => {
+                assert!(
+                    addr >= FPGA_GOLDEN_REGION_END,
+                    "write into the golden image"
+                );
+                assert!(len as usize <= FLASH_BUF_BYTES);
+                let data: Vec<u8> = self
+                    .fpga_flash_buf
+                    .iter()
+                    .flat_map(|w| w.to_le_bytes())
+                    .collect();
+                let flash = self.fpga_flash_mut();
+                for (cell, byte) in flash[addr as usize..end].iter_mut().zip(data) {
+                    *cell &= byte;
+                }
+            }
+            FLASH_OP_REBOOT if self.fpga_reboots_to_ignore > 0 => {
+                self.fpga_reboots_to_ignore -= 1;
+            }
+            FLASH_OP_REBOOT => {
+                self.fpga_reboots += 1;
+                self.fpga_flash_reg = [0; 16];
+                return;
+            }
+            _ => err = FLASH_ERR_INVALID,
+        }
+        if let Some(injected) = self.fpga_flash_err {
+            err = injected;
+        }
+        self.fpga_flash_reg[ADDR_FLASH_STATUS as usize] =
+            (u16::from(err) << 8) | u16::from(self.fpga_flash_hang);
+        self.fpga_flash_reg[ADDR_FLASH_RESULT_0 as usize] = result as u16;
+        self.fpga_flash_reg[ADDR_FLASH_RESULT_1 as usize] = (result >> 16) as u16;
     }
 
     fn fire_isr_frame(&mut self) {
@@ -195,10 +306,20 @@ impl Port for MockPort {
         if select == BRAM_SELECT_CONTROLLER && (a >> 8) as u8 == BRAM_CNT_SELECT_MAIN {
             return self.ctl[(a & 0xFF) as usize];
         }
+        if select == BRAM_SELECT_CONTROLLER && (a >> 8) as u8 == BRAM_CNT_SELECT_FLASH {
+            return match a & 0xFF {
+                ADDR_FLASH_USR_ACCESS_0 => self.fpga_usr_access as u16,
+                ADDR_FLASH_USR_ACCESS_1 => (self.fpga_usr_access >> 16) as u16,
+                r if r < 16 => self.fpga_flash_reg[r as usize],
+                _ => 0,
+            };
+        }
         0
     }
 
-    fn memory_barrier(&mut self) {}
+    fn memory_barrier(&mut self) {
+        self.fpga_flash_target_unflushed = false;
+    }
 
     fn next_sync0(&mut self) -> u64 {
         self.next_sync0

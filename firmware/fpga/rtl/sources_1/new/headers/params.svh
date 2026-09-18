@@ -14,7 +14,15 @@ package params;
   localparam bit [15:0] RepInfinite = 16'hFFFF;
 
   localparam int FuncDynamicFreqBit = 1;
+  localparam int FuncFlashOtaBit = 2;
   localparam int FuncEmulatorBit = 7;  // reserved
+
+  localparam bit [23:0] FlashWritableBase = 24'h800000;
+  localparam bit [24:0] FlashEnd = 25'h1000000;
+  localparam bit [23:0] FlashImageBase = 24'h800100;
+  localparam int FlashBufBytes = 1024;
+  localparam bit [31:0] FlashUsrAccessGolden = 32'h474F4C44;
+  localparam bit [31:0] FlashUsrAccessUpdate = 32'h55504454;
 
   localparam bit [7:0] VersionNumMajor = 8'd0;
   localparam bit [7:0] VersionNumMinor = 8'd9;
@@ -55,8 +63,38 @@ package params;
   typedef enum logic [5:0] {
     BRAM_CNT_SELECT_MAIN = 6'h00,
     BRAM_CNT_SELECT_PHASE_CORR = 6'h01,
-    BRAM_CNT_SELECT_OUTPUT_MASK = 6'h02
+    BRAM_CNT_SELECT_OUTPUT_MASK = 6'h02,
+    BRAM_CNT_SELECT_FLASH = 6'h03,
+    BRAM_CNT_SELECT_FLASH_BUF = 6'h04
   } bram_cnt_select_t;
+
+  typedef enum logic [7:0] {
+    ADDR_FLASH_CMD          = 8'h00,
+    ADDR_FLASH_ADDR_0       = 8'h01,
+    ADDR_FLASH_ADDR_1       = 8'h02,
+    ADDR_FLASH_LEN_0        = 8'h03,
+    ADDR_FLASH_LEN_1        = 8'h04,
+    ADDR_FLASH_STATUS       = 8'h05,
+    ADDR_FLASH_RESULT_0     = 8'h06,
+    ADDR_FLASH_RESULT_1     = 8'h07,
+    ADDR_FLASH_USR_ACCESS_0 = 8'h08,
+    ADDR_FLASH_USR_ACCESS_1 = 8'h09
+  } flash_addr_t;
+
+  typedef enum logic [7:0] {
+    FLASH_OP_READ_ID = 8'h01,
+    FLASH_OP_CRC32   = 8'h02,
+    FLASH_OP_ERASE   = 8'h03,
+    FLASH_OP_PROGRAM = 8'h04,
+    FLASH_OP_REBOOT  = 8'h05
+  } flash_op_t;
+
+  typedef enum logic [7:0] {
+    FLASH_ERR_NONE      = 8'h00,
+    FLASH_ERR_PROTECTED = 8'h01,
+    FLASH_ERR_TIMEOUT   = 8'h02,
+    FLASH_ERR_INVALID   = 8'h03
+  } flash_err_t;
 
   typedef enum logic [7:0] {
     TRANSITION_MODE_SYNC_IDX = 8'h00,

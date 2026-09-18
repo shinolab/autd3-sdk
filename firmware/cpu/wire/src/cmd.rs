@@ -26,6 +26,10 @@ crate::wire_enum! {
         UpdateCommit = 0x72,
         UpdateActivate = 0x73,
         UpdateConfirm = 0x74,
+        FpgaUpdateBegin = 0x75,
+        FpgaUpdateChunk = 0x76,
+        FpgaUpdateCommit = 0x77,
+        FpgaUpdateActivate = 0x78,
         ReadErrorDetail = 0xE0,
         ReadCpuFwVersionMajor = 0xE1,
         ReadCpuFwVersionMinor = 0xE2,
@@ -36,6 +40,7 @@ crate::wire_enum! {
         ReadFpgaState = 0xE7,
         ReadTelemetry = 0xE8,
         ReadFpgaFunctions = 0xE9,
+        ReadFpgaBootImage = 0xEA,
     }
 }
 

@@ -11,7 +11,16 @@ module main #(
     output wire FORCE_FAN,
     output wire PWM_OUT[DEPTH],
     input wire GPIO_IN_HARD[4],
-    output wire GPIO_OUT[4]
+    output wire GPIO_OUT[4],
+    input wire FLASH_EOS,
+    input wire [31:0] USR_ACCESS,
+    output wire FLASH_SCK,
+    output wire FLASH_CS_N,
+    output wire FLASH_MOSI,
+    input wire FLASH_MISO,
+    output wire ICAP_CLK,
+    output wire ICAP_CSIB,
+    output wire [31:0] ICAP_I
 );
 
   cnt_bus_if cnt_bus ();
@@ -20,6 +29,7 @@ module main #(
   modulation_bus_if mod_bus ();
   emission_bus_if emission_bus ();
   pwe_table_bus_if pwe_table_bus ();
+  flash_bus_if flash_bus ();
 
   settings::mod_settings_t mod_settings;
   settings::pattern_settings_t pattern_settings;
@@ -103,7 +113,24 @@ module main #(
       .OUTPUT_MASK_BUS(output_mask_bus.in_port),
       .MOD_BUS(mod_bus.in_port),
       .EMISSION_BUS(emission_bus.in_port),
-      .PWE_TABLE_BUS(pwe_table_bus.in_port)
+      .PWE_TABLE_BUS(pwe_table_bus.in_port),
+      .FLASH_BUS(flash_bus.host_port)
+  );
+
+  assign ICAP_CLK = clk;
+
+  flash flash (
+      .CLK(clk),
+      .LOCKED(locked_sync),
+      .EOS(FLASH_EOS),
+      .USR_ACCESS(USR_ACCESS),
+      .FLASH_BUS(flash_bus.core_port),
+      .SCK(FLASH_SCK),
+      .CS_N(FLASH_CS_N),
+      .MOSI(FLASH_MOSI),
+      .MISO(FLASH_MISO),
+      .ICAP_CSIB(ICAP_CSIB),
+      .ICAP_I(ICAP_I)
   );
 
   controller controller (
