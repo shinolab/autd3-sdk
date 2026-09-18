@@ -17,13 +17,12 @@ Representative sound field computation utilities such as a single focal point, a
 - [focus](/autd3-sdk/en/api/compute/pattern/focus/) — single focal point
 - [plane](/autd3-sdk/en/api/compute/pattern/plane/) — plane wave
 - [bessel](/autd3-sdk/en/api/compute/pattern/bessel/) — Bessel beam
-- [twin_trap](/autd3-sdk/en/api/compute/pattern/twin-trap/) — twin trap
-- [vortex](/autd3-sdk/en/api/compute/pattern/vortex/) — acoustic vortex
+- [laguerre_gaussian_phase](/autd3-sdk/en/api/compute/pattern/laguerre-gaussian/) — Laguerre-Gaussian beam
+- [hermite_gaussian_phase](/autd3-sdk/en/api/compute/pattern/hermite-gaussian/) — Hermite-Gaussian beam
 - [set_intensity / set_phase / add_phase](/autd3-sdk/en/api/compute/pattern/set/) — set the intensity and phase of a whole buffer
 - [group](/autd3-sdk/en/api/compute/pattern/group/) — select a pattern per transducer
 
-`focus` / `plane` / `bessel` / `twin_trap` / `vortex` also have a `*_device` variant that computes for only a single device, and a `*_transducer` variant that returns the phase of a single transducer element (for example, `focus_device` / `focus_transducer`).
-`set_intensity` / `set_phase` / `set_phase_and_intensity` / `add_phase` have a `*_device` variant but no `*_transducer` variant.
+`focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` also have a `*_device` variant that computes for only a single device, and a `*_transducer` variant that returns the phase of a single transducer element (for example, `focus_device` / `focus_transducer`).
 These variants are available in Rust and C#, but not in Python.
 
 Pattern functions write only the phase and leave the intensity untouched.

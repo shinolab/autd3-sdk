@@ -1,6 +1,11 @@
 ---
 interface Props {
-  kind?: "focus" | "plane" | "bessel" | "twin-trap" | "vortex";
+  kind?:
+    | "focus"
+    | "plane"
+    | "bessel"
+    | "laguerre-gaussian"
+    | "hermite-gaussian";
 }
 const { kind = "focus" } = Astro.props;
 const config = JSON.stringify({ kind });
@@ -86,12 +91,17 @@ const config = JSON.stringify({ kind });
     bessel: [
       { key: "theta", label: "theta", unit: "°", min: 50, max: 88, step: 1, def: 72 },
     ],
-    "twin-trap": [
-      { key: "fz", label: "target.z", unit: "mm", min: 20, max: 260, step: 1, def: 150 },
+    "laguerre-gaussian": [
+      { key: "fz", label: "target.z", unit: "mm", min: 60, max: 260, step: 1, def: 150 },
+      { key: "p", label: "p", unit: "", min: 0, max: 3, step: 1, def: 1 },
+      { key: "l", label: "l", unit: "", min: 0, max: 4, step: 1, def: 1 },
+      { key: "waist", label: "waist", unit: "mm", min: 5, max: 30, step: 1, def: 10 },
     ],
-    vortex: [
-      { key: "fz", label: "target.z", unit: "mm", min: 20, max: 260, step: 1, def: 150 },
-      { key: "order", label: "order", unit: "", min: 1, max: 4, step: 1, def: 1 },
+    "hermite-gaussian": [
+      { key: "fz", label: "target.z", unit: "mm", min: 60, max: 260, step: 1, def: 150 },
+      { key: "m", label: "m", unit: "", min: 0, max: 3, step: 1, def: 1 },
+      { key: "n", label: "n", unit: "", min: 0, max: 3, step: 1, def: 1 },
+      { key: "waist", label: "waist", unit: "mm", min: 5, max: 30, step: 1, def: 10 },
     ],
   };
 
@@ -104,9 +114,85 @@ const config = JSON.stringify({ kind });
     focus: { plane: "xz", half: 110 },
     plane: { plane: "xz", half: 110 },
     bessel: { plane: "xz", half: 110 },
-    "twin-trap": { plane: "xy", half: 20 },
-    vortex: { plane: "xy", half: 20 },
+    "laguerre-gaussian": { plane: "xy", half: 30 },
+    "hermite-gaussian": { plane: "xy", half: 30 },
   };
+
+  function laguerre(p: number, alpha: number, x: number): number {
+    if (p === 0) return 1;
+    let prev = 1;
+    let cur = 1 + alpha - x;
+    for (let k = 1; k < p; k++) {
+      const next = ((2 * k + 1 + alpha - x) * cur - (k + alpha) * prev) / (k + 1);
+      prev = cur;
+      cur = next;
+    }
+    return cur;
+  }
+
+  function hermite(n: number, x: number): number {
+    if (n === 0) return 1;
+    let prev = 1;
+    let cur = 2 * x;
+    for (let k = 1; k < n; k++) {
+      const next = 2 * x * cur - 2 * k * prev;
+      prev = cur;
+      cur = next;
+    }
+    return cur;
+  }
+
+  interface Drive {
+    phase: Float32Array;
+    amp: Float32Array;
+  }
+
+  function gaussianFor(kind: string, cfg: Cfg): Drive {
+    const phase = new Float32Array(N);
+    const logAmp = new Float32Array(N);
+    const w0 = cfg.waist;
+    const zeta = -cfg.fz / ((Math.PI * w0 * w0) / WAVELEN);
+    const spread = Math.sqrt(1 + zeta * zeta);
+    const w = w0 * spread;
+    const gouy = Math.atan(zeta);
+    let maxLog = -Infinity;
+    for (let i = 0; i < N; i++) {
+      const rx = txs[i] - CX;
+      const ry = tys[i] - CY;
+      const d = Math.sqrt(rx * rx + ry * ry + cfg.fz * cfg.fz);
+      let extra: number;
+      let poly: number;
+      let log: number;
+      if (kind === "laguerre-gaussian") {
+        const s = (2 * (rx * rx + ry * ry)) / (w * w);
+        poly = laguerre(cfg.p, cfg.l, s);
+        extra = cfg.l * Math.atan2(ry, rx) - (2 * cfg.p + cfg.l + 1) * gouy;
+        log = (cfg.l === 0 ? 0 : 0.5 * cfg.l * Math.log(s)) - 0.5 * s;
+      } else {
+        const xi = (Math.SQRT2 * rx) / w;
+        const eta = (Math.SQRT2 * ry) / w;
+        poly = hermite(cfg.m, xi) * hermite(cfg.n, eta);
+        extra = -(cfg.m + cfg.n + 1) * gouy;
+        log = -0.5 * (xi * xi + eta * eta);
+      }
+      log += Math.log(Math.abs(poly));
+      phase[i] = (-d / WAVELEN) * TWO_PI + extra + (poly < 0 ? Math.PI : 0);
+      logAmp[i] = log;
+      if (log > maxLog) maxLog = log;
+    }
+    const amp = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      amp[i] = Number.isFinite(maxLog) ? Math.exp(logAmp[i] - maxLog) : 0;
+    }
+    return { phase, amp };
+  }
+
+  function driveFor(kind: string, cfg: Cfg): Drive {
+    if (kind === "laguerre-gaussian" || kind === "hermite-gaussian") {
+      return gaussianFor(kind, cfg);
+    }
+    return { phase: phaseFor(kind, cfg), amp: new Float32Array(N).fill(1) };
+  }
 
   function phaseFor(kind: string, cfg: Cfg): Float32Array {
     const ph = new Float32Array(N);
@@ -133,20 +219,6 @@ const config = JSON.stringify({ kind });
         const rxy = Math.sqrt(rx * rx + ry * ry);
         ph[i] = (-(ca * rxy) / WAVELEN) * TWO_PI;
       }
-    } else if (kind === "twin-trap" || kind === "vortex") {
-      const fz = cfg.fz;
-      for (let i = 0; i < N; i++) {
-        const rx = txs[i] - CX;
-        const ry = tys[i] - CY;
-        const d = Math.sqrt(rx * rx + ry * ry + fz * fz);
-        const extra =
-          kind === "twin-trap"
-            ? rx >= 0
-              ? Math.PI
-              : 0
-            : cfg.order * Math.atan2(ry, rx);
-        ph[i] = (-d / WAVELEN) * TWO_PI - extra;
-      }
     }
     return ph;
   }
@@ -164,7 +236,7 @@ const config = JSON.stringify({ kind });
     const vmin = view.plane === "xz" ? 0 : CY - view.half;
     const vmax = view.plane === "xz" ? 260 : CY + view.half;
 
-    const phase = phaseFor(kind, cfg);
+    const { phase, amp } = driveFor(kind, cfg);
 
     const mag = new Float32Array(W * H);
     let maxMag = 1e-9;
@@ -180,7 +252,7 @@ const config = JSON.stringify({ kind });
           const wz = view.plane === "xz" ? wv : cfg.fz;
           const d = Math.sqrt(dx * dx + dy * dy + wz * wz);
           const p = -phase[i] - K * d;
-          const a = 1 / d;
+          const a = amp[i] / d;
           re += a * Math.cos(p);
           im += a * Math.sin(p);
         }

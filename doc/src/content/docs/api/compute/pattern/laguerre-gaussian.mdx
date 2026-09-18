@@ -1,0 +1,48 @@
+---
+title: laguerre_gaussian
+description: ラゲール・ガウシアンビームを作る Pattern
+sidebar:
+  order: 5
+srcPath: crates/autd3-rs-pattern/src/laguerre_gaussian.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import PatternField from "@components/PatternField.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/laguerre-gaussian.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/laguerre-gaussian.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/laguerre-gaussian-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/laguerre-gaussian-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/pattern/laguerre-gaussian.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/pattern/laguerre-gaussian-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`laguerre_gaussian_phase` はラゲール・ガウシアン (LG) ビーム <Math tex="\mathrm{LG}_p^l" /> を生成する.
+
+<PatternField kind="laguerre-gaussian" />
+
+位相を変更する `laguerre_gaussian_phase` とは別に振幅のみを書く `laguerre_gaussian_intensity` がある.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| 引数         | 型                       | 説明                                          |
+| ------------ | ------------------------ | --------------------------------------------- |
+| `geometry`   | `&Geometry`              | デバイス配置                                  |
+| `target`     | `Point3<f32>`            | ビームウエストの中心座標 [mm]                 |
+| `axis`       | `UnitVector3<f32>`       | ビームの伝搬方向 (単位ベクトル)               |
+| `option`     | `LaguerreGaussianOption` | モードとウエスト                              |
+| `wavelength` | `Length`                 | 波長                                          |
+| `dst`        | `&mut [[Emission; _]]`   | 出力バッファ                                  |
+
+| フィールド | 型       | 説明                                                  |
+| ---------- | -------- | ----------------------------------------------------- |
+| `p`        | `u32`    | 動径方向のモード次数                                  |
+| `l`        | `i32`    | 方位角方向のモード次数                                |
+| `waist`    | `Length` | ビームウエスト半径 <Math tex="w_0" /> (正値)          |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

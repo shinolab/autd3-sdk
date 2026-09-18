@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Numerics;
 using AUTD3;
@@ -33,69 +35,83 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void TwinTrapAndVortexFillBuffers()
-        {
-            using var geometry = SingleDevice();
-            var wavelength = Pattern.Wavelength(340 * m / s);
-            var target = geometry.Center + new Vector3(0f, 0f, 150f);
-
-            using var trapped = geometry.PatternBuffer();
-            Pattern.TwinTrap(geometry, target, Vector3.UnitX, wavelength, trapped);
-            Assert.Equal(1, trapped.NumDevices);
-
-            using var spun = geometry.PatternBuffer();
-            Pattern.Vortex(geometry, target, Vector3.UnitZ, 1, wavelength, spun);
-            Assert.Equal(1, spun.NumDevices);
-        }
-
-        [Fact]
-        public void VortexOrderZeroMatchesFocus()
+        public void LaguerreGaussianMatchesFocusAndWritesIntensity()
         {
             using var geometry = SingleDevice();
             var wavelength = Pattern.Wavelength(340 * m / s);
             var device = geometry[0];
             var target = device.Center + new Vector3(0f, 0f, 150f);
+            var option = new LaguerreGaussianOption(0, 1, 10f * mm);
 
             var focused = new Emission[Autd3.NumTransducers];
             Pattern.FocusDevice(device, target, wavelength, focused);
 
-            var spun = new Emission[Autd3.NumTransducers];
-            Pattern.VortexDevice(device, target, Vector3.UnitZ, 0, wavelength, spun);
-
+            var fundamental = new Emission[Autd3.NumTransducers];
+            Pattern.LaguerreGaussianPhaseDevice(device, target, Vector3.UnitZ, new LaguerreGaussianOption(0, 0, 10f * mm), wavelength, fundamental);
+            var offset = (fundamental[0].Phase.Value - focused[0].Phase.Value + 256) % 256;
             for (var i = 0; i < Autd3.NumTransducers; i++)
             {
-                Assert.Equal(focused[i].Phase.Value, spun[i].Phase.Value);
+                var d = (fundamental[i].Phase.Value - focused[i].Phase.Value - offset + 512) % 256;
+                Assert.True(Math.Min(d, 256 - d) <= 2);
+            }
+
+            var lg = new Emission[Autd3.NumTransducers];
+            Pattern.LaguerreGaussianPhaseDevice(device, target, Vector3.UnitZ, option, wavelength, lg);
+            Assert.All(lg, e => Assert.Equal(0, e.Intensity.Value));
+            Assert.Equal(lg[5].Phase.Value, Pattern.LaguerreGaussianPhaseTransducer(device.Position(5), target, Vector3.UnitZ, option, wavelength).Value);
+
+            Pattern.LaguerreGaussianIntensityDevice(device, target, Vector3.UnitZ, option, wavelength, lg);
+            Assert.Equal(255, lg.Max(e => e.Intensity.Value));
+
+            using var buffer = geometry.PatternBuffer();
+            Pattern.LaguerreGaussianPhase(geometry, target, Vector3.UnitZ, option, wavelength, buffer);
+            Pattern.LaguerreGaussianIntensity(geometry, target, Vector3.UnitZ, option, wavelength, buffer);
+            for (var i = 0; i < Autd3.NumTransducers; i++)
+            {
+                Assert.Equal(lg[i].Phase.Value, buffer[0][i].Phase.Value);
+                Assert.Equal(lg[i].Intensity.Value, buffer[0][i].Intensity.Value);
             }
         }
 
         [Fact]
-        public void TwinTrapSplitsThePlaneByPi()
+        public void HermiteGaussianFillsBuffersAndRejectsInvalidWaist()
         {
             using var geometry = SingleDevice();
             var wavelength = Pattern.Wavelength(340 * m / s);
             var device = geometry[0];
             var target = device.Center + new Vector3(0f, 0f, 150f);
+            var option = new HermiteGaussianOption(1, 0, 10f * mm);
 
-            var focused = new Emission[Autd3.NumTransducers];
-            Pattern.FocusDevice(device, target, wavelength, focused);
-
-            var trapped = new Emission[Autd3.NumTransducers];
-            Pattern.TwinTrapDevice(device, target, Vector3.UnitX, wavelength, trapped);
-
-            var diffs = new HashSet<int>();
+            var hg = new Emission[Autd3.NumTransducers];
+            Pattern.HermiteGaussianPhaseDevice(device, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, hg);
+            Pattern.HermiteGaussianIntensityDevice(device, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, hg);
+            Assert.Equal(255, hg.Max(e => e.Intensity.Value));
+            var focusedHg = new Emission[Autd3.NumTransducers];
+            Pattern.FocusDevice(device, target, wavelength, focusedHg);
+            var baseOffset = (hg[0].Phase.Value - focusedHg[0].Phase.Value + 256) % 256;
+            var flipped = 0;
             for (var i = 0; i < Autd3.NumTransducers; i++)
             {
-                diffs.Add((trapped[i].Phase.Value - focused[i].Phase.Value + 256) % 256);
+                var d = (hg[i].Phase.Value - focusedHg[i].Phase.Value - baseOffset + 512) % 256;
+                var toSame = Math.Min(d, 256 - d);
+                var toFlip = Math.Abs(d - 128);
+                Assert.True(toSame <= 2 || toFlip <= 2);
+                if (toFlip <= 2) flipped++;
             }
-            Assert.Equal(new HashSet<int> { 0, 128 }, diffs);
+            Assert.True(flipped > 0);
+            Assert.Equal(hg[7].Phase.Value, Pattern.HermiteGaussianPhaseTransducer(device.Position(7), target, Vector3.UnitZ, Vector3.UnitX, option, wavelength).Value);
 
-            var e = Pattern.TwinTrapTransducer(device.Position(0), target, Vector3.UnitX, wavelength);
-            Assert.Equal(trapped[0].Phase.Value, e.Value);
+            using var buffer = geometry.PatternBuffer();
+            Pattern.HermiteGaussianPhase(geometry, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, buffer);
+            Pattern.HermiteGaussianIntensity(geometry, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, buffer);
+            for (var i = 0; i < Autd3.NumTransducers; i++)
+            {
+                Assert.Equal(hg[i].Phase.Value, buffer[0][i].Phase.Value);
+                Assert.Equal(hg[i].Intensity.Value, buffer[0][i].Intensity.Value);
+            }
 
-            var v = Pattern.VortexTransducer(device.Position(0), target, Vector3.UnitZ, 1, wavelength);
-            var spun = new Emission[Autd3.NumTransducers];
-            Pattern.VortexDevice(device, target, Vector3.UnitZ, 1, wavelength, spun);
-            Assert.Equal(spun[0].Phase.Value, v.Value);
+            Assert.Throws<Autd3Exception>(() => Pattern.HermiteGaussianPhase(geometry, target, Vector3.UnitZ, Vector3.UnitX, new HermiteGaussianOption(), wavelength, buffer));
+            Assert.Throws<Autd3Exception>(() => Pattern.LaguerreGaussianIntensity(geometry, target, Vector3.UnitZ, new LaguerreGaussianOption(0, 1, -1f * mm), wavelength, buffer));
         }
 
         [Fact]

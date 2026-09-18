@@ -266,6 +266,22 @@ name = "api_compute_pattern_group"
 path = "examples/api/compute/pattern/group.rs"
 
 [[example]]
+name = "api_compute_pattern_hermite_gaussian_example"
+path = "examples/api/compute/pattern/hermite-gaussian-example.rs"
+
+[[example]]
+name = "api_compute_pattern_hermite_gaussian"
+path = "examples/api/compute/pattern/hermite-gaussian.rs"
+
+[[example]]
+name = "api_compute_pattern_laguerre_gaussian_example"
+path = "examples/api/compute/pattern/laguerre-gaussian-example.rs"
+
+[[example]]
+name = "api_compute_pattern_laguerre_gaussian"
+path = "examples/api/compute/pattern/laguerre-gaussian.rs"
+
+[[example]]
 name = "api_compute_pattern_plane_example"
 path = "examples/api/compute/pattern/plane-example.rs"
 
@@ -280,22 +296,6 @@ path = "examples/api/compute/pattern/set-example.rs"
 [[example]]
 name = "api_compute_pattern_set"
 path = "examples/api/compute/pattern/set.rs"
-
-[[example]]
-name = "api_compute_pattern_twin_trap_example"
-path = "examples/api/compute/pattern/twin-trap-example.rs"
-
-[[example]]
-name = "api_compute_pattern_twin_trap"
-path = "examples/api/compute/pattern/twin-trap.rs"
-
-[[example]]
-name = "api_compute_pattern_vortex_example"
-path = "examples/api/compute/pattern/vortex-example.rs"
-
-[[example]]
-name = "api_compute_pattern_vortex"
-path = "examples/api/compute/pattern/vortex.rs"
 
 [[example]]
 name = "api_link_echocat"
