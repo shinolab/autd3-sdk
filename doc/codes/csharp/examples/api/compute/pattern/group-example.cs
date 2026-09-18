@@ -41,7 +41,7 @@ Pattern.GroupCompute(geometry, groups, (side, mask, buffer) =>
     }
     else
     {
-        Pattern.Focus(geometry, center + new Vector3(40.0f, 0.0f, 150.0f), wavelength, new FocusOption(), buffer);
+        Pattern.Focus(geometry, center + new Vector3(40.0f, 0.0f, 150.0f), wavelength, buffer);
     }
 }, dst);
         // HIDE

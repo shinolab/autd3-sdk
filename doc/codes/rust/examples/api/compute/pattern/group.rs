@@ -2,8 +2,8 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry, TransducerGroups, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::{Emission, Intensity, Phase};
-use autd3_rs_pattern::{FocusOption, focus, group, group_compute, uniform, wavelength};
+use autd3_rs::value::Phase;
+use autd3_rs_pattern::{focus, group, group_compute, set_phase, wavelength};
 use autd3_rs_pattern_holo::{AmplitudeTarget, GspatOption, NalgebraBackend, Pa, gspat};
 
 // ANCHOR: api
@@ -19,22 +19,9 @@ enum Side {
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut left = geometry.pattern_buffer();
-    uniform(
-        Emission {
-            phase: Phase::ZERO,
-            intensity: Intensity::MAX,
-        },
-        &mut left,
-    );
+    let left = geometry.pattern_buffer();
     let mut right = geometry.pattern_buffer();
-    uniform(
-        Emission {
-            phase: Phase::PI,
-            intensity: Intensity::MAX,
-        },
-        &mut right,
-    );
+    set_phase(Phase::PI, &mut right);
     let mut dst = geometry.pattern_buffer();
     let center = geometry.center();
     // ANCHOR: api
@@ -79,7 +66,7 @@ fn main() -> Result<()> {
                 buffer,
             ),
             Side::Right => {
-                focus(&geometry, target, wavelength, &FocusOption::default(), buffer);
+                focus(&geometry, target, wavelength, buffer);
                 Ok(())
             }
         },

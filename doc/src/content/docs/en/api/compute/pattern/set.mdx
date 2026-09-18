@@ -1,0 +1,57 @@
+---
+title: set_intensity / set_phase / add_phase
+description: Set the intensity and phase of a whole pattern buffer
+sidebar:
+  order: 7
+srcPath: crates/autd3-rs-pattern/src/set.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/set.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/set.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/set-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/set-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/pattern/set.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/pattern/set-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+These functions rewrite the intensity and phase of a whole pattern buffer at once.
+Pattern functions such as `focus` write only the phase, so set the intensity with these functions.
+
+A buffer allocated with `pattern_buffer` starts at phase 0 and the maximum intensity.
+Note that, in C#, the elements of `new Emission[n]` start at intensity 0.
+
+## set_intensity
+
+Sets the intensity of every transducer. The phase is left unchanged.
+Passing `Intensity::MIN` produces no output.
+
+<CodeTabs rust={excerpt(sample, "set_intensity")} python={excerpt(pySample, "set_intensity")} csharp={excerpt(csSample, "set_intensity")} />
+
+## set_phase
+
+Sets the phase of every transducer. The intensity is left unchanged.
+
+<CodeTabs rust={excerpt(sample, "set_phase")} python={excerpt(pySample, "set_phase")} csharp={excerpt(csSample, "set_phase")} />
+
+## set_phase_and_intensity
+
+Sets both the phase and the intensity of every transducer.
+
+<CodeTabs rust={excerpt(sample, "set_phase_and_intensity")} python={excerpt(pySample, "set_phase_and_intensity")} csharp={excerpt(csSample, "set_phase_and_intensity")} />
+
+## add_phase
+
+Adds a phase uniformly to every transducer (wrapping at 8 bits). The intensity is left unchanged.
+
+<CodeTabs rust={excerpt(sample, "add_phase")} python={excerpt(pySample, "add_phase")} csharp={excerpt(csSample, "add_phase")} />
+
+| Parameter   | Type                   | Description   |
+| ----------- | ---------------------- | ------------- |
+| `intensity` | `Intensity`            | Intensity     |
+| `phase`     | `Phase`                | Phase         |
+| `dst`       | `&mut [[Emission; _]]` | Target buffer |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

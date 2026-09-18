@@ -1,7 +1,6 @@
 use autd3_rs::geometry::{Autd3, Geometry, Vector3};
 use autd3_rs::units::{m, s};
-use autd3_rs::value::{Intensity, Phase};
-use autd3_rs_pattern::{PlaneOption, plane, wavelength};
+use autd3_rs_pattern::{plane, wavelength};
 
 // HIDE
 fn main() {
@@ -14,11 +13,6 @@ fn main() {
         &geometry,
         Vector3::z_axis(),
         wavelength(340.0 * m / s),
-        &PlaneOption {
-            intensity: Intensity::MAX,
-            phase_offset: Phase::ZERO,
-            ..Default::default()
-        },
         &mut dst,
     );
     // HIDE

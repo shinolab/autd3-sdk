@@ -58,7 +58,6 @@ async def stop_and_wait(client, geometry, targets, wavelength) -> None:
             geometry,
             target,
             wavelength,
-            pattern.FocusOption(),
             patterns,
         )
         builder = client.datagram_builder()
@@ -77,7 +76,6 @@ async def streaming(client, geometry, targets, wavelength) -> None:
             geometry,
             target,
             wavelength,
-            pattern.FocusOption(),
             patterns,
         )
         builder = client.datagram_builder()

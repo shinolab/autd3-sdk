@@ -39,7 +39,7 @@ def test_current_command_types_drive_the_legacy_client() -> None:
 
         target = geo.center() + np.array([0.0, 0.0, 150.0])
         patterns = geo.pattern_buffer()
-        pattern.focus(geo, target, pattern.wavelength(340 * m / s), pattern.FocusOption(), patterns)
+        pattern.focus(geo, target, pattern.wavelength(340 * m / s), patterns)
 
         mod_buf = modulation.modulation_buffer()
         modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
@@ -90,7 +90,7 @@ def test_push_each_assigns_a_command_per_device() -> None:
 
         wavelength = pattern.wavelength(340 * m / s)
         left = geo.pattern_buffer()
-        pattern.focus(geo, geo.center() + np.array([-40.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), left)
+        pattern.focus(geo, geo.center() + np.array([-40.0, 0.0, 150.0]), wavelength, left)
         mod_buf = modulation.modulation_buffer()
         modulation.sine(150 * Hz, modulation.SineOption(), mod_buf)
 
@@ -248,8 +248,7 @@ def test_every_unsupported_command_is_rejected_at_build_time() -> None:
         client = await autd3.LegacyClient.open(geo, nop.Nop(), autd3.LegacyClientConfig())
 
         buf = geo.pattern_buffer()
-        pattern.focus(geo, geo.center() + np.array([0.0, 0.0, 150.0]), pattern.wavelength(340 * m / s),
-                      pattern.FocusOption(), buf)
+        pattern.focus(geo, geo.center() + np.array([0.0, 0.0, 150.0]), pattern.wavelength(340 * m / s), buf)
         mod_buf = modulation.modulation_buffer()
         modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
         points = [

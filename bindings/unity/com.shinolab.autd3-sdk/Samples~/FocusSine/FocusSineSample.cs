@@ -26,7 +26,7 @@ namespace AUTD3.Samples
             var target = _geometry.Center + new Vector3(0f, 0f, -0.15f);
             var wavelength = Pattern.Wavelength(340 * m / s);
             using var patterns = _geometry.PatternBuffer();
-            Pattern.Focus(_geometry, target, wavelength, new FocusOption(), patterns);
+            Pattern.Focus(_geometry, target, wavelength, patterns);
 
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200 * Hz, new SineOption(), modulation);

@@ -15,15 +15,14 @@ internal static class Sample
         await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
-        var option = new FocusOption();
 
         var leftTarget = geometry.Center + new Vector3(-40.0f, 0.0f, 150.0f);
         var left = geometry.PatternBuffer();
-        Pattern.Focus(geometry, leftTarget, wavelength, option, left);
+        Pattern.Focus(geometry, leftTarget, wavelength, left);
 
         var rightTarget = geometry.Center + new Vector3(40.0f, 0.0f, 150.0f);
         var right = geometry.PatternBuffer();
-        Pattern.Focus(geometry, rightTarget, wavelength, option, right);
+        Pattern.Focus(geometry, rightTarget, wavelength, right);
 
         var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(150 * Hz, new SineOption(), modulation);

@@ -11,7 +11,6 @@ use autd3_rs::commands::{Pattern, SetSilencer};
 use autd3_rs::common::ULTRASOUND_PERIOD;
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::Emission;
 
 use autd3_rs_emulator::{ClientApi, Emulator, RangeXY, RmsRecordOption};
 
@@ -23,15 +22,8 @@ fn main() -> Result<()> {
 
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
-    let mut patterns =
-        vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
-    autd3_rs_pattern::focus(
-        &geometry,
-        target,
-        wavelength,
-        &autd3_rs_pattern::FocusOption::default(),
-        &mut patterns,
-    );
+    let mut patterns = geometry.pattern_buffer();
+    autd3_rs_pattern::focus(&geometry, target, wavelength, &mut patterns);
 
     let center = geometry.center();
     let emulator = Emulator::new(geometry);

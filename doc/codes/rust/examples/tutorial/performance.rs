@@ -6,7 +6,7 @@ use anyhow::Result;
 use autd3_rs::commands::{ConfigPattern, SetSilencer, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::{LoopBehavior, PatternBank, SamplingConfig};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig};
 use autd3_rs::{Client, ClientConfig, Frames, MAX_INFLIGHT, ResponseFuture};
 use autd3_rs_link_nop::Nop;
 
@@ -23,13 +23,15 @@ async fn main() -> Result<()> {
 
     {
         // ANCHOR: configure
+        let mut silent = geometry.pattern_buffer();
+        autd3_rs_pattern::set_intensity(Intensity::MIN, &mut silent);
         let mut builder = client.datagram_builder();
         builder
             .push(SetSilencer::disable())
             .push(WritePatternBuffer {
                 bank: PatternBank::B0,
                 index: 0,
-                emissions: &patterns,
+                emissions: &silent,
             })
             .push(ConfigPattern {
                 bank: PatternBank::B0,
@@ -61,7 +63,6 @@ async fn main() -> Result<()> {
             &geometry,
             target,
             wavelength,
-            &autd3_rs_pattern::FocusOption::default(),
             &mut patterns,
         );
 

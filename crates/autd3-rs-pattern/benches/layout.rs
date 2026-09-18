@@ -5,7 +5,7 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use autd3_rs_core::Length;
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion};
 use autd3_rs_core::value::Emission;
-use autd3_rs_pattern::{FocusOption, focus_transducer};
+use autd3_rs_pattern::focus_transducer;
 
 const N: usize = Autd3::NUM_TRANSDUCERS;
 const HEADER: usize = 8;
@@ -25,30 +25,18 @@ fn make_geometry(devices: usize) -> Geometry {
     Geometry::new(devs)
 }
 
-fn compute_array(
-    geo: &Geometry,
-    target: Point3<f32>,
-    wl: Length,
-    opt: FocusOption,
-    buf: &mut [[Emission; N]],
-) {
+fn compute_array(geo: &Geometry, target: Point3<f32>, wl: Length, buf: &mut [[Emission; N]]) {
     for (slot, dev) in buf.iter_mut().zip(geo.iter()) {
         for (e, &pos) in slot.iter_mut().zip(dev.positions()) {
-            *e = focus_transducer(pos, target, wl, &opt);
+            e.phase = focus_transducer(pos, target, wl);
         }
     }
 }
 
-fn compute_vec(
-    geo: &Geometry,
-    target: Point3<f32>,
-    wl: Length,
-    opt: FocusOption,
-    buf: &mut [Vec<Emission>],
-) {
+fn compute_vec(geo: &Geometry, target: Point3<f32>, wl: Length, buf: &mut [Vec<Emission>]) {
     for (slot, dev) in buf.iter_mut().zip(geo.iter()) {
         for (e, &pos) in slot.iter_mut().zip(dev.positions()) {
-            *e = focus_transducer(pos, target, wl, &opt);
+            e.phase = focus_transducer(pos, target, wl);
         }
     }
 }
@@ -75,7 +63,6 @@ fn pack_vec(buf: &[Vec<Emission>], dst: &mut [u8]) {
 
 fn bench(c: &mut Criterion) {
     let wl = Length::from_mm(8.5);
-    let opt = FocusOption::default();
     let target = Point3::new(90.0, 70.0, 150.0);
 
     let mut g_compute = c.benchmark_group("compute");
@@ -86,13 +73,13 @@ fn bench(c: &mut Criterion) {
 
         g_compute.bench_with_input(BenchmarkId::new("array", devices), &devices, |b, _| {
             b.iter(|| {
-                compute_array(&geo, target, wl, opt, &mut arr);
+                compute_array(&geo, target, wl, &mut arr);
                 black_box(&arr);
             });
         });
         g_compute.bench_with_input(BenchmarkId::new("vec", devices), &devices, |b, _| {
             b.iter(|| {
-                compute_vec(&geo, target, wl, opt, &mut vc);
+                compute_vec(&geo, target, wl, &mut vc);
                 black_box(&vc);
             });
         });
@@ -108,14 +95,14 @@ fn bench(c: &mut Criterion) {
 
         g_pack.bench_with_input(BenchmarkId::new("array", devices), &devices, |b, _| {
             b.iter(|| {
-                compute_array(&geo, target, wl, opt, &mut arr);
+                compute_array(&geo, target, wl, &mut arr);
                 pack_array(&arr, &mut dst);
                 black_box(&dst);
             });
         });
         g_pack.bench_with_input(BenchmarkId::new("vec", devices), &devices, |b, _| {
             b.iter(|| {
-                compute_vec(&geo, target, wl, opt, &mut vc);
+                compute_vec(&geo, target, wl, &mut vc);
                 pack_vec(&vc, &mut dst);
                 black_box(&dst);
             });

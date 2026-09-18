@@ -29,17 +29,7 @@ import { excerpt } from "@lib/excerpt";
 | `geometry`   | `&Geometry`     | デバイス配置                               |
 | `target`     | `Point3<f32>`   | 焦点座標 [mm]                              |
 | `wavelength` | `Length`        | 波長                                       |
-| `option`     | `&FocusOption`  | 追加オプション (下記参照)                  |
 | `dst`        | `&mut [[Emission; _]]` | 出力バッファ                        |
-
-## FocusOption
-
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
-
-| フィールド     | 型          | デフォルト       | 説明                               |
-| -------------- | ----------- | ---------------- | ---------------------------------- |
-| `intensity`    | `Intensity` | `Intensity::MAX` | 全振動子の振幅                     |
-| `phase_offset` | `Phase`     | `Phase::ZERO`    | 全振動子へ一律に加算する位相       |
 
 ## Example
 

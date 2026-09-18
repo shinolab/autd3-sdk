@@ -29,7 +29,6 @@ for (var i = 0; i < 200; i++)
         geometry,
         target,
         wavelength,
-        new FocusOption(),
         buffer
     );
     patterns[i] = buffer;

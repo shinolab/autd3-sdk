@@ -31,17 +31,7 @@ import { excerpt } from "@lib/excerpt";
 | `direction`  | `UnitVector3<f32>`     | ビームの方向 (単位ベクトル)             |
 | `theta`      | `Angle`                | 円錐の半頂角 (`18.0 * deg` など)        |
 | `wavelength` | `Length`               | 波長                                    |
-| `option`     | `&BesselOption`        | 追加オプション (下記参照)               |
 | `dst`        | `&mut [[Emission; _]]` | 出力バッファ                            |
-
-## BesselOption
-
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
-
-| フィールド     | 型          | デフォルト       | 説明                         |
-| -------------- | ----------- | ---------------- | ---------------------------- |
-| `intensity`    | `Intensity` | `Intensity::MAX` | 全振動子の振幅               |
-| `phase_offset` | `Phase`     | `Phase::ZERO`    | 全振動子へ一律に加算する位相 |
 
 ## Example
 

@@ -24,13 +24,8 @@ async def main() -> None:
 
         # ANCHOR: pattern_intensity
         patterns = geometry.pattern_buffer()
-        pattern.focus(
-            geometry,
-            target,
-            wavelength,
-            pattern.FocusOption(intensity=Intensity(0x80)),
-            patterns,
-        )
+        pattern.set_intensity(Intensity(0x80), patterns)
+        pattern.focus(geometry, target, wavelength, patterns)
         # ANCHOR_END: pattern_intensity
 
         # ANCHOR: modulation

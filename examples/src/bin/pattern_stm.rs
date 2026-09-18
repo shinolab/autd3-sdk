@@ -41,13 +41,7 @@ async fn main() -> Result<()> {
                     0.0 * mm,
                 );
             let mut buffer = geometry.pattern_buffer();
-            autd3_rs_pattern::focus(
-                &geometry,
-                target,
-                wavelength,
-                &autd3_rs_pattern::FocusOption::default(),
-                &mut buffer,
-            );
+            autd3_rs_pattern::focus(&geometry, target, wavelength, &mut buffer);
             buffer
         })
         .collect::<Vec<_>>();

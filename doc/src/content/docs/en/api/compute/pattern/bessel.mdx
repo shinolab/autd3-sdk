@@ -31,17 +31,7 @@ The algorithm is based on the paper by Hasegawa et al. ([Hasegawa et al., 2017](
 | `direction`  | `UnitVector3<f32>`     | Direction of the beam (unit vector) |
 | `theta`      | `Angle`                | Half-apex angle of the cone (e.g. `18.0 * deg`) |
 | `wavelength` | `Length`               | Wavelength                          |
-| `option`     | `&BesselOption`        | Additional options (see below)      |
 | `dst`        | `&mut [[Emission; _]]` | Output buffer                       |
-
-## BesselOption
-
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
-
-| Field          | Type        | Default          | Description                  |
-| -------------- | ----------- | ---------------- | ---------------------------- |
-| `intensity`    | `Intensity` | `Intensity::MAX` | Amplitude of all transducers |
-| `phase_offset` | `Phase`     | `Phase::ZERO`    | Phase added uniformly to all transducers |
 
 ## Example
 

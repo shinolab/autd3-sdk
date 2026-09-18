@@ -1,7 +1,7 @@
 use autd3_rs_core::geometry::{Device, Geometry, TransducerGroups, TransducerMask};
-use autd3_rs_core::value::Emission;
+use autd3_rs_core::value::{Emission, Intensity, Phase};
 
-use crate::null_transducer;
+use crate::set_phase_and_intensity;
 
 fn sources_of<K, S, F>(groups: &TransducerGroups<K>, mut source: F) -> Vec<S>
 where
@@ -22,7 +22,7 @@ fn write_device<K, S>(
 {
     let dev = device.idx();
     for (tr, (slot, &index)) in dst.iter_mut().zip(groups.indices(dev)).enumerate() {
-        *slot = index.map_or_else(null_transducer, |index| sources[index].as_ref()[dev][tr]);
+        *slot = index.map_or(Emission::NULL, |index| sources[index].as_ref()[dev][tr]);
     }
 }
 
@@ -83,7 +83,7 @@ where
     for (dev, slot) in dst.iter_mut().enumerate() {
         for (out, &i) in slot.iter_mut().zip(groups.indices(dev)) {
             if i.is_none() {
-                *out = null_transducer();
+                *out = Emission::NULL;
             }
         }
     }
@@ -91,7 +91,7 @@ where
         let Some(mask) = groups.mask(key) else {
             continue;
         };
-        crate::null(scratch);
+        set_phase_and_intensity(Phase::ZERO, Intensity::MAX, scratch);
         compute(key, mask, scratch)?;
         assert!(
             scratch.len() == dst.len()
@@ -115,10 +115,8 @@ where
 #[cfg(test)]
 mod tests {
     use autd3_rs_core::geometry::{Autd3, Point3, UnitQuaternion};
-    use autd3_rs_core::value::{Intensity, Phase};
 
     use super::*;
-    use crate::uniform;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Side {
@@ -131,6 +129,10 @@ mod tests {
             phase: Phase(phase),
             intensity: Intensity(intensity),
         }
+    }
+
+    fn set_emission(e: Emission, dst: &mut [Vec<Emission>]) {
+        set_phase_and_intensity(e.phase, e.intensity, dst);
     }
 
     fn geometry() -> Geometry {
@@ -157,7 +159,7 @@ mod tests {
                 let expected = match (dev, tr % 3) {
                     (_, 0) => left,
                     (1, 1) => right,
-                    _ => Emission::default(),
+                    _ => Emission::NULL,
                 };
                 assert_eq!(e, expected, "dev {dev} tr {tr}");
             }
@@ -168,11 +170,11 @@ mod tests {
     fn group_copies_the_source_of_each_key() {
         let geometry = geometry();
         let mut left = geometry.pattern_buffer();
-        uniform(emission(0x10, 0x20), &mut left);
+        set_emission(emission(0x10, 0x20), &mut left);
         let mut right = geometry.pattern_buffer();
-        uniform(emission(0x30, 0x40), &mut right);
+        set_emission(emission(0x30, 0x40), &mut right);
         let mut dst = geometry.pattern_buffer();
-        uniform(emission(0xFF, 0xFF), &mut dst);
+        set_emission(emission(0xFF, 0xFF), &mut dst);
 
         let groups = sides(&geometry);
         group(
@@ -219,7 +221,7 @@ mod tests {
     fn group_device_matches_group() {
         let geometry = geometry();
         let mut src = geometry.pattern_buffer();
-        uniform(emission(0x55, 0x66), &mut src);
+        set_emission(emission(0x55, 0x66), &mut src);
         let groups = TransducerGroups::new(&geometry, |_, tr| (tr % 2 == 0).then_some(Side::Left));
 
         let mut expected = geometry.pattern_buffer();
@@ -235,7 +237,7 @@ mod tests {
         let geometry = geometry();
         let groups = sides(&geometry);
         let mut dst = geometry.pattern_buffer();
-        uniform(emission(0xFF, 0xFF), &mut dst);
+        set_emission(emission(0xFF, 0xFF), &mut dst);
 
         let mut seen = Vec::new();
         let result: Result<(), ()> = group_compute(
@@ -252,7 +254,7 @@ mod tests {
                     Side::Left => emission(0x10, 0x20),
                     Side::Right => emission(0x30, 0x40),
                 };
-                uniform(e, buffer);
+                set_emission(e, buffer);
                 Ok(())
             },
             &mut dst,
@@ -289,19 +291,19 @@ mod tests {
     }
 
     #[test]
-    fn group_compute_with_hands_a_null_scratch_to_each_key() {
+    fn group_compute_with_hands_a_fresh_pattern_buffer_to_each_key() {
         let geometry = geometry();
         let groups = sides(&geometry);
         let mut scratch = geometry.pattern_buffer();
-        uniform(emission(0xAA, 0xBB), &mut scratch);
+        set_emission(emission(0xAA, 0xBB), &mut scratch);
         let mut dst = geometry.pattern_buffer();
-        uniform(emission(0xFF, 0xFF), &mut dst);
+        set_emission(emission(0xFF, 0xFF), &mut dst);
 
         let result: Result<(), ()> = group_compute_with(
             &groups,
             |side, _, buffer| {
                 if side == Side::Left {
-                    uniform(emission(0x10, 0x20), buffer);
+                    set_emission(emission(0x10, 0x20), buffer);
                 }
                 Ok(())
             },
@@ -310,6 +312,6 @@ mod tests {
         );
 
         assert_eq!(result, Ok(()));
-        assert_sides(&dst, emission(0x10, 0x20), Emission::default());
+        assert_sides(&dst, emission(0x10, 0x20), emission(0x00, 0xFF));
     }
 }

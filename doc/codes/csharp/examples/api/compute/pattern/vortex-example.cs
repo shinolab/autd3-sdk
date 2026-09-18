@@ -20,10 +20,6 @@ Pattern.Vortex(
     Vector3.UnitZ,
     1,
     Pattern.Wavelength(340.0f * m / s),
-    new VortexOption(
-        intensity: Intensity.Max,
-        phaseOffset: Phase.Zero
-    ),
     dst
 );
         // HIDE

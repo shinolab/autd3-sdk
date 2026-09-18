@@ -33,15 +33,14 @@ async def main() -> None:
         print("devices:", client.num_devices())
 
         wavelength = pattern.wavelength(340 * m / s)
-        focus_option = pattern.FocusOption()
 
         left_target = geometry.center() + np.array([-40.0, 0.0, 150.0])
         left = geometry.pattern_buffer()
-        pattern.focus(geometry, left_target, wavelength, focus_option, left)
+        pattern.focus(geometry, left_target, wavelength, left)
 
         right_target = geometry.center() + np.array([40.0, 0.0, 150.0])
         right = geometry.pattern_buffer()
-        pattern.focus(geometry, right_target, wavelength, focus_option, right)
+        pattern.focus(geometry, right_target, wavelength, right)
 
         builder = client.datagram_builder()
         builder.push(autd3.commands.SetSilencer())

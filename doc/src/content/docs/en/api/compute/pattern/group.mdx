@@ -39,6 +39,7 @@ If you only need to switch per device, send a command per device with `push_each
 | `dst`      | `&mut [Vec<Emission>]`                                               | Output buffer                                            |
 
 `compute` is called once per key (in order of first appearance), and only the transducers of that key are written into `dst`.
+Transducers not assigned to any key produce no output (`Emission::NULL`).
 
 ## group
 

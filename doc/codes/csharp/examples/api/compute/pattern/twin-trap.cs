@@ -13,20 +13,10 @@ internal static class Sample
         var target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var normal = Vector3.UnitX;
         var wavelength = Pattern.Wavelength(340.0f * m / s);
-        var intensity = Intensity.Max;
-        var phaseOffset = Phase.Zero;
-        var option =
-            // ANCHOR: option
-            new TwinTrapOption(
-                intensity,
-                phaseOffset
-            )
-            // ANCHOR_END: option
-            ;
         var dst = geometry.PatternBuffer();
 
         // ANCHOR: api
-        Pattern.TwinTrap(geometry, target, normal, wavelength, option, dst);
+        Pattern.TwinTrap(geometry, target, normal, wavelength, dst);
         // ANCHOR_END: api
     }
 }

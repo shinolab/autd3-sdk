@@ -1,24 +1,9 @@
 use autd3_rs_core::common::Length;
 use autd3_rs_core::common::units::rad;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3, Vector3};
-use autd3_rs_core::value::{Emission, Intensity, Phase};
+use autd3_rs_core::value::{Emission, Phase};
 
 use crate::focus::focus_phase;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct VortexOption {
-    pub intensity: Intensity,
-    pub phase_offset: Phase,
-}
-
-impl Default for VortexOption {
-    fn default() -> Self {
-        Self {
-            intensity: Intensity::MAX,
-            phase_offset: Phase::ZERO,
-        }
-    }
-}
 
 struct AzimuthBasis {
     u: Vector3<f32>,
@@ -59,13 +44,8 @@ pub fn vortex_transducer(
     axis: UnitVector3<f32>,
     order: i32,
     wavelength: Length,
-    option: &VortexOption,
-) -> Emission {
-    Emission {
-        phase: vortex_phase(position, target, &azimuth_basis(axis), order, wavelength)
-            + option.phase_offset,
-        intensity: option.intensity,
-    }
+) -> Phase {
+    vortex_phase(position, target, &azimuth_basis(axis), order, wavelength)
 }
 
 pub fn vortex_device(
@@ -74,15 +54,11 @@ pub fn vortex_device(
     axis: UnitVector3<f32>,
     order: i32,
     wavelength: Length,
-    option: &VortexOption,
     dst: &mut [Emission],
 ) {
     let basis = azimuth_basis(axis);
     for (e, &pos) in dst.iter_mut().zip(device.positions()) {
-        *e = Emission {
-            phase: vortex_phase(pos, target, &basis, order, wavelength) + option.phase_offset,
-            intensity: option.intensity,
-        };
+        e.phase = vortex_phase(pos, target, &basis, order, wavelength);
     }
 }
 
@@ -92,7 +68,6 @@ pub fn vortex(
     axis: UnitVector3<f32>,
     order: i32,
     wavelength: Length,
-    option: &VortexOption,
     dst: &mut [Vec<Emission>],
 ) {
     assert_eq!(
@@ -101,7 +76,7 @@ pub fn vortex(
         "dst must have one slot per device"
     );
     for (slot, dev) in dst.iter_mut().zip(geometry.iter()) {
-        vortex_device(dev, target, axis, order, wavelength, option, slot);
+        vortex_device(dev, target, axis, order, wavelength, slot);
     }
 }
 
@@ -111,25 +86,21 @@ mod tests {
 
     use autd3_rs_core::geometry::{Autd3, UnitQuaternion};
     use autd3_rs_core::units::mm;
+    use autd3_rs_core::value::Intensity;
 
     use super::*;
-    use crate::{FocusOption, focus_transducer};
+    use crate::focus_transducer;
 
     #[test]
     fn order_zero_matches_focus() {
         let dev: Device = Autd3::default().into();
         let lambda = 8.5 * mm;
         let target = dev.center() + Vector3::new(0.0, 0.0, 150.0);
-        let option = VortexOption::default();
-        let focus_option = FocusOption {
-            intensity: option.intensity,
-            phase_offset: option.phase_offset,
-        };
 
         for &pos in dev.positions() {
             assert_eq!(
-                vortex_transducer(pos, target, Vector3::z_axis(), 0, lambda, &option),
-                focus_transducer(pos, target, lambda, &focus_option)
+                vortex_transducer(pos, target, Vector3::z_axis(), 0, lambda),
+                focus_transducer(pos, target, lambda)
             );
         }
     }
@@ -140,27 +111,14 @@ mod tests {
         let target = Point3::new(0.0, 0.0, 150.0);
         let axis = Vector3::z_axis();
         let radius = 40.0_f32;
-        let option = VortexOption::default();
 
         for order in [1_i32, 2, -1] {
-            let base = vortex_transducer(
-                Point3::new(radius, 0.0, 0.0),
-                target,
-                axis,
-                order,
-                lambda,
-                &option,
-            );
-            let quarter = vortex_transducer(
-                Point3::new(0.0, radius, 0.0),
-                target,
-                axis,
-                order,
-                lambda,
-                &option,
-            );
-            let expected = base.phase + Phase::from(order as f32 * FRAC_PI_2 * rad);
-            assert_eq!(quarter.phase, expected);
+            let base =
+                vortex_transducer(Point3::new(radius, 0.0, 0.0), target, axis, order, lambda);
+            let quarter =
+                vortex_transducer(Point3::new(0.0, radius, 0.0), target, axis, order, lambda);
+            let expected = base + Phase::from(order as f32 * FRAC_PI_2 * rad);
+            assert_eq!(quarter, expected);
         }
     }
 
@@ -170,25 +128,10 @@ mod tests {
         let target = Point3::new(0.0, 0.0, 150.0);
         let axis = Vector3::z_axis();
         let radius = 40.0_f32;
-        let option = VortexOption::default();
 
-        let a = vortex_transducer(
-            Point3::new(radius, 0.0, 0.0),
-            target,
-            axis,
-            1,
-            lambda,
-            &option,
-        );
-        let b = vortex_transducer(
-            Point3::new(-radius, 0.0, 0.0),
-            target,
-            axis,
-            1,
-            lambda,
-            &option,
-        );
-        assert_eq!(b.phase, a.phase + Phase::PI);
+        let a = vortex_transducer(Point3::new(radius, 0.0, 0.0), target, axis, 1, lambda);
+        let b = vortex_transducer(Point3::new(-radius, 0.0, 0.0), target, axis, 1, lambda);
+        assert_eq!(b, a + Phase::PI);
     }
 
     #[test]
@@ -220,53 +163,26 @@ mod tests {
     }
 
     #[test]
-    fn phase_offset_is_applied() {
-        let dev: Device = Autd3::default().into();
-        let lambda = 8.5 * mm;
-        let target = Point3::new(10.0, 20.0, 150.0);
-        let axis = Vector3::z_axis();
-        let offset = Phase(0x25);
-
-        let base = vortex_transducer(
-            dev.position(0),
-            target,
-            axis,
-            1,
-            lambda,
-            &VortexOption::default(),
-        );
-        let shifted = vortex_transducer(
-            dev.position(0),
-            target,
-            axis,
-            1,
-            lambda,
-            &VortexOption {
-                phase_offset: offset,
-                ..Default::default()
-            },
-        );
-        assert_eq!(shifted.phase, base.phase + offset);
-    }
-
-    #[test]
-    fn device_level_matches_transducer_level() {
+    fn device_level_matches_transducer_level_and_keeps_intensity() {
         let dev: Device = Autd3::default().into();
         let target = Point3::new(86.36, 66.04, 150.0);
         let lambda = 8.5 * mm;
         let axis = UnitVector3::new_normalize(Vector3::new(0.1, -0.2, 1.0));
-        let option = VortexOption {
-            intensity: Intensity(0x80),
-            phase_offset: Phase(0x10),
-        };
 
-        let mut pattern = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
-        vortex_device(&dev, target, axis, 2, lambda, &option, &mut pattern);
+        let mut pattern = vec![
+            Emission {
+                phase: Phase::ZERO,
+                intensity: Intensity(0x42),
+            };
+            Autd3::NUM_TRANSDUCERS
+        ];
+        vortex_device(&dev, target, axis, 2, lambda, &mut pattern);
         for (i, &pos) in dev.positions().iter().enumerate() {
             assert_eq!(
-                pattern[i],
-                vortex_transducer(pos, target, axis, 2, lambda, &option)
+                pattern[i].phase,
+                vortex_transducer(pos, target, axis, 2, lambda)
             );
+            assert_eq!(pattern[i].intensity, Intensity(0x42));
         }
     }
 
@@ -279,16 +195,13 @@ mod tests {
         let target = Point3::new(100.0, 66.0, 150.0);
         let lambda = 8.5 * mm;
         let axis = Vector3::z_axis();
-        let option = VortexOption::default();
 
-        let mut emissions =
-            vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geo.num_devices()];
-        vortex(&geo, target, axis, 1, lambda, &option, &mut emissions);
-        assert_eq!(emissions.len(), 2);
-        for (actual, dev) in emissions.iter().zip(&geo) {
-            let mut expected = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
-            vortex_device(dev, target, axis, 1, lambda, &option, &mut expected);
-            assert_eq!(*actual, expected);
+        let mut emissions = geo.pattern_buffer();
+        vortex(&geo, target, axis, 1, lambda, &mut emissions);
+        let mut expected = geo.pattern_buffer();
+        for (slot, dev) in expected.iter_mut().zip(&geo) {
+            vortex_device(dev, target, axis, 1, lambda, slot);
         }
+        assert_eq!(emissions, expected);
     }
 }

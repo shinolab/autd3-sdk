@@ -19,10 +19,6 @@ Pattern.TwinTrap(
     geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),
     Vector3.UnitX,
     Pattern.Wavelength(340.0f * m / s),
-    new TwinTrapOption(
-        intensity: Intensity.Max,
-        phaseOffset: Phase.Zero
-    ),
     dst
 );
         // HIDE

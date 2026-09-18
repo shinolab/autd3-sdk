@@ -22,12 +22,14 @@ internal static class Sample
         var patterns = geometry.PatternBuffer();
 
         // ANCHOR: configure
+        var silent = geometry.PatternBuffer();
+        Pattern.SetIntensity(Intensity.Min, silent);
         var builder = client.DatagramBuilder();
         builder.Push(SetSilencer.Disable());
         builder.Push(new WritePatternBuffer(
             bank: PatternBank.B0,
             index: 0,
-            emissions: patterns
+            emissions: silent
         ));
         builder.Push(new ConfigPattern(
             bank: PatternBank.B0,
@@ -54,7 +56,6 @@ internal static class Sample
                 geometry,
                 target,
                 wavelength,
-                new FocusOption(),
                 patterns
             );
 

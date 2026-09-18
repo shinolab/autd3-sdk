@@ -25,7 +25,7 @@ def report(label: str, elapsed: float) -> None:
 
 
 async def configure(client: autd3.Client, patterns: object) -> None:
-    pattern.null(patterns)
+    pattern.set_intensity(0, patterns)
     builder = client.datagram_builder()
     builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B0, 0, patterns))
     builder.push(autd3.commands.ConfigPattern(autd3.value.PatternBank.B0, autd3.value.SamplingConfig.FREQ_4K, 1))
@@ -53,12 +53,13 @@ async def main() -> None:
 
         patterns = geometry.pattern_buffer()
         await configure(client, patterns)
+        pattern.set_intensity(autd3.value.Intensity.MAX, patterns)
 
         datagrams = []
         for i in range(TOTAL_POINTS):
             theta = 2.0 * math.pi * i / TOTAL_POINTS
             target = center + np.array([radius * math.cos(theta), radius * math.sin(theta), 150.0])
-            pattern.focus(geometry, target, wavelength, pattern.FocusOption(), patterns)
+            pattern.focus(geometry, target, wavelength, patterns)
             datagrams.append(write_focus(client, patterns))
 
         print(f"sweeping a focus through {TOTAL_POINTS} positions, twice")

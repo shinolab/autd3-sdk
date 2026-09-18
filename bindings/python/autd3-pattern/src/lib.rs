@@ -7,11 +7,6 @@ use autd3_rs_core::geometry::TransducerGroups as CoreTransducerGroups;
 use autd3_rs_core::geometry::{UnitVector3, Vector3};
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 use autd3_rs_core::{Length, Point3, Velocity};
-use autd3_rs_pattern::{
-    BesselOption as CoreBesselOption, FocusOption as CoreFocusOption,
-    PlaneOption as CorePlaneOption, TwinTrapOption as CoreTwinTrapOption,
-    VortexOption as CoreVortexOption,
-};
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyDict};
@@ -90,101 +85,6 @@ fn extract_emission(obj: &Bound<'_, PyAny>) -> PyResult<Emission> {
         phase: Phase(phase),
         intensity: Intensity(intensity),
     })
-}
-
-#[pyclass(name = "FocusOption", module = "autd3_pattern", from_py_object)]
-#[derive(Clone, Copy)]
-pub struct FocusOption(pub(crate) CoreFocusOption);
-
-#[pymethods]
-impl FocusOption {
-    #[new]
-    #[pyo3(signature = (intensity = Intensity::MAX, phase_offset = Phase::ZERO))]
-    fn new(
-        #[pyo3(from_py_with = extract_intensity)] intensity: Intensity,
-        #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
-    ) -> Self {
-        Self(CoreFocusOption {
-            intensity,
-            phase_offset,
-        })
-    }
-}
-
-#[pyclass(name = "PlaneOption", module = "autd3_pattern", from_py_object)]
-#[derive(Clone, Copy)]
-pub struct PlaneOption(pub(crate) CorePlaneOption);
-
-#[pymethods]
-impl PlaneOption {
-    #[new]
-    #[pyo3(signature = (intensity = Intensity::MAX, phase_offset = Phase::ZERO))]
-    fn new(
-        #[pyo3(from_py_with = extract_intensity)] intensity: Intensity,
-        #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
-    ) -> Self {
-        Self(CorePlaneOption {
-            intensity,
-            phase_offset,
-        })
-    }
-}
-
-#[pyclass(name = "BesselOption", module = "autd3_pattern", from_py_object)]
-#[derive(Clone, Copy)]
-pub struct BesselOption(pub(crate) CoreBesselOption);
-
-#[pymethods]
-impl BesselOption {
-    #[new]
-    #[pyo3(signature = (intensity = Intensity::MAX, phase_offset = Phase::ZERO))]
-    fn new(
-        #[pyo3(from_py_with = extract_intensity)] intensity: Intensity,
-        #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
-    ) -> Self {
-        Self(CoreBesselOption {
-            intensity,
-            phase_offset,
-        })
-    }
-}
-
-#[pyclass(name = "TwinTrapOption", module = "autd3_pattern", from_py_object)]
-#[derive(Clone, Copy)]
-pub struct TwinTrapOption(pub(crate) CoreTwinTrapOption);
-
-#[pymethods]
-impl TwinTrapOption {
-    #[new]
-    #[pyo3(signature = (intensity = Intensity::MAX, phase_offset = Phase::ZERO))]
-    fn new(
-        #[pyo3(from_py_with = extract_intensity)] intensity: Intensity,
-        #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
-    ) -> Self {
-        Self(CoreTwinTrapOption {
-            intensity,
-            phase_offset,
-        })
-    }
-}
-
-#[pyclass(name = "VortexOption", module = "autd3_pattern", from_py_object)]
-#[derive(Clone, Copy)]
-pub struct VortexOption(pub(crate) CoreVortexOption);
-
-#[pymethods]
-impl VortexOption {
-    #[new]
-    #[pyo3(signature = (intensity = Intensity::MAX, phase_offset = Phase::ZERO))]
-    fn new(
-        #[pyo3(from_py_with = extract_intensity)] intensity: Intensity,
-        #[pyo3(from_py_with = extract_phase)] phase_offset: Phase,
-    ) -> Self {
-        Self(CoreVortexOption {
-            intensity,
-            phase_offset,
-        })
-    }
 }
 
 #[pyclass(name = "PatternBuffer", module = "autd3_pattern")]
@@ -290,12 +190,11 @@ fn wavelength(sound_speed: &Bound<'_, PyAny>) -> PyResult<f32> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, target, wavelength, option, dst))]
+#[pyo3(signature = (geometry, target, wavelength, dst))]
 fn focus(
     geometry: &Bound<'_, PyAny>,
     target: &Bound<'_, PyAny>,
     wavelength: f32,
-    option: FocusOption,
     mut dst: PyRefMut<'_, PatternBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
@@ -305,19 +204,17 @@ fn focus(
         geometry,
         target,
         Length::from_mm(wavelength),
-        &option.0,
         &mut dst.inner,
     );
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, direction, wavelength, option, dst))]
+#[pyo3(signature = (geometry, direction, wavelength, dst))]
 fn plane(
     geometry: &Bound<'_, PyAny>,
     direction: &Bound<'_, PyAny>,
     wavelength: f32,
-    option: PlaneOption,
     mut dst: PyRefMut<'_, PatternBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
@@ -327,21 +224,19 @@ fn plane(
         geometry,
         direction,
         Length::from_mm(wavelength),
-        &option.0,
         &mut dst.inner,
     );
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, apex, direction, theta, wavelength, option, dst))]
+#[pyo3(signature = (geometry, apex, direction, theta, wavelength, dst))]
 fn bessel(
     geometry: &Bound<'_, PyAny>,
     apex: &Bound<'_, PyAny>,
     direction: &Bound<'_, PyAny>,
     theta: &Bound<'_, PyAny>,
     wavelength: f32,
-    option: BesselOption,
     mut dst: PyRefMut<'_, PatternBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
@@ -355,20 +250,18 @@ fn bessel(
         direction,
         theta,
         Length::from_mm(wavelength),
-        &option.0,
         &mut dst.inner,
     );
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, target, normal, wavelength, option, dst))]
+#[pyo3(signature = (geometry, target, normal, wavelength, dst))]
 fn twin_trap(
     geometry: &Bound<'_, PyAny>,
     target: &Bound<'_, PyAny>,
     normal: &Bound<'_, PyAny>,
     wavelength: f32,
-    option: TwinTrapOption,
     mut dst: PyRefMut<'_, PatternBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
@@ -380,21 +273,19 @@ fn twin_trap(
         target,
         normal,
         Length::from_mm(wavelength),
-        &option.0,
         &mut dst.inner,
     );
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, target, axis, order, wavelength, option, dst))]
+#[pyo3(signature = (geometry, target, axis, order, wavelength, dst))]
 fn vortex(
     geometry: &Bound<'_, PyAny>,
     target: &Bound<'_, PyAny>,
     axis: &Bound<'_, PyAny>,
     order: i32,
     wavelength: f32,
-    option: VortexOption,
     mut dst: PyRefMut<'_, PatternBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
@@ -407,22 +298,48 @@ fn vortex(
         axis,
         order,
         Length::from_mm(wavelength),
-        &option.0,
         &mut dst.inner,
     );
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (emission, dst))]
-fn uniform(emission: &Bound<'_, PyAny>, mut dst: PyRefMut<'_, PatternBuffer>) -> PyResult<()> {
-    autd3_rs_pattern::uniform(extract_emission(emission)?, &mut dst.inner);
+#[pyo3(signature = (intensity, dst))]
+fn set_intensity(
+    intensity: &Bound<'_, PyAny>,
+    mut dst: PyRefMut<'_, PatternBuffer>,
+) -> PyResult<()> {
+    autd3_rs_pattern::set_intensity(extract_intensity(intensity)?, &mut dst.inner);
     Ok(())
 }
 
 #[pyfunction]
-fn null(mut dst: PyRefMut<'_, PatternBuffer>) {
-    autd3_rs_pattern::null(&mut dst.inner);
+#[pyo3(signature = (phase, dst))]
+fn set_phase(phase: &Bound<'_, PyAny>, mut dst: PyRefMut<'_, PatternBuffer>) -> PyResult<()> {
+    autd3_rs_pattern::set_phase(extract_phase(phase)?, &mut dst.inner);
+    Ok(())
+}
+
+#[pyfunction]
+#[pyo3(signature = (phase, intensity, dst))]
+fn set_phase_and_intensity(
+    phase: &Bound<'_, PyAny>,
+    intensity: &Bound<'_, PyAny>,
+    mut dst: PyRefMut<'_, PatternBuffer>,
+) -> PyResult<()> {
+    autd3_rs_pattern::set_phase_and_intensity(
+        extract_phase(phase)?,
+        extract_intensity(intensity)?,
+        &mut dst.inner,
+    );
+    Ok(())
+}
+
+#[pyfunction]
+#[pyo3(signature = (phase, dst))]
+fn add_phase(phase: &Bound<'_, PyAny>, mut dst: PyRefMut<'_, PatternBuffer>) -> PyResult<()> {
+    autd3_rs_pattern::add_phase(extract_phase(phase)?, &mut dst.inner);
+    Ok(())
 }
 
 fn matches_geometry(geometry: &autd3_rs_core::Geometry, buffer: &[DevicePattern]) -> bool {
@@ -643,7 +560,7 @@ fn group_compute(
     for (dev, slot) in dst.try_borrow_mut()?.inner.iter_mut().enumerate() {
         for (tr, out) in slot.iter_mut().enumerate() {
             if groups.inner.key(dev, tr).is_none() {
-                *out = Emission::default();
+                *out = Emission::NULL;
             }
         }
     }
@@ -655,7 +572,11 @@ fn group_compute(
         },
     )?;
     for (index, key) in groups.keys.iter().enumerate() {
-        autd3_rs_pattern::null(&mut scratch.try_borrow_mut()?.inner);
+        autd3_rs_pattern::set_phase_and_intensity(
+            Phase::ZERO,
+            Intensity::MAX,
+            &mut scratch.try_borrow_mut()?.inner,
+        );
         compute.call1((key.bind(py), groups.mask_at(index), &scratch))?;
         let source = scratch.try_borrow()?;
         let mut out = dst.try_borrow_mut()?;
@@ -679,11 +600,6 @@ fn _read_pattern_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
 fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PatternBuffer>()?;
     m.add_class::<DevicePatternView>()?;
-    m.add_class::<FocusOption>()?;
-    m.add_class::<PlaneOption>()?;
-    m.add_class::<BesselOption>()?;
-    m.add_class::<TwinTrapOption>()?;
-    m.add_class::<VortexOption>()?;
     m.add_class::<TransducerMask>()?;
     m.add_class::<TransducerGroups>()?;
     m.add_function(wrap_pyfunction!(wavelength, m)?)?;
@@ -692,8 +608,10 @@ fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bessel, m)?)?;
     m.add_function(wrap_pyfunction!(twin_trap, m)?)?;
     m.add_function(wrap_pyfunction!(vortex, m)?)?;
-    m.add_function(wrap_pyfunction!(uniform, m)?)?;
-    m.add_function(wrap_pyfunction!(null, m)?)?;
+    m.add_function(wrap_pyfunction!(set_intensity, m)?)?;
+    m.add_function(wrap_pyfunction!(set_phase, m)?)?;
+    m.add_function(wrap_pyfunction!(set_phase_and_intensity, m)?)?;
+    m.add_function(wrap_pyfunction!(add_phase, m)?)?;
     m.add_function(wrap_pyfunction!(group, m)?)?;
     m.add_function(wrap_pyfunction!(group_compute, m)?)?;
     m.add_function(wrap_pyfunction!(_read_pattern_capsule, m)?)?;

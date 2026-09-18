@@ -22,7 +22,7 @@ internal static class Program
 
     private static async Task Configure(Client client, PatternBuffer patterns)
     {
-        Pattern.Null(patterns);
+        Pattern.SetIntensity(Intensity.Min, patterns);
         using var builder = client.DatagramBuilder();
         builder
             .Push(new WritePatternBuffer(PatternBank.B0, 0, patterns))
@@ -52,13 +52,14 @@ internal static class Program
 
         using var patterns = geometry.PatternBuffer();
         await Configure(client, patterns);
+        Pattern.SetIntensity(Intensity.Max, patterns);
 
         var frames = new List<Frames>(TotalPoints);
         for (var i = 0; i < TotalPoints; i++)
         {
             var theta = 2.0 * Math.PI * i / TotalPoints;
             var target = center + new Vector3(radius * (float)Math.Cos(theta), radius * (float)Math.Sin(theta), 150f);
-            Pattern.Focus(geometry, target, wavelength, Intensity.Max, patterns);
+            Pattern.Focus(geometry, target, wavelength, patterns);
             frames.Add(WriteFocus(client, patterns));
         }
 

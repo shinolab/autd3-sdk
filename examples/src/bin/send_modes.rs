@@ -12,7 +12,7 @@ use autd3_rs::commands::{ConfigPattern, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::{Emission, LoopBehavior, PatternBank, SamplingConfig};
+use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, SamplingConfig};
 use autd3_rs::{Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture};
 use autd3_rs_link_echocat::EchocatLinkOption;
 
@@ -69,13 +69,7 @@ async fn run_stop_and_wait(
 
     let start = Instant::now();
     for &target in targets {
-        autd3_rs_pattern::focus(
-            geometry,
-            target,
-            wavelength,
-            &autd3_rs_pattern::FocusOption::default(),
-            &mut emissions,
-        );
+        autd3_rs_pattern::focus(geometry, target, wavelength, &mut emissions);
         write_focus(client, &emissions, &mut buf)?;
         for frame in &buf {
             client.send_checked(frame).await?;
@@ -98,13 +92,7 @@ async fn run_streaming(
 
     let start = Instant::now();
     for &target in targets {
-        autd3_rs_pattern::focus(
-            geometry,
-            target,
-            wavelength,
-            &autd3_rs_pattern::FocusOption::default(),
-            &mut emissions,
-        );
+        autd3_rs_pattern::focus(geometry, target, wavelength, &mut emissions);
         write_focus(client, &emissions, &mut buf)?;
         for frame in &buf {
             if pending.len() >= max_inflight {
@@ -121,7 +109,7 @@ async fn run_streaming(
 
 async fn configure(client: &Client) -> Result<()> {
     let mut emissions = client.geometry().pattern_buffer();
-    autd3_rs_pattern::null(&mut emissions);
+    autd3_rs_pattern::set_intensity(Intensity::MIN, &mut emissions);
     let mut builder = client.datagram_builder();
     builder
         .push(WritePatternBuffer {

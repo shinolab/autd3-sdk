@@ -30,7 +30,7 @@ async def main() -> None:
 
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
     emissions = geometry.pattern_buffer()
-    pattern.focus(geometry, target, pattern.wavelength(340 * m / s), pattern.FocusOption(), emissions)
+    pattern.focus(geometry, target, pattern.wavelength(340 * m / s), emissions)
     mod_buf = modulation.modulation_buffer()
     modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
 

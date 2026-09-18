@@ -27,7 +27,6 @@ async fn main() -> Result<()> {
                 &geometry,
                 target,
                 wavelength,
-                &autd3_rs_pattern::FocusOption::default(),
                 &mut patterns,
             );
             let mut builder = client.datagram_builder();

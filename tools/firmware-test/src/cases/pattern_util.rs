@@ -10,11 +10,11 @@ use autd3_rs::commands::{
 use autd3_rs::geometry::{Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{
-    ControlPoints, Emission, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase,
-    SamplingConfig, TransitionMode,
+    ControlPoints, Emission, Intensity, LoopBehavior, ModulationBank, PatternBank, SamplingConfig,
+    TransitionMode,
 };
 use autd3_rs::{Error, Frames, Velocity};
-use autd3_rs_pattern::{FocusOption, focus, wavelength};
+use autd3_rs_pattern::{focus, set_intensity, wavelength};
 
 use crate::Ctx;
 
@@ -24,16 +24,8 @@ pub fn focus_at(geometry: &Geometry, off: [f32; 3], intensity: u8) -> Vec<Vec<Em
     let mut buf = geometry.pattern_buffer();
     let target = geometry.center() + offset(off[0] * mm, off[1] * mm, off[2] * mm);
     let wl = wavelength(SOUND_SPEED_M_S * m / s);
-    focus(
-        geometry,
-        target,
-        wl,
-        &FocusOption {
-            intensity: Intensity(intensity),
-            phase_offset: Phase::ZERO,
-        },
-        &mut buf,
-    );
+    set_intensity(Intensity(intensity), &mut buf);
+    focus(geometry, target, wl, &mut buf);
     buf
 }
 

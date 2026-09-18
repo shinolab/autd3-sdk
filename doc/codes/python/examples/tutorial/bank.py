@@ -28,7 +28,6 @@ async def main() -> None:
             geometry,
             target_a,
             wavelength,
-            pattern.FocusOption(),
             pat_a,
         )
         builder = client.datagram_builder()
@@ -44,7 +43,6 @@ async def main() -> None:
             geometry,
             target_b,
             wavelength,
-            pattern.FocusOption(),
             pat_b,
         )
         builder = client.datagram_builder()

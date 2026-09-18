@@ -26,7 +26,6 @@ for (var i = 0; i < offsets.Length; i++)
         geometry,
         geometry.Center + new Vector3(offsets[i], 0.0f, 150.0f),
         wavelength,
-        new FocusOption(),
         buffer
     );
     patterns[i] = buffer;

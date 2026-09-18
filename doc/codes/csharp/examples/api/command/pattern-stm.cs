@@ -22,7 +22,7 @@ internal static class Sample
             var theta = 2.0f * MathF.PI * i / NumPoints;
             var target = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0.0f);
             var buffer = geometry.PatternBuffer();
-            Pattern.Focus(geometry, target, wavelength, new FocusOption(), buffer);
+            Pattern.Focus(geometry, target, wavelength, buffer);
             patterns[i] = buffer;
         }
         var freq = 1.0f * Hz;

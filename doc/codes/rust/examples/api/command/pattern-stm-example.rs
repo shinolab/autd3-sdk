@@ -4,7 +4,7 @@ use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{LoopBehavior, PatternBank, TransitionMode};
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_nop::Nop;
-use autd3_rs_pattern::{FocusOption, focus, wavelength};
+use autd3_rs_pattern::{focus, wavelength};
 
 // HIDE
 #[tokio::main(flavor = "multi_thread")]
@@ -25,7 +25,6 @@ async fn main() -> anyhow::Result<()> {
                 &geometry,
                 target,
                 wavelength,
-                &FocusOption::default(),
                 &mut buffer,
             );
             buffer

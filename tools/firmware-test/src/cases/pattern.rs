@@ -2,9 +2,9 @@ use anyhow::Result;
 
 use autd3_rs::commands::Pattern;
 use autd3_rs::units::Hz;
-use autd3_rs::value::{PatternBank, SamplingConfig};
+use autd3_rs::value::{Intensity, PatternBank, SamplingConfig};
 use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
-use autd3_rs_pattern::null;
+use autd3_rs_pattern::set_intensity;
 
 use crate::Ctx;
 use crate::cases::pattern_util::{
@@ -15,7 +15,7 @@ use crate::io::wait_enter;
 pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let focus = focus_at(ctx.geometry, [0.0, 0.0, 150.0], 0xFF);
     let mut nullbuf = ctx.geometry.pattern_buffer();
-    null(&mut nullbuf);
+    set_intensity(Intensity::MIN, &mut nullbuf);
 
     let mut modbuf = modulation_buffer();
     sine(150 * Hz, &SineOption::default(), &mut modbuf)?;

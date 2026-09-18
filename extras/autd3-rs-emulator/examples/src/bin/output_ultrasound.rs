@@ -10,7 +10,7 @@ use textplots::{Chart, Plot, Shape};
 use autd3_rs::commands::{Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::units::rad;
-use autd3_rs::value::{Emission, Intensity, Phase};
+use autd3_rs::value::Phase;
 
 use autd3_rs_emulator::{ClientApi, Emulator};
 
@@ -39,15 +39,8 @@ fn lineplot(title: &str, samples: &[f32]) {
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut patterns =
-        vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
-    autd3_rs_pattern::uniform(
-        Emission {
-            phase: Phase::from(std::f32::consts::PI / 2.0 * rad),
-            intensity: Intensity::MAX,
-        },
-        &mut patterns,
-    );
+    let mut patterns = geometry.pattern_buffer();
+    autd3_rs_pattern::set_phase(Phase::from(std::f32::consts::PI / 2.0 * rad), &mut patterns);
 
     let emulator = Emulator::new(geometry);
     let record = emulator.record(async move |r| {

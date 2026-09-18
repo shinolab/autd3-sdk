@@ -33,21 +33,14 @@ async fn main() -> Result<()> {
     println!("devices: {}", client.num_devices());
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
-    let focus_option = autd3_rs_pattern::FocusOption::default();
 
     let left_target = geometry.center() + offset(-40.0 * mm, 0.0 * mm, 150.0 * mm);
     let mut left = geometry.pattern_buffer();
-    autd3_rs_pattern::focus(&geometry, left_target, wavelength, &focus_option, &mut left);
+    autd3_rs_pattern::focus(&geometry, left_target, wavelength, &mut left);
 
     let right_target = geometry.center() + offset(40.0 * mm, 0.0 * mm, 150.0 * mm);
     let mut right = geometry.pattern_buffer();
-    autd3_rs_pattern::focus(
-        &geometry,
-        right_target,
-        wavelength,
-        &focus_option,
-        &mut right,
-    );
+    autd3_rs_pattern::focus(&geometry, right_target, wavelength, &mut right);
 
     let mut builder = client.datagram_builder();
     builder.push(SetSilencer::default()).push_each(|device| {

@@ -41,8 +41,7 @@ namespace AUTD3.Tests
             using var client = await LegacyClient.OpenAsync(geometry, new AUTD3.Link.Nop(), new LegacyClientConfig());
 
             using var patterns = geometry.PatternBuffer();
-            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s),
-                new FocusOption(), patterns);
+            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), patterns);
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200 * Hz, new SineOption(), modulation);
 
@@ -94,8 +93,7 @@ namespace AUTD3.Tests
             using var client = await LegacyClient.OpenAsync(geometry, new AUTD3.Link.Nop(), new LegacyClientConfig());
 
             using var patterns = geometry.PatternBuffer();
-            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s),
-                new FocusOption(), patterns);
+            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), patterns);
 
             using var builder = client.DatagramBuilder();
             builder.PushEach(device => device.Idx == 0 ? new Pattern(patterns) : (ICommand?)null);

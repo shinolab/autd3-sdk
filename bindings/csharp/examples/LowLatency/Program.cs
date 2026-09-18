@@ -27,7 +27,8 @@ internal static class Program
         var target = geometry.Center + new Vector3(0f, 0f, 150f);
         var wavelength = Pattern.Wavelength(340 * m / s);
         using var patterns = geometry.PatternBuffer();
-        Pattern.Focus(geometry, target, wavelength, Intensity.Min, patterns);
+        Pattern.Focus(geometry, target, wavelength, patterns);
+        Pattern.SetIntensity(Intensity.Min, patterns);
         using var builder = client.DatagramBuilder();
         builder.Push(new Pattern(patterns));
         using var frames = builder.Build();

@@ -11,7 +11,7 @@ from autd3_emulator import Emulator, Recorder, RangeXY, RmsRecordOption, Instant
 geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 target = geometry.center() + np.array([0.0, 0.0, 150.0])
 patterns = geometry.pattern_buffer()
-pattern.focus(geometry, target, pattern.wavelength(340 * m / s), pattern.FocusOption(), patterns)
+pattern.focus(geometry, target, pattern.wavelength(340 * m / s), patterns)
 
 # ANCHOR: record
 emulator = Emulator(geometry)

@@ -90,27 +90,32 @@ namespace AUTD3.Tests
             var target = device.Center + new Vector3(0f, 0f, 150f);
 
             var dst = new Emission[Autd3.NumTransducers];
-            Pattern.FocusDevice(device, target, wavelength, new FocusOption(Intensity.Max), dst);
-            var e = Pattern.FocusTransducer(device.Position(0), target, wavelength, new FocusOption(Intensity.Max));
-            Assert.Equal(e.Phase.Value, dst[0].Phase.Value);
-            Assert.Equal(Intensity.Max.Value, dst[0].Intensity.Value);
+            Pattern.SetIntensityDevice(new Intensity(0x42), dst);
+            Pattern.FocusDevice(device, target, wavelength, dst);
+            var e = Pattern.FocusTransducer(device.Position(0), target, wavelength);
+            Assert.Equal(e.Value, dst[0].Phase.Value);
+            Assert.Equal(0x42, dst[0].Intensity.Value);
 
-            Pattern.PlaneDevice(device, new Vector3(0f, 0f, 1f), wavelength, new PlaneOption(Intensity.Max), dst);
-            var pe = Pattern.PlaneTransducer(device.Position(0), new Vector3(0f, 0f, 1f), wavelength, new PlaneOption(Intensity.Max));
-            Assert.Equal(pe.Phase.Value, dst[0].Phase.Value);
+            Pattern.PlaneDevice(device, new Vector3(0f, 0f, 1f), wavelength, dst);
+            var pe = Pattern.PlaneTransducer(device.Position(0), new Vector3(0f, 0f, 1f), wavelength);
+            Assert.Equal(pe.Value, dst[0].Phase.Value);
 
-            Pattern.BesselDevice(device, device.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, wavelength, new BesselOption(Intensity.Max), dst);
-            var be = Pattern.BesselTransducer(device.Position(0), device.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, wavelength, new BesselOption(Intensity.Max));
-            Assert.Equal(be.Phase.Value, dst[0].Phase.Value);
+            Pattern.BesselDevice(device, device.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, wavelength, dst);
+            var be = Pattern.BesselTransducer(device.Position(0), device.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, wavelength);
+            Assert.Equal(be.Value, dst[0].Phase.Value);
+            Assert.Equal(0x42, dst[0].Intensity.Value);
 
-            Pattern.UniformDevice(new Emission(Phase.Pi, Intensity.Max), dst);
+            Pattern.SetPhaseAndIntensityDevice(Phase.Pi, Intensity.Max, dst);
             Assert.Equal(Phase.Pi.Value, dst[10].Phase.Value);
+            Assert.Equal(Intensity.Max.Value, dst[10].Intensity.Value);
 
-            Pattern.NullDevice(dst);
+            Pattern.SetPhaseDevice(new Phase(0xF0), dst);
+            Pattern.AddPhaseDevice(new Phase(0x20), dst);
+            Assert.Equal(0x10, dst[10].Phase.Value);
+
+            Pattern.SetIntensityDevice(Intensity.Min, dst);
             Assert.Equal(Intensity.Min.Value, dst[10].Intensity.Value);
-
-            Pattern.NullTransducer(ref dst[0]);
-            Assert.Equal(Phase.Zero.Value, dst[0].Phase.Value);
+            Assert.Equal(0x10, dst[10].Phase.Value);
         }
 
         [Fact]

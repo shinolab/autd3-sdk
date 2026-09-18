@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry, TransducerGroups, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs_pattern::{FocusOption, focus, group_compute, wavelength};
+use autd3_rs_pattern::{focus, group_compute, wavelength};
 use autd3_rs_pattern_holo::{AmplitudeTarget, GspatOption, NalgebraBackend, Pa, gspat};
 
 // HIDE
@@ -58,7 +58,6 @@ fn main() -> Result<()> {
                     &geometry,
                     center + offset(40.0 * mm, 0.0 * mm, 150.0 * mm),
                     wavelength,
-                    &FocusOption::default(),
                     buffer,
                 );
                 Ok(())

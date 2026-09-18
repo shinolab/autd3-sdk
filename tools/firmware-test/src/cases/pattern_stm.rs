@@ -4,9 +4,11 @@ use anyhow::Result;
 
 use autd3_rs::commands::{PatternStm, PatternStmOption, SetSilencer};
 use autd3_rs::units::Hz;
-use autd3_rs::value::{Emission, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
+use autd3_rs::value::{
+    Emission, Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode,
+};
 use autd3_rs_modulation::{constant, modulation_buffer};
-use autd3_rs_pattern::null;
+use autd3_rs_pattern::set_intensity;
 
 use crate::Ctx;
 use crate::cases::ERR_INVALID_TRANSITION_MODE;
@@ -81,7 +83,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let mut rev = patterns.clone();
     rev.reverse();
     let mut last = ctx.geometry.pattern_buffer();
-    null(&mut last);
+    set_intensity(Intensity::MIN, &mut last);
     rev[POINT_NUM - 1] = last;
     write_pattern_stm_bank(ctx, PatternBank::B1, 0.5 * Hz, &rev, LoopBehavior::ONCE).await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;

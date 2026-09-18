@@ -18,16 +18,8 @@ async fn main() -> Result<()> {
 
     // ANCHOR: pattern_intensity
     let mut patterns = geometry.pattern_buffer();
-    autd3_rs_pattern::focus(
-        &geometry,
-        target,
-        wavelength,
-        &autd3_rs_pattern::FocusOption {
-            intensity: Intensity(0x80),
-            ..Default::default()
-        },
-        &mut patterns,
-    );
+    autd3_rs_pattern::set_intensity(Intensity(0x80), &mut patterns);
+    autd3_rs_pattern::focus(&geometry, target, wavelength, &mut patterns);
     // ANCHOR_END: pattern_intensity
 
     // ANCHOR: modulation

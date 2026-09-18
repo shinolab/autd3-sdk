@@ -32,8 +32,13 @@ namespace AUTD3.Tests
             using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
             using var buffer = geometry.PatternBuffer();
             var wavelength = Pattern.Wavelength(340 * m / s);
-            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), wavelength, Intensity.Max, buffer);
+            Pattern.SetIntensity(new Intensity(0x80), buffer);
+            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), wavelength, buffer);
             Assert.Equal(1, buffer.NumDevices);
+            foreach (var e in buffer[0])
+            {
+                Assert.Equal(new Intensity(0x80), e.Intensity);
+            }
         }
 
         private enum Side
@@ -47,9 +52,9 @@ namespace AUTD3.Tests
         {
             using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero), new Autd3(new Vector3(200f, 0f, 0f)) });
             using var left = geometry.PatternBuffer();
-            Pattern.Uniform(new Emission(new Phase(0x10), new Intensity(0x20)), left);
+            Pattern.SetPhaseAndIntensity(new Phase(0x10), new Intensity(0x20), left);
             using var right = geometry.PatternBuffer();
-            Pattern.Uniform(new Emission(new Phase(0x30), new Intensity(0x40)), right);
+            Pattern.SetPhaseAndIntensity(new Phase(0x30), new Intensity(0x40), right);
             using var dst = geometry.PatternBuffer();
 
             var groups = new TransducerGroups<Side>(geometry, (device, tr) => (device.Idx, tr % 3) switch
@@ -127,7 +132,7 @@ namespace AUTD3.Tests
                 _ => (Side?)null,
             });
             using var dst = geometry.PatternBuffer();
-            Pattern.Uniform(new Emission(new Phase(0xFF), new Intensity(0xFF)), dst);
+            Pattern.SetPhaseAndIntensity(new Phase(0xFF), new Intensity(0xFF), dst);
             var foci = new[] { new AUTD3.Holo.AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 5e3f * AUTD3.Holo.HoloUnits.Pa) };
             var rightEmission = new Emission(new Phase(0x30), new Intensity(0x40));
             var seen = new System.Collections.Generic.List<Side>();
@@ -141,7 +146,7 @@ namespace AUTD3.Tests
                 }
                 else
                 {
-                    Pattern.Uniform(rightEmission, buffer);
+                    Pattern.SetPhaseAndIntensity(rightEmission.Phase, rightEmission.Intensity, buffer);
                 }
             }, dst);
 
@@ -182,7 +187,12 @@ namespace AUTD3.Tests
                 var transducers = dst[dev];
                 for (var tr = 0; tr < transducers.NumTransducers; tr++)
                 {
-                    Assert.Equal(Emission.Null, transducers[tr]);
+                    var expected = (dev, tr % 3) switch
+                    {
+                        (_, 0) or (1, 1) => new Emission(Phase.Zero, Intensity.Max),
+                        _ => Emission.Null,
+                    };
+                    Assert.Equal(expected, transducers[tr]);
                 }
             }
         }
@@ -214,7 +224,7 @@ namespace AUTD3.Tests
         {
             using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
             using var patterns = geometry.PatternBuffer();
-            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), Intensity.Max, patterns);
+            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), patterns);
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200 * Hz, new SineOption(), modulation);
 
@@ -240,7 +250,7 @@ namespace AUTD3.Tests
         {
             using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
             using var patterns = geometry.PatternBuffer();
-            Pattern.Null(patterns);
+            Pattern.SetIntensity(Intensity.Min, patterns);
 
             using var builder = new DatagramBuilder(geometry);
             builder

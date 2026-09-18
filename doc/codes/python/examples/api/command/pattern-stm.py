@@ -6,7 +6,7 @@ from autd3.commands import ChangePatternBank, ConfigPattern, PatternStm, Pattern
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import LoopBehavior, PatternBank, TransitionMode
-from autd3_pattern import FocusOption, focus, wavelength
+from autd3_pattern import focus, wavelength
 
 NUM_POINTS = 200
 RADIUS_MM = 30.0
@@ -25,7 +25,6 @@ for i in range(NUM_POINTS):
         geometry,
         target,
         wavelength,
-        FocusOption(),
         buffer,
     )
     patterns.append(buffer)
