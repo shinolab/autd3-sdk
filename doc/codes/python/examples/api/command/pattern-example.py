@@ -7,7 +7,7 @@ from autd3.commands import Pattern
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 from autd3_link_nop import Nop
-from autd3_pattern import FocusOption, focus, wavelength
+from autd3_pattern import focus, wavelength
 
 
 async def main() -> None:
@@ -18,7 +18,6 @@ async def main() -> None:
             geometry,
             geometry.center() + np.array([0.0, 0.0, 150.0]),
             wavelength(340 * m / s),
-            FocusOption(),
             emissions,
         )
 

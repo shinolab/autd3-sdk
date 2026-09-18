@@ -1,0 +1,57 @@
+---
+title: set_intensity / set_phase / add_phase
+description: パターンバッファの振幅・位相を一括で設定する
+sidebar:
+  order: 7
+srcPath: crates/autd3-rs-pattern/src/set.rs
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/compute/pattern/set.rs?raw";
+import pySample from "@codes/python/examples/api/compute/pattern/set.py?raw";
+import fullSample from "@codes/rust/examples/api/compute/pattern/set-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/compute/pattern/set-example.py?raw";
+import csSample from "@codes/csharp/examples/api/compute/pattern/set.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/compute/pattern/set-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+パターンバッファ全体の振幅・位相を一括で書き換える.
+`focus` などのパターン関数は位相だけを書くので, 振幅はこれらの関数で設定する.
+
+`pattern_buffer` で確保したバッファの初期値は位相 0・最大振幅である.
+C# では `new Emission[n]` の要素は振幅 0 で初期化されることに注意
+
+## set_intensity
+
+全振動子の振幅を設定する. 位相は変えない.
+`Intensity::MIN` を渡すと無出力になる.
+
+<CodeTabs rust={excerpt(sample, "set_intensity")} python={excerpt(pySample, "set_intensity")} csharp={excerpt(csSample, "set_intensity")} />
+
+## set_phase
+
+全振動子の位相を設定する. 振幅は変えない.
+
+<CodeTabs rust={excerpt(sample, "set_phase")} python={excerpt(pySample, "set_phase")} csharp={excerpt(csSample, "set_phase")} />
+
+## set_phase_and_intensity
+
+全振動子の位相と振幅を設定する.
+
+<CodeTabs rust={excerpt(sample, "set_phase_and_intensity")} python={excerpt(pySample, "set_phase_and_intensity")} csharp={excerpt(csSample, "set_phase_and_intensity")} />
+
+## add_phase
+
+全振動子の位相へ一律に加算する (8 bit で折り返す). 振幅は変えない.
+
+<CodeTabs rust={excerpt(sample, "add_phase")} python={excerpt(pySample, "add_phase")} csharp={excerpt(csSample, "add_phase")} />
+
+| 引数        | 型                     | 説明         |
+| ----------- | ---------------------- | ------------ |
+| `intensity` | `Intensity`            | 振幅         |
+| `phase`     | `Phase`                | 位相         |
+| `dst`       | `&mut [[Emission; _]]` | 対象バッファ |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

@@ -20,7 +20,7 @@ def geometry() -> autd3.geometry.Geometry:
 def recorded(geo: autd3.geometry.Geometry) -> emu.Record:
     target = geo.center() + np.array([0.0, 0.0, 150.0])
     patterns = geo.pattern_buffer()
-    pattern.focus(geo, target, pattern.wavelength(340 * m / s), pattern.FocusOption(), patterns)
+    pattern.focus(geo, target, pattern.wavelength(340 * m / s), patterns)
 
     def record(r: emu.Recorder) -> None:
         builder = r.datagram_builder()

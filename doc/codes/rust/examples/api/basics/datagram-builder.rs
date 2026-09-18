@@ -7,7 +7,7 @@ use autd3_rs::value::SamplingConfig;
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_nop::Nop;
 use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
-use autd3_rs_pattern::{FocusOption, focus, wavelength};
+use autd3_rs_pattern::{focus, wavelength};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -15,15 +15,14 @@ async fn main() -> Result<()> {
     let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
 
     let wavelength = wavelength(340.0 * m / s);
-    let option = FocusOption::default();
 
     let left_target = geometry.center() + offset(-40.0 * mm, 0.0 * mm, 150.0 * mm);
     let mut left = geometry.pattern_buffer();
-    focus(&geometry, left_target, wavelength, &option, &mut left);
+    focus(&geometry, left_target, wavelength, &mut left);
 
     let right_target = geometry.center() + offset(40.0 * mm, 0.0 * mm, 150.0 * mm);
     let mut right = geometry.pattern_buffer();
-    focus(&geometry, right_target, wavelength, &option, &mut right);
+    focus(&geometry, right_target, wavelength, &mut right);
 
     let mut modulation = modulation_buffer();
     sine(150 * Hz, &SineOption::default(), &mut modulation)?;

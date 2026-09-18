@@ -46,18 +46,38 @@ def test_phase_from_angle() -> None:
         modulation.sine(200.0, modulation.SineOption(), modulation.modulation_buffer())
 
 
-def test_pattern_focus_plane_bessel_uniform_null() -> None:
+def test_pattern_focus_plane_bessel_keep_intensity() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340 * m / s)
     center = geo.center()
     buf = geo.pattern_buffer()
+    for dev in range(len(buf)):
+        for tr in range(len(buf[dev])):
+            assert (buf[dev][tr].phase.value, buf[dev][tr].intensity.value) == (0x00, 0xFF)
 
-    pattern.focus(geo, center + np.array([0.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), buf)
-    pattern.plane(geo, [0.0, 0.0, 1.0], wavelength, pattern.PlaneOption(), buf)
-    pattern.bessel(geo, center, [0.0, 0.0, 1.0], 0.3 * rad, wavelength, pattern.BesselOption(), buf)
-    pattern.uniform(autd3.value.Emission(autd3.value.Phase(0x00), autd3.value.Intensity(0x80)), buf)
-    pattern.null(buf)
+    pattern.set_intensity(autd3.value.Intensity(0x80), buf)
+    pattern.focus(geo, center + np.array([0.0, 0.0, 150.0]), wavelength, buf)
+    pattern.plane(geo, [0.0, 0.0, 1.0], wavelength, buf)
+    pattern.bessel(geo, center, [0.0, 0.0, 1.0], 0.3 * rad, wavelength, buf)
     assert len(buf) == geo.num_devices()
+    for dev in range(len(buf)):
+        for tr in range(len(buf[dev])):
+            assert buf[dev][tr].intensity.value == 0x80
+
+
+def test_pattern_set_and_add_phase() -> None:
+    geo = geometry()
+    buf = geo.pattern_buffer()
+    pattern.set_intensity(0x80, buf)
+    pattern.set_phase(autd3.value.Phase(0xF0), buf)
+    pattern.add_phase(0x20, buf)
+    for dev in range(len(buf)):
+        for tr in range(len(buf[dev])):
+            assert (buf[dev][tr].phase.value, buf[dev][tr].intensity.value) == (0x10, 0x80)
+    pattern.set_phase_and_intensity(autd3.value.Phase(0x40), autd3.value.Intensity(0x50), buf)
+    for dev in range(len(buf)):
+        for tr in range(len(buf[dev])):
+            assert (buf[dev][tr].phase.value, buf[dev][tr].intensity.value) == (0x40, 0x50)
 
 
 def test_pattern_group() -> None:
@@ -68,9 +88,9 @@ def test_pattern_group() -> None:
         ]
     )
     left = geo.pattern_buffer()
-    pattern.uniform(autd3.value.Emission(autd3.value.Phase(0x10), autd3.value.Intensity(0x20)), left)
+    pattern.set_phase_and_intensity(autd3.value.Phase(0x10), autd3.value.Intensity(0x20), left)
     right = geo.pattern_buffer()
-    pattern.uniform(autd3.value.Emission(autd3.value.Phase(0x30), autd3.value.Intensity(0x40)), right)
+    pattern.set_phase_and_intensity(autd3.value.Phase(0x30), autd3.value.Intensity(0x40), right)
     dst = geo.pattern_buffer()
 
     def key(device: autd3.geometry.Device, tr: int) -> str | None:
@@ -138,10 +158,10 @@ def test_pattern_group() -> None:
                 buffer,
             )
         else:
-            pattern.uniform(autd3.value.Emission(autd3.value.Phase(0x30), autd3.value.Intensity(0x40)), buffer)
+            pattern.set_phase_and_intensity(autd3.value.Phase(0x30), autd3.value.Intensity(0x40), buffer)
 
     computed = geo.pattern_buffer()
-    pattern.uniform(autd3.value.Emission(autd3.value.Phase(0xFF), autd3.value.Intensity(0xFF)), computed)
+    pattern.set_phase_and_intensity(autd3.value.Phase(0xFF), autd3.value.Intensity(0xFF), computed)
     pattern.group_compute(geo, groups, compute, computed)
     assert seen == ["left", "right"]
     for dev in range(2):
@@ -167,7 +187,11 @@ def test_pattern_group() -> None:
     pattern.group_compute(geo, groups, lambda side, mask, buffer: None, computed)
     for dev in range(2):
         for tr in range(len(computed[dev])):
-            assert computed[dev][tr].intensity.value == 0x00
+            e = computed[dev][tr]
+            if tr % 3 == 0 or (dev == 1 and tr % 3 == 1):
+                assert (e.phase.value, e.intensity.value) == (0x00, 0xFF)
+            else:
+                assert (e.phase.value, e.intensity.value) == (0x00, 0x00)
 
 
 def test_pattern_twin_trap_vortex() -> None:
@@ -180,17 +204,17 @@ def test_pattern_twin_trap_vortex() -> None:
         return [buf[0][i].phase.value for i in range(num)]  # type: ignore[index]
 
     focused = geo.pattern_buffer()
-    pattern.focus(geo, target, wavelength, pattern.FocusOption(), focused)
+    pattern.focus(geo, target, wavelength, focused)
 
     spun = geo.pattern_buffer()
-    pattern.vortex(geo, target, [0.0, 0.0, 1.0], 0, wavelength, pattern.VortexOption(), spun)
+    pattern.vortex(geo, target, [0.0, 0.0, 1.0], 0, wavelength, spun)
     assert phases(spun) == phases(focused)
 
-    pattern.vortex(geo, target, [0.0, 0.0, 1.0], 1, wavelength, pattern.VortexOption(), spun)
+    pattern.vortex(geo, target, [0.0, 0.0, 1.0], 1, wavelength, spun)
     assert phases(spun) != phases(focused)
 
     trapped = geo.pattern_buffer()
-    pattern.twin_trap(geo, target, [1.0, 0.0, 0.0], wavelength, pattern.TwinTrapOption(), trapped)
+    pattern.twin_trap(geo, target, [1.0, 0.0, 0.0], wavelength, trapped)
     assert {(t - f) % 256 for t, f in zip(phases(trapped), phases(focused))} == {0, 128}
 
 
@@ -296,7 +320,7 @@ def test_stm_foci_and_pattern() -> None:
     frames = []
     for x in (-20.0, 20.0):
         buf = geo.pattern_buffer()
-        pattern.focus(geo, geo.center() + np.array([x, 0.0, 150.0]), wavelength, pattern.FocusOption(), buf)
+        pattern.focus(geo, geo.center() + np.array([x, 0.0, 150.0]), wavelength, buf)
         frames.append(buf)
     builder.push(autd3.commands.PatternStm(autd3.commands.StmConfig(1.0 * Hz), frames, autd3.commands.PatternStmOption()))
 
@@ -311,9 +335,9 @@ def test_push_each() -> None:
     ])
     wavelength = pattern.wavelength(340 * m / s)
     left = geo.pattern_buffer()
-    pattern.focus(geo, geo.center() + np.array([-40.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), left)
+    pattern.focus(geo, geo.center() + np.array([-40.0, 0.0, 150.0]), wavelength, left)
     right = geo.pattern_buffer()
-    pattern.focus(geo, geo.center() + np.array([40.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), right)
+    pattern.focus(geo, geo.center() + np.array([40.0, 0.0, 150.0]), wavelength, right)
     mod_buf = modulation.modulation_buffer()
     modulation.sine(150 * Hz, modulation.SineOption(), mod_buf)
 
@@ -354,7 +378,7 @@ def test_later_stages_a_bank_without_changing_it() -> None:
     assert len(builder.build()) == 2
 
     pat = geo.pattern_buffer()
-    pattern.uniform(autd3.value.Emission(autd3.value.Phase(0x00), autd3.value.Intensity(0x80)), pat)
+    pattern.set_phase_and_intensity(autd3.value.Phase(0x00), autd3.value.Intensity(0x80), pat)
     builder = autd3.DatagramBuilder(geo)
     builder.push(
         autd3.commands.Pattern(
@@ -438,7 +462,7 @@ def test_loop_behavior_and_transition_mode() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340 * m / s)
     buf = geo.pattern_buffer()
-    pattern.focus(geo, geo.center() + np.array([0.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), buf)
+    pattern.focus(geo, geo.center() + np.array([0.0, 0.0, 150.0]), wavelength, buf)
 
     builder = autd3.DatagramBuilder(geo)
     builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, buf))

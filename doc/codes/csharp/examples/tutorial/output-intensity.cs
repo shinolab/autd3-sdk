@@ -19,13 +19,8 @@ internal static class Sample
 
         // ANCHOR: pattern_intensity
         var patterns = geometry.PatternBuffer();
-        Pattern.Focus(
-            geometry,
-            target,
-            wavelength,
-            new FocusOption(intensity: new Intensity(0x80)),
-            patterns
-        );
+        Pattern.SetIntensity(new Intensity(0x80), patterns);
+        Pattern.Focus(geometry, target, wavelength, patterns);
         // ANCHOR_END: pattern_intensity
 
         var modulation = Modulation.ModulationBuffer();

@@ -18,10 +18,6 @@ Pattern.Plane(
     geometry,
     Vector3.UnitZ,
     Pattern.Wavelength(340.0f * m / s),
-    new PlaneOption(
-        intensity: Intensity.Max,
-        phaseOffset: Phase.Zero
-    ),
     dst
 );
         // HIDE

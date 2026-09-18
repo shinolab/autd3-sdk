@@ -78,7 +78,7 @@ pub fn greedy(
     indices.shuffle(&mut rand::rng());
 
     for slot in dst.iter_mut() {
-        slot.fill(Emission::default());
+        slot.fill(Emission::NULL);
     }
 
     let intensity = option.constraint.convert(1.0, 1.0);

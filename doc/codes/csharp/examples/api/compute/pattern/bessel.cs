@@ -14,20 +14,10 @@ internal static class Sample
         var direction = Vector3.UnitZ;
         var theta = 18.0f * deg;
         var wavelength = Pattern.Wavelength(340.0f * m / s);
-        var intensity = Intensity.Max;
-        var phaseOffset = Phase.Zero;
-        var option =
-            // ANCHOR: option
-            new BesselOption(
-                intensity,
-                phaseOffset
-            )
-            // ANCHOR_END: option
-            ;
         var dst = geometry.PatternBuffer();
 
         // ANCHOR: api
-        Pattern.Bessel(geometry, apex, direction, theta, wavelength, option, dst);
+        Pattern.Bessel(geometry, apex, direction, theta, wavelength, dst);
         // ANCHOR_END: api
     }
 }

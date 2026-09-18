@@ -4,9 +4,7 @@ use autd3_rs::geometry::{Autd3, Geometry, Point3, Vector3};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Emission, SamplingConfig};
 use autd3_rs_emulator::{ClientApi, Emulator, RangeXY, RawColumn, Record, RmsRecordOption};
-use autd3_rs_pattern::{
-    FocusOption, TwinTrapOption, VortexOption, focus, twin_trap, vortex, wavelength,
-};
+use autd3_rs_pattern::{focus, twin_trap, vortex, wavelength};
 
 const HALF_SPAN: f32 = 10.0;
 const RESOLUTION: f32 = 0.5;
@@ -92,13 +90,7 @@ fn setup(f: impl FnOnce(&Geometry, Point3<f32>, &mut Vec<Vec<Emission>>)) -> Vec
 #[test]
 fn focus_peaks_on_axis() {
     let grid = setup(|geometry, target, dst| {
-        focus(
-            geometry,
-            target,
-            wavelength(340.0 * m / s),
-            &FocusOption::default(),
-            dst,
-        );
+        focus(geometry, target, wavelength(340.0 * m / s), dst);
     });
 
     assert_eq!(argmax(&grid), (CENTER, CENTER));
@@ -114,7 +106,6 @@ fn vortex_is_a_ring_with_a_null_on_axis() {
             Vector3::z_axis(),
             1,
             wavelength(340.0 * m / s),
-            &VortexOption::default(),
             dst,
         );
     });
@@ -159,7 +150,6 @@ fn vortex_order_zero_is_a_focus() {
             Vector3::z_axis(),
             0,
             wavelength(340.0 * m / s),
-            &VortexOption::default(),
             dst,
         );
     });
@@ -175,7 +165,6 @@ fn twin_trap_has_two_lobes_across_a_node() {
             target,
             Vector3::x_axis(),
             wavelength(340.0 * m / s),
-            &TwinTrapOption::default(),
             dst,
         );
     });
@@ -215,7 +204,6 @@ fn twin_trap_normal_rotates_the_lobes() {
             target,
             Vector3::y_axis(),
             wavelength(340.0 * m / s),
-            &TwinTrapOption::default(),
             dst,
         );
     });

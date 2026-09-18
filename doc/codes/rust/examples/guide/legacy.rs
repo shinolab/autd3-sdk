@@ -30,7 +30,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &geometry,
         target,
         autd3_rs_pattern::wavelength(340.0 * m / s),
-        &autd3_rs_pattern::FocusOption::default(),
         &mut emissions,
     );
     let mut modulation = autd3_rs_modulation::modulation_buffer();

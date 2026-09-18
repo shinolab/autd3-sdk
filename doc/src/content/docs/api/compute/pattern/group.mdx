@@ -39,6 +39,7 @@ import { excerpt } from "@lib/excerpt";
 | `dst`      | `&mut [Vec<Emission>]`                                               | 出力バッファ                                     |
 
 `compute` はキー毎に 1 回 (キーの初出順) 呼ばれ, 計算結果のうちそのキーの振動子分だけが `dst` に書き込まれる.
+どのキーにも割り当てられていない振動子は無出力 (`Emission::NULL`) になる.
 
 ## group
 

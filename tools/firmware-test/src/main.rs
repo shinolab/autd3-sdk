@@ -216,10 +216,11 @@ async fn run_session(client: &Client, geometry: &Geometry) {
 
 async fn reset(ctx: &Ctx<'_>) -> Result<()> {
     use autd3_rs::commands::{Clear, Pattern, SetSilencer};
-    use autd3_rs_pattern::null;
+    use autd3_rs::value::Intensity;
+    use autd3_rs_pattern::set_intensity;
 
     let mut emissions = ctx.geometry.pattern_buffer();
-    null(&mut emissions);
+    set_intensity(Intensity::MIN, &mut emissions);
 
     let mut builder = ctx.client.datagram_builder();
     builder

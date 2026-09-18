@@ -10,7 +10,7 @@ from autd3 import MAX_INFLIGHT, Client, ClientConfig
 from autd3.commands import ConfigPattern, SetSilencer, WritePatternBuffer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
-from autd3.value import LoopBehavior, PatternBank, SamplingConfig
+from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig
 
 NUM_POINTS = 1000
 RADIUS_MM = 30.0
@@ -27,13 +27,15 @@ async def main() -> None:
         patterns = geometry.pattern_buffer()
 
         # ANCHOR: configure
+        silent = geometry.pattern_buffer()
+        pattern.set_intensity(Intensity.MIN, silent)
         builder = client.datagram_builder()
         builder.push(SetSilencer.disable())
         builder.push(
             WritePatternBuffer(
                 bank=PatternBank.B0,
                 index=0,
-                emissions=patterns,
+                emissions=silent,
             )
         )
         builder.push(
@@ -60,7 +62,6 @@ async def main() -> None:
                 geometry,
                 target,
                 wavelength,
-                pattern.FocusOption(),
                 patterns,
             )
             builder = client.datagram_builder()

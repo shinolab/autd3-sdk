@@ -32,6 +32,7 @@ async fn send_gpio_each(ctx: &Ctx<'_>, outputs: impl Fn(usize) -> [GpioOut; 4]) 
 
 fn custom_drive(ctx: &Ctx<'_>) -> Vec<Vec<Emission>> {
     let mut em = ctx.geometry.pattern_buffer();
+    autd3_rs_pattern::set_intensity(Intensity::MIN, &mut em);
     for (d, dev) in ctx.geometry.iter().enumerate() {
         let (i0, p0, i248, p248) = if d == 0 {
             (0xFF, 0x00, 0x80, 0x80)

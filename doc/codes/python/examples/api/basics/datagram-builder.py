@@ -23,9 +23,9 @@ async def main() -> None:
 
         wavelength = pattern.wavelength(340 * m / s)
         left = geometry.pattern_buffer()
-        pattern.focus(geometry, geometry.center() + np.array([-40.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), left)
+        pattern.focus(geometry, geometry.center() + np.array([-40.0, 0.0, 150.0]), wavelength, left)
         right = geometry.pattern_buffer()
-        pattern.focus(geometry, geometry.center() + np.array([40.0, 0.0, 150.0]), wavelength, pattern.FocusOption(), right)
+        pattern.focus(geometry, geometry.center() + np.array([40.0, 0.0, 150.0]), wavelength, right)
 
         # ANCHOR: push_each
         builder = client.datagram_builder()

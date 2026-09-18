@@ -28,7 +28,6 @@ fn main() {
                 &geometry,
                 target,
                 wavelength,
-                &autd3_rs_pattern::FocusOption::default(),
                 &mut buffer,
             );
             buffer

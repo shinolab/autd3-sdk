@@ -63,7 +63,6 @@ async fn stop_and_wait(
             geometry,
             target,
             wavelength,
-            &autd3_rs_pattern::FocusOption::default(),
             &mut patterns,
         );
         let mut builder = client.datagram_builder();
@@ -90,7 +89,6 @@ async fn streaming(
             geometry,
             target,
             wavelength,
-            &autd3_rs_pattern::FocusOption::default(),
             &mut patterns,
         );
         let mut builder = client.datagram_builder();

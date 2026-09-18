@@ -29,17 +29,7 @@ import { excerpt } from "@lib/excerpt";
 | `geometry`   | `&Geometry`     | Device layout                              |
 | `target`     | `Point3<f32>`   | Focal point coordinates [mm]               |
 | `wavelength` | `Length`        | Wavelength                                 |
-| `option`     | `&FocusOption`  | Additional options (see below)             |
 | `dst`        | `&mut [[Emission; _]]` | Output buffer                       |
-
-## FocusOption
-
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
-
-| Field          | Type        | Default          | Description                        |
-| -------------- | ----------- | ---------------- | ---------------------------------- |
-| `intensity`    | `Intensity` | `Intensity::MAX` | Amplitude of all transducers       |
-| `phase_offset` | `Phase`     | `Phase::ZERO`    | Phase added uniformly to all transducers |
 
 ## Example
 

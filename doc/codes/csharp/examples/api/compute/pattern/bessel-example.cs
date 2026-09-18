@@ -20,10 +20,6 @@ Pattern.Bessel(
     Vector3.UnitZ,
     18.0f * deg,
     Pattern.Wavelength(340.0f * m / s),
-    new BesselOption(
-        intensity: Intensity.Max,
-        phaseOffset: Phase.Zero
-    ),
     dst
 );
         // HIDE

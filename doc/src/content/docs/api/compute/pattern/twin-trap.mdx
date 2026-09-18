@@ -37,17 +37,7 @@ target <Math tex="\boldsymbol{t}" /> を通り normal <Math tex="\boldsymbol{n}"
 | `target`     | `Point3<f32>`          | トラップ位置座標 [mm]                        |
 | `normal`     | `UnitVector3<f32>`     | `target` を通る分割平面の法線 (単位ベクトル) |
 | `wavelength` | `Length`               | 波長                                         |
-| `option`     | `&TwinTrapOption`      | 追加オプション (下記参照)                    |
 | `dst`        | `&mut [[Emission; _]]` | 出力バッファ                                 |
-
-## TwinTrapOption
-
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
-
-| フィールド     | 型          | デフォルト       | 説明                         |
-| -------------- | ----------- | ---------------- | ---------------------------- |
-| `intensity`    | `Intensity` | `Intensity::MAX` | 全振動子の振幅               |
-| `phase_offset` | `Phase`     | `Phase::ZERO`    | 全振動子へ一律に加算する位相 |
 
 ## Example
 

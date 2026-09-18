@@ -21,7 +21,6 @@ Pattern.Focus(
     geometry,
     geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),
     Pattern.Wavelength(340.0f * m / s),
-    new FocusOption(),
     emissions
 );
 

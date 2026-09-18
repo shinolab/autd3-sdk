@@ -19,13 +19,15 @@ import Install from "@components/Install.astro";
 - [bessel](/autd3-sdk/api/compute/pattern/bessel/) — ベッセルビーム
 - [twin_trap](/autd3-sdk/api/compute/pattern/twin-trap/) — ツイントラップ
 - [vortex](/autd3-sdk/api/compute/pattern/vortex/) — 音響渦
-- [uniform](/autd3-sdk/api/compute/pattern/uniform/) — 全振動子一様
-- [null](/autd3-sdk/api/compute/pattern/null/) — 無出力
+- [set_intensity / set_phase / add_phase](/autd3-sdk/api/compute/pattern/set/) — 振幅・位相の一括設定
 - [group](/autd3-sdk/api/compute/pattern/group/) — 振動子毎にパターンを選択
 
-`focus` / `plane` / `bessel` / `twin_trap` / `vortex` / `null` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分のみを計算する `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
-`uniform` は `uniform_device` のみ.
+`focus` / `plane` / `bessel` / `twin_trap` / `vortex` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分の位相を返す `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
+`set_intensity` / `set_phase` / `set_phase_and_intensity` / `add_phase` には `*_device` 版があり, `*_transducer` 版はない.
 いずれも Rust と C# にあり, Python にはない.
+
+パターン関数は位相だけを書き込み, 振幅は変更されない.
+`pattern_buffer` で確保したバッファの初期値は位相 0・最大振幅であり, 振幅を変えるときは `set_intensity` を使う.
 
 ## 波長
 

@@ -24,7 +24,6 @@ internal static class Program
 
         var center = geometry.Center + new Vector3(0f, 0f, 150f);
         var wavelength = Pattern.Wavelength(340 * m / s);
-        var focusOption = new FocusOption();
         var patterns = new List<PatternBuffer>();
         try
         {
@@ -33,7 +32,7 @@ internal static class Program
                 var theta = 2f * MathF.PI * i / NumPoints;
                 var target = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0f);
                 var buffer = geometry.PatternBuffer();
-                Pattern.Focus(geometry, target, wavelength, focusOption, buffer);
+                Pattern.Focus(geometry, target, wavelength, buffer);
                 patterns.Add(buffer);
             }
 

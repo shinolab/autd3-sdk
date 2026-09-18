@@ -19,7 +19,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var buffer = geometry.PatternBuffer();
-            Pattern.Plane(geometry, new Vector3(0f, 0f, 1f), Pattern.Wavelength(340 * m / s), new PlaneOption(), buffer);
+            Pattern.Plane(geometry, new Vector3(0f, 0f, 1f), Pattern.Wavelength(340 * m / s), buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
 
@@ -28,7 +28,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var buffer = geometry.PatternBuffer();
-            Pattern.Bessel(geometry, geometry.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, Pattern.Wavelength(340 * m / s), new BesselOption(), buffer);
+            Pattern.Bessel(geometry, geometry.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, Pattern.Wavelength(340 * m / s), buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
 
@@ -40,11 +40,11 @@ namespace AUTD3.Tests
             var target = geometry.Center + new Vector3(0f, 0f, 150f);
 
             using var trapped = geometry.PatternBuffer();
-            Pattern.TwinTrap(geometry, target, Vector3.UnitX, wavelength, new TwinTrapOption(), trapped);
+            Pattern.TwinTrap(geometry, target, Vector3.UnitX, wavelength, trapped);
             Assert.Equal(1, trapped.NumDevices);
 
             using var spun = geometry.PatternBuffer();
-            Pattern.Vortex(geometry, target, Vector3.UnitZ, 1, wavelength, new VortexOption(), spun);
+            Pattern.Vortex(geometry, target, Vector3.UnitZ, 1, wavelength, spun);
             Assert.Equal(1, spun.NumDevices);
         }
 
@@ -57,10 +57,10 @@ namespace AUTD3.Tests
             var target = device.Center + new Vector3(0f, 0f, 150f);
 
             var focused = new Emission[Autd3.NumTransducers];
-            Pattern.FocusDevice(device, target, wavelength, new FocusOption(), focused);
+            Pattern.FocusDevice(device, target, wavelength, focused);
 
             var spun = new Emission[Autd3.NumTransducers];
-            Pattern.VortexDevice(device, target, Vector3.UnitZ, 0, wavelength, new VortexOption(), spun);
+            Pattern.VortexDevice(device, target, Vector3.UnitZ, 0, wavelength, spun);
 
             for (var i = 0; i < Autd3.NumTransducers; i++)
             {
@@ -77,10 +77,10 @@ namespace AUTD3.Tests
             var target = device.Center + new Vector3(0f, 0f, 150f);
 
             var focused = new Emission[Autd3.NumTransducers];
-            Pattern.FocusDevice(device, target, wavelength, new FocusOption(), focused);
+            Pattern.FocusDevice(device, target, wavelength, focused);
 
             var trapped = new Emission[Autd3.NumTransducers];
-            Pattern.TwinTrapDevice(device, target, Vector3.UnitX, wavelength, new TwinTrapOption(), trapped);
+            Pattern.TwinTrapDevice(device, target, Vector3.UnitX, wavelength, trapped);
 
             var diffs = new HashSet<int>();
             for (var i = 0; i < Autd3.NumTransducers; i++)
@@ -89,22 +89,43 @@ namespace AUTD3.Tests
             }
             Assert.Equal(new HashSet<int> { 0, 128 }, diffs);
 
-            var e = Pattern.TwinTrapTransducer(device.Position(0), target, Vector3.UnitX, wavelength, new TwinTrapOption());
-            Assert.Equal(trapped[0].Phase.Value, e.Phase.Value);
+            var e = Pattern.TwinTrapTransducer(device.Position(0), target, Vector3.UnitX, wavelength);
+            Assert.Equal(trapped[0].Phase.Value, e.Value);
 
-            var v = Pattern.VortexTransducer(device.Position(0), target, Vector3.UnitZ, 1, wavelength, new VortexOption());
+            var v = Pattern.VortexTransducer(device.Position(0), target, Vector3.UnitZ, 1, wavelength);
             var spun = new Emission[Autd3.NumTransducers];
-            Pattern.VortexDevice(device, target, Vector3.UnitZ, 1, wavelength, new VortexOption(), spun);
-            Assert.Equal(spun[0].Phase.Value, v.Phase.Value);
+            Pattern.VortexDevice(device, target, Vector3.UnitZ, 1, wavelength, spun);
+            Assert.Equal(spun[0].Phase.Value, v.Value);
         }
 
         [Fact]
-        public void UniformFillsBuffer()
+        public void BufferStartsAtZeroPhaseMaxIntensity()
         {
             using var geometry = SingleDevice();
             using var buffer = geometry.PatternBuffer();
-            Pattern.Uniform(new Emission(Phase.Pi, Intensity.Max), buffer);
-            Assert.Equal(1, buffer.NumDevices);
+            foreach (var e in buffer[0])
+            {
+                Assert.Equal(new Emission(Phase.Zero, Intensity.Max), e);
+            }
+        }
+
+        [Fact]
+        public void SetAndAddPhaseUpdateTheBuffer()
+        {
+            using var geometry = SingleDevice();
+            using var buffer = geometry.PatternBuffer();
+            Pattern.SetIntensity(new Intensity(0x80), buffer);
+            Pattern.SetPhase(new Phase(0xF0), buffer);
+            Pattern.AddPhase(new Phase(0x20), buffer);
+            foreach (var e in buffer[0])
+            {
+                Assert.Equal(new Emission(new Phase(0x10), new Intensity(0x80)), e);
+            }
+            Pattern.SetPhaseAndIntensity(Phase.Pi, Intensity.Max, buffer);
+            foreach (var e in buffer[0])
+            {
+                Assert.Equal(new Emission(Phase.Pi, Intensity.Max), e);
+            }
         }
 
         [Fact]
@@ -259,7 +280,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var buffer = geometry.PatternBuffer();
-            Pattern.Uniform(new Emission(Phase.Pi, Intensity.Max), buffer);
+            Pattern.SetPhaseAndIntensity(Phase.Pi, Intensity.Max, buffer);
 
             using var builder = new DatagramBuilder(geometry);
             builder.Push(new Pattern(PatternBank.B1, buffer, TransitionMode.Later));

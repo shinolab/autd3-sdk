@@ -24,6 +24,17 @@ mod tests {
     fn null_is_zero_phase_min_intensity() {
         assert_eq!(Emission::NULL.phase, Phase::ZERO);
         assert_eq!(Emission::NULL.intensity, Intensity::MIN);
-        assert_eq!(Emission::NULL, Emission::default());
+    }
+
+    #[test]
+    fn default_is_zero_phase_max_intensity() {
+        assert_eq!(Intensity::default(), Intensity::MAX);
+        assert_eq!(
+            Emission::default(),
+            Emission {
+                phase: Phase::ZERO,
+                intensity: Intensity::MAX,
+            }
+        );
     }
 }

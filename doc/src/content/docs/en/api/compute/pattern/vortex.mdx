@@ -39,17 +39,7 @@ The phase is the focal phase <Math tex="\phi_i" /> plus the azimuth scaled by th
 | `axis`       | `UnitVector3<f32>`     | Axis of the vortex through `target` (unit vector) |
 | `order`      | `i32`                  | Topological charge (negative reverses the swirl)  |
 | `wavelength` | `Length`               | Wavelength                                        |
-| `option`     | `&VortexOption`        | Additional options (see below)                    |
 | `dst`        | `&mut [[Emission; _]]` | Output buffer                                     |
-
-## VortexOption
-
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
-
-| Field          | Type        | Default          | Description                              |
-| -------------- | ----------- | ---------------- | ---------------------------------------- |
-| `intensity`    | `Intensity` | `Intensity::MAX` | Amplitude of all transducers             |
-| `phase_offset` | `Phase`     | `Phase::ZERO`    | Phase added uniformly to all transducers |
 
 ## Example
 

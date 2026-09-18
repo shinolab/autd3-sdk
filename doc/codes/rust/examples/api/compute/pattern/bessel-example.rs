@@ -1,7 +1,6 @@
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{deg, m, mm, s};
-use autd3_rs::value::{Intensity, Phase};
-use autd3_rs_pattern::{BesselOption, bessel, wavelength};
+use autd3_rs_pattern::{bessel, wavelength};
 
 // HIDE
 fn main() {
@@ -16,11 +15,6 @@ fn main() {
         Vector3::z_axis(),
         18.0 * deg,
         wavelength(340.0 * m / s),
-        &BesselOption {
-            intensity: Intensity::MAX,
-            phase_offset: Phase::ZERO,
-            ..Default::default()
-        },
         &mut dst,
     );
     // HIDE

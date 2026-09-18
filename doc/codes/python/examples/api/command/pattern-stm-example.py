@@ -9,7 +9,7 @@ from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import LoopBehavior, PatternBank, TransitionMode
 from autd3_link_nop import Nop
-from autd3_pattern import FocusOption, focus, wavelength
+from autd3_pattern import focus, wavelength
 
 
 async def main() -> None:
@@ -26,7 +26,6 @@ async def main() -> None:
                 geometry,
                 target,
                 wl,
-                FocusOption(),
                 buffer,
             )
             patterns.append(buffer)

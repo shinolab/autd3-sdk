@@ -53,7 +53,6 @@ internal static class Sample
                 geometry,
                 target,
                 wavelength,
-                new FocusOption(),
                 patterns
             );
             var builder = client.DatagramBuilder();
@@ -77,7 +76,6 @@ internal static class Sample
                 geometry,
                 target,
                 wavelength,
-                new FocusOption(),
                 patterns
             );
             var builder = client.DatagramBuilder();

@@ -108,6 +108,7 @@ mod tests {
     use nalgebra::UnitQuaternion;
 
     use super::*;
+    use crate::value::{Intensity, Phase};
 
     #[test]
     fn geometry_sets_device_idx_and_num_transducers() {
@@ -115,6 +116,20 @@ mod tests {
         assert_eq!(g[0].idx(), 0);
         assert_eq!(g[1].idx(), 1);
         assert_eq!(g.num_transducers(), 2 * Autd3::NUM_TRANSDUCERS);
+    }
+
+    #[test]
+    fn pattern_buffer_starts_at_zero_phase_max_intensity() {
+        let g = Geometry::new(vec![Autd3::default(), Autd3::default()]);
+        let buf = g.pattern_buffer();
+        assert_eq!(buf.len(), 2);
+        for dev in &buf {
+            assert_eq!(dev.len(), Autd3::NUM_TRANSDUCERS);
+            for &e in dev {
+                assert_eq!(e.phase, Phase::ZERO);
+                assert_eq!(e.intensity, Intensity::MAX);
+            }
+        }
     }
 
     #[test]

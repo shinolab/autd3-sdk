@@ -88,7 +88,7 @@ mod tests {
         assert_eq!(dst.len(), geometry.num_devices());
         assert!(
             dst.iter()
-                .all(|slot| slot.iter().any(|e| *e != Emission::default()))
+                .all(|slot| slot.iter().any(|e| *e != Emission::NULL))
         );
     }
 
@@ -140,13 +140,7 @@ mod tests {
         .unwrap();
 
         let mut expected = buffer(&geometry);
-        autd3_rs_pattern::focus(
-            &geometry,
-            target,
-            wavelength(),
-            &autd3_rs_pattern::FocusOption::default(),
-            &mut expected,
-        );
+        autd3_rs_pattern::focus(&geometry, target, wavelength(), &mut expected);
 
         for (a, b) in dst[0].iter().zip(expected[0].iter()) {
             let diff = a.phase.0.wrapping_sub(b.phase.0);
@@ -179,13 +173,7 @@ mod tests {
         .unwrap();
 
         let mut expected = buffer(&geometry);
-        autd3_rs_pattern::focus(
-            &geometry,
-            target,
-            wavelength(),
-            &autd3_rs_pattern::FocusOption::default(),
-            &mut expected,
-        );
+        autd3_rs_pattern::focus(&geometry, target, wavelength(), &mut expected);
 
         for (a, b) in dst[0].iter().zip(expected[0].iter()) {
             let diff = a.phase.0.wrapping_sub(b.phase.0);
@@ -275,11 +263,7 @@ mod tests {
             if t % 2 == 0 {
                 assert_eq!(e.intensity, Intensity::MAX, "enabled transducer {t}");
             } else {
-                assert_eq!(
-                    *e,
-                    Emission::default(),
-                    "disabled transducer {t} must be NULL"
-                );
+                assert_eq!(*e, Emission::NULL, "disabled transducer {t} must be NULL");
             }
         }
     }
@@ -313,7 +297,7 @@ mod tests {
             if t % 2 == 1 {
                 assert_eq!(e.intensity, Intensity::MAX, "group transducer {t}");
             } else {
-                assert_eq!(*e, Emission::default(), "transducer {t} outside the group");
+                assert_eq!(*e, Emission::NULL, "transducer {t} outside the group");
             }
         }
     }
@@ -351,7 +335,7 @@ mod tests {
                         buffer,
                     )
                 } else {
-                    autd3_rs_pattern::uniform(other, buffer);
+                    autd3_rs_pattern::set_phase_and_intensity(other.phase, other.intensity, buffer);
                     Ok(())
                 }
             },

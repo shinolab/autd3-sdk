@@ -14,20 +14,10 @@ internal static class Sample
         var axis = Vector3.UnitZ;
         var order = 1;
         var wavelength = Pattern.Wavelength(340.0f * m / s);
-        var intensity = Intensity.Max;
-        var phaseOffset = Phase.Zero;
-        var option =
-            // ANCHOR: option
-            new VortexOption(
-                intensity,
-                phaseOffset
-            )
-            // ANCHOR_END: option
-            ;
         var dst = geometry.PatternBuffer();
 
         // ANCHOR: api
-        Pattern.Vortex(geometry, target, axis, order, wavelength, option, dst);
+        Pattern.Vortex(geometry, target, axis, order, wavelength, dst);
         // ANCHOR_END: api
     }
 }

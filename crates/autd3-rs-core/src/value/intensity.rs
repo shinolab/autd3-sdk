@@ -1,10 +1,14 @@
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 #[repr(C)]
-#[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, FromBytes, IntoBytes, Immutable,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, FromBytes, IntoBytes, Immutable)]
 pub struct Intensity(pub u8);
+
+impl Default for Intensity {
+    fn default() -> Self {
+        Self::MAX
+    }
+}
 
 impl core::fmt::Debug for Intensity {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

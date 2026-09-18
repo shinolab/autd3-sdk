@@ -31,13 +31,12 @@ async def main() -> None:
 
         center = geometry.center() + np.array([0.0, 0.0, 150.0])
         wavelength = pattern.wavelength(340 * m / s)
-        focus_option = pattern.FocusOption()
         patterns = []
         for i in range(NUM_POINTS):
             theta = 2.0 * math.pi * i / NUM_POINTS
             target = center + np.array([RADIUS_MM * math.cos(theta), RADIUS_MM * math.sin(theta), 0.0])
             buffer = geometry.pattern_buffer()
-            pattern.focus(geometry, target, wavelength, focus_option, buffer)
+            pattern.focus(geometry, target, wavelength, buffer)
             patterns.append(buffer)
 
         builder = client.datagram_builder()

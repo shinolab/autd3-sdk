@@ -4,16 +4,15 @@ import numpy as np
 
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
-from autd3.value import Emission, Intensity, Phase
+from autd3.value import Phase
 from autd3_pattern import (
-    FocusOption,
     PatternBuffer,
     TransducerGroups,
     TransducerMask,
     focus,
     group,
     group_compute,
-    uniform,
+    set_phase,
     wavelength,
 )
 from autd3_pattern_holo import AmplitudeTarget, GspatOption, Pa, gspat
@@ -31,9 +30,8 @@ class Side(Enum):
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 left = geometry.pattern_buffer()
-uniform(Emission(Phase.ZERO, Intensity.MAX), left)
 right = geometry.pattern_buffer()
-uniform(Emission(Phase(0x80), Intensity.MAX), right)
+set_phase(Phase(0x80), right)
 dst = geometry.pattern_buffer()
 center = geometry.center()
 
@@ -55,7 +53,7 @@ def compute(side: Side, mask: TransducerMask, buffer: PatternBuffer) -> None:
     if side is Side.LEFT:
         gspat(geometry, foci, wl, GspatOption(mask=mask), buffer)
     else:
-        focus(geometry, target, wl, FocusOption(), buffer)
+        focus(geometry, target, wl, buffer)
 
 
 group_compute(geometry, groups, compute, dst)

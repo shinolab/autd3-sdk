@@ -29,17 +29,7 @@ import { excerpt } from "@lib/excerpt";
 | `geometry`   | `&Geometry`            | Device layout                       |
 | `direction`  | `UnitVector3<f32>`     | Propagation direction of the plane wave (unit vector) |
 | `wavelength` | `Length`               | Wavelength                          |
-| `option`     | `&PlaneOption`         | Additional options (see below)      |
 | `dst`        | `&mut [[Emission; _]]` | Output buffer                       |
-
-## PlaneOption
-
-<CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
-
-| Field          | Type        | Default          | Description                  |
-| -------------- | ----------- | ---------------- | ---------------------------- |
-| `intensity`    | `Intensity` | `Intensity::MAX` | Amplitude of all transducers |
-| `phase_offset` | `Phase`     | `Phase::ZERO`    | Phase added uniformly to all transducers |
 
 ## Example
 

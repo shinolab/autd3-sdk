@@ -196,7 +196,7 @@ fn scatter(e: &[Emission], mask: TransducerMask<'_>, dst: &mut [Vec<Emission>]) 
                         idx += 1;
                         e[idx - 1]
                     } else {
-                        Emission::default()
+                        Emission::NULL
                     };
                 }
             }

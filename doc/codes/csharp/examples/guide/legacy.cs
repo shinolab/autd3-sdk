@@ -32,7 +32,7 @@ internal static class Sample
 
         var target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         using var emissions = geometry.PatternBuffer();
-        Pattern.Focus(geometry, target, Pattern.Wavelength(340.0f * m / s), new FocusOption(), emissions);
+        Pattern.Focus(geometry, target, Pattern.Wavelength(340.0f * m / s), emissions);
         using var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(200 * Hz, new SineOption(), modulation);
 

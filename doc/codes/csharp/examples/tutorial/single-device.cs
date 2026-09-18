@@ -32,7 +32,6 @@ Pattern.Focus(
     geometry,
     target,
     wavelength,
-    new FocusOption(),
     patterns
 );
 

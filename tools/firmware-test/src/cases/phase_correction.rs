@@ -6,9 +6,9 @@ use autd3_rs::commands::SetPhaseCorrection;
 use autd3_rs::geometry::offset;
 use autd3_rs::units::Hz;
 use autd3_rs::units::{m, mm, rad, s};
-use autd3_rs::value::{Emission, Intensity, Phase, SamplingConfig};
+use autd3_rs::value::{Phase, SamplingConfig};
 use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
-use autd3_rs_pattern::{uniform, wavelength};
+use autd3_rs_pattern::wavelength;
 
 use crate::Ctx;
 use crate::cases::pattern_util::{SOUND_SPEED_M_S, send_pattern_mod};
@@ -32,14 +32,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
         .collect();
     ctx.send(SetPhaseCorrection { phases: &phases }).await?;
 
-    let mut emissions = ctx.geometry.pattern_buffer();
-    uniform(
-        Emission {
-            phase: Phase::ZERO,
-            intensity: Intensity(0xFF),
-        },
-        &mut emissions,
-    );
+    let emissions = ctx.geometry.pattern_buffer();
     let mut modbuf = modulation_buffer();
     sine(150 * Hz, &SineOption::default(), &mut modbuf)?;
     send_pattern_mod(ctx, &emissions, &modbuf, SamplingConfig::FREQ_4K).await?;

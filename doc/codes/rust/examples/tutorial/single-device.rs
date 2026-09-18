@@ -26,7 +26,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &geometry,
         target,
         wavelength,
-        &autd3_rs_pattern::FocusOption::default(),
         &mut patterns,
     );
 

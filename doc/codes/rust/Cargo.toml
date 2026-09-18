@@ -266,14 +266,6 @@ name = "api_compute_pattern_group"
 path = "examples/api/compute/pattern/group.rs"
 
 [[example]]
-name = "api_compute_pattern_null_example"
-path = "examples/api/compute/pattern/null-example.rs"
-
-[[example]]
-name = "api_compute_pattern_null"
-path = "examples/api/compute/pattern/null.rs"
-
-[[example]]
 name = "api_compute_pattern_plane_example"
 path = "examples/api/compute/pattern/plane-example.rs"
 
@@ -282,20 +274,20 @@ name = "api_compute_pattern_plane"
 path = "examples/api/compute/pattern/plane.rs"
 
 [[example]]
+name = "api_compute_pattern_set_example"
+path = "examples/api/compute/pattern/set-example.rs"
+
+[[example]]
+name = "api_compute_pattern_set"
+path = "examples/api/compute/pattern/set.rs"
+
+[[example]]
 name = "api_compute_pattern_twin_trap_example"
 path = "examples/api/compute/pattern/twin-trap-example.rs"
 
 [[example]]
 name = "api_compute_pattern_twin_trap"
 path = "examples/api/compute/pattern/twin-trap.rs"
-
-[[example]]
-name = "api_compute_pattern_uniform_example"
-path = "examples/api/compute/pattern/uniform-example.rs"
-
-[[example]]
-name = "api_compute_pattern_uniform"
-path = "examples/api/compute/pattern/uniform.rs"
 
 [[example]]
 name = "api_compute_pattern_vortex_example"

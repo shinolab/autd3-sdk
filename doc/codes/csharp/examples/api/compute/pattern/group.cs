@@ -23,9 +23,8 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         var left = geometry.PatternBuffer();
-        Pattern.Uniform(new Emission(Phase.Zero, Intensity.Max), left);
         var right = geometry.PatternBuffer();
-        Pattern.Uniform(new Emission(new Phase(0x80), Intensity.Max), right);
+        Pattern.SetPhase(new Phase(0x80), right);
         var dst = geometry.PatternBuffer();
         var center = geometry.Center;
         // ANCHOR: api
@@ -45,7 +44,7 @@ internal static class Sample
             }
             else
             {
-                Pattern.Focus(geometry, target, wavelength, new FocusOption(), buffer);
+                Pattern.Focus(geometry, target, wavelength, buffer);
             }
         }, dst);
         // ANCHOR_END: compute

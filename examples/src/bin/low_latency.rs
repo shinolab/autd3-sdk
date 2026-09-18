@@ -39,16 +39,8 @@ async fn main() -> Result<()> {
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
     let mut emissions = geometry.pattern_buffer();
-    autd3_rs_pattern::focus(
-        &geometry,
-        target,
-        wavelength,
-        &autd3_rs_pattern::FocusOption {
-            intensity: Intensity::MIN,
-            ..Default::default()
-        },
-        &mut emissions,
-    );
+    autd3_rs_pattern::focus(&geometry, target, wavelength, &mut emissions);
+    autd3_rs_pattern::set_intensity(Intensity::MIN, &mut emissions);
 
     let mut builder = client.datagram_builder();
     builder.push(Pattern::new(&emissions));

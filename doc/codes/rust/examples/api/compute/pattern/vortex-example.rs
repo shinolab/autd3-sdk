@@ -1,7 +1,6 @@
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::{Intensity, Phase};
-use autd3_rs_pattern::{VortexOption, vortex, wavelength};
+use autd3_rs_pattern::{vortex, wavelength};
 
 // HIDE
 fn main() {
@@ -16,10 +15,6 @@ fn main() {
         Vector3::z_axis(),
         1,
         wavelength(340.0 * m / s),
-        &VortexOption {
-            intensity: Intensity::MAX,
-            phase_offset: Phase::ZERO,
-        },
         &mut dst,
     );
     // HIDE

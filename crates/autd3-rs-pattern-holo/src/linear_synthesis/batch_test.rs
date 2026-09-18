@@ -220,7 +220,7 @@ fn all_masked_batch_matches_sequential() {
         ];
         g.num_devices()
     ];
-    let inactive = slot(&g);
+    let inactive = vec![vec![Emission::NULL; Autd3::NUM_TRANSDUCERS]; g.num_devices()];
 
     let mut one = dirty.clone();
     let mut batched = vec![dirty.clone(); owned.len()];
