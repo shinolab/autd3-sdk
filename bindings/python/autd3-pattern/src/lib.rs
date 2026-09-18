@@ -255,23 +255,111 @@ fn bessel(
     Ok(())
 }
 
+fn extract_waist(waist: f32) -> PyResult<Length> {
+    if waist.is_finite() && waist > 0.0 {
+        Ok(Length::from_mm(waist))
+    } else {
+        Err(PyValueError::new_err(
+            "waist must be a positive finite length in mm",
+        ))
+    }
+}
+
+#[pyclass(
+    name = "LaguerreGaussianOption",
+    module = "autd3_pattern",
+    skip_from_py_object
+)]
+pub struct LaguerreGaussianOption {
+    inner: autd3_rs_pattern::LaguerreGaussianOption,
+}
+
+#[pymethods]
+impl LaguerreGaussianOption {
+    #[new]
+    #[pyo3(signature = (p, l, waist))]
+    fn new(p: u32, l: i32, waist: f32) -> PyResult<Self> {
+        Ok(Self {
+            inner: autd3_rs_pattern::LaguerreGaussianOption {
+                p,
+                l,
+                waist: extract_waist(waist)?,
+            },
+        })
+    }
+
+    #[getter]
+    fn p(&self) -> u32 {
+        self.inner.p
+    }
+
+    #[getter]
+    fn l(&self) -> i32 {
+        self.inner.l
+    }
+
+    #[getter]
+    fn waist(&self) -> f32 {
+        self.inner.waist.mm()
+    }
+}
+
+#[pyclass(
+    name = "HermiteGaussianOption",
+    module = "autd3_pattern",
+    skip_from_py_object
+)]
+pub struct HermiteGaussianOption {
+    inner: autd3_rs_pattern::HermiteGaussianOption,
+}
+
+#[pymethods]
+impl HermiteGaussianOption {
+    #[new]
+    #[pyo3(signature = (m, n, waist))]
+    fn new(m: u32, n: u32, waist: f32) -> PyResult<Self> {
+        Ok(Self {
+            inner: autd3_rs_pattern::HermiteGaussianOption {
+                m,
+                n,
+                waist: extract_waist(waist)?,
+            },
+        })
+    }
+
+    #[getter]
+    fn m(&self) -> u32 {
+        self.inner.m
+    }
+
+    #[getter]
+    fn n(&self) -> u32 {
+        self.inner.n
+    }
+
+    #[getter]
+    fn waist(&self) -> f32 {
+        self.inner.waist.mm()
+    }
+}
+
 #[pyfunction]
-#[pyo3(signature = (geometry, target, normal, wavelength, dst))]
-fn twin_trap(
+#[pyo3(signature = (geometry, target, axis, option, wavelength, dst))]
+fn laguerre_gaussian_phase(
     geometry: &Bound<'_, PyAny>,
     target: &Bound<'_, PyAny>,
-    normal: &Bound<'_, PyAny>,
+    axis: &Bound<'_, PyAny>,
+    option: &LaguerreGaussianOption,
     wavelength: f32,
     mut dst: PyRefMut<'_, PatternBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
-    let target = extract_point(target)?;
-    let normal = extract_direction(normal)?;
-    autd3_rs_pattern::twin_trap(
+    autd3_rs_pattern::laguerre_gaussian_phase(
         geometry,
-        target,
-        normal,
+        extract_point(target)?,
+        extract_direction(axis)?,
+        option.inner,
         Length::from_mm(wavelength),
         &mut dst.inner,
     );
@@ -279,24 +367,72 @@ fn twin_trap(
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, target, axis, order, wavelength, dst))]
-fn vortex(
+#[pyo3(signature = (geometry, target, axis, option, wavelength, dst))]
+fn laguerre_gaussian_intensity(
     geometry: &Bound<'_, PyAny>,
     target: &Bound<'_, PyAny>,
     axis: &Bound<'_, PyAny>,
-    order: i32,
+    option: &LaguerreGaussianOption,
     wavelength: f32,
     mut dst: PyRefMut<'_, PatternBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
-    let target = extract_point(target)?;
-    let axis = extract_direction(axis)?;
-    autd3_rs_pattern::vortex(
+    autd3_rs_pattern::laguerre_gaussian_intensity(
         geometry,
-        target,
-        axis,
-        order,
+        extract_point(target)?,
+        extract_direction(axis)?,
+        option.inner,
+        Length::from_mm(wavelength),
+        &mut dst.inner,
+    );
+    Ok(())
+}
+
+#[pyfunction]
+#[pyo3(signature = (geometry, target, axis, x_dir, option, wavelength, dst))]
+fn hermite_gaussian_phase(
+    geometry: &Bound<'_, PyAny>,
+    target: &Bound<'_, PyAny>,
+    axis: &Bound<'_, PyAny>,
+    x_dir: &Bound<'_, PyAny>,
+    option: &HermiteGaussianOption,
+    wavelength: f32,
+    mut dst: PyRefMut<'_, PatternBuffer>,
+) -> PyResult<()> {
+    let capsule = capsule_of(geometry)?;
+    let geometry = geometry_from_capsule(&capsule)?;
+    autd3_rs_pattern::hermite_gaussian_phase(
+        geometry,
+        extract_point(target)?,
+        extract_direction(axis)?,
+        extract_direction(x_dir)?,
+        option.inner,
+        Length::from_mm(wavelength),
+        &mut dst.inner,
+    );
+    Ok(())
+}
+
+#[pyfunction]
+#[pyo3(signature = (geometry, target, axis, x_dir, option, wavelength, dst))]
+fn hermite_gaussian_intensity(
+    geometry: &Bound<'_, PyAny>,
+    target: &Bound<'_, PyAny>,
+    axis: &Bound<'_, PyAny>,
+    x_dir: &Bound<'_, PyAny>,
+    option: &HermiteGaussianOption,
+    wavelength: f32,
+    mut dst: PyRefMut<'_, PatternBuffer>,
+) -> PyResult<()> {
+    let capsule = capsule_of(geometry)?;
+    let geometry = geometry_from_capsule(&capsule)?;
+    autd3_rs_pattern::hermite_gaussian_intensity(
+        geometry,
+        extract_point(target)?,
+        extract_direction(axis)?,
+        extract_direction(x_dir)?,
+        option.inner,
         Length::from_mm(wavelength),
         &mut dst.inner,
     );
@@ -602,12 +738,16 @@ fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DevicePatternView>()?;
     m.add_class::<TransducerMask>()?;
     m.add_class::<TransducerGroups>()?;
+    m.add_class::<LaguerreGaussianOption>()?;
+    m.add_class::<HermiteGaussianOption>()?;
     m.add_function(wrap_pyfunction!(wavelength, m)?)?;
     m.add_function(wrap_pyfunction!(focus, m)?)?;
     m.add_function(wrap_pyfunction!(plane, m)?)?;
     m.add_function(wrap_pyfunction!(bessel, m)?)?;
-    m.add_function(wrap_pyfunction!(twin_trap, m)?)?;
-    m.add_function(wrap_pyfunction!(vortex, m)?)?;
+    m.add_function(wrap_pyfunction!(laguerre_gaussian_phase, m)?)?;
+    m.add_function(wrap_pyfunction!(laguerre_gaussian_intensity, m)?)?;
+    m.add_function(wrap_pyfunction!(hermite_gaussian_phase, m)?)?;
+    m.add_function(wrap_pyfunction!(hermite_gaussian_intensity, m)?)?;
     m.add_function(wrap_pyfunction!(set_intensity, m)?)?;
     m.add_function(wrap_pyfunction!(set_phase, m)?)?;
     m.add_function(wrap_pyfunction!(set_phase_and_intensity, m)?)?;

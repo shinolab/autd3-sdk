@@ -17,13 +17,12 @@ import Install from "@components/Install.astro";
 - [focus](/autd3-sdk/api/compute/pattern/focus/) — 単一焦点
 - [plane](/autd3-sdk/api/compute/pattern/plane/) — 平面波
 - [bessel](/autd3-sdk/api/compute/pattern/bessel/) — ベッセルビーム
-- [twin_trap](/autd3-sdk/api/compute/pattern/twin-trap/) — ツイントラップ
-- [vortex](/autd3-sdk/api/compute/pattern/vortex/) — 音響渦
+- [laguerre_gaussian_phase](/autd3-sdk/api/compute/pattern/laguerre-gaussian/) — ラゲール・ガウシアンビーム
+- [hermite_gaussian_phase](/autd3-sdk/api/compute/pattern/hermite-gaussian/) — エルミート・ガウシアンビーム
 - [set_intensity / set_phase / add_phase](/autd3-sdk/api/compute/pattern/set/) — 振幅・位相の一括設定
 - [group](/autd3-sdk/api/compute/pattern/group/) — 振動子毎にパターンを選択
 
-`focus` / `plane` / `bessel` / `twin_trap` / `vortex` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分の位相を返す `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
-`set_intensity` / `set_phase` / `set_phase_and_intensity` / `add_phase` には `*_device` 版があり, `*_transducer` 版はない.
+`focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分の位相を返す `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
 いずれも Rust と C# にあり, Python にはない.
 
 パターン関数は位相だけを書き込み, 振幅は変更されない.

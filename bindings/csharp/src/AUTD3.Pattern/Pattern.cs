@@ -7,6 +7,34 @@ using System.Runtime.InteropServices;
 
 namespace AUTD3
 {
+    public readonly struct LaguerreGaussianOption
+    {
+        public uint P { get; }
+        public int L { get; }
+        public Length Waist { get; }
+
+        public LaguerreGaussianOption(uint p, int l, Length waist)
+        {
+            P = p;
+            L = l;
+            Waist = waist;
+        }
+    }
+
+    public readonly struct HermiteGaussianOption
+    {
+        public uint M { get; }
+        public uint N { get; }
+        public Length Waist { get; }
+
+        public HermiteGaussianOption(uint m, uint n, Length waist)
+        {
+            M = m;
+            N = n;
+            Waist = waist;
+        }
+    }
+
     public readonly struct TransducerMask
     {
         internal bool[][]? Mask { get; }
@@ -178,22 +206,34 @@ namespace AUTD3
         internal static extern int autd3_pattern_bessel_transducer(float[] position, float[] apex, float[] dir, float thetaRad, float wavelengthMm, out byte @out);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_twin_trap(GeometryHandle geometry, float[] target, float[] normal, float wavelengthMm, PatternBufferHandle buffer);
+        internal static extern int autd3_pattern_laguerre_gaussian_phase(GeometryHandle geometry, float[] target, float[] axis, uint p, int l, float waistMm, float wavelengthMm, PatternBufferHandle buffer);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_twin_trap_device(GeometryHandle geometry, UIntPtr dev, float[] target, float[] normal, float wavelengthMm, [In, Out] EmissionNative[] dst);
+        internal static extern int autd3_pattern_laguerre_gaussian_phase_device(GeometryHandle geometry, UIntPtr dev, float[] target, float[] axis, uint p, int l, float waistMm, float wavelengthMm, [In, Out] EmissionNative[] dst);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_twin_trap_transducer(float[] position, float[] target, float[] normal, float wavelengthMm, out byte @out);
+        internal static extern int autd3_pattern_laguerre_gaussian_phase_transducer(float[] position, float[] target, float[] axis, uint p, int l, float waistMm, float wavelengthMm, out byte @out);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_vortex(GeometryHandle geometry, float[] target, float[] axis, int order, float wavelengthMm, PatternBufferHandle buffer);
+        internal static extern int autd3_pattern_laguerre_gaussian_intensity(GeometryHandle geometry, float[] target, float[] axis, uint p, int l, float waistMm, float wavelengthMm, PatternBufferHandle buffer);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_vortex_device(GeometryHandle geometry, UIntPtr dev, float[] target, float[] axis, int order, float wavelengthMm, [In, Out] EmissionNative[] dst);
+        internal static extern int autd3_pattern_laguerre_gaussian_intensity_device(GeometryHandle geometry, UIntPtr dev, float[] target, float[] axis, uint p, int l, float waistMm, float wavelengthMm, [In, Out] EmissionNative[] dst);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_vortex_transducer(float[] position, float[] target, float[] axis, int order, float wavelengthMm, out byte @out);
+        internal static extern int autd3_pattern_hermite_gaussian_phase(GeometryHandle geometry, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, PatternBufferHandle buffer);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_hermite_gaussian_phase_device(GeometryHandle geometry, UIntPtr dev, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, [In, Out] EmissionNative[] dst);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_hermite_gaussian_phase_transducer(float[] position, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, out byte @out);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_hermite_gaussian_intensity(GeometryHandle geometry, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, PatternBufferHandle buffer);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_hermite_gaussian_intensity_device(GeometryHandle geometry, UIntPtr dev, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, [In, Out] EmissionNative[] dst);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_set_intensity(byte intensity, PatternBufferHandle buffer);
@@ -494,66 +534,109 @@ namespace AUTD3
             return new Phase(p);
         }
 
-        public static void TwinTrap(Geometry geometry, Vector3 target, Vector3 normal, Length wavelength, PatternBuffer dst)
+        public static void LaguerreGaussianPhase(Geometry geometry, Vector3 target, Vector3 axis, LaguerreGaussianOption option, Length wavelength, PatternBuffer dst)
         {
-            if (NativePattern.autd3_pattern_twin_trap(geometry.Handle, Coords.PointArray(target), Coords.DirArray(normal), wavelength.Mm, dst.Handle) != 0)
+            if (NativePattern.autd3_pattern_laguerre_gaussian_phase(geometry.Handle, Coords.PointArray(target), Coords.DirArray(axis),
+                option.P, option.L, option.Waist.Mm, wavelength.Mm, dst.Handle) != 0)
             {
-                throw new Autd3Exception("twin_trap failed (buffer device count must match geometry)");
+                throw new Autd3Exception("laguerre_gaussian_phase failed (waist must be positive and buffer device count must match geometry)");
             }
         }
 
-        public static void TwinTrapDevice(Device device, Vector3 target, Vector3 normal, Length wavelength, Emission[] dst)
+        public static void LaguerreGaussianPhaseDevice(Device device, Vector3 target, Vector3 axis, LaguerreGaussianOption option, Length wavelength, Emission[] dst)
         {
             var native = ToNativeDst(dst);
-            if (NativePattern.autd3_pattern_twin_trap_device(device.GeometryHandle, device.DeviceIndex,
-                Coords.PointArray(target), Coords.DirArray(normal), wavelength.Mm, native) != 0)
+            if (NativePattern.autd3_pattern_laguerre_gaussian_phase_device(device.GeometryHandle, device.DeviceIndex,
+                Coords.PointArray(target), Coords.DirArray(axis), option.P, option.L, option.Waist.Mm, wavelength.Mm, native) != 0)
             {
-                throw new Autd3Exception("twin_trap_device failed");
+                throw new Autd3Exception("laguerre_gaussian_phase_device failed (waist must be positive)");
             }
             FromNativeDst(native, dst);
         }
 
-        public static Phase TwinTrapTransducer(Vector3 position, Vector3 target, Vector3 normal, Length wavelength)
+        public static Phase LaguerreGaussianPhaseTransducer(Vector3 position, Vector3 target, Vector3 axis, LaguerreGaussianOption option, Length wavelength)
         {
-            if (NativePattern.autd3_pattern_twin_trap_transducer(
+            if (NativePattern.autd3_pattern_laguerre_gaussian_phase_transducer(
                 Coords.PointArray(position),
                 Coords.PointArray(target),
-                Coords.DirArray(normal), wavelength.Mm, out var p) != 0)
+                Coords.DirArray(axis), option.P, option.L, option.Waist.Mm, wavelength.Mm, out var p) != 0)
             {
-                throw new Autd3Exception("twin_trap_transducer failed");
+                throw new Autd3Exception("laguerre_gaussian_phase_transducer failed (waist must be positive)");
             }
             return new Phase(p);
         }
 
-        public static void Vortex(Geometry geometry, Vector3 target, Vector3 axis, int order, Length wavelength, PatternBuffer dst)
+        public static void LaguerreGaussianIntensity(Geometry geometry, Vector3 target, Vector3 axis, LaguerreGaussianOption option, Length wavelength, PatternBuffer dst)
         {
-            if (NativePattern.autd3_pattern_vortex(geometry.Handle, Coords.PointArray(target), Coords.DirArray(axis), order, wavelength.Mm, dst.Handle) != 0)
+            if (NativePattern.autd3_pattern_laguerre_gaussian_intensity(geometry.Handle, Coords.PointArray(target), Coords.DirArray(axis),
+                option.P, option.L, option.Waist.Mm, wavelength.Mm, dst.Handle) != 0)
             {
-                throw new Autd3Exception("vortex failed (buffer device count must match geometry)");
+                throw new Autd3Exception("laguerre_gaussian_intensity failed (waist must be positive and buffer device count must match geometry)");
             }
         }
 
-        public static void VortexDevice(Device device, Vector3 target, Vector3 axis, int order, Length wavelength, Emission[] dst)
+        public static void LaguerreGaussianIntensityDevice(Device device, Vector3 target, Vector3 axis, LaguerreGaussianOption option, Length wavelength, Emission[] dst)
         {
             var native = ToNativeDst(dst);
-            if (NativePattern.autd3_pattern_vortex_device(device.GeometryHandle, device.DeviceIndex,
-                Coords.PointArray(target), Coords.DirArray(axis), order, wavelength.Mm, native) != 0)
+            if (NativePattern.autd3_pattern_laguerre_gaussian_intensity_device(device.GeometryHandle, device.DeviceIndex,
+                Coords.PointArray(target), Coords.DirArray(axis), option.P, option.L, option.Waist.Mm, wavelength.Mm, native) != 0)
             {
-                throw new Autd3Exception("vortex_device failed");
+                throw new Autd3Exception("laguerre_gaussian_intensity_device failed (waist must be positive)");
             }
             FromNativeDst(native, dst);
         }
 
-        public static Phase VortexTransducer(Vector3 position, Vector3 target, Vector3 axis, int order, Length wavelength)
+        public static void HermiteGaussianPhase(Geometry geometry, Vector3 target, Vector3 axis, Vector3 xDir, HermiteGaussianOption option, Length wavelength, PatternBuffer dst)
         {
-            if (NativePattern.autd3_pattern_vortex_transducer(
+            if (NativePattern.autd3_pattern_hermite_gaussian_phase(geometry.Handle, Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir),
+                option.M, option.N, option.Waist.Mm, wavelength.Mm, dst.Handle) != 0)
+            {
+                throw new Autd3Exception("hermite_gaussian_phase failed (waist must be positive and buffer device count must match geometry)");
+            }
+        }
+
+        public static void HermiteGaussianPhaseDevice(Device device, Vector3 target, Vector3 axis, Vector3 xDir, HermiteGaussianOption option, Length wavelength, Emission[] dst)
+        {
+            var native = ToNativeDst(dst);
+            if (NativePattern.autd3_pattern_hermite_gaussian_phase_device(device.GeometryHandle, device.DeviceIndex,
+                Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir), option.M, option.N, option.Waist.Mm, wavelength.Mm, native) != 0)
+            {
+                throw new Autd3Exception("hermite_gaussian_phase_device failed (waist must be positive)");
+            }
+            FromNativeDst(native, dst);
+        }
+
+        public static Phase HermiteGaussianPhaseTransducer(Vector3 position, Vector3 target, Vector3 axis, Vector3 xDir, HermiteGaussianOption option, Length wavelength)
+        {
+            if (NativePattern.autd3_pattern_hermite_gaussian_phase_transducer(
                 Coords.PointArray(position),
                 Coords.PointArray(target),
-                Coords.DirArray(axis), order, wavelength.Mm, out var p) != 0)
+                Coords.DirArray(axis),
+                Coords.DirArray(xDir), option.M, option.N, option.Waist.Mm, wavelength.Mm, out var p) != 0)
             {
-                throw new Autd3Exception("vortex_transducer failed");
+                throw new Autd3Exception("hermite_gaussian_phase_transducer failed (waist must be positive)");
             }
             return new Phase(p);
+        }
+
+        public static void HermiteGaussianIntensity(Geometry geometry, Vector3 target, Vector3 axis, Vector3 xDir, HermiteGaussianOption option, Length wavelength, PatternBuffer dst)
+        {
+            if (NativePattern.autd3_pattern_hermite_gaussian_intensity(geometry.Handle, Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir),
+                option.M, option.N, option.Waist.Mm, wavelength.Mm, dst.Handle) != 0)
+            {
+                throw new Autd3Exception("hermite_gaussian_intensity failed (waist must be positive and buffer device count must match geometry)");
+            }
+        }
+
+        public static void HermiteGaussianIntensityDevice(Device device, Vector3 target, Vector3 axis, Vector3 xDir, HermiteGaussianOption option, Length wavelength, Emission[] dst)
+        {
+            var native = ToNativeDst(dst);
+            if (NativePattern.autd3_pattern_hermite_gaussian_intensity_device(device.GeometryHandle, device.DeviceIndex,
+                Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir), option.M, option.N, option.Waist.Mm, wavelength.Mm, native) != 0)
+            {
+                throw new Autd3Exception("hermite_gaussian_intensity_device failed (waist must be positive)");
+            }
+            FromNativeDst(native, dst);
         }
 
         public static void SetIntensity(Intensity intensity, PatternBuffer dst)

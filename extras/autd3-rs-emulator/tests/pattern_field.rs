@@ -1,10 +1,13 @@
 use autd3_rs::commands::{FixedCompletionTime, Modulation, Pattern, SetSilencer};
 use autd3_rs::common::ULTRASOUND_PERIOD;
-use autd3_rs::geometry::{Autd3, Geometry, Point3, Vector3};
+use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitVector3, Vector3};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Emission, SamplingConfig};
 use autd3_rs_emulator::{ClientApi, Emulator, RangeXY, RawColumn, Record, RmsRecordOption};
-use autd3_rs_pattern::{focus, twin_trap, vortex, wavelength};
+use autd3_rs_pattern::{
+    HermiteGaussianOption, LaguerreGaussianOption, focus, hermite_gaussian_intensity,
+    hermite_gaussian_phase, laguerre_gaussian_intensity, laguerre_gaussian_phase, wavelength,
+};
 
 const HALF_SPAN: f32 = 10.0;
 const RESOLUTION: f32 = 0.5;
@@ -97,18 +100,29 @@ fn focus_peaks_on_axis() {
     assert!(at(&grid, CENTER, CENTER) > 0.9 * max_of(&grid));
 }
 
+fn laguerre_gaussian_grid(p: u32, l: i32) -> Vec<f32> {
+    setup(|geometry, target, dst| {
+        let option = LaguerreGaussianOption {
+            p,
+            l,
+            waist: 10.0 * mm,
+        };
+        let lambda = wavelength(340.0 * m / s);
+        laguerre_gaussian_phase(geometry, target, Vector3::z_axis(), option, lambda, dst);
+        laguerre_gaussian_intensity(geometry, target, Vector3::z_axis(), option, lambda, dst);
+    })
+}
+
 #[test]
-fn vortex_is_a_ring_with_a_null_on_axis() {
-    let grid = setup(|geometry, target, dst| {
-        vortex(
-            geometry,
-            target,
-            Vector3::z_axis(),
-            1,
-            wavelength(340.0 * m / s),
-            dst,
-        );
-    });
+fn laguerre_gaussian_fundamental_is_a_focus() {
+    let grid = laguerre_gaussian_grid(0, 0);
+
+    assert_eq!(argmax(&grid), (CENTER, CENTER));
+}
+
+#[test]
+fn laguerre_gaussian_vortex_mode_is_a_ring_with_a_null_on_axis() {
+    let grid = laguerre_gaussian_grid(0, 1);
 
     let peak = max_of(&grid);
     let on_axis = at(&grid, CENTER, CENTER);
@@ -121,7 +135,7 @@ fn vortex_is_a_ring_with_a_null_on_axis() {
     let step = px.abs_diff(CENTER).max(py.abs_diff(CENTER));
     assert!(
         step >= 3,
-        "the vortex peak must sit off the axis, got it {step} cells from the center"
+        "the ring peak must sit off the axis, got it {step} cells from the center"
     );
     let ring = [
         at(&grid, CENTER + step, CENTER),
@@ -135,87 +149,78 @@ fn vortex_is_a_ring_with_a_null_on_axis() {
         ring_min > 0.7 * ring_max,
         "the ring must be axisymmetric, got {ring:?}"
     );
+}
+
+#[test]
+fn laguerre_gaussian_radial_mode_has_a_dark_ring_around_the_peak() {
+    let grid = laguerre_gaussian_grid(1, 0);
+
+    let center = at(&grid, CENTER, CENTER);
+    assert_eq!(argmax(&grid), (CENTER, CENTER));
+    let row: Vec<f32> = (CENTER..GRID).map(|ix| at(&grid, ix, CENTER)).collect();
+    let dark = row
+        .iter()
+        .enumerate()
+        .min_by(|a, b| a.1.total_cmp(b.1))
+        .unwrap();
+    let bright_outside = row[dark.0..].iter().copied().fold(f32::MIN, f32::max);
     assert!(
-        ring_min > 3.0 * on_axis,
-        "the ring {ring_min} must stand well above the on-axis null {on_axis}"
+        *dark.1 < 0.3 * center && bright_outside > 2.0 * dark.1,
+        "expected a dark ring between the core and an outer ring, got {row:?}"
     );
 }
 
-#[test]
-fn vortex_order_zero_is_a_focus() {
-    let grid = setup(|geometry, target, dst| {
-        vortex(
-            geometry,
-            target,
-            Vector3::z_axis(),
-            0,
-            wavelength(340.0 * m / s),
-            dst,
-        );
-    });
-
-    assert_eq!(argmax(&grid), (CENTER, CENTER));
+fn hermite_gaussian_grid(x_dir: UnitVector3<f32>) -> Vec<f32> {
+    setup(|geometry, target, dst| {
+        let option = HermiteGaussianOption {
+            m: 1,
+            n: 0,
+            waist: 10.0 * mm,
+        };
+        let lambda = wavelength(340.0 * m / s);
+        let axis = Vector3::z_axis();
+        hermite_gaussian_phase(geometry, target, axis, x_dir, option, lambda, dst);
+        hermite_gaussian_intensity(geometry, target, axis, x_dir, option, lambda, dst);
+    })
 }
 
 #[test]
-fn twin_trap_has_two_lobes_across_a_node() {
-    let grid = setup(|geometry, target, dst| {
-        twin_trap(
-            geometry,
-            target,
-            Vector3::x_axis(),
-            wavelength(340.0 * m / s),
-            dst,
-        );
-    });
+fn hermite_gaussian_first_order_has_two_lobes_across_the_node_plane() {
+    let grid = hermite_gaussian_grid(Vector3::x_axis());
 
     let peak = max_of(&grid);
     let on_axis = at(&grid, CENTER, CENTER);
     assert!(
         on_axis < 0.1 * peak,
-        "the split plane must hold a node, got {on_axis} against {peak}"
+        "the node plane must be dark, got {on_axis} against {peak}"
     );
-
     let row: Vec<f32> = (0..GRID).map(|ix| at(&grid, ix, CENTER)).collect();
     let left = row[..CENTER].iter().copied().fold(f32::MIN, f32::max);
     let right = row[CENTER + 1..].iter().copied().fold(f32::MIN, f32::max);
     assert!(
-        left.min(right) > 0.8 * left.max(right),
-        "the two lobes must be balanced, got left {left} right {right}"
+        left.min(right) > 0.8 * left.max(right) && left.min(right) > 0.9 * peak,
+        "the two lobes must sit along x, got left {left} right {right} peak {peak}"
     );
-    assert!(
-        left.min(right) > 0.5 * peak,
-        "both lobes must carry the field, got left {left} right {right} peak {peak}"
-    );
-
     let column: Vec<f32> = (0..GRID).map(|iy| at(&grid, CENTER, iy)).collect();
-    let along_normal_plane = column.iter().copied().fold(f32::MIN, f32::max);
+    let along_node = column.iter().copied().fold(f32::MIN, f32::max);
     assert!(
-        along_normal_plane < 0.5 * peak,
-        "the split plane must stay dark, got {along_normal_plane} against {peak}"
+        along_node < 0.5 * peak,
+        "the node plane must stay dark, got {along_node} against {peak}"
     );
 }
 
 #[test]
-fn twin_trap_normal_rotates_the_lobes() {
-    let grid = setup(|geometry, target, dst| {
-        twin_trap(
-            geometry,
-            target,
-            Vector3::y_axis(),
-            wavelength(340.0 * m / s),
-            dst,
-        );
-    });
+fn hermite_gaussian_x_dir_rotates_the_lobes() {
+    let grid = hermite_gaussian_grid(Vector3::y_axis());
 
     let peak = max_of(&grid);
     let row: Vec<f32> = (0..GRID).map(|ix| at(&grid, ix, CENTER)).collect();
     let column: Vec<f32> = (0..GRID).map(|iy| at(&grid, CENTER, iy)).collect();
-    let along_split = row.iter().copied().fold(f32::MIN, f32::max);
-    let across_split = column.iter().copied().fold(f32::MIN, f32::max);
+    let along_node = row.iter().copied().fold(f32::MIN, f32::max);
+    let across_node = column.iter().copied().fold(f32::MIN, f32::max);
     assert!(
-        across_split > 0.9 * peak && along_split < 0.5 * peak,
-        "with normal = y the lobes must sit along y, got across {across_split} along {along_split}"
+        across_node > 0.9 * peak && along_node < 0.5 * peak,
+        "with x_dir = y the lobes must sit along y, got across {across_node} along {along_node}"
     );
 }
 

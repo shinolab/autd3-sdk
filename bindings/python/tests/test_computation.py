@@ -194,7 +194,7 @@ def test_pattern_group() -> None:
                 assert (e.phase.value, e.intensity.value) == (0x00, 0x00)
 
 
-def test_pattern_twin_trap_vortex() -> None:
+def test_pattern_laguerre_hermite_gaussian() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340 * m / s)
     target = geo.center() + np.array([0.0, 0.0, 150.0])
@@ -203,19 +203,49 @@ def test_pattern_twin_trap_vortex() -> None:
     def phases(buf: object) -> list[int]:
         return [buf[0][i].phase.value for i in range(num)]  # type: ignore[index]
 
+    def intensities(buf: object) -> list[int]:
+        return [buf[0][i].intensity.value for i in range(num)]  # type: ignore[index]
+
     focused = geo.pattern_buffer()
     pattern.focus(geo, target, wavelength, focused)
 
-    spun = geo.pattern_buffer()
-    pattern.vortex(geo, target, [0.0, 0.0, 1.0], 0, wavelength, spun)
-    assert phases(spun) == phases(focused)
+    def near(a: int, b: int) -> bool:
+        return min((a - b) % 256, (b - a) % 256) <= 2
 
-    pattern.vortex(geo, target, [0.0, 0.0, 1.0], 1, wavelength, spun)
-    assert phases(spun) != phases(focused)
+    fundamental = geo.pattern_buffer()
+    pattern.laguerre_gaussian_phase(
+        geo, target, [0.0, 0.0, 1.0], pattern.LaguerreGaussianOption(p=0, l=0, waist=10.0), wavelength, fundamental
+    )
+    offsets = [(a - b) % 256 for a, b in zip(phases(fundamental), phases(focused))]
+    assert all(near(o, offsets[0]) for o in offsets)
 
-    trapped = geo.pattern_buffer()
-    pattern.twin_trap(geo, target, [1.0, 0.0, 0.0], wavelength, trapped)
-    assert {(t - f) % 256 for t, f in zip(phases(trapped), phases(focused))} == {0, 128}
+    lg_option = pattern.LaguerreGaussianOption(p=0, l=1, waist=10.0)
+    assert (lg_option.p, lg_option.l, lg_option.waist) == (0, 1, 10.0)
+    lg = geo.pattern_buffer()
+    pattern.set_phase_and_intensity(0x00, 0x00, lg)
+    pattern.laguerre_gaussian_phase(geo, target, [0.0, 0.0, 1.0], lg_option, wavelength, lg)
+    assert intensities(lg) == [0x00] * num
+    assert phases(lg) != phases(fundamental)
+
+    pattern.laguerre_gaussian_intensity(geo, target, [0.0, 0.0, 1.0], lg_option, wavelength, lg)
+    assert max(intensities(lg)) == 0xFF
+    assert min(intensities(lg)) < 0xFF
+
+    hg_option = pattern.HermiteGaussianOption(m=1, n=0, waist=10.0)
+    hg = geo.pattern_buffer()
+    pattern.hermite_gaussian_phase(geo, target, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], hg_option, wavelength, hg)
+    pattern.hermite_gaussian_intensity(
+        geo, target, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], hg_option, wavelength, hg
+    )
+    assert max(intensities(hg)) == 0xFF
+    split = [(a - b) % 256 for a, b in zip(phases(hg), phases(focused))]
+    assert all(near(o, split[0]) or near(o, split[0] + 128) for o in split)
+    assert any(near(o, split[0] + 128) for o in split)
+
+    with pytest.raises(ValueError):
+        pattern.LaguerreGaussianOption(p=0, l=1, waist=0.0)
+    with pytest.raises(ValueError):
+        pattern.HermiteGaussianOption(m=1, n=0, waist=float("nan"))
 
 
 def test_modulation_sine_square_fourier_radiation() -> None:

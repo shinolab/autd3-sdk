@@ -399,147 +399,78 @@ pub unsafe extern "C" fn autd3_pattern_bessel_transducer(
     0
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_twin_trap(
+fn waist(waist_mm: f32) -> Option<Length> {
+    (waist_mm.is_finite() && waist_mm > 0.0).then(|| Length::from_mm(waist_mm))
+}
+
+fn laguerre_gaussian_option(
+    p: u32,
+    l: i32,
+    waist_mm: f32,
+) -> Option<autd3_rs_pattern::LaguerreGaussianOption> {
+    Some(autd3_rs_pattern::LaguerreGaussianOption {
+        p,
+        l,
+        waist: waist(waist_mm)?,
+    })
+}
+
+fn hermite_gaussian_option(
+    m: u32,
+    n: u32,
+    waist_mm: f32,
+) -> Option<autd3_rs_pattern::HermiteGaussianOption> {
+    Some(autd3_rs_pattern::HermiteGaussianOption {
+        m,
+        n,
+        waist: waist(waist_mm)?,
+    })
+}
+
+unsafe fn with_geometry_buffer(
     geometry: *const Geometry,
-    target: *const f32,
-    normal: *const f32,
-    wavelength_mm: f32,
     buffer: *mut PatternBuffer,
+    f: impl FnOnce(&Geometry, &mut [Vec<Emission>]),
 ) -> i32 {
-    let (Some(geometry), Some(target), Some(normal), Some(buffer)) = (
-        unsafe { handle_ref(geometry) },
-        unsafe { point(target) },
-        unsafe { unit_vector(normal) },
-        unsafe { handle_mut(buffer) },
-    ) else {
+    let (Some(geometry), Some(buffer)) = (unsafe { handle_ref(geometry) }, unsafe {
+        handle_mut(buffer)
+    }) else {
         return -1;
     };
-
     if buffer.0.len() != geometry.num_devices() {
         return -1;
     }
-    autd3_rs_pattern::twin_trap(
-        geometry,
-        target,
-        normal,
-        Length::from_mm(wavelength_mm),
-        &mut buffer.0,
-    );
-    0
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_twin_trap_device(
-    geometry: *const Geometry,
-    dev: usize,
-    target: *const f32,
-    normal: *const f32,
-    wavelength_mm: f32,
-    dst: *mut Autd3Emission,
-) -> i32 {
-    let (Some(target), Some(normal)) = (unsafe { point(target) }, unsafe { unit_vector(normal) })
-    else {
-        return -1;
-    };
-
-    unsafe {
-        with_device_dst(geometry, dev, dst, |device, buf| {
-            autd3_rs_pattern::twin_trap_device(
-                device,
-                target,
-                normal,
-                Length::from_mm(wavelength_mm),
-                buf,
-            );
-        })
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_twin_trap_transducer(
-    position: *const f32,
-    target: *const f32,
-    normal: *const f32,
-    wavelength_mm: f32,
-    out: *mut u8,
-) -> i32 {
-    let (Some(position), Some(target), Some(normal)) = (
-        unsafe { point(position) },
-        unsafe { point(target) },
-        unsafe { unit_vector(normal) },
-    ) else {
-        return -1;
-    };
-
-    let Some(out) = (unsafe { out.as_mut() }) else {
-        return -1;
-    };
-    *out = autd3_rs_pattern::twin_trap_transducer(
-        position,
-        target,
-        normal,
-        Length::from_mm(wavelength_mm),
-    )
-    .0;
-    0
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_vortex(
-    geometry: *const Geometry,
-    target: *const f32,
-    axis: *const f32,
-    order: i32,
-    wavelength_mm: f32,
-    buffer: *mut PatternBuffer,
-) -> i32 {
-    let (Some(geometry), Some(target), Some(axis), Some(buffer)) = (
-        unsafe { handle_ref(geometry) },
-        unsafe { point(target) },
-        unsafe { unit_vector(axis) },
-        unsafe { handle_mut(buffer) },
-    ) else {
-        return -1;
-    };
-
-    if buffer.0.len() != geometry.num_devices() {
-        return -1;
-    }
-    autd3_rs_pattern::vortex(
-        geometry,
-        target,
-        axis,
-        order,
-        Length::from_mm(wavelength_mm),
-        &mut buffer.0,
-    );
+    f(geometry, &mut buffer.0);
     0
 }
 
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
-pub unsafe extern "C" fn autd3_pattern_vortex_device(
+pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_phase(
     geometry: *const Geometry,
-    dev: usize,
     target: *const f32,
     axis: *const f32,
-    order: i32,
+    p: u32,
+    l: i32,
+    waist_mm: f32,
     wavelength_mm: f32,
-    dst: *mut Autd3Emission,
+    buffer: *mut PatternBuffer,
 ) -> i32 {
-    let (Some(target), Some(axis)) = (unsafe { point(target) }, unsafe { unit_vector(axis) })
-    else {
+    let (Some(target), Some(axis), Some(option)) = (
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        laguerre_gaussian_option(p, l, waist_mm),
+    ) else {
         return -1;
     };
 
     unsafe {
-        with_device_dst(geometry, dev, dst, |device, buf| {
-            autd3_rs_pattern::vortex_device(
-                device,
+        with_geometry_buffer(geometry, buffer, |geometry, buf| {
+            autd3_rs_pattern::laguerre_gaussian_phase(
+                geometry,
                 target,
                 axis,
-                order,
+                option,
                 Length::from_mm(wavelength_mm),
                 buf,
             );
@@ -548,18 +479,57 @@ pub unsafe extern "C" fn autd3_pattern_vortex_device(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_vortex_transducer(
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_phase_device(
+    geometry: *const Geometry,
+    dev: usize,
+    target: *const f32,
+    axis: *const f32,
+    p: u32,
+    l: i32,
+    waist_mm: f32,
+    wavelength_mm: f32,
+    dst: *mut Autd3Emission,
+) -> i32 {
+    let (Some(target), Some(axis), Some(option)) = (
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        laguerre_gaussian_option(p, l, waist_mm),
+    ) else {
+        return -1;
+    };
+
+    unsafe {
+        with_device_dst(geometry, dev, dst, |device, buf| {
+            autd3_rs_pattern::laguerre_gaussian_phase_device(
+                device,
+                target,
+                axis,
+                option,
+                Length::from_mm(wavelength_mm),
+                buf,
+            );
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_phase_transducer(
     position: *const f32,
     target: *const f32,
     axis: *const f32,
-    order: i32,
+    p: u32,
+    l: i32,
+    waist_mm: f32,
     wavelength_mm: f32,
     out: *mut u8,
 ) -> i32 {
-    let (Some(position), Some(target), Some(axis)) = (
+    let (Some(position), Some(target), Some(axis), Some(option)) = (
         unsafe { point(position) },
         unsafe { point(target) },
         unsafe { unit_vector(axis) },
+        laguerre_gaussian_option(p, l, waist_mm),
     ) else {
         return -1;
     };
@@ -567,15 +537,272 @@ pub unsafe extern "C" fn autd3_pattern_vortex_transducer(
     let Some(out) = (unsafe { out.as_mut() }) else {
         return -1;
     };
-    *out = autd3_rs_pattern::vortex_transducer(
+    *out = autd3_rs_pattern::laguerre_gaussian_phase_transducer(
         position,
         target,
         axis,
-        order,
+        option,
         Length::from_mm(wavelength_mm),
     )
     .0;
     0
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_intensity(
+    geometry: *const Geometry,
+    target: *const f32,
+    axis: *const f32,
+    p: u32,
+    l: i32,
+    waist_mm: f32,
+    wavelength_mm: f32,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    let (Some(target), Some(axis), Some(option)) = (
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        laguerre_gaussian_option(p, l, waist_mm),
+    ) else {
+        return -1;
+    };
+
+    unsafe {
+        with_geometry_buffer(geometry, buffer, |geometry, buf| {
+            autd3_rs_pattern::laguerre_gaussian_intensity(
+                geometry,
+                target,
+                axis,
+                option,
+                Length::from_mm(wavelength_mm),
+                buf,
+            );
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_intensity_device(
+    geometry: *const Geometry,
+    dev: usize,
+    target: *const f32,
+    axis: *const f32,
+    p: u32,
+    l: i32,
+    waist_mm: f32,
+    wavelength_mm: f32,
+    dst: *mut Autd3Emission,
+) -> i32 {
+    let (Some(target), Some(axis), Some(option)) = (
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        laguerre_gaussian_option(p, l, waist_mm),
+    ) else {
+        return -1;
+    };
+
+    unsafe {
+        with_device_dst(geometry, dev, dst, |device, buf| {
+            autd3_rs_pattern::laguerre_gaussian_intensity_device(
+                device,
+                target,
+                axis,
+                option,
+                Length::from_mm(wavelength_mm),
+                buf,
+            );
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_phase(
+    geometry: *const Geometry,
+    target: *const f32,
+    axis: *const f32,
+    x_dir: *const f32,
+    m: u32,
+    n: u32,
+    waist_mm: f32,
+    wavelength_mm: f32,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    let (Some(target), Some(axis), Some(x_dir), Some(option)) = (
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        unsafe { unit_vector(x_dir) },
+        hermite_gaussian_option(m, n, waist_mm),
+    ) else {
+        return -1;
+    };
+
+    unsafe {
+        with_geometry_buffer(geometry, buffer, |geometry, buf| {
+            autd3_rs_pattern::hermite_gaussian_phase(
+                geometry,
+                target,
+                axis,
+                x_dir,
+                option,
+                Length::from_mm(wavelength_mm),
+                buf,
+            );
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_phase_device(
+    geometry: *const Geometry,
+    dev: usize,
+    target: *const f32,
+    axis: *const f32,
+    x_dir: *const f32,
+    m: u32,
+    n: u32,
+    waist_mm: f32,
+    wavelength_mm: f32,
+    dst: *mut Autd3Emission,
+) -> i32 {
+    let (Some(target), Some(axis), Some(x_dir), Some(option)) = (
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        unsafe { unit_vector(x_dir) },
+        hermite_gaussian_option(m, n, waist_mm),
+    ) else {
+        return -1;
+    };
+
+    unsafe {
+        with_device_dst(geometry, dev, dst, |device, buf| {
+            autd3_rs_pattern::hermite_gaussian_phase_device(
+                device,
+                target,
+                axis,
+                x_dir,
+                option,
+                Length::from_mm(wavelength_mm),
+                buf,
+            );
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_phase_transducer(
+    position: *const f32,
+    target: *const f32,
+    axis: *const f32,
+    x_dir: *const f32,
+    m: u32,
+    n: u32,
+    waist_mm: f32,
+    wavelength_mm: f32,
+    out: *mut u8,
+) -> i32 {
+    let (Some(position), Some(target), Some(axis), Some(x_dir), Some(option)) = (
+        unsafe { point(position) },
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        unsafe { unit_vector(x_dir) },
+        hermite_gaussian_option(m, n, waist_mm),
+    ) else {
+        return -1;
+    };
+
+    let Some(out) = (unsafe { out.as_mut() }) else {
+        return -1;
+    };
+    *out = autd3_rs_pattern::hermite_gaussian_phase_transducer(
+        position,
+        target,
+        axis,
+        x_dir,
+        option,
+        Length::from_mm(wavelength_mm),
+    )
+    .0;
+    0
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_intensity(
+    geometry: *const Geometry,
+    target: *const f32,
+    axis: *const f32,
+    x_dir: *const f32,
+    m: u32,
+    n: u32,
+    waist_mm: f32,
+    wavelength_mm: f32,
+    buffer: *mut PatternBuffer,
+) -> i32 {
+    let (Some(target), Some(axis), Some(x_dir), Some(option)) = (
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        unsafe { unit_vector(x_dir) },
+        hermite_gaussian_option(m, n, waist_mm),
+    ) else {
+        return -1;
+    };
+
+    unsafe {
+        with_geometry_buffer(geometry, buffer, |geometry, buf| {
+            autd3_rs_pattern::hermite_gaussian_intensity(
+                geometry,
+                target,
+                axis,
+                x_dir,
+                option,
+                Length::from_mm(wavelength_mm),
+                buf,
+            );
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_intensity_device(
+    geometry: *const Geometry,
+    dev: usize,
+    target: *const f32,
+    axis: *const f32,
+    x_dir: *const f32,
+    m: u32,
+    n: u32,
+    waist_mm: f32,
+    wavelength_mm: f32,
+    dst: *mut Autd3Emission,
+) -> i32 {
+    let (Some(target), Some(axis), Some(x_dir), Some(option)) = (
+        unsafe { point(target) },
+        unsafe { unit_vector(axis) },
+        unsafe { unit_vector(x_dir) },
+        hermite_gaussian_option(m, n, waist_mm),
+    ) else {
+        return -1;
+    };
+
+    unsafe {
+        with_device_dst(geometry, dev, dst, |device, buf| {
+            autd3_rs_pattern::hermite_gaussian_intensity_device(
+                device,
+                target,
+                axis,
+                x_dir,
+                option,
+                Length::from_mm(wavelength_mm),
+                buf,
+            );
+        })
+    }
 }
 
 unsafe fn with_buffer(buffer: *mut PatternBuffer, f: impl FnOnce(&mut [Vec<Emission>])) -> i32 {
@@ -1122,5 +1349,381 @@ mod tests {
         );
 
         assert!(dst.0.iter().flatten().all(|e| e.phase == Phase(0xFF)));
+    }
+
+    #[test]
+    fn laguerre_gaussian_geometry_level_matches_the_rust_api() {
+        let geometry = geometry();
+        let target = [86.0_f32, 66.0, 150.0];
+        let axis = [0.0_f32, 0.0, 1.0];
+        let option = autd3_rs_pattern::LaguerreGaussianOption {
+            p: 1,
+            l: 2,
+            waist: Length::from_mm(10.0),
+        };
+        let lambda = Length::from_mm(8.5);
+        let rust_target = Point3::new(86.0, 66.0, 150.0);
+
+        let mut buffer = filled(&geometry, 0x00);
+        let result = unsafe {
+            autd3_pattern_laguerre_gaussian_phase(
+                &raw const geometry,
+                target.as_ptr(),
+                axis.as_ptr(),
+                1,
+                2,
+                10.0,
+                8.5,
+                &raw mut buffer,
+            )
+        };
+        assert_eq!(result, 0);
+        let result = unsafe {
+            autd3_pattern_laguerre_gaussian_intensity(
+                &raw const geometry,
+                target.as_ptr(),
+                axis.as_ptr(),
+                1,
+                2,
+                10.0,
+                8.5,
+                &raw mut buffer,
+            )
+        };
+        assert_eq!(result, 0);
+
+        let mut expected = geometry.pattern_buffer();
+        autd3_rs_pattern::laguerre_gaussian_phase(
+            &geometry,
+            rust_target,
+            Vector3::z_axis(),
+            option,
+            lambda,
+            &mut expected,
+        );
+        autd3_rs_pattern::laguerre_gaussian_intensity(
+            &geometry,
+            rust_target,
+            Vector3::z_axis(),
+            option,
+            lambda,
+            &mut expected,
+        );
+        assert_eq!(buffer.0, expected);
+    }
+
+    #[test]
+    fn laguerre_gaussian_device_level_matches_the_rust_api() {
+        let geometry = geometry();
+        let target = [86.0_f32, 66.0, 150.0];
+        let axis = [0.0_f32, 0.0, 1.0];
+        let option = autd3_rs_pattern::LaguerreGaussianOption {
+            p: 1,
+            l: 2,
+            waist: Length::from_mm(10.0),
+        };
+        let lambda = Length::from_mm(8.5);
+        let rust_target = Point3::new(86.0, 66.0, 150.0);
+
+        let mut dst: Vec<Autd3Emission> = (0..Autd3::NUM_TRANSDUCERS)
+            .map(|_| Autd3Emission {
+                phase: 0,
+                intensity: 0,
+            })
+            .collect();
+        let result = unsafe {
+            autd3_pattern_laguerre_gaussian_phase_device(
+                &raw const geometry,
+                1,
+                target.as_ptr(),
+                axis.as_ptr(),
+                1,
+                2,
+                10.0,
+                8.5,
+                dst.as_mut_ptr(),
+            )
+        };
+        assert_eq!(result, 0);
+        let result = unsafe {
+            autd3_pattern_laguerre_gaussian_intensity_device(
+                &raw const geometry,
+                1,
+                target.as_ptr(),
+                axis.as_ptr(),
+                1,
+                2,
+                10.0,
+                8.5,
+                dst.as_mut_ptr(),
+            )
+        };
+        assert_eq!(result, 0);
+        let mut expected_device = vec![Emission::NULL; Autd3::NUM_TRANSDUCERS];
+        autd3_rs_pattern::laguerre_gaussian_phase_device(
+            &geometry[1],
+            rust_target,
+            Vector3::z_axis(),
+            option,
+            lambda,
+            &mut expected_device,
+        );
+        autd3_rs_pattern::laguerre_gaussian_intensity_device(
+            &geometry[1],
+            rust_target,
+            Vector3::z_axis(),
+            option,
+            lambda,
+            &mut expected_device,
+        );
+        for (tr, (e, x)) in dst.iter().zip(&expected_device).enumerate() {
+            assert_eq!((e.phase, e.intensity), (x.phase.0, x.intensity.0));
+            let position = geometry[1].position(tr);
+            let pos = [position.x, position.y, position.z];
+            let mut phase = 0u8;
+            let result = unsafe {
+                autd3_pattern_laguerre_gaussian_phase_transducer(
+                    pos.as_ptr(),
+                    target.as_ptr(),
+                    axis.as_ptr(),
+                    1,
+                    2,
+                    10.0,
+                    8.5,
+                    &raw mut phase,
+                )
+            };
+            assert_eq!(result, 0);
+            assert_eq!(phase, e.phase);
+        }
+    }
+
+    #[test]
+    fn hermite_gaussian_geometry_level_matches_the_rust_api() {
+        let geometry = geometry();
+        let target = [86.0_f32, 66.0, 150.0];
+        let axis = [0.0_f32, 0.0, 1.0];
+        let x_dir = [1.0_f32, 1.0, 0.0];
+        let option = autd3_rs_pattern::HermiteGaussianOption {
+            m: 1,
+            n: 2,
+            waist: Length::from_mm(10.0),
+        };
+        let lambda = Length::from_mm(8.5);
+        let rust_target = Point3::new(86.0, 66.0, 150.0);
+        let rust_x_dir = UnitVector3::new_normalize(Vector3::new(1.0, 1.0, 0.0));
+
+        let mut buffer = filled(&geometry, 0x00);
+        let result = unsafe {
+            autd3_pattern_hermite_gaussian_phase(
+                &raw const geometry,
+                target.as_ptr(),
+                axis.as_ptr(),
+                x_dir.as_ptr(),
+                1,
+                2,
+                10.0,
+                8.5,
+                &raw mut buffer,
+            )
+        };
+        assert_eq!(result, 0);
+        let result = unsafe {
+            autd3_pattern_hermite_gaussian_intensity(
+                &raw const geometry,
+                target.as_ptr(),
+                axis.as_ptr(),
+                x_dir.as_ptr(),
+                1,
+                2,
+                10.0,
+                8.5,
+                &raw mut buffer,
+            )
+        };
+        assert_eq!(result, 0);
+
+        let mut expected = geometry.pattern_buffer();
+        autd3_rs_pattern::hermite_gaussian_phase(
+            &geometry,
+            rust_target,
+            Vector3::z_axis(),
+            rust_x_dir,
+            option,
+            lambda,
+            &mut expected,
+        );
+        autd3_rs_pattern::hermite_gaussian_intensity(
+            &geometry,
+            rust_target,
+            Vector3::z_axis(),
+            rust_x_dir,
+            option,
+            lambda,
+            &mut expected,
+        );
+        assert_eq!(buffer.0, expected);
+    }
+
+    #[test]
+    fn hermite_gaussian_device_level_matches_the_rust_api() {
+        let geometry = geometry();
+        let target = [86.0_f32, 66.0, 150.0];
+        let axis = [0.0_f32, 0.0, 1.0];
+        let x_dir = [1.0_f32, 1.0, 0.0];
+        let option = autd3_rs_pattern::HermiteGaussianOption {
+            m: 1,
+            n: 2,
+            waist: Length::from_mm(10.0),
+        };
+        let lambda = Length::from_mm(8.5);
+        let rust_target = Point3::new(86.0, 66.0, 150.0);
+        let rust_x_dir = UnitVector3::new_normalize(Vector3::new(1.0, 1.0, 0.0));
+
+        let mut dst: Vec<Autd3Emission> = (0..Autd3::NUM_TRANSDUCERS)
+            .map(|_| Autd3Emission {
+                phase: 0,
+                intensity: 0,
+            })
+            .collect();
+        let result = unsafe {
+            autd3_pattern_hermite_gaussian_phase_device(
+                &raw const geometry,
+                1,
+                target.as_ptr(),
+                axis.as_ptr(),
+                x_dir.as_ptr(),
+                1,
+                2,
+                10.0,
+                8.5,
+                dst.as_mut_ptr(),
+            )
+        };
+        assert_eq!(result, 0);
+        let result = unsafe {
+            autd3_pattern_hermite_gaussian_intensity_device(
+                &raw const geometry,
+                1,
+                target.as_ptr(),
+                axis.as_ptr(),
+                x_dir.as_ptr(),
+                1,
+                2,
+                10.0,
+                8.5,
+                dst.as_mut_ptr(),
+            )
+        };
+        assert_eq!(result, 0);
+        let mut expected_device = vec![Emission::NULL; Autd3::NUM_TRANSDUCERS];
+        autd3_rs_pattern::hermite_gaussian_phase_device(
+            &geometry[1],
+            rust_target,
+            Vector3::z_axis(),
+            rust_x_dir,
+            option,
+            lambda,
+            &mut expected_device,
+        );
+        autd3_rs_pattern::hermite_gaussian_intensity_device(
+            &geometry[1],
+            rust_target,
+            Vector3::z_axis(),
+            rust_x_dir,
+            option,
+            lambda,
+            &mut expected_device,
+        );
+        for (tr, (e, x)) in dst.iter().zip(&expected_device).enumerate() {
+            assert_eq!((e.phase, e.intensity), (x.phase.0, x.intensity.0));
+            let position = geometry[1].position(tr);
+            let pos = [position.x, position.y, position.z];
+            let mut phase = 0u8;
+            let result = unsafe {
+                autd3_pattern_hermite_gaussian_phase_transducer(
+                    pos.as_ptr(),
+                    target.as_ptr(),
+                    axis.as_ptr(),
+                    x_dir.as_ptr(),
+                    1,
+                    2,
+                    10.0,
+                    8.5,
+                    &raw mut phase,
+                )
+            };
+            assert_eq!(result, 0);
+            assert_eq!(phase, e.phase);
+        }
+    }
+
+    #[test]
+    fn gaussian_beams_reject_invalid_waist_without_writing() {
+        let geometry = geometry();
+        let target = [0.0_f32, 0.0, 150.0];
+        let axis = [0.0_f32, 0.0, 1.0];
+        let x_dir = [1.0_f32, 0.0, 0.0];
+        for waist_mm in [0.0_f32, -1.0, f32::NAN, f32::INFINITY] {
+            let mut buffer = filled(&geometry, 0x5A);
+            let original = buffer.0.clone();
+            let lg = unsafe {
+                autd3_pattern_laguerre_gaussian_intensity(
+                    &raw const geometry,
+                    target.as_ptr(),
+                    axis.as_ptr(),
+                    0,
+                    1,
+                    waist_mm,
+                    8.5,
+                    &raw mut buffer,
+                )
+            };
+            let hg = unsafe {
+                autd3_pattern_hermite_gaussian_phase(
+                    &raw const geometry,
+                    target.as_ptr(),
+                    axis.as_ptr(),
+                    x_dir.as_ptr(),
+                    1,
+                    0,
+                    waist_mm,
+                    8.5,
+                    &raw mut buffer,
+                )
+            };
+            assert_eq!((lg, hg), (-1, -1));
+            assert_eq!(buffer.0, original);
+
+            let mut phase = 0u8;
+            let result = unsafe {
+                autd3_pattern_laguerre_gaussian_phase_transducer(
+                    target.as_ptr(),
+                    target.as_ptr(),
+                    axis.as_ptr(),
+                    0,
+                    0,
+                    waist_mm,
+                    8.5,
+                    &raw mut phase,
+                )
+            };
+            assert_eq!(result, -1);
+        }
+
+        let mut short = PatternBuffer(vec![vec![Emission::NULL; Autd3::NUM_TRANSDUCERS]]);
+        let result = unsafe {
+            autd3_pattern_laguerre_gaussian_phase(
+                &raw const geometry,
+                target.as_ptr(),
+                axis.as_ptr(),
+                0,
+                1,
+                10.0,
+                8.5,
+                &raw mut short,
+            )
+        };
+        assert_eq!(result, -1);
     }
 }
