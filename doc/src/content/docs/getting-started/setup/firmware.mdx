@@ -10,7 +10,7 @@ import Figure from "@components/Figure.astro";
 AUTD3 デバイスを正しく動作させるには, SDK に対応したバージョンの CPU / FPGA ファームウェアが書き込まれている必要がある.
 
 :::note
-このバージョンの SDK は, Firmware v0.6.x をサポートする.
+このバージョンの SDK は, Firmware v0.9.x をサポートする.
 :::
 
 ファームウェアの更新には, GUI コンソール autd3-console の **Firmware** タブを使う.
@@ -21,7 +21,32 @@ AUTD3 デバイスを正しく動作させるには, SDK に対応したバー�
 
 入手方法は [コンソール](/autd3-sdk/guide/console/) を参照.
 
-## 事前準備
+## Ethernet ケーブルを使用した OTA
+
+CPU と FPGA の両方に v0.9.0 以降のファームウェアが載っている場合, Ethernet ケーブルのみでアップデートできる.
+どちらかが v0.9.0 未満の場合は, 下記の JTAG 経由のアップデートが必要.
+
+### 事前準備
+
+使用する EtherCAT リンクごとに設定と準備が必要になる.
+詳細は [Link](/autd3-sdk/api/link) を参照.
+
+### 手順
+
+1. AUTD3 と PC を Ethernet ケーブルで接続し, 電源を入れる
+1. autd3-console を起動し, **Firmware** タブを開く
+1. **Version** と **Target** (`Both` / `FPGA` / `CPU`) を選ぶ. 通常は `Both` を使う (CPU だけを更新すると FPGA と版数が食い違い, SDK が接続を拒否する)
+1. **Method** が `EtherCAT (OTA)` (既定) になっていることを確認する
+1. **Link** で `echocat` / `TwinCAT` / `Remote` を選び, 設定を埋める (デフォルトのままで良い)
+1. **Flash** を押す. 進捗はパネル下部のログに表示される. CPU は数十秒, FPGA は 1 台あたり約 90 秒かかる
+1. ログに `Ok!` が出れば完了. 電源の入れ直しは不要
+
+**更新中に電源を切らないこと**.
+失敗した場合は電源を再投入してからやり直すこと.
+
+## JTAG を使用したアップデート
+
+### 事前準備
 
 ファームウェアの書き込みには, 以下の外部ツールが必要である.
 いずれも実行ファイルが `PATH` 上にある必要がある (Windows ではインストール先を自動検出する).
@@ -40,7 +65,7 @@ FPGA 書き込みのみが目的であれば, **Vivado Lab Edition** の使用�
 詳細は [Segger Wiki](https://wiki.segger.com/J-Link_Model_Overview) を参照.
 :::
 
-## 書き込み手順
+### 書き込み手順
 
 <Figure src="img/hardware/cable.jpg" alt="ファームウェアアップデート用ケーブルの接続先" />
 
@@ -50,6 +75,7 @@ FPGA 書き込みのみが目的であれば, **Vivado Lab Edition** の使用�
 1. autd3-console を起動し, **Firmware** タブを開く.
 1. **Version** から書き込むバージョンを選択する
 1. **Target** で書き込む対象を選ぶ (`Both` / `FPGA` / `CPU`).
+1. **Method** で `JTAG` を選ぶ
 1. **Flash** を押す. 進捗はパネル下部のログに表示される. 書き込みには数分を要する.
 1. 書き込み完了後, AUTD3 の電源を入れ直すと新しいファームウェアが反映される.
 
