@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{
     capture, cargo_bin, cargo_build_args, copy_dir, on_path, run, run_built_bin, run_cargo,
     run_env, run_tool,
@@ -95,6 +96,8 @@ pub enum SimulatorCmd {
         #[arg(long, default_value_t = 8080)]
         link_port: u16,
     },
+    #[command(about = "Remove the simulator build outputs")]
+    Clean(CleanArgs),
 }
 
 pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
@@ -165,7 +168,21 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
             *port,
             *link_port,
         ),
+        SimulatorCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.paths(&[
+        "simulator/target",
+        "simulator/THIRD-PARTY-LICENSES.md",
+        "simulator/.third-party-frontend.md",
+        "simulator/frontend/target",
+        "simulator/frontend/dist",
+        "simulator/frontend/assets/tailwind.css",
+    ])?;
+    cleaner.children("simulator/backend/web", &[".gitkeep"])?;
+    cleaner.deps("simulator/frontend/node_modules")
 }
 
 fn ensure_css(frontend: &Path) -> Result<()> {

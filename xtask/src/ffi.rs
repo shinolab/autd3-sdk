@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{cargo_fmt_packages, run};
 
 const CSHARP_SRC: &str = "bindings/csharp/src";
@@ -41,6 +42,8 @@ pub enum FfiCmd {
     },
     #[command(about = "Compare the exported C ABI symbols with the C# DllImport declarations")]
     Drift,
+    #[command(about = "Remove the FFI workspace build outputs")]
+    Clean(CleanArgs),
 }
 
 pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
@@ -67,7 +70,12 @@ pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
         }
         FfiCmd::Format { fix } => cargo_fmt_packages(&dir, *fix),
         FfiCmd::Drift => drift(root, &dir),
+        FfiCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.path("bindings/ffi/target")
 }
 
 fn drift(root: &Path, ffi: &Path) -> Result<()> {

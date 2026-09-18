@@ -4,6 +4,7 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{cargo_fmt_packages, on_path, run};
 
 pub(crate) const WHEELS: &[&str] = &[
@@ -58,6 +59,8 @@ pub enum PyCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    #[command(about = "Remove the Python binding build outputs")]
+    Clean(CleanArgs),
 }
 
 pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
@@ -125,7 +128,45 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             }
             run_example(&venv_python(&venv), &script, &args, no_sudo, &dir)
         }
+        PyCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.paths(&["bindings/python/target", "bindings/python/.pytest_cache"])?;
+    let python = cleaner.root().join("bindings").join("python");
+    for wheel in WHEELS {
+        let dir = python.join(wheel);
+        for name in ["LICENSE", "THIRD-PARTY-LICENSES.md"] {
+            let path = dir.join(name);
+            cleaner.remove(&path)?;
+        }
+        for path in stale_extension_modules(&dir, wheel) {
+            cleaner.remove(&path)?;
+        }
+    }
+    cleaner.nested("bindings/python", &["__pycache__"])?;
+    cleaner.deps("bindings/python/.venv")
+}
+
+fn stale_extension_modules(dir: &Path, wheel: &str) -> Vec<PathBuf> {
+    let module = module_name(wheel);
+    let prefix = format!("_{module}.");
+    let Ok(entries) = std::fs::read_dir(dir.join("python").join(&module)) else {
+        return Vec::new();
+    };
+    let mut found: Vec<PathBuf> = entries
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with(&prefix)
+                && (name.ends_with(".so") || name.ends_with(".pyd") || name.ends_with(".dylib"))
+        })
+        .map(|entry| entry.path())
+        .collect();
+    found.sort();
+    found
 }
 
 fn manifest(wheel: &str) -> String {

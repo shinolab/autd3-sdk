@@ -4,6 +4,7 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::run;
 
 const SOLUTION: &str = "AUTD3.slnx";
@@ -67,6 +68,8 @@ pub enum CsCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    #[command(about = "Remove the C# binding build outputs")]
+    Clean(CleanArgs),
 }
 
 pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
@@ -127,7 +130,17 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             let exe = find_example_exe(&project_dir, config, &name)?;
             run_example(&exe, &native, &args, no_sudo, &dir)
         }
+        CsCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.path("bindings/csharp/dist")?;
+    cleaner.in_each_subdir(
+        "bindings/csharp/src",
+        &["runtimes", "THIRD-PARTY-LICENSES.md"],
+    )?;
+    cleaner.nested("bindings/csharp", &["bin", "obj"])
 }
 
 fn pack(root: &Path, native_dir: Option<PathBuf>, out: Option<PathBuf>) -> Result<()> {

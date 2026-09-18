@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{run, run_env, which};
 
 #[derive(Subcommand)]
@@ -40,6 +41,8 @@ pub enum CpuCmd {
         #[arg(long)]
         fix: bool,
     },
+    #[command(about = "Remove the CPU firmware build outputs")]
+    Clean(CleanArgs),
 }
 
 pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
@@ -50,7 +53,12 @@ pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
         CpuCmd::GenParam => gen_param(root),
         CpuCmd::Lint { loom } => cpu_lint(root, *loom),
         CpuCmd::Format { fix } => cpu_format(root, *fix),
+        CpuCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.paths(&["firmware/cpu/build", "firmware/cpu/board/target"])
 }
 
 pub const CPU_TARGET: &str = "armv7r-none-eabi";
