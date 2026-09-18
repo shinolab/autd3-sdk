@@ -5,6 +5,7 @@ use crate::fw;
 use autd3_cpu_fw::Cpu;
 use autd3_cpu_fw::proto::Mode;
 use autd3_cpu_fw::proto::Telemetry;
+use autd3_cpu_fw::update::Slot;
 
 const WIRE_GAP_START: usize = fw::WIRE_RX_GAP_START;
 const WIRE_RX_FRAME_BYTES: usize = fw::WIRE_RX_FRAME_BYTES;
@@ -18,9 +19,17 @@ impl Device {
     #[must_use]
     pub fn new(num_transducers: usize) -> Self {
         let mut fpga = FpgaEmulator::new(num_transducers);
-        let cpu = Cpu::new();
-        cpu.init(&mut fpga);
+        let cpu = boot(&mut fpga);
         Self { cpu, fpga }
+    }
+
+    pub fn power_cycle(&mut self) {
+        self.cpu = boot(&mut self.fpga);
+    }
+
+    #[must_use]
+    pub fn booted_slot(&self) -> Option<Slot> {
+        self.cpu.booted_slot()
     }
 
     pub fn recv(&mut self, tx: &[u8; TX_FRAME_BYTES]) {
@@ -34,6 +43,14 @@ impl Device {
 
     pub fn process_pending(&mut self) {
         self.cpu.process_pending(&mut self.fpga);
+    }
+
+    pub fn tick_1ms(&mut self) {
+        let resets = self.fpga.reset_count();
+        self.cpu.tick_1ms(&mut self.fpga);
+        if self.fpga.reset_count() != resets {
+            self.power_cycle();
+        }
     }
 
     #[must_use]
@@ -70,6 +87,13 @@ impl Device {
     pub fn fpga_mut(&mut self) -> &mut FpgaEmulator {
         &mut self.fpga
     }
+}
+
+fn boot(fpga: &mut FpgaEmulator) -> Cpu {
+    let cpu = Cpu::new();
+    cpu.mark_boot_attempt(fpga);
+    cpu.init(fpga);
+    cpu
 }
 
 fn logical_to_wire(tx: &[u8; TX_FRAME_BYTES]) -> [u8; WIRE_RX_FRAME_BYTES] {

@@ -41,6 +41,7 @@ pub(crate) const SYSTEM_PLL1CR2: usize = 0xA00B_0038;
 pub(crate) const SYSTEM_LOCOCR: usize = 0xA00B_0040;
 pub(crate) const SYSTEM_MSTPCRA: usize = 0xA00B_0300;
 pub(crate) const SYSTEM_MSTPCRC: usize = 0xA00B_0308;
+pub(crate) const SYSTEM_SWRR1: usize = 0xA00B_0210;
 pub(crate) const SYSTEM_PRCR: usize = 0xA00B_0B00;
 
 pub(crate) const SYSTEM_LOCOCR_LCSTP: u32 = 1;
@@ -62,6 +63,8 @@ pub(crate) const VIC_IEC: [usize; 10] = [
 ];
 pub(crate) const VIC_PLS0: usize = 0xA001_0100;
 pub(crate) const VIC_PIC0: usize = 0xA001_0120;
+pub(crate) const VIC_HVA0: usize = 0xA001_0200;
+pub(crate) const VIC_INTNO_CMI0: u32 = 21;
 
 pub(crate) const fn vic_vad(n: u32) -> usize {
     0xA001_0400 + 4 * n as usize

@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -29,6 +30,11 @@ pub enum CpuCmd {
     },
     /// Regenerate `fw/src/params.rs` from the FPGA `params.svh`
     GenParam,
+    /// Write the slot-A image header (magic/generation 0/length/CRC32) into a linked `.bin`
+    StampImage {
+        /// The flash image produced by the final link (`autd3-cpu.bin`)
+        bin: PathBuf,
+    },
     /// Clippy the firmware
     Lint {
         /// Clippy the loom model instead of the regular targets
@@ -51,6 +57,7 @@ pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
         CpuCmd::Flash { isr_probe } => cpu_flash(root, *isr_probe),
         CpuCmd::Test { loom } => cpu_test(root, *loom),
         CpuCmd::GenParam => gen_param(root),
+        CpuCmd::StampImage { bin } => stamp_image(bin),
         CpuCmd::Lint { loom } => cpu_lint(root, *loom),
         CpuCmd::Format { fix } => cpu_format(root, *fix),
         CpuCmd::Clean(args) => crate::clean::scope(root, *args, clean),
@@ -91,17 +98,27 @@ fn cpu_flash(root: &Path, isr_probe: bool) -> Result<()> {
             )?,
     };
 
+    let slot_b_start = 0x3000_0000 + autd3_cpu_wire::update::SLOT_B_BASE;
+    let slot_b_last = slot_b_start + autd3_cpu_wire::update::SLOT_BYTES - 1;
     let script = format!(
-        "r\nloadfile {} 0x30000000\nr\ng\nq\n",
+        "r\nexec EnableEraseAllFlashBanks\nerase 0x{slot_b_start:X} 0x{slot_b_last:X}\nloadfile {} 0x30000000\nr\ng\nq\n",
         bin.to_string_lossy().replace('\\', "/")
     );
     let script_path = root.join("firmware/cpu/build/flash.jlink");
     std::fs::write(&script_path, script)
         .with_context(|| format!("writing {}", script_path.display()))?;
 
-    run(
-        &jlink,
-        [
+    run_jlink(&jlink, &script_path, root)
+        .context("J-Link failed. Make sure the AUTD3 is connected and powered on.")?;
+    println!("flash complete: {}", bin.display());
+    Ok(())
+}
+
+const JLINK_NO_FLASH_BANK: &str = "No Flash bank within given address range";
+
+fn run_jlink(jlink: &str, script: &Path, cwd: &Path) -> Result<()> {
+    let mut child = std::process::Command::new(jlink)
+        .args([
             "-device",
             "R7S910018_R4F",
             "-if",
@@ -115,13 +132,47 @@ fn cpu_flash(root: &Path, isr_probe: bool) -> Result<()> {
             "-ExitOnError",
             "1",
             "-CommanderScript",
-            &script_path.to_string_lossy(),
-        ],
-        root,
-    )
-    .context("J-Link failed. Make sure the AUTD3 is connected and powered on.")?;
-    println!("flash complete: {}", bin.display());
+        ])
+        .arg(script)
+        .current_dir(cwd)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .with_context(|| format!("failed to spawn `{jlink}` (is it installed and on PATH?)"))?;
+    let stdout = child.stdout.take().context("J-Link stdout is not piped")?;
+    let stderr = child.stderr.take().context("J-Link stderr is not piped")?;
+    let out = std::thread::spawn(move || {
+        let mut log = String::new();
+        tee_lines(stdout, &mut log);
+        log
+    });
+    let err = std::thread::spawn(move || {
+        let mut log = String::new();
+        tee_lines(stderr, &mut log);
+        log
+    });
+    let status = child.wait().context("waiting for J-Link")?;
+    let mut log = out.join().unwrap_or_default();
+    log.push_str(&err.join().unwrap_or_default());
+    if !status.success() {
+        bail!("`{jlink}` exited with {status}");
+    }
+    if log.contains(JLINK_NO_FLASH_BANK) {
+        bail!(
+            "J-Link did not erase the serial flash: {JLINK_NO_FLASH_BANK}. \
+             The QSPI bank stayed untouched, so an OTA image in slot B would still win the boot."
+        );
+    }
     Ok(())
+}
+
+fn tee_lines(reader: impl std::io::Read, log: &mut String) {
+    for line in std::io::BufReader::new(reader).lines() {
+        let Ok(line) = line else { break };
+        eprintln!("{line}");
+        log.push_str(&line);
+        log.push('\n');
+    }
 }
 
 pub fn cpu_build(root: &Path, isr_probe: bool) -> Result<PathBuf> {
@@ -199,8 +250,42 @@ pub fn cpu_build(root: &Path, isr_probe: bool) -> Result<PathBuf> {
         root,
     )?;
 
+    stamp_image(&bin)?;
+
     println!("firmware built: {}", bin.display());
     Ok(bin)
+}
+
+pub fn stamp_image(bin: &Path) -> Result<()> {
+    use autd3_cpu_wire::update::{ImageHeader, SLOT_IMAGE_CAPACITY, Slot, crc32};
+    use zerocopy::IntoBytes;
+
+    let mut image = std::fs::read(bin).with_context(|| format!("reading {}", bin.display()))?;
+    let header_at = Slot::A.base() as usize;
+    let body_at = Slot::A.image_base() as usize;
+    if image.len() <= body_at {
+        bail!(
+            "{} is {} bytes; it does not reach the slot-A image at 0x{body_at:X}",
+            bin.display(),
+            image.len()
+        );
+    }
+    let body_len = image.len() - body_at;
+    if body_len > SLOT_IMAGE_CAPACITY as usize {
+        bail!("slot-A image is {body_len} bytes, over the {SLOT_IMAGE_CAPACITY}-byte capacity");
+    }
+    let header = ImageHeader::new(0, body_len as u32, crc32(&image[body_at..]));
+    let slot = &mut image[header_at..header_at + core::mem::size_of::<ImageHeader>()];
+    if slot != header.as_bytes() && slot.iter().any(|&b| b != 0xFF) {
+        bail!("{} already carries a different slot-A header", bin.display());
+    }
+    slot.copy_from_slice(header.as_bytes());
+    std::fs::write(bin, &image).with_context(|| format!("writing {}", bin.display()))?;
+    println!(
+        "stamped slot-A header: length {body_len} bytes, crc32 0x{:08X}",
+        header.crc32.get()
+    );
+    Ok(())
 }
 
 pub fn gen_param(root: &Path) -> Result<()> {

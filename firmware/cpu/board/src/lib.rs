@@ -19,6 +19,11 @@ unsafe impl Sync for StaticCpu {}
 static CPU: StaticCpu = StaticCpu(Cpu::new());
 
 #[unsafe(no_mangle)]
+pub extern "C" fn app_mark_boot_attempt() {
+    CPU.0.mark_boot_attempt(&mut HwPort);
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn init_app() {
     CPU.0.init(&mut HwPort);
 }

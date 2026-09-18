@@ -11,6 +11,8 @@ mod pwe;
 mod read_telemetry;
 mod set_mode;
 mod silencer;
+mod update_begin;
+mod update_chunk;
 mod write_mod;
 mod write_mod_fused;
 mod write_pattern;
@@ -34,6 +36,8 @@ pub use silencer::{
     SILENCER_DEFAULT_UPDATE_RATE, SILENCER_FLAG_BIT_STRICT_MODE, SILENCER_FLAG_STRICT_MODE,
     SilencerPayload,
 };
+pub use update_begin::UpdateBeginPayload;
+pub use update_chunk::UpdateChunkPayload;
 pub use write_mod::WriteModPayload;
 pub use write_mod_fused::WriteModulationFusedPayload;
 pub use write_pattern::WritePatternPayload;

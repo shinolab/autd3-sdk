@@ -12,6 +12,7 @@ const PCAP_PACKAGES: &[&str] = &[
     "autd3-rs-synctune",
     "autd3-rs-examples",
     "autd3-rs-firmware-test",
+    "autd3-rs-firmware-ota",
 ];
 
 #[derive(Subcommand)]

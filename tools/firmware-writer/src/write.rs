@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 #[cfg(windows)]
 use std::path::PathBuf as WinPathBuf;
 use std::path::{Path, PathBuf};
@@ -161,9 +161,17 @@ fn update_cpu(firmware: Option<&Path>) -> Result<()> {
         .with_context(|| format!("writing {}", script_path.display()))?;
 
     eprintln!("Flashing CPU via {jlink}...");
-    run(
-        &jlink,
-        [
+    run_jlink(&jlink, &script_path)
+        .context("J-Link failed. Make sure the AUTD3 is connected and powered on.")?;
+    eprintln!("CPU update done.");
+    Ok(())
+}
+
+const JLINK_NO_FLASH_BANK: &str = "No Flash bank within given address range";
+
+fn run_jlink(jlink: &str, script: &Path) -> Result<()> {
+    let mut child = std::process::Command::new(jlink)
+        .args([
             "-device",
             "R7S910018_R4F",
             "-if",
@@ -177,13 +185,47 @@ fn update_cpu(firmware: Option<&Path>) -> Result<()> {
             "-ExitOnError",
             "1",
             "-CommanderScript",
-            &script_path.to_string_lossy(),
-        ],
-        &std::env::temp_dir(),
-    )
-    .context("J-Link failed. Make sure the AUTD3 is connected and powered on.")?;
-    eprintln!("CPU update done.");
+        ])
+        .arg(script)
+        .current_dir(std::env::temp_dir())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .with_context(|| format!("failed to spawn `{jlink}` (is it installed and on PATH?)"))?;
+    let stdout = child.stdout.take().context("J-Link stdout is not piped")?;
+    let stderr = child.stderr.take().context("J-Link stderr is not piped")?;
+    let out = std::thread::spawn(move || {
+        let mut log = String::new();
+        tee_lines(stdout, &mut log);
+        log
+    });
+    let err = std::thread::spawn(move || {
+        let mut log = String::new();
+        tee_lines(stderr, &mut log);
+        log
+    });
+    let status = child.wait().context("waiting for J-Link")?;
+    let mut log = out.join().unwrap_or_default();
+    log.push_str(&err.join().unwrap_or_default());
+    if !status.success() {
+        bail!("`{jlink}` exited with {status}");
+    }
+    if log.contains(JLINK_NO_FLASH_BANK) {
+        bail!(
+            "J-Link did not erase the serial flash: {JLINK_NO_FLASH_BANK}. \
+             The QSPI bank stayed untouched, so an OTA image in slot B would still win the boot."
+        );
+    }
     Ok(())
+}
+
+fn tee_lines(reader: impl std::io::Read, log: &mut String) {
+    for line in std::io::BufReader::new(reader).lines() {
+        let Ok(line) = line else { break };
+        eprintln!("{line}");
+        log.push_str(&line);
+        log.push('\n');
+    }
 }
 
 fn update_fpga(firmware: Option<&Path>) -> Result<()> {
@@ -214,8 +256,15 @@ fn update_fpga(firmware: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
+const SERIAL_FLASH_XIP_BASE: u32 = 0x3000_0000;
+
 fn jlink_script(bin: &Path) -> String {
-    format!("r\nloadfile {} 0x30000000\nq\n", tcl_path(bin))
+    let slot_b_start = SERIAL_FLASH_XIP_BASE + autd3_cpu_wire::update::SLOT_B_BASE;
+    let slot_b_last = slot_b_start + autd3_cpu_wire::update::SLOT_BYTES - 1;
+    format!(
+        "r\nexec EnableEraseAllFlashBanks\nerase 0x{slot_b_start:X} 0x{slot_b_last:X}\nloadfile {} 0x{SERIAL_FLASH_XIP_BASE:X}\nq\n",
+        tcl_path(bin)
+    )
 }
 
 fn fpga_script(mcs: &Path) -> String {

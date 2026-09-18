@@ -8,4 +8,4 @@ pub use autd3_cpu_fw;
 
 pub use audit::{Audit, Fault};
 pub use device::Device;
-pub use emu_fpga::{FpgaEmulator, SilencerEmulator};
+pub use emu_fpga::{EMULATED_CPU_IMAGE, FpgaEmulator, SilencerEmulator};

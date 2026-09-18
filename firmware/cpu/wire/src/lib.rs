@@ -46,6 +46,7 @@ mod mode;
 pub mod params;
 pub mod payload;
 mod telemetry;
+pub mod update;
 
 pub use cmd::Cmd;
 pub use error::{Error, describe_device_error};

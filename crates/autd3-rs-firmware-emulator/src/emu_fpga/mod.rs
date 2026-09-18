@@ -11,6 +11,29 @@ mod swapchain;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
 use crate::fw;
+use autd3_cpu_fw::update::{FLASH_BYTES, IMAGE_MAGIC, Slot, crc32, is_plausible_length};
+
+pub const EMULATED_CPU_IMAGE: &[u8] =
+    b"autd3-rs-firmware-emulator: a slot-A image long enough to carry a vector block and then some";
+
+const _: () = assert!(is_plausible_length(EMULATED_CPU_IMAGE.len() as u32));
+
+fn fresh_cpu_flash() -> Box<[u8]> {
+    let mut flash = vec![0xFF; FLASH_BYTES as usize].into_boxed_slice();
+    let header_at = Slot::A.base() as usize;
+    let body_at = Slot::A.image_base() as usize;
+    let header = [
+        IMAGE_MAGIC,
+        0,
+        EMULATED_CPU_IMAGE.len() as u32,
+        crc32(EMULATED_CPU_IMAGE),
+    ];
+    for (i, word) in header.iter().enumerate() {
+        flash[header_at + 4 * i..header_at + 4 * i + 4].copy_from_slice(&word.to_le_bytes());
+    }
+    flash[body_at..body_at + EMULATED_CPU_IMAGE.len()].copy_from_slice(EMULATED_CPU_IMAGE);
+    flash
+}
 
 pub use silencer::SilencerEmulator;
 use swapchain::Swapchain;
@@ -68,6 +91,8 @@ pub struct FpgaEmulator {
     thermal: bool,
     mod_swapchain: Swapchain,
     pattern_swapchain: Swapchain,
+    cpu_flash: Box<[u8]>,
+    reset_count: u32,
 }
 
 impl FpgaEmulator {
@@ -100,7 +125,27 @@ impl FpgaEmulator {
             thermal: false,
             mod_swapchain: Swapchain::new(),
             pattern_swapchain: Swapchain::new(),
+            cpu_flash: fresh_cpu_flash(),
+            reset_count: 0,
         }
+    }
+
+    #[must_use]
+    pub fn cpu_flash(&self) -> &[u8] {
+        &self.cpu_flash
+    }
+
+    pub fn cpu_flash_mut(&mut self) -> &mut [u8] {
+        &mut self.cpu_flash
+    }
+
+    #[must_use]
+    pub fn reset_count(&self) -> u32 {
+        self.reset_count
+    }
+
+    pub(crate) fn note_reset(&mut self) {
+        self.reset_count += 1;
     }
 
     pub(crate) fn write(&mut self, addr: u16, value: u16) {
