@@ -9,6 +9,12 @@ crate::wire_enum! {
         FpgaTimeout = 0x07,
         SyncNotReady = 0x08,
         InvalidSync0Cycle = 0x09,
+        UpdateNotStarted = 0x0A,
+        UpdateImageInvalid = 0x0B,
+        UpdateFlash = 0x0C,
+        UpdateNotCommitted = 0x0D,
+        UpdateNothingToConfirm = 0x0E,
+        UpdateActivating = 0x12,
     }
 }
 
@@ -26,6 +32,16 @@ impl Error {
             Self::SyncNotReady => "EtherCAT DC is not configured (no SYNC0 time available)",
             Self::InvalidSync0Cycle => {
                 "invalid Sync0 cycle time (master's DC config missing or not a multiple of 500us)"
+            }
+            Self::UpdateNotStarted => "firmware update session is not open (UpdateBegin required)",
+            Self::UpdateImageInvalid => "firmware image CRC32 mismatch after write-back",
+            Self::UpdateFlash => "serial flash erase/program/read failed",
+            Self::UpdateNotCommitted => "no committed firmware image to activate",
+            Self::UpdateNothingToConfirm => {
+                "the running firmware image is unknown or was overwritten; nothing to confirm"
+            }
+            Self::UpdateActivating => {
+                "a firmware activation is pending; the device reboots within 100 ms"
             }
         }
     }

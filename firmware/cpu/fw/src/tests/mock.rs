@@ -15,11 +15,12 @@ use crate::params::{
     BRAM_SELECT_PWE_TABLE, CTL_FLAG_DEBUG_SET, CTL_FLAG_MOD_SET, CTL_FLAG_PATTERN_SET,
     CTL_FLAG_SILENCER_SET, CTL_FLAG_SYNC_SET, NUM_BANKS,
 };
-use crate::port::Port;
+use crate::port::{FlashError, Port};
 use crate::proto::{
     Cmd, EMISSION_RAM_WORDS, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS, PAYLOAD_BYTES, Telemetry,
     TxFrame, WIRE_RX_FRAME_BYTES, WIRE_RX_GAP_END, WIRE_RX_GAP_START,
 };
+use autd3_cpu_wire::update::{FLASH_BYTES, FLASH_SECTOR_BYTES, LOADER_REGION_END};
 
 pub(crate) const MOD_RAM_WORDS: usize = (MOD_BUFFER_SAMPLES / 2) as usize;
 pub(crate) const EM_RAM_WORDS: usize = EMISSION_RAM_WORDS as usize;
@@ -55,6 +56,20 @@ impl Port for IsrPort {
     fn publish_tx(&mut self, tx: TxFrame) {
         self.published_tx.set(Some(tx));
     }
+
+    fn flash_read(&mut self, _addr: u32, _buf: &mut [u8]) -> Result<(), FlashError> {
+        Err(FlashError)
+    }
+
+    fn flash_write(&mut self, _addr: u32, _data: &[u8]) -> Result<(), FlashError> {
+        Err(FlashError)
+    }
+
+    fn flash_erase(&mut self, _addr: u32, _len: u32) -> Result<(), FlashError> {
+        Err(FlashError)
+    }
+
+    fn reset(&mut self) {}
 }
 
 pub(crate) struct MockPort {
@@ -70,6 +85,12 @@ pub(crate) struct MockPort {
     pub sync0_cycle_ns: u32,
     pub al_status_code: u16,
     pub latch_stuck: bool,
+    pub flash: Vec<u8>,
+    pub flash_fail: bool,
+    pub flash_write_fail_after: Option<usize>,
+    pub flash_write_silent: bool,
+    pub erased: Vec<(u32, u32)>,
+    pub reset_count: u32,
     published_tx: Rc<Cell<Option<TxFrame>>>,
     isr_frame: Option<(Rc<Cpu>, u8, u8)>,
 }
@@ -89,6 +110,12 @@ impl MockPort {
             sync0_cycle_ns: 1_000_000,
             al_status_code: 0,
             latch_stuck: false,
+            flash: vec![0xFF; FLASH_BYTES as usize],
+            flash_fail: false,
+            flash_write_fail_after: None,
+            flash_write_silent: false,
+            erased: Vec::new(),
+            reset_count: 0,
             published_tx: Rc::new(Cell::new(None)),
             isr_frame: None,
         }
@@ -193,6 +220,53 @@ impl Port for MockPort {
         self.fire_isr_frame();
         self.published_tx.set(Some(tx));
     }
+
+    fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
+        if self.flash_fail {
+            return Err(FlashError);
+        }
+        let start = addr as usize;
+        buf.copy_from_slice(&self.flash[start..start + buf.len()]);
+        Ok(())
+    }
+
+    fn flash_write(&mut self, addr: u32, data: &[u8]) -> Result<(), FlashError> {
+        if self.flash_fail {
+            return Err(FlashError);
+        }
+        if let Some(left) = self.flash_write_fail_after {
+            if left == 0 {
+                return Err(FlashError);
+            }
+            self.flash_write_fail_after = Some(left - 1);
+        }
+        assert!(addr >= LOADER_REGION_END, "write into the loader region");
+        if self.flash_write_silent {
+            return Ok(());
+        }
+        let start = addr as usize;
+        for (cell, &byte) in self.flash[start..start + data.len()].iter_mut().zip(data) {
+            *cell &= byte;
+        }
+        Ok(())
+    }
+
+    fn flash_erase(&mut self, addr: u32, len: u32) -> Result<(), FlashError> {
+        if self.flash_fail {
+            return Err(FlashError);
+        }
+        assert!(addr >= LOADER_REGION_END, "erase of the loader region");
+        assert_eq!(addr % FLASH_SECTOR_BYTES, 0);
+        assert_eq!(len % FLASH_SECTOR_BYTES, 0);
+        self.erased.push((addr, len));
+        let start = addr as usize;
+        self.flash[start..start + len as usize].fill(0xFF);
+        Ok(())
+    }
+
+    fn reset(&mut self) {
+        self.reset_count += 1;
+    }
 }
 
 pub(crate) struct Frame {
@@ -262,6 +336,12 @@ impl Harness {
     }
 
     pub(crate) fn init(&mut self) {
+        self.cpu.init(&mut self.port);
+    }
+
+    pub(crate) fn reboot(&mut self) {
+        self.cpu = Rc::new(Cpu::new());
+        self.cpu.mark_boot_attempt(&mut self.port);
         self.cpu.init(&mut self.port);
     }
 

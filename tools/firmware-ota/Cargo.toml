@@ -1,0 +1,33 @@
+[package]
+name = "autd3-rs-firmware-ota"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+description = "Update the AUTD3 CPU firmware over EtherCAT (no J-Link): streams a flash image through the PDO protocol and reboots the devices."
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "autd3-rs-firmware-ota"
+path = "src/main.rs"
+
+[dependencies]
+autd3-cpu-wire.workspace = true
+autd3-rs-core.workspace = true
+autd3-rs-link-echocat.workspace = true
+autd3-rs-link-twincat.workspace = true
+autd3-rs-link-remote.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+zerocopy.workspace = true
+
+[dev-dependencies]
+autd3-rs-firmware-emulator.workspace = true
+
+[lints]
+workspace = true

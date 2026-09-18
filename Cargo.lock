@@ -86,7 +86,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-fw"
-version = "0.6.1"
+version = "0.9.0"
 dependencies = [
  "autd3-cpu-wire",
  "loom",
@@ -95,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-wire"
-version = "0.6.1"
+version = "0.9.0"
 dependencies = [
  "zerocopy 0.8.56",
 ]
@@ -105,6 +105,7 @@ name = "autd3-firmware-writer"
 version = "0.8.0"
 dependencies = [
  "anyhow",
+ "autd3-cpu-wire",
  "clap",
  "serde_json",
  "ureq",
@@ -202,6 +203,22 @@ version = "0.8.0"
 dependencies = [
  "autd3-cpu-fw",
  "autd3-rs-core",
+]
+
+[[package]]
+name = "autd3-rs-firmware-ota"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "autd3-cpu-wire",
+ "autd3-rs-core",
+ "autd3-rs-firmware-emulator",
+ "autd3-rs-link-echocat",
+ "autd3-rs-link-remote",
+ "autd3-rs-link-twincat",
+ "clap",
+ "thiserror 2.0.20",
+ "zerocopy 0.8.56",
 ]
 
 [[package]]

@@ -30,6 +30,7 @@ pub struct Cpu {
     expected_seq: AtomicU8,
     error_detail: Cell<Option<Error>>,
     pub(crate) silencer: cmd::silencer::SilencerGuard,
+    pub(crate) update: cmd::update::UpdateSession,
     tx: AtomicU16,
 }
 
@@ -56,6 +57,7 @@ macro_rules! cpu_new {
             expected_seq: AtomicU8::new(0),
             error_detail: Cell::new(None),
             silencer: cmd::silencer::SilencerGuard::new(),
+            update: cmd::update::UpdateSession::new(),
             tx: AtomicU16::new(0),
         }
     };
@@ -86,11 +88,21 @@ impl Cpu {
             self.error_detail.set(Some(err));
         }
         self.silencer.init();
+        self.update.init();
         self.reset_telemetry();
         self.set_tx(port, 0xFF, 0);
         self.last_seq.store(0xFF, Ordering::Relaxed);
         self.last_cmd.store(0xFF, Ordering::Relaxed);
         self.fifo.reset();
+    }
+
+    pub fn mark_boot_attempt<P: Port>(&self, port: &mut P) {
+        let _ = self.record_boot_attempt(port);
+    }
+
+    #[must_use]
+    pub fn booted_slot(&self) -> Option<autd3_cpu_wire::update::Slot> {
+        self.update.boot_slot()
     }
 
     pub(crate) fn reset_telemetry(&self) {
@@ -114,6 +126,7 @@ impl Cpu {
     }
 
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
+        self.update_tick(port);
         let code = port.al_status_code();
         if code != AL_STATUS_CODE_SYNC_ERROR && code != AL_STATUS_CODE_SM_WATCHDOG {
             self.al_err_ticks.store(0, Ordering::Relaxed);
@@ -177,8 +190,9 @@ impl Cpu {
             self.fifo.request_flush(head);
         }
 
+        let deferred = cmd.is_some_and(cmd::update::is_update_cmd);
         let tail = self.fifo.tail_acquire();
-        let inline_ok = preempt || (self.mode() == Mode::LowLatency && tail == head);
+        let inline_ok = preempt || (self.mode() == Mode::LowLatency && tail == head && !deferred);
         if inline_ok {
             self.handle_frame(port, &RxFrame::from_wire(frame));
             self.last_seq.store(seq, Ordering::Relaxed);
@@ -314,6 +328,11 @@ impl Cpu {
             Cmd::EmulateGpioIn => cmd::gpio_in::handle(port, payload),
             Cmd::SetGpioOut => self.gpio_out(port, payload),
             Cmd::ForceFan => cmd::force_fan::handle(port, payload),
+            Cmd::UpdateBegin => self.update_begin(port, payload),
+            Cmd::UpdateChunk => self.update_chunk(port, payload),
+            Cmd::UpdateCommit => self.update_commit(port),
+            Cmd::UpdateActivate => self.update_activate(),
+            Cmd::UpdateConfirm => self.update_confirm(port),
             Cmd::Synchronize => self.sync(port),
             Cmd::SetMode => self.set_mode_cmd(payload),
             Cmd::Clear => self.clear(port),

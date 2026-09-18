@@ -49,6 +49,18 @@ pub enum ToolCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Update the CPU firmware over EtherCAT (no J-Link) and reboot the devices
+    FirmwareOta {
+        /// Build the dev profile instead of release
+        #[arg(long)]
+        debug: bool,
+        /// Do not wrap the run in `sudo`
+        #[arg(long)]
+        no_sudo: bool,
+        /// Arguments forwarded to the tool (the flash image path first)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     #[command(
         about = "Replay and analyse an AUTD3 EtherCAT wire capture (pcap/pcapng) offline"
     )]
@@ -142,6 +154,11 @@ pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
             no_sudo,
             args,
         } => run_bin(root, "autd3-rs-firmware-test", debug, no_sudo, &[], &args),
+        ToolCmd::FirmwareOta {
+            debug,
+            no_sudo,
+            args,
+        } => run_bin(root, "autd3-rs-firmware-ota", debug, no_sudo, &[], &args),
         ToolCmd::Wiretrace { debug, args } => {
             run_bin(root, "autd3-rs-wiretrace", debug, true, &[], &args)
         }

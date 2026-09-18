@@ -10,3 +10,4 @@ mod proto;
 mod safety;
 mod silencer;
 mod sync;
+mod update;

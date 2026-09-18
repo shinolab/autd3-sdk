@@ -1,5 +1,8 @@
 use crate::proto::TxFrame;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct FlashError;
+
 pub trait Port {
     fn fpga_write(&mut self, addr: u16, value: u16);
 
@@ -16,4 +19,12 @@ pub trait Port {
     fn al_status_code(&mut self) -> u16;
 
     fn publish_tx(&mut self, tx: TxFrame);
+
+    fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError>;
+
+    fn flash_write(&mut self, addr: u32, data: &[u8]) -> Result<(), FlashError>;
+
+    fn flash_erase(&mut self, addr: u32, len: u32) -> Result<(), FlashError>;
+
+    fn reset(&mut self);
 }
