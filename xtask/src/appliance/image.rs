@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{capture, capture_lenient, copy_file, on_path, run};
 
 const ECAT_INTERFACE: &str = "ecat0";
@@ -50,6 +51,8 @@ pub enum ImageCmd {
     Build(BuildArgs),
     /// Write a built image to an SD card
     Flash(FlashArgs),
+    #[command(about = "Remove the image work directories, caches and built images")]
+    Clean(CleanArgs),
 }
 
 #[derive(clap::Args)]
@@ -99,7 +102,31 @@ pub fn run_image(root: &Path, cmd: &ImageCmd) -> Result<()> {
         },
         ImageCmd::Build(args) => build(root, board(&args.board)?, args),
         ImageCmd::Flash(args) => flash(root, board(&args.board)?, args),
+        ImageCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.in_each_subdir("appliance/image", &[".cache", ".work", "deploy"])?;
+    for dir in cleaner.subdirs("appliance/image") {
+        let files = dir.join("stage-autd3").join("files");
+        for name in staged_names(&files) {
+            let path = files.join(name);
+            cleaner.remove(&path)?;
+        }
+    }
+    Ok(())
+}
+
+fn staged_names(files: &Path) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(files.join(".gitignore")) else {
+        return Vec::new();
+    };
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(str::to_owned)
+        .collect()
 }
 
 fn board(name: &str) -> Result<&'static Board> {

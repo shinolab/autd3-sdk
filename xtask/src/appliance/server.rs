@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{
     capture, cargo_bin, cargo_build_args, ensure_rust_target, run, run_built_bin, run_cargo,
 };
@@ -62,6 +63,8 @@ pub enum ServerCmd {
         #[arg(long)]
         target: Option<String>,
     },
+    #[command(about = "Remove the appliance server bundles")]
+    Clean(CleanArgs),
 }
 
 pub fn run_server(root: &Path, cmd: &ServerCmd) -> Result<()> {
@@ -78,7 +81,12 @@ pub fn run_server(root: &Path, cmd: &ServerCmd) -> Result<()> {
         }
         ServerCmd::Update { no_build, args } => update(root, *no_build, args),
         ServerCmd::Bundle { target } => bundle(root, target.as_deref()),
+        ServerCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.path("appliance/server/bundle")
 }
 
 fn build(root: &Path, target: Option<&str>, debug: bool) -> Result<PathBuf> {

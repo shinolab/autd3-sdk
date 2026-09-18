@@ -8,6 +8,7 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::component::COMPONENTS;
 use crate::py::{WHEELS, develop, ensure_venv, pip_install, venv_python};
 use crate::util::{capture, on_path, run, run_tool};
@@ -69,6 +70,8 @@ pub enum DocCmd {
         /// Target version slug (e.g. 0.1.x)
         slug: String,
     },
+    #[command(about = "Remove the documentation site build outputs")]
+    Clean(CleanArgs),
 }
 
 pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
@@ -144,7 +147,23 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
             track_frozen_version(&doc, slug)
         }
         DocCmd::RemoveVersion { slug } => remove_version(&doc, slug),
+        DocCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.paths(&[
+        "doc/dist",
+        "doc/.astro",
+        "doc/.cache",
+        "doc/env.d.ts",
+        "doc/codes/rust/target",
+        "doc/codes/python/examples/target",
+    ])?;
+    cleaner.nested("doc/codes/csharp", &["bin", "obj"])?;
+    cleaner.nested("doc/codes/python", &["__pycache__"])?;
+    cleaner.deps("doc/codes/python/examples/.venv")?;
+    cleaner.deps("doc/node_modules")
 }
 
 const SITE_BASE: &str = "/autd3-sdk";

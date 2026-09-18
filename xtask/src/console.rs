@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::simulator::build_backend_and_frontend;
 use crate::tool::build_twincat_cli;
 use crate::util::{
@@ -46,6 +47,8 @@ pub enum ConsoleCmd {
         #[arg(long)]
         debug: bool,
     },
+    #[command(about = "Remove the console build outputs")]
+    Clean(CleanArgs),
 }
 
 const BINARIES: &[&str] = &[
@@ -88,7 +91,18 @@ pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
         }
         ConsoleCmd::Stage { debug } => stage(root, &dir, *debug).map(|_| ()),
         ConsoleCmd::Bundle { debug } => bundle(root, &dir, *debug),
+        ConsoleCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.paths(&[
+        "console/target",
+        "console/THIRD-PARTY-LICENSES.md",
+        "console/.third-party-firmware.md",
+        "console/.third-party-appliance.md",
+    ])?;
+    cleaner.children("console/twincat", &[".gitkeep"])
 }
 
 fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {

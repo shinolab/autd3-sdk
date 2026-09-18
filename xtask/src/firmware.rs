@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{capture_lenient, run, run_built_bin};
 
 #[derive(Subcommand)]
@@ -11,6 +12,8 @@ pub enum FirmwareCmd {
     Write(WriteArgs),
     /// Build the CPU and FPGA firmware and zip them into `firmware/dist/`
     Bundle(BundleArgs),
+    #[command(about = "Remove the firmware distribution bundles")]
+    Clean(CleanArgs),
 }
 
 #[derive(clap::Args)]
@@ -46,7 +49,12 @@ pub fn run_firmware(root: &Path, cmd: FirmwareCmd) -> Result<()> {
     match cmd {
         FirmwareCmd::Write(args) => write(root, &args),
         FirmwareCmd::Bundle(args) => bundle(root, &args),
+        FirmwareCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.path("firmware/dist")
 }
 
 fn bundle(root: &Path, args: &BundleArgs) -> Result<()> {

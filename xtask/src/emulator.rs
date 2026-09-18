@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{publish_workspace, run};
 
 #[derive(Subcommand)]
@@ -51,6 +52,8 @@ pub enum EmulatorCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    #[command(about = "Remove the emulator workspace build outputs")]
+    Clean(CleanArgs),
 }
 
 pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
@@ -119,5 +122,10 @@ pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
             }
             run("cargo", cargo_args, &dir)
         }
+        EmulatorCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.path("extras/autd3-rs-emulator/target")
 }

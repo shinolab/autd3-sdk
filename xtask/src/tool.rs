@@ -5,6 +5,7 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{on_path, run, run_built_bin, which};
 
 #[derive(Subcommand)]
@@ -66,6 +67,8 @@ pub enum ToolCmd {
         #[command(subcommand)]
         cmd: TwincatCmd,
     },
+    #[command(about = "Remove the `tools/` build outputs (the Rust ones live in `rust clean`)")]
+    Clean(CleanArgs),
 }
 
 #[derive(Subcommand)]
@@ -143,7 +146,17 @@ pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
             run_bin(root, "autd3-rs-wiretrace", debug, true, &[], &args)
         }
         ToolCmd::Twincat { cmd } => run_twincat(root, cmd),
+        ToolCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.paths(&[
+        "tools/twincat-cli/bin",
+        "tools/twincat-cli/obj",
+        "tools/twincat-cli/.vs",
+        "tools/twincat-cli/THIRD-PARTY-LICENSES.md",
+    ])
 }
 
 fn run_twincat(root: &Path, cmd: TwincatCmd) -> Result<()> {

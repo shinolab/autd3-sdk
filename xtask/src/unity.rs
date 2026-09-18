@@ -6,6 +6,7 @@ use clap::Subcommand;
 use flate2::read::GzDecoder;
 use tar::Archive;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{on_path, run, run_tool};
 
 pub const PKG_PREFIX: &str = "com.shinolab.autd3-sdk";
@@ -101,6 +102,8 @@ pub enum UnityCmd {
         #[arg(long)]
         unity_editor: Option<PathBuf>,
     },
+    #[command(about = "Remove the staged UPM package contents and the packed tarballs")]
+    Clean(CleanArgs),
 }
 
 pub fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
@@ -108,7 +111,21 @@ pub fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
         UnityCmd::Build { manifest } => build(root, manifest),
         UnityCmd::Pack { native_dir, out } => pack(root, native_dir.as_deref(), out),
         UnityCmd::Test { unity_editor } => test(root, unity_editor),
+        UnityCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.path("bindings/unity/dist")?;
+    cleaner.in_each_subdir(
+        "bindings/unity",
+        &["Plugins", "LICENSE.md", "THIRD-PARTY-LICENSES.md", "NOTICE"],
+    )?;
+    cleaner.matching_in_each_subdir("bindings/unity", |name| {
+        Path::new(name)
+            .extension()
+            .is_some_and(|ext| ext == "cs" || ext == "meta")
+    })
 }
 
 fn build(root: &Path, manifest: bool) -> Result<()> {

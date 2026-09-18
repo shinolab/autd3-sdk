@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{publish_workspace, run};
 
 #[derive(Subcommand)]
@@ -30,6 +31,8 @@ pub enum HoloWgpuCmd {
         #[arg(long)]
         dry_run: bool,
     },
+    #[command(about = "Remove the wgpu holo backend build outputs")]
+    Clean(CleanArgs),
 }
 
 pub fn run_holo_wgpu(root: &Path, cmd: &HoloWgpuCmd) -> Result<()> {
@@ -59,5 +62,10 @@ pub fn run_holo_wgpu(root: &Path, cmd: &HoloWgpuCmd) -> Result<()> {
             run("cargo", args, &dir)
         }
         HoloWgpuCmd::Publish { dry_run } => publish_workspace(&dir, *dry_run),
+        HoloWgpuCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.path("extras/autd3-rs-pattern-holo-wgpu/target")
 }

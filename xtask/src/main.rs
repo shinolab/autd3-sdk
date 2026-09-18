@@ -2,6 +2,7 @@ mod appliance;
 mod bump;
 mod changelog;
 mod check;
+mod clean;
 mod component;
 mod console;
 mod cpu;
@@ -29,6 +30,7 @@ use appliance::{ApplianceCmd, run_appliance};
 use bump::{BumpVersionCmd, run_bump_version};
 use changelog::{ChangelogCmd, run_changelog};
 use check::{CheckCmd, run_check};
+use clean::CleanArgs;
 use console::{ConsoleCmd, run_console};
 use cpu::{CpuCmd, run_cpu};
 use cs::{CsCmd, run_cs};
@@ -149,6 +151,19 @@ enum TopCmd {
     Changelog(ChangelogCmd),
     /// Bump a component's version and regenerate CHANGELOG.md (no git operations).
     BumpVersion(BumpVersionCmd),
+    #[command(about = "Remove every scope's build outputs (FPGA only with --fpga).")]
+    Clean(TopCleanArgs),
+}
+
+#[derive(clap::Args)]
+struct TopCleanArgs {
+    #[command(flatten)]
+    common: CleanArgs,
+    #[arg(
+        long,
+        help = "Also remove the Vivado project and the FPGA build outputs (re-synthesis takes tens of minutes)"
+    )]
+    fpga: bool,
 }
 
 fn main() -> Result<()> {
@@ -175,5 +190,27 @@ fn main() -> Result<()> {
         TopCmd::Check { cmd } => run_check(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),
+        TopCmd::Clean(args) => clean::scope(&root, args.common, |cleaner| {
+            rust::clean(cleaner)?;
+            cpu::clean(cleaner)?;
+            tool::clean(cleaner)?;
+            holo_wgpu::clean(cleaner)?;
+            appliance::clean(cleaner)?;
+            simulator::clean(cleaner)?;
+            console::clean(cleaner)?;
+            emulator::clean(cleaner)?;
+            firmware::clean(cleaner)?;
+            py::clean(cleaner)?;
+            ffi::clean(cleaner)?;
+            cs::clean(cleaner)?;
+            unity::clean(cleaner)?;
+            doc::clean(cleaner)?;
+            if args.fpga {
+                fpga::clean(cleaner)?;
+            } else {
+                println!("kept the FPGA build outputs; pass --fpga to remove them too");
+            }
+            Ok(())
+        }),
     }
 }

@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use clap::Subcommand;
 
+use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{on_path, publish_workspace, publishable_members, run, run_built_bin};
 
 const PCAP_PACKAGES: &[&str] = &[
@@ -83,6 +84,8 @@ pub enum RustCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    #[command(about = "Remove the `crates/` workspace build outputs")]
+    Clean(CleanArgs),
 }
 
 pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
@@ -154,7 +157,12 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             no_sudo,
             args,
         } => run_example(root, name, *debug, *no_sudo, args),
+        RustCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+    cleaner.paths(&["target", "crates/autd3-rs/tests/golden/generator/target"])
 }
 
 fn run_lint(root: &Path) -> Result<()> {
