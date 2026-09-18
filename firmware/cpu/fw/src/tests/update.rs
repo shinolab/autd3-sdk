@@ -603,6 +603,17 @@ fn commit_after_commit_is_rejected_without_touching_the_header() {
     assert_eq!(h.cpu.update.state(), State::Committed);
 }
 
+fn fpga_begin(seq: u8, length: u32, crc: u32) -> Frame {
+    Frame::from_payload(
+        seq,
+        Cmd::FpgaUpdateBegin,
+        &UpdateBeginPayload {
+            length: U32::new(length),
+            crc32: U32::new(crc),
+        },
+    )
+}
+
 #[test]
 fn begin_is_rejected_while_an_activation_is_pending() {
     let (mut h, _) = running_from_slot_a();
@@ -615,7 +626,12 @@ fn begin_is_rejected_while_an_activation_is_pending() {
     let erased_before = h.port.erased.len();
     h.deliver(&begin(seq, img.len() as u32, crc32(&img)));
     assert_eq!(h.data(), Error::UpdateActivating as u8);
+    seq += 1;
+    h.deliver(&fpga_begin(seq, 100, 0));
+    assert_eq!(h.data(), Error::UpdateActivating as u8);
     assert_eq!(h.port.erased.len(), erased_before);
+    assert!(h.port.fpga_flash_ops.is_empty());
+    assert!(!h.cpu.fpga_update.is_locked());
     assert_eq!(h.cpu.update.state(), State::Committed);
     h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
     assert_eq!(h.port.reset_count, 1);

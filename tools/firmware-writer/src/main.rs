@@ -1,5 +1,4 @@
 mod list;
-mod series;
 mod util;
 mod write;
 
@@ -43,7 +42,7 @@ pub enum Target {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let series = series::Series::from_flag(cli.legacy);
+    let series = autd3_firmware_writer::series::Series::from_flag(cli.legacy);
     if cli.list {
         return list::print_available_versions(series);
     }

@@ -183,3 +183,181 @@ fn activation_without_a_committed_image_is_a_device_error() {
     ));
     driver.close().unwrap();
 }
+
+mod fpga {
+    use autd3_cpu_wire::fpga_update::{
+        FPGA_IMAGE_BASE, FPGA_USR_ACCESS_UPDATE, FpgaBootImage, SYNC_WORD,
+    };
+    use autd3_rs_core::protocol::{Cmd, Seq, TxFrame};
+    use autd3_rs_firmware_emulator::Audit;
+    use autd3_rs_firmware_emulator::autd3_cpu_fw::Port;
+    use autd3_rs_firmware_emulator::autd3_cpu_fw::params::ADDR_VERSION_NUM_MAJOR;
+    use autd3_rs_firmware_ota::{DEFAULT_TIMEOUT, Driver, DriverError, FpgaFirmwareImage};
+
+    use super::NUM_TRANSDUCERS;
+
+    const RECONFIG_TICKS: usize = 3200;
+
+    fn bitstream(payload: u32, seed: u32) -> FpgaFirmwareImage {
+        let mut words = vec![
+            0xFFFF_FFFF,
+            0x0000_00BB,
+            0x1122_0044,
+            0xFFFF_FFFF,
+            SYNC_WORD,
+            0x2000_0000,
+            0x3001_A001,
+            FPGA_USR_ACCESS_UPDATE,
+            0x3000_4000,
+            0x5000_0000 | payload,
+        ];
+        words.extend((0..payload).map(|i| i.wrapping_mul(0x9E37_79B9) ^ seed));
+        words.extend([0x3000_8001, 0x0000_000D, 0x2000_0000]);
+        let bytes = words.iter().flat_map(|w| w.to_be_bytes()).collect();
+        FpgaFirmwareImage::from_update_bin(bytes).unwrap()
+    }
+
+    fn slot(audit: &Audit, device: usize, len: usize) -> Vec<u8> {
+        let base = FPGA_IMAGE_BASE as usize;
+        audit.device(device).fpga().fpga_flash()[base..base + len].to_vec()
+    }
+
+    fn settle(audit: &mut Audit, devices: usize) {
+        for device in 0..devices {
+            for _ in 0..RECONFIG_TICKS {
+                audit.device_mut(device).tick_1ms();
+            }
+        }
+    }
+
+    #[test]
+    fn an_fpga_update_reconfigures_into_the_new_image() {
+        let audit = Audit::new([NUM_TRANSDUCERS, NUM_TRANSDUCERS]);
+        let mut driver = Driver::open(audit).unwrap();
+        assert_eq!(
+            driver.read_fpga_boot_image().unwrap(),
+            [FpgaBootImage::Update, FpgaBootImage::Update]
+        );
+        let image = bitstream(40_000, 1);
+        let mut last = None;
+        driver.update_fpga(&image, |p| last = Some(p)).unwrap();
+        assert_eq!(last.map(|p| p.sent), Some(image.len()));
+        driver.activate_fpga().unwrap();
+
+        let mut audit = driver.into_link();
+        for device in 0..2 {
+            assert_eq!(slot(&audit, device, image.len()), image.as_bytes());
+            assert!(
+                audit.device(device).fpga().fpga_flash()[..FPGA_IMAGE_BASE as usize]
+                    .iter()
+                    .all(|&b| b == 0xFF)
+            );
+            assert!(!audit.device(device).fpga().output_mask_enabled(0));
+        }
+        settle(&mut audit, 2);
+        for device in 0..2 {
+            assert_eq!(audit.device(device).fpga().reconfig_count(), 1);
+            assert_eq!(audit.device(device).fpga().reset_count(), 0);
+            assert!(audit.device(device).fpga().output_mask_enabled(0));
+        }
+
+        let mut driver = Driver::open(audit).unwrap();
+        assert_eq!(
+            driver.read_fpga_boot_image().unwrap(),
+            [FpgaBootImage::Update, FpgaBootImage::Update]
+        );
+        assert_eq!(driver.read_fpga_version().unwrap().len(), 2);
+        driver.close().unwrap();
+    }
+
+    #[test]
+    fn an_fpga_that_ignores_reboot_is_reported() {
+        let mut audit = Audit::new([NUM_TRANSDUCERS, NUM_TRANSDUCERS]);
+        audit.device_mut(1).fpga_mut().ignore_next_reboots(u32::MAX);
+        let mut driver = Driver::open(audit).unwrap();
+        let image = bitstream(1000, 4);
+        driver.update_fpga(&image, |_| {}).unwrap();
+        driver.activate_fpga().unwrap();
+        let mut audit = driver.into_link();
+        for _ in 0..3 {
+            settle(&mut audit, 2);
+        }
+        assert_eq!(audit.device(0).fpga().reconfig_count(), 1);
+        assert_eq!(audit.device(1).fpga().reconfig_count(), 0);
+        assert!(audit.device(1).fpga().output_mask_enabled(0));
+
+        let mut driver = Driver::open(audit).unwrap();
+        assert_eq!(
+            driver.read_fpga_boot_image().unwrap(),
+            [FpgaBootImage::Update, FpgaBootImage::Update]
+        );
+        assert!(matches!(
+            driver.ensure_fpga_reconfigured(),
+            Err(DriverError::FpgaReconfigFailed { device: 1 })
+        ));
+        driver.close().unwrap();
+    }
+
+    #[test]
+    fn a_reboot_ignored_once_is_retried() {
+        let mut audit = Audit::new([NUM_TRANSDUCERS]);
+        audit.device_mut(0).fpga_mut().ignore_next_reboots(1);
+        let mut driver = Driver::open(audit).unwrap();
+        driver.update_fpga(&bitstream(1000, 5), |_| {}).unwrap();
+        driver.activate_fpga().unwrap();
+        let mut audit = driver.into_link();
+        settle(&mut audit, 1);
+        assert_eq!(audit.device(0).fpga().reconfig_count(), 1);
+        assert!(!audit.device(0).fpga().output_mask_enabled(0));
+        settle(&mut audit, 1);
+        assert_eq!(audit.device(0).fpga().reconfig_count(), 1);
+        assert!(audit.device(0).fpga().output_mask_enabled(0));
+        let mut driver = Driver::open(audit).unwrap();
+        driver.ensure_fpga_reconfigured().unwrap();
+        driver.close().unwrap();
+    }
+
+    #[test]
+    fn a_broken_slot_falls_back_to_golden() {
+        let audit = Audit::new([NUM_TRANSDUCERS]);
+        let mut driver = Driver::open(audit).unwrap();
+        let image = bitstream(1000, 2);
+        driver.update_fpga(&image, |_| {}).unwrap();
+        driver.activate_fpga().unwrap();
+        let mut audit = driver.into_link();
+        let base = FPGA_IMAGE_BASE as usize;
+        audit.device_mut(0).fpga_mut().fpga_flash_mut()[base..base + 32].fill(0xFF);
+        settle(&mut audit, 1);
+        let mut driver = Driver::open(audit).unwrap();
+        assert_eq!(
+            driver.read_fpga_boot_image().unwrap(),
+            [FpgaBootImage::Golden]
+        );
+    }
+
+    #[test]
+    fn an_fpga_without_flash_access_is_refused_before_anything_is_sent() {
+        let mut audit = Audit::new([NUM_TRANSDUCERS]);
+        let fpga = audit.device_mut(0).fpga_mut();
+        let functions = fpga.controller_reg(ADDR_VERSION_NUM_MAJOR);
+        fpga.fpga_write(ADDR_VERSION_NUM_MAJOR, functions & 0x80FF);
+        let mut driver = Driver::open(audit).unwrap();
+        assert!(matches!(
+            driver.update_fpga(&bitstream(10, 3), |_| {}),
+            Err(DriverError::FpgaUpdateUnsupported { device: 0 })
+        ));
+        let audit = driver.into_link();
+        assert!(audit.device(0).fpga().fpga_flash().is_empty());
+    }
+
+    #[test]
+    fn output_commands_wait_for_the_reconfiguration() {
+        let audit = Audit::new([NUM_TRANSDUCERS]);
+        let mut driver = Driver::open(audit).unwrap();
+        driver.update_fpga(&bitstream(10, 4), |_| {}).unwrap();
+        assert!(matches!(
+            driver.send_checked(TxFrame::new(Seq::ZERO, Cmd::Clear), DEFAULT_TIMEOUT),
+            Err(DriverError::Device { code: 0x10, .. })
+        ));
+    }
+}

@@ -33,7 +33,15 @@ const IP_CONSTS: &[IpConst] = &[
     },
 ];
 
-const FW_INTERNAL_PREFIXES: &[&str] = &["ADDR_", "BRAM_SELECT_", "BRAM_CNT_SELECT_", "CTL_FLAG_"];
+const FW_INTERNAL_PREFIXES: &[&str] = &[
+    "ADDR_",
+    "BRAM_SELECT_",
+    "BRAM_CNT_SELECT_",
+    "CTL_FLAG_",
+    "FLASH_OP_",
+    "FLASH_ERR_",
+    "FLASH_BUF_",
+];
 
 fn is_fw_internal(name: &str) -> bool {
     FW_INTERNAL_PREFIXES.iter().any(|p| name.starts_with(p))
@@ -54,11 +62,19 @@ fn rust_type(name: &str) -> &'static str {
         || name == "NUM_BANKS"
         || name == "EMISSION_SLOT_WORDS"
         || name == "FOCUS_WORDS"
+        || name == "FLASH_BUF_BYTES"
     {
         "usize"
-    } else if name == "EMISSION_MAX_INDICES" || name == "ULTRASOUND_FREQ_HZ" {
+    } else if name == "EMISSION_MAX_INDICES"
+        || name == "ULTRASOUND_FREQ_HZ"
+        || (name.starts_with("FLASH_")
+            && !name.starts_with("FLASH_OP_")
+            && !name.starts_with("FLASH_ERR_"))
+    {
         "u32"
     } else if name == "NUM_FOCI_MAX"
+        || name.starts_with("FLASH_OP_")
+        || name.starts_with("FLASH_ERR_")
         || name.starts_with("VERSION_NUM_")
         || name.starts_with("BRAM_SELECT_")
         || name.starts_with("BRAM_CNT_SELECT_")
@@ -116,6 +132,21 @@ fn group_decimal(s: &str) -> String {
     format!("{sign}{out}")
 }
 
+fn group_hex(v: u64) -> String {
+    let digits = format!("{v:X}");
+    if digits.len() <= 4 {
+        return format!("0x{digits}");
+    }
+    let mut out = String::with_capacity(digits.len() + digits.len() / 4);
+    for (i, c) in digits.chars().enumerate() {
+        if i != 0 && (digits.len() - i).is_multiple_of(4) {
+            out.push('_');
+        }
+        out.push(c);
+    }
+    format!("0x{out}")
+}
+
 fn to_value(value: &str) -> String {
     if let Some((size, rest)) = value.split_once('\'') {
         if !size.is_empty() && size.bytes().all(|b| b.is_ascii_digit()) && rest.len() >= 2 {
@@ -129,7 +160,7 @@ fn to_value(value: &str) -> String {
             if digits.bytes().all(|b| b.is_ascii_hexdigit())
                 && let Ok(v) = u64::from_str_radix(digits, radix)
             {
-                return format!("0x{v:X}");
+                return group_hex(v);
             }
         }
         return value.to_string();

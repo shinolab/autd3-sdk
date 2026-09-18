@@ -74,7 +74,11 @@ fn bundle(root: &Path, args: &BundleArgs) -> Result<()> {
     let archive = dist.join(format!("{stem}.zip"));
     write_zip(
         &archive,
-        &[(format!("{stem}.bin"), cpu), (format!("{stem}.mcs"), fpga)],
+        &[
+            (format!("{stem}.bin"), cpu),
+            (format!("{stem}.mcs"), fpga.mcs),
+            (format!("{stem}-fpga-update.img"), fpga.update_image),
+        ],
     )?;
 
     println!("firmware bundle: {}", archive.display());

@@ -2,7 +2,7 @@ use std::io::Read;
 
 use anyhow::{Context, Result};
 
-use crate::series::Series;
+use autd3_firmware_writer::series::Series;
 
 pub fn print_available_versions(series: Series) -> Result<()> {
     for version in fetch_versions(series)? {

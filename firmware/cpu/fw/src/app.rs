@@ -31,6 +31,7 @@ pub struct Cpu {
     error_detail: Cell<Option<Error>>,
     pub(crate) silencer: cmd::silencer::SilencerGuard,
     pub(crate) update: cmd::update::UpdateSession,
+    pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
     tx: AtomicU16,
 }
 
@@ -58,6 +59,7 @@ macro_rules! cpu_new {
             error_detail: Cell::new(None),
             silencer: cmd::silencer::SilencerGuard::new(),
             update: cmd::update::UpdateSession::new(),
+            fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
             tx: AtomicU16::new(0),
         }
     };
@@ -89,11 +91,23 @@ impl Cpu {
         }
         self.silencer.init();
         self.update.init();
+        self.fpga_update.init();
         self.reset_telemetry();
         self.set_tx(port, 0xFF, 0);
         self.last_seq.store(0xFF, Ordering::Relaxed);
         self.last_cmd.store(0xFF, Ordering::Relaxed);
         self.fifo.reset();
+    }
+
+    pub(crate) fn record_error_detail(&self, err: Error) {
+        self.error_detail.set(Some(err));
+    }
+
+    pub(crate) fn reinit_fpga<P: Port>(&self, port: &mut P) {
+        if let Err(err) = fpga::init(port, self.mode()) {
+            self.error_detail.set(Some(err));
+        }
+        self.silencer.init();
     }
 
     pub fn mark_boot_attempt<P: Port>(&self, port: &mut P) {
@@ -127,6 +141,7 @@ impl Cpu {
 
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
         self.update_tick(port);
+        self.fpga_update_tick(port);
         let code = port.al_status_code();
         if code != AL_STATUS_CODE_SYNC_ERROR && code != AL_STATUS_CODE_SM_WATCHDOG {
             self.al_err_ticks.store(0, Ordering::Relaxed);
@@ -190,7 +205,9 @@ impl Cpu {
             self.fifo.request_flush(head);
         }
 
-        let deferred = cmd.is_some_and(cmd::update::is_update_cmd);
+        let deferred = cmd.is_some_and(|cmd| {
+            cmd::update::is_update_cmd(cmd) || cmd::fpga_update::is_fpga_update_cmd(cmd)
+        });
         let tail = self.fifo.tail_acquire();
         let inline_ok = preempt || (self.mode() == Mode::LowLatency && tail == head && !deferred);
         if inline_ok {
@@ -287,6 +304,9 @@ impl Cpu {
     }
 
     fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> u8 {
+        if self.fpga_update.is_locked() && !cmd::fpga_update::allowed_while_locked(cmd) {
+            return self.latch_error(Error::FpgaUpdateInProgress);
+        }
         let result = match cmd {
             Cmd::Reset | Cmd::Nop => Ok(()),
             Cmd::ReadCpuFwVersionMajor => return FW_VERSION_MAJOR,
@@ -312,6 +332,7 @@ impl Cpu {
                 return (fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR) >> 8)
                     as u8;
             }
+            Cmd::ReadFpgaBootImage => return cmd::fpga_update::boot_image(port) as u8,
             Cmd::WritePatternBuffer => cmd::write_pattern::handle(port, payload),
             Cmd::WritePatternCompressed => cmd::write_pattern_compressed::handle(port, payload),
             Cmd::WritePatternFused => self.write_pattern_fused(port, payload),
@@ -333,6 +354,10 @@ impl Cpu {
             Cmd::UpdateCommit => self.update_commit(port),
             Cmd::UpdateActivate => self.update_activate(),
             Cmd::UpdateConfirm => self.update_confirm(port),
+            Cmd::FpgaUpdateBegin => self.fpga_update_begin(port, payload),
+            Cmd::FpgaUpdateChunk => self.fpga_update_chunk(port, payload),
+            Cmd::FpgaUpdateCommit => self.fpga_update_commit(port),
+            Cmd::FpgaUpdateActivate => self.fpga_update_activate(),
             Cmd::Synchronize => self.sync(port),
             Cmd::SetMode => self.set_mode_cmd(payload),
             Cmd::Clear => self.clear(port),

@@ -55,6 +55,7 @@ const BINARIES: &[&str] = &[
     "autd3-console",
     "autd3-rs-simulator",
     "autd3-firmware-writer",
+    "autd3-rs-firmware-ota",
     "autd3-appliance",
 ];
 
@@ -132,6 +133,12 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
     )?;
     let fw_bin = cargo_bin(root, target, debug, "autd3-firmware-writer");
 
+    run_cargo(
+        cargo_build_args("autd3-rs-firmware-ota", target, debug),
+        root,
+    )?;
+    let ota_bin = cargo_bin(root, target, debug, "autd3-rs-firmware-ota");
+
     run_cargo(cargo_build_args("autd3-appliance", target, debug), root)?;
     let appliance_bin = cargo_bin(root, target, debug, "autd3-appliance");
 
@@ -140,7 +147,7 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
         std::fs::remove_dir_all(&out_dir)?;
     }
     std::fs::create_dir_all(&out_dir)?;
-    for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &appliance_bin]
+    for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &ota_bin, &appliance_bin]
         .into_iter()
         .zip(BINARIES)
     {

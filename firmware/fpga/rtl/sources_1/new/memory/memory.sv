@@ -8,7 +8,8 @@ module memory (
     output_mask_bus_if.in_port OUTPUT_MASK_BUS,
     modulation_bus_if.in_port MOD_BUS,
     emission_bus_if.in_port EMISSION_BUS,
-    pwe_table_bus_if.in_port PWE_TABLE_BUS
+    pwe_table_bus_if.in_port PWE_TABLE_BUS,
+    flash_bus_if.host_port FLASH_BUS
 );
 
   import params::*;
@@ -20,6 +21,9 @@ module memory (
   logic [13:0] addr;
   logic [15:0] data_in;
   logic [15:0] data_out;
+  logic [15:0] ctl_dout;
+  logic [15:0] flash_dout;
+  logic flash_rd_sel = 1'b0;
 
   assign bus_clk = MEM_BUS.BUS_CLK;
   assign select = MEM_BUS.BRAM_SELECT;
@@ -28,6 +32,7 @@ module memory (
   assign addr = MEM_BUS.BRAM_ADDR;
   assign data_in = MEM_BUS.DATA_IN;
   assign MEM_BUS.DATA_OUT = data_out;
+  assign data_out = flash_rd_sel ? flash_dout : ctl_dout;
 
   logic [5:0] cnt_sel;
   assign cnt_sel = addr[13:8];
@@ -43,7 +48,7 @@ module memory (
       .wea  (we),
       .addra(addr[7:0]),
       .dina (data_in),
-      .douta(data_out),
+      .douta(ctl_dout),
       .clkb (CLK),
       .web  (CNT_BUS.WE),
       .addrb(CNT_BUS.ADDR),
@@ -51,6 +56,34 @@ module memory (
       .doutb(CNT_BUS.DOUT)
   );
   ///////////////////////////// Controller ////////////////////////////
+
+  localparam logic [5:0] FlashBufSelect = BRAM_CNT_SELECT_FLASH_BUF;
+
+  logic flash_reg_en;
+  logic flash_buf_en;
+
+  assign flash_reg_en = (cnt_sel == BRAM_CNT_SELECT_FLASH) & (select == BRAM_SELECT_CONTROLLER) & en;
+  assign flash_buf_en = (cnt_sel[5:1] == FlashBufSelect[5:1]) & (select == BRAM_SELECT_CONTROLLER) & en;
+
+  always_ff @(posedge bus_clk) begin
+    if (flash_reg_en) begin
+      flash_rd_sel <= 1'b1;
+    end else if (ctl_en) begin
+      flash_rd_sel <= 1'b0;
+    end
+  end
+
+  flash_host flash_host (
+      .BUS_CLK(bus_clk),
+      .CLK(CLK),
+      .REG_EN(flash_reg_en),
+      .BUF_EN(flash_buf_en),
+      .WE(we),
+      .ADDR(addr[8:0]),
+      .DATA_IN(data_in),
+      .DATA_OUT(flash_dout),
+      .FLASH_BUS(FLASH_BUS)
+  );
 
   ///////////////////////// Phase correction //////////////////////////
   logic phase_corr_en;

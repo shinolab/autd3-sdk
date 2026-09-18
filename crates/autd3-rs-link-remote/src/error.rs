@@ -57,6 +57,22 @@ pub enum RemoteLinkError {
     Link(String),
 }
 
+impl RemoteLinkError {
+    #[must_use]
+    pub fn rejected_device_count(&self) -> Option<usize> {
+        let Self::SessionRejected {
+            kind: RejectKind::DeviceCount,
+            detail,
+        } = self
+        else {
+            return None;
+        };
+        let (_, rest) = detail.split_once("the bus has ")?;
+        let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+        digits.parse().ok()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RejectKind {

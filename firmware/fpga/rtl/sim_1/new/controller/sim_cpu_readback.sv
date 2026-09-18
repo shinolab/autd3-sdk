@@ -16,6 +16,7 @@ module sim_cpu_readback ();
   modulation_bus_if mod_bus ();
   emission_bus_if emission_bus ();
   pwe_table_bus_if pwe_table_bus ();
+  flash_bus_if flash_bus ();
   output_mask_bus_if output_mask_bus ();
 
   memory memory (
@@ -26,7 +27,8 @@ module sim_cpu_readback ();
       .OUTPUT_MASK_BUS(output_mask_bus.in_port),
       .MOD_BUS(mod_bus.in_port),
       .EMISSION_BUS(emission_bus.in_port),
-      .PWE_TABLE_BUS(pwe_table_bus.in_port)
+      .PWE_TABLE_BUS(pwe_table_bus.in_port),
+      .FLASH_BUS(flash_bus.host_port)
   );
 
   sim_helper_clk sim_helper_clk (
@@ -94,7 +96,7 @@ module sim_cpu_readback ();
     repeat (64) @(posedge CLK);
 
     sim_helper_bram.read_cnt(params::ADDR_VERSION_NUM_MAJOR, value);
-    `ASSERT_EQ({8'h00, params::VersionNumMajor}, value);
+    `ASSERT_EQ({8'd1 << params::FuncFlashOtaBit, params::VersionNumMajor}, value);
 
     sim_helper_bram.read_cnt(params::ADDR_VERSION_NUM_MINOR, value);
     `ASSERT_EQ({8'h00, params::VersionNumMinor}, value);

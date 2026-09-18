@@ -1444,3 +1444,10 @@ set_property PACKAGE_PIN AA19 [get_ports {GPIO_IN[3]}]
 
 create_clock -period 13.333 -name cpu_bsc_75M -waveform {0.000 6.666} [get_ports CPU_CKIO]
 #create_clock -period 39.063 -waveform {0.000 19.531} [get_ports MRCC_25P6M]
+
+set_property PACKAGE_PIN P18 [get_ports FLASH_CS_N]
+set_property PACKAGE_PIN R14 [get_ports FLASH_MOSI]
+set_property PACKAGE_PIN R15 [get_ports FLASH_MISO]
+set_property PACKAGE_PIN P14 [get_ports FLASH_WP_N]
+set_property PACKAGE_PIN N14 [get_ports FLASH_HOLD_N]
+set_property IOSTANDARD LVCMOS33 [get_ports {FLASH_CS_N FLASH_MOSI FLASH_MISO FLASH_WP_N FLASH_HOLD_N}]

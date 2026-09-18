@@ -4,6 +4,7 @@
     clippy::cast_possible_wrap
 )]
 
+mod flash;
 mod foci;
 mod silencer;
 mod swapchain;
@@ -11,6 +12,7 @@ mod swapchain;
 use autd3_rs_core::value::{Emission, Intensity, Phase};
 
 use crate::fw;
+use autd3_cpu_fw::fpga_update::FpgaBootImage;
 use autd3_cpu_fw::update::{FLASH_BYTES, IMAGE_MAGIC, Slot, crc32, is_plausible_length};
 
 pub const EMULATED_CPU_IMAGE: &[u8] =
@@ -53,6 +55,8 @@ const SELECT_EMISSION: u16 = fw::BRAM_SELECT_EMISSION as u16;
 const CNT_SELECT_MAIN: usize = fw::BRAM_CNT_SELECT_MAIN as usize;
 const CNT_SELECT_PHASE_CORR: usize = fw::BRAM_CNT_SELECT_PHASE_CORR as usize;
 const CNT_SELECT_OUTPUT_MASK: usize = fw::BRAM_CNT_SELECT_OUTPUT_MASK as usize;
+const CNT_SELECT_FLASH: usize = fw::BRAM_CNT_SELECT_FLASH as usize;
+const CNT_SELECT_FLASH_BUF: usize = fw::BRAM_CNT_SELECT_FLASH_BUF as usize;
 
 const LATCH_MASK: u16 = fw::CTL_FLAG_MOD_SET
     | fw::CTL_FLAG_PATTERN_SET
@@ -93,6 +97,8 @@ pub struct FpgaEmulator {
     pattern_swapchain: Swapchain,
     cpu_flash: Box<[u8]>,
     reset_count: u32,
+    flash: flash::FlashEmulator,
+    reconfig_count: u32,
 }
 
 impl FpgaEmulator {
@@ -101,7 +107,8 @@ impl FpgaEmulator {
         let mut controller = Box::new([0u16; 256]);
 
         controller[reg(fw::ADDR_VERSION_NUM_MAJOR)] =
-            ((1u16 << fw::FUNC_EMULATOR_BIT) << 8) | fw::VERSION_NUM_MAJOR as u16;
+            (((1u16 << fw::FUNC_EMULATOR_BIT) | (1u16 << fw::FUNC_FLASH_OTA_BIT)) << 8)
+                | fw::VERSION_NUM_MAJOR as u16;
         controller[reg(fw::ADDR_VERSION_NUM_MINOR)] = fw::VERSION_NUM_MINOR as u16;
         controller[reg(fw::ADDR_VERSION_NUM_PATCH)] = fw::VERSION_NUM_PATCH as u16;
         Self {
@@ -127,7 +134,57 @@ impl FpgaEmulator {
             pattern_swapchain: Swapchain::new(),
             cpu_flash: fresh_cpu_flash(),
             reset_count: 0,
+            flash: flash::FlashEmulator::new(),
+            reconfig_count: 0,
         }
+    }
+
+    fn reconfigure(&mut self) {
+        self.reload();
+        self.reconfig_count += 1;
+    }
+
+    pub(crate) fn power_on(&mut self) {
+        self.reload();
+    }
+
+    fn reload(&mut self) {
+        let mut next = Self::new(self.num_transducers);
+        next.next_sync0 = self.next_sync0;
+        next.sync0_cycle_ns = self.sync0_cycle_ns;
+        next.al_status_code = self.al_status_code;
+        next.sys_time_ns = self.sys_time_ns;
+        next.gpio_in = self.gpio_in;
+        next.thermal = self.thermal;
+        let old = core::mem::replace(self, next);
+        self.cpu_flash = old.cpu_flash;
+        self.reset_count = old.reset_count;
+        self.flash = old.flash;
+        self.flash.configure_from_flash();
+        self.reconfig_count = old.reconfig_count;
+    }
+
+    #[must_use]
+    pub fn fpga_flash(&self) -> &[u8] {
+        self.flash.flash()
+    }
+
+    pub fn fpga_flash_mut(&mut self) -> &mut [u8] {
+        self.flash.flash_mut()
+    }
+
+    #[must_use]
+    pub fn boot_image(&self) -> FpgaBootImage {
+        FpgaBootImage::from_usr_access(self.flash.usr_access())
+    }
+
+    #[must_use]
+    pub fn reconfig_count(&self) -> u32 {
+        self.reconfig_count
+    }
+
+    pub fn ignore_next_reboots(&mut self, count: u32) {
+        self.flash.ignore_reboots(count);
     }
 
     #[must_use]
@@ -190,6 +247,13 @@ impl FpgaEmulator {
             }
             CNT_SELECT_PHASE_CORR => self.phase_corr[a & 0xFF] = value,
             CNT_SELECT_OUTPUT_MASK => self.output_mask[a & (OUTPUT_MASK_WORDS - 1)] = value,
+            CNT_SELECT_FLASH => {
+                self.flash.write_reg(a & 0xFF, value);
+                if self.flash.take_reboot_request() {
+                    self.reconfigure();
+                }
+            }
+            sel if sel >> 1 == CNT_SELECT_FLASH_BUF >> 1 => self.flash.write_buf(a & 0x1FF, value),
             _ => {}
         }
     }
@@ -203,6 +267,8 @@ impl FpgaEmulator {
             } else {
                 self.controller[a & 0xFF]
             }
+        } else if select == SELECT_CONTROLLER && (a >> 8) == CNT_SELECT_FLASH {
+            self.flash.read_reg(a & 0xFF)
         } else {
             0
         }

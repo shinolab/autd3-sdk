@@ -5,6 +5,7 @@ pub(crate) mod config_mod;
 pub(crate) mod config_pattern;
 pub(crate) mod failsafe;
 pub(crate) mod force_fan;
+pub(crate) mod fpga_update;
 pub(crate) mod gpio_in;
 pub(crate) mod gpio_out;
 pub(crate) mod output_mask;

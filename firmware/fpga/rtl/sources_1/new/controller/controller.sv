@@ -21,7 +21,7 @@ module controller (
     output var GPIO_IN[4]
 );
 
-  localparam bit [7:0] FunctionBits = (1'b0 << params::FuncDynamicFreqBit) | (1'b0 << params::FuncEmulatorBit);
+  localparam bit [7:0] FunctionBits = (1'b0 << params::FuncDynamicFreqBit) | (1'b1 << params::FuncFlashOtaBit) | (1'b0 << params::FuncEmulatorBit);
 
   logic [15:0] ctl_flags = '0;
   logic [15:0] ctl_flags_cand = '0;

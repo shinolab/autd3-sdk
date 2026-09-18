@@ -29,3 +29,11 @@ set_property CONFIG_VOLTAGE 3.3 [current_design]
 set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
 set_property BITSTREAM.CONFIG.CONFIGRATE 33 [current_design]
 set_property CONFIG_MODE SPIx4 [current_design]
+set_property BITSTREAM.CONFIG.CONFIGFALLBACK ENABLE [current_design]
+set_property BITSTREAM.CONFIG.TIMER_CFG 0x001D0000 [current_design]
+set_property BITSTREAM.CONFIG.USR_ACCESS 0x55504454 [current_design]
+
+set_false_path -to [get_ports {FLASH_CS_N FLASH_MOSI FLASH_WP_N FLASH_HOLD_N}]
+set_false_path -from [get_ports FLASH_MISO]
+set_max_delay -datapath_only -from [get_clocks cpu_bsc_75M] -to [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] 10.000
+set_max_delay -datapath_only -from [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] -to [get_clocks cpu_bsc_75M] 10.000

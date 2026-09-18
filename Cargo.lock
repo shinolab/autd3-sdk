@@ -108,6 +108,7 @@ dependencies = [
  "autd3-cpu-wire",
  "clap",
  "serde_json",
+ "thiserror 2.0.20",
  "ureq",
  "winreg",
  "zip",
@@ -211,6 +212,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "autd3-cpu-wire",
+ "autd3-firmware-writer",
  "autd3-rs-core",
  "autd3-rs-firmware-emulator",
  "autd3-rs-link-echocat",

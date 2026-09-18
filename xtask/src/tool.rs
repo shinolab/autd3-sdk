@@ -49,7 +49,7 @@ pub enum ToolCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// Update the CPU firmware over EtherCAT (no J-Link) and reboot the devices
+    /// Update the CPU / FPGA firmware over EtherCAT (no J-Link / Vivado) and reboot the devices
     FirmwareOta {
         /// Build the dev profile instead of release
         #[arg(long)]
@@ -57,7 +57,7 @@ pub enum ToolCmd {
         /// Do not wrap the run in `sudo`
         #[arg(long)]
         no_sudo: bool,
-        /// Arguments forwarded to the tool (the flash image path first)
+        /// Arguments forwarded to the tool (the flash image path or `--version X.Y.Z` first)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },

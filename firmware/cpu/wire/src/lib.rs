@@ -40,6 +40,7 @@ macro_rules! wire_enum {
 
 mod cmd;
 mod error;
+pub mod fpga_update;
 mod frame;
 pub mod layout;
 mod mode;

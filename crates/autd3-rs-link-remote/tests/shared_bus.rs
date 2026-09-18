@@ -501,6 +501,7 @@ fn a_geometry_that_does_not_match_the_bus_is_refused() {
     let Err(err) = RemoteLink::open(addr, None, &geometry(1)) else {
         panic!("a one-device geometry must not attach to a two-device bus");
     };
+    assert_eq!(err.rejected_device_count(), Some(2));
     let RemoteLinkError::SessionRejected { kind, detail } = err else {
         panic!("expected a session rejection, got {err}");
     };

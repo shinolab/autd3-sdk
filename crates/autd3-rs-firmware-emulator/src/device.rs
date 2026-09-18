@@ -24,6 +24,11 @@ impl Device {
     }
 
     pub fn power_cycle(&mut self) {
+        self.fpga.power_on();
+        self.cpu = boot(&mut self.fpga);
+    }
+
+    pub fn reset_cpu(&mut self) {
         self.cpu = boot(&mut self.fpga);
     }
 
@@ -49,7 +54,7 @@ impl Device {
         let resets = self.fpga.reset_count();
         self.cpu.tick_1ms(&mut self.fpga);
         if self.fpga.reset_count() != resets {
-            self.power_cycle();
+            self.reset_cpu();
         }
     }
 

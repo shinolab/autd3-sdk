@@ -3,6 +3,7 @@
 // Firmware-internal FPGA register map.
 
 pub use autd3_cpu_wire::params::*;
+pub const FLASH_BUF_BYTES: usize = 1024;
 
 pub const CTL_FLAG_BIT_MOD_SET: u16 = 0;
 pub const CTL_FLAG_MOD_SET: u16 = 1 << CTL_FLAG_BIT_MOD_SET;
@@ -33,6 +34,30 @@ pub const BRAM_SELECT_EMISSION: u8 = 0x3;
 pub const BRAM_CNT_SELECT_MAIN: u8 = 0x0;
 pub const BRAM_CNT_SELECT_PHASE_CORR: u8 = 0x1;
 pub const BRAM_CNT_SELECT_OUTPUT_MASK: u8 = 0x2;
+pub const BRAM_CNT_SELECT_FLASH: u8 = 0x3;
+pub const BRAM_CNT_SELECT_FLASH_BUF: u8 = 0x4;
+
+pub const ADDR_FLASH_CMD: u16 = 0x0;
+pub const ADDR_FLASH_ADDR_0: u16 = 0x1;
+pub const ADDR_FLASH_ADDR_1: u16 = 0x2;
+pub const ADDR_FLASH_LEN_0: u16 = 0x3;
+pub const ADDR_FLASH_LEN_1: u16 = 0x4;
+pub const ADDR_FLASH_STATUS: u16 = 0x5;
+pub const ADDR_FLASH_RESULT_0: u16 = 0x6;
+pub const ADDR_FLASH_RESULT_1: u16 = 0x7;
+pub const ADDR_FLASH_USR_ACCESS_0: u16 = 0x8;
+pub const ADDR_FLASH_USR_ACCESS_1: u16 = 0x9;
+
+pub const FLASH_OP_READ_ID: u8 = 0x1;
+pub const FLASH_OP_CRC32: u8 = 0x2;
+pub const FLASH_OP_ERASE: u8 = 0x3;
+pub const FLASH_OP_PROGRAM: u8 = 0x4;
+pub const FLASH_OP_REBOOT: u8 = 0x5;
+
+pub const FLASH_ERR_NONE: u8 = 0x0;
+pub const FLASH_ERR_PROTECTED: u8 = 0x1;
+pub const FLASH_ERR_TIMEOUT: u8 = 0x2;
+pub const FLASH_ERR_INVALID: u8 = 0x3;
 
 pub const ADDR_CTL_FLAG: u16 = 0x0;
 pub const ADDR_FPGA_STATE: u16 = 0x1;
