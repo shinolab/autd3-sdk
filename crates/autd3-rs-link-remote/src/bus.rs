@@ -15,6 +15,7 @@ use crate::wire::{self, BusStatus};
 
 const DEFAULT_CYCLE_PERIOD: Duration = Duration::from_micros(250);
 const REOPEN_RETRY_PERIOD: Duration = Duration::from_secs(1);
+const STALE_REOPEN_AFTER: Duration = Duration::from_secs(2);
 const RECOVERING_REPLY_PERIOD: Duration = Duration::from_millis(1);
 const STATUS_SAMPLE_PERIOD: Duration = Duration::from_millis(100);
 const IDLE_WAIT_PERIOD: Duration = Duration::from_millis(100);
@@ -833,6 +834,7 @@ fn bus_loop<L, F>(
     let mut rx_local: Vec<[u8; RX_FRAME_BYTES]> = Vec::new();
     let mut diag = CycleDiag::default();
     let mut published: Option<Instant> = None;
+    let mut stale = StaleWatch::default();
 
     while !shared.is_stopped() {
         if shared.desired() == Desired::Closed {
@@ -866,6 +868,7 @@ fn bus_loop<L, F>(
                 rx_local = opened.rx;
                 link = Some(opened.link);
                 published = None;
+                stale = StaleWatch::default();
             }
             continue;
         };
@@ -883,6 +886,11 @@ fn bus_loop<L, F>(
 
         match result {
             Ok(outcome) => {
+                if stale.stuck(outcome.rx_valid()) {
+                    close_link(&mut link);
+                    shared.enter_recovering();
+                    continue;
+                }
                 let dc_time_ns = dc_clock
                     .as_ref()
                     .and_then(DcClock::now)
@@ -923,6 +931,28 @@ fn bus_loop<L, F>(
     }
 
     close_link(&mut link);
+}
+
+#[derive(Default)]
+struct StaleWatch {
+    since: Option<Instant>,
+}
+
+impl StaleWatch {
+    fn stuck(&mut self, rx_valid: bool) -> bool {
+        if rx_valid {
+            self.since = None;
+            return false;
+        }
+        if self.since.get_or_insert_with(Instant::now).elapsed() < STALE_REOPEN_AFTER {
+            return false;
+        }
+        tracing::error!(
+            stale_for_ms = STALE_REOPEN_AFTER.as_millis(),
+            "the devices stopped processing frames; reopening the bus link",
+        );
+        true
+    }
 }
 
 pub(crate) fn run_status_loop<C: StateCheck>(

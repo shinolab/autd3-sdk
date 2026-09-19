@@ -734,3 +734,130 @@ fn a_client_that_arrives_in_the_retry_window_waits_instead_of_being_refused() {
     drop(link);
     let _ = handle.join().unwrap();
 }
+
+struct RebootedLink {
+    valid_cycles_left: Option<u32>,
+}
+
+impl Link for RebootedLink {
+    type Error = Infallible;
+    type Checker = ConstStateChecker;
+
+    fn num_devices(&self) -> usize {
+        1
+    }
+
+    fn state_checker(&self) -> ConstStateChecker {
+        ConstStateChecker::new(1)
+    }
+
+    fn cycle(
+        &mut self,
+        tx: &[[u8; TX_FRAME_BYTES]],
+        rx: &mut [[u8; RX_FRAME_BYTES]],
+    ) -> Result<CycleOutcome, Infallible> {
+        match &mut self.valid_cycles_left {
+            Some(0) => return Ok(CycleOutcome::stale()),
+            Some(left) => *left -= 1,
+            None => {}
+        }
+        for (t, r) in tx.iter().zip(rx.iter_mut()) {
+            r[0] = t[0];
+        }
+        Ok(CycleOutcome::valid())
+    }
+}
+
+#[test]
+fn a_bus_whose_devices_stop_processing_frames_is_reopened() {
+    let opens = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&opens);
+    let bus = SharedBus::new(bus_option(), move || {
+        let first = counted.fetch_add(1, Ordering::SeqCst) == 0;
+        Ok::<_, RemoteLinkError>(RebootedLink {
+            valid_cycles_left: first.then_some(100),
+        })
+    })
+    .unwrap();
+    bus.set_desired(Desired::Open);
+
+    spin("the stuck link to be replaced by a fresh one", || {
+        let snapshot = bus.snapshot();
+        (opens.load(Ordering::SeqCst) >= 2 && snapshot.actual == Actual::Open).then_some(snapshot)
+    });
+    assert_eq!(opens.load(Ordering::SeqCst), 2);
+
+    let mut server = BusServer::new(
+        BusServerOption::new(SocketAddr::from((Ipv4Addr::LOCALHOST, 0))),
+        Arc::clone(&bus),
+    )
+    .unwrap();
+    let addr = server.local_addr().unwrap();
+    let handle = std::thread::spawn(move || server.serve_once());
+
+    let mut link = RemoteLink::open(addr, None, &geometry(1)).unwrap();
+    let mut tx = vec![[0u8; TX_FRAME_BYTES]; 1];
+    let mut rx = vec![[0u8; RX_FRAME_BYTES]; 1];
+    tx[0][0] = 7;
+    assert!(link.cycle(&tx, &mut rx).unwrap().rx_valid());
+    assert_eq!(rx[0][0], 7);
+    assert!(bus.snapshot().recoveries >= 1);
+
+    drop(link);
+    let _ = handle.join().unwrap();
+}
+
+#[test]
+fn a_briefly_stale_bus_keeps_its_link() {
+    let opens = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&opens);
+    let stale = Arc::new(AtomicUsize::new(0));
+    let stale_cycles = Arc::clone(&stale);
+    let bus = SharedBus::new(bus_option(), move || {
+        counted.fetch_add(1, Ordering::SeqCst);
+        Ok::<_, RemoteLinkError>(BlinkingLink {
+            cycle: 0,
+            stale: Arc::clone(&stale_cycles),
+        })
+    })
+    .unwrap();
+    bus.set_desired(Desired::Open);
+
+    spin("the link to go through several stale bursts", || {
+        (stale.load(Ordering::SeqCst) >= 3_000).then_some(())
+    });
+    assert_eq!(opens.load(Ordering::SeqCst), 1);
+    assert_eq!(bus.snapshot().actual, Actual::Open);
+}
+
+struct BlinkingLink {
+    cycle: u64,
+    stale: Arc<AtomicUsize>,
+}
+
+impl Link for BlinkingLink {
+    type Error = Infallible;
+    type Checker = ConstStateChecker;
+
+    fn num_devices(&self) -> usize {
+        1
+    }
+
+    fn state_checker(&self) -> ConstStateChecker {
+        ConstStateChecker::new(1)
+    }
+
+    fn cycle(
+        &mut self,
+        _tx: &[[u8; TX_FRAME_BYTES]],
+        _rx: &mut [[u8; RX_FRAME_BYTES]],
+    ) -> Result<CycleOutcome, Infallible> {
+        self.cycle += 1;
+        if self.cycle % 1_000 < 900 {
+            self.stale.fetch_add(1, Ordering::SeqCst);
+            Ok(CycleOutcome::stale())
+        } else {
+            Ok(CycleOutcome::valid())
+        }
+    }
+}
