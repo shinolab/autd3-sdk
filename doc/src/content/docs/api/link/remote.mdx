@@ -96,4 +96,8 @@ mDNS でネットワーク上のサーバ ([Appliance](/autd3-sdk/getting-starte
 | `rt_policy`    | `RtSchedulePolicy`       | バススレッドのスケジューリングポリシー                                     |
 | `rt_affinity`  | `Option<CoreId>`         | バススレッドを固定する CPU コア                                            |
 | `stack_prefault_bytes` | `usize`          | 起動時にページインしておくバススレッドのスタックのバイト数. デフォルトは0. |
+| `stale_reopen_after` | `Option<Duration>` | stale (デバイスがフレームを処理しない) サイクルがこの時間続いたらリンクを開き直す. `None` で無効. デフォルトは2 秒. |
+| `reopen_retry_period` | `Duration`     | リンクを開けなかったときに次に開き直すまでの待ち時間. デフォルトは1 秒. |
+| `recovering_reply_period` | `Duration` | バスの回復中, クライアントへ stale を返すまでに回復を待つ時間. デフォルトは1 ms. |
+| `probe_timeout` | `Duration`            | `SharedBus::probe` がデバイス数を数えるのを待つ上限. デフォルトは10 秒. |
 

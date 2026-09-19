@@ -772,7 +772,11 @@ impl Link for RebootedLink {
 fn a_bus_whose_devices_stop_processing_frames_is_reopened() {
     let opens = Arc::new(AtomicUsize::new(0));
     let counted = Arc::clone(&opens);
-    let bus = SharedBus::new(bus_option(), move || {
+    let option = BusOption {
+        stale_reopen_after: Some(Duration::from_millis(200)),
+        ..bus_option()
+    };
+    let bus = SharedBus::new(option, move || {
         let first = counted.fetch_add(1, Ordering::SeqCst) == 0;
         Ok::<_, RemoteLinkError>(RebootedLink {
             valid_cycles_left: first.then_some(100),
@@ -809,30 +813,74 @@ fn a_bus_whose_devices_stop_processing_frames_is_reopened() {
 
 #[test]
 fn a_briefly_stale_bus_keeps_its_link() {
+    const BURST: Duration = Duration::from_millis(100);
+    const REOPEN_AFTER: Duration = Duration::from_secs(1);
+
     let opens = Arc::new(AtomicUsize::new(0));
     let counted = Arc::clone(&opens);
-    let stale = Arc::new(AtomicUsize::new(0));
-    let stale_cycles = Arc::clone(&stale);
-    let bus = SharedBus::new(bus_option(), move || {
+    let bursts = Arc::new(Bursts::default());
+    let observed = Arc::clone(&bursts);
+    let option = BusOption {
+        stale_reopen_after: Some(REOPEN_AFTER),
+        ..bus_option()
+    };
+    let bus = SharedBus::new(option, move || {
         counted.fetch_add(1, Ordering::SeqCst);
         Ok::<_, RemoteLinkError>(BlinkingLink {
-            cycle: 0,
-            stale: Arc::clone(&stale_cycles),
+            burst: BURST,
+            started: Instant::now(),
+            observed: Arc::clone(&observed),
         })
     })
     .unwrap();
     bus.set_desired(Desired::Open);
 
+    let started = Instant::now();
     spin("the link to go through several stale bursts", || {
-        (stale.load(Ordering::SeqCst) >= 3_000).then_some(())
+        (bursts.stale.load(Ordering::SeqCst) >= 3
+            && bursts.valid.load(Ordering::SeqCst) >= 3
+            && started.elapsed() >= REOPEN_AFTER * 2)
+            .then_some(())
     });
     assert_eq!(opens.load(Ordering::SeqCst), 1);
     assert_eq!(bus.snapshot().actual, Actual::Open);
 }
 
+#[test]
+fn a_bus_without_a_stale_limit_never_reopens_on_its_own() {
+    let opens = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&opens);
+    let option = BusOption {
+        stale_reopen_after: None,
+        ..bus_option()
+    };
+    let bus = SharedBus::new(option, move || {
+        counted.fetch_add(1, Ordering::SeqCst);
+        Ok::<_, RemoteLinkError>(RebootedLink {
+            valid_cycles_left: Some(0),
+        })
+    })
+    .unwrap();
+    bus.set_desired(Desired::Open);
+
+    spin("the bus to open", || {
+        (bus.snapshot().actual == Actual::Open).then_some(())
+    });
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(opens.load(Ordering::SeqCst), 1);
+    assert_eq!(bus.snapshot().actual, Actual::Open);
+}
+
+#[derive(Default)]
+struct Bursts {
+    stale: AtomicUsize,
+    valid: AtomicUsize,
+}
+
 struct BlinkingLink {
-    cycle: u64,
-    stale: Arc<AtomicUsize>,
+    burst: Duration,
+    started: Instant,
+    observed: Arc<Bursts>,
 }
 
 impl Link for BlinkingLink {
@@ -852,11 +900,12 @@ impl Link for BlinkingLink {
         _tx: &[[u8; TX_FRAME_BYTES]],
         _rx: &mut [[u8; RX_FRAME_BYTES]],
     ) -> Result<CycleOutcome, Infallible> {
-        self.cycle += 1;
-        if self.cycle % 1_000 < 900 {
-            self.stale.fetch_add(1, Ordering::SeqCst);
+        let elapsed = self.started.elapsed().as_nanos();
+        if (elapsed / self.burst.as_nanos()).is_multiple_of(2) {
+            self.observed.stale.fetch_add(1, Ordering::SeqCst);
             Ok(CycleOutcome::stale())
         } else {
+            self.observed.valid.fetch_add(1, Ordering::SeqCst);
             Ok(CycleOutcome::valid())
         }
     }

@@ -55,6 +55,14 @@ pub struct Bus {
     pub process_data_watchdog: Option<Duration>,
     #[serde(deserialize_with = "duration")]
     pub sync_timeout: Option<Duration>,
+    #[serde(deserialize_with = "duration")]
+    pub stale_reopen_after: Option<Duration>,
+    #[serde(deserialize_with = "duration")]
+    pub reopen_retry_period: Option<Duration>,
+    #[serde(deserialize_with = "duration")]
+    pub recovering_reply_period: Option<Duration>,
+    #[serde(deserialize_with = "duration")]
+    pub probe_timeout: Option<Duration>,
 }
 
 impl Default for Bus {
@@ -68,6 +76,10 @@ impl Default for Bus {
             state_transition_timeout: None,
             process_data_watchdog: None,
             sync_timeout: None,
+            stale_reopen_after: None,
+            reopen_retry_period: None,
+            recovering_reply_period: None,
+            probe_timeout: None,
         }
     }
 }
@@ -289,6 +301,22 @@ impl Config {
             ),
             ("bus.sync_timeout", self.bus.sync_timeout, MAX_TIMEOUT),
             (
+                "bus.stale_reopen_after",
+                self.bus.stale_reopen_after,
+                MAX_TIMEOUT,
+            ),
+            (
+                "bus.reopen_retry_period",
+                self.bus.reopen_retry_period,
+                MAX_TIMEOUT,
+            ),
+            (
+                "bus.recovering_reply_period",
+                self.bus.recovering_reply_period,
+                MAX_TIMEOUT,
+            ),
+            ("bus.probe_timeout", self.bus.probe_timeout, MAX_TIMEOUT),
+            (
                 "health.report_interval",
                 self.health.report_interval,
                 MAX_TIMEOUT,
@@ -354,12 +382,23 @@ impl Config {
     }
 
     pub fn bus_option(&self) -> BusOption {
+        let defaults = BusOption::default();
         BusOption {
             pacing: BusPacing::LinkPaced,
             rt_priority: self.rt_priority(),
             rt_policy: self.rt.policy.into(),
             rt_affinity: self.rt.affinity.map(|id| CoreId { id }),
             stack_prefault_bytes: self.rt.prefault_stack_bytes,
+            stale_reopen_after: self.bus.stale_reopen_after.or(defaults.stale_reopen_after),
+            reopen_retry_period: self
+                .bus
+                .reopen_retry_period
+                .unwrap_or(defaults.reopen_retry_period),
+            recovering_reply_period: self
+                .bus
+                .recovering_reply_period
+                .unwrap_or(defaults.recovering_reply_period),
+            probe_timeout: self.bus.probe_timeout.unwrap_or(defaults.probe_timeout),
         }
     }
 
@@ -739,6 +778,48 @@ mod tests {
     fn a_config_this_server_fully_understands_reports_nothing() {
         let (_, unknown) = Config::parse(include_str!("../dist/remote-server.toml")).unwrap();
         assert_eq!(unknown, Vec::<String>::new());
+    }
+
+    #[test]
+    fn the_bus_loop_timings_reach_the_bus_option_and_fall_back_to_its_defaults() {
+        let config: Config = toml::from_str(
+            r#"
+            [bus]
+            interface = "eth0"
+            stale_reopen_after = "5s"
+            reopen_retry_period = "3s"
+            recovering_reply_period = "2ms"
+            probe_timeout = "20s"
+            "#,
+        )
+        .unwrap();
+        config.validate().unwrap();
+        let option = config.bus_option();
+        assert_eq!(option.stale_reopen_after, Some(Duration::from_secs(5)));
+        assert_eq!(option.reopen_retry_period, Duration::from_secs(3));
+        assert_eq!(option.recovering_reply_period, Duration::from_millis(2));
+        assert_eq!(option.probe_timeout, Duration::from_secs(20));
+
+        let defaults = BusOption::default();
+        let option = Config::default().bus_option();
+        assert_eq!(option.stale_reopen_after, defaults.stale_reopen_after);
+        assert_eq!(option.reopen_retry_period, defaults.reopen_retry_period);
+        assert_eq!(
+            option.recovering_reply_period,
+            defaults.recovering_reply_period
+        );
+        assert_eq!(option.probe_timeout, defaults.probe_timeout);
+
+        let config: Config = toml::from_str(
+            r#"
+            [bus]
+            interface = "eth0"
+            stale_reopen_after = "0s"
+            "#,
+        )
+        .unwrap();
+        let err = config.validate().unwrap_err().to_string();
+        assert!(err.contains("bus.stale_reopen_after"), "{err}");
     }
 
     #[test]

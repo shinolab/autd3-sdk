@@ -14,14 +14,14 @@ use crate::error::RemoteLinkError;
 use crate::wire::{self, BusStatus};
 
 const DEFAULT_CYCLE_PERIOD: Duration = Duration::from_micros(250);
-const REOPEN_RETRY_PERIOD: Duration = Duration::from_secs(1);
-const STALE_REOPEN_AFTER: Duration = Duration::from_secs(2);
-const RECOVERING_REPLY_PERIOD: Duration = Duration::from_millis(1);
+const DEFAULT_REOPEN_RETRY_PERIOD: Duration = Duration::from_secs(1);
+const DEFAULT_STALE_REOPEN_AFTER: Duration = Duration::from_secs(2);
+const DEFAULT_RECOVERING_REPLY_PERIOD: Duration = Duration::from_millis(1);
+const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 const STATUS_SAMPLE_PERIOD: Duration = Duration::from_millis(100);
 const IDLE_WAIT_PERIOD: Duration = Duration::from_millis(100);
 const SHUTDOWN_POLL_PERIOD: Duration = Duration::from_millis(20);
 const OPEN_WAIT_PERIOD: Duration = Duration::from_millis(10);
-const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 const TUNING_WAIT_TIMEOUT: Duration = Duration::from_secs(1);
 const STACK_HEADROOM_BYTES: usize = 1024 * 1024;
 const PREFAULT_FRAME_BYTES: usize = 16 * 1024;
@@ -62,6 +62,10 @@ pub struct BusOption {
     pub rt_policy: RtSchedulePolicy,
     pub rt_affinity: Option<CoreId>,
     pub stack_prefault_bytes: usize,
+    pub stale_reopen_after: Option<Duration>,
+    pub reopen_retry_period: Duration,
+    pub recovering_reply_period: Duration,
+    pub probe_timeout: Duration,
 }
 
 impl Default for BusOption {
@@ -72,6 +76,10 @@ impl Default for BusOption {
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
             stack_prefault_bytes: 0,
+            stale_reopen_after: Some(DEFAULT_STALE_REOPEN_AFTER),
+            reopen_retry_period: DEFAULT_REOPEN_RETRY_PERIOD,
+            recovering_reply_period: DEFAULT_RECOVERING_REPLY_PERIOD,
+            probe_timeout: DEFAULT_PROBE_TIMEOUT,
         }
     }
 }
@@ -208,6 +216,7 @@ pub(crate) struct FrameReply {
 }
 
 pub(crate) struct BusShared {
+    option: BusOption,
     state: Mutex<BusState>,
     cv: Condvar,
     stopped: AtomicBool,
@@ -217,8 +226,9 @@ pub(crate) struct BusShared {
 }
 
 impl BusShared {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(option: BusOption) -> Self {
         Self {
+            option,
             state: Mutex::new(BusState {
                 actual: Actual::Closed,
                 num_devices: 0,
@@ -410,7 +420,7 @@ impl BusShared {
         }
         state.probe = Probe::Requested;
         self.cv.notify_all();
-        let deadline = Instant::now() + PROBE_TIMEOUT;
+        let deadline = Instant::now() + self.option.probe_timeout;
         loop {
             if matches!(state.probe, Probe::Done(_)) {
                 let Probe::Done(result) = std::mem::replace(&mut state.probe, Probe::Idle) else {
@@ -430,7 +440,7 @@ impl BusShared {
             if remaining.is_zero() {
                 state.probe = Probe::Idle;
                 return Err(RemoteLinkError::ProbeTimeout {
-                    timeout: PROBE_TIMEOUT,
+                    timeout: self.option.probe_timeout,
                 });
             }
             state = self
@@ -701,8 +711,8 @@ impl BusShared {
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
                 continue;
             }
-            let deadline =
-                *recovery_deadline.get_or_insert_with(|| Instant::now() + RECOVERING_REPLY_PERIOD);
+            let deadline = *recovery_deadline
+                .get_or_insert_with(|| Instant::now() + self.option.recovering_reply_period);
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
                 rx.copy_from_slice(state.rx.as_flattened());
@@ -764,7 +774,7 @@ where
         }
     };
     shared.enter_failed(&reason);
-    shared.wait_backoff(REOPEN_RETRY_PERIOD);
+    shared.wait_backoff(shared.option.reopen_retry_period);
     None
 }
 
@@ -834,7 +844,7 @@ fn bus_loop<L, F>(
     let mut rx_local: Vec<[u8; RX_FRAME_BYTES]> = Vec::new();
     let mut diag = CycleDiag::default();
     let mut published: Option<Instant> = None;
-    let mut stale = StaleWatch::default();
+    let mut stale = StaleWatch::new(option.stale_reopen_after);
 
     while !shared.is_stopped() {
         if shared.desired() == Desired::Closed {
@@ -868,7 +878,7 @@ fn bus_loop<L, F>(
                 rx_local = opened.rx;
                 link = Some(opened.link);
                 published = None;
-                stale = StaleWatch::default();
+                stale = StaleWatch::new(option.stale_reopen_after);
             }
             continue;
         };
@@ -933,22 +943,32 @@ fn bus_loop<L, F>(
     close_link(&mut link);
 }
 
-#[derive(Default)]
 struct StaleWatch {
+    reopen_after: Option<Duration>,
     since: Option<Instant>,
 }
 
 impl StaleWatch {
+    fn new(reopen_after: Option<Duration>) -> Self {
+        Self {
+            reopen_after,
+            since: None,
+        }
+    }
+
     fn stuck(&mut self, rx_valid: bool) -> bool {
         if rx_valid {
             self.since = None;
             return false;
         }
-        if self.since.get_or_insert_with(Instant::now).elapsed() < STALE_REOPEN_AFTER {
+        let Some(reopen_after) = self.reopen_after else {
+            return false;
+        };
+        if self.since.get_or_insert_with(Instant::now).elapsed() < reopen_after {
             return false;
         }
         tracing::error!(
-            stale_for_ms = STALE_REOPEN_AFTER.as_millis(),
+            stale_for_ms = reopen_after.as_millis(),
             "the devices stopped processing frames; reopening the bus link",
         );
         true
@@ -1063,7 +1083,7 @@ impl SharedBus {
         L: Link + 'static,
         F: FnMut() -> Result<L, RemoteLinkError> + Send + 'static,
     {
-        let shared = Arc::new(BusShared::new());
+        let shared = Arc::new(BusShared::new(option));
         let (checker_tx, checker_rx) = std::sync::mpsc::channel();
 
         let mut builder = std::thread::Builder::new().name("autd3-remote-bus".to_owned());
