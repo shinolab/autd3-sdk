@@ -2,53 +2,17 @@ use std::collections::{BTreeMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::time::{Duration, Instant};
 
-use mdns_sd::{
-    IfKind, Receiver, ResolvedService, ScopedIp, ServiceDaemon, ServiceEvent, ServiceInfo,
-    TryRecvError,
+use mdns_sd::{Receiver, ResolvedService, ScopedIp, ServiceDaemon, ServiceEvent, TryRecvError};
+
+use super::RemoteLinkOption;
+use crate::mdns::{
+    DiscoveryError, ServerKind, TXT_CONTROL_PORT, TXT_SDK_VERSION, TXT_WIRE_VERSION, instance_name,
+    mdns,
 };
 
-use crate::link::RemoteLinkOption;
-use crate::wire;
-
-pub const SERVICE_TYPE: &str = "_autd3._tcp.local.";
-pub const SIM_SERVICE_TYPE: &str = "_autd3-sim._tcp.local.";
-pub const TXT_CONTROL_PORT: &str = "ctrl";
-pub const TXT_WIRE_VERSION: &str = "wire";
-pub const TXT_SDK_VERSION: &str = "sdk";
-
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
-const UNREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
 const DEFAULT_LINK_TIMEOUT: Duration = Duration::from_secs(10);
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[non_exhaustive]
-pub enum ServerKind {
-    #[default]
-    Appliance,
-    Simulator,
-}
-
-impl ServerKind {
-    const ALL: [Self; 2] = [Self::Appliance, Self::Simulator];
-
-    #[must_use]
-    pub const fn service_type(self) -> &'static str {
-        match self {
-            Self::Appliance => SERVICE_TYPE,
-            Self::Simulator => SIM_SERVICE_TYPE,
-        }
-    }
-}
-
-impl std::fmt::Display for ServerKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Appliance => write!(f, "appliance"),
-            Self::Simulator => write!(f, "simulator"),
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Appliance {
@@ -93,39 +57,6 @@ impl Default for DiscoveryOption {
             kind: None,
         }
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum DiscoveryError {
-    #[error("mDNS error: {0}")]
-    Mdns(String),
-    #[error(
-        "no AUTD3 server answered within {timeout:?}. \
-         Check that the appliance is powered up and on the same link or that the simulator is running, \
-         or pass its address to `RemoteLinkOption::new`"
-    )]
-    NotFound { timeout: Duration },
-    #[error(
-        "{} AUTD3 servers answered with the same priority: {}. \
-         Pick one with `DiscoveryOption::instance`, or pass its address to `RemoteLinkOption::new`",
-        found.len(),
-        found.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "),
-    )]
-    Ambiguous { found: Vec<Appliance> },
-}
-
-fn mdns(err: &mdns_sd::Error) -> DiscoveryError {
-    DiscoveryError::Mdns(err.to_string())
-}
-
-#[must_use]
-pub fn instance_name(fullname: &str) -> String {
-    ServerKind::ALL
-        .iter()
-        .find_map(|kind| fullname.strip_suffix(&format!(".{}", kind.service_type())))
-        .unwrap_or(fullname)
-        .replace("\\.", ".")
 }
 
 fn is_link_local_v6(addr: Ipv6Addr) -> bool {
@@ -387,94 +318,16 @@ fn with_kind(option: &DiscoveryOption, kind: ServerKind) -> DiscoveryOption {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Advertisement {
-    pub instance: String,
-    pub port: u16,
-    pub control_port: Option<u16>,
-    pub exclude_interfaces: Vec<String>,
-    pub kind: ServerKind,
-}
-
-pub struct AdvertisementHandle {
-    daemon: ServiceDaemon,
-    fullname: String,
-}
-
-impl AdvertisementHandle {
-    #[must_use]
-    pub fn fullname(&self) -> &str {
-        &self.fullname
-    }
-}
-
-fn service_info(advertisement: &Advertisement) -> Result<ServiceInfo, DiscoveryError> {
-    let mut properties = vec![
-        (TXT_WIRE_VERSION.to_owned(), wire::VERSION.to_string()),
-        (TXT_SDK_VERSION.to_owned(), wire::SDK_VERSION.to_owned()),
-    ];
-    if let Some(port) = advertisement.control_port {
-        properties.push((TXT_CONTROL_PORT.to_owned(), port.to_string()));
-    }
-
-    Ok(ServiceInfo::new(
-        advertisement.kind.service_type(),
-        &advertisement.instance,
-        &format!("{}.local.", advertisement.instance),
-        "",
-        advertisement.port,
-        &properties[..],
-    )
-    .map_err(|err| mdns(&err))?
-    .enable_addr_auto())
-}
-
-pub fn advertise(advertisement: &Advertisement) -> Result<AdvertisementHandle, DiscoveryError> {
-    let info = service_info(advertisement)?;
-    let fullname = info.get_fullname().to_owned();
-
-    let daemon = ServiceDaemon::new().map_err(|err| mdns(&err))?;
-    for interface in &advertisement.exclude_interfaces {
-        daemon
-            .disable_interface(IfKind::Name(interface.clone()))
-            .map_err(|err| mdns(&err))?;
-    }
-    daemon.register(info).map_err(|err| mdns(&err))?;
-
-    Ok(AdvertisementHandle { daemon, fullname })
-}
-
-impl Drop for AdvertisementHandle {
-    fn drop(&mut self) {
-        if let Ok(status) = self.daemon.unregister(&self.fullname) {
-            let _ = status.recv_timeout(UNREGISTER_TIMEOUT);
-        }
-        let _ = self.daemon.shutdown();
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use mdns_sd::{InterfaceId, ScopedIpV4};
+    use mdns_sd::{InterfaceId, ScopedIpV4, ServiceInfo};
 
     use super::*;
+    use crate::mdns::SERVICE_TYPE;
 
     #[test]
     fn the_default_timeout_outlives_a_full_session_open() {
         assert!(DEFAULT_LINK_TIMEOUT >= crate::server::SESSION_OPEN_TIMEOUT * 2);
-    }
-
-    #[test]
-    fn the_instance_name_drops_the_service_type() {
-        assert_eq!(
-            instance_name(&format!("autd3-0a1b2c3d.{SERVICE_TYPE}")),
-            "autd3-0a1b2c3d",
-        );
-        assert_eq!(
-            instance_name(&format!("autd3-sim-lab-pc-8080.{SIM_SERVICE_TYPE}")),
-            "autd3-sim-lab-pc-8080",
-        );
-        assert_eq!(instance_name("autd3-0a1b2c3d"), "autd3-0a1b2c3d");
     }
 
     #[test]
@@ -525,63 +378,6 @@ mod tests {
 
         let global = ScopedIp::from(IpAddr::V6("2001:db8::1".parse().unwrap()));
         assert!(socket_addr(&global, 8080).is_some());
-    }
-
-    #[test]
-    fn the_advertisement_carries_the_endpoint_and_the_versions() {
-        let info = service_info(&Advertisement {
-            instance: "autd3-0a1b2c3d".to_owned(),
-            port: 8080,
-            control_port: Some(8081),
-            ..Advertisement::default()
-        })
-        .unwrap();
-
-        assert_eq!(
-            info.get_fullname(),
-            format!("autd3-0a1b2c3d.{SERVICE_TYPE}")
-        );
-        assert_eq!(info.get_hostname(), "autd3-0a1b2c3d.local.");
-        assert_eq!(info.get_port(), 8080);
-        assert!(info.is_addr_auto());
-        assert_eq!(
-            info.get_property_val_str(TXT_WIRE_VERSION),
-            Some(wire::VERSION.to_string().as_str()),
-        );
-        assert_eq!(
-            info.get_property_val_str(TXT_SDK_VERSION),
-            Some(wire::SDK_VERSION),
-        );
-        assert_eq!(info.get_property_val_str(TXT_CONTROL_PORT), Some("8081"));
-    }
-
-    #[test]
-    fn a_server_without_a_control_api_advertises_no_control_port() {
-        let info = service_info(&Advertisement {
-            instance: "autd3-0a1b2c3d".to_owned(),
-            port: 8080,
-            ..Advertisement::default()
-        })
-        .unwrap();
-        assert_eq!(info.get_property_val_str(TXT_CONTROL_PORT), None);
-    }
-
-    #[test]
-    fn a_simulator_advertises_under_its_own_service_type() {
-        let info = service_info(&Advertisement {
-            instance: "autd3-sim-lab-pc-8080".to_owned(),
-            port: 8080,
-            kind: ServerKind::Simulator,
-            ..Advertisement::default()
-        })
-        .unwrap();
-        assert_eq!(info.get_type(), SIM_SERVICE_TYPE);
-        assert_eq!(
-            info.get_fullname(),
-            format!("autd3-sim-lab-pc-8080.{SIM_SERVICE_TYPE}"),
-            "a client that only browses {SERVICE_TYPE} never sees a simulator",
-        );
-        assert_eq!(info.get_property_val_str(TXT_CONTROL_PORT), None);
     }
 
     fn resolved(addresses: &str) -> ResolvedService {

@@ -1,3 +1,6 @@
+#[cfg(feature = "discovery")]
+mod discovery;
+
 use std::convert::Infallible;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -7,6 +10,9 @@ use std::time::Duration;
 use autd3_rs_core::link::{CycleOutcome, DcClock, Link, LinkStats, LinkStatus, StateCheck};
 use autd3_rs_core::value::DcSysTime;
 use autd3_rs_core::{IntoLink, RX_FRAME_BYTES, TX_FRAME_BYTES};
+
+#[cfg(feature = "discovery")]
+pub use discovery::{Appliance, DiscoveryOption, discover, discover_all};
 
 use crate::error::{RejectKind, RemoteLinkError};
 use crate::wire::{self, BusStatus};
