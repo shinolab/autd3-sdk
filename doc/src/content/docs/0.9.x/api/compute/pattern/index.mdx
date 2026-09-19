@@ -1,0 +1,36 @@
+---
+title: Pattern
+description: 各振動子の位相・振幅 emission を計算して音場を作る Pattern
+sidebar:
+  order: 1
+slug: 0.9.x/api/compute/pattern
+---
+
+import Math from "@components/Math.astro";
+import Install from "@components/Install.astro";
+
+単一焦点・平面波・ベッセルビーム・音響浮揚向けのトラップ場など, 代表的な音場計算ユーティリティ.
+
+<Install rust="autd3-rs-pattern" python="autd3-pattern" csharp="AUTD3.Pattern" />
+
+## 関数一覧
+
+* [focus](/autd3-sdk/0.9.x/api/compute/pattern/focus/) — 単一焦点
+* [plane](/autd3-sdk/0.9.x/api/compute/pattern/plane/) — 平面波
+* [bessel](/autd3-sdk/0.9.x/api/compute/pattern/bessel/) — ベッセルビーム
+* [laguerre\_gaussian\_phase](/autd3-sdk/0.9.x/api/compute/pattern/laguerre-gaussian/) — ラゲール・ガウシアンビーム
+* [hermite\_gaussian\_phase](/autd3-sdk/0.9.x/api/compute/pattern/hermite-gaussian/) — エルミート・ガウシアンビーム
+* [set\_intensity / set\_phase / add\_phase](/autd3-sdk/0.9.x/api/compute/pattern/set/) — 振幅・位相の一括設定
+* [group](/autd3-sdk/0.9.x/api/compute/pattern/group/) — 振動子毎にパターンを選択
+
+`focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分の位相を返す `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
+いずれも Rust と C# にあり, Python にはない.
+
+パターン関数は位相だけを書き込み, 振幅は変更されない.
+`pattern_buffer` で確保したバッファの初期値は位相 0・最大振幅であり, 振幅を変えるときは `set_intensity` を使う.
+
+## 波長
+
+位相計算には波長 <Math tex="\lambda = c / f" /> が必要になる.
+音速 <Math tex="c" /> から `autd3_rs_pattern::wavelength(sound_speed)` で波長を求められる.
+音速 340 m/s (室温約15°の空気中での音速) では<Math tex="\lambda = 8.5\,\mathrm{mm}" />.

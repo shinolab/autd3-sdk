@@ -1,0 +1,42 @@
+---
+title: laguerre_gaussian
+description: ラゲール・ガウシアンビームを作る Pattern
+sidebar:
+  order: 5
+srcPath: crates/autd3-rs-pattern/src/laguerre_gaussian.rs
+slug: 0.9.x/api/compute/pattern/laguerre-gaussian
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import PatternField from "@components/PatternField.astro";
+
+`laguerre_gaussian_phase` はラゲール・ガウシアン (LG) ビーム <Math tex="\mathrm{LG}_p^l" /> を生成する.
+
+<PatternField kind="laguerre-gaussian" />
+
+位相を変更する `laguerre_gaussian_phase` とは別に振幅のみを書く `laguerre_gaussian_intensity` がある.
+
+## API
+
+<CodeTabs rust={"let option = LaguerreGaussianOption {\n    p: 1,\n    l: 1,\n    waist: 10.0 * mm,\n};\nlaguerre_gaussian_phase(&geometry, target, axis, option, wavelength, &mut dst);\nlaguerre_gaussian_intensity(&geometry, target, axis, option, wavelength, &mut dst);"} python={"option = LaguerreGaussianOption(p=1, l=1, waist=10.0)\nlaguerre_gaussian_phase(geometry, target, axis, option, wavelength, dst)\nlaguerre_gaussian_intensity(geometry, target, axis, option, wavelength, dst)"} csharp={"var option = new LaguerreGaussianOption(p: 1, l: 1, waist: 10.0f * mm);\nPattern.LaguerreGaussianPhase(geometry, target, axis, option, wavelength, dst);\nPattern.LaguerreGaussianIntensity(geometry, target, axis, option, wavelength, dst);"} />
+
+| 引数         | 型                       | 説明                                          |
+| ------------ | ------------------------ | --------------------------------------------- |
+| `geometry`   | `&Geometry`              | デバイス配置                                  |
+| `target`     | `Point3<f32>`            | ビームウエストの中心座標 \[mm]                 |
+| `axis`       | `UnitVector3<f32>`       | ビームの伝搬方向 (単位ベクトル)               |
+| `option`     | `LaguerreGaussianOption` | モードとウエスト                              |
+| `wavelength` | `Length`                 | 波長                                          |
+| `dst`        | `&mut [[Emission; _]]`   | 出力バッファ                                  |
+
+| フィールド | 型       | 説明                                                  |
+| ---------- | -------- | ----------------------------------------------------- |
+| `p`        | `u32`    | 動径方向のモード次数                                  |
+| `l`        | `i32`    | 方位角方向のモード次数                                |
+| `waist`    | `Length` | ビームウエスト半径 <Math tex="w_0" /> (正値)          |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs_pattern::{\n    LaguerreGaussianOption, laguerre_gaussian_phase, laguerre_gaussian_intensity, wavelength,\n};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\n\nlet mut dst = geometry.pattern_buffer();\n\nlet target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);\nlet option = LaguerreGaussianOption {\n    p: 0,\n    l: 1,\n    waist: 10.0 * mm,\n};\nlet wavelength = wavelength(340.0 * m / s);\nlaguerre_gaussian_phase(\n    &geometry,\n    target,\n    Vector3::z_axis(),\n    option,\n    wavelength,\n    &mut dst,\n);\nlaguerre_gaussian_intensity(\n    &geometry,\n    target,\n    Vector3::z_axis(),\n    option,\n    wavelength,\n    &mut dst,\n);"} python={"import numpy as np\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import m, s\nfrom autd3_pattern import (\n    LaguerreGaussianOption,\n    laguerre_gaussian_phase,\n    laguerre_gaussian_intensity,\n    wavelength,\n)\n\ngeometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n\ndst = geometry.pattern_buffer()\n\ntarget = geometry.center() + np.array([0.0, 0.0, 150.0])\noption = LaguerreGaussianOption(p=0, l=1, waist=10.0)\nwl = wavelength(340 * m / s)\nlaguerre_gaussian_phase(geometry, target, np.array([0.0, 0.0, 1.0]), option, wl, dst)\nlaguerre_gaussian_intensity(geometry, target, np.array([0.0, 0.0, 1.0]), option, wl, dst)"} csharp={"using System.Numerics;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\n\nvar dst = geometry.PatternBuffer();\n\nvar target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);\nvar option = new LaguerreGaussianOption(p: 0, l: 1, waist: 10.0f * mm);\nvar wavelength = Pattern.Wavelength(340.0f * m / s);\nPattern.LaguerreGaussianPhase(geometry, target, Vector3.UnitZ, option, wavelength, dst);\nPattern.LaguerreGaussianIntensity(geometry, target, Vector3.UnitZ, option, wavelength, dst);"} />

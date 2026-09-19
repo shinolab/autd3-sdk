@@ -1,0 +1,51 @@
+---
+title: set_intensity / set_phase / add_phase
+description: パターンバッファの振幅・位相を一括で設定する
+sidebar:
+  order: 7
+srcPath: crates/autd3-rs-pattern/src/set.rs
+slug: 0.9.x/api/compute/pattern/set
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+パターンバッファ全体の振幅・位相を一括で書き換える.
+`focus` などのパターン関数は位相だけを書くので, 振幅はこれらの関数で設定する.
+
+`pattern_buffer` で確保したバッファの初期値は位相 0・最大振幅である.
+C# では `new Emission[n]` の要素は振幅 0 で初期化されることに注意
+
+## set\_intensity
+
+全振動子の振幅を設定する. 位相は変えない.
+`Intensity::MIN` を渡すと無出力になる.
+
+<CodeTabs rust={"set_intensity(intensity, &mut dst);"} python={"set_intensity(intensity, dst)"} csharp={"Pattern.SetIntensity(intensity, dst);"} />
+
+## set\_phase
+
+全振動子の位相を設定する. 振幅は変えない.
+
+<CodeTabs rust={"set_phase(phase, &mut dst);"} python={"set_phase(phase, dst)"} csharp={"Pattern.SetPhase(phase, dst);"} />
+
+## set\_phase\_and\_intensity
+
+全振動子の位相と振幅を設定する.
+
+<CodeTabs rust={"set_phase_and_intensity(phase, intensity, &mut dst);"} python={"set_phase_and_intensity(phase, intensity, dst)"} csharp={"Pattern.SetPhaseAndIntensity(phase, intensity, dst);"} />
+
+## add\_phase
+
+全振動子の位相へ一律に加算する (8 bit で折り返す). 振幅は変えない.
+
+<CodeTabs rust={"add_phase(phase, &mut dst);"} python={"add_phase(phase, dst)"} csharp={"Pattern.AddPhase(phase, dst);"} />
+
+| 引数        | 型                     | 説明         |
+| ----------- | ---------------------- | ------------ |
+| `intensity` | `Intensity`            | 振幅         |
+| `phase`     | `Phase`                | 位相         |
+| `dst`       | `&mut [[Emission; _]]` | 対象バッファ |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs::value::{Intensity, Phase};\nuse autd3_rs_pattern::{add_phase, focus, set_intensity, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\n\nlet mut dst = geometry.pattern_buffer();\n\nset_intensity(Intensity(0x80), &mut dst);\nfocus(\n    &geometry,\n    geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n    wavelength(340.0 * m / s),\n    &mut dst,\n);\nadd_phase(Phase::PI, &mut dst);\n\nset_intensity(Intensity::MIN, &mut dst);"} python={"import numpy as np\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import m, s\nfrom autd3.value import Intensity, Phase\nfrom autd3_pattern import add_phase, focus, set_intensity, wavelength\n\ngeometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n\ndst = geometry.pattern_buffer()\n\nset_intensity(Intensity(0x80), dst)\nfocus(\n    geometry,\n    geometry.center() + np.array([0.0, 0.0, 150.0]),\n    wavelength(340 * m / s),\n    dst,\n)\nadd_phase(Phase.PI, dst)\n\nset_intensity(Intensity.MIN, dst)"} csharp={"using System.Numerics;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\n\nvar dst = geometry.PatternBuffer();\n\nPattern.SetIntensity(new Intensity(0x80), dst);\nPattern.Focus(\n    geometry,\n    geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),\n    Pattern.Wavelength(340.0f * m / s),\n    dst\n);\nPattern.AddPhase(Phase.Pi, dst);\n\nPattern.SetIntensity(Intensity.Min, dst);"} />

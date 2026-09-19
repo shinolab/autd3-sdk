@@ -9,3 +9,6 @@ src/content/versions/*
 !src/content/versions/0.8.x.json
 !src/content/docs/0.8.x/
 !src/content/docs/*/0.8.x/
+!src/content/versions/0.9.x.json
+!src/content/docs/0.9.x/
+!src/content/docs/*/0.9.x/

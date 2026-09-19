@@ -79,7 +79,7 @@ export default defineConfig({
       plugins: [
         starlightVersions({
           current: { label: "git" },
-          versions: [{ slug: "0.8.x" }],
+          versions: [{ slug: "0.9.x" }, { slug: "0.8.x" }],
         }),
       ],
       sidebar,

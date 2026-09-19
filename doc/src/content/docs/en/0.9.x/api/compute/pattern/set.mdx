@@ -1,0 +1,51 @@
+---
+title: set_intensity / set_phase / add_phase
+description: Set the intensity and phase of a whole pattern buffer
+sidebar:
+  order: 7
+srcPath: crates/autd3-rs-pattern/src/set.rs
+slug: en/0.9.x/api/compute/pattern/set
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+These functions rewrite the intensity and phase of a whole pattern buffer at once.
+Pattern functions such as `focus` write only the phase, so set the intensity with these functions.
+
+A buffer allocated with `pattern_buffer` starts at phase 0 and the maximum intensity.
+Note that, in C#, the elements of `new Emission[n]` start at intensity 0.
+
+## set\_intensity
+
+Sets the intensity of every transducer. The phase is left unchanged.
+Passing `Intensity::MIN` produces no output.
+
+<CodeTabs rust={"set_intensity(intensity, &mut dst);"} python={"set_intensity(intensity, dst)"} csharp={"Pattern.SetIntensity(intensity, dst);"} />
+
+## set\_phase
+
+Sets the phase of every transducer. The intensity is left unchanged.
+
+<CodeTabs rust={"set_phase(phase, &mut dst);"} python={"set_phase(phase, dst)"} csharp={"Pattern.SetPhase(phase, dst);"} />
+
+## set\_phase\_and\_intensity
+
+Sets both the phase and the intensity of every transducer.
+
+<CodeTabs rust={"set_phase_and_intensity(phase, intensity, &mut dst);"} python={"set_phase_and_intensity(phase, intensity, dst)"} csharp={"Pattern.SetPhaseAndIntensity(phase, intensity, dst);"} />
+
+## add\_phase
+
+Adds a phase uniformly to every transducer (wrapping at 8 bits). The intensity is left unchanged.
+
+<CodeTabs rust={"add_phase(phase, &mut dst);"} python={"add_phase(phase, dst)"} csharp={"Pattern.AddPhase(phase, dst);"} />
+
+| Parameter   | Type                   | Description   |
+| ----------- | ---------------------- | ------------- |
+| `intensity` | `Intensity`            | Intensity     |
+| `phase`     | `Phase`                | Phase         |
+| `dst`       | `&mut [[Emission; _]]` | Target buffer |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs::value::{Intensity, Phase};\nuse autd3_rs_pattern::{add_phase, focus, set_intensity, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\n\nlet mut dst = geometry.pattern_buffer();\n\nset_intensity(Intensity(0x80), &mut dst);\nfocus(\n    &geometry,\n    geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n    wavelength(340.0 * m / s),\n    &mut dst,\n);\nadd_phase(Phase::PI, &mut dst);\n\nset_intensity(Intensity::MIN, &mut dst);"} python={"import numpy as np\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import m, s\nfrom autd3.value import Intensity, Phase\nfrom autd3_pattern import add_phase, focus, set_intensity, wavelength\n\ngeometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n\ndst = geometry.pattern_buffer()\n\nset_intensity(Intensity(0x80), dst)\nfocus(\n    geometry,\n    geometry.center() + np.array([0.0, 0.0, 150.0]),\n    wavelength(340 * m / s),\n    dst,\n)\nadd_phase(Phase.PI, dst)\n\nset_intensity(Intensity.MIN, dst)"} csharp={"using System.Numerics;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\n\nvar dst = geometry.PatternBuffer();\n\nPattern.SetIntensity(new Intensity(0x80), dst);\nPattern.Focus(\n    geometry,\n    geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),\n    Pattern.Wavelength(340.0f * m / s),\n    dst\n);\nPattern.AddPhase(Phase.Pi, dst);\n\nPattern.SetIntensity(Intensity.Min, dst);"} />

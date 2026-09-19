@@ -1,0 +1,57 @@
+---
+title: group
+description: 振動子毎に出力するパターンを選ぶ Pattern
+sidebar:
+  order: 8
+srcPath: crates/autd3-rs-pattern/src/group.rs
+slug: 0.9.x/api/compute/pattern/group
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+振動子毎に, どのパターンの emission を出力するかを選ぶ.
+振動子の振り分けは `TransducerGroups` でキー (enum など) を割り当てて決める. どのキーも割り当てられていない振動子は無出力になる.
+
+合成には 2 つの API がある.
+
+* `group_compute` — キー毎にキーと `TransducerMask` を受け取って計算し, 合成する.
+* `group` — 計算済みのバッファをキーから選んで合成する. 計算結果を使い回したい場合やグループ毎に並列に計算したい場合に使う.
+
+:::note
+デバイス単位で切り替えるだけなら, これらではなく `DatagramBuilder` の `push_each` でデバイス毎にコマンドを送ればよい.
+:::
+
+## group\_compute
+
+<CodeTabs rust={"#[derive(Clone, Copy, PartialEq, Eq)]\nenum Side {\n    Left,\n    Right,\n}\n\ngroup_compute(\n    &geometry,\n    &groups,\n    |side, mask, buffer| match side {\n        Side::Left => gspat(\n            &NalgebraBackend,\n            &geometry,\n            &foci,\n            wavelength,\n            &GspatOption {\n                mask,\n                ..Default::default()\n            },\n            buffer,\n        ),\n        Side::Right => {\n            focus(&geometry, target, wavelength, buffer);\n            Ok(())\n        }\n    },\n    &mut dst,\n)?;"} python={"class Side(Enum):\n    LEFT = auto()\n    RIGHT = auto()\n\ndef compute(side: Side, mask: TransducerMask, buffer: PatternBuffer) -> None:\n    if side is Side.LEFT:\n        gspat(geometry, foci, wl, GspatOption(mask=mask), buffer)\n    else:\n        focus(geometry, target, wl, buffer)\n\n\ngroup_compute(geometry, groups, compute, dst)"} csharp={"internal enum Side\n{\n    Left,\n    Right,\n}\n\nPattern.GroupCompute(geometry, groups, (side, mask, buffer) =>\n{\n    if (side == Side.Left)\n    {\n        Holo.Gspat(geometry, foci, wavelength, new GspatOption(mask: mask), buffer);\n    }\n    else\n    {\n        Pattern.Focus(geometry, target, wavelength, buffer);\n    }\n}, dst);"} />
+
+| 引数       | 型                                                                   | 説明                                             |
+| ---------- | -------------------------------------------------------------------- | ------------------------------------------------ |
+| `geometry` | `&Geometry`                                                          | ジオメトリ                                       |
+| `groups`   | `&TransducerGroups<K>`                                               | 振動子毎のキー                                   |
+| `compute`  | `FnMut(K, TransducerMask, &mut [Vec<Emission>]) -> Result<(), E>`    | キーとマスクを受け取り, 作業バッファへ計算する   |
+| `dst`      | `&mut [Vec<Emission>]`                                               | 出力バッファ                                     |
+
+`compute` はキー毎に 1 回 (キーの初出順) 呼ばれ, 計算結果のうちそのキーの振動子分だけが `dst` に書き込まれる.
+どのキーにも割り当てられていない振動子は無出力 (`Emission::NULL`) になる.
+
+## group
+
+<CodeTabs rust={"#[derive(Clone, Copy, PartialEq, Eq)]\nenum Side {\n    Left,\n    Right,\n}\n\nlet groups = TransducerGroups::new(&geometry, |device, tr| {\n    Some(if device.position(tr).x < center.x {\n        Side::Left\n    } else {\n        Side::Right\n    })\n});\ngroup(\n    &geometry,\n    &groups,\n    |side| match side {\n        Side::Left => &left,\n        Side::Right => &right,\n    },\n    &mut dst,\n);"} python={"class Side(Enum):\n    LEFT = auto()\n    RIGHT = auto()\n\ngroups = TransducerGroups(\n    geometry,\n    lambda device, tr: Side.LEFT if device.position(tr)[0] < center[0] else Side.RIGHT,\n)\ngroup(geometry, groups, {Side.LEFT: left, Side.RIGHT: right}, dst)"} csharp={"internal enum Side\n{\n    Left,\n    Right,\n}\n\nvar groups = new TransducerGroups<Side>(geometry, (device, tr) => device.Position(tr).X < center.X ? Side.Left : Side.Right);\nPattern.Group(geometry, groups, side => side == Side.Left ? left : right, dst);"} />
+
+| 引数       | 型                                          | 説明                                   |
+| ---------- | ------------------------------------------- | -------------------------------------- |
+| `geometry` | `&Geometry`                                 | ジオメトリ                             |
+| `groups`   | `&TransducerGroups<K>`                      | 振動子毎のキー                         |
+| `source`   | `FnMut(K) -> impl AsRef<[Vec<Emission>]>`   | キーから出力元バッファを返す           |
+| `dst`      | `&mut [Vec<Emission>]`                      | 出力バッファ                           |
+
+## TransducerGroups
+
+`TransducerGroups::new(&geometry, |device, tr| ...)` がデバイスと振動子インデックスからキー (`None` = どのグループにも属さない) を返し, 振動子毎のキーを保持する.
+キーは Rust では `Copy + Eq` な型, C# では値型 (`struct`), Python ではハッシュ可能な値.
+`mask(key)` でキー `key` の振動子だけを有効にした [Holo](/autd3-sdk/0.9.x/api/compute/holo/) 用の `TransducerMask`を取得できる.
+
+## Example
+
+<CodeTabs rust={"use anyhow::Result;\n\nuse autd3_rs::geometry::{Autd3, Geometry, TransducerGroups, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs_pattern::{focus, group_compute, wavelength};\nuse autd3_rs_pattern_holo::{AmplitudeTarget, GspatOption, NalgebraBackend, Pa, gspat};\n\n#[derive(Clone, Copy, PartialEq, Eq)]\nenum Side {\n    Left,\n    Right,\n}\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet wavelength = wavelength(340.0 * m / s);\nlet center = geometry.center();\n\nlet groups = TransducerGroups::new(&geometry, |device, tr| {\n    Some(if device.position(tr).x < center.x {\n        Side::Left\n    } else {\n        Side::Right\n    })\n});\n\nlet foci = [\n    AmplitudeTarget {\n        point: center + offset(-50.0 * mm, 0.0 * mm, 150.0 * mm),\n        amplitude: 5e3 * Pa,\n    },\n    AmplitudeTarget {\n        point: center + offset(-20.0 * mm, 0.0 * mm, 150.0 * mm),\n        amplitude: 5e3 * Pa,\n    },\n];\n\nlet mut dst = geometry.pattern_buffer();\ngroup_compute(\n    &geometry,\n    &groups,\n    |side, mask, buffer| match side {\n        Side::Left => gspat(\n            &NalgebraBackend,\n            &geometry,\n            &foci,\n            wavelength,\n            &GspatOption {\n                mask,\n                ..Default::default()\n            },\n            buffer,\n        ),\n        Side::Right => {\n            focus(\n                &geometry,\n                center + offset(40.0 * mm, 0.0 * mm, 150.0 * mm),\n                wavelength,\n                buffer,\n            );\n            Ok(())\n        }\n    },\n    &mut dst,\n)?;"} python={"from enum import Enum, auto\n\nimport numpy as np\n\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import m, s\nfrom autd3_pattern import (\n    PatternBuffer,\n    TransducerGroups,\n    TransducerMask,\n    focus,\n    group_compute,\n    wavelength,\n)\nfrom autd3_pattern_holo import AmplitudeTarget, GspatOption, Pa, gspat\n\n\nclass Side(Enum):\n    LEFT = auto()\n    RIGHT = auto()\n\n\ngeometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\nwl = wavelength(340 * m / s)\ncenter = geometry.center()\n\ngroups = TransducerGroups(\n    geometry,\n    lambda device, tr: Side.LEFT if device.position(tr)[0] < center[0] else Side.RIGHT,\n)\n\nfoci = [\n    AmplitudeTarget(point=center + np.array([-50.0, 0.0, 150.0]), amplitude=5e3 * Pa),\n    AmplitudeTarget(point=center + np.array([-20.0, 0.0, 150.0]), amplitude=5e3 * Pa),\n]\n\n\ndef compute(side: Side, mask: TransducerMask, buffer: PatternBuffer) -> None:\n    if side is Side.LEFT:\n        gspat(geometry, foci, wl, GspatOption(mask=mask), buffer)\n    else:\n        focus(geometry, center + np.array([40.0, 0.0, 150.0]), wl, buffer)\n\n\ndst = geometry.pattern_buffer()\ngroup_compute(geometry, groups, compute, dst)"} csharp={"using System.Numerics;\nusing AUTD3;\nusing AUTD3.Holo;\nusing static AUTD3.Units;\nusing static AUTD3.Holo.HoloUnits;\n\ninternal enum Side\n{\n    Left,\n    Right,\n}\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nvar wavelength = Pattern.Wavelength(340.0f * m / s);\nvar center = geometry.Center;\n\nvar groups = new TransducerGroups<Side>(geometry, (device, tr) => device.Position(tr).X < center.X ? Side.Left : Side.Right);\n\nvar foci = new[]\n{\n    new AmplitudeTarget(center + new Vector3(-50.0f, 0.0f, 150.0f), 5e3f * Pa),\n    new AmplitudeTarget(center + new Vector3(-20.0f, 0.0f, 150.0f), 5e3f * Pa),\n};\n\nvar dst = geometry.PatternBuffer();\nPattern.GroupCompute(geometry, groups, (side, mask, buffer) =>\n{\n    if (side == Side.Left)\n    {\n        Holo.Gspat(geometry, foci, wavelength, new GspatOption(mask: mask), buffer);\n    }\n    else\n    {\n        Pattern.Focus(geometry, center + new Vector3(40.0f, 0.0f, 150.0f), wavelength, buffer);\n    }\n}, dst);"} />

@@ -1,0 +1,30 @@
+---
+title: focus
+description: 単一焦点を生成する Pattern
+sidebar:
+  order: 2
+srcPath: crates/autd3-rs-pattern/src/focus.rs
+slug: 0.9.x/api/compute/pattern/focus
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import PatternField from "@components/PatternField.astro";
+
+`focus` は単一の焦点を生成する.
+
+<PatternField />
+
+## API
+
+<CodeTabs rust={"focus(&geometry, target, wavelength, &mut dst);"} python={"focus(geometry, target, wavelength, dst)"} csharp={"Pattern.Focus(geometry, target, wavelength, dst);"} />
+
+| 引数         | 型              | 説明                                       |
+| ------------ | --------------- | ------------------------------------------ |
+| `geometry`   | `&Geometry`     | デバイス配置                               |
+| `target`     | `Point3<f32>`   | 焦点座標 \[mm]                              |
+| `wavelength` | `Length`        | 波長                                       |
+| `dst`        | `&mut [[Emission; _]]` | 出力バッファ                        |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs_pattern::{focus, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\n\nlet mut dst = geometry.pattern_buffer();\n\nfocus(\n    &geometry,\n    geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n    wavelength(340.0 * m / s),\n    &mut dst,\n);"} python={"import numpy as np\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import m, s\nfrom autd3_pattern import focus, wavelength\n\ngeometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n\ndst = geometry.pattern_buffer()\n\nfocus(\n    geometry,\n    geometry.center() + np.array([0.0, 0.0, 150.0]),\n    wavelength(340 * m / s),\n    dst,\n)"} csharp={"using System.Numerics;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\n\nvar dst = geometry.PatternBuffer();\n\nPattern.Focus(\n    geometry,\n    geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),\n    Pattern.Wavelength(340.0f * m / s),\n    dst\n);"} />

@@ -2,17 +2,26 @@
 
 # Rust
 
+## [0.9.0] - 2026-09-19
+
 ### 💥 Breaking Changes
 
 - [**breaking**] Add per-transducer pattern grouping and move TransducerMask to core
+- *(cpu)* [**breaking**] Close the ISR/main-loop drain and tx publish races
+- *(cpu)* [**breaking**] Update the CPU firmware over EtherCAT with A/B slots and rollback
+- [**breaking**] Make pattern functions write phase only and leave intensity to the user
+- *(pattern)* [**breaking**] Add Laguerre-Gaussian and Hermite-Gaussian beams, replacing vortex and twin_trap
 
 ### 🚀 Features
 
 - *(link-remote)* Discover the simulator over mDNS alongside the appliance
+- *(fpga)* Update the FPGA bitstream over EtherCAT with a golden fallback image
 
 ### 🐛 Bug Fixes
 
 - *(core)* Disable ANSI colors in init_tracing when the output is not a terminal
+- *(fpga)* Make the output mask independent of the bank
+- *(fpga)* Hold same-bank finite loop requests in the swapchain
 
 ## [0.8.0] - 2026-09-11
 
@@ -308,13 +317,22 @@
 
 # Python
 
+## [0.9.0] - 2026-09-19
+
 ### 💥 Breaking Changes
 
 - [**breaking**] Add per-transducer pattern grouping and move TransducerMask to core
+- *(cpu)* [**breaking**] Update the CPU firmware over EtherCAT with A/B slots and rollback
+- [**breaking**] Make pattern functions write phase only and leave intensity to the user
+- *(pattern)* [**breaking**] Add Laguerre-Gaussian and Hermite-Gaussian beams, replacing vortex and twin_trap
 
 ### 🚀 Features
 
 - *(link-remote)* Discover the simulator over mDNS alongside the appliance
+
+### 🐛 Bug Fixes
+
+- *(fpga)* Make the output mask independent of the bank
 
 ## [0.8.0] - 2026-09-11
 
@@ -471,9 +489,13 @@
 
 # C#
 
+## [0.9.0] - 2026-09-19
+
 ### 💥 Breaking Changes
 
 - [**breaking**] Add per-transducer pattern grouping and move TransducerMask to core
+- [**breaking**] Make pattern functions write phase only and leave intensity to the user
+- *(pattern)* [**breaking**] Add Laguerre-Gaussian and Hermite-Gaussian beams, replacing vortex and twin_trap
 
 ### 🚀 Features
 
@@ -601,6 +623,12 @@
 
 # Unity
 
+## [0.9.0] - 2026-09-19
+
+### 💥 Breaking Changes
+
+- [**breaking**] Make pattern functions write phase only and leave intensity to the user
+
 ## [0.8.0] - 2026-09-11
 
 ### 💥 Breaking Changes
@@ -629,9 +657,20 @@
 
 # Simulator
 
+## [0.9.0] - 2026-09-19
+
+### 💥 Breaking Changes
+
+- *(cpu)* [**breaking**] Update the CPU firmware over EtherCAT with A/B slots and rollback
+
 ### 🚀 Features
 
 - *(link-remote)* Discover the simulator over mDNS alongside the appliance
+
+### 🐛 Bug Fixes
+
+- *(fpga)* Make the output mask independent of the bank
+- *(simulator)* Color transducer markers by phase hue and amplitude value
 
 ## [0.8.0] - 2026-09-11
 
@@ -714,6 +753,12 @@
 
 # Console
 
+## [0.9.0] - 2026-09-19
+
+### 🚀 Features
+
+- *(fpga)* Update the FPGA bitstream over EtherCAT with a golden fallback image
+
 ### 🐛 Bug Fixes
 
 - *(core)* Disable ANSI colors in init_tracing when the output is not a terminal
@@ -780,6 +825,8 @@
 
 # Appliance
 
+## [0.9.0] - 2026-09-19
+
 ### 🚀 Features
 
 - *(link-remote)* Discover the simulator over mDNS alongside the appliance
@@ -832,11 +879,25 @@
 
 # Firmware
 
-## [0.6.1] - 2026-09-15
+## [0.9.0] - 2026-09-19
 
 ### 💥 Breaking Changes
 
 - [**breaking**] Narrow the public surface — hide echocat internals, encode-layer types, and dead re-exports
+- *(cpu)* [**breaking**] Close the ISR/main-loop drain and tx publish races
+- *(cpu)* [**breaking**] Update the CPU firmware over EtherCAT with A/B slots and rollback
+
+### 🚀 Features
+
+- *(fpga)* Update the FPGA bitstream over EtherCAT with a golden fallback image
+
+### 🐛 Bug Fixes
+
+- *(fpga)* Make the output mask independent of the bank
+- *(fpga)* Hold same-bank finite loop requests in the swapchain
+- *(cpu)* Validate fused pattern and modulation commands before writing to the FPGA
+- *(fpga)* Rebuild the resync target from the edge-time sys_time
+- *(fpga)* Filter CTL_FLAG reads, reset on lock loss, and latch DEBUG_VALUE
 
 ## [0.6.0] - 2026-08-04
 

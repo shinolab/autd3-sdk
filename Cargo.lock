@@ -74,7 +74,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "autd3-appliance"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "autd3-rs-appliance",
@@ -102,7 +102,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-firmware-writer"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "autd3-cpu-wire",
@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-remote-server"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "autd3-cpu-wire",
@@ -139,7 +139,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "autd3-cpu-fw",
  "autd3-cpu-wire",
@@ -156,7 +156,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-appliance"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "autd3-rs-link-remote",
  "serde",
@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "approx",
  "autd3-cpu-wire",
@@ -186,7 +186,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-examples"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-firmware-emulator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "autd3-cpu-fw",
  "autd3-rs-core",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-firmware-ota"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "autd3-cpu-wire",
@@ -225,7 +225,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-firmware-test"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
@@ -240,7 +240,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-echocat"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "autd3-cpu-wire",
  "autd3-rs-core",
@@ -255,7 +255,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-nop"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "autd3-rs-core",
  "autd3-rs-firmware-emulator",
@@ -263,7 +263,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-remote"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "autd3-rs",
  "autd3-rs-core",
@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-link-twincat"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ads",
  "autd3-rs-core",
@@ -289,7 +289,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-modulation"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "autd3-rs-core",
  "thiserror 2.0.20",
@@ -297,7 +297,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "approx",
  "autd3-rs-core",
@@ -306,7 +306,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern-holo"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "approx",
  "autd3-rs-core",
@@ -320,7 +320,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-perftest"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
@@ -335,7 +335,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-synctune"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "autd3-rs",
@@ -348,7 +348,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-wiretrace"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "autd3-cpu-wire",

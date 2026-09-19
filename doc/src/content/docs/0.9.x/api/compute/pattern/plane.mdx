@@ -1,0 +1,30 @@
+---
+title: plane
+description: 平面波を生成する Pattern
+sidebar:
+  order: 3
+srcPath: crates/autd3-rs-pattern/src/plane.rs
+slug: 0.9.x/api/compute/pattern/plane
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import PatternField from "@components/PatternField.astro";
+
+`plane` は指定方向に伝搬する平面波を生成する.
+
+<PatternField kind="plane" />
+
+## API
+
+<CodeTabs rust={"plane(&geometry, direction, wavelength, &mut dst);"} python={"plane(geometry, direction, wavelength, dst)"} csharp={"Pattern.Plane(geometry, direction, wavelength, dst);"} />
+
+| 引数         | 型                     | 説明                            |
+| ------------ | ---------------------- | ------------------------------- |
+| `geometry`   | `&Geometry`            | デバイス配置                    |
+| `direction`  | `UnitVector3<f32>`     | 平面波の伝搬方向 (単位ベクトル) |
+| `wavelength` | `Length`               | 波長                            |
+| `dst`        | `&mut [[Emission; _]]` | 出力バッファ                    |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::geometry::{Autd3, Geometry, Vector3};\nuse autd3_rs::units::{m, s};\nuse autd3_rs_pattern::{plane, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\n\nlet mut dst = geometry.pattern_buffer();\n\nplane(\n    &geometry,\n    Vector3::z_axis(),\n    wavelength(340.0 * m / s),\n    &mut dst,\n);"} python={"import numpy as np\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import m, s\nfrom autd3_pattern import plane, wavelength\n\ngeometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n\ndst = geometry.pattern_buffer()\n\nplane(\n    geometry,\n    np.array([0.0, 0.0, 1.0]),\n    wavelength(340 * m / s),\n    dst,\n)"} csharp={"using System.Numerics;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\n\nvar dst = geometry.PatternBuffer();\n\nPattern.Plane(\n    geometry,\n    Vector3.UnitZ,\n    Pattern.Wavelength(340.0f * m / s),\n    dst\n);"} />

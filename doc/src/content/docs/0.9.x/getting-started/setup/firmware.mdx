@@ -1,0 +1,81 @@
+---
+title: ファームウェア
+description: autd3-console を用いた CPU / FPGA ファームウェアの更新手順
+sidebar:
+  order: 2
+slug: 0.9.x/getting-started/setup/firmware
+---
+
+import Figure from "@components/Figure.astro";
+
+AUTD3 デバイスを正しく動作させるには, SDK に対応したバージョンの CPU / FPGA ファームウェアが書き込まれている必要がある.
+
+:::note
+このバージョンの SDK は, Firmware v0.9.x をサポートする.
+:::
+
+ファームウェアの更新には, GUI コンソール autd3-console の **Firmware** タブを使う.
+
+:::caution
+ファームウェアのバージョンが SDK と一致しない場合, 正常な動作は保証されない.
+:::
+
+入手方法は [コンソール](/autd3-sdk/0.9.x/guide/console/) を参照.
+
+## Ethernet ケーブルを使用した OTA
+
+CPU と FPGA の両方に v0.9.0 以降のファームウェアが載っている場合, Ethernet ケーブルのみでアップデートできる.
+どちらかが v0.9.0 未満の場合は, 下記の JTAG 経由のアップデートが必要.
+
+### 事前準備
+
+使用する EtherCAT リンクごとに設定と準備が必要になる.
+詳細は [Link](/autd3-sdk/0.9.x/api/link) を参照.
+
+### 手順
+
+1. AUTD3 と PC を Ethernet ケーブルで接続し, 電源を入れる
+2. autd3-console を起動し, **Firmware** タブを開く
+3. **Version** と **Target** (`Both` / `FPGA` / `CPU`) を選ぶ. 通常は `Both` を使う (CPU だけを更新すると FPGA と版数が食い違い, SDK が接続を拒否する)
+4. **Method** が `EtherCAT (OTA)` (既定) になっていることを確認する
+5. **Link** で `echocat` / `TwinCAT` / `Remote` を選び, 設定を埋める (デフォルトのままで良い)
+6. **Flash** を押す. 進捗はパネル下部のログに表示される. CPU は数十秒, FPGA は 1 台あたり約 90 秒かかる
+7. ログに `Ok!` が出れば完了. 電源の入れ直しは不要
+
+**更新中に電源を切らないこと**.
+失敗した場合は電源を再投入してからやり直すこと.
+
+## JTAG を使用したアップデート
+
+### 事前準備
+
+ファームウェアの書き込みには, 以下の外部ツールが必要である.
+いずれも実行ファイルが `PATH` 上にある必要がある (Windows ではインストール先を自動検出する).
+
+* **FPGA 書き込み**: [Vivado](https://www.xilinx.com/products/design-tools/vivado.html) (`vivado` / `vivado_lab`) と, 接続用の [XILINX Platform Cable](https://www.xilinx.com/products/boards-and-kits/hw-usb-ii-g.html).
+
+:::note
+FPGA 書き込みのみが目的であれば, **Vivado Lab Edition** の使用を強く推奨する.
+標準版 (ML Edition) はインストールに 60 GB 以上を要するが, Lab Edition は 6 GB 程度で済む.
+:::
+
+* **CPU 書き込み**: [J-Link Software](https://www.segger.com/downloads/jlink/) (`JLink` / `JLinkExe`) と, [J-Link 9-Pin Cortex-M Adapter](https://www.segger-pocjapan.com/j-link-9-pin-cortex-m-adapter) を介した [J-Link Plus](https://www.segger.com/products/debug-probes/j-link/models/j-link-plus/) プローブ.
+
+:::note
+古い J-Link デバイス (例: J-Link Plus V10 以前) を使用する場合, J-Link Software のインストール時に "**Install legacy USB Driver for J-Link**" にチェックを入れること.
+詳細は [Segger Wiki](https://wiki.segger.com/J-Link_Model_Overview) を参照.
+:::
+
+### 書き込み手順
+
+<Figure src="img/hardware/cable.jpg" alt="ファームウェアアップデート用ケーブルの接続先" />
+
+1. AUTD3の電源を切る
+2. 上記ケーブルを接続する. 接続先は上図の通り.
+3. AUTD3 の電源を入れる
+4. autd3-console を起動し, **Firmware** タブを開く.
+5. **Version** から書き込むバージョンを選択する
+6. **Target** で書き込む対象を選ぶ (`Both` / `FPGA` / `CPU`).
+7. **Method** で `JTAG` を選ぶ
+8. **Flash** を押す. 進捗はパネル下部のログに表示される. 書き込みには数分を要する.
+9. 書き込み完了後, AUTD3 の電源を入れ直すと新しいファームウェアが反映される.
