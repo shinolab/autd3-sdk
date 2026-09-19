@@ -1,3 +1,7 @@
+#[cfg(feature = "discovery")]
+mod advertise;
+mod bus;
+
 use std::io::{ErrorKind, Read, Write};
 use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream};
@@ -7,10 +11,13 @@ use std::time::{Duration, Instant};
 use autd3_rs_core::link::Link;
 use autd3_rs_core::{RX_FRAME_BYTES, TX_FRAME_BYTES};
 
-use crate::bus::{BusOption, BusShared, Desired, SharedBus, run_bus_loop, run_status_loop};
 use crate::error::RemoteLinkError;
 use crate::wire::{self, BusStatus};
 use crate::{DeviceLayout, wire::REPLY_HEADER_BYTES};
+#[cfg(feature = "discovery")]
+pub use advertise::{Advertisement, AdvertisementHandle, advertise};
+pub use bus::{Actual, BusOption, BusPacing, BusSnapshot, Desired, SharedBus};
+use bus::{BusShared, run_bus_loop, run_status_loop};
 
 const DEFAULT_PORT: u16 = 8080;
 const STACK_HEADROOM_BYTES: usize = 1024 * 1024;
