@@ -134,7 +134,7 @@ where
         handshake(&mut stream)?;
         let layout = wire::read_geometry(&mut stream)?;
 
-        let shared = Arc::new(BusShared::new());
+        let shared = Arc::new(BusShared::new(self.option.bus));
         let (checker_tx, checker_rx) = std::sync::mpsc::channel();
         let factory = &mut self.factory;
         let bus_option = &self.option.bus;

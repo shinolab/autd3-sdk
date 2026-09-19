@@ -11,6 +11,10 @@ pdu_timeout = "100ms"
 state_transition_timeout = "10s"
 process_data_watchdog = "100ms"
 sync_timeout = "10s"
+stale_reopen_after = "2s"
+reopen_retry_period = "1s"
+recovering_reply_period = "1ms"
+probe_timeout = "10s"
 
 [rt]
 priority = 80

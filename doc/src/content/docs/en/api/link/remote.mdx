@@ -97,3 +97,7 @@ For a real example, see the [appliance documentation](/autd3-sdk/en/getting-star
 | `rt_policy`   | `RtSchedulePolicy`       | scheduling policy of the bus thread                                                      |
 | `rt_affinity` | `Option<CoreId>`         | CPU core to pin the bus thread to                                                        |
 | `stack_prefault_bytes` | `usize`         | bytes of the bus thread stack to page in at start-up. 0 by default                       |
+| `stale_reopen_after` | `Option<Duration>` | reopen the link once stale cycles (the devices not processing frames) last this long. `None` disables it. 2 seconds by default |
+| `reopen_retry_period` | `Duration`     | how long to wait before trying again after the link failed to open. 1 second by default |
+| `recovering_reply_period` | `Duration` | how long a client frame waits for a recovering bus before it is answered as stale. 1 ms by default |
+| `probe_timeout` | `Duration`            | upper bound on how long `SharedBus::probe` waits for the device count. 10 seconds by default |
