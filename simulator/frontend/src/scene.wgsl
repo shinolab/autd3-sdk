@@ -122,6 +122,7 @@ struct MarkerOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) local: vec2<f32>,
     @location(1) amp: f32,
+    @location(2) phase: f32,
 };
 
 @vertex
@@ -150,7 +151,14 @@ fn marker_vs(@builtin(vertex_index) vid: u32, @builtin(instance_index) iid: u32)
     out.clip = uni.view_proj * vec4<f32>(world, 1.0);
     out.local = q;
     out.amp = states[iid].x;
+    out.phase = states[iid].y;
     return out;
+}
+
+fn hsv_to_rgb(h: f32, s: f32, v: f32) -> vec3<f32> {
+    let k = vec3<f32>(1.0, 2.0 / 3.0, 1.0 / 3.0);
+    let p = abs(fract(vec3<f32>(h) + k) * 6.0 - vec3<f32>(3.0));
+    return v * mix(vec3<f32>(1.0), clamp(p - vec3<f32>(1.0), vec3<f32>(0.0), vec3<f32>(1.0)), s);
 }
 
 @fragment
@@ -158,7 +166,7 @@ fn marker_fs(vtx: MarkerOut) -> @location(0) vec4<f32> {
     if dot(vtx.local, vtx.local) > 1.0 {
         discard;
     }
-    return vec4<f32>(colormap(vtx.amp * 0.9 + 0.05), 1.0);
+    return vec4<f32>(hsv_to_rgb(vtx.phase / (2.0 * PI), 1.0, vtx.amp), 1.0);
 }
 
 struct GizmoOut {
