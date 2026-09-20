@@ -1,3 +1,4 @@
+mod confirm;
 mod ota;
 
 use eframe::egui;
@@ -6,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::launch::tool_bin;
 use crate::process::ManagedProcess;
 
+use confirm::{Answer, Confirm};
 use ota::OtaConfig;
 
 const SUBDIR: &str = "firmware";
@@ -55,6 +57,14 @@ pub enum Target {
 }
 
 impl Target {
+    fn cpu(self) -> bool {
+        matches!(self, Target::Both | Target::Cpu)
+    }
+
+    fn fpga(self) -> bool {
+        matches!(self, Target::Both | Target::Fpga)
+    }
+
     fn arg(self) -> &'static str {
         match self {
             Target::Both => "both",
@@ -101,11 +111,27 @@ impl FirmwareConfig {
             Method::Ethercat => self.ota.args(&version, self.target.arg()),
         }
     }
+
+    fn verify_args(&self) -> Result<Vec<String>, String> {
+        let mut args = self.args()?;
+        args.push("--verify-only".to_string());
+        Ok(args)
+    }
+}
+
+#[derive(Default)]
+enum Phase {
+    #[default]
+    Idle,
+    Verify,
+    Confirm(Confirm),
+    Flash,
 }
 
 #[derive(Default)]
 pub struct FirmwarePanel {
     pub config: FirmwareConfig,
+    phase: Phase,
     proc: Option<ManagedProcess>,
     list_proc: Option<ManagedProcess>,
     versions: Vec<String>,
@@ -115,8 +141,16 @@ pub struct FirmwarePanel {
 
 impl FirmwarePanel {
     pub fn pump(&mut self) {
-        if let Some(proc) = &mut self.proc {
+        let finished = self.proc.as_mut().is_some_and(|proc| {
             proc.pump();
+            !proc.is_running()
+        });
+        if finished {
+            match self.phase {
+                Phase::Verify => self.finish_verify(),
+                Phase::Flash => self.phase = Phase::Idle,
+                Phase::Idle | Phase::Confirm(_) => {}
+            }
         }
         if let Some(list) = &mut self.list_proc {
             list.pump();
@@ -149,10 +183,62 @@ impl FirmwarePanel {
             self.listed = true;
         }
 
-        let flashing = self.proc.as_ref().is_some_and(ManagedProcess::is_running);
+        let running = self.proc.as_ref().is_some_and(ManagedProcess::is_running);
+        let confirming = matches!(self.phase, Phase::Confirm(_));
         let listing = self.list_proc.is_some();
-        let busy = flashing || listing;
+        let locked = running || confirming;
+        let busy = locked || listing;
 
+        self.config_ui(ui, busy, locked);
+
+        ui.separator();
+        self.method_ui(ui, locked);
+        ui.separator();
+
+        let args = self.config.args();
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(!busy && args.is_ok(), egui::Button::new("Flash"))
+                .clicked()
+            {
+                self.start();
+            }
+            if ui.add_enabled(running, egui::Button::new("Stop")).clicked() {
+                self.stop();
+            }
+            ui.label(if listing {
+                "fetching versions..."
+            } else {
+                match self.phase {
+                    Phase::Idle => "idle",
+                    Phase::Verify => "reading the current firmware version...",
+                    Phase::Confirm(_) => "waiting for confirmation",
+                    Phase::Flash => "flashing",
+                }
+            });
+        });
+
+        self.error_ui(ui, args.as_ref().err());
+
+        ui.separator();
+        super::log_view(ui, self.proc.as_ref());
+
+        self.confirm_ui(ui);
+    }
+
+    fn confirm_ui(&mut self, ui: &egui::Ui) {
+        let answer = match &self.phase {
+            Phase::Confirm(confirm) => confirm.ui(ui),
+            _ => Answer::Pending,
+        };
+        match answer {
+            Answer::Update => self.start_flash(),
+            Answer::Cancel => self.phase = Phase::Idle,
+            Answer::Pending => {}
+        }
+    }
+
+    fn config_ui(&mut self, ui: &mut egui::Ui, busy: bool, locked: bool) {
         egui::Grid::new("firmware-config")
             .num_columns(2)
             .spacing([12.0, 6.0])
@@ -196,7 +282,7 @@ impl FirmwarePanel {
                 ui.end_row();
 
                 ui.label("Target");
-                ui.add_enabled_ui(!flashing, |ui| {
+                ui.add_enabled_ui(!locked, |ui| {
                     ui.horizontal(|ui| {
                         for t in [Target::Both, Target::Fpga, Target::Cpu] {
                             ui.selectable_value(&mut self.config.target, t, t.label());
@@ -206,7 +292,7 @@ impl FirmwarePanel {
                 ui.end_row();
 
                 ui.label("Method");
-                ui.add_enabled_ui(!flashing, |ui| {
+                ui.add_enabled_ui(!locked, |ui| {
                     ui.horizontal(|ui| {
                         for m in [Method::Ethercat, Method::Jtag] {
                             ui.selectable_value(&mut self.config.method, m, m.label());
@@ -215,38 +301,6 @@ impl FirmwarePanel {
                 });
                 ui.end_row();
             });
-
-        ui.separator();
-        self.method_ui(ui, flashing);
-        ui.separator();
-
-        let args = self.config.args();
-        ui.horizontal(|ui| {
-            if ui
-                .add_enabled(!flashing && args.is_ok(), egui::Button::new("Flash"))
-                .clicked()
-            {
-                self.start();
-            }
-            if ui
-                .add_enabled(flashing, egui::Button::new("Stop"))
-                .clicked()
-            {
-                self.stop();
-            }
-            ui.label(if listing {
-                "fetching versions..."
-            } else if flashing {
-                "flashing"
-            } else {
-                "idle"
-            });
-        });
-
-        self.error_ui(ui, args.as_ref().err());
-
-        ui.separator();
-        super::log_view(ui, self.proc.as_ref());
     }
 
     fn error_ui(&self, ui: &mut egui::Ui, invalid: Option<&String>) {
@@ -272,7 +326,7 @@ impl FirmwarePanel {
         }
     }
 
-    fn method_ui(&mut self, ui: &mut egui::Ui, flashing: bool) {
+    fn method_ui(&mut self, ui: &mut egui::Ui, locked: bool) {
         match self.config.method {
             Method::Jtag => {
                 ui.weak(
@@ -284,7 +338,7 @@ impl FirmwarePanel {
                 egui::ScrollArea::vertical()
                     .id_salt("ota-settings")
                     .max_height(ui.available_height() * 0.5)
-                    .show(ui, |ui| self.config.ota.ui(ui, !flashing));
+                    .show(ui, |ui| self.config.ota.ui(ui, !locked));
                 ui.weak(
                     "Updates the firmware over EtherCAT without a cable. The devices must \
                      already run CPU/FPGA firmware v0.9 or newer (write it once via JTAG \
@@ -315,24 +369,73 @@ impl FirmwarePanel {
 
     fn start(&mut self) {
         self.error = None;
-        let args = match self.config.args() {
-            Ok(args) => args,
-            Err(e) => {
-                self.error = Some(e);
-                return;
+        match self.config.method {
+            Method::Ethercat => self.start_verify(),
+            Method::Jtag => self.start_flash(),
+        }
+    }
+
+    fn start_verify(&mut self) {
+        let Ok(args) = self
+            .config
+            .verify_args()
+            .inspect_err(|e| self.error = Some(e.clone()))
+        else {
+            return;
+        };
+        if self.spawn(OTA_BIN, &args) {
+            self.phase = Phase::Verify;
+        }
+    }
+
+    fn finish_verify(&mut self) {
+        self.phase = Phase::Idle;
+        let logs = self.proc.as_ref().map_or(&[][..], ManagedProcess::logs);
+        match confirm::outcome(logs) {
+            Ok(devices) => {
+                self.phase = Phase::Confirm(Confirm {
+                    version: self.config.version.clone().unwrap_or_default(),
+                    target: self.config.target,
+                    devices,
+                });
             }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    fn start_flash(&mut self) {
+        self.phase = Phase::Idle;
+        self.error = None;
+        let Ok(args) = self
+            .config
+            .args()
+            .inspect_err(|e| self.error = Some(e.clone()))
+        else {
+            return;
         };
         let name = self.config.method.bin();
+        if self.spawn(name, &args) {
+            self.phase = Phase::Flash;
+        }
+    }
+
+    fn spawn(&mut self, name: &str, args: &[String]) -> bool {
         let bin = match tool_bin(SUBDIR, name) {
             Ok(bin) => bin,
             Err(e) => {
                 self.error = Some(format!("cannot resolve {name}: {e}"));
-                return;
+                return false;
             }
         };
-        match ManagedProcess::spawn(&bin, &args) {
-            Ok(proc) => self.proc = Some(proc),
-            Err(e) => self.error = Some(super::spawn_error(&bin, &e)),
+        match ManagedProcess::spawn(&bin, args) {
+            Ok(proc) => {
+                self.proc = Some(proc);
+                true
+            }
+            Err(e) => {
+                self.error = Some(super::spawn_error(&bin, &e));
+                false
+            }
         }
     }
 
@@ -341,6 +444,7 @@ impl FirmwarePanel {
             proc.kill();
             proc.pump();
         }
+        self.phase = Phase::Idle;
     }
 }
 
@@ -374,6 +478,23 @@ mod tests {
         let args = config.args().unwrap();
         assert_eq!(args[..4], ["--version", "0.9.0", "--target", "cpu"]);
         assert_eq!(config.method.bin(), "autd3-rs-firmware-ota");
+    }
+
+    #[test]
+    fn the_version_is_read_back_before_the_write_with_the_very_same_arguments() {
+        let config = FirmwareConfig {
+            version: Some("0.9.0".to_string()),
+            target: Target::Both,
+            method: Method::Ethercat,
+            ota: OtaConfig::default(),
+        };
+        let args = config.args().unwrap();
+        let verify = config.verify_args().unwrap();
+        assert_eq!(verify[..args.len()], args[..]);
+        assert_eq!(verify[args.len()..], ["--verify-only"]);
+        assert!(config.target.cpu() && config.target.fpga());
+        assert!(!Target::Fpga.cpu() && Target::Fpga.fpga());
+        assert!(Target::Cpu.cpu() && !Target::Cpu.fpga());
     }
 
     #[test]
