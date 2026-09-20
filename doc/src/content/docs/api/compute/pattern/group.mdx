@@ -35,11 +35,13 @@ import { excerpt } from "@lib/excerpt";
 | ---------- | -------------------------------------------------------------------- | ------------------------------------------------ |
 | `geometry` | `&Geometry`                                                          | ジオメトリ                                       |
 | `groups`   | `&TransducerGroups<K>`                                               | 振動子毎のキー                                   |
-| `compute`  | `FnMut(K, TransducerMask, &mut [Vec<Emission>]) -> Result<(), E>`    | キーとマスクを受け取り, 作業バッファへ計算する   |
-| `dst`      | `&mut [Vec<Emission>]`                                               | 出力バッファ                                     |
+| `compute`     | `FnMut(K, TransducerMask, &mut [Vec<Phase>], &mut [Vec<Intensity>]) -> Result<(), E>` | キーとマスクを受け取り, 作業バッファ (位相・振幅) へ計算する |
+| `phases`      | `&mut [Vec<Phase>]`                                                                    | 位相の出力バッファ                                           |
+| `intensities` | `&mut [Vec<Intensity>]`                                                                | 振幅の出力バッファ                                           |
 
-`compute` はキー毎に 1 回 (キーの初出順) 呼ばれ, 計算結果のうちそのキーの振動子分だけが `dst` に書き込まれる.
-どのキーにも割り当てられていない振動子は無出力 (`Emission::NULL`) になる.
+`compute` はキー毎に 1 回 (キーの初出順) 呼ばれ, 計算結果のうちそのキーの振動子分だけが `phases` / `intensities` に書き込まれる.
+作業バッファはキー毎に位相 0・最大振幅で初期化される.
+どのキーにも割り当てられていない振動子は無出力 (位相 0・振幅 `Intensity::MIN`) になる.
 
 ## group
 
@@ -49,8 +51,12 @@ import { excerpt } from "@lib/excerpt";
 | ---------- | ------------------------------------------- | -------------------------------------- |
 | `geometry` | `&Geometry`                                 | ジオメトリ                             |
 | `groups`   | `&TransducerGroups<K>`                      | 振動子毎のキー                         |
-| `source`   | `FnMut(K) -> impl AsRef<[Vec<Emission>]>`   | キーから出力元バッファを返す           |
-| `dst`      | `&mut [Vec<Emission>]`                      | 出力バッファ                           |
+| `source`   | `FnMut(K) -> impl AsRef<[Vec<T>]>`          | キーから出力元バッファを返す           |
+| `null`     | `T`                                         | どのキーにも属さない振動子に書く値     |
+| `dst`      | `&mut [Vec<T>]`                             | 出力バッファ                           |
+
+`T` は `Phase` または `Intensity` で, 位相・振幅それぞれのバッファに対して呼ぶ.
+Python / C# では `null` 引数はなく, `dst` が位相バッファなら位相 0, 振幅バッファなら `Intensity.MIN` (無出力) になる.
 
 ## TransducerGroups
 

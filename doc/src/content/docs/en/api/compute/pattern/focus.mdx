@@ -29,7 +29,7 @@ import { excerpt } from "@lib/excerpt";
 | `geometry`   | `&Geometry`     | Device layout                              |
 | `target`     | `Point3<f32>`   | Focal point coordinates [mm]               |
 | `wavelength` | `Length`        | Wavelength                                 |
-| `dst`        | `&mut [[Emission; _]]` | Output buffer                       |
+| `dst`        | `&mut [Vec<Phase>]` | Output buffer                       |
 
 ## Example
 

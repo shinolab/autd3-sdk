@@ -4,11 +4,11 @@ use nalgebra::Complex;
 
 use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::Geometry;
-use autd3_rs_core::value::{Emission, Intensity};
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::amplitude_target::AmplitudeTarget;
 use crate::backend::LinAlgBackend;
-use crate::constraint::EmissionConstraint;
+use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::linear_synthesis::batch::{BatchSetup, solve_batched};
@@ -18,7 +18,7 @@ use crate::propagation::{make_propagation_matrix, quantize, target_amplitudes};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GsOption<'a> {
     pub repeat: NonZeroUsize,
-    pub constraint: EmissionConstraint,
+    pub constraint: IntensityConstraint,
     pub directivity: Directivity,
     pub mask: TransducerMask<'a>,
     pub parallel: bool,
@@ -28,7 +28,7 @@ impl Default for GsOption<'_> {
     fn default() -> Self {
         Self {
             repeat: NonZeroUsize::new(100).unwrap(),
-            constraint: EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX),
+            constraint: IntensityConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             directivity: Directivity::Sphere,
             mask: TransducerMask::AllEnabled,
             parallel: true,
@@ -43,12 +43,14 @@ pub fn gs<B: LinAlgBackend>(
     foci: &[AmplitudeTarget],
     wavelength: Length,
     option: &GsOption<'_>,
-    dst: &mut [Vec<Emission>],
+    phases: &mut [Vec<Phase>],
+    intensities: &mut [Vec<Intensity>],
 ) -> Result<(), HoloError> {
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
-    crate::mask::validate_dst_len(dst.len(), geometry)?;
+    crate::mask::validate_dst_len(phases.len(), geometry)?;
+    crate::mask::validate_dst_len(intensities.len(), geometry)?;
     let mask = option.mask;
     mask.validate(geometry)?;
 
@@ -79,7 +81,8 @@ pub fn gs<B: LinAlgBackend>(
         option.constraint,
         mask,
         option.parallel,
-        dst,
+        phases,
+        intensities,
     );
     Ok(())
 }
@@ -90,7 +93,8 @@ pub fn gs_batch<B: LinAlgBackend>(
     foci: &[AmplitudeTarget],
     wavelength: Length,
     option: &GsOption<'_>,
-    dst: &mut [Vec<Vec<Emission>>],
+    phases: &mut [Vec<Vec<Phase>>],
+    intensities: &mut [Vec<Vec<Intensity>>],
 ) -> Result<(), HoloError> {
     let setup = BatchSetup {
         constraint: option.constraint,
@@ -104,7 +108,8 @@ pub fn gs_batch<B: LinAlgBackend>(
         foci,
         wavelength,
         &setup,
-        dst,
+        phases,
+        intensities,
         |backend, g, amps, batch, n| {
             let b = backend.batch_back_prop(g);
             let q0 = backend.make_batch_vector(1, vec![Complex::new(1.0, 0.0); n]);

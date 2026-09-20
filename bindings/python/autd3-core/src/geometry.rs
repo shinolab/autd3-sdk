@@ -186,9 +186,15 @@ impl Geometry {
         self.inner.num_transducers()
     }
 
-    fn pattern_buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    fn phase_buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         py.import("autd3_pattern")?
-            .getattr("PatternBuffer")?
+            .getattr("PhaseBuffer")?
+            .call1((self.inner.num_devices(),))
+    }
+
+    fn intensity_buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        py.import("autd3_pattern")?
+            .getattr("IntensityBuffer")?
             .call1((self.inner.num_devices(),))
     }
 

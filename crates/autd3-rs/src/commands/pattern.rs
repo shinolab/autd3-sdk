@@ -1,27 +1,33 @@
 use super::Command;
 use crate::commands::operation::{ConfigPattern, WritePatternBuffer, WritePatternFused};
 use crate::datagram::DatagramBuilder;
-use crate::value::{Emission, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
+use crate::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode};
 use core::num::NonZeroU16;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Pattern<'a> {
     pub bank: PatternBank,
-    pub emissions: &'a [Vec<Emission>],
+    pub phases: &'a [Vec<Phase>],
+    pub intensities: &'a [Vec<Intensity>],
     pub transition_mode: TransitionMode,
 }
 
 impl<'a> Pattern<'a> {
     #[must_use]
-    pub fn new(emissions: &'a [Vec<Emission>]) -> Self {
-        Self::with_bank(PatternBank::B0, emissions)
+    pub fn new(phases: &'a [Vec<Phase>], intensities: &'a [Vec<Intensity>]) -> Self {
+        Self::with_bank(PatternBank::B0, phases, intensities)
     }
 
     #[must_use]
-    pub fn with_bank(bank: PatternBank, emissions: &'a [Vec<Emission>]) -> Self {
+    pub fn with_bank(
+        bank: PatternBank,
+        phases: &'a [Vec<Phase>],
+        intensities: &'a [Vec<Intensity>],
+    ) -> Self {
         Self {
             bank,
-            emissions,
+            phases,
+            intensities,
             transition_mode: TransitionMode::Immediate,
         }
     }
@@ -34,7 +40,8 @@ impl<'a> Command<'a> for Pattern<'a> {
                 .push(WritePatternBuffer {
                     bank: self.bank,
                     index: 0,
-                    emissions: self.emissions,
+                    phases: self.phases,
+                    intensities: self.intensities,
                 })
                 .push(ConfigPattern {
                     bank: self.bank,
@@ -46,7 +53,8 @@ impl<'a> Command<'a> for Pattern<'a> {
         }
         builder.push(WritePatternFused {
             bank: self.bank,
-            emissions: self.emissions,
+            phases: self.phases,
+            intensities: self.intensities,
             config: SamplingConfig::new(NonZeroU16::MAX),
             loop_behavior: LoopBehavior::Infinite,
             transition_mode: self.transition_mode,
@@ -64,9 +72,10 @@ mod tests {
 
     #[test]
     fn pattern_expands_to_a_single_fused_frame() {
-        let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
+        let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
+        let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
         let mut b = DatagramBuilder::new(test_geometry_arc(2));
-        b.push(Pattern::new(&patterns));
+        b.push(Pattern::new(&phases, &intensities));
         let datagrams = b.build().unwrap();
 
         assert_eq!(datagrams.len(), 1, "write+config+change fused into 1 frame");
@@ -83,11 +92,12 @@ mod tests {
 
     #[test]
     fn later_writes_the_bank_without_changing_it() {
-        let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
+        let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
+        let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
         let mut b = DatagramBuilder::new(test_geometry_arc(2));
         b.push(Pattern {
             transition_mode: TransitionMode::Later,
-            ..Pattern::with_bank(PatternBank::B1, &patterns)
+            ..Pattern::with_bank(PatternBank::B1, &phases, &intensities)
         });
         let datagrams = b.build().unwrap();
 
@@ -98,7 +108,7 @@ mod tests {
         );
         assert_eq!(
             datagrams.frame(0).unwrap().datagrams()[0].cmd,
-            Cmd::WritePatternBuffer
+            Cmd::WritePatternRaw
         );
         let cfg = datagrams.frame(1).unwrap();
         assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
@@ -111,11 +121,12 @@ mod tests {
 
     #[test]
     fn a_non_immediate_transition_reaches_the_fused_frame() {
-        let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
+        let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
+        let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
         let mut b = DatagramBuilder::new(test_geometry_arc(2));
         b.push(Pattern {
             transition_mode: TransitionMode::Ext,
-            ..Pattern::new(&patterns)
+            ..Pattern::new(&phases, &intensities)
         });
         let datagrams = b.build().unwrap();
 

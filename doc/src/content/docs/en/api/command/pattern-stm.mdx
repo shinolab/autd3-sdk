@@ -14,7 +14,7 @@ import csSample from "@codes/csharp/examples/api/command/pattern-stm.cs?raw";
 import csFullSample from "@codes/csharp/examples/api/command/pattern-stm-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
-`PatternStm` provides an STM feature that switches arbitrary sound fields (the emission of each transducer) by a hardware timer.
+`PatternStm` provides an STM feature that switches arbitrary sound fields (the phase and intensity of each transducer) by a hardware timer.
 Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary Patterns, but the number of frames to transfer is large (i.e. the latency is high).
 
 ## API
@@ -24,7 +24,8 @@ Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary P
 | Parameter  | Type                                  | Description                                          |
 | ---------- | ------------------------------------- | --------------------------------------------------- |
 | `freq`     | `impl Into<StmConfig>`                | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
-| `patterns` | `&[Vec<Vec<Emission>>]` | Sequence of Pattern samples (at least 2 samples)            |
+| `phases`      | `&[Vec<Vec<Phase>>]`     | Phases of each sample (at least 2 samples)                  |
+| `intensities` | `&[Vec<Vec<Intensity>>]` | Intensities of each sample (same count as `phases`)         |
 | `option`   | `PatternStmOption`                    | Options such as transfer mode, loop, and transition |
 
 Passing a `Freq` / `Duration` to `freq` represents "the frequency/period for one full cycle over all samples".
@@ -57,9 +58,9 @@ Selects the transfer format of each Pattern. The phase-only and low-resolution f
 ## Equivalent Low-Level Commands
 
 `PatternStm` internally expands into the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/)  (each index) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
-The following is equivalent to `PatternStm::new(freq, &patterns, option)`.
+The following is equivalent to `PatternStm::new(freq, &phases, &intensities, option)`.
 
-When `PatternStmMode` is `PhaseFull` / `PhaseHalf`, [WritePatternCompressed](/autd3-sdk/en/api/command/lowlevel/write-pattern-compressed/) is used instead of `WritePatternBuffer`.
+When `PatternStmMode` is `PhaseFull` / `PhaseHalf`, [WritePatternCompressed](/autd3-sdk/en/api/command/lowlevel/write-pattern-compressed/) is used instead of `WritePatternBuffer` (`intensities` is then unused and the intensity is fixed at the maximum).
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

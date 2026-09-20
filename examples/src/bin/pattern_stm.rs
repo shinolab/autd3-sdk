@@ -40,16 +40,18 @@ async fn main() -> Result<()> {
                     RADIUS_MM * theta.sin() * mm,
                     0.0 * mm,
                 );
-            let mut buffer = geometry.pattern_buffer();
-            autd3_rs_pattern::focus(&geometry, target, wavelength, &mut buffer);
-            buffer
+            let mut phases = geometry.phase_buffer();
+            autd3_rs_pattern::focus(&geometry, target, wavelength, &mut phases);
+            phases
         })
         .collect::<Vec<_>>();
+    let intensities = vec![geometry.intensity_buffer(); patterns.len()];
 
     let mut builder = client.datagram_builder();
     builder.push(SetSilencer::default()).push(PatternStm::new(
         1.0 * Hz,
         &patterns,
+        &intensities,
         PatternStmOption {
             mode: PatternStmMode::PhaseFull,
             ..Default::default()

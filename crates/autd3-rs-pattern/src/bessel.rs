@@ -3,7 +3,7 @@ use core::f32::consts::PI;
 use autd3_rs_core::common::units::rad;
 use autd3_rs_core::common::{Angle, Length};
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitQuaternion, UnitVector3, Vector3};
-use autd3_rs_core::value::{Emission, Phase};
+use autd3_rs_core::value::Phase;
 
 fn rotation(dir: UnitVector3<f32>) -> UnitQuaternion<f32> {
     let v = Vector3::new(dir.y, -dir.x, 0.0);
@@ -44,11 +44,11 @@ pub fn bessel_device(
     direction: UnitVector3<f32>,
     theta: Angle,
     wavelength: Length,
-    dst: &mut [Emission],
+    dst: &mut [Phase],
 ) {
     let rot = rotation(direction);
-    for (e, &pos) in dst.iter_mut().zip(device.positions()) {
-        e.phase = bessel_phase(pos, apex, &rot, theta, wavelength);
+    for (p, &pos) in dst.iter_mut().zip(device.positions()) {
+        *p = bessel_phase(pos, apex, &rot, theta, wavelength);
     }
 }
 
@@ -58,7 +58,7 @@ pub fn bessel(
     direction: UnitVector3<f32>,
     theta: Angle,
     wavelength: Length,
-    dst: &mut [Vec<Emission>],
+    dst: &mut [Vec<Phase>],
 ) {
     assert_eq!(
         dst.len(),
@@ -74,7 +74,6 @@ pub fn bessel(
 mod tests {
     use autd3_rs_core::geometry::{Autd3, Vector3};
     use autd3_rs_core::units::mm;
-    use autd3_rs_core::value::Intensity;
 
     use super::*;
 
@@ -122,27 +121,17 @@ mod tests {
     }
 
     #[test]
-    fn device_level_matches_transducer_level_and_keeps_intensity() {
+    fn device_level_matches_transducer_level() {
         let dev: Device = Autd3::default().into();
         let lambda = 8.5 * mm;
         let apex = Point3::new(30.0, 40.0, 120.0);
         let dir = UnitVector3::new_normalize(Vector3::new(0.2, 0.3, 1.0));
         let theta = Angle::from_rad(0.5);
 
-        let mut pattern = vec![
-            Emission {
-                phase: Phase::ZERO,
-                intensity: Intensity(0x42),
-            };
-            Autd3::NUM_TRANSDUCERS
-        ];
+        let mut pattern = vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS];
         bessel_device(&dev, apex, dir, theta, lambda, &mut pattern);
         for (i, &pos) in dev.positions().iter().enumerate() {
-            assert_eq!(
-                pattern[i].phase,
-                bessel_transducer(pos, apex, dir, theta, lambda)
-            );
-            assert_eq!(pattern[i].intensity, Intensity(0x42));
+            assert_eq!(pattern[i], bessel_transducer(pos, apex, dir, theta, lambda));
         }
     }
 }

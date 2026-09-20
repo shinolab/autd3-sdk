@@ -4,11 +4,11 @@ use nalgebra::Complex;
 
 use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::{Geometry, Point3, UnitVector3};
-use autd3_rs_core::value::{Emission, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::amplitude_target::AmplitudeTarget;
 use crate::backend::LinAlgBackend;
-use crate::constraint::EmissionConstraint;
+use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::mask::TransducerMask;
@@ -110,13 +110,13 @@ pub(crate) fn batch_target_amplitudes<B: LinAlgBackend>(
 
 pub(crate) fn emission(
     v: Complex<f32>,
-    constraint: EmissionConstraint,
+    constraint: IntensityConstraint,
     max_coefficient: f32,
-) -> Emission {
-    Emission {
-        phase: Phase::from(v),
-        intensity: constraint.convert(v.norm(), max_coefficient),
-    }
+) -> (Phase, Intensity) {
+    (
+        Phase::from(v),
+        constraint.convert(v.norm(), max_coefficient),
+    )
 }
 
 pub(crate) fn max_coefficient(q: &[Complex<f32>]) -> f32 {
@@ -126,60 +126,81 @@ pub(crate) fn max_coefficient(q: &[Complex<f32>]) -> f32 {
         .sqrt()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn quantize<B: LinAlgBackend>(
     backend: &B,
     geometry: &Geometry,
     q: &B::Vector,
-    constraint: EmissionConstraint,
+    constraint: IntensityConstraint,
     mask: TransducerMask<'_>,
     parallel: bool,
-    dst: &mut [Vec<Emission>],
+    phases: &mut [Vec<Phase>],
+    intensities: &mut [Vec<Intensity>],
 ) {
     assert_eq!(
-        dst.len(),
+        phases.len(),
         geometry.num_devices(),
-        "dst must have one slot per device"
+        "phases must have one slot per device"
     );
-    scatter(&backend.quantize(q, constraint, parallel), mask, dst);
+    assert_eq!(
+        intensities.len(),
+        geometry.num_devices(),
+        "intensities must have one slot per device"
+    );
+    let (p, i) = backend.quantize(q, constraint, parallel);
+    scatter(&p, mask, Phase::ZERO, phases);
+    scatter(&i, mask, Intensity::MIN, intensities);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn quantize_batch<B: LinAlgBackend>(
     backend: &B,
     geometry: &Geometry,
     q: &B::BatchVector,
-    constraint: EmissionConstraint,
+    constraint: IntensityConstraint,
     mask: TransducerMask<'_>,
     parallel: bool,
-    dst: &mut [Vec<Vec<Emission>>],
+    phases: &mut [Vec<Vec<Phase>>],
+    intensities: &mut [Vec<Vec<Intensity>>],
 ) {
     let n = mask.num_enabled(geometry);
     let devices = geometry.num_devices();
-    let emissions = backend.quantize_batch(q, constraint, parallel);
-    debug_assert_eq!(
-        emissions.len(),
-        n * dst.len(),
-        "backend must return one emission per enabled transducer per problem"
+    assert_eq!(
+        phases.len(),
+        intensities.len(),
+        "phases and intensities must have one entry per problem"
     );
-    if n == 0 {
-        for dst in dst.iter_mut() {
-            assert_eq!(dst.len(), devices, "dst must have one slot per device");
-            scatter(&[], mask, dst);
-        }
-        return;
-    }
-    for (dst, e) in dst.iter_mut().zip(emissions.chunks(n)) {
-        assert_eq!(dst.len(), devices, "dst must have one slot per device");
-        scatter(e, mask, dst);
+    let (p, i) = backend.quantize_batch(q, constraint, parallel);
+    debug_assert_eq!(
+        p.len(),
+        n * phases.len(),
+        "backend must return one phase per enabled transducer per problem"
+    );
+    debug_assert_eq!(p.len(), i.len());
+    for (k, (phases, intensities)) in phases.iter_mut().zip(intensities.iter_mut()).enumerate() {
+        assert_eq!(
+            phases.len(),
+            devices,
+            "phases must have one slot per device"
+        );
+        assert_eq!(
+            intensities.len(),
+            devices,
+            "intensities must have one slot per device"
+        );
+        let range = n * k..n * (k + 1);
+        scatter(&p[range.clone()], mask, Phase::ZERO, phases);
+        scatter(&i[range], mask, Intensity::MIN, intensities);
     }
 }
 
-fn scatter(e: &[Emission], mask: TransducerMask<'_>, dst: &mut [Vec<Emission>]) {
+fn scatter<T: Copy>(e: &[T], mask: TransducerMask<'_>, null: T, dst: &mut [Vec<T>]) {
     match mask {
         TransducerMask::AllEnabled => {
             debug_assert_eq!(
                 e.len(),
                 dst.iter().map(Vec::len).sum::<usize>(),
-                "backend must return one emission per transducer"
+                "backend must return one value per transducer"
             );
             let mut at = 0;
             for slot in dst {
@@ -196,7 +217,7 @@ fn scatter(e: &[Emission], mask: TransducerMask<'_>, dst: &mut [Vec<Emission>]) 
                         idx += 1;
                         e[idx - 1]
                     } else {
-                        Emission::NULL
+                        null
                     };
                 }
             }

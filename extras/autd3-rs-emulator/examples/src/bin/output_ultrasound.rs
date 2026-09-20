@@ -39,15 +39,16 @@ fn lineplot(title: &str, samples: &[f32]) {
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut patterns = geometry.pattern_buffer();
-    autd3_rs_pattern::set_phase(Phase::from(std::f32::consts::PI / 2.0 * rad), &mut patterns);
+    let mut phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
+    autd3_rs_pattern::set_phase(Phase::from(std::f32::consts::PI / 2.0 * rad), &mut phases);
 
     let emulator = Emulator::new(geometry);
     let record = emulator.record(async move |r| {
         let mut builder = r.datagram_builder();
         builder
             .push(SetSilencer::disable())
-            .push(Pattern::new(&patterns));
+            .push(Pattern::new(&phases, &intensities));
         let datagrams = builder.build()?;
         for frame in &datagrams {
             r.send_checked(frame).await?;

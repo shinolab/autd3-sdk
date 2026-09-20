@@ -28,7 +28,8 @@ The algorithm is based on the paper by Suzuki et al. ([Suzuki et al., 2021](http
 | `foci`       | `&[AmplitudeTarget]`      | Sequence of focal points (position and target amplitude) |
 | `wavelength` | `Length`               | Wavelength                |
 | `option`     | `&GreedyOption`        | Additional options (see below) |
-| `dst`        | `&mut [[Emission; _]]` | Output buffer             |
+| `phases`      | `&mut [Vec<Phase>]`     | Phase output buffer       |
+| `intensities` | `&mut [Vec<Intensity>]` | Intensity output buffer   |
 
 For the common elements (`AmplitudeTarget` / `TransducerMask`, etc.), see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
 
@@ -39,7 +40,7 @@ For the common elements (`AmplitudeTarget` / `TransducerMask`, etc.), see the [H
 | Field                       | Type                              | Default              |
 |-----------------------------|-----------------------------------|----------------------|
 | `phase_quantization_levels` | `NonZeroU8`                       | `16`                 |
-| `constraint`                | `EmissionConstraint`              | `Uniform(MAX)`       |
+| `constraint`                | `IntensityConstraint`              | `Uniform(MAX)`       |
 | `directivity`               | `Directivity`                     | `Sphere`             |
 | `objective_func`            | `fn(Complex<f32>, Amplitude) -> f32` | `abs_objective_func` |
 | `mask`                      | `TransducerMask`                  | `AllEnabled`         |

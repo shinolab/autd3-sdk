@@ -5,7 +5,7 @@ from autd3_pattern import bessel, wavelength
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-dst = geometry.pattern_buffer()
+phases = geometry.phase_buffer()
 
 bessel(
     geometry,
@@ -13,5 +13,5 @@ bessel(
     np.array([0.0, 0.0, 1.0]),
     18.0 * deg,
     wavelength(340 * m / s),
-    dst,
+    phases,
 )

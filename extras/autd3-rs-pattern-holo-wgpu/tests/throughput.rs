@@ -1,6 +1,6 @@
 use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
-use autd3_rs_core::value::Emission;
+use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_pattern_holo::*;
 use autd3_rs_pattern_holo_wgpu::WgpuBackend;
 use std::time::Instant;
@@ -35,7 +35,10 @@ fn throughput_vs_nalgebra() {
                     amplitude: 5e3 * Pa,
                 })
                 .collect();
-            let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; d];
+            let mut dst = (
+                vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; d],
+                vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; d],
+            );
             for (name, run) in [("naive", 0), ("gs", 1), ("gspat", 2)] {
                 let mut cpu_ms = 0.0;
                 let mut gpu_ms = 0.0;
@@ -95,8 +98,10 @@ fn batch_vs_sequential() {
                     })
                     .collect();
                 let foci: Vec<AmplitudeTarget> = owned.concat();
-                let mut dst =
-                    vec![vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; d]; problems];
+                let mut dst = (
+                    vec![vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; d]; problems],
+                    vec![vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; d]; problems],
+                );
 
                 for (name, alg) in [("naive", 0u8), ("gs", 1), ("gspat", 2)] {
                     let mut seq_ms = 0.0;
@@ -125,24 +130,29 @@ fn run_batch(
     g: &Geometry,
     foci: &[AmplitudeTarget],
     wl: autd3_rs_core::common::Length,
-    dst: &mut [Vec<Vec<Emission>>],
+    dst: &mut Batch,
 ) {
+    let (p, i) = dst;
     if batched {
         match alg {
-            0 => naive_batch(gpu, g, foci, wl, &NaiveOption::default(), dst).unwrap(),
-            1 => gs_batch(gpu, g, foci, wl, &GsOption::default(), dst).unwrap(),
-            _ => gspat_batch(gpu, g, foci, wl, &GspatOption::default(), dst).unwrap(),
+            0 => naive_batch(gpu, g, foci, wl, &NaiveOption::default(), p, i).unwrap(),
+            1 => gs_batch(gpu, g, foci, wl, &GsOption::default(), p, i).unwrap(),
+            _ => gspat_batch(gpu, g, foci, wl, &GspatOption::default(), p, i).unwrap(),
         }
     } else {
-        for (f, dst) in foci.chunks(foci.len() / dst.len()).zip(dst) {
+        let per = foci.len() / p.len();
+        for (f, (p, i)) in foci.chunks(per).zip(p.iter_mut().zip(i.iter_mut())) {
             match alg {
-                0 => naive(gpu, g, f, wl, &NaiveOption::default(), dst).unwrap(),
-                1 => gs(gpu, g, f, wl, &GsOption::default(), dst).unwrap(),
-                _ => gspat(gpu, g, f, wl, &GspatOption::default(), dst).unwrap(),
+                0 => naive(gpu, g, f, wl, &NaiveOption::default(), p, i).unwrap(),
+                1 => gs(gpu, g, f, wl, &GsOption::default(), p, i).unwrap(),
+                _ => gspat(gpu, g, f, wl, &GspatOption::default(), p, i).unwrap(),
             }
         }
     }
 }
+
+type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
+type Batch = (Vec<Vec<Vec<Phase>>>, Vec<Vec<Vec<Intensity>>>);
 
 fn call(
     tag: u8,
@@ -151,14 +161,15 @@ fn call(
     g: &Geometry,
     f: &[AmplitudeTarget],
     wl: autd3_rs_core::common::Length,
-    dst: &mut [Vec<Emission>],
+    dst: &mut Buffers,
 ) {
+    let (dst, i) = dst;
     match (tag, run) {
-        (0, 0) => naive(&NalgebraBackend, g, f, wl, &NaiveOption::default(), dst).unwrap(),
-        (0, 1) => gs(&NalgebraBackend, g, f, wl, &GsOption::default(), dst).unwrap(),
-        (0, _) => gspat(&NalgebraBackend, g, f, wl, &GspatOption::default(), dst).unwrap(),
-        (_, 0) => naive(gpu, g, f, wl, &NaiveOption::default(), dst).unwrap(),
-        (_, 1) => gs(gpu, g, f, wl, &GsOption::default(), dst).unwrap(),
-        (_, _) => gspat(gpu, g, f, wl, &GspatOption::default(), dst).unwrap(),
+        (0, 0) => naive(&NalgebraBackend, g, f, wl, &NaiveOption::default(), dst, i).unwrap(),
+        (0, 1) => gs(&NalgebraBackend, g, f, wl, &GsOption::default(), dst, i).unwrap(),
+        (0, _) => gspat(&NalgebraBackend, g, f, wl, &GspatOption::default(), dst, i).unwrap(),
+        (_, 0) => naive(gpu, g, f, wl, &NaiveOption::default(), dst, i).unwrap(),
+        (_, 1) => gs(gpu, g, f, wl, &GsOption::default(), dst, i).unwrap(),
+        (_, _) => gspat(gpu, g, f, wl, &GspatOption::default(), dst, i).unwrap(),
     }
 }

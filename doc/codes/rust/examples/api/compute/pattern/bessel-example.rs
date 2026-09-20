@@ -7,7 +7,7 @@ fn main() {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
 
     bessel(
         &geometry,
@@ -15,7 +15,7 @@ fn main() {
         Vector3::z_axis(),
         18.0 * deg,
         wavelength(340.0 * m / s),
-        &mut dst,
+        &mut phases,
     );
     // HIDE
 }

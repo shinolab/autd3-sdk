@@ -15,10 +15,12 @@ async fn main() -> Result<()> {
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
 
+    let intensities = geometry.intensity_buffer();
+
     // ANCHOR: switch
     // Write focus A to bank B0 and play it.
     let target_a = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let mut pat_a = geometry.pattern_buffer();
+    let mut pat_a = geometry.phase_buffer();
     autd3_rs_pattern::focus(
         &geometry,
         target_a,
@@ -26,7 +28,7 @@ async fn main() -> Result<()> {
         &mut pat_a,
     );
     let mut builder = client.datagram_builder();
-    builder.push(Pattern::with_bank(PatternBank::B0, &pat_a));
+    builder.push(Pattern::with_bank(PatternBank::B0, &pat_a, &intensities));
     for frame in &builder.build()? {
         client.send_checked(frame).await?;
     }
@@ -34,7 +36,7 @@ async fn main() -> Result<()> {
     // Write focus B to bank B1, which is not currently playing, then switch to B1.
     // B0 keeps playing cleanly while B1 is being written (double buffering).
     let target_b = geometry.center() + offset(0.0 * mm, 30.0 * mm, 150.0 * mm);
-    let mut pat_b = geometry.pattern_buffer();
+    let mut pat_b = geometry.phase_buffer();
     autd3_rs_pattern::focus(
         &geometry,
         target_b,
@@ -42,7 +44,7 @@ async fn main() -> Result<()> {
         &mut pat_b,
     );
     let mut builder = client.datagram_builder();
-    builder.push(Pattern::with_bank(PatternBank::B1, &pat_b));
+    builder.push(Pattern::with_bank(PatternBank::B1, &pat_b, &intensities));
     for frame in &builder.build()? {
         client.send_checked(frame).await?;
     }

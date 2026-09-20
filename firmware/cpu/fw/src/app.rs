@@ -333,7 +333,8 @@ impl Cpu {
                     as u8;
             }
             Cmd::ReadFpgaBootImage => return cmd::fpga_update::boot_image(port) as u8,
-            Cmd::WritePatternBuffer => cmd::write_pattern::handle(port, payload),
+            Cmd::WriteFociBuffer => cmd::write_foci::handle(port, payload),
+            Cmd::WritePatternRaw => cmd::write_pattern_raw::handle(port, payload),
             Cmd::WritePatternCompressed => cmd::write_pattern_compressed::handle(port, payload),
             Cmd::WritePatternFused => self.write_pattern_fused(port, payload),
             Cmd::WriteModulationBuffer => cmd::write_mod::handle(port, payload),

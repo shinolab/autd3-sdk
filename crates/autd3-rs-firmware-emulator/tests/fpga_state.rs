@@ -42,11 +42,10 @@ fn change_mod_bank(bank: u8) -> Vec<u8> {
     c
 }
 
-fn write_pattern(bank: u8, indices: usize) -> Vec<u8> {
+fn write_pattern(bank: u8) -> Vec<u8> {
     let mut w = vec![bank, 0];
-    w.extend_from_slice(&0u32.to_le_bytes());
-    w.extend_from_slice(&((NUM_TRANSDUCERS * 2 * indices) as u16).to_le_bytes());
-    w.extend(std::iter::repeat_n(0u8, NUM_TRANSDUCERS * 2 * indices));
+    w.extend_from_slice(&0u16.to_le_bytes());
+    w.extend(std::iter::repeat_n(0u8, NUM_TRANSDUCERS * 2));
     w
 }
 
@@ -118,7 +117,7 @@ fn pattern_bank_switch_reflects_in_state() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
 
-    device.send(&frame(0, Cmd::WritePatternBuffer, &write_pattern(1, 1)));
+    device.send(&frame(0, Cmd::WritePatternRaw, &write_pattern(1)));
     device.send(&frame(
         1,
         Cmd::ConfigPattern,

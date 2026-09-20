@@ -11,8 +11,8 @@ apex = geometry.center() + np.array([0.0, 0.0, 150.0])
 direction = np.array([0.0, 0.0, 1.0])
 theta = math.radians(18.0) * rad
 wavelength = calc_wavelength(340 * m / s)
-dst = geometry.pattern_buffer()
+phases = geometry.phase_buffer()
 
 # ANCHOR: api
-bessel(geometry, apex, direction, theta, wavelength, dst)
+bessel(geometry, apex, direction, theta, wavelength, phases)
 # ANCHOR_END: api

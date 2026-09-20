@@ -12,13 +12,13 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-var dst = geometry.PatternBuffer();
+var phases = geometry.PhaseBuffer();
 
 Pattern.Focus(
     geometry,
     geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),
     Pattern.Wavelength(340.0f * m / s),
-    dst
+    phases
 );
         // HIDE
     }

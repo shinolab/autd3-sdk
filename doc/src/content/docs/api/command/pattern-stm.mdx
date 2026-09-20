@@ -14,7 +14,7 @@ import csSample from "@codes/csharp/examples/api/command/pattern-stm.cs?raw";
 import csFullSample from "@codes/csharp/examples/api/command/pattern-stm-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
-`PatternStm` は, ハードウェアタイマにより任意の音場 (各振動子の emission) を切り替える STM 機能を提供する.
+`PatternStm` は, ハードウェアタイマにより任意の音場 (各振動子の位相・振幅) を切り替える STM 機能を提供する.
 [FociStm](/autd3-sdk/api/command/foci-stm/) と異なり, 任意の Pattern を扱えるが, 転送フレーム数が多い (=レイテンシが大きい).
 
 ## API
@@ -24,7 +24,8 @@ import { excerpt } from "@lib/excerpt";
 | 引数       | 型                                    | 説明                                                 |
 | ---------- | ------------------------------------- | ---------------------------------------------------- |
 | `freq`     | `impl Into<StmConfig>`                | 再生レート (`Freq` / `Duration` / `SamplingConfig`) |
-| `patterns` | `&[Vec<Vec<Emission>>]` | Pattern サンプルの列 (2 サンプル以上)                |
+| `phases`      | `&[Vec<Vec<Phase>>]`     | 各サンプルの位相の列 (2 サンプル以上)                |
+| `intensities` | `&[Vec<Vec<Intensity>>]` | 各サンプルの振幅の列 (`phases` と同じ本数)           |
 | `option`   | `PatternStmOption`                    | 転送モード・ループ・遷移などのオプション             |
 
 `freq` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
@@ -57,9 +58,9 @@ import { excerpt } from "@lib/excerpt";
 ## 等価な低レベルコマンド
 
 `PatternStm` は内部で [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/)  (各 index) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
-以下は `PatternStm::new(freq, &patterns, option)` と等価な組み合わせである.
+以下は `PatternStm::new(freq, &phases, &intensities, option)` と等価な組み合わせである.
 
-`PatternStmMode` が `PhaseFull` / `PhaseHalf` のときは, `WritePatternBuffer` の代わりに [WritePatternCompressed](/autd3-sdk/api/command/lowlevel/write-pattern-compressed/) が使われる.
+`PatternStmMode` が `PhaseFull` / `PhaseHalf` のときは, `WritePatternBuffer` の代わりに [WritePatternCompressed](/autd3-sdk/api/command/lowlevel/write-pattern-compressed/) が使われる (このとき `intensities` は使われず, 振幅は最大に固定される).
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

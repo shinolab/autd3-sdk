@@ -45,10 +45,7 @@ fn single_focus_synthesizes_phases() {
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(
-        device.send(&frame(0, Cmd::WritePatternBuffer, &write)).data,
-        0
-    );
+    assert_eq!(device.send(&frame(0, Cmd::WriteFociBuffer, &write)).data, 0);
     assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
         device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
@@ -59,14 +56,11 @@ fn single_focus_synthesizes_phases() {
     assert_eq!(0x00, device.fpga().pattern_mode(BANK as usize));
     assert_eq!(1, device.fpga().num_foci(BANK as usize));
 
-    let emissions = device.fpga().emissions();
-    assert_eq!(NUM_TRANSDUCERS, emissions.len());
+    let (phases, intensities) = device.fpga().emissions();
+    assert_eq!(NUM_TRANSDUCERS, phases.len());
+    assert_eq!(NUM_TRANSDUCERS, intensities.len());
 
-    assert!(
-        emissions
-            .iter()
-            .all(|d| d.intensity == Intensity(FOCUS_INTENSITY))
-    );
+    assert!(intensities.iter().all(|&i| i == Intensity(FOCUS_INTENSITY)));
 
-    assert!(emissions.iter().any(|d| d.phase != emissions[0].phase));
+    assert!(phases.iter().any(|&p| p != phases[0]));
 }

@@ -6,7 +6,7 @@ use crate::proto::{
     Cmd, DEVICE_TO_HOST_BYTES, Error, HOST_TO_DEVICE_BYTES, PAYLOAD_BYTES, WIRE_RX_FRAME_BYTES,
     WIRE_RX_GAP_END, WIRE_RX_GAP_START,
 };
-use crate::tests::builders::{config_mod, write_mod_buffer, write_pattern_buffer};
+use crate::tests::builders::{config_mod, write_foci_buffer, write_mod_buffer};
 use crate::tests::mock::{Frame, Harness};
 
 #[test]
@@ -133,7 +133,7 @@ fn clear_reports_fpga_timeout_when_latch_stuck() {
 fn fpga_state_survives_reset() {
     let mut h = Harness::new();
 
-    h.deliver(&write_pattern_buffer(0, 0, 0, &[0x5A5A]));
+    h.deliver(&write_foci_buffer(0, 0, 0, &[0x5A5A]));
     h.deliver(&write_mod_buffer(1, 1, 8, &[0x77]));
     h.deliver(&config_mod(2, 1, 5, 256));
     assert_eq!(h.data(), 0);

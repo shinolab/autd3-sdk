@@ -24,10 +24,11 @@ async def main() -> None:
         echocat.EchocatLinkOption(),
         ClientConfig(),
     ) as client:
-        patterns = geometry.pattern_buffer()
+        phases = geometry.phase_buffer()
+        intensities = geometry.intensity_buffer()
 
         # ANCHOR: configure
-        silent = geometry.pattern_buffer()
+        silent = geometry.intensity_buffer()
         pattern.set_intensity(Intensity.MIN, silent)
         builder = client.datagram_builder()
         builder.push(SetSilencer.disable())
@@ -35,7 +36,8 @@ async def main() -> None:
             WritePatternBuffer(
                 bank=PatternBank.B0,
                 index=0,
-                emissions=silent,
+                phases=phases,
+                intensities=silent,
             )
         )
         builder.push(
@@ -62,14 +64,15 @@ async def main() -> None:
                 geometry,
                 target,
                 wavelength,
-                patterns,
+                phases,
             )
             builder = client.datagram_builder()
             builder.push(
                 WritePatternBuffer(
                     bank=PatternBank.B0,
                     index=0,
-                    emissions=patterns,
+                    phases=phases,
+                    intensities=intensities,
                 )
             )
             for frame in builder.build():

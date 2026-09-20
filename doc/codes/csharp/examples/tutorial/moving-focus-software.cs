@@ -19,7 +19,8 @@ internal static class Sample
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
         // ANCHOR: loop
-        var patterns = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
+        var intensities = geometry.IntensityBuffer();
         while (true)
         {
             foreach (var sign in new[] { 1.0f, -1.0f })
@@ -29,10 +30,10 @@ internal static class Sample
                     geometry,
                     target,
                     wavelength,
-                    patterns
+                    phases
                 );
                 var builder = client.DatagramBuilder();
-                builder.Push(new Pattern(patterns));
+                builder.Push(new Pattern(phases, intensities));
                 foreach (var frame in builder.Build())
                 {
                     await client.SendCheckedAsync(frame);

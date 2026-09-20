@@ -52,16 +52,17 @@ async def main() -> None:
 
 async def stop_and_wait(client, geometry, targets, wavelength) -> None:
     # ANCHOR: stop_and_wait
-    patterns = geometry.pattern_buffer()
+    phases = geometry.phase_buffer()
+    intensities = geometry.intensity_buffer()
     for target in targets:
         pattern.focus(
             geometry,
             target,
             wavelength,
-            patterns,
+            phases,
         )
         builder = client.datagram_builder()
-        builder.push(Pattern(patterns))
+        builder.push(Pattern(phases, intensities))
         for frame in builder.build():
             await client.send_checked(frame)
     # ANCHOR_END: stop_and_wait
@@ -69,17 +70,18 @@ async def stop_and_wait(client, geometry, targets, wavelength) -> None:
 
 async def streaming(client, geometry, targets, wavelength) -> None:
     # ANCHOR: streaming
-    patterns = geometry.pattern_buffer()
+    phases = geometry.phase_buffer()
+    intensities = geometry.intensity_buffer()
     pending = collections.deque()
     for target in targets:
         pattern.focus(
             geometry,
             target,
             wavelength,
-            patterns,
+            phases,
         )
         builder = client.datagram_builder()
-        builder.push(Pattern(patterns))
+        builder.push(Pattern(phases, intensities))
         for frame in builder.build():
             if len(pending) >= MAX_INFLIGHT:
                 (await pending.popleft()).check()

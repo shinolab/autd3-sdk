@@ -243,13 +243,14 @@ fn push_pending<'a>(
 ) -> Result<(), String> {
     match pending {
         Pending::Pattern {
-            emissions,
+            phases,
+            intensities,
             bank,
             transition_mode,
         } => {
             builder.push(Pattern {
                 transition_mode: *transition_mode,
-                ..Pattern::with_bank(*bank, emissions)
+                ..Pattern::with_bank(*bank, phases, intensities)
             });
         }
         Pending::Modulation {
@@ -346,7 +347,8 @@ fn push_pending<'a>(
         }
         Pending::PatternStm {
             config,
-            patterns,
+            phases,
+            intensities,
             bank,
             mode,
             loop_behavior,
@@ -354,7 +356,8 @@ fn push_pending<'a>(
         } => {
             builder.push(PatternStm::new(
                 *config,
-                patterns,
+                phases,
+                intensities,
                 PatternStmOption {
                     bank: *bank,
                     mode: *mode,

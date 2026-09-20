@@ -1,23 +1,30 @@
 use autd3_python_capsule::{
-    DevicePattern, capsule_of, geometry_from_capsule, pattern_from_capsule, pattern_into_capsule,
+    capsule_of, geometry_from_capsule, intensities_from_capsule, intensities_into_capsule,
+    phases_from_capsule, phases_into_capsule,
 };
 use autd3_rs_core::common::Angle;
 use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::TransducerGroups as CoreTransducerGroups;
 use autd3_rs_core::geometry::{UnitVector3, Vector3};
-use autd3_rs_core::value::{Emission, Intensity, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_core::{Length, Point3, Velocity};
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyDict};
 
-fn emission_to_py(py: Python<'_>, emission: Emission) -> PyResult<Py<PyAny>> {
-    let core = py.import("autd3_core")?;
-    let phase = core.getattr("Phase")?.call1((emission.phase.0,))?;
-    let intensity = core.getattr("Intensity")?.call1((emission.intensity.0,))?;
-    Ok(core
-        .getattr("Emission")?
-        .call1((phase, intensity))?
+fn phase_to_py(py: Python<'_>, phase: Phase) -> PyResult<Py<PyAny>> {
+    Ok(py
+        .import("autd3_core")?
+        .getattr("Phase")?
+        .call1((phase.0,))?
+        .unbind())
+}
+
+fn intensity_to_py(py: Python<'_>, intensity: Intensity) -> PyResult<Py<PyAny>> {
+    Ok(py
+        .import("autd3_core")?
+        .getattr("Intensity")?
+        .call1((intensity.0,))?
         .unbind())
 }
 
@@ -71,118 +78,140 @@ fn extract_angle(obj: &Bound<'_, PyAny>) -> PyResult<Angle> {
     Ok(Angle::from_rad(radian))
 }
 
-fn extract_emission(obj: &Bound<'_, PyAny>) -> PyResult<Emission> {
-    if let (Ok(phase), Ok(intensity)) = (obj.getattr("phase"), obj.getattr("intensity")) {
-        return Ok(Emission {
-            phase: Phase(extract_u8(&phase)?),
-            intensity: Intensity(extract_u8(&intensity)?),
-        });
-    }
-    let (phase, intensity): (u8, u8) = obj
-        .extract()
-        .map_err(|_| PyValueError::new_err("expected an Emission or a (phase, intensity) tuple"))?;
-    Ok(Emission {
-        phase: Phase(phase),
-        intensity: Intensity(intensity),
-    })
-}
-
-#[pyclass(name = "PatternBuffer", module = "autd3_pattern")]
-pub struct PatternBuffer {
-    inner: Vec<DevicePattern>,
-}
-
-#[pymethods]
-impl PatternBuffer {
-    #[new]
-    fn new(num_devices: usize) -> Self {
-        Self {
-            inner: vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; num_devices],
+macro_rules! buffer_class {
+    (
+        $buffer:ident,
+        $view:ident,
+        $name:literal,
+        $view_name:literal,
+        $ty:ty,
+        $init:expr,
+        $extract:ident,
+        $to_py:ident,
+        $into_capsule:path,
+        $capsule_mut:path
+    ) => {
+        #[pyclass(name = $name, module = "autd3_pattern")]
+        pub struct $buffer {
+            inner: Vec<Vec<$ty>>,
         }
-    }
 
-    #[staticmethod]
-    fn from_array(emissions: Vec<Vec<Bound<'_, PyAny>>>) -> PyResult<PatternBuffer> {
-        let mut inner = Vec::with_capacity(emissions.len());
-        for device in emissions {
-            if device.len() != Autd3::NUM_TRANSDUCERS {
-                return Err(PyValueError::new_err(format!(
-                    "each device needs {} emissions, got {}",
-                    Autd3::NUM_TRANSDUCERS,
-                    device.len()
-                )));
+        #[pymethods]
+        impl $buffer {
+            #[new]
+            fn new(num_devices: usize) -> Self {
+                Self {
+                    inner: vec![vec![$init; Autd3::NUM_TRANSDUCERS]; num_devices],
+                }
             }
-            let mut slot = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
-            for (e, obj) in slot.iter_mut().zip(device) {
-                *e = extract_emission(&obj)?;
+
+            #[staticmethod]
+            fn from_array(values: Vec<Vec<Bound<'_, PyAny>>>) -> PyResult<$buffer> {
+                let mut inner = Vec::with_capacity(values.len());
+                for device in values {
+                    if device.len() != Autd3::NUM_TRANSDUCERS {
+                        return Err(PyValueError::new_err(format!(
+                            "each device needs {} values, got {}",
+                            Autd3::NUM_TRANSDUCERS,
+                            device.len()
+                        )));
+                    }
+                    inner.push(device.iter().map($extract).collect::<PyResult<Vec<_>>>()?);
+                }
+                Ok($buffer { inner })
             }
-            inner.push(slot);
+
+            fn num_devices(&self) -> usize {
+                self.inner.len()
+            }
+
+            fn __len__(&self) -> usize {
+                self.inner.len()
+            }
+
+            fn __getitem__(slf: &Bound<'_, Self>, index: usize) -> PyResult<$view> {
+                if index >= slf.borrow().inner.len() {
+                    return Err(PyIndexError::new_err("device index out of range"));
+                }
+                Ok($view {
+                    buffer: slf.clone().unbind(),
+                    device: index,
+                })
+            }
+
+            fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
+                $into_capsule(py, self.inner.clone())
+            }
+
+            fn _capsule_mut<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyCapsule>> {
+                let py = slf.py();
+                let ptr = core::ptr::NonNull::from(&mut slf.borrow_mut().inner);
+                unsafe { $capsule_mut(py, ptr, slf.clone().into_any().unbind()) }
+            }
         }
-        Ok(PatternBuffer { inner })
-    }
 
-    fn num_devices(&self) -> usize {
-        self.inner.len()
-    }
-
-    fn __len__(&self) -> usize {
-        self.inner.len()
-    }
-
-    fn __getitem__(slf: &Bound<'_, Self>, index: usize) -> PyResult<DevicePatternView> {
-        if index >= slf.borrow().inner.len() {
-            return Err(PyIndexError::new_err("device index out of range"));
+        #[pyclass(name = $view_name, module = "autd3_pattern")]
+        pub struct $view {
+            buffer: Py<$buffer>,
+            device: usize,
         }
-        Ok(DevicePatternView {
-            buffer: slf.clone().unbind(),
-            device: index,
-        })
-    }
 
-    fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
-        pattern_into_capsule(py, self.inner.clone())
-    }
+        #[pymethods]
+        impl $view {
+            fn __len__(&self, py: Python<'_>) -> usize {
+                self.buffer.borrow(py).inner[self.device].len()
+            }
 
-    fn _capsule_mut<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyCapsule>> {
-        let py = slf.py();
-        let ptr = core::ptr::NonNull::from(&mut slf.borrow_mut().inner);
-        unsafe {
-            autd3_python_capsule::pattern_capsule_mut(py, ptr, slf.clone().into_any().unbind())
+            fn __getitem__(&self, py: Python<'_>, index: usize) -> PyResult<Py<PyAny>> {
+                let buf = self.buffer.borrow(py);
+                let value = *buf.inner[self.device]
+                    .get(index)
+                    .ok_or_else(|| PyIndexError::new_err("transducer index out of range"))?;
+                $to_py(py, value)
+            }
+
+            fn __setitem__(
+                &self,
+                py: Python<'_>,
+                index: usize,
+                value: &Bound<'_, PyAny>,
+            ) -> PyResult<()> {
+                let value = $extract(value)?;
+                let mut buf = self.buffer.borrow_mut(py);
+                *buf.inner[self.device]
+                    .get_mut(index)
+                    .ok_or_else(|| PyIndexError::new_err("transducer index out of range"))? = value;
+                Ok(())
+            }
         }
-    }
+    };
 }
 
-#[pyclass(name = "DevicePatternView", module = "autd3_pattern")]
-pub struct DevicePatternView {
-    buffer: Py<PatternBuffer>,
-    device: usize,
-}
+buffer_class!(
+    PhaseBuffer,
+    DevicePhaseView,
+    "PhaseBuffer",
+    "DevicePhaseView",
+    Phase,
+    Phase::ZERO,
+    extract_phase,
+    phase_to_py,
+    phases_into_capsule,
+    autd3_python_capsule::phase_capsule_mut
+);
 
-#[pymethods]
-impl DevicePatternView {
-    fn __len__(&self, py: Python<'_>) -> usize {
-        self.buffer.borrow(py).inner[self.device].len()
-    }
-
-    fn __getitem__(&self, py: Python<'_>, index: usize) -> PyResult<Py<PyAny>> {
-        let buf = self.buffer.borrow(py);
-        let slot = &buf.inner[self.device];
-        let emission = *slot
-            .get(index)
-            .ok_or_else(|| PyIndexError::new_err("transducer index out of range"))?;
-        emission_to_py(py, emission)
-    }
-
-    fn __setitem__(&self, py: Python<'_>, index: usize, value: &Bound<'_, PyAny>) -> PyResult<()> {
-        let emission = extract_emission(value)?;
-        let mut buf = self.buffer.borrow_mut(py);
-        let slot = &mut buf.inner[self.device];
-        *slot
-            .get_mut(index)
-            .ok_or_else(|| PyIndexError::new_err("transducer index out of range"))? = emission;
-        Ok(())
-    }
-}
+buffer_class!(
+    IntensityBuffer,
+    DeviceIntensityView,
+    "IntensityBuffer",
+    "DeviceIntensityView",
+    Intensity,
+    Intensity::MAX,
+    extract_intensity,
+    intensity_to_py,
+    intensities_into_capsule,
+    autd3_python_capsule::intensity_capsule_mut
+);
 
 #[pyfunction]
 fn wavelength(sound_speed: &Bound<'_, PyAny>) -> PyResult<f32> {
@@ -195,7 +224,7 @@ fn focus(
     geometry: &Bound<'_, PyAny>,
     target: &Bound<'_, PyAny>,
     wavelength: f32,
-    mut dst: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, PhaseBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
@@ -215,7 +244,7 @@ fn plane(
     geometry: &Bound<'_, PyAny>,
     direction: &Bound<'_, PyAny>,
     wavelength: f32,
-    mut dst: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, PhaseBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
@@ -237,7 +266,7 @@ fn bessel(
     direction: &Bound<'_, PyAny>,
     theta: &Bound<'_, PyAny>,
     wavelength: f32,
-    mut dst: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, PhaseBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
@@ -351,7 +380,7 @@ fn laguerre_gaussian_phase(
     axis: &Bound<'_, PyAny>,
     option: &LaguerreGaussianOption,
     wavelength: f32,
-    mut dst: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, PhaseBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
@@ -374,7 +403,7 @@ fn laguerre_gaussian_intensity(
     axis: &Bound<'_, PyAny>,
     option: &LaguerreGaussianOption,
     wavelength: f32,
-    mut dst: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, IntensityBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
@@ -398,7 +427,7 @@ fn hermite_gaussian_phase(
     x_dir: &Bound<'_, PyAny>,
     option: &HermiteGaussianOption,
     wavelength: f32,
-    mut dst: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, PhaseBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
@@ -423,7 +452,7 @@ fn hermite_gaussian_intensity(
     x_dir: &Bound<'_, PyAny>,
     option: &HermiteGaussianOption,
     wavelength: f32,
-    mut dst: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, IntensityBuffer>,
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
@@ -443,7 +472,7 @@ fn hermite_gaussian_intensity(
 #[pyo3(signature = (intensity, dst))]
 fn set_intensity(
     intensity: &Bound<'_, PyAny>,
-    mut dst: PyRefMut<'_, PatternBuffer>,
+    mut dst: PyRefMut<'_, IntensityBuffer>,
 ) -> PyResult<()> {
     autd3_rs_pattern::set_intensity(extract_intensity(intensity)?, &mut dst.inner);
     Ok(())
@@ -451,34 +480,19 @@ fn set_intensity(
 
 #[pyfunction]
 #[pyo3(signature = (phase, dst))]
-fn set_phase(phase: &Bound<'_, PyAny>, mut dst: PyRefMut<'_, PatternBuffer>) -> PyResult<()> {
+fn set_phase(phase: &Bound<'_, PyAny>, mut dst: PyRefMut<'_, PhaseBuffer>) -> PyResult<()> {
     autd3_rs_pattern::set_phase(extract_phase(phase)?, &mut dst.inner);
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (phase, intensity, dst))]
-fn set_phase_and_intensity(
-    phase: &Bound<'_, PyAny>,
-    intensity: &Bound<'_, PyAny>,
-    mut dst: PyRefMut<'_, PatternBuffer>,
-) -> PyResult<()> {
-    autd3_rs_pattern::set_phase_and_intensity(
-        extract_phase(phase)?,
-        extract_intensity(intensity)?,
-        &mut dst.inner,
-    );
-    Ok(())
-}
-
-#[pyfunction]
 #[pyo3(signature = (phase, dst))]
-fn add_phase(phase: &Bound<'_, PyAny>, mut dst: PyRefMut<'_, PatternBuffer>) -> PyResult<()> {
+fn add_phase(phase: &Bound<'_, PyAny>, mut dst: PyRefMut<'_, PhaseBuffer>) -> PyResult<()> {
     autd3_rs_pattern::add_phase(extract_phase(phase)?, &mut dst.inner);
     Ok(())
 }
 
-fn matches_geometry(geometry: &autd3_rs_core::Geometry, buffer: &[DevicePattern]) -> bool {
+fn matches_geometry<T>(geometry: &autd3_rs_core::Geometry, buffer: &[Vec<T>]) -> bool {
     buffer.len() == geometry.num_devices()
         && geometry
             .iter()
@@ -621,63 +635,121 @@ fn groups_match(geometry: &autd3_rs_core::Geometry, groups: &CoreTransducerGroup
             .all(|(dev, device)| groups.num_transducers(dev) == device.num_transducers())
 }
 
+macro_rules! group_into {
+    ($py:expr, $geometry:expr, $groups:expr, $sources:expr, $dst:expr, $buffer:ty, $null:expr) => {{
+        let buffers = $groups
+            .keys
+            .iter()
+            .map(|key| {
+                let source = $sources
+                    .get_item(key.bind($py))?
+                    .cast_into::<$buffer>()
+                    .map_err(|_| {
+                        PyTypeError::new_err("every source must have the same buffer type as dst")
+                    })?;
+                if source.is($dst) {
+                    return Err(PyValueError::new_err("dst must not be one of the sources"));
+                }
+                Ok(source)
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        let borrowed = buffers
+            .iter()
+            .map(Bound::try_borrow)
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut dst = $dst.try_borrow_mut()?;
+        if !groups_match($geometry, &$groups.inner)
+            || !matches_geometry($geometry, &dst.inner)
+            || !borrowed
+                .iter()
+                .all(|source| matches_geometry($geometry, &source.inner))
+        {
+            return Err(PyValueError::new_err(
+                "the groups and every buffer must match the geometry",
+            ));
+        }
+        autd3_rs_pattern::group(
+            $geometry,
+            &$groups.inner,
+            |index| borrowed[index].inner.as_slice(),
+            $null,
+            &mut dst.inner,
+        );
+        Ok(())
+    }};
+}
+
 #[pyfunction]
 #[pyo3(signature = (geometry, groups, sources, dst))]
 fn group(
     geometry: &Bound<'_, PyAny>,
     groups: PyRef<'_, TransducerGroups>,
     sources: &Bound<'_, PyAny>,
-    dst: &Bound<'_, PatternBuffer>,
+    dst: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let py = geometry.py();
     let capsule = capsule_of(geometry)?;
     let core_geometry = geometry_from_capsule(&capsule)?;
-    let buffers = groups
-        .keys
-        .iter()
-        .map(|key| {
-            let source = sources
-                .get_item(key.bind(py))?
-                .cast_into::<PatternBuffer>()
-                .map_err(|_| PyTypeError::new_err("every source must be a PatternBuffer"))?;
-            if source.is(dst) {
-                return Err(PyValueError::new_err("dst must not be one of the sources"));
-            }
-            Ok(source)
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-    let borrowed = buffers
-        .iter()
-        .map(Bound::try_borrow)
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut dst = dst.try_borrow_mut()?;
-    if !groups_match(core_geometry, &groups.inner)
-        || !matches_geometry(core_geometry, &dst.inner)
-        || !borrowed
-            .iter()
-            .all(|source| matches_geometry(core_geometry, &source.inner))
-    {
-        return Err(PyValueError::new_err(
-            "the groups and every pattern buffer must match the geometry",
-        ));
+    if let Ok(dst) = dst.cast::<PhaseBuffer>() {
+        return group_into!(
+            py,
+            core_geometry,
+            groups,
+            sources,
+            dst,
+            PhaseBuffer,
+            Phase::ZERO
+        );
     }
+    if let Ok(dst) = dst.cast::<IntensityBuffer>() {
+        return group_into!(
+            py,
+            core_geometry,
+            groups,
+            sources,
+            dst,
+            IntensityBuffer,
+            Intensity::MIN
+        );
+    }
+    Err(PyTypeError::new_err(
+        "dst must be a PhaseBuffer or an IntensityBuffer",
+    ))
+}
 
-    autd3_rs_pattern::group(
-        core_geometry,
-        &groups.inner,
-        |index| borrowed[index].inner.as_slice(),
-        &mut dst.inner,
-    );
-    Ok(())
+fn fill_unassigned<T: Copy>(groups: &CoreTransducerGroups<usize>, null: T, dst: &mut [Vec<T>]) {
+    for (dev, slot) in dst.iter_mut().enumerate() {
+        for (tr, out) in slot.iter_mut().enumerate() {
+            if groups.key(dev, tr).is_none() {
+                *out = null;
+            }
+        }
+    }
+}
+
+fn copy_group<T: Copy>(
+    groups: &CoreTransducerGroups<usize>,
+    index: usize,
+    source: &[Vec<T>],
+    dst: &mut [Vec<T>],
+) {
+    for (dev, (slot, src)) in dst.iter_mut().zip(source).enumerate() {
+        for (tr, (o, &v)) in slot.iter_mut().zip(src).enumerate() {
+            if groups.key(dev, tr) == Some(index) {
+                *o = v;
+            }
+        }
+    }
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, groups, compute, dst))]
+#[pyo3(signature = (geometry, groups, compute, phases, intensities))]
 fn group_compute(
     geometry: &Bound<'_, PyAny>,
     groups: PyRef<'_, TransducerGroups>,
     compute: &Bound<'_, PyAny>,
-    dst: &Bound<'_, PatternBuffer>,
+    phases: &Bound<'_, PhaseBuffer>,
+    intensities: &Bound<'_, IntensityBuffer>,
 ) -> PyResult<()> {
     let py = geometry.py();
     let capsule = capsule_of(geometry)?;
@@ -686,56 +758,81 @@ fn group_compute(
         return Err(PyTypeError::new_err("compute must be callable"));
     }
     if !groups_match(core_geometry, &groups.inner)
-        || !matches_geometry(core_geometry, &dst.try_borrow()?.inner)
+        || !matches_geometry(core_geometry, &phases.try_borrow()?.inner)
+        || !matches_geometry(core_geometry, &intensities.try_borrow()?.inner)
     {
         return Err(PyValueError::new_err(
-            "the groups and dst must match the geometry",
+            "the groups, phases and intensities must match the geometry",
         ));
     }
 
-    for (dev, slot) in dst.try_borrow_mut()?.inner.iter_mut().enumerate() {
-        for (tr, out) in slot.iter_mut().enumerate() {
-            if groups.inner.key(dev, tr).is_none() {
-                *out = Emission::NULL;
-            }
-        }
-    }
+    fill_unassigned(
+        &groups.inner,
+        Phase::ZERO,
+        &mut phases.try_borrow_mut()?.inner,
+    );
+    fill_unassigned(
+        &groups.inner,
+        Intensity::MIN,
+        &mut intensities.try_borrow_mut()?.inner,
+    );
 
-    let scratch = Bound::new(
+    let scratch_phases = Bound::new(
         py,
-        PatternBuffer {
-            inner: core_geometry.pattern_buffer(),
+        PhaseBuffer {
+            inner: core_geometry.phase_buffer(),
+        },
+    )?;
+    let scratch_intensities = Bound::new(
+        py,
+        IntensityBuffer {
+            inner: core_geometry.intensity_buffer(),
         },
     )?;
     for (index, key) in groups.keys.iter().enumerate() {
-        autd3_rs_pattern::set_phase_and_intensity(
-            Phase::ZERO,
+        autd3_rs_pattern::set_phase(Phase::ZERO, &mut scratch_phases.try_borrow_mut()?.inner);
+        autd3_rs_pattern::set_intensity(
             Intensity::MAX,
-            &mut scratch.try_borrow_mut()?.inner,
+            &mut scratch_intensities.try_borrow_mut()?.inner,
         );
-        compute.call1((key.bind(py), groups.mask_at(index), &scratch))?;
-        let source = scratch.try_borrow()?;
-        let mut out = dst.try_borrow_mut()?;
-        for (dev, (slot, src)) in out.inner.iter_mut().zip(&source.inner).enumerate() {
-            for (tr, (o, &e)) in slot.iter_mut().zip(src).enumerate() {
-                if groups.inner.key(dev, tr) == Some(index) {
-                    *o = e;
-                }
-            }
-        }
+        compute.call1((
+            key.bind(py),
+            groups.mask_at(index),
+            &scratch_phases,
+            &scratch_intensities,
+        ))?;
+        copy_group(
+            &groups.inner,
+            index,
+            &scratch_phases.try_borrow()?.inner,
+            &mut phases.try_borrow_mut()?.inner,
+        );
+        copy_group(
+            &groups.inner,
+            index,
+            &scratch_intensities.try_borrow()?.inner,
+            &mut intensities.try_borrow_mut()?.inner,
+        );
     }
     Ok(())
 }
 
 #[pyfunction]
-fn _read_pattern_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
-    Ok(pattern_from_capsule(capsule)?.len())
+fn _read_phase_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
+    Ok(phases_from_capsule(capsule)?.len())
+}
+
+#[pyfunction]
+fn _read_intensity_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
+    Ok(intensities_from_capsule(capsule)?.len())
 }
 
 #[pymodule]
 fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<PatternBuffer>()?;
-    m.add_class::<DevicePatternView>()?;
+    m.add_class::<PhaseBuffer>()?;
+    m.add_class::<DevicePhaseView>()?;
+    m.add_class::<IntensityBuffer>()?;
+    m.add_class::<DeviceIntensityView>()?;
     m.add_class::<TransducerMask>()?;
     m.add_class::<TransducerGroups>()?;
     m.add_class::<LaguerreGaussianOption>()?;
@@ -750,10 +847,10 @@ fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hermite_gaussian_intensity, m)?)?;
     m.add_function(wrap_pyfunction!(set_intensity, m)?)?;
     m.add_function(wrap_pyfunction!(set_phase, m)?)?;
-    m.add_function(wrap_pyfunction!(set_phase_and_intensity, m)?)?;
     m.add_function(wrap_pyfunction!(add_phase, m)?)?;
     m.add_function(wrap_pyfunction!(group, m)?)?;
     m.add_function(wrap_pyfunction!(group_compute, m)?)?;
-    m.add_function(wrap_pyfunction!(_read_pattern_capsule, m)?)?;
+    m.add_function(wrap_pyfunction!(_read_phase_capsule, m)?)?;
+    m.add_function(wrap_pyfunction!(_read_intensity_capsule, m)?)?;
     Ok(())
 }

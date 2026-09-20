@@ -1,10 +1,10 @@
 use nalgebra::{Complex, DMatrix, DVector};
 
 use autd3_rs_core::geometry::{Point3, UnitVector3};
-use autd3_rs_core::value::Emission;
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::amplitude_target::AmplitudeTarget;
-use crate::constraint::EmissionConstraint;
+use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::propagation::{emission, max_coefficient, propagate};
 
@@ -72,16 +72,16 @@ pub trait LinAlgBackend {
     fn quantize(
         &self,
         v: &Self::Vector,
-        constraint: EmissionConstraint,
+        constraint: IntensityConstraint,
         parallel: bool,
-    ) -> Vec<Emission>;
+    ) -> (Vec<Phase>, Vec<Intensity>);
 
     fn quantize_batch(
         &self,
         v: &Self::BatchVector,
-        constraint: EmissionConstraint,
+        constraint: IntensityConstraint,
         parallel: bool,
-    ) -> Vec<Emission>;
+    ) -> (Vec<Phase>, Vec<Intensity>);
 
     fn make_batch_vector(&self, batch: usize, data: Vec<Complex<f32>>) -> Self::BatchVector;
     fn batch_vector_to_host(&self, v: &Self::BatchVector) -> Vec<Complex<f32>>;
@@ -192,9 +192,9 @@ impl LinAlgBackend for NalgebraBackend {
     fn quantize(
         &self,
         v: &Self::Vector,
-        constraint: EmissionConstraint,
+        constraint: IntensityConstraint,
         parallel: bool,
-    ) -> Vec<Emission> {
+    ) -> (Vec<Phase>, Vec<Intensity>) {
         let q = v.as_slice();
         quantize_slice(q, constraint, max_coefficient(q), parallel)
     }
@@ -202,9 +202,9 @@ impl LinAlgBackend for NalgebraBackend {
     fn quantize_batch(
         &self,
         v: &Self::BatchVector,
-        constraint: EmissionConstraint,
+        constraint: IntensityConstraint,
         parallel: bool,
-    ) -> Vec<Emission> {
+    ) -> (Vec<Phase>, Vec<Intensity>) {
         #[cfg(not(feature = "parallel"))]
         let _ = parallel;
         #[cfg(feature = "parallel")]
@@ -212,11 +212,11 @@ impl LinAlgBackend for NalgebraBackend {
             return v
                 .par_iter()
                 .flat_map_iter(|q| quantized(q.as_slice(), constraint))
-                .collect();
+                .unzip();
         }
         v.iter()
             .flat_map(|q| quantized(q.as_slice(), constraint))
-            .collect()
+            .unzip()
     }
 
     fn make_batch_vector(&self, batch: usize, data: Vec<Complex<f32>>) -> Self::BatchVector {
@@ -284,18 +284,18 @@ impl LinAlgBackend for NalgebraBackend {
 
 fn quantized(
     q: &[Complex<f32>],
-    constraint: EmissionConstraint,
-) -> impl Iterator<Item = Emission> + '_ {
+    constraint: IntensityConstraint,
+) -> impl Iterator<Item = (Phase, Intensity)> + '_ {
     let max = max_coefficient(q);
     q.iter().map(move |&v| emission(v, constraint, max))
 }
 
 fn quantize_slice(
     q: &[Complex<f32>],
-    constraint: EmissionConstraint,
+    constraint: IntensityConstraint,
     max: f32,
     parallel: bool,
-) -> Vec<Emission> {
+) -> (Vec<Phase>, Vec<Intensity>) {
     #[cfg(not(feature = "parallel"))]
     let _ = parallel;
     #[cfg(feature = "parallel")]

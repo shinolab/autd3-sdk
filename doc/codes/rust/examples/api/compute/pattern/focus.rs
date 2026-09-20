@@ -7,9 +7,9 @@ fn main() {
 
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = wavelength(340.0 * m / s);
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
 
     // ANCHOR: api
-    focus(&geometry, target, wavelength, &mut dst);
+    focus(&geometry, target, wavelength, &mut phases);
     // ANCHOR_END: api
 }

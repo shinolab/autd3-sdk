@@ -19,17 +19,19 @@ internal static class Sample
 
         await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
 
-        var patterns = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
+        var intensities = geometry.IntensityBuffer();
 
         // ANCHOR: configure
-        var silent = geometry.PatternBuffer();
+        var silent = geometry.IntensityBuffer();
         Pattern.SetIntensity(Intensity.Min, silent);
         var builder = client.DatagramBuilder();
         builder.Push(SetSilencer.Disable());
         builder.Push(new WritePatternBuffer(
             bank: PatternBank.B0,
             index: 0,
-            emissions: silent
+            phases: phases,
+            intensities: silent
         ));
         builder.Push(new ConfigPattern(
             bank: PatternBank.B0,
@@ -56,14 +58,15 @@ internal static class Sample
                 geometry,
                 target,
                 wavelength,
-                patterns
+                phases
             );
 
             var hotBuilder = client.DatagramBuilder();
             hotBuilder.Push(new WritePatternBuffer(
                 bank: PatternBank.B0,
                 index: 0,
-                emissions: patterns
+                phases: phases,
+                intensities: intensities
             ));
             foreach (var frame in hotBuilder.Build())
             {

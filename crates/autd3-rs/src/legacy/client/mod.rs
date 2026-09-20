@@ -13,7 +13,7 @@ use autd3_rs_core::RtPriority;
 use autd3_rs_core::RtSchedulePolicy;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::link::{DcClock, IntoLink, Link};
-use autd3_rs_core::value::{DcSysTime, Emission};
+use autd3_rs_core::value::{DcSysTime, Intensity, Phase};
 use std::sync::mpsc;
 
 use autd3_rs_core::rt::{Semaphore, SemaphorePermit, oneshot};
@@ -403,12 +403,10 @@ impl LegacyClient {
     }
 
     pub async fn stop(&self) -> Result<(), LegacyError> {
-        let null = self
-            .geometry
-            .iter()
-            .map(|d| vec![Emission::NULL; d.num_transducers()])
-            .collect::<Vec<_>>();
-        self.send_op(op::Gain::new(&null)).await.map(|_| ())
+        let (phases, intensities) = self.null_pattern();
+        self.send_op(op::Gain::new(&phases, &intensities))
+            .await
+            .map(|_| ())
     }
 
     pub async fn close(&self) -> Result<(), LegacyError> {
@@ -434,15 +432,20 @@ impl LegacyClient {
         shutdown.and(joined)
     }
 
-    fn shutdown_frames(&self) -> [Result<LegacyFrames, LegacyError>; 3] {
-        let null = self
+    fn null_pattern(&self) -> (Vec<Vec<Phase>>, Vec<Vec<Intensity>>) {
+        let intensities = self
             .geometry
             .iter()
-            .map(|d| vec![Emission::NULL; d.num_transducers()])
-            .collect::<Vec<_>>();
+            .map(|d| vec![Intensity::MIN; d.num_transducers()])
+            .collect();
+        (self.geometry.phase_buffer(), intensities)
+    }
+
+    fn shutdown_frames(&self) -> [Result<LegacyFrames, LegacyError>; 3] {
+        let (phases, intensities) = self.null_pattern();
         [
             self.build_op(op::Silencer::new(op::SilencerConfig::default_non_strict())),
-            self.build_op(op::Gain::new(&null)),
+            self.build_op(op::Gain::new(&phases, &intensities)),
             self.build_op(op::Clear::new()),
         ]
     }

@@ -1,17 +1,17 @@
 use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, TransducerMask, UnitQuaternion, Vector3};
-use autd3_rs_core::value::{Emission, Intensity};
+use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, GsOption, GspatOption, NaiveOption,
+    AmplitudeTarget, Directivity, GsOption, GspatOption, IntensityConstraint, NaiveOption,
     NalgebraBackend, Pa, gs, gspat, naive,
 };
 use autd3_rs_pattern_holo_wgpu::WgpuBackend;
 
-const CONSTRAINTS: [EmissionConstraint; 4] = [
-    EmissionConstraint::Normalize,
-    EmissionConstraint::Multiply(0.7),
-    EmissionConstraint::Uniform(Intensity(0x80)),
-    EmissionConstraint::Clamp(Intensity(16), Intensity(240)),
+const CONSTRAINTS: [IntensityConstraint; 4] = [
+    IntensityConstraint::Normalize,
+    IntensityConstraint::Multiply(0.7),
+    IntensityConstraint::Uniform(Intensity(0x80)),
+    IntensityConstraint::Clamp(Intensity(16), Intensity(240)),
 ];
 
 fn geometry(devices: usize) -> Geometry {
@@ -36,31 +36,40 @@ fn foci(g: &Geometry, n: usize) -> Vec<AmplitudeTarget> {
         .collect()
 }
 
-fn buffer(g: &Geometry) -> Vec<Vec<Emission>> {
-    vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; g.num_devices()]
+type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
+
+fn buffer(g: &Geometry) -> Buffers {
+    (g.phase_buffer(), g.intensity_buffer())
 }
 
-fn compare(label: &str, cpu: &[Vec<Emission>], gpu: &[Vec<Emission>]) {
+fn compare(
+    label: &str,
+    cpu_phases: &[Vec<Phase>],
+    cpu_intensities: &[Vec<Intensity>],
+    gpu_phases: &[Vec<Phase>],
+    gpu_intensities: &[Vec<Intensity>],
+) {
     let mut worst_phase = 0u8;
     let mut worst_intensity = 0u8;
-    for (d, (c, g)) in cpu.iter().zip(gpu).enumerate() {
-        for (t, (a, b)) in c.iter().zip(g).enumerate() {
-            let dp = a.phase.0.wrapping_sub(b.phase.0);
+    for (d, ((cp, ci), (gp, gi))) in cpu_phases
+        .iter()
+        .zip(cpu_intensities)
+        .zip(gpu_phases.iter().zip(gpu_intensities))
+        .enumerate()
+    {
+        for (t, ((a, ai), (b, bi))) in cp.iter().zip(ci).zip(gp.iter().zip(gi)).enumerate() {
+            let dp = a.0.wrapping_sub(b.0);
             let dp = dp.min(0u8.wrapping_sub(dp));
-            let di = a.intensity.0.abs_diff(b.intensity.0);
+            let di = ai.0.abs_diff(bi.0);
             worst_phase = worst_phase.max(dp);
             worst_intensity = worst_intensity.max(di);
             assert!(
                 dp <= 1,
-                "{label}: phase mismatch at device {d} transducer {t}: {:?} vs {:?}",
-                a.phase,
-                b.phase
+                "{label}: phase mismatch at device {d} transducer {t}: {a:?} vs {b:?}"
             );
             assert!(
                 di <= 1,
-                "{label}: intensity mismatch at device {d} transducer {t}: {:?} vs {:?}",
-                a.intensity,
-                b.intensity
+                "{label}: intensity mismatch at device {d} transducer {t}: {ai:?} vs {bi:?}"
             );
         }
     }
@@ -80,8 +89,8 @@ fn multi_chunk_matches_nalgebra_backend() {
         for n in [1usize, 4, 16] {
             let f = foci(&g, n);
             for constraint in [
-                EmissionConstraint::Normalize,
-                EmissionConstraint::Clamp(Intensity(16), Intensity(240)),
+                IntensityConstraint::Normalize,
+                IntensityConstraint::Clamp(Intensity(16), Intensity(240)),
             ] {
                 let label = format!("{devices}dev/{n}foci/{constraint:?}");
                 let mut a = buffer(&g);
@@ -91,25 +100,25 @@ fn multi_chunk_matches_nalgebra_backend() {
                     constraint,
                     ..Default::default()
                 };
-                naive(&NalgebraBackend, &g, &f, wl, &opt, &mut a).unwrap();
-                naive(&gpu, &g, &f, wl, &opt, &mut b).unwrap();
-                compare(&format!("naive {label}"), &a, &b);
+                naive(&NalgebraBackend, &g, &f, wl, &opt, &mut a.0, &mut a.1).unwrap();
+                naive(&gpu, &g, &f, wl, &opt, &mut b.0, &mut b.1).unwrap();
+                compare(&format!("naive {label}"), &a.0, &a.1, &b.0, &b.1);
 
                 let opt = GsOption {
                     constraint,
                     ..Default::default()
                 };
-                gs(&NalgebraBackend, &g, &f, wl, &opt, &mut a).unwrap();
-                gs(&gpu, &g, &f, wl, &opt, &mut b).unwrap();
-                compare(&format!("gs {label}"), &a, &b);
+                gs(&NalgebraBackend, &g, &f, wl, &opt, &mut a.0, &mut a.1).unwrap();
+                gs(&gpu, &g, &f, wl, &opt, &mut b.0, &mut b.1).unwrap();
+                compare(&format!("gs {label}"), &a.0, &a.1, &b.0, &b.1);
 
                 let opt = GspatOption {
                     constraint,
                     ..Default::default()
                 };
-                gspat(&NalgebraBackend, &g, &f, wl, &opt, &mut a).unwrap();
-                gspat(&gpu, &g, &f, wl, &opt, &mut b).unwrap();
-                compare(&format!("gspat {label}"), &a, &b);
+                gspat(&NalgebraBackend, &g, &f, wl, &opt, &mut a.0, &mut a.1).unwrap();
+                gspat(&gpu, &g, &f, wl, &opt, &mut b.0, &mut b.1).unwrap();
+                compare(&format!("gspat {label}"), &a.0, &a.1, &b.0, &b.1);
             }
         }
     }
@@ -145,9 +154,9 @@ fn matches_nalgebra_backend() {
                             mask,
                             ..Default::default()
                         };
-                        naive(&NalgebraBackend, &g, &f, wl, &opt, &mut a).unwrap();
-                        naive(&gpu, &g, &f, wl, &opt, &mut b).unwrap();
-                        compare(&format!("naive {label}"), &a, &b);
+                        naive(&NalgebraBackend, &g, &f, wl, &opt, &mut a.0, &mut a.1).unwrap();
+                        naive(&gpu, &g, &f, wl, &opt, &mut b.0, &mut b.1).unwrap();
+                        compare(&format!("naive {label}"), &a.0, &a.1, &b.0, &b.1);
 
                         let opt = GsOption {
                             constraint,
@@ -155,9 +164,9 @@ fn matches_nalgebra_backend() {
                             mask,
                             ..Default::default()
                         };
-                        gs(&NalgebraBackend, &g, &f, wl, &opt, &mut a).unwrap();
-                        gs(&gpu, &g, &f, wl, &opt, &mut b).unwrap();
-                        compare(&format!("gs {label}"), &a, &b);
+                        gs(&NalgebraBackend, &g, &f, wl, &opt, &mut a.0, &mut a.1).unwrap();
+                        gs(&gpu, &g, &f, wl, &opt, &mut b.0, &mut b.1).unwrap();
+                        compare(&format!("gs {label}"), &a.0, &a.1, &b.0, &b.1);
 
                         let opt = GspatOption {
                             constraint,
@@ -165,9 +174,9 @@ fn matches_nalgebra_backend() {
                             mask,
                             ..Default::default()
                         };
-                        gspat(&NalgebraBackend, &g, &f, wl, &opt, &mut a).unwrap();
-                        gspat(&gpu, &g, &f, wl, &opt, &mut b).unwrap();
-                        compare(&format!("gspat {label}"), &a, &b);
+                        gspat(&NalgebraBackend, &g, &f, wl, &opt, &mut a.0, &mut a.1).unwrap();
+                        gspat(&gpu, &g, &f, wl, &opt, &mut b.0, &mut b.1).unwrap();
+                        compare(&format!("gspat {label}"), &a.0, &a.1, &b.0, &b.1);
                     }
                 }
             }

@@ -25,7 +25,8 @@ async def main() -> None:
         wavelength = pattern.wavelength(340 * m / s)
 
         # ANCHOR: loop
-        patterns = geometry.pattern_buffer()
+        phases = geometry.phase_buffer()
+        intensities = geometry.intensity_buffer()
         while True:
             for sign in (1.0, -1.0):
                 target = center + np.array([sign * 20.0, 0.0, 0.0])
@@ -33,10 +34,10 @@ async def main() -> None:
                     geometry,
                     target,
                     wavelength,
-                    patterns,
+                    phases,
                 )
                 builder = client.datagram_builder()
-                builder.push(Pattern(patterns))
+                builder.push(Pattern(phases, intensities))
                 for frame in builder.build():
                     await client.send_checked(frame)
                 await asyncio.sleep(1.0)

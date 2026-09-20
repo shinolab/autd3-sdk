@@ -25,12 +25,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR_END: version
 
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let mut emissions = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
     autd3_rs_pattern::focus(
         &geometry,
         target,
         autd3_rs_pattern::wavelength(340.0 * m / s),
-        &mut emissions,
+        &mut phases,
     );
     let mut modulation = autd3_rs_modulation::modulation_buffer();
     autd3_rs_modulation::sine(
@@ -43,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = client.datagram_builder();
     builder
         .push(SetSilencer::default())
-        .push(Pattern::new(&emissions))
+        .push(Pattern::new(&phases, &intensities))
         .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation));
     let frames = builder.build()?;
     for frame in &frames {
@@ -53,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ANCHOR: change_bank
     let mut builder = client.datagram_builder();
-    builder.push(Pattern::with_bank(PatternBank::B1, &emissions));
+    builder.push(Pattern::with_bank(PatternBank::B1, &phases, &intensities));
     for frame in &builder.build()? {
         client.send_checked(frame).await?;
     }

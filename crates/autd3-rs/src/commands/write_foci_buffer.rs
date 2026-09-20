@@ -43,8 +43,8 @@ mod tests {
     use crate::params::{FOCUS_WORDS, MAX_FOCI_TOTAL};
     use crate::protocol::PAYLOAD_BYTES;
     use crate::test_utils::{test_device, test_geometry_arc};
-    use autd3_cpu_wire::payload::WritePatternPayload;
-    const HEADER_BYTES: usize = core::mem::size_of::<WritePatternPayload>();
+    use autd3_cpu_wire::payload::WriteFociPayload;
+    const HEADER_BYTES: usize = core::mem::size_of::<WriteFociPayload>();
 
     fn expand<const N: usize>(op: WriteFociBuffer<'_, N>) -> Result<Frames, Error> {
         let mut b = DatagramBuilder::new(test_geometry_arc(1));

@@ -1,6 +1,6 @@
 ---
 title: Custom Patterns and Modulation
-description: How to build arbitrary Emission patterns and AM waveforms directly without helper functions
+description: How to build arbitrary phase and intensity patterns and AM waveforms directly without helper functions
 sidebar:
   order: 5
 ---
@@ -20,8 +20,8 @@ By building the buffer directly without going through a helper, arbitrary patter
 
 ## Custom Pattern
 
-A pattern is a buffer that lays out a `Vec<Emission>` for each device.
-`Geometry::pattern_buffer` allocates the buffer for all devices, and the `Emission` (phase and intensity) of each transducer can be freely set.
+A pattern is a pair of a phase buffer, which lays out a `Vec<Phase>` for each device, and an intensity buffer, which lays out a `Vec<Intensity>` for each device.
+`Geometry::phase_buffer` / `Geometry::intensity_buffer` allocate the buffers for all devices, and the phase and intensity of each transducer can be freely set.
 
 The following is an example of manually computing the same single focal point as [`focus`](/autd3-sdk/en/api/compute/pattern/focus/), without using a helper.
 It gives each transducer a phase according to the distance from the transducer to the focal point.

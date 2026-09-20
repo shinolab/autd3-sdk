@@ -58,7 +58,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint indexOffset, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] patterns, UIntPtr numPatterns, byte bank, byte mode, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] phases, IntPtr[] intensities, UIntPtr numPatterns, byte bank, byte mode, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_stm_circle(float[] center, float radiusMm, UIntPtr numPoints, float[] normal, byte intensity, Autd3StmControlPointNative[] outPoints, byte[] outIntensities);
@@ -276,28 +276,45 @@ namespace AUTD3
     public sealed class PatternStm : ICommand
     {
         private readonly StmConfig _config;
-        private readonly PatternBuffer[] _patterns;
+        private readonly PhaseBuffer[] _phases;
+        private readonly IntensityBuffer[] _intensities;
         private readonly PatternStmOption _option;
 
-        public PatternStm(StmConfig config, PatternBuffer[] patterns, PatternStmOption? option = null)
+        public PatternStm(StmConfig config, PhaseBuffer[] phases, IntensityBuffer[] intensities, PatternStmOption? option = null)
         {
+            if (phases == null)
+            {
+                throw new ArgumentNullException(nameof(phases));
+            }
+            if (intensities == null)
+            {
+                throw new ArgumentNullException(nameof(intensities));
+            }
+            if (phases.Length != intensities.Length)
+            {
+                throw new Autd3Exception("PatternStm expects the same number of phase and intensity buffers");
+            }
             _config = config;
-            _patterns = patterns;
+            _phases = phases;
+            _intensities = intensities;
             _option = option ?? new PatternStmOption(PatternBank.B0);
         }
 
         IntPtr ICommand.CreateOp()
         {
-            var handles = new SafeHandle[_patterns.Length];
-            for (var i = 0; i < _patterns.Length; i++)
+            var phaseHandles = new SafeHandle[_phases.Length];
+            var intensityHandles = new SafeHandle[_intensities.Length];
+            for (var i = 0; i < _phases.Length; i++)
             {
-                handles[i] = _patterns[i].Handle;
+                phaseHandles[i] = _phases[i].Handle;
+                intensityHandles[i] = _intensities[i].Handle;
             }
-            using var lease = new HandleArray(handles);
+            using var phaseLease = new HandleArray(phaseHandles);
+            using var intensityLease = new HandleArray(intensityHandles);
             var configHandle = _config.CreateHandle();
             try
             {
-                return NativeStm.autd3_op_pattern_stm(configHandle, lease.Pointers, (UIntPtr)lease.Pointers.Length,
+                return NativeStm.autd3_op_pattern_stm(configHandle, phaseLease.Pointers, intensityLease.Pointers, (UIntPtr)phaseLease.Pointers.Length,
                     (byte)_option.Bank, (byte)_option.Mode, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value, _option.TransitionMode.MarginNs);
             }
             finally

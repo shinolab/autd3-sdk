@@ -18,7 +18,7 @@ async def main() -> None:
         wl = wavelength(340 * m / s)
         patterns = []
         for x in (-30.0, -10.0, 10.0, 30.0):
-            buffer = geometry.pattern_buffer()
+            buffer = geometry.phase_buffer()
             focus(
                 geometry,
                 center + np.array([x, 0.0, 0.0]),

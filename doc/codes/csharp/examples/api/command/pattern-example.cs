@@ -16,16 +16,17 @@ internal static class Sample
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
-var emissions = geometry.PatternBuffer();
+var phases = geometry.PhaseBuffer();
+var intensities = geometry.IntensityBuffer();
 Pattern.Focus(
     geometry,
     geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),
     Pattern.Wavelength(340.0f * m / s),
-    emissions
+    phases
 );
 
 var builder = client.DatagramBuilder();
-builder.Push(new Pattern(emissions));
+builder.Push(new Pattern(phases, intensities));
 var frames = builder.Build();
 foreach (var frame in frames)
 {

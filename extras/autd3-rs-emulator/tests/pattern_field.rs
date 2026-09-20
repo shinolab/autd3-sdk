@@ -2,7 +2,7 @@ use autd3_rs::commands::{FixedCompletionTime, Modulation, Pattern, SetSilencer};
 use autd3_rs::common::ULTRASOUND_PERIOD;
 use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitVector3, Vector3};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::{Emission, SamplingConfig};
+use autd3_rs::value::{Intensity, Phase, SamplingConfig};
 use autd3_rs_emulator::{ClientApi, Emulator, RangeXY, RawColumn, Record, RmsRecordOption};
 use autd3_rs_pattern::{
     HermiteGaussianOption, LaguerreGaussianOption, focus, hermite_gaussian_intensity,
@@ -18,7 +18,7 @@ fn geometry() -> Geometry {
     Geometry::new(vec![Autd3::default()])
 }
 
-fn record(geometry: Geometry, emissions: Vec<Vec<Emission>>) -> Record {
+fn record(geometry: Geometry, phases: Vec<Vec<Phase>>, intensities: Vec<Vec<Intensity>>) -> Record {
     let emulator = Emulator::new(geometry);
     let modulation = vec![0xFF, 0xFF];
     emulator
@@ -33,7 +33,7 @@ fn record(geometry: Geometry, emissions: Vec<Vec<Emission>>) -> Record {
                     },
                 })
                 .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
-                .push(Pattern::new(&emissions));
+                .push(Pattern::new(&phases, &intensities));
             let datagrams = builder.build()?;
             for frame in &datagrams {
                 r.send_checked(frame).await?;
@@ -81,36 +81,46 @@ fn argmax(grid: &[f32]) -> (usize, usize) {
     (i % GRID, i / GRID)
 }
 
-fn setup(f: impl FnOnce(&Geometry, Point3<f32>, &mut Vec<Vec<Emission>>)) -> Vec<f32> {
+type Setup<'a> = dyn FnOnce(&Geometry, Point3<f32>, &mut [Vec<Phase>], &mut [Vec<Intensity>]) + 'a;
+
+fn setup(f: Box<Setup<'_>>) -> Vec<f32> {
     let geometry = geometry();
     let target = geometry.center() + Vector3::new(0.0, 0.0, 150.0);
-    let mut emissions = geometry.pattern_buffer();
-    f(&geometry, target, &mut emissions);
-    let record = record(geometry, emissions);
+    let mut phases = geometry.phase_buffer();
+    let mut intensities = geometry.intensity_buffer();
+    f(&geometry, target, &mut phases, &mut intensities);
+    let record = record(geometry, phases, intensities);
     rms_grid(&record, target)
 }
 
 #[test]
 fn focus_peaks_on_axis() {
-    let grid = setup(|geometry, target, dst| {
-        focus(geometry, target, wavelength(340.0 * m / s), dst);
-    });
+    let grid = setup(Box::new(|geometry, target, phases, _| {
+        focus(geometry, target, wavelength(340.0 * m / s), phases);
+    }));
 
     assert_eq!(argmax(&grid), (CENTER, CENTER));
     assert!(at(&grid, CENTER, CENTER) > 0.9 * max_of(&grid));
 }
 
 fn laguerre_gaussian_grid(p: u32, l: i32) -> Vec<f32> {
-    setup(|geometry, target, dst| {
+    setup(Box::new(move |geometry, target, phases, intensities| {
         let option = LaguerreGaussianOption {
             p,
             l,
             waist: 10.0 * mm,
         };
         let lambda = wavelength(340.0 * m / s);
-        laguerre_gaussian_phase(geometry, target, Vector3::z_axis(), option, lambda, dst);
-        laguerre_gaussian_intensity(geometry, target, Vector3::z_axis(), option, lambda, dst);
-    })
+        laguerre_gaussian_phase(geometry, target, Vector3::z_axis(), option, lambda, phases);
+        laguerre_gaussian_intensity(
+            geometry,
+            target,
+            Vector3::z_axis(),
+            option,
+            lambda,
+            intensities,
+        );
+    }))
 }
 
 #[test]
@@ -171,7 +181,7 @@ fn laguerre_gaussian_radial_mode_has_a_dark_ring_around_the_peak() {
 }
 
 fn hermite_gaussian_grid(x_dir: UnitVector3<f32>) -> Vec<f32> {
-    setup(|geometry, target, dst| {
+    setup(Box::new(move |geometry, target, phases, intensities| {
         let option = HermiteGaussianOption {
             m: 1,
             n: 0,
@@ -179,9 +189,9 @@ fn hermite_gaussian_grid(x_dir: UnitVector3<f32>) -> Vec<f32> {
         };
         let lambda = wavelength(340.0 * m / s);
         let axis = Vector3::z_axis();
-        hermite_gaussian_phase(geometry, target, axis, x_dir, option, lambda, dst);
-        hermite_gaussian_intensity(geometry, target, axis, x_dir, option, lambda, dst);
-    })
+        hermite_gaussian_phase(geometry, target, axis, x_dir, option, lambda, phases);
+        hermite_gaussian_intensity(geometry, target, axis, x_dir, option, lambda, intensities);
+    }))
 }
 
 #[test]

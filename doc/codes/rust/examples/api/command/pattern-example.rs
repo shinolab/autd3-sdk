@@ -12,16 +12,17 @@ async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
 
-    let mut emissions = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
     focus(
         &geometry,
         geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),
         wavelength(340.0 * m / s),
-        &mut emissions,
+        &mut phases,
     );
 
     let mut builder = client.datagram_builder();
-    builder.push(Pattern::new(&emissions));
+    builder.push(Pattern::new(&phases, &intensities));
     let frames = builder.build()?;
     for frame in &frames {
         client.send_checked(frame).await?;

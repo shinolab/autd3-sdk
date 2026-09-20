@@ -1,7 +1,7 @@
 use autd3_rs_core::common::Length;
 use autd3_rs_core::common::units::rad;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
-use autd3_rs_core::value::{Emission, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::focus::focus_phase;
 use crate::gaussian::{
@@ -106,11 +106,11 @@ pub fn laguerre_gaussian_phase_device(
     axis: UnitVector3<f32>,
     option: LaguerreGaussianOption,
     wavelength: Length,
-    dst: &mut [Emission],
+    dst: &mut [Phase],
 ) {
     let mode = LaguerreGaussianMode::new(target, axis, option, wavelength);
-    for (e, &pos) in dst.iter_mut().zip(device.positions()) {
-        e.phase = mode.phase(pos);
+    for (p, &pos) in dst.iter_mut().zip(device.positions()) {
+        *p = mode.phase(pos);
     }
 }
 
@@ -120,7 +120,7 @@ pub fn laguerre_gaussian_phase(
     axis: UnitVector3<f32>,
     option: LaguerreGaussianOption,
     wavelength: Length,
-    dst: &mut [Vec<Emission>],
+    dst: &mut [Vec<Phase>],
 ) {
     assert_eq!(
         dst.len(),
@@ -138,7 +138,7 @@ pub fn laguerre_gaussian_intensity_device(
     axis: UnitVector3<f32>,
     option: LaguerreGaussianOption,
     wavelength: Length,
-    dst: &mut [Emission],
+    dst: &mut [Intensity],
 ) {
     let mode = LaguerreGaussianMode::new(target, axis, option, wavelength);
     write_intensity_device(device, |pos| mode.log_amplitude(pos), dst);
@@ -150,7 +150,7 @@ pub fn laguerre_gaussian_intensity(
     axis: UnitVector3<f32>,
     option: LaguerreGaussianOption,
     wavelength: Length,
-    dst: &mut [Vec<Emission>],
+    dst: &mut [Vec<Intensity>],
 ) {
     let mode = LaguerreGaussianMode::new(target, axis, option, wavelength);
     write_intensity(geometry, |pos| mode.log_amplitude(pos), dst);
@@ -160,7 +160,6 @@ pub fn laguerre_gaussian_intensity(
 mod tests {
     use autd3_rs_core::geometry::{Autd3, UnitQuaternion, Vector3};
     use autd3_rs_core::units::mm;
-    use autd3_rs_core::value::Intensity;
 
     use super::*;
     use crate::focus_transducer;
@@ -287,23 +286,13 @@ mod tests {
     }
 
     #[test]
-    fn intensity_peaks_at_max_vanishes_on_axis_and_keeps_phase() {
+    fn intensity_peaks_at_max_vanishes_on_axis() {
         let dev: Device = Autd3::default().into();
         let target = dev.center() + Vector3::new(0.0, 0.0, 150.0);
         let axis = Vector3::z_axis();
-        let mut pattern = vec![
-            Emission {
-                phase: Phase(0x42),
-                intensity: Intensity::MIN,
-            };
-            Autd3::NUM_TRANSDUCERS
-        ];
+        let mut pattern = vec![Intensity::MIN; Autd3::NUM_TRANSDUCERS];
         laguerre_gaussian_intensity_device(&dev, target, axis, option(0, 1), LAMBDA, &mut pattern);
-        assert!(pattern.iter().all(|e| e.phase == Phase(0x42)));
-        assert_eq!(
-            pattern.iter().map(|e| e.intensity).max(),
-            Some(Intensity::MAX)
-        );
+        assert_eq!(pattern.iter().max().copied(), Some(Intensity::MAX));
 
         let on_axis = Point3::new(target.x, target.y, 0.0);
         let mode = LaguerreGaussianMode::new(target, axis, option(0, 1), LAMBDA);
@@ -316,7 +305,7 @@ mod tests {
         let dev: Device = Autd3::default().into();
         let target = dev.center() + Vector3::new(0.0, 0.0, 150.0);
         let axis = Vector3::z_axis();
-        let mut pattern = vec![Emission::NULL; Autd3::NUM_TRANSDUCERS];
+        let mut pattern = vec![Intensity::MIN; Autd3::NUM_TRANSDUCERS];
         laguerre_gaussian_intensity_device(&dev, target, axis, option(0, 0), LAMBDA, &mut pattern);
 
         let rho = |i: usize| {
@@ -327,11 +316,11 @@ mod tests {
             .map(|i| (i, rho(i)))
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .unwrap();
-        assert_eq!(pattern[nearest].intensity, Intensity::MAX);
+        assert_eq!(pattern[nearest], Intensity::MAX);
         for i in 0..Autd3::NUM_TRANSDUCERS {
             for j in 0..Autd3::NUM_TRANSDUCERS {
                 if rho(i) + 1.0 < rho(j) {
-                    assert!(pattern[i].intensity >= pattern[j].intensity);
+                    assert!(pattern[i] >= pattern[j]);
                 }
             }
         }
@@ -346,7 +335,7 @@ mod tests {
             l: 4,
             waist: 0.5 * mm,
         };
-        let mut pattern = vec![Emission::NULL; Autd3::NUM_TRANSDUCERS];
+        let mut pattern = vec![Intensity::MIN; Autd3::NUM_TRANSDUCERS];
         laguerre_gaussian_intensity_device(
             &dev,
             target,
@@ -355,31 +344,21 @@ mod tests {
             LAMBDA,
             &mut pattern,
         );
-        assert_eq!(
-            pattern.iter().map(|e| e.intensity).max(),
-            Some(Intensity::MAX)
-        );
+        assert_eq!(pattern.iter().max().copied(), Some(Intensity::MAX));
     }
 
     #[test]
-    fn device_level_matches_transducer_level_and_keeps_intensity() {
+    fn device_level_matches_transducer_level() {
         let dev: Device = Autd3::default().into();
         let target = Point3::new(86.36, 66.04, 150.0);
         let axis = UnitVector3::new_normalize(Vector3::new(0.1, -0.2, 1.0));
-        let mut pattern = vec![
-            Emission {
-                phase: Phase::ZERO,
-                intensity: Intensity(0x42),
-            };
-            Autd3::NUM_TRANSDUCERS
-        ];
+        let mut pattern = vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS];
         laguerre_gaussian_phase_device(&dev, target, axis, option(1, 2), LAMBDA, &mut pattern);
         for (i, &pos) in dev.positions().iter().enumerate() {
             assert_eq!(
-                pattern[i].phase,
+                pattern[i],
                 laguerre_gaussian_phase_transducer(pos, target, axis, option(1, 2), LAMBDA)
             );
-            assert_eq!(pattern[i].intensity, Intensity(0x42));
         }
     }
 
@@ -392,13 +371,13 @@ mod tests {
         let target = Point3::new(100.0, 66.0, 150.0);
         let axis = Vector3::z_axis();
 
-        let mut emissions = geo.pattern_buffer();
-        laguerre_gaussian_phase(&geo, target, axis, option(1, 1), LAMBDA, &mut emissions);
-        let mut expected = geo.pattern_buffer();
+        let mut dst = geo.phase_buffer();
+        laguerre_gaussian_phase(&geo, target, axis, option(1, 1), LAMBDA, &mut dst);
+        let mut expected = geo.phase_buffer();
         for (slot, dev) in expected.iter_mut().zip(&geo) {
             laguerre_gaussian_phase_device(dev, target, axis, option(1, 1), LAMBDA, slot);
         }
-        assert_eq!(emissions, expected);
+        assert_eq!(dst, expected);
     }
 
     #[test]
@@ -410,13 +389,13 @@ mod tests {
         let target = geo[0].center() + Vector3::new(0.0, 0.0, 150.0);
         let axis = Vector3::z_axis();
 
-        let mut emissions = geo.pattern_buffer();
-        laguerre_gaussian_intensity(&geo, target, axis, option(0, 0), LAMBDA, &mut emissions);
-        let peak = |slot: &Vec<Emission>| slot.iter().map(|e| e.intensity).max().unwrap();
-        assert_eq!(peak(&emissions[0]), Intensity::MAX);
-        assert!(peak(&emissions[1]) < Intensity::MAX);
+        let mut dst = geo.intensity_buffer();
+        laguerre_gaussian_intensity(&geo, target, axis, option(0, 0), LAMBDA, &mut dst);
+        let peak = |slot: &Vec<Intensity>| slot.iter().max().copied().unwrap();
+        assert_eq!(peak(&dst[0]), Intensity::MAX);
+        assert!(peak(&dst[1]) < Intensity::MAX);
 
-        let mut far = vec![Emission::NULL; Autd3::NUM_TRANSDUCERS];
+        let mut far = vec![Intensity::MIN; Autd3::NUM_TRANSDUCERS];
         laguerre_gaussian_intensity_device(&geo[1], target, axis, option(0, 0), LAMBDA, &mut far);
         assert_eq!(peak(&far), Intensity::MAX);
     }

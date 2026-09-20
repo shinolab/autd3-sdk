@@ -22,10 +22,10 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        var left = geometry.PatternBuffer();
-        var right = geometry.PatternBuffer();
+        var left = geometry.PhaseBuffer();
+        var right = geometry.PhaseBuffer();
         Pattern.SetPhase(new Phase(0x80), right);
-        var dst = geometry.PatternBuffer();
+        var dst = geometry.PhaseBuffer();
         var center = geometry.Center;
         // ANCHOR: api
         var groups = new TransducerGroups<Side>(geometry, (device, tr) => device.Position(tr).X < center.X ? Side.Left : Side.Right);
@@ -35,18 +35,20 @@ internal static class Sample
         var wavelength = Pattern.Wavelength(340.0f * m / s);
         var foci = new[] { new AmplitudeTarget(center + new Vector3(-30.0f, 0.0f, 150.0f), 5e3f * Pa) };
         var target = center + new Vector3(40.0f, 0.0f, 150.0f);
+        var phases = geometry.PhaseBuffer();
+        var intensities = geometry.IntensityBuffer();
         // ANCHOR: compute
-        Pattern.GroupCompute(geometry, groups, (side, mask, buffer) =>
+        Pattern.GroupCompute(geometry, groups, (side, mask, p, i) =>
         {
             if (side == Side.Left)
             {
-                Holo.Gspat(geometry, foci, wavelength, new GspatOption(mask: mask), buffer);
+                Holo.Gspat(geometry, foci, wavelength, new GspatOption(mask: mask), p, i);
             }
             else
             {
-                Pattern.Focus(geometry, target, wavelength, buffer);
+                Pattern.Focus(geometry, target, wavelength, p);
             }
-        }, dst);
+        }, phases, intensities);
         // ANCHOR_END: compute
     }
 }

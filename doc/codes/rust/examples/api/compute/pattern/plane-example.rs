@@ -7,13 +7,13 @@ fn main() {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
 
     plane(
         &geometry,
         Vector3::z_axis(),
         wavelength(340.0 * m / s),
-        &mut dst,
+        &mut phases,
     );
     // HIDE
 }

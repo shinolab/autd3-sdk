@@ -108,12 +108,13 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreLegacyBuilder<'a>) -
     match pending {
         Pending::Pattern {
             bank,
-            emissions,
+            phases,
+            intensities,
             transition_mode,
         } => {
             builder.push(CorePattern {
                 transition_mode: *transition_mode,
-                ..CorePattern::with_bank(*bank, emissions)
+                ..CorePattern::with_bank(*bank, phases, intensities)
             });
         }
         Pending::Modulation {
@@ -148,10 +149,16 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreLegacyBuilder<'a>) -
         }
         Pending::PatternStm {
             config,
-            patterns,
+            phases,
+            intensities,
             option,
         } => {
-            builder.push(CorePatternStm::new(*config, patterns.as_slice(), *option));
+            builder.push(CorePatternStm::new(
+                *config,
+                phases.as_slice(),
+                intensities.as_slice(),
+                *option,
+            ));
         }
         Pending::Command(command) => {
             command.push_legacy_into(builder);

@@ -1,10 +1,10 @@
 use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::Geometry;
-use autd3_rs_core::value::Emission;
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::amplitude_target::AmplitudeTarget;
 use crate::backend::LinAlgBackend;
-use crate::constraint::EmissionConstraint;
+use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::mask::TransducerMask;
@@ -13,30 +13,39 @@ use crate::propagation::{
 };
 
 pub(crate) struct BatchSetup<'a> {
-    pub constraint: EmissionConstraint,
+    pub constraint: IntensityConstraint,
     pub directivity: Directivity,
     pub mask: TransducerMask<'a>,
     pub parallel: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn solve_batched<B, F>(
     backend: &B,
     geometry: &Geometry,
     foci: &[AmplitudeTarget],
     wavelength: Length,
     setup: &BatchSetup<'_>,
-    dst: &mut [Vec<Vec<Emission>>],
+    phases: &mut [Vec<Vec<Phase>>],
+    intensities: &mut [Vec<Vec<Intensity>>],
     solve: F,
 ) -> Result<(), HoloError>
 where
     B: LinAlgBackend,
     F: Fn(&B, &B::BatchMatrix, &B::BatchVector, usize, usize) -> B::BatchVector,
 {
-    let foci_per_problem = batch_shape(foci, dst.len())?;
+    if phases.len() != intensities.len() {
+        return Err(HoloError::DstProblemCountMismatch {
+            phases: phases.len(),
+            intensities: intensities.len(),
+        });
+    }
+    let foci_per_problem = batch_shape(foci, phases.len())?;
     let mask = setup.mask;
     mask.validate(geometry)?;
-    for dst in dst.iter() {
-        crate::mask::validate_dst_len(dst.len(), geometry)?;
+    for (p, i) in phases.iter().zip(intensities.iter()) {
+        crate::mask::validate_dst_len(p.len(), geometry)?;
+        crate::mask::validate_dst_len(i.len(), geometry)?;
     }
 
     let k = wavenumber(wavelength);
@@ -44,11 +53,11 @@ where
     let enabled = tr_pos.len();
     let chunk = backend.max_batch(2 * foci_per_problem * enabled * 8).max(1);
 
-    for (foci, dst) in foci
+    for (foci, (phases, intensities)) in foci
         .chunks(chunk.saturating_mul(foci_per_problem))
-        .zip(dst.chunks_mut(chunk))
+        .zip(phases.chunks_mut(chunk).zip(intensities.chunks_mut(chunk)))
     {
-        let problems = dst.len();
+        let problems = phases.len();
         let g = backend.batch_propagation_matrix(
             &tr_pos,
             &tr_dir,
@@ -66,7 +75,8 @@ where
             setup.constraint,
             mask,
             setup.parallel,
-            dst,
+            phases,
+            intensities,
         );
     }
     Ok(())

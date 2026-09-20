@@ -33,14 +33,15 @@ async def main() -> None:
             holo.AmplitudeTarget(center + np.array([20.0, 0.0, 150.0]), 150 * dB),
         ]
 
-        patterns = geometry.pattern_buffer()
-        holo.gspat(geometry, foci, wavelength, holo.GspatOption(repeat=100), patterns)
+        phases = geometry.phase_buffer()
+        intensities = geometry.intensity_buffer()
+        holo.gspat(geometry, foci, wavelength, holo.GspatOption(repeat=100), phases, intensities)
 
         mod_buf = modulation.modulation_buffer()
         modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
 
         builder = client.datagram_builder()
-        builder.push(autd3.commands.Pattern(patterns))
+        builder.push(autd3.commands.Pattern(phases, intensities))
         builder.push(autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf))
         for frame in builder.build():
             await client.send_checked(frame)

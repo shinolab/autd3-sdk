@@ -6,15 +6,16 @@ from autd3_pattern import add_phase, focus, set_intensity, wavelength
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-dst = geometry.pattern_buffer()
+phases = geometry.phase_buffer()
+intensities = geometry.intensity_buffer()
 
-set_intensity(Intensity(0x80), dst)
+set_intensity(Intensity(0x80), intensities)
 focus(
     geometry,
     geometry.center() + np.array([0.0, 0.0, 150.0]),
     wavelength(340 * m / s),
-    dst,
+    phases,
 )
-add_phase(Phase.PI, dst)
+add_phase(Phase.PI, phases)
 
-set_intensity(Intensity.MIN, dst)
+set_intensity(Intensity.MIN, intensities)

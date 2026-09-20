@@ -19,11 +19,12 @@ async fn main() -> Result<()> {
 
     let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
 
-    let mut patterns = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
 
     {
         // ANCHOR: configure
-        let mut silent = geometry.pattern_buffer();
+        let mut silent = geometry.intensity_buffer();
         autd3_rs_pattern::set_intensity(Intensity::MIN, &mut silent);
         let mut builder = client.datagram_builder();
         builder
@@ -31,7 +32,8 @@ async fn main() -> Result<()> {
             .push(WritePatternBuffer {
                 bank: PatternBank::B0,
                 index: 0,
-                emissions: &silent,
+                phases: &phases,
+                intensities: &silent,
             })
             .push(ConfigPattern {
                 bank: PatternBank::B0,
@@ -63,14 +65,15 @@ async fn main() -> Result<()> {
             &geometry,
             target,
             wavelength,
-            &mut patterns,
+            &mut phases,
         );
 
         let mut builder = client.datagram_builder();
         builder.push(WritePatternBuffer {
             bank: PatternBank::B0,
             index: 0,
-            emissions: &patterns,
+            phases: &phases,
+            intensities: &intensities,
         });
         builder.build_into(&mut buf)?;
         for frame in &buf {

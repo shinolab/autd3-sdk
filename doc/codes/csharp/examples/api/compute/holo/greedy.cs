@@ -21,7 +21,7 @@ internal static class Sample
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
         byte phaseQuantizationLevels = 16;
-        var constraint = EmissionConstraint.Uniform(Intensity.Max);
+        var constraint = IntensityConstraint.Uniform(Intensity.Max);
         var directivity = Directivity.Sphere;
         var mask = TransducerMask.AllEnabled;
         var option =
@@ -34,9 +34,10 @@ internal static class Sample
             )
             // ANCHOR_END: option
             ;
-        var dst = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
+        var intensities = geometry.IntensityBuffer();
         // ANCHOR: api
-        Holo.Greedy(geometry, foci, wavelength, option, dst);
+        Holo.Greedy(geometry, foci, wavelength, option, phases, intensities);
         // ANCHOR_END: api
     }
 }

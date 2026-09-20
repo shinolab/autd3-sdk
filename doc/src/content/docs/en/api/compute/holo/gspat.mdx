@@ -28,7 +28,8 @@ The algorithm is based on the paper by Plasencia et al. ([Plasencia et al., 2020
 | `foci`       | `&[AmplitudeTarget]`      | Sequence of focal points (position and target amplitude) |
 | `wavelength` | `Length`               | Wavelength                |
 | `option`     | `&GspatOption`         | Additional options (see below) |
-| `dst`        | `&mut [[Emission; _]]` | Output buffer             |
+| `phases`      | `&mut [Vec<Phase>]`     | Phase output buffer       |
+| `intensities` | `&mut [Vec<Intensity>]` | Intensity output buffer   |
 
 The parameters are the same as [gs](/autd3-sdk/en/api/compute/holo/gs/).
 
@@ -39,7 +40,7 @@ The parameters are the same as [gs](/autd3-sdk/en/api/compute/holo/gs/).
 | Field         | Type                 | Default                   |
 |---------------|----------------------|---------------------------|
 | `repeat`      | `NonZeroUsize`       | `100`                     |
-| `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
+| `constraint`  | `IntensityConstraint` | `Clamp(MIN, MAX)`         |
 | `directivity` | `Directivity`        | `Sphere`                  |
 | `mask`        | `TransducerMask`     | `AllEnabled`              |
 | `parallel`    | `bool`               | `true`                    |

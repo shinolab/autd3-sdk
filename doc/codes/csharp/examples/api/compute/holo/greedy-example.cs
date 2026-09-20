@@ -14,7 +14,8 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-var dst = geometry.PatternBuffer();
+var phases = geometry.PhaseBuffer();
+var intensities = geometry.IntensityBuffer();
 
 Holo.Greedy(
     geometry,
@@ -26,11 +27,12 @@ Holo.Greedy(
     Pattern.Wavelength(340.0f * m / s),
     new GreedyOption(
         phaseQuantizationLevels: 16,
-        constraint: EmissionConstraint.Uniform(Intensity.Max),
+        constraint: IntensityConstraint.Uniform(Intensity.Max),
         directivity: Directivity.Sphere,
         mask: TransducerMask.AllEnabled
     ),
-    dst
+    phases,
+    intensities
 );
         // HIDE
     }

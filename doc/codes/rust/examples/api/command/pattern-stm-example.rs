@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
             let theta = 2.0 * std::f32::consts::PI * i as f32 / 200.0;
             let target =
                 center + offset(30.0 * theta.cos() * mm, 30.0 * theta.sin() * mm, 0.0 * mm);
-            let mut buffer = geometry.pattern_buffer();
+            let mut buffer = geometry.phase_buffer();
             focus(
                 &geometry,
                 target,
@@ -30,11 +30,13 @@ async fn main() -> anyhow::Result<()> {
             buffer
         })
         .collect::<Vec<_>>();
+    let intensities = vec![geometry.intensity_buffer(); patterns.len()];
 
     let mut builder = client.datagram_builder();
     builder.push(PatternStm::new(
         1.0 * Hz,
         &patterns,
+        &intensities,
         PatternStmOption {
             bank: PatternBank::B0,
             mode: PatternStmMode::PhaseIntensityFull,

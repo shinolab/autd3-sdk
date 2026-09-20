@@ -3,7 +3,7 @@ use core::f32::consts::PI;
 use autd3_rs_core::common::Length;
 use autd3_rs_core::common::units::rad;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
-use autd3_rs_core::value::{Emission, Phase};
+use autd3_rs_core::value::Phase;
 
 #[must_use]
 #[inline]
@@ -19,10 +19,10 @@ pub fn plane_device(
     device: &Device,
     direction: UnitVector3<f32>,
     wavelength: Length,
-    dst: &mut [Emission],
+    dst: &mut [Phase],
 ) {
-    for (e, &pos) in dst.iter_mut().zip(device.positions()) {
-        e.phase = plane_transducer(pos, direction, wavelength);
+    for (p, &pos) in dst.iter_mut().zip(device.positions()) {
+        *p = plane_transducer(pos, direction, wavelength);
     }
 }
 
@@ -30,7 +30,7 @@ pub fn plane(
     geometry: &Geometry,
     direction: UnitVector3<f32>,
     wavelength: Length,
-    dst: &mut [Vec<Emission>],
+    dst: &mut [Vec<Phase>],
 ) {
     assert_eq!(
         dst.len(),
@@ -46,7 +46,6 @@ pub fn plane(
 mod tests {
     use autd3_rs_core::geometry::{Autd3, UnitQuaternion, Vector3};
     use autd3_rs_core::units::mm;
-    use autd3_rs_core::value::Intensity;
 
     use super::*;
 
@@ -64,22 +63,15 @@ mod tests {
     }
 
     #[test]
-    fn device_level_matches_transducer_level_and_keeps_intensity() {
+    fn device_level_matches_transducer_level() {
         let dev: Device = Autd3::default().into();
         let lambda = 8.5 * mm;
         let dir = UnitVector3::new_normalize(Vector3::new(1.0, 1.0, 1.0));
 
-        let mut pattern = vec![
-            Emission {
-                phase: Phase::ZERO,
-                intensity: Intensity(0x42),
-            };
-            Autd3::NUM_TRANSDUCERS
-        ];
+        let mut pattern = vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS];
         plane_device(&dev, dir, lambda, &mut pattern);
         for (i, &pos) in dev.positions().iter().enumerate() {
-            assert_eq!(pattern[i].phase, plane_transducer(pos, dir, lambda));
-            assert_eq!(pattern[i].intensity, Intensity(0x42));
+            assert_eq!(pattern[i], plane_transducer(pos, dir, lambda));
         }
     }
 
@@ -92,12 +84,12 @@ mod tests {
         let lambda = 8.5 * mm;
         let dir = UnitVector3::new_normalize(Vector3::new(0.0, 1.0, 1.0));
 
-        let mut emissions = geo.pattern_buffer();
-        plane(&geo, dir, lambda, &mut emissions);
-        let mut expected = geo.pattern_buffer();
+        let mut phases = geo.phase_buffer();
+        plane(&geo, dir, lambda, &mut phases);
+        let mut expected = geo.phase_buffer();
         for (slot, dev) in expected.iter_mut().zip(&geo) {
             plane_device(dev, dir, lambda, slot);
         }
-        assert_eq!(emissions, expected);
+        assert_eq!(phases, expected);
     }
 }

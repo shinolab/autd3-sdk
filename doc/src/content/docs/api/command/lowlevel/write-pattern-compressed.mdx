@@ -27,7 +27,7 @@ import { excerpt } from "@lib/excerpt";
 | `bank`     | `PatternBank`                                     | 書き込み先バンク                           |
 | `index`    | `usize`                                           | バンク内の書き込み開始インデックス         |
 | `format`   | `PatternCompression`                              | 圧縮形式 (下記参照)                      |
-| `patterns` | `[Option<&[Vec<Emission>]>; 4]`     | 書き込む Pattern 列                        |
+| `patterns` | `[Option<&[Vec<Phase>]>; 4]`     | 書き込む位相の列                           |
 
 ## PatternCompression
 

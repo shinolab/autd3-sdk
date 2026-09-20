@@ -2,24 +2,24 @@ use autd3_rs_core::value::Intensity;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
-pub enum EmissionConstraint {
+pub enum IntensityConstraint {
     Normalize,
     Multiply(f32),
     Uniform(Intensity),
     Clamp(Intensity, Intensity),
 }
 
-impl EmissionConstraint {
+impl IntensityConstraint {
     #[must_use]
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn convert(self, value: f32, max_value: f32) -> Intensity {
         match self {
-            EmissionConstraint::Normalize => Intensity((value / max_value * 255.).round() as u8),
-            EmissionConstraint::Multiply(v) => {
+            IntensityConstraint::Normalize => Intensity((value / max_value * 255.).round() as u8),
+            IntensityConstraint::Multiply(v) => {
                 Intensity((value / max_value * 255. * v).round().clamp(0., 255.) as u8)
             }
-            EmissionConstraint::Uniform(v) => v,
-            EmissionConstraint::Clamp(min, max) => Intensity(
+            IntensityConstraint::Uniform(v) => v,
+            IntensityConstraint::Clamp(min, max) => Intensity(
                 (value * 255.)
                     .round()
                     .clamp(f32::from(min.0), f32::from(max.0)) as u8,
@@ -40,7 +40,7 @@ mod tests {
             (Intensity(128), 1.0, 2.0),
             (Intensity(191), 1.5, 2.0),
         ] {
-            assert_eq!(expect, EmissionConstraint::Normalize.convert(value, max));
+            assert_eq!(expect, IntensityConstraint::Normalize.convert(value, max));
         }
     }
 
@@ -54,7 +54,7 @@ mod tests {
         ] {
             assert_eq!(
                 expect,
-                EmissionConstraint::Multiply(mul).convert(value, max)
+                IntensityConstraint::Multiply(mul).convert(value, max)
             );
         }
     }
@@ -68,7 +68,7 @@ mod tests {
         ] {
             assert_eq!(
                 expect,
-                EmissionConstraint::Uniform(expect).convert(value, max)
+                IntensityConstraint::Uniform(expect).convert(value, max)
             );
         }
     }
@@ -83,7 +83,7 @@ mod tests {
         ] {
             assert_eq!(
                 expect,
-                EmissionConstraint::Clamp(min, mx).convert(value, max)
+                IntensityConstraint::Clamp(min, mx).convert(value, max)
             );
         }
     }

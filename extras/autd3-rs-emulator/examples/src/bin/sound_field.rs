@@ -22,8 +22,9 @@ fn main() -> Result<()> {
 
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
-    let mut patterns = geometry.pattern_buffer();
-    autd3_rs_pattern::focus(&geometry, target, wavelength, &mut patterns);
+    let mut phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
+    autd3_rs_pattern::focus(&geometry, target, wavelength, &mut phases);
 
     let center = geometry.center();
     let emulator = Emulator::new(geometry);
@@ -31,7 +32,7 @@ fn main() -> Result<()> {
         let mut builder = r.datagram_builder();
         builder
             .push(SetSilencer::disable())
-            .push(Pattern::new(&patterns));
+            .push(Pattern::new(&phases, &intensities));
         let datagrams = builder.build()?;
         for frame in &datagrams {
             r.send_checked(frame).await?;

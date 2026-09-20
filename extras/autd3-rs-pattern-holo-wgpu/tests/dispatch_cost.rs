@@ -5,7 +5,7 @@ use nalgebra::Complex;
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
 use autd3_rs_core::value::Intensity;
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, LinAlgBackend, NalgebraBackend, Pa,
+    AmplitudeTarget, Directivity, IntensityConstraint, LinAlgBackend, NalgebraBackend, Pa,
 };
 use autd3_rs_pattern_holo_wgpu::{GpuMatrix, WgpuBackend};
 
@@ -177,9 +177,9 @@ fn quantize_cost() {
         for (label, c) in [
             (
                 "clamp",
-                EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX),
+                IntensityConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             ),
-            ("normalize", EmissionConstraint::Normalize),
+            ("normalize", IntensityConstraint::Normalize),
         ] {
             let _ = gpu.quantize_batch(&gpu_v, c, false);
             let t = Instant::now();

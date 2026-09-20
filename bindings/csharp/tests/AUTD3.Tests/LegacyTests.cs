@@ -40,15 +40,16 @@ namespace AUTD3.Tests
             using var geometry = SingleDevice();
             using var client = await LegacyClient.OpenAsync(geometry, new AUTD3.Link.Nop(), new LegacyClientConfig());
 
-            using var patterns = geometry.PatternBuffer();
-            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), patterns);
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), phases);
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200 * Hz, new SineOption(), modulation);
 
             using var builder = client.DatagramBuilder();
             builder
                 .Push(new SetSilencer())
-                .Push(new Pattern(patterns))
+                .Push(new Pattern(phases, intensities))
                 .Push(new Modulation(SamplingConfig.Freq4k, modulation));
             using var frames = builder.Build();
             Assert.True(frames.Length > 0);
@@ -92,11 +93,12 @@ namespace AUTD3.Tests
             });
             using var client = await LegacyClient.OpenAsync(geometry, new AUTD3.Link.Nop(), new LegacyClientConfig());
 
-            using var patterns = geometry.PatternBuffer();
-            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), patterns);
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), phases);
 
             using var builder = client.DatagramBuilder();
-            builder.PushEach(device => device.Idx == 0 ? new Pattern(patterns) : (ICommand?)null);
+            builder.PushEach(device => device.Idx == 0 ? new Pattern(phases, intensities) : (ICommand?)null);
             using var frames = builder.Build();
             Assert.Equal(1, frames.Length);
             foreach (var frame in frames)

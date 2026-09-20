@@ -7,9 +7,9 @@ fn main() {
 
     let direction = Vector3::z_axis();
     let wavelength = wavelength(340.0 * m / s);
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
 
     // ANCHOR: api
-    plane(&geometry, direction, wavelength, &mut dst);
+    plane(&geometry, direction, wavelength, &mut phases);
     // ANCHOR_END: api
 }

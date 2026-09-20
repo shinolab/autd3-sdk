@@ -12,16 +12,18 @@ internal static class Sample
         var bank = PatternBank.B0;
         var transitionMode = TransitionMode.Immediate;
 
-        var emissions = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
+        var intensities = geometry.IntensityBuffer();
 
         // ANCHOR: api
-        new Pattern(emissions);
+        new Pattern(phases, intensities);
 
-        new Pattern(bank, emissions);
+        new Pattern(bank, phases, intensities);
 
         new Pattern(
             bank: bank,
-            emissions: emissions,
+            phases: phases,
+            intensities: intensities,
             transitionMode: transitionMode
         );
         // ANCHOR_END: api
@@ -30,7 +32,8 @@ internal static class Sample
         new WritePatternBuffer(
             bank: bank,
             index: 0,
-            emissions: emissions
+            phases: phases,
+            intensities: intensities
         );
         new ConfigPattern(
             bank: bank,

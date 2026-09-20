@@ -9,7 +9,8 @@ fn main() {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let mut intensities = geometry.intensity_buffer();
 
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let option = HermiteGaussianOption {
@@ -25,7 +26,7 @@ fn main() {
         Vector3::x_axis(),
         option,
         wavelength,
-        &mut dst,
+        &mut phases,
     );
     hermite_gaussian_intensity(
         &geometry,
@@ -34,7 +35,7 @@ fn main() {
         Vector3::x_axis(),
         option,
         wavelength,
-        &mut dst,
+        &mut intensities,
     );
     // HIDE
 }

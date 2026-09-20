@@ -34,7 +34,7 @@ It holds a position and a target amplitude.
 
 The target amplitude `Amplitude` is constructed by multiplying an `f32` by an amplitude unit.
 
-### EmissionConstraint
+### IntensityConstraint
 
 The amplitude obtained from the optimization may be an intensity that the transducer cannot output as-is.
 Therefore, a constraint is specified for converting the amplitude obtained from the optimization into the transducer intensity to be output.
@@ -84,8 +84,8 @@ The backend is passed as the first argument of each function.
 
 <CodeTabs rust={excerpt(batchSample, "api")} />
 
-The problem count is determined by the length of `dst`.
+The problem count is determined by the length of `phases` / `intensities` (both must have the same length).
 The foci are passed as a slice of length equal to the number of problems multiplied by the number of foci per problem.
-An error is returned if the length of the slice is not divisible by the length of `dst`.
+An error is returned if the length of the slice is not divisible by the problem count.
 
 The gain comes from GPU backends, `NalgebraBackend` does not get faster.

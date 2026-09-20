@@ -3,8 +3,7 @@ use core::time::Duration as StdDuration;
 
 use autd3_rs_core::units::Hz;
 use autd3_rs_core::value::{
-    Emission as CoreEmission, Intensity as CoreIntensity, Nearest, Phase as CorePhase,
-    SamplingConfig as CoreSamplingConfig,
+    Intensity as CoreIntensity, Nearest, Phase as CorePhase, SamplingConfig as CoreSamplingConfig,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -99,44 +98,6 @@ impl Phase {
 
     fn __repr__(&self) -> String {
         format!("Phase(0x{:02X})", self.0.0)
-    }
-}
-
-#[pyclass(name = "Emission", module = "autd3_core", skip_from_py_object)]
-#[derive(Clone)]
-pub struct Emission(pub CoreEmission);
-
-#[pymethods]
-impl Emission {
-    #[new]
-    fn new(phase: Phase, intensity: Intensity) -> Self {
-        Self(CoreEmission {
-            phase: phase.0,
-            intensity: intensity.0,
-        })
-    }
-
-    #[getter]
-    fn phase(&self) -> Phase {
-        Phase(self.0.phase)
-    }
-
-    #[getter]
-    fn intensity(&self) -> Intensity {
-        Intensity(self.0.intensity)
-    }
-
-    #[classattr]
-    #[pyo3(name = "NULL")]
-    fn py_null() -> Self {
-        Self(CoreEmission::NULL)
-    }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "Emission(phase=0x{:02X}, intensity=0x{:02X})",
-            self.0.phase.0, self.0.intensity.0
-        )
     }
 }
 

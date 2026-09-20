@@ -219,11 +219,11 @@ mod tests {
         assert_eq!(datagrams.len(), 4);
         assert_eq!(
             datagrams.frame(0).unwrap().datagrams()[0].cmd,
-            Cmd::WritePatternBuffer
+            Cmd::WriteFociBuffer
         );
         assert_eq!(
             datagrams.frame(1).unwrap().datagrams()[0].cmd,
-            Cmd::WritePatternBuffer
+            Cmd::WriteFociBuffer
         );
         assert_eq!(
             datagrams.frame(2).unwrap().datagrams()[0].cmd,
@@ -341,7 +341,7 @@ mod tests {
         assert!(datagrams.len() >= 3, "falls back to write+config+change");
         assert_eq!(
             datagrams.frame(0).unwrap().datagrams()[0].cmd,
-            Cmd::WritePatternBuffer
+            Cmd::WriteFociBuffer
         );
         let last = datagrams.len() - 1;
         assert_eq!(
@@ -380,7 +380,7 @@ mod tests {
         );
         assert_eq!(
             datagrams.frame(0).unwrap().datagrams()[0].cmd,
-            Cmd::WritePatternBuffer
+            Cmd::WriteFociBuffer
         );
         let cfg = datagrams.frame(1).unwrap();
         assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);

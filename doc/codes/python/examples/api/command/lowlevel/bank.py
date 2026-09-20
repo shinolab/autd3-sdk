@@ -6,12 +6,14 @@ geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 bank = PatternBank.B0
 index = 0
-emissions = geometry.pattern_buffer()
+phases = geometry.phase_buffer()
+intensities = geometry.intensity_buffer()
 # ANCHOR: write
 WritePatternBuffer(
     bank=bank,
     index=index,
-    emissions=emissions,
+    phases=phases,
+    intensities=intensities,
 )
 # ANCHOR_END: write
 config = SamplingConfig.FREQ_4K
@@ -33,10 +35,10 @@ ChangePatternBank(
 )
 # ANCHOR_END: change
 
-p0 = geometry.pattern_buffer()
-p1 = geometry.pattern_buffer()
-p2 = geometry.pattern_buffer()
-p3 = geometry.pattern_buffer()
+p0 = geometry.phase_buffer()
+p1 = geometry.phase_buffer()
+p2 = geometry.phase_buffer()
+p3 = geometry.phase_buffer()
 patterns = [p0, p1, p2, p3]
 index = 0
 format = PatternCompression.PhaseHalf

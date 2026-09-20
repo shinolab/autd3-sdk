@@ -29,15 +29,16 @@ async def main() -> None:
     # ANCHOR_END: version
 
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
-    emissions = geometry.pattern_buffer()
-    pattern.focus(geometry, target, pattern.wavelength(340 * m / s), emissions)
+    phases = geometry.phase_buffer()
+    intensities = geometry.intensity_buffer()
+    pattern.focus(geometry, target, pattern.wavelength(340 * m / s), phases)
     mod_buf = modulation.modulation_buffer()
     modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
 
     # ANCHOR: send
     builder = client.datagram_builder()
     builder.push(SetSilencer())
-    builder.push(Pattern(emissions))
+    builder.push(Pattern(phases, intensities))
     builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
     frames = builder.build()
     for i in range(len(frames)):
@@ -46,7 +47,7 @@ async def main() -> None:
 
     # ANCHOR: change_bank
     builder = client.datagram_builder()
-    builder.push(Pattern(emissions, PatternBank.B1))
+    builder.push(Pattern(phases, intensities, PatternBank.B1))
     frames = builder.build()
     for i in range(len(frames)):
         await client.send_checked(frames[i])

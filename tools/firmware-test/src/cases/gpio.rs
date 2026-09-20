@@ -2,11 +2,11 @@ use anyhow::Result;
 
 use autd3_rs::commands::{GpioOut, SetGpioOut};
 use autd3_rs::common::ULTRASOUND_PERIOD;
-use autd3_rs::value::{DcSysTime, Emission, Intensity, Phase, SamplingConfig};
+use autd3_rs::value::{DcSysTime, Intensity, Phase, SamplingConfig};
 use autd3_rs_modulation::{constant, modulation_buffer};
 
 use crate::Ctx;
-use crate::cases::pattern_util::send_pattern_mod;
+use crate::cases::pattern_util::{Buffers, buffers, send_pattern_mod};
 use crate::io::wait_enter;
 
 const TR_A: u8 = 0;
@@ -30,27 +30,22 @@ async fn send_gpio_each(ctx: &Ctx<'_>, outputs: impl Fn(usize) -> [GpioOut; 4]) 
     Ok(())
 }
 
-fn custom_drive(ctx: &Ctx<'_>) -> Vec<Vec<Emission>> {
-    let mut em = ctx.geometry.pattern_buffer();
-    autd3_rs_pattern::set_intensity(Intensity::MIN, &mut em);
+fn custom_drive(ctx: &Ctx<'_>) -> Buffers {
+    let (mut phases, mut intensities) = buffers(ctx.geometry, Intensity::MIN);
     for (d, dev) in ctx.geometry.iter().enumerate() {
         let (i0, p0, i248, p248) = if d == 0 {
             (0xFF, 0x00, 0x80, 0x80)
         } else {
             (0xFF, 0x80, 0x80, 0x00)
         };
-        em[d][usize::from(TR_A)] = Emission {
-            phase: Phase(p0),
-            intensity: Intensity(i0),
-        };
+        phases[d][usize::from(TR_A)] = Phase(p0);
+        intensities[d][usize::from(TR_A)] = Intensity(i0);
         if dev.num_transducers() > usize::from(TR_B) {
-            em[d][usize::from(TR_B)] = Emission {
-                phase: Phase(p248),
-                intensity: Intensity(i248),
-            };
+            phases[d][usize::from(TR_B)] = Phase(p248);
+            intensities[d][usize::from(TR_B)] = Intensity(i248);
         }
     }
-    em
+    (phases, intensities)
 }
 
 pub async fn run(ctx: &Ctx<'_>) -> Result<()> {

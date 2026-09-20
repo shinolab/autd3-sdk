@@ -12,10 +12,10 @@ internal static class Sample
 
         var target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var wavelength = Pattern.Wavelength(340.0f * m / s);
-        var dst = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
 
         // ANCHOR: api
-        Pattern.Focus(geometry, target, wavelength, dst);
+        Pattern.Focus(geometry, target, wavelength, phases);
         // ANCHOR_END: api
     }
 }

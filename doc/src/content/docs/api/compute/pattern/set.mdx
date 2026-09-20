@@ -15,34 +15,28 @@ import csSample from "@codes/csharp/examples/api/compute/pattern/set.cs?raw";
 import csFullSample from "@codes/csharp/examples/api/compute/pattern/set-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
-パターンバッファ全体の振幅・位相を一括で書き換える.
-`focus` などのパターン関数は位相だけを書くので, 振幅はこれらの関数で設定する.
+位相バッファ・振幅バッファ全体を一括で書き換える.
+`focus` などのパターン関数は位相バッファだけを書くので, 振幅は `set_intensity` で設定する.
 
-`pattern_buffer` で確保したバッファの初期値は位相 0・最大振幅である.
-C# では `new Emission[n]` の要素は振幅 0 で初期化されることに注意
+`phase_buffer` / `intensity_buffer` で確保したバッファの初期値は位相 0・最大振幅である.
+C# では `new Intensity[n]` の要素は振幅 0 で初期化されることに注意
 
 ## set_intensity
 
-全振動子の振幅を設定する. 位相は変えない.
+振幅バッファの全振動子の振幅を設定する.
 `Intensity::MIN` を渡すと無出力になる.
 
 <CodeTabs rust={excerpt(sample, "set_intensity")} python={excerpt(pySample, "set_intensity")} csharp={excerpt(csSample, "set_intensity")} />
 
 ## set_phase
 
-全振動子の位相を設定する. 振幅は変えない.
+位相バッファの全振動子の位相を設定する.
 
 <CodeTabs rust={excerpt(sample, "set_phase")} python={excerpt(pySample, "set_phase")} csharp={excerpt(csSample, "set_phase")} />
 
-## set_phase_and_intensity
-
-全振動子の位相と振幅を設定する.
-
-<CodeTabs rust={excerpt(sample, "set_phase_and_intensity")} python={excerpt(pySample, "set_phase_and_intensity")} csharp={excerpt(csSample, "set_phase_and_intensity")} />
-
 ## add_phase
 
-全振動子の位相へ一律に加算する (8 bit で折り返す). 振幅は変えない.
+位相バッファの全振動子の位相へ一律に加算する (8 bit で折り返す).
 
 <CodeTabs rust={excerpt(sample, "add_phase")} python={excerpt(pySample, "add_phase")} csharp={excerpt(csSample, "add_phase")} />
 
@@ -50,7 +44,7 @@ C# では `new Emission[n]` の要素は振幅 0 で初期化されることに�
 | ----------- | ---------------------- | ------------ |
 | `intensity` | `Intensity`            | 振幅         |
 | `phase`     | `Phase`                | 位相         |
-| `dst`       | `&mut [[Emission; _]]` | 対象バッファ |
+| `dst`       | `&mut [Vec<Intensity>]` / `&mut [Vec<Phase>]` | 対象バッファ (`set_intensity` は振幅, `set_phase` / `add_phase` は位相) |
 
 ## Example
 

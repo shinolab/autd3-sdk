@@ -5,7 +5,6 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use autd3_rs_core::Length;
 use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
-use autd3_rs_core::value::Emission;
 use autd3_rs_pattern_holo::{
     AmplitudeTarget, GreedyOption, GsOption, GspatOption, NaiveOption, NalgebraBackend, Pa, greedy,
     gs, gspat, naive,
@@ -36,10 +35,6 @@ fn make_foci(geometry: &Geometry, n: usize) -> Vec<AmplitudeTarget> {
         .collect()
 }
 
-fn make_buffer(geometry: &Geometry) -> Vec<Vec<Emission>> {
-    vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()]
-}
-
 fn wavelength() -> Length {
     autd3_rs_pattern::wavelength(340.0 * m / s)
 }
@@ -49,7 +44,8 @@ fn bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("holo");
     for &d in DEVICE_COUNTS {
         let geometry = make_geometry(d);
-        let mut dst = make_buffer(&geometry);
+        let mut phases = geometry.phase_buffer();
+        let mut intensities = geometry.intensity_buffer();
         for &n in FOCI_COUNTS {
             let foci = make_foci(&geometry, n);
             let id = format!("{d}dev-{n}foci");
@@ -62,7 +58,8 @@ fn bench(c: &mut Criterion) {
                         foci,
                         wl,
                         &NaiveOption::default(),
-                        black_box(&mut dst),
+                        black_box(&mut phases),
+                        black_box(&mut intensities),
                     )
                     .unwrap();
                 });
@@ -75,7 +72,8 @@ fn bench(c: &mut Criterion) {
                         foci,
                         wl,
                         &GsOption::default(),
-                        black_box(&mut dst),
+                        black_box(&mut phases),
+                        black_box(&mut intensities),
                     )
                     .unwrap();
                 });
@@ -88,7 +86,8 @@ fn bench(c: &mut Criterion) {
                         foci,
                         wl,
                         &GspatOption::default(),
-                        black_box(&mut dst),
+                        black_box(&mut phases),
+                        black_box(&mut intensities),
                     )
                     .unwrap();
                 });
@@ -100,7 +99,8 @@ fn bench(c: &mut Criterion) {
                         foci,
                         wl,
                         &GreedyOption::default(),
-                        black_box(&mut dst),
+                        black_box(&mut phases),
+                        black_box(&mut intensities),
                     )
                     .unwrap();
                 });

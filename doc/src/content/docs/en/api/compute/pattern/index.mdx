@@ -25,9 +25,6 @@ Representative sound field computation utilities such as a single focal point, a
 `focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` also have a `*_device` variant that computes for only a single device, and a `*_transducer` variant that returns the phase of a single transducer element (for example, `focus_device` / `focus_transducer`).
 These variants are available in Rust and C#, but not in Python.
 
-Pattern functions write only the phase and leave the intensity untouched.
-A buffer allocated with `pattern_buffer` starts at phase 0 and the maximum intensity; use `set_intensity` to change the intensity.
-
 ## Wavelength
 
 The phase computation requires the wavelength <Math tex="\lambda = c / f" />.

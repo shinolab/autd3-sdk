@@ -31,7 +31,7 @@ import { excerpt } from "@lib/excerpt";
 | `direction`  | `UnitVector3<f32>`     | ビームの方向 (単位ベクトル)             |
 | `theta`      | `Angle`                | 円錐の半頂角 (`18.0 * deg` など)        |
 | `wavelength` | `Length`               | 波長                                    |
-| `dst`        | `&mut [[Emission; _]]` | 出力バッファ                            |
+| `dst`        | `&mut [Vec<Phase>]` | 出力バッファ                            |
 
 ## Example
 

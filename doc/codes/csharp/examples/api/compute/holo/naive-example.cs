@@ -14,7 +14,8 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-var dst = geometry.PatternBuffer();
+var phases = geometry.PhaseBuffer();
+var intensities = geometry.IntensityBuffer();
 
 Holo.Naive(
     geometry,
@@ -25,11 +26,12 @@ Holo.Naive(
     },
     Pattern.Wavelength(340.0f * m / s),
     new NaiveOption(
-        constraint: EmissionConstraint.Clamp(Intensity.Min, Intensity.Max),
+        constraint: IntensityConstraint.Clamp(Intensity.Min, Intensity.Max),
         directivity: Directivity.Sphere,
         mask: TransducerMask.AllEnabled
     ),
-    dst
+    phases,
+    intensities
 );
         // HIDE
     }

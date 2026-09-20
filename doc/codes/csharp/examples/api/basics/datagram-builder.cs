@@ -17,11 +17,12 @@ internal static class Sample
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
         var leftTarget = geometry.Center + new Vector3(-40.0f, 0.0f, 150.0f);
-        var left = geometry.PatternBuffer();
+        var intensities = geometry.IntensityBuffer();
+        var left = geometry.PhaseBuffer();
         Pattern.Focus(geometry, leftTarget, wavelength, left);
 
         var rightTarget = geometry.Center + new Vector3(40.0f, 0.0f, 150.0f);
-        var right = geometry.PatternBuffer();
+        var right = geometry.PhaseBuffer();
         Pattern.Focus(geometry, rightTarget, wavelength, right);
 
         var modulation = Modulation.ModulationBuffer();
@@ -42,8 +43,8 @@ internal static class Sample
         // ANCHOR: push_each
         var builder = client.DatagramBuilder();
         builder.PushEach(device => device.Idx % 2 == 0
-            ? new Pattern(left)
-            : new Pattern(right));
+            ? new Pattern(left, intensities)
+            : new Pattern(right, intensities));
         var frames = builder.Build();
         // ANCHOR_END: push_each
         foreach (var frame in frames)

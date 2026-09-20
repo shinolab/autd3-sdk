@@ -10,7 +10,7 @@ use autd3_rs::commands::{
 use autd3_rs::geometry::{Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{
-    ControlPoints, Emission, Intensity, LoopBehavior, ModulationBank, PatternBank, SamplingConfig,
+    ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
     TransitionMode,
 };
 use autd3_rs::{Error, Frames, Velocity};
@@ -20,25 +20,32 @@ use crate::Ctx;
 
 pub const SOUND_SPEED_M_S: f32 = 340.0;
 
-pub fn focus_at(geometry: &Geometry, off: [f32; 3], intensity: u8) -> Vec<Vec<Emission>> {
-    let mut buf = geometry.pattern_buffer();
+pub type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
+
+pub fn buffers(geometry: &Geometry, intensity: Intensity) -> Buffers {
+    let mut intensities = geometry.intensity_buffer();
+    set_intensity(intensity, &mut intensities);
+    (geometry.phase_buffer(), intensities)
+}
+
+pub fn focus_at(geometry: &Geometry, off: [f32; 3], intensity: u8) -> Buffers {
+    let (mut phases, intensities) = buffers(geometry, Intensity(intensity));
     let target = geometry.center() + offset(off[0] * mm, off[1] * mm, off[2] * mm);
     let wl = wavelength(SOUND_SPEED_M_S * m / s);
-    set_intensity(Intensity(intensity), &mut buf);
-    focus(geometry, target, wl, &mut buf);
-    buf
+    focus(geometry, target, wl, &mut phases);
+    (phases, intensities)
 }
 
 pub async fn send_pattern_mod(
     ctx: &Ctx<'_>,
-    emissions: &[Vec<Emission>],
+    pattern: &Buffers,
     modulation: &[u8],
     config: SamplingConfig,
 ) -> Result<()> {
     let mut builder = ctx.client.datagram_builder();
     builder
         .push(SetSilencer::default())
-        .push(Pattern::new(emissions))
+        .push(Pattern::new(&pattern.0, &pattern.1))
         .push(Modulation::new(config, modulation));
     let frames = builder.build()?;
     for frame in &frames {
@@ -47,17 +54,14 @@ pub async fn send_pattern_mod(
     Ok(())
 }
 
-pub async fn write_pattern_bank(
-    ctx: &Ctx<'_>,
-    bank: PatternBank,
-    emissions: &[Vec<Emission>],
-) -> Result<()> {
+pub async fn write_pattern_bank(ctx: &Ctx<'_>, bank: PatternBank, pattern: &Buffers) -> Result<()> {
     let mut builder = ctx.client.datagram_builder();
     builder
         .push(WritePatternBuffer {
             bank,
             index: 0,
-            emissions,
+            phases: &pattern.0,
+            intensities: &pattern.1,
         })
         .push(ConfigPattern {
             bank,
@@ -255,17 +259,18 @@ pub async fn write_pattern_stm_bank(
     ctx: &Ctx<'_>,
     bank: PatternBank,
     config: impl Into<StmConfig>,
-    patterns: &[Vec<Vec<Emission>>],
+    patterns: &[Buffers],
     loop_behavior: LoopBehavior,
 ) -> Result<()> {
     let size = patterns.len();
     let config = config.into().into_sampling_config(size);
     let mut builder = ctx.client.datagram_builder();
-    for (index, pattern) in patterns.iter().enumerate() {
+    for (index, (phases, intensities)) in patterns.iter().enumerate() {
         builder.push(WritePatternBuffer {
             bank,
             index,
-            emissions: pattern,
+            phases,
+            intensities,
         });
     }
     builder.push(ConfigPattern {

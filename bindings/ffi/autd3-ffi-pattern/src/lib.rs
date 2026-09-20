@@ -1,15 +1,34 @@
 use autd3_ffi_abi::{
-    PatternBuffer, drop_handle, handle_mut, handle_ref, into_handle, slice_mut, slice_ref,
-    write_out,
+    Buffer, IntensityBuffer, PhaseBuffer, drop_handle, handle_mut, handle_ref, into_handle,
+    slice_mut, slice_ref, write_out,
 };
 use autd3_rs_core::geometry::{Autd3, TransducerGroups};
-use autd3_rs_core::value::{Emission, Intensity, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_core::{Angle, Geometry, Length, Point3, UnitVector3, Vector3, Velocity};
 
-#[repr(C)]
-pub struct Autd3Emission {
-    pub phase: u8,
-    pub intensity: u8,
+trait Byte: Copy {
+    fn from_u8(v: u8) -> Self;
+    fn to_u8(self) -> u8;
+}
+
+impl Byte for Phase {
+    fn from_u8(v: u8) -> Self {
+        Phase(v)
+    }
+
+    fn to_u8(self) -> u8 {
+        self.0
+    }
+}
+
+impl Byte for Intensity {
+    fn from_u8(v: u8) -> Self {
+        Intensity(v)
+    }
+
+    fn to_u8(self) -> u8 {
+        self.0
+    }
 }
 
 unsafe fn point(p: *const f32) -> Option<Point3<f32>> {
@@ -27,127 +46,135 @@ pub extern "C" fn autd3_pattern_wavelength(sound_speed_mm_per_s: f32) -> f32 {
     autd3_rs_pattern::wavelength(Velocity::from_mm_s(sound_speed_mm_per_s)).mm()
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_core_geometry_pattern_buffer(
-    geometry: *const Geometry,
-) -> *mut PatternBuffer {
-    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+unsafe fn buffer_from_array<T: Byte>(src: *const u8, num_devices: usize) -> *mut Buffer<T> {
+    let Some(slice) = (unsafe { slice_ref(src, num_devices * Autd3::NUM_TRANSDUCERS) }) else {
         return std::ptr::null_mut();
     };
-
-    into_handle(PatternBuffer(geometry.pattern_buffer()))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_buffer_from_array(
-    emissions: *const Autd3Emission,
-    num_devices: usize,
-) -> *mut PatternBuffer {
-    let Some(slice) = (unsafe { slice_ref(emissions, num_devices * Autd3::NUM_TRANSDUCERS) })
-    else {
-        return std::ptr::null_mut();
-    };
-
     let buffer = slice
         .as_chunks::<{ Autd3::NUM_TRANSDUCERS }>()
         .0
         .iter()
-        .map(|device| {
-            let mut slot = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
-            for (e, src) in slot.iter_mut().zip(device) {
-                *e = Emission {
-                    phase: Phase(src.phase),
-                    intensity: Intensity(src.intensity),
-                };
-            }
-            slot
-        })
+        .map(|device| device.iter().map(|&v| T::from_u8(v)).collect())
         .collect();
-    into_handle(PatternBuffer(buffer))
+    into_handle(Buffer(buffer))
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_buffer_num_devices(buffer: *const PatternBuffer) -> usize {
-    let Some(buffer) = (unsafe { handle_ref(buffer) }) else {
-        return 0;
-    };
-
-    buffer.0.len()
+unsafe fn buffer_num_devices<T>(buffer: *const Buffer<T>) -> usize {
+    unsafe { handle_ref(buffer) }.map_or(0, |buffer| buffer.0.len())
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_buffer_num_transducers(
-    buffer: *const PatternBuffer,
-    dev: usize,
-) -> usize {
-    let Some(buffer) = (unsafe { handle_ref(buffer) }) else {
-        return 0;
-    };
-
-    buffer.0.get(dev).map_or(0, Vec::len)
+unsafe fn buffer_num_transducers<T>(buffer: *const Buffer<T>, dev: usize) -> usize {
+    unsafe { handle_ref(buffer) }
+        .and_then(|buffer| buffer.0.get(dev))
+        .map_or(0, Vec::len)
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_buffer_get(
-    buffer: *const PatternBuffer,
+unsafe fn buffer_get<T: Byte>(
+    buffer: *const Buffer<T>,
     dev: usize,
     tr: usize,
-    out: *mut Autd3Emission,
+    out: *mut u8,
 ) -> i32 {
-    let Some(buffer) = (unsafe { handle_ref(buffer) }) else {
+    let Some(v) = (unsafe { handle_ref(buffer) })
+        .and_then(|buffer| buffer.0.get(dev))
+        .and_then(|slot| slot.get(tr))
+    else {
         return -1;
     };
-
-    let Some(e) = buffer.0.get(dev).and_then(|slot| slot.get(tr)) else {
-        return -1;
-    };
-    if unsafe {
-        write_out(
-            out,
-            Autd3Emission {
-                phase: e.phase.0,
-                intensity: e.intensity.0,
-            },
-        )
-    } != 0
-    {
+    if unsafe { write_out(out, v.to_u8()) } != 0 {
         return -1;
     }
     0
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_buffer_set(
-    buffer: *mut PatternBuffer,
-    dev: usize,
-    tr: usize,
-    emission: Autd3Emission,
-) -> i32 {
-    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
+unsafe fn buffer_set<T: Byte>(buffer: *mut Buffer<T>, dev: usize, tr: usize, value: u8) -> i32 {
+    let Some(v) = (unsafe { handle_mut(buffer) })
+        .and_then(|buffer| buffer.0.get_mut(dev))
+        .and_then(|slot| slot.get_mut(tr))
+    else {
         return -1;
     };
-
-    let Some(e) = buffer.0.get_mut(dev).and_then(|slot| slot.get_mut(tr)) else {
-        return -1;
-    };
-    *e = Emission {
-        phase: Phase(emission.phase),
-        intensity: Intensity(emission.intensity),
-    };
+    *v = T::from_u8(value);
     0
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_buffer_free(buffer: *mut PatternBuffer) {
-    unsafe { drop_handle(buffer) }
+macro_rules! buffer_api {
+    ($ty:ty, $geometry:ident, $make:ident, $from_array:ident, $num_devices:ident, $num_transducers:ident, $get:ident, $set:ident, $free:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $geometry(geometry: *const Geometry) -> *mut $ty {
+            let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+                return std::ptr::null_mut();
+            };
+            into_handle(Buffer(geometry.$make()))
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $from_array(src: *const u8, num_devices: usize) -> *mut $ty {
+            unsafe { buffer_from_array(src, num_devices) }
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $num_devices(buffer: *const $ty) -> usize {
+            unsafe { buffer_num_devices(buffer) }
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $num_transducers(buffer: *const $ty, dev: usize) -> usize {
+            unsafe { buffer_num_transducers(buffer, dev) }
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $get(
+            buffer: *const $ty,
+            dev: usize,
+            tr: usize,
+            out: *mut u8,
+        ) -> i32 {
+            unsafe { buffer_get(buffer, dev, tr, out) }
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $set(buffer: *mut $ty, dev: usize, tr: usize, value: u8) -> i32 {
+            unsafe { buffer_set(buffer, dev, tr, value) }
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $free(buffer: *mut $ty) {
+            unsafe { drop_handle(buffer) }
+        }
+    };
 }
+
+buffer_api!(
+    PhaseBuffer,
+    autd3_core_geometry_phase_buffer,
+    phase_buffer,
+    autd3_phase_buffer_from_array,
+    autd3_phase_buffer_num_devices,
+    autd3_phase_buffer_num_transducers,
+    autd3_phase_buffer_get,
+    autd3_phase_buffer_set,
+    autd3_phase_buffer_free
+);
+
+buffer_api!(
+    IntensityBuffer,
+    autd3_core_geometry_intensity_buffer,
+    intensity_buffer,
+    autd3_intensity_buffer_from_array,
+    autd3_intensity_buffer_num_devices,
+    autd3_intensity_buffer_num_transducers,
+    autd3_intensity_buffer_get,
+    autd3_intensity_buffer_set,
+    autd3_intensity_buffer_free
+);
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_pattern_focus(
     geometry: *const Geometry,
     target: *const f32,
     wavelength_mm: f32,
-    buffer: *mut PatternBuffer,
+    buffer: *mut PhaseBuffer,
 ) -> i32 {
     let (Some(geometry), Some(target), Some(buffer)) = (
         unsafe { handle_ref(geometry) },
@@ -169,36 +196,23 @@ pub unsafe extern "C" fn autd3_pattern_focus(
     0
 }
 
-unsafe fn with_emissions(
-    dst: *mut Autd3Emission,
-    len: usize,
-    f: impl FnOnce(&mut [Emission]),
-) -> i32 {
+unsafe fn with_bytes<T: Byte>(dst: *mut u8, len: usize, f: impl FnOnce(&mut [T])) -> i32 {
     let Some(dst) = (unsafe { slice_mut(dst, len) }) else {
         return -1;
     };
-    let mut buf: Vec<Emission> = dst
-        .iter()
-        .map(|e| Emission {
-            phase: Phase(e.phase),
-            intensity: Intensity(e.intensity),
-        })
-        .collect();
+    let mut buf: Vec<T> = dst.iter().map(|&v| T::from_u8(v)).collect();
     f(&mut buf);
-    for (d, e) in dst.iter_mut().zip(&buf) {
-        *d = Autd3Emission {
-            phase: e.phase.0,
-            intensity: e.intensity.0,
-        };
+    for (d, v) in dst.iter_mut().zip(&buf) {
+        *d = v.to_u8();
     }
     0
 }
 
-unsafe fn with_device_dst(
+unsafe fn with_device_dst<T: Byte>(
     geometry: *const Geometry,
     dev: usize,
-    dst: *mut Autd3Emission,
-    f: impl FnOnce(&autd3_rs_core::geometry::Device, &mut [Emission]),
+    dst: *mut u8,
+    f: impl FnOnce(&autd3_rs_core::geometry::Device, &mut [T]),
 ) -> i32 {
     let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return -1;
@@ -206,7 +220,7 @@ unsafe fn with_device_dst(
     let Some(device) = geometry.iter().nth(dev) else {
         return -1;
     };
-    unsafe { with_emissions(dst, device.num_transducers(), |buf| f(device, buf)) }
+    unsafe { with_bytes(dst, device.num_transducers(), |buf| f(device, buf)) }
 }
 
 #[unsafe(no_mangle)]
@@ -215,7 +229,7 @@ pub unsafe extern "C" fn autd3_pattern_focus_device(
     dev: usize,
     target: *const f32,
     wavelength_mm: f32,
-    dst: *mut Autd3Emission,
+    dst: *mut u8,
 ) -> i32 {
     let Some(target) = (unsafe { point(target) }) else {
         return -1;
@@ -252,7 +266,7 @@ pub unsafe extern "C" fn autd3_pattern_plane(
     geometry: *const Geometry,
     dir: *const f32,
     wavelength_mm: f32,
-    buffer: *mut PatternBuffer,
+    buffer: *mut PhaseBuffer,
 ) -> i32 {
     let (Some(geometry), Some(dir), Some(buffer)) = (
         unsafe { handle_ref(geometry) },
@@ -275,7 +289,7 @@ pub unsafe extern "C" fn autd3_pattern_plane_device(
     dev: usize,
     dir: *const f32,
     wavelength_mm: f32,
-    dst: *mut Autd3Emission,
+    dst: *mut u8,
 ) -> i32 {
     let Some(dir) = (unsafe { unit_vector(dir) }) else {
         return -1;
@@ -314,7 +328,7 @@ pub unsafe extern "C" fn autd3_pattern_bessel(
     dir: *const f32,
     theta_rad: f32,
     wavelength_mm: f32,
-    buffer: *mut PatternBuffer,
+    buffer: *mut PhaseBuffer,
 ) -> i32 {
     let (Some(geometry), Some(apex), Some(dir), Some(buffer)) = (
         unsafe { handle_ref(geometry) },
@@ -347,7 +361,7 @@ pub unsafe extern "C" fn autd3_pattern_bessel_device(
     dir: *const f32,
     theta_rad: f32,
     wavelength_mm: f32,
-    dst: *mut Autd3Emission,
+    dst: *mut u8,
 ) -> i32 {
     let (Some(apex), Some(dir)) = (unsafe { point(apex) }, unsafe { unit_vector(dir) }) else {
         return -1;
@@ -427,10 +441,10 @@ fn hermite_gaussian_option(
     })
 }
 
-unsafe fn with_geometry_buffer(
+unsafe fn with_geometry_buffer<T>(
     geometry: *const Geometry,
-    buffer: *mut PatternBuffer,
-    f: impl FnOnce(&Geometry, &mut [Vec<Emission>]),
+    buffer: *mut Buffer<T>,
+    f: impl FnOnce(&Geometry, &mut [Vec<T>]),
 ) -> i32 {
     let (Some(geometry), Some(buffer)) = (unsafe { handle_ref(geometry) }, unsafe {
         handle_mut(buffer)
@@ -454,7 +468,7 @@ pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_phase(
     l: i32,
     waist_mm: f32,
     wavelength_mm: f32,
-    buffer: *mut PatternBuffer,
+    buffer: *mut PhaseBuffer,
 ) -> i32 {
     let (Some(target), Some(axis), Some(option)) = (
         unsafe { point(target) },
@@ -489,7 +503,7 @@ pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_phase_device(
     l: i32,
     waist_mm: f32,
     wavelength_mm: f32,
-    dst: *mut Autd3Emission,
+    dst: *mut u8,
 ) -> i32 {
     let (Some(target), Some(axis), Some(option)) = (
         unsafe { point(target) },
@@ -558,7 +572,7 @@ pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_intensity(
     l: i32,
     waist_mm: f32,
     wavelength_mm: f32,
-    buffer: *mut PatternBuffer,
+    buffer: *mut IntensityBuffer,
 ) -> i32 {
     let (Some(target), Some(axis), Some(option)) = (
         unsafe { point(target) },
@@ -593,7 +607,7 @@ pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_intensity_device(
     l: i32,
     waist_mm: f32,
     wavelength_mm: f32,
-    dst: *mut Autd3Emission,
+    dst: *mut u8,
 ) -> i32 {
     let (Some(target), Some(axis), Some(option)) = (
         unsafe { point(target) },
@@ -628,7 +642,7 @@ pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_phase(
     n: u32,
     waist_mm: f32,
     wavelength_mm: f32,
-    buffer: *mut PatternBuffer,
+    buffer: *mut PhaseBuffer,
 ) -> i32 {
     let (Some(target), Some(axis), Some(x_dir), Some(option)) = (
         unsafe { point(target) },
@@ -666,7 +680,7 @@ pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_phase_device(
     n: u32,
     waist_mm: f32,
     wavelength_mm: f32,
-    dst: *mut Autd3Emission,
+    dst: *mut u8,
 ) -> i32 {
     let (Some(target), Some(axis), Some(x_dir), Some(option)) = (
         unsafe { point(target) },
@@ -741,7 +755,7 @@ pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_intensity(
     n: u32,
     waist_mm: f32,
     wavelength_mm: f32,
-    buffer: *mut PatternBuffer,
+    buffer: *mut IntensityBuffer,
 ) -> i32 {
     let (Some(target), Some(axis), Some(x_dir), Some(option)) = (
         unsafe { point(target) },
@@ -779,7 +793,7 @@ pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_intensity_device(
     n: u32,
     waist_mm: f32,
     wavelength_mm: f32,
-    dst: *mut Autd3Emission,
+    dst: *mut u8,
 ) -> i32 {
     let (Some(target), Some(axis), Some(x_dir), Some(option)) = (
         unsafe { point(target) },
@@ -805,7 +819,7 @@ pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_intensity_device(
     }
 }
 
-unsafe fn with_buffer(buffer: *mut PatternBuffer, f: impl FnOnce(&mut [Vec<Emission>])) -> i32 {
+unsafe fn with_buffer<T>(buffer: *mut Buffer<T>, f: impl FnOnce(&mut [Vec<T>])) -> i32 {
     let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
         return -1;
     };
@@ -816,7 +830,7 @@ unsafe fn with_buffer(buffer: *mut PatternBuffer, f: impl FnOnce(&mut [Vec<Emiss
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_pattern_set_intensity(
     intensity: u8,
-    buffer: *mut PatternBuffer,
+    buffer: *mut IntensityBuffer,
 ) -> i32 {
     unsafe {
         with_buffer(buffer, |buf| {
@@ -828,84 +842,53 @@ pub unsafe extern "C" fn autd3_pattern_set_intensity(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_pattern_set_intensity_device(
     intensity: u8,
-    dst: *mut Autd3Emission,
+    dst: *mut u8,
     len: usize,
 ) -> i32 {
     unsafe {
-        with_emissions(dst, len, |buf| {
+        with_bytes(dst, len, |buf| {
             autd3_rs_pattern::set_intensity_device(Intensity(intensity), buf);
         })
     }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_set_phase(phase: u8, buffer: *mut PatternBuffer) -> i32 {
+pub unsafe extern "C" fn autd3_pattern_set_phase(phase: u8, buffer: *mut PhaseBuffer) -> i32 {
     unsafe { with_buffer(buffer, |buf| autd3_rs_pattern::set_phase(Phase(phase), buf)) }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_pattern_set_phase_device(
     phase: u8,
-    dst: *mut Autd3Emission,
+    dst: *mut u8,
     len: usize,
 ) -> i32 {
     unsafe {
-        with_emissions(dst, len, |buf| {
+        with_bytes(dst, len, |buf| {
             autd3_rs_pattern::set_phase_device(Phase(phase), buf);
         })
     }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_set_phase_and_intensity(
-    phase: u8,
-    intensity: u8,
-    buffer: *mut PatternBuffer,
-) -> i32 {
-    unsafe {
-        with_buffer(buffer, |buf| {
-            autd3_rs_pattern::set_phase_and_intensity(Phase(phase), Intensity(intensity), buf);
-        })
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_set_phase_and_intensity_device(
-    phase: u8,
-    intensity: u8,
-    dst: *mut Autd3Emission,
-    len: usize,
-) -> i32 {
-    unsafe {
-        with_emissions(dst, len, |buf| {
-            autd3_rs_pattern::set_phase_and_intensity_device(
-                Phase(phase),
-                Intensity(intensity),
-                buf,
-            );
-        })
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_add_phase(phase: u8, buffer: *mut PatternBuffer) -> i32 {
+pub unsafe extern "C" fn autd3_pattern_add_phase(phase: u8, buffer: *mut PhaseBuffer) -> i32 {
     unsafe { with_buffer(buffer, |buf| autd3_rs_pattern::add_phase(Phase(phase), buf)) }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_pattern_add_phase_device(
     phase: u8,
-    dst: *mut Autd3Emission,
+    dst: *mut u8,
     len: usize,
 ) -> i32 {
     unsafe {
-        with_emissions(dst, len, |buf| {
+        with_bytes(dst, len, |buf| {
             autd3_rs_pattern::add_phase_device(Phase(phase), buf);
         })
     }
 }
 
-fn matches_geometry(geometry: &Geometry, buffer: &PatternBuffer) -> bool {
+fn matches_geometry<T>(geometry: &Geometry, buffer: &Buffer<T>) -> bool {
     buffer.0.len() == geometry.num_devices()
         && geometry
             .iter()
@@ -913,13 +896,13 @@ fn matches_geometry(geometry: &Geometry, buffer: &PatternBuffer) -> bool {
             .all(|(device, slot)| slot.len() == device.num_transducers())
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_group(
+unsafe fn group_impl<T: Copy>(
     geometry: *const Geometry,
     keys: *const i32,
-    sources: *const *const PatternBuffer,
+    sources: *const *const Buffer<T>,
     num_sources: usize,
-    buffer: *mut PatternBuffer,
+    buffer: *mut Buffer<T>,
+    null: T,
 ) -> i32 {
     let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return -1;
@@ -939,7 +922,7 @@ pub unsafe extern "C" fn autd3_pattern_group(
     let Some(sources) = source_ptrs
         .iter()
         .map(|&ptr| unsafe { handle_ref(ptr) })
-        .collect::<Option<Vec<&PatternBuffer>>>()
+        .collect::<Option<Vec<&Buffer<T>>>>()
     else {
         return -1;
     };
@@ -974,16 +957,17 @@ pub unsafe extern "C" fn autd3_pattern_group(
         geometry,
         &groups,
         |key| sources[key].0.as_slice(),
+        null,
         &mut buffer.0,
     );
     0
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_group_null(
+unsafe fn group_null_impl<T: Copy>(
     geometry: *const Geometry,
     indices: *const i32,
-    buffer: *mut PatternBuffer,
+    buffer: *mut Buffer<T>,
+    null: T,
 ) -> i32 {
     let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return -1;
@@ -1000,19 +984,18 @@ pub unsafe extern "C" fn autd3_pattern_group_null(
 
     for (out, &index) in buffer.0.iter_mut().flatten().zip(indices) {
         if index < 0 {
-            *out = Emission::NULL;
+            *out = null;
         }
     }
     0
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_group_copy(
+unsafe fn group_copy_impl<T: Copy>(
     geometry: *const Geometry,
     indices: *const i32,
     index: i32,
-    source: *const PatternBuffer,
-    buffer: *mut PatternBuffer,
+    source: *const Buffer<T>,
+    buffer: *mut Buffer<T>,
 ) -> i32 {
     let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return -1;
@@ -1031,7 +1014,7 @@ pub unsafe extern "C" fn autd3_pattern_group_copy(
         return -1;
     }
 
-    for ((out, &e), &i) in buffer
+    for ((out, &v), &i) in buffer
         .0
         .iter_mut()
         .flatten()
@@ -1039,11 +1022,62 @@ pub unsafe extern "C" fn autd3_pattern_group_copy(
         .zip(indices)
     {
         if i == index {
-            *out = e;
+            *out = v;
         }
     }
     0
 }
+
+macro_rules! group_api {
+    ($ty:ty, $null:expr, $group:ident, $group_null:ident, $group_copy:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $group(
+            geometry: *const Geometry,
+            keys: *const i32,
+            sources: *const *const $ty,
+            num_sources: usize,
+            buffer: *mut $ty,
+        ) -> i32 {
+            unsafe { group_impl(geometry, keys, sources, num_sources, buffer, $null) }
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $group_null(
+            geometry: *const Geometry,
+            indices: *const i32,
+            buffer: *mut $ty,
+        ) -> i32 {
+            unsafe { group_null_impl(geometry, indices, buffer, $null) }
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $group_copy(
+            geometry: *const Geometry,
+            indices: *const i32,
+            index: i32,
+            source: *const $ty,
+            buffer: *mut $ty,
+        ) -> i32 {
+            unsafe { group_copy_impl(geometry, indices, index, source, buffer) }
+        }
+    };
+}
+
+group_api!(
+    PhaseBuffer,
+    Phase::ZERO,
+    autd3_pattern_group_phase,
+    autd3_pattern_group_null_phase,
+    autd3_pattern_group_copy_phase
+);
+
+group_api!(
+    IntensityBuffer,
+    Intensity::MIN,
+    autd3_pattern_group_intensity,
+    autd3_pattern_group_null_intensity,
+    autd3_pattern_group_copy_intensity
+);
 
 autd3_ffi_abi::export_abi_version!();
 
@@ -1055,9 +1089,15 @@ mod tests {
         Geometry::new(vec![Autd3::default(), Autd3::default()])
     }
 
-    fn filled(geometry: &Geometry, phase: u8) -> PatternBuffer {
-        let mut buffer = PatternBuffer(geometry.pattern_buffer());
+    fn phases(geometry: &Geometry, phase: u8) -> PhaseBuffer {
+        let mut buffer = Buffer(geometry.phase_buffer());
         autd3_rs_pattern::set_phase(Phase(phase), &mut buffer.0);
+        buffer
+    }
+
+    fn intensities(geometry: &Geometry, intensity: u8) -> IntensityBuffer {
+        let mut buffer = Buffer(geometry.intensity_buffer());
+        autd3_rs_pattern::set_intensity(Intensity(intensity), &mut buffer.0);
         buffer
     }
 
@@ -1069,30 +1109,101 @@ mod tests {
             .collect()
     }
 
+    fn sides(dev: usize, tr: usize) -> i32 {
+        match (dev, tr % 3) {
+            (_, 0) => 0,
+            (1, 1) => 1,
+            _ => -1,
+        }
+    }
+
     #[test]
-    fn set_and_add_phase_update_the_buffer_in_place() {
+    fn buffers_are_created_read_and_written_per_transducer() {
         let geometry = geometry();
-        let mut buffer = PatternBuffer(geometry.pattern_buffer());
-
+        let phases = unsafe { autd3_core_geometry_phase_buffer(&raw const geometry) };
+        let intensities = unsafe { autd3_core_geometry_intensity_buffer(&raw const geometry) };
+        assert_eq!(unsafe { autd3_phase_buffer_num_devices(phases) }, 2);
         assert_eq!(
-            unsafe { autd3_pattern_set_intensity(0x80, &raw mut buffer) },
+            unsafe { autd3_intensity_buffer_num_transducers(intensities, 1) },
+            Autd3::NUM_TRANSDUCERS
+        );
+        assert_eq!(
+            unsafe { autd3_intensity_buffer_num_transducers(intensities, 2) },
             0
         );
-        assert_eq!(unsafe { autd3_pattern_set_phase(0xF0, &raw mut buffer) }, 0);
-        assert_eq!(unsafe { autd3_pattern_add_phase(0x20, &raw mut buffer) }, 0);
-        for &e in buffer.0.iter().flatten() {
-            assert_eq!(e.phase, Phase(0x10));
-            assert_eq!(e.intensity, Intensity(0x80));
-        }
 
+        let mut v = 0xAA;
         assert_eq!(
-            unsafe { autd3_pattern_set_phase_and_intensity(0x40, 0x50, &raw mut buffer) },
+            unsafe { autd3_phase_buffer_get(phases, 1, 3, &raw mut v) },
             0
         );
-        for &e in buffer.0.iter().flatten() {
-            assert_eq!(e.phase, Phase(0x40));
-            assert_eq!(e.intensity, Intensity(0x50));
+        assert_eq!(v, Phase::ZERO.0);
+        assert_eq!(
+            unsafe { autd3_intensity_buffer_get(intensities, 1, 3, &raw mut v) },
+            0
+        );
+        assert_eq!(v, Intensity::MAX.0);
+
+        assert_eq!(unsafe { autd3_phase_buffer_set(phases, 1, 3, 0x42) }, 0);
+        assert_eq!(
+            unsafe { autd3_phase_buffer_get(phases, 1, 3, &raw mut v) },
+            0
+        );
+        assert_eq!(v, 0x42);
+        assert_eq!(unsafe { autd3_phase_buffer_set(phases, 2, 0, 0x42) }, -1);
+        assert_eq!(
+            unsafe {
+                autd3_intensity_buffer_get(intensities, 0, Autd3::NUM_TRANSDUCERS, &raw mut v)
+            },
+            -1
+        );
+
+        unsafe { autd3_phase_buffer_free(phases) };
+        unsafe { autd3_intensity_buffer_free(intensities) };
+    }
+
+    #[test]
+    fn buffers_are_built_from_flat_arrays() {
+        let n = Autd3::NUM_TRANSDUCERS;
+        let src: Vec<u8> = (0..2 * n).map(|i| u8::try_from(i % 256).unwrap()).collect();
+        let phases = unsafe { autd3_phase_buffer_from_array(src.as_ptr(), 2) };
+        let intensities = unsafe { autd3_intensity_buffer_from_array(src.as_ptr(), 2) };
+        let (p, i) = unsafe { (&*phases, &*intensities) };
+        for (k, (&p, &i)) in p.0.iter().flatten().zip(i.0.iter().flatten()).enumerate() {
+            assert_eq!(p, Phase(src[k]));
+            assert_eq!(i, Intensity(src[k]));
         }
+        assert!(unsafe { autd3_phase_buffer_from_array(std::ptr::null(), 1) }.is_null());
+        unsafe { autd3_phase_buffer_free(phases) };
+        unsafe { autd3_intensity_buffer_free(intensities) };
+    }
+
+    #[test]
+    fn set_and_add_update_the_buffers_in_place() {
+        let geometry = geometry();
+        let mut phase_buffer = phases(&geometry, 0);
+        let mut intensity_buffer = intensities(&geometry, 0);
+
+        assert_eq!(
+            unsafe { autd3_pattern_set_intensity(0x80, &raw mut intensity_buffer) },
+            0
+        );
+        assert_eq!(
+            unsafe { autd3_pattern_set_phase(0xF0, &raw mut phase_buffer) },
+            0
+        );
+        assert_eq!(
+            unsafe { autd3_pattern_add_phase(0x20, &raw mut phase_buffer) },
+            0
+        );
+        assert!(phase_buffer.0.iter().flatten().all(|&p| p == Phase(0x10)));
+        assert!(
+            intensity_buffer
+                .0
+                .iter()
+                .flatten()
+                .all(|&i| i == Intensity(0x80))
+        );
 
         assert_eq!(
             unsafe { autd3_pattern_set_intensity(0, std::ptr::null_mut()) },
@@ -1101,15 +1212,10 @@ mod tests {
     }
 
     #[test]
-    fn device_level_functions_keep_the_untouched_field() {
+    fn device_level_functions_write_the_given_array() {
         let geometry = geometry();
         let n = Autd3::NUM_TRANSDUCERS;
-        let mut dst: Vec<Autd3Emission> = (0..n)
-            .map(|_| Autd3Emission {
-                phase: 0x00,
-                intensity: 0x42,
-            })
-            .collect();
+        let mut dst = vec![0u8; n];
         let target = [0.0_f32, 0.0, 150.0];
 
         let result = unsafe {
@@ -1122,7 +1228,7 @@ mod tests {
             )
         };
         assert_eq!(result, 0);
-        for (tr, e) in dst.iter().enumerate() {
+        for (tr, &p) in dst.iter().enumerate() {
             let mut phase = 0u8;
             let position = geometry[0].position(tr);
             let pos = [position.x, position.y, position.z];
@@ -1137,48 +1243,47 @@ mod tests {
                 },
                 0
             );
-            assert_eq!(e.phase, phase);
-            assert_eq!(e.intensity, 0x42);
+            assert_eq!(p, phase);
         }
 
         let result = unsafe { autd3_pattern_set_phase_device(0x33, dst.as_mut_ptr(), dst.len()) };
         assert_eq!(result, 0);
-        assert!(dst.iter().all(|e| e.phase == 0x33 && e.intensity == 0x42));
+        assert!(dst.iter().all(|&p| p == 0x33));
 
         let result = unsafe { autd3_pattern_add_phase_device(0xF0, dst.as_mut_ptr(), dst.len()) };
         assert_eq!(result, 0);
-        assert!(dst.iter().all(|e| e.phase == 0x23 && e.intensity == 0x42));
+        assert!(dst.iter().all(|&p| p == 0x23));
 
         let result =
             unsafe { autd3_pattern_set_intensity_device(0x11, dst.as_mut_ptr(), dst.len()) };
         assert_eq!(result, 0);
-        assert!(dst.iter().all(|e| e.phase == 0x23 && e.intensity == 0x11));
-
-        let result = unsafe {
-            autd3_pattern_set_phase_and_intensity_device(0x01, 0x02, dst.as_mut_ptr(), dst.len())
-        };
-        assert_eq!(result, 0);
-        assert!(dst.iter().all(|e| e.phase == 0x01 && e.intensity == 0x02));
+        assert!(dst.iter().all(|&i| i == 0x11));
 
         let result = unsafe { autd3_pattern_set_phase_device(0x00, std::ptr::null_mut(), 1) };
+        assert_eq!(result, -1);
+        let result = unsafe {
+            autd3_pattern_focus_device(
+                &raw const geometry,
+                2,
+                target.as_ptr(),
+                8.5,
+                dst.as_mut_ptr(),
+            )
+        };
         assert_eq!(result, -1);
     }
 
     #[test]
-    fn group_writes_the_source_of_each_key_across_devices() {
+    fn group_writes_the_source_of_each_key_and_the_type_specific_null() {
         let geometry = geometry();
-        let left = filled(&geometry, 0x10);
-        let right = filled(&geometry, 0x20);
-        let mut dst = filled(&geometry, 0xFF);
-        let keys = keys(&geometry, |dev, tr| match (dev, tr % 3) {
-            (_, 0) => 0,
-            (1, 1) => 1,
-            _ => -1,
-        });
-        let sources = [&raw const left, &raw const right];
+        let keys = keys(&geometry, sides);
 
+        let left = phases(&geometry, 0x10);
+        let right = phases(&geometry, 0x20);
+        let mut dst = phases(&geometry, 0xFF);
+        let sources = [&raw const left, &raw const right];
         let result = unsafe {
-            autd3_pattern_group(
+            autd3_pattern_group_phase(
                 &raw const geometry,
                 keys.as_ptr(),
                 sources.as_ptr(),
@@ -1186,22 +1291,32 @@ mod tests {
                 &raw mut dst,
             )
         };
-
         assert_eq!(result, 0);
-        for (dev, slot) in dst.0.iter().enumerate() {
-            for (tr, &e) in slot.iter().enumerate() {
-                let expected = match (dev, tr % 3) {
-                    (_, 0) => Emission {
-                        phase: Phase(0x10),
-                        intensity: Intensity::MAX,
-                    },
-                    (1, 1) => Emission {
-                        phase: Phase(0x20),
-                        intensity: Intensity::MAX,
-                    },
-                    _ => Emission::NULL,
+
+        let left_i = intensities(&geometry, 0x30);
+        let right_i = intensities(&geometry, 0x40);
+        let mut dst_i = intensities(&geometry, 0xFF);
+        let sources_i = [&raw const left_i, &raw const right_i];
+        let result = unsafe {
+            autd3_pattern_group_intensity(
+                &raw const geometry,
+                keys.as_ptr(),
+                sources_i.as_ptr(),
+                sources_i.len(),
+                &raw mut dst_i,
+            )
+        };
+        assert_eq!(result, 0);
+
+        for dev in 0..2 {
+            for tr in 0..Autd3::NUM_TRANSDUCERS {
+                let (p, i) = match sides(dev, tr) {
+                    0 => (Phase(0x10), Intensity(0x30)),
+                    1 => (Phase(0x20), Intensity(0x40)),
+                    _ => (Phase::ZERO, Intensity::MIN),
                 };
-                assert_eq!(e, expected, "dev {dev} tr {tr}");
+                assert_eq!(dst.0[dev][tr], p, "dev {dev} tr {tr}");
+                assert_eq!(dst_i.0[dev][tr], i, "dev {dev} tr {tr}");
             }
         }
     }
@@ -1209,16 +1324,16 @@ mod tests {
     #[test]
     fn group_rejects_invalid_arguments_without_writing() {
         let geometry = geometry();
-        let left = filled(&geometry, 0x10);
-        let mut dst = filled(&geometry, 0xFF);
+        let left = phases(&geometry, 0x10);
+        let mut dst = phases(&geometry, 0xFF);
         let zeros = keys(&geometry, |_, _| 0);
         let out_of_range = keys(&geometry, |_, tr| i32::from(tr == 5));
         let single_geometry = Geometry::new(vec![Autd3::default()]);
-        let single = filled(&single_geometry, 0x10);
+        let single = phases(&single_geometry, 0x10);
         let dst_ptr = &raw mut dst;
 
-        let call = |keys: &[i32], sources: &[*const PatternBuffer]| unsafe {
-            autd3_pattern_group(
+        let call = |keys: &[i32], sources: &[*const PhaseBuffer]| unsafe {
+            autd3_pattern_group_phase(
                 &raw const geometry,
                 keys.as_ptr(),
                 sources.as_ptr(),
@@ -1232,7 +1347,7 @@ mod tests {
         assert_eq!(call(&zeros, &[std::ptr::null()]), -1);
         assert_eq!(
             unsafe {
-                autd3_pattern_group(
+                autd3_pattern_group_phase(
                     std::ptr::null(),
                     zeros.as_ptr(),
                     [&raw const left].as_ptr(),
@@ -1243,29 +1358,25 @@ mod tests {
             -1
         );
 
-        assert!(dst.0.iter().flatten().all(|e| e.phase == Phase(0xFF)));
+        assert!(dst.0.iter().flatten().all(|&p| p == Phase(0xFF)));
     }
 
     #[test]
     fn group_null_and_copy_write_only_the_selected_transducers() {
         let geometry = geometry();
-        let source = filled(&geometry, 0x10);
-        let mut dst = filled(&geometry, 0xFF);
-        let indices = keys(&geometry, |dev, tr| match (dev, tr % 3) {
-            (_, 0) => 0,
-            (1, 1) => 1,
-            _ => -1,
-        });
+        let indices = keys(&geometry, sides);
 
+        let source = phases(&geometry, 0x10);
+        let mut dst = phases(&geometry, 0xFF);
         assert_eq!(
             unsafe {
-                autd3_pattern_group_null(&raw const geometry, indices.as_ptr(), &raw mut dst)
+                autd3_pattern_group_null_phase(&raw const geometry, indices.as_ptr(), &raw mut dst)
             },
             0
         );
         assert_eq!(
             unsafe {
-                autd3_pattern_group_copy(
+                autd3_pattern_group_copy_phase(
                     &raw const geometry,
                     indices.as_ptr(),
                     1,
@@ -1276,20 +1387,40 @@ mod tests {
             0
         );
 
-        for (dev, slot) in dst.0.iter().enumerate() {
-            for (tr, &e) in slot.iter().enumerate() {
-                let expected = match (dev, tr % 3) {
-                    (_, 0) => Emission {
-                        phase: Phase(0xFF),
-                        intensity: Intensity::MAX,
-                    },
-                    (1, 1) => Emission {
-                        phase: Phase(0x10),
-                        intensity: Intensity::MAX,
-                    },
-                    _ => Emission::NULL,
+        let source_i = intensities(&geometry, 0x20);
+        let mut dst_i = intensities(&geometry, 0xFF);
+        assert_eq!(
+            unsafe {
+                autd3_pattern_group_null_intensity(
+                    &raw const geometry,
+                    indices.as_ptr(),
+                    &raw mut dst_i,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                autd3_pattern_group_copy_intensity(
+                    &raw const geometry,
+                    indices.as_ptr(),
+                    1,
+                    &raw const source_i,
+                    &raw mut dst_i,
+                )
+            },
+            0
+        );
+
+        for dev in 0..2 {
+            for tr in 0..Autd3::NUM_TRANSDUCERS {
+                let (p, i) = match sides(dev, tr) {
+                    0 => (Phase(0xFF), Intensity(0xFF)),
+                    1 => (Phase(0x10), Intensity(0x20)),
+                    _ => (Phase::ZERO, Intensity::MIN),
                 };
-                assert_eq!(e, expected, "dev {dev} tr {tr}");
+                assert_eq!(dst.0[dev][tr], p, "dev {dev} tr {tr}");
+                assert_eq!(dst_i.0[dev][tr], i, "dev {dev} tr {tr}");
             }
         }
     }
@@ -1297,15 +1428,15 @@ mod tests {
     #[test]
     fn group_null_and_copy_reject_invalid_arguments() {
         let geometry = geometry();
-        let source = filled(&geometry, 0x10);
-        let mut dst = filled(&geometry, 0xFF);
+        let source = phases(&geometry, 0x10);
+        let mut dst = phases(&geometry, 0xFF);
         let indices = keys(&geometry, |_, _| 0);
         let single_geometry = Geometry::new(vec![Autd3::default()]);
-        let single = filled(&single_geometry, 0x10);
+        let single = phases(&single_geometry, 0x10);
         let dst_ptr = &raw mut dst;
 
-        let copy = |index: i32, source: *const PatternBuffer| unsafe {
-            autd3_pattern_group_copy(
+        let copy = |index: i32, source: *const PhaseBuffer| unsafe {
+            autd3_pattern_group_copy_phase(
                 &raw const geometry,
                 indices.as_ptr(),
                 index,
@@ -1319,7 +1450,7 @@ mod tests {
         assert_eq!(copy(0, std::ptr::null()), -1);
         assert_eq!(
             unsafe {
-                autd3_pattern_group_copy(
+                autd3_pattern_group_copy_phase(
                     &raw const geometry,
                     std::ptr::null(),
                     0,
@@ -1330,16 +1461,18 @@ mod tests {
             -1
         );
         assert_eq!(
-            unsafe { autd3_pattern_group_null(std::ptr::null(), indices.as_ptr(), dst_ptr) },
-            -1
-        );
-        assert_eq!(
-            unsafe { autd3_pattern_group_null(&raw const geometry, std::ptr::null(), dst_ptr) },
+            unsafe { autd3_pattern_group_null_phase(std::ptr::null(), indices.as_ptr(), dst_ptr) },
             -1
         );
         assert_eq!(
             unsafe {
-                autd3_pattern_group_null(
+                autd3_pattern_group_null_phase(&raw const geometry, std::ptr::null(), dst_ptr)
+            },
+            -1
+        );
+        assert_eq!(
+            unsafe {
+                autd3_pattern_group_null_intensity(
                     &raw const geometry,
                     indices.as_ptr(),
                     std::ptr::null_mut(),
@@ -1348,7 +1481,7 @@ mod tests {
             -1
         );
 
-        assert!(dst.0.iter().flatten().all(|e| e.phase == Phase(0xFF)));
+        assert!(dst.0.iter().flatten().all(|&p| p == Phase(0xFF)));
     }
 
     #[test]
@@ -1364,7 +1497,8 @@ mod tests {
         let lambda = Length::from_mm(8.5);
         let rust_target = Point3::new(86.0, 66.0, 150.0);
 
-        let mut buffer = filled(&geometry, 0x00);
+        let mut phase_buffer = phases(&geometry, 0);
+        let mut intensity_buffer = intensities(&geometry, 0);
         let result = unsafe {
             autd3_pattern_laguerre_gaussian_phase(
                 &raw const geometry,
@@ -1374,7 +1508,7 @@ mod tests {
                 2,
                 10.0,
                 8.5,
-                &raw mut buffer,
+                &raw mut phase_buffer,
             )
         };
         assert_eq!(result, 0);
@@ -1387,19 +1521,20 @@ mod tests {
                 2,
                 10.0,
                 8.5,
-                &raw mut buffer,
+                &raw mut intensity_buffer,
             )
         };
         assert_eq!(result, 0);
 
-        let mut expected = geometry.pattern_buffer();
+        let mut expected_p = geometry.phase_buffer();
+        let mut expected_i = geometry.intensity_buffer();
         autd3_rs_pattern::laguerre_gaussian_phase(
             &geometry,
             rust_target,
             Vector3::z_axis(),
             option,
             lambda,
-            &mut expected,
+            &mut expected_p,
         );
         autd3_rs_pattern::laguerre_gaussian_intensity(
             &geometry,
@@ -1407,9 +1542,10 @@ mod tests {
             Vector3::z_axis(),
             option,
             lambda,
-            &mut expected,
+            &mut expected_i,
         );
-        assert_eq!(buffer.0, expected);
+        assert_eq!(phase_buffer.0, expected_p);
+        assert_eq!(intensity_buffer.0, expected_i);
     }
 
     #[test]
@@ -1425,12 +1561,27 @@ mod tests {
         let lambda = Length::from_mm(8.5);
         let rust_target = Point3::new(86.0, 66.0, 150.0);
 
-        let mut dst: Vec<Autd3Emission> = (0..Autd3::NUM_TRANSDUCERS)
-            .map(|_| Autd3Emission {
-                phase: 0,
-                intensity: 0,
-            })
-            .collect();
+        let mut expected_p = geometry.phase_buffer();
+        let mut expected_i = geometry.intensity_buffer();
+        autd3_rs_pattern::laguerre_gaussian_phase(
+            &geometry,
+            rust_target,
+            Vector3::z_axis(),
+            option,
+            lambda,
+            &mut expected_p,
+        );
+        autd3_rs_pattern::laguerre_gaussian_intensity(
+            &geometry,
+            rust_target,
+            Vector3::z_axis(),
+            option,
+            lambda,
+            &mut expected_i,
+        );
+
+        let mut dst_p = vec![0u8; Autd3::NUM_TRANSDUCERS];
+        let mut dst_i = vec![0u8; Autd3::NUM_TRANSDUCERS];
         let result = unsafe {
             autd3_pattern_laguerre_gaussian_phase_device(
                 &raw const geometry,
@@ -1441,7 +1592,7 @@ mod tests {
                 2,
                 10.0,
                 8.5,
-                dst.as_mut_ptr(),
+                dst_p.as_mut_ptr(),
             )
         };
         assert_eq!(result, 0);
@@ -1455,29 +1606,13 @@ mod tests {
                 2,
                 10.0,
                 8.5,
-                dst.as_mut_ptr(),
+                dst_i.as_mut_ptr(),
             )
         };
         assert_eq!(result, 0);
-        let mut expected_device = vec![Emission::NULL; Autd3::NUM_TRANSDUCERS];
-        autd3_rs_pattern::laguerre_gaussian_phase_device(
-            &geometry[1],
-            rust_target,
-            Vector3::z_axis(),
-            option,
-            lambda,
-            &mut expected_device,
-        );
-        autd3_rs_pattern::laguerre_gaussian_intensity_device(
-            &geometry[1],
-            rust_target,
-            Vector3::z_axis(),
-            option,
-            lambda,
-            &mut expected_device,
-        );
-        for (tr, (e, x)) in dst.iter().zip(&expected_device).enumerate() {
-            assert_eq!((e.phase, e.intensity), (x.phase.0, x.intensity.0));
+        for (tr, (&p, &i)) in dst_p.iter().zip(&dst_i).enumerate() {
+            assert_eq!(p, expected_p[1][tr].0);
+            assert_eq!(i, expected_i[1][tr].0);
             let position = geometry[1].position(tr);
             let pos = [position.x, position.y, position.z];
             let mut phase = 0u8;
@@ -1494,7 +1629,7 @@ mod tests {
                 )
             };
             assert_eq!(result, 0);
-            assert_eq!(phase, e.phase);
+            assert_eq!(phase, p);
         }
     }
 
@@ -1513,7 +1648,8 @@ mod tests {
         let rust_target = Point3::new(86.0, 66.0, 150.0);
         let rust_x_dir = UnitVector3::new_normalize(Vector3::new(1.0, 1.0, 0.0));
 
-        let mut buffer = filled(&geometry, 0x00);
+        let mut phase_buffer = phases(&geometry, 0);
+        let mut intensity_buffer = intensities(&geometry, 0);
         let result = unsafe {
             autd3_pattern_hermite_gaussian_phase(
                 &raw const geometry,
@@ -1524,7 +1660,7 @@ mod tests {
                 2,
                 10.0,
                 8.5,
-                &raw mut buffer,
+                &raw mut phase_buffer,
             )
         };
         assert_eq!(result, 0);
@@ -1538,12 +1674,13 @@ mod tests {
                 2,
                 10.0,
                 8.5,
-                &raw mut buffer,
+                &raw mut intensity_buffer,
             )
         };
         assert_eq!(result, 0);
 
-        let mut expected = geometry.pattern_buffer();
+        let mut expected_p = geometry.phase_buffer();
+        let mut expected_i = geometry.intensity_buffer();
         autd3_rs_pattern::hermite_gaussian_phase(
             &geometry,
             rust_target,
@@ -1551,7 +1688,7 @@ mod tests {
             rust_x_dir,
             option,
             lambda,
-            &mut expected,
+            &mut expected_p,
         );
         autd3_rs_pattern::hermite_gaussian_intensity(
             &geometry,
@@ -1560,9 +1697,10 @@ mod tests {
             rust_x_dir,
             option,
             lambda,
-            &mut expected,
+            &mut expected_i,
         );
-        assert_eq!(buffer.0, expected);
+        assert_eq!(phase_buffer.0, expected_p);
+        assert_eq!(intensity_buffer.0, expected_i);
     }
 
     #[test]
@@ -1580,12 +1718,29 @@ mod tests {
         let rust_target = Point3::new(86.0, 66.0, 150.0);
         let rust_x_dir = UnitVector3::new_normalize(Vector3::new(1.0, 1.0, 0.0));
 
-        let mut dst: Vec<Autd3Emission> = (0..Autd3::NUM_TRANSDUCERS)
-            .map(|_| Autd3Emission {
-                phase: 0,
-                intensity: 0,
-            })
-            .collect();
+        let mut expected_p = geometry.phase_buffer();
+        let mut expected_i = geometry.intensity_buffer();
+        autd3_rs_pattern::hermite_gaussian_phase(
+            &geometry,
+            rust_target,
+            Vector3::z_axis(),
+            rust_x_dir,
+            option,
+            lambda,
+            &mut expected_p,
+        );
+        autd3_rs_pattern::hermite_gaussian_intensity(
+            &geometry,
+            rust_target,
+            Vector3::z_axis(),
+            rust_x_dir,
+            option,
+            lambda,
+            &mut expected_i,
+        );
+
+        let mut dst_p = vec![0u8; Autd3::NUM_TRANSDUCERS];
+        let mut dst_i = vec![0u8; Autd3::NUM_TRANSDUCERS];
         let result = unsafe {
             autd3_pattern_hermite_gaussian_phase_device(
                 &raw const geometry,
@@ -1597,7 +1752,7 @@ mod tests {
                 2,
                 10.0,
                 8.5,
-                dst.as_mut_ptr(),
+                dst_p.as_mut_ptr(),
             )
         };
         assert_eq!(result, 0);
@@ -1612,31 +1767,13 @@ mod tests {
                 2,
                 10.0,
                 8.5,
-                dst.as_mut_ptr(),
+                dst_i.as_mut_ptr(),
             )
         };
         assert_eq!(result, 0);
-        let mut expected_device = vec![Emission::NULL; Autd3::NUM_TRANSDUCERS];
-        autd3_rs_pattern::hermite_gaussian_phase_device(
-            &geometry[1],
-            rust_target,
-            Vector3::z_axis(),
-            rust_x_dir,
-            option,
-            lambda,
-            &mut expected_device,
-        );
-        autd3_rs_pattern::hermite_gaussian_intensity_device(
-            &geometry[1],
-            rust_target,
-            Vector3::z_axis(),
-            rust_x_dir,
-            option,
-            lambda,
-            &mut expected_device,
-        );
-        for (tr, (e, x)) in dst.iter().zip(&expected_device).enumerate() {
-            assert_eq!((e.phase, e.intensity), (x.phase.0, x.intensity.0));
+        for (tr, (&p, &i)) in dst_p.iter().zip(&dst_i).enumerate() {
+            assert_eq!(p, expected_p[1][tr].0);
+            assert_eq!(i, expected_i[1][tr].0);
             let position = geometry[1].position(tr);
             let pos = [position.x, position.y, position.z];
             let mut phase = 0u8;
@@ -1654,7 +1791,7 @@ mod tests {
                 )
             };
             assert_eq!(result, 0);
-            assert_eq!(phase, e.phase);
+            assert_eq!(phase, p);
         }
     }
 
@@ -1665,8 +1802,8 @@ mod tests {
         let axis = [0.0_f32, 0.0, 1.0];
         let x_dir = [1.0_f32, 0.0, 0.0];
         for waist_mm in [0.0_f32, -1.0, f32::NAN, f32::INFINITY] {
-            let mut buffer = filled(&geometry, 0x5A);
-            let original = buffer.0.clone();
+            let mut phase_buffer = phases(&geometry, 0x5A);
+            let mut intensity_buffer = intensities(&geometry, 0x5A);
             let lg = unsafe {
                 autd3_pattern_laguerre_gaussian_intensity(
                     &raw const geometry,
@@ -1676,7 +1813,7 @@ mod tests {
                     1,
                     waist_mm,
                     8.5,
-                    &raw mut buffer,
+                    &raw mut intensity_buffer,
                 )
             };
             let hg = unsafe {
@@ -1689,11 +1826,18 @@ mod tests {
                     0,
                     waist_mm,
                     8.5,
-                    &raw mut buffer,
+                    &raw mut phase_buffer,
                 )
             };
             assert_eq!((lg, hg), (-1, -1));
-            assert_eq!(buffer.0, original);
+            assert!(phase_buffer.0.iter().flatten().all(|&p| p == Phase(0x5A)));
+            assert!(
+                intensity_buffer
+                    .0
+                    .iter()
+                    .flatten()
+                    .all(|&i| i == Intensity(0x5A))
+            );
 
             let mut phase = 0u8;
             let result = unsafe {
@@ -1711,7 +1855,7 @@ mod tests {
             assert_eq!(result, -1);
         }
 
-        let mut short = PatternBuffer(vec![vec![Emission::NULL; Autd3::NUM_TRANSDUCERS]]);
+        let mut short = Buffer(vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]]);
         let result = unsafe {
             autd3_pattern_laguerre_gaussian_phase(
                 &raw const geometry,

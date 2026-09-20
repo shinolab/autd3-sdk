@@ -6,11 +6,11 @@ use rand::seq::SliceRandom;
 
 use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::{Device, Geometry};
-use autd3_rs_core::value::{Emission, Intensity, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::amp::Amplitude;
 use crate::amplitude_target::AmplitudeTarget;
-use crate::constraint::EmissionConstraint;
+use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::mask::TransducerMask;
@@ -24,7 +24,7 @@ pub fn abs_objective_func(c: Complex<f32>, a: Amplitude) -> f32 {
 #[derive(Debug, Clone, Copy)]
 pub struct GreedyOption<'a> {
     pub phase_quantization_levels: NonZeroU8,
-    pub constraint: EmissionConstraint,
+    pub constraint: IntensityConstraint,
     pub directivity: Directivity,
     pub objective_func: fn(Complex<f32>, Amplitude) -> f32,
     pub mask: TransducerMask<'a>,
@@ -34,7 +34,7 @@ impl Default for GreedyOption<'_> {
     fn default() -> Self {
         Self {
             phase_quantization_levels: NonZeroU8::new(16).unwrap(),
-            constraint: EmissionConstraint::Uniform(Intensity::MAX),
+            constraint: IntensityConstraint::Uniform(Intensity::MAX),
             directivity: Directivity::Sphere,
             objective_func: abs_objective_func,
             mask: TransducerMask::AllEnabled,
@@ -48,12 +48,14 @@ pub fn greedy(
     foci: &[AmplitudeTarget],
     wavelength: Length,
     option: &GreedyOption<'_>,
-    dst: &mut [Vec<Emission>],
+    phases: &mut [Vec<Phase>],
+    intensities: &mut [Vec<Intensity>],
 ) -> Result<(), HoloError> {
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
-    crate::mask::validate_dst_len(dst.len(), geometry)?;
+    crate::mask::validate_dst_len(phases.len(), geometry)?;
+    crate::mask::validate_dst_len(intensities.len(), geometry)?;
     let mask = option.mask;
     mask.validate(geometry)?;
 
@@ -77,8 +79,11 @@ pub fn greedy(
         .collect();
     indices.shuffle(&mut rand::rng());
 
-    for slot in dst.iter_mut() {
-        slot.fill(Emission::NULL);
+    for slot in phases.iter_mut() {
+        slot.fill(Phase::ZERO);
+    }
+    for slot in intensities.iter_mut() {
+        slot.fill(Intensity::MIN);
     }
 
     let intensity = option.constraint.convert(1.0, 1.0);
@@ -115,10 +120,8 @@ pub fn greedy(
             *c += trans * best_phase;
         }
 
-        dst[d][t] = Emission {
-            phase: Phase::from(best_phase),
-            intensity,
-        };
+        phases[d][t] = Phase::from(best_phase);
+        intensities[d][t] = intensity;
     }
 
     Ok(())
@@ -143,21 +146,22 @@ mod tests {
         }]
     }
 
-    fn buffer(geometry: &Geometry) -> Vec<Vec<Emission>> {
-        vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()]
+    fn buffer(geometry: &Geometry) -> (Vec<Vec<Phase>>, Vec<Vec<Intensity>>) {
+        (geometry.phase_buffer(), geometry.intensity_buffer())
     }
 
     #[test]
     fn empty_foci_is_error() {
         let geometry = Geometry::new(vec![Autd3::default()]);
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
         assert_eq!(
             greedy(
                 &geometry,
                 &[],
                 wavelength(),
                 &GreedyOption::default(),
-                &mut dst
+                &mut phases,
+                &mut intensities
             ),
             Err(HoloError::NoFoci)
         );
@@ -166,7 +170,7 @@ mod tests {
     #[test]
     fn a_mask_that_does_not_match_the_geometry_is_an_error_not_a_panic() {
         let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
 
         let one_device = vec![vec![true; Autd3::NUM_TRANSDUCERS]];
         let option = GreedyOption {
@@ -174,7 +178,14 @@ mod tests {
             ..GreedyOption::default()
         };
         assert_eq!(
-            greedy(&geometry, &single_focus(), wavelength(), &option, &mut dst),
+            greedy(
+                &geometry,
+                &single_focus(),
+                wavelength(),
+                &option,
+                &mut phases,
+                &mut intensities
+            ),
             Err(HoloError::MaskDeviceCountMismatch {
                 got: 1,
                 expected: 2
@@ -187,7 +198,14 @@ mod tests {
             ..GreedyOption::default()
         };
         assert_eq!(
-            greedy(&geometry, &single_focus(), wavelength(), &option, &mut dst),
+            greedy(
+                &geometry,
+                &single_focus(),
+                wavelength(),
+                &option,
+                &mut phases,
+                &mut intensities
+            ),
             Err(HoloError::MaskTransducerCountMismatch {
                 device: 1,
                 got: 3,
@@ -199,14 +217,16 @@ mod tests {
     #[test]
     fn a_dst_that_does_not_match_the_geometry_is_an_error_not_a_panic() {
         let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
-        let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]];
+        let mut phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
+        let mut intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]];
         assert_eq!(
             greedy(
                 &geometry,
                 &single_focus(),
                 wavelength(),
                 &GreedyOption::default(),
-                &mut dst
+                &mut phases,
+                &mut intensities
             ),
             Err(HoloError::DstDeviceCountMismatch {
                 got: 1,
@@ -218,17 +238,18 @@ mod tests {
     #[test]
     fn uniform_default_sets_all_max_and_focuses() {
         let geometry = Geometry::new(vec![Autd3::default()]);
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
         greedy(
             &geometry,
             &single_focus(),
             wavelength(),
             &GreedyOption::default(),
-            &mut dst,
+            &mut phases,
+            &mut intensities,
         )
         .unwrap();
-        assert_eq!(dst.len(), 1);
-        assert!(dst[0].iter().all(|e| e.intensity == Intensity::MAX));
-        assert!(dst[0].iter().any(|e| e.phase != dst[0][0].phase));
+        assert_eq!(phases.len(), 1);
+        assert!(intensities[0].iter().all(|&i| i == Intensity::MAX));
+        assert!(phases[0].iter().any(|&p| p != phases[0][0]));
     }
 }

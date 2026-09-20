@@ -7,13 +7,13 @@ fn main() {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
 
     focus(
         &geometry,
         geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),
         wavelength(340.0 * m / s),
-        &mut dst,
+        &mut phases,
     );
     // HIDE
 }

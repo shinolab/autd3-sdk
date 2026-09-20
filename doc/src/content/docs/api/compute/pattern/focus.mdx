@@ -29,7 +29,7 @@ import { excerpt } from "@lib/excerpt";
 | `geometry`   | `&Geometry`     | デバイス配置                               |
 | `target`     | `Point3<f32>`   | 焦点座標 [mm]                              |
 | `wavelength` | `Length`        | 波長                                       |
-| `dst`        | `&mut [[Emission; _]]` | 出力バッファ                        |
+| `dst`        | `&mut [Vec<Phase>]` | 出力バッファ                        |
 
 ## Example
 

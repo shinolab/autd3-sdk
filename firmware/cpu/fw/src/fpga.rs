@@ -117,13 +117,62 @@ pub fn write_ram<P: Port>(
     offset: u32,
     src: &[u8],
 ) {
-    if src.is_empty() {
+    write_words(
+        port,
+        select,
+        wr_bank_reg,
+        wr_page_reg,
+        bank,
+        offset,
+        src.len().div_ceil(2),
+        |i| {
+            let lo = u16::from(src[2 * i]);
+            let hi = src.get(2 * i + 1).copied().map_or(0, u16::from);
+            lo | (hi << 8)
+        },
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn write_ram_interleaved<P: Port>(
+    port: &mut P,
+    select: u8,
+    wr_bank_reg: u16,
+    wr_page_reg: u16,
+    bank: u8,
+    offset: u32,
+    lo: &[u8; NUM_TRANSDUCERS],
+    hi: &[u8; NUM_TRANSDUCERS],
+) {
+    write_words(
+        port,
+        select,
+        wr_bank_reg,
+        wr_page_reg,
+        bank,
+        offset,
+        NUM_TRANSDUCERS,
+        |i| u16::from(lo[i]) | (u16::from(hi[i]) << 8),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_words<P: Port>(
+    port: &mut P,
+    select: u8,
+    wr_bank_reg: u16,
+    wr_page_reg: u16,
+    bank: u8,
+    offset: u32,
+    n_words: usize,
+    word: impl Fn(usize) -> u16,
+) {
+    if n_words == 0 {
         return;
     }
     write_switch(port, wr_bank_reg, u16::from(bank));
     let mut page = offset / FPGA_PAGE_WORDS;
     write_switch(port, wr_page_reg, page as u16);
-    let n_words = src.len().div_ceil(2);
     for i in 0..n_words {
         let word_idx = offset + i as u32;
         let p = word_idx / FPGA_PAGE_WORDS;
@@ -131,18 +180,7 @@ pub fn write_ram<P: Port>(
             page = p;
             write_switch(port, wr_page_reg, page as u16);
         }
-        let lo = u16::from(src[2 * i]);
-        let hi = if 2 * i + 1 < src.len() {
-            u16::from(src[2 * i + 1])
-        } else {
-            0
-        };
-        write(
-            port,
-            select,
-            (word_idx % FPGA_PAGE_WORDS) as u16,
-            lo | (hi << 8),
-        );
+        write(port, select, (word_idx % FPGA_PAGE_WORDS) as u16, word(i));
     }
 }
 

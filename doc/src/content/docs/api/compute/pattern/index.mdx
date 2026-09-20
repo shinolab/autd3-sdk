@@ -25,9 +25,6 @@ import Install from "@components/Install.astro";
 `focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分の位相を返す `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
 いずれも Rust と C# にあり, Python にはない.
 
-パターン関数は位相だけを書き込み, 振幅は変更されない.
-`pattern_buffer` で確保したバッファの初期値は位相 0・最大振幅であり, 振幅を変えるときは `set_intensity` を使う.
-
 ## 波長
 
 位相計算には波長 <Math tex="\lambda = c / f" /> が必要になる.

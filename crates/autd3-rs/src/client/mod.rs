@@ -31,7 +31,7 @@ use crate::link::{DcClock, IntoLink, Link, LinkStats};
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, DeviceErrorCode};
 use crate::telemetry::Telemetry;
-use crate::value::{DcSysTime, Emission};
+use crate::value::{DcSysTime, Intensity};
 
 use completion::{CompletionPool, Reply};
 use pool::SlotPool;
@@ -299,12 +299,16 @@ impl Client {
 
     pub async fn stop(&self) -> Result<(), Error> {
         tracing::debug!("sending stop");
-        let buf: Vec<Vec<Emission>> = self
+        let phases = self.geometry.phase_buffer();
+        let intensities: Vec<Vec<Intensity>> = self
             .geometry
             .iter()
-            .map(|d| vec![Emission::NULL; d.num_transducers()])
+            .map(|d| vec![Intensity::MIN; d.num_transducers()])
             .collect();
-        let datagrams = self.datagram_builder().push(Pattern::new(&buf)).build()?;
+        let datagrams = self
+            .datagram_builder()
+            .push(Pattern::new(&phases, &intensities))
+            .build()?;
         for frame in &datagrams {
             self.send_checked(frame).await?;
         }

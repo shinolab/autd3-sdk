@@ -221,12 +221,13 @@ fn slave_cycle(
             }
         }
         Cmd::WritePatternFused => {
-            let start = PATTERN_FUSED_HEADER_BYTES;
-            let end = start + Autd3::NUM_TRANSDUCERS * 2;
+            let start = PATTERN_FUSED_HEADER_BYTES + Autd3::NUM_TRANSDUCERS;
+            let end = start + Autd3::NUM_TRANSDUCERS;
             slave.muted = parsed.payload[start..end].iter().all(|&b| b == 0);
             0
         }
-        Cmd::WritePatternBuffer
+        Cmd::WritePatternRaw
+        | Cmd::WriteFociBuffer
         | Cmd::WritePatternCompressed
         | Cmd::WriteModulationBuffer
         | Cmd::WriteModulationFused

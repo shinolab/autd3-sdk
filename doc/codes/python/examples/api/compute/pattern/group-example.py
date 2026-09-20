@@ -5,7 +5,8 @@ import numpy as np
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 from autd3_pattern import (
-    PatternBuffer,
+    IntensityBuffer,
+    PhaseBuffer,
     TransducerGroups,
     TransducerMask,
     focus,
@@ -35,12 +36,13 @@ foci = [
 ]
 
 
-def compute(side: Side, mask: TransducerMask, buffer: PatternBuffer) -> None:
+def compute(side: Side, mask: TransducerMask, phases: PhaseBuffer, intensities: IntensityBuffer) -> None:
     if side is Side.LEFT:
-        gspat(geometry, foci, wl, GspatOption(mask=mask), buffer)
+        gspat(geometry, foci, wl, GspatOption(mask=mask), phases, intensities)
     else:
-        focus(geometry, center + np.array([40.0, 0.0, 150.0]), wl, buffer)
+        focus(geometry, center + np.array([40.0, 0.0, 150.0]), wl, phases)
 
 
-dst = geometry.pattern_buffer()
-group_compute(geometry, groups, compute, dst)
+phases = geometry.phase_buffer()
+intensities = geometry.intensity_buffer()
+group_compute(geometry, groups, compute, phases, intensities)

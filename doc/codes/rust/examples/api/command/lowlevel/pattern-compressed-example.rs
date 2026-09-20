@@ -19,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
     let patterns = [-30.0f32, -10.0, 10.0, 30.0]
         .iter()
         .map(|&x| {
-            let mut buffer = geometry.pattern_buffer();
+            let mut buffer = geometry.phase_buffer();
             focus(
                 &geometry,
                 geometry.center() + offset(x * mm, 0.0 * mm, 150.0 * mm),

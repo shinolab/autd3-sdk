@@ -16,13 +16,16 @@ async fn main() -> Result<()> {
 
     let bank = PatternBank::B0;
     let index = 0;
-    let _emissions = geometry.pattern_buffer();
-    let emissions = &_emissions;
+    let _phases = geometry.phase_buffer();
+    let _intensities = geometry.intensity_buffer();
+    let phases = &_phases;
+    let intensities = &_intensities;
     // ANCHOR: write
     WritePatternBuffer {
         bank,
         index,
-        emissions,
+        phases,
+        intensities,
     };
     // ANCHOR_END: write
     let config = SamplingConfig::FREQ_4K;
@@ -44,10 +47,10 @@ async fn main() -> Result<()> {
     };
     // ANCHOR_END: change
 
-    let p0 = geometry.pattern_buffer();
-    let p1 = geometry.pattern_buffer();
-    let p2 = geometry.pattern_buffer();
-    let p3 = geometry.pattern_buffer();
+    let p0 = geometry.phase_buffer();
+    let p1 = geometry.phase_buffer();
+    let p2 = geometry.phase_buffer();
+    let p3 = geometry.phase_buffer();
     let patterns = [Some(&p0[..]), Some(&p1[..]), Some(&p2[..]), Some(&p3[..])];
     let index = 0;
     let format = PatternCompression::PhaseHalf;

@@ -9,9 +9,9 @@ fn main() {
     let direction = Vector3::z_axis();
     let theta = 18.0 * deg;
     let wavelength = wavelength(340.0 * m / s);
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
 
     // ANCHOR: api
-    bessel(&geometry, apex, direction, theta, wavelength, &mut dst);
+    bessel(&geometry, apex, direction, theta, wavelength, &mut phases);
     // ANCHOR_END: api
 }

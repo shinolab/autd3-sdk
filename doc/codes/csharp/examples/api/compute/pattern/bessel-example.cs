@@ -12,7 +12,7 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-var dst = geometry.PatternBuffer();
+var phases = geometry.PhaseBuffer();
 
 Pattern.Bessel(
     geometry,
@@ -20,7 +20,7 @@ Pattern.Bessel(
     Vector3.UnitZ,
     18.0f * deg,
     Pattern.Wavelength(340.0f * m / s),
-    dst
+    phases
 );
         // HIDE
     }
