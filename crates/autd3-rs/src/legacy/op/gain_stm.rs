@@ -1,9 +1,10 @@
 use autd3_rs_core::geometry::Device;
-use autd3_rs_core::value::{Intensity, LoopBehavior, Phase, SamplingConfig};
+use autd3_rs_core::value::{LoopBehavior, Phase, SamplingConfig};
 use zerocopy::{Immutable, IntoBytes};
 
 use super::LegacyOperation;
 use super::gain::{slot_for, write_emissions};
+use crate::commands::StmIntensity;
 use crate::legacy::error::{LegacyError, PayloadError};
 use crate::legacy::wire::params::{
     GAIN_STM_BUF_SIZE_MAX, GAIN_STM_FLAG_BEGIN, GAIN_STM_FLAG_END, GAIN_STM_FLAG_SEGMENT,
@@ -52,7 +53,7 @@ impl Default for GainStmOption {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GainStm<'a> {
     phases: &'a [Vec<Vec<Phase>>],
-    intensities: &'a [Vec<Vec<Intensity>>],
+    intensities: StmIntensity<'a>,
     config: SamplingConfig,
     option: GainStmOption,
     sent: usize,
@@ -63,12 +64,12 @@ impl<'a> GainStm<'a> {
     pub fn new(
         config: impl Into<SamplingConfig>,
         phases: &'a [Vec<Vec<Phase>>],
-        intensities: &'a [Vec<Vec<Intensity>>],
+        intensities: impl Into<StmIntensity<'a>>,
         option: GainStmOption,
     ) -> Self {
         Self {
             phases,
-            intensities,
+            intensities: intensities.into(),
             config: config.into(),
             option,
             sent: 0,
@@ -101,10 +102,12 @@ impl LegacyOperation for GainStm<'_> {
 
     fn pack(&mut self, device: &Device, tx: &mut [u8]) -> Result<usize, LegacyError> {
         let size = self.phases.len();
-        if self.intensities.len() != size {
+        if let StmIntensity::PerIndex(intensities) = self.intensities
+            && intensities.len() != size
+        {
             return Err(PayloadError::GainStmLengthMismatch {
                 phases: size,
-                intensities: self.intensities.len(),
+                intensities: intensities.len(),
             }
             .into());
         }
@@ -133,8 +136,7 @@ impl LegacyOperation for GainStm<'_> {
             let phases = slot_for(&self.phases[self.sent + slot], device)?;
             match self.option.mode {
                 GainStmMode::PhaseIntensityFull => {
-                    let intensities = slot_for(&self.intensities[self.sent + slot], device)?;
-                    write_emissions(words, phases, intensities);
+                    write_emissions(words, phases, self.intensities.at(self.sent + slot), device)?;
                 }
                 GainStmMode::PhaseFull => write_phase_bytes(words, phases, slot),
                 GainStmMode::PhaseHalf => write_phase_nibbles(words, phases, slot),
@@ -194,6 +196,7 @@ mod tests {
     use crate::legacy::op::test_frames;
     use crate::legacy::wire::PAYLOAD_BYTES;
     use autd3_rs_core::geometry::{Autd3, Geometry};
+    use autd3_rs_core::value::Intensity;
 
     fn geometry(n: usize) -> Geometry {
         Geometry::new((0..n).map(|_| Autd3::default()).collect())

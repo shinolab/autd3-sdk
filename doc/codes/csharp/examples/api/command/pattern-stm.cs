@@ -17,7 +17,7 @@ internal static class Sample
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var wavelength = Pattern.Wavelength(340.0f * m / s);
         var patterns = new PhaseBuffer[NumPoints];
-        var intensities = new IntensityBuffer[NumPoints];
+        var intensities = Intensity.Max;
         for (var i = 0; i < NumPoints; i++)
         {
             var theta = 2.0f * MathF.PI * i / NumPoints;
@@ -25,7 +25,6 @@ internal static class Sample
             var buffer = geometry.PhaseBuffer();
             Pattern.Focus(geometry, target, wavelength, buffer);
             patterns[i] = buffer;
-            intensities[i] = geometry.IntensityBuffer();
         }
         var freq = 1.0f * Hz;
         var bank = PatternBank.B0;
@@ -53,7 +52,7 @@ internal static class Sample
                 bank: option.Bank,
                 index: (ushort)index,
                 phases: patterns[index],
-                intensities: intensities[index]
+                intensities: intensities
             );
         }
         new ConfigPattern(

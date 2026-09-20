@@ -20,8 +20,10 @@ import csModulation from "@codes/csharp/examples/guide/custom-modulation.cs?raw"
 
 ## 任意のPattern
 
-パターンは, デバイスごとに `Vec<Phase>` を並べた位相バッファと `Vec<Intensity>` を並べた振幅バッファの組である.
-`Geometry::phase_buffer` / `Geometry::intensity_buffer` で全デバイス分のバッファを確保し, 各振動子の位相と振幅を自由に設定できる.
+パターンは, デバイスごとに `Vec<Phase>` を並べた位相バッファと振幅の組である.
+`Geometry::phase_buffer` で全デバイス分の位相バッファを確保し, 各振動子の位相を自由に設定できる.
+振幅は全素子同一なら `Intensity` をそのまま渡し, 素子ごとに変えたいときだけ
+`Geometry::intensity_buffer` でバッファを確保する.
 
 以下は, [`focus`](/autd3-sdk/api/compute/pattern/focus/) と同じ単一焦点を, ヘルパを使わず手動で計算する例である.
 各振動子から焦点までの距離に応じた位相を与えている.

@@ -45,7 +45,7 @@ To write to another bank, use `new Pattern(bank, phases, intensities)`.
 | ----------------- | -------------------------------- | --------------------------- | -------------------------------- |
 | `bank`            | `PatternBank`                    | `PatternBank::B0`           | Bank to write to / play back     |
 | `phases`          | `&[Vec<Phase>]`     | —                           | Phases per device                |
-| `intensities`     | `&[Vec<Intensity>]` | —                           | Intensities per device           |
+| `intensities`     | `PatternIntensity`  | —                           | Intensity (a uniform `Intensity`, or a per-device `&[Vec<Intensity>]` buffer) |
 | `transition_mode` | `TransitionMode`                 | `TransitionMode::Immediate` | Behavior when switching the bank |
 
 Several [helper functions](/autd3-sdk/en/api/compute/pattern/) are provided for computing patterns.

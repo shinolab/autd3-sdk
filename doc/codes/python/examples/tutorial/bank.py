@@ -20,7 +20,6 @@ async def main() -> None:
     ) as client:
         wavelength = pattern.wavelength(340 * m / s)
 
-        intensities = geometry.intensity_buffer()
 
         # ANCHOR: switch
         # Write focus A to bank B0 and play it.
@@ -33,7 +32,7 @@ async def main() -> None:
             pat_a,
         )
         builder = client.datagram_builder()
-        builder.push(Pattern(pat_a, intensities, bank=PatternBank.B0))
+        builder.push(Pattern(pat_a, Intensity.MAX, bank=PatternBank.B0))
         for frame in builder.build():
             await client.send_checked(frame)
 
@@ -48,7 +47,7 @@ async def main() -> None:
             pat_b,
         )
         builder = client.datagram_builder()
-        builder.push(Pattern(pat_b, intensities, bank=PatternBank.B1))
+        builder.push(Pattern(pat_b, Intensity.MAX, bank=PatternBank.B1))
         for frame in builder.build():
             await client.send_checked(frame)
         # ANCHOR_END: switch

@@ -5,7 +5,7 @@ import numpy as np
 from autd3.commands import ChangePatternBank, ConfigPattern, PatternStm, PatternStmMode, PatternStmOption, StmConfig, WritePatternBuffer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
-from autd3.value import LoopBehavior, PatternBank, TransitionMode
+from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
 from autd3_pattern import focus, wavelength
 
 NUM_POINTS = 200
@@ -28,7 +28,7 @@ for i in range(NUM_POINTS):
         buffer,
     )
     patterns.append(buffer)
-intensities = [geometry.intensity_buffer() for _ in patterns]
+intensities = Intensity.MAX
 freq = 1.0 * Hz
 bank = PatternBank.B0
 mode = PatternStmMode.PhaseIntensityFull
@@ -49,12 +49,12 @@ PatternStm(freq, patterns, intensities, option)
 # ANCHOR_END: api
 
 # ANCHOR: equivalent
-for index, (phases, amps) in enumerate(zip(patterns, intensities)):
+for index, phases in enumerate(patterns):
     WritePatternBuffer(
         bank=option.bank,
         index=index,
         phases=phases,
-        intensities=amps,
+        intensities=intensities,
     )
 ConfigPattern(
     bank=option.bank,

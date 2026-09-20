@@ -16,7 +16,6 @@ internal static class Sample
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
-        var intensities = geometry.IntensityBuffer();
 
         // ANCHOR: switch
         // Write focus A to bank B0 and play it.
@@ -29,7 +28,7 @@ internal static class Sample
             patA
         );
         var builder = client.DatagramBuilder();
-        builder.Push(new Pattern(PatternBank.B0, patA, intensities));
+        builder.Push(new Pattern(PatternBank.B0, patA, Intensity.Max));
         foreach (var frame in builder.Build())
         {
             await client.SendCheckedAsync(frame);
@@ -46,7 +45,7 @@ internal static class Sample
             patB
         );
         var builder2 = client.DatagramBuilder();
-        builder2.Push(new Pattern(PatternBank.B1, patB, intensities));
+        builder2.Push(new Pattern(PatternBank.B1, patB, Intensity.Max));
         foreach (var frame in builder2.Build())
         {
             await client.SendCheckedAsync(frame);

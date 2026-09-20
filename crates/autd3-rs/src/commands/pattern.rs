@@ -1,20 +1,22 @@
 use super::Command;
-use crate::commands::operation::{ConfigPattern, WritePatternBuffer, WritePatternFused};
+use crate::commands::operation::{
+    ConfigPattern, PatternIntensity, WritePatternBuffer, WritePatternFused,
+};
 use crate::datagram::DatagramBuilder;
-use crate::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode};
+use crate::value::{LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode};
 use core::num::NonZeroU16;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Pattern<'a> {
     pub bank: PatternBank,
     pub phases: &'a [Vec<Phase>],
-    pub intensities: &'a [Vec<Intensity>],
+    pub intensities: PatternIntensity<'a>,
     pub transition_mode: TransitionMode,
 }
 
 impl<'a> Pattern<'a> {
     #[must_use]
-    pub fn new(phases: &'a [Vec<Phase>], intensities: &'a [Vec<Intensity>]) -> Self {
+    pub fn new(phases: &'a [Vec<Phase>], intensities: impl Into<PatternIntensity<'a>>) -> Self {
         Self::with_bank(PatternBank::B0, phases, intensities)
     }
 
@@ -22,12 +24,12 @@ impl<'a> Pattern<'a> {
     pub fn with_bank(
         bank: PatternBank,
         phases: &'a [Vec<Phase>],
-        intensities: &'a [Vec<Intensity>],
+        intensities: impl Into<PatternIntensity<'a>>,
     ) -> Self {
         Self {
             bank,
             phases,
-            intensities,
+            intensities: intensities.into(),
             transition_mode: TransitionMode::Immediate,
         }
     }
@@ -37,12 +39,12 @@ impl<'a> Command<'a> for Pattern<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
         if self.transition_mode.is_later() {
             builder
-                .push(WritePatternBuffer {
-                    bank: self.bank,
-                    index: 0,
-                    phases: self.phases,
-                    intensities: self.intensities,
-                })
+                .push(WritePatternBuffer::new(
+                    self.bank,
+                    0,
+                    self.phases,
+                    self.intensities,
+                ))
                 .push(ConfigPattern {
                     bank: self.bank,
                     config: SamplingConfig::new(NonZeroU16::MAX),
@@ -51,14 +53,14 @@ impl<'a> Command<'a> for Pattern<'a> {
                 });
             return;
         }
-        builder.push(WritePatternFused {
-            bank: self.bank,
-            phases: self.phases,
-            intensities: self.intensities,
-            config: SamplingConfig::new(NonZeroU16::MAX),
-            loop_behavior: LoopBehavior::Infinite,
-            transition_mode: self.transition_mode,
-        });
+        builder.push(WritePatternFused::new(
+            self.bank,
+            self.phases,
+            self.intensities,
+            SamplingConfig::new(NonZeroU16::MAX),
+            LoopBehavior::Infinite,
+            self.transition_mode,
+        ));
     }
 }
 
@@ -69,6 +71,7 @@ mod tests {
     use crate::mirror::FREQ_DIV_NO_LIMIT;
     use crate::protocol::Cmd;
     use crate::test_utils::test_geometry_arc;
+    use crate::value::Intensity;
 
     #[test]
     fn pattern_expands_to_a_single_fused_frame() {

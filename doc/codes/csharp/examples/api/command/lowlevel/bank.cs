@@ -12,13 +12,12 @@ internal static class Sample
         var bank = PatternBank.B0;
         ushort index = 0;
         var phases = geometry.PhaseBuffer();
-        var intensities = geometry.IntensityBuffer();
         // ANCHOR: write
         new WritePatternBuffer(
             bank: bank,
             index: index,
             phases: phases,
-            intensities: intensities
+            intensities: Intensity.Max
         );
         // ANCHOR_END: write
         var config = SamplingConfig.Freq4k;

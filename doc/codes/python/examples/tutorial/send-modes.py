@@ -10,6 +10,7 @@ from autd3 import MAX_INFLIGHT, Client, ClientConfig
 from autd3.commands import Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
+from autd3.value import Intensity
 
 NUM_POINTS = 1000
 RADIUS_MM = 30.0
@@ -53,7 +54,6 @@ async def main() -> None:
 async def stop_and_wait(client, geometry, targets, wavelength) -> None:
     # ANCHOR: stop_and_wait
     phases = geometry.phase_buffer()
-    intensities = geometry.intensity_buffer()
     for target in targets:
         pattern.focus(
             geometry,
@@ -62,7 +62,7 @@ async def stop_and_wait(client, geometry, targets, wavelength) -> None:
             phases,
         )
         builder = client.datagram_builder()
-        builder.push(Pattern(phases, intensities))
+        builder.push(Pattern(phases, Intensity.MAX))
         for frame in builder.build():
             await client.send_checked(frame)
     # ANCHOR_END: stop_and_wait
@@ -71,7 +71,6 @@ async def stop_and_wait(client, geometry, targets, wavelength) -> None:
 async def streaming(client, geometry, targets, wavelength) -> None:
     # ANCHOR: streaming
     phases = geometry.phase_buffer()
-    intensities = geometry.intensity_buffer()
     pending = collections.deque()
     for target in targets:
         pattern.focus(
@@ -81,7 +80,7 @@ async def streaming(client, geometry, targets, wavelength) -> None:
             phases,
         )
         builder = client.datagram_builder()
-        builder.push(Pattern(phases, intensities))
+        builder.push(Pattern(phases, Intensity.MAX))
         for frame in builder.build():
             if len(pending) >= MAX_INFLIGHT:
                 (await pending.popleft()).check()

@@ -25,12 +25,18 @@ Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary P
 | ---------- | ------------------------------------- | --------------------------------------------------- |
 | `freq`     | `impl Into<StmConfig>`                | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
 | `phases`      | `&[Vec<Vec<Phase>>]`     | Phases of each sample (at least 2 samples)                  |
-| `intensities` | `&[Vec<Vec<Intensity>>]` | Intensities of each sample (same count as `phases`)         |
+| `intensities` | `impl Into<StmIntensity>` | Intensities for every sample (a uniform value, one buffer shared by all indices, or one buffer per index) |
 | `option`   | `PatternStmOption`                    | Options such as transfer mode, loop, and transition |
 
 Passing a `Freq` / `Duration` to `freq` represents "the frequency/period for one full cycle over all samples".
 A sampling frequency can also be specified.
 A `Duration` that is not divisible by the number of samples is an error (use `Nearest` to round it).
+
+`intensities` accepts the following three types.
+
+- `Intensity`: to use the same value for every device, every transducer and every index
+- `&[Vec<Intensity>]`: to use values that differ per transducer but are shared by all indices
+- `&[Vec<Vec<Intensity>>]`: to use a different value for every index
 
 ## PatternStmOption
 
@@ -58,7 +64,7 @@ Selects the transfer format of each Pattern. The phase-only and low-resolution f
 ## Equivalent Low-Level Commands
 
 `PatternStm` internally expands into the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/)  (each index) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
-The following is equivalent to `PatternStm::new(freq, &phases, &intensities, option)`.
+The following is equivalent to `PatternStm::new(freq, &phases, intensities, option)`.
 
 When `PatternStmMode` is `PhaseFull` / `PhaseHalf`, [WritePatternCompressed](/autd3-sdk/en/api/command/lowlevel/write-pattern-compressed/) is used instead of `WritePatternBuffer` (`intensities` is then unused and the intensity is fixed at the maximum).
 

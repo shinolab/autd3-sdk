@@ -57,12 +57,7 @@ pub async fn send_pattern_mod(
 pub async fn write_pattern_bank(ctx: &Ctx<'_>, bank: PatternBank, pattern: &Buffers) -> Result<()> {
     let mut builder = ctx.client.datagram_builder();
     builder
-        .push(WritePatternBuffer {
-            bank,
-            index: 0,
-            phases: &pattern.0,
-            intensities: &pattern.1,
-        })
+        .push(WritePatternBuffer::new(bank, 0, &pattern.0, &pattern.1))
         .push(ConfigPattern {
             bank,
             config: SamplingConfig::new(NonZeroU16::MAX),
@@ -266,12 +261,7 @@ pub async fn write_pattern_stm_bank(
     let config = config.into().into_sampling_config(size);
     let mut builder = ctx.client.datagram_builder();
     for (index, (phases, intensities)) in patterns.iter().enumerate() {
-        builder.push(WritePatternBuffer {
-            bank,
-            index,
-            phases,
-            intensities,
-        });
+        builder.push(WritePatternBuffer::new(bank, index, phases, intensities));
     }
     builder.push(ConfigPattern {
         bank,

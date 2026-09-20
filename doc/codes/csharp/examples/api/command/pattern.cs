@@ -13,17 +13,16 @@ internal static class Sample
         var transitionMode = TransitionMode.Immediate;
 
         var phases = geometry.PhaseBuffer();
-        var intensities = geometry.IntensityBuffer();
 
         // ANCHOR: api
-        new Pattern(phases, intensities);
+        new Pattern(phases, Intensity.Max);
 
-        new Pattern(bank, phases, intensities);
+        new Pattern(bank, phases, Intensity.Max);
 
         new Pattern(
             bank: bank,
             phases: phases,
-            intensities: intensities,
+            intensities: Intensity.Max,
             transitionMode: transitionMode
         );
         // ANCHOR_END: api
@@ -33,7 +32,7 @@ internal static class Sample
             bank: bank,
             index: 0,
             phases: phases,
-            intensities: intensities
+            intensities: Intensity.Max
         );
         new ConfigPattern(
             bank: bank,

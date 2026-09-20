@@ -25,9 +25,8 @@ internal static class Sample
                 slot[t] = (Phase)(-dist / wavelength.Mm * 2.0f * MathF.PI * rad);
             }
         }
-        var intensities = geometry.IntensityBuffer();
 
-        new Pattern(phases, intensities);
+        new Pattern(phases, Intensity.Max);
         // ANCHOR_END: api
     }
 }

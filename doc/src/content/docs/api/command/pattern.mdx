@@ -45,7 +45,7 @@ import { excerpt } from "@lib/excerpt";
 | ----------------- | -------------------------------- | --------------------------- | -------------------------------- |
 | `bank`            | `PatternBank`                    | `PatternBank::B0`           | 書き込み先・再生対象のバンク     |
 | `phases`          | `&[Vec<Phase>]`     | —                           | デバイスごとの位相               |
-| `intensities`     | `&[Vec<Intensity>]` | —                           | デバイスごとの振幅               |
+| `intensities`     | `PatternIntensity`  | —                           | 振幅 (`Intensity` の一様値, または `&[Vec<Intensity>]` のデバイスごとのバッファ) |
 | `transition_mode` | `TransitionMode`                 | `TransitionMode::Immediate` | バンク切替時の遷移挙動           |
 
 patternの計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/pattern/)が用意されている.

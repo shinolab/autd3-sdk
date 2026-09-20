@@ -250,7 +250,7 @@ fn push_pending<'a>(
         } => {
             builder.push(Pattern {
                 transition_mode: *transition_mode,
-                ..Pattern::with_bank(*bank, phases, intensities)
+                ..Pattern::with_bank(*bank, phases, intensities.as_ref())
             });
         }
         Pending::Modulation {
@@ -357,7 +357,7 @@ fn push_pending<'a>(
             builder.push(PatternStm::new(
                 *config,
                 phases,
-                intensities,
+                intensities.as_ref(),
                 PatternStmOption {
                     bank: *bank,
                     mode: *mode,

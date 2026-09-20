@@ -114,7 +114,7 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreLegacyBuilder<'a>) -
         } => {
             builder.push(CorePattern {
                 transition_mode: *transition_mode,
-                ..CorePattern::with_bank(*bank, phases, intensities)
+                ..CorePattern::with_bank(*bank, phases, intensities.as_ref())
             });
         }
         Pending::Modulation {
@@ -156,7 +156,7 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreLegacyBuilder<'a>) -
             builder.push(CorePatternStm::new(
                 *config,
                 phases.as_slice(),
-                intensities.as_slice(),
+                intensities.as_ref(),
                 *option,
             ));
         }

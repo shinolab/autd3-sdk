@@ -7,7 +7,7 @@ from autd3 import Client, ClientConfig
 from autd3.commands import PatternStm, PatternStmMode, PatternStmOption, StmConfig
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
-from autd3.value import LoopBehavior, PatternBank, TransitionMode
+from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
 from autd3_link_nop import Nop
 from autd3_pattern import focus, wavelength
 
@@ -29,14 +29,13 @@ async def main() -> None:
                 buffer,
             )
             patterns.append(buffer)
-        intensities = [geometry.intensity_buffer() for _ in patterns]
 
         builder = client.datagram_builder()
         builder.push(
             PatternStm(
                 1.0 * Hz,
                 patterns,
-                intensities,
+                Intensity.MAX,
                 PatternStmOption(
                     bank=PatternBank.B0,
                     mode=PatternStmMode.PhaseIntensityFull,

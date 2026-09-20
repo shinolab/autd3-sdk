@@ -3,7 +3,7 @@ use anyhow::Result;
 use autd3_rs::commands::{Command, Modulation, Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::SamplingConfig;
+use autd3_rs::value::{Intensity, SamplingConfig};
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_nop::Nop;
 use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
@@ -17,7 +17,6 @@ async fn main() -> Result<()> {
     let wavelength = wavelength(340.0 * m / s);
 
     let left_target = geometry.center() + offset(-40.0 * mm, 0.0 * mm, 150.0 * mm);
-    let intensities = geometry.intensity_buffer();
     let mut left = geometry.phase_buffer();
     focus(&geometry, left_target, wavelength, &mut left);
 
@@ -41,9 +40,9 @@ async fn main() -> Result<()> {
     let mut builder = client.datagram_builder();
     builder.push_each(|device| {
         Some(if device.idx() % 2 == 0 {
-            Pattern::new(&left, &intensities)
+            Pattern::new(&left, Intensity::MAX)
         } else {
-            Pattern::new(&right, &intensities)
+            Pattern::new(&right, Intensity::MAX)
         })
     });
     let frames = builder.build()?;
@@ -57,7 +56,7 @@ async fn main() -> Result<()> {
     let mut builder = client.datagram_builder();
     builder.push_each(|device| {
         Some(if device.idx() % 2 == 0 {
-            Pattern::new(&left, &intensities).boxed()
+            Pattern::new(&left, Intensity::MAX).boxed()
         } else {
             Modulation::new(SamplingConfig::FREQ_4K, &modulation).boxed()
         })

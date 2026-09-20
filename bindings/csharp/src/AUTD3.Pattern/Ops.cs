@@ -63,9 +63,9 @@ namespace AUTD3
         private readonly PatternBank _bank;
         private readonly ushort _index;
         private readonly PhaseBuffer _phases;
-        private readonly IntensityBuffer _intensities;
+        private readonly PatternIntensity _intensities;
 
-        public WritePatternBuffer(PatternBank bank, ushort index, PhaseBuffer phases, IntensityBuffer intensities)
+        public WritePatternBuffer(PatternBank bank, ushort index, PhaseBuffer phases, PatternIntensity intensities)
         {
             _bank = bank;
             _index = index;
@@ -73,8 +73,11 @@ namespace AUTD3
             _intensities = intensities;
         }
 
-        IntPtr ICommand.CreateOp() =>
-            NativePattern.autd3_op_write_pattern_buffer((byte)_bank, _index, _phases.Handle, _intensities.Handle);
+        IntPtr ICommand.CreateOp()
+        {
+            using var intensityLease = new HandleLease(_intensities.Buffer?.Handle);
+            return NativePattern.autd3_op_write_pattern_buffer((byte)_bank, _index, _phases.Handle, intensityLease.Pointer, _intensities.Uniform);
+        }
     }
 
     public sealed class ConfigPattern : ICommand

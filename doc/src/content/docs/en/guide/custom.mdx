@@ -20,8 +20,10 @@ By building the buffer directly without going through a helper, arbitrary patter
 
 ## Custom Pattern
 
-A pattern is a pair of a phase buffer, which lays out a `Vec<Phase>` for each device, and an intensity buffer, which lays out a `Vec<Intensity>` for each device.
-`Geometry::phase_buffer` / `Geometry::intensity_buffer` allocate the buffers for all devices, and the phase and intensity of each transducer can be freely set.
+A pattern is a pair of a phase buffer, which lays out a `Vec<Phase>` for each device, and an intensity.
+`Geometry::phase_buffer` allocates the phase buffer for all devices, and the phase of each transducer can be freely set.
+For the intensity, pass an `Intensity` directly when it is the same for every transducer, and allocate a buffer with
+`Geometry::intensity_buffer` only when it has to differ per transducer.
 
 The following is an example of manually computing the same single focal point as [`focus`](/autd3-sdk/en/api/compute/pattern/focus/), without using a helper.
 It gives each transducer a phase according to the distance from the transducer to the focal point.

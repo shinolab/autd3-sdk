@@ -28,7 +28,6 @@ await using var client = await Client.OpenAsync(
 var target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
 var wavelength = Pattern.Wavelength(340.0f * m / s);
 var phases = geometry.PhaseBuffer();
-var intensities = geometry.IntensityBuffer();
 Pattern.Focus(
     geometry,
     target,
@@ -46,7 +45,7 @@ Modulation.Sine(
 
 var builder = client.DatagramBuilder();
 builder.Push(new SetSilencer());
-builder.Push(new Pattern(phases, intensities));
+builder.Push(new Pattern(phases, Intensity.Max));
 builder.Push(new Modulation(SamplingConfig.Freq4k, modulation));
 var frames = builder.Build();
 foreach (var frame in frames)

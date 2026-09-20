@@ -36,7 +36,7 @@ pub use synchronize::Synchronize;
 pub(crate) use write_foci_chunk::WriteFociChunk;
 pub(crate) use write_modulation_chunk::WriteModulationChunk;
 pub(crate) use write_modulation_fused::WriteModulationFused;
-pub use write_pattern_buffer::WritePatternBuffer;
+pub use write_pattern_buffer::{PatternIntensity, WritePatternBuffer};
 pub(crate) use write_pattern_compressed::PATTERN_MAX_PER_FRAME;
 pub use write_pattern_compressed::{PatternCompression, WritePatternCompressed};
 pub(crate) use write_pattern_fused::{WriteFociStmFused, WritePatternFused};

@@ -13,10 +13,10 @@ use autd3_rs::commands::{
     BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
     ConfigModulation, ConfigPattern, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
     FociStm as CoreFociStm, FociStmOption, ForceFan, GpioOut, Modulation, Nop, PWE_TABLE_SIZE,
-    Pattern, PatternCompression, PatternStm, PatternStmMode, PatternStmOption, SetGpioOut,
-    SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig, Synchronize,
-    WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, WritePatternCompressed, circle,
-    line,
+    Pattern, PatternCompression, PatternIntensity, PatternStm, PatternStmMode, PatternStmOption,
+    SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig,
+    StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
+    WritePatternCompressed, circle, line,
 };
 use autd3_rs::rt::Executor;
 use autd3_rs::units::Hz;
@@ -495,10 +495,42 @@ pub unsafe extern "C" fn autd3_client_opener_free(opener: *mut ClientOpener) {
     unsafe { drop_handle(opener) }
 }
 
+pub enum OwnedPatternIntensity {
+    Uniform(Intensity),
+    PerDevice(Vec<Vec<Intensity>>),
+}
+
+impl OwnedPatternIntensity {
+    fn as_ref(&self) -> PatternIntensity<'_> {
+        match self {
+            OwnedPatternIntensity::Uniform(intensity) => PatternIntensity::Uniform(*intensity),
+            OwnedPatternIntensity::PerDevice(intensities) => {
+                PatternIntensity::PerDevice(intensities)
+            }
+        }
+    }
+}
+
+pub enum OwnedStmIntensity {
+    Uniform(Intensity),
+    Shared(Vec<Vec<Intensity>>),
+    PerIndex(Vec<Vec<Vec<Intensity>>>),
+}
+
+impl OwnedStmIntensity {
+    fn as_ref(&self) -> StmIntensity<'_> {
+        match self {
+            OwnedStmIntensity::Uniform(intensity) => StmIntensity::Uniform(*intensity),
+            OwnedStmIntensity::Shared(intensities) => StmIntensity::Shared(intensities),
+            OwnedStmIntensity::PerIndex(intensities) => StmIntensity::PerIndex(intensities),
+        }
+    }
+}
+
 pub enum Pending {
     Pattern {
         phases: Vec<Vec<Phase>>,
-        intensities: Vec<Vec<Intensity>>,
+        intensities: OwnedPatternIntensity,
         bank: PatternBank,
         transition_mode: TransitionMode,
     },
@@ -513,7 +545,7 @@ pub enum Pending {
         bank: PatternBank,
         index: u16,
         phases: Vec<Vec<Phase>>,
-        intensities: Vec<Vec<Intensity>>,
+        intensities: OwnedPatternIntensity,
     },
     WriteFociBuffer {
         bank: PatternBank,
@@ -589,13 +621,47 @@ pub enum Pending {
     PatternStm {
         config: StmConfig,
         phases: Vec<Vec<Vec<Phase>>>,
-        intensities: Vec<Vec<Vec<Intensity>>>,
+        intensities: OwnedStmIntensity,
         bank: PatternBank,
         mode: PatternStmMode,
         loop_behavior: LoopBehavior,
         transition_mode: TransitionMode,
     },
     Each(Vec<Option<Pending>>),
+}
+
+unsafe fn owned_pattern_intensity(
+    intensities: *const IntensityBuffer,
+    uniform_intensity: u8,
+) -> Option<OwnedPatternIntensity> {
+    if intensities.is_null() {
+        return Some(OwnedPatternIntensity::Uniform(Intensity(uniform_intensity)));
+    }
+    unsafe { handle_ref(intensities) }
+        .map(|intensities| OwnedPatternIntensity::PerDevice(intensities.0.clone()))
+}
+
+unsafe fn owned_stm_intensity(
+    intensities: *const *const IntensityBuffer,
+    num_intensities: usize,
+    num_patterns: usize,
+    uniform_intensity: u8,
+) -> Option<OwnedStmIntensity> {
+    if num_intensities == 0 {
+        return Some(OwnedStmIntensity::Uniform(Intensity(uniform_intensity)));
+    }
+    if num_intensities != 1 && num_intensities != num_patterns {
+        return None;
+    }
+    let buffers = unsafe { slice_ref(intensities, num_intensities) }?
+        .iter()
+        .map(|&p| unsafe { handle_ref(p) }.map(|p| p.0.clone()))
+        .collect::<Option<Vec<_>>>()?;
+    Some(if num_intensities == 1 {
+        OwnedStmIntensity::Shared(buffers.into_iter().next().expect("checked length"))
+    } else {
+        OwnedStmIntensity::PerIndex(buffers)
+    })
 }
 
 fn to_pattern_compression(v: u8) -> Option<PatternCompression> {
@@ -611,13 +677,16 @@ pub unsafe extern "C" fn autd3_op_pattern(
     bank: u8,
     phases: *const PhaseBuffer,
     intensities: *const IntensityBuffer,
+    uniform_intensity: u8,
     transition_mode: u8,
     transition_value: u64,
     transition_margin_ns: u32,
 ) -> *mut Pending {
-    let (Some(phases), Some(intensities)) = (unsafe { handle_ref(phases) }, unsafe {
-        handle_ref(intensities)
-    }) else {
+    let Some(phases) = (unsafe { handle_ref(phases) }) else {
+        return std::ptr::null_mut();
+    };
+    let Some(intensities) = (unsafe { owned_pattern_intensity(intensities, uniform_intensity) })
+    else {
         return std::ptr::null_mut();
     };
     let (Some(bank), Some(transition_mode)) = (
@@ -629,7 +698,7 @@ pub unsafe extern "C" fn autd3_op_pattern(
 
     into_handle(Pending::Pattern {
         phases: phases.0.clone(),
-        intensities: intensities.0.clone(),
+        intensities,
         bank,
         transition_mode,
     })
@@ -678,10 +747,13 @@ pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
     index: u16,
     phases: *const PhaseBuffer,
     intensities: *const IntensityBuffer,
+    uniform_intensity: u8,
 ) -> *mut Pending {
-    let (Some(phases), Some(intensities)) = (unsafe { handle_ref(phases) }, unsafe {
-        handle_ref(intensities)
-    }) else {
+    let Some(phases) = (unsafe { handle_ref(phases) }) else {
+        return std::ptr::null_mut();
+    };
+    let Some(intensities) = (unsafe { owned_pattern_intensity(intensities, uniform_intensity) })
+    else {
         return std::ptr::null_mut();
     };
     let Some(bank) = to_pattern_bank(bank) else {
@@ -692,7 +764,7 @@ pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
         bank,
         index,
         phases: phases.0.clone(),
-        intensities: intensities.0.clone(),
+        intensities,
     })
 }
 
@@ -1157,8 +1229,10 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
 pub unsafe extern "C" fn autd3_op_pattern_stm(
     config: *const StmConfig,
     phases: *const *const PhaseBuffer,
-    intensities: *const *const IntensityBuffer,
     num_patterns: usize,
+    intensities: *const *const IntensityBuffer,
+    num_intensities: usize,
+    uniform_intensity: u8,
     bank: u8,
     mode: u8,
     loop_rep: u16,
@@ -1166,11 +1240,9 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     transition_value: u64,
     transition_margin_ns: u32,
 ) -> *mut Pending {
-    let (Some(config), Some(phase_ptrs), Some(intensity_ptrs)) = (
-        unsafe { handle_ref(config) },
-        unsafe { slice_ref(phases, num_patterns) },
-        unsafe { slice_ref(intensities, num_patterns) },
-    ) else {
+    let (Some(config), Some(phase_ptrs)) = (unsafe { handle_ref(config) }, unsafe {
+        slice_ref(phases, num_patterns)
+    }) else {
         return std::ptr::null_mut();
     };
     let (Some(bank), Some(mode), Some(transition_mode)) = (
@@ -1188,11 +1260,14 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     else {
         return std::ptr::null_mut();
     };
-    let Some(intensities) = intensity_ptrs
-        .iter()
-        .map(|&p| unsafe { handle_ref(p) }.map(|p| p.0.clone()))
-        .collect::<Option<Vec<_>>>()
-    else {
+    let Some(intensities) = (unsafe {
+        owned_stm_intensity(
+            intensities,
+            num_intensities,
+            num_patterns,
+            uniform_intensity,
+        )
+    }) else {
         return std::ptr::null_mut();
     };
     into_handle(Pending::PatternStm {
@@ -1221,7 +1296,7 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             transition_mode,
         } => Pattern {
             transition_mode: *transition_mode,
-            ..Pattern::with_bank(*bank, phases, intensities)
+            ..Pattern::with_bank(*bank, phases, intensities.as_ref())
         }
         .boxed(),
         Pending::Modulation {
@@ -1246,13 +1321,8 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             index,
             phases,
             intensities,
-        } => WritePatternBuffer {
-            bank: *bank,
-            index: usize::from(*index),
-            phases,
-            intensities,
-        }
-        .boxed(),
+        } => WritePatternBuffer::new(*bank, usize::from(*index), phases, intensities.as_ref())
+            .boxed(),
         Pending::ConfigPattern {
             bank,
             config,
@@ -1390,7 +1460,7 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
         } => PatternStm::new(
             *config,
             phases,
-            intensities,
+            intensities.as_ref(),
             PatternStmOption {
                 bank: *bank,
                 mode: *mode,
@@ -1501,7 +1571,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             } => {
                 core.push(Pattern {
                     transition_mode: *transition_mode,
-                    ..Pattern::with_bank(*bank, phases, intensities)
+                    ..Pattern::with_bank(*bank, phases, intensities.as_ref())
                 });
             }
             Pending::Modulation {
@@ -1529,12 +1599,12 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 phases,
                 intensities,
             } => {
-                core.push(WritePatternBuffer {
-                    bank: *bank,
-                    index: usize::from(*index),
+                core.push(WritePatternBuffer::new(
+                    *bank,
+                    usize::from(*index),
                     phases,
-                    intensities,
-                });
+                    intensities.as_ref(),
+                ));
             }
             Pending::WriteFociBuffer {
                 bank,
@@ -1703,7 +1773,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 core.push(PatternStm::new(
                     *config,
                     phases,
-                    intensities,
+                    intensities.as_ref(),
                     PatternStmOption {
                         bank: *bank,
                         mode: *mode,

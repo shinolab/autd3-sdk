@@ -17,7 +17,6 @@ var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
 var phases = geometry.PhaseBuffer();
-var intensities = geometry.IntensityBuffer();
 Pattern.Focus(
     geometry,
     geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),
@@ -26,7 +25,7 @@ Pattern.Focus(
 );
 
 var builder = client.DatagramBuilder();
-builder.Push(new Pattern(phases, intensities));
+builder.Push(new Pattern(phases, Intensity.Max));
 var frames = builder.Build();
 foreach (var frame in frames)
 {

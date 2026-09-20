@@ -4,7 +4,8 @@ use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
 use autd3_rs::commands::{
     FociStm as CoreFociStm, FociStmOption as CoreFociStmOption,
     PatternStmMode as CorePatternStmMode, PatternStmOption as CorePatternStmOption,
-    StmConfig as CoreStmConfig, circle as core_circle, line as core_line,
+    StmConfig as CoreStmConfig, StmIntensity as CoreStmIntensity, circle as core_circle,
+    line as core_line,
 };
 use autd3_rs::value::{
     ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity, Nearest,
@@ -437,11 +438,44 @@ impl WriteFociBuffer {
     }
 }
 
+#[derive(Clone)]
+pub(crate) enum OwnedStmIntensity {
+    Uniform(Intensity),
+    Shared(Vec<Vec<Intensity>>),
+    PerIndex(Vec<Vec<Vec<Intensity>>>),
+}
+
+impl OwnedStmIntensity {
+    pub(crate) fn as_ref(&self) -> CoreStmIntensity<'_> {
+        match self {
+            OwnedStmIntensity::Uniform(intensity) => CoreStmIntensity::Uniform(*intensity),
+            OwnedStmIntensity::Shared(intensities) => CoreStmIntensity::Shared(intensities),
+            OwnedStmIntensity::PerIndex(intensities) => CoreStmIntensity::PerIndex(intensities),
+        }
+    }
+}
+
+fn extract_stm_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedStmIntensity> {
+    if let Some(intensity) = crate::datagram::extract_uniform_intensity(obj) {
+        return Ok(OwnedStmIntensity::Uniform(intensity));
+    }
+    if let Ok(buffers) = obj.extract::<Vec<Bound<'_, PyAny>>>() {
+        return buffers
+            .iter()
+            .map(crate::datagram::extract_intensities)
+            .collect::<PyResult<Vec<_>>>()
+            .map(OwnedStmIntensity::PerIndex);
+    }
+    Ok(OwnedStmIntensity::Shared(
+        crate::datagram::extract_intensities(obj)?,
+    ))
+}
+
 #[pyclass(name = "PatternStm", module = "autd3.commands")]
 pub struct PatternStm {
     pub(crate) config: CoreStmConfig,
     pub(crate) phases: Vec<Vec<Vec<Phase>>>,
-    pub(crate) intensities: Vec<Vec<Vec<Intensity>>>,
+    pub(crate) intensities: OwnedStmIntensity,
     pub(crate) option: CorePatternStmOption,
 }
 
@@ -452,7 +486,7 @@ impl PatternStm {
     fn new(
         config: &Bound<'_, PyAny>,
         phases: Vec<Bound<'_, PyAny>>,
-        intensities: Vec<Bound<'_, PyAny>>,
+        intensities: &Bound<'_, PyAny>,
         option: Option<PyRef<'_, PatternStmOption>>,
     ) -> PyResult<Self> {
         let stm_config = extract_stm_config(config)?;
@@ -460,10 +494,7 @@ impl PatternStm {
             .iter()
             .map(crate::datagram::extract_phases)
             .collect::<PyResult<Vec<_>>>()?;
-        let intensities = intensities
-            .iter()
-            .map(crate::datagram::extract_intensities)
-            .collect::<PyResult<Vec<_>>>()?;
+        let intensities = extract_stm_intensity(intensities)?;
         Ok(Self {
             config: stm_config,
             phases,

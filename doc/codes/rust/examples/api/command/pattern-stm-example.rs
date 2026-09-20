@@ -1,7 +1,7 @@
 use autd3_rs::commands::{PatternStm, PatternStmMode, PatternStmOption};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{LoopBehavior, PatternBank, TransitionMode};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_nop::Nop;
 use autd3_rs_pattern::{focus, wavelength};
@@ -30,13 +30,11 @@ async fn main() -> anyhow::Result<()> {
             buffer
         })
         .collect::<Vec<_>>();
-    let intensities = vec![geometry.intensity_buffer(); patterns.len()];
-
     let mut builder = client.datagram_builder();
     builder.push(PatternStm::new(
         1.0 * Hz,
         &patterns,
-        &intensities,
+        Intensity::MAX,
         PatternStmOption {
             bank: PatternBank::B0,
             mode: PatternStmMode::PhaseIntensityFull,

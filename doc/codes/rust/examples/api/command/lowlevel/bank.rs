@@ -7,7 +7,7 @@ use autd3_rs::commands::{
     WritePatternCompressed,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::value::{LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 use autd3_rs_link_nop::Nop;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -17,16 +17,10 @@ async fn main() -> Result<()> {
     let bank = PatternBank::B0;
     let index = 0;
     let _phases = geometry.phase_buffer();
-    let _intensities = geometry.intensity_buffer();
     let phases = &_phases;
-    let intensities = &_intensities;
+    let intensities = Intensity::MAX;
     // ANCHOR: write
-    WritePatternBuffer {
-        bank,
-        index,
-        phases,
-        intensities,
-    };
+    WritePatternBuffer::new(bank, index, phases, intensities);
     // ANCHOR_END: write
     let config = SamplingConfig::FREQ_4K;
     let size = 1;

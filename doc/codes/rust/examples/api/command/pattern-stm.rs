@@ -4,7 +4,7 @@ use autd3_rs::commands::{
 };
 use autd3_rs::geometry::{offset, Autd3, Geometry};
 use autd3_rs::units::{m, mm, s, Hz};
-use autd3_rs::value::{LoopBehavior, PatternBank, TransitionMode};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
 
 const NUM_POINTS: usize = 200;
 const RADIUS_MM: f32 = 30.0;
@@ -33,7 +33,7 @@ fn main() {
             buffer
         })
         .collect::<Vec<_>>();
-    let intensities = vec![geometry.intensity_buffer(); patterns.len()];
+    let intensities = Intensity::MAX;
     let freq = 1.0 * Hz;
     let bank = PatternBank::B0;
     let mode = PatternStmMode::PhaseIntensityFull;
@@ -51,17 +51,12 @@ fn main() {
         // ANCHOR_END: option
         ;
     // ANCHOR: api
-    PatternStm::new(freq, &patterns, &intensities, option);
+    PatternStm::new(freq, &patterns, intensities, option);
     // ANCHOR_END: api
 
     // ANCHOR: equivalent
-    for (index, (phases, intensities)) in patterns.iter().zip(&intensities).enumerate() {
-        WritePatternBuffer {
-            bank: option.bank,
-            index,
-            phases,
-            intensities,
-        };
+    for (index, phases) in patterns.iter().enumerate() {
+        WritePatternBuffer::new(option.bank, index, phases, intensities);
     }
     ConfigPattern {
         bank: option.bank,

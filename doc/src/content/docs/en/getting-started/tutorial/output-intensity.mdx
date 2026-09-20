@@ -11,7 +11,7 @@ import sample from "@codes/rust/examples/tutorial/output-intensity.rs?raw";
 import pySample from "@codes/python/examples/tutorial/output-intensity.py?raw";
 import csSample from "@codes/csharp/examples/tutorial/output-intensity.cs?raw";
 
-Patterns such as `focus` have an `intensity` parameter that controls the output intensity with 8 bits.
+The output intensity is controlled by the 8-bit `Intensity` passed to the `Pattern` command.
 For example, the following code sets this intensity to about half of its maximum value.
 
 <CodeTabs rust={excerpt(sample, "pattern_intensity")} python={excerpt(pySample, "pattern_intensity")} csharp={excerpt(csSample, "pattern_intensity")} />

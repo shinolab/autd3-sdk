@@ -26,7 +26,6 @@ internal static class Program
         var center = geometry.Center + new Vector3(0f, 0f, 150f);
         var wavelength = Pattern.Wavelength(340 * m / s);
         var patterns = new List<PhaseBuffer>();
-        using var intensities = geometry.IntensityBuffer();
         try
         {
             for (var i = 0; i < NumPoints; i++)
@@ -41,7 +40,7 @@ internal static class Program
             using var builder = client.DatagramBuilder();
             builder
                 .Push(new SetSilencer())
-                .Push(new PatternStm(1 * Hz, patterns.ToArray(), Enumerable.Repeat(intensities, patterns.Count).ToArray(),
+                .Push(new PatternStm(1 * Hz, patterns.ToArray(), Intensity.Max,
                     new PatternStmOption(mode: PatternStmMode.PhaseFull)));
             using var frames = builder.Build();
             foreach (var frame in frames)

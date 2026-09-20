@@ -91,12 +91,12 @@ impl Sender {
                 &self.intensities,
             ));
         } else {
-            builder.push(WritePatternBuffer {
-                bank: PatternBank::B0,
-                index: 0,
-                phases: &self.phases,
-                intensities: &self.intensities,
-            });
+            builder.push(WritePatternBuffer::new(
+                PatternBank::B0,
+                0,
+                &self.phases,
+                &self.intensities,
+            ));
         }
         builder
             .build_into(&mut self.frames)

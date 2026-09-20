@@ -10,7 +10,7 @@ use autd3_rs::commands::{
     Command as CoreCommand, ConfigFociStm as CoreConfigFociStm,
     ConfigModulation as CoreConfigModulation, ConfigPattern as CoreConfigPattern,
     Modulation as CoreModulation, Pattern as CorePattern,
-    PatternCompression as CorePatternCompression,
+    PatternCompression as CorePatternCompression, PatternIntensity as CorePatternIntensity,
     WriteModulationBuffer as CoreWriteModulationBuffer,
     WritePatternBuffer as CoreWritePatternBuffer,
     WritePatternCompressed as CoreWritePatternCompressed,
@@ -25,11 +25,28 @@ use pyo3::prelude::*;
 
 use crate::ops;
 
+#[derive(Clone)]
+pub(crate) enum OwnedPatternIntensity {
+    Uniform(Intensity),
+    PerDevice(Vec<Vec<Intensity>>),
+}
+
+impl OwnedPatternIntensity {
+    pub(crate) fn as_ref(&self) -> CorePatternIntensity<'_> {
+        match self {
+            OwnedPatternIntensity::Uniform(intensity) => CorePatternIntensity::Uniform(*intensity),
+            OwnedPatternIntensity::PerDevice(intensities) => {
+                CorePatternIntensity::PerDevice(intensities)
+            }
+        }
+    }
+}
+
 #[pyclass(name = "Pattern", module = "autd3.commands")]
 pub struct Pattern {
     bank: CorePatternBank,
     phases: Vec<Vec<Phase>>,
-    intensities: Vec<Vec<Intensity>>,
+    intensities: OwnedPatternIntensity,
     transition_mode: CoreTransitionMode,
 }
 
@@ -41,6 +58,17 @@ pub(crate) fn extract_phases(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<Phase>>
 pub(crate) fn extract_intensities(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<Intensity>>> {
     let capsule = capsule_of(obj)?;
     Ok(intensities_from_capsule(&capsule)?.to_vec())
+}
+
+pub(crate) fn extract_uniform_intensity(obj: &Bound<'_, PyAny>) -> Option<Intensity> {
+    obj.extract::<u8>().ok().map(Intensity)
+}
+
+pub(crate) fn extract_pattern_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedPatternIntensity> {
+    if let Some(intensity) = extract_uniform_intensity(obj) {
+        return Ok(OwnedPatternIntensity::Uniform(intensity));
+    }
+    Ok(OwnedPatternIntensity::PerDevice(extract_intensities(obj)?))
 }
 
 #[pymethods]
@@ -56,7 +84,7 @@ impl Pattern {
         Ok(Self {
             bank: bank.map_or(CorePatternBank::B0, |b| b.0),
             phases: extract_phases(phases)?,
-            intensities: extract_intensities(intensities)?,
+            intensities: extract_pattern_intensity(intensities)?,
             transition_mode: transition_mode.map_or(CoreTransitionMode::Immediate, |t| t.0),
         })
     }
@@ -99,7 +127,7 @@ pub(crate) enum Pending {
     Pattern {
         bank: CorePatternBank,
         phases: Vec<Vec<Phase>>,
-        intensities: Vec<Vec<Intensity>>,
+        intensities: OwnedPatternIntensity,
         transition_mode: CoreTransitionMode,
     },
     Modulation {
@@ -113,7 +141,7 @@ pub(crate) enum Pending {
         bank: CorePatternBank,
         index: u16,
         phases: Vec<Vec<Phase>>,
-        intensities: Vec<Vec<Intensity>>,
+        intensities: OwnedPatternIntensity,
     },
     ConfigPattern {
         bank: CorePatternBank,
@@ -167,7 +195,7 @@ pub(crate) enum Pending {
     PatternStm {
         config: autd3_rs::commands::StmConfig,
         phases: Vec<Vec<Vec<Phase>>>,
-        intensities: Vec<Vec<Vec<Intensity>>>,
+        intensities: crate::stm::OwnedStmIntensity,
         option: autd3_rs::commands::PatternStmOption,
     },
     Each {
@@ -213,7 +241,7 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
         } => {
             builder.push(CorePattern {
                 transition_mode: *transition_mode,
-                ..CorePattern::with_bank(*bank, phases, intensities)
+                ..CorePattern::with_bank(*bank, phases, intensities.as_ref())
             });
         }
         Pending::Modulation {
@@ -235,12 +263,12 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
             phases,
             intensities,
         } => {
-            builder.push(CoreWritePatternBuffer {
-                bank: *bank,
-                index: usize::from(*index),
+            builder.push(CoreWritePatternBuffer::new(
+                *bank,
+                usize::from(*index),
                 phases,
-                intensities,
-            });
+                intensities.as_ref(),
+            ));
         }
         Pending::ConfigPattern {
             bank,
@@ -353,7 +381,7 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
             builder.push(autd3_rs::commands::PatternStm::new(
                 *config,
                 phases.as_slice(),
-                intensities.as_slice(),
+                intensities.as_ref(),
                 *option,
             ));
         }
