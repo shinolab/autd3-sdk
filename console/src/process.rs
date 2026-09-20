@@ -3,6 +3,8 @@ use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 
+pub const FINISHED: &str = "[process finished]";
+
 pub struct ManagedProcess {
     child: Child,
     rx: Receiver<String>,
@@ -89,7 +91,7 @@ pub fn no_window(_command: &mut Command) {}
 
 fn exit_marker(status: ExitStatus) -> String {
     match status.code() {
-        Some(0) => "[process finished]".to_string(),
+        Some(0) => FINISHED.to_string(),
         Some(code) => format!("[process exited with code {code}]"),
         None => "[process terminated]".to_string(),
     }
