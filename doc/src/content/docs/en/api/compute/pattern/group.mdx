@@ -35,11 +35,13 @@ If you only need to switch per device, send a command per device with `push_each
 | ---------- | -------------------------------------------------------------------- | -------------------------------------------------------- |
 | `geometry` | `&Geometry`                                                          | Geometry                                                 |
 | `groups`   | `&TransducerGroups<K>`                                               | Key of each transducer                                   |
-| `compute`  | `FnMut(K, TransducerMask, &mut [Vec<Emission>]) -> Result<(), E>`    | Computes into the scratch buffer for a key and its mask  |
-| `dst`      | `&mut [Vec<Emission>]`                                               | Output buffer                                            |
+| `compute`     | `FnMut(K, TransducerMask, &mut [Vec<Phase>], &mut [Vec<Intensity>]) -> Result<(), E>` | Computes into the scratch buffers (phases and intensities) for a key and its mask |
+| `phases`      | `&mut [Vec<Phase>]`                                                                    | Phase output buffer                                                              |
+| `intensities` | `&mut [Vec<Intensity>]`                                                                | Intensity output buffer                                                          |
 
-`compute` is called once per key (in order of first appearance), and only the transducers of that key are written into `dst`.
-Transducers not assigned to any key produce no output (`Emission::NULL`).
+`compute` is called once per key (in order of first appearance), and only the transducers of that key are written into `phases` / `intensities`.
+The scratch buffers are reset to phase 0 and the maximum intensity for each key.
+Transducers not assigned to any key produce no output (phase 0 and `Intensity::MIN`).
 
 ## group
 
@@ -49,8 +51,12 @@ Transducers not assigned to any key produce no output (`Emission::NULL`).
 | ---------- | ------------------------------------------- | ---------------------------------------- |
 | `geometry` | `&Geometry`                                 | Geometry                                 |
 | `groups`   | `&TransducerGroups<K>`                      | Key of each transducer                   |
-| `source`   | `FnMut(K) -> impl AsRef<[Vec<Emission>]>`   | Returns the source buffer for a key      |
-| `dst`      | `&mut [Vec<Emission>]`                      | Output buffer                            |
+| `source`   | `FnMut(K) -> impl AsRef<[Vec<T>]>`          | Returns the source buffer for a key      |
+| `null`     | `T`                                         | Value written to transducers of no key   |
+| `dst`      | `&mut [Vec<T>]`                             | Output buffer                            |
+
+`T` is `Phase` or `Intensity`; call it once for each of the phase and intensity buffers.
+Python and C# take no `null` argument: transducers of no key get phase 0 for a phase buffer and `Intensity.MIN` (no output) for an intensity buffer.
 
 ## TransducerGroups
 

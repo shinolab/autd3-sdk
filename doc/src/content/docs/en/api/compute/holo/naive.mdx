@@ -28,7 +28,8 @@ It does not iterate and is fast, but it does not correct for interference betwee
 | `foci`       | `&[AmplitudeTarget]`      | Sequence of focal points (position and target amplitude) |
 | `wavelength` | `Length`               | Wavelength                |
 | `option`     | `&NaiveOption`         | Additional options (see below) |
-| `dst`        | `&mut [[Emission; _]]` | Output buffer             |
+| `phases`      | `&mut [Vec<Phase>]`     | Phase output buffer       |
+| `intensities` | `&mut [Vec<Intensity>]` | Intensity output buffer   |
 
 For the common elements (`AmplitudeTarget` / `TransducerMask` / `LinAlgBackend`, etc.), see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
 
@@ -38,7 +39,7 @@ For the common elements (`AmplitudeTarget` / `TransducerMask` / `LinAlgBackend`,
 
 | Field         | Type                 | Default                   |
 |---------------|----------------------|---------------------------|
-| `constraint`  | `EmissionConstraint` | `Clamp(MIN, MAX)`         |
+| `constraint`  | `IntensityConstraint` | `Clamp(MIN, MAX)`         |
 | `directivity` | `Directivity`        | `Sphere`                  |
 | `mask`        | `TransducerMask`     | `AllEnabled`              |
 | `parallel`    | `bool`               | `true`                    |

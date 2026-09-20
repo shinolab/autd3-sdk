@@ -23,7 +23,7 @@ impl Operation for SetOutputMask<'_> {
         let mask = self
             .masks
             .get(device.idx())
-            .ok_or(PayloadError::EmissionsDeviceOutOfRange {
+            .ok_or(PayloadError::DeviceDataOutOfRange {
                 device: device.idx(),
                 len: self.masks.len(),
             })?;

@@ -23,7 +23,7 @@ fn main() {
                     RADIUS_MM * theta.sin() * mm,
                     0.0 * mm,
                 );
-            let mut buffer = geometry.pattern_buffer();
+            let mut buffer = geometry.phase_buffer();
             autd3_rs_pattern::focus(
                 &geometry,
                 target,
@@ -33,6 +33,7 @@ fn main() {
             buffer
         })
         .collect::<Vec<_>>();
+    let intensities = vec![geometry.intensity_buffer(); patterns.len()];
     let freq = 1.0 * Hz;
     let bank = PatternBank::B0;
     let mode = PatternStmMode::PhaseIntensityFull;
@@ -50,15 +51,16 @@ fn main() {
         // ANCHOR_END: option
         ;
     // ANCHOR: api
-    PatternStm::new(freq, &patterns, option);
+    PatternStm::new(freq, &patterns, &intensities, option);
     // ANCHOR_END: api
 
     // ANCHOR: equivalent
-    for (index, pattern) in patterns.iter().enumerate() {
+    for (index, (phases, intensities)) in patterns.iter().zip(&intensities).enumerate() {
         WritePatternBuffer {
             bank: option.bank,
             index,
-            emissions: pattern.as_slice(),
+            phases,
+            intensities,
         };
     }
     ConfigPattern {

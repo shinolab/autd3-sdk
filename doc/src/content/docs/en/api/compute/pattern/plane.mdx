@@ -29,7 +29,7 @@ import { excerpt } from "@lib/excerpt";
 | `geometry`   | `&Geometry`            | Device layout                       |
 | `direction`  | `UnitVector3<f32>`     | Propagation direction of the plane wave (unit vector) |
 | `wavelength` | `Length`               | Wavelength                          |
-| `dst`        | `&mut [[Emission; _]]` | Output buffer                       |
+| `dst`        | `&mut [Vec<Phase>]` | Output buffer                       |
 
 ## Example
 

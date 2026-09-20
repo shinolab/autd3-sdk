@@ -1,6 +1,6 @@
 # autd3-rs-pattern
 
-Emission-pattern computation for [AUTD3](https://hapislab.org/en/airborne-ultrasound-tactile-display): single focus, Bessel beam, plane wave, and the helpers to write them into a device emission buffer.
+Emission-pattern computation for [AUTD3](https://hapislab.org/en/airborne-ultrasound-tactile-display): single focus, Bessel beam, plane wave, and the helpers to write them into per-device phase and intensity buffers.
 
 Use with [`autd3-rs`](https://crates.io/crates/autd3-rs); for multi-focus holograms see [`autd3-rs-pattern-holo`](https://crates.io/crates/autd3-rs-pattern-holo).
 

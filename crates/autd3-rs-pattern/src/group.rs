@@ -1,7 +1,5 @@
 use autd3_rs_core::geometry::{Device, Geometry, TransducerGroups, TransducerMask};
-use autd3_rs_core::value::{Emission, Intensity, Phase};
-
-use crate::set_phase_and_intensity;
+use autd3_rs_core::value::{Intensity, Phase};
 
 fn sources_of<K, S, F>(groups: &TransducerGroups<K>, mut source: F) -> Vec<S>
 where
@@ -11,48 +9,54 @@ where
     groups.keys().iter().map(|&key| source(key)).collect()
 }
 
-fn write_device<K, S>(
+fn write_device<K, T, S>(
     device: &Device,
     groups: &TransducerGroups<K>,
     sources: &[S],
-    dst: &mut [Emission],
+    null: T,
+    dst: &mut [T],
 ) where
     K: Copy + Eq,
-    S: AsRef<[Vec<Emission>]>,
+    T: Copy,
+    S: AsRef<[Vec<T>]>,
 {
     let dev = device.idx();
     for (tr, (slot, &index)) in dst.iter_mut().zip(groups.indices(dev)).enumerate() {
-        *slot = index.map_or(Emission::NULL, |index| sources[index].as_ref()[dev][tr]);
+        *slot = index.map_or(null, |index| sources[index].as_ref()[dev][tr]);
     }
 }
 
-pub fn group_device<K, S, F>(
+pub fn group_device<K, T, S, F>(
     device: &Device,
     groups: &TransducerGroups<K>,
     source: F,
-    dst: &mut [Emission],
+    null: T,
+    dst: &mut [T],
 ) where
     K: Copy + Eq,
-    S: AsRef<[Vec<Emission>]>,
+    T: Copy,
+    S: AsRef<[Vec<T>]>,
     F: FnMut(K) -> S,
 {
     let sources = sources_of(groups, source);
-    write_device(device, groups, &sources, dst);
+    write_device(device, groups, &sources, null, dst);
 }
 
-pub fn group<K, S, F>(
+pub fn group<K, T, S, F>(
     geometry: &Geometry,
     groups: &TransducerGroups<K>,
     source: F,
-    dst: &mut [Vec<Emission>],
+    null: T,
+    dst: &mut [Vec<T>],
 ) where
     K: Copy + Eq,
-    S: AsRef<[Vec<Emission>]>,
+    T: Copy,
+    S: AsRef<[Vec<T>]>,
     F: FnMut(K) -> S,
 {
     let sources = sources_of(groups, source);
     for (device, slot) in geometry.iter().zip(dst.iter_mut()) {
-        write_device(device, groups, &sources, slot);
+        write_device(device, groups, &sources, null, slot);
     }
 }
 
@@ -60,54 +64,94 @@ pub fn group_compute<K, E, F>(
     geometry: &Geometry,
     groups: &TransducerGroups<K>,
     compute: F,
-    dst: &mut [Vec<Emission>],
+    phases: &mut [Vec<Phase>],
+    intensities: &mut [Vec<Intensity>],
 ) -> Result<(), E>
 where
     K: Copy + Eq,
-    F: FnMut(K, TransducerMask<'_>, &mut [Vec<Emission>]) -> Result<(), E>,
+    F: FnMut(K, TransducerMask<'_>, &mut [Vec<Phase>], &mut [Vec<Intensity>]) -> Result<(), E>,
 {
-    let mut scratch = geometry.pattern_buffer();
-    group_compute_with(groups, compute, &mut scratch, dst)
+    let mut scratch_phases = geometry.phase_buffer();
+    let mut scratch_intensities = geometry.intensity_buffer();
+    group_compute_with(
+        groups,
+        compute,
+        &mut scratch_phases,
+        &mut scratch_intensities,
+        phases,
+        intensities,
+    )
+}
+
+fn assert_same_shape<A, B>(scratch: &[Vec<A>], dst: &[Vec<B>]) {
+    assert!(
+        scratch.len() == dst.len()
+            && scratch
+                .iter()
+                .zip(dst.iter())
+                .all(|(source, slot)| source.len() == slot.len()),
+        "scratch must have the same shape as dst"
+    );
+}
+
+fn fill_unassigned<K: Copy + Eq, T: Copy>(
+    groups: &TransducerGroups<K>,
+    null: T,
+    dst: &mut [Vec<T>],
+) {
+    for (dev, slot) in dst.iter_mut().enumerate() {
+        for (out, &i) in slot.iter_mut().zip(groups.indices(dev)) {
+            if i.is_none() {
+                *out = null;
+            }
+        }
+    }
+}
+
+fn copy_group<K: Copy + Eq, T: Copy>(
+    groups: &TransducerGroups<K>,
+    index: usize,
+    scratch: &[Vec<T>],
+    dst: &mut [Vec<T>],
+) {
+    for (dev, (slot, source)) in dst.iter_mut().zip(scratch.iter()).enumerate() {
+        for ((out, &v), &i) in slot.iter_mut().zip(source).zip(groups.indices(dev)) {
+            if i == Some(index) {
+                *out = v;
+            }
+        }
+    }
 }
 
 pub fn group_compute_with<K, E, F>(
     groups: &TransducerGroups<K>,
     mut compute: F,
-    scratch: &mut [Vec<Emission>],
-    dst: &mut [Vec<Emission>],
+    scratch_phases: &mut [Vec<Phase>],
+    scratch_intensities: &mut [Vec<Intensity>],
+    phases: &mut [Vec<Phase>],
+    intensities: &mut [Vec<Intensity>],
 ) -> Result<(), E>
 where
     K: Copy + Eq,
-    F: FnMut(K, TransducerMask<'_>, &mut [Vec<Emission>]) -> Result<(), E>,
+    F: FnMut(K, TransducerMask<'_>, &mut [Vec<Phase>], &mut [Vec<Intensity>]) -> Result<(), E>,
 {
-    for (dev, slot) in dst.iter_mut().enumerate() {
-        for (out, &i) in slot.iter_mut().zip(groups.indices(dev)) {
-            if i.is_none() {
-                *out = Emission::NULL;
-            }
-        }
-    }
+    fill_unassigned(groups, Phase::ZERO, phases);
+    fill_unassigned(groups, Intensity::MIN, intensities);
     for (index, &key) in groups.keys().iter().enumerate() {
         let Some(mask) = groups.mask(key) else {
             continue;
         };
-        set_phase_and_intensity(Phase::ZERO, Intensity::MAX, scratch);
-        compute(key, mask, scratch)?;
-        assert!(
-            scratch.len() == dst.len()
-                && scratch
-                    .iter()
-                    .zip(dst.iter())
-                    .all(|(source, slot)| source.len() == slot.len()),
-            "scratch must have the same shape as dst"
-        );
-        for (dev, (slot, source)) in dst.iter_mut().zip(scratch.iter()).enumerate() {
-            for ((out, &e), &i) in slot.iter_mut().zip(source).zip(groups.indices(dev)) {
-                if i == Some(index) {
-                    *out = e;
-                }
-            }
+        for slot in scratch_phases.iter_mut() {
+            slot.fill(Phase::ZERO);
         }
+        for slot in scratch_intensities.iter_mut() {
+            slot.fill(Intensity::MAX);
+        }
+        compute(key, mask, scratch_phases, scratch_intensities)?;
+        assert_same_shape(scratch_phases, phases);
+        assert_same_shape(scratch_intensities, intensities);
+        copy_group(groups, index, scratch_phases, phases);
+        copy_group(groups, index, scratch_intensities, intensities);
     }
     Ok(())
 }
@@ -124,15 +168,10 @@ mod tests {
         Right,
     }
 
-    fn emission(phase: u8, intensity: u8) -> Emission {
-        Emission {
-            phase: Phase(phase),
-            intensity: Intensity(intensity),
+    fn fill<T: Copy>(value: T, dst: &mut [Vec<T>]) {
+        for slot in dst {
+            slot.fill(value);
         }
-    }
-
-    fn set_emission(e: Emission, dst: &mut [Vec<Emission>]) {
-        set_phase_and_intensity(e.phase, e.intensity, dst);
     }
 
     fn geometry() -> Geometry {
@@ -153,15 +192,20 @@ mod tests {
         })
     }
 
-    fn assert_sides(dst: &[Vec<Emission>], left: Emission, right: Emission) {
+    fn assert_sides<T: Copy + PartialEq + core::fmt::Debug>(
+        dst: &[Vec<T>],
+        left: T,
+        right: T,
+        null: T,
+    ) {
         for (dev, slot) in dst.iter().enumerate() {
-            for (tr, &e) in slot.iter().enumerate() {
+            for (tr, &v) in slot.iter().enumerate() {
                 let expected = match (dev, tr % 3) {
                     (_, 0) => left,
                     (1, 1) => right,
-                    _ => Emission::NULL,
+                    _ => null,
                 };
-                assert_eq!(e, expected, "dev {dev} tr {tr}");
+                assert_eq!(v, expected, "dev {dev} tr {tr}");
             }
         }
     }
@@ -169,12 +213,12 @@ mod tests {
     #[test]
     fn group_copies_the_source_of_each_key() {
         let geometry = geometry();
-        let mut left = geometry.pattern_buffer();
-        set_emission(emission(0x10, 0x20), &mut left);
-        let mut right = geometry.pattern_buffer();
-        set_emission(emission(0x30, 0x40), &mut right);
-        let mut dst = geometry.pattern_buffer();
-        set_emission(emission(0xFF, 0xFF), &mut dst);
+        let mut left = geometry.phase_buffer();
+        fill(Phase(0x10), &mut left);
+        let mut right = geometry.phase_buffer();
+        fill(Phase(0x30), &mut right);
+        let mut dst = geometry.phase_buffer();
+        fill(Phase(0xFF), &mut dst);
 
         let groups = sides(&geometry);
         group(
@@ -184,22 +228,47 @@ mod tests {
                 Side::Left => &left,
                 Side::Right => &right,
             },
+            Phase::ZERO,
             &mut dst,
         );
 
-        assert_sides(&dst, emission(0x10, 0x20), emission(0x30, 0x40));
+        assert_sides(&dst, Phase(0x10), Phase(0x30), Phase::ZERO);
+    }
+
+    #[test]
+    fn group_fills_unassigned_transducers_with_the_given_null() {
+        let geometry = geometry();
+        let mut left = geometry.intensity_buffer();
+        fill(Intensity(0x20), &mut left);
+        let mut right = geometry.intensity_buffer();
+        fill(Intensity(0x40), &mut right);
+        let mut dst = geometry.intensity_buffer();
+
+        let groups = sides(&geometry);
+        group(
+            &geometry,
+            &groups,
+            |side| match side {
+                Side::Left => &left,
+                Side::Right => &right,
+            },
+            Intensity::MIN,
+            &mut dst,
+        );
+
+        assert_sides(&dst, Intensity(0x20), Intensity(0x40), Intensity::MIN);
     }
 
     #[test]
     fn group_asks_for_each_source_once_and_reads_the_same_transducer() {
         let geometry = geometry();
-        let mut src = geometry.pattern_buffer();
-        for (dev, slot) in src.iter_mut().enumerate() {
-            for (tr, e) in slot.iter_mut().enumerate() {
-                *e = emission(u8::try_from(tr % 256).unwrap(), u8::try_from(dev).unwrap());
+        let mut src = geometry.phase_buffer();
+        for slot in &mut src {
+            for (tr, p) in slot.iter_mut().enumerate() {
+                *p = Phase(u8::try_from(tr % 256).unwrap());
             }
         }
-        let mut dst = geometry.pattern_buffer();
+        let mut dst = geometry.phase_buffer();
         let groups = TransducerGroups::new(&geometry, |_, _| Some(()));
 
         let mut calls = 0;
@@ -210,6 +279,7 @@ mod tests {
                 calls += 1;
                 &src
             },
+            Phase::ZERO,
             &mut dst,
         );
 
@@ -220,15 +290,15 @@ mod tests {
     #[test]
     fn group_device_matches_group() {
         let geometry = geometry();
-        let mut src = geometry.pattern_buffer();
-        set_emission(emission(0x55, 0x66), &mut src);
+        let mut src = geometry.phase_buffer();
+        fill(Phase(0x55), &mut src);
         let groups = TransducerGroups::new(&geometry, |_, tr| (tr % 2 == 0).then_some(Side::Left));
 
-        let mut expected = geometry.pattern_buffer();
-        group(&geometry, &groups, |_| &src, &mut expected);
+        let mut expected = geometry.phase_buffer();
+        group(&geometry, &groups, |_| &src, Phase::ZERO, &mut expected);
 
-        let mut dst = vec![emission(0xFF, 0xFF); Autd3::NUM_TRANSDUCERS];
-        group_device(&geometry[1], &groups, |_| &src, &mut dst);
+        let mut dst = vec![Phase(0xFF); Autd3::NUM_TRANSDUCERS];
+        group_device(&geometry[1], &groups, |_| &src, Phase::ZERO, &mut dst);
         assert_eq!(dst, expected[1]);
     }
 
@@ -236,46 +306,56 @@ mod tests {
     fn group_compute_passes_the_mask_of_each_key_and_copies_its_transducers() {
         let geometry = geometry();
         let groups = sides(&geometry);
-        let mut dst = geometry.pattern_buffer();
-        set_emission(emission(0xFF, 0xFF), &mut dst);
+        let mut phases = geometry.phase_buffer();
+        fill(Phase(0xFF), &mut phases);
+        let mut intensities = geometry.intensity_buffer();
 
         let mut seen = Vec::new();
         let result: Result<(), ()> = group_compute(
             &geometry,
             &groups,
-            |side, mask, buffer| {
+            |side, mask, phases, intensities| {
                 seen.push(side);
-                for (dev, slot) in buffer.iter().enumerate() {
+                for (dev, slot) in phases.iter().enumerate() {
                     for tr in 0..slot.len() {
                         assert_eq!(mask.is_enabled(dev, tr), groups.key(dev, tr) == Some(side));
                     }
                 }
-                let e = match side {
-                    Side::Left => emission(0x10, 0x20),
-                    Side::Right => emission(0x30, 0x40),
+                let (p, i) = match side {
+                    Side::Left => (Phase(0x10), Intensity(0x20)),
+                    Side::Right => (Phase(0x30), Intensity(0x40)),
                 };
-                set_emission(e, buffer);
+                fill(p, phases);
+                fill(i, intensities);
                 Ok(())
             },
-            &mut dst,
+            &mut phases,
+            &mut intensities,
         );
 
         assert_eq!(result, Ok(()));
         assert_eq!(seen, [Side::Left, Side::Right]);
-        assert_sides(&dst, emission(0x10, 0x20), emission(0x30, 0x40));
+        assert_sides(&phases, Phase(0x10), Phase(0x30), Phase::ZERO);
+        assert_sides(
+            &intensities,
+            Intensity(0x20),
+            Intensity(0x40),
+            Intensity::MIN,
+        );
     }
 
     #[test]
     fn group_compute_stops_at_the_first_error() {
         let geometry = geometry();
         let groups = sides(&geometry);
-        let mut dst = geometry.pattern_buffer();
+        let mut phases = geometry.phase_buffer();
+        let mut intensities = geometry.intensity_buffer();
 
         let mut calls = 0;
         let result = group_compute(
             &geometry,
             &groups,
-            |side, _, _| {
+            |side, _, _, _| {
                 calls += 1;
                 if side == Side::Left {
                     Err("left failed")
@@ -283,7 +363,8 @@ mod tests {
                     Ok(())
                 }
             },
-            &mut dst,
+            &mut phases,
+            &mut intensities,
         );
 
         assert_eq!(result, Err("left failed"));
@@ -294,24 +375,36 @@ mod tests {
     fn group_compute_with_hands_a_fresh_pattern_buffer_to_each_key() {
         let geometry = geometry();
         let groups = sides(&geometry);
-        let mut scratch = geometry.pattern_buffer();
-        set_emission(emission(0xAA, 0xBB), &mut scratch);
-        let mut dst = geometry.pattern_buffer();
-        set_emission(emission(0xFF, 0xFF), &mut dst);
+        let mut scratch_phases = geometry.phase_buffer();
+        fill(Phase(0xAA), &mut scratch_phases);
+        let mut scratch_intensities = geometry.intensity_buffer();
+        fill(Intensity(0xBB), &mut scratch_intensities);
+        let mut phases = geometry.phase_buffer();
+        fill(Phase(0xFF), &mut phases);
+        let mut intensities = geometry.intensity_buffer();
 
         let result: Result<(), ()> = group_compute_with(
             &groups,
-            |side, _, buffer| {
+            |side, _, phases, intensities| {
                 if side == Side::Left {
-                    set_emission(emission(0x10, 0x20), buffer);
+                    fill(Phase(0x10), phases);
+                    fill(Intensity(0x20), intensities);
                 }
                 Ok(())
             },
-            &mut scratch,
-            &mut dst,
+            &mut scratch_phases,
+            &mut scratch_intensities,
+            &mut phases,
+            &mut intensities,
         );
 
         assert_eq!(result, Ok(()));
-        assert_sides(&dst, emission(0x10, 0x20), emission(0x00, 0xFF));
+        assert_sides(&phases, Phase(0x10), Phase::ZERO, Phase::ZERO);
+        assert_sides(
+            &intensities,
+            Intensity(0x20),
+            Intensity::MAX,
+            Intensity::MIN,
+        );
     }
 }

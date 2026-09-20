@@ -19,12 +19,13 @@ await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientC
 
 var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
 var wavelength = Pattern.Wavelength(340.0f * m / s);
-var patterns = new PatternBuffer[200];
+var patterns = new PhaseBuffer[200];
+var intensities = new IntensityBuffer[200];
 for (var i = 0; i < 200; i++)
 {
     var theta = 2.0f * MathF.PI * i / 200.0f;
     var target = center + new Vector3(30.0f * MathF.Cos(theta), 30.0f * MathF.Sin(theta), 0.0f);
-    var buffer = geometry.PatternBuffer();
+    var buffer = geometry.PhaseBuffer();
     Pattern.Focus(
         geometry,
         target,
@@ -32,12 +33,14 @@ for (var i = 0; i < 200; i++)
         buffer
     );
     patterns[i] = buffer;
+    intensities[i] = geometry.IntensityBuffer();
 }
 
 var builder = client.DatagramBuilder();
 builder.Push(new PatternStm(
     1.0f * Hz,
     patterns,
+    intensities,
     new PatternStmOption(
         bank: PatternBank.B0,
         mode: PatternStmMode.PhaseIntensityFull,

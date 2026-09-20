@@ -20,12 +20,12 @@ internal static class Program
         Console.WriteLine($"{label}: {TotalPoints} updates in {elapsedSeconds:F2}s ({rate:F0} updates/s)");
     }
 
-    private static async Task Configure(Client client, PatternBuffer patterns)
+    private static async Task Configure(Client client, PhaseBuffer phases, IntensityBuffer intensities)
     {
-        Pattern.SetIntensity(Intensity.Min, patterns);
+        Pattern.SetIntensity(Intensity.Min, intensities);
         using var builder = client.DatagramBuilder();
         builder
-            .Push(new WritePatternBuffer(PatternBank.B0, 0, patterns))
+            .Push(new WritePatternBuffer(PatternBank.B0, 0, phases, intensities))
             .Push(new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1));
         using var frames = builder.Build();
         foreach (var frame in frames)
@@ -34,10 +34,10 @@ internal static class Program
         }
     }
 
-    private static Frames WriteFocus(Client client, PatternBuffer patterns)
+    private static Frames WriteFocus(Client client, PhaseBuffer phases, IntensityBuffer intensities)
     {
         using var builder = client.DatagramBuilder();
-        builder.Push(new WritePatternBuffer(PatternBank.B0, 0, patterns));
+        builder.Push(new WritePatternBuffer(PatternBank.B0, 0, phases, intensities));
         return builder.Build();
     }
 
@@ -50,17 +50,18 @@ internal static class Program
         const float radius = 30f;
         var wavelength = Pattern.Wavelength(340 * m / s);
 
-        using var patterns = geometry.PatternBuffer();
-        await Configure(client, patterns);
-        Pattern.SetIntensity(Intensity.Max, patterns);
+        using var phases = geometry.PhaseBuffer();
+        using var intensities = geometry.IntensityBuffer();
+        await Configure(client, phases, intensities);
+        Pattern.SetIntensity(Intensity.Max, intensities);
 
         var frames = new List<Frames>(TotalPoints);
         for (var i = 0; i < TotalPoints; i++)
         {
             var theta = 2.0 * Math.PI * i / TotalPoints;
             var target = center + new Vector3(radius * (float)Math.Cos(theta), radius * (float)Math.Sin(theta), 150f);
-            Pattern.Focus(geometry, target, wavelength, patterns);
-            frames.Add(WriteFocus(client, patterns));
+            Pattern.Focus(geometry, target, wavelength, phases);
+            frames.Add(WriteFocus(client, phases, intensities));
         }
 
         Console.WriteLine($"sweeping a focus through {TotalPoints} positions, twice");

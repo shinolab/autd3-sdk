@@ -20,10 +20,12 @@ async def main() -> None:
     ) as client:
         wavelength = pattern.wavelength(340 * m / s)
 
+        intensities = geometry.intensity_buffer()
+
         # ANCHOR: switch
         # Write focus A to bank B0 and play it.
         target_a = geometry.center() + np.array([0.0, 0.0, 150.0])
-        pat_a = geometry.pattern_buffer()
+        pat_a = geometry.phase_buffer()
         pattern.focus(
             geometry,
             target_a,
@@ -31,14 +33,14 @@ async def main() -> None:
             pat_a,
         )
         builder = client.datagram_builder()
-        builder.push(Pattern(pat_a, bank=PatternBank.B0))
+        builder.push(Pattern(pat_a, intensities, bank=PatternBank.B0))
         for frame in builder.build():
             await client.send_checked(frame)
 
         # Write focus B to bank B1, which is not currently playing, then switch to B1.
         # B0 keeps playing cleanly while B1 is being written (double buffering).
         target_b = geometry.center() + np.array([0.0, 30.0, 150.0])
-        pat_b = geometry.pattern_buffer()
+        pat_b = geometry.phase_buffer()
         pattern.focus(
             geometry,
             target_b,
@@ -46,7 +48,7 @@ async def main() -> None:
             pat_b,
         )
         builder = client.datagram_builder()
-        builder.push(Pattern(pat_b, bank=PatternBank.B1))
+        builder.push(Pattern(pat_b, intensities, bank=PatternBank.B1))
         for frame in builder.build():
             await client.send_checked(frame)
         # ANCHOR_END: switch

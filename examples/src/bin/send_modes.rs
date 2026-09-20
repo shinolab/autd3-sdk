@@ -12,7 +12,7 @@ use autd3_rs::commands::{ConfigPattern, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, SamplingConfig};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture};
 use autd3_rs_link_echocat::EchocatLinkOption;
 
@@ -64,13 +64,14 @@ async fn run_stop_and_wait(
     wavelength: Length,
 ) -> Result<Duration> {
     let geometry = client.geometry();
-    let mut emissions = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
     let mut buf = Frames::default();
 
     let start = Instant::now();
     for &target in targets {
-        autd3_rs_pattern::focus(geometry, target, wavelength, &mut emissions);
-        write_focus(client, &emissions, &mut buf)?;
+        autd3_rs_pattern::focus(geometry, target, wavelength, &mut phases);
+        write_focus(client, &phases, &intensities, &mut buf)?;
         for frame in &buf {
             client.send_checked(frame).await?;
         }
@@ -86,14 +87,15 @@ async fn run_streaming(
     max_inflight: usize,
 ) -> Result<Duration> {
     let geometry = client.geometry();
-    let mut emissions = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
     let mut buf = Frames::default();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(max_inflight);
 
     let start = Instant::now();
     for &target in targets {
-        autd3_rs_pattern::focus(geometry, target, wavelength, &mut emissions);
-        write_focus(client, &emissions, &mut buf)?;
+        autd3_rs_pattern::focus(geometry, target, wavelength, &mut phases);
+        write_focus(client, &phases, &intensities, &mut buf)?;
         for frame in &buf {
             if pending.len() >= max_inflight {
                 pending.pop_front().expect("non-empty").await?.check()?;
@@ -108,14 +110,16 @@ async fn run_streaming(
 }
 
 async fn configure(client: &Client) -> Result<()> {
-    let mut emissions = client.geometry().pattern_buffer();
-    autd3_rs_pattern::set_intensity(Intensity::MIN, &mut emissions);
+    let phases = client.geometry().phase_buffer();
+    let mut intensities = client.geometry().intensity_buffer();
+    autd3_rs_pattern::set_intensity(Intensity::MIN, &mut intensities);
     let mut builder = client.datagram_builder();
     builder
         .push(WritePatternBuffer {
             bank: PatternBank::B0,
             index: 0,
-            emissions: &emissions,
+            phases: &phases,
+            intensities: &intensities,
         })
         .push(ConfigPattern {
             bank: PatternBank::B0,
@@ -130,12 +134,18 @@ async fn configure(client: &Client) -> Result<()> {
     Ok(())
 }
 
-fn write_focus(client: &Client, emissions: &[Vec<Emission>], buf: &mut Frames) -> Result<()> {
+fn write_focus(
+    client: &Client,
+    phases: &[Vec<Phase>],
+    intensities: &[Vec<Intensity>],
+    buf: &mut Frames,
+) -> Result<()> {
     let mut builder = client.datagram_builder();
     builder.push(WritePatternBuffer {
         bank: PatternBank::B0,
         index: 0,
-        emissions,
+        phases,
+        intensities,
     });
     builder.build_into(buf)?;
     Ok(())

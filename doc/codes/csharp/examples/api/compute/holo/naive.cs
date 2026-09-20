@@ -20,7 +20,7 @@ internal static class Sample
         };
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
-        var constraint = EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
+        var constraint = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
         var directivity = Directivity.Sphere;
         var mask = TransducerMask.AllEnabled;
         var parallel = true;
@@ -34,9 +34,10 @@ internal static class Sample
             )
             // ANCHOR_END: option
             ;
-        var dst = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
+        var intensities = geometry.IntensityBuffer();
         // ANCHOR: api
-        Holo.Naive(geometry, foci, wavelength, option, dst);
+        Holo.Naive(geometry, foci, wavelength, option, phases, intensities);
         // ANCHOR_END: api
     }
 }

@@ -32,18 +32,19 @@ var foci = new[]
     new AmplitudeTarget(center + new Vector3(-20.0f, 0.0f, 150.0f), 5e3f * Pa),
 };
 
-var dst = geometry.PatternBuffer();
-Pattern.GroupCompute(geometry, groups, (side, mask, buffer) =>
+var phases = geometry.PhaseBuffer();
+var intensities = geometry.IntensityBuffer();
+Pattern.GroupCompute(geometry, groups, (side, mask, p, i) =>
 {
     if (side == Side.Left)
     {
-        Holo.Gspat(geometry, foci, wavelength, new GspatOption(mask: mask), buffer);
+        Holo.Gspat(geometry, foci, wavelength, new GspatOption(mask: mask), p, i);
     }
     else
     {
-        Pattern.Focus(geometry, center + new Vector3(40.0f, 0.0f, 150.0f), wavelength, buffer);
+        Pattern.Focus(geometry, center + new Vector3(40.0f, 0.0f, 150.0f), wavelength, p);
     }
-}, dst);
+}, phases, intensities);
         // HIDE
     }
 }

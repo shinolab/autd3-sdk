@@ -1,9 +1,9 @@
 use autd3_rs_core::geometry::Device;
-use autd3_rs_core::value::{Emission, LoopBehavior, SamplingConfig};
+use autd3_rs_core::value::{Intensity, LoopBehavior, Phase, SamplingConfig};
 use zerocopy::{Immutable, IntoBytes};
 
 use super::LegacyOperation;
-use super::gain::{emissions_for, write_emissions};
+use super::gain::{slot_for, write_emissions};
 use crate::legacy::error::{LegacyError, PayloadError};
 use crate::legacy::wire::params::{
     GAIN_STM_BUF_SIZE_MAX, GAIN_STM_FLAG_BEGIN, GAIN_STM_FLAG_END, GAIN_STM_FLAG_SEGMENT,
@@ -51,7 +51,8 @@ impl Default for GainStmOption {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GainStm<'a> {
-    patterns: &'a [Vec<Vec<Emission>>],
+    phases: &'a [Vec<Vec<Phase>>],
+    intensities: &'a [Vec<Vec<Intensity>>],
     config: SamplingConfig,
     option: GainStmOption,
     sent: usize,
@@ -61,11 +62,13 @@ impl<'a> GainStm<'a> {
     #[must_use]
     pub fn new(
         config: impl Into<SamplingConfig>,
-        patterns: &'a [Vec<Vec<Emission>>],
+        phases: &'a [Vec<Vec<Phase>>],
+        intensities: &'a [Vec<Vec<Intensity>>],
         option: GainStmOption,
     ) -> Self {
         Self {
-            patterns,
+            phases,
+            intensities,
             config: config.into(),
             option,
             sent: 0,
@@ -73,17 +76,16 @@ impl<'a> GainStm<'a> {
     }
 }
 
-fn write_phase_nibbles(tx: &mut [u8], emissions: &[Emission], slot: usize) {
-    for (dst, emission) in tx.as_chunks_mut::<2>().0.iter_mut().zip(emissions) {
-        let word =
-            u16::from_le_bytes(*dst) | (u16::from(emission.phase.0 >> 4) & 0x000F) << (4 * slot);
+fn write_phase_nibbles(tx: &mut [u8], phases: &[Phase], slot: usize) {
+    for (dst, phase) in tx.as_chunks_mut::<2>().0.iter_mut().zip(phases) {
+        let word = u16::from_le_bytes(*dst) | (u16::from(phase.0 >> 4) & 0x000F) << (4 * slot);
         *dst = word.to_le_bytes();
     }
 }
 
-fn write_phase_bytes(tx: &mut [u8], emissions: &[Emission], slot: usize) {
-    for (dst, emission) in tx.as_chunks_mut::<2>().0.iter_mut().zip(emissions) {
-        dst[slot] = emission.phase.0;
+fn write_phase_bytes(tx: &mut [u8], phases: &[Phase], slot: usize) {
+    for (dst, phase) in tx.as_chunks_mut::<2>().0.iter_mut().zip(phases) {
+        dst[slot] = phase.0;
     }
 }
 
@@ -94,11 +96,18 @@ impl LegacyOperation for GainStm<'_> {
         } else {
             size_of::<GainStmSubseq>()
         };
-        head + device.num_transducers() * size_of::<Emission>()
+        head + device.num_transducers() * 2
     }
 
     fn pack(&mut self, device: &Device, tx: &mut [u8]) -> Result<usize, LegacyError> {
-        let size = self.patterns.len();
+        let size = self.phases.len();
+        if self.intensities.len() != size {
+            return Err(PayloadError::GainStmLengthMismatch {
+                phases: size,
+                intensities: self.intensities.len(),
+            }
+            .into());
+        }
         if !(STM_BUF_SIZE_MIN..=GAIN_STM_BUF_SIZE_MAX).contains(&size) {
             return Err(PayloadError::GainStmSizeOutOfRange {
                 size,
@@ -114,18 +123,21 @@ impl LegacyOperation for GainStm<'_> {
         } else {
             size_of::<GainStmSubseq>()
         };
-        let body = device.num_transducers() * size_of::<Emission>();
+        let body = device.num_transducers() * 2;
         let words = &mut tx[offset..offset + body];
         words.fill(0);
 
         let take = self.option.mode.frames_per_round().min(size - self.sent);
         debug_assert!(take >= 1, "a done GainStm op must not be packed again");
         for slot in 0..take {
-            let emissions = emissions_for(&self.patterns[self.sent + slot], device)?;
+            let phases = slot_for(&self.phases[self.sent + slot], device)?;
             match self.option.mode {
-                GainStmMode::PhaseIntensityFull => write_emissions(words, emissions),
-                GainStmMode::PhaseFull => write_phase_bytes(words, emissions, slot),
-                GainStmMode::PhaseHalf => write_phase_nibbles(words, emissions, slot),
+                GainStmMode::PhaseIntensityFull => {
+                    let intensities = slot_for(&self.intensities[self.sent + slot], device)?;
+                    write_emissions(words, phases, intensities);
+                }
+                GainStmMode::PhaseFull => write_phase_bytes(words, phases, slot),
+                GainStmMode::PhaseHalf => write_phase_nibbles(words, phases, slot),
             }
         }
         self.sent += take;
@@ -170,7 +182,7 @@ impl LegacyOperation for GainStm<'_> {
     }
 
     fn is_done(&self) -> bool {
-        self.sent == self.patterns.len()
+        self.sent == self.phases.len()
     }
 }
 
@@ -178,12 +190,10 @@ impl LegacyOperation for GainStm<'_> {
 mod tests {
     use core::num::NonZeroU16;
 
-    use autd3_rs_core::geometry::{Autd3, Geometry};
-    use autd3_rs_core::value::{Intensity, Phase};
-
     use super::*;
     use crate::legacy::op::test_frames;
     use crate::legacy::wire::PAYLOAD_BYTES;
+    use autd3_rs_core::geometry::{Autd3, Geometry};
 
     fn geometry(n: usize) -> Geometry {
         Geometry::new((0..n).map(|_| Autd3::default()).collect())
@@ -193,27 +203,43 @@ mod tests {
         SamplingConfig::new(NonZeroU16::new(0x4321).unwrap())
     }
 
-    fn pattern(geo: &Geometry, base: u8) -> Vec<Vec<Emission>> {
+    #[allow(clippy::cast_possible_truncation)]
+    fn phases(geo: &Geometry, base: u8) -> Vec<Vec<Phase>> {
         geo.iter()
             .map(|d| {
                 (0..d.num_transducers())
-                    .map(|i| Emission {
-                        #[allow(clippy::cast_possible_truncation)]
-                        phase: Phase(base.wrapping_add(i as u8)),
-                        #[allow(clippy::cast_possible_truncation)]
-                        intensity: Intensity(base.wrapping_mul(2).wrapping_add(i as u8)),
-                    })
+                    .map(|i| Phase(base.wrapping_add(i as u8)))
                     .collect()
             })
             .collect()
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn intensities(geo: &Geometry, base: u8) -> Vec<Vec<Intensity>> {
+        geo.iter()
+            .map(|d| {
+                (0..d.num_transducers())
+                    .map(|i| Intensity(base.wrapping_mul(2).wrapping_add(i as u8)))
+                    .collect()
+            })
+            .collect()
+    }
+
+    type Patterns = (Vec<Vec<Vec<Phase>>>, Vec<Vec<Vec<Intensity>>>);
+
+    fn patterns(geo: &Geometry, bases: &[u8]) -> Patterns {
+        (
+            bases.iter().map(|&b| phases(geo, b)).collect(),
+            bases.iter().map(|&b| intensities(geo, b)).collect(),
+        )
     }
 
     #[test]
     fn phase_intensity_full_sends_one_pattern_per_frame() {
         let geo = geometry(1);
         let n = geo[0].num_transducers();
-        let patterns = vec![pattern(&geo, 0x10), pattern(&geo, 0x20)];
-        let mut op = GainStm::new(config(), &patterns, GainStmOption::default());
+        let (patterns, amps) = patterns(&geo, &[0x10, 0x20]);
+        let mut op = GainStm::new(config(), &patterns, &amps, GainStmOption::default());
         assert_eq!(op.required_size(&geo[0]), 16 + 2 * n);
 
         let mut tx = vec![0u8; PAYLOAD_BYTES];
@@ -228,8 +254,8 @@ mod tests {
         assert_eq!(&tx[4..6], &0x4321u16.to_le_bytes());
         assert_eq!(&tx[6..8], &0xFFFFu16.to_le_bytes());
         for (i, chunk) in tx[16..16 + 2 * n].as_chunks::<2>().0.iter().enumerate() {
-            assert_eq!(chunk[0], patterns[0][0][i].phase.0);
-            assert_eq!(chunk[1], patterns[0][0][i].intensity.0);
+            assert_eq!(chunk[0], patterns[0][0][i].0);
+            assert_eq!(chunk[1], amps[0][0][i].0);
         }
 
         let mut tx = vec![0u8; PAYLOAD_BYTES];
@@ -243,10 +269,11 @@ mod tests {
     fn phase_full_packs_two_patterns_into_the_high_and_low_byte() {
         let geo = geometry(1);
         let n = geo[0].num_transducers();
-        let patterns = vec![pattern(&geo, 0x10), pattern(&geo, 0x90)];
+        let (patterns, amps) = patterns(&geo, &[0x10, 0x90]);
         let mut op = GainStm::new(
             config(),
             &patterns,
+            &amps,
             GainStmOption {
                 mode: GainStmMode::PhaseFull,
                 ..GainStmOption::default()
@@ -264,8 +291,8 @@ mod tests {
                 | GAIN_STM_FLAG_SEND_BIT0
         );
         for (i, chunk) in tx[16..16 + 2 * n].as_chunks::<2>().0.iter().enumerate() {
-            assert_eq!(chunk[0], patterns[0][0][i].phase.0);
-            assert_eq!(chunk[1], patterns[1][0][i].phase.0);
+            assert_eq!(chunk[0], patterns[0][0][i].0);
+            assert_eq!(chunk[1], patterns[1][0][i].0);
         }
     }
 
@@ -273,12 +300,12 @@ mod tests {
     fn phase_half_packs_four_patterns_into_nibbles() {
         let geo = geometry(1);
         let n = geo[0].num_transducers();
-        let patterns = (0..4)
-            .map(|k| pattern(&geo, 0x10 * (k + 1)))
-            .collect::<Vec<_>>();
+        let bases: Vec<u8> = (1..=4).map(|k| 0x10 * k).collect();
+        let (patterns, amps) = patterns(&geo, &bases);
         let mut op = GainStm::new(
             config(),
             &patterns,
+            &amps,
             GainStmOption {
                 mode: GainStmMode::PhaseHalf,
                 segment: Segment::S1,
@@ -303,7 +330,7 @@ mod tests {
             for (k, pat) in patterns.iter().enumerate() {
                 assert_eq!(
                     (word >> (4 * k)) & 0x0F,
-                    u16::from(pat[0][i].phase.0 >> 4),
+                    u16::from(pat[0][i].0 >> 4),
                     "nibble {k} of transducer {i}"
                 );
             }
@@ -313,12 +340,12 @@ mod tests {
     #[test]
     fn phase_half_with_a_partial_round_reports_the_actual_count() {
         let geo = geometry(1);
-        let patterns = (0..3)
-            .map(|k| pattern(&geo, 0x10 * (k + 1)))
-            .collect::<Vec<_>>();
+        let bases: Vec<u8> = (1..=3).map(|k| 0x10 * k).collect();
+        let (patterns, amps) = patterns(&geo, &bases);
         let mut op = GainStm::new(
             config(),
             &patterns,
+            &amps,
             GainStmOption {
                 mode: GainStmMode::PhaseHalf,
                 ..GainStmOption::default()
@@ -334,16 +361,17 @@ mod tests {
     #[test]
     fn multi_frame_split_covers_every_pattern_once() {
         let geo = geometry(2);
-        let patterns = (0..5).map(|k| pattern(&geo, 0x10 * k)).collect::<Vec<_>>();
+        let bases: Vec<u8> = (0..5).map(|k| 0x10 * k).collect();
+        let (patterns, amps) = patterns(&geo, &bases);
         let frames = test_frames(
             &geo,
-            GainStm::new(config(), &patterns, GainStmOption::default()),
+            GainStm::new(config(), &patterns, &amps, GainStmOption::default()),
         )
         .unwrap();
         assert_eq!(frames.len(), 5);
 
         for device in &geo {
-            for (round, expected) in patterns.iter().enumerate() {
+            for (round, (expected, expected_amps)) in patterns.iter().zip(&amps).enumerate() {
                 let frame = frames.frame(round).unwrap();
                 let payload = &frame.frames()[device.idx()].payload;
                 let offset = if round == 0 { 16 } else { 2 };
@@ -353,8 +381,8 @@ mod tests {
                     .iter()
                     .enumerate()
                 {
-                    assert_eq!(chunk[0], expected[device.idx()][i].phase.0);
-                    assert_eq!(chunk[1], expected[device.idx()][i].intensity.0);
+                    assert_eq!(chunk[0], expected[device.idx()][i].0);
+                    assert_eq!(chunk[1], expected_amps[device.idx()][i].0);
                 }
             }
         }
@@ -363,14 +391,32 @@ mod tests {
     #[test]
     fn size_out_of_range_is_rejected() {
         let geo = geometry(1);
-        let patterns = vec![pattern(&geo, 0)];
+        let (patterns, amps) = patterns(&geo, &[0]);
         let mut tx = vec![0u8; PAYLOAD_BYTES];
-        let err = GainStm::new(config(), &patterns, GainStmOption::default())
+        let err = GainStm::new(config(), &patterns, &amps, GainStmOption::default())
             .pack(&geo[0], &mut tx)
             .unwrap_err();
         assert!(matches!(
             err,
             LegacyError::InvalidPayload(PayloadError::GainStmSizeOutOfRange { size: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn mismatched_phase_and_intensity_counts_are_rejected() {
+        let geo = geometry(1);
+        let (three, _) = patterns(&geo, &[0, 1, 2]);
+        let (_, amps) = patterns(&geo, &[0, 1]);
+        let mut tx = vec![0u8; PAYLOAD_BYTES];
+        let err = GainStm::new(config(), &three, &amps, GainStmOption::default())
+            .pack(&geo[0], &mut tx)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            LegacyError::InvalidPayload(PayloadError::GainStmLengthMismatch {
+                phases: 3,
+                intensities: 2
+            })
         ));
     }
 }

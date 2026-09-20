@@ -14,7 +14,8 @@ import csSample from "@codes/csharp/examples/api/command/lowlevel/bank.cs?raw";
 import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
-`WritePatternBuffer` は, 指定したバンク・インデックスへ Pattern (各振動子の `Emission`) を書き込む低レベルコマンド.
+`WritePatternBuffer` は, 指定したバンク・インデックスへ Pattern (各振動子の位相と振幅) を書き込む低レベルコマンド.
+通信上は位相列・振幅列の順で送られ, デバイスの CPU が FPGA のメモリへ振動子毎に並べ直して書き込む.
 
 ## API
 
@@ -24,7 +25,8 @@ import { excerpt } from "@lib/excerpt";
 | ----------- | -------------------------------- | -------------------------------- |
 | `bank`      | `PatternBank`                    | 書き込み先バンク                 |
 | `index`     | `u16`                            | バンク内の書き込み先インデックス |
-| `emissions` | `&[Vec<Emission>]` | デバイスごとの emission パターン |
+| `phases`      | `&[Vec<Phase>]`     | デバイスごとの位相               |
+| `intensities` | `&[Vec<Intensity>]` | デバイスごとの振幅               |
 
 ## Example
 

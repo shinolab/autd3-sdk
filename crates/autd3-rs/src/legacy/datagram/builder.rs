@@ -205,7 +205,7 @@ fn pack_device<'a>(
 #[cfg(test)]
 mod tests {
     use autd3_rs_core::geometry::{Autd3, Geometry};
-    use autd3_rs_core::value::{Emission, SamplingConfig};
+    use autd3_rs_core::value::{Intensity, Phase, SamplingConfig};
     use core::num::NonZeroU16;
 
     use super::*;
@@ -247,7 +247,8 @@ mod tests {
     fn a_multi_frame_op_keeps_the_following_op_in_a_later_frame() {
         let geo = geometry(1);
         let data = vec![0x80u8; 300];
-        let emissions = vec![vec![Emission::NULL; geo[0].num_transducers()]];
+        let phases = vec![vec![Phase::ZERO; geo[0].num_transducers()]];
+        let intensities = vec![vec![Intensity::MIN; geo[0].num_transducers()]];
 
         let mut b = LegacyDatagramBuilder::new(Arc::clone(&geo));
         b.push_op(Modulation::new(
@@ -255,7 +256,7 @@ mod tests {
             &data,
             ModulationOption::default(),
         ))
-        .push_op(Gain::new(&emissions));
+        .push_op(Gain::new(&phases, &intensities));
         let frames = b.build().unwrap();
 
         assert_eq!(frames.len(), 3, "2 modulation rounds, then the gain");
@@ -378,9 +379,10 @@ mod tests {
     #[test]
     fn an_encode_error_leaves_no_partial_rounds() {
         let geo = geometry(1);
-        let ragged = vec![vec![Emission::NULL; 1]];
+        let ragged = vec![vec![Phase::ZERO; 1]];
+        let intensities = vec![vec![Intensity::MIN; 1]];
         let mut b = LegacyDatagramBuilder::new(geo);
-        b.push_op(Gain::new(&ragged));
+        b.push_op(Gain::new(&ragged, &intensities));
         assert!(b.build().is_err());
     }
 
@@ -388,7 +390,8 @@ mod tests {
     fn an_encode_error_empties_the_caller_provided_buffer() {
         let geo = geometry(1);
         let data = vec![0x80u8; 300];
-        let ragged = vec![vec![Emission::NULL; 1]];
+        let ragged = vec![vec![Phase::ZERO; 1]];
+        let intensities = vec![vec![Intensity::MIN; 1]];
 
         let mut out = LegacyFrames::default();
         let mut b = LegacyDatagramBuilder::new(Arc::clone(&geo));
@@ -402,7 +405,7 @@ mod tests {
             &data,
             ModulationOption::default(),
         ))
-        .push_op(Gain::new(&ragged));
+        .push_op(Gain::new(&ragged, &intensities));
         assert!(b.build_into(&mut out).is_err());
         assert_eq!(out.len(), 0);
         assert!(out.is_empty());

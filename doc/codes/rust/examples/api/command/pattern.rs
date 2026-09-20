@@ -11,26 +11,30 @@ fn main() {
     let bank = PatternBank::B0;
     let transition_mode = TransitionMode::Immediate;
 
-    let emissions = geometry.pattern_buffer();
+    let phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
 
     // ANCHOR: api
-    Pattern::new(&emissions);
+    Pattern::new(&phases, &intensities);
 
-    Pattern::with_bank(bank, &emissions);
+    Pattern::with_bank(bank, &phases, &intensities);
 
     Pattern {
         bank,
-        emissions: &emissions,
+        phases: &phases,
+        intensities: &intensities,
         transition_mode,
     };
     // ANCHOR_END: api
 
-    let emissions = &emissions;
+    let phases = &phases;
+    let intensities = &intensities;
     // ANCHOR: equivalent
     WritePatternBuffer {
         bank,
         index: 0,
-        emissions,
+        phases,
+        intensities,
     };
     ConfigPattern {
         bank,

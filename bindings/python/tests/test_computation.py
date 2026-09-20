@@ -46,38 +46,40 @@ def test_phase_from_angle() -> None:
         modulation.sine(200.0, modulation.SineOption(), modulation.modulation_buffer())
 
 
-def test_pattern_focus_plane_bessel_keep_intensity() -> None:
+def test_pattern_focus_plane_bessel_write_phase() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340 * m / s)
     center = geo.center()
-    buf = geo.pattern_buffer()
-    for dev in range(len(buf)):
-        for tr in range(len(buf[dev])):
-            assert (buf[dev][tr].phase.value, buf[dev][tr].intensity.value) == (0x00, 0xFF)
+    phases = geo.phase_buffer()
+    intensities = geo.intensity_buffer()
+    for dev in range(len(phases)):
+        for tr in range(len(phases[dev])):
+            assert phases[dev][tr].value == 0x00
+            assert intensities[dev][tr].value == 0xFF
 
-    pattern.set_intensity(autd3.value.Intensity(0x80), buf)
-    pattern.focus(geo, center + np.array([0.0, 0.0, 150.0]), wavelength, buf)
-    pattern.plane(geo, [0.0, 0.0, 1.0], wavelength, buf)
-    pattern.bessel(geo, center, [0.0, 0.0, 1.0], 0.3 * rad, wavelength, buf)
-    assert len(buf) == geo.num_devices()
-    for dev in range(len(buf)):
-        for tr in range(len(buf[dev])):
-            assert buf[dev][tr].intensity.value == 0x80
+    pattern.focus(geo, center + np.array([0.0, 0.0, 150.0]), wavelength, phases)
+    focused = [phases[0][tr].value for tr in range(len(phases[0]))]
+    assert len(set(focused)) > 1
+    pattern.plane(geo, [0.0, 0.0, 1.0], wavelength, phases)
+    pattern.bessel(geo, center, [0.0, 0.0, 1.0], 0.3 * rad, wavelength, phases)
+    assert len(phases) == geo.num_devices()
+    with pytest.raises(TypeError):
+        pattern.focus(geo, center, wavelength, intensities)
 
 
 def test_pattern_set_and_add_phase() -> None:
     geo = geometry()
-    buf = geo.pattern_buffer()
-    pattern.set_intensity(0x80, buf)
-    pattern.set_phase(autd3.value.Phase(0xF0), buf)
-    pattern.add_phase(0x20, buf)
-    for dev in range(len(buf)):
-        for tr in range(len(buf[dev])):
-            assert (buf[dev][tr].phase.value, buf[dev][tr].intensity.value) == (0x10, 0x80)
-    pattern.set_phase_and_intensity(autd3.value.Phase(0x40), autd3.value.Intensity(0x50), buf)
-    for dev in range(len(buf)):
-        for tr in range(len(buf[dev])):
-            assert (buf[dev][tr].phase.value, buf[dev][tr].intensity.value) == (0x40, 0x50)
+    phases = geo.phase_buffer()
+    intensities = geo.intensity_buffer()
+    pattern.set_intensity(0x80, intensities)
+    pattern.set_phase(autd3.value.Phase(0xF0), phases)
+    pattern.add_phase(0x20, phases)
+    for dev in range(len(phases)):
+        for tr in range(len(phases[dev])):
+            assert (phases[dev][tr].value, intensities[dev][tr].value) == (0x10, 0x80)
+    assert not hasattr(pattern, "set_phase_and_intensity")
+    with pytest.raises(TypeError):
+        pattern.set_intensity(0x80, phases)
 
 
 def test_pattern_group() -> None:
@@ -87,16 +89,30 @@ def test_pattern_group() -> None:
             autd3.geometry.Autd3([200.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
         ]
     )
-    left = geo.pattern_buffer()
-    pattern.set_phase_and_intensity(autd3.value.Phase(0x10), autd3.value.Intensity(0x20), left)
-    right = geo.pattern_buffer()
-    pattern.set_phase_and_intensity(autd3.value.Phase(0x30), autd3.value.Intensity(0x40), right)
-    dst = geo.pattern_buffer()
+    left = geo.phase_buffer()
+    pattern.set_phase(autd3.value.Phase(0x10), left)
+    right = geo.phase_buffer()
+    pattern.set_phase(autd3.value.Phase(0x30), right)
+    dst = geo.phase_buffer()
+    pattern.set_phase(autd3.value.Phase(0xFF), dst)
+
+    left_i = geo.intensity_buffer()
+    pattern.set_intensity(0x20, left_i)
+    right_i = geo.intensity_buffer()
+    pattern.set_intensity(0x40, right_i)
+    dst_i = geo.intensity_buffer()
 
     def key(device: autd3.geometry.Device, tr: int) -> str | None:
         if tr % 3 == 0:
             return "left"
         if device.idx() == 1 and tr % 3 == 1:
+            return "right"
+        return None
+
+    def side(dev: int, tr: int) -> str | None:
+        if tr % 3 == 0:
+            return "left"
+        if dev == 1 and tr % 3 == 1:
             return "right"
         return None
 
@@ -106,139 +122,141 @@ def test_pattern_group() -> None:
     assert groups.key(0, 1) is None
 
     pattern.group(geo, groups, {"left": left, "right": right}, dst)
+    pattern.group(geo, groups, {"left": left_i, "right": right_i}, dst_i)
 
     for dev in range(2):
         for tr in range(len(dst[dev])):
-            e = dst[dev][tr]
-            if tr % 3 == 0:
-                expected = (0x10, 0x20)
-            elif dev == 1 and tr % 3 == 1:
-                expected = (0x30, 0x40)
-            else:
-                expected = (0x00, 0x00)
-            assert (e.phase.value, e.intensity.value) == expected
+            expected = {"left": (0x10, 0x20), "right": (0x30, 0x40), None: (0x00, 0x00)}[side(dev, tr)]
+            assert (dst[dev][tr].value, dst_i[dev][tr].value) == expected
 
     with pytest.raises(ValueError):
         pattern.group(geo, groups, {"left": left, "right": dst}, dst)
     with pytest.raises(KeyError):
         pattern.group(geo, groups, {"left": left}, dst)
-    single = geometry().pattern_buffer()
+    single = geometry().phase_buffer()
     with pytest.raises(ValueError):
         pattern.group(geo, groups, {"left": left, "right": single}, dst)
     with pytest.raises(TypeError):
         pattern.group(geo, groups, {"left": left, "right": 1}, dst)
     with pytest.raises(TypeError):
+        pattern.group(geo, groups, {"left": left, "right": right_i}, dst)
+    with pytest.raises(TypeError):
+        pattern.group(geo, groups, {"left": left, "right": right}, 1)
+    with pytest.raises(TypeError):
         pattern.TransducerGroups(geo, lambda device, tr: [])
     with pytest.raises(KeyError):
         groups.mask("center")
 
-    holo_dst = geo.pattern_buffer()
+    holo_phases = geo.phase_buffer()
+    holo_intensities = geo.intensity_buffer()
     holo.gspat(
         geo,
         [holo.AmplitudeTarget(point=geo.center() + np.array([0.0, 0.0, 150.0]), amplitude=5e3 * Pa)],
         pattern.wavelength(340 * m / s),
-        holo.GspatOption(constraint=holo.EmissionConstraint.Uniform(0xFF), mask=groups.mask("right")),
-        holo_dst,
+        holo.GspatOption(constraint=holo.IntensityConstraint.Uniform(0xFF), mask=groups.mask("right")),
+        holo_phases,
+        holo_intensities,
     )
     for dev in range(2):
-        for tr in range(len(holo_dst[dev])):
-            expected = 0xFF if dev == 1 and tr % 3 == 1 else 0x00
-            assert holo_dst[dev][tr].intensity.value == expected
+        for tr in range(len(holo_intensities[dev])):
+            expected = 0xFF if side(dev, tr) == "right" else 0x00
+            assert holo_intensities[dev][tr].value == expected
 
     seen = []
 
-    def compute(side: str, mask: object, buffer: object) -> None:
-        seen.append(side)
-        if side == "left":
+    def compute(key: str, mask: object, phases: object, intensities: object) -> None:
+        seen.append(key)
+        if key == "left":
             holo.gspat(
                 geo,
                 [holo.AmplitudeTarget(point=geo.center() + np.array([0.0, 0.0, 150.0]), amplitude=5e3 * Pa)],
                 pattern.wavelength(340 * m / s),
-                holo.GspatOption(constraint=holo.EmissionConstraint.Uniform(0xFF), mask=mask),
-                buffer,
+                holo.GspatOption(constraint=holo.IntensityConstraint.Uniform(0xFF), mask=mask),
+                phases,
+                intensities,
             )
         else:
-            pattern.set_phase_and_intensity(autd3.value.Phase(0x30), autd3.value.Intensity(0x40), buffer)
+            pattern.set_phase(autd3.value.Phase(0x30), phases)
+            pattern.set_intensity(autd3.value.Intensity(0x40), intensities)
 
-    computed = geo.pattern_buffer()
-    pattern.set_phase_and_intensity(autd3.value.Phase(0xFF), autd3.value.Intensity(0xFF), computed)
-    pattern.group_compute(geo, groups, compute, computed)
+    computed = geo.phase_buffer()
+    pattern.set_phase(autd3.value.Phase(0xFF), computed)
+    computed_i = geo.intensity_buffer()
+    pattern.group_compute(geo, groups, compute, computed, computed_i)
     assert seen == ["left", "right"]
     for dev in range(2):
         for tr in range(len(computed[dev])):
-            e = computed[dev][tr]
-            if tr % 3 == 0:
-                assert e.intensity.value == 0xFF
-            elif dev == 1 and tr % 3 == 1:
-                assert (e.phase.value, e.intensity.value) == (0x30, 0x40)
+            p, i = computed[dev][tr].value, computed_i[dev][tr].value
+            if side(dev, tr) == "left":
+                assert i == 0xFF
+            elif side(dev, tr) == "right":
+                assert (p, i) == (0x30, 0x40)
             else:
-                assert (e.phase.value, e.intensity.value) == (0x00, 0x00)
+                assert (p, i) == (0x00, 0x00)
 
-    def fail(side: str, mask: object, buffer: object) -> None:
-        raise RuntimeError(side)
+    def fail(key: str, mask: object, phases: object, intensities: object) -> None:
+        raise RuntimeError(key)
 
     with pytest.raises(RuntimeError):
-        pattern.group_compute(geo, groups, fail, computed)
+        pattern.group_compute(geo, groups, fail, computed, computed_i)
     with pytest.raises(ValueError):
-        pattern.group_compute(geometry(), groups, compute, single)
+        pattern.group_compute(geometry(), groups, compute, single, geometry().intensity_buffer())
     with pytest.raises(TypeError):
-        pattern.group_compute(geo, groups, None, computed)
+        pattern.group_compute(geo, groups, None, computed, computed_i)
 
-    pattern.group_compute(geo, groups, lambda side, mask, buffer: None, computed)
+    pattern.group_compute(geo, groups, lambda key, mask, phases, intensities: None, computed, computed_i)
     for dev in range(2):
         for tr in range(len(computed[dev])):
-            e = computed[dev][tr]
-            if tr % 3 == 0 or (dev == 1 and tr % 3 == 1):
-                assert (e.phase.value, e.intensity.value) == (0x00, 0xFF)
+            p, i = computed[dev][tr].value, computed_i[dev][tr].value
+            if side(dev, tr) is not None:
+                assert (p, i) == (0x00, 0xFF)
             else:
-                assert (e.phase.value, e.intensity.value) == (0x00, 0x00)
+                assert (p, i) == (0x00, 0x00)
 
 
 def test_pattern_laguerre_hermite_gaussian() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340 * m / s)
     target = geo.center() + np.array([0.0, 0.0, 150.0])
-    num = len(geo.pattern_buffer()[0])
+    num = len(geo.phase_buffer()[0])
 
-    def phases(buf: object) -> list[int]:
-        return [buf[0][i].phase.value for i in range(num)]  # type: ignore[index]
+    def values(buf: object) -> list[int]:
+        return [buf[0][i].value for i in range(num)]  # type: ignore[index]
 
-    def intensities(buf: object) -> list[int]:
-        return [buf[0][i].intensity.value for i in range(num)]  # type: ignore[index]
-
-    focused = geo.pattern_buffer()
+    focused = geo.phase_buffer()
     pattern.focus(geo, target, wavelength, focused)
 
     def near(a: int, b: int) -> bool:
         return min((a - b) % 256, (b - a) % 256) <= 2
 
-    fundamental = geo.pattern_buffer()
+    fundamental = geo.phase_buffer()
     pattern.laguerre_gaussian_phase(
         geo, target, [0.0, 0.0, 1.0], pattern.LaguerreGaussianOption(p=0, l=0, waist=10.0), wavelength, fundamental
     )
-    offsets = [(a - b) % 256 for a, b in zip(phases(fundamental), phases(focused))]
+    offsets = [(a - b) % 256 for a, b in zip(values(fundamental), values(focused))]
     assert all(near(o, offsets[0]) for o in offsets)
 
     lg_option = pattern.LaguerreGaussianOption(p=0, l=1, waist=10.0)
     assert (lg_option.p, lg_option.l, lg_option.waist) == (0, 1, 10.0)
-    lg = geo.pattern_buffer()
-    pattern.set_phase_and_intensity(0x00, 0x00, lg)
+    lg = geo.phase_buffer()
     pattern.laguerre_gaussian_phase(geo, target, [0.0, 0.0, 1.0], lg_option, wavelength, lg)
-    assert intensities(lg) == [0x00] * num
-    assert phases(lg) != phases(fundamental)
+    assert values(lg) != values(fundamental)
 
-    pattern.laguerre_gaussian_intensity(geo, target, [0.0, 0.0, 1.0], lg_option, wavelength, lg)
-    assert max(intensities(lg)) == 0xFF
-    assert min(intensities(lg)) < 0xFF
+    lg_i = geo.intensity_buffer()
+    pattern.set_intensity(0x00, lg_i)
+    pattern.laguerre_gaussian_intensity(geo, target, [0.0, 0.0, 1.0], lg_option, wavelength, lg_i)
+    assert max(values(lg_i)) == 0xFF
+    assert min(values(lg_i)) < 0xFF
 
     hg_option = pattern.HermiteGaussianOption(m=1, n=0, waist=10.0)
-    hg = geo.pattern_buffer()
+    hg = geo.phase_buffer()
+    hg_i = geo.intensity_buffer()
     pattern.hermite_gaussian_phase(geo, target, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], hg_option, wavelength, hg)
     pattern.hermite_gaussian_intensity(
-        geo, target, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], hg_option, wavelength, hg
+        geo, target, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], hg_option, wavelength, hg_i
     )
-    assert max(intensities(hg)) == 0xFF
-    split = [(a - b) % 256 for a, b in zip(phases(hg), phases(focused))]
+    assert max(values(hg_i)) == 0xFF
+    split = [(a - b) % 256 for a, b in zip(values(hg), values(focused))]
     assert all(near(o, split[0]) or near(o, split[0] + 128) for o in split)
     assert any(near(o, split[0] + 128) for o in split)
 
@@ -285,24 +303,27 @@ def test_modulation_sine_square_fourier_radiation() -> None:
 
 def test_custom_pattern_indexing() -> None:
     geo = geometry()
-    buf = geo.pattern_buffer()
+    phases = geo.phase_buffer()
+    intensities = geo.intensity_buffer()
 
-    assert len(buf) == geo.num_devices()
-    for slot, device in zip(buf, geo):
+    assert len(phases) == geo.num_devices()
+    assert len(intensities) == geo.num_devices()
+    for slot, islot, device in zip(phases, intensities, geo):
         assert len(slot) == device.num_transducers()
         for t in range(len(slot)):
-            slot[t] = autd3.value.Emission(autd3.value.Phase(t & 0xFF), autd3.value.Intensity(0x80))
+            slot[t] = autd3.value.Phase(t & 0xFF)
+            islot[t] = autd3.value.Intensity(0x80)
 
-    slot0 = buf[0]
-    assert slot0[3].phase.value == 3
-    assert slot0[3].intensity.value == 0x80
+    slot0 = phases[0]
+    assert slot0[3].value == 3
+    assert intensities[0][3].value == 0x80
 
     with pytest.raises(IndexError):
-        _ = buf[geo.num_devices()]
+        _ = phases[geo.num_devices()]
     with pytest.raises(IndexError):
-        slot0[len(slot0)] = autd3.value.Emission(autd3.value.Phase(0), autd3.value.Intensity(0))
+        slot0[len(slot0)] = autd3.value.Phase(0)
 
-    autd3.commands.Pattern(buf)
+    autd3.commands.Pattern(phases, intensities)
 
 
 def test_custom_modulation_indexing() -> None:
@@ -330,12 +351,14 @@ def test_holo_algorithms() -> None:
         holo.AmplitudeTarget(center + np.array([-20.0, 0.0, 150.0]), 5e3 * Pa),
         holo.AmplitudeTarget(center + np.array([20.0, 0.0, 150.0]), 150 * dB),
     ]
-    buf = geo.pattern_buffer()
-    holo.naive(geo, foci, wavelength, holo.NaiveOption(), buf)
-    holo.gs(geo, foci, wavelength, holo.GsOption(repeat=10), buf)
-    holo.gspat(geo, foci, wavelength, holo.GspatOption(repeat=10), buf)
-    holo.greedy(geo, foci, wavelength, holo.GreedyOption(), buf)
-    assert len(buf) == geo.num_devices()
+    phases = geo.phase_buffer()
+    intensities = geo.intensity_buffer()
+    holo.naive(geo, foci, wavelength, holo.NaiveOption(), phases, intensities)
+    holo.gs(geo, foci, wavelength, holo.GsOption(repeat=10), phases, intensities)
+    holo.gspat(geo, foci, wavelength, holo.GspatOption(repeat=10), phases, intensities)
+    holo.greedy(geo, foci, wavelength, holo.GreedyOption(), phases, intensities)
+    assert len(phases) == geo.num_devices()
+    assert len(intensities) == geo.num_devices()
 
 
 def test_stm_foci_and_pattern() -> None:
@@ -349,10 +372,13 @@ def test_stm_foci_and_pattern() -> None:
     wavelength = pattern.wavelength(340 * m / s)
     frames = []
     for x in (-20.0, 20.0):
-        buf = geo.pattern_buffer()
+        buf = geo.phase_buffer()
         pattern.focus(geo, geo.center() + np.array([x, 0.0, 150.0]), wavelength, buf)
         frames.append(buf)
-    builder.push(autd3.commands.PatternStm(autd3.commands.StmConfig(1.0 * Hz), frames, autd3.commands.PatternStmOption()))
+    amps = [geo.intensity_buffer() for _ in frames]
+    builder.push(
+        autd3.commands.PatternStm(autd3.commands.StmConfig(1.0 * Hz), frames, amps, autd3.commands.PatternStmOption())
+    )
 
     datagrams = builder.build()
     assert len(datagrams) > 0
@@ -364,22 +390,23 @@ def test_push_each() -> None:
         autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
     ])
     wavelength = pattern.wavelength(340 * m / s)
-    left = geo.pattern_buffer()
+    left = geo.phase_buffer()
     pattern.focus(geo, geo.center() + np.array([-40.0, 0.0, 150.0]), wavelength, left)
-    right = geo.pattern_buffer()
+    right = geo.phase_buffer()
     pattern.focus(geo, geo.center() + np.array([40.0, 0.0, 150.0]), wavelength, right)
+    amps = geo.intensity_buffer()
     mod_buf = modulation.modulation_buffer()
     modulation.sine(150 * Hz, modulation.SineOption(), mod_buf)
 
     # homogeneous per-device command
     builder = autd3.DatagramBuilder(geo)
-    builder.push_each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right))
+    builder.push_each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right, amps))
     assert len(builder.build()) > 0
 
     # heterogeneous per-device command (Python is dynamically typed, no boxing needed)
     builder = autd3.DatagramBuilder(geo)
     builder.push_each(
-        lambda device: autd3.commands.Pattern(left)
+        lambda device: autd3.commands.Pattern(left, amps)
         if device.idx() % 2 == 0
         else autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf)
     )
@@ -387,7 +414,7 @@ def test_push_each() -> None:
 
     # returning None leaves that device unassigned
     builder = autd3.DatagramBuilder(geo)
-    builder.push_each(lambda device: autd3.commands.Pattern(left) if device.idx() == 0 else None)
+    builder.push_each(lambda device: autd3.commands.Pattern(left, amps) if device.idx() == 0 else None)
     assert len(builder.build()) > 0
 
 
@@ -407,12 +434,14 @@ def test_later_stages_a_bank_without_changing_it() -> None:
     )
     assert len(builder.build()) == 2
 
-    pat = geo.pattern_buffer()
-    pattern.set_phase_and_intensity(autd3.value.Phase(0x00), autd3.value.Intensity(0x80), pat)
+    pat = geo.phase_buffer()
+    pat_i = geo.intensity_buffer()
+    pattern.set_intensity(autd3.value.Intensity(0x80), pat_i)
     builder = autd3.DatagramBuilder(geo)
     builder.push(
         autd3.commands.Pattern(
             pat,
+            pat_i,
             bank=autd3.value.PatternBank.B1,
             transition_mode=autd3.value.TransitionMode.Later,
         )
@@ -491,12 +520,14 @@ def test_link_options_construct() -> None:
 def test_loop_behavior_and_transition_mode() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340 * m / s)
-    buf = geo.pattern_buffer()
+    buf = geo.phase_buffer()
+    amps = geo.intensity_buffer()
     pattern.focus(geo, geo.center() + np.array([0.0, 0.0, 150.0]), wavelength, buf)
 
     builder = autd3.DatagramBuilder(geo)
-    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, buf))
-    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 1, buf))
+    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, buf, amps))
+    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 1, buf, amps))
+    builder.push(autd3.commands.WritePatternCompressed(autd3.value.PatternBank.B1, 2, autd3.commands.PatternCompression.PhaseFull, [buf, buf]))
     builder.push(
         autd3.commands.ConfigPattern(
             autd3.value.PatternBank.B1,

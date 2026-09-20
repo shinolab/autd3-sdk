@@ -27,12 +27,13 @@ await using var client = await Client.OpenAsync(
 // Generate a focus 150 mm above the array center.
 var target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
 var wavelength = Pattern.Wavelength(340.0f * m / s);
-var patterns = geometry.PatternBuffer();
+var phases = geometry.PhaseBuffer();
+var intensities = geometry.IntensityBuffer();
 Pattern.Focus(
     geometry,
     target,
     wavelength,
-    patterns
+    phases
 );
 
 // Apply a 200 Hz sine-wave AM.
@@ -45,7 +46,7 @@ Modulation.Sine(
 
 var builder = client.DatagramBuilder();
 builder.Push(new SetSilencer());
-builder.Push(new Pattern(patterns));
+builder.Push(new Pattern(phases, intensities));
 builder.Push(new Modulation(SamplingConfig.Freq4k, modulation));
 var frames = builder.Build();
 foreach (var frame in frames)

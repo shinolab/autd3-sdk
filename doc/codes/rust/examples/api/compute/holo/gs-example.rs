@@ -5,7 +5,7 @@ use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs_pattern::wavelength;
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, GsOption, NalgebraBackend, Pa, gs,
+    AmplitudeTarget, Directivity, IntensityConstraint, GsOption, NalgebraBackend, Pa, gs,
 };
 
 // HIDE
@@ -13,7 +13,8 @@ fn main() -> anyhow::Result<()> {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let mut intensities = geometry.intensity_buffer();
 
     gs(
         &NalgebraBackend,
@@ -31,13 +32,14 @@ fn main() -> anyhow::Result<()> {
         wavelength(340.0 * m / s),
         &GsOption {
             repeat: NonZeroUsize::new(100).unwrap(),
-            constraint: EmissionConstraint::Clamp(Intensity::MIN, Intensity::MAX),
+            constraint: IntensityConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             directivity: Directivity::Sphere,
             mask: TransducerMask::AllEnabled,
             parallel: true,
             ..Default::default()
         },
-        &mut dst,
+        &mut phases,
+        &mut intensities,
     )?;
 
     // HIDE

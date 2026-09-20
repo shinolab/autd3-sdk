@@ -193,8 +193,8 @@ pub enum PayloadError {
     #[error("STM size {size} out of range {min}..={max}")]
     StmSizeOutOfRange { size: usize, min: usize, max: usize },
 
-    #[error("emissions has {len} entr(ies) but device {device} was requested")]
-    EmissionsDeviceOutOfRange { device: usize, len: usize },
+    #[error("per-device data has {len} entr(ies) but device {device} was requested")]
+    DeviceDataOutOfRange { device: usize, len: usize },
 
     #[error("device {device} has {got} transducer entr(ies) but {expected} are required")]
     TransducerCountMismatch {
@@ -203,12 +203,8 @@ pub enum PayloadError {
         expected: usize,
     },
 
-    #[error("device {device} pattern data ({len} byte(s)) exceeds frame capacity {capacity}")]
-    PatternWriteExceedsCapacity {
-        device: usize,
-        len: usize,
-        capacity: usize,
-    },
+    #[error("pattern STM has {phases} phase pattern(s) but {intensities} intensity pattern(s)")]
+    PatternStmLengthMismatch { phases: usize, intensities: usize },
 
     #[error("pattern STM index {index} out of range 0..{max}")]
     PatternIndexOutOfRange { index: usize, max: usize },

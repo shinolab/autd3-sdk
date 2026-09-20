@@ -23,9 +23,10 @@ async def main() -> None:
         wavelength = pattern.wavelength(340 * m / s)
 
         # ANCHOR: pattern_intensity
-        patterns = geometry.pattern_buffer()
-        pattern.set_intensity(Intensity(0x80), patterns)
-        pattern.focus(geometry, target, wavelength, patterns)
+        phases = geometry.phase_buffer()
+        intensities = geometry.intensity_buffer()
+        pattern.set_intensity(Intensity(0x80), intensities)
+        pattern.focus(geometry, target, wavelength, phases)
         # ANCHOR_END: pattern_intensity
 
         # ANCHOR: modulation
@@ -43,7 +44,7 @@ async def main() -> None:
 
         builder = client.datagram_builder()
         builder.push(SetSilencer())
-        builder.push(Pattern(patterns))
+        builder.push(Pattern(phases, intensities))
         builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
         for frame in builder.build():
             await client.send_checked(frame)

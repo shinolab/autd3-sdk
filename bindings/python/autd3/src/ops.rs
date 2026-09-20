@@ -1,14 +1,12 @@
 use core::num::NonZeroU16;
 use core::time::Duration;
 
-use autd3_python_capsule::{
-    DevicePattern, capsule_of, modulation_from_capsule, pattern_from_capsule,
-};
+use autd3_python_capsule::{capsule_of, modulation_from_capsule};
 use autd3_rs::Velocity;
 use autd3_rs::commands::PatternCompression as CorePatternCompression;
 use autd3_rs::value::{
-    DcSysTime as CoreDcSysTime, GpioIn as CoreGpioIn, LoopBehavior as CoreLoopBehavior,
-    ModulationBank as CoreModulationBank, PatternBank as CorePatternBank,
+    DcSysTime as CoreDcSysTime, GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
+    ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase,
     TransitionMode as CoreTransitionMode,
 };
 use pyo3::exceptions::PyValueError;
@@ -235,19 +233,24 @@ impl LoopBehavior {
 pub struct WritePatternBuffer {
     pub(crate) bank: CorePatternBank,
     pub(crate) index: u16,
-    pub(crate) emissions: Vec<DevicePattern>,
+    pub(crate) phases: Vec<Vec<Phase>>,
+    pub(crate) intensities: Vec<Vec<Intensity>>,
 }
 
 #[pymethods]
 impl WritePatternBuffer {
     #[new]
-    fn new(bank: PatternBank, index: u16, emissions: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let capsule = capsule_of(emissions)?;
-        let emissions = pattern_from_capsule(&capsule)?.to_vec();
+    fn new(
+        bank: PatternBank,
+        index: u16,
+        phases: &Bound<'_, PyAny>,
+        intensities: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
         Ok(Self {
             bank: bank.0,
             index,
-            emissions,
+            phases: crate::datagram::extract_phases(phases)?,
+            intensities: crate::datagram::extract_intensities(intensities)?,
         })
     }
 }
@@ -284,7 +287,7 @@ pub struct WritePatternCompressed {
     pub(crate) bank: CorePatternBank,
     pub(crate) index: u32,
     pub(crate) format: CorePatternCompression,
-    pub(crate) patterns: Vec<Vec<DevicePattern>>,
+    pub(crate) patterns: Vec<Vec<Vec<Phase>>>,
 }
 
 #[pymethods]
@@ -298,15 +301,12 @@ impl WritePatternCompressed {
     ) -> PyResult<Self> {
         if patterns.is_empty() || patterns.len() > 4 {
             return Err(PyValueError::new_err(
-                "WritePatternCompressed expects 1..=4 pattern buffers",
+                "WritePatternCompressed expects 1..=4 phase buffers",
             ));
         }
         let patterns = patterns
             .iter()
-            .map(|buffer| {
-                let capsule = capsule_of(buffer)?;
-                Ok(pattern_from_capsule(&capsule)?.to_vec())
-            })
+            .map(crate::datagram::extract_phases)
             .collect::<PyResult<Vec<_>>>()?;
         Ok(Self {
             bank: bank.0,

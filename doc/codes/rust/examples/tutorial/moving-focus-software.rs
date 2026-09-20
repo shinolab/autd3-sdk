@@ -19,7 +19,8 @@ async fn main() -> Result<()> {
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
 
     // ANCHOR: loop
-    let mut patterns = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
     loop {
         for sign in [1.0_f32, -1.0] {
             let target = center + offset((sign * 20.0) * mm, 0.0 * mm, 0.0 * mm);
@@ -27,10 +28,10 @@ async fn main() -> Result<()> {
                 &geometry,
                 target,
                 wavelength,
-                &mut patterns,
+                &mut phases,
             );
             let mut builder = client.datagram_builder();
-            builder.push(Pattern::new(&patterns));
+            builder.push(Pattern::new(&phases, &intensities));
             for frame in &builder.build()? {
                 client.send_checked(frame).await?;
             }

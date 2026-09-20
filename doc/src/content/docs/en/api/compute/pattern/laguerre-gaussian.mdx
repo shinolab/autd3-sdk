@@ -35,7 +35,7 @@ Besides `laguerre_gaussian_phase`, which writes only the phase, there is `laguer
 | `axis`       | `UnitVector3<f32>`       | Propagation direction (unit vector)    |
 | `option`     | `LaguerreGaussianOption` | Mode and waist                         |
 | `wavelength` | `Length`                 | Wavelength                             |
-| `dst`        | `&mut [[Emission; _]]`   | Output buffer                          |
+| `dst`        | `&mut [Vec<Phase>]` / `&mut [Vec<Intensity>]` | Output buffer (phases for `*_phase`, intensities for `*_intensity`) |
 
 | Field   | Type     | Description                                             |
 | ------- | -------- | ------------------------------------------------------- |

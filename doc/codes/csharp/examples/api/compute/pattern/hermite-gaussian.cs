@@ -14,12 +14,13 @@ internal static class Sample
         var axis = Vector3.UnitZ;
         var xDir = Vector3.UnitX;
         var wavelength = Pattern.Wavelength(340.0f * m / s);
-        var dst = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
+        var intensities = geometry.IntensityBuffer();
 
         // ANCHOR: api
         var option = new HermiteGaussianOption(m: 1, n: 0, waist: 10.0f * mm);
-        Pattern.HermiteGaussianPhase(geometry, target, axis, xDir, option, wavelength, dst);
-        Pattern.HermiteGaussianIntensity(geometry, target, axis, xDir, option, wavelength, dst);
+        Pattern.HermiteGaussianPhase(geometry, target, axis, xDir, option, wavelength, phases);
+        Pattern.HermiteGaussianIntensity(geometry, target, axis, xDir, option, wavelength, intensities);
         // ANCHOR_END: api
     }
 }

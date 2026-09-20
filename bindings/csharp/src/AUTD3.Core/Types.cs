@@ -114,20 +114,6 @@ namespace AUTD3
             new Phase((byte)(lhs.Value / rhs));
     }
 
-    public readonly struct Emission
-    {
-        public Phase Phase { get; }
-        public Intensity Intensity { get; }
-
-        public Emission(Phase phase, Intensity intensity)
-        {
-            Phase = phase;
-            Intensity = intensity;
-        }
-
-        public static Emission Null => new Emission(Phase.Zero, Intensity.Min);
-    }
-
     public readonly struct Interface
     {
         private readonly string? _name;

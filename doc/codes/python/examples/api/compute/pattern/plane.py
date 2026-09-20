@@ -7,8 +7,8 @@ geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 direction = np.array([0.0, 0.0, 1.0])
 wavelength = calc_wavelength(340 * m / s)
-dst = geometry.pattern_buffer()
+phases = geometry.phase_buffer()
 
 # ANCHOR: api
-plane(geometry, direction, wavelength, dst)
+plane(geometry, direction, wavelength, phases)
 # ANCHOR_END: api

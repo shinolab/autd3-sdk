@@ -18,10 +18,10 @@ await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientC
 
 var wavelength = Pattern.Wavelength(340.0f * m / s);
 var offsets = new[] { -30.0f, -10.0f, 10.0f, 30.0f };
-var patterns = new PatternBuffer[offsets.Length];
+var patterns = new PhaseBuffer[offsets.Length];
 for (var i = 0; i < offsets.Length; i++)
 {
-    var buffer = geometry.PatternBuffer();
+    var buffer = geometry.PhaseBuffer();
     Pattern.Focus(
         geometry,
         geometry.Center + new Vector3(offsets[i], 0.0f, 150.0f),

@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use autd3_rs::commands::{ConfigPattern, Pattern};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, Frames, Link, ResponseFuture, RtPriority,
     RtSchedulePolicy, StateCheck,
@@ -212,11 +212,15 @@ async fn run_load(
     send_config_pattern_once(client)
         .await
         .context("initial ConfigPattern")?;
-    let mut emissions = geometry.pattern_buffer();
-    fill_emissions(&mut emissions);
+    let mut phases = geometry.phase_buffer();
+    fill_phases(&mut phases);
+    let intensities: Vec<Vec<Intensity>> = geometry
+        .iter()
+        .map(|d| vec![Intensity::MIN; d.num_transducers()])
+        .collect();
     let frames = client
         .datagram_builder()
-        .push(Pattern::with_bank(PatternBank::B0, &emissions))
+        .push(Pattern::with_bank(PatternBank::B0, &phases, &intensities))
         .build()
         .context("building Pattern frame")?;
 
@@ -348,12 +352,11 @@ async fn send_config_pattern_once(client: &Client) -> Result<()> {
     Ok(())
 }
 
-fn fill_emissions(emissions: &mut [Vec<Emission>]) {
-    for device in emissions {
+fn fill_phases(phases: &mut [Vec<Phase>]) {
+    for device in phases {
         let mut phase = 0u8;
-        for e in device.iter_mut() {
-            e.phase = Phase(phase);
-            e.intensity = Intensity::MIN;
+        for p in device.iter_mut() {
+            *p = Phase(phase);
             phase = phase.wrapping_add(1);
         }
     }

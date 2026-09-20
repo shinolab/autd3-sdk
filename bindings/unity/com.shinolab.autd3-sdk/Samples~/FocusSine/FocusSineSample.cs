@@ -25,15 +25,16 @@ namespace AUTD3.Samples
 
             var target = _geometry.Center + new Vector3(0f, 0f, -0.15f);
             var wavelength = Pattern.Wavelength(340 * m / s);
-            using var patterns = _geometry.PatternBuffer();
-            Pattern.Focus(_geometry, target, wavelength, patterns);
+            using var phases = _geometry.PhaseBuffer();
+            using var intensities = _geometry.IntensityBuffer();
+            Pattern.Focus(_geometry, target, wavelength, phases);
 
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200 * Hz, new SineOption(), modulation);
 
             using var builder = _client.DatagramBuilder();
             builder
-                .Push(new Pattern(patterns))
+                .Push(new Pattern(phases, intensities))
                 .Push(new Modulation(SamplingConfig.Freq4k, modulation));
             using var frames = builder.Build();
             foreach (var frame in frames)

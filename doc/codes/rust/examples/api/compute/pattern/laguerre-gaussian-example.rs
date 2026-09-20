@@ -9,7 +9,8 @@ fn main() {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let mut intensities = geometry.intensity_buffer();
 
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let option = LaguerreGaussianOption {
@@ -24,7 +25,7 @@ fn main() {
         Vector3::z_axis(),
         option,
         wavelength,
-        &mut dst,
+        &mut phases,
     );
     laguerre_gaussian_intensity(
         &geometry,
@@ -32,7 +33,7 @@ fn main() {
         Vector3::z_axis(),
         option,
         wavelength,
-        &mut dst,
+        &mut intensities,
     );
     // HIDE
 }

@@ -1,5 +1,5 @@
 use autd3_rs_core::geometry::Device;
-use autd3_rs_core::value::Emission;
+use autd3_rs_core::value::{Intensity, Phase};
 use zerocopy::{Immutable, IntoBytes};
 
 use super::LegacyOperation;
@@ -17,7 +17,8 @@ struct GainHead {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Gain<'a> {
-    emissions: &'a [Vec<Emission>],
+    phases: &'a [Vec<Phase>],
+    intensities: &'a [Vec<Intensity>],
     segment: Segment,
     transition: bool,
     done: bool,
@@ -25,9 +26,10 @@ pub struct Gain<'a> {
 
 impl<'a> Gain<'a> {
     #[must_use]
-    pub const fn new(emissions: &'a [Vec<Emission>]) -> Self {
+    pub const fn new(phases: &'a [Vec<Phase>], intensities: &'a [Vec<Intensity>]) -> Self {
         Self {
-            emissions,
+            phases,
+            intensities,
             segment: Segment::S0,
             transition: true,
             done: false,
@@ -36,12 +38,14 @@ impl<'a> Gain<'a> {
 
     #[must_use]
     pub const fn with_segment(
-        emissions: &'a [Vec<Emission>],
+        phases: &'a [Vec<Phase>],
+        intensities: &'a [Vec<Intensity>],
         segment: Segment,
         transition: bool,
     ) -> Self {
         Self {
-            emissions,
+            phases,
+            intensities,
             segment,
             transition,
             done: false,
@@ -49,15 +53,15 @@ impl<'a> Gain<'a> {
     }
 }
 
-pub(super) fn emissions_for<'a>(
-    emissions: &'a [Vec<Emission>],
+pub(super) fn slot_for<'a, T>(
+    data: &'a [Vec<T>],
     device: &Device,
-) -> Result<&'a [Emission], PayloadError> {
-    let slot = emissions
+) -> Result<&'a [T], PayloadError> {
+    let slot = data
         .get(device.idx())
         .ok_or(PayloadError::EmissionDeviceCountMismatch {
             expected: device.idx() + 1,
-            got: emissions.len(),
+            got: data.len(),
         })?;
     if slot.len() != device.num_transducers() {
         return Err(PayloadError::EmissionTransducerCountMismatch {
@@ -69,24 +73,25 @@ pub(super) fn emissions_for<'a>(
     Ok(slot)
 }
 
-pub(super) fn write_emissions(tx: &mut [u8], emissions: &[Emission]) {
-    for (dst, emission) in tx
-        .as_chunks_mut::<{ size_of::<Emission>() }>()
+pub(super) fn write_emissions(tx: &mut [u8], phases: &[Phase], intensities: &[Intensity]) {
+    for (dst, (phase, intensity)) in tx
+        .as_chunks_mut::<2>()
         .0
         .iter_mut()
-        .zip(emissions)
+        .zip(phases.iter().zip(intensities))
     {
-        dst.copy_from_slice(emission.as_bytes());
+        *dst = [phase.0, intensity.0];
     }
 }
 
 impl LegacyOperation for Gain<'_> {
     fn required_size(&self, device: &Device) -> usize {
-        size_of::<GainHead>() + device.num_transducers() * size_of::<Emission>()
+        size_of::<GainHead>() + device.num_transducers() * 2
     }
 
     fn pack(&mut self, device: &Device, tx: &mut [u8]) -> Result<usize, LegacyError> {
-        let emissions = emissions_for(self.emissions, device)?;
+        let phases = slot_for(self.phases, device)?;
+        let intensities = slot_for(self.intensities, device)?;
         let head = GainHead {
             tag: Tag::Gain.as_u8(),
             segment: self.segment.as_u8(),
@@ -94,7 +99,7 @@ impl LegacyOperation for Gain<'_> {
             _pad: 0,
         };
         tx[..size_of::<GainHead>()].copy_from_slice(head.as_bytes());
-        write_emissions(&mut tx[size_of::<GainHead>()..], emissions);
+        write_emissions(&mut tx[size_of::<GainHead>()..], phases, intensities);
         self.done = true;
         Ok(self.required_size(device))
     }
@@ -106,23 +111,22 @@ impl LegacyOperation for Gain<'_> {
 
 #[cfg(test)]
 mod tests {
-    use autd3_rs_core::geometry::{Autd3, Geometry};
-    use autd3_rs_core::value::{Intensity, Phase};
-
     use super::*;
+    use autd3_rs_core::geometry::{Autd3, Geometry};
 
     fn geometry(n: usize) -> Geometry {
         Geometry::new((0..n).map(|_| Autd3::default()).collect())
     }
 
-    fn ramp(n: usize, base: u8) -> Vec<Emission> {
+    #[allow(clippy::cast_possible_truncation)]
+    fn ramp_phases(n: usize, base: u8) -> Vec<Phase> {
+        (0..n).map(|i| Phase(base.wrapping_add(i as u8))).collect()
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn ramp_intensities(n: usize, base: u8) -> Vec<Intensity> {
         (0..n)
-            .map(|i| Emission {
-                #[allow(clippy::cast_possible_truncation)]
-                phase: Phase(base.wrapping_add(i as u8)),
-                #[allow(clippy::cast_possible_truncation)]
-                intensity: Intensity(base.wrapping_sub(i as u8)),
-            })
+            .map(|i| Intensity(base.wrapping_sub(i as u8)))
             .collect()
     }
 
@@ -130,9 +134,10 @@ mod tests {
     fn gain_writes_head_then_phase_intensity_pairs() {
         let geo = geometry(1);
         let n = geo[0].num_transducers();
-        let emissions = vec![ramp(n, 0x10)];
+        let phases = vec![ramp_phases(n, 0x10)];
+        let intensities = vec![ramp_intensities(n, 0x10)];
 
-        let mut op = Gain::new(&emissions);
+        let mut op = Gain::new(&phases, &intensities);
         assert_eq!(op.required_size(&geo[0]), 4 + 2 * n);
 
         let mut tx = vec![0u8; 4 + 2 * n];
@@ -144,16 +149,18 @@ mod tests {
         assert_eq!(tx[2], GAIN_FLAG_UPDATE);
         assert_eq!(tx[3], 0);
         for (i, chunk) in tx[4..].as_chunks::<2>().0.iter().enumerate() {
-            assert_eq!(chunk[0], emissions[0][i].phase.0);
-            assert_eq!(chunk[1], emissions[0][i].intensity.0);
+            assert_eq!(chunk[0], phases[0][i].0);
+            assert_eq!(chunk[1], intensities[0][i].0);
         }
     }
 
     #[test]
     fn gain_without_transition_clears_the_update_flag() {
         let geo = geometry(1);
-        let emissions = vec![ramp(geo[0].num_transducers(), 0)];
-        let mut op = Gain::with_segment(&emissions, Segment::S1, false);
+        let n = geo[0].num_transducers();
+        let phases = vec![ramp_phases(n, 0)];
+        let intensities = vec![ramp_intensities(n, 0)];
+        let mut op = Gain::with_segment(&phases, &intensities, Segment::S1, false);
         let mut tx = vec![0u8; op.required_size(&geo[0])];
         op.pack(&geo[0], &mut tx).unwrap();
         assert_eq!(tx[1], Segment::S1.as_u8());
@@ -164,12 +171,13 @@ mod tests {
     fn gain_uses_the_slot_matching_the_device_index() {
         let geo = geometry(2);
         let n = geo[0].num_transducers();
-        let emissions = vec![ramp(n, 0x00), ramp(n, 0x80)];
+        let phases = vec![ramp_phases(n, 0x00), ramp_phases(n, 0x80)];
+        let intensities = vec![ramp_intensities(n, 0x00), ramp_intensities(n, 0x80)];
         for device in &geo {
-            let mut op = Gain::new(&emissions);
+            let mut op = Gain::new(&phases, &intensities);
             let mut tx = vec![0u8; op.required_size(device)];
             op.pack(device, &mut tx).unwrap();
-            assert_eq!(tx[4], emissions[device.idx()][0].phase.0);
+            assert_eq!(tx[4], phases[device.idx()][0].0);
         }
     }
 
@@ -178,16 +186,20 @@ mod tests {
         let geo = geometry(2);
         let n = geo[0].num_transducers();
 
-        let short = vec![ramp(n, 0)];
+        let short = vec![ramp_phases(n, 0)];
+        let full = vec![ramp_intensities(n, 0), ramp_intensities(n, 0)];
         let mut tx = vec![0u8; 4 + 2 * n];
-        let err = Gain::new(&short).pack(&geo[1], &mut tx).unwrap_err();
+        let err = Gain::new(&short, &full).pack(&geo[1], &mut tx).unwrap_err();
         assert!(matches!(
             err,
             LegacyError::InvalidPayload(PayloadError::EmissionDeviceCountMismatch { .. })
         ));
 
-        let ragged = vec![ramp(n - 1, 0), ramp(n, 0)];
-        let err = Gain::new(&ragged).pack(&geo[0], &mut tx).unwrap_err();
+        let phases = vec![ramp_phases(n, 0), ramp_phases(n, 0)];
+        let ragged = vec![ramp_intensities(n - 1, 0), ramp_intensities(n, 0)];
+        let err = Gain::new(&phases, &ragged)
+            .pack(&geo[0], &mut tx)
+            .unwrap_err();
         assert!(matches!(
             err,
             LegacyError::InvalidPayload(PayloadError::EmissionTransducerCountMismatch {

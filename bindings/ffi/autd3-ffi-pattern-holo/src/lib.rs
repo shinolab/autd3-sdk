@@ -2,14 +2,14 @@ use std::ffi::c_char;
 use std::num::{NonZeroU8, NonZeroUsize};
 
 use autd3_ffi_abi::{
-    AUTD3_ERR, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, PatternBuffer, handle_mut, handle_ref,
-    slice_ref, write_cstr,
+    AUTD3_ERR, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, IntensityBuffer, PhaseBuffer, handle_mut,
+    handle_ref, slice_ref, write_cstr,
 };
 use autd3_rs_core::geometry::{Autd3, TransducerMask};
 use autd3_rs_core::value::Intensity;
 use autd3_rs_core::{Geometry, Length, Point3};
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, GreedyOption, GsOption, GspatOption,
+    AmplitudeTarget, Directivity, GreedyOption, GsOption, GspatOption, IntensityConstraint,
     NaiveOption, NalgebraBackend, Pa, abs_objective_func, dB, greedy, gs, gspat, kPa, naive,
 };
 
@@ -20,7 +20,7 @@ pub struct Autd3HoloAmplitudeTarget {
 }
 
 #[repr(C)]
-pub struct Autd3EmissionConstraint {
+pub struct Autd3IntensityConstraint {
     pub kind: u8,
     pub min: u8,
     pub max: u8,
@@ -50,12 +50,12 @@ fn to_directivity(d: u8) -> Option<Directivity> {
     }
 }
 
-fn to_constraint(c: &Autd3EmissionConstraint) -> Option<EmissionConstraint> {
+fn to_constraint(c: &Autd3IntensityConstraint) -> Option<IntensityConstraint> {
     match c.kind {
-        0 => Some(EmissionConstraint::Normalize),
-        1 => Some(EmissionConstraint::Multiply(c.multiply)),
-        2 => Some(EmissionConstraint::Uniform(Intensity(c.min))),
-        3 => Some(EmissionConstraint::Clamp(
+        0 => Some(IntensityConstraint::Normalize),
+        1 => Some(IntensityConstraint::Multiply(c.multiply)),
+        2 => Some(IntensityConstraint::Uniform(Intensity(c.min))),
+        3 => Some(IntensityConstraint::Clamp(
             Intensity(c.min),
             Intensity(c.max),
         )),
@@ -99,10 +99,11 @@ fn mask_ref(mask: Option<&[Vec<bool>]>) -> TransducerMask<'_> {
 
 struct Common<'a> {
     geometry: &'a Geometry,
-    buffer: &'a mut PatternBuffer,
+    phases: &'a mut PhaseBuffer,
+    intensities: &'a mut IntensityBuffer,
     foci: Vec<AmplitudeTarget>,
     mask: Option<Vec<Vec<bool>>>,
-    constraint: EmissionConstraint,
+    constraint: IntensityConstraint,
     directivity: Directivity,
 }
 
@@ -111,10 +112,11 @@ unsafe fn prepare<'a>(
     geometry: *const Geometry,
     foci: *const Autd3HoloAmplitudeTarget,
     num_foci: usize,
-    constraint: *const Autd3EmissionConstraint,
+    constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
-    buffer: *mut PatternBuffer,
+    phases: *mut PhaseBuffer,
+    intensities: *mut IntensityBuffer,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> Result<Common<'a>, i32> {
@@ -126,19 +128,23 @@ unsafe fn prepare<'a>(
     let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
         return Err(fail("null geometry"));
     };
-    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
-        return Err(fail("null pattern buffer"));
+    if std::ptr::eq(phases.cast::<u8>(), intensities.cast::<u8>()) {
+        return Err(fail("the phase and intensity buffers must be distinct"));
+    }
+    let Some(phases) = (unsafe { handle_mut(phases) }) else {
+        return Err(fail("null phase buffer"));
     };
-    if buffer.0.len() != geometry.num_devices() {
-        return Err(fail(
-            "the pattern buffer length does not match the geometry",
-        ));
+    let Some(intensities) = (unsafe { handle_mut(intensities) }) else {
+        return Err(fail("null intensity buffer"));
+    };
+    if phases.0.len() != geometry.num_devices() || intensities.0.len() != geometry.num_devices() {
+        return Err(fail("the buffer length does not match the geometry"));
     }
     let Some(constraint) = (unsafe { handle_ref(constraint) }) else {
         return Err(fail("null constraint"));
     };
     let Some(constraint) = to_constraint(constraint) else {
-        return Err(fail("unknown emission constraint"));
+        return Err(fail("unknown intensity constraint"));
     };
     let Some(directivity) = to_directivity(directivity) else {
         return Err(fail("unknown directivity"));
@@ -147,11 +153,11 @@ unsafe fn prepare<'a>(
         return Err(fail("null foci"));
     };
     let foci = build_foci(foci);
-    let num_devices = buffer.0.len();
-    let mask = unsafe { build_mask(mask, num_devices) };
+    let mask = unsafe { build_mask(mask, geometry.num_devices()) };
     Ok(Common {
         geometry,
-        buffer,
+        phases,
+        intensities,
         foci,
         mask,
         constraint,
@@ -180,11 +186,12 @@ pub unsafe extern "C" fn autd3_holo_naive(
     foci: *const Autd3HoloAmplitudeTarget,
     num_foci: usize,
     wavelength_mm: f32,
-    constraint: *const Autd3EmissionConstraint,
+    constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
     parallel: bool,
-    buffer: *mut PatternBuffer,
+    phases: *mut PhaseBuffer,
+    intensities: *mut IntensityBuffer,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
@@ -196,7 +203,8 @@ pub unsafe extern "C" fn autd3_holo_naive(
             constraint,
             directivity,
             mask,
-            buffer,
+            phases,
+            intensities,
             out_err,
             out_err_len,
         )
@@ -216,7 +224,8 @@ pub unsafe extern "C" fn autd3_holo_naive(
         &common.foci,
         Length::from_mm(wavelength_mm),
         &option,
-        &mut common.buffer.0,
+        &mut common.phases.0,
+        &mut common.intensities.0,
     );
     unsafe { finish(result, out_err, out_err_len) }
 }
@@ -229,11 +238,12 @@ pub unsafe extern "C" fn autd3_holo_gs(
     num_foci: usize,
     wavelength_mm: f32,
     repeat: usize,
-    constraint: *const Autd3EmissionConstraint,
+    constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
     parallel: bool,
-    buffer: *mut PatternBuffer,
+    phases: *mut PhaseBuffer,
+    intensities: *mut IntensityBuffer,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
@@ -249,7 +259,8 @@ pub unsafe extern "C" fn autd3_holo_gs(
             constraint,
             directivity,
             mask,
-            buffer,
+            phases,
+            intensities,
             out_err,
             out_err_len,
         )
@@ -270,7 +281,8 @@ pub unsafe extern "C" fn autd3_holo_gs(
         &common.foci,
         Length::from_mm(wavelength_mm),
         &option,
-        &mut common.buffer.0,
+        &mut common.phases.0,
+        &mut common.intensities.0,
     );
     unsafe { finish(result, out_err, out_err_len) }
 }
@@ -283,11 +295,12 @@ pub unsafe extern "C" fn autd3_holo_gspat(
     num_foci: usize,
     wavelength_mm: f32,
     repeat: usize,
-    constraint: *const Autd3EmissionConstraint,
+    constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
     parallel: bool,
-    buffer: *mut PatternBuffer,
+    phases: *mut PhaseBuffer,
+    intensities: *mut IntensityBuffer,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
@@ -303,7 +316,8 @@ pub unsafe extern "C" fn autd3_holo_gspat(
             constraint,
             directivity,
             mask,
-            buffer,
+            phases,
+            intensities,
             out_err,
             out_err_len,
         )
@@ -324,7 +338,8 @@ pub unsafe extern "C" fn autd3_holo_gspat(
         &common.foci,
         Length::from_mm(wavelength_mm),
         &option,
-        &mut common.buffer.0,
+        &mut common.phases.0,
+        &mut common.intensities.0,
     );
     unsafe { finish(result, out_err, out_err_len) }
 }
@@ -337,10 +352,11 @@ pub unsafe extern "C" fn autd3_holo_greedy(
     num_foci: usize,
     wavelength_mm: f32,
     phase_quantization_levels: u8,
-    constraint: *const Autd3EmissionConstraint,
+    constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
-    buffer: *mut PatternBuffer,
+    phases: *mut PhaseBuffer,
+    intensities: *mut IntensityBuffer,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
@@ -362,7 +378,8 @@ pub unsafe extern "C" fn autd3_holo_greedy(
             constraint,
             directivity,
             mask,
-            buffer,
+            phases,
+            intensities,
             out_err,
             out_err_len,
         )
@@ -382,7 +399,8 @@ pub unsafe extern "C" fn autd3_holo_greedy(
         &common.foci,
         Length::from_mm(wavelength_mm),
         &option,
-        &mut common.buffer.0,
+        &mut common.phases.0,
+        &mut common.intensities.0,
     );
     unsafe { finish(result, out_err, out_err_len) }
 }

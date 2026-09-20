@@ -7,8 +7,8 @@ geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 target = geometry.center() + np.array([0.0, 0.0, 150.0])
 wavelength = calc_wavelength(340 * m / s)
-dst = geometry.pattern_buffer()
+phases = geometry.phase_buffer()
 
 # ANCHOR: api
-focus(geometry, target, wavelength, dst)
+focus(geometry, target, wavelength, phases)
 # ANCHOR_END: api

@@ -21,7 +21,6 @@ pub use laguerre_gaussian::{
 };
 pub use plane::{plane, plane_device, plane_transducer};
 pub use set::{
-    add_phase, add_phase_device, set_intensity, set_intensity_device, set_phase,
-    set_phase_and_intensity, set_phase_and_intensity_device, set_phase_device,
+    add_phase, add_phase_device, set_intensity, set_intensity_device, set_phase, set_phase_device,
 };
 pub use wavelength::wavelength;

@@ -36,7 +36,7 @@ import { excerpt } from "@lib/excerpt";
 | `x_dir`      | `UnitVector3<f32>`      | 次数 `m` の節面を並べる方向                   |
 | `option`     | `HermiteGaussianOption` | モードとウエスト                              |
 | `wavelength` | `Length`                | 波長                                          |
-| `dst`        | `&mut [[Emission; _]]`  | 出力バッファ                                  |
+| `dst`        | `&mut [Vec<Phase>]` / `&mut [Vec<Intensity>]` | 出力バッファ (`*_phase` は位相, `*_intensity` は振幅) |
 
 | フィールド | 型       | 説明                                                  |
 | ---------- | -------- | ----------------------------------------------------- |

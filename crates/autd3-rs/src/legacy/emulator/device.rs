@@ -1,4 +1,4 @@
-use autd3_rs_core::value::{Emission, Intensity, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::legacy::error::{
     INVALID_GAIN_STM_MODE, INVALID_INFO_TYPE, INVALID_MSG_ID, INVALID_SEGMENT_TRANSITION,
@@ -65,12 +65,9 @@ fn prefix(data: &[u8], len: usize) -> Option<&[u8]> {
     data.get(..len)
 }
 
-fn gain_stm_emission(chunk: [u8; 2], mode: u8, shift: u32) -> Emission {
+fn gain_stm_emission(chunk: [u8; 2], mode: u8, shift: u32) -> (Phase, Intensity) {
     if mode == GAIN_STM_MODE_PHASE_INTENSITY_FULL {
-        return Emission {
-            phase: Phase(chunk[0]),
-            intensity: Intensity(chunk[1]),
-        };
+        return (Phase(chunk[0]), Intensity(chunk[1]));
     }
     let word = u16::from_le_bytes(chunk);
     #[allow(clippy::cast_possible_truncation)]
@@ -80,10 +77,7 @@ fn gain_stm_emission(chunk: [u8; 2], mode: u8, shift: u32) -> Emission {
         let nibble = ((word >> shift) & 0x0F) as u8;
         Phase(nibble << 4 | nibble)
     };
-    Emission {
-        phase,
-        intensity: Intensity::MAX,
-    }
+    (phase, Intensity::MAX)
 }
 
 fn body(data: &[u8], offset: usize, len: usize) -> Option<&[u8]> {
@@ -99,7 +93,8 @@ pub enum StmKind {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SegmentState {
     pub kind: StmKind,
-    pub emissions: Vec<Vec<Emission>>,
+    pub phases: Vec<Vec<Phase>>,
+    pub intensities: Vec<Vec<Intensity>>,
     pub foci: Vec<u64>,
     pub cycle: u32,
     pub freq_div: u16,
@@ -114,7 +109,8 @@ impl Default for SegmentState {
     fn default() -> Self {
         Self {
             kind: StmKind::Gain,
-            emissions: Vec::new(),
+            phases: Vec::new(),
+            intensities: Vec::new(),
             foci: Vec::new(),
             cycle: 1,
             freq_div: 0xFFFF,
@@ -547,7 +543,8 @@ impl LegacyDevice {
 
         self.segments = [SegmentState::default(), SegmentState::default()];
         for segment in &mut self.segments {
-            segment.emissions = vec![vec![Emission::NULL; self.num_transducers]];
+            segment.phases = vec![vec![Phase::ZERO; self.num_transducers]];
+            segment.intensities = vec![vec![Intensity::MIN; self.num_transducers]];
             segment.modulation = vec![0xFF; 2];
         }
         self.mod_cycle = MOD_CYCLE_INIT;
@@ -665,23 +662,21 @@ impl LegacyDevice {
         };
         let segment = self.take_segment(head[1]);
         let flag = head[2];
-        let Some(words) = body(data, 4, self.num_transducers * size_of::<Emission>()) else {
+        let Some(words) = body(data, 4, self.num_transducers * 2) else {
             return NOT_SUPPORTED_TAG;
         };
 
-        let emissions = words
-            .as_chunks::<{ size_of::<Emission>() }>()
+        let (phases, intensities) = words
+            .as_chunks::<2>()
             .0
             .iter()
-            .map(|chunk| Emission {
-                phase: Phase(chunk[0]),
-                intensity: Intensity(chunk[1]),
-            })
-            .collect::<Vec<_>>();
+            .map(|chunk| (Phase(chunk[0]), Intensity(chunk[1])))
+            .unzip();
 
         self.stm_segment = segment;
         let state = &mut self.segments[segment as usize];
-        state.emissions = vec![emissions];
+        state.phases = vec![phases];
+        state.intensities = vec![intensities];
         state.foci.clear();
         state.cycle = 1;
         state.freq_div = 0xFFFF;
@@ -839,7 +834,8 @@ impl LegacyDevice {
             state.rep = rep;
             state.sound_speed = sound_speed;
             state.foci.clear();
-            state.emissions.clear();
+            state.phases.clear();
+            state.intensities.clear();
             24usize
         } else {
             4usize
@@ -910,7 +906,8 @@ impl LegacyDevice {
             state.cycle = 0;
             state.freq_div = freq_div;
             state.rep = rep;
-            state.emissions.clear();
+            state.phases.clear();
+            state.intensities.clear();
             state.foci.clear();
             16usize
         } else {
@@ -940,14 +937,15 @@ impl LegacyDevice {
         };
         let mode = self.gain_stm_mode;
         for &shift in shifts {
-            let emissions = words
+            let (phases, intensities) = words
                 .as_chunks::<2>()
                 .0
                 .iter()
                 .map(|&chunk| gain_stm_emission(chunk, mode, shift))
-                .collect::<Vec<_>>();
+                .unzip();
             let state = &mut self.segments[segment as usize];
-            state.emissions.push(emissions);
+            state.phases.push(phases);
+            state.intensities.push(intensities);
             state.cycle += 1;
         }
 

@@ -6,18 +6,18 @@ use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{
     Autd3, Geometry, Point3, TransducerMask, UnitQuaternion, UnitVector3, Vector3,
 };
-use autd3_rs_core::value::{Emission, Intensity};
+use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, GsOption, GspatOption, LinAlgBackend,
+    AmplitudeTarget, Directivity, GsOption, GspatOption, IntensityConstraint, LinAlgBackend,
     NaiveOption, NalgebraBackend, Pa, gs, gs_batch, gspat, gspat_batch, naive, naive_batch,
 };
 use autd3_rs_pattern_holo_wgpu::WgpuBackend;
 
-const CONSTRAINTS: [EmissionConstraint; 4] = [
-    EmissionConstraint::Normalize,
-    EmissionConstraint::Multiply(0.7),
-    EmissionConstraint::Uniform(Intensity(0x80)),
-    EmissionConstraint::Clamp(Intensity(16), Intensity(240)),
+const CONSTRAINTS: [IntensityConstraint; 4] = [
+    IntensityConstraint::Normalize,
+    IntensityConstraint::Multiply(0.7),
+    IntensityConstraint::Uniform(Intensity(0x80)),
+    IntensityConstraint::Clamp(Intensity(16), Intensity(240)),
 ];
 
 fn geometry(devices: usize) -> Geometry {
@@ -47,26 +47,44 @@ fn problem(g: &Geometry, seed: usize, nf: usize) -> Vec<AmplitudeTarget> {
         .collect()
 }
 
-fn slot(g: &Geometry) -> Vec<Vec<Emission>> {
-    vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; g.num_devices()]
+type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
+type Batch = (Vec<Vec<Vec<Phase>>>, Vec<Vec<Vec<Intensity>>>);
+
+fn slot(g: &Geometry) -> Buffers {
+    (g.phase_buffer(), g.intensity_buffer())
 }
 
-fn compare(label: &str, cpu: &[Vec<Emission>], gpu: &[Vec<Emission>]) {
-    for (d, (c, g)) in cpu.iter().zip(gpu).enumerate() {
-        for (t, (a, b)) in c.iter().zip(g).enumerate() {
-            let dp = a.phase.0.wrapping_sub(b.phase.0);
+fn batch(g: &Geometry, problems: usize) -> Batch {
+    (
+        vec![g.phase_buffer(); problems],
+        vec![g.intensity_buffer(); problems],
+    )
+}
+
+fn compare(
+    label: &str,
+    cpu_phases: &[Vec<Phase>],
+    cpu_intensities: &[Vec<Intensity>],
+    gpu_phases: &[Vec<Phase>],
+    gpu_intensities: &[Vec<Intensity>],
+) {
+    for (d, ((cp, ci), (gp, gi))) in cpu_phases
+        .iter()
+        .zip(cpu_intensities)
+        .zip(gpu_phases.iter().zip(gpu_intensities))
+        .enumerate()
+    {
+        for (t, ((a, ai), (b, bi))) in cp.iter().zip(ci).zip(gp.iter().zip(gi)).enumerate() {
+            let dp = a.0.wrapping_sub(b.0);
             let dp = dp.min(0u8.wrapping_sub(dp));
+            let di = ai.0.abs_diff(bi.0);
             assert!(
                 dp <= 1,
-                "{label}: phase mismatch at device {d} transducer {t}: {:?} vs {:?}",
-                a.phase,
-                b.phase
+                "{label}: phase mismatch at device {d} transducer {t}: {a:?} vs {b:?}"
             );
             assert!(
-                a.intensity.0.abs_diff(b.intensity.0) <= 1,
-                "{label}: intensity mismatch at device {d} transducer {t}: {:?} vs {:?}",
-                a.intensity,
-                b.intensity
+                di <= 1,
+                "{label}: intensity mismatch at device {d} transducer {t}: {ai:?} vs {bi:?}"
             );
         }
     }
@@ -195,43 +213,73 @@ fn batch_matches_nalgebra_on_pool_size_collision() {
     let owned: Vec<Vec<AmplitudeTarget>> = (0..problems).map(|k| problem(&g, k, nf)).collect();
     let foci: Vec<AmplitudeTarget> = owned.concat();
 
-    let mut batched = vec![slot(&g); problems];
+    let mut batched = batch(&g, problems);
     let mut one = slot(&g);
 
     let opt = NaiveOption {
-        constraint: EmissionConstraint::Normalize,
+        constraint: IntensityConstraint::Normalize,
         directivity: Directivity::T4010A1,
         mask: TransducerMask::AllEnabled,
         ..Default::default()
     };
-    naive_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-    for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
-        naive(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
-        compare(&format!("naive {problems}problems #{k}"), &one, got);
+    naive_batch(&gpu, &g, &foci, wl, &opt, &mut batched.0, &mut batched.1).unwrap();
+    for (k, (f, got)) in owned
+        .iter()
+        .zip(batched.0.iter().zip(&batched.1))
+        .enumerate()
+    {
+        naive(&NalgebraBackend, &g, f, wl, &opt, &mut one.0, &mut one.1).unwrap();
+        compare(
+            &format!("naive {problems}problems #{k}"),
+            &one.0,
+            &one.1,
+            got.0,
+            got.1,
+        );
     }
 
     let opt = GsOption {
-        constraint: EmissionConstraint::Normalize,
+        constraint: IntensityConstraint::Normalize,
         directivity: Directivity::T4010A1,
         mask: TransducerMask::AllEnabled,
         ..Default::default()
     };
-    gs_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-    for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
-        gs(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
-        compare(&format!("gs {problems}problems #{k}"), &one, got);
+    gs_batch(&gpu, &g, &foci, wl, &opt, &mut batched.0, &mut batched.1).unwrap();
+    for (k, (f, got)) in owned
+        .iter()
+        .zip(batched.0.iter().zip(&batched.1))
+        .enumerate()
+    {
+        gs(&NalgebraBackend, &g, f, wl, &opt, &mut one.0, &mut one.1).unwrap();
+        compare(
+            &format!("gs {problems}problems #{k}"),
+            &one.0,
+            &one.1,
+            got.0,
+            got.1,
+        );
     }
 
     let opt = GspatOption {
-        constraint: EmissionConstraint::Normalize,
+        constraint: IntensityConstraint::Normalize,
         directivity: Directivity::T4010A1,
         mask: TransducerMask::AllEnabled,
         ..Default::default()
     };
-    gspat_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-    for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
-        gspat(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
-        compare(&format!("gspat {problems}problems #{k}"), &one, got);
+    gspat_batch(&gpu, &g, &foci, wl, &opt, &mut batched.0, &mut batched.1).unwrap();
+    for (k, (f, got)) in owned
+        .iter()
+        .zip(batched.0.iter().zip(&batched.1))
+        .enumerate()
+    {
+        gspat(&NalgebraBackend, &g, f, wl, &opt, &mut one.0, &mut one.1).unwrap();
+        compare(
+            &format!("gspat {problems}problems #{k}"),
+            &one.0,
+            &one.1,
+            got.0,
+            got.1,
+        );
     }
 }
 
@@ -256,7 +304,7 @@ fn batch_matches_nalgebra_per_problem() {
                 let foci: Vec<AmplitudeTarget> = owned.concat();
                 let directivity = Directivity::T4010A1;
 
-                let mut batched = vec![slot(&g); problems];
+                let mut batched = batch(&g, problems);
                 let mut one = slot(&g);
 
                 for mask in [TransducerMask::AllEnabled, TransducerMask::Masked(&enabled)] {
@@ -271,10 +319,16 @@ fn batch_matches_nalgebra_per_problem() {
                             mask,
                             ..Default::default()
                         };
-                        naive_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-                        for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
-                            naive(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
-                            compare(&format!("naive {label} #{k}"), &one, got);
+                        naive_batch(&gpu, &g, &foci, wl, &opt, &mut batched.0, &mut batched.1)
+                            .unwrap();
+                        for (k, (f, got)) in owned
+                            .iter()
+                            .zip(batched.0.iter().zip(&batched.1))
+                            .enumerate()
+                        {
+                            naive(&NalgebraBackend, &g, f, wl, &opt, &mut one.0, &mut one.1)
+                                .unwrap();
+                            compare(&format!("naive {label} #{k}"), &one.0, &one.1, got.0, got.1);
                         }
 
                         let opt = GsOption {
@@ -283,10 +337,15 @@ fn batch_matches_nalgebra_per_problem() {
                             mask,
                             ..Default::default()
                         };
-                        gs_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-                        for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
-                            gs(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
-                            compare(&format!("gs {label} #{k}"), &one, got);
+                        gs_batch(&gpu, &g, &foci, wl, &opt, &mut batched.0, &mut batched.1)
+                            .unwrap();
+                        for (k, (f, got)) in owned
+                            .iter()
+                            .zip(batched.0.iter().zip(&batched.1))
+                            .enumerate()
+                        {
+                            gs(&NalgebraBackend, &g, f, wl, &opt, &mut one.0, &mut one.1).unwrap();
+                            compare(&format!("gs {label} #{k}"), &one.0, &one.1, got.0, got.1);
                         }
 
                         let opt = GspatOption {
@@ -295,10 +354,16 @@ fn batch_matches_nalgebra_per_problem() {
                             mask,
                             ..Default::default()
                         };
-                        gspat_batch(&gpu, &g, &foci, wl, &opt, &mut batched).unwrap();
-                        for (k, (f, got)) in owned.iter().zip(&batched).enumerate() {
-                            gspat(&NalgebraBackend, &g, f, wl, &opt, &mut one).unwrap();
-                            compare(&format!("gspat {label} #{k}"), &one, got);
+                        gspat_batch(&gpu, &g, &foci, wl, &opt, &mut batched.0, &mut batched.1)
+                            .unwrap();
+                        for (k, (f, got)) in owned
+                            .iter()
+                            .zip(batched.0.iter().zip(&batched.1))
+                            .enumerate()
+                        {
+                            gspat(&NalgebraBackend, &g, f, wl, &opt, &mut one.0, &mut one.1)
+                                .unwrap();
+                            compare(&format!("gspat {label} #{k}"), &one.0, &one.1, got.0, got.1);
                         }
                     }
                 }

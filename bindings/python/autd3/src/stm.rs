@@ -1,6 +1,5 @@
 use core::time::Duration;
 
-use autd3_python_capsule::{DevicePattern, capsule_of, pattern_from_capsule};
 use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
 use autd3_rs::commands::{
     FociStm as CoreFociStm, FociStmOption as CoreFociStmOption,
@@ -441,30 +440,34 @@ impl WriteFociBuffer {
 #[pyclass(name = "PatternStm", module = "autd3.commands")]
 pub struct PatternStm {
     pub(crate) config: CoreStmConfig,
-    pub(crate) patterns: Vec<Vec<DevicePattern>>,
+    pub(crate) phases: Vec<Vec<Vec<Phase>>>,
+    pub(crate) intensities: Vec<Vec<Vec<Intensity>>>,
     pub(crate) option: CorePatternStmOption,
 }
 
 #[pymethods]
 impl PatternStm {
     #[new]
-    #[pyo3(signature = (config, patterns, option = None))]
+    #[pyo3(signature = (config, phases, intensities, option = None))]
     fn new(
         config: &Bound<'_, PyAny>,
-        patterns: Vec<Bound<'_, PyAny>>,
+        phases: Vec<Bound<'_, PyAny>>,
+        intensities: Vec<Bound<'_, PyAny>>,
         option: Option<PyRef<'_, PatternStmOption>>,
     ) -> PyResult<Self> {
         let stm_config = extract_stm_config(config)?;
-        let patterns = patterns
+        let phases = phases
             .iter()
-            .map(|buffer| {
-                let capsule = capsule_of(buffer)?;
-                Ok(pattern_from_capsule(&capsule)?.to_vec())
-            })
+            .map(crate::datagram::extract_phases)
+            .collect::<PyResult<Vec<_>>>()?;
+        let intensities = intensities
+            .iter()
+            .map(crate::datagram::extract_intensities)
             .collect::<PyResult<Vec<_>>>()?;
         Ok(Self {
             config: stm_config,
-            patterns,
+            phases,
+            intensities,
             option: option.map_or_else(CorePatternStmOption::default, |o| o.inner),
         })
     }

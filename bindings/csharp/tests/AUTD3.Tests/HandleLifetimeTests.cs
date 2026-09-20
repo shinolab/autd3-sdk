@@ -29,9 +29,12 @@ namespace AUTD3.Tests
         public void UsingADisposedPatternBufferThrowsInsteadOfTouchingFreedMemory()
         {
             using var geometry = SingleDevice();
-            var buffer = geometry.PatternBuffer();
-            buffer.Dispose();
-            Assert.Throws<ObjectDisposedException>(() => buffer.NumDevices);
+            var phases = geometry.PhaseBuffer();
+            phases.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => phases.NumDevices);
+            var intensities = geometry.IntensityBuffer();
+            intensities.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => intensities.NumDevices);
         }
 
         [Fact]

@@ -5,11 +5,11 @@ from autd3_pattern import focus, wavelength
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-dst = geometry.pattern_buffer()
+phases = geometry.phase_buffer()
 
 focus(
     geometry,
     geometry.center() + np.array([0.0, 0.0, 150.0]),
     wavelength(340 * m / s),
-    dst,
+    phases,
 )

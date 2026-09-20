@@ -1,6 +1,6 @@
 ---
 title: Pattern
-description: 計算した Emission パターンをデバイスへ送るコマンド
+description: 計算した位相・振幅パターンをデバイスへ送るコマンド
 sidebar:
   order: 1
 ---
@@ -15,7 +15,8 @@ import csSample from "@codes/csharp/examples/api/command/pattern.cs?raw";
 import csFullSample from "@codes/csharp/examples/api/command/pattern-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
-`Pattern` は, 各振動子の `Emission` をデバイスへ送るコマンド.
+`Pattern` は, 各振動子の位相と振幅をデバイスへ送るコマンド.
+位相と振幅は別々のバッファで渡す.
 
 ## API
 
@@ -24,7 +25,7 @@ import { excerpt } from "@lib/excerpt";
 <Code code={excerpt(sample, "api")} lang="rust" />
 
 `Pattern::new` は書き込み先バンクを `PatternBank::B0` とする.
-別バンクへ書く場合は `Pattern::with_bank(bank, emissions)` を使う.
+別バンクへ書く場合は `Pattern::with_bank(bank, phases, intensities)` を使う.
 </Fragment>
 <Fragment slot="python">
 <Code code={excerpt(pySample, "api")} lang="python" />
@@ -35,15 +36,16 @@ import { excerpt } from "@lib/excerpt";
 <Fragment slot="csharp">
 <Code code={excerpt(csSample, "api")} lang="csharp" />
 
-`new Pattern(emissions)` は書き込み先バンクを `PatternBank.B0` とする.
-別バンクへ書く場合は `new Pattern(bank, emissions)` を使う.
+`new Pattern(phases, intensities)` は書き込み先バンクを `PatternBank.B0` とする.
+別バンクへ書く場合は `new Pattern(bank, phases, intensities)` を使う.
 </Fragment>
 </CodeTabs>
 
 | フィールド        | 型                               | デフォルト                      | 説明                             |
 | ----------------- | -------------------------------- | --------------------------- | -------------------------------- |
 | `bank`            | `PatternBank`                    | `PatternBank::B0`           | 書き込み先・再生対象のバンク     |
-| `emissions`       | `&[Vec<Emission>]` | —                           | デバイスごとの emission パターン |
+| `phases`          | `&[Vec<Phase>]`     | —                           | デバイスごとの位相               |
+| `intensities`     | `&[Vec<Intensity>]` | —                           | デバイスごとの振幅               |
 | `transition_mode` | `TransitionMode`                 | `TransitionMode::Immediate` | バンク切替時の遷移挙動           |
 
 patternの計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/pattern/)が用意されている.
@@ -51,7 +53,7 @@ patternの計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/patte
 ## 等価な低レベルコマンド
 
 `Pattern` は [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つと等価であり, これらは 1 フレームに融合して送られる.
-以下は `Pattern { bank, emissions }` と等価な組み合わせである.
+以下は `Pattern { bank, phases, intensities }` と等価な組み合わせである.
 
 `transition_mode` に `TransitionMode::Later` を指定した場合は融合せず, `WritePatternBuffer` + `ConfigPattern` の 2 フレームに分解して送る (`ChangePatternBank` を送らない).
 詳細は [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の `TransitionMode` を参照.

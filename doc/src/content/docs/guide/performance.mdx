@@ -39,7 +39,7 @@ import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
 
 毎フレームの確保を避けるため, バッファは使い回す. 
 
-- `pattern_buffer()` で得たバッファは, Pattern 計算関数の出力先として毎フレーム上書きできる. 
+- `phase_buffer()` / `intensity_buffer()` で得たバッファは, Pattern 計算関数の出力先として毎フレーム上書きできる. 
 - Rust では `Frames` も `build_into` で同じバッファへ書き出せば, `build` のたびに確保せずに済む. Python/C# では `build_into` は提供されない. 
 
 ## OS チューニング

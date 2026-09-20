@@ -3,20 +3,15 @@ use std::time::Duration;
 use autd3_rs::commands::{FixedCompletionTime, Pattern, SetSilencer};
 use autd3_rs::common::ULTRASOUND_PERIOD;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::value::{Emission, Intensity, Phase};
+use autd3_rs::value::{Intensity, Phase};
 
 use autd3_rs_emulator::{ClientApi, Emulator};
 
 #[test]
 fn records_phase_passthrough_with_silencer_disabled() {
     let emulator = Emulator::new(Geometry::new(vec![Autd3::default()]));
-    let emissions = vec![vec![
-        Emission {
-            phase: Phase(0x20),
-            intensity: Intensity::MAX,
-        };
-        Autd3::NUM_TRANSDUCERS
-    ]];
+    let phases = vec![vec![Phase(0x20); Autd3::NUM_TRANSDUCERS]];
+    let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]];
 
     let record = emulator
         .record(async move |r| {
@@ -28,7 +23,7 @@ fn records_phase_passthrough_with_silencer_disabled() {
                     strict_mode: false,
                 },
             });
-            builder.push(Pattern::new(&emissions));
+            builder.push(Pattern::new(&phases, &intensities));
             let datagrams = builder.build()?;
             for frame in &datagrams {
                 r.send_checked(frame).await?;

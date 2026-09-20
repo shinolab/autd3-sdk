@@ -35,7 +35,7 @@ import { excerpt } from "@lib/excerpt";
 | `axis`       | `UnitVector3<f32>`       | ビームの伝搬方向 (単位ベクトル)               |
 | `option`     | `LaguerreGaussianOption` | モードとウエスト                              |
 | `wavelength` | `Length`                 | 波長                                          |
-| `dst`        | `&mut [[Emission; _]]`   | 出力バッファ                                  |
+| `dst`        | `&mut [Vec<Phase>]` / `&mut [Vec<Intensity>]` | 出力バッファ (`*_phase` は位相, `*_intensity` は振幅) |
 
 | フィールド | 型       | 説明                                                  |
 | ---------- | -------- | ----------------------------------------------------- |

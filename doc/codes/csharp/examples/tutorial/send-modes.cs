@@ -46,17 +46,18 @@ internal static class Sample
     private static async Task StopAndWait(Client client, Geometry geometry, Vector3[] targets, Length wavelength)
     {
         // ANCHOR: stop_and_wait
-        var patterns = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
+        var intensities = geometry.IntensityBuffer();
         foreach (var target in targets)
         {
             Pattern.Focus(
                 geometry,
                 target,
                 wavelength,
-                patterns
+                phases
             );
             var builder = client.DatagramBuilder();
-            builder.Push(new Pattern(patterns));
+            builder.Push(new Pattern(phases, intensities));
             foreach (var frame in builder.Build())
             {
                 await client.SendCheckedAsync(frame);
@@ -68,7 +69,8 @@ internal static class Sample
     private static async Task Streaming(Client client, Geometry geometry, Vector3[] targets, Length wavelength)
     {
         // ANCHOR: streaming
-        var patterns = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
+        var intensities = geometry.IntensityBuffer();
         var pending = new Queue<ResponseToken>();
         foreach (var target in targets)
         {
@@ -76,10 +78,10 @@ internal static class Sample
                 geometry,
                 target,
                 wavelength,
-                patterns
+                phases
             );
             var builder = client.DatagramBuilder();
-            builder.Push(new Pattern(patterns));
+            builder.Push(new Pattern(phases, intensities));
             foreach (var frame in builder.Build())
             {
                 if (pending.Count >= Client.MaxInflight)

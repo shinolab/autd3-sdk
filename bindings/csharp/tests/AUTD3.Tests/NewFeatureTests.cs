@@ -20,7 +20,7 @@ namespace AUTD3.Tests
         public void PlaneFillsBuffer()
         {
             using var geometry = SingleDevice();
-            using var buffer = geometry.PatternBuffer();
+            using var buffer = geometry.PhaseBuffer();
             Pattern.Plane(geometry, new Vector3(0f, 0f, 1f), Pattern.Wavelength(340 * m / s), buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
@@ -29,7 +29,7 @@ namespace AUTD3.Tests
         public void BesselFillsBuffer()
         {
             using var geometry = SingleDevice();
-            using var buffer = geometry.PatternBuffer();
+            using var buffer = geometry.PhaseBuffer();
             Pattern.Bessel(geometry, geometry.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, Pattern.Wavelength(340 * m / s), buffer);
             Assert.Equal(1, buffer.NumDevices);
         }
@@ -43,33 +43,34 @@ namespace AUTD3.Tests
             var target = device.Center + new Vector3(0f, 0f, 150f);
             var option = new LaguerreGaussianOption(0, 1, 10f * mm);
 
-            var focused = new Emission[Autd3.NumTransducers];
+            var focused = new Phase[Autd3.NumTransducers];
             Pattern.FocusDevice(device, target, wavelength, focused);
 
-            var fundamental = new Emission[Autd3.NumTransducers];
+            var fundamental = new Phase[Autd3.NumTransducers];
             Pattern.LaguerreGaussianPhaseDevice(device, target, Vector3.UnitZ, new LaguerreGaussianOption(0, 0, 10f * mm), wavelength, fundamental);
-            var offset = (fundamental[0].Phase.Value - focused[0].Phase.Value + 256) % 256;
+            var offset = (fundamental[0].Value - focused[0].Value + 256) % 256;
             for (var i = 0; i < Autd3.NumTransducers; i++)
             {
-                var d = (fundamental[i].Phase.Value - focused[i].Phase.Value - offset + 512) % 256;
+                var d = (fundamental[i].Value - focused[i].Value - offset + 512) % 256;
                 Assert.True(Math.Min(d, 256 - d) <= 2);
             }
 
-            var lg = new Emission[Autd3.NumTransducers];
-            Pattern.LaguerreGaussianPhaseDevice(device, target, Vector3.UnitZ, option, wavelength, lg);
-            Assert.All(lg, e => Assert.Equal(0, e.Intensity.Value));
-            Assert.Equal(lg[5].Phase.Value, Pattern.LaguerreGaussianPhaseTransducer(device.Position(5), target, Vector3.UnitZ, option, wavelength).Value);
+            var lgPhases = new Phase[Autd3.NumTransducers];
+            Pattern.LaguerreGaussianPhaseDevice(device, target, Vector3.UnitZ, option, wavelength, lgPhases);
+            Assert.Equal(lgPhases[5].Value, Pattern.LaguerreGaussianPhaseTransducer(device.Position(5), target, Vector3.UnitZ, option, wavelength).Value);
 
-            Pattern.LaguerreGaussianIntensityDevice(device, target, Vector3.UnitZ, option, wavelength, lg);
-            Assert.Equal(255, lg.Max(e => e.Intensity.Value));
+            var lgIntensities = new Intensity[Autd3.NumTransducers];
+            Pattern.LaguerreGaussianIntensityDevice(device, target, Vector3.UnitZ, option, wavelength, lgIntensities);
+            Assert.Equal(255, lgIntensities.Max(e => e.Value));
 
-            using var buffer = geometry.PatternBuffer();
-            Pattern.LaguerreGaussianPhase(geometry, target, Vector3.UnitZ, option, wavelength, buffer);
-            Pattern.LaguerreGaussianIntensity(geometry, target, Vector3.UnitZ, option, wavelength, buffer);
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+            Pattern.LaguerreGaussianPhase(geometry, target, Vector3.UnitZ, option, wavelength, phases);
+            Pattern.LaguerreGaussianIntensity(geometry, target, Vector3.UnitZ, option, wavelength, intensities);
             for (var i = 0; i < Autd3.NumTransducers; i++)
             {
-                Assert.Equal(lg[i].Phase.Value, buffer[0][i].Phase.Value);
-                Assert.Equal(lg[i].Intensity.Value, buffer[0][i].Intensity.Value);
+                Assert.Equal(lgPhases[i], phases[0][i]);
+                Assert.Equal(lgIntensities[i], intensities[0][i]);
             }
         }
 
@@ -82,109 +83,109 @@ namespace AUTD3.Tests
             var target = device.Center + new Vector3(0f, 0f, 150f);
             var option = new HermiteGaussianOption(1, 0, 10f * mm);
 
-            var hg = new Emission[Autd3.NumTransducers];
+            var hg = new Phase[Autd3.NumTransducers];
+            var hgIntensities = new Intensity[Autd3.NumTransducers];
             Pattern.HermiteGaussianPhaseDevice(device, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, hg);
-            Pattern.HermiteGaussianIntensityDevice(device, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, hg);
-            Assert.Equal(255, hg.Max(e => e.Intensity.Value));
-            var focusedHg = new Emission[Autd3.NumTransducers];
+            Pattern.HermiteGaussianIntensityDevice(device, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, hgIntensities);
+            Assert.Equal(255, hgIntensities.Max(e => e.Value));
+            var focusedHg = new Phase[Autd3.NumTransducers];
             Pattern.FocusDevice(device, target, wavelength, focusedHg);
-            var baseOffset = (hg[0].Phase.Value - focusedHg[0].Phase.Value + 256) % 256;
+            var baseOffset = (hg[0].Value - focusedHg[0].Value + 256) % 256;
             var flipped = 0;
             for (var i = 0; i < Autd3.NumTransducers; i++)
             {
-                var d = (hg[i].Phase.Value - focusedHg[i].Phase.Value - baseOffset + 512) % 256;
+                var d = (hg[i].Value - focusedHg[i].Value - baseOffset + 512) % 256;
                 var toSame = Math.Min(d, 256 - d);
                 var toFlip = Math.Abs(d - 128);
                 Assert.True(toSame <= 2 || toFlip <= 2);
                 if (toFlip <= 2) flipped++;
             }
             Assert.True(flipped > 0);
-            Assert.Equal(hg[7].Phase.Value, Pattern.HermiteGaussianPhaseTransducer(device.Position(7), target, Vector3.UnitZ, Vector3.UnitX, option, wavelength).Value);
+            Assert.Equal(hg[7].Value, Pattern.HermiteGaussianPhaseTransducer(device.Position(7), target, Vector3.UnitZ, Vector3.UnitX, option, wavelength).Value);
 
-            using var buffer = geometry.PatternBuffer();
-            Pattern.HermiteGaussianPhase(geometry, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, buffer);
-            Pattern.HermiteGaussianIntensity(geometry, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, buffer);
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+            Pattern.HermiteGaussianPhase(geometry, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, phases);
+            Pattern.HermiteGaussianIntensity(geometry, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, intensities);
             for (var i = 0; i < Autd3.NumTransducers; i++)
             {
-                Assert.Equal(hg[i].Phase.Value, buffer[0][i].Phase.Value);
-                Assert.Equal(hg[i].Intensity.Value, buffer[0][i].Intensity.Value);
+                Assert.Equal(hg[i], phases[0][i]);
+                Assert.Equal(hgIntensities[i], intensities[0][i]);
             }
 
-            Assert.Throws<Autd3Exception>(() => Pattern.HermiteGaussianPhase(geometry, target, Vector3.UnitZ, Vector3.UnitX, new HermiteGaussianOption(), wavelength, buffer));
-            Assert.Throws<Autd3Exception>(() => Pattern.LaguerreGaussianIntensity(geometry, target, Vector3.UnitZ, new LaguerreGaussianOption(0, 1, -1f * mm), wavelength, buffer));
+            Assert.Throws<Autd3Exception>(() => Pattern.HermiteGaussianPhase(geometry, target, Vector3.UnitZ, Vector3.UnitX, new HermiteGaussianOption(), wavelength, phases));
+            Assert.Throws<Autd3Exception>(() => Pattern.LaguerreGaussianIntensity(geometry, target, Vector3.UnitZ, new LaguerreGaussianOption(0, 1, -1f * mm), wavelength, intensities));
         }
 
         [Fact]
         public void BufferStartsAtZeroPhaseMaxIntensity()
         {
             using var geometry = SingleDevice();
-            using var buffer = geometry.PatternBuffer();
-            foreach (var e in buffer[0])
-            {
-                Assert.Equal(new Emission(Phase.Zero, Intensity.Max), e);
-            }
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+            Assert.All(phases[0], p => Assert.Equal(Phase.Zero, p));
+            Assert.All(intensities[0], i => Assert.Equal(Intensity.Max, i));
         }
 
         [Fact]
         public void SetAndAddPhaseUpdateTheBuffer()
         {
             using var geometry = SingleDevice();
-            using var buffer = geometry.PatternBuffer();
-            Pattern.SetIntensity(new Intensity(0x80), buffer);
-            Pattern.SetPhase(new Phase(0xF0), buffer);
-            Pattern.AddPhase(new Phase(0x20), buffer);
-            foreach (var e in buffer[0])
-            {
-                Assert.Equal(new Emission(new Phase(0x10), new Intensity(0x80)), e);
-            }
-            Pattern.SetPhaseAndIntensity(Phase.Pi, Intensity.Max, buffer);
-            foreach (var e in buffer[0])
-            {
-                Assert.Equal(new Emission(Phase.Pi, Intensity.Max), e);
-            }
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+            Pattern.SetIntensity(new Intensity(0x80), intensities);
+            Pattern.SetPhase(new Phase(0xF0), phases);
+            Pattern.AddPhase(new Phase(0x20), phases);
+            Assert.All(phases[0], p => Assert.Equal(new Phase(0x10), p));
+            Assert.All(intensities[0], i => Assert.Equal(new Intensity(0x80), i));
         }
 
         [Fact]
-        public void PatternBufferFromArray()
+        public void BuffersFromArray()
         {
-            var emissions = new Emission[1][];
-            emissions[0] = new Emission[249];
-            for (var i = 0; i < 249; i++)
-            {
-                emissions[0][i] = Emission.Null;
-            }
-            using var buffer = PatternBuffer.FromArray(emissions);
-            Assert.Equal(1, buffer.NumDevices);
+            var phases = new[] { Enumerable.Range(0, 249).Select(i => new Phase((byte)i)).ToArray() };
+            var intensities = new[] { Enumerable.Range(0, 249).Select(i => new Intensity((byte)(255 - i))).ToArray() };
+            using var phaseBuffer = PhaseBuffer.FromArray(phases);
+            using var intensityBuffer = IntensityBuffer.FromArray(intensities);
+            Assert.Equal(1, phaseBuffer.NumDevices);
+            Assert.Equal(1, intensityBuffer.NumDevices);
+            Assert.Equal(new Phase(5), phaseBuffer[0][5]);
+            Assert.Equal(new Intensity(250), intensityBuffer[0][5]);
+            Assert.Throws<Autd3Exception>(() => PhaseBuffer.FromArray(new[] { new Phase[10] }));
         }
 
         [Fact]
-        public void PatternBufferIndexerAndIterator()
+        public void BufferIndexerAndIterator()
         {
             using var geometry = SingleDevice();
-            using var buffer = geometry.PatternBuffer();
-            Assert.Equal(1, buffer.NumDevices);
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+            Assert.Equal(1, phases.NumDevices);
 
-            var slot = buffer[0];
+            var slot = phases[0];
             Assert.Equal(Autd3.NumTransducers, slot.NumTransducers);
+            slot[0] = Phase.Pi;
+            Assert.Equal(Phase.Pi, slot[0]);
 
-            slot[0] = new Emission(Phase.Pi, Intensity.Max);
-            Assert.Equal(Phase.Pi.Value, slot[0].Phase.Value);
-            Assert.Equal(Intensity.Max.Value, slot[0].Intensity.Value);
+            var intensitySlot = intensities[0];
+            intensitySlot[0] = Intensity.Min;
+            Assert.Equal(Intensity.Min, intensitySlot[0]);
 
             var total = 0;
-            foreach (var device in buffer)
+            foreach (var device in phases)
             {
-                foreach (var emission in device)
+                foreach (var phase in device)
                 {
                     total++;
-                    _ = emission;
+                    _ = phase;
                 }
             }
             Assert.Equal(Autd3.NumTransducers, total);
 
-            Assert.Throws<System.ArgumentOutOfRangeException>(() => buffer[1]);
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => phases[1]);
             Assert.Throws<System.ArgumentOutOfRangeException>(() => slot[Autd3.NumTransducers]);
-            Assert.Throws<System.ArgumentOutOfRangeException>(() => { slot[Autd3.NumTransducers] = Emission.Null; });
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => { slot[Autd3.NumTransducers] = Phase.Zero; });
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => { intensitySlot[Autd3.NumTransducers] = Intensity.Min; });
         }
 
         [Fact]
@@ -212,13 +213,14 @@ namespace AUTD3.Tests
         public void HoloNaiveFillsBuffer()
         {
             using var geometry = SingleDevice();
-            using var buffer = geometry.PatternBuffer();
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
             var foci = new[]
             {
                 new AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 150 * dB),
             };
-            Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new NaiveOption(EmissionConstraint.Clamp(Intensity.Min, Intensity.Max)), buffer);
-            Assert.Equal(1, buffer.NumDevices);
+            Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new NaiveOption(IntensityConstraint.Clamp(Intensity.Min, Intensity.Max)), phases, intensities);
+            Assert.Contains(intensities[0], i => i.Value != Intensity.Min.Value);
         }
 
         [Fact]
@@ -295,11 +297,12 @@ namespace AUTD3.Tests
         public void LaterStagesAPatternBankWithoutChangingIt()
         {
             using var geometry = SingleDevice();
-            using var buffer = geometry.PatternBuffer();
-            Pattern.SetPhaseAndIntensity(Phase.Pi, Intensity.Max, buffer);
+            using var phases = geometry.PhaseBuffer();
+            Pattern.SetPhase(Phase.Pi, phases);
+            using var intensities = geometry.IntensityBuffer();
 
             using var builder = new DatagramBuilder(geometry);
-            builder.Push(new Pattern(PatternBank.B1, buffer, TransitionMode.Later));
+            builder.Push(new Pattern(PatternBank.B1, phases, intensities, TransitionMode.Later));
             using var frames = builder.Build();
             Assert.Equal(2, frames.Length);
         }

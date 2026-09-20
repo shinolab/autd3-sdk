@@ -112,7 +112,8 @@ impl<'a> LegacyCommand<'a> for SetSilencer<FixedUpdateRate> {
 impl<'a> LegacyCommand<'a> for Pattern<'a> {
     fn expand(self, builder: &mut LegacyDatagramBuilder<'a>) {
         builder.push_op(op::Gain::with_segment(
-            self.emissions,
+            self.phases,
+            self.intensities,
             pattern_segment(self.bank),
             !self.transition_mode.is_later(),
         ));
@@ -163,11 +164,12 @@ impl<'a, const N: usize> LegacyCommand<'a> for FociStm<'a, N> {
 
 impl<'a> LegacyCommand<'a> for PatternStm<'a> {
     fn expand(self, builder: &mut LegacyDatagramBuilder<'a>) {
-        let config = self.config.into_sampling_config(self.patterns.len());
+        let config = self.config.into_sampling_config(self.phases.len());
         let transition_mode = transition_mode(self.option.transition_mode, builder.dc_offset_ns());
         builder.push_op(op::GainStm::new(
             config,
-            self.patterns,
+            self.phases,
+            self.intensities,
             op::GainStmOption {
                 mode: gain_stm_mode(self.option.mode),
                 segment: pattern_segment(self.option.bank),

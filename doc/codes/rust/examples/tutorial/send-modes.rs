@@ -57,16 +57,17 @@ async fn stop_and_wait(
     wavelength: Length,
 ) -> Result<()> {
     // ANCHOR: stop_and_wait
-    let mut patterns = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
     for &target in targets {
         autd3_rs_pattern::focus(
             geometry,
             target,
             wavelength,
-            &mut patterns,
+            &mut phases,
         );
         let mut builder = client.datagram_builder();
-        builder.push(Pattern::new(&patterns));
+        builder.push(Pattern::new(&phases, &intensities));
         for frame in &builder.build()? {
             client.send_checked(frame).await?;
         }
@@ -82,17 +83,18 @@ async fn streaming(
     wavelength: Length,
 ) -> Result<()> {
     // ANCHOR: streaming
-    let mut patterns = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let intensities = geometry.intensity_buffer();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(MAX_INFLIGHT);
     for &target in targets {
         autd3_rs_pattern::focus(
             geometry,
             target,
             wavelength,
-            &mut patterns,
+            &mut phases,
         );
         let mut builder = client.datagram_builder();
-        builder.push(Pattern::new(&patterns));
+        builder.push(Pattern::new(&phases, &intensities));
         for frame in &builder.build()? {
             if pending.len() >= MAX_INFLIGHT {
                 pending.pop_front().expect("non-empty").await?.check()?;

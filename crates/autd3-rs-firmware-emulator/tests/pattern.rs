@@ -2,7 +2,7 @@
 
 use autd3_rs_core::params::REP_INFINITE;
 use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
-use autd3_rs_core::value::{Emission, Intensity, Phase, TransitionMode};
+use autd3_rs_core::value::{Intensity, Phase, TransitionMode};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
@@ -18,22 +18,17 @@ fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
 
 #[test]
 fn raw_pattern_round_trips_to_emissions() {
-    let expected: Vec<Emission> = (0..NUM_TRANSDUCERS)
-        .map(|i| Emission {
-            phase: Phase(i as u8),
-            intensity: Intensity((255 - i) as u8),
-        })
-        .collect();
+    let expected: (Vec<Phase>, Vec<Intensity>) = (
+        (0..NUM_TRANSDUCERS).map(|i| Phase(i as u8)).collect(),
+        (0..NUM_TRANSDUCERS)
+            .map(|i| Intensity((255 - i) as u8))
+            .collect(),
+    );
 
-    let mut write = Vec::new();
-    write.push(BANK);
-    write.push(0);
-    write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&((NUM_TRANSDUCERS * 2) as u16).to_le_bytes());
-    for e in &expected {
-        write.push(e.phase.0);
-        write.push(e.intensity.0);
-    }
+    let mut write = vec![BANK, 0];
+    write.extend_from_slice(&0u16.to_le_bytes());
+    write.extend(expected.0.iter().map(|p| p.0));
+    write.extend(expected.1.iter().map(|i| i.0));
 
     let mut config = vec![0u8; 14];
     config[0] = BANK;
@@ -50,10 +45,7 @@ fn raw_pattern_round_trips_to_emissions() {
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(
-        device.send(&frame(0, Cmd::WritePatternBuffer, &write)).data,
-        0
-    );
+    assert_eq!(device.send(&frame(0, Cmd::WritePatternRaw, &write)).data, 0);
     assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
         device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
@@ -107,18 +99,10 @@ fn phase_full_pattern_decompresses_to_two_indices() {
     let idx0 = device.fpga().emissions_at(BANK as usize, 0);
     let idx1 = device.fpga().emissions_at(BANK as usize, 1);
     for (i, &(p0, p1)) in phases.iter().enumerate() {
-        assert_eq!(idx0[i].phase, Phase(p0), "index 0 phase t={i}");
-        assert_eq!(
-            idx0[i].intensity,
-            Intensity(0xFF),
-            "index 0 intensity t={i}"
-        );
-        assert_eq!(idx1[i].phase, Phase(p1), "index 1 phase t={i}");
-        assert_eq!(
-            idx1[i].intensity,
-            Intensity(0xFF),
-            "index 1 intensity t={i}"
-        );
+        assert_eq!(idx0.0[i], Phase(p0), "index 0 phase t={i}");
+        assert_eq!(idx0.1[i], Intensity(0xFF), "index 0 intensity t={i}");
+        assert_eq!(idx1.0[i], Phase(p1), "index 1 phase t={i}");
+        assert_eq!(idx1.1[i], Intensity(0xFF), "index 1 intensity t={i}");
     }
 }
 
@@ -165,8 +149,8 @@ fn phase_half_pattern_decompresses_to_four_indices() {
         for (i, n) in nibbles.iter().enumerate() {
             let p4 = n[g];
             let expected = (p4 << 4) | p4;
-            assert_eq!(idx[i].phase, Phase(expected), "g={g} t={i}");
-            assert_eq!(idx[i].intensity, Intensity(0xFF), "g={g} t={i}");
+            assert_eq!(idx.0[i], Phase(expected), "g={g} t={i}");
+            assert_eq!(idx.1[i], Intensity(0xFF), "g={g} t={i}");
         }
     }
 }

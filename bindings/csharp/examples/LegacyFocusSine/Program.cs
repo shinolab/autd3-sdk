@@ -29,8 +29,9 @@ internal static class Program
         // length in mm
         var target = geometry.Center + new Vector3(0f, 0f, 150f);
         var wavelength = Pattern.Wavelength(340 * m / s);
-        using var patterns = geometry.PatternBuffer();
-        Pattern.Focus(geometry, target, wavelength, patterns);
+        using var phases = geometry.PhaseBuffer();
+        using var intensities = geometry.IntensityBuffer();
+        Pattern.Focus(geometry, target, wavelength, phases);
 
         using var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(200 * Hz, new SineOption(), modulation);
@@ -38,7 +39,7 @@ internal static class Program
         using var builder = client.DatagramBuilder();
         builder
             .Push(new SetSilencer())
-            .Push(new Pattern(patterns))
+            .Push(new Pattern(phases, intensities))
             .Push(new Modulation(SamplingConfig.Freq4k, modulation));
         using var frames = builder.Build();
         foreach (var frame in frames)

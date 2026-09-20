@@ -11,22 +11,19 @@ internal static class Sample
 
         var intensity = new Intensity(0x80);
         var phase = Phase.Pi;
-        var dst = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
+        var intensities = geometry.IntensityBuffer();
 
         // ANCHOR: set_intensity
-        Pattern.SetIntensity(intensity, dst);
+        Pattern.SetIntensity(intensity, intensities);
         // ANCHOR_END: set_intensity
 
         // ANCHOR: set_phase
-        Pattern.SetPhase(phase, dst);
+        Pattern.SetPhase(phase, phases);
         // ANCHOR_END: set_phase
 
-        // ANCHOR: set_phase_and_intensity
-        Pattern.SetPhaseAndIntensity(phase, intensity, dst);
-        // ANCHOR_END: set_phase_and_intensity
-
         // ANCHOR: add_phase
-        Pattern.AddPhase(phase, dst);
+        Pattern.AddPhase(phase, phases);
         // ANCHOR_END: add_phase
     }
 }

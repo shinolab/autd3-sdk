@@ -6,7 +6,7 @@
     clippy::unreadable_literal
 )]
 
-use autd3_rs_core::value::{Emission, Intensity, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 
 use super::FpgaEmulator;
 use crate::fw;
@@ -94,7 +94,7 @@ impl FpgaEmulator {
     }
 
     #[must_use]
-    pub fn foci_emissions_at(&self, bank: usize, idx: usize) -> Vec<Emission> {
+    pub fn foci_emissions_at(&self, bank: usize, idx: usize) -> (Vec<Phase>, Vec<Intensity>) {
         let sound_speed = u32::from(self.sound_speed(bank));
         let num_foci = self.num_foci(bank);
         let ram = &self.em_ram[bank];
@@ -131,8 +131,8 @@ impl FpgaEmulator {
                 } else {
                     Intensity::MIN
                 };
-                Emission { phase, intensity }
+                (phase, intensity)
             })
-            .collect()
+            .unzip()
     }
 }

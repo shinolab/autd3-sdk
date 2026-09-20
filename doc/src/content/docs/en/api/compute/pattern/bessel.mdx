@@ -31,7 +31,7 @@ The algorithm is based on the paper by Hasegawa et al. ([Hasegawa et al., 2017](
 | `direction`  | `UnitVector3<f32>`     | Direction of the beam (unit vector) |
 | `theta`      | `Angle`                | Half-apex angle of the cone (e.g. `18.0 * deg`) |
 | `wavelength` | `Length`               | Wavelength                          |
-| `dst`        | `&mut [[Emission; _]]` | Output buffer                       |
+| `dst`        | `&mut [Vec<Phase>]` | Output buffer                       |
 
 ## Example
 

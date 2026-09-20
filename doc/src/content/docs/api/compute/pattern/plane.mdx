@@ -29,7 +29,7 @@ import { excerpt } from "@lib/excerpt";
 | `geometry`   | `&Geometry`            | デバイス配置                    |
 | `direction`  | `UnitVector3<f32>`     | 平面波の伝搬方向 (単位ベクトル) |
 | `wavelength` | `Length`               | 波長                            |
-| `dst`        | `&mut [[Emission; _]]` | 出力バッファ                    |
+| `dst`        | `&mut [Vec<Phase>]` | 出力バッファ                    |
 
 ## Example
 

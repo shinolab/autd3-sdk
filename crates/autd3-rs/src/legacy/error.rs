@@ -149,6 +149,9 @@ pub enum PayloadError {
     #[error("GainSTM size {size} out of range {min}..={max}")]
     GainStmSizeOutOfRange { size: usize, min: usize, max: usize },
 
+    #[error("GainSTM has {phases} phase pattern(s) but {intensities} intensity pattern(s)")]
+    GainStmLengthMismatch { phases: usize, intensities: usize },
+
     #[error("emission buffer has {got} slot(s) but the geometry has {expected} device(s)")]
     EmissionDeviceCountMismatch { expected: usize, got: usize },
 

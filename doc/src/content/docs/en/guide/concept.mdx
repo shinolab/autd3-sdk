@@ -38,7 +38,7 @@ This SDK is responsible for computing these phases and amplitudes and transmitti
 The AUTD3 SDK consists of the following layers.
 
 - **Geometry** — represents the physical device layout (position and rotation).
-- **Pattern** — a bundle of the phase and amplitude (`Emission`) of each transducer.
+- **Pattern** — a bundle of the phase and amplitude of each transducer (a phase buffer and an intensity buffer).
 - **Modulation** — modulates the output amplitude in the time direction (AM).
 - **STM** — a feature that switches Patterns using a hardware timer.
 - **Client** — transmits data such as Pattern and Modulation to the device via a Link.

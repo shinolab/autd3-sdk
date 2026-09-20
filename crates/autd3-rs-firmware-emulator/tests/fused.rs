@@ -1,7 +1,7 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
-use autd3_rs_core::value::{Emission, Intensity, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
@@ -16,27 +16,30 @@ fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
     buf
 }
 
-fn expected_emissions() -> Vec<Emission> {
-    (0..NUM_TRANSDUCERS)
-        .map(|i| Emission {
-            phase: Phase(i as u8),
-            intensity: Intensity((255 - i) as u8),
-        })
-        .collect()
+type Pattern = (Vec<Phase>, Vec<Intensity>);
+
+fn expected_pattern() -> Pattern {
+    (
+        (0..NUM_TRANSDUCERS).map(|i| Phase(i as u8)).collect(),
+        (0..NUM_TRANSDUCERS)
+            .map(|i| Intensity((255 - i) as u8))
+            .collect(),
+    )
 }
 
-fn emission_bytes(emissions: &[Emission]) -> Vec<u8> {
-    emissions
+fn soa_bytes(pattern: &Pattern) -> Vec<u8> {
+    pattern
+        .0
         .iter()
-        .flat_map(|e| [e.phase.0, e.intensity.0])
+        .map(|p| p.0)
+        .chain(pattern.1.iter().map(|i| i.0))
         .collect()
 }
 
-fn split_path(emissions: &[Emission]) -> Device {
+fn split_path(pattern: &Pattern) -> Device {
     let mut write = vec![BANK, 0];
-    write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&((NUM_TRANSDUCERS * 2) as u16).to_le_bytes());
-    write.extend_from_slice(&emission_bytes(emissions));
+    write.extend_from_slice(&0u16.to_le_bytes());
+    write.extend_from_slice(&soa_bytes(pattern));
 
     let mut config = vec![0u8; 14];
     config[0] = BANK;
@@ -51,10 +54,7 @@ fn split_path(emissions: &[Emission]) -> Device {
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(
-        device.send(&frame(0, Cmd::WritePatternBuffer, &write)).data,
-        0
-    );
+    assert_eq!(device.send(&frame(0, Cmd::WritePatternRaw, &write)).data, 0);
     assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
         device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
@@ -63,10 +63,10 @@ fn split_path(emissions: &[Emission]) -> Device {
     device
 }
 
-fn fused_path(emissions: &[Emission]) -> Device {
+fn fused_path(pattern: &Pattern) -> Device {
     let mut p = vec![0u8; 32];
     p[0] = BANK;
-    p[1] = 0x01;
+    p[1] = 0x02;
     p[2..4].copy_from_slice(&DIVIDER.to_le_bytes());
     p[4..8].copy_from_slice(&1u32.to_le_bytes());
     p[8] = 0;
@@ -74,7 +74,7 @@ fn fused_path(emissions: &[Emission]) -> Device {
     p[10..12].copy_from_slice(&0u16.to_le_bytes());
     p[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
     p[14..16].copy_from_slice(&((NUM_TRANSDUCERS * 2) as u16).to_le_bytes());
-    p.extend_from_slice(&emission_bytes(emissions));
+    p.extend_from_slice(&soa_bytes(pattern));
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
@@ -88,12 +88,12 @@ fn fused_path(emissions: &[Emission]) -> Device {
 
 #[test]
 fn fused_pattern_produces_the_same_emissions_as_the_three_frame_path() {
-    let emissions = expected_emissions();
+    let pattern = expected_pattern();
 
-    let split = split_path(&emissions);
-    let fused = fused_path(&emissions);
+    let split = split_path(&pattern);
+    let fused = fused_path(&pattern);
 
-    assert_eq!(emissions, fused.fpga().emissions_at(BANK as usize, 0));
+    assert_eq!(pattern, fused.fpga().emissions_at(BANK as usize, 0));
     assert_eq!(
         split.fpga().emissions_at(BANK as usize, 0),
         fused.fpga().emissions_at(BANK as usize, 0),

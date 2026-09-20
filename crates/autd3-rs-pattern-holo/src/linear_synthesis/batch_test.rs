@@ -2,7 +2,7 @@
 
 use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
-use autd3_rs_core::value::{Emission, Intensity, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::amp::Pa;
 use crate::amplitude_target::AmplitudeTarget;
@@ -40,8 +40,26 @@ fn problem(g: &Geometry, seed: usize, nf: usize) -> Vec<AmplitudeTarget> {
         .collect()
 }
 
-fn slot(g: &Geometry) -> Vec<Vec<Emission>> {
-    vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; g.num_devices()]
+type Slot = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
+type Batch = (Vec<Vec<Vec<Phase>>>, Vec<Vec<Vec<Intensity>>>);
+
+fn slot(g: &Geometry) -> Slot {
+    (g.phase_buffer(), g.intensity_buffer())
+}
+
+fn filled(g: &Geometry, phase: Phase, intensity: Intensity) -> Slot {
+    (
+        vec![vec![phase; Autd3::NUM_TRANSDUCERS]; g.num_devices()],
+        vec![vec![intensity; Autd3::NUM_TRANSDUCERS]; g.num_devices()],
+    )
+}
+
+fn batch(one: &Slot, n: usize) -> Batch {
+    (vec![one.0.clone(); n], vec![one.1.clone(); n])
+}
+
+fn problems(b: &Batch) -> impl Iterator<Item = Slot> + '_ {
+    b.0.iter().cloned().zip(b.1.iter().cloned())
 }
 
 fn wl() -> autd3_rs_core::common::Length {
@@ -55,7 +73,7 @@ fn batch_matches_sequential() {
         let owned: Vec<Vec<AmplitudeTarget>> = (0..5).map(|k| problem(&g, k, nf)).collect();
         let foci: Vec<AmplitudeTarget> = owned.concat();
 
-        let mut batched = vec![slot(&g); owned.len()];
+        let mut batched = batch(&slot(&g), owned.len());
         let mut one = slot(&g);
 
         naive_batch(
@@ -64,20 +82,22 @@ fn batch_matches_sequential() {
             &foci,
             wl(),
             &NaiveOption::default(),
-            &mut batched,
+            &mut batched.0,
+            &mut batched.1,
         )
         .unwrap();
-        for (f, want) in owned.iter().zip(&batched) {
+        for (f, want) in owned.iter().zip(problems(&batched)) {
             naive(
                 &NalgebraBackend,
                 &g,
                 f,
                 wl(),
                 &NaiveOption::default(),
-                &mut one,
+                &mut one.0,
+                &mut one.1,
             )
             .unwrap();
-            assert_eq!(&one, want, "naive {nf} foci");
+            assert_eq!(one, want, "naive {nf} foci");
         }
 
         gs_batch(
@@ -86,20 +106,22 @@ fn batch_matches_sequential() {
             &foci,
             wl(),
             &GsOption::default(),
-            &mut batched,
+            &mut batched.0,
+            &mut batched.1,
         )
         .unwrap();
-        for (f, want) in owned.iter().zip(&batched) {
+        for (f, want) in owned.iter().zip(problems(&batched)) {
             gs(
                 &NalgebraBackend,
                 &g,
                 f,
                 wl(),
                 &GsOption::default(),
-                &mut one,
+                &mut one.0,
+                &mut one.1,
             )
             .unwrap();
-            assert_eq!(&one, want, "gs {nf} foci");
+            assert_eq!(one, want, "gs {nf} foci");
         }
 
         gspat_batch(
@@ -108,20 +130,22 @@ fn batch_matches_sequential() {
             &foci,
             wl(),
             &GspatOption::default(),
-            &mut batched,
+            &mut batched.0,
+            &mut batched.1,
         )
         .unwrap();
-        for (f, want) in owned.iter().zip(&batched) {
+        for (f, want) in owned.iter().zip(problems(&batched)) {
             gspat(
                 &NalgebraBackend,
                 &g,
                 f,
                 wl(),
                 &GspatOption::default(),
-                &mut one,
+                &mut one.0,
+                &mut one.1,
             )
             .unwrap();
-            assert_eq!(&one, want, "gspat {nf} foci");
+            assert_eq!(one, want, "gspat {nf} foci");
         }
     }
 }
@@ -152,7 +176,8 @@ fn parallel_flag_does_not_change_the_result() {
                 parallel: true,
                 ..Default::default()
             },
-            &mut on,
+            &mut on.0,
+            &mut on.1,
         )
         .unwrap();
         gs(
@@ -165,13 +190,14 @@ fn parallel_flag_does_not_change_the_result() {
                 parallel: false,
                 ..Default::default()
             },
-            &mut off,
+            &mut off.0,
+            &mut off.1,
         )
         .unwrap();
         assert_eq!(on, off, "single problem");
 
-        let mut on = vec![slot(&g); owned.len()];
-        let mut off = vec![slot(&g); owned.len()];
+        let mut on = batch(&slot(&g), owned.len());
+        let mut off = batch(&slot(&g), owned.len());
         gs_batch(
             &NalgebraBackend,
             &g,
@@ -182,7 +208,8 @@ fn parallel_flag_does_not_change_the_result() {
                 parallel: true,
                 ..Default::default()
             },
-            &mut on,
+            &mut on.0,
+            &mut on.1,
         )
         .unwrap();
         gs_batch(
@@ -195,7 +222,8 @@ fn parallel_flag_does_not_change_the_result() {
                 parallel: false,
                 ..Default::default()
             },
-            &mut off,
+            &mut off.0,
+            &mut off.1,
         )
         .unwrap();
         assert_eq!(on, off, "batch");
@@ -210,20 +238,11 @@ fn all_masked_batch_matches_sequential() {
     let owned: Vec<Vec<AmplitudeTarget>> = (0..3).map(|k| problem(&g, k, 2)).collect();
     let foci: Vec<AmplitudeTarget> = owned.concat();
 
-    let dirty = vec![
-        vec![
-            Emission {
-                phase: Phase(0x7F),
-                intensity: Intensity(0xFF),
-            };
-            Autd3::NUM_TRANSDUCERS
-        ];
-        g.num_devices()
-    ];
-    let inactive = vec![vec![Emission::NULL; Autd3::NUM_TRANSDUCERS]; g.num_devices()];
+    let dirty = filled(&g, Phase(0x7F), Intensity(0xFF));
+    let inactive = filled(&g, Phase::ZERO, Intensity::MIN);
 
     let mut one = dirty.clone();
-    let mut batched = vec![dirty.clone(); owned.len()];
+    let mut batched = batch(&dirty, owned.len());
     naive(
         &NalgebraBackend,
         &g,
@@ -233,7 +252,8 @@ fn all_masked_batch_matches_sequential() {
             mask,
             ..Default::default()
         },
-        &mut one,
+        &mut one.0,
+        &mut one.1,
     )
     .unwrap();
     naive_batch(
@@ -245,14 +265,15 @@ fn all_masked_batch_matches_sequential() {
             mask,
             ..Default::default()
         },
-        &mut batched,
+        &mut batched.0,
+        &mut batched.1,
     )
     .unwrap();
     assert_eq!(one, inactive, "naive single");
-    assert!(batched.iter().all(|b| *b == one), "naive batch");
+    assert!(problems(&batched).all(|b| b == one), "naive batch");
 
     let mut one = dirty.clone();
-    let mut batched = vec![dirty.clone(); owned.len()];
+    let mut batched = batch(&dirty, owned.len());
     gs(
         &NalgebraBackend,
         &g,
@@ -262,7 +283,8 @@ fn all_masked_batch_matches_sequential() {
             mask,
             ..Default::default()
         },
-        &mut one,
+        &mut one.0,
+        &mut one.1,
     )
     .unwrap();
     gs_batch(
@@ -274,14 +296,15 @@ fn all_masked_batch_matches_sequential() {
             mask,
             ..Default::default()
         },
-        &mut batched,
+        &mut batched.0,
+        &mut batched.1,
     )
     .unwrap();
     assert_eq!(one, inactive, "gs single");
-    assert!(batched.iter().all(|b| *b == one), "gs batch");
+    assert!(problems(&batched).all(|b| b == one), "gs batch");
 
     let mut one = dirty.clone();
-    let mut batched = vec![dirty; owned.len()];
+    let mut batched = batch(&dirty, owned.len());
     gspat(
         &NalgebraBackend,
         &g,
@@ -291,7 +314,8 @@ fn all_masked_batch_matches_sequential() {
             mask,
             ..Default::default()
         },
-        &mut one,
+        &mut one.0,
+        &mut one.1,
     )
     .unwrap();
     gspat_batch(
@@ -303,18 +327,19 @@ fn all_masked_batch_matches_sequential() {
             mask,
             ..Default::default()
         },
-        &mut batched,
+        &mut batched.0,
+        &mut batched.1,
     )
     .unwrap();
     assert_eq!(one, inactive, "gspat single");
-    assert!(batched.iter().all(|b| *b == one), "gspat batch");
+    assert!(problems(&batched).all(|b| b == one), "gspat batch");
 }
 
 #[test]
 fn rejects_malformed_batches() {
     let g = geometry(1);
     let foci = problem(&g, 0, 5);
-    let mut dst = vec![slot(&g); 2];
+    let mut dst = batch(&slot(&g), 2);
 
     assert_eq!(
         gs_batch(
@@ -323,7 +348,8 @@ fn rejects_malformed_batches() {
             &foci,
             wl(),
             &GsOption::default(),
-            &mut dst
+            &mut dst.0,
+            &mut dst.1
         ),
         Err(HoloError::BatchSizeMismatch {
             foci: 5,
@@ -337,6 +363,7 @@ fn rejects_malformed_batches() {
             &foci,
             wl(),
             &GsOption::default(),
+            &mut [],
             &mut []
         ),
         Err(HoloError::NoProblems)
@@ -348,8 +375,25 @@ fn rejects_malformed_batches() {
             &[],
             wl(),
             &GsOption::default(),
-            &mut [slot(&g)]
+            &mut [slot(&g).0],
+            &mut [slot(&g).1]
         ),
         Err(HoloError::NoFoci)
+    );
+    let mut two = batch(&slot(&g), 2);
+    assert_eq!(
+        gs_batch(
+            &NalgebraBackend,
+            &g,
+            &problem(&g, 0, 2),
+            wl(),
+            &GsOption::default(),
+            &mut two.0,
+            &mut two.1[..1]
+        ),
+        Err(HoloError::DstProblemCountMismatch {
+            phases: 2,
+            intensities: 1
+        })
     );
 }

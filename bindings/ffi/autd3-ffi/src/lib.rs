@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use autd3_ffi_abi::{
     AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, CheckerBackend, ClientBackend, ClientOpener,
-    CompletionCallback, CompletionCtx, DevicePattern, ModulationBuffer, PatternBuffer,
+    CompletionCallback, CompletionCtx, IntensityBuffer, ModulationBuffer, PhaseBuffer,
     ResponseTokenData, drop_handle, handle_mut, handle_ref, into_handle, slice_mut, slice_ref,
     take_handle, to_rt_policy, to_rt_priority, write_cstr, write_out,
 };
@@ -497,7 +497,8 @@ pub unsafe extern "C" fn autd3_client_opener_free(opener: *mut ClientOpener) {
 
 pub enum Pending {
     Pattern {
-        emissions: Vec<DevicePattern>,
+        phases: Vec<Vec<Phase>>,
+        intensities: Vec<Vec<Intensity>>,
         bank: PatternBank,
         transition_mode: TransitionMode,
     },
@@ -511,7 +512,8 @@ pub enum Pending {
     WritePatternBuffer {
         bank: PatternBank,
         index: u16,
-        emissions: Vec<DevicePattern>,
+        phases: Vec<Vec<Phase>>,
+        intensities: Vec<Vec<Intensity>>,
     },
     WriteFociBuffer {
         bank: PatternBank,
@@ -522,7 +524,7 @@ pub enum Pending {
         bank: PatternBank,
         index: u32,
         format: PatternCompression,
-        patterns: Vec<Vec<DevicePattern>>,
+        patterns: Vec<Vec<Vec<Phase>>>,
     },
     ConfigPattern {
         bank: PatternBank,
@@ -586,7 +588,8 @@ pub enum Pending {
     },
     PatternStm {
         config: StmConfig,
-        patterns: Vec<Vec<DevicePattern>>,
+        phases: Vec<Vec<Vec<Phase>>>,
+        intensities: Vec<Vec<Vec<Intensity>>>,
         bank: PatternBank,
         mode: PatternStmMode,
         loop_behavior: LoopBehavior,
@@ -606,12 +609,15 @@ fn to_pattern_compression(v: u8) -> Option<PatternCompression> {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_pattern(
     bank: u8,
-    pattern_buffer: *const PatternBuffer,
+    phases: *const PhaseBuffer,
+    intensities: *const IntensityBuffer,
     transition_mode: u8,
     transition_value: u64,
     transition_margin_ns: u32,
 ) -> *mut Pending {
-    let Some(pattern_buffer) = (unsafe { handle_ref(pattern_buffer) }) else {
+    let (Some(phases), Some(intensities)) = (unsafe { handle_ref(phases) }, unsafe {
+        handle_ref(intensities)
+    }) else {
         return std::ptr::null_mut();
     };
     let (Some(bank), Some(transition_mode)) = (
@@ -622,7 +628,8 @@ pub unsafe extern "C" fn autd3_op_pattern(
     };
 
     into_handle(Pending::Pattern {
-        emissions: pattern_buffer.0.clone(),
+        phases: phases.0.clone(),
+        intensities: intensities.0.clone(),
         bank,
         transition_mode,
     })
@@ -669,20 +676,23 @@ pub unsafe extern "C" fn autd3_op_modulation(
 pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
     bank: u8,
     index: u16,
-    pattern_buffer: *const PatternBuffer,
+    phases: *const PhaseBuffer,
+    intensities: *const IntensityBuffer,
 ) -> *mut Pending {
-    let Some(pattern_buffer) = (unsafe { handle_ref(pattern_buffer) }) else {
+    let (Some(phases), Some(intensities)) = (unsafe { handle_ref(phases) }, unsafe {
+        handle_ref(intensities)
+    }) else {
         return std::ptr::null_mut();
     };
     let Some(bank) = to_pattern_bank(bank) else {
         return std::ptr::null_mut();
     };
 
-    let emissions = pattern_buffer.0.clone();
     into_handle(Pending::WritePatternBuffer {
         bank,
         index,
-        emissions,
+        phases: phases.0.clone(),
+        intensities: intensities.0.clone(),
     })
 }
 
@@ -741,7 +751,7 @@ pub unsafe extern "C" fn autd3_op_write_pattern_compressed(
     bank: u8,
     index: u32,
     format: u8,
-    patterns: *const *const PatternBuffer,
+    patterns: *const *const PhaseBuffer,
     num_patterns: usize,
 ) -> *mut Pending {
     if num_patterns == 0 {
@@ -1146,7 +1156,8 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_pattern_stm(
     config: *const StmConfig,
-    patterns: *const *const PatternBuffer,
+    phases: *const *const PhaseBuffer,
+    intensities: *const *const IntensityBuffer,
     num_patterns: usize,
     bank: u8,
     mode: u8,
@@ -1155,9 +1166,11 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     transition_value: u64,
     transition_margin_ns: u32,
 ) -> *mut Pending {
-    let (Some(config), Some(slice)) = (unsafe { handle_ref(config) }, unsafe {
-        slice_ref(patterns, num_patterns)
-    }) else {
+    let (Some(config), Some(phase_ptrs), Some(intensity_ptrs)) = (
+        unsafe { handle_ref(config) },
+        unsafe { slice_ref(phases, num_patterns) },
+        unsafe { slice_ref(intensities, num_patterns) },
+    ) else {
         return std::ptr::null_mut();
     };
     let (Some(bank), Some(mode), Some(transition_mode)) = (
@@ -1168,16 +1181,24 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
         return std::ptr::null_mut();
     };
 
-    let mut patterns = Vec::with_capacity(slice.len());
-    for p in slice {
-        let Some(pattern) = (unsafe { handle_ref(*p) }) else {
-            return std::ptr::null_mut();
-        };
-        patterns.push(pattern.0.clone());
-    }
+    let Some(phases) = phase_ptrs
+        .iter()
+        .map(|&p| unsafe { handle_ref(p) }.map(|p| p.0.clone()))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return std::ptr::null_mut();
+    };
+    let Some(intensities) = intensity_ptrs
+        .iter()
+        .map(|&p| unsafe { handle_ref(p) }.map(|p| p.0.clone()))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return std::ptr::null_mut();
+    };
     into_handle(Pending::PatternStm {
         config: *config,
-        patterns,
+        phases,
+        intensities,
         bank,
         mode,
         loop_behavior: rep_to_loop_behavior(loop_rep),
@@ -1194,12 +1215,13 @@ pub unsafe extern "C" fn autd3_op_free(op: *mut Pending) {
 fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
     Some(match pending {
         Pending::Pattern {
-            emissions,
+            phases,
+            intensities,
             bank,
             transition_mode,
         } => Pattern {
             transition_mode: *transition_mode,
-            ..Pattern::with_bank(*bank, emissions)
+            ..Pattern::with_bank(*bank, phases, intensities)
         }
         .boxed(),
         Pending::Modulation {
@@ -1222,11 +1244,13 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
         Pending::WritePatternBuffer {
             bank,
             index,
-            emissions,
+            phases,
+            intensities,
         } => WritePatternBuffer {
             bank: *bank,
             index: usize::from(*index),
-            emissions,
+            phases,
+            intensities,
         }
         .boxed(),
         Pending::ConfigPattern {
@@ -1327,7 +1351,7 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             format,
             patterns,
         } => {
-            let mut arr: [Option<&[DevicePattern]>; 4] = [None; 4];
+            let mut arr: [Option<&[Vec<Phase>]>; 4] = [None; 4];
             for (slot, buf) in arr.iter_mut().zip(patterns.iter()) {
                 *slot = Some(buf.as_slice());
             }
@@ -1357,14 +1381,16 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
         ),
         Pending::PatternStm {
             config,
-            patterns,
+            phases,
+            intensities,
             bank,
             mode,
             loop_behavior,
             transition_mode,
         } => PatternStm::new(
             *config,
-            patterns,
+            phases,
+            intensities,
             PatternStmOption {
                 bank: *bank,
                 mode: *mode,
@@ -1468,13 +1494,14 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
     for pending in &builder.pending {
         match pending {
             Pending::Pattern {
-                emissions,
+                phases,
+                intensities,
                 bank,
                 transition_mode,
             } => {
                 core.push(Pattern {
                     transition_mode: *transition_mode,
-                    ..Pattern::with_bank(*bank, emissions)
+                    ..Pattern::with_bank(*bank, phases, intensities)
                 });
             }
             Pending::Modulation {
@@ -1499,12 +1526,14 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             Pending::WritePatternBuffer {
                 bank,
                 index,
-                emissions,
+                phases,
+                intensities,
             } => {
                 core.push(WritePatternBuffer {
                     bank: *bank,
                     index: usize::from(*index),
-                    emissions,
+                    phases,
+                    intensities,
                 });
             }
             Pending::WriteFociBuffer {
@@ -1520,7 +1549,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 format,
                 patterns,
             } => {
-                let mut arr: [Option<&[DevicePattern]>; 4] = [None; 4];
+                let mut arr: [Option<&[Vec<Phase>]>; 4] = [None; 4];
                 for (slot, buf) in arr.iter_mut().zip(patterns.iter()) {
                     *slot = Some(buf.as_slice());
                 }
@@ -1664,7 +1693,8 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             }
             Pending::PatternStm {
                 config,
-                patterns,
+                phases,
+                intensities,
                 bank,
                 mode,
                 loop_behavior,
@@ -1672,7 +1702,8 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             } => {
                 core.push(PatternStm::new(
                     *config,
-                    patterns,
+                    phases,
+                    intensities,
                     PatternStmOption {
                         bank: *bank,
                         mode: *mode,

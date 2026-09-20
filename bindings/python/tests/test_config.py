@@ -48,9 +48,12 @@ def test_zero_valued_config_fields_are_rejected() -> None:
 
 def test_the_mutable_capsule_keeps_its_buffer_alive() -> None:
     geo = geometry()
-    buffer = geo.pattern_buffer()
-    capsule = buffer._capsule_mut()
-    del buffer
+    phases = geo.phase_buffer()
+    intensities = geo.intensity_buffer()
+    phase_capsule = phases._capsule_mut()
+    intensity_capsule = intensities._capsule_mut()
+    del phases
+    del intensities
     gc.collect()
 
     holo.naive(
@@ -58,5 +61,6 @@ def test_the_mutable_capsule_keeps_its_buffer_alive() -> None:
         [holo.AmplitudeTarget(np.array([0.0, 0.0, 150.0]), 5e3 * Pa)],
         pattern.wavelength(340 * autd3.units.m / autd3.units.s),
         holo.NaiveOption(),
-        capsule,
+        phase_capsule,
+        intensity_capsule,
     )

@@ -1,5 +1,5 @@
 use crate::proto::{Cmd, Error};
-use crate::tests::builders::write_pattern_buffer;
+use crate::tests::builders::write_foci_buffer;
 use crate::tests::mock::{Frame, Harness};
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
@@ -83,7 +83,7 @@ fn duplicate_frame_is_suppressed_at_isr_boundary() {
 fn reset_during_inflight_drain_overrides_stale_frame() {
     let mut h = Harness::new();
 
-    let stale = write_pattern_buffer(0, 0, 0, &[0x5A5A]);
+    let stale = write_foci_buffer(0, 0, 0, &[0x5A5A]);
     h.deliver_no_drain(&stale);
     h.arm_isr_reset();
 

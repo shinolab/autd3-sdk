@@ -5,7 +5,7 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{ControlPoints, PatternBank};
 
 use super::{Distribution, Operation};
-use autd3_cpu_wire::payload::WritePatternPayload;
+use autd3_cpu_wire::payload::WriteFociPayload;
 use zerocopy::FromBytes;
 use zerocopy::little_endian::{U16, U32};
 
@@ -45,8 +45,8 @@ impl<const N: usize> Operation for WriteFociChunk<'_, N> {
         let word_offset = u32::try_from((base + start) * FOCUS_WORDS).expect("bounded by capacity");
         let len = u16::try_from(self.focus_len * FOCUS_WORDS * 2).expect("bounded by frame");
 
-        let (h, rest) = WritePatternPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *h = WritePatternPayload {
+        let (h, rest) = WriteFociPayload::mut_from_prefix(&mut out[..]).unwrap();
+        *h = WriteFociPayload {
             bank: self.bank.as_u8(),
             reserved: 0,
             offset: U32::new(word_offset),
@@ -61,7 +61,7 @@ impl<const N: usize> Operation for WriteFociChunk<'_, N> {
             let focus = self.points[k / N].focus(device, k % N);
             *dst = focus.encode()?.to_le_bytes();
         }
-        Ok(Cmd::WritePatternBuffer)
+        Ok(Cmd::WriteFociBuffer)
     }
 }
 
@@ -70,7 +70,7 @@ mod tests {
     use super::*;
     use crate::geometry::Point3;
     use crate::test_utils::test_device;
-    const HEADER_BYTES: usize = core::mem::size_of::<WritePatternPayload>();
+    const HEADER_BYTES: usize = core::mem::size_of::<WriteFociPayload>();
 
     #[test]
     fn write_foci_chunk_writes_its_own_window() {
@@ -88,7 +88,7 @@ mod tests {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
-        assert_eq!(cmd, Cmd::WritePatternBuffer);
+        assert_eq!(cmd, Cmd::WriteFociBuffer);
         let word_offset = u32::try_from((10 + 2) * FOCUS_WORDS).unwrap();
         assert_eq!(&out[2..6], &word_offset.to_le_bytes());
         assert_eq!(&out[6..8], &u16::try_from(2 * 8).unwrap().to_le_bytes());

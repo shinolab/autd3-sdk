@@ -1,6 +1,6 @@
 ---
 title: 任意のパターン・変調
-description: ヘルパ関数を使わず, 任意の Emission パターン・AM 波形を直接構築する方法
+description: ヘルパ関数を使わず, 任意の位相・振幅パターン・AM 波形を直接構築する方法
 sidebar:
   order: 5
 ---
@@ -20,8 +20,8 @@ import csModulation from "@codes/csharp/examples/guide/custom-modulation.cs?raw"
 
 ## 任意のPattern
 
-パターンは, デバイスごとに `Vec<Emission>` を並べたバッファである.
-`Geometry::pattern_buffer` で全デバイス分のバッファを確保し, 各振動子の `Emission` (位相と強度) を自由に設定できる.
+パターンは, デバイスごとに `Vec<Phase>` を並べた位相バッファと `Vec<Intensity>` を並べた振幅バッファの組である.
+`Geometry::phase_buffer` / `Geometry::intensity_buffer` で全デバイス分のバッファを確保し, 各振動子の位相と振幅を自由に設定できる.
 
 以下は, [`focus`](/autd3-sdk/api/compute/pattern/focus/) と同じ単一焦点を, ヘルパを使わず手動で計算する例である.
 各振動子から焦点までの距離に応じた位相を与えている.

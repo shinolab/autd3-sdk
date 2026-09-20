@@ -14,12 +14,13 @@ from autd3_pattern import focus, wavelength
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
     async with await Client.open(geometry, Nop(), ClientConfig()) as client:
-        emissions = geometry.pattern_buffer()
+        phases = geometry.phase_buffer()
+        intensities = geometry.intensity_buffer()
         focus(
             geometry,
             geometry.center() + np.array([0.0, 0.0, 150.0]),
             wavelength(340 * m / s),
-            emissions,
+            phases,
         )
 
         bank = PatternBank.B0
@@ -29,7 +30,8 @@ async def main() -> None:
             WritePatternBuffer(
                 bank=bank,
                 index=0,
-                emissions=emissions,
+                phases=phases,
+                intensities=intensities,
             )
         )
         builder.push(

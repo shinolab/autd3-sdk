@@ -69,14 +69,14 @@ namespace AUTD3.Holo
         public static readonly SplUnit dB = default;
     }
 
-    public readonly struct EmissionConstraint
+    public readonly struct IntensityConstraint
     {
         internal byte Kind { get; }
         internal byte Min { get; }
         internal byte Max { get; }
         internal float MultiplyValue { get; }
 
-        private EmissionConstraint(byte kind, byte min, byte max, float multiply)
+        private IntensityConstraint(byte kind, byte min, byte max, float multiply)
         {
             Kind = kind;
             Min = min;
@@ -84,17 +84,17 @@ namespace AUTD3.Holo
             MultiplyValue = multiply;
         }
 
-        public static EmissionConstraint Normalize => new EmissionConstraint(0, 0, 0, 0);
-        public static EmissionConstraint Multiply(float value) => new EmissionConstraint(1, 0, 0, value);
-        public static EmissionConstraint Uniform(Intensity intensity) => new EmissionConstraint(2, intensity.Value, 0, 0);
-        public static EmissionConstraint Clamp(Intensity min, Intensity max) => new EmissionConstraint(3, min.Value, max.Value, 0);
+        public static IntensityConstraint Normalize => new IntensityConstraint(0, 0, 0, 0);
+        public static IntensityConstraint Multiply(float value) => new IntensityConstraint(1, 0, 0, value);
+        public static IntensityConstraint Uniform(Intensity intensity) => new IntensityConstraint(2, intensity.Value, 0, 0);
+        public static IntensityConstraint Clamp(Intensity min, Intensity max) => new IntensityConstraint(3, min.Value, max.Value, 0);
 
-        internal EmissionConstraintNative ToNative() =>
-            new EmissionConstraintNative { Kind = Kind, Min = Min, Max = Max, Multiply = MultiplyValue };
+        internal IntensityConstraintNative ToNative() =>
+            new IntensityConstraintNative { Kind = Kind, Min = Min, Max = Max, Multiply = MultiplyValue };
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct EmissionConstraintNative
+    internal struct IntensityConstraintNative
     {
         public byte Kind;
         public byte Min;
@@ -104,7 +104,7 @@ namespace AUTD3.Holo
 
     public readonly struct NaiveOption
     {
-        public EmissionConstraint Constraint { get; }
+        public IntensityConstraint Constraint { get; }
         public Directivity Directivity { get; }
         public TransducerMask Mask { get; }
         public bool Parallel { get; }
@@ -113,9 +113,9 @@ namespace AUTD3.Holo
         {
         }
 
-        public NaiveOption(EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default, bool parallel = true)
+        public NaiveOption(IntensityConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default, bool parallel = true)
         {
-            Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
+            Constraint = constraint ?? IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
             Directivity = directivity;
             Mask = mask;
             Parallel = parallel;
@@ -125,7 +125,7 @@ namespace AUTD3.Holo
     public readonly struct GsOption
     {
         public uint Repeat { get; }
-        public EmissionConstraint Constraint { get; }
+        public IntensityConstraint Constraint { get; }
         public Directivity Directivity { get; }
         public TransducerMask Mask { get; }
         public bool Parallel { get; }
@@ -134,10 +134,10 @@ namespace AUTD3.Holo
         {
         }
 
-        public GsOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default, bool parallel = true)
+        public GsOption(uint repeat = 100, IntensityConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default, bool parallel = true)
         {
             Repeat = repeat;
-            Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
+            Constraint = constraint ?? IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
             Directivity = directivity;
             Mask = mask;
             Parallel = parallel;
@@ -147,7 +147,7 @@ namespace AUTD3.Holo
     public readonly struct GspatOption
     {
         public uint Repeat { get; }
-        public EmissionConstraint Constraint { get; }
+        public IntensityConstraint Constraint { get; }
         public Directivity Directivity { get; }
         public TransducerMask Mask { get; }
         public bool Parallel { get; }
@@ -156,10 +156,10 @@ namespace AUTD3.Holo
         {
         }
 
-        public GspatOption(uint repeat = 100, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default, bool parallel = true)
+        public GspatOption(uint repeat = 100, IntensityConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default, bool parallel = true)
         {
             Repeat = repeat;
-            Constraint = constraint ?? EmissionConstraint.Clamp(Intensity.Min, Intensity.Max);
+            Constraint = constraint ?? IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
             Directivity = directivity;
             Mask = mask;
             Parallel = parallel;
@@ -169,7 +169,7 @@ namespace AUTD3.Holo
     public readonly struct GreedyOption
     {
         public byte PhaseQuantizationLevels { get; }
-        public EmissionConstraint Constraint { get; }
+        public IntensityConstraint Constraint { get; }
         public Directivity Directivity { get; }
         public TransducerMask Mask { get; }
 
@@ -177,10 +177,10 @@ namespace AUTD3.Holo
         {
         }
 
-        public GreedyOption(byte phaseQuantizationLevels = 16, EmissionConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
+        public GreedyOption(byte phaseQuantizationLevels = 16, IntensityConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
         {
             PhaseQuantizationLevels = phaseQuantizationLevels;
-            Constraint = constraint ?? EmissionConstraint.Uniform(Intensity.Max);
+            Constraint = constraint ?? IntensityConstraint.Uniform(Intensity.Max);
             Directivity = directivity;
             Mask = mask;
         }
@@ -214,16 +214,16 @@ namespace AUTD3.Holo
         internal static extern float autd3_holo_amplitude_spl(float value);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_naive(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, PatternBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_naive(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_gs(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, PatternBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_gs(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_gspat(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, PatternBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_gspat(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, byte phaseQuantizationLevels, in EmissionConstraintNative constraint, byte directivity, byte[]? mask, PatternBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, byte phaseQuantizationLevels, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
     }
 
     public readonly struct AmplitudeTarget
@@ -283,41 +283,41 @@ namespace AUTD3.Holo
             return flat;
         }
 
-        public static void Naive(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, NaiveOption option, PatternBuffer dst)
+        public static void Naive(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, NaiveOption option, PhaseBuffer phases, IntensityBuffer intensities)
         {
             var c = option.Constraint.ToNative();
             var err = new byte[NativeAbi.ErrorBufferLength];
-            if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle, err, (UIntPtr)err.Length) != 0)
+            if (NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, phases.Handle, intensities.Handle, err, (UIntPtr)err.Length) != 0)
             {
                 throw new Autd3Exception(NativeUtil.Utf8(err));
             }
         }
 
-        public static void Gs(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GsOption option, PatternBuffer dst)
+        public static void Gs(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GsOption option, PhaseBuffer phases, IntensityBuffer intensities)
         {
             var c = option.Constraint.ToNative();
             var err = new byte[NativeAbi.ErrorBufferLength];
-            if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle, err, (UIntPtr)err.Length) != 0)
+            if (NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, phases.Handle, intensities.Handle, err, (UIntPtr)err.Length) != 0)
             {
                 throw new Autd3Exception(NativeUtil.Utf8(err));
             }
         }
 
-        public static void Gspat(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GspatOption option, PatternBuffer dst)
+        public static void Gspat(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GspatOption option, PhaseBuffer phases, IntensityBuffer intensities)
         {
             var c = option.Constraint.ToNative();
             var err = new byte[NativeAbi.ErrorBufferLength];
-            if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), option.Parallel, dst.Handle, err, (UIntPtr)err.Length) != 0)
+            if (NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, phases.Handle, intensities.Handle, err, (UIntPtr)err.Length) != 0)
             {
                 throw new Autd3Exception(NativeUtil.Utf8(err));
             }
         }
 
-        public static void Greedy(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GreedyOption option, PatternBuffer dst)
+        public static void Greedy(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GreedyOption option, PhaseBuffer phases, IntensityBuffer intensities)
         {
             var c = option.Constraint.ToNative();
             var err = new byte[NativeAbi.ErrorBufferLength];
-            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, dst.NumDevices), dst.Handle, err, (UIntPtr)err.Length) != 0)
+            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), phases.Handle, intensities.Handle, err, (UIntPtr)err.Length) != 0)
             {
                 throw new Autd3Exception(NativeUtil.Utf8(err));
             }

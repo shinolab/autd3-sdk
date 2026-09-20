@@ -2,7 +2,6 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::Emission;
 use autd3_rs_pattern_holo::{AmplitudeTarget, GsOption, NalgebraBackend, Pa, gs_batch};
 
 fn main() -> Result<()> {
@@ -20,14 +19,16 @@ fn main() -> Result<()> {
         })
         .collect();
 
-    let mut dst = vec![geometry.pattern_buffer(); problems];
+    let mut phases = vec![geometry.phase_buffer(); problems];
+    let mut intensities = vec![geometry.intensity_buffer(); problems];
     gs_batch(
         &NalgebraBackend,
         &geometry,
         &foci,
         wavelength,
         &option,
-        &mut dst,
+        &mut phases,
+        &mut intensities,
     )?;
     // ANCHOR_END: api
     Ok(())

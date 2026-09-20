@@ -1,5 +1,5 @@
 use autd3_rs_core::link::Link;
-use autd3_rs_core::value::{Emission, Intensity, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::legacy::emulator::{LegacyAudit, LegacyDevice, StmKind};
 use crate::legacy::error::{
@@ -500,14 +500,12 @@ fn an_audit_link_keeps_one_independent_state_per_device() {
             assert_eq!(d.segment(Segment::S1).kind, StmKind::Gain);
             assert_eq!(d.segment(Segment::S1).cycle, 1);
             assert_eq!(
-                d.segment(Segment::S1).emissions[0],
-                vec![
-                    Emission {
-                        phase: Phase(0),
-                        intensity: Intensity(0)
-                    };
-                    NUM_TRANSDUCERS
-                ]
+                d.segment(Segment::S1).phases[0],
+                vec![Phase(0); NUM_TRANSDUCERS]
+            );
+            assert_eq!(
+                d.segment(Segment::S1).intensities[0],
+                vec![Intensity(0); NUM_TRANSDUCERS]
             );
         });
     }

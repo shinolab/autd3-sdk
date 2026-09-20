@@ -24,18 +24,18 @@ def report(label: str, elapsed: float) -> None:
     print(f"{label}: {TOTAL_POINTS} updates in {elapsed:.2f}s ({rate:.0f} updates/s)")
 
 
-async def configure(client: autd3.Client, patterns: object) -> None:
-    pattern.set_intensity(0, patterns)
+async def configure(client: autd3.Client, phases: object, intensities: object) -> None:
+    pattern.set_intensity(0, intensities)
     builder = client.datagram_builder()
-    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B0, 0, patterns))
+    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B0, 0, phases, intensities))
     builder.push(autd3.commands.ConfigPattern(autd3.value.PatternBank.B0, autd3.value.SamplingConfig.FREQ_4K, 1))
     for frame in builder.build():
         await client.send_checked(frame)
 
 
-def write_focus(client: autd3.Client, patterns: object) -> object:
+def write_focus(client: autd3.Client, phases: object, intensities: object) -> object:
     builder = client.datagram_builder()
-    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B0, 0, patterns))
+    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B0, 0, phases, intensities))
     return builder.build()
 
 
@@ -51,16 +51,17 @@ async def main() -> None:
         radius = 30.0
         wavelength = pattern.wavelength(340 * m / s)
 
-        patterns = geometry.pattern_buffer()
-        await configure(client, patterns)
-        pattern.set_intensity(autd3.value.Intensity.MAX, patterns)
+        phases = geometry.phase_buffer()
+        intensities = geometry.intensity_buffer()
+        await configure(client, phases, intensities)
+        pattern.set_intensity(autd3.value.Intensity.MAX, intensities)
 
         datagrams = []
         for i in range(TOTAL_POINTS):
             theta = 2.0 * math.pi * i / TOTAL_POINTS
             target = center + np.array([radius * math.cos(theta), radius * math.sin(theta), 150.0])
-            pattern.focus(geometry, target, wavelength, patterns)
-            datagrams.append(write_focus(client, patterns))
+            pattern.focus(geometry, target, wavelength, phases)
+            datagrams.append(write_focus(client, phases, intensities))
 
         print(f"sweeping a focus through {TOTAL_POINTS} positions, twice")
 

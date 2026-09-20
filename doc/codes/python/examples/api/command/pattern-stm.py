@@ -20,7 +20,7 @@ patterns = []
 for i in range(NUM_POINTS):
     theta = 2.0 * math.pi * i / NUM_POINTS
     target = center + np.array([RADIUS_MM * math.cos(theta), RADIUS_MM * math.sin(theta), 0.0])
-    buffer = geometry.pattern_buffer()
+    buffer = geometry.phase_buffer()
     focus(
         geometry,
         target,
@@ -28,6 +28,7 @@ for i in range(NUM_POINTS):
         buffer,
     )
     patterns.append(buffer)
+intensities = [geometry.intensity_buffer() for _ in patterns]
 freq = 1.0 * Hz
 bank = PatternBank.B0
 mode = PatternStmMode.PhaseIntensityFull
@@ -44,15 +45,16 @@ option = (
     # ANCHOR_END: option
 )
 # ANCHOR: api
-PatternStm(freq, patterns, option)
+PatternStm(freq, patterns, intensities, option)
 # ANCHOR_END: api
 
 # ANCHOR: equivalent
-for index, emissions in enumerate(patterns):
+for index, (phases, amps) in enumerate(zip(patterns, intensities)):
     WritePatternBuffer(
         bank=option.bank,
         index=index,
-        emissions=emissions,
+        phases=phases,
+        intensities=amps,
     )
 ConfigPattern(
     bank=option.bank,

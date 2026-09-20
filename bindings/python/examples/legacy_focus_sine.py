@@ -31,15 +31,16 @@ async def main() -> None:
         # length in mm
         target = geometry.center() + np.array([0.0, 0.0, 150.0])
         wavelength = pattern.wavelength(340 * m / s)
-        patterns = geometry.pattern_buffer()
-        pattern.focus(geometry, target, wavelength, patterns)
+        phases = geometry.phase_buffer()
+        intensities = geometry.intensity_buffer()
+        pattern.focus(geometry, target, wavelength, phases)
 
         mod_buf = modulation.modulation_buffer()
         modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
 
         builder = client.datagram_builder()
         builder.push(autd3.commands.SetSilencer())
-        builder.push(autd3.commands.Pattern(patterns))
+        builder.push(autd3.commands.Pattern(phases, intensities))
         builder.push(autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf))
         frames = builder.build()
         for i in range(len(frames)):

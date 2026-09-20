@@ -2,7 +2,7 @@ use core::f32::consts::PI;
 
 use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3, Vector3};
-use autd3_rs_core::value::{Emission, Intensity};
+use autd3_rs_core::value::Intensity;
 
 pub(crate) struct AzimuthBasis {
     pub(crate) u: Vector3<f32>,
@@ -121,17 +121,17 @@ fn write_scaled(
     device: &Device,
     log_amplitude: &impl Fn(Point3<f32>) -> f32,
     log_max: f32,
-    dst: &mut [Emission],
+    dst: &mut [Intensity],
 ) {
-    for (e, &pos) in dst.iter_mut().zip(device.positions()) {
-        e.intensity = scaled_intensity(log_amplitude(pos), log_max);
+    for (i, &pos) in dst.iter_mut().zip(device.positions()) {
+        *i = scaled_intensity(log_amplitude(pos), log_max);
     }
 }
 
 pub(crate) fn write_intensity_device(
     device: &Device,
     log_amplitude: impl Fn(Point3<f32>) -> f32,
-    dst: &mut [Emission],
+    dst: &mut [Intensity],
 ) {
     let log_max = max_log_amplitude(device.positions(), &log_amplitude);
     write_scaled(device, &log_amplitude, log_max, dst);
@@ -140,7 +140,7 @@ pub(crate) fn write_intensity_device(
 pub(crate) fn write_intensity(
     geometry: &Geometry,
     log_amplitude: impl Fn(Point3<f32>) -> f32,
-    dst: &mut [Vec<Emission>],
+    dst: &mut [Vec<Intensity>],
 ) {
     assert_eq!(
         dst.len(),

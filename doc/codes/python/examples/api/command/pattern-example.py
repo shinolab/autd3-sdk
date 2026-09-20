@@ -13,16 +13,17 @@ from autd3_pattern import focus, wavelength
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
     async with await Client.open(geometry, Nop(), ClientConfig()) as client:
-        emissions = geometry.pattern_buffer()
+        phases = geometry.phase_buffer()
+        intensities = geometry.intensity_buffer()
         focus(
             geometry,
             geometry.center() + np.array([0.0, 0.0, 150.0]),
             wavelength(340 * m / s),
-            emissions,
+            phases,
         )
 
         builder = client.datagram_builder()
-        builder.push(Pattern(emissions))
+        builder.push(Pattern(phases, intensities))
         frames = builder.build()
         for frame in frames:
             await client.send_checked(frame)

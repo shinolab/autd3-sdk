@@ -5,7 +5,7 @@ from autd3_pattern import TransducerMask, wavelength
 from autd3_pattern_holo import (
     AmplitudeTarget,
     Directivity,
-    EmissionConstraint,
+    IntensityConstraint,
     NaiveOption,
     Pa,
     naive,
@@ -13,7 +13,8 @@ from autd3_pattern_holo import (
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-dst = geometry.pattern_buffer()
+phases = geometry.phase_buffer()
+intensities = geometry.intensity_buffer()
 
 naive(
     geometry,
@@ -29,9 +30,10 @@ naive(
     ],
     wavelength(340 * m / s),
     NaiveOption(
-        constraint=EmissionConstraint.Clamp(0x00, 0xFF),
+        constraint=IntensityConstraint.Clamp(0x00, 0xFF),
         directivity=Directivity.Sphere,
         mask=TransducerMask.AllEnabled,
     ),
-    dst,
+    phases,
+    intensities,
 )

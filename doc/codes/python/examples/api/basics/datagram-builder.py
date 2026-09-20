@@ -22,14 +22,15 @@ async def main() -> None:
         # ANCHOR_END: api
 
         wavelength = pattern.wavelength(340 * m / s)
-        left = geometry.pattern_buffer()
+        intensities = geometry.intensity_buffer()
+        left = geometry.phase_buffer()
         pattern.focus(geometry, geometry.center() + np.array([-40.0, 0.0, 150.0]), wavelength, left)
-        right = geometry.pattern_buffer()
+        right = geometry.phase_buffer()
         pattern.focus(geometry, geometry.center() + np.array([40.0, 0.0, 150.0]), wavelength, right)
 
         # ANCHOR: push_each
         builder = client.datagram_builder()
-        builder.push_each(lambda device: Pattern(left if device.idx() % 2 == 0 else right))
+        builder.push_each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, intensities))
         frames = builder.build()
         # ANCHOR_END: push_each
 

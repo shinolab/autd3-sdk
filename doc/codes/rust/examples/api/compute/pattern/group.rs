@@ -19,10 +19,10 @@ enum Side {
 fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let left = geometry.pattern_buffer();
-    let mut right = geometry.pattern_buffer();
+    let left = geometry.phase_buffer();
+    let mut right = geometry.phase_buffer();
     set_phase(Phase::PI, &mut right);
-    let mut dst = geometry.pattern_buffer();
+    let mut dst = geometry.phase_buffer();
     let center = geometry.center();
     // ANCHOR: api
     let groups = TransducerGroups::new(&geometry, |device, tr| {
@@ -39,6 +39,7 @@ fn main() -> Result<()> {
             Side::Left => &left,
             Side::Right => &right,
         },
+        Phase::ZERO,
         &mut dst,
     );
     // ANCHOR_END: api
@@ -49,11 +50,13 @@ fn main() -> Result<()> {
         amplitude: 5e3 * Pa,
     }];
     let target = center + offset(40.0 * mm, 0.0 * mm, 150.0 * mm);
+    let mut phases = geometry.phase_buffer();
+    let mut intensities = geometry.intensity_buffer();
     // ANCHOR: compute
     group_compute(
         &geometry,
         &groups,
-        |side, mask, buffer| match side {
+        |side, mask, phases, intensities| match side {
             Side::Left => gspat(
                 &NalgebraBackend,
                 &geometry,
@@ -63,14 +66,16 @@ fn main() -> Result<()> {
                     mask,
                     ..Default::default()
                 },
-                buffer,
+                phases,
+                intensities,
             ),
             Side::Right => {
-                focus(&geometry, target, wavelength, buffer);
+                focus(&geometry, target, wavelength, phases);
                 Ok(())
             }
         },
-        &mut dst,
+        &mut phases,
+        &mut intensities,
     )?;
     // ANCHOR_END: compute
     Ok(())

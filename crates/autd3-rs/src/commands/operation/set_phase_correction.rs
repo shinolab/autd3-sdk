@@ -21,13 +21,13 @@ impl Operation for SetPhaseCorrection<'_> {
     }
 
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        let phases =
-            self.phases
-                .get(device.idx())
-                .ok_or(PayloadError::EmissionsDeviceOutOfRange {
-                    device: device.idx(),
-                    len: self.phases.len(),
-                })?;
+        let phases = self
+            .phases
+            .get(device.idx())
+            .ok_or(PayloadError::DeviceDataOutOfRange {
+                device: device.idx(),
+                len: self.phases.len(),
+            })?;
         if phases.len() != device.num_transducers() {
             return Err(PayloadError::TransducerCountMismatch {
                 device: device.idx(),

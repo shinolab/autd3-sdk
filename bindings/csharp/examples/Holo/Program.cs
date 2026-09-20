@@ -29,15 +29,16 @@ internal static class Program
             new AmplitudeTarget(center + new Vector3(20f, 0f, 150f), 150 * dB),
         };
 
-        using var patterns = geometry.PatternBuffer();
-        Holo.Gspat(geometry, foci, wavelength, new GspatOption(repeat: 100), patterns);
+        using var phases = geometry.PhaseBuffer();
+        using var intensities = geometry.IntensityBuffer();
+        Holo.Gspat(geometry, foci, wavelength, new GspatOption(repeat: 100), phases, intensities);
 
         using var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(200 * Hz, new SineOption(), modulation);
 
         using var builder = client.DatagramBuilder();
         builder
-            .Push(new Pattern(patterns))
+            .Push(new Pattern(phases, intensities))
             .Push(new Modulation(SamplingConfig.Freq4k, modulation));
         using var frames = builder.Build();
         foreach (var frame in frames)

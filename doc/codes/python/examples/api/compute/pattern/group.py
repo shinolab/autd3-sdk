@@ -6,7 +6,8 @@ from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 from autd3.value import Phase
 from autd3_pattern import (
-    PatternBuffer,
+    IntensityBuffer,
+    PhaseBuffer,
     TransducerGroups,
     TransducerMask,
     focus,
@@ -29,10 +30,10 @@ class Side(Enum):
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-left = geometry.pattern_buffer()
-right = geometry.pattern_buffer()
+left = geometry.phase_buffer()
+right = geometry.phase_buffer()
 set_phase(Phase(0x80), right)
-dst = geometry.pattern_buffer()
+dst = geometry.phase_buffer()
 center = geometry.center()
 
 # ANCHOR: api
@@ -46,15 +47,17 @@ group(geometry, groups, {Side.LEFT: left, Side.RIGHT: right}, dst)
 wl = wavelength(340 * m / s)
 foci = [AmplitudeTarget(point=center + np.array([-30.0, 0.0, 150.0]), amplitude=5e3 * Pa)]
 target = center + np.array([40.0, 0.0, 150.0])
+phases = geometry.phase_buffer()
+intensities = geometry.intensity_buffer()
 
 
 # ANCHOR: compute
-def compute(side: Side, mask: TransducerMask, buffer: PatternBuffer) -> None:
+def compute(side: Side, mask: TransducerMask, phases: PhaseBuffer, intensities: IntensityBuffer) -> None:
     if side is Side.LEFT:
-        gspat(geometry, foci, wl, GspatOption(mask=mask), buffer)
+        gspat(geometry, foci, wl, GspatOption(mask=mask), phases, intensities)
     else:
-        focus(geometry, target, wl, buffer)
+        focus(geometry, target, wl, phases)
 
 
-group_compute(geometry, groups, compute, dst)
+group_compute(geometry, groups, compute, phases, intensities)
 # ANCHOR_END: compute

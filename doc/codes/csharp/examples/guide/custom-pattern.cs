@@ -15,20 +15,19 @@ internal static class Sample
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
         // ANCHOR: api
-        var emissions = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
         foreach (var device in geometry)
         {
-            var slot = emissions[device.Idx];
+            var slot = phases[device.Idx];
             for (var t = 0; t < device.NumTransducers; t++)
             {
                 var dist = Vector3.Distance(target, device.Position(t));
-                slot[t] = new Emission(
-                    (Phase)(-dist / wavelength.Mm * 2.0f * MathF.PI * rad),
-                    Intensity.Max);
+                slot[t] = (Phase)(-dist / wavelength.Mm * 2.0f * MathF.PI * rad);
             }
         }
+        var intensities = geometry.IntensityBuffer();
 
-        new Pattern(emissions);
+        new Pattern(phases, intensities);
         // ANCHOR_END: api
     }
 }

@@ -15,11 +15,12 @@ pub(crate) mod set_mode;
 pub(crate) mod silencer;
 pub(crate) mod sync;
 pub(crate) mod update;
+pub(crate) mod write_foci;
 pub(crate) mod write_mod;
 pub(crate) mod write_mod_fused;
-pub(crate) mod write_pattern;
 pub(crate) mod write_pattern_compressed;
 pub(crate) mod write_pattern_fused;
+pub(crate) mod write_pattern_raw;
 
 use crate::fpga::TransitionMode;
 

@@ -12,18 +12,19 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-var dst = geometry.PatternBuffer();
+var phases = geometry.PhaseBuffer();
+var intensities = geometry.IntensityBuffer();
 
-Pattern.SetIntensity(new Intensity(0x80), dst);
+Pattern.SetIntensity(new Intensity(0x80), intensities);
 Pattern.Focus(
     geometry,
     geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),
     Pattern.Wavelength(340.0f * m / s),
-    dst
+    phases
 );
-Pattern.AddPhase(Phase.Pi, dst);
+Pattern.AddPhase(Phase.Pi, phases);
 
-Pattern.SetIntensity(Intensity.Min, dst);
+Pattern.SetIntensity(Intensity.Min, intensities);
         // HIDE
     }
 }

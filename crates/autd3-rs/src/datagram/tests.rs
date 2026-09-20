@@ -7,7 +7,7 @@ use crate::error::{Error, PayloadError};
 use crate::geometry::{Autd3, Device};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::test_utils::test_geometry_arc;
-use crate::value::{Emission, LoopBehavior, ModulationBank, PatternBank, SamplingConfig};
+use crate::value::{Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig};
 
 #[derive(Clone, Copy)]
 struct Marker(u8);
@@ -166,11 +166,12 @@ fn push_each_propagates_rejection_from_sub_builder() {
 
 #[test]
 fn push_each_accepts_heterogeneous_boxed_commands() {
-    let patterns = vec![vec![crate::value::Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
+    let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
+    let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
     let mut b = DatagramBuilder::new(test_geometry_arc(2));
     b.push_each(|device| {
         Some(if device.idx() == 0 {
-            Pattern::new(&patterns).boxed()
+            Pattern::new(&phases, &intensities).boxed()
         } else {
             ConfigModulation {
                 bank: ModulationBank::B0,
@@ -296,11 +297,13 @@ fn broadcast_op_yields_one_frame_of_one_datagram() {
 
 #[test]
 fn per_device_op_yields_one_datagram_per_device() {
-    let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 3];
+    let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 3];
+    let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 3];
     let op = WritePatternBuffer {
         bank: PatternBank::B0,
         index: 0,
-        emissions: &patterns,
+        phases: &phases,
+        intensities: &intensities,
     };
     let mut b = DatagramBuilder::new(test_geometry_arc(3));
     b.push(op);
@@ -314,11 +317,13 @@ fn per_device_op_yields_one_datagram_per_device() {
 
 #[test]
 fn composite_emission_orders_write_then_config() {
-    let patterns = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; 2];
+    let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
+    let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
     let we = WritePatternBuffer {
         bank: PatternBank::B0,
         index: 0,
-        emissions: &patterns,
+        phases: &phases,
+        intensities: &intensities,
     };
     let ce = ConfigPattern {
         bank: PatternBank::B0,

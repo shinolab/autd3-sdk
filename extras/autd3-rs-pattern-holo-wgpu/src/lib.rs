@@ -8,8 +8,8 @@ use std::rc::Rc;
 use nalgebra::Complex;
 
 use autd3_rs_core::geometry::{Point3, UnitVector3};
-use autd3_rs_core::value::{Emission, Intensity, Phase};
-use autd3_rs_pattern_holo::{AmplitudeTarget, Directivity, EmissionConstraint, LinAlgBackend};
+use autd3_rs_core::value::{Intensity, Phase};
+use autd3_rs_pattern_holo::{AmplitudeTarget, Directivity, IntensityConstraint, LinAlgBackend};
 
 pub use buffer::{GpuMatrix, GpuVector, Pooled};
 
@@ -556,18 +556,18 @@ impl LinAlgBackend for WgpuBackend {
     fn quantize(
         &self,
         v: &Self::Vector,
-        constraint: EmissionConstraint,
+        constraint: IntensityConstraint,
         _parallel: bool,
-    ) -> Vec<Emission> {
+    ) -> (Vec<Phase>, Vec<Intensity>) {
         self.quantize_on_device(v, constraint)
     }
 
     fn quantize_batch(
         &self,
         v: &Self::BatchVector,
-        constraint: EmissionConstraint,
+        constraint: IntensityConstraint,
         _parallel: bool,
-    ) -> Vec<Emission> {
+    ) -> (Vec<Phase>, Vec<Intensity>) {
         self.quantize_on_device(v, constraint)
     }
 
@@ -639,12 +639,12 @@ impl LinAlgBackend for WgpuBackend {
     }
 }
 
-fn encode_constraint(constraint: EmissionConstraint) -> (u32, u32, u32) {
+fn encode_constraint(constraint: IntensityConstraint) -> (u32, u32, u32) {
     match constraint {
-        EmissionConstraint::Normalize => (0, 0, 0),
-        EmissionConstraint::Multiply(v) => (1, v.to_bits(), 0),
-        EmissionConstraint::Uniform(v) => (2, u32::from(v.0), 0),
-        EmissionConstraint::Clamp(min, max) => {
+        IntensityConstraint::Normalize => (0, 0, 0),
+        IntensityConstraint::Multiply(v) => (1, v.to_bits(), 0),
+        IntensityConstraint::Uniform(v) => (2, u32::from(v.0), 0),
+        IntensityConstraint::Clamp(min, max) => {
             (3, f32::from(min.0).to_bits(), f32::from(max.0).to_bits())
         }
         other => {
@@ -658,7 +658,11 @@ fn encode_constraint(constraint: EmissionConstraint) -> (u32, u32, u32) {
 }
 
 impl WgpuBackend {
-    fn quantize_on_device(&self, v: &GpuVector, constraint: EmissionConstraint) -> Vec<Emission> {
+    fn quantize_on_device(
+        &self,
+        v: &GpuVector,
+        constraint: IntensityConstraint,
+    ) -> (Vec<Phase>, Vec<Intensity>) {
         self.materialize(v);
         let (len, batch) = (v.len, v.batch.max(1));
         let words = len.div_ceil(2);
@@ -692,21 +696,16 @@ impl WgpuBackend {
         );
 
         self.read_back(&out, bytes, |raw| {
-            let mut dst = Vec::with_capacity(len * batch);
+            let mut phases = Vec::with_capacity(len * batch);
+            let mut intensities = Vec::with_capacity(len * batch);
             for k in 0..batch {
                 let at = k * words * 4;
-                dst.extend(
-                    raw[at..at + len * 2]
-                        .as_chunks::<2>()
-                        .0
-                        .iter()
-                        .map(|b| Emission {
-                            phase: Phase(b[0]),
-                            intensity: Intensity(b[1]),
-                        }),
-                );
+                for b in raw[at..at + len * 2].as_chunks::<2>().0 {
+                    phases.push(Phase(b[0]));
+                    intensities.push(Intensity(b[1]));
+                }
             }
-            dst
+            (phases, intensities)
         })
     }
 

@@ -22,6 +22,8 @@ pub enum HoloError {
     },
     #[error("dst has {got} device slots but the geometry has {expected} devices")]
     DstDeviceCountMismatch { got: usize, expected: usize },
+    #[error("dst has {phases} phase problem(s) but {intensities} intensity problem(s)")]
+    DstProblemCountMismatch { phases: usize, intensities: usize },
     #[error(transparent)]
     Mask(TransducerMaskError),
 }

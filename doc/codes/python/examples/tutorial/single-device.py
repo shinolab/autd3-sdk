@@ -27,12 +27,13 @@ async def main() -> None:
         # Generate a focus 150 mm above the array center.
         target = geometry.center() + np.array([0.0, 0.0, 150.0])
         wavelength = pattern.wavelength(340 * m / s)
-        patterns = geometry.pattern_buffer()
+        phases = geometry.phase_buffer()
+        intensities = geometry.intensity_buffer()
         pattern.focus(
             geometry,
             target,
             wavelength,
-            patterns,
+            phases,
         )
 
         # Apply a 200 Hz sine-wave AM.
@@ -45,7 +46,7 @@ async def main() -> None:
 
         builder = client.datagram_builder()
         builder.push(SetSilencer())
-        builder.push(Pattern(patterns))
+        builder.push(Pattern(phases, intensities))
         builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
         for frame in builder.build():
             await client.send_checked(frame)

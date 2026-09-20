@@ -234,12 +234,13 @@ async fn reset(ctx: &Ctx<'_>) -> Result<()> {
     use autd3_rs::value::Intensity;
     use autd3_rs_pattern::set_intensity;
 
-    let mut emissions = ctx.geometry.pattern_buffer();
-    set_intensity(Intensity::MIN, &mut emissions);
+    let phases = ctx.geometry.phase_buffer();
+    let mut intensities = ctx.geometry.intensity_buffer();
+    set_intensity(Intensity::MIN, &mut intensities);
 
     let mut builder = ctx.client.datagram_builder();
     builder
-        .push(Pattern::new(&emissions))
+        .push(Pattern::new(&phases, &intensities))
         .push(SetSilencer::default());
     let frames = builder.build()?;
     for frame in &frames {

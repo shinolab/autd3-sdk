@@ -26,12 +26,12 @@ fn constant_wave(v: u8) -> Vec<u8> {
 }
 
 fn pwm_waveform(fpga: &FpgaEmulator, tr: usize) -> Vec<u8> {
-    let emissions = fpga.emissions();
-    let Some(em) = emissions.get(tr) else {
+    let (phases, intensities) = fpga.emissions();
+    let (Some(&em_phase), Some(&em_intensity)) = (phases.get(tr), intensities.get(tr)) else {
         return constant_wave(0);
     };
-    let pw = fpga.to_pulse_width(em.intensity, fpga.modulation());
-    let phase = u16::from(em.phase.0) * 2;
+    let pw = fpga.to_pulse_width(em_intensity, fpga.modulation());
+    let phase = u16::from(em_phase.0) * 2;
     let rise = (GPIO_PERIOD + phase - pw / 2) % GPIO_PERIOD;
     let fall = (phase + pw / 2 + (pw & 0x01)) % GPIO_PERIOD;
     (0..GPIO_PERIOD)
@@ -132,12 +132,13 @@ pub fn extract_states_into(devices: &[EmuDevice], out: &mut Vec<TransState>, mod
         } else {
             u8::MAX
         };
-        for (i, d) in fpga.emissions().iter().enumerate() {
-            let pulse_width = fpga.to_pulse_width(d.intensity, modulation);
+        let (phases, intensities) = fpga.emissions();
+        for (i, (phase, &intensity)) in phases.iter().zip(&intensities).enumerate() {
+            let pulse_width = fpga.to_pulse_width(intensity, modulation);
             let amp = (PI * f32::from(pulse_width) / ULTRASOUND_PERIOD_COUNT).sin();
             out.push(TransState {
                 amp,
-                phase: d.phase.rad(),
+                phase: phase.rad(),
                 enable: fpga.output_mask_enabled(i),
             });
         }
@@ -152,7 +153,7 @@ mod tests {
 
     use approx::assert_relative_eq;
     use autd3_rs::commands::{Modulation, Nop, Pattern, SetPulseWidthTable};
-    use autd3_rs::value::{Emission, Intensity, Phase, SamplingConfig};
+    use autd3_rs::value::{Intensity, Phase, SamplingConfig};
     use autd3_rs_link_remote::TransducerLayout;
 
     use crate::harness::Harness;
@@ -171,14 +172,10 @@ mod tests {
             SamplingConfig::new(NonZeroU16::MAX),
             &[modulation, modulation],
         ));
-        let emissions = vec![vec![
-            Emission {
-                phase,
-                intensity: Intensity(0xFF),
-            };
-            h.fpga().num_transducers()
-        ]];
-        h.send(Pattern::new(&emissions));
+        let n = h.fpga().num_transducers();
+        let phases = vec![vec![phase; n]];
+        let intensities = vec![vec![Intensity(0xFF); n]];
+        h.send(Pattern::new(&phases, &intensities));
         h
     }
 

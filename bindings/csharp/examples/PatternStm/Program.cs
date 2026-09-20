@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
@@ -24,14 +25,15 @@ internal static class Program
 
         var center = geometry.Center + new Vector3(0f, 0f, 150f);
         var wavelength = Pattern.Wavelength(340 * m / s);
-        var patterns = new List<PatternBuffer>();
+        var patterns = new List<PhaseBuffer>();
+        using var intensities = geometry.IntensityBuffer();
         try
         {
             for (var i = 0; i < NumPoints; i++)
             {
                 var theta = 2f * MathF.PI * i / NumPoints;
                 var target = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0f);
-                var buffer = geometry.PatternBuffer();
+                var buffer = geometry.PhaseBuffer();
                 Pattern.Focus(geometry, target, wavelength, buffer);
                 patterns.Add(buffer);
             }
@@ -39,7 +41,7 @@ internal static class Program
             using var builder = client.DatagramBuilder();
             builder
                 .Push(new SetSilencer())
-                .Push(new PatternStm(1 * Hz, patterns.ToArray(),
+                .Push(new PatternStm(1 * Hz, patterns.ToArray(), Enumerable.Repeat(intensities, patterns.Count).ToArray(),
                     new PatternStmOption(mode: PatternStmMode.PhaseFull)));
             using var frames = builder.Build();
             foreach (var frame in frames)

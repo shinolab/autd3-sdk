@@ -15,7 +15,7 @@ pub use amp::{Amplitude, Pa, dB, kPa};
 pub use amplitude_target::AmplitudeTarget;
 pub use backend::{LinAlgBackend, NalgebraBackend};
 pub use combinatorial::{GreedyOption, abs_objective_func, greedy};
-pub use constraint::EmissionConstraint;
+pub use constraint::IntensityConstraint;
 pub use directivity::Directivity;
 pub use error::HoloError;
 pub use linear_synthesis::{
@@ -28,7 +28,7 @@ mod tests {
     use autd3_rs_core::geometry::{
         Autd3, Geometry, Point3, TransducerGroups, TransducerMask, UnitQuaternion,
     };
-    use autd3_rs_core::value::{Emission, Intensity, Phase};
+    use autd3_rs_core::value::{Intensity, Phase};
 
     use super::*;
 
@@ -44,14 +44,16 @@ mod tests {
         geometry.center() + autd3_rs_core::geometry::Vector3::new(0.0, 0.0, 150.0)
     }
 
-    fn buffer(geometry: &Geometry) -> Vec<Vec<Emission>> {
-        vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()]
+    type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
+
+    fn buffer(geometry: &Geometry) -> Buffers {
+        (geometry.phase_buffer(), geometry.intensity_buffer())
     }
 
     #[test]
     fn empty_foci_is_error() {
         let geometry = single_device();
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
         assert_eq!(
             naive(
                 &NalgebraBackend,
@@ -59,7 +61,8 @@ mod tests {
                 &[],
                 wavelength(),
                 &NaiveOption::default(),
-                &mut dst,
+                &mut phases,
+                &mut intensities,
             ),
             Err(HoloError::NoFoci)
         );
@@ -75,20 +78,23 @@ mod tests {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
         }];
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
         naive(
             &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
             &NaiveOption::default(),
-            &mut dst,
+            &mut phases,
+            &mut intensities,
         )
         .unwrap();
-        assert_eq!(dst.len(), geometry.num_devices());
+        assert_eq!(phases.len(), geometry.num_devices());
+        assert_eq!(intensities.len(), geometry.num_devices());
         assert!(
-            dst.iter()
-                .all(|slot| slot.iter().any(|e| *e != Emission::NULL))
+            intensities
+                .iter()
+                .all(|slot| slot.iter().any(|&i| i != Intensity::MIN))
         );
     }
 
@@ -99,20 +105,21 @@ mod tests {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
         }];
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
         gspat(
             &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
             &GspatOption {
-                constraint: EmissionConstraint::Uniform(Intensity(0x80)),
+                constraint: IntensityConstraint::Uniform(Intensity(0x80)),
                 ..Default::default()
             },
-            &mut dst,
+            &mut phases,
+            &mut intensities,
         )
         .unwrap();
-        assert!(dst[0].iter().all(|e| e.intensity == Intensity(0x80)));
+        assert!(intensities[0].iter().all(|&i| i == Intensity(0x80)));
     }
 
     #[test]
@@ -124,28 +131,29 @@ mod tests {
             amplitude: 5e3 * Pa,
         }];
 
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
         naive(
             &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
             &NaiveOption {
-                constraint: EmissionConstraint::Uniform(Intensity::MAX),
+                constraint: IntensityConstraint::Uniform(Intensity::MAX),
                 directivity: Directivity::Sphere,
                 ..Default::default()
             },
-            &mut dst,
+            &mut phases,
+            &mut intensities,
         )
         .unwrap();
 
-        let mut expected = buffer(&geometry);
+        let mut expected = geometry.phase_buffer();
         autd3_rs_pattern::focus(&geometry, target, wavelength(), &mut expected);
 
-        for (a, b) in dst[0].iter().zip(expected[0].iter()) {
-            let diff = a.phase.0.wrapping_sub(b.phase.0);
+        for (a, b) in phases[0].iter().zip(expected[0].iter()) {
+            let diff = a.0.wrapping_sub(b.0);
             let diff = diff.min(0u8.wrapping_sub(diff));
-            assert!(diff <= 1, "phase mismatch: {:?} vs {:?}", a.phase, b.phase);
+            assert!(diff <= 1, "phase mismatch: {a:?} vs {b:?}");
         }
     }
 
@@ -158,27 +166,28 @@ mod tests {
             amplitude: 5e3 * Pa,
         }];
 
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
         gspat(
             &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
             &GspatOption {
-                constraint: EmissionConstraint::Uniform(Intensity::MAX),
+                constraint: IntensityConstraint::Uniform(Intensity::MAX),
                 ..Default::default()
             },
-            &mut dst,
+            &mut phases,
+            &mut intensities,
         )
         .unwrap();
 
-        let mut expected = buffer(&geometry);
+        let mut expected = geometry.phase_buffer();
         autd3_rs_pattern::focus(&geometry, target, wavelength(), &mut expected);
 
-        for (a, b) in dst[0].iter().zip(expected[0].iter()) {
-            let diff = a.phase.0.wrapping_sub(b.phase.0);
+        for (a, b) in phases[0].iter().zip(expected[0].iter()) {
+            let diff = a.0.wrapping_sub(b.0);
             let diff = diff.min(0u8.wrapping_sub(diff));
-            assert!(diff <= 1, "phase mismatch: {:?} vs {:?}", a.phase, b.phase);
+            assert!(diff <= 1, "phase mismatch: {a:?} vs {b:?}");
         }
     }
 
@@ -201,7 +210,8 @@ mod tests {
             &foci,
             lambda,
             &NaiveOption::default(),
-            &mut n,
+            &mut n.0,
+            &mut n.1,
         )
         .unwrap();
         gs(
@@ -210,7 +220,8 @@ mod tests {
             &foci,
             lambda,
             &GsOption::default(),
-            &mut g,
+            &mut g.0,
+            &mut g.1,
         )
         .unwrap();
         gspat(
@@ -219,13 +230,14 @@ mod tests {
             &foci,
             lambda,
             &GspatOption::default(),
-            &mut gp,
+            &mut gp.0,
+            &mut gp.1,
         )
         .unwrap();
 
-        for dst in [&n, &g, &gp] {
-            assert!(dst[0].iter().any(|e| e.intensity != Intensity::MIN));
-            assert!(dst[0].iter().any(|e| e.phase != dst[0][0].phase));
+        for (phases, intensities) in [&n, &g, &gp] {
+            assert!(intensities[0].iter().any(|&i| i != Intensity::MIN));
+            assert!(phases[0].iter().any(|&p| p != phases[0][0]));
         }
     }
 
@@ -243,27 +255,29 @@ mod tests {
         }
         let mask = TransducerMask::Masked(&enabled);
 
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
         naive(
             &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
             &NaiveOption {
-                constraint: EmissionConstraint::Uniform(Intensity::MAX),
+                constraint: IntensityConstraint::Uniform(Intensity::MAX),
                 directivity: Directivity::Sphere,
                 mask,
                 ..Default::default()
             },
-            &mut dst,
+            &mut phases,
+            &mut intensities,
         )
         .unwrap();
 
-        for (t, e) in dst[0].iter().enumerate() {
+        for (t, (&p, &i)) in phases[0].iter().zip(&intensities[0]).enumerate() {
             if t % 2 == 0 {
-                assert_eq!(e.intensity, Intensity::MAX, "enabled transducer {t}");
+                assert_eq!(i, Intensity::MAX, "enabled transducer {t}");
             } else {
-                assert_eq!(*e, Emission::NULL, "disabled transducer {t} must be NULL");
+                assert_eq!(p, Phase::ZERO, "disabled transducer {t} must be silent");
+                assert_eq!(i, Intensity::MIN, "disabled transducer {t} must be silent");
             }
         }
     }
@@ -277,27 +291,29 @@ mod tests {
         }];
         let groups = TransducerGroups::new(&geometry, |_, tr| Some(tr % 2));
 
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
         naive(
             &NalgebraBackend,
             &geometry,
             &foci,
             wavelength(),
             &NaiveOption {
-                constraint: EmissionConstraint::Uniform(Intensity::MAX),
+                constraint: IntensityConstraint::Uniform(Intensity::MAX),
                 directivity: Directivity::Sphere,
                 mask: groups.mask(1).unwrap(),
                 ..Default::default()
             },
-            &mut dst,
+            &mut phases,
+            &mut intensities,
         )
         .unwrap();
 
-        for (t, e) in dst[0].iter().enumerate() {
+        for (t, (&p, &i)) in phases[0].iter().zip(&intensities[0]).enumerate() {
             if t % 2 == 1 {
-                assert_eq!(e.intensity, Intensity::MAX, "group transducer {t}");
+                assert_eq!(i, Intensity::MAX, "group transducer {t}");
             } else {
-                assert_eq!(*e, Emission::NULL, "transducer {t} outside the group");
+                assert_eq!(p, Phase::ZERO, "transducer {t} outside the group");
+                assert_eq!(i, Intensity::MIN, "transducer {t} outside the group");
             }
         }
     }
@@ -310,16 +326,13 @@ mod tests {
             amplitude: 5e3 * Pa,
         }];
         let groups = TransducerGroups::new(&geometry, |_, tr| Some(tr % 2 == 0));
-        let other = Emission {
-            phase: Phase(0x40),
-            intensity: Intensity(0x20),
-        };
+        let other = (Phase(0x40), Intensity(0x20));
 
-        let mut dst = buffer(&geometry);
+        let (mut phases, mut intensities) = buffer(&geometry);
         autd3_rs_pattern::group_compute(
             &geometry,
             &groups,
-            |even, mask, buffer| {
+            |even, mask, phases, intensities| {
                 if even {
                     naive(
                         &NalgebraBackend,
@@ -327,27 +340,30 @@ mod tests {
                         &foci,
                         wavelength(),
                         &NaiveOption {
-                            constraint: EmissionConstraint::Uniform(Intensity::MAX),
+                            constraint: IntensityConstraint::Uniform(Intensity::MAX),
                             directivity: Directivity::Sphere,
                             mask,
                             ..Default::default()
                         },
-                        buffer,
+                        phases,
+                        intensities,
                     )
                 } else {
-                    autd3_rs_pattern::set_phase_and_intensity(other.phase, other.intensity, buffer);
+                    autd3_rs_pattern::set_phase(other.0, phases);
+                    autd3_rs_pattern::set_intensity(other.1, intensities);
                     Ok(())
                 }
             },
-            &mut dst,
+            &mut phases,
+            &mut intensities,
         )
         .unwrap();
 
-        for (t, e) in dst[0].iter().enumerate() {
+        for (t, (&p, &i)) in phases[0].iter().zip(&intensities[0]).enumerate() {
             if t % 2 == 0 {
-                assert_eq!(e.intensity, Intensity::MAX, "even transducer {t}");
+                assert_eq!(i, Intensity::MAX, "even transducer {t}");
             } else {
-                assert_eq!(*e, other, "odd transducer {t}");
+                assert_eq!((p, i), other, "odd transducer {t}");
             }
         }
     }

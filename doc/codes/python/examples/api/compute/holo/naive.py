@@ -6,7 +6,7 @@ from autd3_pattern import wavelength as calc_wavelength
 from autd3_pattern_holo import (
     AmplitudeTarget,
     Directivity,
-    EmissionConstraint,
+    IntensityConstraint,
     NaiveOption,
     Pa,
     naive,
@@ -27,7 +27,7 @@ foci = [
 ]
 
 wavelength = calc_wavelength(340 * m / s)
-constraint = EmissionConstraint.Clamp(0x00, 0xFF)
+constraint = IntensityConstraint.Clamp(0x00, 0xFF)
 directivity = Directivity.Sphere
 mask = TransducerMask.AllEnabled
 parallel = True
@@ -41,7 +41,8 @@ option = (
     )
     # ANCHOR_END: option
 )
-dst = geometry.pattern_buffer()
+phases = geometry.phase_buffer()
+intensities = geometry.intensity_buffer()
 # ANCHOR: api
-naive(geometry, foci, wavelength, option, dst)
+naive(geometry, foci, wavelength, option, phases, intensities)
 # ANCHOR_END: api

@@ -26,17 +26,18 @@ internal static class Program
         var wavelength = Pattern.Wavelength(340 * m / s);
 
         var leftTarget = geometry.Center + new Vector3(-40f, 0f, 150f);
-        using var left = geometry.PatternBuffer();
+        using var intensities = geometry.IntensityBuffer();
+        using var left = geometry.PhaseBuffer();
         Pattern.Focus(geometry, leftTarget, wavelength, left);
 
         var rightTarget = geometry.Center + new Vector3(40f, 0f, 150f);
-        using var right = geometry.PatternBuffer();
+        using var right = geometry.PhaseBuffer();
         Pattern.Focus(geometry, rightTarget, wavelength, right);
 
         using var builder = client.DatagramBuilder();
         builder
             .Push(new SetSilencer())
-            .PushEach(device => new Pattern(device.Idx % 2 == 0 ? left : right));
+            .PushEach(device => new Pattern(device.Idx % 2 == 0 ? left : right, intensities));
         using var frames = builder.Build();
         foreach (var frame in frames)
         {

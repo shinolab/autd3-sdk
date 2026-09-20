@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use autd3_rs::commands::{ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::TX_FRAME_BYTES;
-use autd3_rs::value::{Emission, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
     Client, ClientConfig, CoreId, Error as ClientError, Frames, IntoLink, Link, LinkStats,
     ResponseFuture, RtPriority, RtSchedulePolicy, StateCheck,
@@ -41,7 +41,8 @@ pub struct RunOutput {
 struct Sender {
     command: Command,
     frames: Frames,
-    emissions: Vec<Vec<Emission>>,
+    phases: Vec<Vec<Phase>>,
+    intensities: Vec<Vec<Intensity>>,
     tick: u8,
 }
 
@@ -50,8 +51,16 @@ impl Sender {
         let mut sender = Self {
             command: cli.command,
             frames: Frames::default(),
-            emissions: if cli.command.is_pattern() {
-                geometry.pattern_buffer()
+            phases: if cli.command.is_pattern() {
+                geometry.phase_buffer()
+            } else {
+                Vec::new()
+            },
+            intensities: if cli.command.is_pattern() {
+                geometry
+                    .iter()
+                    .map(|d| vec![Intensity::MIN; d.num_transducers()])
+                    .collect()
             } else {
                 Vec::new()
             },
@@ -71,17 +80,22 @@ impl Sender {
         if self.command == Command::Nop {
             return Ok(());
         }
-        fill_emissions(&mut self.emissions, self.tick);
+        fill_phases(&mut self.phases, self.tick);
         self.tick = self.tick.wrapping_add(1);
 
         let mut builder = client.datagram_builder();
         if self.command == Command::Pattern {
-            builder.push(Pattern::with_bank(PatternBank::B0, &self.emissions));
+            builder.push(Pattern::with_bank(
+                PatternBank::B0,
+                &self.phases,
+                &self.intensities,
+            ));
         } else {
             builder.push(WritePatternBuffer {
                 bank: PatternBank::B0,
                 index: 0,
-                emissions: &self.emissions,
+                phases: &self.phases,
+                intensities: &self.intensities,
             });
         }
         builder
@@ -91,12 +105,11 @@ impl Sender {
     }
 }
 
-fn fill_emissions(emissions: &mut [Vec<Emission>], tick: u8) {
-    for device in emissions {
+fn fill_phases(phases: &mut [Vec<Phase>], tick: u8) {
+    for device in phases {
         let mut phase = tick;
-        for e in device.iter_mut() {
-            e.phase = Phase(phase);
-            e.intensity = Intensity::MIN;
+        for p in device.iter_mut() {
+            *p = Phase(phase);
             phase = phase.wrapping_add(1);
         }
     }

@@ -36,7 +36,7 @@ As with `laguerre_gaussian_phase`, the amplitude is changed with `hermite_gaussi
 | `x_dir`      | `UnitVector3<f32>`      | Direction along which the `m` nodes line up   |
 | `option`     | `HermiteGaussianOption` | Mode and waist                                |
 | `wavelength` | `Length`                | Wavelength                                    |
-| `dst`        | `&mut [[Emission; _]]`  | Output buffer                                 |
+| `dst`        | `&mut [Vec<Phase>]` / `&mut [Vec<Intensity>]` | Output buffer (phases for `*_phase`, intensities for `*_intensity`) |
 
 | Field   | Type     | Description                                             |
 | ------- | -------- | ------------------------------------------------------- |

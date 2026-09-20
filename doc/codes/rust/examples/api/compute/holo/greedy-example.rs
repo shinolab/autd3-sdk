@@ -5,7 +5,7 @@ use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs_pattern::wavelength;
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, GreedyOption, Pa, abs_objective_func,
+    AmplitudeTarget, Directivity, IntensityConstraint, GreedyOption, Pa, abs_objective_func,
     greedy,
 };
 
@@ -14,7 +14,8 @@ fn main() -> anyhow::Result<()> {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let mut intensities = geometry.intensity_buffer();
 
     greedy(
         &geometry,
@@ -31,13 +32,14 @@ fn main() -> anyhow::Result<()> {
         wavelength(340.0 * m / s),
         &GreedyOption {
             phase_quantization_levels: NonZeroU8::new(16).unwrap(),
-            constraint: EmissionConstraint::Uniform(Intensity::MAX),
+            constraint: IntensityConstraint::Uniform(Intensity::MAX),
             directivity: Directivity::Sphere,
             objective_func: abs_objective_func,
             mask: TransducerMask::AllEnabled,
             ..Default::default()
         },
-        &mut dst,
+        &mut phases,
+        &mut intensities,
     )?;
 
     // HIDE

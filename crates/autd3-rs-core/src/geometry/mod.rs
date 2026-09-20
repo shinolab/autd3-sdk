@@ -14,7 +14,7 @@ pub use mask::{TransducerMask, TransducerMaskError};
 pub use nalgebra::{Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3};
 
 use crate::common::Length;
-use crate::value::Emission;
+use crate::value::{Intensity, Phase};
 
 #[must_use]
 pub fn point(x: Length, y: Length, z: Length) -> Point3<f32> {
@@ -53,10 +53,18 @@ impl Geometry {
     }
 
     #[must_use]
-    pub fn pattern_buffer(&self) -> Vec<Vec<Emission>> {
+    pub fn phase_buffer(&self) -> Vec<Vec<Phase>> {
         self.devices
             .iter()
-            .map(|d| vec![Emission::default(); d.num_transducers()])
+            .map(|d| vec![Phase::ZERO; d.num_transducers()])
+            .collect()
+    }
+
+    #[must_use]
+    pub fn intensity_buffer(&self) -> Vec<Vec<Intensity>> {
+        self.devices
+            .iter()
+            .map(|d| vec![Intensity::MAX; d.num_transducers()])
             .collect()
     }
 
@@ -119,16 +127,24 @@ mod tests {
     }
 
     #[test]
-    fn pattern_buffer_starts_at_zero_phase_max_intensity() {
+    fn phase_buffer_starts_at_zero_phase() {
         let g = Geometry::new(vec![Autd3::default(), Autd3::default()]);
-        let buf = g.pattern_buffer();
+        let buf = g.phase_buffer();
         assert_eq!(buf.len(), 2);
         for dev in &buf {
             assert_eq!(dev.len(), Autd3::NUM_TRANSDUCERS);
-            for &e in dev {
-                assert_eq!(e.phase, Phase::ZERO);
-                assert_eq!(e.intensity, Intensity::MAX);
-            }
+            assert!(dev.iter().all(|&p| p == Phase::ZERO));
+        }
+    }
+
+    #[test]
+    fn intensity_buffer_starts_at_max_intensity() {
+        let g = Geometry::new(vec![Autd3::default(), Autd3::default()]);
+        let buf = g.intensity_buffer();
+        assert_eq!(buf.len(), 2);
+        for dev in &buf {
+            assert_eq!(dev.len(), Autd3::NUM_TRANSDUCERS);
+            assert!(dev.iter().all(|&i| i == Intensity::MAX));
         }
     }
 

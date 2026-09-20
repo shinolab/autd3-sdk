@@ -35,7 +35,7 @@ async def main() -> None:
         for i in range(NUM_POINTS):
             theta = 2.0 * math.pi * i / NUM_POINTS
             target = center + np.array([RADIUS_MM * math.cos(theta), RADIUS_MM * math.sin(theta), 0.0])
-            buffer = geometry.pattern_buffer()
+            buffer = geometry.phase_buffer()
             pattern.focus(geometry, target, wavelength, buffer)
             patterns.append(buffer)
 
@@ -45,6 +45,7 @@ async def main() -> None:
             autd3.commands.PatternStm(
                 1.0 * Hz,
                 patterns,
+                [geometry.intensity_buffer() for _ in patterns],
                 autd3.commands.PatternStmOption(mode=autd3.commands.PatternStmMode.PhaseFull),
             )
         )

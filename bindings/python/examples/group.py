@@ -35,16 +35,17 @@ async def main() -> None:
         wavelength = pattern.wavelength(340 * m / s)
 
         left_target = geometry.center() + np.array([-40.0, 0.0, 150.0])
-        left = geometry.pattern_buffer()
+        left = geometry.phase_buffer()
         pattern.focus(geometry, left_target, wavelength, left)
 
         right_target = geometry.center() + np.array([40.0, 0.0, 150.0])
-        right = geometry.pattern_buffer()
+        right = geometry.phase_buffer()
+        intensities = geometry.intensity_buffer()
         pattern.focus(geometry, right_target, wavelength, right)
 
         builder = client.datagram_builder()
         builder.push(autd3.commands.SetSilencer())
-        builder.push_each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right))
+        builder.push_each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right, intensities))
         for frame in builder.build():
             await client.send_checked(frame)
 

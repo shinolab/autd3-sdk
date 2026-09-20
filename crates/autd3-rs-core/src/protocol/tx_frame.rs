@@ -52,17 +52,17 @@ mod tests {
         }
         let f = TxFrame {
             seq: Seq::new(0xA5),
-            cmd: Cmd::WritePatternBuffer,
+            cmd: Cmd::WritePatternRaw,
             payload,
         };
         let mut bytes = [0u8; TX_FRAME_BYTES];
         f.write_to(&mut bytes);
         assert_eq!(bytes[0], 0xA5);
-        assert_eq!(bytes[1], Cmd::WritePatternBuffer.as_u8());
+        assert_eq!(bytes[1], Cmd::WritePatternRaw.as_u8());
 
         let parsed = TxFrame::parse(&bytes).unwrap();
         assert_eq!(parsed.seq, Seq::new(0xA5));
-        assert_eq!(parsed.cmd, Cmd::WritePatternBuffer);
+        assert_eq!(parsed.cmd, Cmd::WritePatternRaw);
         assert_eq!(parsed.payload, payload);
     }
 

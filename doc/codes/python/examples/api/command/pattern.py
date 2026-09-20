@@ -7,14 +7,16 @@ geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 bank = PatternBank.B0
 transition_mode = TransitionMode.Immediate
 
-emissions = geometry.pattern_buffer()
+phases = geometry.phase_buffer()
+intensities = geometry.intensity_buffer()
 
 # ANCHOR: api
-Pattern(emissions)
+Pattern(phases, intensities)
 
 Pattern(
+    phases,
+    intensities,
     bank=bank,
-    emissions=emissions,
     transition_mode=transition_mode,
 )
 # ANCHOR_END: api
@@ -23,7 +25,8 @@ Pattern(
 WritePatternBuffer(
     bank=bank,
     index=0,
-    emissions=emissions,
+    phases=phases,
+    intensities=intensities,
 )
 ConfigPattern(
     bank=bank,

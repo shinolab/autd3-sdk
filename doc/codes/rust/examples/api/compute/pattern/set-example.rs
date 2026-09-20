@@ -8,18 +8,19 @@ fn main() {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let mut intensities = geometry.intensity_buffer();
 
-    set_intensity(Intensity(0x80), &mut dst);
+    set_intensity(Intensity(0x80), &mut intensities);
     focus(
         &geometry,
         geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),
         wavelength(340.0 * m / s),
-        &mut dst,
+        &mut phases,
     );
-    add_phase(Phase::PI, &mut dst);
+    add_phase(Phase::PI, &mut phases);
 
-    set_intensity(Intensity::MIN, &mut dst);
+    set_intensity(Intensity::MIN, &mut intensities);
     // HIDE
 }
 // HIDE_END

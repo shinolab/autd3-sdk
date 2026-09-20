@@ -12,11 +12,12 @@ use crate::cmd::output_mask::OutputMaskPayload;
 use crate::cmd::phase_corr::PhaseCorrPayload;
 use crate::cmd::pwe::PwePayload;
 use crate::cmd::silencer::SilencerPayload;
+use crate::cmd::write_foci::WriteFociPayload;
 use crate::cmd::write_mod::WriteModPayload;
 use crate::cmd::write_mod_fused::WriteModulationFusedPayload;
-use crate::cmd::write_pattern::WritePatternPayload;
 use crate::cmd::write_pattern_compressed::WritePatternCompressedPayload;
 use crate::cmd::write_pattern_fused::WritePatternFusedPayload;
+use crate::cmd::write_pattern_raw::WritePatternRawPayload;
 use crate::fpga::{REP_INFINITE, TransitionMode};
 use crate::params::NUM_BANKS;
 use crate::proto::Cmd;
@@ -61,19 +62,40 @@ fn words_to_bytes(words: &[u16]) -> std::vec::Vec<u8> {
     words.iter().flat_map(|w| w.to_le_bytes()).collect()
 }
 
-pub(crate) fn write_pattern_buffer(seq: u8, bank: u8, offset_words: u32, words: &[u16]) -> Frame {
-    let header = WritePatternPayload {
+pub(crate) fn write_foci_buffer(seq: u8, bank: u8, offset_words: u32, words: &[u16]) -> Frame {
+    let header = WriteFociPayload {
         bank,
         reserved: 0,
         offset: U32::new(offset_words),
         data_len: U16::new((words.len() * 2) as u16),
     };
-    Frame::from_parts(
-        seq,
-        Cmd::WritePatternBuffer,
-        &header,
-        &words_to_bytes(words),
-    )
+    Frame::from_parts(seq, Cmd::WriteFociBuffer, &header, &words_to_bytes(words))
+}
+
+pub(crate) fn write_pattern_raw(
+    seq: u8,
+    bank: u8,
+    index: u16,
+    phases: &[u8],
+    intensities: &[u8],
+) -> Frame {
+    let header = WritePatternRawPayload {
+        bank,
+        reserved: 0,
+        index: U16::new(index),
+    };
+    let data: std::vec::Vec<u8> = phases.iter().chain(intensities).copied().collect();
+    Frame::from_parts(seq, Cmd::WritePatternRaw, &header, &data)
+}
+
+pub(crate) fn raw_words_to_soa(words: &[u16]) -> std::vec::Vec<u16> {
+    let phases = words.iter().map(|w| w.to_le_bytes()[0]);
+    let intensities = words.iter().map(|w| w.to_le_bytes()[1]);
+    let bytes: std::vec::Vec<u8> = phases.chain(intensities).collect();
+    bytes
+        .chunks(2)
+        .map(|c| u16::from_le_bytes([c[0], c.get(1).copied().unwrap_or(0)]))
+        .collect()
 }
 
 pub(crate) fn write_pattern_compressed(
@@ -219,7 +241,7 @@ impl FusedPattern {
     pub(crate) fn raw(bank: u8, divider: u16, size: u32) -> Self {
         Self {
             bank,
-            emission_type: crate::params::EMISSION_TYPE_RAW,
+            emission_type: autd3_cpu_wire::layout::FUSED_EMISSION_TYPE_RAW_SOA,
             divider,
             size,
             num_foci: 0,

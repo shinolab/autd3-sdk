@@ -4,9 +4,9 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry, TransducerMask, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::{Emission, Intensity};
+use autd3_rs::value::Intensity;
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, EmissionConstraint, GreedyOption, Pa, abs_objective_func,
+    AmplitudeTarget, Directivity, IntensityConstraint, GreedyOption, Pa, abs_objective_func,
     greedy,
 };
 
@@ -27,7 +27,7 @@ fn main() -> Result<()> {
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
     let phase_quantization_levels = NonZeroU8::new(16).unwrap();
-    let constraint = EmissionConstraint::Uniform(Intensity::MAX);
+    let constraint = IntensityConstraint::Uniform(Intensity::MAX);
     let directivity = Directivity::Sphere;
     let objective_func = abs_objective_func;
     let mask = TransducerMask::AllEnabled;
@@ -43,9 +43,17 @@ fn main() -> Result<()> {
         }
         // ANCHOR_END: option
         ;
-    let mut dst = vec![vec![Emission::default(); Autd3::NUM_TRANSDUCERS]; geometry.num_devices()];
+    let mut phases = geometry.phase_buffer();
+    let mut intensities = geometry.intensity_buffer();
     // ANCHOR: api
-    greedy(&geometry, &foci, wavelength, &option, &mut dst)?;
+    greedy(
+        &geometry,
+        &foci,
+        wavelength,
+        &option,
+        &mut phases,
+        &mut intensities,
+    )?;
     // ANCHOR_END: api
     Ok(())
 }

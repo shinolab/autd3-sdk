@@ -12,10 +12,10 @@ internal static class Sample
 
         var direction = Vector3.UnitZ;
         var wavelength = Pattern.Wavelength(340.0f * m / s);
-        var dst = geometry.PatternBuffer();
+        var phases = geometry.PhaseBuffer();
 
         // ANCHOR: api
-        Pattern.Plane(geometry, direction, wavelength, dst);
+        Pattern.Plane(geometry, direction, wavelength, phases);
         // ANCHOR_END: api
     }
 }

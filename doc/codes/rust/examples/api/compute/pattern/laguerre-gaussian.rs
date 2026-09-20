@@ -10,7 +10,8 @@ fn main() {
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let axis = Vector3::z_axis();
     let wavelength = wavelength(340.0 * m / s);
-    let mut dst = geometry.pattern_buffer();
+    let mut phases = geometry.phase_buffer();
+    let mut intensities = geometry.intensity_buffer();
 
     // ANCHOR: api
     let option = LaguerreGaussianOption {
@@ -18,7 +19,7 @@ fn main() {
         l: 1,
         waist: 10.0 * mm,
     };
-    laguerre_gaussian_phase(&geometry, target, axis, option, wavelength, &mut dst);
-    laguerre_gaussian_intensity(&geometry, target, axis, option, wavelength, &mut dst);
+    laguerre_gaussian_phase(&geometry, target, axis, option, wavelength, &mut phases);
+    laguerre_gaussian_intensity(&geometry, target, axis, option, wavelength, &mut intensities);
     // ANCHOR_END: api
 }

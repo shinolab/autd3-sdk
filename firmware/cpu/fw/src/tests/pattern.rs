@@ -3,16 +3,19 @@ use std::vec::Vec;
 
 use crate::fpga::FPGA_PAGE_WORDS;
 use crate::params::{
-    ADDR_MOD_MEM_WR_PAGE, ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, NUM_BANKS,
-    NUM_TRANSDUCERS,
+    ADDR_MOD_MEM_WR_PAGE, ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, EMISSION_MAX_INDICES,
+    NUM_BANKS, NUM_TRANSDUCERS,
 };
 use zerocopy::little_endian::{U16, U32};
 
+use crate::cmd::write_foci::{FOCI_WRITE_MAX_DATA_LEN, WriteFociPayload};
 use crate::cmd::write_mod::{MOD_WRITE_MAX_DATA_LEN, WriteModPayload};
-use crate::cmd::write_pattern::{PATTERN_WRITE_MAX_DATA_LEN, WritePatternPayload};
 use crate::cmd::write_pattern_compressed::PatternFormat;
 use crate::proto::{Cmd, EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, Error, MOD_BUFFER_SAMPLES};
-use crate::tests::builders::{write_mod_buffer, write_pattern_buffer, write_pattern_compressed};
+use crate::tests::builders::{
+    assert_fpga_unchanged, fpga_snapshot, write_foci_buffer, write_mod_buffer,
+    write_pattern_compressed, write_pattern_raw,
+};
 use crate::tests::mock::{Frame, Harness};
 
 fn bad_bank() -> u8 {
@@ -20,12 +23,12 @@ fn bad_bank() -> u8 {
 }
 
 #[test]
-fn write_pattern_buffer_writes_words_at_offset_per_bank() {
+fn write_foci_buffer_writes_words_at_offset_per_bank() {
     let mut h = Harness::new();
 
-    h.deliver(&write_pattern_buffer(0, 0, 0, &[0x1234, 0x5678]));
+    h.deliver(&write_foci_buffer(0, 0, 0, &[0x1234, 0x5678]));
     assert_eq!(h.data(), 0);
-    h.deliver(&write_pattern_buffer(1, 1, 300, &[0xAABB]));
+    h.deliver(&write_foci_buffer(1, 1, 300, &[0xAABB]));
     assert_eq!(h.data(), 0);
     assert_eq!(h.expected_seq(), 2);
 
@@ -36,11 +39,11 @@ fn write_pattern_buffer_writes_words_at_offset_per_bank() {
 }
 
 #[test]
-fn write_pattern_buffer_crosses_page_boundary() {
+fn write_foci_buffer_crosses_page_boundary() {
     let mut h = Harness::new();
 
     let page = FPGA_PAGE_WORDS as usize;
-    h.deliver(&write_pattern_buffer(
+    h.deliver(&write_foci_buffer(
         0,
         0,
         FPGA_PAGE_WORDS - 2,
@@ -55,41 +58,88 @@ fn write_pattern_buffer_crosses_page_boundary() {
     assert_eq!(h.ctl(ADDR_PATTERN_MEM_WR_PAGE), 1);
 }
 
-#[test]
-fn write_pattern_buffer_raw_slot_layout() {
-    let mut h = Harness::new();
-
-    let pattern: Vec<u16> = (0..NUM_TRANSDUCERS)
-        .map(|i| {
-            let i = i as u16;
-            (i << 8) | (0xFF - (i & 0xFF))
-        })
-        .collect();
-    let slot = 3 * EMISSION_SLOT_WORDS;
-    h.deliver(&write_pattern_buffer(0, 0, slot, &pattern));
-    assert_eq!(h.data(), 0);
-
-    for (i, w) in pattern.iter().enumerate() {
-        assert_eq!(h.emission_word(0, slot as usize + i), *w);
-    }
+fn raw_pattern() -> (Vec<u8>, Vec<u8>) {
+    let phases = (0..NUM_TRANSDUCERS).map(|i| i as u8).collect();
+    let intensities = (0..NUM_TRANSDUCERS).map(|i| 0xFF - i as u8).collect();
+    (phases, intensities)
 }
 
 #[test]
-fn write_pattern_buffer_empty_data_is_no_op_success() {
+fn write_pattern_raw_interleaves_phase_and_intensity_into_slot() {
     let mut h = Harness::new();
-    h.deliver(&write_pattern_buffer(0, 0, 0, &[]));
+    let (phases, intensities) = raw_pattern();
+
+    h.deliver(&write_pattern_raw(0, 1, 3, &phases, &intensities));
+    assert_eq!(h.data(), 0);
+    assert_eq!(h.expected_seq(), 1);
+
+    let slot = 3 * EMISSION_SLOT_WORDS as usize;
+    for i in 0..NUM_TRANSDUCERS {
+        assert_eq!(
+            h.emission_word(1, slot + i),
+            u16::from(phases[i]) | (u16::from(intensities[i]) << 8)
+        );
+        assert_eq!(h.emission_word(0, slot + i), 0);
+    }
+    assert_eq!(h.emission_word(1, slot + NUM_TRANSDUCERS), 0);
+}
+
+#[test]
+fn write_pattern_raw_selects_page_of_high_index() {
+    let mut h = Harness::new();
+    let (phases, intensities) = raw_pattern();
+    let index = FPGA_PAGE_WORDS / EMISSION_SLOT_WORDS;
+
+    h.deliver(&write_pattern_raw(
+        0,
+        0,
+        u16::try_from(index).unwrap(),
+        &phases,
+        &intensities,
+    ));
+    assert_eq!(h.data(), 0);
+
+    let slot = (index * EMISSION_SLOT_WORDS) as usize;
+    assert_eq!(h.emission_word(0, slot), 0xFF00);
+    assert_eq!(h.ctl(ADDR_PATTERN_MEM_WR_PAGE), 1);
+}
+
+#[test]
+fn write_pattern_raw_rejects_invalid_bank_and_index() {
+    let mut h = Harness::new();
+    let (phases, intensities) = raw_pattern();
+    let before = fpga_snapshot(&h);
+
+    h.deliver(&write_pattern_raw(0, bad_bank(), 0, &phases, &intensities));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+
+    h.deliver(&write_pattern_raw(
+        1,
+        0,
+        u16::try_from(EMISSION_MAX_INDICES).unwrap(),
+        &phases,
+        &intensities,
+    ));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_fpga_unchanged(&before, &h);
+}
+
+#[test]
+fn write_foci_buffer_empty_data_is_no_op_success() {
+    let mut h = Harness::new();
+    h.deliver(&write_foci_buffer(0, 0, 0, &[]));
     assert_eq!(h.ack(), 0);
     assert_eq!(h.data(), 0);
 }
 
 #[test]
-fn write_pattern_buffer_empty_data_at_ram_end_does_not_switch_bank_or_page() {
+fn write_foci_buffer_empty_data_at_ram_end_does_not_switch_bank_or_page() {
     const UNTOUCHED: u16 = 0xBEEF;
     let mut h = Harness::new();
     h.set_ctl(ADDR_PATTERN_MEM_WR_BANK, UNTOUCHED);
     h.set_ctl(ADDR_PATTERN_MEM_WR_PAGE, UNTOUCHED);
 
-    h.deliver(&write_pattern_buffer(0, 1, EMISSION_RAM_WORDS, &[]));
+    h.deliver(&write_foci_buffer(0, 1, EMISSION_RAM_WORDS, &[]));
 
     assert_eq!(h.ack(), 0);
     assert_eq!(h.data(), 0);
@@ -98,31 +148,31 @@ fn write_pattern_buffer_empty_data_at_ram_end_does_not_switch_bank_or_page() {
 }
 
 #[test]
-fn write_pattern_buffer_rejects_invalid_payloads() {
+fn write_foci_buffer_rejects_invalid_payloads() {
     let mut h = Harness::new();
 
-    h.deliver(&write_pattern_buffer(0, bad_bank(), 0, &[0x0001]));
+    h.deliver(&write_foci_buffer(0, bad_bank(), 0, &[0x0001]));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 
-    let odd = WritePatternPayload {
+    let odd = WriteFociPayload {
         bank: 0,
         reserved: 0,
         offset: U32::new(0),
         data_len: U16::new(3),
     };
-    h.deliver(&Frame::from_payload(1, Cmd::WritePatternBuffer, &odd));
+    h.deliver(&Frame::from_payload(1, Cmd::WriteFociBuffer, &odd));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 
-    let too_long = WritePatternPayload {
+    let too_long = WriteFociPayload {
         bank: 0,
         reserved: 0,
         offset: U32::new(0),
-        data_len: U16::new(u16::try_from(PATTERN_WRITE_MAX_DATA_LEN + 2).unwrap()),
+        data_len: U16::new(u16::try_from(FOCI_WRITE_MAX_DATA_LEN + 2).unwrap()),
     };
-    h.deliver(&Frame::from_payload(2, Cmd::WritePatternBuffer, &too_long));
+    h.deliver(&Frame::from_payload(2, Cmd::WriteFociBuffer, &too_long));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 
-    h.deliver(&write_pattern_buffer(
+    h.deliver(&write_foci_buffer(
         3,
         0,
         EMISSION_RAM_WORDS - 1,

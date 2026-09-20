@@ -14,8 +14,8 @@ use crate::fpga::TransitionMode;
 use crate::proto::{EMISSION_SLOT_WORDS, Error};
 use crate::tests::builders::{
     FusedMod, FusedPattern, assert_fpga_unchanged, change_mod_bank, change_pattern_bank,
-    config_mod, config_mod_rep, config_pattern_rep, fpga_snapshot, set_silencer, write_mod_buffer,
-    write_mod_fused, write_pattern_buffer, write_pattern_fused,
+    config_mod, config_mod_rep, config_pattern_rep, fpga_snapshot, raw_words_to_soa, set_silencer,
+    write_foci_buffer, write_mod_buffer, write_mod_fused, write_pattern_fused, write_pattern_raw,
 };
 use crate::tests::mock::Harness;
 
@@ -67,7 +67,9 @@ fn fused_pattern_matches_three_frame_path_bit_for_bit() {
     let divider = 20;
 
     let mut split = Harness::new();
-    split.deliver(&write_pattern_buffer(0, bank, 0, &words));
+    let phases: Vec<u8> = words.iter().map(|w| w.to_le_bytes()[0]).collect();
+    let intensities: Vec<u8> = words.iter().map(|w| w.to_le_bytes()[1]).collect();
+    split.deliver(&write_pattern_raw(0, bank, 0, &phases, &intensities));
     split.deliver(&config_pattern_rep(
         1,
         bank,
@@ -85,7 +87,7 @@ fn fused_pattern_matches_three_frame_path_bit_for_bit() {
     fused.deliver(&write_pattern_fused(
         0,
         &FusedPattern::raw(bank, divider, 1),
-        &words,
+        &raw_words_to_soa(&words),
     ));
     assert_eq!(fused.data(), 0, "fused frame must succeed");
 
@@ -119,7 +121,7 @@ fn fused_foci_matches_three_frame_path_bit_for_bit() {
     let sound_speed = 21760;
 
     let mut split = Harness::new();
-    split.deliver(&write_pattern_buffer(0, bank, 0, &foci));
+    split.deliver(&write_foci_buffer(0, bank, 0, &foci));
     split.deliver(&config_pattern_rep(
         1,
         bank,
@@ -195,7 +197,7 @@ fn fused_pattern_rejects_bad_bank() {
     h.deliver(&write_pattern_fused(
         0,
         &FusedPattern::raw(bad, 10, 1),
-        &[0x1234],
+        &raw_words_to_soa(&pattern_words()),
     ));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 }
@@ -206,7 +208,7 @@ fn fused_pattern_rejects_zero_size_without_writing_config() {
     h.deliver(&write_pattern_fused(
         0,
         &FusedPattern::raw(0, 10, 0),
-        &[0x1234],
+        &raw_words_to_soa(&pattern_words()),
     ));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
 }
@@ -353,7 +355,48 @@ fn fused_raw_pattern_requires_size_one() {
     h.deliver(&write_pattern_fused(
         0,
         &FusedPattern::raw(0, 10, 2),
-        &pattern_words(),
+        &raw_words_to_soa(&pattern_words()),
+    ));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_fpga_unchanged(&before, &h);
+}
+
+#[test]
+fn fused_raw_pattern_interleaves_soa_data() {
+    let words = pattern_words();
+    let mut h = Harness::new();
+    h.deliver(&write_pattern_fused(
+        0,
+        &FusedPattern::raw(0, 10, 1),
+        &raw_words_to_soa(&words),
+    ));
+    assert_eq!(h.data(), 0);
+    for (i, w) in words.iter().enumerate() {
+        assert_eq!(h.emission_word(0, i), *w);
+    }
+}
+
+#[test]
+fn fused_raw_pattern_requires_full_slot_data() {
+    let mut h = Harness::new();
+    let before = fpga_snapshot(&h);
+    let mut data = raw_words_to_soa(&pattern_words());
+    data.pop();
+    h.deliver(&write_pattern_fused(0, &FusedPattern::raw(0, 10, 1), &data));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_fpga_unchanged(&before, &h);
+}
+
+#[test]
+fn fused_rejects_the_pre_soa_raw_emission_type() {
+    let mut h = Harness::new();
+    let before = fpga_snapshot(&h);
+    let mut f = FusedPattern::raw(0, 10, 1);
+    f.emission_type = EMISSION_TYPE_RAW;
+    h.deliver(&write_pattern_fused(
+        0,
+        &f,
+        &raw_words_to_soa(&pattern_words()),
     ));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
     assert_fpga_unchanged(&before, &h);

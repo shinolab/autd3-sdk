@@ -1,18 +1,20 @@
-use autd3_cpu_wire::params::{EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW};
+use autd3_cpu_wire::layout::{FUSED_EMISSION_TYPE_RAW_SOA, PATTERN_RAW_DATA_LEN};
+use autd3_cpu_wire::params::EMISSION_TYPE_FOCI;
 use autd3_cpu_wire::payload::WritePatternFusedPayload;
+use zerocopy::FromBytes;
 use zerocopy::little_endian::{U16, U32, U64};
-use zerocopy::{FromBytes, IntoBytes};
 
 use crate::Velocity;
 use crate::error::{Error, PayloadError};
-use crate::geometry::{Autd3, Device};
+use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::params::{BUFFER_SIZE_MIN, FOCUS_WORDS, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{
-    ControlPoints, Emission, LoopBehavior, PatternBank, SamplingConfig, TransitionMode,
+    ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 
+use super::write_pattern_buffer::encode_raw_slot;
 use super::{Distribution, Operation, check_index_advance};
 
 pub(crate) const PATTERN_FUSED_HEADER_BYTES: usize =
@@ -21,12 +23,13 @@ const PATTERN_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - PATTERN_FUSED_HEADER_B
 pub(crate) const PATTERN_FUSED_MAX_FOCI_PER_FRAME: usize =
     PATTERN_FUSED_MAX_DATA_LEN / (FOCUS_WORDS * 2);
 
-const _: () = assert!(Autd3::NUM_TRANSDUCERS * 2 <= PATTERN_FUSED_MAX_DATA_LEN);
+const _: () = assert!(PATTERN_RAW_DATA_LEN <= PATTERN_FUSED_MAX_DATA_LEN);
 
 #[derive(Clone, Copy, Debug)]
 pub struct WritePatternFused<'a> {
     pub bank: PatternBank,
-    pub emissions: &'a [Vec<Emission>],
+    pub phases: &'a [Vec<Phase>],
+    pub intensities: &'a [Vec<Intensity>],
     pub config: SamplingConfig,
     pub loop_behavior: LoopBehavior,
     pub transition_mode: TransitionMode,
@@ -76,51 +79,28 @@ impl Operation for WritePatternFused<'_> {
     }
 
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        let emissions =
-            self.emissions
-                .get(device.idx())
-                .ok_or(PayloadError::EmissionsDeviceOutOfRange {
-                    device: device.idx(),
-                    len: self.emissions.len(),
-                })?;
-        if emissions.len() != device.num_transducers() {
-            return Err(PayloadError::TransducerCountMismatch {
-                device: device.idx(),
-                got: emissions.len(),
-                expected: device.num_transducers(),
-            }
-            .into());
-        }
         check_index_advance(1, self.loop_behavior)?;
         let divider = self.config.divide()?;
         let margin_ns = self.transition_mode.margin_ns()?;
-        let bytes = emissions.as_bytes();
 
         let (h, rest) = WritePatternFusedPayload::mut_from_prefix(&mut out[..]).unwrap();
-        if bytes.len() > rest.len() {
-            return Err(PayloadError::PatternWriteExceedsCapacity {
-                device: device.idx(),
-                len: bytes.len(),
-                capacity: rest.len(),
-            }
-            .into());
-        }
-        let data_len = u16::try_from(bytes.len()).expect("bounded by frame capacity");
+        encode_raw_slot(self.phases, self.intensities, device, rest)?;
         *h = WritePatternFusedPayload {
             bank: self.bank.as_u8(),
-            emission_type: EMISSION_TYPE_RAW,
+            emission_type: FUSED_EMISSION_TYPE_RAW_SOA,
             divider: U16::new(divider),
             size: U32::new(1),
             num_foci: 0,
             transition_mode: self.transition_mode.try_as_u8()?,
             sound_speed: U16::new(0),
             rep: U16::new(self.loop_behavior.rep()),
-            data_len: U16::new(data_len),
+            data_len: U16::new(
+                u16::try_from(PATTERN_RAW_DATA_LEN).expect("bounded by frame capacity"),
+            ),
             transition_value: U64::new(self.transition_mode.value()),
             margin_ns: U32::new(margin_ns),
             reserved: U32::new(0),
         };
-        rest[..bytes.len()].copy_from_slice(bytes);
         Ok(Cmd::WritePatternFused)
     }
 
@@ -234,22 +214,24 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::Point3;
+    use crate::geometry::{Autd3, Point3};
     use crate::test_utils::test_device;
     use crate::value::{ControlPoint, Focus, Intensity, Phase};
     use core::num::NonZeroU16;
 
     #[test]
     fn fused_pattern_lays_out_header_and_data() {
-        let mut emissions = vec![Emission::default(); Autd3::NUM_TRANSDUCERS];
-        for (i, e) in emissions.iter_mut().enumerate() {
-            e.phase = Phase(u8::try_from(i % 251).unwrap());
-            e.intensity = Intensity(u8::try_from((i * 3) % 256).unwrap());
-        }
-        let patterns = [emissions];
+        let n = Autd3::NUM_TRANSDUCERS;
+        let phases = [(0..n)
+            .map(|i| Phase(u8::try_from(i % 251).unwrap()))
+            .collect::<Vec<_>>()];
+        let intensities = [(0..n)
+            .map(|i| Intensity(u8::try_from((i * 3) % 256).unwrap()))
+            .collect::<Vec<_>>()];
         let op = WritePatternFused {
             bank: PatternBank::B1,
-            emissions: &patterns,
+            phases: &phases,
+            intensities: &intensities,
             config: SamplingConfig::new(NonZeroU16::new(7).unwrap()),
             loop_behavior: LoopBehavior::Infinite,
             transition_mode: TransitionMode::Immediate,
@@ -260,16 +242,16 @@ mod tests {
 
         assert_eq!(cmd, Cmd::WritePatternFused);
         assert_eq!(out[0], 1, "bank B1");
-        assert_eq!(out[1], EMISSION_TYPE_RAW);
+        assert_eq!(out[1], FUSED_EMISSION_TYPE_RAW_SOA);
         assert_eq!(&out[2..4], &7u16.to_le_bytes(), "divider");
         assert_eq!(&out[4..8], &1u32.to_le_bytes(), "size = 1 index");
         assert_eq!(out[8], 0, "num_foci unused for raw");
         assert_eq!(out[9], 0xFF, "IMMEDIATE");
         assert_eq!(&out[12..14], &0xFFFFu16.to_le_bytes(), "infinite rep");
         assert_eq!(&out[14..16], &498u16.to_le_bytes(), "data_len");
-        for (i, e) in patterns[0].iter().enumerate() {
-            assert_eq!(out[PATTERN_FUSED_HEADER_BYTES + 2 * i], e.phase.0);
-            assert_eq!(out[PATTERN_FUSED_HEADER_BYTES + 2 * i + 1], e.intensity.0);
+        for i in 0..n {
+            assert_eq!(out[PATTERN_FUSED_HEADER_BYTES + i], phases[0][i].0);
+            assert_eq!(out[PATTERN_FUSED_HEADER_BYTES + n + i], intensities[0][i].0);
         }
     }
 
@@ -378,10 +360,12 @@ mod tests {
 
     #[test]
     fn fused_pattern_rejects_device_out_of_range() {
-        let patterns = [vec![Emission::default(); Autd3::NUM_TRANSDUCERS]];
+        let phases = [vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
+        let intensities = [vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]];
         let op = WritePatternFused {
             bank: PatternBank::B0,
-            emissions: &patterns,
+            phases: &phases,
+            intensities: &intensities,
             config: SamplingConfig::FREQ_4K,
             loop_behavior: LoopBehavior::Infinite,
             transition_mode: TransitionMode::Immediate,

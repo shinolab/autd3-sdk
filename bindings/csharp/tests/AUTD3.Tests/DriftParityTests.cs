@@ -89,33 +89,27 @@ namespace AUTD3.Tests
             var device = geometry[0];
             var target = device.Center + new Vector3(0f, 0f, 150f);
 
-            var dst = new Emission[Autd3.NumTransducers];
-            Pattern.SetIntensityDevice(new Intensity(0x42), dst);
+            var dst = new Phase[Autd3.NumTransducers];
             Pattern.FocusDevice(device, target, wavelength, dst);
             var e = Pattern.FocusTransducer(device.Position(0), target, wavelength);
-            Assert.Equal(e.Value, dst[0].Phase.Value);
-            Assert.Equal(0x42, dst[0].Intensity.Value);
+            Assert.Equal(e, dst[0]);
 
             Pattern.PlaneDevice(device, new Vector3(0f, 0f, 1f), wavelength, dst);
             var pe = Pattern.PlaneTransducer(device.Position(0), new Vector3(0f, 0f, 1f), wavelength);
-            Assert.Equal(pe.Value, dst[0].Phase.Value);
+            Assert.Equal(pe, dst[0]);
 
             Pattern.BesselDevice(device, device.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, wavelength, dst);
             var be = Pattern.BesselTransducer(device.Position(0), device.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, wavelength);
-            Assert.Equal(be.Value, dst[0].Phase.Value);
-            Assert.Equal(0x42, dst[0].Intensity.Value);
-
-            Pattern.SetPhaseAndIntensityDevice(Phase.Pi, Intensity.Max, dst);
-            Assert.Equal(Phase.Pi.Value, dst[10].Phase.Value);
-            Assert.Equal(Intensity.Max.Value, dst[10].Intensity.Value);
+            Assert.Equal(be, dst[0]);
 
             Pattern.SetPhaseDevice(new Phase(0xF0), dst);
             Pattern.AddPhaseDevice(new Phase(0x20), dst);
-            Assert.Equal(0x10, dst[10].Phase.Value);
+            Assert.Equal(new Phase(0x10), dst[10]);
 
-            Pattern.SetIntensityDevice(Intensity.Min, dst);
-            Assert.Equal(Intensity.Min.Value, dst[10].Intensity.Value);
-            Assert.Equal(0x10, dst[10].Phase.Value);
+            var intensities = new Intensity[Autd3.NumTransducers];
+            Pattern.SetIntensityDevice(new Intensity(0x42), intensities);
+            Assert.All(intensities, i => Assert.Equal(new Intensity(0x42), i));
+            Assert.Throws<Autd3Exception>(() => Pattern.FocusDevice(device, target, wavelength, new Phase[10]));
         }
 
         [Fact]

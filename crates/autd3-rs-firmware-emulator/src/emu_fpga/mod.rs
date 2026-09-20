@@ -9,7 +9,7 @@ mod foci;
 mod silencer;
 mod swapchain;
 
-use autd3_rs_core::value::{Emission, Intensity, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::fw;
 use autd3_cpu_fw::fpga_update::FpgaBootImage;
@@ -428,7 +428,7 @@ impl FpgaEmulator {
     }
 
     #[must_use]
-    pub fn emissions(&self) -> Vec<Emission> {
+    pub fn emissions(&self) -> (Vec<Phase>, Vec<Intensity>) {
         let bank = self.current_pattern_bank();
         let idx = self.current_pattern_idx();
         if self.pattern_mode(bank) == fw::EMISSION_TYPE_FOCI as u16 {
@@ -591,7 +591,7 @@ impl FpgaEmulator {
     }
 
     #[must_use]
-    pub fn emissions_at(&self, bank: usize, idx: usize) -> Vec<Emission> {
+    pub fn emissions_at(&self, bank: usize, idx: usize) -> (Vec<Phase>, Vec<Intensity>) {
         let base = idx * EMISSION_SLOT_WORDS;
         (0..self.num_transducers)
             .map(|i| {
@@ -602,9 +602,9 @@ impl FpgaEmulator {
                 } else {
                     Intensity::MIN
                 };
-                Emission { phase, intensity }
+                (phase, intensity)
             })
-            .collect()
+            .unzip()
     }
 }
 

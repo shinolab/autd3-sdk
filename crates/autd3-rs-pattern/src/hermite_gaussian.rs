@@ -3,7 +3,7 @@ use core::f32::consts::SQRT_2;
 use autd3_rs_core::common::Length;
 use autd3_rs_core::common::units::rad;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
-use autd3_rs_core::value::{Emission, Phase};
+use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::focus::focus_phase;
 use crate::gaussian::{
@@ -108,11 +108,11 @@ pub fn hermite_gaussian_phase_device(
     x_dir: UnitVector3<f32>,
     option: HermiteGaussianOption,
     wavelength: Length,
-    dst: &mut [Emission],
+    dst: &mut [Phase],
 ) {
     let mode = HermiteGaussianMode::new(target, axis, x_dir, option, wavelength);
-    for (e, &pos) in dst.iter_mut().zip(device.positions()) {
-        e.phase = mode.phase(pos);
+    for (p, &pos) in dst.iter_mut().zip(device.positions()) {
+        *p = mode.phase(pos);
     }
 }
 
@@ -123,7 +123,7 @@ pub fn hermite_gaussian_phase(
     x_dir: UnitVector3<f32>,
     option: HermiteGaussianOption,
     wavelength: Length,
-    dst: &mut [Vec<Emission>],
+    dst: &mut [Vec<Phase>],
 ) {
     assert_eq!(
         dst.len(),
@@ -142,7 +142,7 @@ pub fn hermite_gaussian_intensity_device(
     x_dir: UnitVector3<f32>,
     option: HermiteGaussianOption,
     wavelength: Length,
-    dst: &mut [Emission],
+    dst: &mut [Intensity],
 ) {
     let mode = HermiteGaussianMode::new(target, axis, x_dir, option, wavelength);
     write_intensity_device(device, |pos| mode.log_amplitude(pos), dst);
@@ -155,7 +155,7 @@ pub fn hermite_gaussian_intensity(
     x_dir: UnitVector3<f32>,
     option: HermiteGaussianOption,
     wavelength: Length,
-    dst: &mut [Vec<Emission>],
+    dst: &mut [Vec<Intensity>],
 ) {
     let mode = HermiteGaussianMode::new(target, axis, x_dir, option, wavelength);
     write_intensity(geometry, |pos| mode.log_amplitude(pos), dst);
@@ -165,7 +165,6 @@ pub fn hermite_gaussian_intensity(
 mod tests {
     use autd3_rs_core::geometry::{Autd3, UnitQuaternion, Vector3};
     use autd3_rs_core::units::mm;
-    use autd3_rs_core::value::Intensity;
 
     use super::*;
     use crate::focus_transducer;
@@ -283,17 +282,11 @@ mod tests {
     }
 
     #[test]
-    fn intensity_vanishes_on_the_node_plane_and_keeps_phase() {
+    fn intensity_vanishes_on_the_node_plane() {
         let dev: Device = Autd3::default().into();
         let target = dev.center() + Vector3::new(0.0, 0.0, 150.0);
         let axis = Vector3::z_axis();
-        let mut pattern = vec![
-            Emission {
-                phase: Phase(0x42),
-                intensity: Intensity::MIN,
-            };
-            Autd3::NUM_TRANSDUCERS
-        ];
+        let mut pattern = vec![Intensity::MIN; Autd3::NUM_TRANSDUCERS];
         hermite_gaussian_intensity_device(
             &dev,
             target,
@@ -303,11 +296,7 @@ mod tests {
             LAMBDA,
             &mut pattern,
         );
-        assert!(pattern.iter().all(|e| e.phase == Phase(0x42)));
-        assert_eq!(
-            pattern.iter().map(|e| e.intensity).max(),
-            Some(Intensity::MAX)
-        );
+        assert_eq!(pattern.iter().max().copied(), Some(Intensity::MAX));
 
         let mode = HermiteGaussianMode::new(target, axis, Vector3::x_axis(), option(1, 0), LAMBDA);
         let on_node = Point3::new(target.x, target.y + 20.0, 0.0);
@@ -316,18 +305,12 @@ mod tests {
     }
 
     #[test]
-    fn device_level_matches_transducer_level_and_keeps_intensity() {
+    fn device_level_matches_transducer_level() {
         let dev: Device = Autd3::default().into();
         let target = Point3::new(86.36, 66.04, 150.0);
         let axis = UnitVector3::new_normalize(Vector3::new(0.1, -0.2, 1.0));
         let x_dir = UnitVector3::new_normalize(Vector3::new(1.0, 1.0, 0.0));
-        let mut pattern = vec![
-            Emission {
-                phase: Phase::ZERO,
-                intensity: Intensity(0x42),
-            };
-            Autd3::NUM_TRANSDUCERS
-        ];
+        let mut pattern = vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS];
         hermite_gaussian_phase_device(
             &dev,
             target,
@@ -339,10 +322,9 @@ mod tests {
         );
         for (i, &pos) in dev.positions().iter().enumerate() {
             assert_eq!(
-                pattern[i].phase,
+                pattern[i],
                 hermite_gaussian_phase_transducer(pos, target, axis, x_dir, option(2, 1), LAMBDA)
             );
-            assert_eq!(pattern[i].intensity, Intensity(0x42));
         }
     }
 
@@ -356,20 +338,12 @@ mod tests {
         let axis = Vector3::z_axis();
         let x_dir = Vector3::x_axis();
 
-        let mut emissions = geo.pattern_buffer();
-        hermite_gaussian_phase(
-            &geo,
-            target,
-            axis,
-            x_dir,
-            option(1, 1),
-            LAMBDA,
-            &mut emissions,
-        );
-        let mut expected = geo.pattern_buffer();
+        let mut dst = geo.phase_buffer();
+        hermite_gaussian_phase(&geo, target, axis, x_dir, option(1, 1), LAMBDA, &mut dst);
+        let mut expected = geo.phase_buffer();
         for (slot, dev) in expected.iter_mut().zip(&geo) {
             hermite_gaussian_phase_device(dev, target, axis, x_dir, option(1, 1), LAMBDA, slot);
         }
-        assert_eq!(emissions, expected);
+        assert_eq!(dst, expected);
     }
 }

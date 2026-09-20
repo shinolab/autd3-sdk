@@ -2,7 +2,7 @@ use std::ffi::{CString, c_char, c_void};
 use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 
-use autd3_rs_core::value::Emission;
+use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_core::{RtPriority, RtSchedulePolicy};
 
 const fn parse_version_field(s: &str) -> u16 {
@@ -182,10 +182,11 @@ pub fn from_rt_policy(policy: RtSchedulePolicy) -> u8 {
     }
 }
 
-pub type DevicePattern = Vec<Emission>;
-
 #[repr(transparent)]
-pub struct PatternBuffer(pub Vec<DevicePattern>);
+pub struct Buffer<T>(pub Vec<Vec<T>>);
+
+pub type PhaseBuffer = Buffer<Phase>;
+pub type IntensityBuffer = Buffer<Intensity>;
 
 #[repr(transparent)]
 pub struct ModulationBuffer(pub Vec<u8>);

@@ -10,8 +10,9 @@ from autd3_emulator import Emulator, Recorder, RangeXY, RmsRecordOption, Instant
 
 geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 target = geometry.center() + np.array([0.0, 0.0, 150.0])
-patterns = geometry.pattern_buffer()
-pattern.focus(geometry, target, pattern.wavelength(340 * m / s), patterns)
+phases = geometry.phase_buffer()
+intensities = geometry.intensity_buffer()
+pattern.focus(geometry, target, pattern.wavelength(340 * m / s), phases)
 
 # ANCHOR: record
 emulator = Emulator(geometry)
@@ -19,7 +20,7 @@ emulator = Emulator(geometry)
 
 def record_fn(r: Recorder) -> None:
     builder = r.datagram_builder()
-    builder.push(Pattern(patterns))
+    builder.push(Pattern(phases, intensities))
     for frame in builder.build():
         r.send_checked(frame)
     r.tick(Duration.from_millis(1))

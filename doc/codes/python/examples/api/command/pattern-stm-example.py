@@ -21,7 +21,7 @@ async def main() -> None:
         for i in range(200):
             theta = 2.0 * math.pi * i / 200
             target = center + np.array([30.0 * math.cos(theta), 30.0 * math.sin(theta), 0.0])
-            buffer = geometry.pattern_buffer()
+            buffer = geometry.phase_buffer()
             focus(
                 geometry,
                 target,
@@ -29,12 +29,14 @@ async def main() -> None:
                 buffer,
             )
             patterns.append(buffer)
+        intensities = [geometry.intensity_buffer() for _ in patterns]
 
         builder = client.datagram_builder()
         builder.push(
             PatternStm(
                 1.0 * Hz,
                 patterns,
+                intensities,
                 PatternStmOption(
                     bank=PatternBank.B0,
                     mode=PatternStmMode.PhaseIntensityFull,

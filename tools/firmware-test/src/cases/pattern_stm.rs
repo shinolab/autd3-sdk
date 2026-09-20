@@ -5,23 +5,22 @@ use anyhow::Result;
 use autd3_rs::commands::{PatternStm, PatternStmOption, SetSilencer};
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
-    Emission, Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode,
+    Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 use autd3_rs_modulation::{constant, modulation_buffer};
-use autd3_rs_pattern::set_intensity;
 
 use crate::Ctx;
 use crate::cases::ERR_INVALID_TRANSITION_MODE;
 use crate::cases::pattern_util::{
-    change_pattern_bank, change_pattern_bank_sync, expect_firmware_error, focus_at,
-    report_fpga_state, write_pattern_stm_bank,
+    Buffers, buffers, change_pattern_bank, change_pattern_bank_sync, expect_firmware_error,
+    focus_at, report_fpga_state, write_pattern_stm_bank,
 };
 use crate::io::wait_enter;
 
 const POINT_NUM: usize = 200;
 const RADIUS_MM: f32 = 30.0;
 
-fn circle_patterns(ctx: &Ctx<'_>) -> Vec<Vec<Vec<Emission>>> {
+fn circle_patterns(ctx: &Ctx<'_>) -> Vec<Buffers> {
     (0..POINT_NUM)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / POINT_NUM as f32;
@@ -34,16 +33,24 @@ fn circle_patterns(ctx: &Ctx<'_>) -> Vec<Vec<Vec<Emission>>> {
         .collect()
 }
 
+type Split = (Vec<Vec<Vec<Phase>>>, Vec<Vec<Vec<Intensity>>>);
+
+fn split(patterns: &[Buffers]) -> Split {
+    patterns.iter().cloned().unzip()
+}
+
 async fn send_stm(
     ctx: &Ctx<'_>,
-    patterns: &[Vec<Vec<Emission>>],
+    patterns: &[Buffers],
     config: f32,
     bank: PatternBank,
 ) -> Result<()> {
+    let (phases, intensities) = split(patterns);
     let mut builder = ctx.client.datagram_builder();
     builder.push(SetSilencer::default()).push(PatternStm::new(
         config * Hz,
-        patterns,
+        &phases,
+        &intensities,
         PatternStmOption {
             bank,
             ..PatternStmOption::default()
@@ -82,14 +89,13 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
 
     let mut rev = patterns.clone();
     rev.reverse();
-    let mut last = ctx.geometry.pattern_buffer();
-    set_intensity(Intensity::MIN, &mut last);
-    rev[POINT_NUM - 1] = last;
+    rev[POINT_NUM - 1] = buffers(ctx.geometry, Intensity::MIN);
     write_pattern_stm_bank(ctx, PatternBank::B1, 0.5 * Hz, &rev, LoopBehavior::ONCE).await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
     change_pattern_bank_sync(ctx, PatternBank::B1).await?;
     wait_enter("The trajectory reverses at the right edge, then stops after one cycle").await;
 
+    let (phases, intensities) = split(&patterns);
     println!("transition-mode validation (firmware):");
     expect_firmware_error(
         ctx,
@@ -98,7 +104,8 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
             let mut b = ctx.client.datagram_builder();
             b.push(SetSilencer::default()).push(PatternStm::new(
                 0.5 * Hz,
-                &patterns,
+                &phases,
+                &intensities,
                 PatternStmOption {
                     loop_behavior: LoopBehavior::Infinite,
                     transition_mode: TransitionMode::SyncIdx,
@@ -117,7 +124,8 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
             let mut b = ctx.client.datagram_builder();
             b.push(SetSilencer::default()).push(PatternStm::new(
                 0.5 * Hz,
-                &patterns,
+                &phases,
+                &intensities,
                 PatternStmOption {
                     loop_behavior: LoopBehavior::ONCE,
                     transition_mode: TransitionMode::Immediate,

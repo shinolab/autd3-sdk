@@ -38,7 +38,8 @@ def test_current_command_types_drive_the_legacy_client() -> None:
         client = await autd3.LegacyClient.open(geo, nop.Nop(), autd3.LegacyClientConfig())
 
         target = geo.center() + np.array([0.0, 0.0, 150.0])
-        patterns = geo.pattern_buffer()
+        patterns = geo.phase_buffer()
+        intensities = geo.intensity_buffer()
         pattern.focus(geo, target, pattern.wavelength(340 * m / s), patterns)
 
         mod_buf = modulation.modulation_buffer()
@@ -46,7 +47,7 @@ def test_current_command_types_drive_the_legacy_client() -> None:
 
         builder = client.datagram_builder()
         builder.push(autd3.commands.SetSilencer())
-        builder.push(autd3.commands.Pattern(patterns))
+        builder.push(autd3.commands.Pattern(patterns, intensities))
         builder.push(autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf))
         frames = builder.build()
         assert len(frames) > 0
@@ -89,14 +90,15 @@ def test_push_each_assigns_a_command_per_device() -> None:
         client = await autd3.LegacyClient.open(geo, nop.Nop(), autd3.LegacyClientConfig())
 
         wavelength = pattern.wavelength(340 * m / s)
-        left = geo.pattern_buffer()
+        left = geo.phase_buffer()
+        amps = geo.intensity_buffer()
         pattern.focus(geo, geo.center() + np.array([-40.0, 0.0, 150.0]), wavelength, left)
         mod_buf = modulation.modulation_buffer()
         modulation.sine(150 * Hz, modulation.SineOption(), mod_buf)
 
         builder = client.datagram_builder()
         builder.push_each(
-            lambda device: autd3.commands.Pattern(left)
+            lambda device: autd3.commands.Pattern(left, amps)
             if device.idx() == 0
             else autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf)
         )
@@ -107,7 +109,7 @@ def test_push_each_assigns_a_command_per_device() -> None:
 
         # returning None leaves that device unassigned
         builder = client.datagram_builder()
-        builder.push_each(lambda device: autd3.commands.Pattern(left) if device.idx() == 0 else None)
+        builder.push_each(lambda device: autd3.commands.Pattern(left, amps) if device.idx() == 0 else None)
         assert len(builder.build()) == 1
 
         await client.close()
@@ -247,7 +249,8 @@ def test_every_unsupported_command_is_rejected_at_build_time() -> None:
         geo = geometry()
         client = await autd3.LegacyClient.open(geo, nop.Nop(), autd3.LegacyClientConfig())
 
-        buf = geo.pattern_buffer()
+        buf = geo.phase_buffer()
+        amps = geo.intensity_buffer()
         pattern.focus(geo, geo.center() + np.array([0.0, 0.0, 150.0]), pattern.wavelength(340 * m / s), buf)
         mod_buf = modulation.modulation_buffer()
         modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
@@ -256,7 +259,7 @@ def test_every_unsupported_command_is_rejected_at_build_time() -> None:
         ]
 
         unsupported = (
-            ("WritePatternBuffer", autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, buf)),
+            ("WritePatternBuffer", autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, buf, amps)),
             ("WriteFociBuffer", autd3.commands.WriteFociBuffer(autd3.value.PatternBank.B1, 0, points)),
             ("ConfigPattern", autd3.commands.ConfigPattern(
                 autd3.value.PatternBank.B1, autd3.value.SamplingConfig.FREQ_4K, 2)),

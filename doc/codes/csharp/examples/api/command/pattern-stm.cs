@@ -16,14 +16,16 @@ internal static class Sample
 
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var wavelength = Pattern.Wavelength(340.0f * m / s);
-        var patterns = new PatternBuffer[NumPoints];
+        var patterns = new PhaseBuffer[NumPoints];
+        var intensities = new IntensityBuffer[NumPoints];
         for (var i = 0; i < NumPoints; i++)
         {
             var theta = 2.0f * MathF.PI * i / NumPoints;
             var target = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0.0f);
-            var buffer = geometry.PatternBuffer();
+            var buffer = geometry.PhaseBuffer();
             Pattern.Focus(geometry, target, wavelength, buffer);
             patterns[i] = buffer;
+            intensities[i] = geometry.IntensityBuffer();
         }
         var freq = 1.0f * Hz;
         var bank = PatternBank.B0;
@@ -41,7 +43,7 @@ internal static class Sample
             // ANCHOR_END: option
             ;
         // ANCHOR: api
-        new PatternStm(freq, patterns, option);
+        new PatternStm(freq, patterns, intensities, option);
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
@@ -50,7 +52,8 @@ internal static class Sample
             new WritePatternBuffer(
                 bank: option.Bank,
                 index: (ushort)index,
-                emissions: patterns[index]
+                phases: patterns[index],
+                intensities: intensities[index]
             );
         }
         new ConfigPattern(

@@ -2,17 +2,17 @@ use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 
 use autd3_rs_core::Geometry;
-use autd3_rs_core::value::Emission;
+use autd3_rs_core::value::{Intensity, Phase};
 use pyo3::exceptions::{PyAttributeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyCapsuleMethods};
 
 pub const GEOMETRY_CAPSULE_NAME: &CStr = c"autd3.geometry.v1";
-pub const PATTERN_CAPSULE_NAME: &CStr = c"autd3.pattern.v1";
-pub const PATTERN_MUT_CAPSULE_NAME: &CStr = c"autd3.pattern.mut.v1";
+pub const PHASE_CAPSULE_NAME: &CStr = c"autd3.phase.v1";
+pub const PHASE_MUT_CAPSULE_NAME: &CStr = c"autd3.phase.mut.v1";
+pub const INTENSITY_CAPSULE_NAME: &CStr = c"autd3.intensity.v1";
+pub const INTENSITY_MUT_CAPSULE_NAME: &CStr = c"autd3.intensity.mut.v1";
 pub const MODULATION_CAPSULE_NAME: &CStr = c"autd3.modulation.v1";
-
-pub type DevicePattern = Vec<Emission>;
 
 pub fn to_pyerr<E: core::fmt::Display>(py: Python<'_>, e: E) -> PyErr {
     let msg = e.to_string();
@@ -67,48 +67,107 @@ pub fn geometry_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResult<
     Ok(unsafe { ptr.cast::<Geometry>().as_ref() })
 }
 
-pub fn pattern_into_capsule(
-    py: Python<'_>,
-    emissions: Vec<DevicePattern>,
-) -> PyResult<Bound<'_, PyCapsule>> {
-    PyCapsule::new_with_value(py, emissions, PATTERN_CAPSULE_NAME)
+fn buffer_into_capsule<'py, T: Send + 'static>(
+    py: Python<'py>,
+    data: Vec<Vec<T>>,
+    name: &'static CStr,
+) -> PyResult<Bound<'py, PyCapsule>> {
+    PyCapsule::new_with_value(py, data, name)
 }
 
-pub fn pattern_from_capsule<'a>(
+fn buffer_from_capsule<'a, T>(
     capsule: &'a Bound<'_, PyCapsule>,
-) -> PyResult<&'a [DevicePattern]> {
-    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(PATTERN_CAPSULE_NAME))?;
-    Ok(unsafe { ptr.cast::<Vec<DevicePattern>>().as_ref() })
+    name: &'static CStr,
+) -> PyResult<&'a [Vec<T>]> {
+    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(name))?;
+    Ok(unsafe { ptr.cast::<Vec<Vec<T>>>().as_ref() })
 }
 
-pub struct PatternBufferMut {
+pub struct BufferMut {
     addr: usize,
     _owner: Py<PyAny>,
 }
 
-#[allow(clippy::missing_safety_doc)]
-pub unsafe fn pattern_capsule_mut(
-    py: Python<'_>,
-    ptr: NonNull<Vec<DevicePattern>>,
+unsafe fn buffer_capsule_mut<'py, T>(
+    py: Python<'py>,
+    ptr: NonNull<Vec<Vec<T>>>,
     owner: Py<PyAny>,
-) -> PyResult<Bound<'_, PyCapsule>> {
+    name: &'static CStr,
+) -> PyResult<Bound<'py, PyCapsule>> {
     PyCapsule::new_with_value(
         py,
-        PatternBufferMut {
+        BufferMut {
             addr: ptr.as_ptr() as usize,
             _owner: owner,
         },
-        PATTERN_MUT_CAPSULE_NAME,
+        name,
     )
 }
 
 #[allow(clippy::mut_from_ref)]
-pub fn pattern_from_capsule_mut<'a>(
+fn buffer_from_capsule_mut<'a, T>(
     capsule: &'a Bound<'_, PyCapsule>,
-) -> PyResult<&'a mut Vec<DevicePattern>> {
-    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(PATTERN_MUT_CAPSULE_NAME))?;
-    let addr = unsafe { ptr.cast::<PatternBufferMut>().as_ref() }.addr;
-    Ok(unsafe { &mut *(addr as *mut Vec<DevicePattern>) })
+    name: &'static CStr,
+) -> PyResult<&'a mut Vec<Vec<T>>> {
+    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(name))?;
+    let addr = unsafe { ptr.cast::<BufferMut>().as_ref() }.addr;
+    Ok(unsafe { &mut *(addr as *mut Vec<Vec<T>>) })
+}
+
+pub fn phases_into_capsule(
+    py: Python<'_>,
+    data: Vec<Vec<Phase>>,
+) -> PyResult<Bound<'_, PyCapsule>> {
+    buffer_into_capsule(py, data, PHASE_CAPSULE_NAME)
+}
+
+pub fn phases_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResult<&'a [Vec<Phase>]> {
+    buffer_from_capsule(capsule, PHASE_CAPSULE_NAME)
+}
+
+#[allow(clippy::missing_safety_doc)]
+pub unsafe fn phase_capsule_mut(
+    py: Python<'_>,
+    ptr: NonNull<Vec<Vec<Phase>>>,
+    owner: Py<PyAny>,
+) -> PyResult<Bound<'_, PyCapsule>> {
+    unsafe { buffer_capsule_mut(py, ptr, owner, PHASE_MUT_CAPSULE_NAME) }
+}
+
+#[allow(clippy::mut_from_ref)]
+pub fn phases_from_capsule_mut<'a>(
+    capsule: &'a Bound<'_, PyCapsule>,
+) -> PyResult<&'a mut Vec<Vec<Phase>>> {
+    buffer_from_capsule_mut(capsule, PHASE_MUT_CAPSULE_NAME)
+}
+
+pub fn intensities_into_capsule(
+    py: Python<'_>,
+    data: Vec<Vec<Intensity>>,
+) -> PyResult<Bound<'_, PyCapsule>> {
+    buffer_into_capsule(py, data, INTENSITY_CAPSULE_NAME)
+}
+
+pub fn intensities_from_capsule<'a>(
+    capsule: &'a Bound<'_, PyCapsule>,
+) -> PyResult<&'a [Vec<Intensity>]> {
+    buffer_from_capsule(capsule, INTENSITY_CAPSULE_NAME)
+}
+
+#[allow(clippy::missing_safety_doc)]
+pub unsafe fn intensity_capsule_mut(
+    py: Python<'_>,
+    ptr: NonNull<Vec<Vec<Intensity>>>,
+    owner: Py<PyAny>,
+) -> PyResult<Bound<'_, PyCapsule>> {
+    unsafe { buffer_capsule_mut(py, ptr, owner, INTENSITY_MUT_CAPSULE_NAME) }
+}
+
+#[allow(clippy::mut_from_ref)]
+pub fn intensities_from_capsule_mut<'a>(
+    capsule: &'a Bound<'_, PyCapsule>,
+) -> PyResult<&'a mut Vec<Vec<Intensity>>> {
+    buffer_from_capsule_mut(capsule, INTENSITY_MUT_CAPSULE_NAME)
 }
 
 pub fn modulation_into_capsule(py: Python<'_>, data: Vec<u8>) -> PyResult<Bound<'_, PyCapsule>> {

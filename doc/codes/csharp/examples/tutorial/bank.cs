@@ -16,10 +16,12 @@ internal static class Sample
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
+        var intensities = geometry.IntensityBuffer();
+
         // ANCHOR: switch
         // Write focus A to bank B0 and play it.
         var targetA = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
-        var patA = geometry.PatternBuffer();
+        var patA = geometry.PhaseBuffer();
         Pattern.Focus(
             geometry,
             targetA,
@@ -27,7 +29,7 @@ internal static class Sample
             patA
         );
         var builder = client.DatagramBuilder();
-        builder.Push(new Pattern(PatternBank.B0, patA));
+        builder.Push(new Pattern(PatternBank.B0, patA, intensities));
         foreach (var frame in builder.Build())
         {
             await client.SendCheckedAsync(frame);
@@ -36,7 +38,7 @@ internal static class Sample
         // Write focus B to bank B1, which is not currently playing, then switch to B1.
         // B0 keeps playing cleanly while B1 is being written (double buffering).
         var targetB = geometry.Center + new Vector3(0.0f, 30.0f, 150.0f);
-        var patB = geometry.PatternBuffer();
+        var patB = geometry.PhaseBuffer();
         Pattern.Focus(
             geometry,
             targetB,
@@ -44,7 +46,7 @@ internal static class Sample
             patB
         );
         var builder2 = client.DatagramBuilder();
-        builder2.Push(new Pattern(PatternBank.B1, patB));
+        builder2.Push(new Pattern(PatternBank.B1, patB, intensities));
         foreach (var frame in builder2.Build())
         {
             await client.SendCheckedAsync(frame);

@@ -57,7 +57,8 @@ Provides retrieval of information about the whole layout and access to each `Dev
 | `num_devices()`        | `usize`                      | Number of devices                    |
 | `num_transducers()`    | `usize`                      | Total number of transducers across all devices |
 | `center()`             | `Point3<f32>`                | Center coordinate of the whole array |
-| `pattern_buffer()`     | `Vec<Vec<Emission>>`         | Allocate an output buffer for Pattern computation |
+| `phase_buffer()`       | `Vec<Vec<Phase>>`            | Allocate a phase buffer for Pattern computation (starts at 0) |
+| `intensity_buffer()`   | `Vec<Vec<Intensity>>`        | Allocate an intensity buffer for Pattern computation (starts at the maximum) |
 | `iter()` / `&geometry` | `Iterator<Item = &Device>`   | Iterate over each `Device`           |
 | `geometry[i]`          | `&Device`                    | Get the `i`-th `Device`              |
 | `to_json()`            | `String`                     | Convert the layout to a JSON string  |
