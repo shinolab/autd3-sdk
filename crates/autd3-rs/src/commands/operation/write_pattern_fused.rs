@@ -11,10 +11,10 @@ use crate::mirror::FirmwareState;
 use crate::params::{BUFFER_SIZE_MIN, FOCUS_WORDS, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{
-    ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode,
+    ControlPoints, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 
-use super::write_pattern_buffer::encode_raw_slot;
+use super::write_pattern_buffer::{PatternIntensity, encode_raw_slot};
 use super::{Distribution, Operation, check_index_advance};
 
 pub(crate) const PATTERN_FUSED_HEADER_BYTES: usize =
@@ -29,10 +29,31 @@ const _: () = assert!(PATTERN_RAW_DATA_LEN <= PATTERN_FUSED_MAX_DATA_LEN);
 pub struct WritePatternFused<'a> {
     pub bank: PatternBank,
     pub phases: &'a [Vec<Phase>],
-    pub intensities: &'a [Vec<Intensity>],
+    pub intensities: PatternIntensity<'a>,
     pub config: SamplingConfig,
     pub loop_behavior: LoopBehavior,
     pub transition_mode: TransitionMode,
+}
+
+impl<'a> WritePatternFused<'a> {
+    #[must_use]
+    pub fn new(
+        bank: PatternBank,
+        phases: &'a [Vec<Phase>],
+        intensities: impl Into<PatternIntensity<'a>>,
+        config: SamplingConfig,
+        loop_behavior: LoopBehavior,
+        transition_mode: TransitionMode,
+    ) -> Self {
+        Self {
+            bank,
+            phases,
+            intensities: intensities.into(),
+            config,
+            loop_behavior,
+            transition_mode,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -228,14 +249,14 @@ mod tests {
         let intensities = [(0..n)
             .map(|i| Intensity(u8::try_from((i * 3) % 256).unwrap()))
             .collect::<Vec<_>>()];
-        let op = WritePatternFused {
-            bank: PatternBank::B1,
-            phases: &phases,
-            intensities: &intensities,
-            config: SamplingConfig::new(NonZeroU16::new(7).unwrap()),
-            loop_behavior: LoopBehavior::Infinite,
-            transition_mode: TransitionMode::Immediate,
-        };
+        let op = WritePatternFused::new(
+            PatternBank::B1,
+            &phases,
+            &intensities,
+            SamplingConfig::new(NonZeroU16::new(7).unwrap()),
+            LoopBehavior::Infinite,
+            TransitionMode::Immediate,
+        );
 
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = op.encode(&test_device(0), &mut out).unwrap();
@@ -362,14 +383,14 @@ mod tests {
     fn fused_pattern_rejects_device_out_of_range() {
         let phases = [vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
         let intensities = [vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]];
-        let op = WritePatternFused {
-            bank: PatternBank::B0,
-            phases: &phases,
-            intensities: &intensities,
-            config: SamplingConfig::FREQ_4K,
-            loop_behavior: LoopBehavior::Infinite,
-            transition_mode: TransitionMode::Immediate,
-        };
+        let op = WritePatternFused::new(
+            PatternBank::B0,
+            &phases,
+            &intensities,
+            SamplingConfig::FREQ_4K,
+            LoopBehavior::Infinite,
+            TransitionMode::Immediate,
+        );
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(op.encode(&test_device(0), &mut out).is_ok());
         assert!(matches!(

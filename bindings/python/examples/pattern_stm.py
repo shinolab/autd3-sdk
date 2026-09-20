@@ -45,7 +45,7 @@ async def main() -> None:
             autd3.commands.PatternStm(
                 1.0 * Hz,
                 patterns,
-                [geometry.intensity_buffer() for _ in patterns],
+                autd3.value.Intensity.MAX,
                 autd3.commands.PatternStmOption(mode=autd3.commands.PatternStmMode.PhaseFull),
             )
         )

@@ -1,6 +1,7 @@
 use autd3_rs::commands::Pattern;
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
+use autd3_rs::value::Intensity;
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_nop::Nop;
 use autd3_rs_pattern::{focus, wavelength};
@@ -13,7 +14,6 @@ async fn main() -> anyhow::Result<()> {
     let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
 
     let mut phases = geometry.phase_buffer();
-    let intensities = geometry.intensity_buffer();
     focus(
         &geometry,
         geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),
@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let mut builder = client.datagram_builder();
-    builder.push(Pattern::new(&phases, &intensities));
+    builder.push(Pattern::new(&phases, Intensity::MAX));
     let frames = builder.build()?;
     for frame in &frames {
         client.send_checked(frame).await?;

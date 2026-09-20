@@ -24,18 +24,17 @@ def report(label: str, elapsed: float) -> None:
     print(f"{label}: {TOTAL_POINTS} updates in {elapsed:.2f}s ({rate:.0f} updates/s)")
 
 
-async def configure(client: autd3.Client, phases: object, intensities: object) -> None:
-    pattern.set_intensity(0, intensities)
+async def configure(client: autd3.Client, phases: object) -> None:
     builder = client.datagram_builder()
-    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B0, 0, phases, intensities))
+    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B0, 0, phases, autd3.value.Intensity.MIN))
     builder.push(autd3.commands.ConfigPattern(autd3.value.PatternBank.B0, autd3.value.SamplingConfig.FREQ_4K, 1))
     for frame in builder.build():
         await client.send_checked(frame)
 
 
-def write_focus(client: autd3.Client, phases: object, intensities: object) -> object:
+def write_focus(client: autd3.Client, phases: object) -> object:
     builder = client.datagram_builder()
-    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B0, 0, phases, intensities))
+    builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B0, 0, phases, autd3.value.Intensity.MAX))
     return builder.build()
 
 
@@ -52,16 +51,14 @@ async def main() -> None:
         wavelength = pattern.wavelength(340 * m / s)
 
         phases = geometry.phase_buffer()
-        intensities = geometry.intensity_buffer()
-        await configure(client, phases, intensities)
-        pattern.set_intensity(autd3.value.Intensity.MAX, intensities)
+        await configure(client, phases)
 
         datagrams = []
         for i in range(TOTAL_POINTS):
             theta = 2.0 * math.pi * i / TOTAL_POINTS
             target = center + np.array([radius * math.cos(theta), radius * math.sin(theta), 150.0])
             pattern.focus(geometry, target, wavelength, phases)
-            datagrams.append(write_focus(client, phases, intensities))
+            datagrams.append(write_focus(client, phases))
 
         print(f"sweeping a focus through {TOTAL_POINTS} positions, twice")
 

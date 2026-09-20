@@ -25,12 +25,18 @@ import { excerpt } from "@lib/excerpt";
 | ---------- | ------------------------------------- | ---------------------------------------------------- |
 | `freq`     | `impl Into<StmConfig>`                | 再生レート (`Freq` / `Duration` / `SamplingConfig`) |
 | `phases`      | `&[Vec<Vec<Phase>>]`     | 各サンプルの位相の列 (2 サンプル以上)                |
-| `intensities` | `&[Vec<Vec<Intensity>>]` | 各サンプルの振幅の列 (`phases` と同じ本数)           |
+| `intensities` | `impl Into<StmIntensity>` | 全サンプルの振幅 (一様値 / 全 index 共通バッファ / index 毎のバッファ列) |
 | `option`   | `PatternStmOption`                    | 転送モード・ループ・遷移などのオプション             |
 
 `freq` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
 サンプリング周波数を指定することもできる.
 `Duration` がサンプル数で割り切れない場合はエラーになる (丸めたいときは `Nearest` を使う).
+
+`intensities` には以下の3つの型が渡せる.
+
+- `Intensity` : 全デバイス・全振動子・全indexで同じ値を使う場合
+- `&[Vec<Intensity>]` : 振動子ごとには異なるが全indexで共通の値を使う場合
+- `&[Vec<Vec<Intensity>>]` : 全indexごとに異なる値を使う場合
 
 ## PatternStmOption
 
@@ -58,7 +64,7 @@ import { excerpt } from "@lib/excerpt";
 ## 等価な低レベルコマンド
 
 `PatternStm` は内部で [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/)  (各 index) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
-以下は `PatternStm::new(freq, &phases, &intensities, option)` と等価な組み合わせである.
+以下は `PatternStm::new(freq, &phases, intensities, option)` と等価な組み合わせである.
 
 `PatternStmMode` が `PhaseFull` / `PhaseHalf` のときは, `WritePatternBuffer` の代わりに [WritePatternCompressed](/autd3-sdk/api/command/lowlevel/write-pattern-compressed/) が使われる (このとき `intensities` は使われず, 振幅は最大に固定される).
 

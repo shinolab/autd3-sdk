@@ -20,18 +20,15 @@ internal static class Sample
         await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
 
         var phases = geometry.PhaseBuffer();
-        var intensities = geometry.IntensityBuffer();
 
         // ANCHOR: configure
-        var silent = geometry.IntensityBuffer();
-        Pattern.SetIntensity(Intensity.Min, silent);
         var builder = client.DatagramBuilder();
         builder.Push(SetSilencer.Disable());
         builder.Push(new WritePatternBuffer(
             bank: PatternBank.B0,
             index: 0,
             phases: phases,
-            intensities: silent
+            intensities: Intensity.Min
         ));
         builder.Push(new ConfigPattern(
             bank: PatternBank.B0,
@@ -66,7 +63,7 @@ internal static class Sample
                 bank: PatternBank.B0,
                 index: 0,
                 phases: phases,
-                intensities: intensities
+                intensities: Intensity.Max
             ));
             foreach (var frame in hotBuilder.Build())
             {

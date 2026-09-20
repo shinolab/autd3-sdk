@@ -17,7 +17,6 @@ var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
 
 var phases = geometry.PhaseBuffer();
-var intensities = geometry.IntensityBuffer();
 Pattern.Focus(
     geometry,
     geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),
@@ -32,7 +31,7 @@ builder.Push(new WritePatternBuffer(
     bank: bank,
     index: 0,
     phases: phases,
-    intensities: intensities
+    intensities: Intensity.Max
 ));
 builder.Push(new ConfigPattern(
     bank: bank,

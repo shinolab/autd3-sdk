@@ -5,7 +5,7 @@ use autd3_python_capsule::{capsule_of, modulation_from_capsule};
 use autd3_rs::Velocity;
 use autd3_rs::commands::PatternCompression as CorePatternCompression;
 use autd3_rs::value::{
-    DcSysTime as CoreDcSysTime, GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
+    DcSysTime as CoreDcSysTime, GpioIn as CoreGpioIn, LoopBehavior as CoreLoopBehavior,
     ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase,
     TransitionMode as CoreTransitionMode,
 };
@@ -234,7 +234,7 @@ pub struct WritePatternBuffer {
     pub(crate) bank: CorePatternBank,
     pub(crate) index: u16,
     pub(crate) phases: Vec<Vec<Phase>>,
-    pub(crate) intensities: Vec<Vec<Intensity>>,
+    pub(crate) intensities: crate::datagram::OwnedPatternIntensity,
 }
 
 #[pymethods]
@@ -250,7 +250,7 @@ impl WritePatternBuffer {
             bank: bank.0,
             index,
             phases: crate::datagram::extract_phases(phases)?,
-            intensities: crate::datagram::extract_intensities(intensities)?,
+            intensities: crate::datagram::extract_pattern_intensity(intensities)?,
         })
     }
 }

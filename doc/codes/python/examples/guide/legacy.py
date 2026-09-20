@@ -9,7 +9,7 @@ from autd3 import LegacyChangePatternBank, LegacyClient, LegacyClientConfig
 from autd3.commands import ChangeModulationBank, Modulation, Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
-from autd3.value import ModulationBank, PatternBank, SamplingConfig, TransitionMode
+from autd3.value import Intensity, ModulationBank, PatternBank, SamplingConfig, TransitionMode
 
 
 async def main() -> None:
@@ -30,7 +30,6 @@ async def main() -> None:
 
     target = geometry.center() + np.array([0.0, 0.0, 150.0])
     phases = geometry.phase_buffer()
-    intensities = geometry.intensity_buffer()
     pattern.focus(geometry, target, pattern.wavelength(340 * m / s), phases)
     mod_buf = modulation.modulation_buffer()
     modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
@@ -38,7 +37,7 @@ async def main() -> None:
     # ANCHOR: send
     builder = client.datagram_builder()
     builder.push(SetSilencer())
-    builder.push(Pattern(phases, intensities))
+    builder.push(Pattern(phases, Intensity.MAX))
     builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
     frames = builder.build()
     for i in range(len(frames)):
@@ -47,7 +46,7 @@ async def main() -> None:
 
     # ANCHOR: change_bank
     builder = client.datagram_builder()
-    builder.push(Pattern(phases, intensities, PatternBank.B1))
+    builder.push(Pattern(phases, Intensity.MAX, PatternBank.B1))
     frames = builder.build()
     for i in range(len(frames)):
         await client.send_checked(frames[i])

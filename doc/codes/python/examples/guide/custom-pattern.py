@@ -6,7 +6,7 @@ import autd3_pattern as pattern
 from autd3.commands import Pattern
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, rad, s
-from autd3.value import Phase
+from autd3.value import Intensity, Phase
 
 
 def main() -> None:
@@ -21,9 +21,8 @@ def main() -> None:
         for t, pos in enumerate(device.positions()):
             dist = float(np.linalg.norm(target - pos))
             slot[t] = Phase(-dist / wavelength * 2.0 * math.pi * rad)
-    intensities = geometry.intensity_buffer()
 
-    Pattern(phases, intensities)
+    Pattern(phases, Intensity.MAX)
     # ANCHOR_END: api
 
 

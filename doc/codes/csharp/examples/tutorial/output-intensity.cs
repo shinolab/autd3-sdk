@@ -19,9 +19,8 @@ internal static class Sample
 
         // ANCHOR: pattern_intensity
         var phases = geometry.PhaseBuffer();
-        var intensities = geometry.IntensityBuffer();
-        Pattern.SetIntensity(new Intensity(0x80), intensities);
         Pattern.Focus(geometry, target, wavelength, phases);
+        var intensity = new Intensity(0x80);
         // ANCHOR_END: pattern_intensity
 
         var modulation = Modulation.ModulationBuffer();
@@ -37,7 +36,7 @@ internal static class Sample
 
         var builder = client.DatagramBuilder();
         builder.Push(new SetSilencer());
-        builder.Push(new Pattern(phases, intensities));
+        builder.Push(new Pattern(phases, intensity));
         builder.Push(new Modulation(SamplingConfig.Freq4k, modulation));
         foreach (var frame in builder.Build())
         {

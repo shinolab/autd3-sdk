@@ -26,7 +26,7 @@ On the wire the phases are sent first, followed by the intensities, and the devi
 | `bank`      | `PatternBank`                    | Destination bank                   |
 | `index`     | `u16`                            | Destination index for writing within the bank |
 | `phases`      | `&[Vec<Phase>]`     | Per-device phases                  |
-| `intensities` | `&[Vec<Intensity>]` | Per-device intensities             |
+| `intensities` | `PatternIntensity`  | Intensity (a uniform `Intensity`, or a per-device `&[Vec<Intensity>]` buffer) |
 
 ## Example
 

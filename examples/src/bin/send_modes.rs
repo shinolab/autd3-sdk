@@ -65,13 +65,12 @@ async fn run_stop_and_wait(
 ) -> Result<Duration> {
     let geometry = client.geometry();
     let mut phases = geometry.phase_buffer();
-    let intensities = geometry.intensity_buffer();
     let mut buf = Frames::default();
 
     let start = Instant::now();
     for &target in targets {
         autd3_rs_pattern::focus(geometry, target, wavelength, &mut phases);
-        write_focus(client, &phases, &intensities, &mut buf)?;
+        write_focus(client, &phases, &mut buf)?;
         for frame in &buf {
             client.send_checked(frame).await?;
         }
@@ -88,14 +87,13 @@ async fn run_streaming(
 ) -> Result<Duration> {
     let geometry = client.geometry();
     let mut phases = geometry.phase_buffer();
-    let intensities = geometry.intensity_buffer();
     let mut buf = Frames::default();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(max_inflight);
 
     let start = Instant::now();
     for &target in targets {
         autd3_rs_pattern::focus(geometry, target, wavelength, &mut phases);
-        write_focus(client, &phases, &intensities, &mut buf)?;
+        write_focus(client, &phases, &mut buf)?;
         for frame in &buf {
             if pending.len() >= max_inflight {
                 pending.pop_front().expect("non-empty").await?.check()?;
@@ -111,16 +109,14 @@ async fn run_streaming(
 
 async fn configure(client: &Client) -> Result<()> {
     let phases = client.geometry().phase_buffer();
-    let mut intensities = client.geometry().intensity_buffer();
-    autd3_rs_pattern::set_intensity(Intensity::MIN, &mut intensities);
     let mut builder = client.datagram_builder();
     builder
-        .push(WritePatternBuffer {
-            bank: PatternBank::B0,
-            index: 0,
-            phases: &phases,
-            intensities: &intensities,
-        })
+        .push(WritePatternBuffer::new(
+            PatternBank::B0,
+            0,
+            &phases,
+            Intensity::MIN,
+        ))
         .push(ConfigPattern {
             bank: PatternBank::B0,
             config: SamplingConfig::FREQ_4K,
@@ -134,19 +130,14 @@ async fn configure(client: &Client) -> Result<()> {
     Ok(())
 }
 
-fn write_focus(
-    client: &Client,
-    phases: &[Vec<Phase>],
-    intensities: &[Vec<Intensity>],
-    buf: &mut Frames,
-) -> Result<()> {
+fn write_focus(client: &Client, phases: &[Vec<Phase>], buf: &mut Frames) -> Result<()> {
     let mut builder = client.datagram_builder();
-    builder.push(WritePatternBuffer {
-        bank: PatternBank::B0,
-        index: 0,
+    builder.push(WritePatternBuffer::new(
+        PatternBank::B0,
+        0,
         phases,
-        intensities,
-    });
+        Intensity::MAX,
+    ));
     builder.build_into(buf)?;
     Ok(())
 }

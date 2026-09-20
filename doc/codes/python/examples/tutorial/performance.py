@@ -25,11 +25,8 @@ async def main() -> None:
         ClientConfig(),
     ) as client:
         phases = geometry.phase_buffer()
-        intensities = geometry.intensity_buffer()
 
         # ANCHOR: configure
-        silent = geometry.intensity_buffer()
-        pattern.set_intensity(Intensity.MIN, silent)
         builder = client.datagram_builder()
         builder.push(SetSilencer.disable())
         builder.push(
@@ -37,7 +34,7 @@ async def main() -> None:
                 bank=PatternBank.B0,
                 index=0,
                 phases=phases,
-                intensities=silent,
+                intensities=Intensity.MIN,
             )
         )
         builder.push(
@@ -72,7 +69,7 @@ async def main() -> None:
                     bank=PatternBank.B0,
                     index=0,
                     phases=phases,
-                    intensities=intensities,
+                    intensities=Intensity.MAX,
                 )
             )
             for frame in builder.build():

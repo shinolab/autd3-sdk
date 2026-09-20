@@ -11,6 +11,7 @@ use autd3_rs::commands::{Pattern, SetSilencer};
 use autd3_rs::common::ULTRASOUND_PERIOD;
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
+use autd3_rs::value::Intensity;
 
 use autd3_rs_emulator::{ClientApi, Emulator, RangeXY, RmsRecordOption};
 
@@ -23,7 +24,6 @@ fn main() -> Result<()> {
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
     let mut phases = geometry.phase_buffer();
-    let intensities = geometry.intensity_buffer();
     autd3_rs_pattern::focus(&geometry, target, wavelength, &mut phases);
 
     let center = geometry.center();
@@ -32,7 +32,7 @@ fn main() -> Result<()> {
         let mut builder = r.datagram_builder();
         builder
             .push(SetSilencer::disable())
-            .push(Pattern::new(&phases, &intensities));
+            .push(Pattern::new(&phases, Intensity::MAX));
         let datagrams = builder.build()?;
         for frame in &datagrams {
             r.send_checked(frame).await?;

@@ -9,6 +9,7 @@ from autd3 import Client, ClientConfig
 from autd3.commands import Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
+from autd3.value import Intensity
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]), Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
@@ -22,7 +23,6 @@ async def main() -> None:
         # ANCHOR_END: api
 
         wavelength = pattern.wavelength(340 * m / s)
-        intensities = geometry.intensity_buffer()
         left = geometry.phase_buffer()
         pattern.focus(geometry, geometry.center() + np.array([-40.0, 0.0, 150.0]), wavelength, left)
         right = geometry.phase_buffer()
@@ -30,7 +30,7 @@ async def main() -> None:
 
         # ANCHOR: push_each
         builder = client.datagram_builder()
-        builder.push_each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, intensities))
+        builder.push_each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, Intensity.MAX))
         frames = builder.build()
         # ANCHOR_END: push_each
 

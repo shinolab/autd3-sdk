@@ -32,7 +32,6 @@ internal static class Sample
 
         var target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         using var phases = geometry.PhaseBuffer();
-        using var intensities = geometry.IntensityBuffer();
         Pattern.Focus(geometry, target, Pattern.Wavelength(340.0f * m / s), phases);
         using var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(200 * Hz, new SineOption(), modulation);
@@ -41,7 +40,7 @@ internal static class Sample
         using var builder = client.DatagramBuilder();
         builder
             .Push(new SetSilencer())
-            .Push(new Pattern(phases, intensities))
+            .Push(new Pattern(phases, Intensity.Max))
             .Push(new Modulation(SamplingConfig.Freq4k, modulation));
         using var frames = builder.Build();
         foreach (var frame in frames)
@@ -53,7 +52,7 @@ internal static class Sample
         // ANCHOR: change_bank
         using (var bankBuilder = client.DatagramBuilder())
         {
-            bankBuilder.Push(new Pattern(PatternBank.B1, phases, intensities));
+            bankBuilder.Push(new Pattern(PatternBank.B1, phases, Intensity.Max));
             using var bankFrames = bankBuilder.Build();
             foreach (var frame in bankFrames)
             {

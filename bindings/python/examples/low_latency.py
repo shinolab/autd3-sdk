@@ -32,11 +32,9 @@ async def main() -> None:
         target = geometry.center() + np.array([0.0, 0.0, 150.0])
         wavelength = pattern.wavelength(340 * m / s)
         phases = geometry.phase_buffer()
-        intensities = geometry.intensity_buffer()
         pattern.focus(geometry, target, wavelength, phases)
-        pattern.set_intensity(0, intensities)
         builder = client.datagram_builder()
-        builder.push(autd3.commands.Pattern(phases, intensities))
+        builder.push(autd3.commands.Pattern(phases, autd3.value.Intensity.MIN))
         datagrams = builder.build()
 
         frame = datagrams[0]

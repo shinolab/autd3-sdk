@@ -10,7 +10,7 @@ use textplots::{Chart, Plot, Shape};
 use autd3_rs::commands::{Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::units::rad;
-use autd3_rs::value::Phase;
+use autd3_rs::value::{Intensity, Phase};
 
 use autd3_rs_emulator::{ClientApi, Emulator};
 
@@ -40,7 +40,6 @@ fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     let mut phases = geometry.phase_buffer();
-    let intensities = geometry.intensity_buffer();
     autd3_rs_pattern::set_phase(Phase::from(std::f32::consts::PI / 2.0 * rad), &mut phases);
 
     let emulator = Emulator::new(geometry);
@@ -48,7 +47,7 @@ fn main() -> Result<()> {
         let mut builder = r.datagram_builder();
         builder
             .push(SetSilencer::disable())
-            .push(Pattern::new(&phases, &intensities));
+            .push(Pattern::new(&phases, Intensity::MAX));
         let datagrams = builder.build()?;
         for frame in &datagrams {
             r.send_checked(frame).await?;

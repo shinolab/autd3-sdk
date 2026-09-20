@@ -18,9 +18,8 @@ async fn main() -> Result<()> {
 
     // ANCHOR: pattern_intensity
     let mut phases = geometry.phase_buffer();
-    let mut intensities = geometry.intensity_buffer();
-    autd3_rs_pattern::set_intensity(Intensity(0x80), &mut intensities);
     autd3_rs_pattern::focus(&geometry, target, wavelength, &mut phases);
+    let intensity = Intensity(0x80);
     // ANCHOR_END: pattern_intensity
 
     // ANCHOR: modulation
@@ -40,7 +39,7 @@ async fn main() -> Result<()> {
     let mut builder = client.datagram_builder();
     builder
         .push(SetSilencer::default())
-        .push(Pattern::new(&phases, &intensities))
+        .push(Pattern::new(&phases, intensity))
         .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation));
     for frame in &builder.build()? {
         client.send_checked(frame).await?;

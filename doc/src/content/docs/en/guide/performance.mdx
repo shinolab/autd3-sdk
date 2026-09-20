@@ -40,6 +40,7 @@ Since the round-trip latency is hidden and throughput improves further, choose s
 To avoid per-frame allocation, reuse buffers.
 
 - The buffers obtained via `phase_buffer()` / `intensity_buffer()` can be overwritten every frame as the output destination of the Pattern compute function.
+- When the intensity is the same for every transducer, pass an `Intensity` directly instead of allocating a buffer.
 - In Rust, `Frames` can also be written into the same buffer with `build_into`, avoiding allocation on every `build`. `build_into` is not provided in Python / C#.
 
 ## OS Tuning

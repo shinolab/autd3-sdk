@@ -5,7 +5,7 @@ use anyhow::Result;
 use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::SamplingConfig;
+use autd3_rs::value::{Intensity, SamplingConfig};
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_nop::Nop;
 
@@ -20,7 +20,6 @@ async fn main() -> Result<()> {
 
     // ANCHOR: loop
     let mut phases = geometry.phase_buffer();
-    let intensities = geometry.intensity_buffer();
     loop {
         for sign in [1.0_f32, -1.0] {
             let target = center + offset((sign * 20.0) * mm, 0.0 * mm, 0.0 * mm);
@@ -31,7 +30,7 @@ async fn main() -> Result<()> {
                 &mut phases,
             );
             let mut builder = client.datagram_builder();
-            builder.push(Pattern::new(&phases, &intensities));
+            builder.push(Pattern::new(&phases, Intensity::MAX));
             for frame in &builder.build()? {
                 client.send_checked(frame).await?;
             }

@@ -9,7 +9,7 @@ from autd3 import Client, ClientConfig
 from autd3.commands import Modulation, Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
-from autd3.value import SamplingConfig
+from autd3.value import Intensity, SamplingConfig
 
 # xtask:long-running  # [hide]
 
@@ -28,7 +28,6 @@ async def main() -> None:
         target = geometry.center() + np.array([0.0, 0.0, 150.0])
         wavelength = pattern.wavelength(340 * m / s)
         phases = geometry.phase_buffer()
-        intensities = geometry.intensity_buffer()
         pattern.focus(
             geometry,
             target,
@@ -46,7 +45,7 @@ async def main() -> None:
 
         builder = client.datagram_builder()
         builder.push(SetSilencer())
-        builder.push(Pattern(phases, intensities))
+        builder.push(Pattern(phases, Intensity.MAX))
         builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
         for frame in builder.build():
             await client.send_checked(frame)

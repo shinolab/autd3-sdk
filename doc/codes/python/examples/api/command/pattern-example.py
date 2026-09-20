@@ -6,6 +6,7 @@ from autd3 import Client, ClientConfig
 from autd3.commands import Pattern
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
+from autd3.value import Intensity
 from autd3_link_nop import Nop
 from autd3_pattern import focus, wavelength
 
@@ -14,7 +15,6 @@ async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
     async with await Client.open(geometry, Nop(), ClientConfig()) as client:
         phases = geometry.phase_buffer()
-        intensities = geometry.intensity_buffer()
         focus(
             geometry,
             geometry.center() + np.array([0.0, 0.0, 150.0]),
@@ -23,7 +23,7 @@ async def main() -> None:
         )
 
         builder = client.datagram_builder()
-        builder.push(Pattern(phases, intensities))
+        builder.push(Pattern(phases, Intensity.MAX))
         frames = builder.build()
         for frame in frames:
             await client.send_checked(frame)

@@ -3,7 +3,7 @@ use core::f32::consts::PI;
 use autd3_rs::commands::Pattern;
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, rad, s};
-use autd3_rs::value::Phase;
+use autd3_rs::value::{Intensity, Phase};
 use autd3_rs_pattern::wavelength;
 
 fn main() {
@@ -20,8 +20,7 @@ fn main() {
             *p = Phase::from(-dist / wavelength.mm() * 2.0 * PI * rad);
         }
     }
-    let intensities = geometry.intensity_buffer();
 
-    Pattern::new(&phases, &intensities);
+    Pattern::new(&phases, Intensity::MAX);
     // ANCHOR_END: api
 }

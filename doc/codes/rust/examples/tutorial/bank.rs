@@ -3,7 +3,7 @@ use anyhow::Result;
 use autd3_rs::commands::Pattern;
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::PatternBank;
+use autd3_rs::value::{Intensity, PatternBank};
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_nop::Nop;
 
@@ -15,7 +15,6 @@ async fn main() -> Result<()> {
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
 
-    let intensities = geometry.intensity_buffer();
 
     // ANCHOR: switch
     // Write focus A to bank B0 and play it.
@@ -28,7 +27,7 @@ async fn main() -> Result<()> {
         &mut pat_a,
     );
     let mut builder = client.datagram_builder();
-    builder.push(Pattern::with_bank(PatternBank::B0, &pat_a, &intensities));
+    builder.push(Pattern::with_bank(PatternBank::B0, &pat_a, Intensity::MAX));
     for frame in &builder.build()? {
         client.send_checked(frame).await?;
     }
@@ -44,7 +43,7 @@ async fn main() -> Result<()> {
         &mut pat_b,
     );
     let mut builder = client.datagram_builder();
-    builder.push(Pattern::with_bank(PatternBank::B1, &pat_b, &intensities));
+    builder.push(Pattern::with_bank(PatternBank::B1, &pat_b, Intensity::MAX));
     for frame in &builder.build()? {
         client.send_checked(frame).await?;
     }

@@ -1,8 +1,9 @@
 use autd3_rs_core::geometry::Device;
-use autd3_rs_core::value::{Intensity, Phase};
+use autd3_rs_core::value::Phase;
 use zerocopy::{Immutable, IntoBytes};
 
 use super::LegacyOperation;
+use crate::commands::PatternIntensity;
 use crate::legacy::error::{LegacyError, PayloadError};
 use crate::legacy::wire::{Segment, Tag, params::GAIN_FLAG_UPDATE};
 
@@ -18,7 +19,7 @@ struct GainHead {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Gain<'a> {
     phases: &'a [Vec<Phase>],
-    intensities: &'a [Vec<Intensity>],
+    intensities: PatternIntensity<'a>,
     segment: Segment,
     transition: bool,
     done: bool,
@@ -26,10 +27,10 @@ pub struct Gain<'a> {
 
 impl<'a> Gain<'a> {
     #[must_use]
-    pub const fn new(phases: &'a [Vec<Phase>], intensities: &'a [Vec<Intensity>]) -> Self {
+    pub fn new(phases: &'a [Vec<Phase>], intensities: impl Into<PatternIntensity<'a>>) -> Self {
         Self {
             phases,
-            intensities,
+            intensities: intensities.into(),
             segment: Segment::S0,
             transition: true,
             done: false,
@@ -37,15 +38,15 @@ impl<'a> Gain<'a> {
     }
 
     #[must_use]
-    pub const fn with_segment(
+    pub fn with_segment(
         phases: &'a [Vec<Phase>],
-        intensities: &'a [Vec<Intensity>],
+        intensities: impl Into<PatternIntensity<'a>>,
         segment: Segment,
         transition: bool,
     ) -> Self {
         Self {
             phases,
-            intensities,
+            intensities: intensities.into(),
             segment,
             transition,
             done: false,
@@ -73,15 +74,30 @@ pub(super) fn slot_for<'a, T>(
     Ok(slot)
 }
 
-pub(super) fn write_emissions(tx: &mut [u8], phases: &[Phase], intensities: &[Intensity]) {
-    for (dst, (phase, intensity)) in tx
-        .as_chunks_mut::<2>()
-        .0
-        .iter_mut()
-        .zip(phases.iter().zip(intensities))
-    {
-        *dst = [phase.0, intensity.0];
+pub(super) fn write_emissions(
+    tx: &mut [u8],
+    phases: &[Phase],
+    intensities: PatternIntensity<'_>,
+    device: &Device,
+) -> Result<(), PayloadError> {
+    match intensities {
+        PatternIntensity::Uniform(intensity) => {
+            for (dst, phase) in tx.as_chunks_mut::<2>().0.iter_mut().zip(phases) {
+                *dst = [phase.0, intensity.0];
+            }
+        }
+        PatternIntensity::PerDevice(intensities) => {
+            for (dst, (phase, intensity)) in tx
+                .as_chunks_mut::<2>()
+                .0
+                .iter_mut()
+                .zip(phases.iter().zip(slot_for(intensities, device)?))
+            {
+                *dst = [phase.0, intensity.0];
+            }
+        }
     }
+    Ok(())
 }
 
 impl LegacyOperation for Gain<'_> {
@@ -91,7 +107,6 @@ impl LegacyOperation for Gain<'_> {
 
     fn pack(&mut self, device: &Device, tx: &mut [u8]) -> Result<usize, LegacyError> {
         let phases = slot_for(self.phases, device)?;
-        let intensities = slot_for(self.intensities, device)?;
         let head = GainHead {
             tag: Tag::Gain.as_u8(),
             segment: self.segment.as_u8(),
@@ -99,7 +114,12 @@ impl LegacyOperation for Gain<'_> {
             _pad: 0,
         };
         tx[..size_of::<GainHead>()].copy_from_slice(head.as_bytes());
-        write_emissions(&mut tx[size_of::<GainHead>()..], phases, intensities);
+        write_emissions(
+            &mut tx[size_of::<GainHead>()..],
+            phases,
+            self.intensities,
+            device,
+        )?;
         self.done = true;
         Ok(self.required_size(device))
     }
@@ -113,6 +133,7 @@ impl LegacyOperation for Gain<'_> {
 mod tests {
     use super::*;
     use autd3_rs_core::geometry::{Autd3, Geometry};
+    use autd3_rs_core::value::Intensity;
 
     fn geometry(n: usize) -> Geometry {
         Geometry::new((0..n).map(|_| Autd3::default()).collect())

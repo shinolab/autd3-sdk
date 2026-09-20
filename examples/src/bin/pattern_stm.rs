@@ -8,6 +8,7 @@ use autd3_rs::commands::{PatternStm, PatternStmMode, PatternStmOption, SetSilenc
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
+use autd3_rs::value::Intensity;
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs_link_echocat::EchocatLinkOption;
 
@@ -45,13 +46,12 @@ async fn main() -> Result<()> {
             phases
         })
         .collect::<Vec<_>>();
-    let intensities = vec![geometry.intensity_buffer(); patterns.len()];
 
     let mut builder = client.datagram_builder();
     builder.push(SetSilencer::default()).push(PatternStm::new(
         1.0 * Hz,
         &patterns,
-        &intensities,
+        Intensity::MAX,
         PatternStmOption {
             mode: PatternStmMode::PhaseFull,
             ..Default::default()

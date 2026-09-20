@@ -287,10 +287,10 @@ namespace AUTD3
 
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_pattern(byte bank, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+        internal static extern IntPtr autd3_op_pattern(byte bank, PhaseBufferHandle phases, IntPtr intensities, byte uniformIntensity, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_write_pattern_buffer(byte bank, ushort index, PhaseBufferHandle phases, IntensityBufferHandle intensities);
+        internal static extern IntPtr autd3_op_write_pattern_buffer(byte bank, ushort index, PhaseBufferHandle phases, IntPtr intensities, byte uniformIntensity);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_write_pattern_compressed(byte bank, uint index, byte format, IntPtr[] patterns, UIntPtr numPatterns);
@@ -541,19 +541,45 @@ namespace AUTD3
             new IntensityBuffer(NativePattern.autd3_core_geometry_intensity_buffer(geometry.Handle));
     }
 
+    public readonly struct PatternIntensity
+    {
+        private readonly IntensityBuffer? _buffer;
+        private readonly Intensity? _uniform;
+
+        public PatternIntensity(Intensity uniform)
+        {
+            _buffer = null;
+            _uniform = uniform;
+        }
+
+        public PatternIntensity(IntensityBuffer buffer)
+        {
+            _buffer = buffer ?? throw new ArgumentNullException(nameof(buffer));
+            _uniform = null;
+        }
+
+        internal IntensityBuffer? Buffer => _buffer;
+
+        internal byte Uniform => (_uniform ?? Intensity.Max).Value;
+
+        public static implicit operator PatternIntensity(Intensity uniform) => new PatternIntensity(uniform);
+
+        public static implicit operator PatternIntensity(IntensityBuffer buffer) => new PatternIntensity(buffer);
+    }
+
     public sealed class Pattern : ICommand
     {
         private readonly PatternBank _bank;
         private readonly PhaseBuffer _phases;
-        private readonly IntensityBuffer _intensities;
+        private readonly PatternIntensity _intensities;
         private readonly TransitionMode _transitionMode;
 
-        public Pattern(PhaseBuffer phases, IntensityBuffer intensities, TransitionMode? transitionMode = null)
+        public Pattern(PhaseBuffer phases, PatternIntensity intensities, TransitionMode? transitionMode = null)
             : this(PatternBank.B0, phases, intensities, transitionMode)
         {
         }
 
-        public Pattern(PatternBank bank, PhaseBuffer phases, IntensityBuffer intensities, TransitionMode? transitionMode = null)
+        public Pattern(PatternBank bank, PhaseBuffer phases, PatternIntensity intensities, TransitionMode? transitionMode = null)
         {
             _bank = bank;
             _phases = phases;
@@ -561,8 +587,11 @@ namespace AUTD3
             _transitionMode = transitionMode ?? TransitionMode.Immediate;
         }
 
-        IntPtr ICommand.CreateOp() =>
-            NativePattern.autd3_op_pattern((byte)_bank, _phases.Handle, _intensities.Handle, _transitionMode.Mode, _transitionMode.Value, _transitionMode.MarginNs);
+        IntPtr ICommand.CreateOp()
+        {
+            using var intensityLease = new HandleLease(_intensities.Buffer?.Handle);
+            return NativePattern.autd3_op_pattern((byte)_bank, _phases.Handle, intensityLease.Pointer, _intensities.Uniform, _transitionMode.Mode, _transitionMode.Value, _transitionMode.MarginNs);
+        }
 
 
         public static Length Wavelength(Velocity soundSpeed) =>

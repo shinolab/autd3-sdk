@@ -1,19 +1,18 @@
 from autd3.commands import ChangePatternBank, ConfigPattern, PatternCompression, WritePatternBuffer, WritePatternCompressed
 from autd3.geometry import Autd3, Geometry
-from autd3.value import LoopBehavior, PatternBank, SamplingConfig, TransitionMode
+from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 bank = PatternBank.B0
 index = 0
 phases = geometry.phase_buffer()
-intensities = geometry.intensity_buffer()
 # ANCHOR: write
 WritePatternBuffer(
     bank=bank,
     index=index,
     phases=phases,
-    intensities=intensities,
+    intensities=Intensity.MAX,
 )
 # ANCHOR_END: write
 config = SamplingConfig.FREQ_4K

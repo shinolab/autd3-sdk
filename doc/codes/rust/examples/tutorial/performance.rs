@@ -20,21 +20,13 @@ async fn main() -> Result<()> {
     let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
 
     let mut phases = geometry.phase_buffer();
-    let intensities = geometry.intensity_buffer();
 
     {
         // ANCHOR: configure
-        let mut silent = geometry.intensity_buffer();
-        autd3_rs_pattern::set_intensity(Intensity::MIN, &mut silent);
         let mut builder = client.datagram_builder();
         builder
             .push(SetSilencer::disable())
-            .push(WritePatternBuffer {
-                bank: PatternBank::B0,
-                index: 0,
-                phases: &phases,
-                intensities: &silent,
-            })
+            .push(WritePatternBuffer::new(PatternBank::B0, 0, &phases, Intensity::MIN))
             .push(ConfigPattern {
                 bank: PatternBank::B0,
                 config: SamplingConfig::FREQ_40K,
@@ -69,12 +61,12 @@ async fn main() -> Result<()> {
         );
 
         let mut builder = client.datagram_builder();
-        builder.push(WritePatternBuffer {
-            bank: PatternBank::B0,
-            index: 0,
-            phases: &phases,
-            intensities: &intensities,
-        });
+        builder.push(WritePatternBuffer::new(
+            PatternBank::B0,
+            0,
+            &phases,
+            Intensity::MAX,
+        ));
         builder.build_into(&mut buf)?;
         for frame in &buf {
             if pending.len() >= MAX_INFLIGHT {

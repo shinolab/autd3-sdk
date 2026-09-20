@@ -3,7 +3,7 @@ use core::num::NonZeroU16;
 use autd3_rs::DatagramBuilder;
 use autd3_rs::commands::{ChangePatternBank, ConfigPattern, Pattern, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::value::{LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 
 fn main() {
     let geometry = Geometry::new(vec![Autd3::default()]);
@@ -12,30 +12,24 @@ fn main() {
     let transition_mode = TransitionMode::Immediate;
 
     let phases = geometry.phase_buffer();
-    let intensities = geometry.intensity_buffer();
+    let intensities = Intensity::MAX;
 
     // ANCHOR: api
-    Pattern::new(&phases, &intensities);
+    Pattern::new(&phases, intensities);
 
-    Pattern::with_bank(bank, &phases, &intensities);
+    Pattern::with_bank(bank, &phases, intensities);
 
     Pattern {
         bank,
         phases: &phases,
-        intensities: &intensities,
+        intensities: intensities.into(),
         transition_mode,
     };
     // ANCHOR_END: api
 
     let phases = &phases;
-    let intensities = &intensities;
     // ANCHOR: equivalent
-    WritePatternBuffer {
-        bank,
-        index: 0,
-        phases,
-        intensities,
-    };
+    WritePatternBuffer::new(bank, 0, phases, intensities);
     ConfigPattern {
         bank,
         config: SamplingConfig::new(NonZeroU16::MAX),

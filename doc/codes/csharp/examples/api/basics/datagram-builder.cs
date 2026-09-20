@@ -17,7 +17,6 @@ internal static class Sample
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
         var leftTarget = geometry.Center + new Vector3(-40.0f, 0.0f, 150.0f);
-        var intensities = geometry.IntensityBuffer();
         var left = geometry.PhaseBuffer();
         Pattern.Focus(geometry, leftTarget, wavelength, left);
 
@@ -43,8 +42,8 @@ internal static class Sample
         // ANCHOR: push_each
         var builder = client.DatagramBuilder();
         builder.PushEach(device => device.Idx % 2 == 0
-            ? new Pattern(left, intensities)
-            : new Pattern(right, intensities));
+            ? new Pattern(left, Intensity.Max)
+            : new Pattern(right, Intensity.Max));
         var frames = builder.Build();
         // ANCHOR_END: push_each
         foreach (var frame in frames)

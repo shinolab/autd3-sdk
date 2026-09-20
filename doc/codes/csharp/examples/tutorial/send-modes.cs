@@ -47,7 +47,6 @@ internal static class Sample
     {
         // ANCHOR: stop_and_wait
         var phases = geometry.PhaseBuffer();
-        var intensities = geometry.IntensityBuffer();
         foreach (var target in targets)
         {
             Pattern.Focus(
@@ -57,7 +56,7 @@ internal static class Sample
                 phases
             );
             var builder = client.DatagramBuilder();
-            builder.Push(new Pattern(phases, intensities));
+            builder.Push(new Pattern(phases, Intensity.Max));
             foreach (var frame in builder.Build())
             {
                 await client.SendCheckedAsync(frame);
@@ -70,7 +69,6 @@ internal static class Sample
     {
         // ANCHOR: streaming
         var phases = geometry.PhaseBuffer();
-        var intensities = geometry.IntensityBuffer();
         var pending = new Queue<ResponseToken>();
         foreach (var target in targets)
         {
@@ -81,7 +79,7 @@ internal static class Sample
                 phases
             );
             var builder = client.DatagramBuilder();
-            builder.Push(new Pattern(phases, intensities));
+            builder.Push(new Pattern(phases, Intensity.Max));
             foreach (var frame in builder.Build())
             {
                 if (pending.Count >= Client.MaxInflight)

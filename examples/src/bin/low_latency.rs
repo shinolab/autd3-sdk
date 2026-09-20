@@ -39,12 +39,10 @@ async fn main() -> Result<()> {
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
     let mut phases = geometry.phase_buffer();
-    let mut intensities = geometry.intensity_buffer();
     autd3_rs_pattern::focus(&geometry, target, wavelength, &mut phases);
-    autd3_rs_pattern::set_intensity(Intensity::MIN, &mut intensities);
 
     let mut builder = client.datagram_builder();
-    builder.push(Pattern::new(&phases, &intensities));
+    builder.push(Pattern::new(&phases, Intensity::MIN));
     let datagrams = builder.build()?;
 
     for _ in 0..WARMUP {

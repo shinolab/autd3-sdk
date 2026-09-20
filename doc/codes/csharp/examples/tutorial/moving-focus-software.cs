@@ -20,7 +20,6 @@ internal static class Sample
 
         // ANCHOR: loop
         var phases = geometry.PhaseBuffer();
-        var intensities = geometry.IntensityBuffer();
         while (true)
         {
             foreach (var sign in new[] { 1.0f, -1.0f })
@@ -33,7 +32,7 @@ internal static class Sample
                     phases
                 );
                 var builder = client.DatagramBuilder();
-                builder.Push(new Pattern(phases, intensities));
+                builder.Push(new Pattern(phases, Intensity.Max));
                 foreach (var frame in builder.Build())
                 {
                     await client.SendCheckedAsync(frame);

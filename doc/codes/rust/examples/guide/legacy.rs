@@ -2,7 +2,7 @@ use autd3_rs::commands::{ChangeModulationBank, Modulation, Pattern, SetSilencer}
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::legacy::{LegacyChangePatternBank, LegacyClient, LegacyClientConfig};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{ModulationBank, PatternBank, SamplingConfig, TransitionMode};
+use autd3_rs::value::{Intensity, ModulationBank, PatternBank, SamplingConfig, TransitionMode};
 use autd3_rs_link_echocat::EchocatLinkOption;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -26,7 +26,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let mut phases = geometry.phase_buffer();
-    let intensities = geometry.intensity_buffer();
     autd3_rs_pattern::focus(
         &geometry,
         target,
@@ -44,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = client.datagram_builder();
     builder
         .push(SetSilencer::default())
-        .push(Pattern::new(&phases, &intensities))
+        .push(Pattern::new(&phases, Intensity::MAX))
         .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation));
     let frames = builder.build()?;
     for frame in &frames {
@@ -54,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ANCHOR: change_bank
     let mut builder = client.datagram_builder();
-    builder.push(Pattern::with_bank(PatternBank::B1, &phases, &intensities));
+    builder.push(Pattern::with_bank(PatternBank::B1, &phases, Intensity::MAX));
     for frame in &builder.build()? {
         client.send_checked(frame).await?;
     }

@@ -299,12 +299,7 @@ fn broadcast_op_yields_one_frame_of_one_datagram() {
 fn per_device_op_yields_one_datagram_per_device() {
     let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 3];
     let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 3];
-    let op = WritePatternBuffer {
-        bank: PatternBank::B0,
-        index: 0,
-        phases: &phases,
-        intensities: &intensities,
-    };
+    let op = WritePatternBuffer::new(PatternBank::B0, 0, &phases, &intensities);
     let mut b = DatagramBuilder::new(test_geometry_arc(3));
     b.push(op);
     let frames = b.build().unwrap();
@@ -319,12 +314,7 @@ fn per_device_op_yields_one_datagram_per_device() {
 fn composite_emission_orders_write_then_config() {
     let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
     let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
-    let we = WritePatternBuffer {
-        bank: PatternBank::B0,
-        index: 0,
-        phases: &phases,
-        intensities: &intensities,
-    };
+    let we = WritePatternBuffer::new(PatternBank::B0, 0, &phases, &intensities);
     let ce = ConfigPattern {
         bank: PatternBank::B0,
         config: SamplingConfig::FREQ_40K,
