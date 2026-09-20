@@ -11,7 +11,7 @@ use autd3_rs::commands::Command;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use autd3_rs::{Client, ClientConfig, DatagramBuilder};
-use autd3_rs_link_remote::RemoteLinkOption;
+use autd3_rs_link_remote::{DiscoveryOption, RemoteLinkOption, ServerKind, discover};
 use autd3_rs_link_twincat::TwinCATLinkOption;
 
 use crate::cli::{Cli, LinkKind};
@@ -89,6 +89,23 @@ async fn main() -> Result<()> {
     run(&cli).await
 }
 
+fn remote_option(cli: &Cli) -> Result<RemoteLinkOption> {
+    if let Some(addr) = cli.remote_addr {
+        return Ok(RemoteLinkOption::new(addr));
+    }
+    let default = DiscoveryOption::default();
+    let appliance = discover(&DiscoveryOption {
+        timeout: cli
+            .discovery_timeout_ms
+            .map_or(default.timeout, Duration::from_millis),
+        instance: cli.remote_instance.clone(),
+        kind: Some(ServerKind::Appliance),
+    })
+    .context("finding the appliance over mDNS (or pass --remote-addr)")?;
+    println!("appliance: {appliance}");
+    Ok(RemoteLinkOption::new(appliance.addr))
+}
+
 async fn run(cli: &Cli) -> Result<()> {
     let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()).collect());
     let config = ClientConfig {
@@ -113,9 +130,7 @@ async fn run(cli: &Cli) -> Result<()> {
             };
             Client::open(&geometry, option, config).await
         }
-        LinkKind::Remote => {
-            Client::open(&geometry, RemoteLinkOption::new(cli.remote_addr), config).await
-        }
+        LinkKind::Remote => Client::open(&geometry, remote_option(cli)?, config).await,
     }
     .context("opening link / client handshake")?;
 

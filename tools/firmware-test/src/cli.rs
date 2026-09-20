@@ -22,16 +22,16 @@ pub struct Cli {
     pub devices: usize,
     #[arg(long, default_value_t = 1000)]
     pub cycle_us: u64,
-    #[arg(long, default_value_t = default_remote_addr())]
-    pub remote_addr: SocketAddr,
+    #[arg(long)]
+    pub remote_addr: Option<SocketAddr>,
+    #[arg(long, conflicts_with = "remote_addr")]
+    pub remote_instance: Option<String>,
+    #[arg(long, conflicts_with = "remote_addr")]
+    pub discovery_timeout_ms: Option<u64>,
     #[arg(long)]
     pub twincat_remote: Option<IpAddr>,
     #[arg(long)]
     pub ams_net_id: Option<AmsNetId>,
-}
-
-fn default_remote_addr() -> SocketAddr {
-    "127.0.0.1:8080".parse().expect("valid default addr")
 }
 
 impl Cli {
@@ -56,6 +56,16 @@ impl Cli {
                     );
                 }
             }
+        }
+        if self.link != LinkKind::Remote
+            && (self.remote_addr.is_some()
+                || self.remote_instance.is_some()
+                || self.discovery_timeout_ms.is_some())
+        {
+            return Err(
+                "--remote-addr / --remote-instance / --discovery-timeout-ms are only valid with --link remote"
+                    .to_string(),
+            );
         }
         Ok(())
     }
