@@ -16,7 +16,7 @@
     "@astrojs/starlight": "^0.42.0",
     "@mathjax/mathjax-newcm-font": "^4.1.2",
     "@mathjax/src": "^4.1.2",
-    "@types/three": "^0.185.1",
+    "@types/three": "^0.186.0",
     "astro": "^7.2.0",
     "mermaid": "^11.17.2",
     "sharp": "^0.35.0",
