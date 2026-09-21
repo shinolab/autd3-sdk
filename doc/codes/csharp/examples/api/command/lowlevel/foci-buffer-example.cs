@@ -39,7 +39,7 @@ builder.Push(new WriteFociBuffer(
 ));
 builder.Push(new ConfigFociStm(
     bank: bank,
-    config: new SamplingConfig(points.Length * Hz),
+    config: new StmConfig(1.0f * Hz).IntoSamplingConfig(points.Length),
     size: (uint)points.Length,
     numFoci: 1,
     soundSpeed: 340.0f * m / s,

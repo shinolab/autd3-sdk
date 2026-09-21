@@ -2,7 +2,7 @@ from autd3.units import Hz
 from autd3.value import SamplingConfig
 from autd3_modulation import SquareOption, modulation_buffer, square
 
-freq = 150.0 * Hz
+freq = 150 * Hz
 low = 0x00
 high = 0xFF
 duty = 0.5

@@ -5,8 +5,8 @@ from autd3_pattern import (
     LaguerreGaussianOption,
     laguerre_gaussian_phase,
     laguerre_gaussian_intensity,
-    wavelength,
 )
+from autd3_pattern import wavelength as calc_wavelength
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
@@ -15,6 +15,6 @@ intensities = geometry.intensity_buffer()
 
 target = geometry.center() + np.array([0.0, 0.0, 150.0])
 option = LaguerreGaussianOption(p=0, l=1, waist=10.0)
-wl = wavelength(340 * m / s)
-laguerre_gaussian_phase(geometry, target, np.array([0.0, 0.0, 1.0]), option, wl, phases)
-laguerre_gaussian_intensity(geometry, target, np.array([0.0, 0.0, 1.0]), option, wl, intensities)
+wavelength = calc_wavelength(340 * m / s)
+laguerre_gaussian_phase(geometry, target, np.array([0.0, 0.0, 1.0]), option, wavelength, phases)
+laguerre_gaussian_intensity(geometry, target, np.array([0.0, 0.0, 1.0]), option, wavelength, intensities)

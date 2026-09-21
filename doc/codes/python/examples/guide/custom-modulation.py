@@ -6,10 +6,10 @@ from autd3_modulation import ModulationBuffer
 def main() -> None:
     # ANCHOR: api
     length = 10
-    buffer = ModulationBuffer(length)
-    buffer[0] = 0xFF
+    data = ModulationBuffer(length)
+    data[0] = 0xFF
 
-    Modulation(SamplingConfig.FREQ_4K, buffer)
+    Modulation(SamplingConfig.FREQ_4K, data)
     # ANCHOR_END: api
 
 

@@ -31,7 +31,7 @@ To write to another bank, use `Pattern::with_bank(bank, phases, intensities)`.
 <Code code={excerpt(pySample, "api")} lang="python" />
 
 `Pattern` sets the destination bank to `PatternBank.B0` by default.
-To specify another bank, pass the `bank` argument.
+To write to another bank, use `Pattern(phases, intensities, bank=bank)`.
 </Fragment>
 <Fragment slot="csharp">
 <Code code={excerpt(csSample, "api")} lang="csharp" />

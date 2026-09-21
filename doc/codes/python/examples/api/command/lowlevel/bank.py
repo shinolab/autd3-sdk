@@ -7,12 +7,13 @@ geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 bank = PatternBank.B0
 index = 0
 phases = geometry.phase_buffer()
+intensities = Intensity.MAX
 # ANCHOR: write
 WritePatternBuffer(
     bank=bank,
     index=index,
     phases=phases,
-    intensities=Intensity.MAX,
+    intensities=intensities,
 )
 # ANCHOR_END: write
 config = SamplingConfig.FREQ_4K

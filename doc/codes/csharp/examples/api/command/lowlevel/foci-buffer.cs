@@ -13,7 +13,7 @@ internal static class Sample
         var dst = new List<ControlPoints>();
         Stm.Circle(Vector3.Zero, 30.0f * mm, 200, Vector3.UnitZ, Intensity.Max, dst);
         var points = dst.ToArray();
-        var config = new SamplingConfig(points.Length * Hz);
+        var config = new StmConfig(1.0f * Hz).IntoSamplingConfig(points.Length);
 
         var indexOffset = 0u;
         // ANCHOR: write

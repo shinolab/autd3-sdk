@@ -14,8 +14,8 @@ from autd3_pattern import (
     group,
     group_compute,
     set_phase,
-    wavelength,
 )
+from autd3_pattern import wavelength as calc_wavelength
 from autd3_pattern_holo import AmplitudeTarget, GspatOption, Pa, gspat
 
 
@@ -32,7 +32,7 @@ geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 left = geometry.phase_buffer()
 right = geometry.phase_buffer()
-set_phase(Phase(0x80), right)
+set_phase(Phase.PI, right)
 dst = geometry.phase_buffer()
 center = geometry.center()
 
@@ -44,7 +44,7 @@ groups = TransducerGroups(
 group(geometry, groups, {Side.LEFT: left, Side.RIGHT: right}, dst)
 # ANCHOR_END: api
 
-wl = wavelength(340 * m / s)
+wavelength = calc_wavelength(340 * m / s)
 foci = [AmplitudeTarget(point=center + np.array([-30.0, 0.0, 150.0]), amplitude=5e3 * Pa)]
 target = center + np.array([40.0, 0.0, 150.0])
 phases = geometry.phase_buffer()
@@ -54,9 +54,9 @@ intensities = geometry.intensity_buffer()
 # ANCHOR: compute
 def compute(side: Side, mask: TransducerMask, phases: PhaseBuffer, intensities: IntensityBuffer) -> None:
     if side is Side.LEFT:
-        gspat(geometry, foci, wl, GspatOption(mask=mask), phases, intensities)
+        gspat(geometry, foci, wavelength, GspatOption(mask=mask), phases, intensities)
     else:
-        focus(geometry, target, wl, phases)
+        focus(geometry, target, wavelength, phases)
 
 
 group_compute(geometry, groups, compute, phases, intensities)

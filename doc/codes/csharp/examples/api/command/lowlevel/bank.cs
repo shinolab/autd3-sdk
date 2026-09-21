@@ -12,12 +12,13 @@ internal static class Sample
         var bank = PatternBank.B0;
         ushort index = 0;
         var phases = geometry.PhaseBuffer();
+        var intensities = Intensity.Max;
         // ANCHOR: write
         new WritePatternBuffer(
             bank: bank,
             index: index,
             phases: phases,
-            intensities: Intensity.Max
+            intensities: intensities
         );
         // ANCHOR_END: write
         var config = SamplingConfig.Freq4k;
@@ -38,18 +39,24 @@ internal static class Sample
             transitionMode: transitionMode
         );
         // ANCHOR_END: change
+    }
 
+    internal static void RunCompressed()
+    {
+        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+
+        var bank = PatternBank.B0;
         var p0 = geometry.PhaseBuffer();
         var p1 = geometry.PhaseBuffer();
         var p2 = geometry.PhaseBuffer();
         var p3 = geometry.PhaseBuffer();
         var patterns = new[] { p0, p1, p2, p3 };
-        var compressedIndex = 0u;
+        var index = 0u;
         var format = PatternCompression.PhaseHalf;
         // ANCHOR: compressed
         new WritePatternCompressed(
             bank: bank,
-            index: compressedIndex,
+            index: index,
             format: format,
             patterns: patterns
         );

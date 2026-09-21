@@ -6,7 +6,7 @@ from autd3_modulation import SineOption, modulation_buffer, sine
 bank = ModulationBank.B0
 offset = 0
 buffer = modulation_buffer()
-sine(150.0 * Hz, SineOption(), buffer)
+sine(150 * Hz, SineOption(), buffer)
 data = buffer
 # ANCHOR: write
 WriteModulationBuffer(bank=bank, offset=offset, data=data)

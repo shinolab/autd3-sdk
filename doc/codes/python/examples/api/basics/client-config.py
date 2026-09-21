@@ -1,7 +1,7 @@
 import asyncio
 
 import autd3_link_nop as nop
-from autd3 import Client, ClientConfig, MAX_INFLIGHT
+from autd3 import MAX_INFLIGHT, Client, ClientConfig, RtSchedulePolicy
 from autd3.geometry import Autd3, Geometry
 
 
@@ -19,8 +19,10 @@ async def main() -> None:
             reset_resend_cycles=2,
             rt_priority=80,
             disable_rt_priority=False,
+            rt_policy=RtSchedulePolicy.Fifo,
             rt_affinity=None,
             validate_state=True,
+            require_supported_firmware=False,
         )
         # ANCHOR_END: config
     )

@@ -42,7 +42,7 @@ builder.Push(new WritePatternCompressed(
 ));
 builder.Push(new ConfigPattern(
     bank: bank,
-    config: new SamplingConfig(patterns.Length * Hz),
+    config: new StmConfig(1.0f * Hz).IntoSamplingConfig(patterns.Length),
     size: (uint)patterns.Length,
     loopBehavior: LoopBehavior.Infinite
 ));

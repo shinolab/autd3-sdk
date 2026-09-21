@@ -23,8 +23,10 @@ internal static class Sample
                 resetResendCycles: 2,
                 rtPriority: 80,
                 disableRtPriority: false,
+                rtPolicy: RtSchedulePolicy.Fifo,
                 rtAffinity: null,
-                validateState: true
+                validateState: true,
+                requireSupportedFirmware: false
             )
             // ANCHOR_END: config
             ;
