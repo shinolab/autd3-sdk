@@ -81,12 +81,23 @@ jobs:
             (cd "$deploy" && sha256sum *.img.xz > SHA256SUMS && cat SHA256SUMS)
           done
 
+      - name: Stage the server binary
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if [ -n "${TAG}" ]; then
+            cargo xtask appliance server asset --expect-version "${TAG#appliance-v}"
+          else
+            cargo xtask appliance server asset
+          fi
+
       - uses: actions/upload-artifact@v7
         with:
           name: autd3-appliance-image
           path: |
             appliance/image/*/deploy/*.img.xz
             appliance/image/*/deploy/SHA256SUMS
+            appliance/server/release/*
           retention-days: 30
 
       - uses: taiki-e/install-action@v2.87.15
@@ -113,11 +124,16 @@ jobs:
         run: |
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release edit "${TAG}" --notes-file RELEASE_NOTES.md
-            gh release upload "${TAG}" appliance/image/*/deploy/*.img.xz appliance/image/*/deploy/SHA256SUMS --clobber
+            gh release upload "${TAG}" \
+              appliance/image/*/deploy/*.img.xz \
+              appliance/image/*/deploy/SHA256SUMS \
+              appliance/server/release/* --clobber
           else
             gh release create "${TAG}" \
               --target "${GITHUB_SHA}" \
               --title "${TAG}" \
               --notes-file RELEASE_NOTES.md \
-              appliance/image/*/deploy/*.img.xz appliance/image/*/deploy/SHA256SUMS
+              appliance/image/*/deploy/*.img.xz \
+              appliance/image/*/deploy/SHA256SUMS \
+              appliance/server/release/*
           fi

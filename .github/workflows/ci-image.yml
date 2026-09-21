@@ -18,3 +18,4 @@ jobs:
           workspaces: xtask
       - run: cargo xtask appliance image lint
       - run: cargo xtask appliance server cross
+      - run: cargo xtask appliance server asset

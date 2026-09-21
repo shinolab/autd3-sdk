@@ -7,6 +7,9 @@ publish = false
 [dependencies]
 anyhow = "1.0.104"
 autd3-cpu-wire = { path = "../firmware/cpu/wire" }
+autd3-rs-appliance = { path = "../appliance/lib", default-features = false, features = [
+    "checksum",
+] }
 zerocopy = { version = "0.8.52", default-features = false }
 clap = { version = "4.6.1", features = ["derive"] }
 flate2 = "1.1.9"

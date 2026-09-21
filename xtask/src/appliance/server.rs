@@ -57,6 +57,12 @@ pub enum ServerCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Stage the published server binary and its SHA-256 into `appliance/server/release/`
+    Asset {
+        /// Fail unless the staged binary carries this version (the release tag's version)
+        #[arg(long, value_name = "VERSION")]
+        expect_version: Option<String>,
+    },
     /// Zip the server, the systemd unit and the tuning scripts into `appliance/server/bundle/`
     Bundle {
         /// Target triple to bundle (defaults to the Raspberry Pi 4 target)
@@ -80,15 +86,57 @@ pub fn run_server(root: &Path, cmd: &ServerCmd) -> Result<()> {
             run_built_bin(&bin, args, *no_sudo, root)
         }
         ServerCmd::Update { no_build, args } => update(root, *no_build, args),
+        ServerCmd::Asset { expect_version } => {
+            asset(root, expect_version.as_deref()).map(|_| ())
+        }
         ServerCmd::Bundle { target } => bundle(root, target.as_deref()),
         ServerCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
-    cleaner.path("appliance/server/bundle")
+    cleaner.path("appliance/server/bundle")?;
+    cleaner.path("appliance/server/release")
 }
 
+pub const RELEASE_DIR: &str = "appliance/server/release";
+
+fn asset(root: &Path, expect_version: Option<&str>) -> Result<PathBuf> {
+    let binary = cross_build(root)?;
+    let version = crate::component::COMPONENTS
+        .iter()
+        .find(|component| component.name == "software")
+        .context("no `software` component")?
+        .current_version(root)?;
+    if let Some(expected) = expect_version
+        && expected != version
+    {
+        bail!(
+            "the release is tagged {expected} but the workspace builds {version}; \
+             the published asset would carry a name no client looks for",
+        );
+    }
+
+    let out = root.join(RELEASE_DIR);
+    if out.exists() {
+        std::fs::remove_dir_all(&out).with_context(|| format!("removing {}", out.display()))?;
+    }
+    std::fs::create_dir_all(&out).with_context(|| format!("creating {}", out.display()))?;
+    let name = autd3_rs_appliance::server_asset_name(&version);
+    let staged = out.join(&name);
+    std::fs::copy(&binary, &staged)
+        .with_context(|| format!("copying {} to {}", binary.display(), staged.display()))?;
+
+    let bytes = std::fs::read(&staged).with_context(|| format!("reading {}", staged.display()))?;
+    let checksum = out.join(format!("{name}{}", autd3_rs_appliance::CHECKSUM_SUFFIX));
+    let hex = autd3_rs_appliance::sha256_hex(&bytes);
+    std::fs::write(&checksum, format!("{hex}  {name}\n"))
+        .with_context(|| format!("writing {}", checksum.display()))?;
+
+    println!("appliance server asset: {}", staged.display());
+    println!("appliance server checksum: {}", checksum.display());
+    Ok(staged)
+}
 fn build(root: &Path, target: Option<&str>, debug: bool) -> Result<PathBuf> {
     if let Some(target) = target {
         ensure_rust_target(target)?;

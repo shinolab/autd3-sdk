@@ -90,10 +90,10 @@ autd3-console の **Appliance** タブで「Scan」を押しても良い.
 | バス操作 | 開く / 閉じる / 接続台数の確認 |
 | 設定 | 設定ファイルの取得と差し替え (反映は再起動後) |
 | ログ監視 | ボードのログ |
-| 保守 | サーバの再起動, ボードの再起動・電源断, サーババイナリの更新, Wi-Fi 資格情報の設定と削除 |
+| 保守 | サーバの再起動, ボードの再起動・電源断, Wi-Fi 資格情報の設定と削除 |
 
 同じ操作は `autd3-appliance` コマンドからもできる.
-探索・状態表示・バスの開閉・再起動は autd3-console の **Appliance** タブからも行える.
+探索・状態表示・バスの開閉・再起動・サーバの更新は autd3-console の **Appliance** タブからも行える.
 
 ```sh
 autd3-appliance scan
@@ -145,6 +145,31 @@ dtoverlay=disable-wifi
 
 無線を戻すときはこの行を消す.
 資格情報だけを消したいなら, `autd3-data` パーティションの `network/autd3-wifi.nmconnection` と `wifi-radio-off` を削除する.
+
+## サーバの更新
+
+ボード上の `autd3-remote-server` だけは, SD カードを焼き直さずに差し替えられる.
+
+autd3-console の **Appliance** タブでは, 走っているサーバの版数の横に新しい版数があるかどうかが出る.
+版数を選んで **Update** を押すと, console が Release からバイナリを取ってきてボードへ送り, ボードはそれを入れ替えて再起動する.
+
+同じことは `autd3-appliance` からもできる.
+
+```sh
+autd3-appliance releases
+autd3-appliance update --version 0.10.0
+autd3-appliance update ./autd3-remote-server
+```
+
+バイナリは `appliance-vX.Y.Z` の Release に `autd3-remote-server-X.Y.Z-aarch64-unknown-linux-musl` として置かれている.
+console も CLI も SHA-256 を照合してから送る.
+
+:::caution
+入れ替わるのはサーババイナリだけで, systemd ユニット・管理ヘルパ・Wi-Fi スクリプトはイメージのまま残る.
+これらも含めて更新するにはイメージを焼き直す.
+:::
+
+更新には `control.allow_admin` が有効である必要がある.
 
 ## セキュリティ
 
