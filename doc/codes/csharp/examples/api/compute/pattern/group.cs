@@ -24,7 +24,7 @@ internal static class Sample
 
         var left = geometry.PhaseBuffer();
         var right = geometry.PhaseBuffer();
-        Pattern.SetPhase(new Phase(0x80), right);
+        Pattern.SetPhase(Phase.Pi, right);
         var dst = geometry.PhaseBuffer();
         var center = geometry.Center;
         // ANCHOR: api

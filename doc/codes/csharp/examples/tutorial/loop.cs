@@ -20,14 +20,16 @@ internal static class Sample
         Stm.Circle(center, 30.0f * mm, 20, Vector3.UnitZ, Intensity.Max, dst);
         var foci = dst.ToArray();
 
-        // By default the playback loops infinitely; B0 keeps circling the focus.
         {
+        // ANCHOR: infinite
+        // By default the playback loops infinitely; B0 keeps circling the focus.
         var b = client.DatagramBuilder();
-        b.Push(new FociStm(50.0f * Hz, foci));
+        b.Push(new FociStm(50.0f * Hz, foci, new FociStmOption()));
         foreach (var frame in b.Build())
         {
             await client.SendCheckedAsync(frame);
         }
+        // ANCHOR_END: infinite
         }
 
         // ANCHOR: finite
@@ -39,8 +41,8 @@ internal static class Sample
             50.0f * Hz,
             foci,
             new FociStmOption(
-                bank: PatternBank.B1,
                 loopBehavior: LoopBehavior.Finite(3),
+                bank: PatternBank.B1,
                 transitionMode: TransitionMode.SyncIdx
             )
         ));

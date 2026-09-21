@@ -31,7 +31,8 @@ import { excerpt } from "@lib/excerpt";
 <Code code={excerpt(pySample, "api")} lang="python" />
 
 `Modulation` は書き込み先バンクをデフォルトで `ModulationBank.B0`, ループを `Infinite`, 遷移を `Immediate` とする.
-別バンク・ループ回数・遷移タイミングを指定したい場合は, `bank` / `loop_behavior` / `transition_mode` 引数を渡す.
+別バンクへ書く場合は `Modulation(config, data, bank=bank)` を使う.
+ループ回数や遷移タイミングも変えたい場合は, `loop_behavior` / `transition_mode` 引数を渡す.
 </Fragment>
 <Fragment slot="csharp">
 <Code code={excerpt(csSample, "api")} lang="csharp" />

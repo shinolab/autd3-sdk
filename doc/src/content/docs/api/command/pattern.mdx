@@ -31,7 +31,7 @@ import { excerpt } from "@lib/excerpt";
 <Code code={excerpt(pySample, "api")} lang="python" />
 
 `Pattern` は書き込み先バンクをデフォルトで `PatternBank.B0` とする.
-別バンクを指定したい場合は `bank` 引数を渡す.
+別バンクへ書く場合は `Pattern(phases, intensities, bank=bank)` を使う.
 </Fragment>
 <Fragment slot="csharp">
 <Code code={excerpt(csSample, "api")} lang="csharp" />

@@ -11,8 +11,8 @@ from autd3_pattern import (
     TransducerMask,
     focus,
     group_compute,
-    wavelength,
 )
+from autd3_pattern import wavelength as calc_wavelength
 from autd3_pattern_holo import AmplitudeTarget, GspatOption, Pa, gspat
 
 
@@ -22,7 +22,7 @@ class Side(Enum):
 
 
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-wl = wavelength(340 * m / s)
+wavelength = calc_wavelength(340 * m / s)
 center = geometry.center()
 
 groups = TransducerGroups(
@@ -38,9 +38,9 @@ foci = [
 
 def compute(side: Side, mask: TransducerMask, phases: PhaseBuffer, intensities: IntensityBuffer) -> None:
     if side is Side.LEFT:
-        gspat(geometry, foci, wl, GspatOption(mask=mask), phases, intensities)
+        gspat(geometry, foci, wavelength, GspatOption(mask=mask), phases, intensities)
     else:
-        focus(geometry, center + np.array([40.0, 0.0, 150.0]), wl, phases)
+        focus(geometry, center + np.array([40.0, 0.0, 150.0]), wavelength, phases)
 
 
 phases = geometry.phase_buffer()

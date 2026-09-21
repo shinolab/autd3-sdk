@@ -31,7 +31,8 @@ To also change the loop count or transition timing, construct it by specifying t
 <Code code={excerpt(pySample, "api")} lang="python" />
 
 `Modulation` sets the destination bank to `ModulationBank.B0`, the loop to `Infinite`, and the transition to `Immediate` by default.
-To specify another bank, loop count, or transition timing, pass the `bank` / `loop_behavior` / `transition_mode` arguments.
+To write to another bank, use `Modulation(config, data, bank=bank)`.
+To also change the loop count or transition timing, pass the `loop_behavior` / `transition_mode` arguments.
 </Fragment>
 <Fragment slot="csharp">
 <Code code={excerpt(csSample, "api")} lang="csharp" />

@@ -8,10 +8,10 @@ internal static class Sample
     {
         // ANCHOR: api
         var length = 10;
-        var buffer = new ModulationBuffer(length);
-        buffer[0] = 0xFF;
+        var data = new ModulationBuffer(length);
+        data[0] = 0xFF;
 
-        new Modulation(SamplingConfig.Freq4k, buffer);
+        new Modulation(SamplingConfig.Freq4k, data);
         // ANCHOR_END: api
     }
 }

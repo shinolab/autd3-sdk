@@ -8,21 +8,21 @@ from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import LoopBehavior, PatternBank, TransitionMode
 from autd3_link_nop import Nop
-from autd3_pattern import focus, wavelength
+from autd3_pattern import focus
+from autd3_pattern import wavelength as calc_wavelength
 
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
     async with await Client.open(geometry, Nop(), ClientConfig()) as client:
-        center = geometry.center() + np.array([0.0, 0.0, 150.0])
-        wl = wavelength(340 * m / s)
+        wavelength = calc_wavelength(340 * m / s)
         patterns = []
         for x in (-30.0, -10.0, 10.0, 30.0):
             buffer = geometry.phase_buffer()
             focus(
                 geometry,
-                center + np.array([x, 0.0, 0.0]),
-                wl,
+                geometry.center() + np.array([x, 0.0, 150.0]),
+                wavelength,
                 buffer,
             )
             patterns.append(buffer)

@@ -3,7 +3,7 @@ import asyncio
 import numpy as np
 
 from autd3 import Client, ClientConfig
-from autd3.commands import FociStm, FociStmOption, StmConfig, circle
+from autd3.commands import FociStm, FociStmOption, circle
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode

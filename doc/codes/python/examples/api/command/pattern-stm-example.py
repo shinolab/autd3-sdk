@@ -4,19 +4,20 @@ import math
 import numpy as np
 
 from autd3 import Client, ClientConfig
-from autd3.commands import PatternStm, PatternStmMode, PatternStmOption, StmConfig
+from autd3.commands import PatternStm, PatternStmMode, PatternStmOption
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
 from autd3_link_nop import Nop
-from autd3_pattern import focus, wavelength
+from autd3_pattern import focus
+from autd3_pattern import wavelength as calc_wavelength
 
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
     async with await Client.open(geometry, Nop(), ClientConfig()) as client:
         center = geometry.center() + np.array([0.0, 0.0, 150.0])
-        wl = wavelength(340 * m / s)
+        wavelength = calc_wavelength(340 * m / s)
         patterns = []
         for i in range(200):
             theta = 2.0 * math.pi * i / 200
@@ -25,7 +26,7 @@ async def main() -> None:
             focus(
                 geometry,
                 target,
-                wl,
+                wavelength,
                 buffer,
             )
             patterns.append(buffer)

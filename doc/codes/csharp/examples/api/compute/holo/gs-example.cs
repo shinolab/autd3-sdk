@@ -29,7 +29,8 @@ Holo.Gs(
         repeat: 100,
         constraint: IntensityConstraint.Clamp(Intensity.Min, Intensity.Max),
         directivity: Directivity.Sphere,
-        mask: TransducerMask.AllEnabled
+        mask: TransducerMask.AllEnabled,
+        parallel: true
     ),
     phases,
     intensities

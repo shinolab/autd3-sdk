@@ -23,6 +23,7 @@ internal static class Sample
         var intensity = new Intensity(0x80);
         // ANCHOR_END: pattern_intensity
 
+        // ANCHOR: modulation
         var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(
             200 * Hz,
@@ -33,6 +34,7 @@ internal static class Sample
             ),
             modulation
         );
+        // ANCHOR_END: modulation
 
         var builder = client.DatagramBuilder();
         builder.Push(new SetSilencer());

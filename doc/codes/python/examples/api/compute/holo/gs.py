@@ -1,6 +1,7 @@
 import numpy as np
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
+from autd3.value import Intensity
 from autd3_pattern import TransducerMask
 from autd3_pattern import wavelength as calc_wavelength
 from autd3_pattern_holo import (
@@ -28,7 +29,7 @@ foci = [
 
 wavelength = calc_wavelength(340 * m / s)
 repeat = 100
-constraint = IntensityConstraint.Clamp(0x00, 0xFF)
+constraint = IntensityConstraint.Clamp(Intensity.MIN, Intensity.MAX)
 directivity = Directivity.Sphere
 mask = TransducerMask.AllEnabled
 parallel = True

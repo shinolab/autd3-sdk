@@ -8,13 +8,16 @@ bank = PatternBank.B0
 transition_mode = TransitionMode.Immediate
 
 phases = geometry.phase_buffer()
+intensities = Intensity.MAX
 
 # ANCHOR: api
-Pattern(phases, Intensity.MAX)
+Pattern(phases, intensities)
+
+Pattern(phases, intensities, bank=bank)
 
 Pattern(
     phases,
-    Intensity.MAX,
+    intensities,
     bank=bank,
     transition_mode=transition_mode,
 )
@@ -25,7 +28,7 @@ WritePatternBuffer(
     bank=bank,
     index=0,
     phases=phases,
-    intensities=Intensity.MAX,
+    intensities=intensities,
 )
 ConfigPattern(
     bank=bank,

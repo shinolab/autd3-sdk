@@ -28,7 +28,8 @@ Holo.Naive(
     new NaiveOption(
         constraint: IntensityConstraint.Clamp(Intensity.Min, Intensity.Max),
         directivity: Directivity.Sphere,
-        mask: TransducerMask.AllEnabled
+        mask: TransducerMask.AllEnabled,
+        parallel: true
     ),
     phases,
     intensities

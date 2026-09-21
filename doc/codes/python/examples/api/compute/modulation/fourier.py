@@ -24,14 +24,14 @@ dst = modulation_buffer()
 # Shown standalone in the SineComponent section of the docs.
 # ANCHOR: components
 SineComponent(
-    100.0 * Hz,
+    100 * Hz,
     SineOption(),
 )
 # ANCHOR_END: components
 
 components = [
     SineComponent(
-        100.0 * Hz,
+        100 * Hz,
         SineOption(),
     )
 ]

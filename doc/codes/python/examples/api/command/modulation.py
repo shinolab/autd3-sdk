@@ -12,6 +12,8 @@ data = modulation_buffer()
 # ANCHOR: api
 Modulation(config, data)
 
+Modulation(config, data, bank=bank)
+
 Modulation(
     bank=bank,
     config=config,
