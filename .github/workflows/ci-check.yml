@@ -67,7 +67,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           shared-key: check-careful
-      - uses: taiki-e/install-action@v2.87.11
+      - uses: taiki-e/install-action@v2.87.15
         with:
           tool: cargo-binstall
       - run: cargo binstall -y cargo-careful@0.4.10
@@ -90,7 +90,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           shared-key: check-mutants
-      - uses: taiki-e/install-action@v2.87.11
+      - uses: taiki-e/install-action@v2.87.15
         with:
           tool: cargo-binstall
       - run: cargo binstall -y cargo-mutants@27.1.0
