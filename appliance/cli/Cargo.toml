@@ -13,7 +13,11 @@ name = "autd3-appliance"
 path = "src/main.rs"
 
 [dependencies]
-autd3-rs-appliance = { workspace = true, features = ["client", "discovery"] }
+autd3-rs-appliance = { workspace = true, features = [
+    "client",
+    "discovery",
+    "release",
+] }
 anyhow.workspace = true
 clap = { workspace = true, features = ["string"] }
 humantime.workspace = true

@@ -90,10 +90,10 @@ The following operations are available.
 | Bus | Open, close, count the devices |
 | Config | Read and replace the config file (takes effect after a restart) |
 | Logs | The board's log |
-| Maintenance | Restart the server, reboot or power off the board, update the server binary, set or remove Wi-Fi credentials |
+| Maintenance | Restart the server, reboot or power off the board, set or remove Wi-Fi credentials |
 
 The same operations are available from the `autd3-appliance` command.
-Discovery, status, opening and closing the bus, and restarting are also on the **Appliance** tab of autd3-console.
+Discovery, status, opening and closing the bus, restarting and updating the server are also on the **Appliance** tab of autd3-console.
 
 ```sh
 autd3-appliance scan
@@ -145,6 +145,31 @@ dtoverlay=disable-wifi
 
 Remove the line to bring the radio back.
 To drop only the credentials, delete `network/autd3-wifi.nmconnection` and `wifi-radio-off` from the `autd3-data` partition.
+
+## Updating the server
+
+`autd3-remote-server` alone can be replaced without writing the SD card again.
+
+The **Appliance** tab of autd3-console shows, next to the running version, whether a newer one is published.
+Pick a version and press **Update**: the console downloads the binary from the release, sends it to the board, and the board installs it and restarts.
+
+The same is available from `autd3-appliance`.
+
+```sh
+autd3-appliance releases
+autd3-appliance update --version 0.10.0
+autd3-appliance update ./autd3-remote-server
+```
+
+The binary is published in the `appliance-vX.Y.Z` release as `autd3-remote-server-X.Y.Z-aarch64-unknown-linux-musl`.
+Both the console and the CLI check its SHA-256 before they send it.
+
+:::caution
+Only the server binary is replaced; the systemd unit, the admin helper and the Wi-Fi scripts stay as the image shipped them.
+Write the image again to update those as well.
+:::
+
+`control.allow_admin` must be enabled for the update to go through.
 
 ## Security
 

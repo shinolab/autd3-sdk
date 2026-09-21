@@ -1,5 +1,7 @@
 #[cfg(feature = "client")]
 mod client;
+#[cfg(feature = "release")]
+pub mod release;
 
 #[cfg(feature = "discovery")]
 pub use autd3_rs_link_remote::{
@@ -11,6 +13,33 @@ pub use client::{ApplianceClient, ClientError, host_of};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_CONTROL_PORT: u16 = 8081;
+
+pub const SERVER_BINARY: &str = "autd3-remote-server";
+pub const SERVER_TARGET: &str = "aarch64-unknown-linux-musl";
+pub const RELEASE_TAG_PREFIX: &str = "appliance-v";
+pub const CHECKSUM_SUFFIX: &str = ".sha256";
+
+#[must_use]
+pub fn server_asset_name(version: &str) -> String {
+    format!("{SERVER_BINARY}-{version}-{SERVER_TARGET}")
+}
+
+#[cfg(feature = "checksum")]
+#[must_use]
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    use std::fmt::Write;
+
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher
+        .finalize()
+        .iter()
+        .fold(String::with_capacity(64), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -5,13 +5,17 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use autd3_rs_appliance::{
     Appliance, ApplianceClient, ApplianceStatus, ConfigDocument, DEFAULT_CONTROL_PORT,
-    DiscoveryOption, FRAME_PHASE_AUTO, LogLines, ServerKind, TuneCandidate, TuneReport,
-    TuneRequest, TuneStatus, UNKNOWN_STATE_HINT, UplinkStatus, WifiCredentials, WifiForget,
-    discover_all,
+    DiscoveryOption, FRAME_PHASE_AUTO, LogLines, SERVER_TARGET, ServerKind, TuneCandidate,
+    TuneReport, TuneRequest, TuneStatus, UNKNOWN_STATE_HINT, UplinkStatus, WifiCredentials,
+    WifiForget, discover_all, release, server_asset_name,
 };
 use clap::{Parser, Subcommand};
 
 const DEFAULT_LOG_LINES: usize = 200;
+
+const NOTHING_TO_INSTALL: &str = "pass the path of a server binary built for the appliance, or \
+     --version <VERSION> to install a released one \
+     (`autd3-appliance releases` lists what is published)";
 
 #[derive(Parser)]
 #[command(
@@ -75,8 +79,13 @@ enum Command {
     /// Replace the server binary and restart it
     Update {
         /// Server binary built for the appliance
-        binary: PathBuf,
+        binary: Option<PathBuf>,
+        /// Released version to download and install instead of a local binary
+        #[arg(long, conflicts_with = "binary", value_name = "VERSION")]
+        version: Option<String>,
     },
+    /// List the released server binaries that can be installed
+    Releases,
     /// Set up or tear down Wi-Fi
     Wifi {
         #[command(subcommand)]
@@ -211,10 +220,20 @@ fn main() -> Result<()> {
     if matches!(cli.command, Command::Scan) {
         return scan(&cli);
     }
+    if matches!(cli.command, Command::Releases) {
+        return releases(&cli);
+    }
+    if let Command::Update {
+        binary: None,
+        version: None,
+    } = &cli.command
+    {
+        bail!("{NOTHING_TO_INSTALL}");
+    }
 
     let client = connect(&cli)?;
     match &cli.command {
-        Command::Scan => unreachable!("handled above"),
+        Command::Scan | Command::Releases => unreachable!("handled above"),
         Command::Status => status(&cli, &client)?,
         Command::Open => emit(&cli, &client.bus_open()?, |a| println!("{}", a.message))?,
         Command::Close => emit(&cli, &client.bus_close()?, |a| println!("{}", a.message))?,
@@ -248,9 +267,8 @@ fn main() -> Result<()> {
         Command::Restart => emit(&cli, &client.restart()?, |a| println!("{}", a.message))?,
         Command::Reboot => emit(&cli, &client.reboot()?, |a| println!("{}", a.message))?,
         Command::Shutdown => emit(&cli, &client.shutdown()?, |a| println!("{}", a.message))?,
-        Command::Update { binary } => {
-            let bytes =
-                std::fs::read(binary).with_context(|| format!("reading {}", binary.display()))?;
+        Command::Update { binary, version } => {
+            let bytes = server_binary(&cli, binary.as_deref(), version.as_deref())?;
             if !cli.json {
                 println!("uploading {} bytes", bytes.len());
             }
@@ -268,39 +286,98 @@ fn main() -> Result<()> {
                 })?;
             }
         },
-        Command::Wifi { action } => match action {
-            WifiAction::Set {
-                ssid,
-                psk,
-                open,
-                country,
-            } => {
-                if psk.is_none() && !open {
-                    bail!(
-                        "pass --psk <PASSPHRASE>, or --open if `{ssid}` really has no passphrase. \
-                         An open profile cannot associate with a protected network, and the board \
-                         only says `ssid-not-found` when it fails",
-                    );
-                }
-                let credentials = WifiCredentials {
-                    ssid: ssid.clone(),
-                    psk: psk.clone(),
-                    country: country.clone(),
-                };
-                emit(&cli, &client.set_wifi(&credentials)?, |a| {
-                    println!("{}", a.message);
-                })?;
+        Command::Wifi { action } => wifi(&cli, &client, action)?,
+    }
+    Ok(())
+}
+
+fn wifi(cli: &Cli, client: &ApplianceClient, action: &WifiAction) -> Result<()> {
+    match action {
+        WifiAction::Set {
+            ssid,
+            psk,
+            open,
+            country,
+        } => {
+            if psk.is_none() && !open {
+                bail!(
+                    "pass --psk <PASSPHRASE>, or --open if `{ssid}` really has no passphrase. \
+                     An open profile cannot associate with a protected network, and the board \
+                     only says `ssid-not-found` when it fails",
+                );
             }
-            WifiAction::Forget { radio_off, force } => {
-                let request = WifiForget {
-                    radio_off: *radio_off,
-                    force: *force,
-                };
-                emit(&cli, &client.forget_wifi(&request)?, |a| {
-                    println!("{}", a.message);
-                })?;
+            let credentials = WifiCredentials {
+                ssid: ssid.clone(),
+                psk: psk.clone(),
+                country: country.clone(),
+            };
+            emit(cli, &client.set_wifi(&credentials)?, |a| {
+                println!("{}", a.message);
+            })?;
+        }
+        WifiAction::Forget { radio_off, force } => {
+            let request = WifiForget {
+                radio_off: *radio_off,
+                force: *force,
+            };
+            emit(cli, &client.forget_wifi(&request)?, |a| {
+                println!("{}", a.message);
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn server_binary(
+    cli: &Cli,
+    binary: Option<&std::path::Path>,
+    version: Option<&str>,
+) -> Result<Vec<u8>> {
+    match (binary, version) {
+        (Some(path), _) => {
+            std::fs::read(path).with_context(|| format!("reading {}", path.display()))
+        }
+        (None, Some(version)) => {
+            let found = release::find(version, release::DEFAULT_TIMEOUT)?;
+            if !cli.json {
+                println!(
+                    "downloading {} ({})",
+                    server_asset_name(&found.version),
+                    found.tag,
+                );
             }
-        },
+            Ok(release::download(&found, release::DEFAULT_TIMEOUT)?)
+        }
+        (None, None) => bail!("{NOTHING_TO_INSTALL}"),
+    }
+}
+
+fn releases(cli: &Cli) -> Result<()> {
+    let found = release::list(release::DEFAULT_TIMEOUT)?;
+    if cli.json {
+        let rows: Vec<_> = found
+            .iter()
+            .map(|release| {
+                serde_json::json!({
+                    "version": release.version,
+                    "tag": release.tag,
+                    "url": release.url,
+                    "size": release.size,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&rows)?);
+        return Ok(());
+    }
+    if found.is_empty() {
+        println!("no appliance release publishes a server binary for {SERVER_TARGET}");
+        return Ok(());
+    }
+    for release in &found {
+        println!(
+            "{}\t{}\t{} bytes",
+            release.version, release.tag, release.size
+        );
     }
     Ok(())
 }
@@ -731,5 +808,45 @@ fn human_duration(secs: u64) -> String {
         format!("{hours}h {minutes}m")
     } else {
         format!("{minutes}m {}s", secs % 60)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use clap::CommandFactory;
+
+    fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(std::iter::once("autd3-appliance").chain(args.iter().copied()))
+    }
+
+    #[test]
+    fn the_command_line_is_well_formed() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn an_update_takes_a_local_binary_or_a_published_version_but_not_both() {
+        assert!(parse(&["update", "autd3-remote-server"]).is_ok());
+        assert!(parse(&["update", "--version", "0.10.0"]).is_ok());
+        assert!(parse(&["update", "autd3-remote-server", "--version", "0.10.0"]).is_err());
+    }
+
+    #[test]
+    fn an_update_that_names_neither_says_what_is_missing_before_it_dials() {
+        let cli = parse(&["update"]).unwrap();
+        let error = server_binary(&cli, None, None).unwrap_err().to_string();
+        assert!(error.contains("--version"), "{error}");
+        assert!(error.contains("releases"), "{error}");
+        assert_eq!(error, NOTHING_TO_INSTALL);
+    }
+
+    #[test]
+    fn listing_the_releases_needs_no_appliance() {
+        assert!(matches!(
+            parse(&["releases"]).unwrap().command,
+            Command::Releases,
+        ));
     }
 }
