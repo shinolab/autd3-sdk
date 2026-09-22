@@ -104,85 +104,51 @@ namespace AUTD3.Holo
 
     public readonly struct NaiveOption
     {
-        public IntensityConstraint Constraint { get; }
-        public Directivity Directivity { get; }
-        public TransducerMask Mask { get; }
-        public bool Parallel { get; }
+        public IntensityConstraint Constraint { get; init; } = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
+        public Directivity Directivity { get; init; } = Directivity.Sphere;
+        public TransducerMask Mask { get; init; } = TransducerMask.AllEnabled;
+        public bool Parallel { get; init; } = true;
 
-        public NaiveOption() : this(constraint: null)
+        public NaiveOption()
         {
-        }
-
-        public NaiveOption(IntensityConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default, bool parallel = true)
-        {
-            Constraint = constraint ?? IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
-            Directivity = directivity;
-            Mask = mask;
-            Parallel = parallel;
         }
     }
 
     public readonly struct GsOption
     {
-        public uint Repeat { get; }
-        public IntensityConstraint Constraint { get; }
-        public Directivity Directivity { get; }
-        public TransducerMask Mask { get; }
-        public bool Parallel { get; }
+        public uint Repeat { get; init; } = 100;
+        public IntensityConstraint Constraint { get; init; } = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
+        public Directivity Directivity { get; init; } = Directivity.Sphere;
+        public TransducerMask Mask { get; init; } = TransducerMask.AllEnabled;
+        public bool Parallel { get; init; } = true;
 
-        public GsOption() : this(repeat: 100)
+        public GsOption()
         {
-        }
-
-        public GsOption(uint repeat = 100, IntensityConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default, bool parallel = true)
-        {
-            Repeat = repeat;
-            Constraint = constraint ?? IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
-            Directivity = directivity;
-            Mask = mask;
-            Parallel = parallel;
         }
     }
 
     public readonly struct GspatOption
     {
-        public uint Repeat { get; }
-        public IntensityConstraint Constraint { get; }
-        public Directivity Directivity { get; }
-        public TransducerMask Mask { get; }
-        public bool Parallel { get; }
+        public uint Repeat { get; init; } = 100;
+        public IntensityConstraint Constraint { get; init; } = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
+        public Directivity Directivity { get; init; } = Directivity.Sphere;
+        public TransducerMask Mask { get; init; } = TransducerMask.AllEnabled;
+        public bool Parallel { get; init; } = true;
 
-        public GspatOption() : this(repeat: 100)
+        public GspatOption()
         {
-        }
-
-        public GspatOption(uint repeat = 100, IntensityConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default, bool parallel = true)
-        {
-            Repeat = repeat;
-            Constraint = constraint ?? IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
-            Directivity = directivity;
-            Mask = mask;
-            Parallel = parallel;
         }
     }
 
     public readonly struct GreedyOption
     {
-        public byte PhaseQuantizationLevels { get; }
-        public IntensityConstraint Constraint { get; }
-        public Directivity Directivity { get; }
-        public TransducerMask Mask { get; }
+        public byte PhaseQuantizationLevels { get; init; } = 16;
+        public IntensityConstraint Constraint { get; init; } = IntensityConstraint.Uniform(Intensity.Max);
+        public Directivity Directivity { get; init; } = Directivity.Sphere;
+        public TransducerMask Mask { get; init; } = TransducerMask.AllEnabled;
 
-        public GreedyOption() : this(phaseQuantizationLevels: 16)
+        public GreedyOption()
         {
-        }
-
-        public GreedyOption(byte phaseQuantizationLevels = 16, IntensityConstraint? constraint = null, Directivity directivity = Directivity.Sphere, TransducerMask mask = default)
-        {
-            PhaseQuantizationLevels = phaseQuantizationLevels;
-            Constraint = constraint ?? IntensityConstraint.Uniform(Intensity.Max);
-            Directivity = directivity;
-            Mask = mask;
         }
     }
 

@@ -35,7 +35,6 @@ namespace AUTD3
         }
 
         public static RtPriority Default => default;
-        public static RtPriority Disabled => new RtPriority(ModeDisabled, 0);
         public static RtPriority Min => new RtPriority(ModeMin, 0);
         public static RtPriority Max => new RtPriority(ModeMax, 0);
 
@@ -45,9 +44,11 @@ namespace AUTD3
         public static bool operator ==(RtPriority left, RtPriority right) => left.Equals(right);
         public static bool operator !=(RtPriority left, RtPriority right) => !left.Equals(right);
 
+        internal static (byte Mode, byte Value) ToNative(RtPriority? priority) =>
+            priority is { } p ? (p.Mode, p.Value) : (ModeDisabled, (byte)0);
+
         public override string ToString() => Mode switch
         {
-            ModeDisabled => "RtPriority.Disabled",
             ModeExplicit => $"RtPriority({Value})",
             ModeMin => "RtPriority.Min",
             ModeMax => "RtPriority.Max",
@@ -57,43 +58,19 @@ namespace AUTD3
 
     public readonly struct ClientConfig
     {
-        public bool LowLatency { get; }
-        public uint TimeoutCycles { get; }
-        public uint MaxInflight { get; }
-        public uint MaxResyncRounds { get; }
-        public uint ResetResendCycles { get; }
-        public RtPriority RtPriority { get; }
-        public RtSchedulePolicy RtPolicy { get; }
-        public ulong? RtAffinity { get; }
-        public bool ValidateState { get; }
-        public bool RequireSupportedFirmware { get; }
+        public bool LowLatency { get; init; } = false;
+        public uint TimeoutCycles { get; init; } = 10;
+        public uint MaxInflight { get; init; } = 127;
+        public uint MaxResyncRounds { get; init; } = 8;
+        public uint ResetResendCycles { get; init; } = 2;
+        public RtPriority? RtPriority { get; init; } = AUTD3.RtPriority.Default;
+        public RtSchedulePolicy RtPolicy { get; init; } = RtSchedulePolicy.Fifo;
+        public ulong? RtAffinity { get; init; } = null;
+        public bool ValidateState { get; init; } = true;
+        public bool RequireSupportedFirmware { get; init; } = false;
 
-        public ClientConfig() : this(lowLatency: false)
+        public ClientConfig()
         {
-        }
-
-        public ClientConfig(
-            bool lowLatency = false,
-            uint timeoutCycles = 10,
-            uint maxInflight = 127,
-            uint maxResyncRounds = 8,
-            uint resetResendCycles = 2,
-            RtPriority rtPriority = default,
-            RtSchedulePolicy rtPolicy = RtSchedulePolicy.Fifo,
-            ulong? rtAffinity = null,
-            bool validateState = true,
-            bool requireSupportedFirmware = false)
-        {
-            LowLatency = lowLatency;
-            TimeoutCycles = timeoutCycles;
-            MaxInflight = maxInflight;
-            MaxResyncRounds = maxResyncRounds;
-            ResetResendCycles = resetResendCycles;
-            RtPriority = rtPriority;
-            RtPolicy = rtPolicy;
-            RtAffinity = rtAffinity;
-            ValidateState = validateState;
-            RequireSupportedFirmware = requireSupportedFirmware;
         }
 
         internal IntPtr CreateHandle()
@@ -110,7 +87,8 @@ namespace AUTD3
                 NativeConfig.Apply("maxInflight", NativeClient.autd3_client_config_set_max_inflight(handle, (UIntPtr)MaxInflight));
                 NativeConfig.Apply("maxResyncRounds", NativeClient.autd3_client_config_set_max_resync_rounds(handle, MaxResyncRounds));
                 NativeConfig.Apply("resetResendCycles", NativeClient.autd3_client_config_set_reset_resend_cycles(handle, ResetResendCycles));
-                NativeConfig.Apply("rtPriority", NativeClient.autd3_client_config_set_rt_priority(handle, RtPriority.Mode, RtPriority.Value));
+                var (rtPriorityMode, rtPriorityValue) = AUTD3.RtPriority.ToNative(RtPriority);
+                NativeConfig.Apply("rtPriority", NativeClient.autd3_client_config_set_rt_priority(handle, rtPriorityMode, rtPriorityValue));
                 NativeConfig.Apply("rtPolicy", NativeClient.autd3_client_config_set_rt_policy(handle, (byte)RtPolicy));
                 NativeConfig.Apply("rtAffinity", NativeClient.autd3_client_config_set_rt_affinity(handle, RtAffinity.HasValue, (UIntPtr)(RtAffinity ?? 0)));
                 NativeConfig.Apply("validateState", NativeClient.autd3_client_config_set_validate_state(handle, ValidateState));

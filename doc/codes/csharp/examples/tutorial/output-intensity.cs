@@ -27,11 +27,12 @@ internal static class Sample
         var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(
             200 * Hz,
-            new SineOption(
-                amplitude: 0xFF,
-                offset: 0x80,
-                samplingConfig: SamplingConfig.Freq4k
-            ),
+            new SineOption
+            {
+                Amplitude = 0xFF,
+                Offset = 0x80,
+                SamplingConfig = SamplingConfig.Freq4k,
+            },
             modulation
         );
         // ANCHOR_END: modulation

@@ -25,13 +25,14 @@ Holo.Gspat(
         new AmplitudeTarget(geometry.Center + new Vector3(30.0f, 0.0f, 150.0f), 2.5e3f * Pa),
     },
     Pattern.Wavelength(340.0f * m / s),
-    new GspatOption(
-        repeat: 100,
-        constraint: IntensityConstraint.Clamp(Intensity.Min, Intensity.Max),
-        directivity: Directivity.Sphere,
-        mask: TransducerMask.AllEnabled,
-        parallel: true
-    ),
+    new GspatOption
+    {
+        Repeat = 100,
+        Constraint = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max),
+        Directivity = Directivity.Sphere,
+        Mask = TransducerMask.AllEnabled,
+        Parallel = true,
+    },
     phases,
     intensities
 );

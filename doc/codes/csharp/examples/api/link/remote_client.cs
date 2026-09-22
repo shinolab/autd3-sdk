@@ -11,7 +11,7 @@ internal static class Sample
         var timeout = TimeSpan.FromSeconds(1);
 
         // ANCHOR: api
-        new RemoteLinkOption(addr, timeout);
+        new RemoteLinkOption(addr) { Timeout = timeout };
         // ANCHOR_END: api
     }
 

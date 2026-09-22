@@ -19,18 +19,19 @@ internal static class Sample
         var syncTimeout = TimeSpan.FromSeconds(10);
         var processDataWatchdog = TimeSpan.FromMilliseconds(100);
         // ANCHOR: api
-        new EchocatLinkOption(
-            iface,
-            sync0Period,
-            framePhase,
-            pduTimeout,
-            stateTransitionTimeout,
-            dcStaticSyncIterations,
-            dcStartDelay,
-            syncTolerance,
-            syncTimeout,
-            processDataWatchdog
-        );
+        new EchocatLinkOption
+        {
+            Iface = iface,
+            Sync0Period = sync0Period,
+            FramePhase = framePhase,
+            PduTimeout = pduTimeout,
+            StateTransitionTimeout = stateTransitionTimeout,
+            DcStaticSyncIterations = dcStaticSyncIterations,
+            DcStartDelay = dcStartDelay,
+            SyncTolerance = syncTolerance,
+            SyncTimeout = syncTimeout,
+            ProcessDataWatchdog = processDataWatchdog,
+        };
         // ANCHOR_END: api
 
         // ANCHOR: frame_phase

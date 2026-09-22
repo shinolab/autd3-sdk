@@ -26,12 +26,13 @@ internal static class Sample
         var mask = TransducerMask.AllEnabled;
         var option =
             // ANCHOR: option
-            new GreedyOption(
-                phaseQuantizationLevels,
-                constraint,
-                directivity,
-                mask
-            )
+            new GreedyOption
+            {
+                PhaseQuantizationLevels = phaseQuantizationLevels,
+                Constraint = constraint,
+                Directivity = directivity,
+                Mask = mask,
+            }
             // ANCHOR_END: option
             ;
         var phases = geometry.PhaseBuffer();

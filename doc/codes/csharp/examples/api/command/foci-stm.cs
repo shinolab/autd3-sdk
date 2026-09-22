@@ -33,12 +33,13 @@ internal static class Sample
         var transitionMode = TransitionMode.Immediate;
         var option =
             // ANCHOR: option
-            new FociStmOption(
-                bank,
-                soundSpeed,
-                loopBehavior,
-                transitionMode
-            )
+            new FociStmOption
+            {
+                Bank = bank,
+                SoundSpeed = soundSpeed,
+                LoopBehavior = loopBehavior,
+                TransitionMode = transitionMode,
+            }
             // ANCHOR_END: option
             ;
         // ANCHOR: api

@@ -14,12 +14,13 @@ internal static class Sample
         var samplingConfig = SamplingConfig.Freq4k;
         var option =
             // ANCHOR: option
-            new SquareOption(
-                low,
-                high,
-                duty,
-                samplingConfig
-            )
+            new SquareOption
+            {
+                Low = low,
+                High = high,
+                Duty = duty,
+                SamplingConfig = samplingConfig,
+            }
             // ANCHOR_END: option
             ;
         var dst = Modulation.ModulationBuffer();

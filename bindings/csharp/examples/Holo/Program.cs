@@ -31,7 +31,7 @@ internal static class Program
 
         using var phases = geometry.PhaseBuffer();
         using var intensities = geometry.IntensityBuffer();
-        Holo.Gspat(geometry, foci, wavelength, new GspatOption(repeat: 100), phases, intensities);
+        Holo.Gspat(geometry, foci, wavelength, new GspatOption { Repeat = 100 }, phases, intensities);
 
         using var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(200 * Hz, new SineOption(), modulation);

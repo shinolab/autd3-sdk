@@ -12,11 +12,12 @@ internal static class Sample
         byte offset = 0x00;
         var option =
             // ANCHOR: option
-            new FourierOption(
-                scaleFactor,
-                clamp,
-                offset
-            )
+            new FourierOption
+            {
+                ScaleFactor = scaleFactor,
+                Clamp = clamp,
+                Offset = offset,
+            }
             // ANCHOR_END: option
             ;
         var dst = Modulation.ModulationBuffer();

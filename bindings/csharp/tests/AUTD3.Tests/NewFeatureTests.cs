@@ -219,7 +219,7 @@ namespace AUTD3.Tests
             {
                 new AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 150 * dB),
             };
-            Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new NaiveOption(IntensityConstraint.Clamp(Intensity.Min, Intensity.Max)), phases, intensities);
+            Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new NaiveOption { Constraint = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max) }, phases, intensities);
             Assert.Contains(intensities[0], i => i.Value != Intensity.Min.Value);
         }
 
