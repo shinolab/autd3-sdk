@@ -52,6 +52,8 @@ pub enum DocCmd {
     },
     /// Type-check the site without building it
     Check,
+    #[command(about = "Fail on known vulnerabilities in the site's npm dependencies")]
+    Audit,
     #[command(about = "Check the built site under doc/dist for broken links")]
     LinkCheck {
         #[arg(long, help = "Only check links inside the site (no network requests)")]
@@ -130,6 +132,7 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
             npm_install(&doc)?;
             npm(&doc, &["run", "check"])
         }
+        DocCmd::Audit => npm(&doc, &["audit"]),
         DocCmd::LinkCheck { offline } => link_check(&doc, *offline),
         DocCmd::FreezeVersion { slug, force } => {
             if !on_path("node") {

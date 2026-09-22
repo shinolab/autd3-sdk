@@ -34,6 +34,7 @@ jobs:
         with:
           tool: cargo-binstall
       - run: cargo binstall -y lychee@0.24.2
+      - run: cargo xtask doc audit
       - run: cargo xtask doc check
       - run: cargo xtask doc build --no-samples
       - run: cargo xtask doc link-check --offline

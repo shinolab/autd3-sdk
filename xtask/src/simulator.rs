@@ -96,6 +96,8 @@ pub enum SimulatorCmd {
         #[arg(long, default_value_t = 8080)]
         link_port: u16,
     },
+    #[command(about = "Fail on known vulnerabilities in the frontend's npm dependencies")]
+    Audit,
     #[command(about = "Remove the simulator build outputs")]
     Clean(CleanArgs),
 }
@@ -168,6 +170,12 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
             *port,
             *link_port,
         ),
+        SimulatorCmd::Audit => {
+            if !on_path("npm") {
+                bail!("`npm` not found on PATH (needed for `npm audit`).");
+            }
+            run_tool("npm", ["audit"], &frontend)
+        }
         SimulatorCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }

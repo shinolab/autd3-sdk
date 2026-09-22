@@ -37,6 +37,31 @@ jobs:
           tool: cargo-deny
       - run: cargo xtask license audit
 
+  npm:
+    name: npm (${{ matrix.branch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [main, develop]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.branch }}
+      - uses: ./.github/actions/setup-rust
+        with:
+          workspaces: xtask
+          shared-key: npm-${{ matrix.branch }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: doc
+        if: ${{ !cancelled() }}
+        run: cargo xtask doc audit
+      - name: simulator
+        if: ${{ !cancelled() }}
+        run: cargo xtask simulator audit
+
   links:
     name: links
     runs-on: ubuntu-latest
