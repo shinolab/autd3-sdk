@@ -69,5 +69,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 `max_inflight` は `MAX_INFLIGHT (127)` を超えるとエラーになる.
 
+C# の `rtPriority` は `RtPriority` 構造体で, 既定値 (`default`) がプラットフォーム既定, `RtPriority.Disabled` が Rust の `None` (OS 既定) に対応する.
+
 `low_latency` を有効にすると, ファームウェア内部での受信バッファをバイパスするため, レイテンシが改善する. ただし, 動作が不安定になる可能性がある.
 

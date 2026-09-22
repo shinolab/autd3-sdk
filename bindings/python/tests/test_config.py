@@ -30,11 +30,23 @@ def test_require_supported_firmware_is_settable() -> None:
     autd3.ClientConfig(require_supported_firmware=False)
 
 
-def test_rt_priority_and_disable_are_mutually_exclusive() -> None:
+def test_rt_priority_accepts_a_priority_or_none() -> None:
+    for priority in (autd3.RtPriority(49), autd3.RtPriority.MIN, autd3.RtPriority.MAX, None):
+        autd3.ClientConfig(rt_priority=priority)
+        autd3.LegacyClientConfig(rt_priority=priority)
+
+
+def test_rt_priority_rejects_an_out_of_range_value() -> None:
     with pytest.raises(ValueError):
-        autd3.ClientConfig(rt_priority=49, disable_rt_priority=True)
-    with pytest.raises(ValueError):
-        autd3.LegacyClientConfig(rt_priority=49, disable_rt_priority=True)
+        autd3.RtPriority(100)
+
+
+def test_rt_priority_exposes_its_value() -> None:
+    assert autd3.RtPriority(49).value == 49
+    assert autd3.RtPriority(49) == autd3.RtPriority(49)
+    assert repr(autd3.RtPriority(49)) == "RtPriority(49)"
+    assert autd3.RtPriority.MIN.value is None
+    assert repr(autd3.RtPriority.MAX) == "RtPriority.MAX"
 
 
 def test_zero_valued_config_fields_are_rejected() -> None:

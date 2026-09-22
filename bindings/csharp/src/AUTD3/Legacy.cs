@@ -10,8 +10,7 @@ namespace AUTD3.Legacy
     public readonly struct LegacyClientConfig
     {
         public uint TimeoutCycles { get; }
-        public byte? RtPriority { get; }
-        public bool DisableRtPriority { get; }
+        public RtPriority RtPriority { get; }
         public RtSchedulePolicy RtPolicy { get; }
         public ulong? RtAffinity { get; }
 
@@ -21,18 +20,12 @@ namespace AUTD3.Legacy
 
         public LegacyClientConfig(
             uint timeoutCycles = 2000,
-            byte? rtPriority = null,
-            bool disableRtPriority = false,
+            RtPriority rtPriority = default,
             RtSchedulePolicy rtPolicy = RtSchedulePolicy.Fifo,
             ulong? rtAffinity = null)
         {
-            if (rtPriority.HasValue && disableRtPriority)
-            {
-                throw new ArgumentException("rtPriority and disableRtPriority are mutually exclusive");
-            }
             TimeoutCycles = timeoutCycles;
             RtPriority = rtPriority;
-            DisableRtPriority = disableRtPriority;
             RtPolicy = rtPolicy;
             RtAffinity = rtAffinity;
         }
@@ -47,7 +40,7 @@ namespace AUTD3.Legacy
             try
             {
                 NativeConfig.Apply("timeoutCycles", NativeLegacyClient.autd3_legacy_client_config_set_timeout_cycles(handle, TimeoutCycles));
-                NativeConfig.Apply("rtPriority", NativeLegacyClient.autd3_legacy_client_config_set_rt_priority(handle, NativeConfig.RtPriorityMode(RtPriority, DisableRtPriority), RtPriority ?? 0));
+                NativeConfig.Apply("rtPriority", NativeLegacyClient.autd3_legacy_client_config_set_rt_priority(handle, RtPriority.Mode, RtPriority.Value));
                 NativeConfig.Apply("rtPolicy", NativeLegacyClient.autd3_legacy_client_config_set_rt_policy(handle, (byte)RtPolicy));
                 NativeConfig.Apply("rtAffinity", NativeLegacyClient.autd3_legacy_client_config_set_rt_affinity(handle, RtAffinity.HasValue, (UIntPtr)(RtAffinity ?? 0)));
             }

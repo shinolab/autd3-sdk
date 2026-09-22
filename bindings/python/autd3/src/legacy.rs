@@ -7,6 +7,7 @@ use autd3_python_capsule::{
     LegacyClientBackend, capsule_of, geometry_from_capsule, legacy_capsule_of,
     legacy_frame_into_capsule, take_legacy_client_opener, to_pyerr, to_pyerr_gil,
 };
+use autd3_rs::CoreId;
 use autd3_rs::Geometry;
 use autd3_rs::commands::{
     ChangeModulationBank as CoreChangeModulationBank, Modulation as CoreModulation,
@@ -18,12 +19,11 @@ use autd3_rs::legacy::{
     LegacyDatagramBuilder as CoreLegacyBuilder, LegacyFrames as CoreLegacyFrames,
 };
 use autd3_rs::value::{SamplingConfig, TransitionMode as CoreTransitionMode};
-use autd3_rs::{CoreId, RtPriority};
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 
 use crate::client::{Checker, CheckerSource, FpgaState};
-use crate::config::RtSchedulePolicy;
+use crate::config::{RtPriority, RtSchedulePolicy};
 use crate::datagram::{DatagramBuilder, Pending, validate_pending};
 use crate::future::{completed_into_py, future_into_py};
 use crate::ops::{PatternBank, TransitionMode};
@@ -39,15 +39,13 @@ impl LegacyClientConfig {
     #[new]
     #[pyo3(signature = (
         timeout_cycles = None,
-        rt_priority = None,
-        disable_rt_priority = false,
+        rt_priority = CoreLegacyClientConfig::default().rt_priority.map(RtPriority),
         rt_policy = None,
         rt_affinity = None,
     ))]
     fn new(
         timeout_cycles: Option<u32>,
-        rt_priority: Option<u8>,
-        disable_rt_priority: bool,
+        rt_priority: Option<RtPriority>,
         rt_policy: Option<RtSchedulePolicy>,
         rt_affinity: Option<usize>,
     ) -> PyResult<Self> {
@@ -56,19 +54,7 @@ impl LegacyClientConfig {
             inner.timeout_cycles = NonZeroU32::new(v)
                 .ok_or_else(|| PyValueError::new_err("timeout_cycles must be >= 1"))?;
         }
-        if rt_priority.is_some() && disable_rt_priority {
-            return Err(PyValueError::new_err(
-                "rt_priority and disable_rt_priority are mutually exclusive",
-            ));
-        }
-        if disable_rt_priority {
-            inner.rt_priority = None;
-        }
-        if let Some(v) = rt_priority {
-            let value = RtPriority::new(v)
-                .ok_or_else(|| PyValueError::new_err(format!("invalid rt_priority: {v}")))?;
-            inner.rt_priority = Some(value);
-        }
+        inner.rt_priority = rt_priority.map(|v| v.0);
         if let Some(v) = rt_policy {
             inner.rt_policy = v.0;
         }
