@@ -32,9 +32,10 @@ namespace AUTD3
         private readonly PatternBank _bank;
         private readonly uint _index;
         private readonly PatternCompression _format;
+        private readonly Intensity _intensity;
         private readonly PhaseBuffer[] _patterns;
 
-        public WritePatternCompressed(PatternBank bank, uint index, PatternCompression format, PhaseBuffer[] patterns)
+        public WritePatternCompressed(PatternBank bank, uint index, PatternCompression format, Intensity intensity, PhaseBuffer[] patterns)
         {
             if (patterns.Length == 0 || patterns.Length > 4)
             {
@@ -43,6 +44,7 @@ namespace AUTD3
             _bank = bank;
             _index = index;
             _format = format;
+            _intensity = intensity;
             _patterns = patterns;
         }
 
@@ -54,7 +56,7 @@ namespace AUTD3
                 handles[i] = _patterns[i].Handle;
             }
             using var lease = new HandleArray(handles);
-            return NativePattern.autd3_op_write_pattern_compressed((byte)_bank, _index, (byte)_format, lease.Pointers, (UIntPtr)lease.Pointers.Length);
+            return NativePattern.autd3_op_write_pattern_compressed((byte)_bank, _index, (byte)_format, _intensity.Value, lease.Pointers, (UIntPtr)lease.Pointers.Length);
         }
     }
 

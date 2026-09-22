@@ -48,11 +48,13 @@ async fn main() -> Result<()> {
     let patterns = [Some(&p0[..]), Some(&p1[..]), Some(&p2[..]), Some(&p3[..])];
     let index = 0;
     let format = PatternCompression::PhaseHalf;
+    let intensity = Intensity::MAX;
     // ANCHOR: compressed
     WritePatternCompressed {
         bank,
         index,
         format,
+        intensity,
         patterns,
     };
     // ANCHOR_END: compressed

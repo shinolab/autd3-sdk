@@ -266,7 +266,7 @@ def test_every_unsupported_command_is_rejected_at_build_time() -> None:
             ("ConfigFociStm", autd3.commands.ConfigFociStm(
                 autd3.value.PatternBank.B1, autd3.value.SamplingConfig.FREQ_4K, 2, 1, 340 * m / s)),
             ("WritePatternCompressed", autd3.commands.WritePatternCompressed(
-                autd3.value.PatternBank.B1, 0, autd3.commands.PatternCompression.PhaseFull, [buf, buf])),
+                autd3.value.PatternBank.B1, 0, autd3.commands.PatternCompression.PhaseFull, autd3.value.Intensity.MAX, [buf, buf])),
             ("ChangePatternBank", autd3.commands.ChangePatternBank(autd3.value.PatternBank.B1)),
             ("WriteModulationBuffer", autd3.commands.WriteModulationBuffer(
                 autd3.value.ModulationBank.B1, 0, mod_buf)),

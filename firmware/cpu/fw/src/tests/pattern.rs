@@ -14,7 +14,7 @@ use crate::cmd::write_pattern_compressed::PatternFormat;
 use crate::proto::{Cmd, EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, Error, MOD_BUFFER_SAMPLES};
 use crate::tests::builders::{
     assert_fpga_unchanged, fpga_snapshot, write_foci_buffer, write_mod_buffer,
-    write_pattern_compressed, write_pattern_raw,
+    write_pattern_compressed, write_pattern_compressed_with_intensity, write_pattern_raw,
 };
 use crate::tests::mock::{Frame, Harness};
 
@@ -271,6 +271,51 @@ fn write_pattern_compressed_phase_half_decompresses_four_indices() {
             assert_eq!(
                 h.emission_word(0, slot as usize + g * EMISSION_SLOT_WORDS as usize + t),
                 expected
+            );
+        }
+    }
+}
+
+#[test]
+fn write_pattern_compressed_fills_every_slot_with_the_header_intensity() {
+    let mut h = Harness::new();
+
+    let full = vec![0x3412_u16; NUM_TRANSDUCERS];
+    let half = vec![0x4321_u16; NUM_TRANSDUCERS];
+    let full_slot = 3 * EMISSION_SLOT_WORDS;
+    let half_slot = 9 * EMISSION_SLOT_WORDS;
+    h.deliver(&write_pattern_compressed_with_intensity(
+        0,
+        0,
+        full_slot,
+        PatternFormat::PhaseFull as u8,
+        2,
+        0x80,
+        &full,
+    ));
+    assert_eq!(h.data(), 0);
+    h.deliver(&write_pattern_compressed_with_intensity(
+        1,
+        0,
+        half_slot,
+        PatternFormat::PhaseHalf as u8,
+        4,
+        0x00,
+        &half,
+    ));
+    assert_eq!(h.data(), 0);
+
+    for t in 0..NUM_TRANSDUCERS {
+        for (g, phase) in [0x12u16, 0x34].into_iter().enumerate() {
+            assert_eq!(
+                h.emission_word(0, (full_slot + g as u32 * EMISSION_SLOT_WORDS) as usize + t),
+                0x8000 | phase
+            );
+        }
+        for (g, phase) in [0x11u16, 0x22, 0x33, 0x44].into_iter().enumerate() {
+            assert_eq!(
+                h.emission_word(0, (half_slot + g as u32 * EMISSION_SLOT_WORDS) as usize + t),
+                phase
             );
         }
     }

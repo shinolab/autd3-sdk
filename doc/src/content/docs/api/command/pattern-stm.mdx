@@ -58,15 +58,15 @@ import { excerpt } from "@lib/excerpt";
 | モード               | 内容                                   | 
 | -------------------- | -------------------------------------- |
 | `PhaseIntensityFull` | 位相・振幅をそのまま転送 (デフォルト) | 
-| `PhaseFull`          | 位相のみ転送. 振幅は最大に固定         |
-| `PhaseHalf`          | 位相を 4 bit に圧縮して転送            |
+| `PhaseFull`          | 位相と一様な振幅を転送            |
+| `PhaseHalf`          | 4 bit に圧縮した位相と一様な振幅を転送 |
 
 ## 等価な低レベルコマンド
 
 `PatternStm` は内部で [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/)  (各 index) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
 以下は `PatternStm::new(freq, &phases, intensities, option)` と等価な組み合わせである.
 
-`PatternStmMode` が `PhaseFull` / `PhaseHalf` のときは, `WritePatternBuffer` の代わりに [WritePatternCompressed](/autd3-sdk/api/command/lowlevel/write-pattern-compressed/) が使われる (このとき `intensities` は使われず, 振幅は最大に固定される).
+`PatternStmMode` が `PhaseFull` / `PhaseHalf` のときは, `WritePatternBuffer` の代わりに [WritePatternCompressed](/autd3-sdk/api/command/lowlevel/write-pattern-compressed/) が使われる (このとき `intensities` は `Intensity` (一様値) しか渡せず, それ以外はエラーになる).
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

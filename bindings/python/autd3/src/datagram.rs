@@ -185,6 +185,7 @@ pub(crate) enum Pending {
         bank: CorePatternBank,
         index: u32,
         format: CorePatternCompression,
+        intensity: Intensity,
         patterns: Vec<Vec<Vec<Phase>>>,
     },
     FociStm {
@@ -352,6 +353,7 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
             bank,
             index,
             format,
+            intensity,
             patterns,
         } => {
             let mut arr: [Option<&[Vec<Phase>]>; 4] = [None, None, None, None];
@@ -362,6 +364,7 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
                 bank: *bank,
                 index: usize::try_from(*index).unwrap_or(usize::MAX),
                 format: *format,
+                intensity: *intensity,
                 patterns: arr,
             });
         }
@@ -554,6 +557,7 @@ impl DatagramBuilder {
                 bank: op.bank,
                 index: op.index,
                 format: op.format,
+                intensity: op.intensity,
                 patterns: op.patterns.clone(),
             });
             return Ok(());

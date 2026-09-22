@@ -74,7 +74,7 @@ fn phase_full_pattern_decompresses_to_two_indices() {
         .map(|i| (i as u8, (255 - i) as u8))
         .collect();
 
-    let mut write = vec![BANK, 1, 2, 0];
+    let mut write = vec![BANK, 1, 2, 0x80];
     write.extend_from_slice(&0u32.to_le_bytes());
     for &(p0, p1) in &phases {
         let word = u16::from(p0) | (u16::from(p1) << 8);
@@ -100,9 +100,9 @@ fn phase_full_pattern_decompresses_to_two_indices() {
     let idx1 = device.fpga().emissions_at(BANK as usize, 1);
     for (i, &(p0, p1)) in phases.iter().enumerate() {
         assert_eq!(idx0.0[i], Phase(p0), "index 0 phase t={i}");
-        assert_eq!(idx0.1[i], Intensity(0xFF), "index 0 intensity t={i}");
+        assert_eq!(idx0.1[i], Intensity(0x80), "index 0 intensity t={i}");
         assert_eq!(idx1.0[i], Phase(p1), "index 1 phase t={i}");
-        assert_eq!(idx1.1[i], Intensity(0xFF), "index 1 intensity t={i}");
+        assert_eq!(idx1.1[i], Intensity(0x80), "index 1 intensity t={i}");
     }
 }
 
@@ -119,7 +119,7 @@ fn phase_half_pattern_decompresses_to_four_indices() {
         })
         .collect();
 
-    let mut write = vec![BANK, 2, 4, 0];
+    let mut write = vec![BANK, 2, 4, 0xFF];
     write.extend_from_slice(&0u32.to_le_bytes());
     for n in &nibbles {
         let word = u16::from(n[0])

@@ -16,7 +16,7 @@ import { excerpt } from "@lib/excerpt";
 
 `WritePatternCompressed` は, [`WritePatternBuffer`](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) の圧縮版.
 位相情報のみを送ることで 1 フレームに複数 Pattern を書き込む低レベルコマンド.
-強度は最大 (255) で固定される.
+強度は全振動子・全 Pattern で共通の値になる.
 
 ## API
 
@@ -27,6 +27,7 @@ import { excerpt } from "@lib/excerpt";
 | `bank`     | `PatternBank`                                     | 書き込み先バンク                           |
 | `index`    | `usize`                                           | バンク内の書き込み開始インデックス         |
 | `format`   | `PatternCompression`                              | 圧縮形式 (下記参照)                      |
+| `intensity`| `Intensity`                                       | 全振動子・全 Pattern に共通の強度          |
 | `patterns` | `[Option<&[Vec<Phase>]>; 4]`     | 書き込む位相の列                           |
 
 ## PatternCompression

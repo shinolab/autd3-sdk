@@ -556,6 +556,7 @@ pub enum Pending {
         bank: PatternBank,
         index: u32,
         format: PatternCompression,
+        intensity: Intensity,
         patterns: Vec<Vec<Vec<Phase>>>,
     },
     ConfigPattern {
@@ -823,6 +824,7 @@ pub unsafe extern "C" fn autd3_op_write_pattern_compressed(
     bank: u8,
     index: u32,
     format: u8,
+    intensity: u8,
     patterns: *const *const PhaseBuffer,
     num_patterns: usize,
 ) -> *mut Pending {
@@ -847,6 +849,7 @@ pub unsafe extern "C" fn autd3_op_write_pattern_compressed(
         bank,
         index,
         format,
+        intensity: Intensity(intensity),
         patterns,
     })
 }
@@ -1419,6 +1422,7 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             bank,
             index,
             format,
+            intensity,
             patterns,
         } => {
             let mut arr: [Option<&[Vec<Phase>]>; 4] = [None; 4];
@@ -1429,6 +1433,7 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
                 bank: *bank,
                 index: usize::try_from(*index).unwrap_or(usize::MAX),
                 format: *format,
+                intensity: *intensity,
                 patterns: arr,
             }
             .boxed()
@@ -1617,6 +1622,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 bank,
                 index,
                 format,
+                intensity,
                 patterns,
             } => {
                 let mut arr: [Option<&[Vec<Phase>]>; 4] = [None; 4];
@@ -1627,6 +1633,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                     bank: *bank,
                     index: usize::try_from(*index).unwrap_or(usize::MAX),
                     format: *format,
+                    intensity: *intensity,
                     patterns: arr,
                 });
             }
