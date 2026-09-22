@@ -53,11 +53,13 @@ internal static class Sample
         var patterns = new[] { p0, p1, p2, p3 };
         var index = 0u;
         var format = PatternCompression.PhaseHalf;
+        var intensity = Intensity.Max;
         // ANCHOR: compressed
         new WritePatternCompressed(
             bank: bank,
             index: index,
             format: format,
+            intensity: intensity,
             patterns: patterns
         );
         // ANCHOR_END: compressed

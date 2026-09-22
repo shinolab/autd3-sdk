@@ -7,12 +7,13 @@ pub struct WritePatternCompressedPayload {
     pub bank: u8,
     pub format: u8,
     pub count: u8,
-    pub reserved: u8,
+    pub intensity: u8,
     pub offset: U32,
 }
 
 const _: () = assert!(core::mem::offset_of!(WritePatternCompressedPayload, bank) == 0);
 const _: () = assert!(core::mem::offset_of!(WritePatternCompressedPayload, format) == 1);
 const _: () = assert!(core::mem::offset_of!(WritePatternCompressedPayload, count) == 2);
+const _: () = assert!(core::mem::offset_of!(WritePatternCompressedPayload, intensity) == 3);
 const _: () = assert!(core::mem::offset_of!(WritePatternCompressedPayload, offset) == 4);
 const _: () = assert!(core::mem::size_of::<WritePatternCompressedPayload>() == 8);

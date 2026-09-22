@@ -52,7 +52,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
                 }
             };
             slot[2 * t] = phase;
-            slot[2 * t + 1] = 0xFF;
+            slot[2 * t + 1] = p.intensity;
         }
         fpga::write_ram(
             port,

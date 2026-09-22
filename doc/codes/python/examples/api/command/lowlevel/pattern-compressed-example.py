@@ -6,7 +6,7 @@ from autd3 import Client, ClientConfig
 from autd3.commands import ChangePatternBank, ConfigPattern, PatternCompression, StmConfig, WritePatternCompressed
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
-from autd3.value import LoopBehavior, PatternBank, TransitionMode
+from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
 from autd3_link_nop import Nop
 from autd3_pattern import focus
 from autd3_pattern import wavelength as calc_wavelength
@@ -35,6 +35,7 @@ async def main() -> None:
                 bank=bank,
                 index=0,
                 format=PatternCompression.PhaseHalf,
+                intensity=Intensity.MAX,
                 patterns=patterns,
             )
         )

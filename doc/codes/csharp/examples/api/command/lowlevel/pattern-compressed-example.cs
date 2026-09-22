@@ -38,6 +38,7 @@ builder.Push(new WritePatternCompressed(
     bank: bank,
     index: 0,
     format: PatternCompression.PhaseHalf,
+    intensity: Intensity.Max,
     patterns: patterns
 ));
 builder.Push(new ConfigPattern(

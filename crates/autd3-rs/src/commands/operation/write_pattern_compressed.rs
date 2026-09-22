@@ -2,7 +2,7 @@ use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::params::{EMISSION_MAX_INDICES, EMISSION_SLOT_WORDS};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
-use crate::value::{PatternBank, Phase};
+use crate::value::{Intensity, PatternBank, Phase};
 
 use super::write_pattern_buffer::device_phases;
 use super::{Distribution, Operation};
@@ -53,6 +53,7 @@ pub struct WritePatternCompressed<'a> {
     pub bank: PatternBank,
     pub index: usize,
     pub format: PatternCompression,
+    pub intensity: Intensity,
     pub patterns: [Option<&'a [Vec<Phase>]>; PATTERN_MAX_PER_FRAME],
 }
 
@@ -98,7 +99,7 @@ impl Operation for WritePatternCompressed<'_> {
             bank: self.bank.as_u8(),
             format: self.format.as_u8(),
             count: u8::try_from(count).expect("count <= PATTERN_MAX_PER_FRAME"),
-            reserved: 0,
+            intensity: self.intensity.0,
             offset: U32::new(offset),
         };
         rest.as_chunks_mut::<2>()
@@ -157,6 +158,7 @@ mod tests {
             bank: PatternBank::B0,
             index: 4,
             format: PatternCompression::PhaseFull,
+            intensity: Intensity::MAX,
             patterns: [Some(&p0[..]), Some(&p1[..]), None, None],
         };
 
@@ -166,6 +168,7 @@ mod tests {
         assert_eq!(cmd, Cmd::WritePatternCompressed);
         assert_eq!(out[1], 1, "format = PhaseFull");
         assert_eq!(out[2], 2, "count = 2");
+        assert_eq!(out[3], 0xFF, "intensity");
         let expected_offset = u32::try_from(4 * EMISSION_SLOT_WORDS).unwrap();
         assert_eq!(&out[4..8], &expected_offset.to_le_bytes());
         for i in 0..Autd3::NUM_TRANSDUCERS {
@@ -189,6 +192,7 @@ mod tests {
             bank: PatternBank::B0,
             index: 8,
             format: PatternCompression::PhaseHalf,
+            intensity: Intensity::MAX,
             patterns: [Some(&p0[..]), Some(&p1[..]), Some(&p2[..]), Some(&p3[..])],
         };
 
@@ -209,12 +213,28 @@ mod tests {
     }
 
     #[test]
+    fn intensity_is_carried_in_the_header() {
+        let patterns = [vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
+        let op = WritePatternCompressed {
+            bank: PatternBank::B0,
+            index: 0,
+            format: PatternCompression::PhaseHalf,
+            intensity: Intensity(0x42),
+            patterns: [Some(&patterns[..]), None, None, None],
+        };
+        let mut out = [0u8; PAYLOAD_BYTES];
+        op.encode(&test_device(0), &mut out).unwrap();
+        assert_eq!(out[3], 0x42);
+    }
+
+    #[test]
     fn rejects_last_index_out_of_range() {
         let patterns = [vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
         let op = WritePatternCompressed {
             bank: PatternBank::B0,
             index: EMISSION_MAX_INDICES - 1,
             format: PatternCompression::PhaseFull,
+            intensity: Intensity::MAX,
             patterns: [Some(&patterns[..]), Some(&patterns[..]), None, None],
         };
         let mut out = [0u8; PAYLOAD_BYTES];
@@ -231,6 +251,7 @@ mod tests {
             bank: PatternBank::B0,
             index: 0,
             format: PatternCompression::PhaseFull,
+            intensity: Intensity::MAX,
             patterns: [
                 Some(&patterns[..]),
                 Some(&patterns[..]),
@@ -261,6 +282,7 @@ mod tests {
                 bank: PatternBank::B0,
                 index: 0,
                 format,
+                intensity: Intensity::MAX,
                 patterns: slots,
             };
             assert!(op.encode(&test_device(0), &mut out).is_ok(), "{count}");
@@ -274,6 +296,7 @@ mod tests {
             bank: PatternBank::B0,
             index: 0,
             format: PatternCompression::PhaseFull,
+            intensity: Intensity::MAX,
             patterns: [Some(&patterns[..]), None, None, None],
         };
         let mut out = [0u8; PAYLOAD_BYTES];

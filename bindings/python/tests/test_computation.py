@@ -527,7 +527,7 @@ def test_loop_behavior_and_transition_mode() -> None:
     builder = autd3.DatagramBuilder(geo)
     builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, buf, amps))
     builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 1, buf, amps))
-    builder.push(autd3.commands.WritePatternCompressed(autd3.value.PatternBank.B1, 2, autd3.commands.PatternCompression.PhaseFull, [buf, buf]))
+    builder.push(autd3.commands.WritePatternCompressed(autd3.value.PatternBank.B1, 2, autd3.commands.PatternCompression.PhaseFull, autd3.value.Intensity.MAX, [buf, buf]))
     builder.push(
         autd3.commands.ConfigPattern(
             autd3.value.PatternBank.B1,

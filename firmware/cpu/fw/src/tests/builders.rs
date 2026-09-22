@@ -106,11 +106,23 @@ pub(crate) fn write_pattern_compressed(
     count: u8,
     words: &[u16],
 ) -> Frame {
+    write_pattern_compressed_with_intensity(seq, bank, offset_words, format, count, 0xFF, words)
+}
+
+pub(crate) fn write_pattern_compressed_with_intensity(
+    seq: u8,
+    bank: u8,
+    offset_words: u32,
+    format: u8,
+    count: u8,
+    intensity: u8,
+    words: &[u16],
+) -> Frame {
     let header = WritePatternCompressedPayload {
         bank,
         format,
         count,
-        reserved: 0,
+        intensity,
         offset: U32::new(offset_words),
     };
     Frame::from_parts(

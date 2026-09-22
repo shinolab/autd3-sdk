@@ -5,6 +5,7 @@ use thiserror::Error;
 use autd3_rs_core::error::{EncodeError, LinkError};
 use autd3_rs_core::protocol::describe_device_error;
 
+use crate::commands::PatternCompression;
 use crate::firmware_version::FirmwareVersion;
 use crate::mirror::{BankLoop, SilencerAxis};
 use crate::telemetry::Telemetry;
@@ -205,6 +206,11 @@ pub enum PayloadError {
 
     #[error("pattern STM has {phases} phase pattern(s) but {intensities} intensity pattern(s)")]
     PatternStmLengthMismatch { phases: usize, intensities: usize },
+
+    #[error(
+        "the {format:?} compression carries a single uniform intensity; per-transducer or per-index intensities are not supported"
+    )]
+    PatternCompressionRequiresUniformIntensity { format: PatternCompression },
 
     #[error("pattern STM index {index} out of range 0..{max}")]
     PatternIndexOutOfRange { index: usize, max: usize },

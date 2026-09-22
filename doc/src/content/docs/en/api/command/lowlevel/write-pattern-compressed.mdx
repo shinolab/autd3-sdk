@@ -16,7 +16,7 @@ import { excerpt } from "@lib/excerpt";
 
 `WritePatternCompressed` is the compressed version of [`WritePatternBuffer`](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/).
 It is a low-level command that writes multiple Patterns into a single frame by sending only the phase information.
-The intensity is fixed at the maximum (255).
+The intensity is a single `intensity` value shared by every transducer and every Pattern.
 
 ## API
 
@@ -27,6 +27,7 @@ The intensity is fixed at the maximum (255).
 | `bank`     | `PatternBank`                                     | Destination bank                           |
 | `index`    | `usize`                                           | Start index for writing within the bank    |
 | `format`   | `PatternCompression`                              | Compression format (see below)             |
+| `intensity`| `Intensity`                                       | Intensity shared by every transducer and Pattern |
 | `patterns` | `[Option<&[Vec<Phase>]>; 4]`     | Sequence of phases to write                |
 
 ## PatternCompression

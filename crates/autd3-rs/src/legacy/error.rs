@@ -4,6 +4,8 @@ use autd3_rs_core::error::{EncodeError, LinkError};
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError};
 use thiserror::Error;
 
+use crate::legacy::wire::GainStmMode;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TimeoutPhase {
@@ -151,6 +153,11 @@ pub enum PayloadError {
 
     #[error("GainSTM has {phases} phase pattern(s) but {intensities} intensity pattern(s)")]
     GainStmLengthMismatch { phases: usize, intensities: usize },
+
+    #[error(
+        "GainSTM {mode:?} compression carries a single uniform intensity; per-transducer or per-index intensities are not supported"
+    )]
+    GainStmCompressionRequiresUniformIntensity { mode: GainStmMode },
 
     #[error("emission buffer has {got} slot(s) but the geometry has {expected} device(s)")]
     EmissionDeviceCountMismatch { expected: usize, got: usize },

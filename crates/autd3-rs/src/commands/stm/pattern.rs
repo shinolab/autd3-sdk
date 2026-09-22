@@ -125,6 +125,18 @@ impl<'a> PatternStm<'a> {
 impl<'a> Command<'a> for PatternStm<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
         let n = self.phases.len();
+        let compression = match self.option.mode.compression() {
+            None => None,
+            Some(format) => {
+                let StmIntensity::Uniform(intensity) = self.intensities else {
+                    builder.reject(PayloadError::PatternCompressionRequiresUniformIntensity {
+                        format,
+                    });
+                    return;
+                };
+                Some((format, intensity))
+            }
+        };
         if let Some(len) = self.intensities.per_index_len()
             && len != n
         {
@@ -146,7 +158,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
         let size = n;
         let bank = self.option.bank;
 
-        match self.option.mode.compression() {
+        match compression {
             None => {
                 for (i, phases) in self.phases.iter().enumerate() {
                     builder.push(WritePatternBuffer::new(
@@ -157,7 +169,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
                     ));
                 }
             }
-            Some(format) => {
+            Some((format, intensity)) => {
                 let per_frame = format.per_frame();
                 let mut base = 0;
                 while base < n {
@@ -171,6 +183,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
                         bank,
                         index: base,
                         format,
+                        intensity,
                         patterns,
                     });
                     base += count;
@@ -353,11 +366,11 @@ mod tests {
 
     #[test]
     fn pattern_stm_phase_full_packs_two_indices_per_frame() {
-        let (patterns, intensities) = make_patterns(5);
+        let (patterns, _) = make_patterns(5);
         let stm = PatternStm::new(
             SamplingConfig::FREQ_4K,
             &patterns,
-            &intensities,
+            Intensity(0x80),
             PatternStmOption {
                 mode: PatternStmMode::PhaseFull,
                 ..Default::default()
@@ -382,6 +395,7 @@ mod tests {
             let payload = &dg.payload;
             assert_eq!(payload[1], 1, "frame {f} format = PhaseFull");
             assert_eq!(payload[2], count, "frame {f} count");
+            assert_eq!(payload[3], 0x80, "frame {f} intensity");
             let offset = idx * u32::try_from(EMISSION_SLOT_WORDS).unwrap();
             assert_eq!(&payload[4..8], &offset.to_le_bytes(), "frame {f} offset");
             let p0 = patterns[idx as usize][0][0].0;
@@ -396,6 +410,40 @@ mod tests {
             &5u32.to_le_bytes(),
             "size = total index count"
         );
+    }
+
+    #[test]
+    fn pattern_stm_compression_rejects_non_uniform_intensities() {
+        use crate::error::Error;
+
+        let (patterns, per_index) = make_patterns(4);
+        let shared = vec![vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS]];
+        for mode in [PatternStmMode::PhaseFull, PatternStmMode::PhaseHalf] {
+            for intensities in [
+                StmIntensity::Shared(&shared),
+                StmIntensity::PerIndex(&per_index),
+            ] {
+                let mut b = DatagramBuilder::new(test_geometry_arc(1));
+                b.push(PatternStm::new(
+                    SamplingConfig::FREQ_4K,
+                    &patterns,
+                    intensities,
+                    PatternStmOption {
+                        mode,
+                        ..Default::default()
+                    },
+                ));
+                assert!(
+                    matches!(
+                        b.build(),
+                        Err(Error::InvalidPayload(
+                            PayloadError::PatternCompressionRequiresUniformIntensity { .. }
+                        ))
+                    ),
+                    "{mode:?} {intensities:?}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -429,11 +477,11 @@ mod tests {
 
     #[test]
     fn pattern_stm_phase_half_packs_four_indices_per_frame() {
-        let (patterns, intensities) = make_patterns(4);
+        let (patterns, _) = make_patterns(4);
         let stm = PatternStm::new(
             SamplingConfig::FREQ_4K,
             &patterns,
-            &intensities,
+            Intensity::MAX,
             PatternStmOption {
                 mode: PatternStmMode::PhaseHalf,
                 ..Default::default()

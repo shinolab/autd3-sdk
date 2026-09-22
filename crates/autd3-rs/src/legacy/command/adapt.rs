@@ -1,9 +1,10 @@
 use crate::commands::{
     ChangeModulationBank, Clear, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, FociStm,
     ForceFan, GpioOut as NewGpioOut, Modulation, Nop, Pattern, PatternStm, PatternStmMode,
-    SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, Synchronize,
+    SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmIntensity,
+    Synchronize,
 };
-use autd3_rs_core::value::{ModulationBank, PatternBank, TransitionMode};
+use autd3_rs_core::value::{Intensity, ModulationBank, PatternBank, TransitionMode};
 
 use super::LegacyCommand;
 use crate::legacy::datagram::LegacyDatagramBuilder;
@@ -166,6 +167,15 @@ impl<'a> LegacyCommand<'a> for PatternStm<'a> {
     fn expand(self, builder: &mut LegacyDatagramBuilder<'a>) {
         let config = self.config.into_sampling_config(self.phases.len());
         let transition_mode = transition_mode(self.option.transition_mode, builder.dc_offset_ns());
+        if let StmIntensity::Uniform(intensity) = self.intensities
+            && self.option.mode != PatternStmMode::PhaseIntensityFull
+            && intensity != Intensity::MAX
+        {
+            tracing::warn!(
+                ?intensity,
+                "legacy firmware decompresses GainSTM with the maximum intensity; the requested intensity is ignored"
+            );
+        }
         builder.push_op(op::GainStm::new(
             config,
             self.phases,

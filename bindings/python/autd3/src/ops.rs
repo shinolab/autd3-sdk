@@ -5,7 +5,7 @@ use autd3_python_capsule::{capsule_of, modulation_from_capsule};
 use autd3_rs::Velocity;
 use autd3_rs::commands::PatternCompression as CorePatternCompression;
 use autd3_rs::value::{
-    DcSysTime as CoreDcSysTime, GpioIn as CoreGpioIn, LoopBehavior as CoreLoopBehavior,
+    DcSysTime as CoreDcSysTime, GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
     ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase,
     TransitionMode as CoreTransitionMode,
 };
@@ -287,6 +287,7 @@ pub struct WritePatternCompressed {
     pub(crate) bank: CorePatternBank,
     pub(crate) index: u32,
     pub(crate) format: CorePatternCompression,
+    pub(crate) intensity: Intensity,
     pub(crate) patterns: Vec<Vec<Vec<Phase>>>,
 }
 
@@ -297,6 +298,7 @@ impl WritePatternCompressed {
         bank: PatternBank,
         index: u32,
         format: PatternCompression,
+        intensity: u8,
         patterns: Vec<Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         if patterns.is_empty() || patterns.len() > 4 {
@@ -312,6 +314,7 @@ impl WritePatternCompressed {
             bank: bank.0,
             index,
             format: format.0,
+            intensity: Intensity(intensity),
             patterns,
         })
     }

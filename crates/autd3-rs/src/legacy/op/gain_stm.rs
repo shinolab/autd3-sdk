@@ -102,6 +102,14 @@ impl LegacyOperation for GainStm<'_> {
 
     fn pack(&mut self, device: &Device, tx: &mut [u8]) -> Result<usize, LegacyError> {
         let size = self.phases.len();
+        if self.option.mode != GainStmMode::PhaseIntensityFull
+            && !matches!(self.intensities, StmIntensity::Uniform(_))
+        {
+            return Err(PayloadError::GainStmCompressionRequiresUniformIntensity {
+                mode: self.option.mode,
+            }
+            .into());
+        }
         if let StmIntensity::PerIndex(intensities) = self.intensities
             && intensities.len() != size
         {
@@ -272,11 +280,11 @@ mod tests {
     fn phase_full_packs_two_patterns_into_the_high_and_low_byte() {
         let geo = geometry(1);
         let n = geo[0].num_transducers();
-        let (patterns, amps) = patterns(&geo, &[0x10, 0x90]);
+        let (patterns, _) = patterns(&geo, &[0x10, 0x90]);
         let mut op = GainStm::new(
             config(),
             &patterns,
-            &amps,
+            Intensity::MAX,
             GainStmOption {
                 mode: GainStmMode::PhaseFull,
                 ..GainStmOption::default()
@@ -304,11 +312,11 @@ mod tests {
         let geo = geometry(1);
         let n = geo[0].num_transducers();
         let bases: Vec<u8> = (1..=4).map(|k| 0x10 * k).collect();
-        let (patterns, amps) = patterns(&geo, &bases);
+        let (patterns, _) = patterns(&geo, &bases);
         let mut op = GainStm::new(
             config(),
             &patterns,
-            &amps,
+            Intensity::MAX,
             GainStmOption {
                 mode: GainStmMode::PhaseHalf,
                 segment: Segment::S1,
@@ -344,11 +352,11 @@ mod tests {
     fn phase_half_with_a_partial_round_reports_the_actual_count() {
         let geo = geometry(1);
         let bases: Vec<u8> = (1..=3).map(|k| 0x10 * k).collect();
-        let (patterns, amps) = patterns(&geo, &bases);
+        let (patterns, _) = patterns(&geo, &bases);
         let mut op = GainStm::new(
             config(),
             &patterns,
-            &amps,
+            Intensity::MAX,
             GainStmOption {
                 mode: GainStmMode::PhaseHalf,
                 ..GainStmOption::default()
@@ -387,6 +395,38 @@ mod tests {
                     assert_eq!(chunk[0], expected[device.idx()][i].0);
                     assert_eq!(chunk[1], expected_amps[device.idx()][i].0);
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn compression_rejects_non_uniform_intensities() {
+        let geo = geometry(1);
+        let (patterns, amps) = patterns(&geo, &[0, 1]);
+        let shared = intensities(&geo, 0);
+        for mode in [GainStmMode::PhaseFull, GainStmMode::PhaseHalf] {
+            for intensities in [StmIntensity::Shared(&shared), StmIntensity::PerIndex(&amps)] {
+                let mut tx = vec![0u8; PAYLOAD_BYTES];
+                let err = GainStm::new(
+                    config(),
+                    &patterns,
+                    intensities,
+                    GainStmOption {
+                        mode,
+                        ..GainStmOption::default()
+                    },
+                )
+                .pack(&geo[0], &mut tx)
+                .unwrap_err();
+                assert!(
+                    matches!(
+                        err,
+                        LegacyError::InvalidPayload(
+                            PayloadError::GainStmCompressionRequiresUniformIntensity { .. }
+                        )
+                    ),
+                    "{mode:?} {intensities:?}"
+                );
             }
         }
     }

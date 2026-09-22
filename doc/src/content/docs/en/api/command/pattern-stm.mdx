@@ -58,15 +58,15 @@ Selects the transfer format of each Pattern. The phase-only and low-resolution f
 | Mode                 | Content                                  | 
 | -------------------- | ---------------------------------------- |
 | `PhaseIntensityFull` | Transfer phase and amplitude as-is (default) | 
-| `PhaseFull`          | Transfer phase only. Amplitude fixed at maximum |
-| `PhaseHalf`          | Compress phase to 4 bit and transfer     |
+| `PhaseFull`          | Transfer phase and a single uniform amplitude |
+| `PhaseHalf`          | Transfer 4-bit phase and a single uniform amplitude |
 
 ## Equivalent Low-Level Commands
 
 `PatternStm` internally expands into the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/)  (each index) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
 The following is equivalent to `PatternStm::new(freq, &phases, intensities, option)`.
 
-When `PatternStmMode` is `PhaseFull` / `PhaseHalf`, [WritePatternCompressed](/autd3-sdk/en/api/command/lowlevel/write-pattern-compressed/) is used instead of `WritePatternBuffer` (`intensities` is then unused and the intensity is fixed at the maximum).
+When `PatternStmMode` is `PhaseFull` / `PhaseHalf`, [WritePatternCompressed](/autd3-sdk/en/api/command/lowlevel/write-pattern-compressed/) is used instead of `WritePatternBuffer` (`intensities` must then be a uniform `Intensity`; anything else is an error).
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

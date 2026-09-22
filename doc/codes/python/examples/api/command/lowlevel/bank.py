@@ -42,11 +42,13 @@ p3 = geometry.phase_buffer()
 patterns = [p0, p1, p2, p3]
 index = 0
 format = PatternCompression.PhaseHalf
+intensity = Intensity.MAX
 # ANCHOR: compressed
 WritePatternCompressed(
     bank=bank,
     index=index,
     format=format,
+    intensity=intensity,
     patterns=patterns,
 )
 # ANCHOR_END: compressed
