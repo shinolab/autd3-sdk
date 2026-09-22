@@ -6,12 +6,11 @@ namespace AUTD3.Link
     public readonly struct RemoteLinkOption : ILink, ILegacyLink
     {
         public string Addr { get; }
-        public TimeSpan? Timeout { get; }
+        public TimeSpan? Timeout { get; init; } = null;
 
-        public RemoteLinkOption(string addr, TimeSpan? timeout = null)
+        public RemoteLinkOption(string addr)
         {
             Addr = addr;
-            Timeout = timeout;
         }
 
         public static RemoteLinkOption Discover(TimeSpan? timeout = null, string? instance = null) =>
@@ -36,7 +35,7 @@ namespace AUTD3.Link
                 try
                 {
                     var addr = Marshal.PtrToStringUTF8(found) ?? throw new Autd3Exception("mDNS discovery returned nothing");
-                    return new RemoteLinkOption(addr, linkTimeoutNs == 0 ? null : LinkOptionNative.FromNanos(linkTimeoutNs));
+                    return new RemoteLinkOption(addr) { Timeout = linkTimeoutNs == 0 ? null : LinkOptionNative.FromNanos(linkTimeoutNs) };
                 }
                 finally
                 {

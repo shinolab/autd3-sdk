@@ -230,7 +230,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             await Assert.ThrowsAsync<Autd3Exception>(async () =>
-                await LegacyClient.OpenAsync(geometry, new AUTD3.Link.Nop(), new LegacyClientConfig(timeoutCycles: 0)));
+                await LegacyClient.OpenAsync(geometry, new AUTD3.Link.Nop(), new LegacyClientConfig { TimeoutCycles = 0 }));
         }
     }
 }

@@ -15,18 +15,19 @@ internal static class Sample
         var link = new Nop();
         var option =
             // ANCHOR: config
-            new ClientConfig(
-                timeoutCycles: 10,
-                maxInflight: (uint)Client.MaxInflight,
-                maxResyncRounds: 8,
-                lowLatency: false,
-                resetResendCycles: 2,
-                rtPriority: new RtPriority(80),
-                rtPolicy: RtSchedulePolicy.Fifo,
-                rtAffinity: null,
-                validateState: true,
-                requireSupportedFirmware: false
-            )
+            new ClientConfig
+            {
+                TimeoutCycles = 10,
+                MaxInflight = (uint)Client.MaxInflight,
+                MaxResyncRounds = 8,
+                LowLatency = false,
+                ResetResendCycles = 2,
+                RtPriority = new RtPriority(80),
+                RtPolicy = RtSchedulePolicy.Fifo,
+                RtAffinity = null,
+                ValidateState = true,
+                RequireSupportedFirmware = false,
+            }
             // ANCHOR_END: config
             ;
         // ANCHOR: api

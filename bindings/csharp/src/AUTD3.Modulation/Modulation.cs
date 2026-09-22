@@ -169,57 +169,37 @@ namespace AUTD3
 
     public readonly struct SineOption
     {
-        public byte Amplitude { get; }
-        public byte Offset { get; }
-        public Angle Phase { get; }
-        public bool Clamp { get; }
-        public SamplingConfig SamplingConfig { get; }
+        public byte Amplitude { get; init; } = 0xFF;
+        public byte Offset { get; init; } = 0x80;
+        public Angle Phase { get; init; } = default;
+        public bool Clamp { get; init; } = false;
+        public SamplingConfig SamplingConfig { get; init; } = SamplingConfig.Freq4k;
 
-        public SineOption() : this(amplitude: 0xFF)
+        public SineOption()
         {
-        }
-
-        public SineOption(byte amplitude = 0xFF, byte offset = 0x80, Angle phase = default, bool clamp = false, SamplingConfig? samplingConfig = null)
-        {
-            Amplitude = amplitude;
-            Offset = offset;
-            Phase = phase;
-            Clamp = clamp;
-            SamplingConfig = samplingConfig ?? SamplingConfig.Freq4k;
         }
     }
 
     public readonly struct SquareOption
     {
-        public byte Low { get; }
-        public byte High { get; }
-        public float Duty { get; }
-        public SamplingConfig SamplingConfig { get; }
+        public byte Low { get; init; } = 0x00;
+        public byte High { get; init; } = 0xFF;
+        public float Duty { get; init; } = 0.5f;
+        public SamplingConfig SamplingConfig { get; init; } = SamplingConfig.Freq4k;
 
-        public SquareOption() : this(low: 0x00)
+        public SquareOption()
         {
-        }
-
-        public SquareOption(byte low = 0x00, byte high = 0xFF, float duty = 0.5f, SamplingConfig? samplingConfig = null)
-        {
-            Low = low;
-            High = high;
-            Duty = duty;
-            SamplingConfig = samplingConfig ?? SamplingConfig.Freq4k;
         }
     }
 
     public readonly struct FourierOption
     {
-        public float? ScaleFactor { get; }
-        public bool Clamp { get; }
-        public byte Offset { get; }
+        public float? ScaleFactor { get; init; } = null;
+        public bool Clamp { get; init; } = false;
+        public byte Offset { get; init; } = 0x00;
 
-        public FourierOption(float? scaleFactor = null, bool clamp = false, byte offset = 0x00)
+        public FourierOption()
         {
-            ScaleFactor = scaleFactor;
-            Clamp = clamp;
-            Offset = offset;
         }
     }
 

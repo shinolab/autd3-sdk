@@ -26,12 +26,13 @@ internal static class Sample
         var parallel = true;
         var option =
             // ANCHOR: option
-            new NaiveOption(
-                constraint,
-                directivity,
-                mask,
-                parallel
-            )
+            new NaiveOption
+            {
+                Constraint = constraint,
+                Directivity = directivity,
+                Mask = mask,
+                Parallel = parallel,
+            }
             // ANCHOR_END: option
             ;
         var phases = geometry.PhaseBuffer();

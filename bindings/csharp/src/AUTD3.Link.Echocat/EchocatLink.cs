@@ -19,29 +19,19 @@ namespace AUTD3.Link
 
     public readonly struct EchocatLinkOption : ILink, ILegacyLink
     {
-        public Interface Iface { get; }
-        public TimeSpan? Sync0Period { get; }
-        public FramePhase FramePhase { get; }
-        public TimeSpan? PduTimeout { get; }
-        public TimeSpan? StateTransitionTimeout { get; }
-        public uint? DcStaticSyncIterations { get; }
-        public TimeSpan? DcStartDelay { get; }
-        public TimeSpan? SyncTolerance { get; }
-        public TimeSpan? SyncTimeout { get; }
-        public TimeSpan? ProcessDataWatchdog { get; }
+        public Interface Iface { get; init; } = Interface.Auto;
+        public TimeSpan? Sync0Period { get; init; } = null;
+        public FramePhase FramePhase { get; init; } = default;
+        public TimeSpan? PduTimeout { get; init; } = null;
+        public TimeSpan? StateTransitionTimeout { get; init; } = null;
+        public uint? DcStaticSyncIterations { get; init; } = null;
+        public TimeSpan? DcStartDelay { get; init; } = null;
+        public TimeSpan? SyncTolerance { get; init; } = null;
+        public TimeSpan? SyncTimeout { get; init; } = null;
+        public TimeSpan? ProcessDataWatchdog { get; init; } = null;
 
-        public EchocatLinkOption(Interface? iface = null, TimeSpan? sync0Period = null, FramePhase framePhase = default, TimeSpan? pduTimeout = null, TimeSpan? stateTransitionTimeout = null, uint? dcStaticSyncIterations = null, TimeSpan? dcStartDelay = null, TimeSpan? syncTolerance = null, TimeSpan? syncTimeout = null, TimeSpan? processDataWatchdog = null)
+        public EchocatLinkOption()
         {
-            Iface = iface ?? Interface.Auto;
-            Sync0Period = sync0Period;
-            FramePhase = framePhase;
-            PduTimeout = pduTimeout;
-            StateTransitionTimeout = stateTransitionTimeout;
-            DcStaticSyncIterations = dcStaticSyncIterations;
-            DcStartDelay = dcStartDelay;
-            SyncTolerance = syncTolerance;
-            SyncTimeout = syncTimeout;
-            ProcessDataWatchdog = processDataWatchdog;
         }
 
         private IntPtr CreateHandle()

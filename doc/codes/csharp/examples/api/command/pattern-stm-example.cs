@@ -39,12 +39,13 @@ builder.Push(new PatternStm(
     1.0f * Hz,
     patterns,
     Intensity.Max,
-    new PatternStmOption(
-        bank: PatternBank.B0,
-        mode: PatternStmMode.PhaseIntensityFull,
-        loopBehavior: LoopBehavior.Infinite,
-        transitionMode: TransitionMode.Immediate
-    )
+    new PatternStmOption
+    {
+        Bank = PatternBank.B0,
+        Mode = PatternStmMode.PhaseIntensityFull,
+        LoopBehavior = LoopBehavior.Infinite,
+        TransitionMode = TransitionMode.Immediate,
+    }
 ));
 var frames = builder.Build();
 foreach (var frame in frames)

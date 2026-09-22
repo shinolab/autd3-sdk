@@ -5,15 +5,12 @@ namespace AUTD3.Link
 {
     public readonly struct Timeouts
     {
-        public TimeSpan? Connect { get; }
-        public TimeSpan? Read { get; }
-        public TimeSpan? Write { get; }
+        public TimeSpan? Connect { get; init; } = null;
+        public TimeSpan? Read { get; init; } = null;
+        public TimeSpan? Write { get; init; } = null;
 
-        public Timeouts(TimeSpan? connect = null, TimeSpan? read = null, TimeSpan? write = null)
+        public Timeouts()
         {
-            Connect = connect;
-            Read = read;
-            Write = write;
         }
     }
 

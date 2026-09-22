@@ -33,12 +33,13 @@ internal static class Sample
         var transitionMode = TransitionMode.Immediate;
         var option =
             // ANCHOR: option
-            new PatternStmOption(
-                bank,
-                mode,
-                loopBehavior,
-                transitionMode
-            )
+            new PatternStmOption
+            {
+                Bank = bank,
+                Mode = mode,
+                LoopBehavior = loopBehavior,
+                TransitionMode = transitionMode,
+            }
             // ANCHOR_END: option
             ;
         // ANCHOR: api

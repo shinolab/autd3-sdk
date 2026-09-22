@@ -116,7 +116,7 @@ namespace AUTD3.Tests
             using var intensities = geometry.IntensityBuffer();
             var foci = new[] { new AUTD3.Holo.AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 5e3f * AUTD3.Holo.HoloUnits.Pa) };
 
-            AUTD3.Holo.Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption(AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), mask: groups.Mask(Side.Left)), phases, intensities);
+            AUTD3.Holo.Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Constraint = AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), Mask = groups.Mask(Side.Left) }, phases, intensities);
 
             for (var dev = 0; dev < 2; dev++)
             {
@@ -131,7 +131,7 @@ namespace AUTD3.Tests
             using var single = new Geometry(new[] { new Autd3(Vector3.Zero) });
             using var singlePhases = single.PhaseBuffer();
             using var singleIntensities = single.IntensityBuffer();
-            Assert.Throws<Autd3Exception>(() => AUTD3.Holo.Holo.Naive(single, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption(AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), mask: groups.Mask(Side.Left)), singlePhases, singleIntensities));
+            Assert.Throws<Autd3Exception>(() => AUTD3.Holo.Holo.Naive(single, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Constraint = AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), Mask = groups.Mask(Side.Left) }, singlePhases, singleIntensities));
         }
 
         [Fact]
@@ -151,7 +151,7 @@ namespace AUTD3.Tests
                 seen.Add(side);
                 if (side == Side.Left)
                 {
-                    AUTD3.Holo.Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption(AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), mask: mask), p, i);
+                    AUTD3.Holo.Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Constraint = AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), Mask = mask }, p, i);
                 }
                 else
                 {
@@ -210,7 +210,7 @@ namespace AUTD3.Tests
         public void SineProducesSamples()
         {
             using var modulation = Modulation.ModulationBuffer();
-            Modulation.Sine(200 * Hz, new SineOption(samplingConfig: SamplingConfig.Freq4k), modulation);
+            Modulation.Sine(200 * Hz, new SineOption { SamplingConfig = SamplingConfig.Freq4k }, modulation);
             Assert.True(modulation.Length > 0);
         }
 

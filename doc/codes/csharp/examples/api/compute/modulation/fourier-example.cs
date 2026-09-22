@@ -19,11 +19,12 @@ Modulation.Fourier(
             new SineOption()
         ),
     },
-    new FourierOption(
-        scaleFactor: null,
-        clamp: false,
-        offset: 0x00
-    ),
+    new FourierOption
+    {
+        ScaleFactor = null,
+        Clamp = false,
+        Offset = 0x00,
+    },
     dst
 );
         // HIDE

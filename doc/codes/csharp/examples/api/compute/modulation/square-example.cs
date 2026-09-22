@@ -13,12 +13,13 @@ var dst = Modulation.ModulationBuffer();
 
 Modulation.Square(
     150 * Hz,
-    new SquareOption(
-        low: byte.MinValue,
-        high: byte.MaxValue,
-        duty: 0.5f,
-        samplingConfig: SamplingConfig.Freq4k
-    ),
+    new SquareOption
+    {
+        Low = byte.MinValue,
+        High = byte.MaxValue,
+        Duty = 0.5f,
+        SamplingConfig = SamplingConfig.Freq4k,
+    },
     dst
 );
         // HIDE

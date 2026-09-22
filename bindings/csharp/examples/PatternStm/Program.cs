@@ -41,7 +41,7 @@ internal static class Program
             builder
                 .Push(new SetSilencer())
                 .Push(new PatternStm(1 * Hz, patterns.ToArray(), Intensity.Max,
-                    new PatternStmOption(mode: PatternStmMode.PhaseFull)));
+                    new PatternStmOption { Mode = PatternStmMode.PhaseFull }));
             using var frames = builder.Build();
             foreach (var frame in frames)
             {

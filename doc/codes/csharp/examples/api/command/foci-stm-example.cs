@@ -33,12 +33,13 @@ var builder = client.DatagramBuilder();
 builder.Push(new FociStm(
     1.0f * Hz,
     points,
-    new FociStmOption(
-        bank: PatternBank.B0,
-        soundSpeed: 340.0f * m / s,
-        loopBehavior: LoopBehavior.Infinite,
-        transitionMode: TransitionMode.Immediate
-    )
+    new FociStmOption
+    {
+        Bank = PatternBank.B0,
+        SoundSpeed = 340.0f * m / s,
+        LoopBehavior = LoopBehavior.Infinite,
+        TransitionMode = TransitionMode.Immediate,
+    }
 ));
 var frames = builder.Build();
 foreach (var frame in frames)

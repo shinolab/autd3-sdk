@@ -40,11 +40,12 @@ internal static class Sample
         builder.Push(new FociStm(
             50.0f * Hz,
             foci,
-            new FociStmOption(
-                loopBehavior: LoopBehavior.Finite(3),
-                bank: PatternBank.B1,
-                transitionMode: TransitionMode.SyncIdx
-            )
+            new FociStmOption
+            {
+                LoopBehavior = LoopBehavior.Finite(3),
+                Bank = PatternBank.B1,
+                TransitionMode = TransitionMode.SyncIdx,
+            }
         ));
         foreach (var frame in builder.Build())
         {

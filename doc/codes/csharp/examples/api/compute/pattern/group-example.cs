@@ -38,7 +38,7 @@ Pattern.GroupCompute(geometry, groups, (side, mask, p, i) =>
 {
     if (side == Side.Left)
     {
-        Holo.Gspat(geometry, foci, wavelength, new GspatOption(mask: mask), p, i);
+        Holo.Gspat(geometry, foci, wavelength, new GspatOption { Mask = mask }, p, i);
     }
     else
     {

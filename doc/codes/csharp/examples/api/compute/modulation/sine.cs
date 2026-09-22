@@ -15,13 +15,14 @@ internal static class Sample
         var samplingConfig = SamplingConfig.Freq4k;
         var option =
             // ANCHOR: option
-            new SineOption(
-                amplitude,
-                offset,
-                phase,
-                clamp,
-                samplingConfig
-            )
+            new SineOption
+            {
+                Amplitude = amplitude,
+                Offset = offset,
+                Phase = phase,
+                Clamp = clamp,
+                SamplingConfig = samplingConfig,
+            }
             // ANCHOR_END: option
             ;
         var dst = Modulation.ModulationBuffer();

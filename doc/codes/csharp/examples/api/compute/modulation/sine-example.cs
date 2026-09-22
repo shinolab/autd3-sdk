@@ -13,13 +13,14 @@ var dst = Modulation.ModulationBuffer();
 
 Modulation.Sine(
     150 * Hz,
-    new SineOption(
-        amplitude: 0xFF,
-        offset: 0x80,
-        phase: 0.0f * rad,
-        clamp: false,
-        samplingConfig: SamplingConfig.Freq4k
-    ),
+    new SineOption
+    {
+        Amplitude = 0xFF,
+        Offset = 0x80,
+        Phase = 0.0f * rad,
+        Clamp = false,
+        SamplingConfig = SamplingConfig.Freq4k,
+    },
     dst
 );
         // HIDE

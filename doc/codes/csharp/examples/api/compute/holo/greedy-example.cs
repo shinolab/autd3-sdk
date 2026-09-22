@@ -25,12 +25,13 @@ Holo.Greedy(
         new AmplitudeTarget(geometry.Center + new Vector3(30.0f, 0.0f, 150.0f), 2.5e3f * Pa),
     },
     Pattern.Wavelength(340.0f * m / s),
-    new GreedyOption(
-        phaseQuantizationLevels: 16,
-        constraint: IntensityConstraint.Uniform(Intensity.Max),
-        directivity: Directivity.Sphere,
-        mask: TransducerMask.AllEnabled
-    ),
+    new GreedyOption
+    {
+        PhaseQuantizationLevels = 16,
+        Constraint = IntensityConstraint.Uniform(Intensity.Max),
+        Directivity = Directivity.Sphere,
+        Mask = TransducerMask.AllEnabled,
+    },
     phases,
     intensities
 );

@@ -25,12 +25,13 @@ Holo.Naive(
         new AmplitudeTarget(geometry.Center + new Vector3(30.0f, 0.0f, 150.0f), 2.5e3f * Pa),
     },
     Pattern.Wavelength(340.0f * m / s),
-    new NaiveOption(
-        constraint: IntensityConstraint.Clamp(Intensity.Min, Intensity.Max),
-        directivity: Directivity.Sphere,
-        mask: TransducerMask.AllEnabled,
-        parallel: true
-    ),
+    new NaiveOption
+    {
+        Constraint = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max),
+        Directivity = Directivity.Sphere,
+        Mask = TransducerMask.AllEnabled,
+        Parallel = true,
+    },
     phases,
     intensities
 );

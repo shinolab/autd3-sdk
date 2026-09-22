@@ -39,7 +39,7 @@ Pattern.Focus(
 var modulation = Modulation.ModulationBuffer();
 Modulation.Sine(
     200 * Hz,
-    new SineOption(samplingConfig: SamplingConfig.Freq4k),
+    new SineOption { SamplingConfig = SamplingConfig.Freq4k },
     modulation
 );
 

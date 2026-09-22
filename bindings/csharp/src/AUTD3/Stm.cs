@@ -180,41 +180,25 @@ namespace AUTD3
 
     public readonly struct FociStmOption
     {
-        public PatternBank Bank { get; }
-        public Velocity SoundSpeed { get; }
-        public LoopBehavior LoopBehavior { get; }
-        public TransitionMode TransitionMode { get; }
+        public PatternBank Bank { get; init; } = PatternBank.B0;
+        public Velocity SoundSpeed { get; init; } = Velocity.FromMS(340f);
+        public LoopBehavior LoopBehavior { get; init; } = LoopBehavior.Infinite;
+        public TransitionMode TransitionMode { get; init; } = TransitionMode.Immediate;
 
-        public FociStmOption() : this(bank: PatternBank.B0)
+        public FociStmOption()
         {
-        }
-
-        public FociStmOption(PatternBank bank = PatternBank.B0, Velocity? soundSpeed = null, LoopBehavior? loopBehavior = null, TransitionMode? transitionMode = null)
-        {
-            Bank = bank;
-            SoundSpeed = soundSpeed ?? Velocity.FromMS(340f);
-            LoopBehavior = loopBehavior ?? LoopBehavior.Infinite;
-            TransitionMode = transitionMode ?? TransitionMode.Immediate;
         }
     }
 
     public readonly struct PatternStmOption
     {
-        public PatternBank Bank { get; }
-        public PatternStmMode Mode { get; }
-        public LoopBehavior LoopBehavior { get; }
-        public TransitionMode TransitionMode { get; }
+        public PatternBank Bank { get; init; } = PatternBank.B0;
+        public PatternStmMode Mode { get; init; } = PatternStmMode.PhaseIntensityFull;
+        public LoopBehavior LoopBehavior { get; init; } = LoopBehavior.Infinite;
+        public TransitionMode TransitionMode { get; init; } = TransitionMode.Immediate;
 
-        public PatternStmOption() : this(bank: PatternBank.B0)
+        public PatternStmOption()
         {
-        }
-
-        public PatternStmOption(PatternBank bank = PatternBank.B0, PatternStmMode mode = PatternStmMode.PhaseIntensityFull, LoopBehavior? loopBehavior = null, TransitionMode? transitionMode = null)
-        {
-            Bank = bank;
-            Mode = mode;
-            LoopBehavior = loopBehavior ?? LoopBehavior.Infinite;
-            TransitionMode = transitionMode ?? TransitionMode.Immediate;
         }
     }
 
@@ -328,7 +312,7 @@ namespace AUTD3
             _config = config;
             _phases = phases;
             _intensities = intensities;
-            _option = option ?? new PatternStmOption(PatternBank.B0);
+            _option = option ?? new PatternStmOption();
         }
 
         IntPtr ICommand.CreateOp()

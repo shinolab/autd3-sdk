@@ -9,25 +9,13 @@ namespace AUTD3.Legacy
 
     public readonly struct LegacyClientConfig
     {
-        public uint TimeoutCycles { get; }
-        public RtPriority RtPriority { get; }
-        public RtSchedulePolicy RtPolicy { get; }
-        public ulong? RtAffinity { get; }
+        public uint TimeoutCycles { get; init; } = 2000;
+        public RtPriority? RtPriority { get; init; } = AUTD3.RtPriority.Default;
+        public RtSchedulePolicy RtPolicy { get; init; } = RtSchedulePolicy.Fifo;
+        public ulong? RtAffinity { get; init; } = null;
 
-        public LegacyClientConfig() : this(timeoutCycles: 2000)
+        public LegacyClientConfig()
         {
-        }
-
-        public LegacyClientConfig(
-            uint timeoutCycles = 2000,
-            RtPriority rtPriority = default,
-            RtSchedulePolicy rtPolicy = RtSchedulePolicy.Fifo,
-            ulong? rtAffinity = null)
-        {
-            TimeoutCycles = timeoutCycles;
-            RtPriority = rtPriority;
-            RtPolicy = rtPolicy;
-            RtAffinity = rtAffinity;
         }
 
         internal IntPtr CreateHandle()
@@ -40,7 +28,8 @@ namespace AUTD3.Legacy
             try
             {
                 NativeConfig.Apply("timeoutCycles", NativeLegacyClient.autd3_legacy_client_config_set_timeout_cycles(handle, TimeoutCycles));
-                NativeConfig.Apply("rtPriority", NativeLegacyClient.autd3_legacy_client_config_set_rt_priority(handle, RtPriority.Mode, RtPriority.Value));
+                var (rtPriorityMode, rtPriorityValue) = AUTD3.RtPriority.ToNative(RtPriority);
+                NativeConfig.Apply("rtPriority", NativeLegacyClient.autd3_legacy_client_config_set_rt_priority(handle, rtPriorityMode, rtPriorityValue));
                 NativeConfig.Apply("rtPolicy", NativeLegacyClient.autd3_legacy_client_config_set_rt_policy(handle, (byte)RtPolicy));
                 NativeConfig.Apply("rtAffinity", NativeLegacyClient.autd3_legacy_client_config_set_rt_affinity(handle, RtAffinity.HasValue, (UIntPtr)(RtAffinity ?? 0)));
             }
