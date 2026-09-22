@@ -25,6 +25,9 @@ jobs:
             simulator
             simulator/frontend
             xtask
+      - name: Audit
+        if: runner.os == 'Linux'
+        run: cargo xtask simulator audit
       - name: Format
         if: runner.os == 'Linux'
         run: cargo xtask simulator format
