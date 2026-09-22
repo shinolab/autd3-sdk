@@ -67,6 +67,8 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 
 `max_inflight` errors if it exceeds `MAX_INFLIGHT (127)`.
 
+In C#, `rtPriority` is an `RtPriority` struct: its default value (`default`) is the platform default, and `RtPriority.Disabled` corresponds to Rust's `None` (the OS default).
+
 Enabling `low_latency` bypasses the receive buffer inside the firmware, improving latency.
 However, this may make operation unstable.
 

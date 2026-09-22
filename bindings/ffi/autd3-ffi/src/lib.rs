@@ -2278,7 +2278,8 @@ autd3_ffi_abi::export_abi_version!();
 #[cfg(test)]
 mod tests {
     use super::*;
-    use autd3_ffi_abi::AUTD3_RT_PRIORITY_DEFAULT;
+    use autd3_ffi_abi::{AUTD3_RT_PRIORITY_DEFAULT, AUTD3_RT_PRIORITY_MAX, AUTD3_RT_PRIORITY_MIN};
+    use autd3_rs::RtPriority;
 
     #[test]
     fn a_new_client_config_matches_the_rust_default() {
@@ -2310,6 +2311,21 @@ mod tests {
         let config = unsafe { take_handle(handle) }.unwrap();
         assert_eq!(ClientConfig::default().rt_priority, config.rt_priority);
         assert!(config.rt_priority.is_some());
+    }
+
+    #[test]
+    fn the_min_and_max_rt_priority_modes_select_the_bounds() {
+        for (mode, expected) in [
+            (AUTD3_RT_PRIORITY_MIN, RtPriority::MIN),
+            (AUTD3_RT_PRIORITY_MAX, RtPriority::MAX),
+        ] {
+            let handle = autd3_client_config_new();
+            assert_eq!(AUTD3_OK, unsafe {
+                autd3_client_config_set_rt_priority(handle, mode, 0)
+            });
+            let config = unsafe { take_handle(handle) }.unwrap();
+            assert_eq!(Some(expected), config.rt_priority);
+        }
     }
 
     #[test]

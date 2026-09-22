@@ -15,8 +15,7 @@ namespace AUTD3.Tests
         {
             var config = new LegacyClientConfig();
 
-            Assert.Null(config.RtPriority);
-            Assert.False(config.DisableRtPriority);
+            Assert.Equal(RtPriority.Default, config.RtPriority);
             Assert.Equal(RtSchedulePolicy.Fifo, config.RtPolicy);
             Assert.Equal(2000u, config.TimeoutCycles);
             Assert.Null(config.RtAffinity);

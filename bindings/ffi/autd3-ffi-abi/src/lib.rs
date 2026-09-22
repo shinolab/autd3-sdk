@@ -152,6 +152,8 @@ pub const OPTION_HANDLE_CONSUMED: &str =
 pub const AUTD3_RT_PRIORITY_DEFAULT: u8 = 0;
 pub const AUTD3_RT_PRIORITY_DISABLED: u8 = 1;
 pub const AUTD3_RT_PRIORITY_EXPLICIT: u8 = 2;
+pub const AUTD3_RT_PRIORITY_MIN: u8 = 3;
+pub const AUTD3_RT_PRIORITY_MAX: u8 = 4;
 
 #[must_use]
 pub fn to_rt_priority(mode: u8, value: u8) -> Option<Option<RtPriority>> {
@@ -159,6 +161,8 @@ pub fn to_rt_priority(mode: u8, value: u8) -> Option<Option<RtPriority>> {
         AUTD3_RT_PRIORITY_DEFAULT => Some(autd3_rs_core::default_rt_priority()),
         AUTD3_RT_PRIORITY_DISABLED => Some(None),
         AUTD3_RT_PRIORITY_EXPLICIT => RtPriority::new(value).map(Some),
+        AUTD3_RT_PRIORITY_MIN => Some(Some(RtPriority::MIN)),
+        AUTD3_RT_PRIORITY_MAX => Some(Some(RtPriority::MAX)),
         _ => None,
     }
 }
