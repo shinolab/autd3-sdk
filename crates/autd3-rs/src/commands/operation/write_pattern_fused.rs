@@ -1,5 +1,5 @@
-use autd3_cpu_wire::layout::{FUSED_EMISSION_TYPE_RAW_SOA, PATTERN_RAW_DATA_LEN};
-use autd3_cpu_wire::params::EMISSION_TYPE_FOCI;
+use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
+use autd3_cpu_wire::params::{EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW};
 use autd3_cpu_wire::payload::WritePatternFusedPayload;
 use zerocopy::FromBytes;
 use zerocopy::little_endian::{U16, U32, U64};
@@ -108,7 +108,7 @@ impl Operation for WritePatternFused<'_> {
         encode_raw_slot(self.phases, self.intensities, device, rest)?;
         *h = WritePatternFusedPayload {
             bank: self.bank.as_u8(),
-            emission_type: FUSED_EMISSION_TYPE_RAW_SOA,
+            emission_type: EMISSION_TYPE_RAW,
             divider: U16::new(divider),
             size: U32::new(1),
             num_foci: 0,
@@ -263,7 +263,7 @@ mod tests {
 
         assert_eq!(cmd, Cmd::WritePatternFused);
         assert_eq!(out[0], 1, "bank B1");
-        assert_eq!(out[1], FUSED_EMISSION_TYPE_RAW_SOA);
+        assert_eq!(out[1], EMISSION_TYPE_RAW);
         assert_eq!(&out[2..4], &7u16.to_le_bytes(), "divider");
         assert_eq!(&out[4..8], &1u32.to_le_bytes(), "size = 1 index");
         assert_eq!(out[8], 0, "num_foci unused for raw");

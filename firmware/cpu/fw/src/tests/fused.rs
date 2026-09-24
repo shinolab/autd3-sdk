@@ -17,7 +17,7 @@ use crate::tests::builders::{
     config_mod, config_mod_rep, config_pattern_rep, fpga_snapshot, raw_words_to_soa, set_silencer,
     write_foci_buffer, write_mod_buffer, write_mod_fused, write_pattern_fused, write_pattern_raw,
 };
-use crate::tests::mock::Harness;
+use crate::tests::mock::{Frame, Harness};
 
 fn pattern_words() -> Vec<u16> {
     (0..NUM_TRANSDUCERS)
@@ -388,16 +388,10 @@ fn fused_raw_pattern_requires_full_slot_data() {
 }
 
 #[test]
-fn fused_rejects_the_pre_soa_raw_emission_type() {
+fn pre_soa_fused_pattern_cmd_is_unknown() {
     let mut h = Harness::new();
     let before = fpga_snapshot(&h);
-    let mut f = FusedPattern::raw(0, 10, 1);
-    f.emission_type = EMISSION_TYPE_RAW;
-    h.deliver(&write_pattern_fused(
-        0,
-        &f,
-        &raw_words_to_soa(&pattern_words()),
-    ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    h.deliver(&Frame::raw(0, 0x14));
+    assert_eq!(h.data(), Error::UnknownCmd as u8);
     assert_fpga_unchanged(&before, &h);
 }

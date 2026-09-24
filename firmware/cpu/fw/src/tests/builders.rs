@@ -253,7 +253,7 @@ impl FusedPattern {
     pub(crate) fn raw(bank: u8, divider: u16, size: u32) -> Self {
         Self {
             bank,
-            emission_type: autd3_cpu_wire::layout::FUSED_EMISSION_TYPE_RAW_SOA,
+            emission_type: autd3_cpu_wire::params::EMISSION_TYPE_RAW,
             divider,
             size,
             num_foci: 0,

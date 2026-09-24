@@ -18,7 +18,6 @@ pub const MOD_WRITE_MAX_DATA_LEN: usize = PAYLOAD_BYTES - core::mem::size_of::<W
 pub const FOCI_WRITE_MAX_DATA_LEN: usize = PAYLOAD_BYTES - core::mem::size_of::<WriteFociPayload>();
 pub const MAX_FOCI_PER_FRAME: usize = FOCI_WRITE_MAX_DATA_LEN / (FOCUS_WORDS * 2);
 pub const PATTERN_RAW_DATA_LEN: usize = 2 * NUM_TRANSDUCERS;
-pub const FUSED_EMISSION_TYPE_RAW_SOA: u8 = 0x2;
 const _: () =
     assert!(core::mem::size_of::<WritePatternRawPayload>() + PATTERN_RAW_DATA_LEN <= PAYLOAD_BYTES);
 pub const UPDATE_CHUNK_MAX_DATA_LEN: usize =

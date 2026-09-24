@@ -7,11 +7,10 @@ use crate::app::Cpu;
 use crate::fpga::{self, EmissionType};
 use crate::params::{
     ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, BRAM_SELECT_EMISSION, CTL_FLAG_PATTERN_SET,
-    EMISSION_TYPE_FOCI, NUM_BANKS,
+    EMISSION_TYPE_RAW, NUM_BANKS,
 };
 use crate::port::Port;
 use crate::proto::{Error, PAYLOAD_BYTES};
-use autd3_cpu_wire::layout::FUSED_EMISSION_TYPE_RAW_SOA;
 
 const PATTERN_FUSED_MAX_DATA_LEN: usize =
     PAYLOAD_BYTES - core::mem::size_of::<WritePatternFusedPayload>();
@@ -27,17 +26,13 @@ impl Cpu {
         };
         let bank = p.bank;
         let data_len = p.data_len.get();
-        let emission_type = match p.emission_type {
-            FUSED_EMISSION_TYPE_RAW_SOA => EmissionType::Raw as u8,
-            EMISSION_TYPE_FOCI => EMISSION_TYPE_FOCI,
-            _ => return Err(Error::InvalidPayload),
-        };
+        let emission_type = p.emission_type;
 
         if usize::from(bank) >= NUM_BANKS
             || !data_len.is_multiple_of(2)
             || usize::from(data_len) > PATTERN_FUSED_MAX_DATA_LEN
             || usize::from(data_len) > rest.len()
-            || (p.emission_type == FUSED_EMISSION_TYPE_RAW_SOA
+            || (emission_type == EMISSION_TYPE_RAW
                 && (p.size.get() != 1 || usize::from(data_len) != PATTERN_RAW_DATA_LEN))
         {
             return Err(Error::InvalidPayload);

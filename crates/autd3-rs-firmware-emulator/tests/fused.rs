@@ -66,7 +66,7 @@ fn split_path(pattern: &Pattern) -> Device {
 fn fused_path(pattern: &Pattern) -> Device {
     let mut p = vec![0u8; 32];
     p[0] = BANK;
-    p[1] = 0x02;
+    p[1] = 0x01;
     p[2..4].copy_from_slice(&DIVIDER.to_le_bytes());
     p[4..8].copy_from_slice(&1u32.to_le_bytes());
     p[8] = 0;
