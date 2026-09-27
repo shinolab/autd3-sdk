@@ -326,6 +326,113 @@ def test_custom_pattern_indexing() -> None:
     autd3.commands.Pattern(phases, intensities)
 
 
+def two_devices() -> autd3.geometry.Geometry:
+    return autd3.geometry.Geometry(
+        [
+            autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+            autd3.geometry.Autd3([192.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+        ]
+    )
+
+
+@pytest.mark.parametrize("buffer_type", [pattern.PhaseBuffer, pattern.IntensityBuffer])
+def test_buffer_numpy_round_trip(buffer_type: type) -> None:
+    values = (np.arange(2 * 249) & 0xFF).astype(np.uint8).reshape(2, 249)
+
+    buf = buffer_type.from_array(values)
+    assert buf.num_devices() == 2
+    assert buf[1][3].value == values[1, 3]
+    out = buf.to_numpy()
+    assert out.dtype == np.uint8
+    assert out.shape == (2, 249)
+    np.testing.assert_array_equal(out, values)
+
+    out[0, 0] = 0xAA
+    assert buf[0][0].value == values[0, 0]
+
+    reversed_view = values[:, ::-1]
+    assert not reversed_view.flags.c_contiguous
+    buf.copy_from(reversed_view)
+    np.testing.assert_array_equal(buf.to_numpy(), reversed_view)
+
+    empty = buffer_type.from_array(np.zeros((0, 249), dtype=np.uint8))
+    assert empty.num_devices() == 0
+    assert empty.to_numpy().shape == (0, 249)
+
+
+@pytest.mark.parametrize("buffer_type", [pattern.PhaseBuffer, pattern.IntensityBuffer])
+def test_buffer_numpy_rejects_mismatch(buffer_type: type) -> None:
+    buf = buffer_type(2)
+    values = np.zeros((2, 249), dtype=np.uint8)
+
+    with pytest.raises(TypeError, match="uint8"):
+        buf.copy_from(values.astype(np.int64))
+    with pytest.raises(TypeError, match="uint8"):
+        buffer_type.from_array(values.astype(np.float32))
+    with pytest.raises(ValueError, match="shape"):
+        buf.copy_from(values[:1])
+    with pytest.raises(ValueError, match="shape"):
+        buf.copy_from(np.zeros((249, 2), dtype=np.uint8))
+    with pytest.raises(ValueError, match=r"expected shape \(n, 249\), got \(249,\)"):
+        buffer_type.from_array(np.zeros(249, dtype=np.uint8))
+    with pytest.raises(ValueError, match=r"expected shape \(n, 249\)"):
+        buffer_type.from_array(np.zeros((2, 249, 1), dtype=np.uint8))
+    with pytest.raises(TypeError, match="ndarray"):
+        buf.copy_from(values.tolist())
+    with pytest.raises(TypeError, match="masked"):
+        buf.copy_from(np.ma.masked_array(values, mask=values > 0))
+    with pytest.raises(TypeError):
+        buffer_type.from_array("abc")
+
+    before = buf.to_numpy()
+    with pytest.raises(ValueError):
+        buf.copy_from(np.full((1, 249), 7, dtype=np.uint8))
+    np.testing.assert_array_equal(buf.to_numpy(), before)
+
+
+def test_buffer_from_array_list_is_unchanged() -> None:
+    values = [[autd3.value.Phase(t & 0xFF) for t in range(249)] for _ in range(2)]
+    buf = pattern.PhaseBuffer.from_array(values)
+    assert buf[1][5].value == 5
+    with pytest.raises(ValueError):
+        pattern.PhaseBuffer.from_array([[0] * 248])
+
+
+def test_positions_and_directions_are_float32_arrays() -> None:
+    geo = autd3.geometry.Geometry(
+        [autd3.geometry.Autd3([10.0, 20.0, 30.0], [np.cos(np.pi / 4), 0.0, np.sin(np.pi / 4), 0.0])]
+    )
+    dev = geo[0]
+    positions = dev.positions()
+    directions = dev.directions()
+    assert positions.dtype == np.float32
+    assert directions.dtype == np.float32
+    assert positions.shape == (dev.num_transducers(), 3)
+    assert directions.shape == (dev.num_transducers(), 3)
+    for t in (0, 17, dev.num_transducers() - 1):
+        np.testing.assert_allclose(positions[t], dev.position(t), atol=1e-4)
+        np.testing.assert_allclose(directions[t], dev.direction(t), atol=1e-6)
+    np.testing.assert_allclose(directions[0], [1.0, 0.0, 0.0], atol=1e-6)
+
+
+def test_numpy_focus_matches_native_focus() -> None:
+    geo = two_devices()
+    wavelength = pattern.wavelength(340 * m / s)
+    target = geo.center() + np.array([10.0, -20.0, 150.0])
+
+    native = geo.phase_buffer()
+    pattern.focus(geo, target, wavelength, native)
+
+    positions = np.stack([device.positions() for device in geo])
+    dist = np.linalg.norm(positions - target.astype(np.float32), axis=2)
+    phases = (np.rint(-dist / wavelength * 256.0).astype(np.int64) & 0xFF).astype(np.uint8)
+    custom = geo.phase_buffer()
+    custom.copy_from(phases)
+
+    diff = (custom.to_numpy().astype(np.int16) - native.to_numpy().astype(np.int16)) & 0xFF
+    assert np.all((diff == 0) | (diff == 1) | (diff == 0xFF))
+
+
 def test_custom_modulation_indexing() -> None:
     buf = modulation.ModulationBuffer(10)
     assert len(buf) == 10
