@@ -1,3 +1,5 @@
+pub mod numpy;
+
 use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 

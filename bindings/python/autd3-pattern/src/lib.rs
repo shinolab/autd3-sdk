@@ -1,3 +1,4 @@
+use autd3_python_capsule::numpy;
 use autd3_python_capsule::{
     capsule_of, geometry_from_capsule, intensities_from_capsule, intensities_into_capsule,
     phases_from_capsule, phases_into_capsule,
@@ -85,6 +86,7 @@ macro_rules! buffer_class {
         $name:literal,
         $view_name:literal,
         $ty:ty,
+        $ctor:path,
         $init:expr,
         $extract:ident,
         $to_py:ident,
@@ -106,7 +108,21 @@ macro_rules! buffer_class {
             }
 
             #[staticmethod]
-            fn from_array(values: Vec<Vec<Bound<'_, PyAny>>>) -> PyResult<$buffer> {
+            fn from_array(values: &Bound<'_, PyAny>) -> PyResult<$buffer> {
+                if numpy::is_ndarray(values)? {
+                    let bytes = numpy::u8_matrix_bytes(values, Autd3::NUM_TRANSDUCERS, None)?;
+                    let inner = bytes
+                        .as_bytes()
+                        .chunks_exact(Autd3::NUM_TRANSDUCERS)
+                        .map(|row| row.iter().map(|&v| $ctor(v)).collect())
+                        .collect::<Vec<Vec<$ty>>>();
+                    return Ok($buffer { inner });
+                }
+                let values: Vec<Vec<Bound<'_, PyAny>>> = values.extract().map_err(|e| {
+                    PyTypeError::new_err(format!(
+                        "values must be a uint8 numpy.ndarray or a list of per-device lists: {e}"
+                    ))
+                })?;
                 let mut inner = Vec::with_capacity(values.len());
                 for device in values {
                     if device.len() != Autd3::NUM_TRANSDUCERS {
@@ -119,6 +135,36 @@ macro_rules! buffer_class {
                     inner.push(device.iter().map($extract).collect::<PyResult<Vec<_>>>()?);
                 }
                 Ok($buffer { inner })
+            }
+
+            fn copy_from(slf: &Bound<'_, Self>, values: &Bound<'_, PyAny>) -> PyResult<()> {
+                let num_devices = slf.borrow().inner.len();
+                let bytes =
+                    numpy::u8_matrix_bytes(values, Autd3::NUM_TRANSDUCERS, Some(num_devices))?;
+                let mut this = slf.borrow_mut();
+                for (dst, src) in this
+                    .inner
+                    .iter_mut()
+                    .zip(bytes.as_bytes().chunks_exact(Autd3::NUM_TRANSDUCERS))
+                {
+                    for (d, &s) in dst.iter_mut().zip(src) {
+                        *d = $ctor(s);
+                    }
+                }
+                Ok(())
+            }
+
+            fn to_numpy<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+                numpy::u8_matrix(py, self.inner.len(), Autd3::NUM_TRANSDUCERS, |dst| {
+                    for (dst, src) in dst
+                        .chunks_exact_mut(Autd3::NUM_TRANSDUCERS)
+                        .zip(&self.inner)
+                    {
+                        for (d, s) in dst.iter_mut().zip(src) {
+                            *d = s.0;
+                        }
+                    }
+                })
             }
 
             fn num_devices(&self) -> usize {
@@ -193,6 +239,7 @@ buffer_class!(
     "PhaseBuffer",
     "DevicePhaseView",
     Phase,
+    Phase,
     Phase::ZERO,
     extract_phase,
     phase_to_py,
@@ -205,6 +252,7 @@ buffer_class!(
     DeviceIntensityView,
     "IntensityBuffer",
     "DeviceIntensityView",
+    Intensity,
     Intensity,
     Intensity::MAX,
     extract_intensity,

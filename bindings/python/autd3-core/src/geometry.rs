@@ -17,10 +17,6 @@ fn np_vec4(py: Python<'_>, x: f32, y: f32, z: f32, w: f32) -> PyResult<Bound<'_,
     py.import("numpy")?.call_method1("array", ((x, y, z, w),))
 }
 
-fn np_rows(py: Python<'_>, rows: Vec<(f32, f32, f32)>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("numpy")?.call_method1("array", (rows,))
-}
-
 #[pyclass(name = "EulerAngles", module = "autd3_core", from_py_object)]
 #[derive(Clone, Copy)]
 pub struct EulerAngles(UnitQuaternion<f32>);
@@ -256,26 +252,17 @@ impl Device {
     }
 
     fn positions<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let rows = self
-            .inner
-            .positions()
-            .iter()
-            .map(|p| (p.x, p.y, p.z))
-            .collect();
-        np_rows(py, rows)
+        autd3_python_capsule::numpy::f32_vec3_rows(
+            py,
+            self.inner.positions().iter().map(|p| [p.x, p.y, p.z]),
+        )
     }
 
     fn directions<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let rows = self
-            .inner
-            .directions()
-            .iter()
-            .map(|d| {
-                let d = d.into_inner();
-                (d.x, d.y, d.z)
-            })
-            .collect();
-        np_rows(py, rows)
+        autd3_python_capsule::numpy::f32_vec3_rows(
+            py,
+            self.inner.directions().iter().map(|d| [d.x, d.y, d.z]),
+        )
     }
 
     fn position<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyAny>> {
