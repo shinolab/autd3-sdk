@@ -25,15 +25,15 @@ impl Cpu {
             return Err(Error::InvalidPayload);
         };
         let bank = p.bank;
-        let data_len = p.data_len.get();
+        let data_len = usize::from(p.data_len.get());
         let emission_type = p.emission_type;
 
         if usize::from(bank) >= NUM_BANKS
             || !data_len.is_multiple_of(2)
-            || usize::from(data_len) > PATTERN_FUSED_MAX_DATA_LEN
-            || usize::from(data_len) > rest.len()
+            || data_len > PATTERN_FUSED_MAX_DATA_LEN
+            || data_len > rest.len()
             || (emission_type == EMISSION_TYPE_RAW
-                && (p.size.get() != 1 || usize::from(data_len) != PATTERN_RAW_DATA_LEN))
+                && (p.size.get() != 1 || data_len != PATTERN_RAW_DATA_LEN))
         {
             return Err(Error::InvalidPayload);
         }
@@ -57,7 +57,7 @@ impl Cpu {
             p.margin_ns.get(),
         )?;
 
-        let data = &rest[..usize::from(data_len)];
+        let data = &rest[..data_len];
         if let Ok(raw) = <&[u8; PATTERN_RAW_DATA_LEN]>::try_from(data)
             && cfg.emission_type == EmissionType::Raw
         {
