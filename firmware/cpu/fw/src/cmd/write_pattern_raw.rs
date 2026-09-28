@@ -16,12 +16,12 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
         return Err(Error::InvalidPayload);
     };
     let index = u32::from(p.index.get());
-    let Some(data) = rest.first_chunk::<PATTERN_RAW_DATA_LEN>() else {
-        return Err(Error::InvalidPayload);
-    };
     if usize::from(p.bank) >= NUM_BANKS || index >= EMISSION_MAX_INDICES {
         return Err(Error::InvalidPayload);
     }
+    let Some(data) = rest.first_chunk::<PATTERN_RAW_DATA_LEN>() else {
+        return Err(Error::InvalidPayload);
+    };
     write_slot(port, p.bank, index * EMISSION_SLOT_WORDS, data);
     Ok(())
 }
