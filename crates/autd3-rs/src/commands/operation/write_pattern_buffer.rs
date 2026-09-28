@@ -5,7 +5,6 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Intensity, PatternBank, Phase};
 
 use super::{Distribution, Operation};
-use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
 use autd3_cpu_wire::payload::WritePatternRawPayload;
 use zerocopy::little_endian::U16;
 use zerocopy::{FromBytes, IntoBytes};
@@ -102,18 +101,18 @@ pub(crate) fn encode_raw_slot(
     phases: &[Vec<Phase>],
     intensities: PatternIntensity<'_>,
     device: &Device,
-    dst: &mut [u8],
+    dst_phases: &mut [u8],
+    dst_intensities: &mut [u8],
 ) -> Result<(), Error> {
     let phases = device_slot(phases, device)?.as_bytes();
-    let (p, i) = dst[..PATTERN_RAW_DATA_LEN].split_at_mut(PATTERN_RAW_DATA_LEN / 2);
-    p[..phases.len()].copy_from_slice(phases);
+    dst_phases[..phases.len()].copy_from_slice(phases);
     match intensities {
         PatternIntensity::Uniform(intensity) => {
-            i[..device.num_transducers()].fill(intensity.0);
+            dst_intensities[..device.num_transducers()].fill(intensity.0);
         }
         PatternIntensity::PerDevice(intensities) => {
             let intensities = device_slot(intensities, device)?.as_bytes();
-            i[..intensities.len()].copy_from_slice(intensities);
+            dst_intensities[..intensities.len()].copy_from_slice(intensities);
         }
     }
     Ok(())
@@ -132,13 +131,17 @@ impl Operation for WritePatternBuffer<'_> {
             }
             .into());
         }
-        let (h, rest) = WritePatternRawPayload::mut_from_prefix(&mut out[..]).unwrap();
-        encode_raw_slot(self.phases, self.intensities, device, rest)?;
-        *h = WritePatternRawPayload {
-            bank: self.bank.as_u8(),
-            reserved: 0,
-            index: U16::new(u16::try_from(self.index).expect("bounded by EMISSION_MAX_INDICES")),
-        };
+        let (p, _) = WritePatternRawPayload::mut_from_prefix(&mut out[..]).unwrap();
+        encode_raw_slot(
+            self.phases,
+            self.intensities,
+            device,
+            &mut p.phases,
+            &mut p.intensities,
+        )?;
+        p.bank = self.bank.as_u8();
+        p.reserved = 0;
+        p.index = U16::new(u16::try_from(self.index).expect("bounded by EMISSION_MAX_INDICES"));
         Ok(Cmd::WritePatternRaw)
     }
 }
@@ -147,7 +150,8 @@ impl Operation for WritePatternBuffer<'_> {
 mod tests {
     use super::*;
     use crate::test_utils::test_device;
-    const HEADER_BYTES: usize = core::mem::size_of::<WritePatternRawPayload>();
+    const PHASES_OFFSET: usize = core::mem::offset_of!(WritePatternRawPayload, phases);
+    const INTENSITIES_OFFSET: usize = core::mem::offset_of!(WritePatternRawPayload, intensities);
 
     #[test]
     fn write_pattern_lays_out_phases_then_intensities() {
@@ -168,8 +172,8 @@ mod tests {
         assert_eq!(out[0], 1);
         assert_eq!(&out[2..4], &3u16.to_le_bytes());
         for i in 0..n {
-            assert_eq!(out[HEADER_BYTES + i], phases[0][i].0);
-            assert_eq!(out[HEADER_BYTES + n + i], intensities[0][i].0);
+            assert_eq!(out[PHASES_OFFSET + i], phases[0][i].0);
+            assert_eq!(out[INTENSITIES_OFFSET + i], intensities[0][i].0);
         }
     }
 
@@ -202,10 +206,7 @@ mod tests {
         let op = WritePatternBuffer::new(PatternBank::B0, 0, &phases, PatternIntensity::default());
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(op.encode(&dev, &mut out).is_ok());
-        assert_eq!(
-            out[HEADER_BYTES + PATTERN_RAW_DATA_LEN / 2],
-            Intensity::MAX.0
-        );
+        assert_eq!(out[INTENSITIES_OFFSET], Intensity::MAX.0);
     }
 
     #[test]

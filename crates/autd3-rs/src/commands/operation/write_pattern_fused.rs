@@ -105,7 +105,15 @@ impl Operation for WritePatternFused<'_> {
         let margin_ns = self.transition_mode.margin_ns()?;
 
         let (h, rest) = WritePatternFusedPayload::mut_from_prefix(&mut out[..]).unwrap();
-        encode_raw_slot(self.phases, self.intensities, device, rest)?;
+        let (dst_phases, dst_intensities) =
+            rest[..PATTERN_RAW_DATA_LEN].split_at_mut(PATTERN_RAW_DATA_LEN / 2);
+        encode_raw_slot(
+            self.phases,
+            self.intensities,
+            device,
+            dst_phases,
+            dst_intensities,
+        )?;
         *h = WritePatternFusedPayload {
             bank: self.bank.as_u8(),
             emission_type: EMISSION_TYPE_RAW,

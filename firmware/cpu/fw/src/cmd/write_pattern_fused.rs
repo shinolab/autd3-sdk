@@ -7,7 +7,7 @@ use crate::app::Cpu;
 use crate::fpga::{self, EmissionType};
 use crate::params::{
     ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, BRAM_SELECT_EMISSION, CTL_FLAG_PATTERN_SET,
-    EMISSION_TYPE_RAW, NUM_BANKS,
+    EMISSION_TYPE_RAW, NUM_BANKS, NUM_TRANSDUCERS,
 };
 use crate::port::Port;
 use crate::proto::{Error, PAYLOAD_BYTES};
@@ -58,10 +58,11 @@ impl Cpu {
         )?;
 
         let data = &rest[..data_len];
-        if let Ok(raw) = <&[u8; PATTERN_RAW_DATA_LEN]>::try_from(data)
+        if let Some((phases, intensities)) = data.split_first_chunk::<NUM_TRANSDUCERS>()
+            && let Ok(intensities) = <&[u8; NUM_TRANSDUCERS]>::try_from(intensities)
             && cfg.emission_type == EmissionType::Raw
         {
-            write_pattern_raw::write_slot(port, bank, 0, raw);
+            write_pattern_raw::write_slot(port, bank, 0, phases, intensities);
         } else {
             fpga::write_ram(
                 port,
