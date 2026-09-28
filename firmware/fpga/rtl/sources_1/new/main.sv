@@ -268,6 +268,7 @@ module main #(
       .THERMO(thermo_sync),
       .FORCE_FAN(FORCE_FAN),
       .SYNC(sync),
+      .ECAT_SYNC_RAW(CAT_SYNC0),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
       .PATTERN_IDX(pattern_idx),

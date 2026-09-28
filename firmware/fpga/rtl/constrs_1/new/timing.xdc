@@ -22,6 +22,7 @@ set_output_delay -clock [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]
 set_output_delay -clock [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] -max 1.500 [get_ports XDCR_OUT*]
 set_output_delay -clock [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] -min 0.500 [get_ports GPIO_OUT*]
 set_output_delay -clock [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] -max 1.500 [get_ports GPIO_OUT*]
+set_max_delay -datapath_only -from [get_ports CAT_SYNC0] -to [get_ports GPIO_OUT*] 20.000
 
 set_property CFGBVS VCCO [current_design]
 set_property CONFIG_VOLTAGE 3.3 [current_design]

@@ -56,6 +56,7 @@ pub const GPIO_O_TYPE_BASE_SIG: u8 = 0x1;
 pub const GPIO_O_TYPE_THERMO: u8 = 0x2;
 pub const GPIO_O_TYPE_FORCE_FAN: u8 = 0x3;
 pub const GPIO_O_TYPE_SYNC: u8 = 0x10;
+pub const GPIO_O_TYPE_SYNC_RAW: u8 = 0x11;
 pub const GPIO_O_TYPE_MOD_BANK: u8 = 0x20;
 pub const GPIO_O_TYPE_MOD_IDX: u8 = 0x21;
 pub const GPIO_O_TYPE_PATTERN_BANK: u8 = 0x50;

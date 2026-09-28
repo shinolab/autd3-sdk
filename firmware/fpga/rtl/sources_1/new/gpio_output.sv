@@ -12,6 +12,7 @@ module gpio_output #(
     input wire THERMO,
     input wire FORCE_FAN,
     input wire SYNC,
+    input wire ECAT_SYNC_RAW,
     input wire PATTERN_BANK,
     input wire MOD_BANK,
     input wire [15:0] PATTERN_IDX,
@@ -22,8 +23,17 @@ module gpio_output #(
 
   logic [63:0] debug_value[4] = '{4{{params::GPIO_O_TYPE_NONE, 56'd0}}};
   logic gpio_out[4];
+  logic sync_raw_sel[4] = '{4{1'b0}};
 
-  assign GPIO_OUT = gpio_out;
+  for (genvar i = 0; i < 4; i++) begin : gen_out
+    assign GPIO_OUT[i] = sync_raw_sel[i] ? ECAT_SYNC_RAW : gpio_out[i];
+  end
+
+  always_ff @(posedge CLK) begin
+    for (int i = 0; i < 4; i++) begin
+      sync_raw_sel[i] <= debug_value[i][63:56] == params::GPIO_O_TYPE_SYNC_RAW;
+    end
+  end
 
   always_ff @(posedge CLK) begin
     if (DEBUG_SETTINGS.UPDATE) begin
