@@ -4,9 +4,7 @@ pub use autd3_cpu_wire::payload::ChangeModBankPayload;
 
 use crate::app::Cpu;
 use crate::cmd::BankChange;
-use crate::fpga::{
-    self, SYS_TIME_TRANSITION_MARGIN_NS, TransitionMode, transition_mode_violates_loop,
-};
+use crate::fpga::{self, SYS_TIME_TRANSITION_MARGIN_NS, TransitionMode, validate_transition_mode};
 use crate::params::{
     ADDR_MOD_REP0, ADDR_MOD_REQ_RD_BANK, ADDR_MOD_TRANSITION_MODE, ADDR_MOD_TRANSITION_VALUE_0,
     BRAM_SELECT_CONTROLLER, CTL_FLAG_MOD_SET, NUM_BANKS,
@@ -71,14 +69,7 @@ impl Cpu {
         let Some(transition_mode) = TransitionMode::from_u8(transition_mode) else {
             return Err(Error::InvalidTransitionMode);
         };
-        if transition_mode_violates_loop(rep, transition_mode) {
-            return Err(Error::InvalidTransitionMode);
-        }
-        if transition_mode == TransitionMode::SysTime
-            && transition_value < port.dc_sys_time() + margin_ns
-        {
-            return Err(Error::MissTransitionTime);
-        }
+        validate_transition_mode(port, rep, transition_mode, transition_value, margin_ns)?;
         Ok(BankChange {
             bank,
             transition_mode,

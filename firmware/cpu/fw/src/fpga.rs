@@ -93,19 +93,33 @@ pub fn write_u64<P: Port>(port: &mut P, addr: u16, value: u64) {
     }
 }
 
-#[must_use]
-pub fn transition_mode_violates_loop(rep: u16, transition_mode: TransitionMode) -> bool {
-    if rep == REP_INFINITE {
-        !matches!(
+pub fn validate_transition_mode<P: Port>(
+    port: &mut P,
+    rep: u16,
+    transition_mode: TransitionMode,
+    transition_value: u64,
+    margin_ns: u64,
+) -> Result<(), Error> {
+    let loop_compatible = if rep == REP_INFINITE {
+        matches!(
             transition_mode,
             TransitionMode::Immediate | TransitionMode::Ext
         )
     } else {
-        !matches!(
+        matches!(
             transition_mode,
             TransitionMode::SyncIdx | TransitionMode::SysTime | TransitionMode::Gpio
         )
+    };
+    if !loop_compatible {
+        return Err(Error::InvalidTransitionMode);
     }
+    if transition_mode == TransitionMode::SysTime
+        && transition_value < port.dc_sys_time() + margin_ns
+    {
+        return Err(Error::MissTransitionTime);
+    }
+    Ok(())
 }
 
 pub fn write_ram<P: Port>(
