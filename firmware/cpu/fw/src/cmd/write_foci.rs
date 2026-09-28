@@ -20,8 +20,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
     if usize::from(p.bank) >= NUM_BANKS
         || !data_len.is_multiple_of(2)
         || usize::from(data_len) > FOCI_WRITE_MAX_DATA_LEN
-        || offset > EMISSION_RAM_WORDS
-        || u32::from(data_len / 2) > EMISSION_RAM_WORDS - offset
+        || offset.saturating_add(u32::from(data_len / 2)) > EMISSION_RAM_WORDS
     {
         return Err(Error::InvalidPayload);
     }

@@ -257,6 +257,8 @@ fn chunk_out_of_range_is_invalid_payload() {
             generation: 1
         }
     );
+    h.deliver(&chunk(5, u32::MAX - 1, &img[..3]));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
 }
 
 #[test]
