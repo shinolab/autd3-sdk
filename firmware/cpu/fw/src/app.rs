@@ -45,8 +45,10 @@ impl Default for Cpu {
     }
 }
 
-macro_rules! cpu_new {
-    () => {
+impl Cpu {
+    #[must_use]
+    #[const_fn::const_fn(cfg(not(loom)))]
+    pub const fn new() -> Self {
         Self {
             mode: AtomicU8::new(Mode::Fifo as u8),
             last_seq: AtomicU8::new(0xFF),
@@ -62,22 +64,6 @@ macro_rules! cpu_new {
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
             tx: AtomicU16::new(0),
         }
-    };
-}
-
-#[cfg(not(loom))]
-impl Cpu {
-    #[must_use]
-    pub const fn new() -> Self {
-        cpu_new!()
-    }
-}
-
-#[cfg(loom)]
-impl Cpu {
-    #[must_use]
-    pub fn new() -> Self {
-        cpu_new!()
     }
 }
 

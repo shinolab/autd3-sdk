@@ -12,8 +12,9 @@ pub(crate) struct Fifo {
     flush_seen: AtomicU16,
 }
 
-macro_rules! zeroed {
-    () => {
+impl Fifo {
+    #[const_fn::const_fn(cfg(not(loom)))]
+    pub(crate) const fn new() -> Self {
         Self {
             head: AtomicU16::new(0),
             tail: AtomicU16::new(0),
@@ -21,20 +22,6 @@ macro_rules! zeroed {
             flush_gen: AtomicU16::new(0),
             flush_seen: AtomicU16::new(0),
         }
-    };
-}
-
-#[cfg(not(loom))]
-impl Fifo {
-    pub(crate) const fn new() -> Self {
-        zeroed!()
-    }
-}
-
-#[cfg(loom)]
-impl Fifo {
-    pub(crate) fn new() -> Self {
-        zeroed!()
     }
 }
 
