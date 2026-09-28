@@ -351,16 +351,13 @@ pub fn init<P: Port>(port: &mut P, mode: Mode) -> Result<(), Error> {
     init_pattern(port);
     init_tables(port);
 
-    let mut result = Ok(());
     for flag in [
         CTL_FLAG_MOD_SET,
         CTL_FLAG_PATTERN_SET,
         CTL_FLAG_SILENCER_SET,
         CTL_FLAG_DEBUG_SET,
     ] {
-        if set_and_wait_update(port, mode, flag).is_err() {
-            result = Err(Error::FpgaTimeout);
-        }
+        set_and_wait_update(port, mode, flag)?;
     }
-    result
+    Ok(())
 }
