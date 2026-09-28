@@ -58,23 +58,23 @@ impl Cpu {
         let Some(emission_type) = EmissionType::from_u8(emission_type) else {
             return Err(Error::InvalidPayload);
         };
-        let mut invalid = usize::from(bank) >= NUM_BANKS
+        if usize::from(bank) >= NUM_BANKS
             || divider == 0
             || size == 0
-            || (size < BUFFER_SIZE_MIN && rep != REP_INFINITE);
-        if !invalid {
-            invalid = match emission_type {
-                EmissionType::Raw => size > EMISSION_MAX_INDICES,
-                EmissionType::Foci => {
-                    size < BUFFER_SIZE_MIN
-                        || num_foci == 0
-                        || num_foci > NUM_FOCI_MAX
-                        || size > MAX_FOCI_TOTAL / u32::from(num_foci)
-                        || sound_speed == 0
-                }
-            };
+            || (size < BUFFER_SIZE_MIN && rep != REP_INFINITE)
+        {
+            return Err(Error::InvalidPayload);
         }
-        if invalid {
+        if match emission_type {
+            EmissionType::Raw => size > EMISSION_MAX_INDICES,
+            EmissionType::Foci => {
+                size < BUFFER_SIZE_MIN
+                    || num_foci == 0
+                    || num_foci > NUM_FOCI_MAX
+                    || size > MAX_FOCI_TOTAL / u32::from(num_foci)
+                    || sound_speed == 0
+            }
+        } {
             return Err(Error::InvalidPayload);
         }
         if self.silencer.violates_pattern_div(divider) {
