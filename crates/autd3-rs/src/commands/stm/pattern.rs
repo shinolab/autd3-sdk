@@ -301,11 +301,13 @@ mod tests {
         ));
         let datagrams = b.build().unwrap();
 
-        let header_bytes = core::mem::size_of::<autd3_cpu_wire::payload::WritePatternRawPayload>();
-        let intensity_offset = header_bytes + Autd3::NUM_TRANSDUCERS;
+        let phase_offset =
+            core::mem::offset_of!(autd3_cpu_wire::payload::WritePatternRawPayload, phases);
+        let intensity_offset =
+            core::mem::offset_of!(autd3_cpu_wire::payload::WritePatternRawPayload, intensities);
         for (i, phases) in phases.iter().enumerate() {
             let payload = &datagrams.frame(i).unwrap().datagrams()[0].payload;
-            assert_eq!(payload[header_bytes], phases[0][0].0, "frame {i} phase");
+            assert_eq!(payload[phase_offset], phases[0][0].0, "frame {i} phase");
             assert_eq!(payload[intensity_offset], 0x42, "frame {i} intensity");
         }
     }

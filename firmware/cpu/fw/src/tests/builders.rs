@@ -79,13 +79,12 @@ pub(crate) fn write_pattern_raw(
     phases: &[u8],
     intensities: &[u8],
 ) -> Frame {
-    let header = WritePatternRawPayload {
-        bank,
-        reserved: 0,
-        index: U16::new(index),
-    };
-    let data: std::vec::Vec<u8> = phases.iter().chain(intensities).copied().collect();
-    Frame::from_parts(seq, Cmd::WritePatternRaw, &header, &data)
+    let mut p = WritePatternRawPayload::new_zeroed();
+    p.bank = bank;
+    p.index = U16::new(index);
+    p.phases.copy_from_slice(phases);
+    p.intensities.copy_from_slice(intensities);
+    Frame::from_payload(seq, Cmd::WritePatternRaw, &p)
 }
 
 pub(crate) fn raw_words_to_soa(words: &[u16]) -> std::vec::Vec<u16> {
