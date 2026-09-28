@@ -265,8 +265,7 @@ impl Cpu {
         let offset = p.offset.get();
         let data_len = p.data_len.get();
         if usize::from(data_len) > UPDATE_CHUNK_MAX_DATA_LEN
-            || offset > length
-            || u32::from(data_len) > length - offset
+            || offset.saturating_add(u32::from(data_len)) > length
         {
             return Err(Error::InvalidPayload);
         }

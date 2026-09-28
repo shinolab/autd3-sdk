@@ -18,8 +18,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
     if usize::from(p.bank) >= NUM_BANKS
         || !offset.is_multiple_of(2)
         || usize::from(data_len) > MOD_WRITE_MAX_DATA_LEN
-        || offset > MOD_BUFFER_SAMPLES
-        || u32::from(data_len) > MOD_BUFFER_SAMPLES - offset
+        || offset.saturating_add(u32::from(data_len)) > MOD_BUFFER_SAMPLES
     {
         return Err(Error::InvalidPayload);
     }

@@ -97,7 +97,7 @@ impl From<FlashError> for Error {
 }
 
 fn slot_range_ok(offset: u32, len: u32) -> bool {
-    offset <= SLOT_BYTES && len <= SLOT_BYTES - offset
+    offset.saturating_add(len) <= SLOT_BYTES
 }
 
 fn slot_read<P: Port>(port: &mut P, slot: Slot, offset: u32, buf: &mut [u8]) -> Result<(), Error> {
@@ -228,8 +228,7 @@ impl Cpu {
         let offset = p.offset.get();
         let data_len = p.data_len.get();
         if usize::from(data_len) > UPDATE_CHUNK_MAX_DATA_LEN
-            || offset > length
-            || u32::from(data_len) > length - offset
+            || offset.saturating_add(u32::from(data_len)) > length
         {
             return Err(Error::InvalidPayload);
         }

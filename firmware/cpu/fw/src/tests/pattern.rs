@@ -180,6 +180,11 @@ fn write_foci_buffer_rejects_invalid_payloads() {
     ));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
     assert_eq!(h.emission_word(0, EMISSION_RAM_WORDS as usize - 1), 0);
+
+    let before = fpga_snapshot(&h);
+    h.deliver(&write_foci_buffer(4, 0, u32::MAX, &[0x0001]));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_fpga_unchanged(&before, &h);
 }
 
 #[test]
@@ -372,6 +377,18 @@ fn write_pattern_compressed_rejects_invalid_payloads() {
         &full,
     ));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
+
+    let before = fpga_snapshot(&h);
+    h.deliver(&write_pattern_compressed(
+        6,
+        0,
+        u32::MAX,
+        PatternFormat::PhaseFull as u8,
+        1,
+        &full,
+    ));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_fpga_unchanged(&before, &h);
 }
 
 #[test]
@@ -473,4 +490,9 @@ fn write_mod_buffer_rejects_invalid_payloads() {
     ));
     assert_eq!(h.data(), Error::InvalidPayload as u8);
     assert_eq!(h.mod_word(0, MOD_BUFFER_SAMPLES as usize / 2 - 1), 0);
+
+    let before = fpga_snapshot(&h);
+    h.deliver(&write_mod_buffer(5, 0, u32::MAX - 1, &[0x01, 0x02]));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_fpga_unchanged(&before, &h);
 }

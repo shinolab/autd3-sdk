@@ -209,6 +209,9 @@ fn chunks_are_validated() {
     h.deliver(&chunk(4, 10, &[]));
     assert_eq!(h.data(), 0);
     assert_eq!(h.port.fpga_flash_ops.len(), before);
+    h.deliver(&chunk(5, u32::MAX - 1, &[1, 2, 3]));
+    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.port.fpga_flash_ops.len(), before);
 }
 
 #[test]

@@ -33,9 +33,9 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
     if usize::from(p.bank) >= NUM_BANKS
         || p.count < 1
         || p.count > max_count
-        || offset > EMISSION_RAM_WORDS
-        || u32::from(p.count - 1) * EMISSION_SLOT_WORDS + NUM_TRANSDUCERS as u32
-            > EMISSION_RAM_WORDS - offset
+        || offset
+            .saturating_add(u32::from(p.count - 1) * EMISSION_SLOT_WORDS + NUM_TRANSDUCERS as u32)
+            > EMISSION_RAM_WORDS
     {
         return Err(Error::InvalidPayload);
     }

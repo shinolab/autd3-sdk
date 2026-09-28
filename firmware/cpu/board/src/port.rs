@@ -35,8 +35,8 @@ const PRCR_RESET_UNLOCK: u32 = 0x0000_A502;
 const SWRR1_SOFTWARE_RESET: u32 = 0x4321_A501;
 
 fn flash_range_ok(addr: u32, len: usize) -> bool {
-    (LOADER_REGION_END..=FLASH_BYTES).contains(&addr)
-        && u32::try_from(len).is_ok_and(|len| len <= FLASH_BYTES - addr)
+    addr >= LOADER_REGION_END
+        && u32::try_from(len).is_ok_and(|len| addr.saturating_add(len) <= FLASH_BYTES)
 }
 
 fn flash_wait_idle() -> Result<(), FlashError> {
