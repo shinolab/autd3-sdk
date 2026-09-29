@@ -118,11 +118,16 @@ impl Channel {
     pub(crate) fn recv(&mut self, deadline: Instant) -> io::Result<Option<Datagram<'_>>> {
         let (len, src) = loop {
             let now = Instant::now();
-            if now >= deadline {
-                return Ok(None);
-            }
-            self.socket.set_read_timeout(Some(deadline - now))?;
-            match self.socket.recv_from(&mut self.recv_buf[..]) {
+            let received = if now >= deadline {
+                self.socket.set_nonblocking(true)?;
+                let received = self.socket.recv_from(&mut self.recv_buf[..]);
+                self.socket.set_nonblocking(false)?;
+                received
+            } else {
+                self.socket.set_read_timeout(Some(deadline - now))?;
+                self.socket.recv_from(&mut self.recv_buf[..])
+            };
+            match received {
                 Ok((len, SocketAddr::V6(src))) if len >= HEADER_BYTES => break (len, src),
                 Ok(_) => {}
                 Err(e) if is_timeout(&e) => return Ok(None),

@@ -52,6 +52,8 @@ pub mod update;
 
 pub use cmd::Cmd;
 pub use error::{Error, describe_device_error};
-pub use frame::{DEVICE_TO_HOST_BYTES, HOST_TO_DEVICE_BYTES, PAYLOAD_BYTES};
+pub use frame::{
+    FRAME_BYTES_MAX, FRAME_HEADER_BYTES, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX, trimmed_len,
+};
 pub use mode::Mode;
 pub use telemetry::Telemetry;

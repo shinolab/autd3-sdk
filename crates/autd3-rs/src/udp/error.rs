@@ -46,14 +46,12 @@ pub enum UdpError {
     },
     #[error("the number of devices must be 1..=255, but {0} was given")]
     InvalidDeviceCount(usize),
-    #[error("{expected} frames are needed (one per device), but tx has {tx} and rx has {rx}")]
-    FrameCountMismatch {
-        expected: usize,
-        tx: usize,
-        rx: usize,
-    },
-    #[error("the host clock cannot be read as a DC system time: {0}")]
-    HostClock(#[from] autd3_rs_core::value::DcSysTimeError),
+    #[error("{expected} frames are needed (one per device), but {got} were given")]
+    FrameCountMismatch { expected: usize, got: usize },
+    #[error("a frame must be 2..=1448 bytes, but {0} bytes were given")]
+    InvalidFrameLength(usize),
+    #[error("the host clock cannot be read as a device time: {0}")]
+    HostClock(#[from] autd3_rs_core::value::SysTimeError),
     #[error("the connection is closed")]
     Closed,
 }

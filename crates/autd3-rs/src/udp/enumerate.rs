@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use autd3_cpu_wire::udp::{
     AssignIdBody, FLAG_ASSIGNED, FLAG_SYNC_READY, Kind, SetTimeBody, Status, UnblockReply, UnitInfo,
 };
-use autd3_rs_core::value::DcSysTime;
+use autd3_rs_core::value::SysTime;
 use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, IntoBytes};
 
@@ -232,7 +232,7 @@ impl Enumerator<'_> {
             let mut answered = None;
             for _ in 0..UNICAST_ATTEMPTS {
                 let body = SetTimeBody {
-                    sys_time: U64::new(DcSysTime::now()?.sys_time()),
+                    sys_time: U64::new(SysTime::now()?.sys_time()),
                 };
                 answered = self.channel.exchange(
                     addr,

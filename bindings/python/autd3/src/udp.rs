@@ -17,7 +17,7 @@ fn duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
     Ok(Duration::from_nanos(u64::try_from(ns).unwrap_or(u64::MAX)))
 }
 
-fn opt_duration(obj: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Duration>> {
+pub(crate) fn opt_duration(obj: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Duration>> {
     obj.map(duration).transpose()
 }
 
@@ -48,8 +48,8 @@ impl ClientBackend for UdpBackend {
         self.client.num_devices()
     }
 
-    fn dc_offset_ns(&self) -> i64 {
-        self.client.dc_offset_ns()
+    fn clock_offset_ns(&self) -> i64 {
+        self.client.clock_offset_ns()
     }
 
     fn read_firmware_version(&self) -> BoxFuture<Vec<String>> {
@@ -73,9 +73,9 @@ impl ClientBackend for UdpBackend {
         Box::pin(async move { client.read_error_detail().await })
     }
 
-    fn read_telemetry(&self, counter: autd3_rs::Telemetry) -> BoxFuture<Vec<u8>> {
+    fn read_telemetry(&self) -> BoxFuture<Vec<autd3_rs::TelemetryCounters>> {
         let client = Arc::clone(&self.client);
-        Box::pin(async move { client.read_telemetry(counter).await })
+        Box::pin(async move { client.read_telemetry().await })
     }
 
     fn send(&self, datagrams: Arc<Frames>, index: usize) -> BoxFuture<ResponseToken> {
@@ -121,9 +121,8 @@ impl ClientBackend for UdpBackend {
             .map_err(Error::from)?;
         Ok(DeviceStatusData {
             device_states: status.devices().iter().map(ToString::to_string).collect(),
-            all_op: status.all_op(),
+            all_ready: status.all_ready(),
             any_lost: status.any_lost(),
-            recoveries: status.recoveries(),
         })
     }
 
@@ -149,8 +148,9 @@ impl TransportOption {
     #[pyo3(signature = (
         iface = None,
         group = None,
-        cycle = None,
+        heartbeat = None,
         reply_timeout = None,
+        lost_timeout = None,
         response_timeout = None,
         enumeration_timeout = None,
         sync_timeout = None,
@@ -159,8 +159,9 @@ impl TransportOption {
     fn new(
         iface: Option<String>,
         group: Option<&str>,
-        cycle: Option<&Bound<'_, PyAny>>,
+        heartbeat: Option<&Bound<'_, PyAny>>,
         reply_timeout: Option<&Bound<'_, PyAny>>,
+        lost_timeout: Option<&Bound<'_, PyAny>>,
         response_timeout: Option<&Bound<'_, PyAny>>,
         enumeration_timeout: Option<&Bound<'_, PyAny>>,
         sync_timeout: Option<&Bound<'_, PyAny>>,
@@ -170,11 +171,14 @@ impl TransportOption {
             group: parse_group(group)?,
             ..CoreOption::default()
         };
-        if let Some(v) = opt_duration(cycle)? {
-            inner.cycle = v;
+        if let Some(v) = opt_duration(heartbeat)? {
+            inner.heartbeat = v;
         }
         if let Some(v) = opt_duration(reply_timeout)? {
             inner.reply_timeout = v;
+        }
+        if let Some(v) = opt_duration(lost_timeout)? {
+            inner.lost_timeout = v;
         }
         if let Some(v) = opt_duration(response_timeout)? {
             inner.response_timeout = v;
@@ -199,13 +203,18 @@ impl TransportOption {
     }
 
     #[getter]
-    fn cycle<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        to_py_duration(py, self.inner.cycle)
+    fn heartbeat<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        to_py_duration(py, self.inner.heartbeat)
     }
 
     #[getter]
     fn reply_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         to_py_duration(py, self.inner.reply_timeout)
+    }
+
+    #[getter]
+    fn lost_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        to_py_duration(py, self.inner.lost_timeout)
     }
 
     #[getter]

@@ -20,8 +20,8 @@ use crate::params::{
 };
 use crate::port::{FlashError, Port};
 use crate::proto::{
-    Cmd, EMISSION_RAM_WORDS, HOST_TO_DEVICE_BYTES, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS,
-    PAYLOAD_BYTES, Telemetry, TxFrame,
+    Cmd, Drained, EMISSION_RAM_WORDS, FRAME_BYTES_MAX, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS,
+    PAYLOAD_BYTES, Reply, Telemetry,
 };
 use autd3_cpu_wire::fpga_update::{FPGA_FLASH_BYTES, FPGA_GOLDEN_REGION_END, FPGA_SECTOR_BYTES};
 use autd3_cpu_wire::update::{FLASH_BYTES, FLASH_SECTOR_BYTES, LOADER_REGION_END, crc32};
@@ -43,17 +43,14 @@ impl Port for IsrPort {
         0
     }
     fn memory_barrier(&mut self) {}
-    fn next_sync0(&mut self) -> u64 {
+    fn next_sync_edge(&mut self) -> u64 {
         0
     }
-    fn dc_sys_time(&mut self) -> u64 {
+    fn sys_time(&mut self) -> u64 {
         0
     }
-    fn sync0_cycle_ns(&mut self) -> u32 {
-        0
-    }
-    fn al_status_code(&mut self) -> u16 {
-        0
+    fn host_idle_ms(&mut self) -> Option<u32> {
+        None
     }
 
     fn flash_read(&mut self, _addr: u32, _buf: &mut [u8]) -> Result<(), FlashError> {
@@ -79,10 +76,9 @@ pub(crate) struct MockPort {
     pub mod_ram: Vec<Vec<u16>>,
     pub em_ram: Vec<Vec<u16>>,
     pub latch_count: [u32; 16],
-    pub next_sync0: u64,
-    pub dc_sys_time: u64,
-    pub sync0_cycle_ns: u32,
-    pub al_status_code: u16,
+    pub next_sync_edge: u64,
+    pub sys_time: u64,
+    pub host_idle_ms: Option<u32>,
     pub latch_stuck: bool,
     pub flash: Vec<u8>,
     pub flash_fail: bool,
@@ -115,10 +111,9 @@ impl MockPort {
             mod_ram: vec![vec![0; MOD_RAM_WORDS]; NUM_BANKS],
             em_ram: vec![vec![0; EM_RAM_WORDS]; NUM_BANKS],
             latch_count: [0; 16],
-            next_sync0: 0,
-            dc_sys_time: 0,
-            sync0_cycle_ns: 1_000_000,
-            al_status_code: 0,
+            next_sync_edge: 0,
+            sys_time: 0,
+            host_idle_ms: None,
             latch_stuck: false,
             flash: vec![0xFF; FLASH_BYTES as usize],
             flash_fail: false,
@@ -260,10 +255,7 @@ impl MockPort {
         let Some((cpu, seq, cmd)) = self.isr_frame.take() else {
             return;
         };
-        let mut frame = [0u8; HOST_TO_DEVICE_BYTES];
-        frame[0] = seq;
-        frame[1] = cmd;
-        cpu.recv_frame(&mut IsrPort, &frame);
+        let _ = cpu.recv_frame(&mut IsrPort, &[seq, cmd], 0);
     }
 }
 
@@ -310,20 +302,16 @@ impl Port for MockPort {
         self.fpga_flash_target_unflushed = false;
     }
 
-    fn next_sync0(&mut self) -> u64 {
-        self.next_sync0
+    fn next_sync_edge(&mut self) -> u64 {
+        self.next_sync_edge
     }
 
-    fn dc_sys_time(&mut self) -> u64 {
-        self.dc_sys_time
+    fn sys_time(&mut self) -> u64 {
+        self.sys_time
     }
 
-    fn sync0_cycle_ns(&mut self) -> u32 {
-        self.sync0_cycle_ns
-    }
-
-    fn al_status_code(&mut self) -> u16 {
-        self.al_status_code
+    fn host_idle_ms(&mut self) -> Option<u32> {
+        self.host_idle_ms
     }
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
@@ -416,8 +404,12 @@ impl Frame {
         f
     }
 
-    pub(crate) fn bytes(&self) -> Box<[u8; HOST_TO_DEVICE_BYTES]> {
-        let mut bytes = Box::new([0u8; HOST_TO_DEVICE_BYTES]);
+    pub(crate) fn set_payload_byte(&mut self, index: usize, value: u8) {
+        self.payload[index] = value;
+    }
+
+    pub(crate) fn bytes(&self) -> Box<[u8; FRAME_BYTES_MAX]> {
+        let mut bytes = Box::new([0u8; FRAME_BYTES_MAX]);
         bytes[0] = self.seq;
         bytes[1] = self.cmd;
         bytes[2..].copy_from_slice(&self.payload[..]);
@@ -454,23 +446,33 @@ impl Harness {
     }
 
     pub(crate) fn deliver_no_drain(&mut self, frame: &Frame) {
-        self.cpu.recv_frame(&mut self.port, &frame.bytes());
+        let _ = self.cpu.recv_frame(&mut self.port, &frame.bytes()[..], 0);
     }
 
     pub(crate) fn process_one(&mut self) -> bool {
-        self.cpu.process_one(&mut self.port)
+        self.cpu.process_one(&mut self.port) != Drained::Empty
     }
 
-    fn tx(&self) -> TxFrame {
-        self.cpu.tx()
+    fn reply(&self) -> Reply {
+        self.cpu.reply()
     }
 
     pub(crate) fn ack(&self) -> u8 {
-        self.tx().ack
+        self.reply().ack
     }
 
-    pub(crate) fn data(&self) -> u8 {
-        self.tx().data
+    pub(crate) fn status(&self) -> u8 {
+        self.reply().status
+    }
+
+    pub(crate) fn reply_data(&self) -> Vec<u8> {
+        self.reply().data().to_vec()
+    }
+
+    pub(crate) fn firmware_info(&self) -> autd3_cpu_wire::payload::FirmwareInfo {
+        use zerocopy::FromBytes;
+        autd3_cpu_wire::payload::FirmwareInfo::read_from_bytes(&self.reply_data()[..])
+            .expect("a firmware info reply")
     }
 
     pub(crate) fn expected_seq(&self) -> u8 {
@@ -505,7 +507,7 @@ impl Harness {
         self.port.isr_frame = Some((Rc::clone(&self.cpu), seq, cmd as u8));
     }
 
-    pub(crate) fn telemetry(&self, id: Telemetry) -> u8 {
+    pub(crate) fn telemetry(&self, id: Telemetry) -> u32 {
         self.cpu.telemetry(id)
     }
 

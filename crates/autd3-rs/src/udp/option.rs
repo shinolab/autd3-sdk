@@ -1,18 +1,21 @@
 use std::net::SocketAddrV6;
 use std::time::Duration;
 
+use autd3_cpu_wire::udp::FAILSAFE_TIMEOUT_MS;
 use autd3_rs_core::Interface;
 
 use super::error::UdpError;
 
 const MAX_DURATION: Duration = Duration::from_secs(3600);
+const HEARTBEAT_MAX: Duration = Duration::from_millis(FAILSAFE_TIMEOUT_MS as u64 / 2);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportOption {
     pub iface: Interface,
     pub group: Option<SocketAddrV6>,
-    pub cycle: Duration,
+    pub heartbeat: Duration,
     pub reply_timeout: Duration,
+    pub lost_timeout: Duration,
     pub response_timeout: Duration,
     pub enumeration_timeout: Duration,
     pub sync_timeout: Duration,
@@ -23,8 +26,9 @@ impl Default for TransportOption {
         Self {
             iface: Interface::Auto,
             group: None,
-            cycle: Duration::from_millis(1),
+            heartbeat: Duration::from_millis(10),
             reply_timeout: Duration::from_millis(1),
+            lost_timeout: Duration::from_millis(100),
             response_timeout: Duration::from_millis(200),
             enumeration_timeout: Duration::from_secs(10),
             sync_timeout: Duration::from_secs(5),
@@ -47,8 +51,17 @@ impl TransportOption {
         }
 
         let tick = Duration::from_micros(1);
-        check("cycle", self.cycle, tick)?;
+        check("heartbeat", self.heartbeat, tick)?;
+        if self.heartbeat >= HEARTBEAT_MAX {
+            return Err(UdpError::InvalidOption {
+                field: "heartbeat",
+                value: self.heartbeat,
+                min: tick,
+                max: HEARTBEAT_MAX.saturating_sub(tick),
+            });
+        }
         check("reply_timeout", self.reply_timeout, tick)?;
+        check("lost_timeout", self.lost_timeout, self.heartbeat + tick)?;
         check("response_timeout", self.response_timeout, tick)?;
         check(
             "enumeration_timeout",
@@ -69,8 +82,9 @@ mod tests {
         let option = TransportOption::default();
         assert_eq!(option.iface, Interface::Auto);
         assert_eq!(option.group, None);
-        assert_eq!(option.cycle, Duration::from_millis(1));
+        assert_eq!(option.heartbeat, Duration::from_millis(10));
         assert_eq!(option.reply_timeout, Duration::from_millis(1));
+        assert_eq!(option.lost_timeout, Duration::from_millis(100));
         assert_eq!(option.response_timeout, Duration::from_millis(200));
         assert_eq!(option.enumeration_timeout, Duration::from_secs(10));
         assert_eq!(option.sync_timeout, Duration::from_secs(5));
@@ -78,14 +92,55 @@ mod tests {
     }
 
     #[test]
-    fn a_zero_cycle_is_rejected() {
+    fn a_zero_heartbeat_is_rejected() {
         let option = TransportOption {
-            cycle: Duration::ZERO,
+            heartbeat: Duration::ZERO,
             ..TransportOption::default()
         };
         assert!(matches!(
             option.validate(),
-            Err(UdpError::InvalidOption { field: "cycle", .. })
+            Err(UdpError::InvalidOption {
+                field: "heartbeat",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_heartbeat_that_would_let_the_failsafe_fire_is_rejected() {
+        let option = TransportOption {
+            heartbeat: Duration::from_millis(250),
+            lost_timeout: Duration::from_secs(1),
+            ..TransportOption::default()
+        };
+        assert!(matches!(
+            option.validate(),
+            Err(UdpError::InvalidOption {
+                field: "heartbeat",
+                ..
+            })
+        ));
+        let option = TransportOption {
+            heartbeat: Duration::from_millis(249),
+            lost_timeout: Duration::from_secs(1),
+            ..TransportOption::default()
+        };
+        assert!(option.validate().is_ok());
+    }
+
+    #[test]
+    fn the_lost_timeout_must_outlast_the_heartbeat() {
+        let option = TransportOption {
+            heartbeat: Duration::from_millis(20),
+            lost_timeout: Duration::from_millis(20),
+            ..TransportOption::default()
+        };
+        assert!(matches!(
+            option.validate(),
+            Err(UdpError::InvalidOption {
+                field: "lost_timeout",
+                ..
+            })
         ));
     }
 

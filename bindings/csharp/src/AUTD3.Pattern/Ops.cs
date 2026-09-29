@@ -37,9 +37,10 @@ namespace AUTD3
 
         public WritePatternCompressed(PatternBank bank, uint index, PatternCompression format, Intensity intensity, PhaseBuffer[] patterns)
         {
-            if (patterns.Length == 0 || patterns.Length > 4)
+            var max = PatternCompression.PhaseHalf.PerFrame();
+            if (patterns.Length == 0 || patterns.Length > max)
             {
-                throw new Autd3Exception("WritePatternCompressed expects 1..=4 pattern buffers");
+                throw new Autd3Exception($"WritePatternCompressed expects 1..={max} pattern buffers");
             }
             _bank = bank;
             _index = index;

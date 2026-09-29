@@ -13,7 +13,7 @@ use autd3_cpu_wire::udp::{
 
 use crate::net::{self, Endpoint, Ipv6, Mac, NDP_HOP_LIMIT, Packet, UDP_PAYLOAD_OFFSET, Udp};
 use crate::nic::{Nic, RxMeta, other_port};
-use crate::proto::{HOST_TO_DEVICE_BYTES, TxFrame};
+use crate::proto::{Disposition, FRAME_BYTES_MAX, FRAME_HEADER_BYTES, REPLY_DATA_BYTES_MAX, Reply};
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
 pub const TX_BUF_BYTES: usize = 320;
@@ -22,8 +22,18 @@ const MAX_ECHO_BODY: usize = TX_BUF_BYTES - UDP_PAYLOAD_OFFSET - 4;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Received {
     Nothing,
-    HostFrame,
+    HostMessage,
 }
+
+pub trait CommandLayer {
+    fn recv_frame(&mut self, frame: &[u8], msg_id: u16) -> Disposition;
+
+    fn reply(&mut self) -> Reply;
+}
+
+const FRAME_REPLY_HEAD_BYTES: usize = core::mem::size_of::<FrameReply>();
+
+const _: () = assert!(TX_BUF_BYTES >= UDP_PAYLOAD_OFFSET + autd3_cpu_wire::udp::MAX_REPLY_BYTES);
 
 pub struct Node {
     unit_id: u8,
@@ -33,6 +43,7 @@ pub struct Node {
     close_at: Option<u32>,
     mac: Mac,
     addr: Ipv6,
+    host: Option<(u8, Endpoint)>,
     buf: [u8; TX_BUF_BYTES],
 }
 
@@ -42,7 +53,8 @@ impl Default for Node {
     }
 }
 
-struct Reply {
+#[derive(Clone, Copy)]
+struct ReplyTo {
     port: u8,
     to: Endpoint,
     kind: u8,
@@ -60,6 +72,7 @@ impl Node {
             close_at: None,
             mac: mac(UNASSIGNED_ID),
             addr: link_local(mac(UNASSIGNED_ID)),
+            host: None,
             buf: [0; TX_BUF_BYTES],
         }
     }
@@ -114,6 +127,7 @@ impl Node {
         self.close_at = None;
         self.mac = mac(UNASSIGNED_ID);
         self.addr = link_local(self.mac);
+        self.host = None;
         nic.set_mac(self.mac);
         nic.stop_pulse();
     }
@@ -126,13 +140,26 @@ impl Node {
         }
     }
 
-    pub fn on_frame<N: Nic, F: FnOnce(&[u8; HOST_TO_DEVICE_BYTES]) -> TxFrame>(
+    pub fn send_completion<N: Nic>(&mut self, nic: &mut N, msg_id: u16, reply: &Reply) {
+        let Some((port, to)) = self.host.filter(|_| self.is_assigned()) else {
+            return;
+        };
+        let reply_to = ReplyTo {
+            port,
+            to,
+            kind: Kind::Frame.as_u8(),
+            msg_id,
+        };
+        self.frame_reply(nic, &reply_to, reply);
+    }
+
+    pub fn on_frame<N: Nic, C: CommandLayer>(
         &mut self,
         nic: &mut N,
         now_ms: u32,
         frame: &[u8],
         rx: RxMeta,
-        data: F,
+        cmds: &mut C,
     ) -> Received {
         match net::parse(frame) {
             Some(Packet::NeighborSolicitation {
@@ -175,7 +202,7 @@ impl Node {
             }
             Some(Packet::Udp(udp)) => {
                 if udp.dst_port == PORT && (udp.dst_ip == self.addr || udp.dst_ip == ALL_NODES) {
-                    self.on_udp(nic, now_ms, &udp, rx, data)
+                    self.on_udp(nic, now_ms, &udp, rx, cmds)
                 } else {
                     Received::Nothing
                 }
@@ -184,18 +211,18 @@ impl Node {
         }
     }
 
-    fn on_udp<N: Nic, F: FnOnce(&[u8; HOST_TO_DEVICE_BYTES]) -> TxFrame>(
+    fn on_udp<N: Nic, C: CommandLayer>(
         &mut self,
         nic: &mut N,
         now_ms: u32,
         udp: &Udp<'_>,
         rx: RxMeta,
-        data: F,
+        cmds: &mut C,
     ) -> Received {
         let Ok((header, body)) = Header::ref_from_prefix(udp.payload) else {
             return Received::Nothing;
         };
-        let reply = Reply {
+        let reply = ReplyTo {
             port: rx.port,
             to: Endpoint {
                 mac: udp.src_mac,
@@ -212,25 +239,27 @@ impl Node {
         let unicast = udp.dst_ip == self.addr;
         match Kind::from_u8(header.kind) {
             Some(Kind::Frame) => {
-                let Some(frame) = body
-                    .get(..HOST_TO_DEVICE_BYTES)
-                    .and_then(|b| <&[u8; HOST_TO_DEVICE_BYTES]>::try_from(b).ok())
-                else {
+                if !self.is_assigned()
+                    || !unicast
+                    || !(FRAME_HEADER_BYTES..=FRAME_BYTES_MAX).contains(&body.len())
+                {
                     return Received::Nothing;
-                };
+                }
+                self.host = Some((reply.port, reply.to));
+                if cmds.recv_frame(body, reply.msg_id) == Disposition::Reply {
+                    let state = cmds.reply();
+                    self.frame_reply(nic, &reply, &state);
+                }
+                return Received::HostMessage;
+            }
+            Some(Kind::Heartbeat) => {
                 if !self.is_assigned() || !unicast {
                     return Received::Nothing;
                 }
-                let tx = data(frame);
-                let body = FrameReply {
-                    ack: tx.ack,
-                    data: tx.data,
-                    flags: self.flags(nic),
-                    unit_id: self.unit_id,
-                    sys_time: U64::new(nic.now().unwrap_or(0)),
-                };
-                self.send_reply(nic, &reply, None, body.as_bytes());
-                return Received::HostFrame;
+                self.host = Some((reply.port, reply.to));
+                let state = cmds.reply();
+                self.frame_reply(nic, &reply, &state);
+                return Received::HostMessage;
             }
             Some(Kind::ReadUnitInfo) => {
                 let info = self.unit_info(nic);
@@ -260,7 +289,7 @@ impl Node {
         Received::Nothing
     }
 
-    fn assign<N: Nic>(&mut self, nic: &mut N, body: &[u8], reply: &Reply, port: u8) {
+    fn assign<N: Nic>(&mut self, nic: &mut N, body: &[u8], reply: &ReplyTo, port: u8) {
         let Ok((req, _)) = AssignIdBody::ref_from_prefix(body) else {
             self.status(nic, reply, Status::InvalidPayload);
             return;
@@ -278,7 +307,7 @@ impl Node {
         self.status(nic, reply, Status::Ok);
     }
 
-    fn unblock<N: Nic>(&mut self, nic: &mut N, reply: &Reply) {
+    fn unblock<N: Nic>(&mut self, nic: &mut N, reply: &ReplyTo) {
         let Some(upstream) = self.upstream.filter(|_| self.is_assigned()) else {
             self.status(nic, reply, Status::NotAssigned);
             return;
@@ -319,14 +348,34 @@ impl Node {
         }
     }
 
-    fn status<N: Nic>(&mut self, nic: &mut N, reply: &Reply, status: Status) {
+    fn frame_reply<N: Nic>(&mut self, nic: &mut N, reply: &ReplyTo, state: &Reply) {
+        let head = FrameReply {
+            ack: state.ack,
+            status: state.status,
+            flags: self.flags(nic),
+            unit_id: self.unit_id,
+            sys_time: U64::new(nic.now().unwrap_or(0)),
+        };
+        let data = state.data();
+        let mut body = [0u8; FRAME_REPLY_HEAD_BYTES + REPLY_DATA_BYTES_MAX];
+        body[..FRAME_REPLY_HEAD_BYTES].copy_from_slice(head.as_bytes());
+        body[FRAME_REPLY_HEAD_BYTES..FRAME_REPLY_HEAD_BYTES + data.len()].copy_from_slice(data);
+        self.send_reply(
+            nic,
+            reply,
+            None,
+            &body[..FRAME_REPLY_HEAD_BYTES + data.len()],
+        );
+    }
+
+    fn status<N: Nic>(&mut self, nic: &mut N, reply: &ReplyTo, status: Status) {
         self.send_reply(nic, reply, Some(status), &[]);
     }
 
     fn send_reply<N: Nic>(
         &mut self,
         nic: &mut N,
-        reply: &Reply,
+        reply: &ReplyTo,
         status: Option<Status>,
         body: &[u8],
     ) {

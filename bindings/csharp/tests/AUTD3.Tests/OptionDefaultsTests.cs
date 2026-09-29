@@ -1,3 +1,4 @@
+using System;
 using AUTD3.Holo;
 using Xunit;
 
@@ -10,10 +11,9 @@ namespace AUTD3.Tests
         {
             var config = new ClientConfig();
             Assert.False(config.LowLatency);
-            Assert.Equal(10u, config.TimeoutCycles);
-            Assert.Equal((uint)Client.MaxInflight, config.MaxInflight);
+            Assert.Equal(TimeSpan.FromMilliseconds(10), config.AckTimeout);
+            Assert.Equal(7u, config.MaxInflight);
             Assert.Equal(8u, config.MaxResyncRounds);
-            Assert.Equal(2u, config.ResetResendCycles);
             Assert.Equal(RtPriority.Default, config.RtPriority);
             Assert.Equal(RtSchedulePolicy.Fifo, config.RtPolicy);
             Assert.Null(config.RtAffinity);
@@ -27,7 +27,7 @@ namespace AUTD3.Tests
             var config = new ClientConfig { MaxInflight = 4, RtPriority = null };
             Assert.Equal(4u, config.MaxInflight);
             Assert.Null(config.RtPriority);
-            Assert.Equal(10u, config.TimeoutCycles);
+            Assert.Equal(TimeSpan.FromMilliseconds(10), config.AckTimeout);
             Assert.True(config.ValidateState);
 
             var gs = new GsOption { Repeat = 5 };

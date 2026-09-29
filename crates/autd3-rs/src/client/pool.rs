@@ -3,14 +3,29 @@ use std::sync::{Arc, Mutex, PoisonError};
 use autd3_rs_core::rt::Semaphore;
 
 use crate::commands::operation::Distribution;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::{Cmd, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX};
+use crate::response::Response;
+
+#[derive(Clone, Copy)]
+struct ReplyValue {
+    len: u8,
+    bytes: [u8; REPLY_DATA_BYTES_MAX],
+}
+
+impl ReplyValue {
+    const EMPTY: Self = Self {
+        len: 0,
+        bytes: [0; REPLY_DATA_BYTES_MAX],
+    };
+}
 
 pub(super) struct SlotData {
     num_devices: usize,
     dist: Distribution,
     payload: Box<[u8]>,
     cmds: Box<[Cmd]>,
-    data: Box<[u8]>,
+    status: Box<[u8]>,
+    values: Box<[ReplyValue]>,
 }
 
 impl SlotData {
@@ -20,13 +35,15 @@ impl SlotData {
             dist: Distribution::Broadcast,
             payload: vec![0u8; num_devices * PAYLOAD_BYTES].into_boxed_slice(),
             cmds: vec![Cmd::Reset; num_devices].into_boxed_slice(),
-            data: vec![0u8; num_devices].into_boxed_slice(),
+            status: vec![0u8; num_devices].into_boxed_slice(),
+            values: vec![ReplyValue::EMPTY; num_devices].into_boxed_slice(),
         }
     }
 
     pub(super) fn reset(&mut self, dist: Distribution) {
         self.dist = dist;
-        self.data.fill(0);
+        self.status.fill(0);
+        self.values.fill(ReplyValue::EMPTY);
         let used = self.encode_devices_for(dist) * PAYLOAD_BYTES;
         self.payload[..used].fill(0);
     }
@@ -65,12 +82,25 @@ impl SlotData {
         &self.payload[base..base + PAYLOAD_BYTES]
     }
 
-    pub(super) fn record_data(&mut self, device: usize, byte: u8) {
-        self.data[device] = byte;
+    pub(super) fn record_reply(&mut self, device: usize, status: u8, data: &[u8]) {
+        self.status[device] = status;
+        let len = data.len().min(REPLY_DATA_BYTES_MAX);
+        let value = &mut self.values[device];
+        value.len = u8::try_from(len).expect("bounded by REPLY_DATA_BYTES_MAX");
+        value.bytes[..len].copy_from_slice(&data[..len]);
     }
 
-    pub(super) fn data(&self) -> &[u8] {
-        &self.data
+    pub(super) fn response(&self) -> Response {
+        if self.values.iter().all(|v| v.len == 0) {
+            return Response::from_status(&self.status);
+        }
+        Response::with_values(
+            &self.status,
+            self.values
+                .iter()
+                .map(|v| v.bytes[..usize::from(v.len)].to_vec())
+                .collect(),
+        )
     }
 }
 

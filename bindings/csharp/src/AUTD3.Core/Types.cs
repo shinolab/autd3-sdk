@@ -133,104 +133,92 @@ namespace AUTD3
     public readonly struct DeviceState : IEquatable<DeviceState>
     {
         private readonly byte _kind;
-        private readonly byte _bits;
 
-        private DeviceState(byte kind, byte bits)
+        private DeviceState(byte kind)
         {
             _kind = kind;
-            _bits = bits;
         }
 
-        public static DeviceState Op => new DeviceState(0, 0);
-        public static DeviceState SafeOp => new DeviceState(1, 0);
-        public static DeviceState SafeOpError => new DeviceState(2, 0);
-        public static DeviceState Lost => new DeviceState(3, 0);
-        public static DeviceState Other(byte bits) => new DeviceState(4, bits);
+        public static DeviceState Ready => new DeviceState(0);
+        public static DeviceState Syncing => new DeviceState(1);
+        public static DeviceState Lost => new DeviceState(2);
 
-        internal static DeviceState FromNative(byte kind, byte bits) => new DeviceState(kind, bits);
+        internal static DeviceState FromNative(byte kind) => new DeviceState(kind);
 
         public override string ToString() => _kind switch
         {
-            0 => "OP",
-            1 => "SAFE-OP",
-            2 => "SAFE-OP + ERROR",
-            3 => "LOST",
-            _ => _bits switch
-            {
-                0x00 => "NONE",
-                0x01 => "INIT",
-                0x02 => "PRE-OP",
-                0x03 => "BOOT",
-                _ => $"UNKNOWN (0x{_bits:x2})",
-            },
+            0 => "READY",
+            1 => "SYNCING",
+            2 => "LOST",
+            _ => $"UNKNOWN ({_kind})",
         };
 
-        public bool Equals(DeviceState other) => _kind == other._kind && _bits == other._bits;
+        public bool Equals(DeviceState other) => _kind == other._kind;
 
         public override bool Equals(object? obj) => obj is DeviceState other && Equals(other);
 
-        public override int GetHashCode() => (_kind << 8) | _bits;
+        public override int GetHashCode() => _kind;
 
         public static bool operator ==(DeviceState left, DeviceState right) => left.Equals(right);
 
         public static bool operator !=(DeviceState left, DeviceState right) => !left.Equals(right);
     }
 
-    public readonly struct DcSysTime : IEquatable<DcSysTime>, IComparable<DcSysTime>
+    public readonly struct SysTime : IEquatable<SysTime>, IComparable<SysTime>
     {
-        private static readonly DateTime EcatEpoch = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        private static readonly DateTime Epoch = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         private readonly ulong _ns;
 
-        private DcSysTime(ulong ns)
+        private SysTime(ulong ns)
         {
             _ns = ns;
         }
 
-        public static DcSysTime Zero => new DcSysTime(0);
+        public static SysTime Zero => new SysTime(0);
 
-        public static DcSysTime FromNanos(ulong ns) => new DcSysTime(ns);
+        public static SysTime FromNanos(ulong ns) => new SysTime(ns);
 
-        public ulong SysTime => _ns;
+        public ulong Nanos => _ns;
 
-        public static DcSysTime Now() => FromUtc(DateTime.UtcNow);
+        public static SysTime Now() => FromUtc(DateTime.UtcNow);
 
-        public static DcSysTime FromUtc(DateTime utc)
+        public static SysTime FromUtc(DateTime utc)
         {
-            var ticks = utc.ToUniversalTime().Ticks - EcatEpoch.Ticks;
+            var ticks = utc.ToUniversalTime().Ticks - Epoch.Ticks;
             if (ticks < 0)
             {
-                throw new Autd3Exception("UTC time is out of the representable DcSysTime range (2000-01-01 0:00:00 UTC ..)");
+                throw new Autd3Exception("UTC time is out of the representable SysTime range (2000-01-01 0:00:00 UTC ..)");
             }
-            return new DcSysTime((ulong)ticks * 100);
+            return new SysTime((ulong)ticks * 100);
         }
 
-        public DateTime ToUtc() => EcatEpoch.AddTicks((long)(_ns / 100));
+        public DateTime ToUtc() => Epoch.AddTicks((long)(_ns / 100));
 
-        public static DcSysTime operator +(DcSysTime lhs, TimeSpan rhs) =>
-            new DcSysTime(checked(lhs._ns + (ulong)rhs.Ticks * 100));
+        public static SysTime operator +(SysTime lhs, TimeSpan rhs) =>
+            new SysTime(checked(lhs._ns + (ulong)rhs.Ticks * 100));
 
-        public static DcSysTime operator -(DcSysTime lhs, TimeSpan rhs) =>
-            new DcSysTime(checked(lhs._ns - (ulong)rhs.Ticks * 100));
+        public static SysTime operator -(SysTime lhs, TimeSpan rhs) =>
+            new SysTime(checked(lhs._ns - (ulong)rhs.Ticks * 100));
 
-        public bool Equals(DcSysTime other) => _ns == other._ns;
+        public bool Equals(SysTime other) => _ns == other._ns;
 
-        public override bool Equals(object? obj) => obj is DcSysTime other && Equals(other);
+        public override bool Equals(object? obj) => obj is SysTime other && Equals(other);
 
         public override int GetHashCode() => _ns.GetHashCode();
 
-        public int CompareTo(DcSysTime other) => _ns.CompareTo(other._ns);
+        public int CompareTo(SysTime other) => _ns.CompareTo(other._ns);
 
-        public static bool operator ==(DcSysTime left, DcSysTime right) => left.Equals(right);
+        public static bool operator ==(SysTime left, SysTime right) => left.Equals(right);
 
-        public static bool operator !=(DcSysTime left, DcSysTime right) => !left.Equals(right);
+        public static bool operator !=(SysTime left, SysTime right) => !left.Equals(right);
 
-        public static bool operator <(DcSysTime left, DcSysTime right) => left._ns < right._ns;
+        public static bool operator <(SysTime left, SysTime right) => left._ns < right._ns;
 
-        public static bool operator >(DcSysTime left, DcSysTime right) => left._ns > right._ns;
+        public static bool operator >(SysTime left, SysTime right) => left._ns > right._ns;
 
-        public static bool operator <=(DcSysTime left, DcSysTime right) => left._ns <= right._ns;
+        public static bool operator <=(SysTime left, SysTime right) => left._ns <= right._ns;
 
-        public static bool operator >=(DcSysTime left, DcSysTime right) => left._ns >= right._ns;
+        public static bool operator >=(SysTime left, SysTime right) => left._ns >= right._ns;
     }
 }

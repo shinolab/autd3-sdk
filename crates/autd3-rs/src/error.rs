@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use thiserror::Error;
 
@@ -8,7 +9,6 @@ use autd3_rs_core::protocol::describe_device_error;
 use crate::commands::PatternCompression;
 use crate::firmware_version::FirmwareVersion;
 use crate::mirror::{BankLoop, SilencerAxis};
-use crate::telemetry::Telemetry;
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError, TransitionMode};
 
 #[derive(Clone)]
@@ -76,19 +76,19 @@ pub enum Error {
         version: FirmwareVersion,
     },
 
-    #[error(
-        "device {device} rejected telemetry counter {counter:?}; its firmware does not know this counter"
-    )]
-    UnsupportedTelemetry { device: usize, counter: Telemetry },
+    #[error("device {device} returned a shorter reply than the command defines")]
+    UnexpectedReply { device: usize },
 
-    #[error("ack timeout after {cycles} cycles")]
-    Timeout { cycles: u32 },
+    #[error(
+        "the devices did not acknowledge within {timeout:?} after retransmissions and a sequence reset"
+    )]
+    Timeout { timeout: std::time::Duration },
 
     #[error("network error: {0}")]
     Network(#[source] NetworkCause),
 
     #[error(transparent)]
-    DcSysTime(#[from] autd3_rs_core::value::DcSysTimeError),
+    SysTime(#[from] autd3_rs_core::value::SysTimeError),
 
     #[error("invalid payload: {0}")]
     InvalidPayload(PayloadError),
@@ -123,6 +123,9 @@ where
 pub enum PayloadError {
     #[error("max_inflight must be <= {max}")]
     MaxInflightTooLarge { max: usize },
+
+    #[error("ack_timeout must be longer than zero and at most {max:?}")]
+    AckTimeoutOutOfRange { max: Duration },
 
     #[error("the number of devices must be 1..={max}, got {got}")]
     DeviceCountOutOfRange { got: usize, max: usize },

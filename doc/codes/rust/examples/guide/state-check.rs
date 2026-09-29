@@ -28,10 +28,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("device[{i}]: {state}");
             }
             println!(
-                "all operational: {}, any lost: {}, recoveries: {}",
-                status.all_op(),
-                status.any_lost(),
-                status.recoveries()
+                "all ready: {}, any lost: {}",
+                status.all_ready(),
+                status.any_lost()
             );
             last = Some(status);
         }

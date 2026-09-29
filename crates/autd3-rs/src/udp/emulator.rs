@@ -10,9 +10,10 @@ use autd3_cpu_wire::udp::{
     FrameReply, Header, Kind, PROTOCOL_VERSION, RESET_ID_CLOSE_DELAY_MS, SetTimeBody, Status,
     UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo,
 };
-use autd3_rs_core::TX_FRAME_BYTES;
-use autd3_rs_core::value::DcSysTime;
+use autd3_rs_core::FRAME_BYTES_MAX;
+use autd3_rs_core::value::SysTime;
 use autd3_rs_firmware_emulator::Device;
+use autd3_rs_firmware_emulator::autd3_cpu_fw::proto::{Disposition, Drained, Reply};
 use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, IntoBytes};
 
@@ -55,7 +56,7 @@ struct Chain {
 }
 
 fn host_now_ns() -> i64 {
-    DcSysTime::now().map_or(0, |t| i64::try_from(t.sys_time()).unwrap_or(i64::MAX))
+    SysTime::now().map_or(0, |t| i64::try_from(t.sys_time()).unwrap_or(i64::MAX))
 }
 
 impl Chain {
@@ -170,6 +171,11 @@ impl Chain {
                     self.frame(i, src, header, body, now);
                 }
             }
+            Kind::Heartbeat if unicast => {
+                for i in targets {
+                    self.heartbeat(i, src, header, now);
+                }
+            }
             Kind::ReadUnitInfo => {
                 for i in targets {
                     let info = self.unit_info(i, now);
@@ -256,18 +262,8 @@ impl Chain {
         self.reply_status(index, src, header, status, &[]);
     }
 
-    fn frame(&mut self, index: usize, src: SocketAddr, header: Header, body: &[u8], now: Instant) {
-        let Some(unit_id) = self.units[index].id else {
-            return;
-        };
-        let Some(tx) = body
-            .get(..TX_FRAME_BYTES)
-            .and_then(|b| <&[u8; TX_FRAME_BYTES]>::try_from(b).ok())
-        else {
-            return;
-        };
+    fn advance(&mut self, index: usize, now: Instant) {
         let bus = self.unit_now(index);
-        let flags = self.flags(index, now);
         let unit = &mut self.units[index];
         let elapsed = now.saturating_duration_since(unit.last_tick).as_millis();
         if elapsed > 0 {
@@ -277,17 +273,55 @@ impl Chain {
             }
         }
         unit.device.fpga_mut().update_with_sys_time(bus);
-        unit.device.recv(tx);
-        let rx = unit.device.rx();
-        let reply = FrameReply {
-            ack: rx.ack.get(),
-            data: rx.data,
-            flags,
-            unit_id,
-            sys_time: U64::new(bus),
+    }
+
+    fn frame_reply(&self, index: usize, dst: SocketAddr, header: Header, now: Instant) {
+        let Some(unit_id) = self.units[index].id else {
+            return;
         };
-        self.reply(index, src, header, reply.as_bytes());
-        self.units[index].device.process_pending();
+        let state: Reply = self.units[index].device.reply();
+        let head = FrameReply {
+            ack: state.ack,
+            status: state.status,
+            flags: self.flags(index, now),
+            unit_id,
+            sys_time: U64::new(self.unit_now(index)),
+        };
+        let mut body = head.as_bytes().to_vec();
+        body.extend_from_slice(state.data());
+        self.reply(index, dst, header, &body);
+    }
+
+    fn heartbeat(&mut self, index: usize, src: SocketAddr, header: Header, now: Instant) {
+        if self.units[index].id.is_none() {
+            return;
+        }
+        self.advance(index, now);
+        self.frame_reply(index, src, header, now);
+    }
+
+    fn frame(&mut self, index: usize, src: SocketAddr, header: Header, body: &[u8], now: Instant) {
+        if self.units[index].id.is_none() || !(2..=FRAME_BYTES_MAX).contains(&body.len()) {
+            return;
+        }
+        self.advance(index, now);
+        match self.units[index].device.recv(body, header.msg_id.get()) {
+            Disposition::Reply => self.frame_reply(index, src, header, now),
+            Disposition::Deferred => loop {
+                match self.units[index].device.process_one() {
+                    Drained::Empty => break,
+                    Drained::Completed { msg_id } => {
+                        let header = Header {
+                            msg_id: zerocopy::little_endian::U16::new(msg_id),
+                            ..header
+                        };
+                        self.frame_reply(index, src, header, now);
+                    }
+                    Drained::Flushed => {}
+                }
+            },
+            Disposition::Dropped => {}
+        }
     }
 }
 

@@ -1,92 +1,42 @@
 use crate::params::{
-    ADDR_CTL_FLAG, ADDR_ECAT_SYNC_CYCLE_0, ADDR_ECAT_SYNC_CYCLE_1, ADDR_ECAT_SYNC_TIME_0,
-    ADDR_MOD_CYCLE0, CTL_FLAG_SYNC_SET,
+    ADDR_CTL_FLAG, ADDR_MOD_CYCLE0, ADDR_SYNC_CYCLE_0, ADDR_SYNC_CYCLE_1, ADDR_SYNC_TIME_0,
+    CTL_FLAG_SYNC_SET,
 };
-use crate::proto::{Cmd, DEVICE_TO_HOST_BYTES, Error, HOST_TO_DEVICE_BYTES, PAYLOAD_BYTES};
+use crate::proto::{Cmd, Error, FRAME_BYTES_MAX, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX};
 use crate::tests::builders::{config_mod, write_foci_buffer, write_mod_buffer};
 use crate::tests::mock::{Frame, Harness};
 
 #[test]
-fn synchronize_writes_next_sync0_and_latches() {
+fn synchronize_writes_next_sync_edge_and_latches() {
     let mut h = Harness::new();
-    h.port.next_sync0 = 0x1122_3344_5566_7788;
-    h.port.sync0_cycle_ns = 1_000_000;
+    h.port.next_sync_edge = 0x1122_3344_5566_7788;
 
     h.deliver(&Frame::new(0, Cmd::Synchronize));
 
     assert_eq!(h.ack(), 0);
-    assert_eq!(h.data(), 0);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_TIME_0), 0x7788);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_TIME_0 + 1), 0x5566);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_TIME_0 + 2), 0x3344);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_TIME_0 + 3), 0x1122);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_CYCLE_0), 20480);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_CYCLE_1), 0);
+    assert_eq!(h.status(), 0);
+    assert_eq!(h.ctl(ADDR_SYNC_TIME_0), 0x7788);
+    assert_eq!(h.ctl(ADDR_SYNC_TIME_0 + 1), 0x5566);
+    assert_eq!(h.ctl(ADDR_SYNC_TIME_0 + 2), 0x3344);
+    assert_eq!(h.ctl(ADDR_SYNC_TIME_0 + 3), 0x1122);
+    assert_eq!(h.ctl(ADDR_SYNC_CYCLE_0), 20480);
+    assert_eq!(h.ctl(ADDR_SYNC_CYCLE_1), 0);
     assert_eq!(h.latch_count(CTL_FLAG_SYNC_SET), 1);
     assert_eq!(h.ctl(ADDR_CTL_FLAG) & CTL_FLAG_SYNC_SET, 0);
 }
 
 #[test]
-fn synchronize_returns_sync_not_ready_when_dc_unset() {
+fn synchronize_returns_sync_not_ready_before_the_pulse_runs() {
     let mut h = Harness::new();
-    h.port.next_sync0 = 0;
+    h.port.next_sync_edge = 0;
 
     h.deliver(&Frame::new(0, Cmd::Synchronize));
-    assert_eq!(h.data(), Error::SyncNotReady as u8);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_TIME_0), 0);
+    assert_eq!(h.status(), Error::SyncNotReady as u8);
+    assert_eq!(h.ctl(ADDR_SYNC_TIME_0), 0);
     assert_eq!(h.latch_count(CTL_FLAG_SYNC_SET), 0);
 
     h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.data(), Error::SyncNotReady as u8);
-}
-
-#[test]
-fn synchronize_writes_sync0_cycle_from_esc_register() {
-    let mut h = Harness::new();
-    h.port.next_sync0 = 0x10;
-    h.port.sync0_cycle_ns = 2_000_000;
-
-    h.deliver(&Frame::new(0, Cmd::Synchronize));
-
-    assert_eq!(h.data(), 0);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_CYCLE_0), 40960);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_CYCLE_1), 0);
-    assert_eq!(h.latch_count(CTL_FLAG_SYNC_SET), 1);
-}
-
-#[test]
-fn synchronize_rejects_single_shot_sync0() {
-    let mut h = Harness::new();
-    h.port.sync0_cycle_ns = 0;
-
-    h.deliver(&Frame::new(0, Cmd::Synchronize));
-
-    assert_eq!(h.data(), Error::InvalidSync0Cycle as u8);
-    assert_eq!(h.latch_count(CTL_FLAG_SYNC_SET), 0);
-}
-
-#[test]
-fn synchronize_rejects_non_multiple_of500us() {
-    let mut h = Harness::new();
-    h.port.sync0_cycle_ns = 750_000;
-
-    h.deliver(&Frame::new(0, Cmd::Synchronize));
-
-    assert_eq!(h.data(), Error::InvalidSync0Cycle as u8);
-    assert_eq!(h.latch_count(CTL_FLAG_SYNC_SET), 0);
-}
-
-#[test]
-fn synchronize_writes_both_cycle_words_for_large_cycle() {
-    let mut h = Harness::new();
-    h.port.next_sync0 = 0x10;
-    h.port.sync0_cycle_ns = 3_500_000;
-
-    h.deliver(&Frame::new(0, Cmd::Synchronize));
-
-    assert_eq!(h.data(), 0);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_CYCLE_0), 0x1800);
-    assert_eq!(h.ctl(ADDR_ECAT_SYNC_CYCLE_1), 0x1);
+    assert_eq!(h.reply_data(), [Error::SyncNotReady as u8]);
 }
 
 #[test]
@@ -94,12 +44,12 @@ fn set_and_wait_update_times_out_when_latch_stuck() {
     let mut h = Harness::new();
     h.port.latch_stuck = true;
 
-    h.port.next_sync0 = 0x1122_3344_5566_7788;
+    h.port.next_sync_edge = 0x1122_3344_5566_7788;
     h.deliver(&Frame::new(0, Cmd::Synchronize));
-    assert_eq!(h.data(), Error::FpgaTimeout as u8);
+    assert_eq!(h.status(), Error::FpgaTimeout as u8);
 
     h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.data(), Error::FpgaTimeout as u8);
+    assert_eq!(h.reply_data(), [Error::FpgaTimeout as u8]);
 
     h.port.latch_stuck = false;
 }
@@ -112,7 +62,7 @@ fn fpga_init_latch_timeout_is_latched_into_error_detail() {
     h.port.latch_stuck = false;
 
     h.deliver(&Frame::new(0, Cmd::ReadErrorDetail));
-    assert_eq!(h.data(), Error::FpgaTimeout as u8);
+    assert_eq!(h.reply_data(), [Error::FpgaTimeout as u8]);
 }
 
 #[test]
@@ -121,7 +71,7 @@ fn clear_reports_fpga_timeout_when_latch_stuck() {
     h.port.latch_stuck = true;
 
     h.deliver(&Frame::new(0, Cmd::Clear));
-    assert_eq!(h.data(), Error::FpgaTimeout as u8);
+    assert_eq!(h.status(), Error::FpgaTimeout as u8);
 
     h.port.latch_stuck = false;
 }
@@ -133,7 +83,7 @@ fn fpga_state_survives_reset() {
     h.deliver(&write_foci_buffer(0, 0, 0, &[0x5A5A]));
     h.deliver(&write_mod_buffer(1, 1, 8, &[0x77]));
     h.deliver(&config_mod(2, 1, 5, 256));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     h.deliver(&Frame::new(99, Cmd::Reset));
     assert_eq!(h.expected_seq(), 0);
@@ -145,7 +95,7 @@ fn fpga_state_survives_reset() {
 
 #[test]
 fn struct_sizes_match_spec() {
-    assert_eq!(HOST_TO_DEVICE_BYTES, 626);
-    assert_eq!(HOST_TO_DEVICE_BYTES, 2 + PAYLOAD_BYTES);
-    assert_eq!(DEVICE_TO_HOST_BYTES, 2);
+    assert_eq!(FRAME_BYTES_MAX, 1448);
+    assert_eq!(FRAME_BYTES_MAX, 2 + PAYLOAD_BYTES);
+    assert_eq!(REPLY_DATA_BYTES_MAX, 32);
 }

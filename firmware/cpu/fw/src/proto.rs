@@ -1,6 +1,7 @@
+pub use autd3_cpu_wire::udp::FAILSAFE_TIMEOUT_MS;
 pub use autd3_cpu_wire::{
-    Cmd, DEVICE_TO_HOST_BYTES, Error, HOST_TO_DEVICE_BYTES, Mode, PAYLOAD_BYTES, Telemetry,
-    wire_enum,
+    Cmd, Error, FRAME_BYTES_MAX, FRAME_HEADER_BYTES, Mode, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX,
+    Telemetry, wire_enum,
 };
 
 pub const BUFFER_SIZE_MIN: u32 = autd3_cpu_wire::layout::BUFFER_SIZE_MIN as u32;
@@ -11,16 +12,13 @@ pub const MAX_FOCI_TOTAL: u32 = autd3_cpu_wire::layout::MAX_FOCI_TOTAL as u32;
 
 pub const OUTPUT_MASK_WORDS: usize = autd3_cpu_wire::layout::OUTPUT_MASK_WORDS;
 
-pub const AL_STATUS_CODE_SYNC_ERROR: u16 = 0x001A;
-pub const AL_STATUS_CODE_SM_WATCHDOG: u16 = 0x001B;
-pub const FAILSAFE_TICKS: u16 = 500;
-
 const _: () = assert!(crate::params::NUM_TRANSDUCERS <= EMISSION_SLOT_WORDS as usize);
 
 #[derive(Clone, Copy)]
 pub struct RxFrame {
     pub seq: u8,
     pub cmd: u8,
+    pub msg_id: u16,
     pub payload: [u8; PAYLOAD_BYTES],
 }
 
@@ -28,15 +26,19 @@ impl RxFrame {
     pub const ZERO: Self = Self {
         seq: 0,
         cmd: 0,
+        msg_id: 0,
         payload: [0; PAYLOAD_BYTES],
     };
 
     #[must_use]
-    pub fn from_frame(frame: &[u8; HOST_TO_DEVICE_BYTES]) -> Self {
+    pub fn from_frame(frame: &[u8], msg_id: u16) -> Self {
         let mut rx = Self::ZERO;
-        rx.seq = frame[0];
-        rx.cmd = frame[1];
-        rx.payload.copy_from_slice(&frame[2..]);
+        rx.seq = frame.first().copied().unwrap_or(0);
+        rx.cmd = frame.get(1).copied().unwrap_or(0);
+        rx.msg_id = msg_id;
+        let body = frame.get(FRAME_HEADER_BYTES..).unwrap_or(&[]);
+        let len = body.len().min(PAYLOAD_BYTES);
+        rx.payload[..len].copy_from_slice(&body[..len]);
         rx
     }
 }
@@ -47,8 +49,50 @@ impl Default for RxFrame {
     }
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
-pub struct TxFrame {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Reply {
     pub ack: u8,
-    pub data: u8,
+    pub status: u8,
+    len: u8,
+    data: [u8; REPLY_DATA_BYTES_MAX],
+}
+
+impl Reply {
+    #[must_use]
+    pub fn new(ack: u8, status: u8, data: &[u8]) -> Self {
+        let len = data.len().min(REPLY_DATA_BYTES_MAX);
+        let mut buf = [0; REPLY_DATA_BYTES_MAX];
+        buf[..len].copy_from_slice(&data[..len]);
+        Self {
+            ack,
+            status,
+            len: len as u8,
+            data: buf,
+        }
+    }
+
+    #[must_use]
+    pub fn data(&self) -> &[u8] {
+        &self.data[..usize::from(self.len)]
+    }
+}
+
+impl Default for Reply {
+    fn default() -> Self {
+        Self::new(0, 0, &[])
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Disposition {
+    Reply,
+    Deferred,
+    Dropped,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Drained {
+    Empty,
+    Completed { msg_id: u16 },
+    Flushed,
 }

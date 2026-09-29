@@ -37,7 +37,7 @@ for frame in &frames {
   R -- "UDP" --> D`}
 />
 
-RT スレッドは通信周期でひたすら送受信を繰り返しており, ユーザースレッドはそこへコマンドを渡して結果を待つ.
+RT スレッドはコマンドが届いたらすぐにデバイスへ送り, デバイスの返信を振り分けている. ユーザースレッドはそこへコマンドを渡して結果を待つ.
 以下では, デバイス 2 台に `PerDevice` のフレームを 1 つ送る場合を例に, 送信から受信までの処理を追う.
 
 ### ① Slot を借りる
@@ -75,7 +75,8 @@ struct Slot {
     dist: Distribution,
     payload: Box<[u8]>,     // num_devices * PAYLOAD_BYTES
     cmds: Box<[Cmd]>,
-    data: Box<[u8]>,        // 各デバイスからの応答バイト
+    status: Box<[u8]>,      // 各デバイスからの応答 (エラーコード)
+    values: Box<[Value]>,   // 各デバイスからの読み出し値 (最大 32 byte)
 }
 ```
 
@@ -118,51 +119,38 @@ async fn dispatch(&self, slot: Slot, exclusive: bool) -> Result<ResponseFuture, 
 
 以下は RT スレッド側の処理である.
 
-### ③ TX バッファへ書く
+### ③ 送る
 
-RT スレッドは毎サイクル `stage_tx` で「今回何を送るか」を決める.
-新規コマンドがあれば `stage_new` が呼ばれる.
+RT スレッドはループの先頭で `pickup` を呼び, 送ってよい枠 (窓) がある限りコマンドを取り出してすぐに送る.
 
 ```rust
-
-fn stage_tx(&mut self) -> StageOutcome {
-    /* エラーや障害時の処理は省略 */
-    let exclusive_inflight = /* 受信データを使うタイプのフレームを送信中の場合. 後述. */;
-    if !exclusive_inflight && self.pending.len() < self.config.max_inflight.get() {
+fn pickup(&mut self) -> Result<Step, NetworkCause> {
+    /* 再送モード中や exclusive の待ちは省略 */
+    while self.window_open() {                    // pending.len() < max_inflight など
         match self.cmd_rx.try_recv() {
-            Ok(msg) if msg.exclusive && !self.pending.is_empty() => {
-                self.held_exclusive = Some(msg);
-            }
-            Ok(msg) => self.stage_new(msg),
-            Err(mpsc::error::TryRecvError::Empty) => {}
-            Err(mpsc::error::TryRecvError::Disconnected) => return StageOutcome::Disconnected,
+            Ok(msg) => self.accept(msg)?,          // exclusive なら pending が空になるまで保留
+            Err(TryRecvError::Empty) => break,
+            Err(TryRecvError::Disconnected) => return Ok(Step::Disconnected),
         }
     }
-    StageOutcome::Staged
+    Ok(Step::Continue)
 }
 
-fn stage_new(&mut self, msg: CmdMessage) {
+fn stage_new(&mut self, msg: CmdMessage) -> Result<(), NetworkCause> {
     let seq = self.next_seq;
     self.next_seq = self.next_seq.next();
-    stage_frame(seq, &msg.frame, &mut self.tx_bufs);
-    self.pending.push_back(Inflight {
-        seq,
-        frame: msg.frame,
-        acked: 0,
-        age: 0,
-        exclusive: msg.exclusive,
-        response_tx: msg.response_tx,
-    });
+    stage_frame(seq, &msg.frame, &mut self.bufs);
+    self.pending.push_back(Inflight { seq, frame: msg.frame, acked: 0, sent_at: Instant::now(), /* .. */ });
+    self.send_bufs()?;                             // UdpBus::send
+    Ok(())
 }
 ```
 
-`try_recv` は 1 サイクルにつき 1 回しか呼ばれないため, 新規 SEQ の投入は最大 1 サイクルに 1 件である.
-
-`stage_frame` が `Slot` の内容を TX バッファへ展開する.
+`stage_frame` が `Slot` の内容を送信バッファへ展開する.
 
 ```rust
-fn stage_frame(seq: Seq, frame: &Slot, tx_bufs: &mut [[u8; TX_FRAME_BYTES]]) {
-    for (device, buf) in tx_bufs.iter_mut().enumerate() {
+fn stage_frame(seq: Seq, frame: &Slot, bufs: &mut [[u8; FRAME_BYTES_MAX]]) {
+    for (device, buf) in bufs.iter_mut().enumerate() {
         buf[0] = seq.get();
         buf[1] = frame.cmd_for(device).as_u8();
         buf[2..].copy_from_slice(frame.payload_for(device));
@@ -170,8 +158,9 @@ fn stage_frame(seq: Seq, frame: &Slot, tx_bufs: &mut [[u8; TX_FRAME_BYTES]]) {
 }
 ```
 
-TX フレームの先頭 2 byte が `Seq` と `Cmd`, 残りがペイロードである.
-`Seq` はこの送信に割り当てられた 8 bit の通し番号で, 周期的に 0 → 1 → … → 255 → 0 とラップする.
+フレームの先頭 2 byte が `Seq` と `Cmd`, 残りがペイロードである.
+`UdpBus::send` はペイロード末尾の 0 を省いて送る (デバイスは受け取らなかった部分を 0 で埋める).
+`Seq` はこの送信に割り当てられた 8 bit の通し番号で, 0 → 1 → … → 255 → 0 とラップする.
 
 送信中のコマンドは `pending` に積まれる.
 
@@ -180,7 +169,7 @@ struct Inflight {
     seq: Seq,
     frame: Slot,
     acked: u128,          // ACK を返したデバイスのビットマスク
-    age: u32,             // 応答を待っているサイクル数
+    sent_at: Instant,     // 最初に送った時刻 (統計用)
     exclusive: bool,
     response_tx: CompletionSender,
 }
@@ -188,54 +177,56 @@ struct Inflight {
 
 stop-and-wait では `pending` の要素は常に高々 1 つである.
 
-### ④ 1 サイクル送受信する
+### ④ 返信を待つ
+
+送った後は, ソケットで次の期限まで返信を待つ.
 
 ```rust
-let CycleOutcome { rx_valid } = self.link.cycle(&self.tx_bufs, &mut self.rx_bufs)?;
+if let Some(reply) = self.recv(deadline)? {        // UdpBus::recv
+    self.handle_reply(&reply);
+}
 ```
 
-`UdpBus::cycle` (内部 trait `Bus` 越し) が 1 サイクル分の送受信を行う.
+期限は「先頭が `ack_timeout` を過ぎる時刻」「次の生存確認の時刻」, 窓に空きがあれば「新しいコマンドを拾うための短い間隔 (200 µs)」のうち最も早いものである.
 
-デバイスは受け取ったフレームを処理し, 結果を次のサイクルの RX に載せる.
-したがって, サイクル N で送ったフレームの ACK が読めるのは早くてもサイクル N+1 である.
-
-サイクル N+1 の `stage_tx` では新規コマンドが無いので, TX バッファは前サイクルのまま送出される.
-つまり同じ SEQ のフレームがもう一度流れる.
+デバイスは各フレームの扱いを終えた時点で 1 回返信する.
+FIFO モードではメインループが処理した後に, Low Latency モードでは受信割り込みの中で処理した直後に返信が届く.
+返信には `ack` (最後に処理した SEQ)・`status` (そのフレームのエラーコード)・読み出し値が載る.
 
 :::note
-送るものが無いサイクルでも同じフレームを送り続ける (デバイスはこれをホストが生きている信号としても使う).
-ファームウェア側で同じ SEQ のフレームを受け取った場合に無視するようにしているので, 同一フレームの再送は無害.
+送るものが無い間は, `heartbeat` (既定 10 ms) ごとに全デバイスへ生存確認 (`Heartbeat`) を送る.
+デバイスはこれをホストが生きている信号として使い (500 ms 届かないと出力を止める), 現在の `ack` を載せて返信する.
+ホストはこの返信で状態監視とデバイス時刻の観測を行う.
+pending も生存確認の返信待ちも無い間は, RT スレッドはソケットではなくコマンドのチャネルで待つので, 新しいコマンドが来ればすぐに起きる.
 :::
-
 
 ### ⑤ ACK を集める
 
-`rx_valid` が真 (つまり正しくデータが受信できている) なら `route_acks` が呼ばれる.
-`UdpBus` は全デバイスの返信が `reply_timeout` 内に揃ったかどうかで `rx_valid` を判定する.
+返信は 1 つずつ振り分ける.
 
 ```rust
+if !not_before(reply.msg_id, self.epoch) { return; }  // Reset より前の要求への返信は捨てる
 let front_seq = pending.front().seq;
 let span = pending.back().seq.distance_from(front_seq) as usize;   // stop-and-wait では 0
-for (device, rx_buf) in rx_bufs.iter().enumerate() {
-    let rx = RxFrame::parse(rx_buf);
-    let ack_offset = rx.ack.distance_from(front_seq) as usize;
-    if ack_offset > span { continue; }                // まだ届いていないデバイスは飛ばす
-    let bit = 1u128 << device;
-    for entry in pending.iter_mut().take(ack_offset + 1) {
-        if entry.acked & bit == 0 {
-            entry.acked |= bit;
-            entry.frame.record_data(device, rx.data);  // 応答バイトを Slot へ記録
+let ack = Seq::new(reply.ack);
+let ack_offset = ack.distance_from(front_seq) as usize;
+if ack_offset > span { return; }                    // 窓外の ACK は無視
+let bit = 1u128 << reply.device;
+for entry in pending.iter_mut().take(ack_offset + 1) {
+    if entry.acked & bit == 0 {
+        entry.acked |= bit;
+        if entry.seq == ack {
+            entry.frame.record_reply(reply.device, reply.status, reply.data());
+        } else {
+            entry.frame.record_reply(reply.device, 0, &[]);  // 返信を取りこぼした分は結果不明
         }
     }
 }
 ```
 
-stop-and-wait ではpendingの要素は 1 つなので, `front() == back()` である.
+stop-and-wait では pending の要素は 1 つなので, `front() == back()` である.
 
-RX フレームは `ack` と `data` の 2 byte である.
-`ack` はそのデバイスが最後に処理し終えた SEQ を表す.
-
-`ack_offset` は 例えば, デバイスが一個前のSEQを返した場合は `255` となり, `ack_offset > span` で弾かれる.
+`ack_offset` は 例えば, デバイスが一個前の SEQ を返した場合は `255` となり, `ack_offset > span` で弾かれる.
 
 デバイス 2 台の両方が ACK を返すと, `acked` は `0b11` になる.
 
@@ -256,13 +247,12 @@ acked は u128 にしてある. つまり, 最大デバイス数は 128 に制�
 ```rust
 while pending.front().is_some_and(|e| e.acked == all_acked) {
     let entry = pending.pop_front().expect("just checked");
-    entry.response_tx.send(Ok(Response::from_slice(entry.frame.data())));
-    self.pool.release(entry.frame);
+    entry.response_tx.send(Ok(entry.frame.response()));
     progressed = true;
 }
 ```
 
-`Slot` に記録した応答バイトを `Response` へ写して送信側へ渡し, `Slot` をプールへ返す.
+`Slot` に記録した応答を `Response` へ写して送信側へ渡す. `Slot` は `Inflight` と一緒に破棄され, プールへ戻る.
 これでユーザースレッドの `ResponseFuture` が起こされる.
 
 ### 全体の流れ
@@ -279,12 +269,11 @@ while pending.front().is_some_and(|e| e.acked == all_acked) {
   U->>U: Frame のペイロードを Slot へ写す
   U->>R: CmdMessage (mpsc)
   Note over U: ResponseFuture を await
-  R->>R: stage_frame: Slot → tx_bufs
-  R->>D: cycle N
-  D-->>R: rx (ACK はまだ)
-  R->>D: cycle N+1 (同じ内容を再送)
-  D-->>R: rx (ack = seq)
-  R->>P: release(Slot)
+  R->>R: stage_frame: Slot → bufs
+  R->>D: Frame (seq)
+  D->>D: 処理
+  D-->>R: 返信 (ack = seq, status)
+  R->>P: Slot を返す
   R-->>U: 完了通知 (waker)`}
 />
 
@@ -302,16 +291,18 @@ pending: ┌────────┬────────┬────�
 ```
 
 `stage_new` が `next_seq` を 1 つずつ配って `push_back` するので, `pending` の SEQ は連番の昇順になる.
+同時に送ってよい数は `max_inflight` (既定 7) で, これはデバイスの受信キュー (FIFO) の容量に合わせてある.
+FIFO モードではフレームが処理されるまでキューに残るので, これより多く送ると溢れて捨てられる (後述の再送で回復するが遅くなる).
 
 ### デバイス側の受理条件
 
 ```rust
 if in_frame.seq == expected_seq {
     expected_seq = seq + 1;
-    let data = dispatch(cmd, payload);
-    tx = pack_tx(in_frame.seq, data);      // ack = 今処理した SEQ, data = 結果
+    let outcome = dispatch(cmd, payload);
+    set_reply(in_frame.seq, status_of(outcome), data_of(outcome));   // ack = 今処理した SEQ
 } else {
-    bump(Telemetry::SeqMismatch);          // tx は据え置き
+    bump(Telemetry::SeqMismatch);          // 返信は現在の値のまま
 }
 ```
 
@@ -319,13 +310,13 @@ if in_frame.seq == expected_seq {
 
 ### 累積 ACK の展開
 
-`route_acks` の `take(ack_offset + 1)` は, 最新の ACK に従って, 古いFrameまで遡って処理する.
+`take(ack_offset + 1)` は, 最新の ACK に従って, 古いフレームまで遡って処理する.
 
 ```rust
 for entry in pending.iter_mut().take(ack_offset + 1) { .. }
 ```
 
-例として, デバイス 2 台, `pending = [seq3, seq4, seq5]` で, dev0 が 5 まで進み dev1 が 3 で足踏みしている場合を追う.
+例として, デバイス 2 台, `pending = [seq3, seq4, seq5]` で, dev0 の返信が ack=5, dev1 の返信が ack=3 だった場合を追う.
 
 ```
 front = 3, back = 5, span = 2
@@ -339,7 +330,7 @@ dev1: ack=3 → offset = 0 ≤ 2 → take(1) → seq3 のみに bit1 を立て�
 pending = [seq4: 0b01] [seq5: 0b01]
 ```
 
-次のサイクルで dev1 が `ack=5` を返すと, seq4 と seq5 の両方が一度に埋まる.
+dev1 の seq4 の返信が失われ, 次に seq5 の返信 (`ack=5`) が届くと, seq4 と seq5 の両方が一度に埋まる.
 dev1 は seq4 の ACK を報告していないが, `ack=5` から遡って処理されたという扱いにする.
 
 :::note
@@ -367,49 +358,43 @@ dev1 は seq4 の ACK を報告していないが, `ack=5` から遡って処理
 デバイスは順番通りの SEQ しか受理しないため, フレームを取りこぼしたデバイスの `ack` は `front - 1` でとまるからである.
 
 問題になるのは, デバイスの `ack` が止まったまま, ホスト側の SEQ だけが先へ進んだ場合である.
-例えば後述の異常 RX で `pending` (深さ d) を一括タイムアウトさせた後, アプリケーションが新しい SEQ で再送すると, 新しい `front` は古い `ack` の `1 + d` 先から始まる.
+例えば後述のタイムアウトで `pending` (深さ d) を一括で失敗させた後, アプリケーションが新しい SEQ で再送すると, 新しい `front` は古い `ack` の `1 + d` 先から始まる.
 このときデバイス側の `ack` が古いままだと `ack_offset` は `255 - d` になる.
 `max_inflight <= 127` なら `d <= 127` かつ `span <= 126` なので, `255 - d >= 128 > span` が常に成り立ち, 偽の完了通知になることはない.
 :::
 
 ### exclusive
 
-上記の ACK 処理の影響で ACK が 2 つ以上飛んだ場合, 中間のエントリには後続フレームの応答バイトが記録される.
+返信は「最後に処理したフレーム」の結果を運ぶので, 返信が失われて ACK が 2 つ以上飛んだ場合, 中間のエントリの結果は観測できない.
 
-通常はこれで問題ないが, デバイスからの受信データを使うコマンドではこれが問題になる.
+通常はこれで問題ないが, デバイスからの読み出し値を使うコマンドではこれが問題になる.
 
-そのため, 受信データが必要なコマンド (例えばファームウェアのバージョンを読むコマンドなど) は, 送信中のフレームが完了するまで次のコマンドを送らないようにする.
+そのため, 読み出し値が必要なコマンド (例えばファームウェアのバージョンを読むコマンドなど) は, 送信中のフレームが完了するまで次のコマンドを送らないようにする.
+後続が無いので, 値を運ぶ返信 (完了返信, それが失われたら再送か生存確認への返信) の `ack` は必ずそのフレームの SEQ に一致する.
 
 ## 異常系
 
 ここまでは正常系だった.
-RT ループは毎サイクル, 送受信の結果に応じて 3 つの経路へ分岐する.
+RT ループは毎回, 次の順で処理する.
 
 ```rust
-let mut link_error: Option<NetworkCause> = None;
 loop {
-    if closed { break }
-    if matches!(stage_tx(), StageOutcome::Disconnected) { break }
-    let rx_valid = match self.link.cycle(&self.tx_bufs, &mut self.rx_bufs) {
-        Ok(CycleOutcome { rx_valid }) => rx_valid,
-        Err(e) => { link_error = Some(NetworkCause::new(e)); break }
-    };
-    if reset_remaining > 0 { advance_reset_phase() }
-    else if rx_valid { handle_healthy() }   // 正常系 = route_acks
-    else { handle_stale() }
+    if closed { return Ok(()) }
+    if matches!(self.pickup()?, Step::Disconnected) { return Ok(()) }
+    self.check_head(Instant::now())?;       // ACK 停滞の検出と再送・Reset
+    self.check_heartbeat(Instant::now())?;  // 生存確認
+    if matches!(self.wait()?, Step::Disconnected) { return Ok(()) }   // 返信かコマンドを待つ
 }
-teardown(link_error.as_ref());
 ```
 
-異常は主に3つのパターンに分かれる.
+異常は主に 2 つのパターンに分かれる.
 
-|              | 判定                       | 意味                              | 担当             |
-| ------------ | -------------------------- | --------------------------------- | ---------------- |
-| リンク断     | `cycle()` が `Err`         | ソケット自体の異常.               | `teardown`       |
-| RX 不信頼    | `rx_valid == false`        | 返信が揃わない (途絶・再起動).       | `handle_stale`   |
-| ACK 停滞     | `rx_valid` だが先頭が進まない | フレーム喪失, デバイス停止.        | `ResyncState`    |
+|              | 判定                                  | 意味                                        | 担当             |
+| ------------ | ------------------------------------- | ------------------------------------------- | ---------------- |
+| ソケットの異常 | `send` / `recv` が `Err`              | ソケット自体の異常.                         | `teardown`       |
+| ACK 停滞     | 先頭が `ack_timeout` の間進まない      | フレーム・返信の喪失, FIFO の溢れ, デバイスの停止・途絶. | `check_head`     |
 
-通信の異常は Client 側ではどうすることもできないので, ループを抜けて RT スレッドを終了させる.
+ソケットの異常は Client 側ではどうすることもできないので, ループを抜けて RT スレッドを終了させる.
 
 終了処理は理由によらず `teardown` に一本化されている.
 
@@ -426,36 +411,25 @@ fn teardown(&mut self, link_error: Option<&NetworkCause>) {
 待っている `ResponseFuture` に `cause()` を返し, `Slot` をプールへ戻す.
 
 `teardown`による後処理は正常系ではほぼ意味を持たない.
-一方リンクエラーでは RT スレッドだけが死に, `Client` は生き残る.
+一方ソケットの異常では RT スレッドだけが死に, `Client` は生き残る.
 このとき後処理を怠ると, デッドロックが発生する可能性がある.
-`SlotPool::acquire` は取得した `Semaphore` の許可を `forget` するため,  `in-flight の `Slot` を回収しないと, プールが枯渇し以降の `send` が `acquire` で永久にブロックする可能性がある.
+`SlotPool::acquire` は取得した `Semaphore` の許可を `forget` するため,  in-flight の `Slot` を回収しないと, プールが枯渇し以降の `send` が `acquire` で永久にブロックする可能性がある.
 
 また, エラー種別が具体的になるというメリットもある.
-
-### stage_tx の優先順位
-
-障害時は `stage_tx` が新規コマンドの投入より回復を優先する.
-
-| 優先度 | 条件                  | 動作                                     |
-| ------ | --------------------- | ---------------------------------------- |
-| 1      | `reset_remaining > 0` | `Cmd::Reset` をブロードキャストし続ける. |
-| 2      | `resync.active`       | `pending` の先頭を再送する.              |
-| 3      | `held_exclusive` あり | `pending` が空になるまで待って投入する.  |
-| 4      | 通常                  | `cmd_rx.try_recv()` で新規を 1 件取る.   |
 
 ### ACK 停滞
 
 ```text
    Normal
-     │  先頭が timeout_cycles 経過
+     │  先頭が ack_timeout の間進まない
      ▼
    Resync  ──── pending が空 ────▶  Normal
-     │  (この間, 先頭を毎サイクル再送)
+     │  (ack_timeout ごとに pending 全体を送り直す)
      │
      │  max_resync_rounds 回超過
      ▼
    Reset
-     │  SEQ を 0 から振り直し
+     │  全デバイスの返信で到達を確かめ, SEQ を 0 から振り直す
      ▼
    Resync  (Reset 後)
      │  再度 max_resync_rounds 回超過
@@ -464,43 +438,26 @@ fn teardown(&mut self, link_error: Option<&NetworkCause>) {
 ```
 
 `pending` が空になれば, どの状態からでも `Normal` へ戻る.
+再送モードの間は新規コマンドを受け付けない.
 
-状態の判定は `pending` の先頭の `age` (応答を待っているサイクル数) で行う.
-既定値 (`timeout_cycles = 10`, `max_resync_rounds = 8`, `reset_resend_cycles = 2`) では次のようになる.
+既定値 (`ack_timeout = 10 ms`, `max_resync_rounds = 8`) では次のようになる.
 
-| サイクル | 状態              | 出来事                                                     |
-| -------- | ----------------- | ---------------------------------------------------------- |
-| 〜10     | Normal            | 先頭の `age` を数える.                                     |
-| 10       | Normal → Resync   | `age` が `timeout_cycles` に到達. 再送モードへ入る.        |
-| 20〜90   | Resync            | 10 サイクルごとに `rounds` が増える. その間は先頭を再送.    |
-| 90       | Resync → Reset    | `rounds` が `max_resync_rounds` に到達. `Cmd::Reset` を送る. |
-| 92       | Reset → Resync    | Reset 送出が終わり, SEQ を 0 から振り直す.                  |
-| 102〜172 | Resync            | 再び 10 サイクルごとに `rounds` が増える.                   |
-| 172      | Resync → GiveUp   | Reset 済みなので今度は諦め, 全 `pending` をタイムアウトさせて `Normal` へ戻る. |
+| 経過時間     | 状態              | 出来事                                                     |
+| ------------ | ----------------- | ---------------------------------------------------------- |
+| 〜10 ms      | Normal            | 先頭の返信を待つ.                                          |
+| 10〜80 ms    | Resync            | 10 ms ごとに pending 全体を送り直す.                       |
+| 90 ms        | Resync → Reset    | `max_resync_rounds` 回送り直しても進まない. `Cmd::Reset` を送る. |
+| 90〜170 ms   | Reset             | 10 ms ごとに Reset を送り直して全デバイスの返信を待つ. 揃えば SEQ を振り直して Resync へ, `max_resync_rounds` 回で揃わなければ GiveUp. |
+| Reset 後 90 ms | Resync → GiveUp | Reset 済みなので今度は諦め, 全 `pending` をタイムアウトさせて `Normal` へ戻る. |
 
-各サイクル数は 3 つの設定値から決まる.
-
-- **再送モードに入るまで**: `age` が `timeout_cycles` に達する = `10` サイクル.
-- **Resync → Reset**: 再送モードに入った後は `timeout_cycles` ごとに `rounds` が 1 増え, `max_resync_rounds` 回で Reset へ移る. つまり `timeout_cycles × max_resync_rounds` = `10 × 8` = `80` サイクルで, 到達は `10 + 80 =` `90`.
-- **Reset の送出**: `reset_resend_cycles` = `2` サイクル `Cmd::Reset` を送り, 振り直す. `90 + 2 =` `92`.
-- **Reset → GiveUp**: 振り直し後も同じで, `timeout_cycles × max_resync_rounds` = `80` サイクル後に GiveUp. `92 + 80 =` `172`.
-
-まとめると, 決着までのサイクル数は次式になる.
-
-```text
-timeout_cycles × (1 + 2 × max_resync_rounds) + reset_resend_cycles
-  = 10 × (1 + 2 × 8) + 2
-  = 172
-```
-
-よって 1 ms サイクルなら最悪でも約 172 ms で回復する.
+送り直しは窓全体を先頭から行う (go-back-N).
+デバイスは `expected_seq` と一致するフレームだけを受理し, 既に受理したフレームは SEQ 不一致か dedup で捨てるので, 送り直しは冪等である.
 
 #### 進捗があれば状態をリセット
 
-`route_acks` で 1 本でも完了すれば `on_ack_progress` が呼ばれ, `rounds` と `reset_tried` と先頭の `age` が戻る.
+1 本でも完了すれば, `rounds` と `reset_tried` が戻り, 先頭の待ち時間も数え直す.
 
-一方で `active` は保持し, `pending` が空になるまで再送モードを維持し, 溜まっているフレームを 1 本ずつ流し切ってから通常運転へ戻る.
-`stage_tx` の優先順位で示したとおり, その間は新規コマンドを受け付けない.
+一方で再送モードは `pending` が空になるまで維持し, 溜まっているフレームを流し切ってから通常運転へ戻る.
 
 #### SEQ のリセット
 
@@ -513,49 +470,40 @@ timeout_cycles × (1 + 2 × max_resync_rounds) + reset_resend_cycles
 - `ack` を `0xFF` にする
 - FIFO に積まれた未処理フレームを破棄する
 
-`Reset` は FIFO を無視して即座に発行される.
+`Reset` は FIFO を無視して受信割り込みの中で即座に処理され, その場で返信 (`ack = 0xFF`) が返る.
 
-ホスト側は Reset 送出が終わったところで `pending` の SEQ を 0 から振り直す.
+ホストは Reset を送るたびに記録した `msg_id` を使い, それ以降の `msg_id` の返信 (`ack = 0xFF`) が全デバイスから揃うまで `ack_timeout` ごとに送り直す.
+揃ったら, 次に使う `msg_id` を**エポック**とし, それより前の要求への返信を以後捨てる.
+Reset より前に処理されたフレームの完了返信が遅れて届いても, 振り直した SEQ 空間で誤って完了扱いにしないためである.
+そのうえで `pending` の SEQ を 0 から振り直して送り直す.
 
 ```rust
-fn advance_reset_phase(&mut self) {
-    self.reset_remaining -= 1;
-    if self.reset_remaining == 0 {
-        let mut seq = Seq::ZERO;
-        for entry in &mut self.pending {
-            entry.seq = seq;  entry.acked = 0;  entry.age = 0;
-            seq = seq.next();
-        }
-        self.next_seq = seq;
-        self.resync.active = !self.pending.is_empty();
-        self.resync.rounds = 0;
+fn renumber_pending(&mut self) {
+    let mut seq = Seq::ZERO;
+    for entry in &mut self.pending {
+        entry.seq = seq;
+        entry.acked = 0;
+        seq = seq.next();
     }
+    self.next_seq = seq;
 }
 ```
 
-`reset_remaining > 0` の間は `handle_healthy` を呼ばないので, この期間の RX は ACK 処理に使わない.
-(仮に使われたとしても, 振り直し後の `front_seq = 0` に対して `ack = 0xFF` は `distance_from` が `255` になり, `span`の判定で弾かれる.)
-
 :::note
-`Cmd::Reset` は `reset_resend_cycles` (既定 2) サイクル連続で送られる.
-Reset には ACK による到達確認が無く, 送りっぱなしなので, 何回か送ることが唯一の保険になる.
-
-Reset は冪等であり, SEQ 一致チェックも受けないため, 届きさえすれば 1 回で完了する.
-そのため, 2は比較的保守的な値である.
-サイクル落ちが頻発する環境ではこの値を増やしてもよい.
+EtherCAT 版 (Firmware v0.9.0 まで) では Reset に到達確認が無く, 決め打ちの周期数だけ送り続けていた.
+UDP 版では Reset にも返信があるので, 届いたことを確かめてから振り直す.
 :::
 
-### 異常 RX
+### 途絶
 
-`rx_valid = false` が続くのはデバイスとの通信が途絶えている状態であり, 再送しても `Cmd::Reset` を送っても届かないのでどうしようもない.
-そのため, `stale_limit` サイクル待って一括でタイムアウトさせる.
-
-この間は `route_acks` も `advance_head` も呼ばれないため, 先頭の `age` は進まない.
+デバイスが返信しない (再起動・ケーブル断) 間も, 上の ACK 停滞と同じ経路で扱う.
+送り直しも Reset も届かないので, 最終的に全 `pending` がタイムアウトする.
+デバイスの状態は `UdpBus` が返信の途絶 (`lost_timeout`) から `Lost` と判定し, `StateChecker` が報告する.
 
 ### タイムアウト後
 
-`fail_pending_timeout` は全 `ResponseFuture` に `Error::Timeout` を返して `Slot` をプールへ戻す.
-RT ループ自体は継続し, 次のサイクルから新しいコマンドを受け付ける.
+`fail_pending_timeout` は全 `ResponseFuture` に `Error::Timeout` を返す.
+RT ループ自体は継続し, 次のコマンドを受け付ける.
 
 ## mirror の Desync 
 
@@ -571,6 +519,7 @@ pub struct ResponseFuture {
     completion: Option<Arc<Completion>>,
     pool: Arc<CompletionPool>,
     mirror: Option<MirrorHandle>,
+    reply: Reply,
 }
 
 impl ResponseFuture {

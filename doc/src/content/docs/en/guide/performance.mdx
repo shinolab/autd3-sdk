@@ -45,10 +45,10 @@ To avoid per-frame allocation, reuse buffers.
 
 ## OS Tuning
 
-When the host connects directly over UDP, the real-time performance of the cyclic communication also depends on the OS settings.
+When the host connects directly over UDP, the real-time performance of sending and receiving also depends on the OS settings.
 By adjusting thread priority, CPU affinity, timer precision, and so on, jitter can be suppressed, potentially enabling more stable high-rate transmission.
 
-These can be set as `rt_priority` / `rt_policy` / `rt_affinity` of `ClientConfig`, and `cycle` / `reply_timeout` of `TransportOption`.
+These can be set as `rt_priority` / `rt_policy` / `rt_affinity` / `ack_timeout` of `ClientConfig`, and `heartbeat` / `reply_timeout` of `TransportOption`.
 The appropriate values differ by environment, so it is best to measure and decide.
 
 ## Windows Driver Settings

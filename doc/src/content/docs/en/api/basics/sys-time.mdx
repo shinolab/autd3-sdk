@@ -1,17 +1,17 @@
 ---
-title: DcSysTime
-description: The API and arithmetic of DcSysTime, the time of the devices
+title: SysTime
+description: The API and arithmetic of SysTime, the time of the devices
 sidebar:
   order: 5
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
 import { excerpt } from "@lib/excerpt";
-import sample from "@codes/rust/examples/api/basics/dc-sys-time.rs?raw";
-import pySample from "@codes/python/examples/api/basics/dc-sys-time.py?raw";
-import csSample from "@codes/csharp/examples/api/basics/dc-sys-time.cs?raw";
+import sample from "@codes/rust/examples/api/basics/sys-time.rs?raw";
+import pySample from "@codes/python/examples/api/basics/sys-time.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/sys-time.cs?raw";
 
-`DcSysTime` is a type representing a **time of the devices**.
+`SysTime` is a type representing a **time of the devices**.
 It is used with [`TransitionMode::SysTime`](/autd3-sdk/en/getting-started/tutorial/loop/), [`GpioOut::SysTimeEq`](/autd3-sdk/en/api/command/gpio/), and the like.
 
 Each device has its own clock, and output switching and the like happen on this time.
@@ -25,7 +25,7 @@ Each device free-runs from the time set on open, so the time of different device
 
 ## Construction
 
-`DcSysTime` is constructed from the current time, a UTC datetime, or raw ns.
+`SysTime` is constructed from the current time, a UTC datetime, or raw ns.
 
 <CodeTabs rust={excerpt(sample, "construct")} python={excerpt(pySample, "construct")} csharp={excerpt(csSample, "construct")} />
 
@@ -44,15 +44,15 @@ The Python version does not have `from_utc` / `to_utc`.
 
 ## Arithmetic
 
-`DcSysTime` defines operations that add and subtract time differences.
+`SysTime` defines operations that add and subtract time differences.
 
 <CodeTabs rust={excerpt(sample, "ops")} python={excerpt(pySample, "ops")} csharp={excerpt(csSample, "ops")} />
 
 | Operation                     | Result       | Description                              |
 | ----------------------------- | ------------ | ---------------------------------------- |
-| `DcSysTime + Duration`        | `DcSysTime`  | Add the specified duration               |
-| `DcSysTime - Duration`        | `DcSysTime`  | Subtract the specified duration          |
-| `DcSysTime - DcSysTime`       | `Duration`   | Difference between two times (Rust only) |
+| `SysTime + Duration`        | `SysTime`  | Add the specified duration               |
+| `SysTime - Duration`        | `SysTime`  | Subtract the specified duration          |
+| `SysTime - SysTime`       | `Duration`   | Difference between two times (Rust only) |
 | Comparison (`<` / `>` / `==`, etc.) | `bool` | Comparison (Rust / C# only)              |
 
 Rust uses `core::time::Duration` for `Duration`, C# uses `TimeSpan`, and Python uses `autd3.Duration`.

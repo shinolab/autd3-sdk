@@ -3,23 +3,18 @@ use super::DeviceState;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceStatus {
     devices: Vec<DeviceState>,
-    recoveries: u64,
 }
 
 impl DeviceStatus {
     #[must_use]
-    pub fn new(devices: Vec<DeviceState>, recoveries: u64) -> Self {
-        Self {
-            devices,
-            recoveries,
-        }
+    pub fn new(devices: Vec<DeviceState>) -> Self {
+        Self { devices }
     }
 
     #[must_use]
-    pub fn op(num_devices: usize) -> Self {
+    pub fn ready(num_devices: usize) -> Self {
         Self {
-            devices: vec![DeviceState::Op; num_devices],
-            recoveries: 0,
+            devices: vec![DeviceState::Ready; num_devices],
         }
     }
 
@@ -33,23 +28,14 @@ impl DeviceStatus {
         self.devices
     }
 
-    #[must_use]
-    pub fn recoveries(&self) -> u64 {
-        self.recoveries
-    }
-
-    pub fn set_recoveries(&mut self, recoveries: u64) {
-        self.recoveries = recoveries;
-    }
-
     pub fn set_devices(&mut self, devices: impl IntoIterator<Item = DeviceState>) {
         self.devices.clear();
         self.devices.extend(devices);
     }
 
     #[must_use]
-    pub fn all_op(&self) -> bool {
-        self.devices.iter().all(|s| *s == DeviceState::Op)
+    pub fn all_ready(&self) -> bool {
+        self.devices.iter().all(|s| *s == DeviceState::Ready)
     }
 
     #[must_use]
@@ -63,22 +49,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn link_status_predicates() {
-        let status = DeviceStatus::op(2);
-        assert!(status.all_op());
+    fn status_predicates() {
+        let status = DeviceStatus::ready(2);
+        assert!(status.all_ready());
         assert!(!status.any_lost());
 
-        let status = DeviceStatus::new(vec![DeviceState::Op, DeviceState::Lost], 0);
-        assert!(!status.all_op());
+        let status = DeviceStatus::new(vec![DeviceState::Ready, DeviceState::Syncing]);
+        assert!(!status.all_ready());
+        assert!(!status.any_lost());
+
+        let status = DeviceStatus::new(vec![DeviceState::Ready, DeviceState::Lost]);
+        assert!(!status.all_ready());
         assert!(status.any_lost());
     }
 
     #[test]
     fn set_devices_reuses_the_buffer() {
-        let mut status = DeviceStatus::op(2);
+        let mut status = DeviceStatus::ready(2);
         status.set_devices([DeviceState::Lost]);
-        status.set_recoveries(3);
         assert_eq!(status.devices(), [DeviceState::Lost]);
-        assert_eq!(status.recoveries(), 3);
     }
 }

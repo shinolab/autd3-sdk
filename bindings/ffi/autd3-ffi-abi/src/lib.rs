@@ -337,7 +337,7 @@ mod client {
     use std::time::Duration;
 
     use autd3_rs::Error;
-    use autd3_rs::{Frames, Response, ResponseFuture, Telemetry};
+    use autd3_rs::{Frames, Response, ResponseFuture, TelemetryCounters};
     use autd3_rs_core::bus::DeviceState;
 
     use super::{
@@ -353,7 +353,7 @@ mod client {
         fn error_code(&self) -> i32 {
             match self {
                 Error::Timeout { .. } => AUTD3_ERR_TIMEOUT,
-                Error::DeviceError { .. } => AUTD3_ERR_DEVICE,
+                Error::DeviceError { .. } | Error::UnexpectedReply { .. } => AUTD3_ERR_DEVICE,
                 Error::Network(_) => AUTD3_ERR_NETWORK,
                 Error::UnsupportedFirmware { .. } => AUTD3_ERR_UNSUPPORTED_FIRMWARE,
                 Error::SilencerConstraint { .. }
@@ -387,7 +387,6 @@ mod client {
 
     pub struct DeviceStatusData {
         pub devices: Vec<DeviceState>,
-        pub recoveries: u64,
     }
 
     pub struct ResponseTokenData(pub BoxFuture<Response>);
@@ -415,11 +414,11 @@ mod client {
 
     pub trait ClientBackend: Send + Sync {
         fn num_devices(&self) -> usize;
-        fn dc_offset_ns(&self) -> i64;
+        fn clock_offset_ns(&self) -> i64;
         fn read_firmware_version(&self) -> BoxFuture<Vec<String>>;
         fn read_fpga_state(&self) -> BoxFuture<Vec<u8>>;
         fn read_error_detail(&self) -> BoxFuture<Vec<u8>>;
-        fn read_telemetry(&self, counter: Telemetry) -> BoxFuture<Vec<u8>>;
+        fn read_telemetry(&self) -> BoxFuture<Vec<TelemetryCounters>>;
 
         fn send(
             &self,

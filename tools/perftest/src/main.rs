@@ -54,8 +54,8 @@ async fn main() -> Result<()> {
         warmup,
         elapsed,
         frame_bytes,
-        stale_cycles,
-        lost_cycles,
+        retransmissions,
+        missed_replies,
         mem,
     } = output;
 
@@ -82,7 +82,13 @@ async fn main() -> Result<()> {
         }
     }
 
-    let summary = Summary::from_samples(measured, frame_bytes, elapsed, stale_cycles, lost_cycles);
+    let summary = Summary::from_samples(
+        measured,
+        frame_bytes,
+        elapsed,
+        retransmissions,
+        missed_replies,
+    );
     print_summary(&summary);
     if let Some(mem) = &mem {
         print_mem(mem);

@@ -6,6 +6,7 @@ use clap::Args;
 use autd3_rs::{TransportOption, UdpBus, UdpError};
 
 const MAX_DEVICES: usize = 255;
+const LOST_AFTER_HEARTBEATS: u32 = 10;
 
 #[derive(Args, Debug, Clone, Default)]
 #[command(next_help_heading = "UDP (unset options keep the library defaults)")]
@@ -18,9 +19,12 @@ pub struct UdpArgs {
         help = "Send the multicast management messages here instead of ff02::1 (e.g. the simulator's [::1]:44336)"
     )]
     pub group: Option<SocketAddrV6>,
-    #[arg(long, help = "Send period in microseconds")]
-    pub cycle_us: Option<u64>,
-    #[arg(long, help = "How long a cycle waits for every reply, microseconds")]
+    #[arg(long, help = "Heartbeat interval while waiting, microseconds")]
+    pub heartbeat_us: Option<u64>,
+    #[arg(
+        long,
+        help = "How long a heartbeat waits for every reply, microseconds"
+    )]
     pub reply_timeout_us: Option<u64>,
     #[arg(
         long,
@@ -51,11 +55,15 @@ impl UdpArgs {
     #[must_use]
     pub fn option(&self) -> TransportOption {
         let default = TransportOption::default();
+        let heartbeat = us(self.heartbeat_us).unwrap_or(default.heartbeat);
         TransportOption {
             iface: self.interface.clone().into(),
             group: self.group,
-            cycle: us(self.cycle_us).unwrap_or(default.cycle),
+            heartbeat,
             reply_timeout: us(self.reply_timeout_us).unwrap_or(default.reply_timeout),
+            lost_timeout: default
+                .lost_timeout
+                .max(heartbeat.saturating_mul(LOST_AFTER_HEARTBEATS)),
             response_timeout: ms(self.response_timeout_ms).unwrap_or(default.response_timeout),
             enumeration_timeout: ms(self.enumeration_timeout_ms)
                 .unwrap_or(default.enumeration_timeout),
@@ -112,8 +120,8 @@ mod tests {
         let args = parse(&[
             "--interface",
             "eth1",
-            "--cycle-us",
-            "2000",
+            "--heartbeat-us",
+            "20000",
             "--reply-timeout-us",
             "1500",
             "--response-timeout-ms",
@@ -127,8 +135,9 @@ mod tests {
             args.option(),
             TransportOption {
                 iface: Interface::Name("eth1".to_string()),
-                cycle: Duration::from_millis(2),
+                heartbeat: Duration::from_millis(20),
                 reply_timeout: Duration::from_micros(1500),
+                lost_timeout: Duration::from_millis(200),
                 response_timeout: Duration::from_millis(300),
                 enumeration_timeout: Duration::from_secs(20),
                 sync_timeout: Duration::from_secs(8),

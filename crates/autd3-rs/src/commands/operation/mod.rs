@@ -36,6 +36,7 @@ pub use synchronize::Synchronize;
 pub(crate) use write_foci_chunk::WriteFociChunk;
 pub(crate) use write_modulation_chunk::WriteModulationChunk;
 pub(crate) use write_modulation_fused::WriteModulationFused;
+pub(crate) use write_pattern_buffer::WritePatternBuffers;
 pub use write_pattern_buffer::{PatternIntensity, WritePatternBuffer};
 pub(crate) use write_pattern_compressed::PATTERN_MAX_PER_FRAME;
 pub use write_pattern_compressed::{PatternCompression, WritePatternCompressed};
@@ -80,7 +81,7 @@ pub trait Operation: crate::sealed::Sealed {
         Ok(())
     }
 
-    fn apply_dc_offset(&mut self, offset_ns: i64) {
+    fn apply_clock_offset(&mut self, offset_ns: i64) {
         let _ = offset_ns;
     }
 }

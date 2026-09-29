@@ -8,8 +8,8 @@ use autd3_rs::commands::{
 use autd3_rs::geometry::{Point3, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::{
-    ControlPoint, ControlPoints, DcSysTime, GpioIn, Intensity, LoopBehavior, PatternBank, Phase,
-    SamplingConfig, TransitionMode,
+    ControlPoint, ControlPoints, GpioIn, Intensity, LoopBehavior, PatternBank, Phase,
+    SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
@@ -74,7 +74,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
-    let at = DcSysTime::from_nanos(DcSysTime::now()?.sys_time() + 2_000_000_000);
+    let at = SysTime::from_nanos(SysTime::now()?.sys_time() + 2_000_000_000);
     change_bank(
         ctx,
         PatternBank::B1,

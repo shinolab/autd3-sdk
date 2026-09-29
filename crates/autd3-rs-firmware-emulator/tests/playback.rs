@@ -1,15 +1,15 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
 const ULTRASOUND_PERIOD_NS: u64 = 25_000;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
     let mut tx = TxFrame::new(Seq::new(seq), cmd);
     tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; TX_FRAME_BYTES];
+    let mut buf = [0u8; FRAME_BYTES_MAX];
     tx.write_to(&mut buf);
     buf
 }
@@ -38,17 +38,19 @@ fn modulation_buffer_and_index_follow_time() {
     assert_eq!(
         device
             .send(&frame(0, Cmd::WriteModulationBuffer, &write))
-            .data,
+            .status,
         0
     );
     assert_eq!(
-        device.send(&frame(1, Cmd::ConfigModulation, &config)).data,
+        device
+            .send(&frame(1, Cmd::ConfigModulation, &config))
+            .status,
         0
     );
     assert_eq!(
         device
             .send(&frame(2, Cmd::ChangeModulationBank, &change))
-            .data,
+            .status,
         0
     );
 
@@ -146,7 +148,7 @@ fn sys_time_transition_within_margin_is_rejected() {
                 Cmd::ChangeModulationBank,
                 &change(sys_time + MARGIN_NS - 1)
             ))
-            .data,
+            .status,
         MISS_TRANSITION_TIME,
         "transition within the margin must be rejected"
     );
@@ -158,7 +160,7 @@ fn sys_time_transition_within_margin_is_rejected() {
                 Cmd::ChangeModulationBank,
                 &change(sys_time + MARGIN_NS)
             ))
-            .data,
+            .status,
         0,
         "transition at least a margin ahead is accepted"
     );
@@ -192,7 +194,7 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
     assert_eq!(
         device
             .send(&frame(2, Cmd::ChangeModulationBank, &change))
-            .data,
+            .status,
         0
     );
 
@@ -209,7 +211,10 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
 
     let mut gpio_in = [0u8; 4];
     gpio_in[GPIO_IN_PIN as usize] = 1;
-    assert_eq!(device.send(&frame(3, Cmd::EmulateGpioIn, &gpio_in)).data, 0);
+    assert_eq!(
+        device.send(&frame(3, Cmd::EmulateGpioIn, &gpio_in)).status,
+        0
+    );
     for i in 8..16u64 {
         device
             .fpga_mut()

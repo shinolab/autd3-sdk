@@ -31,8 +31,6 @@ pub(crate) const FPGA_FLASH_MAX_POLLS: u32 = 10_000;
 const FLASH_STATUS_BUSY: u16 = 1 << 0;
 const SLOT_SECTOR_BASE: u32 = FPGA_IMAGE_BASE - FPGA_IMAGE_BASE % FPGA_SECTOR_BYTES;
 
-const _: () = assert!(UPDATE_CHUNK_MAX_DATA_LEN <= FLASH_BUF_BYTES);
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum State {
     Idle,
@@ -284,8 +282,18 @@ impl Cpu {
                 erased_end: erased,
             });
         }
-        load_buffer(port, &rest[..usize::from(data_len)]);
-        run_command(port, FLASH_OP_PROGRAM, start, u32::from(data_len))?;
+        for (k, part) in rest[..usize::from(data_len)]
+            .chunks(FLASH_BUF_BYTES)
+            .enumerate()
+        {
+            load_buffer(port, part);
+            run_command(
+                port,
+                FLASH_OP_PROGRAM,
+                start + (k * FLASH_BUF_BYTES) as u32,
+                part.len() as u32,
+            )?;
+        }
         Ok(())
     }
 

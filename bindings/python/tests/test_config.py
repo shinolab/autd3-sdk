@@ -49,7 +49,7 @@ def test_rt_priority_exposes_its_value() -> None:
 
 def test_zero_valued_config_fields_are_rejected() -> None:
     with pytest.raises(ValueError):
-        autd3.ClientConfig(timeout_cycles=0)
+        autd3.ClientConfig(ack_timeout=autd3.Duration.from_millis(0))
     with pytest.raises(ValueError):
         autd3.ClientConfig(max_inflight=0)
 

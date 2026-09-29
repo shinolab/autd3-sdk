@@ -127,12 +127,12 @@ mod tests {
 
     #[test]
     fn modulation_transition_mode_encodes_into_fused_frame() {
-        use crate::value::{DcSysTime, TransitionMode};
+        use crate::value::{SysTime, TransitionMode};
 
         let data = vec![0x80u8; 4];
         let payload = fused_payload(Modulation {
             transition_mode: TransitionMode::SysTime {
-                time: DcSysTime::from_nanos(0xDEAD_BEEF),
+                time: SysTime::from_nanos(0xDEAD_BEEF),
                 margin: None,
             },
             ..Modulation::new(SamplingConfig::FREQ_4K, &data)

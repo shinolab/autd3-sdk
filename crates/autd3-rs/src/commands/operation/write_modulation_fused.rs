@@ -33,8 +33,8 @@ impl WriteModulationFused<'_> {
 impl crate::sealed::Sealed for WriteModulationFused<'_> {}
 
 impl Operation for WriteModulationFused<'_> {
-    fn apply_dc_offset(&mut self, offset_ns: i64) {
-        self.transition_mode = self.transition_mode.with_dc_offset(offset_ns);
+    fn apply_clock_offset(&mut self, offset_ns: i64) {
+        self.transition_mode = self.transition_mode.with_clock_offset(offset_ns);
     }
 
     fn distribution(&self) -> Distribution {

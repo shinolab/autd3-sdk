@@ -2,17 +2,19 @@ use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::fpga_update::{FPGA_FUNC_FLASH_OTA, FpgaBootImage};
 use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
-use autd3_cpu_wire::payload::{SetModePayload, UpdateBeginPayload, UpdateChunkPayload};
+use autd3_cpu_wire::payload::{
+    FirmwareInfo, SetModePayload, UpdateBeginPayload, UpdateChunkPayload,
+};
 use autd3_cpu_wire::{Mode, describe_device_error};
-use autd3_rs::protocol::{Cmd, RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
-use autd3_rs::{CycleOutcome, UdpBus, UdpError};
+use autd3_rs::protocol::{Cmd, FRAME_BYTES_MAX, FRAME_HEADER_BYTES, PAYLOAD_BYTES, Seq};
+use autd3_rs::{UdpBus, UdpError};
 use zerocopy::FromBytes;
 
 use crate::fpga_image::FpgaFirmwareImage;
 use crate::image::CpuFirmwareImage;
 
-pub const RESET_CYCLES: u32 = 2;
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
+pub const RETRANSMIT_INTERVAL: Duration = Duration::from_millis(100);
 pub const UPDATE_BEGIN_TIMEOUT: Duration = Duration::from_secs(30);
 pub const UPDATE_CHUNK_TIMEOUT: Duration = Duration::from_secs(4);
 pub const UPDATE_COMMIT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -28,14 +30,20 @@ pub const MIN_CPU_FIRMWARE_VERSION: (u8, u8, u8) = (0, 10, 0);
 pub enum DriverError {
     #[error("network error: {0}")]
     Network(#[source] Box<dyn core::error::Error + Send + Sync>),
-    #[error("device {device} did not acknowledge {cmd:?} within {timeout:?}; {}", timeout_hint(*cmd))]
+    #[error("device {device} did not acknowledge {cmd} within {timeout:?}; {}", timeout_hint(*cmd))]
     Timeout {
         device: usize,
-        cmd: Cmd,
+        cmd: Request,
         timeout: Duration,
     },
-    #[error("device {device} rejected {cmd:?} with firmware error {code:#04x}: {}{}", describe_device_error(*code), device_hint(*cmd, *code))]
-    Device { device: usize, cmd: Cmd, code: u8 },
+    #[error("device {device} rejected {cmd} with firmware error {code:#04x}: {}{}", describe_device_error(*code), device_hint(*cmd, *code))]
+    Device {
+        device: usize,
+        cmd: Request,
+        code: u8,
+    },
+    #[error("device {device} returned a shorter reply to {cmd} than the command defines")]
+    ShortReply { device: usize, cmd: Request },
     #[error(
         "device {device} runs an FPGA image without configuration-flash access; flash `autd3-fpga.mcs` once via JTAG"
     )]
@@ -44,6 +52,8 @@ pub enum DriverError {
         "device {device} did not reconfigure after activation (or an earlier attempt failed since power-on); the written image boots at the next power cycle"
     )]
     FpgaReconfigFailed { device: usize },
+    #[error("the devices did not acknowledge Reset")]
+    ResetUnconfirmed,
     #[error("mode negotiation failed: the devices did not acknowledge SetMode")]
     ModeNegotiation,
     #[error(
@@ -57,7 +67,41 @@ pub enum DriverError {
     },
 }
 
-fn timeout_hint(cmd: Cmd) -> &'static str {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Request {
+    Command(Cmd),
+    Legacy(u8),
+}
+
+impl Request {
+    #[must_use]
+    pub const fn id(self) -> u8 {
+        match self {
+            Self::Command(cmd) => cmd.as_u8(),
+            Self::Legacy(id) => id,
+        }
+    }
+}
+
+impl From<Cmd> for Request {
+    fn from(cmd: Cmd) -> Self {
+        Self::Command(cmd)
+    }
+}
+
+impl core::fmt::Display for Request {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Command(cmd) => write!(f, "{cmd:?}"),
+            Self::Legacy(id) => write!(f, "v0.9 read command {id:#04x}"),
+        }
+    }
+}
+
+fn timeout_hint(cmd: Request) -> &'static str {
+    let Request::Command(cmd) = cmd else {
+        return "check the cable and the host firewall, then rerun";
+    };
     match cmd {
         Cmd::UpdateBegin | Cmd::UpdateChunk | Cmd::UpdateCommit => {
             "the device keeps the half-written slot and boots its previous image; rerun the update from the beginning"
@@ -69,7 +113,10 @@ fn timeout_hint(cmd: Cmd) -> &'static str {
     }
 }
 
-fn device_hint(cmd: Cmd, code: u8) -> &'static str {
+fn device_hint(cmd: Request, code: u8) -> &'static str {
+    let Request::Command(cmd) = cmd else {
+        return "";
+    };
     match (cmd, autd3_cpu_wire::Error::from_u8(code)) {
         (Cmd::UpdateActivate, Some(autd3_cpu_wire::Error::FpgaUpdateInProgress)) => {
             " (the CPU image is already committed: it boots as a trial at the next power cycle, run `--confirm-only` after that)"
@@ -103,6 +150,55 @@ pub struct UpdateProgress {
     pub total: usize,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Dialect {
+    #[default]
+    Udp,
+    Legacy,
+}
+
+pub const LEGACY_PAYLOAD_BYTES: usize = 624;
+pub const LEGACY_CHUNK_MAX_DATA_LEN: usize =
+    LEGACY_PAYLOAD_BYTES - core::mem::size_of::<UpdateChunkPayload>();
+
+const LEGACY_READ_ERROR_DETAIL: u8 = 0xE0;
+const LEGACY_READ_CPU_VERSION: [u8; 3] = [0xE1, 0xE2, 0xE3];
+const LEGACY_READ_FPGA_VERSION: [u8; 3] = [0xE4, 0xE5, 0xE6];
+const LEGACY_READ_FPGA_FUNCTIONS: u8 = 0xE9;
+const LEGACY_READ_FPGA_BOOT_IMAGE: u8 = 0xEA;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeviceReply {
+    pub status: u8,
+    pub value: Vec<u8>,
+}
+
+pub struct Frame {
+    pub cmd: u8,
+    pub payload: [u8; PAYLOAD_BYTES],
+}
+
+impl Frame {
+    #[must_use]
+    pub fn new(cmd: impl Into<Request>) -> Self {
+        Self {
+            cmd: cmd.into().id(),
+            payload: [0; PAYLOAD_BYTES],
+        }
+    }
+
+    #[must_use]
+    pub fn bytes(&self, seq: Seq) -> [u8; FRAME_BYTES_MAX] {
+        let mut bytes = [0; FRAME_BYTES_MAX];
+        bytes[0] = seq.get();
+        bytes[1] = self.cmd;
+        bytes[FRAME_HEADER_BYTES..].copy_from_slice(&self.payload);
+        bytes
+    }
+}
+
+pub type Replies = Result<Vec<DeviceReply>, usize>;
+
 pub trait Exchange {
     type Error: core::error::Error + Send + Sync + 'static;
 
@@ -112,17 +208,28 @@ pub trait Exchange {
         MIN_CPU_FIRMWARE_VERSION
     }
 
-    fn wait_next_cycle(&mut self) {}
+    fn dialect(&self) -> Dialect {
+        Dialect::Udp
+    }
 
-    fn cycle(
+    fn reset(&mut self, timeout: Duration) -> Result<bool, Self::Error>;
+
+    fn exchange(
         &mut self,
-        tx: &[[u8; TX_FRAME_BYTES]],
-        rx: &mut [[u8; RX_FRAME_BYTES]],
-    ) -> Result<CycleOutcome, Self::Error>;
+        seq: Seq,
+        frame: &Frame,
+        timeout: Duration,
+    ) -> Result<Replies, Self::Error>;
+
+    fn idle(&mut self, duration: Duration) -> Result<(), Self::Error>;
 
     fn close(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
+}
+
+fn not_before(msg_id: u16, first: u16) -> bool {
+    msg_id.wrapping_sub(first) < 0x8000
 }
 
 impl Exchange for UdpBus {
@@ -132,16 +239,77 @@ impl Exchange for UdpBus {
         UdpBus::num_devices(self)
     }
 
-    fn wait_next_cycle(&mut self) {
-        UdpBus::wait_next_cycle(self);
+    fn reset(&mut self, timeout: Duration) -> Result<bool, UdpError> {
+        let frame = Frame::new(Cmd::Reset);
+        let frames = vec![frame.bytes(Seq::ZERO); self.num_devices()];
+        let first = self.next_msg_id();
+        let start = Instant::now();
+        let mut confirmed = vec![false; self.num_devices()];
+        while start.elapsed() < timeout {
+            self.send(&frames)?;
+            let deadline = (Instant::now() + RETRANSMIT_INTERVAL).min(start + timeout);
+            while confirmed.contains(&false) {
+                let Some(reply) = self.recv(deadline)? else {
+                    break;
+                };
+                if not_before(reply.msg_id, first) && reply.ack == 0xFF {
+                    confirmed[reply.device] = true;
+                }
+            }
+            if !confirmed.contains(&false) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
-    fn cycle(
+    fn exchange(
         &mut self,
-        tx: &[[u8; TX_FRAME_BYTES]],
-        rx: &mut [[u8; RX_FRAME_BYTES]],
-    ) -> Result<CycleOutcome, UdpError> {
-        UdpBus::cycle(self, tx, rx)
+        seq: Seq,
+        frame: &Frame,
+        timeout: Duration,
+    ) -> Result<Replies, UdpError> {
+        let frames = vec![frame.bytes(seq); self.num_devices()];
+        let mut replies: Vec<Option<DeviceReply>> = vec![None; self.num_devices()];
+        let first = self.next_msg_id();
+        let end = Instant::now() + timeout;
+        while Instant::now() < end {
+            self.send(&frames)?;
+            let retransmit_at = (Instant::now() + RETRANSMIT_INTERVAL).min(end);
+            loop {
+                let keepalive = (Instant::now() + self.heartbeat_interval()).min(retransmit_at);
+                let Some(reply) = self.recv(keepalive)? else {
+                    if Instant::now() >= retransmit_at {
+                        break;
+                    }
+                    self.heartbeat()?;
+                    continue;
+                };
+                if not_before(reply.msg_id, first)
+                    && reply.ack == seq.get()
+                    && replies[reply.device].is_none()
+                {
+                    replies[reply.device] = Some(DeviceReply {
+                        status: reply.status,
+                        value: reply.data().to_vec(),
+                    });
+                }
+                if replies.iter().all(Option::is_some) {
+                    return Ok(Ok(replies.into_iter().map(Option::unwrap).collect()));
+                }
+            }
+        }
+        Ok(Err(replies.iter().position(Option::is_none).unwrap_or(0)))
+    }
+
+    fn idle(&mut self, duration: Duration) -> Result<(), UdpError> {
+        let start = Instant::now();
+        while start.elapsed() < duration {
+            self.heartbeat()?;
+            let deadline = (Instant::now() + self.heartbeat_interval()).min(start + duration);
+            while self.recv(deadline)?.is_some() {}
+        }
+        Ok(())
     }
 
     fn close(&mut self) -> Result<(), UdpError> {
@@ -151,8 +319,6 @@ impl Exchange for UdpBus {
 
 pub struct Driver<L: Exchange> {
     inner: L,
-    tx: Vec<[u8; TX_FRAME_BYTES]>,
-    rx: Vec<[u8; RX_FRAME_BYTES]>,
     next_seq: Seq,
 }
 
@@ -162,11 +328,8 @@ fn network_err<E: core::error::Error + Send + Sync + 'static>(e: E) -> DriverErr
 
 impl<L: Exchange> Driver<L> {
     pub fn open(inner: L) -> Result<Self, DriverError> {
-        let n = inner.num_devices();
         let mut driver = Self {
             inner,
-            tx: vec![[0; TX_FRAME_BYTES]; n],
-            rx: vec![[0; RX_FRAME_BYTES]; n],
             next_seq: Seq::ZERO,
         };
         driver.handshake()?;
@@ -175,139 +338,179 @@ impl<L: Exchange> Driver<L> {
 
     #[must_use]
     pub fn num_devices(&self) -> usize {
-        self.tx.len()
-    }
-
-    fn cycle(&mut self) -> Result<bool, DriverError> {
-        self.inner.wait_next_cycle();
-        self.inner
-            .cycle(&self.tx, &mut self.rx)
-            .map(CycleOutcome::rx_valid)
-            .map_err(network_err)
-    }
-
-    fn stage(&mut self, frame: &TxFrame) {
-        for buf in &mut self.tx {
-            frame.write_to(buf);
-        }
+        self.inner.num_devices()
     }
 
     fn handshake(&mut self) -> Result<(), DriverError> {
-        self.stage(&TxFrame::new(Seq::ZERO, Cmd::Reset));
-        for _ in 0..RESET_CYCLES {
-            self.cycle()?;
+        if !self.inner.reset(DEFAULT_TIMEOUT).map_err(network_err)? {
+            return Err(DriverError::ResetUnconfirmed);
         }
-        let mut frame = TxFrame::new(Seq::ZERO, Cmd::SetMode);
+        let mut frame = Frame::new(Cmd::SetMode);
         let (p, _) = SetModePayload::mut_from_prefix(&mut frame.payload).unwrap();
         p.mode = Mode::Fifo.as_u8();
-        self.stage(&frame);
-        let start = Instant::now();
-        loop {
-            let valid = self.cycle()?;
-            if valid && self.rx.iter().all(|rx| RxFrame::parse(rx).ack == Seq::ZERO) {
+        match self
+            .inner
+            .exchange(Seq::ZERO, &frame, DEFAULT_TIMEOUT)
+            .map_err(network_err)?
+        {
+            Ok(_) => {
                 self.next_seq = Seq::new(1);
-                return Ok(());
+                Ok(())
             }
-            if start.elapsed() >= DEFAULT_TIMEOUT {
-                return Err(DriverError::ModeNegotiation);
-            }
+            Err(_) => Err(DriverError::ModeNegotiation),
         }
     }
 
-    pub fn send(&mut self, mut frame: TxFrame, timeout: Duration) -> Result<Vec<u8>, DriverError> {
+    pub fn send(
+        &mut self,
+        request: impl Into<Request>,
+        frame: &Frame,
+        timeout: Duration,
+    ) -> Result<Vec<DeviceReply>, DriverError> {
         let seq = self.next_seq;
-        frame.seq = seq;
-        self.stage(&frame);
-        let mut data = vec![None; self.num_devices()];
-        let start = Instant::now();
-        loop {
-            if self.cycle()? {
-                for (slot, rx) in data.iter_mut().zip(&self.rx) {
-                    let rx = RxFrame::parse(rx);
-                    if slot.is_none() && rx.ack == seq {
-                        *slot = Some(rx.data);
-                    }
-                }
-                if data.iter().all(Option::is_some) {
-                    self.next_seq = seq.next();
-                    return Ok(data.into_iter().map(Option::unwrap).collect());
-                }
+        match self
+            .inner
+            .exchange(seq, frame, timeout)
+            .map_err(network_err)?
+        {
+            Ok(replies) => {
+                self.next_seq = seq.next();
+                Ok(replies)
             }
-            if start.elapsed() >= timeout {
-                break;
-            }
-        }
-        let device = data.iter().position(Option::is_none).unwrap_or(0);
-        Err(DriverError::Timeout {
-            device,
-            cmd: frame.cmd,
-            timeout,
-        })
-    }
-
-    pub fn send_checked(&mut self, frame: TxFrame, timeout: Duration) -> Result<(), DriverError> {
-        let cmd = frame.cmd;
-        let data = self.send(frame, timeout)?;
-        match data.iter().position(|&code| code != 0) {
-            None => Ok(()),
-            Some(device) => Err(DriverError::Device {
+            Err(device) => Err(DriverError::Timeout {
                 device,
-                cmd,
-                code: data[device],
+                cmd: request.into(),
+                timeout,
             }),
         }
     }
 
-    pub fn read_cpu_version(&mut self) -> Result<Vec<(u8, u8, u8)>, DriverError> {
-        self.read_triple([
-            Cmd::ReadCpuFwVersionMajor,
-            Cmd::ReadCpuFwVersionMinor,
-            Cmd::ReadCpuFwVersionPatch,
-        ])
+    pub fn send_checked(&mut self, frame: &Frame, timeout: Duration) -> Result<(), DriverError> {
+        let cmd = Self::request_of(frame);
+        let replies = self.send(cmd, frame, timeout)?;
+        match replies.iter().position(|reply| reply.status != 0) {
+            None => Ok(()),
+            Some(device) => Err(DriverError::Device {
+                device,
+                cmd,
+                code: replies[device].status,
+            }),
+        }
     }
 
-    fn read_triple(&mut self, cmds: [Cmd; 3]) -> Result<Vec<(u8, u8, u8)>, DriverError> {
-        let [major, minor, patch] = cmds;
-        let major = self.send(TxFrame::new(Seq::ZERO, major), DEFAULT_TIMEOUT)?;
-        let minor = self.send(TxFrame::new(Seq::ZERO, minor), DEFAULT_TIMEOUT)?;
-        let patch = self.send(TxFrame::new(Seq::ZERO, patch), DEFAULT_TIMEOUT)?;
-        Ok(major
+    fn request_of(frame: &Frame) -> Request {
+        Cmd::from_u8(frame.cmd).map_or(Request::Legacy(frame.cmd), Request::Command)
+    }
+
+    fn legacy_read(&mut self, id: u8) -> Result<Vec<u8>, DriverError> {
+        let replies = self.send(
+            Request::Legacy(id),
+            &Frame::new(Request::Legacy(id)),
+            DEFAULT_TIMEOUT,
+        )?;
+        Ok(replies.into_iter().map(|reply| reply.status).collect())
+    }
+
+    fn legacy_triple(&mut self, ids: [u8; 3]) -> Result<Vec<(u8, u8, u8)>, DriverError> {
+        let [major, minor, patch] = ids.map(|id| self.legacy_read(id));
+        Ok(major?
             .into_iter()
-            .zip(minor)
-            .zip(patch)
+            .zip(minor?)
+            .zip(patch?)
             .map(|((major, minor), patch)| (major, minor, patch))
             .collect())
     }
 
+    fn read(&mut self, cmd: Cmd) -> Result<Vec<Vec<u8>>, DriverError> {
+        let replies = self.send(cmd, &Frame::new(cmd), DEFAULT_TIMEOUT)?;
+        if let Some(device) = replies.iter().position(|reply| reply.status != 0) {
+            return Err(DriverError::Device {
+                device,
+                cmd: cmd.into(),
+                code: replies[device].status,
+            });
+        }
+        Ok(replies.into_iter().map(|reply| reply.value).collect())
+    }
+
+    fn read_firmware_info(&mut self) -> Result<Vec<FirmwareInfo>, DriverError> {
+        self.read(Cmd::ReadFirmwareInfo)?
+            .into_iter()
+            .enumerate()
+            .map(|(device, value)| {
+                FirmwareInfo::read_from_prefix(&value)
+                    .map(|(info, _)| info)
+                    .map_err(|_| DriverError::ShortReply {
+                        device,
+                        cmd: Cmd::ReadFirmwareInfo.into(),
+                    })
+            })
+            .collect()
+    }
+
+    pub fn read_cpu_version(&mut self) -> Result<Vec<(u8, u8, u8)>, DriverError> {
+        match self.inner.dialect() {
+            Dialect::Legacy => self.legacy_triple(LEGACY_READ_CPU_VERSION),
+            Dialect::Udp => Ok(self
+                .read_firmware_info()?
+                .into_iter()
+                .map(|info| {
+                    let [major, minor, patch] = info.cpu_version;
+                    (major, minor, patch)
+                })
+                .collect()),
+        }
+    }
+
     pub fn read_fpga_version(&mut self) -> Result<Vec<(u8, u8, u8)>, DriverError> {
-        self.read_triple([
-            Cmd::ReadFpgaFwVersionMajor,
-            Cmd::ReadFpgaFwVersionMinor,
-            Cmd::ReadFpgaFwVersionPatch,
-        ])
+        match self.inner.dialect() {
+            Dialect::Legacy => self.legacy_triple(LEGACY_READ_FPGA_VERSION),
+            Dialect::Udp => Ok(self
+                .read_firmware_info()?
+                .into_iter()
+                .map(|info| {
+                    let [major, minor, patch] = info.fpga_version;
+                    (major, minor, patch)
+                })
+                .collect()),
+        }
     }
 
     pub fn read_fpga_functions(&mut self) -> Result<Vec<u8>, DriverError> {
-        self.send(
-            TxFrame::new(Seq::ZERO, Cmd::ReadFpgaFunctions),
-            DEFAULT_TIMEOUT,
-        )
+        match self.inner.dialect() {
+            Dialect::Legacy => self.legacy_read(LEGACY_READ_FPGA_FUNCTIONS),
+            Dialect::Udp => Ok(self
+                .read_firmware_info()?
+                .into_iter()
+                .map(|info| info.fpga_functions)
+                .collect()),
+        }
     }
 
     fn read_error_detail(&mut self) -> Result<Vec<u8>, DriverError> {
-        self.send(
-            TxFrame::new(Seq::ZERO, Cmd::ReadErrorDetail),
-            DEFAULT_TIMEOUT,
-        )
+        match self.inner.dialect() {
+            Dialect::Legacy => self.legacy_read(LEGACY_READ_ERROR_DETAIL),
+            Dialect::Udp => Ok(self
+                .read(Cmd::ReadErrorDetail)?
+                .into_iter()
+                .map(|value| value.first().copied().unwrap_or(0))
+                .collect()),
+        }
     }
 
     pub fn read_fpga_boot_image(&mut self) -> Result<Vec<FpgaBootImage>, DriverError> {
+        if self.inner.dialect() == Dialect::Udp {
+            return Ok(self
+                .read_firmware_info()?
+                .into_iter()
+                .map(|info| {
+                    FpgaBootImage::from_u8(info.fpga_boot_image).unwrap_or(FpgaBootImage::Unknown)
+                })
+                .collect());
+        }
         let unknown_cmd = autd3_cpu_wire::Error::UnknownCmd.as_u8();
         let before = self.read_error_detail()?;
-        let raw = self.send(
-            TxFrame::new(Seq::ZERO, Cmd::ReadFpgaBootImage),
-            DEFAULT_TIMEOUT,
-        )?;
+        let raw = self.legacy_read(LEGACY_READ_FPGA_BOOT_IMAGE)?;
         let after = self.read_error_detail()?;
         Ok(raw
             .into_iter()
@@ -370,18 +573,11 @@ impl<L: Exchange> Driver<L> {
     }
 
     pub fn activate_fpga(&mut self) -> Result<(), DriverError> {
-        self.send_checked(
-            TxFrame::new(Seq::ZERO, Cmd::FpgaUpdateActivate),
-            DEFAULT_TIMEOUT,
-        )
+        self.send_checked(&Frame::new(Cmd::FpgaUpdateActivate), DEFAULT_TIMEOUT)
     }
 
     pub fn idle(&mut self, duration: Duration) -> Result<(), DriverError> {
-        let start = Instant::now();
-        while start.elapsed() < duration {
-            self.cycle()?;
-        }
-        Ok(())
+        self.inner.idle(duration).map_err(network_err)
     }
 
     pub fn update(
@@ -403,6 +599,13 @@ impl<L: Exchange> Driver<L> {
         )
     }
 
+    fn chunk_len(&self) -> usize {
+        match self.inner.dialect() {
+            Dialect::Udp => UPDATE_CHUNK_MAX_DATA_LEN,
+            Dialect::Legacy => LEGACY_CHUNK_MAX_DATA_LEN,
+        }
+    }
+
     fn stream(
         &mut self,
         bytes: &[u8],
@@ -412,31 +615,32 @@ impl<L: Exchange> Driver<L> {
         mut on_progress: impl FnMut(UpdateProgress),
     ) -> Result<(), DriverError> {
         let total = bytes.len();
-        let mut begin = TxFrame::new(Seq::ZERO, begin_cmd);
+        let mut begin = Frame::new(begin_cmd);
         let (p, _) = UpdateBeginPayload::mut_from_prefix(&mut begin.payload).unwrap();
         p.length
             .set(u32::try_from(total).expect("bounded by the slot capacity"));
         p.crc32.set(crc32);
-        self.send_checked(begin, begin_timeout)?;
+        self.send_checked(&begin, begin_timeout)?;
         on_progress(UpdateProgress { sent: 0, total });
 
-        for (index, data) in bytes.chunks(UPDATE_CHUNK_MAX_DATA_LEN).enumerate() {
-            let offset = index * UPDATE_CHUNK_MAX_DATA_LEN;
-            let mut chunk = TxFrame::new(Seq::ZERO, chunk_cmd);
+        let chunk_len = self.chunk_len();
+        for (index, data) in bytes.chunks(chunk_len).enumerate() {
+            let offset = index * chunk_len;
+            let mut chunk = Frame::new(chunk_cmd);
             let (p, rest) = UpdateChunkPayload::mut_from_prefix(&mut chunk.payload).unwrap();
             p.offset
                 .set(u32::try_from(offset).expect("bounded by the slot capacity"));
             p.data_len
                 .set(u16::try_from(data.len()).expect("bounded by the chunk size"));
             rest[..data.len()].copy_from_slice(data);
-            self.send_checked(chunk, chunk_timeout)?;
+            self.send_checked(&chunk, chunk_timeout)?;
             on_progress(UpdateProgress {
                 sent: offset + data.len(),
                 total,
             });
         }
 
-        self.send_checked(TxFrame::new(Seq::ZERO, commit_cmd), commit_timeout)
+        self.send_checked(&Frame::new(commit_cmd), commit_timeout)
     }
 
     pub fn ensure_update_supported(&mut self) -> Result<(), DriverError> {
@@ -452,17 +656,11 @@ impl<L: Exchange> Driver<L> {
     }
 
     pub fn confirm(&mut self) -> Result<(), DriverError> {
-        self.send_checked(
-            TxFrame::new(Seq::ZERO, Cmd::UpdateConfirm),
-            UPDATE_CONFIRM_TIMEOUT,
-        )
+        self.send_checked(&Frame::new(Cmd::UpdateConfirm), UPDATE_CONFIRM_TIMEOUT)
     }
 
     pub fn activate(&mut self) -> Result<(), DriverError> {
-        self.send_checked(
-            TxFrame::new(Seq::ZERO, Cmd::UpdateActivate),
-            DEFAULT_TIMEOUT,
-        )
+        self.send_checked(&Frame::new(Cmd::UpdateActivate), DEFAULT_TIMEOUT)
     }
 
     pub fn close(mut self) -> Result<(), DriverError> {

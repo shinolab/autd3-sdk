@@ -7,8 +7,9 @@ namespace AUTD3
     {
         public Interface Iface { get; init; } = Interface.Auto;
         public string? Group { get; init; } = null;
-        public TimeSpan? Cycle { get; init; } = null;
+        public TimeSpan? Heartbeat { get; init; } = null;
         public TimeSpan? ReplyTimeout { get; init; } = null;
+        public TimeSpan? LostTimeout { get; init; } = null;
         public TimeSpan? ResponseTimeout { get; init; } = null;
         public TimeSpan? EnumerationTimeout { get; init; } = null;
         public TimeSpan? SyncTimeout { get; init; } = null;
@@ -28,8 +29,9 @@ namespace AUTD3
             {
                 OptionNative.Apply("iface", NativeClient.autd3_transport_option_set_iface(handle, Iface.NameValue));
                 OptionNative.Apply("group", NativeClient.autd3_transport_option_set_group(handle, Group));
-                OptionNative.SetDuration(handle, "cycle", Cycle, NativeClient.autd3_transport_option_set_cycle);
+                OptionNative.SetDuration(handle, "heartbeat", Heartbeat, NativeClient.autd3_transport_option_set_heartbeat);
                 OptionNative.SetDuration(handle, "replyTimeout", ReplyTimeout, NativeClient.autd3_transport_option_set_reply_timeout);
+                OptionNative.SetDuration(handle, "lostTimeout", LostTimeout, NativeClient.autd3_transport_option_set_lost_timeout);
                 OptionNative.SetDuration(handle, "responseTimeout", ResponseTimeout, NativeClient.autd3_transport_option_set_response_timeout);
                 OptionNative.SetDuration(handle, "enumerationTimeout", EnumerationTimeout, NativeClient.autd3_transport_option_set_enumeration_timeout);
                 OptionNative.SetDuration(handle, "syncTimeout", SyncTimeout, NativeClient.autd3_transport_option_set_sync_timeout);
@@ -45,8 +47,9 @@ namespace AUTD3
         internal static TransportOption FromHandle(IntPtr handle) => new TransportOption
         {
             Group = ReadGroup(handle),
-            Cycle = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_cycle),
+            Heartbeat = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_heartbeat),
             ReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_reply_timeout),
+            LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_lost_timeout),
             ResponseTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_response_timeout),
             EnumerationTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_enumeration_timeout),
             SyncTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_sync_timeout),

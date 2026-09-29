@@ -1,6 +1,6 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
@@ -12,10 +12,10 @@ const BIT_MOD_BANK: u8 = 1 << 1;
 const BIT_PATTERN_BANK: u8 = 1 << 2;
 const BIT_PATTERN_MODE: u8 = 1 << 3;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
     let mut tx = TxFrame::new(Seq::new(seq), cmd);
     tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; TX_FRAME_BYTES];
+    let mut buf = [0u8; FRAME_BYTES_MAX];
     tx.write_to(&mut buf);
     buf
 }
@@ -43,7 +43,7 @@ fn change_mod_bank(bank: u8) -> Vec<u8> {
 }
 
 fn write_pattern(bank: u8) -> Vec<u8> {
-    let mut w = vec![bank, 0];
+    let mut w = vec![bank, 1];
     w.extend_from_slice(&0u16.to_le_bytes());
     w.extend(std::iter::repeat_n(0u8, NUM_TRANSDUCERS * 2));
     w
@@ -66,7 +66,7 @@ fn change_pattern_bank(bank: u8) -> Vec<u8> {
 }
 
 fn read_state(device: &mut Device, seq: u8) -> u8 {
-    device.send(&frame(seq, Cmd::ReadFpgaState, &[])).data
+    device.send(&frame(seq, Cmd::ReadFpgaState, &[])).data()[0]
 }
 
 #[test]

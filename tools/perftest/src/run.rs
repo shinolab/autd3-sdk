@@ -1,18 +1,23 @@
 use std::collections::VecDeque;
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use autd3_rs::commands::{ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WritePatternBuffer};
+use autd3_rs::commands::{
+    ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WriteModulationBuffer, WritePatternBuffer,
+};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::protocol::TX_FRAME_BYTES;
+use autd3_rs::params::MOD_BUFFER_SAMPLES;
+use autd3_rs::protocol::FRAME_HEADER_BYTES;
 use autd3_rs::udp::emulator::UdpEmulator;
-use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
+use autd3_rs::value::{
+    Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
+};
 use autd3_rs::{
     BusStats, Client, ClientConfig, CoreId, Error as ClientError, Frames, ResponseFuture,
-    RtPriority, RtSchedulePolicy, StateChecker, TransportOption,
+    RtPriority, RtSchedulePolicy, StateChecker, Telemetry, TelemetryCounters, TransportOption,
 };
 
 use crate::cli::{Cli, Command, Mode, RtPolicy};
@@ -30,8 +35,8 @@ pub struct RunOutput {
     pub warmup: u64,
     pub elapsed: Duration,
     pub frame_bytes: usize,
-    pub stale_cycles: u64,
-    pub lost_cycles: u64,
+    pub retransmissions: u64,
+    pub missed_replies: u64,
     pub mem: Option<MemProfile>,
 }
 
@@ -40,6 +45,7 @@ struct Sender {
     frames: Frames,
     phases: Vec<Vec<Phase>>,
     intensities: Vec<Vec<Intensity>>,
+    modulation: Vec<u8>,
     tick: u8,
 }
 
@@ -61,6 +67,11 @@ impl Sender {
             } else {
                 Vec::new()
             },
+            modulation: if cli.command.is_bulk() {
+                vec![0; MOD_BUFFER_SAMPLES]
+            } else {
+                Vec::new()
+            },
             tick: 0,
         };
         if cli.command == Command::Nop {
@@ -75,6 +86,24 @@ impl Sender {
 
     fn prepare(&mut self, client: &Client) -> Result<()> {
         if self.command == Command::Nop {
+            return Ok(());
+        }
+        if self.command.is_bulk() {
+            let mut value = self.tick;
+            for sample in &mut self.modulation {
+                *sample = value;
+                value = value.wrapping_add(1);
+            }
+            self.tick = self.tick.wrapping_add(1);
+            let mut builder = client.datagram_builder();
+            builder.push(WriteModulationBuffer {
+                bank: ModulationBank::B1,
+                offset: 0,
+                data: &self.modulation,
+            });
+            builder
+                .build_into(&mut self.frames)
+                .context("encoding modulation write")?;
             return Ok(());
         }
         fill_phases(&mut self.phases, self.tick);
@@ -99,6 +128,22 @@ impl Sender {
             .build_into(&mut self.frames)
             .context("encoding pattern write")?;
         Ok(())
+    }
+}
+
+impl Sender {
+    fn frame_bytes(&self) -> usize {
+        self.frames.frame(0).map_or(FRAME_HEADER_BYTES, |frame| {
+            frame
+                .datagrams()
+                .iter()
+                .map(|d| {
+                    FRAME_HEADER_BYTES
+                        + d.payload.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1)
+                })
+                .max()
+                .unwrap_or(FRAME_HEADER_BYTES)
+        })
     }
 }
 
@@ -215,7 +260,7 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             ..Default::default()
         },
     };
-    option.cycle = cli.cycle;
+    option.heartbeat = cli.heartbeat;
     if let Some(reply_timeout) = cli.reply_timeout {
         option.reply_timeout = reply_timeout;
     }
@@ -232,19 +277,18 @@ async fn run_with_option(
     eprintln!("devices: {num_devices}");
 
     let max_inflight = match cli.mode {
-        Mode::StopAndWait => 1,
-        Mode::Streaming => cli.max_inflight.max(1),
+        Mode::StopAndWait if !cli.command.is_bulk() => 1,
+        _ => cli.max_inflight.max(1),
     };
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
     let (client, checker) = Box::pin(Client::open_with_checker(
         &geometry,
         option,
         ClientConfig {
-            timeout_cycles: cli.timeout_cycles,
+            ack_timeout: cli.ack_timeout,
             max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
             max_resync_rounds: cli.max_resync_rounds,
             low_latency: cli.low_latency,
-            reset_resend_cycles: NonZeroU32::new(2).unwrap(),
             rt_priority: match cli.rt_priority {
                 Some(p) => Some(RtPriority::new(p).expect("validated to 0..=99")),
                 None => ClientConfig::default().rt_priority,
@@ -286,6 +330,16 @@ async fn run_with_option(
     let shutdown = Arc::new(AtomicBool::new(false));
     spawn_signal_listener(Arc::clone(&shutdown));
 
+    let telemetry_before = if cli.telemetry {
+        Some(client.read_telemetry().await.context("reading telemetry")?)
+    } else {
+        None
+    };
+    if let Some(hold) = cli.hold {
+        eprintln!("holding the connection idle for {hold:?}");
+        tokio::time::sleep(hold).await;
+    }
+
     let sender = Sender::new(&client, &geometry, cli)?;
     let bus_stats = client.bus_stats();
 
@@ -296,10 +350,42 @@ async fn run_with_option(
         }
     };
 
+    if let Some(before) = telemetry_before {
+        let after = client.read_telemetry().await.context("reading telemetry")?;
+        print_telemetry(&before, &after);
+    }
+
     let _ = client.close().await;
     guard.stop().await;
 
     output
+}
+
+fn print_telemetry(before: &[TelemetryCounters], after: &[TelemetryCounters]) {
+    for counter in Telemetry::ALL {
+        let at_start: Vec<u32> = before.iter().map(|c| c.get(*counter)).collect();
+        let deltas: Vec<u32> = before
+            .iter()
+            .zip(after)
+            .map(|(b, a)| a.get(*counter).wrapping_sub(b.get(*counter)))
+            .collect();
+        eprintln!("telemetry {counter:?}: at start {at_start:?}, delta {deltas:?}");
+    }
+}
+
+async fn send_all(client: &Client, frames: &Frames, window: usize) -> Result<(), ClientError> {
+    let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(window);
+    for frame in frames {
+        if pending.len() >= window {
+            let fut = pending.pop_front().expect("non-empty");
+            fut.await?.check()?;
+        }
+        pending.push_back(client.send(frame).await?);
+    }
+    for fut in pending {
+        fut.await?.check()?;
+    }
+    Ok(())
 }
 
 async fn run_stop_and_wait(
@@ -309,6 +395,11 @@ async fn run_stop_and_wait(
     shutdown: Arc<AtomicBool>,
     bus_stats: &BusStats,
 ) -> Result<RunOutput> {
+    let window = if cli.command.is_bulk() {
+        cli.max_inflight.max(1)
+    } else {
+        1
+    };
     let mut recorded = Recorder::new(cli);
     let mut index: u64 = 0;
     let mut stopped_on_error = None;
@@ -334,9 +425,7 @@ async fn run_stop_and_wait(
 
         sender.prepare(client)?;
         let t0 = Instant::now();
-        let res = client
-            .send_checked(sender.frames.frame(0).expect("one frame"))
-            .await;
+        let res = send_all(client, &sender.frames, window).await;
         let rtt = t0.elapsed();
 
         let status = match res {
@@ -389,9 +478,9 @@ async fn run_stop_and_wait(
         rt_closed,
         warmup: cli.warmup,
         elapsed: start.elapsed(),
-        frame_bytes: TX_FRAME_BYTES,
-        stale_cycles: bus_stats.stale_cycles(),
-        lost_cycles: bus_stats.lost_cycles(),
+        frame_bytes: sender.frame_bytes(),
+        retransmissions: bus_stats.retransmissions(),
+        missed_replies: bus_stats.missed_replies(),
         mem,
     })
 }
@@ -448,7 +537,7 @@ async fn run_streaming(
         let res = entry.fut.await;
         let rtt = entry.sent_at.elapsed();
         let status = match res {
-            Ok(resp) => match resp.data().iter().find(|&&d| d != 0) {
+            Ok(resp) => match resp.status().iter().find(|&&d| d != 0) {
                 None => SampleStatus::Ok,
                 Some(&code) => SampleStatus::DeviceError(code),
             },
@@ -503,9 +592,9 @@ async fn run_streaming(
         rt_closed,
         warmup: cli.warmup,
         elapsed: start.elapsed(),
-        frame_bytes: TX_FRAME_BYTES,
-        stale_cycles: bus_stats.stale_cycles(),
-        lost_cycles: bus_stats.lost_cycles(),
+        frame_bytes: sender.frame_bytes(),
+        retransmissions: bus_stats.retransmissions(),
+        missed_replies: bus_stats.missed_replies(),
         mem,
     })
 }
@@ -636,10 +725,8 @@ fn estimate_capacity(cli: &Cli) -> usize {
     if let Some(n) = cli.count {
         return usize::try_from(n).unwrap_or(usize::MAX);
     }
-    if let Some(d) = cli.duration
-        && let Some(cycles) = d.as_micros().checked_div(cli.cycle.as_micros())
-    {
-        return cycles as usize;
+    if let Some(d) = cli.duration {
+        return usize::try_from(d.as_millis()).unwrap_or(usize::MAX);
     }
     0
 }

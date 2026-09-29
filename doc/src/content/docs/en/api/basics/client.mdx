@@ -54,11 +54,10 @@ To continuously monitor the operating state of the devices, use `open_with_check
 
 | Field                  | Type                     | Default | Description                                                |
 | ---------------------- | ------------------------ | ------- | ---------------------------------------------------------- |
-| `timeout_cycles`       | `NonZeroU32`             | `10`    | Response-wait timeout (in send cycles)                     |
-| `max_inflight`         | `NonZeroUsize`           | `127`   | Send queue size                                            |
+| `ack_timeout`          | `Duration`               | 10 ms   | Response-wait timeout; the frames are sent again after it  |
+| `max_inflight`         | `NonZeroUsize`           | `7`     | Frames that may be sent without waiting for a reply (the default is the capacity of the device receive queue) |
 | `max_resync_rounds`    | `NonZeroU32`             | `8`     | Maximum number of rounds to attempt resynchronization      |
 | `low_latency`          | `bool`                   | `false` | Low-latency mode                                           |
-| `reset_resend_cycles`  | `NonZeroU32`             | `2`     | Number of cycles to send a reset command                   |
 | `rt_priority`          | `Option<RtPriority>` | Windows: `TimeCritical` / otherwise: `80` | Priority of the RT thread. Setting `None` leaves the OS default. |
 | `rt_policy`            | `RtSchedulePolicy`       | `Fifo`  | Scheduling policy used when `rt_priority` is set: `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
 | `rt_affinity`          | `Option<CoreId>`         | `None`  | CPU core affinity of the RT thread (OS default if `None`)  |
@@ -66,6 +65,7 @@ To continuously monitor the operating state of the devices, use `open_with_check
 | `require_supported_firmware` | `bool`             | `false` | Check the firmware series on open (Rust only) |
 
 `max_inflight` errors if it exceeds `MAX_INFLIGHT (127)`.
+The device receive queue holds 7 frames, so a value above the default does not speed anything up (the overflowing frames are sent again).
 
 Enabling `low_latency` bypasses the receive buffer inside the firmware, improving latency.
 However, this may make operation unstable.

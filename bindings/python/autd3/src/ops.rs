@@ -5,9 +5,9 @@ use autd3_python_capsule::{capsule_of, modulation_from_capsule};
 use autd3_rs::Velocity;
 use autd3_rs::commands::PatternCompression as CorePatternCompression;
 use autd3_rs::value::{
-    DcSysTime as CoreDcSysTime, GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
+    GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
     ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase,
-    TransitionMode as CoreTransitionMode,
+    SysTime as CoreSysTime, TransitionMode as CoreTransitionMode,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -93,28 +93,28 @@ impl GpioIn {
     }
 }
 
-#[pyclass(name = "DcSysTime", module = "autd3.value", from_py_object)]
+#[pyclass(name = "SysTime", module = "autd3.value", from_py_object)]
 #[derive(Clone, Copy)]
-pub struct DcSysTime(pub(crate) CoreDcSysTime);
+pub struct SysTime(pub(crate) CoreSysTime);
 
 #[pymethods]
-impl DcSysTime {
+impl SysTime {
     #[classattr]
     #[pyo3(name = "ZERO")]
     fn zero() -> Self {
-        Self(CoreDcSysTime::ZERO)
+        Self(CoreSysTime::ZERO)
     }
 
     #[staticmethod]
     #[pyo3(name = "from_nanos")]
     fn from_nanos(sys_time_ns: u64) -> Self {
-        Self(CoreDcSysTime::from_nanos(sys_time_ns))
+        Self(CoreSysTime::from_nanos(sys_time_ns))
     }
 
     #[staticmethod]
     #[pyo3(name = "now")]
     fn now() -> PyResult<Self> {
-        CoreDcSysTime::now()
+        CoreSysTime::now()
             .map(Self)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     }
@@ -133,7 +133,7 @@ impl DcSysTime {
     }
 
     fn __repr__(&self) -> String {
-        format!("DcSysTime.from_nanos({})", self.0.sys_time())
+        format!("SysTime.from_nanos({})", self.0.sys_time())
     }
 }
 
@@ -176,7 +176,7 @@ impl TransitionMode {
 
     #[staticmethod]
     #[pyo3(name = "SysTime", signature = (sys_time, margin = None))]
-    fn sys_time(sys_time: DcSysTime, margin: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+    fn sys_time(sys_time: SysTime, margin: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         Ok(Self(CoreTransitionMode::SysTime {
             time: sys_time.0,
             margin: margin.map(extract_duration).transpose()?,
@@ -301,10 +301,11 @@ impl WritePatternCompressed {
         intensity: u8,
         patterns: Vec<Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
-        if patterns.is_empty() || patterns.len() > 4 {
-            return Err(PyValueError::new_err(
-                "WritePatternCompressed expects 1..=4 phase buffers",
-            ));
+        let max = CorePatternCompression::PhaseHalf.per_frame();
+        if patterns.is_empty() || patterns.len() > max {
+            return Err(PyValueError::new_err(format!(
+                "WritePatternCompressed expects 1..={max} phase buffers"
+            )));
         }
         let patterns = patterns
             .iter()

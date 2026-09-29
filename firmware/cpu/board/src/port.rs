@@ -62,20 +62,16 @@ impl Port for HwPort {
         unsafe { asm!("dmb", options(nostack, preserves_flags)) };
     }
 
-    fn next_sync0(&mut self) -> u64 {
-        udp::next_sync0()
+    fn next_sync_edge(&mut self) -> u64 {
+        udp::next_sync_edge()
     }
 
-    fn dc_sys_time(&mut self) -> u64 {
-        udp::dc_sys_time()
+    fn sys_time(&mut self) -> u64 {
+        udp::sys_time()
     }
 
-    fn sync0_cycle_ns(&mut self) -> u32 {
-        udp::sync0_cycle_ns()
-    }
-
-    fn al_status_code(&mut self) -> u16 {
-        udp::al_status_code()
+    fn host_idle_ms(&mut self) -> Option<u32> {
+        udp::host_idle_ms()
     }
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {

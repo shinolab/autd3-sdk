@@ -31,13 +31,12 @@ async def main() -> None:
         last = None
         while not stop.is_set():
             status = checker.check()
-            key = (tuple(status.device_states), status.recoveries)
+            key = tuple(status.device_states)
             if key != last:
                 for i, state in enumerate(status.device_states):
                     print(f"device[{i}]: {state}")
                 print(
-                    f"all operational: {status.all_op}, "
-                    f"any lost: {status.any_lost}, recoveries: {status.recoveries}"
+                    f"all ready: {status.all_ready}, any lost: {status.any_lost}"
                 )
                 last = key
             try:

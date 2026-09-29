@@ -97,7 +97,7 @@ async fn run(cli: &Cli) -> Result<()> {
     let option = TransportOption {
         iface: cli.interface.clone().into(),
         group: cli.group,
-        cycle: Duration::from_micros(cli.cycle_us),
+        heartbeat: Duration::from_micros(cli.heartbeat_us),
         ..Default::default()
     };
     let client = Client::open(&geometry, option, config)

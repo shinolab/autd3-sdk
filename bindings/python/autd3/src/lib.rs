@@ -25,6 +25,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<udp::TransportOption>()?;
     m.add_class::<udp::UdpEmulator>()?;
     m.add_class::<client::FpgaState>()?;
+    m.add_class::<client::TelemetryCounters>()?;
     m.add_class::<config::ClientConfig>()?;
     m.add_class::<config::RtPriority>()?;
     m.add_class::<config::RtSchedulePolicy>()?;
@@ -36,7 +37,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ops::PatternBank>()?;
     m.add_class::<ops::ModulationBank>()?;
     m.add_class::<ops::GpioIn>()?;
-    m.add_class::<ops::DcSysTime>()?;
+    m.add_class::<ops::SysTime>()?;
     m.add_class::<ops::TransitionMode>()?;
     m.add_class::<ops::Telemetry>()?;
     m.add_class::<ops::LoopBehavior>()?;

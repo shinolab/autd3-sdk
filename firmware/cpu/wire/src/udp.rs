@@ -1,10 +1,10 @@
 use zerocopy::little_endian::{U16, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
-use crate::frame::HOST_TO_DEVICE_BYTES;
+use crate::frame::{FRAME_BYTES_MAX, FRAME_HEADER_BYTES, REPLY_DATA_BYTES_MAX};
 
 pub const PORT: u16 = 0xAD30;
-pub const PROTOCOL_VERSION: u8 = 1;
+pub const PROTOCOL_VERSION: u8 = 2;
 
 pub const UNASSIGNED_ID: u8 = 0xFF;
 pub const MAC_PREFIX: [u8; 5] = [0x02, 0x41, 0x55, 0x54, 0x44];
@@ -12,8 +12,11 @@ pub const ALL_NODES: [u8; 16] = [0xFF, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 pub const ALL_NODES_MAC: [u8; 6] = [0x33, 0x33, 0x00, 0x00, 0x00, 0x01];
 
 pub const RESET_ID_CLOSE_DELAY_MS: u32 = 20;
-pub const HOST_WATCHDOG_MS: u32 = 10;
+pub const FAILSAFE_TIMEOUT_MS: u32 = 500;
 pub const SYNC_CYCLE_NS: u32 = 1_000_000;
+pub const DEVICE_QUEUE_FRAMES: usize = 7;
+
+const _: () = assert!(SYNC_CYCLE_NS.is_multiple_of(3125));
 
 pub const FLAG_ASSIGNED: u8 = 1 << 0;
 pub const FLAG_DOWNSTREAM_OPEN: u8 = 1 << 1;
@@ -31,6 +34,7 @@ crate::wire_enum! {
         AssignId = 0x04,
         UnblockDownstream = 0x05,
         SetTime = 0x06,
+        Heartbeat = 0x07,
     }
 }
 
@@ -100,7 +104,7 @@ pub struct UnitInfo {
 #[repr(C)]
 pub struct FrameReply {
     pub ack: u8,
-    pub data: u8,
+    pub status: u8,
     pub flags: u8,
     pub unit_id: u8,
     pub sys_time: U64,
@@ -116,19 +120,27 @@ pub struct UnblockReply {
 
 pub const HEADER_BYTES: usize = core::mem::size_of::<Header>();
 pub const STATUS_BYTES: usize = 1;
-pub const FRAME_REQUEST_BYTES: usize = HEADER_BYTES + HOST_TO_DEVICE_BYTES;
-pub const FRAME_REPLY_BYTES: usize = HEADER_BYTES + core::mem::size_of::<FrameReply>();
+pub const FRAME_REQUEST_BYTES_MIN: usize = HEADER_BYTES + FRAME_HEADER_BYTES;
+pub const FRAME_REQUEST_BYTES_MAX: usize = HEADER_BYTES + FRAME_BYTES_MAX;
+pub const FRAME_REPLY_BYTES_MIN: usize = HEADER_BYTES + core::mem::size_of::<FrameReply>();
+pub const FRAME_REPLY_BYTES_MAX: usize = FRAME_REPLY_BYTES_MIN + REPLY_DATA_BYTES_MAX;
 pub const UNIT_INFO_REPLY_BYTES: usize =
     HEADER_BYTES + STATUS_BYTES + core::mem::size_of::<UnitInfo>();
 pub const UNBLOCK_REPLY_BYTES: usize =
     HEADER_BYTES + STATUS_BYTES + core::mem::size_of::<UnblockReply>();
 pub const STATUS_REPLY_BYTES: usize = HEADER_BYTES + STATUS_BYTES;
-pub const MAX_REPLY_BYTES: usize = UNIT_INFO_REPLY_BYTES;
+pub const MAX_REPLY_BYTES: usize = if FRAME_REPLY_BYTES_MAX > UNIT_INFO_REPLY_BYTES {
+    FRAME_REPLY_BYTES_MAX
+} else {
+    UNIT_INFO_REPLY_BYTES
+};
 
 const _: () = assert!(HEADER_BYTES == 4);
 const _: () = assert!(core::mem::size_of::<UnitInfo>() == 16);
 const _: () = assert!(core::mem::size_of::<FrameReply>() == 12);
-const _: () = assert!(FRAME_REPLY_BYTES <= MAX_REPLY_BYTES);
+const _: () = assert!(FRAME_REPLY_BYTES_MAX <= MAX_REPLY_BYTES);
+const _: () = assert!(UNIT_INFO_REPLY_BYTES <= MAX_REPLY_BYTES);
+const _: () = assert!(FRAME_REQUEST_BYTES_MAX == 1452);
 const _: () = assert!(UNBLOCK_REPLY_BYTES <= MAX_REPLY_BYTES);
 
 #[must_use]

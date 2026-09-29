@@ -3,8 +3,8 @@ use std::sync::atomic::Ordering;
 
 use autd3_rs::commands::{Command, Distribution};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::protocol::{RX_FRAME_BYTES, Seq, TX_FRAME_BYTES, TxFrame};
-use autd3_rs::value::DcSysTime;
+use autd3_rs::protocol::{FRAME_BYTES_MAX, Seq, TxFrame};
+use autd3_rs::value::SysTime;
 use autd3_rs::{DatagramBuilder, Frames};
 use autd3_rs_firmware_emulator::{Device as EmuDevice, FpgaEmulator};
 use autd3_rs_simulator_protocol::{DeviceState, TransState};
@@ -43,16 +43,15 @@ impl Harness {
     }
 
     fn drive(&mut self, frames: &Frames) {
-        let mut rx = [0u8; RX_FRAME_BYTES];
         for frame in frames {
             let datagrams = frame.datagrams();
-            let sys_time_ns = DcSysTime::now().map_or(0, DcSysTime::sys_time);
+            let sys_time_ns = SysTime::now().map_or(0, SysTime::sys_time);
             for (index, device) in self.devices.iter_mut().enumerate() {
                 let datagram = match frame.distribution() {
                     Distribution::Broadcast => &datagrams[0],
                     Distribution::PerDevice => &datagrams[index],
                 };
-                let mut bytes = [0u8; TX_FRAME_BYTES];
+                let mut bytes = [0u8; FRAME_BYTES_MAX];
                 TxFrame {
                     seq: Seq::new(self.seq),
                     cmd: datagram.cmd,
@@ -60,7 +59,7 @@ impl Harness {
                 }
                 .write_to(&mut bytes);
                 device.fpga_mut().update_with_sys_time(sys_time_ns);
-                device.send(&bytes).write_to(&mut rx);
+                let _ = device.send(&bytes);
             }
             self.seq = self.seq.wrapping_add(1);
         }

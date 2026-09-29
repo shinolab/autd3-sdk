@@ -1,6 +1,7 @@
 use core::fmt;
 
 use autd3_cpu_wire::params::{FUNC_EMULATOR_BIT, VERSION_NUM_MAJOR, VERSION_NUM_MINOR};
+use autd3_cpu_wire::payload::FirmwareInfo;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Version {
@@ -42,6 +43,26 @@ pub struct FirmwareVersion {
 
 impl FirmwareVersion {
     pub const SUPPORTED_SERIES: (u8, u8) = (VERSION_NUM_MAJOR, VERSION_NUM_MINOR);
+
+    pub(crate) fn from_info(info: FirmwareInfo) -> Self {
+        let [major, minor, patch] = info.cpu_version;
+        let cpu = Version {
+            major,
+            minor,
+            patch,
+        };
+        let [major, minor, patch] = info.fpga_version;
+        let fpga = Version {
+            major,
+            minor,
+            patch,
+        };
+        Self {
+            cpu,
+            fpga,
+            function_bits: info.fpga_functions,
+        }
+    }
 
     #[must_use]
     pub const fn is_emulator(&self) -> bool {

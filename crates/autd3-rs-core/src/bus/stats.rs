@@ -3,91 +3,88 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, Clone, Default)]
 pub struct BusStats {
-    stale_cycles: Arc<AtomicU64>,
-    lost_cycles: Arc<AtomicU64>,
-    phase_excursions: Arc<AtomicU64>,
-    worst_phase_deviation_ns: Arc<AtomicU64>,
-    exchanges: Arc<AtomicU64>,
-    exchange_ns_total: Arc<AtomicU64>,
-    worst_exchange_ns: Arc<AtomicU64>,
+    frames: Arc<AtomicU64>,
+    retransmissions: Arc<AtomicU64>,
+    resets: Arc<AtomicU64>,
+    heartbeats: Arc<AtomicU64>,
+    missed_replies: Arc<AtomicU64>,
+    acked_frames: Arc<AtomicU64>,
+    ack_latency_ns_total: Arc<AtomicU64>,
+    worst_ack_latency_ns: Arc<AtomicU64>,
 }
 
 impl BusStats {
     #[must_use]
-    pub fn stale_cycles(&self) -> u64 {
-        self.stale_cycles.load(Ordering::Acquire)
+    pub fn frames(&self) -> u64 {
+        self.frames.load(Ordering::Acquire)
     }
 
     #[must_use]
-    pub fn lost_cycles(&self) -> u64 {
-        self.lost_cycles.load(Ordering::Acquire)
+    pub fn retransmissions(&self) -> u64 {
+        self.retransmissions.load(Ordering::Acquire)
     }
 
     #[must_use]
-    pub fn phase_excursions(&self) -> u64 {
-        self.phase_excursions.load(Ordering::Acquire)
+    pub fn resets(&self) -> u64 {
+        self.resets.load(Ordering::Acquire)
     }
 
     #[must_use]
-    pub fn worst_phase_deviation_ns(&self) -> u64 {
-        self.worst_phase_deviation_ns.load(Ordering::Acquire)
+    pub fn heartbeats(&self) -> u64 {
+        self.heartbeats.load(Ordering::Acquire)
     }
 
     #[must_use]
-    pub fn exchanges(&self) -> u64 {
-        self.exchanges.load(Ordering::Acquire)
+    pub fn missed_replies(&self) -> u64 {
+        self.missed_replies.load(Ordering::Acquire)
     }
 
     #[must_use]
-    pub fn worst_exchange_ns(&self) -> u64 {
-        self.worst_exchange_ns.load(Ordering::Acquire)
+    pub fn acked_frames(&self) -> u64 {
+        self.acked_frames.load(Ordering::Acquire)
     }
 
     #[must_use]
-    pub fn mean_exchange_ns(&self) -> u64 {
-        let total = self.exchange_ns_total.load(Ordering::Acquire);
-        let exchanges = self.exchanges.load(Ordering::Acquire);
-        if exchanges == 0 {
+    pub fn worst_ack_latency_ns(&self) -> u64 {
+        self.worst_ack_latency_ns.load(Ordering::Acquire)
+    }
+
+    #[must_use]
+    pub fn mean_ack_latency_ns(&self) -> u64 {
+        let total = self.ack_latency_ns_total.load(Ordering::Acquire);
+        let acked = self.acked_frames.load(Ordering::Acquire);
+        if acked == 0 {
             return 0;
         }
-        total / exchanges
+        total / acked
     }
 
-    pub fn record_exchange(&self, elapsed_ns: u64) {
-        self.worst_exchange_ns
-            .fetch_max(elapsed_ns, Ordering::Relaxed);
-        self.exchanges.fetch_add(1, Ordering::Relaxed);
-        self.exchange_ns_total
-            .fetch_add(elapsed_ns, Ordering::Release);
+    pub fn record_frame(&self) {
+        self.frames.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn record_stale_cycle(&self) {
-        self.stale_cycles.fetch_add(1, Ordering::Relaxed);
+    pub fn record_retransmissions(&self, count: u64) {
+        self.retransmissions.fetch_add(count, Ordering::Relaxed);
     }
 
-    pub fn record_lost_cycle(&self) {
-        self.stale_cycles.fetch_add(1, Ordering::Relaxed);
-        self.lost_cycles.fetch_add(1, Ordering::Release);
+    pub fn record_reset(&self) {
+        self.resets.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn record_phase_excursion(&self, deviation_ns: u64) {
-        self.phase_excursions.fetch_add(1, Ordering::Relaxed);
-        self.worst_phase_deviation_ns
-            .fetch_max(deviation_ns, Ordering::Relaxed);
+    pub fn record_heartbeat(&self) {
+        self.heartbeats.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn add_stale_cycles(&self, count: u64) {
-        self.stale_cycles.fetch_add(count, Ordering::Relaxed);
+    pub fn record_missed_replies(&self, count: u64) {
+        self.missed_replies.fetch_add(count, Ordering::Relaxed);
     }
 
-    pub fn add_lost_cycles(&self, count: u64) {
-        self.lost_cycles.fetch_add(count, Ordering::Relaxed);
-    }
-
-    pub fn add_phase_excursions(&self, count: u64, worst_deviation_ns: u64) {
-        self.phase_excursions.fetch_add(count, Ordering::Relaxed);
-        self.worst_phase_deviation_ns
-            .fetch_max(worst_deviation_ns, Ordering::Relaxed);
+    pub fn record_ack(&self, latency_ns: u64) {
+        self.worst_ack_latency_ns
+            .fetch_max(latency_ns, Ordering::Relaxed);
+        self.acked_frames.fetch_add(1, Ordering::Relaxed);
+        self.ack_latency_ns_total
+            .fetch_add(latency_ns, Ordering::Release);
     }
 }
 
@@ -98,50 +95,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bus_stats_counters() {
+    fn counters_are_shared_between_clones() {
         let stats = BusStats::default();
         let observer = stats.clone();
-        stats.record_stale_cycle();
-        stats.record_lost_cycle();
-        assert_eq!(observer.stale_cycles(), 2);
-        assert_eq!(observer.lost_cycles(), 1);
+        stats.record_frame();
+        stats.record_frame();
+        stats.record_retransmissions(3);
+        stats.record_reset();
+        stats.record_heartbeat();
+        stats.record_missed_replies(2);
+        assert_eq!(observer.frames(), 2);
+        assert_eq!(observer.retransmissions(), 3);
+        assert_eq!(observer.resets(), 1);
+        assert_eq!(observer.heartbeats(), 1);
+        assert_eq!(observer.missed_replies(), 2);
     }
 
     #[test]
-    fn exchange_times_keep_the_mean_and_the_worst() {
+    fn ack_latencies_keep_the_mean_and_the_worst() {
         let stats = BusStats::default();
         let observer = stats.clone();
-        assert_eq!(observer.mean_exchange_ns(), 0, "no division by zero");
-        stats.record_exchange(100_000);
-        stats.record_exchange(300_000);
-        stats.record_exchange(200_000);
-        assert_eq!(observer.exchanges(), 3);
-        assert_eq!(observer.mean_exchange_ns(), 200_000);
-        assert_eq!(observer.worst_exchange_ns(), 300_000);
-    }
-
-    #[test]
-    fn phase_excursions_keep_the_worst_deviation() {
-        let stats = BusStats::default();
-        let observer = stats.clone();
-        stats.record_phase_excursion(1_000);
-        stats.record_phase_excursion(300);
-        stats.record_phase_excursion(2_500);
-        assert_eq!(observer.phase_excursions(), 3);
-        assert_eq!(observer.worst_phase_deviation_ns(), 2_500);
-    }
-
-    #[test]
-    fn counters_can_be_advanced_in_bulk() {
-        let stats = BusStats::default();
-        stats.add_stale_cycles(5);
-        stats.add_lost_cycles(2);
-        stats.add_phase_excursions(7, 900);
-        stats.add_phase_excursions(1, 100);
-        assert_eq!(stats.stale_cycles(), 5);
-        assert_eq!(stats.lost_cycles(), 2);
-        assert_eq!(stats.phase_excursions(), 8);
-        assert_eq!(stats.worst_phase_deviation_ns(), 900);
+        assert_eq!(observer.mean_ack_latency_ns(), 0, "no division by zero");
+        stats.record_ack(100_000);
+        stats.record_ack(300_000);
+        stats.record_ack(200_000);
+        assert_eq!(observer.acked_frames(), 3);
+        assert_eq!(observer.mean_ack_latency_ns(), 200_000);
+        assert_eq!(observer.worst_ack_latency_ns(), 300_000);
     }
 
     #[test]
@@ -154,11 +134,11 @@ mod tests {
         let writer_stop = stop.clone();
         let writer = std::thread::spawn(move || {
             while !writer_stop.load(Ordering::Acquire) {
-                stats.record_exchange(SAMPLE_NS);
+                stats.record_ack(SAMPLE_NS);
             }
         });
         for _ in 0..100_000 {
-            let mean = observer.mean_exchange_ns();
+            let mean = observer.mean_ack_latency_ns();
             assert!(
                 mean <= SAMPLE_NS,
                 "the mean must stay within the samples, got {mean}"

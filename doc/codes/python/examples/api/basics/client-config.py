@@ -1,6 +1,6 @@
 import asyncio
 
-from autd3 import MAX_INFLIGHT, Client, ClientConfig, RtPriority, RtSchedulePolicy, TransportOption
+from autd3 import Client, ClientConfig, Duration, RtPriority, RtSchedulePolicy, TransportOption
 from autd3.geometry import Autd3, Geometry
 
 
@@ -11,11 +11,10 @@ async def main() -> None:
     option = (
         # ANCHOR: config
         ClientConfig(
-            timeout_cycles=10,
-            max_inflight=MAX_INFLIGHT,
+            ack_timeout=Duration.from_millis(10),
+            max_inflight=7,
             max_resync_rounds=8,
             low_latency=False,
-            reset_resend_cycles=2,
             rt_priority=RtPriority(80),
             rt_policy=RtSchedulePolicy.Fifo,
             rt_affinity=None,

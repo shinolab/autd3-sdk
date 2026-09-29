@@ -613,7 +613,7 @@ def test_device_accessors() -> None:
 
 def test_transport_options_construct() -> None:
     autd3.TransportOption()
-    autd3.TransportOption(iface="eth0", cycle=autd3.Duration.from_millis(2))
+    autd3.TransportOption(iface="eth0", heartbeat=autd3.Duration.from_millis(2))
 
 
 def test_loop_behavior_and_transition_mode() -> None:
@@ -642,3 +642,12 @@ def test_loop_behavior_and_transition_mode() -> None:
         )
     )
     assert len(builder.build()) > 0
+
+
+def test_sys_time_feeds_transition_mode_and_gpio() -> None:
+    time = autd3.value.SysTime.from_nanos(1_000_000)
+    assert time.sys_time == 1_000_000
+    assert repr(time) == "SysTime.from_nanos(1000000)"
+    assert (time + autd3.Duration.from_millis(1)).sys_time == 2_000_000
+    autd3.value.TransitionMode.SysTime(time)
+    autd3.commands.GpioOut.SysTimeEq(time)

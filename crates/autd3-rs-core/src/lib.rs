@@ -14,9 +14,7 @@ pub use rt::{
 pub use chrono;
 pub use nalgebra;
 
-pub use bus::{
-    BusStats, CycleOutcome, DcClock, DcObservation, DeviceState, DeviceStatus, Interface,
-};
+pub use bus::{BusStats, ClockObservation, DeviceClock, DeviceState, DeviceStatus, Interface};
 pub use common::units;
 pub use common::{Angle, Freq, Length, Velocity};
 pub use error::EncodeError;
@@ -27,6 +25,6 @@ pub use geometry::{
     TransducerMaskError, UnitQuaternion, UnitVector3, Vector3, offset, point,
 };
 pub use protocol::{
-    Cmd, DeviceErrorCode, MAX_INFLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, RxFrame, Seq,
-    TX_FRAME_BYTES, TxFrame, describe_device_error,
+    Cmd, DeviceErrorCode, FRAME_BYTES_MAX, MAX_INFLIGHT, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX, Seq,
+    TxFrame, describe_device_error,
 };

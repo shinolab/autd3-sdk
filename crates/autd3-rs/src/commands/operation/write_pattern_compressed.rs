@@ -6,15 +6,17 @@ use crate::value::{Intensity, PatternBank, Phase};
 
 use super::write_pattern_buffer::device_phases;
 use super::{Distribution, Operation};
+use autd3_cpu_wire::layout::{PATTERN_COMPRESSED_GROUP_BYTES, PATTERN_COMPRESSED_MAX_GROUPS};
+use autd3_cpu_wire::params::NUM_TRANSDUCERS;
 use autd3_cpu_wire::payload::WritePatternCompressedPayload;
 use zerocopy::FromBytes;
 use zerocopy::little_endian::U32;
 
-pub const PATTERN_MAX_PER_FRAME: usize = 4;
+pub const PATTERN_MAX_PER_FRAME: usize = 4 * PATTERN_COMPRESSED_MAX_GROUPS;
 
 const _: () = assert!(
     core::mem::size_of::<WritePatternCompressedPayload>()
-        + crate::geometry::Autd3::NUM_TRANSDUCERS * 2
+        + PATTERN_COMPRESSED_MAX_GROUPS * PATTERN_COMPRESSED_GROUP_BYTES
         <= PAYLOAD_BYTES
 );
 
@@ -26,11 +28,16 @@ pub enum PatternCompression {
 
 impl PatternCompression {
     #[must_use]
-    pub const fn per_frame(self) -> usize {
+    pub const fn per_word(self) -> usize {
         match self {
             PatternCompression::PhaseFull => 2,
             PatternCompression::PhaseHalf => 4,
         }
+    }
+
+    #[must_use]
+    pub const fn per_frame(self) -> usize {
+        self.per_word() * PATTERN_COMPRESSED_MAX_GROUPS
     }
 
     const fn name(self) -> &'static str {
@@ -102,14 +109,21 @@ impl Operation for WritePatternCompressed<'_> {
             intensity: self.intensity.0,
             offset: U32::new(offset),
         };
-        rest.as_chunks_mut::<2>()
-            .0
-            .iter_mut()
-            .take(device.num_transducers())
+        for (group, words) in rest
+            .chunks_mut(PATTERN_COMPRESSED_GROUP_BYTES)
+            .take(count.div_ceil(self.format.per_word()))
             .enumerate()
-            .for_each(|(t, dst)| {
-                *dst = self.pack_word(device.idx(), t).to_le_bytes();
-            });
+        {
+            words
+                .as_chunks_mut::<2>()
+                .0
+                .iter_mut()
+                .take(device.num_transducers().min(NUM_TRANSDUCERS))
+                .enumerate()
+                .for_each(|(t, dst)| {
+                    *dst = self.pack_word(device.idx(), group, t).to_le_bytes();
+                });
+        }
         Ok(Cmd::WritePatternCompressed)
     }
 }
@@ -122,13 +136,16 @@ impl WritePatternCompressed<'_> {
             .unwrap_or(PATTERN_MAX_PER_FRAME)
     }
 
-    fn pack_word(&self, device: usize, t: usize) -> u16 {
+    fn pack_word(&self, device: usize, group: usize, t: usize) -> u16 {
         let (shift, hi) = match self.format {
             PatternCompression::PhaseFull => (8usize, 0u8),
             PatternCompression::PhaseHalf => (4usize, 4u8),
         };
+        let per_word = self.format.per_word();
         self.patterns
             .iter()
+            .skip(group * per_word)
+            .take(per_word)
             .enumerate()
             .filter_map(|(g, &p)| p.map(|s| (g, s[device][t].0)))
             .fold(0u16, |acc, (g, phase)| {
@@ -143,6 +160,16 @@ mod tests {
     use crate::geometry::Autd3;
     use crate::test_utils::test_device;
     const HEADER_BYTES: usize = core::mem::size_of::<WritePatternCompressedPayload>();
+
+    fn slots<'a>(
+        patterns: &[&'a [Vec<Phase>]],
+    ) -> [Option<&'a [Vec<Phase>]>; PATTERN_MAX_PER_FRAME] {
+        let mut slots = [None; PATTERN_MAX_PER_FRAME];
+        for (slot, &pattern) in slots.iter_mut().zip(patterns) {
+            *slot = Some(pattern);
+        }
+        slots
+    }
 
     #[test]
     fn phase_full_packs_two_phases_per_word() {
@@ -159,7 +186,16 @@ mod tests {
             index: 4,
             format: PatternCompression::PhaseFull,
             intensity: Intensity::MAX,
-            patterns: [Some(&p0[..]), Some(&p1[..]), None, None],
+            patterns: [
+                Some(&p0[..]),
+                Some(&p1[..]),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
@@ -193,7 +229,16 @@ mod tests {
             index: 8,
             format: PatternCompression::PhaseHalf,
             intensity: Intensity::MAX,
-            patterns: [Some(&p0[..]), Some(&p1[..]), Some(&p2[..]), Some(&p3[..])],
+            patterns: [
+                Some(&p0[..]),
+                Some(&p1[..]),
+                Some(&p2[..]),
+                Some(&p3[..]),
+                None,
+                None,
+                None,
+                None,
+            ],
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];
@@ -213,6 +258,29 @@ mod tests {
     }
 
     #[test]
+    fn patterns_past_one_word_go_to_the_second_group() {
+        let mk = |phase: u8| [vec![Phase(phase); Autd3::NUM_TRANSDUCERS]];
+        let (p0, p1, p2, p3) = (mk(0x10), mk(0x20), mk(0x30), mk(0x40));
+        let op = WritePatternCompressed {
+            bank: PatternBank::B0,
+            index: 0,
+            format: PatternCompression::PhaseFull,
+            intensity: Intensity::MAX,
+            patterns: slots(&[&p0[..], &p1[..], &p2[..], &p3[..]]),
+        };
+        let mut out = [0u8; PAYLOAD_BYTES];
+        op.encode(&test_device(0), &mut out).unwrap();
+        assert_eq!(out[2], 4, "count");
+        let word = |group: usize, t: usize| {
+            let at = HEADER_BYTES + group * PATTERN_COMPRESSED_GROUP_BYTES + 2 * t;
+            u16::from_le_bytes([out[at], out[at + 1]])
+        };
+        assert_eq!(word(0, 0), 0x2010);
+        assert_eq!(word(1, 0), 0x4030);
+        assert_eq!(word(1, Autd3::NUM_TRANSDUCERS - 1), 0x4030);
+    }
+
+    #[test]
     fn intensity_is_carried_in_the_header() {
         let patterns = [vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
         let op = WritePatternCompressed {
@@ -220,7 +288,7 @@ mod tests {
             index: 0,
             format: PatternCompression::PhaseHalf,
             intensity: Intensity(0x42),
-            patterns: [Some(&patterns[..]), None, None, None],
+            patterns: slots(&[&patterns[..]]),
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         op.encode(&test_device(0), &mut out).unwrap();
@@ -235,7 +303,7 @@ mod tests {
             index: EMISSION_MAX_INDICES - 1,
             format: PatternCompression::PhaseFull,
             intensity: Intensity::MAX,
-            patterns: [Some(&patterns[..]), Some(&patterns[..]), None, None],
+            patterns: slots(&[&patterns[..], &patterns[..]]),
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
@@ -252,12 +320,7 @@ mod tests {
             index: 0,
             format: PatternCompression::PhaseFull,
             intensity: Intensity::MAX,
-            patterns: [
-                Some(&patterns[..]),
-                Some(&patterns[..]),
-                Some(&patterns[..]),
-                None,
-            ],
+            patterns: slots(&[&patterns[..]; 5]),
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         let err = op.encode(&test_device(0), &mut out).unwrap_err();
@@ -270,8 +333,8 @@ mod tests {
         let patterns = [vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
         let mut out = [0u8; PAYLOAD_BYTES];
         for (format, count) in [
-            (PatternCompression::PhaseFull, 2),
-            (PatternCompression::PhaseHalf, 4),
+            (PatternCompression::PhaseFull, 4),
+            (PatternCompression::PhaseHalf, 8),
         ] {
             let mut slots: [Option<&[Vec<Phase>]>; PATTERN_MAX_PER_FRAME] =
                 [None; PATTERN_MAX_PER_FRAME];
@@ -297,7 +360,7 @@ mod tests {
             index: 0,
             format: PatternCompression::PhaseFull,
             intensity: Intensity::MAX,
-            patterns: [Some(&patterns[..]), None, None, None],
+            patterns: slots(&[&patterns[..]]),
         };
         let mut out = [0u8; PAYLOAD_BYTES];
         assert!(op.encode(&test_device(0), &mut out).is_ok());

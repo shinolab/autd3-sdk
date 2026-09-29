@@ -6,19 +6,25 @@ mod reg;
 mod sim;
 
 use std::io;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use autd3_rs::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES};
-use autd3_rs::value::DcSysTimeError;
-use autd3_rs::{CycleOutcome, PerfTuning};
+use autd3_rs::PerfTuning;
+use autd3_rs::protocol::{Cmd, FRAME_HEADER_BYTES, Seq};
+use autd3_rs::value::SysTimeError;
 
-use crate::driver::Exchange;
+use crate::driver::{DeviceReply, Dialect, Exchange, Frame, LEGACY_PAYLOAD_BYTES, Replies};
 use frame::FrameError;
 use master::{Master, MasterConfig};
 use raw::{PERMISSION_HINT, RawBus, RawSocket};
 use reg::AlState;
 
 pub const MIN_ETHERCAT_CPU_FIRMWARE_VERSION: (u8, u8, u8) = (0, 9, 0);
+
+pub(crate) const LEGACY_FRAME_BYTES: usize = master::OUTPUT_BYTES as usize;
+pub(crate) const LEGACY_REPLY_BYTES: usize = master::INPUT_BYTES as usize;
+const RESET_CYCLES: u32 = 2;
+
+const _: () = assert!(LEGACY_FRAME_BYTES == FRAME_HEADER_BYTES + LEGACY_PAYLOAD_BYTES);
 
 #[derive(Debug, thiserror::Error)]
 pub enum EcatError {
@@ -77,7 +83,7 @@ pub enum EcatError {
     #[error("the EtherCAT connection is closed")]
     Closed,
     #[error("the host clock cannot be read as an EtherCAT system time: {0}")]
-    HostClock(#[from] DcSysTimeError),
+    HostClock(#[from] SysTimeError),
 }
 
 impl EcatError {
@@ -98,6 +104,8 @@ pub struct EcatBus {
     master: Master<Box<dyn RawBus>>,
     interface: String,
     closed: bool,
+    tx: Vec<u8>,
+    rx: Vec<u8>,
     _tuning: Option<PerfTuning>,
 }
 
@@ -183,10 +191,13 @@ impl EcatBus {
         expected: Option<usize>,
         tuning: Option<PerfTuning>,
     ) -> Result<Self, EcatError> {
+        let n = master.num_devices();
         let mut bus = Self {
             master,
             interface,
             closed: false,
+            tx: vec![0; n * LEGACY_FRAME_BYTES],
+            rx: vec![0; n * LEGACY_REPLY_BYTES],
             _tuning: tuning,
         };
         match expected {
@@ -224,6 +235,20 @@ impl Drop for EcatBus {
     }
 }
 
+impl EcatBus {
+    fn stage(&mut self, seq: Seq, cmd: u8, payload: &[u8]) {
+        for frame in self.tx.chunks_mut(LEGACY_FRAME_BYTES) {
+            frame[0] = seq.get();
+            frame[1] = cmd;
+            frame[FRAME_HEADER_BYTES..].copy_from_slice(&payload[..LEGACY_PAYLOAD_BYTES]);
+        }
+    }
+
+    fn cycle(&mut self) -> Result<bool, EcatError> {
+        Ok(self.master.cycle(&self.tx, &mut self.rx)?.rx_valid)
+    }
+}
+
 impl Exchange for EcatBus {
     type Error = EcatError;
 
@@ -235,23 +260,53 @@ impl Exchange for EcatBus {
         MIN_ETHERCAT_CPU_FIRMWARE_VERSION
     }
 
-    fn wait_next_cycle(&mut self) {
-        self.master.wait_next_cycle();
+    fn dialect(&self) -> Dialect {
+        Dialect::Legacy
     }
 
-    fn cycle(
+    fn reset(&mut self, _timeout: Duration) -> Result<bool, EcatError> {
+        self.stage(Seq::ZERO, Cmd::Reset.as_u8(), &[0; LEGACY_PAYLOAD_BYTES]);
+        for _ in 0..RESET_CYCLES {
+            self.cycle()?;
+        }
+        Ok(true)
+    }
+
+    fn exchange(
         &mut self,
-        tx: &[[u8; TX_FRAME_BYTES]],
-        rx: &mut [[u8; RX_FRAME_BYTES]],
-    ) -> Result<CycleOutcome, EcatError> {
-        let report = self
-            .master
-            .cycle(tx.as_flattened(), rx.as_flattened_mut())?;
-        Ok(if report.rx_valid {
-            CycleOutcome::valid()
-        } else {
-            CycleOutcome::stale()
-        })
+        seq: Seq,
+        frame: &Frame,
+        timeout: Duration,
+    ) -> Result<Replies, EcatError> {
+        self.stage(seq, frame.cmd, &frame.payload);
+        let mut replies: Vec<Option<DeviceReply>> = vec![None; self.num_devices()];
+        let start = Instant::now();
+        loop {
+            if self.cycle()? {
+                for (reply, rx) in replies.iter_mut().zip(self.rx.chunks(LEGACY_REPLY_BYTES)) {
+                    if reply.is_none() && rx[0] == seq.get() {
+                        *reply = Some(DeviceReply {
+                            status: rx[1],
+                            value: vec![rx[1]],
+                        });
+                    }
+                }
+                if replies.iter().all(Option::is_some) {
+                    return Ok(Ok(replies.into_iter().map(Option::unwrap).collect()));
+                }
+            }
+            if start.elapsed() >= timeout {
+                return Ok(Err(replies.iter().position(Option::is_none).unwrap_or(0)));
+            }
+        }
+    }
+
+    fn idle(&mut self, duration: Duration) -> Result<(), EcatError> {
+        let start = Instant::now();
+        while start.elapsed() < duration {
+            self.cycle()?;
+        }
+        Ok(())
     }
 
     fn close(&mut self) -> Result<(), EcatError> {
@@ -324,15 +379,11 @@ mod tests {
     #[test]
     fn the_bus_reaches_op_and_carries_process_data() {
         let mut bus = sim_bus(EscSim::nop(3), Some(3)).unwrap();
-        let tx = vec![[0u8; TX_FRAME_BYTES]; 3];
-        let mut rx = vec![[0u8; RX_FRAME_BYTES]; 3];
-        assert!(bus.cycle(&tx, &mut rx).unwrap().rx_valid());
+        assert!(bus.cycle().unwrap());
         assert_eq!(bus.min_cpu_firmware_version(), (0, 9, 0));
+        assert_eq!(bus.dialect(), Dialect::Legacy);
         bus.close().unwrap();
-        assert!(matches!(
-            bus.master.cycle(tx.as_flattened(), rx.as_flattened_mut()),
-            Err(EcatError::Closed)
-        ));
+        assert!(matches!(bus.cycle(), Err(EcatError::Closed)));
     }
 
     #[test]
@@ -368,13 +419,11 @@ mod tests {
     fn a_device_that_drops_out_of_op_is_brought_back() {
         let sim = EscSim::nop(2);
         let mut bus = sim_bus(sim.clone(), None).unwrap();
-        let tx = vec![[0u8; TX_FRAME_BYTES]; 2];
-        let mut rx = vec![[0u8; RX_FRAME_BYTES]; 2];
-        bus.cycle(&tx, &mut rx).unwrap();
+        bus.cycle().unwrap();
         sim.latch_al_error(AlState::SafeOp, 0x001b);
         assert!(!sim.all_in(AlState::Op));
         let recovered = (0..16).any(|_| {
-            bus.cycle(&tx, &mut rx).unwrap();
+            bus.cycle().unwrap();
             sim.all_in(AlState::Op)
         });
         assert!(recovered);
@@ -384,8 +433,22 @@ mod tests {
 
     impl sim::ProcessData for Firmware {
         fn exchange(&mut self, outputs: &[u8], inputs: &mut [u8]) {
-            let rx = self.0.lock().unwrap().send(outputs.try_into().unwrap());
-            rx.write_to(inputs.try_into().unwrap());
+            let (seq, cmd) = (outputs[0], outputs[1]);
+            let legacy_version = (0xE1..=0xE3).contains(&cmd);
+            let reply = if legacy_version {
+                self.0
+                    .lock()
+                    .unwrap()
+                    .send(&[seq, Cmd::ReadFirmwareInfo.as_u8()])
+            } else {
+                self.0.lock().unwrap().send(outputs)
+            };
+            inputs[0] = reply.ack;
+            inputs[1] = if legacy_version && reply.ack == seq {
+                reply.data()[usize::from(cmd - 0xE1)]
+            } else {
+                reply.status
+            };
         }
     }
 

@@ -28,7 +28,7 @@ The client opens it with the `group` of [`TransportOption`](/autd3-sdk/en/api/co
   csharp={'var option = new TransportOption { Group = "[::1]:44336" };\nvar client = await Client.OpenAsync(geometry, option, new ClientConfig());'}
 />
 
-The Simulator serves every device in one process, so its replies may miss the default `reply_timeout` (1 ms). If cycles keep going without all replies, widen `reply_timeout` (`UdpEmulator::option()` uses 50 ms).
+The Simulator serves every device in one process, so its replies may be late. If frames are sent again often, widen `ack_timeout` of `ClientConfig` (10 ms by default) and `reply_timeout` of `TransportOption` (1 ms by default) (`UdpEmulator::option()` uses 50 ms for `reply_timeout`).
 
 The layout of the emulated devices is given on the Simulator side.
 When launching the Simulator by itself, pass a `Geometry` JSON (the output of `Geometry::to_json`) to `--geometry <file>` (one device at the origin when omitted).

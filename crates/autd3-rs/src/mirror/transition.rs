@@ -97,7 +97,7 @@ fn check(device: usize, bank_loop: BankLoop, mode: TransitionMode) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::value::{DcSysTime, GpioIn};
+    use crate::value::{GpioIn, SysTime};
     use core::num::NonZeroU16;
 
     const FINITE: LoopBehavior = LoopBehavior::ONCE;
@@ -116,7 +116,7 @@ mod tests {
         assert!(BankLoop::Infinite.accepts(TransitionMode::Ext));
         assert!(!BankLoop::Infinite.accepts(TransitionMode::SyncIdx));
         assert!(!BankLoop::Infinite.accepts(TransitionMode::SysTime {
-            time: DcSysTime::from_nanos(0),
+            time: SysTime::from_nanos(0),
             margin: None
         }));
         assert!(!BankLoop::Infinite.accepts(TransitionMode::Gpio(GpioIn::I0)));
@@ -126,7 +126,7 @@ mod tests {
     fn finite_accepts_only_timed_modes() {
         assert!(BankLoop::Finite.accepts(TransitionMode::SyncIdx));
         assert!(BankLoop::Finite.accepts(TransitionMode::SysTime {
-            time: DcSysTime::from_nanos(0),
+            time: SysTime::from_nanos(0),
             margin: None
         }));
         assert!(BankLoop::Finite.accepts(TransitionMode::Gpio(GpioIn::I0)));

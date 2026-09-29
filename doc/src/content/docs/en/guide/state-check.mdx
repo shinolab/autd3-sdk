@@ -24,12 +24,11 @@ Using `open_with_checker` instead of the usual [`Client::open`](/autd3-sdk/en/ap
 `StateChecker::check` returns the state `DeviceStatus` at the time of the call.
 `DeviceStatus` holds the following.
 
-- `devices`: the state of each device (`DeviceState`). `OP` when normal, `LOST` when disconnected, etc.
-- `all_op`: whether all devices are in the `OP` state.
-- `any_lost`: whether any device is in the `LOST` state.
-- `recoveries`: the cumulative number of automatic recoveries from disconnection (always 0, since there is no automatic recovery).
+- `devices`: the state of each device (`DeviceState`). `Ready` when normal, `Lost` when disconnected, etc.
+- `all_ready`: whether all devices are in the `Ready` state.
+- `any_lost`: whether any device is in the `Lost` state.
 
-See [Connection](/autd3-sdk/en/api/connection/#state-monitoring) for the meaning of each state. A device is `OP` when its sync pulse is running, `SAFE-OP` while it is not running yet, and `LOST` when its replies stop or it reboots; there is no automatic recovery from `LOST` (reopen the client).
+See [Connection](/autd3-sdk/en/api/connection/#state-monitoring) for the meaning of each state. A device is `Ready` when its sync pulse is running, `Syncing` while it is not running yet, and `Lost` when its replies stop or it reboots; there is no automatic recovery from `Lost` (reopen the client).
 
 The following is an example that calls `check` at fixed intervals and outputs only when the state changes.
 

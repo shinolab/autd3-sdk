@@ -19,23 +19,24 @@ use std::sync::mpsc;
 
 use autd3_rs_core::rt::oneshot;
 
-use autd3_cpu_wire::payload::ReadTelemetryPayload;
+use autd3_cpu_wire::payload::FirmwareInfo;
 use zerocopy::FromBytes;
 
 use crate::commands::Pattern;
 use crate::commands::operation::{Clear, Distribution, Synchronize};
 use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
 use crate::error::{Error, NetworkCause, PayloadError};
-use crate::firmware_version::{FirmwareVersion, Version};
+use crate::firmware_version::FirmwareVersion;
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
 use crate::mirror::FirmwareState;
-use crate::protocol::{Cmd, DeviceErrorCode};
-use crate::telemetry::Telemetry;
+use crate::protocol::Cmd;
+use crate::response::Response;
+use crate::telemetry::TelemetryCounters;
 use crate::transport::Bus;
 use crate::udp::{StateChecker, TransportOption, UdpBus};
-use crate::value::{DcSysTime, Intensity};
-use autd3_rs_core::{BusStats, DcClock};
+use crate::value::{Intensity, SysTime};
+use autd3_rs_core::{BusStats, DeviceClock};
 
 use completion::{CompletionPool, Reply};
 use pool::SlotPool;
@@ -52,7 +53,7 @@ pub struct Client {
     closed: Arc<AtomicBool>,
     stopping: AtomicBool,
     mirror: MirrorHandle,
-    dc_clock: Option<DcClock>,
+    device_clock: Option<DeviceClock>,
     stats: BusStats,
 }
 
@@ -115,7 +116,7 @@ impl Client {
             .into());
         }
 
-        let dc_clock = link.dc_clock();
+        let device_clock = link.device_clock();
         let stats = link.stats();
         let pool = SlotPool::new(num_devices, config.max_inflight.get());
         let completions = CompletionPool::new(config.max_inflight.get());
@@ -150,7 +151,7 @@ impl Client {
                         state: Arc::new(std::sync::Mutex::new(Mirror::Desynced)),
                         enabled: config.validate_state,
                     },
-                    dc_clock,
+                    device_clock,
                     stats,
                 };
                 if let Err(e) = client
@@ -198,15 +199,15 @@ impl Client {
     }
 
     #[must_use]
-    pub fn dc_offset_ns(&self) -> i64 {
-        self.dc_clock
+    pub fn clock_offset_ns(&self) -> i64 {
+        self.device_clock
             .as_ref()
-            .and_then(DcClock::offset_ns)
+            .and_then(DeviceClock::offset_ns)
             .unwrap_or(0)
     }
 
-    pub fn bus_time_now(&self) -> Result<DcSysTime, Error> {
-        Ok(DcSysTime::now()?.with_dc_offset(self.dc_offset_ns()))
+    pub fn device_time_now(&self) -> Result<SysTime, Error> {
+        Ok(SysTime::now()?.with_clock_offset(self.clock_offset_ns()))
     }
 
     #[must_use]
@@ -214,7 +215,7 @@ impl Client {
         DatagramBuilder::with_mirror(
             Arc::clone(&self.geometry),
             self.mirror.clone(),
-            self.dc_clock.clone().into(),
+            self.device_clock.clone().into(),
         )
     }
 
@@ -331,65 +332,34 @@ impl Client {
         Ok(())
     }
 
-    async fn read_broadcast(&self, cmd: Cmd) -> Result<Vec<u8>, Error> {
-        self.read_broadcast_with(&Datagram::no_payload(cmd)).await
+    async fn read_broadcast(&self, cmd: Cmd) -> Result<Response, Error> {
+        let response = self
+            .send_broadcast_exclusive(&Datagram::no_payload(cmd))
+            .await?
+            .await?;
+        response.check()?;
+        Ok(response)
     }
 
-    async fn read_broadcast_with(&self, datagram: &Datagram) -> Result<Vec<u8>, Error> {
-        Ok(self
-            .send_broadcast_exclusive(datagram)
-            .await?
-            .await?
-            .data()
-            .to_vec())
+    async fn read_values<T>(
+        &self,
+        cmd: Cmd,
+        parse: impl Fn(&[u8]) -> Option<T>,
+    ) -> Result<Vec<T>, Error> {
+        let response = self.read_broadcast(cmd).await?;
+        (0..self.num_devices)
+            .map(|device| parse(response.value(device)).ok_or(Error::UnexpectedReply { device }))
+            .collect()
     }
 
     pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
-        const UNKNOWN_CMD: u8 = DeviceErrorCode::UnknownCmd as u8;
-
-        let cpu_major = self.read_broadcast(Cmd::ReadCpuFwVersionMajor).await?;
-        let cpu_minor = self.read_broadcast(Cmd::ReadCpuFwVersionMinor).await?;
-        let cpu_patch = self.read_broadcast(Cmd::ReadCpuFwVersionPatch).await?;
-
-        let err_before = self.read_broadcast(Cmd::ReadErrorDetail).await?;
-        let fpga_major = self.read_broadcast(Cmd::ReadFpgaFwVersionMajor).await?;
-        let fpga_minor = self.read_broadcast(Cmd::ReadFpgaFwVersionMinor).await?;
-        let fpga_patch = self.read_broadcast(Cmd::ReadFpgaFwVersionPatch).await?;
-        let err_after_version = self.read_broadcast(Cmd::ReadErrorDetail).await?;
-        let fpga_functions = self.read_broadcast(Cmd::ReadFpgaFunctions).await?;
-        let err_after_functions = self.read_broadcast(Cmd::ReadErrorDetail).await?;
-
-        let versions: Vec<_> = (0..cpu_major.len())
-            .map(|i| {
-                let fpga = if err_after_version[i] == UNKNOWN_CMD {
-                    warn_unknown(i, "FPGA firmware version", err_before[i] == UNKNOWN_CMD);
-                    Version::UNKNOWN
-                } else {
-                    Version {
-                        major: fpga_major[i],
-                        minor: fpga_minor[i],
-                        patch: fpga_patch[i],
-                    }
-                };
-                let function_bits = if err_after_functions[i] == UNKNOWN_CMD {
-                    if err_after_version[i] != UNKNOWN_CMD {
-                        warn_unknown(i, "FPGA function bits", false);
-                    }
-                    0
-                } else {
-                    fpga_functions[i]
-                };
-                FirmwareVersion {
-                    cpu: Version {
-                        major: cpu_major[i],
-                        minor: cpu_minor[i],
-                        patch: cpu_patch[i],
-                    },
-                    fpga,
-                    function_bits,
-                }
+        let versions = self
+            .read_values(Cmd::ReadFirmwareInfo, |value| {
+                FirmwareInfo::read_from_prefix(value)
+                    .ok()
+                    .map(|(info, _)| FirmwareVersion::from_info(info))
             })
-            .collect();
+            .await?;
 
         let (major, minor) = FirmwareVersion::SUPPORTED_SERIES;
         versions
@@ -431,36 +401,20 @@ impl Client {
     }
 
     pub async fn read_error_detail(&self) -> Result<Vec<u8>, Error> {
-        self.read_broadcast(Cmd::ReadErrorDetail).await
+        self.read_values(Cmd::ReadErrorDetail, |value| value.first().copied())
+            .await
     }
 
     pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, Error> {
-        Ok(self
-            .read_broadcast(Cmd::ReadFpgaState)
-            .await?
-            .into_iter()
-            .map(FpgaState)
-            .collect())
+        self.read_values(Cmd::ReadFpgaState, |value| {
+            value.first().copied().map(FpgaState)
+        })
+        .await
     }
 
-    pub async fn read_telemetry(&self, counter: Telemetry) -> Result<Vec<u8>, Error> {
-        const INVALID_PAYLOAD: u8 = DeviceErrorCode::InvalidPayload as u8;
-
-        let mut datagram = Datagram::no_payload(Cmd::ReadTelemetry);
-        let (p, _) = ReadTelemetryPayload::mut_from_prefix(&mut datagram.payload).unwrap();
-        p.counter_id = counter.as_u8();
-
-        let err_before = self.read_broadcast(Cmd::ReadErrorDetail).await?;
-        let counters = self.read_broadcast_with(&datagram).await?;
-        let err_after = self.read_broadcast(Cmd::ReadErrorDetail).await?;
-
-        if let Some(device) = (0..counters.len()).find(|&i| err_after[i] == INVALID_PAYLOAD) {
-            if err_before[device] == INVALID_PAYLOAD {
-                warn_unknown(device, "telemetry counter", true);
-            }
-            return Err(Error::UnsupportedTelemetry { device, counter });
-        }
-        Ok(counters)
+    pub async fn read_telemetry(&self) -> Result<Vec<TelemetryCounters>, Error> {
+        self.read_values(Cmd::ReadTelemetry, TelemetryCounters::parse)
+            .await
     }
 
     pub async fn close(&self) -> Result<(), Error> {
@@ -506,20 +460,6 @@ impl Drop for Client {
 fn close_unopened<L: Bus>(link: &mut L) {
     if let Err(e) = link.close() {
         tracing::warn!(error = %e, "failed to close the bus that never opened");
-    }
-}
-
-fn warn_unknown(device: usize, what: &str, pre_latched: bool) {
-    if pre_latched {
-        tracing::warn!(
-            device,
-            "{what} is unknown: an error was already latched before the query, so it cannot be attributed to it"
-        );
-    } else {
-        tracing::warn!(
-            device,
-            "{what} is unknown; device firmware may be out of date"
-        );
     }
 }
 

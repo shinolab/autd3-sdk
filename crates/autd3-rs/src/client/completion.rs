@@ -240,8 +240,8 @@ mod tests {
         let (tx, rx) = pool.channel(None, Reply::Ack);
         assert_eq!(free_len(&pool), 0);
 
-        tx.send(Ok(Response::from_slice(&[0x42])));
-        assert_eq!(rx.await.unwrap().data(), [0x42]);
+        tx.send(Ok(Response::from_status(&[0x42])));
+        assert_eq!(rx.await.unwrap().status(), [0x42]);
         assert_eq!(free_len(&pool), 1);
     }
 
@@ -260,7 +260,7 @@ mod tests {
         let (tx, rx) = pool.channel(None, Reply::Ack);
         drop(rx);
         assert_eq!(free_len(&pool), 0);
-        tx.send(Ok(Response::from_slice(&[0])));
+        tx.send(Ok(Response::from_status(&[0])));
         assert_eq!(free_len(&pool), 1);
     }
 
@@ -271,12 +271,12 @@ mod tests {
         let (tx2, rx2) = pool.channel(None, Reply::Ack);
         assert_eq!(free_len(&pool), 0);
 
-        tx2.send(Ok(Response::from_slice(&[2])));
-        assert_eq!(rx2.await.unwrap().data(), [2]);
+        tx2.send(Ok(Response::from_status(&[2])));
+        assert_eq!(rx2.await.unwrap().status(), [2]);
         assert_eq!(free_len(&pool), 0);
 
-        tx1.send(Ok(Response::from_slice(&[1])));
-        assert_eq!(rx1.await.unwrap().data(), [1]);
+        tx1.send(Ok(Response::from_status(&[1])));
+        assert_eq!(rx1.await.unwrap().status(), [1]);
         assert_eq!(free_len(&pool), 1);
     }
 
@@ -286,8 +286,8 @@ mod tests {
         let (tx, rx) = pool.channel(None, Reply::Ack);
         let joined = tokio::spawn(rx);
         tokio::task::yield_now().await;
-        tx.send(Ok(Response::from_slice(&[7])));
-        assert_eq!(joined.await.unwrap().unwrap().data(), [7]);
+        tx.send(Ok(Response::from_status(&[7])));
+        assert_eq!(joined.await.unwrap().unwrap().status(), [7]);
     }
 
     #[test]

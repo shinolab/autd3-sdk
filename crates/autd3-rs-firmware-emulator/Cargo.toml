@@ -15,5 +15,9 @@ categories = ["science"]
 autd3-cpu-fw.workspace = true
 autd3-rs-core.workspace = true
 
+[dev-dependencies]
+autd3-cpu-wire.workspace = true
+zerocopy.workspace = true
+
 [lints]
 workspace = true

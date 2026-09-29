@@ -11,16 +11,18 @@ async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     let iface = Interface::Auto;
-    let cycle = Duration::from_millis(1);
+    let heartbeat = Duration::from_millis(10);
     let reply_timeout = Duration::from_millis(1);
+    let lost_timeout = Duration::from_millis(100);
     let response_timeout = Duration::from_millis(200);
     let enumeration_timeout = Duration::from_secs(10);
     let sync_timeout = Duration::from_secs(5);
     // ANCHOR: api
     TransportOption {
         iface,
-        cycle,
+        heartbeat,
         reply_timeout,
+        lost_timeout,
         response_timeout,
         enumeration_timeout,
         sync_timeout,

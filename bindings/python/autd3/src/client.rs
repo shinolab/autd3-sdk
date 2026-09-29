@@ -16,11 +16,9 @@ pub struct DeviceStatus {
     #[pyo3(get)]
     device_states: Vec<String>,
     #[pyo3(get)]
-    all_op: bool,
+    all_ready: bool,
     #[pyo3(get)]
     any_lost: bool,
-    #[pyo3(get)]
-    recoveries: u64,
 }
 
 #[pymethods]
@@ -28,13 +26,13 @@ impl DeviceStatus {
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         other
             .extract::<PyRef<'_, Self>>()
-            .is_ok_and(|o| self.device_states == o.device_states && self.recoveries == o.recoveries)
+            .is_ok_and(|o| self.device_states == o.device_states)
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "DeviceStatus(devices={:?}, all_op={}, any_lost={}, recoveries={})",
-            self.device_states, self.all_op, self.any_lost, self.recoveries
+            "DeviceStatus(devices={:?}, all_ready={}, any_lost={})",
+            self.device_states, self.all_ready, self.any_lost
         )
     }
 }
@@ -78,6 +76,40 @@ impl FpgaState {
             self.0.is_transition_pending(),
             self.0.reads_enabled()
         )
+    }
+}
+
+#[pyclass(
+    name = "TelemetryCounters",
+    module = "autd3",
+    frozen,
+    eq,
+    skip_from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct TelemetryCounters(pub(crate) autd3_rs::TelemetryCounters);
+
+#[pymethods]
+impl TelemetryCounters {
+    fn get(&self, counter: crate::ops::Telemetry) -> u32 {
+        self.0.get(counter.0)
+    }
+
+    fn __getitem__(&self, counter: crate::ops::Telemetry) -> u32 {
+        self.0.get(counter.0)
+    }
+
+    fn as_list(&self) -> Vec<u32> {
+        self.0.as_array().to_vec()
+    }
+
+    fn __repr__(&self) -> String {
+        let fields = autd3_rs::Telemetry::ALL
+            .iter()
+            .map(|&counter| format!("{counter:?}={}", self.0.get(counter)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("TelemetryCounters({fields})")
     }
 }
 
@@ -180,17 +212,14 @@ impl Client {
         })
     }
 
-    fn read_telemetry<'py>(
-        &self,
-        py: Python<'py>,
-        counter: crate::ops::Telemetry,
-    ) -> PyResult<Bound<'py, PyAny>> {
+    fn read_telemetry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let backend = Arc::clone(&self.backend);
         future_into_py(py, async move {
-            backend
-                .read_telemetry(counter.0)
-                .await
-                .map_err(to_pyerr_gil)
+            let counters = backend.read_telemetry().await.map_err(to_pyerr_gil)?;
+            Ok(counters
+                .into_iter()
+                .map(TelemetryCounters)
+                .collect::<Vec<_>>())
         })
     }
 
@@ -262,8 +291,17 @@ pub struct Response {
 #[pymethods]
 impl Response {
     #[getter]
-    fn data(&self) -> Vec<u8> {
-        self.inner.data().to_vec()
+    fn status(&self) -> Vec<u8> {
+        self.inner.status().to_vec()
+    }
+
+    #[getter]
+    fn values(&self) -> Vec<Vec<u8>> {
+        self.inner.values().to_vec()
+    }
+
+    fn value(&self, device: usize) -> Vec<u8> {
+        self.inner.value(device).to_vec()
     }
 
     fn check(&self, py: Python<'_>) -> PyResult<()> {
@@ -310,9 +348,8 @@ impl Checker {
         }?;
         Ok(DeviceStatus {
             device_states: status.device_states,
-            all_op: status.all_op,
+            all_ready: status.all_ready,
             any_lost: status.any_lost,
-            recoveries: status.recoveries,
         })
     }
 }

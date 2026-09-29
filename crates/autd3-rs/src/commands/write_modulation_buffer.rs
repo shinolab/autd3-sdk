@@ -68,9 +68,8 @@ mod tests {
 
     #[test]
     fn write_modulation_buffer_splits_with_advancing_even_offset() {
-        let data: Vec<u8> = (0..1000u16)
-            .map(|i| u8::try_from(i % 256).unwrap())
-            .collect();
+        let total = MOD_WRITE_MAX_DATA_LEN + 562;
+        let data: Vec<u8> = (0..total).map(|i| u8::try_from(i % 256).unwrap()).collect();
         let frames = expand(WriteModulationBuffer {
             bank: ModulationBank::B0,
             offset: 100,
@@ -96,7 +95,7 @@ mod tests {
 
         let p1 = payload(&frames, 1);
         assert_eq!(&p1[2..6], &(100 + u32::from(max)).to_le_bytes());
-        let rest = u16::try_from(1000 - MOD_WRITE_MAX_DATA_LEN).unwrap();
+        let rest = u16::try_from(total - MOD_WRITE_MAX_DATA_LEN).unwrap();
         assert_eq!(&p1[6..8], &rest.to_le_bytes());
         assert_eq!(
             &p1[HEADER_BYTES..HEADER_BYTES + usize::from(rest)],

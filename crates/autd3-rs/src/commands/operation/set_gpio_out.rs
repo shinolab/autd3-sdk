@@ -5,7 +5,7 @@ use zerocopy::little_endian::U64;
 use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
-use crate::value::DcSysTime;
+use crate::value::SysTime;
 
 use super::{Distribution, Operation};
 
@@ -36,7 +36,7 @@ pub enum GpioOut {
     PatternBank,
     PatternIdx(u16),
     IsStmMode,
-    SysTimeEq(DcSysTime),
+    SysTimeEq(SysTime),
     SyncDiff,
     PwmOut(u8),
     Direct(bool),
@@ -67,9 +67,9 @@ impl GpioOut {
     }
 
     #[must_use]
-    fn with_dc_offset(self, offset_ns: i64) -> Self {
+    fn with_clock_offset(self, offset_ns: i64) -> Self {
         match self {
-            GpioOut::SysTimeEq(t) => GpioOut::SysTimeEq(t.with_dc_offset(offset_ns)),
+            GpioOut::SysTimeEq(t) => GpioOut::SysTimeEq(t.with_clock_offset(offset_ns)),
             other => other,
         }
     }
@@ -83,8 +83,8 @@ pub struct SetGpioOut {
 impl crate::sealed::Sealed for SetGpioOut {}
 
 impl Operation for SetGpioOut {
-    fn apply_dc_offset(&mut self, offset_ns: i64) {
-        self.outputs = self.outputs.map(|out| out.with_dc_offset(offset_ns));
+    fn apply_clock_offset(&mut self, offset_ns: i64) {
+        self.outputs = self.outputs.map(|out| out.with_clock_offset(offset_ns));
     }
 
     fn distribution(&self) -> Distribution {
@@ -142,7 +142,7 @@ mod tests {
         SetGpioOut {
             outputs: [
                 GpioOut::Off,
-                GpioOut::SysTimeEq(DcSysTime::from_nanos(ec_time_ns)),
+                GpioOut::SysTimeEq(SysTime::from_nanos(ec_time_ns)),
                 GpioOut::Off,
                 GpioOut::Off,
             ],

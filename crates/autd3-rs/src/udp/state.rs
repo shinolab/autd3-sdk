@@ -1,20 +1,19 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{FLAG_ASSIGNED, FLAG_SYNC_READY};
 use autd3_rs_core::{DeviceState, DeviceStatus};
 
 use super::error::UdpError;
 
-pub(crate) const LOST_AFTER_MISSES: u32 = 10;
-
-const STATE_OP: u8 = 0;
-const STATE_SAFE_OP: u8 = 1;
+const STATE_READY: u8 = 0;
+const STATE_SYNCING: u8 = 1;
 const STATE_LOST: u8 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Tracker {
-    misses: u32,
+    unanswered_since: Option<Instant>,
     lost: bool,
     state: DeviceState,
 }
@@ -22,10 +21,14 @@ pub(crate) struct Tracker {
 impl Tracker {
     pub(crate) const fn new() -> Self {
         Self {
-            misses: 0,
+            unanswered_since: None,
             lost: false,
-            state: DeviceState::Op,
+            state: DeviceState::Ready,
         }
+    }
+
+    pub(crate) fn requested(&mut self, now: Instant) {
+        self.unanswered_since.get_or_insert(now);
     }
 
     pub(crate) fn replied(&mut self, unit: u8, unit_id: u8, flags: u8) -> bool {
@@ -37,18 +40,21 @@ impl Tracker {
             self.state = DeviceState::Lost;
             return false;
         }
-        self.misses = 0;
+        self.unanswered_since = None;
         self.state = if flags & FLAG_SYNC_READY != 0 {
-            DeviceState::Op
+            DeviceState::Ready
         } else {
-            DeviceState::SafeOp
+            DeviceState::Syncing
         };
         true
     }
 
-    pub(crate) fn missed(&mut self) {
-        self.misses = self.misses.saturating_add(1);
-        if self.misses >= LOST_AFTER_MISSES {
+    pub(crate) fn expire(&mut self, now: Instant, lost_timeout: Duration) {
+        if !self.lost
+            && self
+                .unanswered_since
+                .is_some_and(|since| now.saturating_duration_since(since) >= lost_timeout)
+        {
             self.lost = true;
             self.state = DeviceState::Lost;
         }
@@ -62,24 +68,24 @@ impl Tracker {
 #[derive(Debug)]
 pub(crate) struct SharedState {
     states: Box<[AtomicU8]>,
-    recoveries: AtomicU64,
     closed: AtomicBool,
 }
 
 impl SharedState {
     pub(crate) fn new(num_devices: usize) -> Arc<Self> {
         Arc::new(Self {
-            states: (0..num_devices).map(|_| AtomicU8::new(STATE_OP)).collect(),
-            recoveries: AtomicU64::new(0),
+            states: (0..num_devices)
+                .map(|_| AtomicU8::new(STATE_READY))
+                .collect(),
             closed: AtomicBool::new(false),
         })
     }
 
     pub(crate) fn publish(&self, device: usize, state: DeviceState) {
         let encoded = match state {
-            DeviceState::Op => STATE_OP,
+            DeviceState::Ready => STATE_READY,
             DeviceState::Lost => STATE_LOST,
-            _ => STATE_SAFE_OP,
+            _ => STATE_SYNCING,
         };
         self.states[device].store(encoded, Ordering::Relaxed);
     }
@@ -92,9 +98,9 @@ impl SharedState {
         self.states
             .iter()
             .map(|s| match s.load(Ordering::Relaxed) {
-                STATE_OP => DeviceState::Op,
+                STATE_READY => DeviceState::Ready,
                 STATE_LOST => DeviceState::Lost,
-                _ => DeviceState::SafeOp,
+                _ => DeviceState::Syncing,
             })
             .collect()
     }
@@ -113,10 +119,7 @@ impl StateChecker {
         if self.shared.closed.load(Ordering::Acquire) {
             return Err(UdpError::Closed);
         }
-        Ok(DeviceStatus::new(
-            self.shared.snapshot(),
-            self.shared.recoveries.load(Ordering::Relaxed),
-        ))
+        Ok(DeviceStatus::new(self.shared.snapshot()))
     }
 }
 
@@ -125,37 +128,53 @@ mod tests {
     use super::*;
 
     const READY: u8 = FLAG_ASSIGNED | FLAG_SYNC_READY;
+    const LOST_AFTER: Duration = Duration::from_millis(100);
 
     #[test]
-    fn a_ready_reply_is_op() {
+    fn a_ready_reply_is_ready() {
         let mut t = Tracker::new();
         assert!(t.replied(2, 2, READY));
-        assert_eq!(t.state(), DeviceState::Op);
+        assert_eq!(t.state(), DeviceState::Ready);
     }
 
     #[test]
-    fn a_reply_without_the_pulse_is_safe_op() {
+    fn a_reply_without_the_pulse_is_syncing() {
         let mut t = Tracker::new();
         assert!(t.replied(0, 0, FLAG_ASSIGNED));
-        assert_eq!(t.state(), DeviceState::SafeOp);
+        assert_eq!(t.state(), DeviceState::Syncing);
         assert!(t.replied(0, 0, READY));
-        assert_eq!(t.state(), DeviceState::Op);
+        assert_eq!(t.state(), DeviceState::Ready);
     }
 
     #[test]
-    fn ten_missed_cycles_make_a_device_lost_for_good() {
+    fn an_unanswered_request_past_the_lost_timeout_makes_a_device_lost_for_good() {
+        let start = Instant::now();
         let mut t = Tracker::new();
-        for _ in 0..LOST_AFTER_MISSES - 1 {
-            t.missed();
-            assert_eq!(t.state(), DeviceState::Op);
-        }
+        t.requested(start);
+        t.expire(start + LOST_AFTER / 2, LOST_AFTER);
+        assert_eq!(t.state(), DeviceState::Ready);
         assert!(t.replied(1, 1, READY));
-        for _ in 0..LOST_AFTER_MISSES {
-            t.missed();
-        }
+        let later = start + LOST_AFTER / 2;
+        t.requested(later);
+        t.requested(later + LOST_AFTER / 2);
+        t.expire(start + LOST_AFTER, LOST_AFTER);
+        assert_eq!(t.state(), DeviceState::Ready);
+        t.expire(later + LOST_AFTER, LOST_AFTER);
         assert_eq!(t.state(), DeviceState::Lost);
         assert!(!t.replied(1, 1, READY));
         assert_eq!(t.state(), DeviceState::Lost);
+    }
+
+    #[test]
+    fn silence_without_a_request_is_not_lost() {
+        let start = Instant::now();
+        let mut t = Tracker::new();
+        assert!(t.replied(1, 1, READY));
+        t.expire(start + LOST_AFTER * 10, LOST_AFTER);
+        assert_eq!(t.state(), DeviceState::Ready);
+        t.requested(start + LOST_AFTER * 10);
+        t.expire(start + LOST_AFTER * 10 + LOST_AFTER / 2, LOST_AFTER);
+        assert_eq!(t.state(), DeviceState::Ready);
     }
 
     #[test]
@@ -172,13 +191,13 @@ mod tests {
     #[test]
     fn the_checker_reads_the_published_states() {
         let shared = SharedState::new(3);
-        shared.publish(1, DeviceState::SafeOp);
+        shared.publish(1, DeviceState::Syncing);
         shared.publish(2, DeviceState::Lost);
         let mut checker = StateChecker::new(Arc::clone(&shared));
         let status = checker.check().unwrap();
         assert_eq!(
             status.devices(),
-            [DeviceState::Op, DeviceState::SafeOp, DeviceState::Lost]
+            [DeviceState::Ready, DeviceState::Syncing, DeviceState::Lost]
         );
         shared.close();
         assert!(matches!(checker.check(), Err(UdpError::Closed)));

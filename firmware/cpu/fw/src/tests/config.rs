@@ -26,7 +26,7 @@ fn config_mod_writes_playback_registers_and_latches() {
     h.deliver(&config_mod(0, 1, 10, 4000));
 
     assert_eq!(h.ack(), 0);
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_MOD_CYCLE0 + 1), 3999);
     assert_eq!(h.ctl(ADDR_MOD_FREQ_DIV0 + 1), 10);
     assert_eq!(h.ctl(ADDR_MOD_REP0 + 1), REP_INFINITE);
@@ -45,7 +45,7 @@ fn config_mod_writes_finite_loop_rep() {
 
     h.deliver(&config_mod_rep(0, 0, 10, 4000, 9));
 
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_MOD_REP0), 9);
 }
 
@@ -53,16 +53,16 @@ fn config_mod_writes_finite_loop_rep() {
 fn config_mod_rejects_invalid_fields_and_leaves_registers_untouched() {
     let mut h = Harness::new();
     h.deliver(&config_mod(0, 1, 2, 100));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     h.deliver(&config_mod(1, invalid_bank(), 1, 1));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     h.deliver(&config_mod(2, 0, 0, 1));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     h.deliver(&config_mod(3, 0, 1, 0));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     h.deliver(&config_mod(4, 0, 1, MOD_BUFFER_SAMPLES + 1));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     assert_eq!(h.ctl(ADDR_MOD_CYCLE0 + 1), 99);
     assert_eq!(h.ctl(ADDR_MOD_FREQ_DIV0 + 1), 2);
@@ -73,21 +73,21 @@ fn config_mod_rejects_invalid_fields_and_leaves_registers_untouched() {
 fn config_mod_rejects_single_sample_buffer() {
     let mut h = Harness::new();
     h.deliver(&config_mod(0, 0, 1, 1));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&config_mod(1, 0, 1, BUFFER_SIZE_MIN));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 }
 
 #[test]
 fn config_pattern_allows_single_index_only_for_infinite_loop() {
     let mut h = Harness::new();
     h.deliver(&config_pattern(0, 0, EMISSION_TYPE_RAW, 10, 1, 0, 0));
-    assert_eq!(h.data(), 0, "static pattern is a single index");
+    assert_eq!(h.status(), 0, "static pattern is a single index");
 
     h.deliver(&config_pattern_rep(1, 0, EMISSION_TYPE_RAW, 10, 1, 0, 0, 4));
     assert_eq!(
-        h.data(),
+        h.status(),
         Error::InvalidPayload as u8,
         "a single index never advances, so a finite loop would never end"
     );
@@ -102,14 +102,14 @@ fn config_pattern_allows_single_index_only_for_infinite_loop() {
         0,
         4,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 }
 
 #[test]
 fn config_mod_accepts_full_buffer_size() {
     let mut h = Harness::new();
     h.deliver(&config_mod(0, 0, 1, MOD_BUFFER_SAMPLES));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_MOD_CYCLE0), 0xFFFF);
 }
 
@@ -127,7 +127,7 @@ fn config_pattern_raw_writes_registers_and_latches() {
         0,
     ));
 
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_PATTERN_MODE0), u16::from(EMISSION_TYPE_RAW));
     assert_eq!(
         h.ctl(ADDR_PATTERN_CYCLE0),
@@ -149,7 +149,7 @@ fn config_pattern_foci_writes_registers_and_latches() {
 
     h.deliver(&config_pattern(0, 1, EMISSION_TYPE_FOCI, 1, 8192, 8, 340));
 
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_PATTERN_MODE0 + 1), u16::from(EMISSION_TYPE_FOCI));
     assert_eq!(h.ctl(ADDR_PATTERN_CYCLE0 + 1), 8191);
     assert_eq!(h.ctl(ADDR_PATTERN_SOUND_SPEED0 + 1), 340);
@@ -174,7 +174,7 @@ fn config_pattern_writes_finite_loop_rep() {
         4,
     ));
 
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_PATTERN_REP0), 4);
 }
 
@@ -191,10 +191,10 @@ fn config_pattern_rejects_invalid_raw_fields() {
         0,
         0,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&config_pattern(1, 0, 2, 1, 1, 0, 0));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     assert_eq!(h.ctl(ADDR_PATTERN_CYCLE0), 0);
 }
@@ -204,7 +204,7 @@ fn config_pattern_rejects_invalid_foci_fields() {
     let mut h = Harness::new();
 
     h.deliver(&config_pattern(0, 0, EMISSION_TYPE_FOCI, 1, 2, 0, 340));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     h.deliver(&config_pattern(
         1,
         0,
@@ -214,11 +214,11 @@ fn config_pattern_rejects_invalid_foci_fields() {
         NUM_FOCI_MAX + 1,
         340,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&config_pattern(5, 0, EMISSION_TYPE_FOCI, 1, 1, 1, 340));
     assert_eq!(
-        h.data(),
+        h.status(),
         Error::InvalidPayload as u8,
         "a single-sample STM never advances its index"
     );
@@ -232,10 +232,10 @@ fn config_pattern_rejects_invalid_foci_fields() {
         8,
         340,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&config_pattern(3, 0, EMISSION_TYPE_FOCI, 1, 2, 1, 0));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&config_pattern(
         4,
@@ -246,7 +246,7 @@ fn config_pattern_rejects_invalid_foci_fields() {
         8,
         340,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 }
 
 #[test]
@@ -256,7 +256,7 @@ fn change_pattern_bank_writes_transition_and_req_bank_and_latches() {
 
     h.deliver(&change_pattern_bank(0, 1, TransitionMode::Immediate, 0));
 
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(
         h.ctl(ADDR_PATTERN_TRANSITION_MODE),
         TransitionMode::Immediate as u16
@@ -280,7 +280,7 @@ fn change_pattern_bank_writes_transition_value() {
         0,
         4,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     h.deliver(&change_pattern_bank(
         1,
@@ -289,7 +289,7 @@ fn change_pattern_bank_writes_transition_value() {
         0x0123_4567_89AB_CDEF,
     ));
 
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(
         h.ctl(ADDR_PATTERN_TRANSITION_MODE),
         TransitionMode::SysTime as u16
@@ -309,7 +309,7 @@ fn change_pattern_bank_rejects_invalid_bank() {
         TransitionMode::Immediate,
         0,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 }
 
@@ -320,7 +320,7 @@ fn change_mod_bank_writes_transition_and_req_bank_and_latches() {
 
     h.deliver(&change_mod_bank(0, 1, TransitionMode::Immediate, 0));
 
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(
         h.ctl(ADDR_MOD_TRANSITION_MODE),
         TransitionMode::Immediate as u16
@@ -339,7 +339,7 @@ fn change_mod_bank_rejects_invalid_bank() {
         TransitionMode::Immediate,
         0,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 }
 
@@ -348,11 +348,11 @@ fn change_mod_bank_rejects_timed_transition_on_infinite_loop() {
     let mut h = Harness::new();
 
     h.deliver(&change_mod_bank(0, 1, TransitionMode::SyncIdx, 0));
-    assert_eq!(h.data(), Error::InvalidTransitionMode as u8);
+    assert_eq!(h.status(), Error::InvalidTransitionMode as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
     h.deliver(&change_mod_bank(1, 1, TransitionMode::Ext, 0));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 1);
 }
 
@@ -360,14 +360,14 @@ fn change_mod_bank_rejects_timed_transition_on_infinite_loop() {
 fn change_mod_bank_rejects_immediate_transition_on_finite_loop() {
     let mut h = Harness::new();
     h.deliver(&config_mod_rep(0, 1, 10, 100, 4));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     h.deliver(&change_mod_bank(1, 1, TransitionMode::Immediate, 0));
-    assert_eq!(h.data(), Error::InvalidTransitionMode as u8);
+    assert_eq!(h.status(), Error::InvalidTransitionMode as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
     h.deliver(&change_mod_bank(2, 1, TransitionMode::Gpio, 1));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 1);
 }
 
@@ -376,11 +376,11 @@ fn change_pattern_bank_rejects_timed_transition_on_infinite_loop() {
     let mut h = Harness::new();
 
     h.deliver(&change_pattern_bank(0, 1, TransitionMode::Gpio, 0));
-    assert_eq!(h.data(), Error::InvalidTransitionMode as u8);
+    assert_eq!(h.status(), Error::InvalidTransitionMode as u8);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 
     h.deliver(&change_pattern_bank(1, 1, TransitionMode::Immediate, 0));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
 }
 
@@ -397,14 +397,14 @@ fn change_pattern_bank_rejects_immediate_transition_on_finite_loop() {
         0,
         4,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     h.deliver(&change_pattern_bank(1, 1, TransitionMode::Ext, 0));
-    assert_eq!(h.data(), Error::InvalidTransitionMode as u8);
+    assert_eq!(h.status(), Error::InvalidTransitionMode as u8);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 
     h.deliver(&change_pattern_bank(2, 1, TransitionMode::SyncIdx, 0));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
 }
 
@@ -412,8 +412,8 @@ fn change_pattern_bank_rejects_immediate_transition_on_finite_loop() {
 fn change_mod_bank_rejects_sys_time_transition_within_margin() {
     let mut h = Harness::new();
     h.deliver(&config_mod_rep(0, 1, 10, 100, 4));
-    assert_eq!(h.data(), 0);
-    h.port.dc_sys_time = 1_000_000_000;
+    assert_eq!(h.status(), 0);
+    h.port.sys_time = 1_000_000_000;
 
     h.deliver(&change_mod_bank(
         1,
@@ -421,7 +421,7 @@ fn change_mod_bank_rejects_sys_time_transition_within_margin() {
         TransitionMode::SysTime,
         1_000_000_000 + SYS_TIME_TRANSITION_MARGIN_NS - 1,
     ));
-    assert_eq!(h.data(), Error::MissTransitionTime as u8);
+    assert_eq!(h.status(), Error::MissTransitionTime as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
     h.deliver(&change_mod_bank(
@@ -430,7 +430,7 @@ fn change_mod_bank_rejects_sys_time_transition_within_margin() {
         TransitionMode::SysTime,
         1_000_000_000 + SYS_TIME_TRANSITION_MARGIN_NS,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 1);
 }
 
@@ -447,8 +447,8 @@ fn change_pattern_bank_rejects_sys_time_transition_within_margin() {
         0,
         4,
     ));
-    assert_eq!(h.data(), 0);
-    h.port.dc_sys_time = 2_000_000_000;
+    assert_eq!(h.status(), 0);
+    h.port.sys_time = 2_000_000_000;
 
     h.deliver(&change_pattern_bank(
         1,
@@ -456,7 +456,7 @@ fn change_pattern_bank_rejects_sys_time_transition_within_margin() {
         TransitionMode::SysTime,
         2_000_000_000,
     ));
-    assert_eq!(h.data(), Error::MissTransitionTime as u8);
+    assert_eq!(h.status(), Error::MissTransitionTime as u8);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 
     h.deliver(&change_pattern_bank(
@@ -465,6 +465,6 @@ fn change_pattern_bank_rejects_sys_time_transition_within_margin() {
         TransitionMode::SysTime,
         2_000_000_000 + SYS_TIME_TRANSITION_MARGIN_NS + 1,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
 }

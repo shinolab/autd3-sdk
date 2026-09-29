@@ -15,6 +15,7 @@ use crate::proto::{Cmd, EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, Error, MOD_BUFF
 use crate::tests::builders::{
     assert_fpga_unchanged, fpga_snapshot, write_foci_buffer, write_mod_buffer,
     write_pattern_compressed, write_pattern_compressed_with_intensity, write_pattern_raw,
+    write_pattern_raw_multi,
 };
 use crate::tests::mock::{Frame, Harness};
 
@@ -27,9 +28,9 @@ fn write_foci_buffer_writes_words_at_offset_per_bank() {
     let mut h = Harness::new();
 
     h.deliver(&write_foci_buffer(0, 0, 0, &[0x1234, 0x5678]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     h.deliver(&write_foci_buffer(1, 1, 300, &[0xAABB]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.expected_seq(), 2);
 
     assert_eq!(h.emission_word(0, 0), 0x1234);
@@ -49,7 +50,7 @@ fn write_foci_buffer_crosses_page_boundary() {
         FPGA_PAGE_WORDS - 2,
         &[0x0001, 0x0002, 0x0003, 0x0004],
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     assert_eq!(h.emission_word(0, page - 2), 0x0001);
     assert_eq!(h.emission_word(0, page - 1), 0x0002);
@@ -70,7 +71,7 @@ fn write_pattern_raw_interleaves_phase_and_intensity_into_slot() {
     let (phases, intensities) = raw_pattern();
 
     h.deliver(&write_pattern_raw(0, 1, 3, &phases, &intensities));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.expected_seq(), 1);
 
     let slot = 3 * EMISSION_SLOT_WORDS as usize;
@@ -82,6 +83,58 @@ fn write_pattern_raw_interleaves_phase_and_intensity_into_slot() {
         assert_eq!(h.emission_word(0, slot + i), 0);
     }
     assert_eq!(h.emission_word(1, slot + NUM_TRANSDUCERS), 0);
+}
+
+#[test]
+fn write_pattern_raw_carries_two_consecutive_indices() {
+    let mut h = Harness::new();
+    let (phases, intensities) = raw_pattern();
+    let reversed: Vec<u8> = phases.iter().rev().copied().collect();
+
+    h.deliver(&write_pattern_raw_multi(
+        0,
+        0,
+        7,
+        &[(&phases, &intensities), (&reversed, &phases)],
+    ));
+    assert_eq!(h.status(), 0);
+
+    let first = 7 * EMISSION_SLOT_WORDS as usize;
+    let second = 8 * EMISSION_SLOT_WORDS as usize;
+    for i in 0..NUM_TRANSDUCERS {
+        assert_eq!(
+            h.emission_word(0, first + i),
+            u16::from(phases[i]) | (u16::from(intensities[i]) << 8)
+        );
+        assert_eq!(
+            h.emission_word(0, second + i),
+            u16::from(reversed[i]) | (u16::from(phases[i]) << 8)
+        );
+    }
+}
+
+#[test]
+fn write_pattern_raw_rejects_a_count_out_of_range() {
+    let mut h = Harness::new();
+    let (phases, intensities) = raw_pattern();
+    let before = fpga_snapshot(&h);
+
+    h.deliver(&write_pattern_raw_multi(0, 0, 0, &[]));
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    h.deliver(&write_pattern_raw_multi(
+        1,
+        0,
+        u16::try_from(EMISSION_MAX_INDICES - 1).unwrap(),
+        &[(&phases, &intensities), (&phases, &intensities)],
+    ));
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    let mut frame = write_pattern_raw(2, 0, 0, &phases, &intensities);
+    frame.set_payload_byte(1, 3);
+    h.deliver(&frame);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+    assert_fpga_unchanged(&before, &h);
 }
 
 #[test]
@@ -97,7 +150,7 @@ fn write_pattern_raw_selects_page_of_high_index() {
         &phases,
         &intensities,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     let slot = (index * EMISSION_SLOT_WORDS) as usize;
     assert_eq!(h.emission_word(0, slot), 0xFF00);
@@ -111,7 +164,7 @@ fn write_pattern_raw_rejects_invalid_bank_and_index() {
     let before = fpga_snapshot(&h);
 
     h.deliver(&write_pattern_raw(0, bad_bank(), 0, &phases, &intensities));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_raw(
         1,
@@ -120,7 +173,7 @@ fn write_pattern_raw_rejects_invalid_bank_and_index() {
         &phases,
         &intensities,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_fpga_unchanged(&before, &h);
 }
 
@@ -129,7 +182,7 @@ fn write_foci_buffer_empty_data_is_no_op_success() {
     let mut h = Harness::new();
     h.deliver(&write_foci_buffer(0, 0, 0, &[]));
     assert_eq!(h.ack(), 0);
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 }
 
 #[test]
@@ -142,7 +195,7 @@ fn write_foci_buffer_empty_data_at_ram_end_does_not_switch_bank_or_page() {
     h.deliver(&write_foci_buffer(0, 1, EMISSION_RAM_WORDS, &[]));
 
     assert_eq!(h.ack(), 0);
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_PATTERN_MEM_WR_BANK), UNTOUCHED);
     assert_eq!(h.ctl(ADDR_PATTERN_MEM_WR_PAGE), UNTOUCHED);
 }
@@ -152,7 +205,7 @@ fn write_foci_buffer_rejects_invalid_payloads() {
     let mut h = Harness::new();
 
     h.deliver(&write_foci_buffer(0, bad_bank(), 0, &[0x0001]));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     let odd = WriteFociPayload {
         bank: 0,
@@ -161,7 +214,7 @@ fn write_foci_buffer_rejects_invalid_payloads() {
         data_len: U16::new(3),
     };
     h.deliver(&Frame::from_payload(1, Cmd::WriteFociBuffer, &odd));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     let too_long = WriteFociPayload {
         bank: 0,
@@ -170,7 +223,7 @@ fn write_foci_buffer_rejects_invalid_payloads() {
         data_len: U16::new(u16::try_from(FOCI_WRITE_MAX_DATA_LEN + 2).unwrap()),
     };
     h.deliver(&Frame::from_payload(2, Cmd::WriteFociBuffer, &too_long));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&write_foci_buffer(
         3,
@@ -178,12 +231,12 @@ fn write_foci_buffer_rejects_invalid_payloads() {
         EMISSION_RAM_WORDS - 1,
         &[0x0001, 0x0002],
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_eq!(h.emission_word(0, EMISSION_RAM_WORDS as usize - 1), 0);
 
     let before = fpga_snapshot(&h);
     h.deliver(&write_foci_buffer(4, 0, u32::MAX, &[0x0001]));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_fpga_unchanged(&before, &h);
 }
 
@@ -208,7 +261,7 @@ fn write_pattern_compressed_phase_full_decompresses_two_indices() {
         2,
         &words,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     for t in 0..NUM_TRANSDUCERS {
         let p0 = (t & 0xFF) as u16;
@@ -218,6 +271,44 @@ fn write_pattern_compressed_phase_full_decompresses_two_indices() {
             h.emission_word(1, slot as usize + EMISSION_SLOT_WORDS as usize + t),
             0xFF00 | p1
         );
+    }
+}
+
+#[test]
+fn write_pattern_compressed_reads_the_second_group_of_words() {
+    let mut h = Harness::new();
+
+    let mut words = vec![0x2211_u16; NUM_TRANSDUCERS];
+    words.extend(vec![0x4433_u16; NUM_TRANSDUCERS]);
+    h.deliver(&write_pattern_compressed(
+        0,
+        0,
+        0,
+        PatternFormat::PhaseFull as u8,
+        4,
+        &words,
+    ));
+    assert_eq!(h.status(), 0);
+    let slot = EMISSION_SLOT_WORDS as usize;
+    assert_eq!(h.emission_word(0, 0), 0xFF11);
+    assert_eq!(h.emission_word(0, slot), 0xFF22);
+    assert_eq!(h.emission_word(0, 2 * slot), 0xFF33);
+    assert_eq!(h.emission_word(0, 3 * slot + NUM_TRANSDUCERS - 1), 0xFF44);
+
+    let mut half = vec![0x4321_u16; NUM_TRANSDUCERS];
+    half.extend(vec![0x8765_u16; NUM_TRANSDUCERS]);
+    h.deliver(&write_pattern_compressed(
+        1,
+        1,
+        0,
+        PatternFormat::PhaseHalf as u8,
+        8,
+        &half,
+    ));
+    assert_eq!(h.status(), 0);
+    let expected = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+    for (g, &phase) in expected.iter().enumerate() {
+        assert_eq!(h.emission_word(1, g * slot), 0xFF00 | phase);
     }
 }
 
@@ -235,7 +326,7 @@ fn write_pattern_compressed_phase_full_partial_count_writes_single_slot() {
         1,
         &words,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     assert_eq!(h.emission_word(0, slot as usize), 0xFF00 | 0xAB);
     assert_eq!(
@@ -267,7 +358,7 @@ fn write_pattern_compressed_phase_half_decompresses_four_indices() {
         4,
         &words,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     for t in 0..NUM_TRANSDUCERS {
         for g in 0..4usize {
@@ -298,7 +389,7 @@ fn write_pattern_compressed_fills_every_slot_with_the_header_intensity() {
         0x80,
         &full,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     h.deliver(&write_pattern_compressed_with_intensity(
         1,
         0,
@@ -308,7 +399,7 @@ fn write_pattern_compressed_fills_every_slot_with_the_header_intensity() {
         0x00,
         &half,
     ));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     for t in 0..NUM_TRANSDUCERS {
         for (g, phase) in [0x12u16, 0x34].into_iter().enumerate() {
@@ -333,10 +424,10 @@ fn write_pattern_compressed_rejects_invalid_payloads() {
     let full = vec![0x1234_u16; NUM_TRANSDUCERS];
 
     h.deliver(&write_pattern_compressed(0, 0, 0, 0, 1, &full));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_compressed(1, 0, 0, 3, 1, &full));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_compressed(
         2,
@@ -346,27 +437,27 @@ fn write_pattern_compressed_rejects_invalid_payloads() {
         0,
         &full,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_compressed(
         3,
         0,
         0,
         PatternFormat::PhaseFull as u8,
-        3,
+        5,
         &full,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_compressed(
         4,
         0,
         0,
         PatternFormat::PhaseHalf as u8,
-        5,
+        9,
         &full,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&write_pattern_compressed(
         5,
@@ -376,7 +467,7 @@ fn write_pattern_compressed_rejects_invalid_payloads() {
         2,
         &full,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     let before = fpga_snapshot(&h);
     h.deliver(&write_pattern_compressed(
@@ -387,7 +478,7 @@ fn write_pattern_compressed_rejects_invalid_payloads() {
         1,
         &full,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_fpga_unchanged(&before, &h);
 }
 
@@ -396,9 +487,9 @@ fn write_mod_buffer_packs_samples_into_words_per_bank() {
     let mut h = Harness::new();
 
     h.deliver(&write_mod_buffer(0, 0, 0, &[0x10, 0x20, 0x30, 0x40]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     h.deliver(&write_mod_buffer(1, 1, 100, &[0xAA, 0xBB]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     assert_eq!(h.mod_word(0, 0), 0x2010);
     assert_eq!(h.mod_word(0, 1), 0x4030);
@@ -410,7 +501,7 @@ fn write_mod_buffer_packs_samples_into_words_per_bank() {
 fn write_mod_buffer_odd_length_pads_high_byte() {
     let mut h = Harness::new();
     h.deliver(&write_mod_buffer(0, 0, 0, &[0xAA]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.mod_word(0, 0), 0x00AA);
 }
 
@@ -420,7 +511,7 @@ fn write_mod_buffer_crosses_page_boundary() {
 
     let offset = 2 * FPGA_PAGE_WORDS - 2;
     h.deliver(&write_mod_buffer(0, 0, offset, &[0x01, 0x02, 0x03, 0x04]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     let page = FPGA_PAGE_WORDS as usize;
     assert_eq!(h.mod_word(0, page - 1), 0x0201);
@@ -434,18 +525,19 @@ fn write_mod_buffer_accepts_chunked_writes_up_to_capacity() {
 
     let mut seq: u8 = 0;
     let mut written: u32 = 0;
+    let mut last = 0u8;
     while written < MOD_BUFFER_SAMPLES {
         let len = u32::try_from(MOD_WRITE_MAX_DATA_LEN)
             .unwrap()
             .min(MOD_BUFFER_SAMPLES - written);
-        let chunk = vec![(written >> 8) as u8; len as usize];
+        last = (written >> 8) as u8;
+        let chunk = vec![last; len as usize];
         h.deliver(&write_mod_buffer(seq, 0, written, &chunk));
-        assert_eq!(h.data(), 0);
+        assert_eq!(h.status(), 0);
         seq = seq.wrapping_add(1);
         written += len;
     }
-    let expected = ((MOD_BUFFER_SAMPLES - 1) >> 8) as u16;
-    let expected = expected | (expected << 8);
+    let expected = u16::from(last) | (u16::from(last) << 8);
     assert_eq!(h.mod_word(0, MOD_BUFFER_SAMPLES as usize / 2 - 1), expected);
 }
 
@@ -454,7 +546,7 @@ fn write_mod_buffer_empty_data_is_no_op_success() {
     let mut h = Harness::new();
     h.deliver(&write_mod_buffer(0, 0, 0, &[]));
     assert_eq!(h.ack(), 0);
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 }
 
 #[test]
@@ -462,12 +554,12 @@ fn write_mod_buffer_rejects_invalid_payloads() {
     let mut h = Harness::new();
 
     h.deliver(&write_mod_buffer(0, bad_bank(), 0, &[0x01]));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.reply_data(), [Error::InvalidPayload as u8]);
 
     h.deliver(&write_mod_buffer(2, 0, 1, &[0x01, 0x02]));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     let too_long = WriteModPayload {
         bank: 0,
@@ -480,7 +572,7 @@ fn write_mod_buffer_rejects_invalid_payloads() {
         Cmd::WriteModulationBuffer,
         &too_long,
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&write_mod_buffer(
         4,
@@ -488,11 +580,11 @@ fn write_mod_buffer_rejects_invalid_payloads() {
         MOD_BUFFER_SAMPLES - 2,
         &[0x01, 0x02, 0x03],
     ));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_eq!(h.mod_word(0, MOD_BUFFER_SAMPLES as usize / 2 - 1), 0);
 
     let before = fpga_snapshot(&h);
     h.deliver(&write_mod_buffer(5, 0, u32::MAX - 1, &[0x01, 0x02]));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_fpga_unchanged(&before, &h);
 }

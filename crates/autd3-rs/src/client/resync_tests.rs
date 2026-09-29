@@ -1,23 +1,27 @@
+use std::collections::VecDeque;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use crate::Telemetry;
 use crate::commands::SetSilencer;
 use crate::geometry::{Autd3, Geometry};
-use crate::protocol::{Cmd, RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
+use crate::protocol::{Cmd, FRAME_BYTES_MAX, TxFrame};
 use crate::transport::Bus;
+use crate::udp::Reply;
 use crate::{Client, ClientConfig};
 use autd3_cpu_fw::proto::Mode;
 use autd3_cpu_fw::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
-use autd3_rs_core::CycleOutcome;
-use autd3_rs_firmware_emulator::{Audit, Fault};
+use autd3_rs_firmware_emulator::{Audit, AuditReply, Fault};
 
 #[derive(Clone)]
 struct SharedAudit {
     audit: Arc<Mutex<Audit>>,
     resets: Arc<AtomicUsize>,
     sent: Arc<Mutex<Vec<(u8, Cmd)>>>,
+    queue: VecDeque<AuditReply>,
+    msg_id: u16,
 }
 
 impl SharedAudit {
@@ -28,6 +32,8 @@ impl SharedAudit {
             ))),
             resets: Arc::new(AtomicUsize::new(0)),
             sent: Arc::new(Mutex::new(Vec::new())),
+            queue: VecDeque::new(),
+            msg_id: 0,
         }
     }
 
@@ -59,11 +65,11 @@ impl SharedAudit {
     fn run_device_ahead(&self, device: usize, frames: usize) {
         let mut audit = self.audit.lock().unwrap();
         let device = audit.device_mut(device);
-        let mut seq = device.rx().ack.next();
-        let mut bytes = [0u8; TX_FRAME_BYTES];
+        let mut seq = crate::protocol::Seq::new(device.reply().ack).next();
+        let mut bytes = [0u8; FRAME_BYTES_MAX];
         for _ in 0..frames {
             TxFrame::new(seq, Cmd::Nop).write_to(&mut bytes);
-            device.recv(&bytes);
+            let _ = device.recv(&bytes, 0);
             device.process_pending();
             seq = seq.next();
         }
@@ -77,18 +83,47 @@ impl Bus for SharedAudit {
         self.audit.lock().unwrap().num_devices()
     }
 
-    fn cycle(
-        &mut self,
-        tx: &[[u8; TX_FRAME_BYTES]],
-        rx: &mut [[u8; RX_FRAME_BYTES]],
-    ) -> Result<CycleOutcome, Self::Error> {
-        if let Some(frame) = tx.first().and_then(|f| TxFrame::parse(f).ok()) {
+    fn next_msg_id(&self) -> u16 {
+        self.msg_id.wrapping_add(1)
+    }
+
+    fn send(&mut self, frames: &[[u8; FRAME_BYTES_MAX]]) -> Result<u16, Self::Error> {
+        if let Some(frame) = frames.first().and_then(|f| TxFrame::parse(f).ok()) {
             if frame.cmd == Cmd::Reset {
                 self.resets.fetch_add(1, Ordering::Relaxed);
             }
             self.sent.lock().unwrap().push((frame.seq.get(), frame.cmd));
         }
-        Ok(self.audit.lock().unwrap().cycle(tx, rx))
+        self.msg_id = self.msg_id.wrapping_add(1);
+        let refs: Vec<&[u8]> = frames.iter().map(|f| &f[..]).collect();
+        let replies = self.audit.lock().unwrap().send(&refs, self.msg_id);
+        self.queue.extend(replies);
+        Ok(self.msg_id)
+    }
+
+    fn heartbeat(&mut self) -> Result<u16, Self::Error> {
+        self.msg_id = self.msg_id.wrapping_add(1);
+        let replies = self.audit.lock().unwrap().heartbeat(self.msg_id);
+        self.queue.extend(replies);
+        Ok(self.msg_id)
+    }
+
+    fn recv(&mut self, deadline: Instant) -> Result<Option<Reply>, Self::Error> {
+        if let Some(r) = self.queue.pop_front() {
+            return Ok(Some(Reply::new(
+                r.device,
+                r.msg_id,
+                r.reply.ack,
+                r.reply.status,
+                0x09,
+                r.reply.data(),
+            )));
+        }
+        let now = Instant::now();
+        if deadline > now {
+            std::thread::sleep(deadline - now);
+        }
+        Ok(None)
     }
 }
 
@@ -98,10 +133,9 @@ fn geometry(n: usize) -> Geometry {
 
 fn resilient_config() -> ClientConfig {
     ClientConfig {
-        timeout_cycles: NonZeroU32::new(50).unwrap(),
-        max_inflight: NonZeroUsize::new(16).unwrap(),
+        ack_timeout: Duration::from_millis(20),
+        max_inflight: NonZeroUsize::new(7).unwrap(),
         max_resync_rounds: NonZeroU32::new(8).unwrap(),
-        reset_resend_cycles: NonZeroU32::new(2).unwrap(),
         ..ClientConfig::default()
     }
 }
@@ -175,12 +209,12 @@ async fn a_device_that_ran_ahead_recovers_via_reset_resync() {
 }
 
 #[tokio::test]
-async fn an_rx_invalid_interval_does_not_lose_a_frame() {
+async fn lost_replies_do_not_lose_a_frame() {
     let link = SharedAudit::new(1);
     let client = open(link.clone(), 1, resilient_config()).await;
 
     link.inject(Fault {
-        invalid_cycles: 5,
+        drop_replies: 5,
         ..Fault::default()
     });
 
@@ -272,30 +306,23 @@ async fn a_telemetry_counter_the_firmware_knows_reads_back() {
     let link = SharedAudit::new(1);
     let client = open(link.clone(), 1, resilient_config()).await;
 
-    let counters = client.read_telemetry(Telemetry::Processed).await.unwrap();
+    let counters = client.read_telemetry().await.unwrap();
     assert_eq!(counters.len(), 1);
+    assert!(counters[0].get(Telemetry::Processed) > 0);
     client.close().await.unwrap();
 }
 
 #[tokio::test]
-async fn the_read_error_detail_sandwich_costs_two_extra_round_trips() {
+async fn every_read_is_a_single_round_trip() {
     let link = SharedAudit::new(1);
     let client = open(link.clone(), 1, resilient_config()).await;
 
     let before = link.round_trips();
-    client.read_telemetry(Telemetry::Processed).await.unwrap();
-    assert_eq!(
-        link.round_trips() - before,
-        3,
-        "read_telemetry is ReadErrorDetail + ReadTelemetry + ReadErrorDetail"
-    );
+    client.read_telemetry().await.unwrap();
+    assert_eq!(link.round_trips() - before, 1);
 
     let before = link.round_trips();
     client.read_firmware_version().await.unwrap();
-    assert_eq!(
-        link.round_trips() - before,
-        10,
-        "read_firmware_version is 3 CPU + 3 FPGA version + 1 FPGA functions read, sandwiched by 3 ReadErrorDetail"
-    );
+    assert_eq!(link.round_trips() - before, 1);
     client.close().await.unwrap();
 }

@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use autd3_rs::commands::{ChangePatternBank, ConfigModulation, ConfigPattern, SetSilencer};
 use autd3_rs::value::{
-    DcSysTime, LoopBehavior, ModulationBank, PatternBank, SamplingConfig, TransitionMode,
+    LoopBehavior, ModulationBank, PatternBank, SamplingConfig, SysTime, TransitionMode,
 };
 
 use crate::Ctx;
@@ -130,7 +130,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
             b.push(ChangePatternBank {
                 bank: PatternBank::B1,
                 transition_mode: TransitionMode::SysTime {
-                    time: DcSysTime::from_nanos(0),
+                    time: SysTime::from_nanos(0),
                     margin: None,
                 },
             });

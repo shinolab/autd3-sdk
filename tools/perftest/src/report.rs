@@ -24,8 +24,8 @@ pub fn print_summary(s: &Summary) {
             println!("    code {code:#04x} : {count}");
         }
     }
-    println!("  stale cycles  : {}", s.stale_cycles);
-    println!("  lost cycles   : {}", s.lost_cycles);
+    println!("  retransmitted : {}", s.retransmissions);
+    println!("  missed replies: {}", s.missed_replies);
 
     println!();
     println!("throughput      :");

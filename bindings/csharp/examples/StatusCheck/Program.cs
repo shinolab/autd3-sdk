@@ -31,14 +31,14 @@ internal static class Program
         while (!cts.IsCancellationRequested)
         {
             var status = checker.Check();
-            var key = string.Join(",", status.Devices) + $"|{status.Recoveries}";
+            var key = string.Join(",", status.Devices);
             if (key != last)
             {
                 for (var i = 0; i < status.Devices.Count; i++)
                 {
                     Console.WriteLine($"device[{i}]: {status.Devices[i]}");
                 }
-                Console.WriteLine($"all operational: {status.AllOp}, any lost: {status.AnyLost}, recoveries: {status.Recoveries}");
+                Console.WriteLine($"all ready: {status.AllReady}, any lost: {status.AnyLost}");
                 last = key;
             }
 

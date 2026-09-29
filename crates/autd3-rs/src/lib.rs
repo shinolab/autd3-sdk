@@ -25,7 +25,7 @@ pub use error::{Error, NetworkCause, PayloadError};
 #[cfg(feature = "serde")]
 pub use autd3_rs_core::LayoutError;
 pub use autd3_rs_core::{
-    Angle, Autd3, BusStats, CoreId, CycleOutcome, DcClock, DcObservation, Device, DeviceState,
+    Angle, Autd3, BusStats, ClockObservation, CoreId, Device, DeviceClock, DeviceState,
     DeviceStatus, EncodeError, Freq, Geometry, Interface, Length, MAX_INFLIGHT, Point3, Quaternion,
     RtPriority, RtSchedulePolicy, UnitQuaternion, UnitVector3, Vector3, Velocity, offset, point,
 };
@@ -34,6 +34,6 @@ pub use datagram::{Datagram, DatagramBuilder, Frame, FrameIter, Frames};
 pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;
 pub use response::Response;
-pub use telemetry::Telemetry;
+pub use telemetry::{Telemetry, TelemetryCounters};
 pub use tuning::PerfTuning;
-pub use udp::{StateChecker, TransportOption, UdpBus, UdpError};
+pub use udp::{Reply, StateChecker, TransportOption, UdpBus, UdpError};

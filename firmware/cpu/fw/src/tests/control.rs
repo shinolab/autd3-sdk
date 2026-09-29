@@ -20,14 +20,14 @@ fn force_fan_sets_and_clears_persistent_bit() {
     let mut h = Harness::new();
 
     h.deliver(&force_fan(0, 1));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(
         h.ctl(ADDR_CTL_FLAG) & CTL_FLAG_FORCE_FAN,
         CTL_FLAG_FORCE_FAN
     );
 
     h.deliver(&force_fan(1, 0));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_CTL_FLAG) & CTL_FLAG_FORCE_FAN, 0);
 }
 
@@ -35,7 +35,7 @@ fn force_fan_sets_and_clears_persistent_bit() {
 fn force_fan_rejects_out_of_range() {
     let mut h = Harness::new();
     h.deliver(&force_fan(0, 2));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn force_fan_survives_subsequent_latch() {
 fn emulate_gpio_in_maps_values() {
     let mut h = Harness::new();
     h.deliver(&gpio_in(0, [0, 1, 0, 1]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     let ctl = h.ctl(ADDR_CTL_FLAG);
     assert_eq!(ctl & CTL_FLAG_GPIO_IN_0, 0);
     assert_eq!(ctl & CTL_FLAG_GPIO_IN_1, CTL_FLAG_GPIO_IN_1);
@@ -65,7 +65,7 @@ fn emulate_gpio_in_maps_values() {
 fn emulate_gpio_in_rejects_out_of_range() {
     let mut h = Harness::new();
     h.deliver(&gpio_in(0, [0, 0, 2, 0]));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn phase_corr_packs_bytes_into_words() {
     let mut h = Harness::new();
     let phases: Vec<u8> = (0..NUM_TRANSDUCERS).map(|i| (i & 0xFF) as u8).collect();
     h.deliver(&phase_corr(0, &phases));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(
         h.port.phase_corr[0],
         u16::from(phases[0]) | (u16::from(phases[1]) << 8)
@@ -90,7 +90,7 @@ fn output_mask_packs_bytes_into_words() {
     let mut h = Harness::new();
     let mask: Vec<bool> = (0..NUM_TRANSDUCERS).map(|i| i % 3 == 0).collect();
     h.deliver(&output_mask(0, &mask));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     for i in 0..OUTPUT_MASK_WORDS {
         let expected = mask[i * 16..]
             .iter()
@@ -107,7 +107,7 @@ fn pwe_writes_table() {
     let mut h = Harness::new();
     let table: Vec<u16> = (0..PWE_TABLE_SIZE).map(|i| i as u16).collect();
     h.deliver(&pwe(0, &table));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.port.pwe[0], 0);
     assert_eq!(h.port.pwe[1], 1);
     assert_eq!(h.port.pwe[255], 255);
@@ -124,7 +124,7 @@ fn gpio_out_writes_debug_values_and_latches() {
         0x3132_3334_3536_3738,
     ];
     h.deliver(&gpio_out(0, &values));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     for (v, value) in values.iter().enumerate() {
         for w in 0..4u32 {
             let expect = ((value >> (16 * w)) & 0xFFFF) as u16;
@@ -140,7 +140,8 @@ fn read_fpga_state_returns_register_byte() {
     let mut h = Harness::new();
     h.set_ctl(ADDR_FPGA_STATE, 0x83);
     h.deliver(&Frame::new(0, Cmd::ReadFpgaState));
-    assert_eq!(h.data(), 0x83);
+    assert_eq!(h.status(), 0);
+    assert_eq!(h.reply_data(), [0x83]);
 }
 
 #[test]
@@ -150,14 +151,9 @@ fn read_fpga_fw_version_returns_register_bytes() {
     h.set_ctl(ADDR_VERSION_NUM_MINOR, 0x0B);
     h.set_ctl(ADDR_VERSION_NUM_PATCH, 0x0C);
 
-    h.deliver(&Frame::new(0, Cmd::ReadFpgaFwVersionMajor));
-    assert_eq!(h.data(), 0x0A);
-
-    h.deliver(&Frame::new(1, Cmd::ReadFpgaFwVersionMinor));
-    assert_eq!(h.data(), 0x0B);
-
-    h.deliver(&Frame::new(2, Cmd::ReadFpgaFwVersionPatch));
-    assert_eq!(h.data(), 0x0C);
+    h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+    assert_eq!(h.status(), 0);
+    assert_eq!(h.firmware_info().fpga_version, [0x0A, 0x0B, 0x0C]);
 }
 
 #[test]

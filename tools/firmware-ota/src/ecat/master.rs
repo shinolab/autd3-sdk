@@ -1,7 +1,6 @@
 use std::time::{Duration, Instant};
 
-use autd3_rs::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES};
-use autd3_rs::value::DcSysTime;
+use autd3_rs::value::SysTime;
 
 use super::EcatError;
 use super::frame::{
@@ -28,8 +27,6 @@ const SM_INPUTS_CONTROL: u8 = 0x20;
 
 pub const OUTPUT_BYTES: u16 = 626;
 pub const INPUT_BYTES: u16 = 2;
-const _: () = assert!(OUTPUT_BYTES as usize == TX_FRAME_BYTES);
-const _: () = assert!(INPUT_BYTES as usize == RX_FRAME_BYTES);
 
 const OUTPUT_LOGICAL_BASE: u32 = 0x0000_0000;
 const INPUT_LOGICAL_BASE: u32 = 0x1000_0000;
@@ -523,7 +520,7 @@ impl<B: RawBus> Master<B> {
 
     fn measure_propagation_delays(&mut self) -> Result<(Vec<u32>, u64), EcatError> {
         self.write_all(reg::DC_RECEIVE_TIME_PORT0, &0u32.to_le_bytes())?;
-        let host_time = DcSysTime::now()?.sys_time();
+        let host_time = SysTime::now()?.sys_time();
 
         let mut round_trips = Vec::with_capacity(self.devices);
         for index in 0..self.devices {

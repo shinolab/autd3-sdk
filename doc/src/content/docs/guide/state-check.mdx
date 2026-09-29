@@ -24,12 +24,11 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 `StateChecker::check` は, 呼び出した時点の状態 `DeviceStatus` を返す.
 `DeviceStatus` は以下を持つ.
 
-- `devices`: デバイスごとの状態 (`DeviceState`). 正常なら `OP`, 切断されると `LOST` など.
-- `all_op`: 全デバイスが `OP` 状態か.
-- `any_lost`: いずれかのデバイスが `LOST` 状態か.
-- `recoveries`: 切断から自動で復帰した累計回数 (自動復帰しないので常に 0).
+- `devices`: デバイスごとの状態 (`DeviceState`). 正常なら `Ready`, 切断されると `Lost` など.
+- `all_ready`: 全デバイスが `Ready` 状態か.
+- `any_lost`: いずれかのデバイスが `Lost` 状態か.
 
-各状態の意味は [接続](/autd3-sdk/api/connection/#状態監視) を参照. 同期パルスが動いていれば `OP`, まだ動いていなければ `SAFE-OP`, 返信が途絶えるか機体が再起動すると `LOST` になり, `LOST` からは自動で復帰しない (開き直す).
+各状態の意味は [接続](/autd3-sdk/api/connection/#状態監視) を参照. 同期パルスが動いていれば `Ready`, まだ動いていなければ `Syncing`, 返信が途絶えるか機体が再起動すると `Lost` になり, `Lost` からは自動で復帰しない (開き直す).
 
 以下は, 一定間隔で `check` を呼び, 状態が変化したときだけ出力する例.
 

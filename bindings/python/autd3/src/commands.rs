@@ -11,7 +11,7 @@ use autd3_rs::commands::{
 use autd3_rs::geometry::Autd3;
 use autd3_rs::value::{Phase, PulseWidth as CorePulseWidth};
 
-use crate::ops::DcSysTime;
+use crate::ops::SysTime;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -327,7 +327,7 @@ impl GpioOut {
 
     #[staticmethod]
     #[pyo3(name = "SysTimeEq")]
-    fn sys_time_eq(sys_time: DcSysTime) -> Self {
+    fn sys_time_eq(sys_time: SysTime) -> Self {
         Self(CoreGpioOut::SysTimeEq(sys_time.0))
     }
 

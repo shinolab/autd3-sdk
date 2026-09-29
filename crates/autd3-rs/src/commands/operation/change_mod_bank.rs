@@ -19,8 +19,8 @@ pub struct ChangeModulationBank {
 impl crate::sealed::Sealed for ChangeModulationBank {}
 
 impl Operation for ChangeModulationBank {
-    fn apply_dc_offset(&mut self, offset_ns: i64) {
-        self.transition_mode = self.transition_mode.with_dc_offset(offset_ns);
+    fn apply_clock_offset(&mut self, offset_ns: i64) {
+        self.transition_mode = self.transition_mode.with_clock_offset(offset_ns);
     }
 
     fn distribution(&self) -> Distribution {
@@ -76,12 +76,12 @@ mod tests {
 
     #[test]
     fn change_mod_bank_sys_time_encodes_value() {
-        use crate::value::DcSysTime;
+        use crate::value::SysTime;
 
         let (_cmd, payload) = encode(ChangeModulationBank {
             bank: ModulationBank::B0,
             transition_mode: TransitionMode::SysTime {
-                time: DcSysTime::from_nanos(0x0123_4567_89AB_CDEF),
+                time: SysTime::from_nanos(0x0123_4567_89AB_CDEF),
                 margin: None,
             },
         });

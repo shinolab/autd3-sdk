@@ -1,10 +1,13 @@
 use autd3_cpu_wire::update::{
     ImageHeader, Slot, TRANSPORT_MARKER_BYTES, TRANSPORT_MARKER_OFFSET, Transport, crc32,
 };
-use autd3_rs::CycleOutcome;
-use autd3_rs::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES};
+use std::time::Duration;
+
+use autd3_rs::protocol::{Cmd, Seq};
 use autd3_rs_firmware_emulator::{Audit, EMULATED_CPU_IMAGE};
-use autd3_rs_firmware_ota::{CpuFirmwareImage, Driver, DriverError, Exchange, UpdateProgress};
+use autd3_rs_firmware_ota::{
+    CpuFirmwareImage, DeviceReply, Driver, DriverError, Exchange, Frame, Replies, UpdateProgress,
+};
 use zerocopy::FromBytes;
 
 struct Chain(Audit);
@@ -36,12 +39,38 @@ impl Exchange for Chain {
         self.0.num_devices()
     }
 
-    fn cycle(
+    fn reset(&mut self, _timeout: Duration) -> Result<bool, Self::Error> {
+        let reset = [0, Cmd::Reset.as_u8()];
+        let frames = vec![&reset[..]; self.0.num_devices()];
+        let replies = self.0.send(&frames, 0);
+        Ok(replies.len() == self.0.num_devices())
+    }
+
+    fn exchange(
         &mut self,
-        tx: &[[u8; TX_FRAME_BYTES]],
-        rx: &mut [[u8; RX_FRAME_BYTES]],
-    ) -> Result<CycleOutcome, Self::Error> {
-        Ok(self.0.cycle(tx, rx))
+        seq: Seq,
+        frame: &Frame,
+        _timeout: Duration,
+    ) -> Result<Replies, Self::Error> {
+        let bytes = frame.bytes(seq);
+        let frames = vec![&bytes[..]; self.0.num_devices()];
+        let mut replies: Vec<Option<DeviceReply>> = vec![None; self.0.num_devices()];
+        for r in self.0.send(&frames, 0) {
+            if r.reply.ack == seq.get() {
+                replies[r.device] = Some(DeviceReply {
+                    status: r.reply.status,
+                    value: r.reply.data().to_vec(),
+                });
+            }
+        }
+        Ok(match replies.iter().position(Option::is_none) {
+            Some(device) => Err(device),
+            None => Ok(replies.into_iter().map(Option::unwrap).collect()),
+        })
+    }
+
+    fn idle(&mut self, _duration: Duration) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 
@@ -232,13 +261,13 @@ mod fpga {
     use autd3_cpu_wire::fpga_update::{
         FPGA_IMAGE_BASE, FPGA_USR_ACCESS_UPDATE, FpgaBootImage, SYNC_WORD,
     };
-    use autd3_rs::protocol::{Cmd, Seq, TxFrame};
+    use autd3_rs::protocol::Cmd;
     use autd3_rs_firmware_emulator::Audit;
 
     use super::Chain;
     use autd3_rs_firmware_emulator::autd3_cpu_fw::Port;
     use autd3_rs_firmware_emulator::autd3_cpu_fw::params::ADDR_VERSION_NUM_MAJOR;
-    use autd3_rs_firmware_ota::{DEFAULT_TIMEOUT, Driver, DriverError, FpgaFirmwareImage};
+    use autd3_rs_firmware_ota::{DEFAULT_TIMEOUT, Driver, DriverError, FpgaFirmwareImage, Frame};
 
     use super::NUM_TRANSDUCERS;
 
@@ -402,7 +431,7 @@ mod fpga {
         let mut driver = Driver::open(Chain::from(audit)).unwrap();
         driver.update_fpga(&bitstream(10, 4), |_| {}).unwrap();
         assert!(matches!(
-            driver.send_checked(TxFrame::new(Seq::ZERO, Cmd::Clear), DEFAULT_TIMEOUT),
+            driver.send_checked(&Frame::new(Cmd::Clear), DEFAULT_TIMEOUT),
             Err(DriverError::Device { code: 0x10, .. })
         ));
     }

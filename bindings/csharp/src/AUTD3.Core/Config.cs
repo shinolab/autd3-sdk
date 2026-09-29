@@ -48,15 +48,15 @@ namespace AUTD3
 
         public static TransitionMode SyncIdx => new TransitionMode(0x00, 0);
 
-        public static TransitionMode SysTime(DcSysTime sysTime, TimeSpan? margin = null)
+        public static TransitionMode SysTime(SysTime sysTime, TimeSpan? margin = null)
         {
-            if (margin is not { } m) return new TransitionMode(0x01, sysTime.SysTime);
+            if (margin is not { } m) return new TransitionMode(0x01, sysTime.Nanos);
             var nanos = (double)m.Ticks * 100.0;
             if (nanos < 0.0 || nanos > uint.MaxValue)
             {
                 throw new Autd3Exception("transition margin is out of range (0..=4294967295 ns)");
             }
-            return new TransitionMode(0x01, sysTime.SysTime, (uint)nanos);
+            return new TransitionMode(0x01, sysTime.Nanos, (uint)nanos);
         }
 
         public static TransitionMode Gpio(GpioIn gpio) => new TransitionMode(0x02, (byte)gpio);

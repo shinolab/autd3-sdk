@@ -1,7 +1,7 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use autd3_rs_core::params::REP_INFINITE;
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
 use autd3_rs_core::value::{Intensity, TransitionMode};
 use autd3_rs_firmware_emulator::Device;
 
@@ -9,10 +9,10 @@ const NUM_TRANSDUCERS: usize = 249;
 const BANK: u8 = 0;
 const FOCUS_INTENSITY: u8 = 0xAA;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
     let mut tx = TxFrame::new(Seq::new(seq), cmd);
     tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; TX_FRAME_BYTES];
+    let mut buf = [0u8; FRAME_BYTES_MAX];
     tx.write_to(&mut buf);
     buf
 }
@@ -45,10 +45,18 @@ fn single_focus_synthesizes_phases() {
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(device.send(&frame(0, Cmd::WriteFociBuffer, &write)).data, 0);
-    assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
-        device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
+        device.send(&frame(0, Cmd::WriteFociBuffer, &write)).status,
+        0
+    );
+    assert_eq!(
+        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        0
+    );
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ChangePatternBank, &change))
+            .status,
         0
     );
     device.fpga_mut().update_with_sys_time(0);

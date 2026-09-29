@@ -34,7 +34,7 @@ internal static class Sample
                     {
                         Console.WriteLine($"device[{i}]: {status.Devices[i]}");
                     }
-                    Console.WriteLine($"all operational: {status.AllOp}, any lost: {status.AnyLost}, recoveries: {status.Recoveries}");
+                    Console.WriteLine($"all ready: {status.AllReady}, any lost: {status.AnyLost}");
                     last = status;
                 }
                 await Task.Delay(CheckInterval);

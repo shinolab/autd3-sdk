@@ -45,6 +45,10 @@ fn answers(candidate: &Candidate, response_timeout: Duration) -> bool {
     })();
     match result {
         Ok(found) => found,
+        Err(e @ UdpError::UnsupportedVersion { .. }) => {
+            tracing::debug!(interface = %candidate.name, "an AUTD3 device answered: {e}");
+            true
+        }
         Err(e) => {
             tracing::debug!(interface = %candidate.name, "probing an interface failed: {e}");
             false

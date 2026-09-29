@@ -58,7 +58,8 @@ mod tests {
 
     #[test]
     fn write_foci_buffer_packs_and_splits() {
-        let points: Vec<ControlPoints<1>> = (0..100)
+        let total = MAX_FOCI_PER_FRAME + 23;
+        let points: Vec<ControlPoints<1>> = (0..total)
             .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32)))
             .collect();
         let frames = expand(WriteFociBuffer {
@@ -68,7 +69,7 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(frames.len(), 2, "100 foci > 77 per frame");
+        assert_eq!(frames.len(), 2, "one frame more than fits");
 
         let p0 = payload(&frames, 0);
         let word_offset0 = u32::try_from(10 * FOCUS_WORDS).unwrap();
@@ -81,7 +82,7 @@ mod tests {
         let p1 = payload(&frames, 1);
         let word_offset1 = u32::try_from((10 + MAX_FOCI_PER_FRAME) * FOCUS_WORDS).unwrap();
         assert_eq!(&p1[2..6], &word_offset1.to_le_bytes());
-        let rest = u16::try_from((100 - MAX_FOCI_PER_FRAME) * 8).unwrap();
+        let rest = u16::try_from((total - MAX_FOCI_PER_FRAME) * 8).unwrap();
         assert_eq!(&p1[6..8], &rest.to_le_bytes());
         let first_of_rest =
             u64::from_le_bytes(p1[HEADER_BYTES..HEADER_BYTES + 8].try_into().unwrap());

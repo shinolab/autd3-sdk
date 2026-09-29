@@ -28,14 +28,14 @@ import { excerpt } from "@lib/excerpt";
 | `index`    | `usize`                                           | バンク内の書き込み開始インデックス         |
 | `format`   | `PatternCompression`                              | 圧縮形式 (下記参照)                      |
 | `intensity`| `Intensity`                                       | 全振動子・全 Pattern に共通の強度          |
-| `patterns` | `[Option<&[Vec<Phase>]>; 4]`     | 書き込む位相の列                           |
+| `patterns` | `[Option<&[Vec<Phase>]>; 8]`     | 書き込む位相の列                           |
 
 ## PatternCompression
 
 | バリアント  | 1 フレームあたりの Pattern 数 | 説明                                  |
 | ----------- | ----------------------------- | ------------------------------------- |
-| `PhaseFull` | 2                             | 位相を全分解能 (8 bit) で送る        |
-| `PhaseHalf` | 4                             | 位相を半分解能 (4 bit) で送る        |
+| `PhaseFull` | 4                             | 位相を全分解能 (8 bit) で送る        |
+| `PhaseHalf` | 8                             | 位相を半分解能 (4 bit) で送る        |
 
 ## Example
 

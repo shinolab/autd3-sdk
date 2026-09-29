@@ -21,6 +21,7 @@ from ._autd3 import (
     DeviceStatus,
     Frames,
     ResponseFuture,
+    TelemetryCounters,
     UdpEmulator,
     TransportOption,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "DeviceStatus",
     "Frames",
     "ResponseFuture",
+    "TelemetryCounters",
     "UdpEmulator",
     "TransportOption",
     "commands",

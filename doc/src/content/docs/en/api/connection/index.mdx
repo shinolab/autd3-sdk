@@ -30,14 +30,18 @@ See [Host Network Setup](/autd3-sdk/en/getting-started/setup/network/).
 | --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface` | `Auto`  | The NIC the devices are attached to. `Auto` detects it, `Name(..)` names it                    |
 | `group`               | address     | none    | Overrides where the multicast (`ff02::1`) management messages go. For the emulator; not normally used |
-| `cycle`               | `Duration`  | 1 ms    | Send period                                                                                   |
-| `reply_timeout`       | `Duration`  | 1 ms    | How long one cycle waits for the replies of all devices. A cycle past it counts as not received |
+| `heartbeat`           | `Duration`  | 10 ms   | Interval of the liveness check sent while nothing else is sent. Below 250 ms (a device stops its output after 500 ms without the host) |
+| `reply_timeout`       | `Duration`  | 1 ms    | How long a liveness check waits for the replies of all devices                                 |
+| `lost_timeout`        | `Duration`  | 100 ms  | A device with no reply for this long is reported `Lost`. Longer than `heartbeat`               |
 | `response_timeout`    | `Duration`  | 200 ms  | How long to wait for the reply to a management message such as the enumeration                 |
 | `enumeration_timeout` | `Duration`  | 10 s    | How long the enumeration retries until the device count reaches the geometry                  |
 | `sync_timeout`        | `Duration`  | 5 s     | How long to wait, after setting the time, until every device starts its sync pulse            |
 
-Each AUTD3 adds one frame of store-and-forward delay (about 57 µs per device).
-With many devices (more than a dozen or so), widen `reply_timeout` and `cycle`.
+A command is sent as soon as there is something to send, and each device replies when it has finished handling it.
+Nothing is sent on a fixed cycle; only while there is nothing to send, a liveness check goes out every `heartbeat`.
+
+Each AUTD3 adds one frame of store-and-forward delay (about 120 µs per device for a full 1448-byte frame).
+With many devices (more than a dozen or so), widen `reply_timeout`.
 
 ## Interface Auto-Detection
 
@@ -64,9 +68,9 @@ The checker returned by `Client::open_with_checker` reports each device as follo
 
 | State    | Meaning                                                            |
 | -------- | ------------------------------------------------------------------ |
-| `Op`     | The device replies and its sync pulse is running                   |
-| `SafeOp` | The device replies but its sync pulse is not running yet           |
-| `Lost`   | No reply for 10 consecutive cycles, or the device rebooted         |
+| `Ready`   | The device replies and its sync pulse is running                  |
+| `Syncing` | The device replies but its sync pulse is not running yet          |
+| `Lost`    | No reply for `lost_timeout`, or the device rebooted               |
 
 Rebooting one device in the middle makes every device beyond it `Lost` as well.
 There is no automatic recovery from `Lost`; reopen the client.

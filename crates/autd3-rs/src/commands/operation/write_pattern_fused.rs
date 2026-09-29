@@ -91,8 +91,8 @@ fn reflect_fused(
 impl crate::sealed::Sealed for WritePatternFused<'_> {}
 
 impl Operation for WritePatternFused<'_> {
-    fn apply_dc_offset(&mut self, offset_ns: i64) {
-        self.transition_mode = self.transition_mode.with_dc_offset(offset_ns);
+    fn apply_clock_offset(&mut self, offset_ns: i64) {
+        self.transition_mode = self.transition_mode.with_clock_offset(offset_ns);
     }
 
     fn distribution(&self) -> Distribution {
@@ -155,8 +155,8 @@ impl<const N: usize> WriteFociStmFused<'_, N> {
 impl<const N: usize> crate::sealed::Sealed for WriteFociStmFused<'_, N> {}
 
 impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
-    fn apply_dc_offset(&mut self, offset_ns: i64) {
-        self.transition_mode = self.transition_mode.with_dc_offset(offset_ns);
+    fn apply_clock_offset(&mut self, offset_ns: i64) {
+        self.transition_mode = self.transition_mode.with_clock_offset(offset_ns);
     }
 
     fn distribution(&self) -> Distribution {
@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn fused_pattern_encodes_transition_value_and_margin() {
-        use crate::value::DcSysTime;
+        use crate::value::SysTime;
         use core::time::Duration;
 
         let points = [
@@ -374,7 +374,7 @@ mod tests {
             sound_speed: Velocity::from_m_s(340.0),
             loop_behavior: LoopBehavior::Finite(NonZeroU16::new(8).unwrap()),
             transition_mode: TransitionMode::SysTime {
-                time: DcSysTime::from_nanos(0xDEAD_BEEF),
+                time: SysTime::from_nanos(0xDEAD_BEEF),
                 margin: Some(Duration::from_millis(1)),
             },
         };

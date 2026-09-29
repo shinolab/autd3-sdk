@@ -1,5 +1,5 @@
 mod builder;
-pub(crate) mod dc_offset;
+pub(crate) mod clock_offset;
 mod each;
 mod frame;
 mod mirror;

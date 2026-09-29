@@ -28,14 +28,14 @@ The intensity is a single `intensity` value shared by every transducer and every
 | `index`    | `usize`                                           | Start index for writing within the bank    |
 | `format`   | `PatternCompression`                              | Compression format (see below)             |
 | `intensity`| `Intensity`                                       | Intensity shared by every transducer and Pattern |
-| `patterns` | `[Option<&[Vec<Phase>]>; 4]`     | Sequence of phases to write                |
+| `patterns` | `[Option<&[Vec<Phase>]>; 8]`     | Sequence of phases to write                |
 
 ## PatternCompression
 
 | Variant     | Patterns per frame | Description                           |
 | ----------- | ------------------ | ------------------------------------- |
-| `PhaseFull` | 2                  | Sends the phase at full resolution (8 bit) |
-| `PhaseHalf` | 4                  | Sends the phase at half resolution (4 bit) |
+| `PhaseFull` | 4                  | Sends the phase at full resolution (8 bit) |
+| `PhaseHalf` | 8                  | Sends the phase at half resolution (4 bit) |
 
 ## Example
 

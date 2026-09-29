@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct UdpConfig {
     pub interface: String,
-    pub cycle_us: Option<u64>,
+    pub heartbeat_us: Option<u64>,
     pub reply_timeout_us: Option<u64>,
     pub response_timeout_ms: Option<u64>,
     pub enumeration_timeout_ms: Option<u64>,
@@ -28,7 +28,7 @@ impl Default for OtaConfig {
     }
 }
 
-const DEFAULT_CYCLE_US: u64 = 1000;
+const DEFAULT_HEARTBEAT_US: u64 = 10_000;
 const DEFAULT_REPLY_TIMEOUT_US: u64 = 1000;
 const DEFAULT_RESPONSE_TIMEOUT_MS: u64 = 200;
 const DEFAULT_ENUMERATION_TIMEOUT_MS: u64 = 10_000;
@@ -63,7 +63,7 @@ impl OtaConfig {
             args.push("--interface".to_string());
             args.push(interface.to_string());
         }
-        push_opt(args, "--cycle-us", u.cycle_us);
+        push_opt(args, "--heartbeat-us", u.heartbeat_us);
         push_opt(args, "--reply-timeout-us", u.reply_timeout_us);
         push_opt(args, "--response-timeout-ms", u.response_timeout_ms);
         push_opt(args, "--enumeration-timeout-ms", u.enumeration_timeout_ms);
@@ -107,7 +107,7 @@ impl OtaConfig {
         );
         ui.end_row();
 
-        optional_row(ui, "Cycle", &mut u.cycle_us, DEFAULT_CYCLE_US, " µs");
+        optional_row(ui, "Heartbeat", &mut u.heartbeat_us, DEFAULT_HEARTBEAT_US, " µs");
     }
 
     fn udp_advanced_ui(&mut self, ui: &mut egui::Ui) {
@@ -220,7 +220,7 @@ mod tests {
         let config = OtaConfig {
             udp: UdpConfig {
                 interface: "  eth0 ".to_string(),
-                cycle_us: Some(2000),
+                heartbeat_us: Some(20_000),
                 reply_timeout_us: Some(1500),
                 response_timeout_ms: Some(300),
                 enumeration_timeout_ms: Some(20_000),
@@ -233,8 +233,8 @@ mod tests {
             [
                 "--interface",
                 "eth0",
-                "--cycle-us",
-                "2000",
+                "--heartbeat-us",
+                "20000",
                 "--reply-timeout-us",
                 "1500",
                 "--response-timeout-ms",

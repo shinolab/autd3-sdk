@@ -5,9 +5,13 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Intensity, PatternBank, Phase};
 
 use super::{Distribution, Operation};
+use autd3_cpu_wire::layout::{PATTERN_RAW_DATA_LEN, PATTERN_RAW_MAX_COUNT};
+use autd3_cpu_wire::params::NUM_TRANSDUCERS;
 use autd3_cpu_wire::payload::WritePatternRawPayload;
 use zerocopy::little_endian::U16;
 use zerocopy::{FromBytes, IntoBytes};
+
+const RAW_HEADER_BYTES: usize = core::mem::size_of::<WritePatternRawPayload>();
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PatternIntensity<'a> {
@@ -118,40 +122,83 @@ pub(crate) fn encode_raw_slot(
     Ok(())
 }
 
+fn encode_raw_frame(
+    bank: PatternBank,
+    index: usize,
+    slots: &[(&[Vec<Phase>], PatternIntensity<'_>)],
+    device: &Device,
+    out: &mut [u8; PAYLOAD_BYTES],
+) -> Result<Cmd, Error> {
+    let last = index + slots.len().max(1) - 1;
+    if last >= EMISSION_MAX_INDICES {
+        return Err(PayloadError::PatternIndexOutOfRange {
+            index: last,
+            max: EMISSION_MAX_INDICES,
+        }
+        .into());
+    }
+    let (p, rest) = WritePatternRawPayload::mut_from_prefix(&mut out[..]).unwrap();
+    p.bank = bank.as_u8();
+    p.count = u8::try_from(slots.len()).expect("at most PATTERN_RAW_MAX_COUNT slots");
+    p.index = U16::new(u16::try_from(index).expect("bounded by EMISSION_MAX_INDICES"));
+    for (&(phases, intensities), data) in slots.iter().zip(rest.chunks_mut(PATTERN_RAW_DATA_LEN)) {
+        let (dst_phases, dst_intensities) = data.split_at_mut(NUM_TRANSDUCERS);
+        encode_raw_slot(phases, intensities, device, dst_phases, dst_intensities)?;
+    }
+    Ok(Cmd::WritePatternRaw)
+}
+
 impl Operation for WritePatternBuffer<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        if self.index >= EMISSION_MAX_INDICES {
-            return Err(PayloadError::PatternIndexOutOfRange {
-                index: self.index,
-                max: EMISSION_MAX_INDICES,
-            }
-            .into());
-        }
-        let (p, _) = WritePatternRawPayload::mut_from_prefix(&mut out[..]).unwrap();
-        encode_raw_slot(
-            self.phases,
-            self.intensities,
+        encode_raw_frame(
+            self.bank,
+            self.index,
+            &[(self.phases, self.intensities)],
             device,
-            &mut p.phases,
-            &mut p.intensities,
-        )?;
-        p.bank = self.bank.as_u8();
-        p.reserved = 0;
-        p.index = U16::new(u16::try_from(self.index).expect("bounded by EMISSION_MAX_INDICES"));
-        Ok(Cmd::WritePatternRaw)
+            out,
+        )
     }
 }
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct WritePatternBuffers<'a> {
+    pub(crate) bank: PatternBank,
+    pub(crate) index: usize,
+    pub(crate) count: usize,
+    pub(crate) slots: [(&'a [Vec<Phase>], PatternIntensity<'a>); PATTERN_RAW_MAX_COUNT],
+}
+
+impl crate::sealed::Sealed for WritePatternBuffers<'_> {}
+
+impl Operation for WritePatternBuffers<'_> {
+    fn distribution(&self) -> Distribution {
+        Distribution::PerDevice
+    }
+
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+        encode_raw_frame(
+            self.bank,
+            self.index,
+            &self.slots[..self.count.clamp(1, PATTERN_RAW_MAX_COUNT)],
+            device,
+            out,
+        )
+    }
+}
+
+const _: () =
+    assert!(RAW_HEADER_BYTES + PATTERN_RAW_MAX_COUNT * PATTERN_RAW_DATA_LEN <= PAYLOAD_BYTES);
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_utils::test_device;
-    const PHASES_OFFSET: usize = core::mem::offset_of!(WritePatternRawPayload, phases);
-    const INTENSITIES_OFFSET: usize = core::mem::offset_of!(WritePatternRawPayload, intensities);
+    const PHASES_OFFSET: usize = RAW_HEADER_BYTES;
+    const INTENSITIES_OFFSET: usize = RAW_HEADER_BYTES + NUM_TRANSDUCERS;
 
     #[test]
     fn write_pattern_lays_out_phases_then_intensities() {
@@ -170,6 +217,7 @@ mod tests {
 
         assert_eq!(cmd, Cmd::WritePatternRaw);
         assert_eq!(out[0], 1);
+        assert_eq!(out[1], 1, "count");
         assert_eq!(&out[2..4], &3u16.to_le_bytes());
         for i in 0..n {
             assert_eq!(out[PHASES_OFFSET + i], phases[0][i].0);
@@ -234,6 +282,51 @@ mod tests {
         assert!(matches!(
             op.encode(&test_device(1), &mut out),
             Err(Error::InvalidPayload(_))
+        ));
+    }
+
+    #[test]
+    fn two_indices_share_one_frame() {
+        let dev = test_device(0);
+        let n = dev.num_transducers();
+        let first = [vec![Phase(1); n]];
+        let second = [vec![Phase(2); n]];
+        let op = WritePatternBuffers {
+            bank: PatternBank::B0,
+            index: 10,
+            count: 2,
+            slots: [
+                (&first[..], PatternIntensity::Uniform(Intensity(0x11))),
+                (&second[..], PatternIntensity::Uniform(Intensity(0x22))),
+            ],
+        };
+        let mut out = [0u8; PAYLOAD_BYTES];
+        assert_eq!(op.encode(&dev, &mut out).unwrap(), Cmd::WritePatternRaw);
+        assert_eq!(out[1], 2, "count");
+        assert_eq!(&out[2..4], &10u16.to_le_bytes());
+        assert_eq!(out[PHASES_OFFSET], 1);
+        assert_eq!(out[INTENSITIES_OFFSET], 0x11);
+        assert_eq!(out[PHASES_OFFSET + PATTERN_RAW_DATA_LEN], 2);
+        assert_eq!(out[INTENSITIES_OFFSET + PATTERN_RAW_DATA_LEN], 0x22);
+    }
+
+    #[test]
+    fn two_indices_must_fit_below_the_last_slot() {
+        let dev = test_device(0);
+        let phases = [vec![Phase::ZERO; dev.num_transducers()]];
+        let slot = (&phases[..], PatternIntensity::default());
+        let op = WritePatternBuffers {
+            bank: PatternBank::B0,
+            index: EMISSION_MAX_INDICES - 1,
+            count: 2,
+            slots: [slot, slot],
+        };
+        let mut out = [0u8; PAYLOAD_BYTES];
+        assert!(matches!(
+            op.encode(&dev, &mut out),
+            Err(Error::InvalidPayload(
+                PayloadError::PatternIndexOutOfRange { .. }
+            ))
         ));
     }
 

@@ -1,6 +1,8 @@
 use crate::frame::PAYLOAD_BYTES;
 use crate::params::{EMISSION_MAX_INDICES, NUM_TRANSDUCERS};
-use crate::payload::{UpdateChunkPayload, WriteFociPayload, WriteModPayload};
+use crate::payload::{
+    UpdateChunkPayload, WriteFociPayload, WriteModPayload, WritePatternCompressedPayload,
+};
 
 pub use crate::params::{EMISSION_SLOT_WORDS, FOCUS_WORDS, MOD_BUFFER_SAMPLES, PWE_TABLE_SIZE};
 
@@ -16,5 +18,19 @@ pub const MOD_WRITE_MAX_DATA_LEN: usize = PAYLOAD_BYTES - core::mem::size_of::<W
 pub const FOCI_WRITE_MAX_DATA_LEN: usize = PAYLOAD_BYTES - core::mem::size_of::<WriteFociPayload>();
 pub const MAX_FOCI_PER_FRAME: usize = FOCI_WRITE_MAX_DATA_LEN / (FOCUS_WORDS * 2);
 pub const PATTERN_RAW_DATA_LEN: usize = 2 * NUM_TRANSDUCERS;
+pub const PATTERN_RAW_MAX_COUNT: usize = 2;
+pub const PATTERN_COMPRESSED_GROUP_BYTES: usize = 2 * NUM_TRANSDUCERS;
+pub const PATTERN_COMPRESSED_MAX_GROUPS: usize = 2;
 pub const UPDATE_CHUNK_MAX_DATA_LEN: usize =
     PAYLOAD_BYTES - core::mem::size_of::<UpdateChunkPayload>();
+
+const _: () = assert!(
+    core::mem::size_of::<WritePatternCompressedPayload>()
+        + PATTERN_COMPRESSED_MAX_GROUPS * PATTERN_COMPRESSED_GROUP_BYTES
+        <= PAYLOAD_BYTES
+);
+const _: () = assert!(
+    core::mem::size_of::<WritePatternCompressedPayload>()
+        + (PATTERN_COMPRESSED_MAX_GROUPS + 1) * PATTERN_COMPRESSED_GROUP_BYTES
+        > PAYLOAD_BYTES
+);

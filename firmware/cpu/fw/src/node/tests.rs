@@ -11,13 +11,13 @@ use autd3_cpu_wire::udp::{
     Status, UNASSIGNED_ID, UnblockReply, UnitInfo, mac, solicited_node, unit_address,
 };
 
-use super::{Node, Received};
+use super::{CommandLayer, Node, Received};
 use crate::net::{
     self, ETH_HEADER, ETHERTYPE_IPV6, Endpoint, ICMPV6_ECHO_REQUEST, ICMPV6_NEIGHBOR_SOLICITATION,
     IPV6_HEADER, Ipv6, MAX_FRAME, Mac, NEXT_HEADER_ICMPV6, Packet, UDP_PAYLOAD_OFFSET,
 };
 use crate::nic::RxMeta;
-use crate::proto::{HOST_TO_DEVICE_BYTES, TxFrame};
+use crate::proto::{Disposition, FRAME_BYTES_MAX, Reply as CmdReply};
 use crate::sim_nic::SimNic;
 
 const HOST_MAC: Mac = [0x3C, 0x7C, 0x3F, 0x11, 0x22, 0x33];
@@ -27,11 +27,31 @@ const HOST_IP: Ipv6 = [
 const HOST_PORT: u16 = 51234;
 const UPSTREAM: u8 = 1;
 
+struct FakeCommands {
+    frames: Vec<(Vec<u8>, u16)>,
+    disposition: Disposition,
+    reply: CmdReply,
+}
+
+impl CommandLayer for FakeCommands {
+    fn recv_frame(&mut self, frame: &[u8], msg_id: u16) -> Disposition {
+        self.frames.push((frame.to_vec(), msg_id));
+        if self.disposition == Disposition::Reply {
+            self.reply = CmdReply::new(frame[0], 0, &[0x5A, 0x5B]);
+        }
+        self.disposition
+    }
+
+    fn reply(&mut self) -> CmdReply {
+        self.reply
+    }
+}
+
 struct Harness {
     node: Node,
     nic: SimNic,
     now_ms: u32,
-    frames: Vec<[u8; HOST_TO_DEVICE_BYTES]>,
+    cmds: FakeCommands,
 }
 
 struct Reply {
@@ -55,7 +75,11 @@ impl Harness {
             node,
             nic,
             now_ms: 0,
-            frames: Vec::new(),
+            cmds: FakeCommands {
+                frames: Vec::new(),
+                disposition: Disposition::Reply,
+                reply: CmdReply::new(0xFF, 0, &[]),
+            },
         }
     }
 
@@ -87,15 +111,8 @@ impl Harness {
 
     fn deliver(&mut self, frame: &[u8]) -> Received {
         let rx = RxMeta { port: UPSTREAM };
-        let frames = &mut self.frames;
         self.node
-            .on_frame(&mut self.nic, self.now_ms, frame, rx, |f| {
-                frames.push(*f);
-                TxFrame {
-                    ack: f[0],
-                    data: 0x5A,
-                }
-            })
+            .on_frame(&mut self.nic, self.now_ms, frame, rx, &mut self.cmds)
     }
 
     fn send(&mut self, dst: Ipv6, kind: Kind, body: &[u8]) -> Received {
@@ -153,11 +170,16 @@ impl Harness {
 }
 
 fn frame_body(seq: u8) -> Vec<u8> {
-    let mut f = vec![0u8; HOST_TO_DEVICE_BYTES];
+    let mut f = vec![0u8; FRAME_BYTES_MAX];
     f[0] = seq;
     f[1] = 0x04;
-    f[HOST_TO_DEVICE_BYTES - 1] = 0xEE;
+    f[FRAME_BYTES_MAX - 1] = 0xEE;
     f
+}
+
+fn parse_frame_reply(body: &[u8]) -> (FrameReply, Vec<u8>) {
+    let (head, data) = FrameReply::read_from_prefix(body).unwrap();
+    (head, data.to_vec())
 }
 
 #[test]
@@ -304,32 +326,131 @@ fn a_frame_reaches_the_command_layer_and_is_answered_at_once() {
         h.send(unit_address(UNASSIGNED_ID), Kind::Frame, &body),
         Received::Nothing
     );
-    assert!(h.frames.is_empty());
+    assert!(h.cmds.frames.is_empty());
     assert!(h.replies().is_empty());
 
     h.assign(1);
     assert_eq!(h.send(ALL_NODES, Kind::Frame, &body), Received::Nothing);
     assert!(h.replies().is_empty());
     assert_eq!(
-        h.send(unit_address(1), Kind::Frame, &body[..100]),
+        h.send(unit_address(1), Kind::Frame, &body[..1]),
         Received::Nothing
     );
     assert!(h.replies().is_empty());
 
     assert_eq!(
         h.send(unit_address(1), Kind::Frame, &body),
-        Received::HostFrame
+        Received::HostMessage
     );
-    assert_eq!(h.frames.len(), 1);
-    assert_eq!(&h.frames[0][..], &body[..]);
+    assert_eq!(h.cmds.frames.len(), 1);
+    assert_eq!(h.cmds.frames[0].0, body);
+    assert_eq!(h.cmds.frames[0].1, 0x4242);
     let r = h.only_reply();
     assert_eq!(r.header, Header::new(Kind::Frame, 0x4242));
-    let reply = FrameReply::read_from_bytes(&r.body).unwrap();
+    let (reply, data) = parse_frame_reply(&r.body);
     assert_eq!(reply.ack, 7);
-    assert_eq!(reply.data, 0x5A);
+    assert_eq!(reply.status, 0);
+    assert_eq!(data, [0x5A, 0x5B]);
     assert_eq!(reply.unit_id, 1);
     assert_eq!(reply.flags, FLAG_ASSIGNED);
     assert_eq!(reply.sys_time.get(), 5_000_000_000);
+}
+
+#[test]
+fn a_short_frame_is_passed_on_without_padding() {
+    let mut h = Harness::new();
+    h.assign(1);
+    let body = [9, 0x04, 1, 2];
+    assert_eq!(
+        h.send(unit_address(1), Kind::Frame, &body),
+        Received::HostMessage
+    );
+    assert_eq!(h.cmds.frames[0].0, body);
+    let (reply, _) = parse_frame_reply(&h.only_reply().body);
+    assert_eq!(reply.ack, 9);
+}
+
+#[test]
+fn a_deferred_frame_is_answered_by_the_completion() {
+    let mut h = Harness::new();
+    h.assign(2);
+    h.cmds.disposition = Disposition::Deferred;
+    assert_eq!(
+        h.request(
+            unit_address(2),
+            PROTOCOL_VERSION,
+            Kind::Frame.as_u8(),
+            0x0101,
+            &frame_body(3)
+        ),
+        Received::HostMessage
+    );
+    assert!(h.replies().is_empty());
+
+    h.node
+        .send_completion(&mut h.nic, 0x0101, &CmdReply::new(3, 0x02, &[]));
+    let r = h.only_reply();
+    assert_eq!(r.header, Header::new(Kind::Frame, 0x0101));
+    assert_eq!(r.port, UPSTREAM);
+    assert_eq!(r.dst_ip, HOST_IP);
+    assert_eq!(r.dst_port, HOST_PORT);
+    assert_eq!(r.src_ip, unit_address(2));
+    let (reply, data) = parse_frame_reply(&r.body);
+    assert_eq!(reply.ack, 3);
+    assert_eq!(reply.status, 0x02);
+    assert!(data.is_empty());
+}
+
+#[test]
+fn a_dropped_frame_gets_no_reply() {
+    let mut h = Harness::new();
+    h.assign(0);
+    h.cmds.disposition = Disposition::Dropped;
+    assert_eq!(
+        h.send(unit_address(0), Kind::Frame, &frame_body(1)),
+        Received::HostMessage
+    );
+    assert!(h.replies().is_empty());
+}
+
+#[test]
+fn a_completion_needs_an_assigned_unit_and_a_host() {
+    let mut h = Harness::new();
+    h.node
+        .send_completion(&mut h.nic, 1, &CmdReply::new(0, 0, &[]));
+    assert!(h.replies().is_empty());
+
+    h.assign(0);
+    h.node
+        .send_completion(&mut h.nic, 1, &CmdReply::new(0, 0, &[]));
+    assert!(h.replies().is_empty());
+}
+
+#[test]
+fn a_heartbeat_is_answered_with_the_current_result() {
+    let mut h = Harness::new();
+    assert_eq!(
+        h.send(unit_address(UNASSIGNED_ID), Kind::Heartbeat, &[]),
+        Received::Nothing
+    );
+    assert!(h.replies().is_empty());
+
+    h.assign(4);
+    assert_eq!(h.send(ALL_NODES, Kind::Heartbeat, &[]), Received::Nothing);
+    assert!(h.replies().is_empty());
+
+    h.cmds.reply = CmdReply::new(0x33, 0, &[1, 2, 3]);
+    assert_eq!(
+        h.send(unit_address(4), Kind::Heartbeat, &[]),
+        Received::HostMessage
+    );
+    assert!(h.cmds.frames.is_empty());
+    let r = h.only_reply();
+    assert_eq!(r.header, Header::new(Kind::Heartbeat, 0x4242));
+    let (reply, data) = parse_frame_reply(&r.body);
+    assert_eq!(reply.ack, 0x33);
+    assert_eq!(data, [1, 2, 3]);
+    assert_eq!(reply.unit_id, 4);
 }
 
 #[test]

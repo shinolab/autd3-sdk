@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 
-use crate::value::{DcSysTime, DcSysTimeError};
+use crate::value::{SysTime, SysTimeError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct DcObservation {
+pub struct ClockObservation {
     pub offset_ns: i64,
     pub samples: u64,
 }
@@ -13,12 +13,12 @@ pub struct DcObservation {
 const FILTER_WINDOW: u64 = 256;
 
 #[derive(Debug, Clone, Default)]
-pub struct DcClock {
-    inner: Arc<DcClockInner>,
+pub struct DeviceClock {
+    inner: Arc<DeviceClockInner>,
 }
 
 #[derive(Debug)]
-struct DcClockInner {
+struct DeviceClockInner {
     offset_ns: AtomicI64,
     prev_max_ns: AtomicI64,
     cur_max_ns: AtomicI64,
@@ -26,7 +26,7 @@ struct DcClockInner {
     host_clock_warned: AtomicBool,
 }
 
-impl Default for DcClockInner {
+impl Default for DeviceClockInner {
     fn default() -> Self {
         Self {
             offset_ns: AtomicI64::new(0),
@@ -38,14 +38,14 @@ impl Default for DcClockInner {
     }
 }
 
-impl DcClock {
+impl DeviceClock {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn observe(&self, bus: DcSysTime) -> Result<(), DcSysTimeError> {
-        match DcSysTime::now() {
+    pub fn observe(&self, bus: SysTime) -> Result<(), SysTimeError> {
+        match SysTime::now() {
             Ok(host) => {
                 self.observe_against(bus, host);
                 Ok(())
@@ -53,7 +53,7 @@ impl DcClock {
             Err(e) => {
                 if !self.inner.host_clock_warned.swap(true, Ordering::Relaxed) {
                     tracing::warn!(
-                        "the host clock is outside the DcSysTime range, so the bus offset cannot be observed: {e}"
+                        "the host clock is outside the SysTime range, so the bus offset cannot be observed: {e}"
                     );
                 }
                 Err(e)
@@ -61,7 +61,7 @@ impl DcClock {
         }
     }
 
-    pub fn observe_against(&self, bus: DcSysTime, host: DcSysTime) {
+    pub fn observe_against(&self, bus: SysTime, host: SysTime) {
         let sample_ns = bus.sys_time().cast_signed() - host.sys_time().cast_signed();
 
         let seen = self.inner.samples.load(Ordering::Relaxed);
@@ -79,9 +79,9 @@ impl DcClock {
     }
 
     #[must_use]
-    pub fn observation(&self) -> Option<DcObservation> {
+    pub fn observation(&self) -> Option<ClockObservation> {
         let samples = self.inner.samples.load(Ordering::Acquire);
-        (samples != 0).then(|| DcObservation {
+        (samples != 0).then(|| ClockObservation {
             offset_ns: self.inner.offset_ns.load(Ordering::Relaxed),
             samples,
         })
@@ -93,12 +93,12 @@ impl DcClock {
     }
 
     #[must_use]
-    pub fn now(&self) -> Option<DcSysTime> {
+    pub fn now(&self) -> Option<SysTime> {
         let offset_ns = self.offset_ns()?;
-        let host = DcSysTime::now().ok()?.sys_time().cast_signed();
+        let host = SysTime::now().ok()?.sys_time().cast_signed();
         u64::try_from(host + offset_ns)
             .ok()
-            .map(DcSysTime::from_nanos)
+            .map(SysTime::from_nanos)
     }
 }
 
@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn an_unobserved_clock_has_no_offset() {
-        let clock = DcClock::new();
+        let clock = DeviceClock::new();
         assert_eq!(clock.observation(), None);
         assert_eq!(clock.offset_ns(), None);
         assert_eq!(clock.now(), None);
@@ -116,27 +116,27 @@ mod tests {
 
     #[test]
     fn observations_are_visible_through_every_clone() {
-        let clock = DcClock::new();
+        let clock = DeviceClock::new();
         let observer = clock.clone();
         clock.observe_against(
-            DcSysTime::from_nanos(1_000_500),
-            DcSysTime::from_nanos(1_000_000),
+            SysTime::from_nanos(1_000_500),
+            SysTime::from_nanos(1_000_000),
         );
         assert_eq!(
             observer.observation(),
-            Some(DcObservation {
+            Some(ClockObservation {
                 offset_ns: 500,
                 samples: 1,
             })
         );
 
         clock.observe_against(
-            DcSysTime::from_nanos(1_000_900),
-            DcSysTime::from_nanos(1_000_000),
+            SysTime::from_nanos(1_000_900),
+            SysTime::from_nanos(1_000_000),
         );
         assert_eq!(
             observer.observation(),
-            Some(DcObservation {
+            Some(ClockObservation {
                 offset_ns: 900,
                 samples: 2,
             })
@@ -145,15 +145,15 @@ mod tests {
 
     #[test]
     fn a_delayed_sample_does_not_drag_the_offset_down() {
-        let clock = DcClock::new();
+        let clock = DeviceClock::new();
         clock.observe_against(
-            DcSysTime::from_nanos(1_001_000),
-            DcSysTime::from_nanos(1_000_000),
+            SysTime::from_nanos(1_001_000),
+            SysTime::from_nanos(1_000_000),
         );
         for _ in 0..FILTER_WINDOW {
             clock.observe_against(
-                DcSysTime::from_nanos(1_000_100),
-                DcSysTime::from_nanos(1_000_000),
+                SysTime::from_nanos(1_000_100),
+                SysTime::from_nanos(1_000_000),
             );
         }
         assert_eq!(clock.offset_ns(), Some(1_000));
@@ -161,15 +161,15 @@ mod tests {
 
     #[test]
     fn the_window_forgets_a_stale_outlier() {
-        let clock = DcClock::new();
+        let clock = DeviceClock::new();
         clock.observe_against(
-            DcSysTime::from_nanos(1_001_000),
-            DcSysTime::from_nanos(1_000_000),
+            SysTime::from_nanos(1_001_000),
+            SysTime::from_nanos(1_000_000),
         );
         for _ in 0..2 * FILTER_WINDOW {
             clock.observe_against(
-                DcSysTime::from_nanos(1_000_100),
-                DcSysTime::from_nanos(1_000_000),
+                SysTime::from_nanos(1_000_100),
+                SysTime::from_nanos(1_000_000),
             );
         }
         assert_eq!(clock.offset_ns(), Some(100));
@@ -177,12 +177,12 @@ mod tests {
 
     #[test]
     fn the_offset_never_drops_out_of_the_filter_between_windows() {
-        let clock = DcClock::new();
+        let clock = DeviceClock::new();
         for i in 0..4 * FILTER_WINDOW {
             let delayed = i % 3 != 0;
             clock.observe_against(
-                DcSysTime::from_nanos(if delayed { 1_000_100 } else { 1_001_000 }),
-                DcSysTime::from_nanos(1_000_000),
+                SysTime::from_nanos(if delayed { 1_000_100 } else { 1_001_000 }),
+                SysTime::from_nanos(1_000_000),
             );
             assert_eq!(clock.offset_ns(), Some(1_000));
         }
@@ -190,11 +190,11 @@ mod tests {
 
     #[test]
     fn now_applies_the_observed_offset() {
-        let clock = DcClock::new();
-        clock.observe_against(DcSysTime::from_nanos(500), DcSysTime::from_nanos(500));
-        let before = DcSysTime::now().unwrap();
+        let clock = DeviceClock::new();
+        clock.observe_against(SysTime::from_nanos(500), SysTime::from_nanos(500));
+        let before = SysTime::now().unwrap();
         let now = clock.now().expect("observed");
-        let after = DcSysTime::now().unwrap();
+        let after = SysTime::now().unwrap();
         assert!(now >= before && now <= after);
     }
 }

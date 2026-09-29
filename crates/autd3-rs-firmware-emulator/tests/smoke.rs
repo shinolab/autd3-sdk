@@ -1,14 +1,16 @@
 use autd3_cpu_fw::params::{VERSION_NUM_MAJOR, VERSION_NUM_MINOR, VERSION_NUM_PATCH};
 use autd3_cpu_fw::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
-use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, RX_FRAME_BYTES, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_cpu_wire::payload::FirmwareInfo;
+use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, FRAME_BYTES_MAX, Seq, TxFrame};
 use autd3_rs_firmware_emulator::{Audit, Device};
+use zerocopy::FromBytes;
 
-const ADDR_ECAT_SYNC_CYCLE_0: u16 = 0x14;
+const ADDR_SYNC_CYCLE_0: u16 = 0x14;
 
 const NUM_TRANSDUCERS: usize = 249;
 
-fn frame(seq: u8, cmd: Cmd) -> [u8; TX_FRAME_BYTES] {
-    let mut buf = [0u8; TX_FRAME_BYTES];
+fn frame(seq: u8, cmd: Cmd) -> [u8; FRAME_BYTES_MAX] {
+    let mut buf = [0u8; FRAME_BYTES_MAX];
     TxFrame::new(Seq::new(seq), cmd).write_to(&mut buf);
     buf
 }
@@ -17,47 +19,28 @@ fn frame(seq: u8, cmd: Cmd) -> [u8; TX_FRAME_BYTES] {
 fn reset_acks_with_sentinel() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     let rx = device.send(&frame(0, Cmd::Reset));
-    assert_eq!(rx.ack, Seq::new(0xFF));
-    assert_eq!(rx.data, 0);
+    assert_eq!(rx.ack, 0xFF);
+    assert_eq!(rx.status, 0);
 }
 
 #[test]
-fn reads_cpu_firmware_version() {
-    let (expected_major, expected_minor, expected_patch) =
-        (FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH);
-    let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset));
-
-    let major = device.send(&frame(0, Cmd::ReadCpuFwVersionMajor));
-    assert_eq!(major.ack, Seq::new(0));
-    assert_eq!(major.data, expected_major);
-
-    let minor = device.send(&frame(1, Cmd::ReadCpuFwVersionMinor));
-    assert_eq!(minor.ack, Seq::new(1));
-    assert_eq!(minor.data, expected_minor);
-
-    let patch = device.send(&frame(2, Cmd::ReadCpuFwVersionPatch));
-    assert_eq!(patch.ack, Seq::new(2));
-    assert_eq!(patch.data, expected_patch);
-}
-
-#[test]
-fn reads_fpga_firmware_version() {
+fn reads_the_firmware_info_in_one_frame() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     let (major, minor, patch) = device.fpga().fpga_version();
     device.send(&frame(0, Cmd::Reset));
 
-    let rx_major = device.send(&frame(0, Cmd::ReadFpgaFwVersionMajor));
-    assert_eq!(rx_major.ack, Seq::new(0));
-    assert_eq!(u16::from(rx_major.data), major);
-
-    let rx_minor = device.send(&frame(1, Cmd::ReadFpgaFwVersionMinor));
-    assert_eq!(rx_minor.ack, Seq::new(1));
-    assert_eq!(u16::from(rx_minor.data), minor);
-
-    let rx_patch = device.send(&frame(2, Cmd::ReadFpgaFwVersionPatch));
-    assert_eq!(rx_patch.ack, Seq::new(2));
-    assert_eq!(u16::from(rx_patch.data), patch);
+    let rx = device.send(&frame(0, Cmd::ReadFirmwareInfo));
+    assert_eq!(rx.ack, 0);
+    assert_eq!(rx.status, 0);
+    let info = FirmwareInfo::read_from_bytes(rx.data()).unwrap();
+    assert_eq!(
+        info.cpu_version,
+        [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH]
+    );
+    assert_eq!(
+        info.fpga_version.map(u16::from),
+        [major & 0xFF, minor, patch]
+    );
 }
 
 #[test]
@@ -78,33 +61,14 @@ fn init_enables_all_outputs_by_default() {
 }
 
 #[test]
-fn synchronize_reads_sync0_cycle_from_esc_register() {
+fn synchronize_writes_the_fixed_sync_cycle() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset));
 
     let rx = device.send(&frame(0, Cmd::Synchronize));
-    assert_eq!(rx.ack, Seq::new(0));
-    assert_eq!(rx.data, DeviceErrorCode::None as u8);
-    assert_eq!(device.fpga().controller_reg(ADDR_ECAT_SYNC_CYCLE_0), 20480);
-
-    device.fpga_mut().set_sync0_cycle_ns(2_000_000);
-    let rx = device.send(&frame(1, Cmd::Synchronize));
-    assert_eq!(rx.data, DeviceErrorCode::None as u8);
-    assert_eq!(device.fpga().controller_reg(ADDR_ECAT_SYNC_CYCLE_0), 40960);
-}
-
-#[test]
-fn synchronize_rejects_invalid_sync0_cycle() {
-    let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset));
-
-    device.fpga_mut().set_sync0_cycle_ns(0);
-    let rx = device.send(&frame(0, Cmd::Synchronize));
-    assert_eq!(rx.data, DeviceErrorCode::InvalidSync0Cycle as u8);
-
-    device.fpga_mut().set_sync0_cycle_ns(750_000);
-    let rx = device.send(&frame(1, Cmd::Synchronize));
-    assert_eq!(rx.data, DeviceErrorCode::InvalidSync0Cycle as u8);
+    assert_eq!(rx.ack, 0);
+    assert_eq!(rx.status, DeviceErrorCode::None as u8);
+    assert_eq!(device.fpga().controller_reg(ADDR_SYNC_CYCLE_0), 20480);
 }
 
 #[test]
@@ -112,9 +76,13 @@ fn audit_drives_multiple_independent_devices() {
     let mut audit = Audit::new([NUM_TRANSDUCERS, NUM_TRANSDUCERS, NUM_TRANSDUCERS]);
     assert_eq!(audit.num_devices(), 3);
 
-    let tx = vec![frame(0, Cmd::Reset); 3];
-    let mut rx = vec![[0u8; RX_FRAME_BYTES]; 3];
-    let rx_valid = audit.cycle(&tx, &mut rx).rx_valid();
-    assert!(rx_valid);
-    assert!(rx.iter().all(|r| r == &[0xFF, 0x00]));
+    let tx = frame(0, Cmd::Reset);
+    let replies = audit.send(&[&tx, &tx, &tx], 7);
+    assert_eq!(replies.len(), 3);
+    assert!(
+        replies
+            .iter()
+            .enumerate()
+            .all(|(i, r)| r.device == i && r.msg_id == 7 && r.reply.ack == 0xFF)
+    );
 }

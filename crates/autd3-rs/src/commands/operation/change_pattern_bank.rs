@@ -19,8 +19,8 @@ pub struct ChangePatternBank {
 impl crate::sealed::Sealed for ChangePatternBank {}
 
 impl Operation for ChangePatternBank {
-    fn apply_dc_offset(&mut self, offset_ns: i64) {
-        self.transition_mode = self.transition_mode.with_dc_offset(offset_ns);
+    fn apply_clock_offset(&mut self, offset_ns: i64) {
+        self.transition_mode = self.transition_mode.with_clock_offset(offset_ns);
     }
 
     fn distribution(&self) -> Distribution {
@@ -76,12 +76,12 @@ mod tests {
 
     #[test]
     fn change_pattern_bank_encodes_transition_value() {
-        use crate::value::DcSysTime;
+        use crate::value::SysTime;
 
         let (_cmd, payload) = encode(ChangePatternBank {
             bank: PatternBank::B0,
             transition_mode: TransitionMode::SysTime {
-                time: DcSysTime::from_nanos(0x0123_4567_89AB_CDEF),
+                time: SysTime::from_nanos(0x0123_4567_89AB_CDEF),
                 margin: None,
             },
         });
@@ -108,12 +108,12 @@ mod tests {
     fn change_pattern_bank_encodes_sys_time_margin() {
         use core::time::Duration;
 
-        use crate::value::DcSysTime;
+        use crate::value::SysTime;
 
         let (_cmd, payload) = encode(ChangePatternBank {
             bank: PatternBank::B0,
             transition_mode: TransitionMode::SysTime {
-                time: DcSysTime::ZERO,
+                time: SysTime::ZERO,
                 margin: Some(Duration::from_millis(1)),
             },
         });
@@ -122,7 +122,7 @@ mod tests {
         let (_cmd, payload) = encode(ChangePatternBank {
             bank: PatternBank::B0,
             transition_mode: TransitionMode::SysTime {
-                time: DcSysTime::ZERO,
+                time: SysTime::ZERO,
                 margin: None,
             },
         });
@@ -133,13 +133,13 @@ mod tests {
     fn change_pattern_bank_rejects_margin_beyond_u32_nanos() {
         use core::time::Duration;
 
-        use crate::value::DcSysTime;
+        use crate::value::SysTime;
 
         let mut out = [0u8; PAYLOAD_BYTES];
         let err = ChangePatternBank {
             bank: PatternBank::B0,
             transition_mode: TransitionMode::SysTime {
-                time: DcSysTime::ZERO,
+                time: SysTime::ZERO,
                 margin: Some(Duration::from_secs(5)),
             },
         }

@@ -23,14 +23,14 @@ use autd3_rs::commands::{
 use autd3_rs::rt::Executor;
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
-    ControlPoint, ControlPoints, DcSysTime, GpioIn, Intensity, LoopBehavior, ModulationBank,
-    Nearest, PatternBank, Phase, PulseWidth, SamplingConfig, TransitionMode,
+    ControlPoint, ControlPoints, GpioIn, Intensity, LoopBehavior, ModulationBank, Nearest,
+    PatternBank, Phase, PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
     ClientConfig, CoreId, DatagramBuilder as CoreDatagramBuilder, Frames, Geometry, Length, Point3,
     Response, UnitVector3, Vector3, Velocity,
 };
-use autd3_rs::{DeviceState, Telemetry};
+use autd3_rs::{DeviceState, TelemetryCounters};
 
 pub(crate) fn executor() -> &'static Executor {
     static EXECUTOR: OnceLock<Executor> = OnceLock::new();
@@ -63,24 +63,18 @@ fn to_gpio_in(v: u8) -> Option<GpioIn> {
     }
 }
 
-fn to_telemetry(counter: u8) -> Option<Telemetry> {
-    match counter {
-        0x00 => Some(Telemetry::FifoDrop),
-        0x01 => Some(Telemetry::Dedup),
-        0x02 => Some(Telemetry::SeqMismatch),
-        0x03 => Some(Telemetry::DispatchError),
-        0x04 => Some(Telemetry::Processed),
-        0x05 => Some(Telemetry::Failsafe),
-        0x06 => Some(Telemetry::SyncResync),
-        _ => None,
-    }
+fn flatten_telemetry(counters: &[TelemetryCounters]) -> Vec<u32> {
+    counters
+        .iter()
+        .flat_map(|c| c.as_array().iter().copied())
+        .collect()
 }
 
 pub(crate) fn to_transition_mode(mode: u8, value: u64, margin_ns: u32) -> Option<TransitionMode> {
     match mode {
         0x00 => Some(TransitionMode::SyncIdx),
         0x01 => Some(TransitionMode::SysTime {
-            time: DcSysTime::from_nanos(value),
+            time: SysTime::from_nanos(value),
             margin: (margin_ns != 0).then(|| Duration::from_nanos(u64::from(margin_ns))),
         }),
         #[allow(clippy::cast_possible_truncation)]
@@ -111,7 +105,7 @@ fn to_gpio_out(g: &Autd3GpioOut) -> Option<GpioOut> {
         7 => Some(GpioOut::PatternBank),
         8 => Some(GpioOut::PatternIdx(g.value as u16)),
         9 => Some(GpioOut::IsStmMode),
-        10 => Some(GpioOut::SysTimeEq(DcSysTime::from_nanos(g.value))),
+        10 => Some(GpioOut::SysTimeEq(SysTime::from_nanos(g.value))),
         11 => Some(GpioOut::SyncDiff),
         12 => Some(GpioOut::PwmOut(g.value as u8)),
         13 => Some(GpioOut::Direct(g.value != 0)),
@@ -406,12 +400,21 @@ client_config_setter!(
     require_supported_firmware,
     bool
 );
-client_config_setter!(
-    autd3_client_config_set_timeout_cycles,
-    timeout_cycles,
-    u32,
-    NonZeroU32
-);
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_set_ack_timeout_ns(
+    config: *mut ClientConfig,
+    ns: u64,
+) -> i32 {
+    let Some(config) = (unsafe { handle_mut(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    if ns == 0 {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    }
+    config.ack_timeout = Duration::from_nanos(ns);
+    AUTD3_OK
+}
+
 client_config_setter!(
     autd3_client_config_set_max_inflight,
     max_inflight,
@@ -421,12 +424,6 @@ client_config_setter!(
 client_config_setter!(
     autd3_client_config_set_max_resync_rounds,
     max_resync_rounds,
-    u32,
-    NonZeroU32
-);
-client_config_setter!(
-    autd3_client_config_set_reset_resend_cycles,
-    reset_resend_cycles,
     u32,
     NonZeroU32
 );
@@ -810,7 +807,7 @@ pub unsafe extern "C" fn autd3_op_write_pattern_compressed(
     patterns: *const *const PhaseBuffer,
     num_patterns: usize,
 ) -> *mut Pending {
-    if num_patterns == 0 {
+    if num_patterns == 0 || num_patterns > PatternCompression::PhaseHalf.per_frame() {
         return std::ptr::null_mut();
     }
     let (Some(bank), Some(format)) = (to_pattern_bank(bank), to_pattern_compression(format)) else {
@@ -1406,20 +1403,14 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             format,
             intensity,
             patterns,
-        } => {
-            let mut arr: [Option<&[Vec<Phase>]>; 4] = [None; 4];
-            for (slot, buf) in arr.iter_mut().zip(patterns.iter()) {
-                *slot = Some(buf.as_slice());
-            }
-            WritePatternCompressed {
-                bank: *bank,
-                index: usize::try_from(*index).unwrap_or(usize::MAX),
-                format: *format,
-                intensity: *intensity,
-                patterns: arr,
-            }
-            .boxed()
+        } => WritePatternCompressed {
+            bank: *bank,
+            index: usize::try_from(*index).unwrap_or(usize::MAX),
+            format: *format,
+            intensity: *intensity,
+            patterns: std::array::from_fn(|i| patterns.get(i).map(Vec::as_slice)),
         }
+        .boxed(),
         Pending::FociStm {
             config,
             points,
@@ -1545,9 +1536,10 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
         return std::ptr::null_mut();
     };
 
-    let dc_offset_ns =
-        unsafe { handle_ref(client) }.map_or(0, |client: &ClientHandle| client.0.dc_offset_ns());
-    let mut core = CoreDatagramBuilder::with_dc_offset(Arc::clone(&builder.geometry), dc_offset_ns);
+    let clock_offset_ns =
+        unsafe { handle_ref(client) }.map_or(0, |client: &ClientHandle| client.0.clock_offset_ns());
+    let mut core =
+        CoreDatagramBuilder::with_clock_offset(Arc::clone(&builder.geometry), clock_offset_ns);
     for pending in &builder.pending {
         match pending {
             Pending::Pattern {
@@ -1607,16 +1599,12 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 intensity,
                 patterns,
             } => {
-                let mut arr: [Option<&[Vec<Phase>]>; 4] = [None; 4];
-                for (slot, buf) in arr.iter_mut().zip(patterns.iter()) {
-                    *slot = Some(buf.as_slice());
-                }
                 core.push(WritePatternCompressed {
                     bank: *bank,
                     index: usize::try_from(*index).unwrap_or(usize::MAX),
                     format: *format,
                     intensity: *intensity,
-                    patterns: arr,
+                    patterns: std::array::from_fn(|i| patterns.get(i).map(Vec::as_slice)),
                 });
             }
             Pending::ConfigPattern {
@@ -1812,9 +1800,10 @@ pub struct StringArray(Vec<CString>);
 
 pub struct ByteArray(Vec<u8>);
 
+pub struct U32Array(Vec<u32>);
+
 pub struct DeviceStatus {
     devices: Vec<DeviceState>,
-    recoveries: u64,
 }
 
 pub(crate) fn to_cstrings(values: Vec<String>) -> Vec<CString> {
@@ -1942,7 +1931,7 @@ pub unsafe extern "C" fn autd3_response_token_await(
     let fut = token.0.0;
     executor().spawn(async move {
         match fut.await {
-            Ok(response) => ctx.ok(into_handle(ByteArray(response.data().to_vec())).cast()),
+            Ok(response) => ctx.ok(into_handle(ByteArray(response.status().to_vec())).cast()),
             Err(e) => ctx.err_of(&e),
         }
     });
@@ -1961,7 +1950,7 @@ pub unsafe extern "C" fn autd3_response_check(
     out_err_len: usize,
 ) -> bool {
     let response = match unsafe { slice_ref(data, len) } {
-        Some(data) if !data.is_empty() => Response::from_slice(data),
+        Some(data) if !data.is_empty() => Response::from_status(data),
         _ => Response::default(),
     };
     match response.check() {
@@ -2022,7 +2011,6 @@ pub unsafe extern "C" fn autd3_client_read_fpga_state(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_read_telemetry(
     client: *const ClientHandle,
-    counter: u8,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
@@ -2033,15 +2021,11 @@ pub unsafe extern "C" fn autd3_client_read_telemetry(
         ctx.err("null client");
         return;
     };
-    let Some(counter) = to_telemetry(counter) else {
-        ctx.err("unknown telemetry counter");
-        return;
-    };
 
-    let fut = client.0.read_telemetry(counter);
+    let fut = client.0.read_telemetry();
     executor().spawn(async move {
         match fut.await {
-            Ok(values) => ctx.ok(into_handle(ByteArray(values)).cast()),
+            Ok(counters) => ctx.ok(into_handle(U32Array(flatten_telemetry(&counters))).cast()),
             Err(e) => ctx.err_of(&e),
         }
     });
@@ -2094,6 +2078,29 @@ pub unsafe extern "C" fn autd3_byte_array_free(array: *mut ByteArray) {
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_u32_array_len(array: *const U32Array) -> usize {
+    let Some(array) = (unsafe { handle_ref(array) }) else {
+        return 0;
+    };
+
+    array.0.len()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_u32_array_data(array: *const U32Array) -> *const u32 {
+    let Some(array) = (unsafe { handle_ref(array) }) else {
+        return std::ptr::null();
+    };
+
+    array.0.as_ptr()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_u32_array_free(array: *mut U32Array) {
+    unsafe { drop_handle(array) }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_checker(client: *const ClientHandle) -> *mut CheckerHandle {
     let Some(client) = (unsafe { handle_ref(client) }) else {
         return std::ptr::null_mut();
@@ -2116,7 +2123,6 @@ pub unsafe extern "C" fn autd3_checker_check(
     match checker.0.check() {
         Ok(status) => into_handle(DeviceStatus {
             devices: status.devices,
-            recoveries: status.recoveries,
         }),
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
@@ -2208,15 +2214,6 @@ pub unsafe extern "C" fn autd3_string_array_free(array: *mut StringArray) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_device_status_recoveries(status: *const DeviceStatus) -> u64 {
-    let Some(status) = (unsafe { handle_ref(status) }) else {
-        return 0;
-    };
-
-    status.recoveries
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_device_status_num_devices(status: *const DeviceStatus) -> usize {
     let Some(status) = (unsafe { handle_ref(status) }) else {
         return 0;
@@ -2230,7 +2227,6 @@ pub unsafe extern "C" fn autd3_device_status_device_state(
     status: *const DeviceStatus,
     index: usize,
     out_kind: *mut u8,
-    out_bits: *mut u8,
 ) -> bool {
     let Some(status) = (unsafe { handle_ref(status) }) else {
         return false;
@@ -2239,15 +2235,15 @@ pub unsafe extern "C" fn autd3_device_status_device_state(
     let Some(state) = status.devices.get(index) else {
         return false;
     };
-    let (kind, bits) = match state {
-        DeviceState::Op => (0, 0),
-        DeviceState::SafeOp => (1, 0),
-        DeviceState::SafeOpError => (2, 0),
-        DeviceState::Lost => (3, 0),
-        DeviceState::Other(bits) => (4, *bits),
-    };
+    unsafe { write_out(out_kind, device_state_code(*state)) == AUTD3_OK }
+}
 
-    unsafe { write_out(out_kind, kind) == AUTD3_OK && write_out(out_bits, bits) == AUTD3_OK }
+fn device_state_code(state: DeviceState) -> u8 {
+    match state {
+        DeviceState::Ready => 0,
+        DeviceState::Syncing => 1,
+        _ => 2,
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -2269,11 +2265,10 @@ mod tests {
         let config = unsafe { take_handle(handle) }.unwrap();
         let expected = ClientConfig::default();
 
-        assert_eq!(expected.timeout_cycles, config.timeout_cycles);
+        assert_eq!(expected.ack_timeout, config.ack_timeout);
         assert_eq!(expected.max_inflight, config.max_inflight);
         assert_eq!(expected.max_resync_rounds, config.max_resync_rounds);
         assert_eq!(expected.low_latency, config.low_latency);
-        assert_eq!(expected.reset_resend_cycles, config.reset_resend_cycles);
         assert_eq!(expected.rt_priority, config.rt_priority);
         assert_eq!(expected.rt_policy, config.rt_policy);
         assert_eq!(expected.rt_affinity, config.rt_affinity);
@@ -2323,7 +2318,7 @@ mod tests {
     fn a_zero_nonzero_setter_argument_is_rejected() {
         let handle = autd3_client_config_new();
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_config_set_timeout_cycles(handle, 0)
+            autd3_client_config_set_ack_timeout_ns(handle, 0)
         });
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_client_config_set_max_inflight(handle, 0)
@@ -2336,7 +2331,6 @@ mod tests {
         assert!(to_pattern_bank(2).is_none());
         assert!(to_modulation_bank(2).is_none());
         assert!(to_gpio_in(4).is_none());
-        assert!(to_telemetry(0x07).is_none());
         assert!(to_pattern_stm_mode(3).is_none());
         assert!(to_pattern_compression(0).is_none());
         assert!(to_transition_mode(0x03, 0, 0).is_none());
@@ -2344,11 +2338,24 @@ mod tests {
     }
 
     #[test]
-    fn every_telemetry_counter_round_trips() {
-        assert_eq!(Some(Telemetry::SyncResync), to_telemetry(0x06));
-        for counter in 0x00..=0x06u8 {
-            assert!(to_telemetry(counter).is_some());
-        }
+    fn telemetry_is_flattened_device_major_in_id_order() {
+        let first = TelemetryCounters::new([1, 2, 3, 4, 5, 6, 7]);
+        let second = TelemetryCounters::new([8, 9, 10, 11, 12, 13, 14]);
+        assert_eq!(
+            flatten_telemetry(&[first, second]),
+            (1..=14).collect::<Vec<u32>>()
+        );
+        assert_eq!(
+            first.get(autd3_rs::Telemetry::SyncResync),
+            flatten_telemetry(&[first])[usize::from(autd3_rs::Telemetry::SyncResync.as_u8())]
+        );
+    }
+
+    #[test]
+    fn device_states_have_stable_codes() {
+        assert_eq!(device_state_code(DeviceState::Ready), 0);
+        assert_eq!(device_state_code(DeviceState::Syncing), 1);
+        assert_eq!(device_state_code(DeviceState::Lost), 2);
     }
 
     #[test]

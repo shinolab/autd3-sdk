@@ -1,9 +1,9 @@
 use core::cell::Cell;
-use core::sync::atomic::{AtomicU8, AtomicU16, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
-use zerocopy::FromBytes;
+use zerocopy::IntoBytes;
 
-pub use autd3_cpu_wire::payload::ReadTelemetryPayload;
+use autd3_cpu_wire::payload::FirmwareInfo;
 
 use crate::cmd;
 use crate::fifo::{FIFO_DEPTH, Fifo};
@@ -14,8 +14,8 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{
-    AL_STATUS_CODE_SM_WATCHDOG, AL_STATUS_CODE_SYNC_ERROR, Cmd, Error, FAILSAFE_TICKS,
-    HOST_TO_DEVICE_BYTES, Mode, RxFrame, Telemetry, TxFrame,
+    Cmd, Disposition, Drained, Error, FAILSAFE_TIMEOUT_MS, Mode, REPLY_DATA_BYTES_MAX, Reply,
+    RxFrame, Telemetry,
 };
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
@@ -25,18 +25,56 @@ pub struct Cpu {
     last_cmd: AtomicU8,
     slots: [Cell<RxFrame>; FIFO_DEPTH as usize],
     fifo: Fifo,
-    telemetry: [AtomicU8; Telemetry::CPU_COUNTER_COUNT],
-    al_err_ticks: AtomicU16,
+    telemetry: [AtomicU32; Telemetry::CPU_COUNTER_COUNT],
+    failsafe_fired: AtomicBool,
     expected_seq: AtomicU8,
     error_detail: Cell<Option<Error>>,
     pub(crate) silencer: cmd::silencer::SilencerGuard,
     pub(crate) update: cmd::update::UpdateSession,
     pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
-    tx: AtomicU16,
+    reply_meta: AtomicU32,
+    reply_data: [[AtomicU32; REPLY_WORDS]; 2],
 }
 
-fn pack_tx(ack: u8, data: u8) -> u16 {
-    u16::from(ack) | (u16::from(data) << 8)
+const REPLY_WORDS: usize = REPLY_DATA_BYTES_MAX / 4;
+
+const _: () = assert!(REPLY_DATA_BYTES_MAX.is_multiple_of(4));
+const _: () = assert!(FIFO_DEPTH as usize > autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES);
+
+fn pack_meta(ack: u8, status: u8, len: u8, bank: usize) -> u32 {
+    u32::from(ack) | (u32::from(status) << 8) | (u32::from(len) << 16) | ((bank as u32) << 24)
+}
+
+type Outcome = Result<ReplyData, Error>;
+
+pub(crate) struct ReplyData {
+    len: u8,
+    bytes: [u8; REPLY_DATA_BYTES_MAX],
+}
+
+impl ReplyData {
+    pub(crate) const EMPTY: Self = Self {
+        len: 0,
+        bytes: [0; REPLY_DATA_BYTES_MAX],
+    };
+
+    pub(crate) fn from_slice(data: &[u8]) -> Self {
+        let len = data.len().min(REPLY_DATA_BYTES_MAX);
+        let mut bytes = [0; REPLY_DATA_BYTES_MAX];
+        bytes[..len].copy_from_slice(&data[..len]);
+        Self {
+            len: len as u8,
+            bytes,
+        }
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        &self.bytes[..usize::from(self.len)]
+    }
+}
+
+fn empty(result: Result<(), Error>) -> Outcome {
+    result.map(|()| ReplyData::EMPTY)
 }
 
 impl Default for Cpu {
@@ -55,14 +93,15 @@ impl Cpu {
             last_cmd: AtomicU8::new(0xFF),
             slots: [const { Cell::new(RxFrame::ZERO) }; FIFO_DEPTH as usize],
             fifo: Fifo::new(),
-            telemetry: [const { AtomicU8::new(0) }; Telemetry::CPU_COUNTER_COUNT],
-            al_err_ticks: AtomicU16::new(0),
+            telemetry: [const { AtomicU32::new(0) }; Telemetry::CPU_COUNTER_COUNT],
+            failsafe_fired: AtomicBool::new(false),
             expected_seq: AtomicU8::new(0),
             error_detail: Cell::new(None),
             silencer: cmd::silencer::SilencerGuard::new(),
             update: cmd::update::UpdateSession::new(),
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
-            tx: AtomicU16::new(0),
+            reply_meta: AtomicU32::new(0),
+            reply_data: [const { [const { AtomicU32::new(0) }; REPLY_WORDS] }; 2],
         }
     }
 }
@@ -79,7 +118,7 @@ impl Cpu {
         self.update.init();
         self.fpga_update.init();
         self.reset_telemetry();
-        self.set_tx(0xFF, 0);
+        self.set_reply(0xFF, 0, &[]);
         self.last_seq.store(0xFF, Ordering::Relaxed);
         self.last_cmd.store(0xFF, Ordering::Relaxed);
         self.fifo.reset();
@@ -109,7 +148,7 @@ impl Cpu {
         for counter in &self.telemetry {
             counter.store(0, Ordering::Relaxed);
         }
-        self.al_err_ticks.store(0, Ordering::Relaxed);
+        self.failsafe_fired.store(false, Ordering::Relaxed);
     }
 
     fn bump(&self, id: Telemetry) {
@@ -119,7 +158,7 @@ impl Cpu {
     }
 
     #[must_use]
-    pub fn telemetry(&self, id: Telemetry) -> u8 {
+    pub fn telemetry(&self, id: Telemetry) -> u32 {
         self.telemetry
             .get(id as usize)
             .map_or(0, |counter| counter.load(Ordering::Relaxed))
@@ -128,31 +167,29 @@ impl Cpu {
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
         self.update_tick(port);
         self.fpga_update_tick(port);
-        let code = port.al_status_code();
-        if code != AL_STATUS_CODE_SYNC_ERROR && code != AL_STATUS_CODE_SM_WATCHDOG {
-            self.al_err_ticks.store(0, Ordering::Relaxed);
+        let silent = port
+            .host_idle_ms()
+            .is_some_and(|ms| ms >= FAILSAFE_TIMEOUT_MS);
+        if !silent {
+            self.failsafe_fired.store(false, Ordering::Relaxed);
             return;
         }
-        let update = self
-            .al_err_ticks
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |t| {
-                Some(t.saturating_add(1))
-            });
-        let (Ok(prev) | Err(prev)) = update;
-        let ticks = prev.saturating_add(1);
-        if ticks == FAILSAFE_TICKS {
+        if !self.failsafe_fired.swap(true, Ordering::Relaxed) {
             cmd::failsafe::mute(port);
             self.bump(Telemetry::Failsafe);
         }
     }
 
     #[must_use]
-    pub fn tx(&self) -> TxFrame {
-        let packed = self.tx.load(Ordering::Relaxed);
-        TxFrame {
-            ack: (packed & 0xFF) as u8,
-            data: (packed >> 8) as u8,
+    pub fn reply(&self) -> Reply {
+        let meta = self.reply_meta.load(Ordering::Acquire);
+        let len = usize::from((meta >> 16) as u8).min(REPLY_DATA_BYTES_MAX);
+        let bank = (meta >> 24) as usize & 1;
+        let mut data = [0u8; REPLY_DATA_BYTES_MAX];
+        for (chunk, word) in data.chunks_mut(4).zip(&self.reply_data[bank]) {
+            chunk.copy_from_slice(&word.load(Ordering::Relaxed).to_le_bytes());
         }
+        Reply::new(meta as u8, (meta >> 8) as u8, &data[..len])
     }
 
     #[cfg(all(test, not(loom)))]
@@ -174,14 +211,15 @@ impl Cpu {
         self.mode.store(mode as u8, Ordering::Relaxed);
     }
 
-    pub fn recv_frame<P: Port>(&self, port: &mut P, frame: &[u8; HOST_TO_DEVICE_BYTES]) {
-        let seq = frame[0];
-        let raw_cmd = frame[1];
+    pub fn recv_frame<P: Port>(&self, port: &mut P, frame: &[u8], msg_id: u16) -> Disposition {
+        let (Some(&seq), Some(&raw_cmd)) = (frame.first(), frame.get(1)) else {
+            return Disposition::Dropped;
+        };
         if seq == self.last_seq.load(Ordering::Relaxed)
             && raw_cmd == self.last_cmd.load(Ordering::Relaxed)
         {
             self.bump(Telemetry::Dedup);
-            return;
+            return Disposition::Reply;
         }
 
         let head = self.fifo.head();
@@ -197,23 +235,24 @@ impl Cpu {
         let tail = self.fifo.tail_acquire();
         let inline_ok = preempt || (self.mode() == Mode::LowLatency && tail == head && !deferred);
         if inline_ok {
-            self.handle_frame(port, &RxFrame::from_frame(frame));
+            self.handle_frame(port, &RxFrame::from_frame(frame, msg_id));
             self.last_seq.store(seq, Ordering::Relaxed);
             self.last_cmd.store(raw_cmd, Ordering::Relaxed);
-            return;
+            return Disposition::Reply;
         }
 
         if Fifo::is_full(head, tail) {
             self.bump(Telemetry::FifoDrop);
-            return;
+            return Disposition::Dropped;
         }
-        self.slots[Fifo::slot(head)].set(RxFrame::from_frame(frame));
+        self.slots[Fifo::slot(head)].set(RxFrame::from_frame(frame, msg_id));
         self.fifo.publish(head);
         self.last_seq.store(seq, Ordering::Relaxed);
         self.last_cmd.store(raw_cmd, Ordering::Relaxed);
+        Disposition::Deferred
     }
 
-    pub fn process_one<P: Port>(&self, port: &mut P) -> bool {
+    pub fn process_one<P: Port>(&self, port: &mut P) -> Drained {
         let flush_gen = self.fifo.begin_drain();
         self.drain_step(port, flush_gen)
     }
@@ -223,30 +262,53 @@ impl Cpu {
         self.fifo.begin_drain()
     }
 
-    pub(crate) fn drain_step<P: Port>(&self, port: &mut P, flush_gen: u16) -> bool {
+    pub(crate) fn drain_step<P: Port>(&self, port: &mut P, flush_gen: u16) -> Drained {
         let Some(tail) = self.fifo.next() else {
-            return false;
+            return Drained::Empty;
         };
         let in_frame = self.slots[Fifo::slot(tail)].get();
         self.handle_frame(port, &in_frame);
-        if self.fifo.is_before_flush(flush_gen, tail) {
+        let flushed = self.fifo.is_before_flush(flush_gen, tail);
+        if flushed {
             self.apply_preempt();
         }
         self.fifo.commit(tail);
-        true
+        if flushed {
+            Drained::Flushed
+        } else {
+            Drained::Completed {
+                msg_id: in_frame.msg_id,
+            }
+        }
     }
 
     pub fn process_pending<P: Port>(&self, port: &mut P) {
-        while self.process_one(port) {}
+        while self.process_one(port) != Drained::Empty {}
     }
 
     fn apply_preempt(&self) {
         self.expected_seq.store(0, Ordering::Relaxed);
-        self.set_tx(0xFF, 0);
+        self.set_reply(0xFF, 0, &[]);
     }
 
-    fn set_tx(&self, ack: u8, data: u8) {
-        self.tx.store(pack_tx(ack, data), Ordering::Relaxed);
+    fn set_reply(&self, ack: u8, status: u8, data: &[u8]) {
+        let len = data.len().min(REPLY_DATA_BYTES_MAX);
+        let current = self.reply_meta.load(Ordering::Relaxed);
+        let bank = ((current >> 24) as usize & 1) ^ 1;
+        let mut padded = [0u8; REPLY_DATA_BYTES_MAX];
+        padded[..len].copy_from_slice(&data[..len]);
+        for (chunk, word) in padded.chunks(4).zip(&self.reply_data[bank]) {
+            word.store(
+                u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]),
+                Ordering::Relaxed,
+            );
+        }
+        let _ = self.reply_meta.compare_exchange(
+            current,
+            pack_meta(ack, status, len as u8, bank),
+            Ordering::Release,
+            Ordering::Relaxed,
+        );
     }
 
     fn handle_frame<P: Port>(&self, port: &mut P, in_frame: &RxFrame) {
@@ -258,66 +320,81 @@ impl Cpu {
         if in_frame.seq == self.expected_seq.load(Ordering::Relaxed) {
             self.expected_seq
                 .store(in_frame.seq.wrapping_add(1), Ordering::Relaxed);
-            let data = match cmd {
+            let outcome = match cmd {
                 Some(cmd) => self.dispatch(port, cmd, &in_frame.payload),
-                None => self.latch_error(Error::UnknownCmd),
+                None => Err(Error::UnknownCmd),
             };
-            self.set_tx(in_frame.seq, data);
+            match outcome {
+                Ok(data) => self.set_reply(in_frame.seq, 0, data.as_slice()),
+                Err(err) => {
+                    self.latch_error(err);
+                    self.set_reply(in_frame.seq, err as u8, &[]);
+                }
+            }
             self.bump(Telemetry::Processed);
         } else {
             self.bump(Telemetry::SeqMismatch);
         }
     }
 
-    fn latch_error(&self, err: Error) -> u8 {
+    fn latch_error(&self, err: Error) {
         self.error_detail.set(Some(err));
         self.bump(Telemetry::DispatchError);
-        err as u8
     }
 
-    fn read_telemetry<P: Port>(&self, port: &mut P, payload: &[u8]) -> u8 {
-        let Ok((p, _)) = ReadTelemetryPayload::ref_from_prefix(payload) else {
-            return self.latch_error(Error::InvalidPayload);
-        };
-        match Telemetry::from_u8(p.counter_id) {
-            Some(Telemetry::SyncResync) => {
-                (fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_FPGA_STATE) >> 8) as u8
-            }
-            Some(id) => self.telemetry(id),
-            None => self.latch_error(Error::InvalidPayload),
+    fn read_telemetry<P: Port>(&self, port: &mut P) -> ReplyData {
+        let mut bytes = [0u8; Telemetry::REPLY_BYTES];
+        for (chunk, id) in bytes
+            .chunks_mut(Telemetry::COUNTER_BYTES)
+            .zip(Telemetry::ALL)
+        {
+            let value = match id {
+                Telemetry::SyncResync => {
+                    u32::from(fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_FPGA_STATE) >> 8)
+                }
+                id => self.telemetry(*id),
+            };
+            chunk.copy_from_slice(&value.to_le_bytes());
         }
+        ReplyData::from_slice(&bytes)
     }
 
-    fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> u8 {
+    fn read_firmware_info<P: Port>(port: &mut P) -> ReplyData {
+        let major = fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR);
+        let info = FirmwareInfo {
+            cpu_version: [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH],
+            fpga_version: [
+                major as u8,
+                fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MINOR) as u8,
+                fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_PATCH) as u8,
+            ],
+            fpga_functions: (major >> 8) as u8,
+            fpga_boot_image: cmd::fpga_update::boot_image(port) as u8,
+        };
+        ReplyData::from_slice(info.as_bytes())
+    }
+
+    fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> Outcome {
         if self.fpga_update.is_locked() && !cmd::fpga_update::allowed_while_locked(cmd) {
-            return self.latch_error(Error::FpgaUpdateInProgress);
+            return Err(Error::FpgaUpdateInProgress);
         }
         let result = match cmd {
             Cmd::Reset | Cmd::Nop => Ok(()),
-            Cmd::ReadCpuFwVersionMajor => return FW_VERSION_MAJOR,
-            Cmd::ReadCpuFwVersionMinor => return FW_VERSION_MINOR,
-            Cmd::ReadCpuFwVersionPatch => return FW_VERSION_PATCH,
-            Cmd::ReadFpgaFwVersionMajor => {
-                return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR) as u8;
-            }
-            Cmd::ReadFpgaFwVersionMinor => {
-                return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MINOR) as u8;
-            }
-            Cmd::ReadFpgaFwVersionPatch => {
-                return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_PATCH) as u8;
-            }
             Cmd::ReadErrorDetail => {
-                return self.error_detail.get().map_or(0, |err| err as u8);
+                return Ok(ReplyData::from_slice(&[self
+                    .error_detail
+                    .get()
+                    .map_or(0, |err| err as u8)]));
             }
             Cmd::ReadFpgaState => {
-                return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_FPGA_STATE) as u8;
+                return Ok(ReplyData::from_slice(&[fpga::read(
+                    port,
+                    BRAM_SELECT_CONTROLLER,
+                    ADDR_FPGA_STATE,
+                ) as u8]));
             }
-            Cmd::ReadTelemetry => return self.read_telemetry(port, payload),
-            Cmd::ReadFpgaFunctions => {
-                return (fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR) >> 8)
-                    as u8;
-            }
-            Cmd::ReadFpgaBootImage => return cmd::fpga_update::boot_image(port) as u8,
+            Cmd::ReadTelemetry => return Ok(self.read_telemetry(port)),
+            Cmd::ReadFirmwareInfo => return Ok(Self::read_firmware_info(port)),
             Cmd::WriteFociBuffer => cmd::write_foci::handle(port, payload),
             Cmd::WritePatternRaw => cmd::write_pattern_raw::handle(port, payload),
             Cmd::WritePatternCompressed => cmd::write_pattern_compressed::handle(port, payload),
@@ -349,10 +426,7 @@ impl Cpu {
             Cmd::Clear => self.clear(port),
             _ => Err(Error::UnknownCmd),
         };
-        match result {
-            Ok(()) => 0,
-            Err(err) => self.latch_error(err),
-        }
+        empty(result)
     }
 
     pub(crate) fn set_and_wait_update<P: Port>(

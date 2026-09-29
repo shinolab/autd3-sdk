@@ -1,17 +1,17 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use autd3_rs_core::params::REP_INFINITE;
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
 use autd3_rs_core::value::{Intensity, Phase, TransitionMode};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
 const BANK: u8 = 1;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
     let mut tx = TxFrame::new(Seq::new(seq), cmd);
     tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; TX_FRAME_BYTES];
+    let mut buf = [0u8; FRAME_BYTES_MAX];
     tx.write_to(&mut buf);
     buf
 }
@@ -25,7 +25,7 @@ fn raw_pattern_round_trips_to_emissions() {
             .collect(),
     );
 
-    let mut write = vec![BANK, 0];
+    let mut write = vec![BANK, 1];
     write.extend_from_slice(&0u16.to_le_bytes());
     write.extend(expected.0.iter().map(|p| p.0));
     write.extend(expected.1.iter().map(|i| i.0));
@@ -45,10 +45,18 @@ fn raw_pattern_round_trips_to_emissions() {
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(device.send(&frame(0, Cmd::WritePatternRaw, &write)).data, 0);
-    assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
-        device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
+        device.send(&frame(0, Cmd::WritePatternRaw, &write)).status,
+        0
+    );
+    assert_eq!(
+        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        0
+    );
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ChangePatternBank, &change))
+            .status,
         0
     );
 
@@ -87,12 +95,17 @@ fn phase_full_pattern_decompresses_to_two_indices() {
     assert_eq!(
         device
             .send(&frame(0, Cmd::WritePatternCompressed, &write))
-            .data,
+            .status,
         0
     );
-    assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
-        device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
+        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        0
+    );
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ChangePatternBank, &change))
+            .status,
         0
     );
 
@@ -135,12 +148,17 @@ fn phase_half_pattern_decompresses_to_four_indices() {
     assert_eq!(
         device
             .send(&frame(0, Cmd::WritePatternCompressed, &write))
-            .data,
+            .status,
         0
     );
-    assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
-        device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
+        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        0
+    );
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ChangePatternBank, &change))
+            .status,
         0
     );
 
@@ -164,5 +182,5 @@ fn unknown_command_reports_error() {
     bad[1] = 0x7F;
     let rx = device.send(&bad);
 
-    assert_eq!(rx.data, 0x01);
+    assert_eq!(rx.status, 0x01);
 }

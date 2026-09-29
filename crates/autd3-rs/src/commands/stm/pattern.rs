@@ -2,12 +2,13 @@ use super::StmConfig;
 use crate::commands::Command;
 use crate::commands::operation::{
     ChangePatternBank, ConfigPattern, PATTERN_MAX_PER_FRAME, PatternCompression, PatternIntensity,
-    WritePatternBuffer, WritePatternCompressed,
+    WritePatternBuffers, WritePatternCompressed,
 };
 use crate::datagram::DatagramBuilder;
 use crate::error::PayloadError;
 use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES};
 use crate::value::{Intensity, LoopBehavior, PatternBank, Phase, TransitionMode};
+use autd3_cpu_wire::layout::PATTERN_RAW_MAX_COUNT;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
@@ -160,13 +161,20 @@ impl<'a> Command<'a> for PatternStm<'a> {
 
         match compression {
             None => {
-                for (i, phases) in self.phases.iter().enumerate() {
-                    builder.push(WritePatternBuffer::new(
+                let mut index = 0;
+                while index < n {
+                    let count = PATTERN_RAW_MAX_COUNT.min(n - index);
+                    let slot = |k: usize| {
+                        let i = index + k.min(count - 1);
+                        (self.phases[i].as_slice(), self.intensities.at(i))
+                    };
+                    builder.push(WritePatternBuffers {
                         bank,
-                        i,
-                        phases,
-                        self.intensities.at(i),
-                    ));
+                        index,
+                        count,
+                        slots: core::array::from_fn(slot),
+                    });
+                    index += count;
                 }
             }
             Some((format, intensity)) => {
@@ -229,15 +237,15 @@ mod tests {
         b.push(stm);
         let datagrams = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 5);
-        for i in 0..3 {
-            let f = datagrams.frame(i).unwrap();
+        assert_eq!(datagrams.len(), 4, "two raw frames carry three indices");
+        for (frame, (index, count)) in [(0u16, 2u8), (2, 1)].into_iter().enumerate() {
+            let f = datagrams.frame(frame).unwrap();
             assert_eq!(f.datagrams()[0].cmd, Cmd::WritePatternRaw);
-            let index = u16::try_from(i).unwrap();
+            assert_eq!(f.datagrams()[0].payload[1], count, "frame {frame} count");
             assert_eq!(&f.datagrams()[0].payload[2..4], &index.to_le_bytes());
         }
 
-        let cfg = datagrams.frame(3).unwrap();
+        let cfg = datagrams.frame(2).unwrap();
         assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
         assert_eq!(cfg.datagrams()[0].payload[1], 1, "RawEmissions data_type");
         assert_eq!(
@@ -251,7 +259,7 @@ mod tests {
             "size = pattern count"
         );
 
-        let chg = datagrams.frame(4).unwrap();
+        let chg = datagrams.frame(3).unwrap();
         assert_eq!(chg.datagrams()[0].cmd, Cmd::ChangePatternBank);
         assert_eq!(chg.datagrams()[0].payload[1], 0xFF, "IMMEDIATE");
     }
@@ -301,14 +309,18 @@ mod tests {
         ));
         let datagrams = b.build().unwrap();
 
-        let phase_offset =
-            core::mem::offset_of!(autd3_cpu_wire::payload::WritePatternRawPayload, phases);
-        let intensity_offset =
-            core::mem::offset_of!(autd3_cpu_wire::payload::WritePatternRawPayload, intensities);
+        let header = core::mem::size_of::<autd3_cpu_wire::payload::WritePatternRawPayload>();
+        let slot = autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
         for (i, phases) in phases.iter().enumerate() {
-            let payload = &datagrams.frame(i).unwrap().datagrams()[0].payload;
-            assert_eq!(payload[phase_offset], phases[0][0].0, "frame {i} phase");
-            assert_eq!(payload[intensity_offset], 0x42, "frame {i} intensity");
+            let (frame, k) = (i / PATTERN_RAW_MAX_COUNT, i % PATTERN_RAW_MAX_COUNT);
+            let payload = &datagrams.frame(frame).unwrap().datagrams()[0].payload;
+            let base = header + k * slot;
+            assert_eq!(payload[base], phases[0][0].0, "index {i} phase");
+            assert_eq!(
+                payload[base + Autd3::NUM_TRANSDUCERS],
+                0x42,
+                "index {i} intensity"
+            );
         }
     }
 
@@ -383,10 +395,10 @@ mod tests {
         b.push(stm);
         let datagrams = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 5);
+        assert_eq!(datagrams.len(), 4);
 
-        let expected_counts = [2u8, 2, 1];
-        let expected_indices = [0u32, 2, 4];
+        let expected_counts = [4u8, 1];
+        let expected_indices = [0u32, 4];
         for (f, (&count, &idx)) in expected_counts
             .iter()
             .zip(expected_indices.iter())
@@ -404,7 +416,7 @@ mod tests {
             assert_eq!(payload[8], p0, "frame {f} low phase");
         }
 
-        let cfg = datagrams.frame(3).unwrap();
+        let cfg = datagrams.frame(2).unwrap();
         assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
         assert_eq!(cfg.datagrams()[0].payload[1], 1, "data_type stays Raw");
         assert_eq!(
@@ -468,7 +480,7 @@ mod tests {
         b.push(stm);
         let datagrams = b.build().unwrap();
 
-        let cfg = datagrams.frame(3).unwrap();
+        let cfg = datagrams.frame(2).unwrap();
         assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
         assert_eq!(
             &cfg.datagrams()[0].payload[12..14],
@@ -524,8 +536,8 @@ mod tests {
         ));
         let datagrams = b.build().unwrap();
 
-        assert_eq!(datagrams.len(), 4, "3 writes + config, no change");
-        let cfg = datagrams.frame(3).unwrap();
+        assert_eq!(datagrams.len(), 3, "2 writes + config, no change");
+        let cfg = datagrams.frame(2).unwrap();
         assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
         assert_eq!(cfg.datagrams()[0].payload[0], 1, "bank B1");
     }

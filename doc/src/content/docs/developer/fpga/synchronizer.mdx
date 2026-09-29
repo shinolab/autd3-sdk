@@ -37,7 +37,7 @@ Synchronizer は CPU のデバイス時刻に同期した時刻 `SYS_TIME` を�
     - なお, 時刻基準は 2000 年 1 月 1 日である. <Math tex="\SI{1}{ns}" /> 単位の <Math tex="\SI{64}{bit}" /> なので約 600 年しか使えないが, 事実上問題ない.
 - FPGA からは CPU ボードのデバイス時刻に直接アクセスできない.
 - CPU ボードは一定の周期で同期パルス (`ECAT_SYNC`) をアサートする. このパルスの立ち上がりはデバイス時刻を参照している.
-- 同期パルスの周期は <Math tex="\SI{500}{us}" /> の整数倍である (現在は <Math tex="\SI{1}{ms}" />).
+- 同期パルスの周期は CPU ファームウェアが決める (現在は <Math tex="\SI{1}{ms}" /> 固定).
 - CPU ファームウェアはこの周期を `SYS_TIME` の単位に変換して `ECAT_SYNC_CYCLE` として FPGA に渡す (詳細は [CPU ファームウェア](/autd3-sdk/developer/cpu/) を参照).
 
 なお, `SYS_TIME` はデバイス時刻に同期しているが, その単位は <Math tex="1/\SI{20.48}{MHz}" /> で, <Math tex="\SI{57}{bit}" /> となっている.

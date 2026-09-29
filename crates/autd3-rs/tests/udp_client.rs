@@ -13,7 +13,7 @@ async fn a_client_drives_the_emulated_chain() {
             .await
             .unwrap();
     assert_eq!(client.num_devices(), 2);
-    assert!(client.dc_offset_ns().abs() < 1_000_000_000);
+    assert!(client.clock_offset_ns().abs() < 1_000_000_000);
 
     let mut phases = geometry.phase_buffer();
     for (d, device_phases) in phases.iter_mut().enumerate() {
@@ -45,7 +45,42 @@ async fn a_client_drives_the_emulated_chain() {
     }
 
     let status = checker.check().unwrap();
-    assert_eq!(status.devices(), [DeviceState::Op; 2]);
+    assert_eq!(status.devices(), [DeviceState::Ready; 2]);
 
+    client.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_full_modulation_buffer_streams_through_the_emulated_chain() {
+    let emulator = UdpEmulator::spawn(2).unwrap();
+    let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
+    let client = Client::open(&geometry, emulator.option(), ClientConfig::default())
+        .await
+        .unwrap();
+
+    let modulation: Vec<u8> = (0..autd3_rs::params::MOD_BUFFER_SAMPLES)
+        .map(|i| u8::try_from((i * 7) % 251).unwrap())
+        .collect();
+    let datagrams = client
+        .datagram_builder()
+        .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
+        .build()
+        .unwrap();
+    let mut pending = std::collections::VecDeque::new();
+    for frame in &datagrams {
+        pending.push_back(client.send(frame).await.unwrap());
+    }
+    for future in pending {
+        future.await.unwrap().check().unwrap();
+    }
+
+    for d in 0..2 {
+        let buffer = emulator.with_device(d, |device| {
+            let fpga = device.fpga();
+            fpga.modulation_buffer(fpga.current_mod_bank())
+        });
+        assert_eq!(buffer, modulation);
+    }
+    assert_eq!(client.bus_stats().retransmissions(), 0);
     client.close().await.unwrap();
 }

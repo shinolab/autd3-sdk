@@ -8,7 +8,6 @@ crate::wire_enum! {
         MissTransitionTime = 0x06,
         FpgaTimeout = 0x07,
         SyncNotReady = 0x08,
-        InvalidSync0Cycle = 0x09,
         UpdateNotStarted = 0x0A,
         UpdateImageInvalid = 0x0B,
         UpdateFlash = 0x0C,
@@ -36,7 +35,6 @@ impl Error {
             Self::SyncNotReady => {
                 "the sync pulse is not running yet (the device has not received SetTime)"
             }
-            Self::InvalidSync0Cycle => "invalid sync cycle time (not a multiple of 500us)",
             Self::UpdateNotStarted => "firmware update session is not open (UpdateBegin required)",
             Self::UpdateImageInvalid => "firmware image CRC32 mismatch after write-back",
             Self::UpdateFlash => "serial flash erase/program/read failed",
@@ -86,6 +84,12 @@ mod tests {
                 None => assert_eq!(Error::try_from(raw), Err(raw)),
             }
         }
+    }
+
+    #[test]
+    fn retired_codes_stay_unassigned() {
+        assert_eq!(Error::from_u8(0x03), None);
+        assert_eq!(Error::from_u8(0x09), None);
     }
 
     #[test]

@@ -8,13 +8,11 @@ pub trait Port {
 
     fn memory_barrier(&mut self);
 
-    fn next_sync0(&mut self) -> u64;
+    fn next_sync_edge(&mut self) -> u64;
 
-    fn dc_sys_time(&mut self) -> u64;
+    fn sys_time(&mut self) -> u64;
 
-    fn sync0_cycle_ns(&mut self) -> u32;
-
-    fn al_status_code(&mut self) -> u16;
+    fn host_idle_ms(&mut self) -> Option<u32>;
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError>;
 

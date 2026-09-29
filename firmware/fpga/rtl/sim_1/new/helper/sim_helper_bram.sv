@@ -188,12 +188,12 @@ module sim_helper_bram #(
   endtask
 
   task automatic write_sync_settings(input settings::sync_settings_t settings);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_TIME_0, settings.ECAT_SYNC_TIME[15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_TIME_1, settings.ECAT_SYNC_TIME[31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_TIME_2, settings.ECAT_SYNC_TIME[47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_TIME_3, settings.ECAT_SYNC_TIME[63:48]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_CYCLE_0, settings.ECAT_SYNC_CYCLE[15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_ECAT_SYNC_CYCLE_1, settings.ECAT_SYNC_CYCLE[31:16]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SYNC_TIME_0, settings.ECAT_SYNC_TIME[15:0]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SYNC_TIME_1, settings.ECAT_SYNC_TIME[31:16]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SYNC_TIME_2, settings.ECAT_SYNC_TIME[47:32]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SYNC_TIME_3, settings.ECAT_SYNC_TIME[63:48]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SYNC_CYCLE_0, settings.ECAT_SYNC_CYCLE[15:0]);
+    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SYNC_CYCLE_1, settings.ECAT_SYNC_CYCLE[31:16]);
   endtask
 
   task automatic write_debug_settings(input settings::debug_settings_t settings);

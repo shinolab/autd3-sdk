@@ -57,7 +57,7 @@ New-NetFirewallRule -DisplayName "AUTD3" -Direction Inbound -Protocol UDP -Remot
 ## 割り込みモデレーションを切る
 
 NIC の割り込みモデレーション (interrupt coalescing) は, 受信の遅延を増やしばらつかせる.
-既定の設定では 1 周期 (1 ms) の中で返信が揃わないことがあるので, 切っておくことを推奨する.
+返信が数百 µs 以上遅れて送り直しの原因になることがあるので, 切っておくことを推奨する.
 
 - Linux: `sudo ethtool -C <if> rx-usecs 0`
 - Windows: デバイス マネージャーでアダプタのプロパティを開き, **詳細設定** の「割り込みモデレーション (Interrupt Moderation)」を「無効」にする

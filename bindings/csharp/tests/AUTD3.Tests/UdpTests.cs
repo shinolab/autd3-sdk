@@ -16,8 +16,9 @@ namespace AUTD3.Tests
         {
             var option = TransportOption.Defaults();
             Assert.Null(option.Group);
-            Assert.Equal(TimeSpan.FromMilliseconds(1), option.Cycle);
+            Assert.Equal(TimeSpan.FromMilliseconds(10), option.Heartbeat);
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.ReplyTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(200), option.ResponseTimeout);
             Assert.Equal(TimeSpan.FromSeconds(10), option.EnumerationTimeout);
             Assert.Equal(TimeSpan.FromSeconds(5), option.SyncTimeout);
@@ -29,7 +30,8 @@ namespace AUTD3.Tests
             var option = new TransportOption();
             Assert.Equal(Interface.Auto, option.Iface);
             Assert.Null(option.Group);
-            Assert.Null(option.Cycle);
+            Assert.Null(option.Heartbeat);
+            Assert.Null(option.LostTimeout);
             Assert.Null(option.SyncTimeout);
         }
 
@@ -45,7 +47,14 @@ namespace AUTD3.Tests
             {
                 Assert.Equal(2, client.NumDevices);
                 Assert.Equal(2, (await client.ReadFirmwareVersionAsync()).Count);
-                Assert.True(checker.Check().AllOp);
+                Assert.True(checker.Check().AllReady);
+                var telemetry = await client.ReadTelemetryAsync();
+                Assert.Equal(2, telemetry.Count);
+                foreach (var counters in telemetry)
+                {
+                    Assert.Equal(TelemetryCounters.Count, counters.AsArray().Count);
+                    Assert.Equal(counters.Get(Telemetry.Failsafe), counters[Telemetry.Failsafe]);
+                }
             }
         }
 
@@ -58,6 +67,13 @@ namespace AUTD3.Tests
             {
                 await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
             });
+        }
+
+        [Fact]
+        public void AZeroAckTimeoutIsRejected()
+        {
+            var config = new ClientConfig { AckTimeout = TimeSpan.Zero };
+            Assert.Throws<Autd3Exception>(() => config.CreateHandle());
         }
 
         [Fact]

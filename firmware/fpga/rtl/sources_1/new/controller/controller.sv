@@ -622,29 +622,29 @@ module controller (
 
         REQ_ECAT_SYNC_TIME_0: begin
           we <= 1'b0;
-          addr <= params::ADDR_ECAT_SYNC_TIME_0;
+          addr <= params::ADDR_SYNC_TIME_0;
           state <= REQ_ECAT_SYNC_TIME_1;
         end
         REQ_ECAT_SYNC_TIME_1: begin
-          addr  <= params::ADDR_ECAT_SYNC_TIME_1;
+          addr  <= params::ADDR_SYNC_TIME_1;
           state <= REQ_ECAT_SYNC_TIME_2;
         end
         REQ_ECAT_SYNC_TIME_2: begin
-          addr  <= params::ADDR_ECAT_SYNC_TIME_2;
+          addr  <= params::ADDR_SYNC_TIME_2;
           state <= REQ_ECAT_SYNC_TIME_3_RD_ECAT_SYNC_TIME_0;
         end
         REQ_ECAT_SYNC_TIME_3_RD_ECAT_SYNC_TIME_0: begin
-          addr <= params::ADDR_ECAT_SYNC_TIME_3;
+          addr <= params::ADDR_SYNC_TIME_3;
           SYNC_SETTINGS.ECAT_SYNC_TIME[15:0] <= dout;
           state <= REQ_ECAT_SYNC_CYCLE_0_RD_ECAT_SYNC_TIME_1;
         end
         REQ_ECAT_SYNC_CYCLE_0_RD_ECAT_SYNC_TIME_1: begin
-          addr <= params::ADDR_ECAT_SYNC_CYCLE_0;
+          addr <= params::ADDR_SYNC_CYCLE_0;
           SYNC_SETTINGS.ECAT_SYNC_TIME[31:16] <= dout;
           state <= REQ_ECAT_SYNC_CYCLE_1_RD_ECAT_SYNC_TIME_2;
         end
         REQ_ECAT_SYNC_CYCLE_1_RD_ECAT_SYNC_TIME_2: begin
-          addr <= params::ADDR_ECAT_SYNC_CYCLE_1;
+          addr <= params::ADDR_SYNC_CYCLE_1;
           SYNC_SETTINGS.ECAT_SYNC_TIME[47:32] <= dout;
           state <= RD_ECAT_SYNC_TIME_3;
         end

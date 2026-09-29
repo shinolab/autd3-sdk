@@ -31,7 +31,7 @@ import { excerpt } from "@lib/excerpt";
 | -------------------- | --------------------------        |
 | `Immediate`          | Immediate                         |
 | `SyncIdx`            | When the playback index next becomes 0 |
-| `SysTime(DcSysTime, margin)` | At the specified DC system time (`margin` is optional, see below) |
+| `SysTime(SysTime, margin)` | At the specified device time (`margin` is optional, see below) |
 | `Gpio(GpioIn)`       | Trigger on the specified GPIO input pin |
 | `Ext`                | Extended mode (automatically switches to the next bank when playback within the bank finishes) |
 | `Later`              | Does not transition (only writes to the bank) |

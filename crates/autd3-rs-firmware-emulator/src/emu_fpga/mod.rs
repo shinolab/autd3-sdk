@@ -87,9 +87,8 @@ pub struct FpgaEmulator {
     mod_ram: Vec<Box<[u16]>>,
     em_ram: Vec<Box<[u16]>>,
     latch_count: [u32; 16],
-    next_sync0: u64,
-    sync0_cycle_ns: u32,
-    al_status_code: u16,
+    next_sync_edge: u64,
+    host_idle_ms: Option<u32>,
     sys_time_ns: u64,
     gpio_in: [bool; 4],
     thermal: bool,
@@ -124,9 +123,8 @@ impl FpgaEmulator {
                 .map(|_| vec![0u16; EMISSION_RAM_WORDS].into_boxed_slice())
                 .collect(),
             latch_count: [0; 16],
-            next_sync0: 0,
-            sync0_cycle_ns: 1_000_000,
-            al_status_code: 0,
+            next_sync_edge: 0,
+            host_idle_ms: None,
             sys_time_ns: 0,
             gpio_in: [false; 4],
             thermal: false,
@@ -150,9 +148,8 @@ impl FpgaEmulator {
 
     fn reload(&mut self) {
         let mut next = Self::new(self.num_transducers);
-        next.next_sync0 = self.next_sync0;
-        next.sync0_cycle_ns = self.sync0_cycle_ns;
-        next.al_status_code = self.al_status_code;
+        next.next_sync_edge = self.next_sync_edge;
+        next.host_idle_ms = self.host_idle_ms;
         next.sys_time_ns = self.sys_time_ns;
         next.gpio_in = self.gpio_in;
         next.thermal = self.thermal;
@@ -274,20 +271,12 @@ impl FpgaEmulator {
         }
     }
 
-    pub(crate) fn next_sync0(&mut self) -> u64 {
-        self.next_sync0.max(self.sys_time_ns + 500_000)
+    pub(crate) fn next_sync_edge(&mut self) -> u64 {
+        self.next_sync_edge.max(self.sys_time_ns + 500_000)
     }
 
-    pub(crate) fn dc_sys_time(&mut self) -> u64 {
-        self.sys_time_ns
-    }
-
-    pub(crate) fn sync0_cycle_ns(&mut self) -> u32 {
-        self.sync0_cycle_ns
-    }
-
-    pub(crate) fn al_status_code(&mut self) -> u16 {
-        self.al_status_code
+    pub(crate) fn host_idle_ms(&self) -> Option<u32> {
+        self.host_idle_ms
     }
 
     fn reg_u64(&self, base: usize) -> u64 {
@@ -330,16 +319,12 @@ impl FpgaEmulator {
         self.pattern_swapchain.update(gpio_in, sys_time_ns);
     }
 
-    pub fn set_next_sync0(&mut self, sys_time_ns: u64) {
-        self.next_sync0 = sys_time_ns;
+    pub fn set_next_sync_edge(&mut self, sys_time_ns: u64) {
+        self.next_sync_edge = sys_time_ns;
     }
 
-    pub fn set_sync0_cycle_ns(&mut self, sync0_cycle_ns: u32) {
-        self.sync0_cycle_ns = sync0_cycle_ns;
-    }
-
-    pub fn set_al_status_code(&mut self, al_status_code: u16) {
-        self.al_status_code = al_status_code;
+    pub fn set_host_idle_ms(&mut self, host_idle_ms: Option<u32>) {
+        self.host_idle_ms = host_idle_ms;
     }
 
     pub fn set_gpio_in(&mut self, gpio_in: [bool; 4]) {

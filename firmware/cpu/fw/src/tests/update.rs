@@ -67,18 +67,18 @@ fn image(len: usize, seed: u32) -> Vec<u8> {
 fn send_image(h: &mut Harness, seq: &mut u8, img: &[u8]) {
     for (i, piece) in img.chunks(UPDATE_CHUNK_MAX_DATA_LEN).enumerate() {
         h.deliver(&chunk(*seq, (i * UPDATE_CHUNK_MAX_DATA_LEN) as u32, piece));
-        assert_eq!(h.data(), 0, "chunk {i}");
+        assert_eq!(h.status(), 0, "chunk {i}");
         *seq = seq.wrapping_add(1);
     }
 }
 
 fn run_update(h: &mut Harness, seq: &mut u8, img: &[u8]) {
     h.deliver(&begin(*seq, img.len() as u32, crc32(img)));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     *seq = seq.wrapping_add(1);
     send_image(h, seq, img);
     h.deliver(&Frame::new(*seq, Cmd::UpdateCommit));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     *seq = seq.wrapping_add(1);
 }
 
@@ -117,13 +117,13 @@ fn erased_len(len: u32) -> u32 {
 fn begin_refuses_to_erase_when_no_slot_is_valid() {
     let mut h = Harness::new();
     h.deliver(&begin(0, 5000, 0));
-    assert_eq!(h.data(), Error::UpdateFlash as u8);
+    assert_eq!(h.status(), Error::UpdateFlash as u8);
     assert_eq!(h.cpu.update.state(), State::Idle);
     assert!(h.port.erased.is_empty());
     assert!(h.port.flash.iter().all(|&b| b == 0xFF));
 
     h.deliver(&chunk(1, 0, &[1, 2, 3]));
-    assert_eq!(h.data(), Error::UpdateNotStarted as u8);
+    assert_eq!(h.status(), Error::UpdateNotStarted as u8);
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn begin_refuses_when_the_only_header_has_a_wrong_crc() {
     let corrupt = Slot::A.image_base() as usize + 3;
     h.port.flash[corrupt] ^= 0x10;
     h.deliver(&begin(0, 5000, 0));
-    assert_eq!(h.data(), Error::UpdateFlash as u8);
+    assert_eq!(h.status(), Error::UpdateFlash as u8);
     assert!(h.port.erased.is_empty());
 }
 
@@ -213,28 +213,28 @@ fn commit_rejects_a_crc_mismatch_and_leaves_the_slot_invalid() {
     let mut seq = 1;
     send_image(&mut h, &mut seq, &img);
     h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
-    assert_eq!(h.data(), Error::UpdateImageInvalid as u8);
+    assert_eq!(h.status(), Error::UpdateImageInvalid as u8);
     assert!(!header_of(&h, Slot::B).is_plausible());
     assert_eq!(header_of(&h, Slot::A).generation.get(), 0);
     assert_eq!(h.cpu.update.state(), State::Idle);
 
     h.deliver(&chunk(seq + 1, 0, &img[..8]));
-    assert_eq!(h.data(), Error::UpdateNotStarted as u8);
+    assert_eq!(h.status(), Error::UpdateNotStarted as u8);
     h.deliver(&Frame::new(seq + 2, Cmd::UpdateCommit));
-    assert_eq!(h.data(), Error::UpdateNotStarted as u8);
+    assert_eq!(h.status(), Error::UpdateNotStarted as u8);
     h.deliver(&Frame::new(seq + 3, Cmd::UpdateActivate));
-    assert_eq!(h.data(), Error::UpdateNotCommitted as u8);
+    assert_eq!(h.status(), Error::UpdateNotCommitted as u8);
     h.deliver(&Frame::new(seq + 4, Cmd::ReadErrorDetail));
-    assert_eq!(h.data(), Error::UpdateNotCommitted as u8);
+    assert_eq!(h.reply_data(), [Error::UpdateNotCommitted as u8]);
 }
 
 #[test]
 fn chunk_and_commit_without_begin_are_rejected() {
     let mut h = Harness::new();
     h.deliver(&chunk(0, 0, &[1, 2, 3]));
-    assert_eq!(h.data(), Error::UpdateNotStarted as u8);
+    assert_eq!(h.status(), Error::UpdateNotStarted as u8);
     h.deliver(&Frame::new(1, Cmd::UpdateCommit));
-    assert_eq!(h.data(), Error::UpdateNotStarted as u8);
+    assert_eq!(h.status(), Error::UpdateNotStarted as u8);
     assert!(h.port.erased.is_empty());
     assert!(h.port.flash.iter().all(|&b| b == 0xFF));
 }
@@ -245,9 +245,9 @@ fn chunk_out_of_range_is_invalid_payload() {
     let img = image(1000, 8);
     h.deliver(&begin(0, img.len() as u32, crc32(&img)));
     h.deliver(&chunk(1, 996, &img[..8]));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     h.deliver(&chunk(2, 1001, &[]));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     let oversized = Frame::from_parts(
         3,
         Cmd::UpdateChunk,
@@ -258,9 +258,9 @@ fn chunk_out_of_range_is_invalid_payload() {
         &[],
     );
     h.deliver(&oversized);
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     h.deliver(&chunk(4, 1000, &[]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(
         h.cpu.update.state(),
         State::Receiving {
@@ -271,7 +271,7 @@ fn chunk_out_of_range_is_invalid_payload() {
         }
     );
     h.deliver(&chunk(5, u32::MAX - 1, &img[..3]));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
 }
 
 #[test]
@@ -289,12 +289,12 @@ fn begin_rejects_lengths_the_loader_cannot_copy() {
     .enumerate()
     {
         h.deliver(&begin(seq as u8, length, 0));
-        assert_eq!(h.data(), Error::InvalidPayload as u8, "length {length}");
+        assert_eq!(h.status(), Error::InvalidPayload as u8, "length {length}");
     }
     assert_eq!(h.cpu.update.state(), State::Idle);
     assert!(h.port.erased.is_empty());
     h.deliver(&begin(5, max, 0));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.port.erased, [(Slot::B.base(), erased_len(max))]);
 }
 
@@ -306,14 +306,14 @@ fn activate_requires_a_commit_and_resets_after_the_delay() {
     h.deliver(&begin(seq, img.len() as u32, crc32(&img)));
     seq += 1;
     h.deliver(&Frame::new(seq, Cmd::UpdateActivate));
-    assert_eq!(h.data(), Error::UpdateNotCommitted as u8);
+    assert_eq!(h.status(), Error::UpdateNotCommitted as u8);
     seq += 1;
     send_image(&mut h, &mut seq, &img);
     h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     seq += 1;
     h.deliver(&Frame::new(seq, Cmd::UpdateActivate));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.cpu.update.reset_countdown(), ACTIVATE_DELAY_MS);
 
     h.tick_1ms(u32::from(ACTIVATE_DELAY_MS) - 1);
@@ -329,7 +329,7 @@ fn flash_driver_failure_is_reported() {
     let (mut h, _) = running_from_slot_a();
     h.port.flash_fail = true;
     h.deliver(&begin(0, 100, 0));
-    assert_eq!(h.data(), Error::UpdateFlash as u8);
+    assert_eq!(h.status(), Error::UpdateFlash as u8);
     assert_eq!(h.cpu.update.state(), State::Idle);
 }
 
@@ -365,7 +365,7 @@ fn protocol_reset_keeps_the_session_open() {
     let mut seq = 0;
     send_image(&mut h, &mut seq, &img);
     h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(header_of(&h, Slot::B).generation.get(), 1);
 }
 
@@ -376,7 +376,7 @@ fn begin_restarts_the_session_and_erases_again() {
     h.deliver(&begin(0, img.len() as u32, crc32(&img)));
     h.deliver(&chunk(1, 0, &img[..100]));
     h.deliver(&begin(2, img.len() as u32, crc32(&img)));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.port.erased.len(), 2);
     assert!(slot_image(&h, Slot::B, 100).iter().all(|&b| b == 0xFF));
 }
@@ -405,7 +405,7 @@ fn begin_after_confirmation_targets_the_older_slot() {
     run_update(&mut h, &mut seq, &img);
     h.reboot();
     h.deliver(&Frame::new(0, Cmd::UpdateConfirm));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     let next = image(800, 16);
     let mut seq = 1;
@@ -418,7 +418,7 @@ fn begin_after_confirmation_targets_the_older_slot() {
 
 fn confirm(h: &mut Harness, seq: u8) -> u8 {
     h.deliver(&Frame::new(seq, Cmd::UpdateConfirm));
-    h.data()
+    h.status()
 }
 
 #[test]
@@ -522,14 +522,14 @@ fn begin_over_the_booted_trial_forgets_it_so_confirm_cannot_bless_the_next_image
     let next = image(1100, 25);
     let mut seq = 0;
     h.deliver(&begin(seq, next.len() as u32, crc32(&next)));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     seq += 1;
     assert_eq!(h.cpu.booted_slot(), None);
     assert_eq!(confirm(&mut h, seq), Error::UpdateNothingToConfirm as u8);
     seq += 1;
     send_image(&mut h, &mut seq, &next);
     h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
     let b = header_of(&h, Slot::B);
     assert!(b.is_trial());
@@ -601,9 +601,9 @@ fn resending_an_identical_chunk_is_harmless() {
     let mut seq = 1;
     send_image(&mut h, &mut seq, &img);
     h.deliver(&chunk(seq, 0, &img[..UPDATE_CHUNK_MAX_DATA_LEN]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     h.deliver(&Frame::new(seq + 1, Cmd::UpdateCommit));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 }
 
 #[test]
@@ -613,7 +613,7 @@ fn commit_after_commit_is_rejected_without_touching_the_header() {
     let mut seq = 0;
     run_update(&mut h, &mut seq, &img);
     h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
-    assert_eq!(h.data(), Error::UpdateNotStarted as u8);
+    assert_eq!(h.status(), Error::UpdateNotStarted as u8);
     assert_eq!(header_of(&h, Slot::B).generation.get(), 1);
     assert_eq!(h.cpu.update.state(), State::Committed);
 }
@@ -636,14 +636,14 @@ fn begin_is_rejected_while_an_activation_is_pending() {
     let mut seq = 0;
     run_update(&mut h, &mut seq, &img);
     h.deliver(&Frame::new(seq, Cmd::UpdateActivate));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     seq += 1;
     let erased_before = h.port.erased.len();
     h.deliver(&begin(seq, img.len() as u32, crc32(&img)));
-    assert_eq!(h.data(), Error::UpdateActivating as u8);
+    assert_eq!(h.status(), Error::UpdateActivating as u8);
     seq += 1;
     h.deliver(&fpga_begin(seq, 100, 0));
-    assert_eq!(h.data(), Error::UpdateActivating as u8);
+    assert_eq!(h.status(), Error::UpdateActivating as u8);
     assert_eq!(h.port.erased.len(), erased_before);
     assert!(h.port.fpga_flash_ops.is_empty());
     assert!(!h.cpu.fpga_update.is_locked());
@@ -659,11 +659,11 @@ fn a_chunk_with_no_data_writes_nothing() {
     h.deliver(&begin(0, img.len() as u32, crc32(&img)));
     h.port.flash_write_fail_after = Some(0);
     h.deliver(&chunk(1, 0, &[]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     h.deliver(&chunk(2, img.len() as u32, &[]));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     h.deliver(&chunk(3, 0, &img[..1]));
-    assert_eq!(h.data(), Error::UpdateFlash as u8);
+    assert_eq!(h.status(), Error::UpdateFlash as u8);
 }
 
 #[test]
@@ -675,7 +675,7 @@ fn a_header_write_failure_fails_the_commit_and_leaves_the_slot_invalid() {
     send_image(&mut h, &mut seq, &img);
     h.port.flash_write_fail_after = Some(0);
     h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
-    assert_eq!(h.data(), Error::UpdateFlash as u8);
+    assert_eq!(h.status(), Error::UpdateFlash as u8);
     assert!(!header_of(&h, Slot::B).is_plausible());
     assert_ne!(h.cpu.update.state(), State::Committed);
 }
@@ -714,7 +714,7 @@ fn confirm_is_deferred_even_in_low_latency_mode() {
     assert!(header_of(&h, Slot::B).needs_confirmation());
     assert!(h.process_one());
     assert_eq!(h.ack(), 1);
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert!(!header_of(&h, Slot::B).needs_confirmation());
     assert!(!h.process_one());
 }
@@ -723,11 +723,11 @@ fn commit_result(h: &mut Harness, img: &[u8]) -> u8 {
     h.deliver(&Frame::new(0, Cmd::Reset));
     let mut seq = 0;
     h.deliver(&begin(seq, img.len() as u32, crc32(img)));
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     seq += 1;
     send_image(h, &mut seq, img);
     h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
-    h.data()
+    h.status()
 }
 
 #[test]

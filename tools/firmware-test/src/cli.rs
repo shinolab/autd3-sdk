@@ -11,8 +11,8 @@ pub struct Cli {
     pub group: Option<SocketAddrV6>,
     #[arg(long, default_value_t = 1)]
     pub devices: usize,
-    #[arg(long, default_value_t = 1000)]
-    pub cycle_us: u64,
+    #[arg(long, default_value_t = 10_000)]
+    pub heartbeat_us: u64,
 }
 
 impl Cli {
@@ -20,8 +20,8 @@ impl Cli {
         if self.devices == 0 {
             return Err("--devices must be at least 1".to_string());
         }
-        if self.cycle_us == 0 {
-            return Err("--cycle-us must be at least 1".to_string());
+        if self.heartbeat_us == 0 {
+            return Err("--heartbeat-us must be at least 1".to_string());
         }
         Ok(())
     }

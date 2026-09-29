@@ -3,9 +3,9 @@ use std::time::Duration;
 use anyhow::{Result, anyhow};
 use clap::{Args, ValueEnum};
 
-use autd3_rs::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES};
-use autd3_rs::{CycleOutcome, UdpBus, UdpError};
-use autd3_rs_firmware_ota::{EcatBus, EcatError, Exchange};
+use autd3_rs::protocol::Seq;
+use autd3_rs::{UdpBus, UdpError};
+use autd3_rs_firmware_ota::{Dialect, EcatBus, EcatError, Exchange, Frame, Replies};
 
 use crate::udp::UdpArgs;
 
@@ -97,21 +97,40 @@ impl<U: Exchange, E: Exchange> Exchange for Connection<U, E> {
         }
     }
 
-    fn wait_next_cycle(&mut self) {
+    fn dialect(&self) -> Dialect {
         match self {
-            Self::Udp(bus) => bus.wait_next_cycle(),
-            Self::EtherCat(bus) => bus.wait_next_cycle(),
+            Self::Udp(bus) => bus.dialect(),
+            Self::EtherCat(bus) => bus.dialect(),
         }
     }
 
-    fn cycle(
-        &mut self,
-        tx: &[[u8; TX_FRAME_BYTES]],
-        rx: &mut [[u8; RX_FRAME_BYTES]],
-    ) -> Result<CycleOutcome, Self::Error> {
+    fn reset(&mut self, timeout: Duration) -> Result<bool, Self::Error> {
         match self {
-            Self::Udp(bus) => bus.cycle(tx, rx).map_err(ConnectionError::Udp),
-            Self::EtherCat(bus) => bus.cycle(tx, rx).map_err(ConnectionError::EtherCat),
+            Self::Udp(bus) => bus.reset(timeout).map_err(ConnectionError::Udp),
+            Self::EtherCat(bus) => bus.reset(timeout).map_err(ConnectionError::EtherCat),
+        }
+    }
+
+    fn exchange(
+        &mut self,
+        seq: Seq,
+        frame: &Frame,
+        timeout: Duration,
+    ) -> Result<Replies, Self::Error> {
+        match self {
+            Self::Udp(bus) => bus
+                .exchange(seq, frame, timeout)
+                .map_err(ConnectionError::Udp),
+            Self::EtherCat(bus) => bus
+                .exchange(seq, frame, timeout)
+                .map_err(ConnectionError::EtherCat),
+        }
+    }
+
+    fn idle(&mut self, duration: Duration) -> Result<(), Self::Error> {
+        match self {
+            Self::Udp(bus) => bus.idle(duration).map_err(ConnectionError::Udp),
+            Self::EtherCat(bus) => bus.idle(duration).map_err(ConnectionError::EtherCat),
         }
     }
 

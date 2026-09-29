@@ -114,8 +114,7 @@ pub fn validate_transition_mode<P: Port>(
     if !loop_compatible {
         return Err(Error::InvalidTransitionMode);
     }
-    if transition_mode == TransitionMode::SysTime
-        && transition_value < port.dc_sys_time() + margin_ns
+    if transition_mode == TransitionMode::SysTime && transition_value < port.sys_time() + margin_ns
     {
         return Err(Error::MissTransitionTime);
     }

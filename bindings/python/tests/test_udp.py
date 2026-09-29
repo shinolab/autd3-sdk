@@ -16,8 +16,9 @@ def test_defaults_follow_the_spec() -> None:
     option = autd3.TransportOption()
     assert option.iface is None
     assert option.group is None
-    assert option.cycle.as_millis() == 1
+    assert option.heartbeat.as_millis() == 10
     assert option.reply_timeout.as_millis() == 1
+    assert option.lost_timeout.as_millis() == 100
     assert option.response_timeout.as_millis() == 200
     assert option.enumeration_timeout.as_millis() == 10_000
     assert option.sync_timeout.as_millis() == 5_000
@@ -27,12 +28,14 @@ def test_fields_round_trip() -> None:
     option = autd3.TransportOption(
         iface="eth1",
         group="[::1]:44336",
-        cycle=autd3.Duration.from_millis(2),
+        heartbeat=autd3.Duration.from_millis(2),
+        lost_timeout=autd3.Duration.from_millis(50),
         sync_timeout=autd3.Duration.from_secs(3),
     )
     assert option.iface == "eth1"
     assert option.group == "[::1]:44336"
-    assert option.cycle.as_millis() == 2
+    assert option.heartbeat.as_millis() == 2
+    assert option.lost_timeout.as_millis() == 50
     assert option.sync_timeout.as_millis() == 3_000
 
 
@@ -52,7 +55,17 @@ def test_the_client_opens_the_emulated_chain() -> None:
         async with client:
             assert client.num_devices() == 2
             assert len(await client.read_firmware_version()) == 2
-            assert checker.check().all_op
+            status = checker.check()
+            assert status.all_ready
+            assert status.device_states == ["READY", "READY"]
+            telemetry = await client.read_telemetry()
+            assert len(telemetry) == 2
+            for counters in telemetry:
+                assert isinstance(counters, autd3.TelemetryCounters)
+                assert len(counters.as_list()) == 7
+                assert counters[autd3.value.Telemetry.Failsafe] == counters.get(
+                    autd3.value.Telemetry.Failsafe
+                )
 
     asyncio.run(run())
 

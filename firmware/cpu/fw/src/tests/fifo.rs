@@ -2,7 +2,7 @@ use crate::fifo::{FIFO_DEPTH, Fifo};
 use zerocopy::FromZeros;
 
 use crate::cmd::set_mode::SetModePayload;
-use crate::proto::{Cmd, Error, Mode};
+use crate::proto::{Cmd, Drained, Error, Mode};
 use crate::tests::mock::{Frame, Harness};
 
 fn set_mode(seq: u8, mode: u8) -> Frame {
@@ -62,7 +62,7 @@ fn set_mode_rejects_unknown_mode() {
     let mut h = Harness::new();
 
     h.deliver(&set_mode(0, 0x02));
-    assert_eq!(h.data(), Error::InvalidPayload as u8);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_eq!(h.cpu.mode(), Mode::Fifo);
 }
 
@@ -115,7 +115,7 @@ fn reset_and_next_frame_landing_inside_one_drain_step_keep_the_next_ack() {
     h.deliver_no_drain(&Frame::new(0, Cmd::Reset));
     h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
 
-    assert!(h.cpu.drain_step(&mut h.port, flush_gen));
+    assert_ne!(h.cpu.drain_step(&mut h.port, flush_gen), Drained::Empty);
     assert_eq!(h.ack(), 0);
     assert_eq!(h.expected_seq(), 1);
 
@@ -133,7 +133,7 @@ fn reset_landing_inside_a_drain_step_still_rolls_back_the_discarded_frame() {
     h.deliver_no_drain(&Frame::new(0, Cmd::Reset));
     h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
 
-    assert!(h.cpu.drain_step(&mut h.port, flush_gen));
+    assert_ne!(h.cpu.drain_step(&mut h.port, flush_gen), Drained::Empty);
     assert_eq!(h.ack(), 0xFF);
     assert_eq!(h.expected_seq(), 0);
 
@@ -238,4 +238,85 @@ fn fifo_slots_stay_distinct_across_the_index_wrap() {
         seen[slot] = true;
     }
     assert!(seen.iter().all(|&s| s));
+}
+
+#[test]
+fn a_fifo_frame_completes_with_its_msg_id() {
+    let h = Harness::new();
+    let frame = Frame::new(0, Cmd::Nop).bytes();
+    assert_eq!(
+        h.cpu.recv_frame(
+            &mut crate::tests::mock::MockPort::new(),
+            &frame[..2],
+            0x1234
+        ),
+        crate::proto::Disposition::Deferred
+    );
+    let mut port = crate::tests::mock::MockPort::new();
+    assert_eq!(
+        h.cpu.process_one(&mut port),
+        Drained::Completed { msg_id: 0x1234 }
+    );
+    assert_eq!(h.cpu.process_one(&mut port), Drained::Empty);
+    assert_eq!(h.cpu.reply().ack, 0);
+}
+
+#[test]
+fn a_duplicate_and_a_reset_are_answered_by_the_isr() {
+    let mut h = Harness::new();
+    h.deliver(&Frame::new(0, Cmd::Nop));
+    let mut port = crate::tests::mock::MockPort::new();
+    assert_eq!(
+        h.cpu.recv_frame(&mut port, &[0, Cmd::Nop as u8], 1),
+        crate::proto::Disposition::Reply
+    );
+    assert_eq!(
+        h.cpu.recv_frame(&mut port, &[7, Cmd::Reset as u8], 2),
+        crate::proto::Disposition::Reply
+    );
+    assert_eq!(h.ack(), 0xFF);
+}
+
+#[test]
+fn a_full_fifo_drops_the_frame_without_a_reply() {
+    let h = Harness::new();
+    let mut port = crate::tests::mock::MockPort::new();
+    let capacity = u8::try_from(FIFO_DEPTH - 1).unwrap();
+    for seq in 0..capacity {
+        assert_eq!(
+            h.cpu.recv_frame(&mut port, &[seq, Cmd::Nop as u8], 0),
+            crate::proto::Disposition::Deferred
+        );
+    }
+    assert_eq!(
+        h.cpu.recv_frame(&mut port, &[capacity, Cmd::Nop as u8], 0),
+        crate::proto::Disposition::Dropped
+    );
+}
+
+#[test]
+fn a_frame_handled_in_low_latency_mode_is_answered_by_the_isr() {
+    let mut h = Harness::new();
+    h.deliver(&set_mode(0, Mode::LowLatency as u8));
+    let mut port = crate::tests::mock::MockPort::new();
+    assert_eq!(
+        h.cpu.recv_frame(&mut port, &[1, Cmd::Nop as u8], 9),
+        crate::proto::Disposition::Reply
+    );
+    assert_eq!(h.ack(), 1);
+    assert_eq!(h.cpu.process_one(&mut port), Drained::Empty);
+}
+
+#[test]
+fn a_frame_flushed_by_a_reset_is_not_completed() {
+    let mut h = Harness::new();
+    h.deliver_no_drain(&crate::tests::builders::write_foci_buffer(
+        0,
+        0,
+        0,
+        &[0x5A5A],
+    ));
+    h.arm_isr_reset();
+    assert_eq!(h.cpu.process_one(&mut h.port), Drained::Flushed);
+    assert_eq!(h.ack(), 0xFF);
 }

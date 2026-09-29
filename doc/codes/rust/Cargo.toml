@@ -34,16 +34,16 @@ name = "api_basics_datagram_builder"
 path = "examples/api/basics/datagram-builder.rs"
 
 [[example]]
-name = "api_basics_dc_sys_time"
-path = "examples/api/basics/dc-sys-time.rs"
-
-[[example]]
 name = "api_basics_geometry"
 path = "examples/api/basics/geometry.rs"
 
 [[example]]
 name = "api_basics_sampling_config"
 path = "examples/api/basics/sampling-config.rs"
+
+[[example]]
+name = "api_basics_sys_time"
+path = "examples/api/basics/sys-time.rs"
 
 [[example]]
 name = "api_command_clear_example"

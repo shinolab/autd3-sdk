@@ -27,7 +27,7 @@ async def main() -> None:
             if status != last:
                 for i, state in enumerate(status.device_states):
                     print(f"device[{i}]: {state}")
-                print(f"all operational: {status.all_op}, any lost: {status.any_lost}, recoveries: {status.recoveries}")
+                print(f"all ready: {status.all_ready}, any lost: {status.any_lost}")
                 last = status
             await asyncio.sleep(CHECK_INTERVAL)
         # ANCHOR_END: poll

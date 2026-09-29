@@ -27,20 +27,16 @@ impl Port for FpgaEmulator {
 
     fn memory_barrier(&mut self) {}
 
-    fn next_sync0(&mut self) -> u64 {
-        FpgaEmulator::next_sync0(self)
+    fn next_sync_edge(&mut self) -> u64 {
+        FpgaEmulator::next_sync_edge(self)
     }
 
-    fn dc_sys_time(&mut self) -> u64 {
-        FpgaEmulator::dc_sys_time(self)
+    fn sys_time(&mut self) -> u64 {
+        FpgaEmulator::sys_time(self)
     }
 
-    fn sync0_cycle_ns(&mut self) -> u32 {
-        FpgaEmulator::sync0_cycle_ns(self)
-    }
-
-    fn al_status_code(&mut self) -> u16 {
-        FpgaEmulator::al_status_code(self)
+    fn host_idle_ms(&mut self) -> Option<u32> {
+        FpgaEmulator::host_idle_ms(self)
     }
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {

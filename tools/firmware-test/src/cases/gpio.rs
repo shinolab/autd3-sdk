@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use autd3_rs::commands::{GpioOut, SetGpioOut};
 use autd3_rs::common::ULTRASOUND_PERIOD;
-use autd3_rs::value::{DcSysTime, Intensity, Phase, SamplingConfig};
+use autd3_rs::value::{Intensity, Phase, SamplingConfig, SysTime};
 use autd3_rs_modulation::{constant, modulation_buffer};
 
 use crate::Ctx;
@@ -124,7 +124,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await;
 
-    let t0 = DcSysTime::now()? + std::time::Duration::from_secs(2);
+    let t0 = SysTime::now()? + std::time::Duration::from_secs(2);
     send_gpio_each(ctx, |dev| {
         let at = if dev == 0 { t0 } else { t0 + ULTRASOUND_PERIOD };
         [

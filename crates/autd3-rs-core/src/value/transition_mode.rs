@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use super::{DcSysTime, GpioIn};
+use super::{GpioIn, SysTime};
 use crate::error::EncodeError;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -8,7 +8,7 @@ use crate::error::EncodeError;
 pub enum TransitionMode {
     SyncIdx,
     SysTime {
-        time: DcSysTime,
+        time: SysTime,
         margin: Option<Duration>,
     },
     Gpio(GpioIn),
@@ -47,10 +47,10 @@ impl TransitionMode {
     }
 
     #[must_use]
-    pub fn with_dc_offset(self, offset_ns: i64) -> Self {
+    pub fn with_clock_offset(self, offset_ns: i64) -> Self {
         match self {
             TransitionMode::SysTime { time, margin } => TransitionMode::SysTime {
-                time: time.with_dc_offset(offset_ns),
+                time: time.with_clock_offset(offset_ns),
                 margin,
             },
             other => other,
@@ -77,7 +77,7 @@ mod tests {
 
     fn sys_time(nanos: u64) -> TransitionMode {
         TransitionMode::SysTime {
-            time: DcSysTime::from_nanos(nanos),
+            time: SysTime::from_nanos(nanos),
             margin: None,
         }
     }
@@ -122,7 +122,7 @@ mod tests {
         assert_eq!(sys_time(0).margin_ns(), Ok(0));
         assert_eq!(
             TransitionMode::SysTime {
-                time: DcSysTime::ZERO,
+                time: SysTime::ZERO,
                 margin: Some(Duration::from_millis(1)),
             }
             .margin_ns(),
@@ -130,7 +130,7 @@ mod tests {
         );
         assert_eq!(
             TransitionMode::SysTime {
-                time: DcSysTime::ZERO,
+                time: SysTime::ZERO,
                 margin: Some(Duration::from_secs(5)),
             }
             .margin_ns(),
@@ -143,7 +143,7 @@ mod tests {
     #[test]
     fn only_sys_time_moves_with_the_bus_clock() {
         assert_eq!(
-            sys_time(1_000).with_dc_offset(25),
+            sys_time(1_000).with_clock_offset(25),
             sys_time(1_025),
             "SysTime is an absolute instant on the bus clock"
         );
@@ -153,7 +153,7 @@ mod tests {
             TransitionMode::Ext,
             TransitionMode::Immediate,
         ] {
-            assert_eq!(mode.with_dc_offset(25), mode);
+            assert_eq!(mode.with_clock_offset(25), mode);
         }
     }
 

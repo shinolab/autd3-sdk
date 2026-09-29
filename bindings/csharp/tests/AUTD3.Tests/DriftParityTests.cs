@@ -56,8 +56,8 @@ namespace AUTD3.Tests
         [Fact]
         public void PatternCompressionPerFrame()
         {
-            Assert.Equal(2, PatternCompression.PhaseFull.PerFrame());
-            Assert.Equal(4, PatternCompression.PhaseHalf.PerFrame());
+            Assert.Equal(4, PatternCompression.PhaseFull.PerFrame());
+            Assert.Equal(8, PatternCompression.PhaseHalf.PerFrame());
         }
 
         [Fact]
@@ -113,17 +113,18 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void DcSysTimeRoundTrips()
+        public void SysTimeRoundTrips()
         {
             var utc = new DateTime(2026, 7, 3, 0, 0, 0, DateTimeKind.Utc);
-            var t = DcSysTime.FromUtc(utc);
+            var t = SysTime.FromUtc(utc);
             Assert.Equal(utc, t.ToUtc());
-            Assert.Equal(0UL, DcSysTime.Zero.SysTime);
-            Assert.Equal(1000UL, DcSysTime.FromNanos(1000).SysTime);
-            Assert.True(DcSysTime.Now() > DcSysTime.Zero);
+            Assert.Equal(0UL, SysTime.Zero.Nanos);
+            Assert.Equal(1000UL, SysTime.FromNanos(1000).Nanos);
+            Assert.True(SysTime.Now() > SysTime.Zero);
             Assert.Equal(t + TimeSpan.FromSeconds(1) - TimeSpan.FromSeconds(1), t);
-            Assert.Throws<Autd3Exception>(() => DcSysTime.FromUtc(new DateTime(1999, 12, 31, 0, 0, 0, DateTimeKind.Utc)));
+            Assert.Throws<Autd3Exception>(() => SysTime.FromUtc(new DateTime(1999, 12, 31, 0, 0, 0, DateTimeKind.Utc)));
             _ = TransitionMode.SysTime(t);
+            _ = GpioOut.SysTimeEq(t);
         }
 
         [Fact]
@@ -179,8 +180,8 @@ namespace AUTD3.Tests
             using var c = client;
             using var k = checker;
             var status = checker.Check();
-            Assert.Equal(DeviceState.Op, Assert.Single(status.Devices));
-            Assert.True(status.AllOp);
+            Assert.Equal(DeviceState.Ready, Assert.Single(status.Devices));
+            Assert.True(status.AllReady);
             Assert.False(status.AnyLost);
             await client.CloseAsync();
         }
@@ -207,7 +208,7 @@ namespace AUTD3.Tests
             using var frames = builder.Build();
             var token = await client.SendAsync(frames[0]);
             var response = await token;
-            Assert.Equal(client.NumDevices, response.Data.Count);
+            Assert.Equal(client.NumDevices, response.Status.Count);
             response.Check();
             await Assert.ThrowsAsync<Autd3Exception>(async () => await token);
             await client.CloseAsync();
@@ -216,14 +217,11 @@ namespace AUTD3.Tests
         [Fact]
         public void DeviceStateToStringMatchesRust()
         {
-            Assert.Equal("OP", DeviceState.Op.ToString());
-            Assert.Equal("SAFE-OP", DeviceState.SafeOp.ToString());
-            Assert.Equal("SAFE-OP + ERROR", DeviceState.SafeOpError.ToString());
+            Assert.Equal("READY", DeviceState.Ready.ToString());
+            Assert.Equal("SYNCING", DeviceState.Syncing.ToString());
             Assert.Equal("LOST", DeviceState.Lost.ToString());
-            Assert.Equal("INIT", DeviceState.Other(0x01).ToString());
-            Assert.Equal("UNKNOWN (0x0a)", DeviceState.Other(0x0A).ToString());
-            Assert.True(DeviceState.Op == DeviceState.Op);
-            Assert.True(DeviceState.Op != DeviceState.Lost);
+            Assert.True(DeviceState.Ready == DeviceState.Ready);
+            Assert.True(DeviceState.Ready != DeviceState.Lost);
         }
     }
 }

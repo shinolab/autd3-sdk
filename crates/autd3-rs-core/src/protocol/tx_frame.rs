@@ -1,4 +1,4 @@
-use super::{Cmd, PAYLOAD_BYTES, Seq, TX_FRAME_BYTES};
+use super::{Cmd, FRAME_BYTES_MAX, PAYLOAD_BYTES, Seq};
 
 #[repr(C)]
 #[derive(Clone)]
@@ -8,7 +8,7 @@ pub struct TxFrame {
     pub payload: [u8; PAYLOAD_BYTES],
 }
 
-const _: () = assert!(size_of::<TxFrame>() == TX_FRAME_BYTES);
+const _: () = assert!(size_of::<TxFrame>() == FRAME_BYTES_MAX);
 
 impl TxFrame {
     #[must_use]
@@ -20,13 +20,13 @@ impl TxFrame {
         }
     }
 
-    pub fn write_to(&self, dst: &mut [u8; TX_FRAME_BYTES]) {
+    pub fn write_to(&self, dst: &mut [u8; FRAME_BYTES_MAX]) {
         dst[0] = self.seq.get();
         dst[1] = self.cmd.as_u8();
         dst[2..].copy_from_slice(&self.payload);
     }
 
-    pub fn parse(src: &[u8; TX_FRAME_BYTES]) -> Result<Self, u8> {
+    pub fn parse(src: &[u8; FRAME_BYTES_MAX]) -> Result<Self, u8> {
         let cmd = Cmd::try_from(src[1])?;
         let mut payload = [0u8; PAYLOAD_BYTES];
         payload.copy_from_slice(&src[2..]);
@@ -55,7 +55,7 @@ mod tests {
             cmd: Cmd::WritePatternRaw,
             payload,
         };
-        let mut bytes = [0u8; TX_FRAME_BYTES];
+        let mut bytes = [0u8; FRAME_BYTES_MAX];
         f.write_to(&mut bytes);
         assert_eq!(bytes[0], 0xA5);
         assert_eq!(bytes[1], Cmd::WritePatternRaw.as_u8());
@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn tx_frame_parse_rejects_unknown_cmd() {
-        let mut bytes = [0u8; TX_FRAME_BYTES];
+        let mut bytes = [0u8; FRAME_BYTES_MAX];
         bytes[0] = 0x10;
         bytes[1] = 0xFE;
         assert!(matches!(TxFrame::parse(&bytes), Err(0xFE)));

@@ -356,16 +356,12 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
             intensity,
             patterns,
         } => {
-            let mut arr: [Option<&[Vec<Phase>]>; 4] = [None, None, None, None];
-            for (slot, p) in arr.iter_mut().zip(patterns.iter()) {
-                *slot = Some(p.as_slice());
-            }
             builder.push(CoreWritePatternCompressed {
                 bank: *bank,
                 index: usize::try_from(*index).unwrap_or(usize::MAX),
                 format: *format,
                 intensity: *intensity,
-                patterns: arr,
+                patterns: std::array::from_fn(|i| patterns.get(i).map(Vec::as_slice)),
             });
         }
         Pending::FociStm {
@@ -420,8 +416,8 @@ impl DatagramBuilder {
         }
     }
 
-    fn dc_offset_ns(&self) -> i64 {
-        self.backend.as_ref().map_or(0, |b| b.dc_offset_ns())
+    fn clock_offset_ns(&self) -> i64 {
+        self.backend.as_ref().map_or(0, |b| b.clock_offset_ns())
     }
 }
 
@@ -593,8 +589,10 @@ impl DatagramBuilder {
     }
 
     fn build(&self, py: Python<'_>) -> PyResult<Frames> {
-        let mut builder =
-            CoreDatagramBuilder::with_dc_offset(Arc::clone(&self.geometry), self.dc_offset_ns());
+        let mut builder = CoreDatagramBuilder::with_clock_offset(
+            Arc::clone(&self.geometry),
+            self.clock_offset_ns(),
+        );
         for pending in &self.pending {
             validate_pending(pending)?;
             push_pending(pending, &mut builder);

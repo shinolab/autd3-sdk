@@ -1,8 +1,9 @@
+use std::collections::VecDeque;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::commands::operation::{Distribution, Nop, Operation, PATTERN_FUSED_HEADER_BYTES};
 use crate::datagram::Datagram;
@@ -10,15 +11,25 @@ use crate::error::Error;
 use crate::firmware_version::{FirmwareVersion, Version};
 use crate::geometry::Device;
 use crate::geometry::{Autd3, Geometry};
-use crate::protocol::{Cmd, MAX_INFLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
+use crate::protocol::{Cmd, FRAME_BYTES_MAX, MAX_INFLIGHT, PAYLOAD_BYTES, TxFrame};
+use crate::response::Response;
 use crate::transport::Bus;
-use autd3_rs_core::{BusStats, CycleOutcome};
+use crate::udp::Reply;
+use autd3_rs_core::BusStats;
 
 use crate::telemetry::Telemetry;
 use autd3_cpu_wire::Mode;
 
 use super::{Client, ClientConfig};
 use crate::RtSchedulePolicy;
+
+fn first_bytes(response: &Response) -> Vec<u8> {
+    response
+        .values()
+        .iter()
+        .map(|value| value.first().copied().unwrap_or(0))
+        .collect()
+}
 
 fn geometry(n: usize) -> Geometry {
     Geometry::new((0..n).map(|_| Autd3::default()).collect())
@@ -88,28 +99,29 @@ async fn arm_strict_silencer(client: &Client) {
 
 struct LoopbackLink {
     slaves: Vec<Arc<StdMutex<Slave>>>,
+    queue: VecDeque<Reply>,
+    msg_id: u16,
 }
 
 struct Slave {
     expected_seq: u8,
     ack: u8,
-    data: u8,
+    status: u8,
+    value: Vec<u8>,
     fw_version_major: u8,
     fw_version_minor: u8,
     fw_version_patch: u8,
     fpga_version_major: u8,
     fpga_version_minor: u8,
     fpga_version_patch: u8,
-    supports_fpga_version: bool,
     error_detail: u8,
     fpga_state: u8,
     fpga_functions: u8,
-    supports_fpga_functions: bool,
-    telemetry: [u8; 6],
-    sync_resync_count: u8,
+    telemetry: [u32; Telemetry::ALL.len()],
+    short_reads: bool,
     muted: bool,
     drop_next: u32,
-    stale_for_next: u32,
+    silent_until: Option<Instant>,
     sent_log: Vec<(u8, Cmd)>,
     mode: u8,
 }
@@ -119,31 +131,46 @@ impl Slave {
         Self {
             expected_seq: 0,
             ack: 0xFF,
-            data: 0,
+            status: 0,
+            value: Vec::new(),
             fw_version_major: 0,
             fw_version_minor: 0,
             fw_version_patch: 0,
             fpga_version_major: 0,
             fpga_version_minor: 0,
             fpga_version_patch: 0,
-            supports_fpga_version: true,
             error_detail: 0,
             fpga_state: 0,
             fpga_functions: 0,
-            supports_fpga_functions: true,
-            telemetry: [0; 6],
-            sync_resync_count: 0,
+            telemetry: [0; Telemetry::ALL.len()],
+            short_reads: false,
             muted: false,
             drop_next: 0,
-            stale_for_next: 0,
+            silent_until: None,
             sent_log: Vec::new(),
             mode: Mode::Fifo.as_u8(),
         }
     }
+
+    fn silence(&mut self, duration: Duration) {
+        self.silent_until = Some(Instant::now() + duration);
+    }
+
+    fn silence_forever(&mut self) {
+        self.silence(Duration::from_secs(3600));
+    }
+
+    fn silent(&self) -> bool {
+        self.silent_until
+            .is_some_and(|until| Instant::now() < until)
+    }
+
+    fn reply(&self, device: usize, msg_id: u16) -> Reply {
+        Reply::new(device, msg_id, self.ack, self.status, 0x09, &self.value)
+    }
 }
 
 const ERR_UNKNOWN_CMD: u8 = 0x01;
-const ERR_INVALID_PAYLOAD: u8 = 0x02;
 const ERR_INVALID_DATA: u8 = 0x03;
 
 fn handle_nop(payload: &[u8; PAYLOAD_BYTES], slave: &mut Slave) -> u8 {
@@ -155,71 +182,66 @@ fn handle_nop(payload: &[u8; PAYLOAD_BYTES], slave: &mut Slave) -> u8 {
     }
 }
 
-fn slave_cycle(
-    slave: &mut Slave,
-    tx: &[u8; TX_FRAME_BYTES],
-    rx: &mut [u8; RX_FRAME_BYTES],
-) -> bool {
-    let parsed = TxFrame::parse(tx).expect("loopback only sees known cmds");
+fn read_value(slave: &Slave, cmd: Cmd) -> Vec<u8> {
+    let value = match cmd {
+        Cmd::ReadFirmwareInfo => vec![
+            slave.fw_version_major,
+            slave.fw_version_minor,
+            slave.fw_version_patch,
+            slave.fpga_version_major,
+            slave.fpga_version_minor,
+            slave.fpga_version_patch,
+            slave.fpga_functions,
+            0,
+        ],
+        Cmd::ReadErrorDetail => vec![slave.error_detail],
+        Cmd::ReadFpgaState => vec![slave.fpga_state],
+        Cmd::ReadTelemetry => slave
+            .telemetry
+            .iter()
+            .flat_map(|c| c.to_le_bytes())
+            .collect(),
+        _ => Vec::new(),
+    };
+    if slave.short_reads {
+        value[..value.len() / 2].to_vec()
+    } else {
+        value
+    }
+}
+
+fn slave_frame(slave: &mut Slave, frame: &[u8; FRAME_BYTES_MAX]) -> bool {
+    let parsed = TxFrame::parse(frame).expect("loopback only sees known cmds");
     slave.sent_log.push((parsed.seq.get(), parsed.cmd));
 
     if parsed.cmd == Cmd::Reset {
         slave.expected_seq = 0;
         slave.ack = 0xFF;
-        slave.data = 0;
-        *rx = [slave.ack, slave.data];
+        slave.status = 0;
+        slave.value.clear();
         return true;
     }
 
-    if slave.stale_for_next > 0 {
-        slave.stale_for_next -= 1;
-        *rx = [slave.ack, slave.data];
+    if slave.silent() {
         return false;
     }
 
     if parsed.seq.get() != slave.expected_seq {
-        *rx = [slave.ack, slave.data];
         return true;
     }
 
     if slave.drop_next > 0 {
         slave.drop_next -= 1;
-        *rx = [slave.ack, slave.data];
-        return true;
+        return false;
     }
 
     slave.expected_seq = slave.expected_seq.wrapping_add(1);
-    let data = match parsed.cmd {
+    slave.value.clear();
+    let status = match parsed.cmd {
         Cmd::Nop => handle_nop(&parsed.payload, slave),
-        Cmd::ReadCpuFwVersionMajor => slave.fw_version_major,
-        Cmd::ReadCpuFwVersionMinor => slave.fw_version_minor,
-        Cmd::ReadCpuFwVersionPatch => slave.fw_version_patch,
-        Cmd::ReadFpgaFwVersionMajor | Cmd::ReadFpgaFwVersionMinor | Cmd::ReadFpgaFwVersionPatch
-            if !slave.supports_fpga_version =>
-        {
-            slave.error_detail = ERR_UNKNOWN_CMD;
-            ERR_UNKNOWN_CMD
-        }
-        Cmd::ReadFpgaFwVersionMajor => slave.fpga_version_major,
-        Cmd::ReadFpgaFwVersionMinor => slave.fpga_version_minor,
-        Cmd::ReadFpgaFwVersionPatch => slave.fpga_version_patch,
-        Cmd::ReadErrorDetail => slave.error_detail,
-        Cmd::ReadFpgaState => slave.fpga_state,
-        Cmd::ReadFpgaFunctions if !slave.supports_fpga_functions => {
-            slave.error_detail = ERR_UNKNOWN_CMD;
-            ERR_UNKNOWN_CMD
-        }
-        Cmd::ReadFpgaFunctions => slave.fpga_functions,
-        Cmd::ReadTelemetry if parsed.payload[0] == Telemetry::SyncResync.as_u8() => {
-            slave.sync_resync_count
-        }
-        Cmd::ReadTelemetry => {
-            if let Some(&value) = slave.telemetry.get(parsed.payload[0] as usize) {
-                value
-            } else {
-                slave.error_detail = ERR_INVALID_PAYLOAD;
-                ERR_INVALID_PAYLOAD
-            }
+        Cmd::ReadFirmwareInfo | Cmd::ReadErrorDetail | Cmd::ReadFpgaState | Cmd::ReadTelemetry => {
+            slave.value = read_value(slave, parsed.cmd);
+            0
         }
         Cmd::WritePatternFused => {
             let start = PATTERN_FUSED_HEADER_BYTES + Autd3::NUM_TRANSDUCERS;
@@ -252,12 +274,20 @@ fn slave_cycle(
             slave.mode = parsed.payload[0];
             0
         }
-        _ => unreachable!(),
+        _ => ERR_UNKNOWN_CMD,
     };
     slave.ack = parsed.seq.get();
-    slave.data = data;
-    *rx = [slave.ack, slave.data];
+    slave.status = status;
     true
+}
+
+impl LoopbackLink {
+    fn wait(deadline: Instant) {
+        let now = Instant::now();
+        if deadline > now {
+            std::thread::sleep(deadline - now);
+        }
+    }
 }
 
 impl Bus for LoopbackLink {
@@ -267,21 +297,38 @@ impl Bus for LoopbackLink {
         self.slaves.len()
     }
 
-    fn cycle(
-        &mut self,
-        tx: &[[u8; TX_FRAME_BYTES]],
-        rx: &mut [[u8; RX_FRAME_BYTES]],
-    ) -> Result<CycleOutcome, Self::Error> {
-        let mut rx_valid = true;
-        for ((tx, rx), slave) in tx.iter().zip(rx.iter_mut()).zip(&self.slaves) {
+    fn next_msg_id(&self) -> u16 {
+        self.msg_id.wrapping_add(1)
+    }
+
+    fn send(&mut self, frames: &[[u8; FRAME_BYTES_MAX]]) -> Result<u16, Self::Error> {
+        self.msg_id = self.msg_id.wrapping_add(1);
+        for (device, (frame, slave)) in frames.iter().zip(&self.slaves).enumerate() {
             let mut s = slave.lock().unwrap();
-            rx_valid &= slave_cycle(&mut s, tx, rx);
+            if slave_frame(&mut s, frame) {
+                self.queue.push_back(s.reply(device, self.msg_id));
+            }
         }
-        Ok(if rx_valid {
-            CycleOutcome::valid()
-        } else {
-            CycleOutcome::stale()
-        })
+        Ok(self.msg_id)
+    }
+
+    fn heartbeat(&mut self) -> Result<u16, Self::Error> {
+        self.msg_id = self.msg_id.wrapping_add(1);
+        for (device, slave) in self.slaves.iter().enumerate() {
+            let s = slave.lock().unwrap();
+            if !s.silent() {
+                self.queue.push_back(s.reply(device, self.msg_id));
+            }
+        }
+        Ok(self.msg_id)
+    }
+
+    fn recv(&mut self, deadline: Instant) -> Result<Option<Reply>, Self::Error> {
+        if let Some(reply) = self.queue.pop_front() {
+            return Ok(Some(reply));
+        }
+        Self::wait(deadline);
+        Ok(None)
     }
 }
 
@@ -319,15 +366,29 @@ impl Bus for FailingLink {
         self.inner.num_devices()
     }
 
-    fn cycle(
-        &mut self,
-        tx: &[[u8; TX_FRAME_BYTES]],
-        rx: &mut [[u8; RX_FRAME_BYTES]],
-    ) -> Result<CycleOutcome, Self::Error> {
+    fn next_msg_id(&self) -> u16 {
+        self.inner.next_msg_id()
+    }
+
+    fn send(&mut self, frames: &[[u8; FRAME_BYTES_MAX]]) -> Result<u16, Self::Error> {
         if self.fail.load(AtomicOrdering::Relaxed) {
             return Err(LinkFailure);
         }
-        Ok(self.inner.cycle(tx, rx).expect("loopback never fails"))
+        Ok(self.inner.send(frames).expect("loopback never fails"))
+    }
+
+    fn heartbeat(&mut self) -> Result<u16, Self::Error> {
+        if self.fail.load(AtomicOrdering::Relaxed) {
+            return Err(LinkFailure);
+        }
+        Ok(self.inner.heartbeat().expect("loopback never fails"))
+    }
+
+    fn recv(&mut self, deadline: Instant) -> Result<Option<Reply>, Self::Error> {
+        if self.fail.load(AtomicOrdering::Relaxed) {
+            return Err(LinkFailure);
+        }
+        Ok(self.inner.recv(deadline).expect("loopback never fails"))
     }
 }
 
@@ -338,6 +399,8 @@ fn slaves_pair(n: usize) -> (LoopbackLink, Vec<Arc<StdMutex<Slave>>>) {
     (
         LoopbackLink {
             slaves: slaves.clone(),
+            queue: VecDeque::new(),
+            msg_id: 0,
         },
         slaves,
     )
@@ -450,7 +513,12 @@ async fn a_foreign_series_is_reported_as_unsupported() {
 async fn an_unknown_fpga_version_is_never_supported() {
     let (client, slave) = open_client().await;
     set_supported_series(&slave);
-    slave.lock().unwrap().supports_fpga_version = false;
+    {
+        let mut s = slave.lock().unwrap();
+        s.fpga_version_major = 0;
+        s.fpga_version_minor = 0;
+        s.fpga_version_patch = 0;
+    }
 
     let v = client.read_firmware_version().await.unwrap();
     assert!(v[0].fpga.is_unknown());
@@ -487,91 +555,6 @@ async fn open_rejects_a_foreign_series_only_when_the_check_is_requested() {
         .close()
         .await
         .unwrap();
-}
-
-#[tokio::test]
-async fn read_firmware_version_reports_unknown_fpga_on_outdated_firmware() {
-    let (client, slave) = open_client().await;
-    {
-        let mut s = slave.lock().unwrap();
-        s.fw_version_major = 0;
-        s.fw_version_minor = 1;
-        s.fw_version_patch = 0;
-        s.supports_fpga_version = false;
-    }
-    let v = client.read_firmware_version().await.unwrap();
-    assert_eq!(
-        v,
-        vec![FirmwareVersion {
-            cpu: Version {
-                major: 0,
-                minor: 1,
-                patch: 0,
-            },
-            fpga: Version::UNKNOWN,
-            function_bits: 0,
-        }]
-    );
-    assert!(v[0].fpga.is_unknown());
-    assert_eq!(v[0].to_string(), "CPU: 0.1.0, FPGA: unknown");
-}
-
-#[tokio::test]
-async fn read_firmware_version_reports_unknown_fpga_when_error_detail_already_latched() {
-    let (client, slave) = open_client().await;
-    {
-        let mut s = slave.lock().unwrap();
-        s.supports_fpga_version = false;
-        s.error_detail = ERR_UNKNOWN_CMD;
-    }
-    let v = client.read_firmware_version().await.unwrap();
-    assert_eq!(v[0].fpga, Version::UNKNOWN);
-}
-
-#[tokio::test]
-async fn read_firmware_version_keeps_fpga_version_when_unrelated_error_is_latched() {
-    let (client, slave) = open_client().await;
-    {
-        let mut s = slave.lock().unwrap();
-        s.fpga_version_major = 4;
-        s.fpga_version_minor = 5;
-        s.fpga_version_patch = 6;
-        s.error_detail = ERR_INVALID_DATA;
-    }
-    let v = client.read_firmware_version().await.unwrap();
-    assert_eq!(
-        v[0].fpga,
-        Version {
-            major: 4,
-            minor: 5,
-            patch: 6,
-        }
-    );
-}
-
-#[tokio::test]
-async fn read_firmware_version_reports_unknown_fpga_per_device() {
-    let (link, slaves) = slaves_pair(2);
-    {
-        let mut s = slaves[0].lock().unwrap();
-        s.fpga_version_major = 1;
-        s.fpga_version_minor = 2;
-        s.fpga_version_patch = 3;
-    }
-    slaves[1].lock().unwrap().supports_fpga_version = false;
-    let client = Client::open_bus(&geometry(2), link, ClientConfig::default())
-        .await
-        .unwrap();
-    let v = client.read_firmware_version().await.unwrap();
-    assert_eq!(
-        v[0].fpga,
-        Version {
-            major: 1,
-            minor: 2,
-            patch: 3,
-        }
-    );
-    assert_eq!(v[1].fpga, Version::UNKNOWN);
 }
 
 #[tokio::test]
@@ -682,7 +665,7 @@ async fn multi_device_per_device_payloads_yield_per_device_results() {
         .await
         .unwrap();
     let resp = fut.await.unwrap();
-    assert_eq!(resp.data(), [0, ERR_INVALID_DATA]);
+    assert_eq!(resp.status(), [0, ERR_INVALID_DATA]);
 }
 
 #[tokio::test]
@@ -707,17 +690,16 @@ async fn multi_device_send_reports_failing_device_index() {
 #[tokio::test]
 async fn multi_device_skip_on_one_device_recovers_via_resync() {
     let (link, slaves) = slaves_pair(2);
-    slaves[1].lock().unwrap().fw_version_major = 0xB1;
-    slaves[0].lock().unwrap().fw_version_major = 0xB0;
+    slaves[1].lock().unwrap().fpga_state = 0xB1;
+    slaves[0].lock().unwrap().fpga_state = 0xB0;
     let client = Client::open_bus(
         &geometry(2),
         link,
         ClientConfig {
-            timeout_cycles: NonZeroU32::new(10).unwrap(),
+            ack_timeout: Duration::from_millis(10),
             max_inflight: NonZeroUsize::new(16).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            reset_resend_cycles: NonZeroU32::new(2).unwrap(),
             rt_priority: None,
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
@@ -734,14 +716,14 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
     for _ in 0..8 {
         futs.push(
             client
-                .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+                .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
                 .await
                 .unwrap(),
         );
     }
     for f in futs {
         assert_eq!(
-            f.await.unwrap().data(),
+            first_bytes(&f.await.unwrap()),
             [0xB0, 0xB1],
             "resync must recover as success with per-device data"
         );
@@ -757,7 +739,7 @@ async fn send_rejects_wrong_datagram_count() {
         .await
         .unwrap();
     let err = client
-        .send_datagrams(&[Datagram::no_payload(Cmd::ReadCpuFwVersionMajor)])
+        .send_datagrams(&[Datagram::no_payload(Cmd::ReadFpgaState)])
         .await
         .err()
         .expect("send with wrong datagram count must fail");
@@ -765,13 +747,13 @@ async fn send_rejects_wrong_datagram_count() {
 }
 
 #[tokio::test]
-async fn handshake_sends_reset_resend_cycles_seq_zero_resets() {
+async fn handshake_confirms_one_reset_then_sets_the_mode() {
     let (_client, slave) = open_client().await;
     tokio::time::sleep(Duration::from_millis(20)).await;
     let s = slave.lock().unwrap();
     assert!(s.sent_log.len() >= 2);
     assert_eq!(s.sent_log[0], (0, Cmd::Reset));
-    assert_eq!(s.sent_log[1], (0, Cmd::Reset));
+    assert_eq!(s.sent_log[1], (0, Cmd::SetMode));
     let clear = s.sent_log.iter().position(|(_, c)| *c == Cmd::Clear);
     let synchronize = s.sent_log.iter().position(|(_, c)| *c == Cmd::Synchronize);
     assert!(clear.is_some() && synchronize < Some(s.sent_log.len()));
@@ -869,17 +851,10 @@ async fn open_reads_the_firmware_version_even_when_the_check_is_off() {
 
     {
         let s = slave.lock().unwrap();
-        for cmd in [
-            Cmd::ReadCpuFwVersionMajor,
-            Cmd::ReadCpuFwVersionMinor,
-            Cmd::ReadFpgaFwVersionMajor,
-            Cmd::ReadFpgaFwVersionMinor,
-        ] {
-            assert!(
-                s.sent_log.iter().any(|(_, c)| *c == cmd),
-                "{cmd:?} never reached the device, so the series mismatch cannot be warned about",
-            );
-        }
+        assert!(
+            s.sent_log.iter().any(|(_, c)| *c == Cmd::ReadFirmwareInfo),
+            "ReadFirmwareInfo never reached the device, so the series mismatch cannot be warned about",
+        );
     }
     client.close().await.unwrap();
 }
@@ -963,32 +938,32 @@ async fn two_stage_await_resolves_in_order() {
     let (client, slave) = open_client().await;
     {
         let mut s = slave.lock().unwrap();
-        s.fw_version_major = 0xAA;
-        s.fw_version_minor = 0xBB;
+        s.error_detail = 0xAA;
+        s.fpga_state = 0xBB;
     }
     let f1 = client
-        .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+        .send_broadcast(&Datagram::no_payload(Cmd::ReadErrorDetail))
         .await
         .unwrap();
     let f2 = client
-        .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMinor))
+        .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
         .await
         .unwrap();
     let r1 = f1.await.unwrap();
     let r2 = f2.await.unwrap();
-    assert_eq!(r1.data(), [0xAA]);
-    assert_eq!(r2.data(), [0xBB]);
+    assert_eq!(first_bytes(&r1), [0xAA]);
+    assert_eq!(first_bytes(&r2), [0xBB]);
 }
 
 #[tokio::test]
 async fn pipeline_continues_after_device_error_in_the_middle() {
     let (client, slave) = open_client().await;
-    slave.lock().unwrap().fw_version_major = 0x42;
+    slave.lock().unwrap().fpga_state = 0x42;
 
     let bad_payload = failing_payload();
 
     let f1 = client
-        .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+        .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
         .await
         .unwrap();
     let f2 = client
@@ -999,29 +974,28 @@ async fn pipeline_continues_after_device_error_in_the_middle() {
         .await
         .unwrap();
     let f3 = client
-        .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+        .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
         .await
         .unwrap();
 
-    assert_eq!(f1.await.unwrap().data(), [0x42]);
+    assert_eq!(first_bytes(&f1.await.unwrap()), [0x42]);
     let mid = f2.await.unwrap();
-    assert_eq!(mid.data(), [ERR_INVALID_DATA]);
-    assert_eq!(f3.await.unwrap().data(), [0x42]);
+    assert_eq!(mid.status(), [ERR_INVALID_DATA]);
+    assert_eq!(first_bytes(&f3.await.unwrap()), [0x42]);
 }
 
 #[tokio::test]
 async fn streaming_skip_recovers_via_resync_without_timeout() {
     let (link, slave) = slave_pair();
-    slave.lock().unwrap().fw_version_major = 0xAB;
+    slave.lock().unwrap().fpga_state = 0xAB;
     let client = Client::open_bus(
         &geometry(1),
         link,
         ClientConfig {
-            timeout_cycles: NonZeroU32::new(10).unwrap(),
+            ack_timeout: Duration::from_millis(10),
             max_inflight: NonZeroUsize::new(16).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            reset_resend_cycles: NonZeroU32::new(2).unwrap(),
             rt_priority: None,
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
@@ -1038,14 +1012,14 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
     for _ in 0..8 {
         futs.push(
             client
-                .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+                .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
                 .await
                 .unwrap(),
         );
     }
     for f in futs {
         assert_eq!(
-            f.await.unwrap().data(),
+            first_bytes(&f.await.unwrap()),
             [0xAB],
             "resync must recover as success"
         );
@@ -1060,11 +1034,10 @@ async fn dead_link_gives_up_whole_window_in_bounded_time() {
         &geometry(1),
         link,
         ClientConfig {
-            timeout_cycles: NonZeroU32::new(5).unwrap(),
+            ack_timeout: Duration::from_millis(5),
             max_inflight: NonZeroUsize::new(8).unwrap(),
             max_resync_rounds: NonZeroU32::new(3).unwrap(),
             low_latency: false,
-            reset_resend_cycles: NonZeroU32::new(2).unwrap(),
             rt_priority: None,
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
@@ -1080,7 +1053,7 @@ async fn dead_link_gives_up_whole_window_in_bounded_time() {
     for _ in 0..3 {
         futs.push(
             client
-                .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+                .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
                 .await
                 .unwrap(),
         );
@@ -1099,12 +1072,11 @@ async fn stale_cycles_block_false_positive_ack_match() {
     {
         let mut s = slave.lock().unwrap();
         s.ack = 0;
-        s.data = 0;
-        s.stale_for_next = u32::MAX;
+        s.silence_forever();
     }
     let err = send_nop(&client).await.unwrap_err();
     match err {
-        Error::Timeout { cycles } => assert_eq!(cycles, 10),
+        Error::Timeout { timeout } => assert_eq!(timeout, Duration::from_millis(10)),
         other => panic!("expected Timeout, got {other:?}"),
     }
 }
@@ -1113,7 +1085,7 @@ async fn stale_cycles_block_false_positive_ack_match() {
 async fn recovers_after_transient_stale_cycles() {
     let (client, slave) = open_client().await;
     let base = seq_after_open(&slave);
-    slave.lock().unwrap().stale_for_next = 3;
+    slave.lock().unwrap().silence(Duration::from_millis(3));
     send_nop(&client)
         .await
         .expect("send should recover after the stale burst");
@@ -1138,19 +1110,19 @@ fn post_handshake_reset_count(slave: &Arc<StdMutex<Slave>>) -> usize {
 #[tokio::test]
 async fn inflight_held_across_stale_recovers_without_reset() {
     let (link, slave) = slave_pair();
-    slave.lock().unwrap().fw_version_major = 0xAB;
+    slave.lock().unwrap().fpga_state = 0xAB;
     let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     let base = seq_after_open(&slave);
-    slave.lock().unwrap().stale_for_next = 40;
+    slave.lock().unwrap().silence(Duration::from_millis(40));
 
     let fut = client
-        .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+        .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
         .await
         .unwrap();
     assert_eq!(
-        fut.await.unwrap().data(),
+        first_bytes(&fut.await.unwrap()),
         [0xAB],
         "held in-flight must recover after the stale burst, not time out"
     );
@@ -1172,16 +1144,15 @@ async fn inflight_held_across_stale_recovers_without_reset() {
 #[tokio::test]
 async fn streaming_holds_window_across_stale_and_recovers() {
     let (link, slave) = slave_pair();
-    slave.lock().unwrap().fw_version_major = 0xAB;
+    slave.lock().unwrap().fpga_state = 0xAB;
     let client = Client::open_bus(
         &geometry(1),
         link,
         ClientConfig {
-            timeout_cycles: NonZeroU32::new(10).unwrap(),
+            ack_timeout: Duration::from_millis(10),
             max_inflight: NonZeroUsize::new(8).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            reset_resend_cycles: NonZeroU32::new(2).unwrap(),
             rt_priority: None,
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
@@ -1192,20 +1163,20 @@ async fn streaming_holds_window_across_stale_and_recovers() {
     .await
     .unwrap();
     let base = seq_after_open(&slave);
-    slave.lock().unwrap().stale_for_next = 30;
+    slave.lock().unwrap().silence(Duration::from_millis(30));
 
     let mut futs = Vec::new();
     for _ in 0..8 {
         futs.push(
             client
-                .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+                .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
                 .await
                 .unwrap(),
         );
     }
     for f in futs {
         assert_eq!(
-            f.await.unwrap().data(),
+            first_bytes(&f.await.unwrap()),
             [0xAB],
             "every held in-flight must recover after the stale burst"
         );
@@ -1221,18 +1192,18 @@ async fn streaming_holds_window_across_stale_and_recovers() {
 #[tokio::test]
 async fn frozen_ahead_desync_recovers_via_reset_resync() {
     let (link, slave) = slave_pair();
-    slave.lock().unwrap().fw_version_major = 0xCD;
+    slave.lock().unwrap().fpga_state = 0xCD;
     let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     slave.lock().unwrap().expected_seq = 200;
 
     let fut = client
-        .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+        .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
         .await
         .unwrap();
     assert_eq!(
-        fut.await.unwrap().data(),
+        first_bytes(&fut.await.unwrap()),
         [0xCD],
         "Reset re-sync must recover the desync instead of waiting for SEQ wraparound"
     );
@@ -1247,7 +1218,7 @@ async fn close_resolves_pending_with_rt_closed() {
     let (client, slave) = open_client().await;
     slave.lock().unwrap().drop_next = u32::MAX;
     let f = client
-        .send_broadcast(&Datagram::no_payload(Cmd::ReadCpuFwVersionMajor))
+        .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
         .await
         .unwrap();
     let closed = client.close().await;
@@ -1269,11 +1240,10 @@ async fn open_rejects_oversize_max_inflight() {
         &geometry(1),
         link,
         ClientConfig {
-            timeout_cycles: NonZeroU32::new(10).unwrap(),
+            ack_timeout: Duration::from_millis(10),
             max_inflight: NonZeroUsize::new(MAX_INFLIGHT + 1).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            reset_resend_cycles: NonZeroU32::new(2).unwrap(),
             rt_priority: None,
             rt_policy: RtSchedulePolicy::default(),
             rt_affinity: None,
@@ -1387,7 +1357,7 @@ async fn desync_after_send_failure_stops_precheck() {
         Err(Error::SilencerConstraint { .. })
     ));
 
-    slave.lock().unwrap().stale_for_next = u32::MAX;
+    slave.lock().unwrap().silence_forever();
     assert!(matches!(
         send_nop(&client).await.unwrap_err(),
         Error::Timeout { .. }
@@ -1409,7 +1379,7 @@ async fn raw_send_failure_desyncs_the_mirror() {
         Err(Error::SilencerConstraint { .. })
     ));
 
-    slave.lock().unwrap().stale_for_next = u32::MAX;
+    slave.lock().unwrap().silence_forever();
     let datagrams = client.datagram_builder().push(Nop).build().unwrap();
     for frame in &datagrams {
         let future = client.send(frame).await.unwrap();
@@ -1435,7 +1405,7 @@ async fn raw_send_device_error_desyncs_the_mirror() {
     let datagrams = client.datagram_builder().push(FailingCmd).build().unwrap();
     for frame in &datagrams {
         let response = client.send(frame).await.unwrap().await.unwrap();
-        assert_eq!(response.data(), [ERR_INVALID_DATA]);
+        assert_eq!(response.status(), [ERR_INVALID_DATA]);
     }
 
     assert!(
@@ -1451,14 +1421,11 @@ async fn read_replies_never_count_as_device_errors() {
     {
         let mut s = slave.lock().unwrap();
         s.fpga_state = 0x80;
-        s.supports_fpga_version = false;
+        s.error_detail = 0x7F;
     }
 
     assert_eq!(client.read_fpga_state().await.unwrap()[0].0, 0x80);
-    assert_eq!(
-        client.read_firmware_version().await.unwrap()[0].fpga,
-        Version::UNKNOWN
-    );
+    assert_eq!(client.read_error_detail().await.unwrap(), [0x7F]);
 
     assert!(
         matches!(
@@ -1484,7 +1451,7 @@ async fn validation_opt_out_keeps_the_response_future_mirror_free() {
     .unwrap();
     assert!(client.mirror_for_response().is_none());
 
-    slave.lock().unwrap().stale_for_next = u32::MAX;
+    slave.lock().unwrap().silence_forever();
     let datagrams = client.datagram_builder().push(Nop).build().unwrap();
     for frame in &datagrams {
         let future = client.send(frame).await.unwrap();
@@ -1511,7 +1478,7 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
         &geometry(1),
         link,
         ClientConfig {
-            timeout_cycles: NonZeroU32::MAX,
+            ack_timeout: Duration::from_secs(3600),
             max_inflight,
             ..ClientConfig::default()
         },
@@ -1889,29 +1856,44 @@ async fn a_second_close_does_not_send_another_stop() {
 }
 
 #[tokio::test]
-async fn read_telemetry_returns_selected_counter() {
+async fn read_telemetry_returns_every_counter() {
     let (client, slave) = open_client().await;
-    slave.lock().unwrap().telemetry[Telemetry::FifoDrop.as_u8() as usize] = 7;
-    slave.lock().unwrap().telemetry[Telemetry::Failsafe.as_u8() as usize] = 3;
+    {
+        let mut s = slave.lock().unwrap();
+        s.telemetry[Telemetry::FifoDrop.as_u8() as usize] = 7;
+        s.telemetry[Telemetry::Failsafe.as_u8() as usize] = 3;
+        s.telemetry[Telemetry::Processed.as_u8() as usize] = 70_000;
+    }
 
-    assert_eq!(
-        client.read_telemetry(Telemetry::FifoDrop).await.unwrap(),
-        vec![7]
-    );
-    assert_eq!(
-        client.read_telemetry(Telemetry::Failsafe).await.unwrap(),
-        vec![3]
-    );
+    let counters = client.read_telemetry().await.unwrap();
+    assert_eq!(counters.len(), 1);
+    assert_eq!(counters[0].get(Telemetry::FifoDrop), 7);
+    assert_eq!(counters[0].get(Telemetry::Failsafe), 3);
+    assert_eq!(counters[0].get(Telemetry::Processed), 70_000);
+}
+
+#[tokio::test]
+async fn a_short_read_reply_is_an_unexpected_reply() {
+    let (client, slave) = open_client().await;
+    slave.lock().unwrap().short_reads = true;
+    assert!(matches!(
+        client.read_telemetry().await,
+        Err(Error::UnexpectedReply { device: 0 })
+    ));
+    assert!(matches!(
+        client.read_firmware_version().await,
+        Err(Error::UnexpectedReply { device: 0 })
+    ));
 }
 
 #[tokio::test]
 async fn read_telemetry_returns_sync_resync_count() {
     let (client, slave) = open_client().await;
-    slave.lock().unwrap().sync_resync_count = 5;
+    slave.lock().unwrap().telemetry[Telemetry::SyncResync.as_u8() as usize] = 5;
 
     assert_eq!(
-        client.read_telemetry(Telemetry::SyncResync).await.unwrap(),
-        vec![5]
+        client.read_telemetry().await.unwrap()[0].get(Telemetry::SyncResync),
+        5
     );
 }
 
@@ -1941,24 +1923,11 @@ async fn read_firmware_version_without_emulator_bit_is_not_emulator() {
     assert!(!v[0].to_string().contains("[Emulator]"));
 }
 
-#[tokio::test]
-async fn read_firmware_version_ignores_emulator_bit_when_fpga_unknown() {
-    let (client, slave) = open_client().await;
-    {
-        let mut s = slave.lock().unwrap();
-        s.supports_fpga_version = false;
-        s.fpga_functions = 1 << 7;
-    }
-
-    let v = client.read_firmware_version().await.unwrap();
-    assert!(!v[0].is_emulator());
-}
-
 #[derive(Default)]
 struct CloseTracker {
     closes: AtomicUsize,
     close_fails: AtomicBool,
-    cycle_fails: AtomicBool,
+    send_fails: AtomicBool,
 }
 
 impl CloseTracker {
@@ -1997,16 +1966,23 @@ impl Bus for TrackedLink {
         self.stats.clone()
     }
 
-    fn cycle(
-        &mut self,
-        tx: &[[u8; TX_FRAME_BYTES]],
-        rx: &mut [[u8; RX_FRAME_BYTES]],
-    ) -> Result<CycleOutcome, Self::Error> {
-        if self.tracker.cycle_fails.load(AtomicOrdering::Acquire) {
+    fn next_msg_id(&self) -> u16 {
+        self.inner.next_msg_id()
+    }
+
+    fn send(&mut self, frames: &[[u8; FRAME_BYTES_MAX]]) -> Result<u16, Self::Error> {
+        if self.tracker.send_fails.load(AtomicOrdering::Acquire) {
             return Err(LinkFailure);
         }
-        self.stats.record_exchange(1_000);
-        Ok(self.inner.cycle(tx, rx).expect("loopback never fails"))
+        Ok(self.inner.send(frames).expect("loopback never fails"))
+    }
+
+    fn heartbeat(&mut self) -> Result<u16, Self::Error> {
+        Ok(self.inner.heartbeat().expect("loopback never fails"))
+    }
+
+    fn recv(&mut self, deadline: Instant) -> Result<Option<Reply>, Self::Error> {
+        Ok(self.inner.recv(deadline).expect("loopback never fails"))
     }
 
     fn close(&mut self) -> Result<(), Self::Error> {
@@ -2056,7 +2032,7 @@ async fn link_close_failure_surfaces_from_client_close() {
 #[tokio::test]
 async fn the_link_is_closed_even_when_the_handshake_fails() {
     let (link, tracker) = tracked_pair();
-    tracker.cycle_fails.store(true, AtomicOrdering::Release);
+    tracker.send_fails.store(true, AtomicOrdering::Release);
     let opened = Client::open_bus(&geometry(1), link, ClientConfig::default()).await;
     assert!(link_cause_is::<LinkFailure>(
         &opened.err().expect("open fails")
@@ -2093,10 +2069,13 @@ async fn bus_stats_are_reachable_through_the_client() {
         .await
         .unwrap();
     let stats = client.bus_stats();
-    assert!(stats.exchanges() > 0);
-    let before = stats.exchanges();
+    assert!(stats.frames() > 0);
+    let before = stats.acked_frames();
     send_nop(&client).await.unwrap();
-    assert!(client.bus_stats().exchanges() > before);
+    assert!(client.bus_stats().acked_frames() > before);
+    assert_eq!(
+        client.bus_stats().frames(),
+        client.bus_stats().acked_frames()
+    );
     client.close().await.unwrap();
-    assert_eq!(client.bus_stats().mean_exchange_ns(), 1_000);
 }

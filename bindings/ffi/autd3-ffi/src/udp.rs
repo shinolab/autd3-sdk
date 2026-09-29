@@ -22,8 +22,8 @@ impl ClientBackend for UdpBackend {
         self.client.num_devices()
     }
 
-    fn dc_offset_ns(&self) -> i64 {
-        self.client.dc_offset_ns()
+    fn clock_offset_ns(&self) -> i64 {
+        self.client.clock_offset_ns()
     }
 
     fn read_firmware_version(&self) -> BoxFuture<Vec<String>> {
@@ -47,9 +47,9 @@ impl ClientBackend for UdpBackend {
         Box::pin(async move { client.read_error_detail().await })
     }
 
-    fn read_telemetry(&self, counter: autd3_rs::Telemetry) -> BoxFuture<Vec<u8>> {
+    fn read_telemetry(&self) -> BoxFuture<Vec<autd3_rs::TelemetryCounters>> {
         let client = Arc::clone(&self.client);
-        Box::pin(async move { client.read_telemetry(counter).await })
+        Box::pin(async move { client.read_telemetry().await })
     }
 
     fn send(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<ResponseTokenData> {
@@ -120,7 +120,6 @@ impl CheckerBackend for UdpChecker {
             .map_err(Error::from)?;
         Ok(DeviceStatusData {
             devices: status.devices().to_vec(),
-            recoveries: status.recoveries(),
         })
     }
 }
@@ -139,10 +138,10 @@ autd3_ffi_abi::option_handle_iface!(
 );
 autd3_ffi_abi::option_handle_field!(
     TransportOptionHandle,
-    [cycle],
+    [heartbeat],
     duration,
-    autd3_transport_option_set_cycle,
-    autd3_transport_option_get_cycle
+    autd3_transport_option_set_heartbeat,
+    autd3_transport_option_get_heartbeat
 );
 autd3_ffi_abi::option_handle_field!(
     TransportOptionHandle,
@@ -150,6 +149,13 @@ autd3_ffi_abi::option_handle_field!(
     duration,
     autd3_transport_option_set_reply_timeout,
     autd3_transport_option_get_reply_timeout
+);
+autd3_ffi_abi::option_handle_field!(
+    TransportOptionHandle,
+    [lost_timeout],
+    duration,
+    autd3_transport_option_set_lost_timeout,
+    autd3_transport_option_get_lost_timeout
 );
 autd3_ffi_abi::option_handle_field!(
     TransportOptionHandle,
@@ -282,10 +288,19 @@ mod tests {
 
     use super::*;
 
-    fn cycle(handle: *const TransportOptionHandle) -> Duration {
+    fn heartbeat(handle: *const TransportOptionHandle) -> Duration {
         let mut ns = 0u64;
         assert_eq!(
-            unsafe { autd3_transport_option_get_cycle(handle, &raw mut ns) },
+            unsafe { autd3_transport_option_get_heartbeat(handle, &raw mut ns) },
+            AUTD3_OK
+        );
+        Duration::from_nanos(ns)
+    }
+
+    fn lost_timeout(handle: *const TransportOptionHandle) -> Duration {
+        let mut ns = 0u64;
+        assert_eq!(
+            unsafe { autd3_transport_option_get_lost_timeout(handle, &raw mut ns) },
             AUTD3_OK
         );
         Duration::from_nanos(ns)
@@ -311,7 +326,8 @@ mod tests {
     fn the_defaults_reach_c_unchanged() {
         let handle = autd3_transport_option_new();
         let option = CoreOption::default();
-        assert_eq!(cycle(handle), option.cycle);
+        assert_eq!(heartbeat(handle), option.heartbeat);
+        assert_eq!(lost_timeout(handle), option.lost_timeout);
         let mut ns = 0u64;
         assert_eq!(
             unsafe { autd3_transport_option_get_sync_timeout(handle, &raw mut ns) },
@@ -351,7 +367,7 @@ mod tests {
     fn a_null_handle_is_an_argument_error_not_a_crash() {
         let mut ns = 0u64;
         assert_eq!(
-            unsafe { autd3_transport_option_get_cycle(std::ptr::null(), &raw mut ns) },
+            unsafe { autd3_transport_option_get_heartbeat(std::ptr::null(), &raw mut ns) },
             AUTD3_ERR_INVALID_ARGUMENT
         );
         assert!(unsafe { autd3_udp_emulator_option(std::ptr::null()) }.is_null());
@@ -370,7 +386,9 @@ mod tests {
             autd3_rs::rt::block_on(open(geometry, option, ClientConfig::default())).unwrap();
         assert_eq!(backend.num_devices(), 2);
         let status = backend.checker().check().unwrap();
-        assert_eq!(status.devices, [DeviceState::Op; 2]);
+        assert_eq!(status.devices, [DeviceState::Ready; 2]);
+        let telemetry = autd3_rs::rt::block_on(backend.read_telemetry()).unwrap();
+        assert_eq!(telemetry.len(), 2);
         autd3_rs::rt::block_on(backend.close()).unwrap();
 
         assert_eq!(

@@ -1,6 +1,6 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
 use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_firmware_emulator::Device;
 
@@ -8,10 +8,10 @@ const NUM_TRANSDUCERS: usize = 249;
 const BANK: u8 = 1;
 const DIVIDER: u16 = 512;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
     let mut tx = TxFrame::new(Seq::new(seq), cmd);
     tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; TX_FRAME_BYTES];
+    let mut buf = [0u8; FRAME_BYTES_MAX];
     tx.write_to(&mut buf);
     buf
 }
@@ -37,7 +37,7 @@ fn soa_bytes(pattern: &Pattern) -> Vec<u8> {
 }
 
 fn split_path(pattern: &Pattern) -> Device {
-    let mut write = vec![BANK, 0];
+    let mut write = vec![BANK, 1];
     write.extend_from_slice(&0u16.to_le_bytes());
     write.extend_from_slice(&soa_bytes(pattern));
 
@@ -54,10 +54,18 @@ fn split_path(pattern: &Pattern) -> Device {
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(device.send(&frame(0, Cmd::WritePatternRaw, &write)).data, 0);
-    assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
-        device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
+        device.send(&frame(0, Cmd::WritePatternRaw, &write)).status,
+        0
+    );
+    assert_eq!(
+        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        0
+    );
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ChangePatternBank, &change))
+            .status,
         0
     );
     device
@@ -79,7 +87,7 @@ fn fused_path(pattern: &Pattern) -> Device {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
-        device.send(&frame(0, Cmd::WritePatternFused, &p)).data,
+        device.send(&frame(0, Cmd::WritePatternFused, &p)).status,
         0,
         "fused frame must be accepted"
     );
@@ -133,17 +141,17 @@ fn fused_modulation_produces_the_same_state_as_the_three_frame_path() {
     assert_eq!(
         split
             .send(&frame(0, Cmd::WriteModulationBuffer, &write))
-            .data,
+            .status,
         0
     );
     assert_eq!(
-        split.send(&frame(1, Cmd::ConfigModulation, &config)).data,
+        split.send(&frame(1, Cmd::ConfigModulation, &config)).status,
         0
     );
     assert_eq!(
         split
             .send(&frame(2, Cmd::ChangeModulationBank, &change))
-            .data,
+            .status,
         0
     );
 
@@ -159,7 +167,7 @@ fn fused_modulation_produces_the_same_state_as_the_three_frame_path() {
     let mut fused = Device::new(NUM_TRANSDUCERS);
     fused.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
-        fused.send(&frame(0, Cmd::WriteModulationFused, &p)).data,
+        fused.send(&frame(0, Cmd::WriteModulationFused, &p)).status,
         0,
         "fused modulation frame must be accepted"
     );
@@ -204,7 +212,7 @@ fn fused_modulation_finite_loop_arms_and_stops_from_a_single_latch() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
-        device.send(&frame(0, Cmd::WriteModulationFused, &p)).data,
+        device.send(&frame(0, Cmd::WriteModulationFused, &p)).status,
         0,
         "a finite loop with a SYNC_IDX transition must be accepted"
     );

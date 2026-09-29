@@ -23,24 +23,78 @@ namespace AUTD3
         public bool ReadsEnabled => (Raw & (1 << 7)) != 0;
     }
 
+    public readonly struct TelemetryCounters : IEquatable<TelemetryCounters>
+    {
+        public const int Count = 7;
+
+        private readonly uint[] _counters;
+
+        internal TelemetryCounters(uint[] counters)
+        {
+            _counters = counters;
+        }
+
+        public uint this[Telemetry counter] => Get(counter);
+
+        public uint Get(Telemetry counter)
+        {
+            var index = (int)counter;
+            return _counters != null && index < _counters.Length ? _counters[index] : 0;
+        }
+
+        public IReadOnlyList<uint> AsArray() => _counters ?? Array.Empty<uint>();
+
+        public bool Equals(TelemetryCounters other)
+        {
+            var lhs = AsArray();
+            var rhs = other.AsArray();
+            if (lhs.Count != rhs.Count)
+            {
+                return false;
+            }
+            for (var i = 0; i < lhs.Count; i++)
+            {
+                if (lhs[i] != rhs[i])
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public override bool Equals(object? obj) => obj is TelemetryCounters other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            foreach (var value in AsArray())
+            {
+                hash.Add(value);
+            }
+            return hash.ToHashCode();
+        }
+
+        public static bool operator ==(TelemetryCounters left, TelemetryCounters right) => left.Equals(right);
+
+        public static bool operator !=(TelemetryCounters left, TelemetryCounters right) => !left.Equals(right);
+    }
+
     public sealed class DeviceStatus
     {
         public IReadOnlyList<DeviceState> Devices { get; }
-        public ulong Recoveries { get; }
 
-        internal DeviceStatus(IReadOnlyList<DeviceState> devices, ulong recoveries)
+        internal DeviceStatus(IReadOnlyList<DeviceState> devices)
         {
             Devices = devices;
-            Recoveries = recoveries;
         }
 
-        public bool AllOp
+        public bool AllReady
         {
             get
             {
                 foreach (var state in Devices)
                 {
-                    if (state != DeviceState.Op)
+                    if (state != DeviceState.Ready)
                     {
                         return false;
                     }
@@ -70,7 +124,7 @@ namespace AUTD3
             {
                 return false;
             }
-            if (Recoveries != other.Recoveries || Devices.Count != other.Devices.Count)
+            if (Devices.Count != other.Devices.Count)
             {
                 return false;
             }
@@ -87,7 +141,6 @@ namespace AUTD3
         public override int GetHashCode()
         {
             var hash = new HashCode();
-            hash.Add(Recoveries);
             foreach (var state in Devices)
             {
                 hash.Add(state);
@@ -124,13 +177,13 @@ namespace AUTD3
                 var devices = new List<DeviceState>(count);
                 for (var i = 0; i < count; i++)
                 {
-                    if (!NativeClient.autd3_device_status_device_state(status, (UIntPtr)i, out var kind, out var bits))
+                    if (!NativeClient.autd3_device_status_device_state(status, (UIntPtr)i, out var kind))
                     {
                         throw new Autd3Exception("failed to read device state");
                     }
-                    devices.Add(DeviceState.FromNative(kind, bits));
+                    devices.Add(DeviceState.FromNative(kind));
                 }
-                return new DeviceStatus(devices, NativeClient.autd3_device_status_recoveries(status));
+                return new DeviceStatus(devices);
             }
             finally
             {
@@ -143,19 +196,19 @@ namespace AUTD3
 
     public sealed class Response
     {
-        private readonly byte[] _data;
+        private readonly byte[] _status;
 
-        internal Response(byte[] data)
+        internal Response(byte[] status)
         {
-            _data = data;
+            _status = status;
         }
 
-        public IReadOnlyList<byte> Data => _data;
+        public IReadOnlyList<byte> Status => _status;
 
         public void Check()
         {
             var err = new byte[NativeAbi.ErrorBufferLength];
-            if (!NativeClient.autd3_response_check(_data, (UIntPtr)_data.Length, err, (UIntPtr)err.Length))
+            if (!NativeClient.autd3_response_check(_status, (UIntPtr)_status.Length, err, (UIntPtr)err.Length))
             {
                 throw new Autd3Exception(NativeUtil.Utf8(err));
             }
@@ -314,8 +367,35 @@ namespace AUTD3
         public Task<byte[]> ReadErrorDetailAsync() =>
             ReadByteArrayAsync((cb, ud) => NativeClient.autd3_client_read_error_detail(Handle, cb, ud));
 
-        public Task<byte[]> ReadTelemetryAsync(Telemetry counter) =>
-            ReadByteArrayAsync((cb, ud) => NativeClient.autd3_client_read_telemetry(Handle, (byte)counter, cb, ud));
+        public async Task<IReadOnlyList<TelemetryCounters>> ReadTelemetryAsync()
+        {
+            var array = await AsyncOps.InvokeAsync((cb, ud) =>
+                NativeClient.autd3_client_read_telemetry(Handle, cb, ud)).ConfigureAwait(false);
+            try
+            {
+                var len = (int)NativeClient.autd3_u32_array_len(array);
+                var values = new int[len];
+                if (len > 0)
+                {
+                    Marshal.Copy(NativeClient.autd3_u32_array_data(array), values, 0, len);
+                }
+                var devices = new TelemetryCounters[len / TelemetryCounters.Count];
+                for (var d = 0; d < devices.Length; d++)
+                {
+                    var counters = new uint[TelemetryCounters.Count];
+                    for (var i = 0; i < counters.Length; i++)
+                    {
+                        counters[i] = unchecked((uint)values[d * TelemetryCounters.Count + i]);
+                    }
+                    devices[d] = new TelemetryCounters(counters);
+                }
+                return devices;
+            }
+            finally
+            {
+                NativeClient.autd3_u32_array_free(array);
+            }
+        }
 
         internal static async Task<byte[]> ReadByteArrayAsync(Action<CompletionCallback, IntPtr> invoke)
         {

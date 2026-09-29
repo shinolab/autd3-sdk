@@ -18,10 +18,9 @@ impl ClientConfig {
     #[new]
     #[pyo3(signature = (
         low_latency = false,
-        timeout_cycles = None,
+        ack_timeout = None,
         max_inflight = None,
         max_resync_rounds = None,
-        reset_resend_cycles = None,
         rt_priority = CoreClientConfig::default().rt_priority.map(RtPriority),
         rt_policy = None,
         rt_affinity = None,
@@ -31,10 +30,9 @@ impl ClientConfig {
     #[allow(clippy::too_many_arguments)]
     fn new(
         low_latency: bool,
-        timeout_cycles: Option<u32>,
+        ack_timeout: Option<&Bound<'_, PyAny>>,
         max_inflight: Option<usize>,
         max_resync_rounds: Option<u32>,
-        reset_resend_cycles: Option<u32>,
         rt_priority: Option<RtPriority>,
         rt_policy: Option<RtSchedulePolicy>,
         rt_affinity: Option<usize>,
@@ -46,9 +44,13 @@ impl ClientConfig {
             rt_priority: rt_priority.map(|v| v.0),
             ..CoreClientConfig::default()
         };
-        if let Some(v) = timeout_cycles {
-            inner.timeout_cycles = NonZeroU32::new(v)
-                .ok_or_else(|| PyValueError::new_err("timeout_cycles must be >= 1"))?;
+        if let Some(v) = crate::udp::opt_duration(ack_timeout)? {
+            if v.is_zero() {
+                return Err(PyValueError::new_err(
+                    "ack_timeout must be longer than zero",
+                ));
+            }
+            inner.ack_timeout = v;
         }
         if let Some(v) = max_inflight {
             inner.max_inflight = NonZeroUsize::new(v)
@@ -57,10 +59,6 @@ impl ClientConfig {
         if let Some(v) = max_resync_rounds {
             inner.max_resync_rounds = NonZeroU32::new(v)
                 .ok_or_else(|| PyValueError::new_err("max_resync_rounds must be >= 1"))?;
-        }
-        if let Some(v) = reset_resend_cycles {
-            inner.reset_resend_cycles = NonZeroU32::new(v)
-                .ok_or_else(|| PyValueError::new_err("reset_resend_cycles must be >= 1"))?;
         }
         if let Some(v) = rt_policy {
             inner.rt_policy = v.0;

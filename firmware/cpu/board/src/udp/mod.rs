@@ -11,9 +11,9 @@ use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use autd3_cpu_fw::net::{MAX_FRAME, Mac};
 use autd3_cpu_fw::nic::{Nic, RxMeta};
-use autd3_cpu_fw::node::{Node, Received};
-use autd3_cpu_fw::proto::{HOST_TO_DEVICE_BYTES, TxFrame};
-use autd3_cpu_fw::udp::{HOST_WATCHDOG_MS, SYNC_CYCLE_NS};
+use autd3_cpu_fw::node::{CommandLayer, Node, Received};
+use autd3_cpu_fw::proto::{Disposition, Reply};
+use autd3_cpu_fw::udp::SYNC_CYCLE_NS;
 use autd3_cpu_fw::update::{TRANSPORT_MARKER_BYTES, Transport};
 
 use self::regs::{VIC_INTNO_ETHDMAIR, VIC_INTNO_TGIA0};
@@ -32,7 +32,6 @@ const PHY_BMSR: u32 = 1;
 const BMSR_LINK_STATUS: u16 = 1 << 2;
 const ETHDMAIR_PRIORITY: u32 = 14;
 const TGIA0_PRIORITY: u32 = 13;
-const AL_STATUS_CODE_SM_WATCHDOG: u16 = 0x001B;
 const SYNC_GUARD_NS: u64 = 250_000;
 
 struct HwNic {
@@ -179,8 +178,8 @@ extern "C" fn ethdmair_isr() {
                 };
                 let received =
                     net.node
-                        .on_frame(&mut net.nic, now_ms, &net.rx[..len], meta, deliver);
-                if received == Received::HostFrame {
+                        .on_frame(&mut net.nic, now_ms, &net.rx[..len], meta, &mut Commands);
+                if received == Received::HostMessage {
                     LAST_HOST_FRAME_MS.store(now_ms, Ordering::Relaxed);
                     HOST_SEEN.store(true, Ordering::Release);
                 }
@@ -191,9 +190,24 @@ extern "C" fn ethdmair_isr() {
     vic::end_of_interrupt();
 }
 
-fn deliver(frame: &[u8; HOST_TO_DEVICE_BYTES]) -> TxFrame {
-    crate::cpu().recv_frame(&mut HwPort, frame);
-    crate::cpu().tx()
+struct Commands;
+
+impl CommandLayer for Commands {
+    fn recv_frame(&mut self, frame: &[u8], msg_id: u16) -> Disposition {
+        crate::cpu().recv_frame(&mut HwPort, frame, msg_id)
+    }
+
+    fn reply(&mut self) -> Reply {
+        crate::cpu().reply()
+    }
+}
+
+pub(crate) fn complete(msg_id: u16) {
+    irq::without_irq(|| {
+        let net = net();
+        let reply = crate::cpu().reply();
+        net.node.send_completion(&mut net.nic, msg_id, &reply);
+    });
 }
 
 #[unsafe(naked)]
@@ -214,7 +228,7 @@ extern "C" fn tgia0_isr() {
     vic::end_of_interrupt();
 }
 
-pub(crate) fn next_sync0() -> u64 {
+pub(crate) fn next_sync_edge() -> u64 {
     if !pulse::is_ready() {
         return 0;
     }
@@ -225,23 +239,14 @@ pub(crate) fn next_sync0() -> u64 {
     (now + SYNC_GUARD_NS).div_ceil(cycle) * cycle
 }
 
-pub(crate) fn dc_sys_time() -> u64 {
+pub(crate) fn sys_time() -> u64 {
     ethsw::capture().unwrap_or(0)
 }
 
-pub(crate) fn sync0_cycle_ns() -> u32 {
-    SYNC_CYCLE_NS
-}
-
-pub(crate) fn al_status_code() -> u16 {
+pub(crate) fn host_idle_ms() -> Option<u32> {
     if !HOST_SEEN.load(Ordering::Acquire) {
-        return 0;
+        return None;
     }
     let last = LAST_HOST_FRAME_MS.load(Ordering::Relaxed);
-    let silent = timer::now_ms().wrapping_sub(last);
-    if silent >= HOST_WATCHDOG_MS {
-        AL_STATUS_CODE_SM_WATCHDOG
-    } else {
-        0
-    }
+    Some(timer::now_ms().wrapping_sub(last))
 }

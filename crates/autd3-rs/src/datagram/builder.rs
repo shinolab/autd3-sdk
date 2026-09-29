@@ -4,9 +4,9 @@ use crate::commands::Command;
 use crate::commands::operation::Operation;
 use crate::error::{Error, PayloadError};
 use crate::geometry::{Device, Geometry};
-use autd3_rs_core::DcClock;
+use autd3_rs_core::DeviceClock;
 
-use super::dc_offset::DcOffset;
+use super::clock_offset::ClockOffset;
 use super::each::{EachFrame, EachOps, each_reflect};
 use super::frame::Frames;
 use super::mirror::{Mirror, MirrorHandle};
@@ -21,45 +21,45 @@ pub struct DatagramBuilder<'a> {
     ops: Vec<Step<'a>>,
     invalid: Option<PayloadError>,
     mirror: Option<MirrorHandle>,
-    dc_offset: DcOffset,
+    clock_offset: ClockOffset,
 }
 
 impl<'a> DatagramBuilder<'a> {
     #[must_use]
     pub fn new(geometry: Arc<Geometry>) -> Self {
-        Self::with_dc_offset(geometry, 0)
+        Self::with_clock_offset(geometry, 0)
     }
 
     #[must_use]
-    pub fn with_dc_offset(geometry: Arc<Geometry>, dc_offset_ns: i64) -> Self {
-        Self::with_source(geometry, None, DcOffset::Fixed(dc_offset_ns))
+    pub fn with_clock_offset(geometry: Arc<Geometry>, clock_offset_ns: i64) -> Self {
+        Self::with_source(geometry, None, ClockOffset::Fixed(clock_offset_ns))
     }
 
     #[must_use]
-    pub fn with_dc_clock(geometry: Arc<Geometry>, dc_clock: DcClock) -> Self {
-        Self::with_source(geometry, None, DcOffset::Clock(dc_clock))
+    pub fn with_device_clock(geometry: Arc<Geometry>, device_clock: DeviceClock) -> Self {
+        Self::with_source(geometry, None, ClockOffset::Clock(device_clock))
     }
 
     #[must_use]
     pub(crate) fn with_mirror(
         geometry: Arc<Geometry>,
         mirror: MirrorHandle,
-        dc_offset: DcOffset,
+        clock_offset: ClockOffset,
     ) -> Self {
-        Self::with_source(geometry, Some(mirror), dc_offset)
+        Self::with_source(geometry, Some(mirror), clock_offset)
     }
 
     fn with_source(
         geometry: Arc<Geometry>,
         mirror: Option<MirrorHandle>,
-        dc_offset: DcOffset,
+        clock_offset: ClockOffset,
     ) -> Self {
         Self {
             geometry,
             ops: Vec::new(),
             invalid: None,
             mirror,
-            dc_offset,
+            clock_offset,
         }
     }
 
@@ -90,7 +90,7 @@ impl<'a> DatagramBuilder<'a> {
                     let mut sub = DatagramBuilder::with_source(
                         Arc::clone(&geometry),
                         None,
-                        self.dc_offset.clone(),
+                        self.clock_offset.clone(),
                     );
                     cmd.expand(&mut sub);
                     invalid = invalid.or(sub.invalid);
@@ -131,9 +131,9 @@ impl<'a> DatagramBuilder<'a> {
     }
 
     pub(crate) fn push_op<O: Operation + 'a>(&mut self, mut op: O) -> &mut Self {
-        let dc_offset_ns = self.dc_offset.offset_ns();
-        if dc_offset_ns != 0 {
-            op.apply_dc_offset(dc_offset_ns);
+        let clock_offset_ns = self.clock_offset.offset_ns();
+        if clock_offset_ns != 0 {
+            op.apply_clock_offset(clock_offset_ns);
         }
         self.ops.push(Step::Op(Box::new(op)));
         self

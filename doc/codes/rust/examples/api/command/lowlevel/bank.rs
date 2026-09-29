@@ -45,7 +45,16 @@ async fn main() -> Result<()> {
     let p1 = geometry.phase_buffer();
     let p2 = geometry.phase_buffer();
     let p3 = geometry.phase_buffer();
-    let patterns = [Some(&p0[..]), Some(&p1[..]), Some(&p2[..]), Some(&p3[..])];
+    let patterns = [
+        Some(&p0[..]),
+        Some(&p1[..]),
+        Some(&p2[..]),
+        Some(&p3[..]),
+        None,
+        None,
+        None,
+        None,
+    ];
     let index = 0;
     let format = PatternCompression::PhaseHalf;
     let intensity = Intensity::MAX;

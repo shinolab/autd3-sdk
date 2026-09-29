@@ -1,10 +1,10 @@
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
-    let mut buf = [0u8; TX_FRAME_BYTES];
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
+    let mut buf = [0u8; FRAME_BYTES_MAX];
     TxFrame::new(Seq::new(seq), cmd).write_to(&mut buf);
     buf[2..2 + payload.len()].copy_from_slice(payload);
     buf
@@ -105,13 +105,13 @@ fn read_fpga_state_reports_thermal_and_default_banks() {
     device.send(&frame(0, Cmd::Reset, &[]));
 
     let rx = device.send(&frame(0, Cmd::ReadFpgaState, &[]));
-    assert_eq!(rx.data, 0b0000_1000);
+    assert_eq!(rx.data(), [0b0000_1000]);
 
     device.fpga_mut().set_thermal(true);
     let rx = device.send(&frame(1, Cmd::ReadFpgaState, &[]));
-    assert_eq!(rx.data, 0b0000_1001);
+    assert_eq!(rx.data(), [0b0000_1001]);
 
     device.fpga_mut().set_thermal(false);
     let rx = device.send(&frame(2, Cmd::ReadFpgaState, &[]));
-    assert_eq!(rx.data, 0b0000_1000);
+    assert_eq!(rx.data(), [0b0000_1000]);
 }

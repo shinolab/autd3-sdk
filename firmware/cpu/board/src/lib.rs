@@ -9,6 +9,7 @@ use core::arch::asm;
 use core::panic::PanicInfo;
 
 use autd3_cpu_fw::Cpu;
+use autd3_cpu_fw::proto::Drained;
 
 use crate::port::HwPort;
 
@@ -47,7 +48,13 @@ pub extern "C" fn main() -> ! {
     udp::start();
     bsp::vic::irq_enable();
     loop {
-        cpu().process_pending(&mut HwPort);
+        loop {
+            match cpu().process_one(&mut HwPort) {
+                Drained::Empty => break,
+                Drained::Completed { msg_id } => udp::complete(msg_id),
+                Drained::Flushed => {}
+            }
+        }
         for _ in 0..bsp::timer::elapsed_ms() {
             cpu().tick_1ms(&mut HwPort);
         }

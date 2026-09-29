@@ -1,4 +1,3 @@
-use core::num::NonZeroU32;
 use std::fmt::Write;
 use std::time::Duration;
 
@@ -37,7 +36,7 @@ fn option_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
     if let Some(group) = &cli.group {
         let _ = writeln!(body, "    group: Some(\"{group}\".parse()?),");
     }
-    let _ = writeln!(body, "    cycle: {},", fmt_duration(cli.cycle));
+    let _ = writeln!(body, "    heartbeat: {},", fmt_duration(cli.heartbeat));
     if let Some(reply_timeout) = cli.reply_timeout {
         let _ = writeln!(body, "    reply_timeout: {},", fmt_duration(reply_timeout));
     }
@@ -48,7 +47,7 @@ fn option_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
 impl From<&Cli> for Config {
     fn from(cli: &Cli) -> Self {
         Config {
-            timeout_cycles: cli.timeout_cycles,
+            ack_timeout: cli.ack_timeout,
             max_inflight: match cli.mode {
                 Mode::StopAndWait => 1,
                 Mode::Streaming => cli.max_inflight.max(1),
@@ -98,7 +97,7 @@ fn rt_policy(p: RtPolicy) -> &'static str {
 }
 
 struct Config {
-    timeout_cycles: NonZeroU32,
+    ack_timeout: Duration,
     max_inflight: usize,
     max_resync_rounds: u32,
     low_latency: bool,
@@ -116,11 +115,7 @@ fn push_config(body: &mut String, imports: &mut Vec<&'static str>, c: &Config) {
     need("std::num::NonZeroUsize");
     need("std::num::NonZeroU32");
     let _ = writeln!(body, "let config = ClientConfig {{");
-    let _ = writeln!(
-        body,
-        "    timeout_cycles: NonZeroU32::new({}).unwrap(),",
-        c.timeout_cycles
-    );
+    let _ = writeln!(body, "    ack_timeout: {},", fmt_duration(c.ack_timeout));
     let _ = writeln!(
         body,
         "    max_inflight: NonZeroUsize::new({}).unwrap(),",

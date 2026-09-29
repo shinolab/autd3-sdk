@@ -18,27 +18,22 @@ fn matching_seq_advances_ack_and_expected_seq() {
     h.deliver(&Frame::new(0, Cmd::Nop));
     assert_eq!(h.ack(), 0);
     assert_eq!(h.expected_seq(), 1);
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
 
-    h.deliver(&Frame::new(1, Cmd::ReadCpuFwVersionMajor));
+    h.deliver(&Frame::new(1, Cmd::ReadFirmwareInfo));
     assert_eq!(h.ack(), 1);
     assert_eq!(h.expected_seq(), 2);
-    assert_eq!(h.data(), FW_VERSION_MAJOR);
+    assert_eq!(h.status(), 0);
+    assert_eq!(
+        h.firmware_info().cpu_version,
+        [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH]
+    );
 
-    h.deliver(&Frame::new(2, Cmd::ReadCpuFwVersionMinor));
+    h.deliver(&Frame::new(2, Cmd::ReadErrorDetail));
     assert_eq!(h.ack(), 2);
     assert_eq!(h.expected_seq(), 3);
-    assert_eq!(h.data(), FW_VERSION_MINOR);
-
-    h.deliver(&Frame::new(3, Cmd::ReadCpuFwVersionPatch));
-    assert_eq!(h.ack(), 3);
-    assert_eq!(h.expected_seq(), 4);
-    assert_eq!(h.data(), FW_VERSION_PATCH);
-
-    h.deliver(&Frame::new(4, Cmd::ReadErrorDetail));
-    assert_eq!(h.ack(), 4);
-    assert_eq!(h.expected_seq(), 5);
-    assert_eq!(h.data(), Error::MissTransitionTime as u8);
+    assert_eq!(h.status(), 0);
+    assert_eq!(h.reply_data(), [Error::MissTransitionTime as u8]);
 }
 
 #[test]
@@ -53,9 +48,9 @@ fn mismatched_seq_is_dropped() {
 fn unknown_cmd_sets_error_detail() {
     let mut h = Harness::new();
     h.deliver(&Frame::raw(0, 0x7F));
-    assert_eq!(h.data(), Error::UnknownCmd as u8);
+    assert_eq!(h.status(), Error::UnknownCmd as u8);
     h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.data(), Error::UnknownCmd as u8);
+    assert_eq!(h.reply_data(), [Error::UnknownCmd as u8]);
 }
 
 #[test]
@@ -63,9 +58,10 @@ fn every_cmd_has_a_dispatch_arm() {
     for &cmd in Cmd::ALL {
         let mut h = Harness::new();
         h.deliver(&Frame::new(0, cmd));
+        assert_ne!(h.status(), Error::UnknownCmd as u8, "{cmd:?}");
         let next_seq = u8::from(cmd != Cmd::Reset);
         h.deliver(&Frame::new(next_seq, Cmd::ReadErrorDetail));
-        assert_ne!(h.data(), Error::UnknownCmd as u8, "{cmd:?}");
+        assert_ne!(h.reply_data(), [Error::UnknownCmd as u8], "{cmd:?}");
     }
 }
 
@@ -89,7 +85,7 @@ fn reset_during_inflight_drain_overrides_stale_frame() {
 
     assert!(h.process_one());
     assert_eq!(h.ack(), 0xFF);
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.expected_seq(), 0);
 
     assert!(!h.process_one());
@@ -113,14 +109,13 @@ fn reset_returns_proto_state_to_post_boot_baseline() {
     assert_eq!(h.ack(), 0xFF);
     assert_eq!(h.expected_seq(), 0);
 
-    h.deliver(&Frame::new(0, Cmd::ReadCpuFwVersionMajor));
-    assert_eq!(h.data(), FW_VERSION_MAJOR);
-    h.deliver(&Frame::new(1, Cmd::ReadCpuFwVersionMinor));
-    assert_eq!(h.data(), FW_VERSION_MINOR);
-    h.deliver(&Frame::new(2, Cmd::ReadCpuFwVersionPatch));
-    assert_eq!(h.data(), FW_VERSION_PATCH);
-    h.deliver(&Frame::new(3, Cmd::ReadErrorDetail));
-    assert_eq!(h.data(), Error::SyncNotReady as u8);
+    h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+    assert_eq!(
+        h.firmware_info().cpu_version,
+        [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH]
+    );
+    h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
+    assert_eq!(h.reply_data(), [Error::SyncNotReady as u8]);
 }
 
 #[test]
@@ -130,11 +125,11 @@ fn nop_acks_without_changing_state() {
 
     h.deliver(&Frame::new(0, Cmd::Nop));
     assert_eq!(h.ack(), 0);
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.expected_seq(), 1);
 
     h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.data(), Error::FpgaTimeout as u8);
+    assert_eq!(h.reply_data(), [Error::FpgaTimeout as u8]);
 }
 
 #[test]
@@ -151,7 +146,7 @@ fn seq_wraparound_boundary() {
 fn unknown_non_streaming_cmd_sets_error_detail() {
     let mut h = Harness::new();
     h.deliver(&Frame::raw(0, 0xEE));
-    assert_eq!(h.data(), Error::UnknownCmd as u8);
+    assert_eq!(h.status(), Error::UnknownCmd as u8);
 }
 
 #[test]
@@ -205,6 +200,6 @@ fn handshake_survives_worst_case_dedup_collision_after_crashed_client() {
 
     h.deliver(&Frame::new(0, Cmd::Nop));
     assert_eq!(h.ack(), 0);
-    assert_eq!(h.data(), 0);
+    assert_eq!(h.status(), 0);
     assert_eq!(h.expected_seq(), 1);
 }

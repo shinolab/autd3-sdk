@@ -44,6 +44,10 @@ async fn main() -> anyhow::Result<()> {
             Some(&patterns[1][..]),
             Some(&patterns[2][..]),
             Some(&patterns[3][..]),
+            None,
+            None,
+            None,
+            None,
         ],
     });
     builder.push(ConfigPattern {

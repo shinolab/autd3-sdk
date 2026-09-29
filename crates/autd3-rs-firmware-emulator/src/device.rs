@@ -1,9 +1,6 @@
-use autd3_rs_core::protocol::{RX_FRAME_BYTES, RxFrame, TX_FRAME_BYTES};
-
 use crate::emu_fpga::FpgaEmulator;
 use autd3_cpu_fw::Cpu;
-use autd3_cpu_fw::proto::Mode;
-use autd3_cpu_fw::proto::Telemetry;
+use autd3_cpu_fw::proto::{Disposition, Drained, Mode, Reply, Telemetry};
 use autd3_cpu_fw::update::Slot;
 
 pub struct Device {
@@ -33,11 +30,11 @@ impl Device {
         self.cpu.booted_slot()
     }
 
-    pub fn recv(&mut self, tx: &[u8; TX_FRAME_BYTES]) {
-        self.cpu.recv_frame(&mut self.fpga, tx);
+    pub fn recv(&mut self, frame: &[u8], msg_id: u16) -> Disposition {
+        self.cpu.recv_frame(&mut self.fpga, frame, msg_id)
     }
 
-    pub fn process_one(&mut self) -> bool {
+    pub fn process_one(&mut self) -> Drained {
         self.cpu.process_one(&mut self.fpga)
     }
 
@@ -54,18 +51,14 @@ impl Device {
     }
 
     #[must_use]
-    pub fn rx(&self) -> RxFrame {
-        let tx = self.cpu.tx();
-        let mut rx = [0u8; RX_FRAME_BYTES];
-        rx[0] = tx.ack;
-        rx[1] = tx.data;
-        RxFrame::parse(&rx)
+    pub fn reply(&self) -> Reply {
+        self.cpu.reply()
     }
 
-    pub fn send(&mut self, tx: &[u8; TX_FRAME_BYTES]) -> RxFrame {
-        self.recv(tx);
+    pub fn send(&mut self, frame: &[u8]) -> Reply {
+        let _ = self.recv(frame, 0);
         self.process_pending();
-        self.rx()
+        self.reply()
     }
 
     #[must_use]
@@ -74,7 +67,7 @@ impl Device {
     }
 
     #[must_use]
-    pub fn telemetry(&self, id: Telemetry) -> u8 {
+    pub fn telemetry(&self, id: Telemetry) -> u32 {
         self.cpu.telemetry(id)
     }
 

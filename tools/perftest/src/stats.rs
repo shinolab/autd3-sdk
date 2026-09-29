@@ -33,8 +33,8 @@ pub struct Summary {
     pub device_errors: BTreeMap<u8, u64>,
     pub timeouts: u64,
     pub network_errors: u64,
-    pub stale_cycles: u64,
-    pub lost_cycles: u64,
+    pub retransmissions: u64,
+    pub missed_replies: u64,
     pub throughput_cmd_per_sec: f64,
     pub throughput_byte_per_sec: f64,
     pub latency: LatencyStats,
@@ -45,8 +45,8 @@ impl Summary {
         samples: &[Sample],
         frame_bytes: usize,
         elapsed: Duration,
-        stale_cycles: u64,
-        lost_cycles: u64,
+        retransmissions: u64,
+        missed_replies: u64,
     ) -> Self {
         let mut device_errors: BTreeMap<u8, u64> = BTreeMap::new();
         let mut timeouts = 0u64;
@@ -82,8 +82,8 @@ impl Summary {
             device_errors,
             timeouts,
             network_errors,
-            stale_cycles,
-            lost_cycles,
+            retransmissions,
+            missed_replies,
             throughput_cmd_per_sec: cmd_per_sec,
             throughput_byte_per_sec: byte_per_sec,
             latency,

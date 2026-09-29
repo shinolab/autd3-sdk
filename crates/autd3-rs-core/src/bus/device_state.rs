@@ -1,26 +1,29 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DeviceState {
-    Op,
-    SafeOp,
-    SafeOpError,
+    Ready,
+    Syncing,
     Lost,
-    Other(u8),
 }
 
 impl std::fmt::Display for DeviceState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DeviceState::Op => write!(f, "OP"),
-            DeviceState::SafeOp => write!(f, "SAFE-OP"),
-            DeviceState::SafeOpError => write!(f, "SAFE-OP + ERROR"),
+            DeviceState::Ready => write!(f, "READY"),
+            DeviceState::Syncing => write!(f, "SYNCING"),
             DeviceState::Lost => write!(f, "LOST"),
-            DeviceState::Other(bits) => match bits {
-                0x00 => write!(f, "NONE"),
-                0x01 => write!(f, "INIT"),
-                0x02 => write!(f, "PRE-OP"),
-                0x03 => write!(f, "BOOT"),
-                bits => write!(f, "UNKNOWN ({bits:#04x})"),
-            },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_names_the_state() {
+        assert_eq!(DeviceState::Ready.to_string(), "READY");
+        assert_eq!(DeviceState::Syncing.to_string(), "SYNCING");
+        assert_eq!(DeviceState::Lost.to_string(), "LOST");
     }
 }

@@ -1,16 +1,35 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use autd3_rs::DeviceState;
-use autd3_rs::protocol::{Cmd, RX_FRAME_BYTES, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
 use autd3_rs::udp::emulator::UdpEmulator;
-use autd3_rs::udp::{TransportOption, UdpBus, UdpError};
+use autd3_rs::udp::{Reply, TransportOption, UdpBus, UdpError};
 
-fn frames(n: usize, seq: u8, cmd: Cmd) -> Vec<[u8; TX_FRAME_BYTES]> {
-    let mut tx = vec![[0u8; TX_FRAME_BYTES]; n];
+fn frames(n: usize, seq: u8, cmd: Cmd) -> Vec<[u8; FRAME_BYTES_MAX]> {
+    let mut tx = vec![[0u8; FRAME_BYTES_MAX]; n];
     for buf in &mut tx {
         TxFrame::new(Seq::new(seq), cmd).write_to(buf);
     }
     tx
+}
+
+fn collect(bus: &mut UdpBus, msg_id: u16, n: usize) -> Vec<Reply> {
+    collect_within(bus, msg_id, n, Duration::from_millis(500))
+}
+
+fn collect_within(bus: &mut UdpBus, msg_id: u16, n: usize, wait: Duration) -> Vec<Reply> {
+    let deadline = Instant::now() + wait;
+    let mut replies: Vec<Reply> = Vec::new();
+    while replies.len() < n {
+        let Some(reply) = bus.recv(deadline).unwrap() else {
+            break;
+        };
+        if reply.msg_id == msg_id {
+            replies.push(reply);
+        }
+    }
+    replies.sort_by_key(|r| r.device);
+    replies
 }
 
 fn open(emulator: &UdpEmulator, n: usize) -> UdpBus {
@@ -63,32 +82,67 @@ fn a_zero_device_count_is_rejected() {
 }
 
 #[test]
-fn cycles_route_every_ack_back_to_its_device() {
+fn every_frame_is_answered_once_with_its_result() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let mut bus = open(&emulator, 2);
-    let mut rx = vec![[0u8; RX_FRAME_BYTES]; 2];
 
-    let reset = frames(2, 0, Cmd::Reset);
-    assert!(bus.cycle(&reset, &mut rx).unwrap().rx_valid());
-    assert!(rx.iter().all(|r| r[0] == 0xFF));
+    let msg_id = bus.send(&frames(2, 0, Cmd::Reset)).unwrap();
+    let replies = collect(&mut bus, msg_id, 2);
+    assert_eq!(replies.len(), 2);
+    assert!(replies.iter().all(|r| r.ack == 0xFF));
 
-    let nop = frames(2, 0, Cmd::Nop);
-    assert!(bus.cycle(&nop, &mut rx).unwrap().rx_valid());
-    assert!(bus.cycle(&nop, &mut rx).unwrap().rx_valid());
-    assert!(rx.iter().all(|r| *r == [0, 0]));
-    assert_eq!(bus.stats().lost_cycles(), 0);
-    assert!(bus.stats().exchanges() >= 3);
+    let msg_id = bus.send(&frames(2, 0, Cmd::ReadErrorDetail)).unwrap();
+    let replies = collect(&mut bus, msg_id, 2);
+    assert_eq!(replies.iter().map(|r| r.device).collect::<Vec<_>>(), [0, 1]);
+    assert!(
+        replies
+            .iter()
+            .all(|r| r.ack == 0 && r.status == 0 && r.data() == [0])
+    );
 }
 
 #[test]
-fn replies_feed_the_dc_clock() {
+fn a_heartbeat_reports_the_last_result() {
+    let emulator = UdpEmulator::spawn(2).unwrap();
+    let mut bus = open(&emulator, 2);
+    let msg_id = bus.send(&frames(2, 0, Cmd::Reset)).unwrap();
+    assert_eq!(collect(&mut bus, msg_id, 2).len(), 2);
+    let msg_id = bus.send(&frames(2, 0, Cmd::Nop)).unwrap();
+    assert_eq!(collect(&mut bus, msg_id, 2).len(), 2);
+
+    let msg_id = bus.heartbeat().unwrap();
+    let replies = collect(&mut bus, msg_id, 2);
+    assert_eq!(replies.len(), 2);
+    assert!(replies.iter().all(|r| r.ack == 0));
+    assert_eq!(bus.stats().heartbeats(), 1);
+}
+
+#[test]
+fn frames_of_the_wrong_count_or_length_are_rejected() {
+    let emulator = UdpEmulator::spawn(2).unwrap();
+    let mut bus = open(&emulator, 2);
+    assert!(matches!(
+        bus.send(&frames(1, 0, Cmd::Nop)),
+        Err(UdpError::FrameCountMismatch {
+            expected: 2,
+            got: 1
+        })
+    ));
+    assert!(matches!(
+        bus.send(&[[0u8; 1], [0u8; 1]]),
+        Err(UdpError::InvalidFrameLength(1))
+    ));
+}
+
+#[test]
+fn replies_feed_the_device_clock() {
     let emulator = UdpEmulator::spawn(1).unwrap();
     let mut bus = open(&emulator, 1);
-    let clock = bus.dc_clock();
+    let clock = bus.device_clock();
     assert_eq!(clock.observation(), None);
-    let mut rx = vec![[0u8; RX_FRAME_BYTES]; 1];
     for _ in 0..3 {
-        bus.cycle(&frames(1, 0, Cmd::Reset), &mut rx).unwrap();
+        let msg_id = bus.heartbeat().unwrap();
+        assert_eq!(collect(&mut bus, msg_id, 1).len(), 1);
     }
     let observation = clock.observation().expect("observed");
     assert_eq!(observation.samples, 3);
@@ -98,22 +152,27 @@ fn replies_feed_the_dc_clock() {
 #[test]
 fn a_rebooted_middle_device_is_lost_with_everything_behind_it() {
     let emulator = UdpEmulator::spawn(3).unwrap();
-    let mut bus = open(&emulator, 3);
+    let option = TransportOption {
+        lost_timeout: Duration::from_millis(100),
+        heartbeat: Duration::from_millis(10),
+        ..emulator.option()
+    };
+    let mut bus = UdpBus::open(&option, 3).unwrap();
     let mut checker = bus.state_checker();
-    let mut rx = vec![[0u8; RX_FRAME_BYTES]; 3];
-    let reset = frames(3, 0, Cmd::Reset);
-    assert!(bus.cycle(&reset, &mut rx).unwrap().rx_valid());
-    assert_eq!(checker.check().unwrap().devices(), [DeviceState::Op; 3]);
+    let msg_id = bus.heartbeat().unwrap();
+    assert_eq!(collect(&mut bus, msg_id, 3).len(), 3);
+    assert_eq!(checker.check().unwrap().devices(), [DeviceState::Ready; 3]);
 
     emulator.reboot(1);
-    for _ in 0..12 {
-        assert!(!bus.cycle(&reset, &mut rx).unwrap().rx_valid());
+    let until = Instant::now() + Duration::from_millis(250);
+    while Instant::now() < until {
+        let msg_id = bus.heartbeat().unwrap();
+        let _ = collect_within(&mut bus, msg_id, 3, Duration::from_millis(10));
     }
     assert_eq!(
         checker.check().unwrap().devices(),
-        [DeviceState::Op, DeviceState::Lost, DeviceState::Lost]
+        [DeviceState::Ready, DeviceState::Lost, DeviceState::Lost]
     );
-    assert!(bus.stats().lost_cycles() >= 12);
 
     bus.close().unwrap();
     assert!(matches!(checker.check(), Err(UdpError::Closed)));
@@ -121,6 +180,47 @@ fn a_rebooted_middle_device_is_lost_with_everything_behind_it() {
 
     let mut bus = open(&emulator, 3);
     let mut checker = bus.state_checker();
-    assert!(bus.cycle(&reset, &mut rx).unwrap().rx_valid());
-    assert_eq!(checker.check().unwrap().devices(), [DeviceState::Op; 3]);
+    let msg_id = bus.heartbeat().unwrap();
+    assert_eq!(collect(&mut bus, msg_id, 3).len(), 3);
+    assert_eq!(checker.check().unwrap().devices(), [DeviceState::Ready; 3]);
+}
+
+#[test]
+fn a_host_stall_past_the_lost_timeout_reads_queued_replies_before_judging() {
+    let emulator = UdpEmulator::spawn(2).unwrap();
+    let option = emulator.option();
+    let mut bus = UdpBus::open(&option, 2).unwrap();
+    let mut checker = bus.state_checker();
+
+    bus.heartbeat().unwrap();
+    std::thread::sleep(option.lost_timeout * 2);
+    let msg_id = bus.heartbeat().unwrap();
+    assert_eq!(collect(&mut bus, msg_id, 2).len(), 2);
+
+    assert_eq!(
+        checker.check().unwrap().devices(),
+        [DeviceState::Ready, DeviceState::Ready]
+    );
+}
+
+#[test]
+fn a_host_silent_past_the_lost_timeout_without_requests_keeps_the_devices() {
+    let emulator = UdpEmulator::spawn(2).unwrap();
+    let option = emulator.option();
+    let mut bus = UdpBus::open(&option, 2).unwrap();
+    let mut checker = bus.state_checker();
+
+    std::thread::sleep(option.lost_timeout * 3);
+    assert!(bus.recv(Instant::now()).unwrap().is_none());
+    assert_eq!(
+        checker.check().unwrap().devices(),
+        [DeviceState::Ready, DeviceState::Ready]
+    );
+
+    let msg_id = bus.heartbeat().unwrap();
+    assert_eq!(collect(&mut bus, msg_id, 2).len(), 2);
+    assert_eq!(
+        checker.check().unwrap().devices(),
+        [DeviceState::Ready, DeviceState::Ready]
+    );
 }

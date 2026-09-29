@@ -28,7 +28,7 @@ import CodeTabs from "@components/CodeTabs.astro";
   csharp={'var option = new TransportOption { Group = "[::1]:44336" };\nvar client = await Client.OpenAsync(geometry, option, new ClientConfig());'}
 />
 
-Simulator は全台を 1 プロセスで処理するので, 返信が既定の `reply_timeout` (1 ms) に間に合わないことがある. 返信が揃わない周期が続く場合は `reply_timeout` を広げる (`UdpEmulator` の `option()` は 50 ms を使っている).
+Simulator は全台を 1 プロセスで処理するので, 返信が遅れることがある. 送り直しが多い場合は `ClientConfig` の `ack_timeout` (既定 10 ms) と `TransportOption` の `reply_timeout` (既定 1 ms) を広げる (`UdpEmulator` の `option()` は `reply_timeout` に 50 ms を使っている).
 
 Simulator が模擬するデバイスの配置は Simulator 側で与える.
 Simulator を単体で起動する場合は `--geometry <file>` に `Geometry` の JSON (`Geometry::to_json` の出力) を渡す (省略すると原点に 1 台).

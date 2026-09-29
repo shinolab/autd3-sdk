@@ -57,7 +57,7 @@ If the application firewall is enabled, allow inbound connections for the applic
 ## Disable Interrupt Moderation
 
 Interrupt moderation (interrupt coalescing) on the NIC increases and spreads the receive latency.
-With the default settings the replies may not all arrive within one cycle (1 ms), so disabling it is recommended.
+It can delay a reply by hundreds of µs or more and cause frames to be sent again, so disabling it is recommended.
 
 - Linux: `sudo ethtool -C <if> rx-usecs 0`
 - Windows: open the adapter properties in Device Manager and set "Interrupt Moderation" under **Advanced** to "Disabled"

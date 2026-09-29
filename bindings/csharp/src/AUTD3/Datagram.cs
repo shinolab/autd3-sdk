@@ -59,10 +59,9 @@ namespace AUTD3
     public readonly struct ClientConfig
     {
         public bool LowLatency { get; init; } = false;
-        public uint TimeoutCycles { get; init; } = 10;
-        public uint MaxInflight { get; init; } = 127;
+        public TimeSpan AckTimeout { get; init; } = TimeSpan.FromMilliseconds(10);
+        public uint MaxInflight { get; init; } = 7;
         public uint MaxResyncRounds { get; init; } = 8;
-        public uint ResetResendCycles { get; init; } = 2;
         public RtPriority? RtPriority { get; init; } = AUTD3.RtPriority.Default;
         public RtSchedulePolicy RtPolicy { get; init; } = RtSchedulePolicy.Fifo;
         public ulong? RtAffinity { get; init; } = null;
@@ -83,10 +82,9 @@ namespace AUTD3
             try
             {
                 NativeConfig.Apply("lowLatency", NativeClient.autd3_client_config_set_low_latency(handle, LowLatency));
-                NativeConfig.Apply("timeoutCycles", NativeClient.autd3_client_config_set_timeout_cycles(handle, TimeoutCycles));
+                NativeConfig.Apply("ackTimeout", AckTimeout < TimeSpan.Zero ? -1 : NativeClient.autd3_client_config_set_ack_timeout_ns(handle, OptionNative.ToNanos(AckTimeout)));
                 NativeConfig.Apply("maxInflight", NativeClient.autd3_client_config_set_max_inflight(handle, (UIntPtr)MaxInflight));
                 NativeConfig.Apply("maxResyncRounds", NativeClient.autd3_client_config_set_max_resync_rounds(handle, MaxResyncRounds));
-                NativeConfig.Apply("resetResendCycles", NativeClient.autd3_client_config_set_reset_resend_cycles(handle, ResetResendCycles));
                 var (rtPriorityMode, rtPriorityValue) = AUTD3.RtPriority.ToNative(RtPriority);
                 NativeConfig.Apply("rtPriority", NativeClient.autd3_client_config_set_rt_priority(handle, rtPriorityMode, rtPriorityValue));
                 NativeConfig.Apply("rtPolicy", NativeClient.autd3_client_config_set_rt_policy(handle, (byte)RtPolicy));
