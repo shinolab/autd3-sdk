@@ -22,8 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-rust
-      - name: Install system deps
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - name: Verify the packages assemble
         run: cargo xtask rust publish --dry-run
       - uses: rust-lang/crates-io-auth-action@v1

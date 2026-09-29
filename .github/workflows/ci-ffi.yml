@@ -24,9 +24,6 @@ jobs:
             bindings/ffi
             xtask
           shared-key: ffi
-      - name: Install system deps
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - name: Format
         if: runner.os == 'Linux'
         run: cargo xtask ffi format

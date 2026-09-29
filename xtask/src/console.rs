@@ -5,7 +5,6 @@ use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
 use crate::simulator::build_backend_and_frontend;
-use crate::tool::build_twincat_cli;
 use crate::util::{
     cargo_bin, cargo_build_args, copy_dir, copy_file, dist_target, ensure_rust_target, exe_name,
     run, run_cargo,
@@ -56,7 +55,6 @@ const BINARIES: &[&str] = &[
     "autd3-rs-simulator",
     "autd3-firmware-writer",
     "autd3-rs-firmware-ota",
-    "autd3-appliance",
 ];
 
 pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
@@ -101,9 +99,7 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
         "console/target",
         "console/THIRD-PARTY-LICENSES.md",
         "console/.third-party-firmware.md",
-        "console/.third-party-appliance.md",
-    ])?;
-    cleaner.children("console/twincat", &[".gitkeep"])
+    ])
 }
 
 fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
@@ -116,8 +112,6 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
     let target = target.as_deref();
 
     crate::license::generate_console(root)?;
-
-    stage_twincat(root, console_dir, debug)?;
 
     run_cargo(
         cargo_build_args("autd3-console", target, debug),
@@ -139,15 +133,12 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
     )?;
     let ota_bin = cargo_bin(root, target, debug, "autd3-rs-firmware-ota");
 
-    run_cargo(cargo_build_args("autd3-appliance", target, debug), root)?;
-    let appliance_bin = cargo_bin(root, target, debug, "autd3-appliance");
-
     let out_dir = console_dir.join("target").join("distrib");
     if out_dir.exists() {
         std::fs::remove_dir_all(&out_dir)?;
     }
     std::fs::create_dir_all(&out_dir)?;
-    for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &ota_bin, &appliance_bin]
+    for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &ota_bin]
         .into_iter()
         .zip(BINARIES)
     {
@@ -164,42 +155,6 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
         out_dir.display()
     );
     Ok(out_dir)
-}
-
-fn stage_twincat(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
-    let dst = console_dir.join("twincat");
-    std::fs::create_dir_all(&dst)?;
-    for entry in std::fs::read_dir(&dst).with_context(|| format!("reading {}", dst.display()))? {
-        let entry = entry?;
-        if entry.file_name() == ".gitkeep" {
-            continue;
-        }
-        std::fs::remove_file(entry.path())?;
-    }
-    if !cfg!(target_os = "windows") {
-        return Ok(());
-    }
-
-    let exe = build_twincat_cli(root, debug)?;
-    let src = exe
-        .parent()
-        .context("twincat-cli.exe has no parent directory")?;
-    for entry in std::fs::read_dir(src).with_context(|| format!("reading {}", src.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() {
-            copy_file(&path, &dst.join(entry.file_name()))?;
-        }
-    }
-    let staged = dst.join(exe_name("twincat-cli"));
-    if !staged.is_file() {
-        bail!(
-            "twincat-cli was not staged to {}; autd3-console would be built without it",
-            staged.display()
-        );
-    }
-    println!("staged twincat-cli in {}", dst.display());
-    Ok(())
 }
 
 fn check_versions_match(console_dir: &Path) -> Result<()> {

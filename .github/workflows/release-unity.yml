@@ -26,9 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-rust
-      - name: Install system deps
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - name: Build native cdylibs
         working-directory: bindings/ffi
         run: cargo build --workspace --release

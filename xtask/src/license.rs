@@ -12,10 +12,6 @@ const PY_WHEELS: &[&str] = &[
     "autd3-pattern",
     "autd3-pattern-holo",
     "autd3-modulation",
-    "autd3-link-echocat",
-    "autd3-link-remote",
-    "autd3-link-twincat",
-    "autd3-link-nop",
     "autd3-emulator",
 ];
 
@@ -25,10 +21,6 @@ const CS_PACKAGES: &[(&str, &str)] = &[
     ("AUTD3.Pattern", "autd3-ffi-pattern"),
     ("AUTD3.Pattern.Holo", "autd3-ffi-pattern-holo"),
     ("AUTD3.Modulation", "autd3-ffi-modulation"),
-    ("AUTD3.Link.Echocat", "autd3-ffi-link-echocat"),
-    ("AUTD3.Link.Remote", "autd3-ffi-link-remote"),
-    ("AUTD3.Link.TwinCAT", "autd3-ffi-link-twincat"),
-    ("AUTD3.Link.Nop", "autd3-ffi-link-nop"),
 ];
 
 const UNITY_PACKAGES: &[(&str, &str)] = &[
@@ -40,19 +32,6 @@ const UNITY_PACKAGES: &[(&str, &str)] = &[
         "autd3-ffi-pattern-holo",
     ),
     ("com.shinolab.autd3-sdk.modulation", "autd3-ffi-modulation"),
-    (
-        "com.shinolab.autd3-sdk.link.echocat",
-        "autd3-ffi-link-echocat",
-    ),
-    (
-        "com.shinolab.autd3-sdk.link.remote",
-        "autd3-ffi-link-remote",
-    ),
-    (
-        "com.shinolab.autd3-sdk.link.twincat",
-        "autd3-ffi-link-twincat",
-    ),
-    ("com.shinolab.autd3-sdk.link.nop", "autd3-ffi-link-nop"),
 ];
 
 const PUBLISH_WORKSPACES: &[&str] = &[
@@ -308,15 +287,6 @@ pub fn generate_console(root: &Path) -> Result<()> {
     let ota = std::fs::read_to_string(&ota_tmp)
         .with_context(|| format!("reading {}", ota_tmp.display()))?;
 
-    let appliance_tmp = console.join(".third-party-appliance.md");
-    about(
-        root,
-        &root.join("appliance").join("cli").join("Cargo.toml"),
-        &appliance_tmp,
-    )?;
-    let appliance = std::fs::read_to_string(&appliance_tmp)
-        .with_context(|| format!("reading {}", appliance_tmp.display()))?;
-
     let mut combined =
         std::fs::read_to_string(&out).with_context(|| format!("reading {}", out.display()))?;
     combined.push_str("\n\n---\n\n# Simulator dependencies\n\n");
@@ -325,12 +295,9 @@ pub fn generate_console(root: &Path) -> Result<()> {
     combined.push_str(&firmware);
     combined.push_str("\n\n---\n\n# Firmware OTA tool dependencies\n\n");
     combined.push_str(&ota);
-    combined.push_str("\n\n---\n\n# Appliance CLI dependencies\n\n");
-    combined.push_str(&appliance);
     std::fs::write(&out, combined).with_context(|| format!("writing {}", out.display()))?;
     std::fs::remove_file(&firmware_tmp).ok();
     std::fs::remove_file(&ota_tmp).ok();
-    std::fs::remove_file(&appliance_tmp).ok();
     Ok(())
 }
 

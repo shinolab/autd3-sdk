@@ -15,15 +15,9 @@ const CS_NATIVE: &[(&str, &str)] = &[
     ("AUTD3.Pattern", "autd3_pattern"),
     ("AUTD3.Pattern.Holo", "autd3_pattern_holo"),
     ("AUTD3.Modulation", "autd3_modulation"),
-    ("AUTD3.Link.Echocat", "autd3_link_echocat"),
-    ("AUTD3.Link.Remote", "autd3_link_remote"),
-    ("AUTD3.Link.TwinCAT", "autd3_link_twincat"),
-    ("AUTD3.Link.Nop", "autd3_link_nop"),
 ];
 
 const RIDS: &[&str] = &["win-x64", "linux-x64", "osx-arm64"];
-
-const PCAP_TRAIT: &str = "Category!=Pcap";
 
 #[derive(Subcommand)]
 pub enum CsCmd {
@@ -43,11 +37,7 @@ pub enum CsCmd {
         out: Option<PathBuf>,
     },
     /// Build the FFI cdylibs and run the C# tests against them
-    Test {
-        /// Skip the tests that need a pcap runtime
-        #[arg(long)]
-        no_pcap: bool,
-    },
+    Test,
     /// `dotnet format` the C# solution
     Format {
         /// Rewrite the files instead of only checking them
@@ -61,9 +51,6 @@ pub enum CsCmd {
         /// Build the Debug configuration instead of Release
         #[arg(long)]
         debug: bool,
-        /// Do not wrap the run in `sudo`
-        #[arg(long)]
-        no_sudo: bool,
         /// Arguments forwarded to the example
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -80,23 +67,19 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             run("dotnet", ["build", SOLUTION, "-c", config], &dir)
         }
         CsCmd::Pack { native_dir, out } => pack(root, native_dir, out),
-        CsCmd::Test { no_pcap } => {
+        CsCmd::Test => {
             let native = build_ffi(root)?;
-            let filter: &[&str] = if no_pcap {
-                &["--filter", PCAP_TRAIT]
-            } else {
-                &[]
-            };
             if cfg!(target_os = "windows") {
                 run("dotnet", ["build", SOLUTION, "-c", "Debug"], &dir)?;
                 stage_native_libs(&native, &dir)?;
-                let mut args = vec!["test", SOLUTION, "-c", "Debug", "--no-build"];
-                args.extend(filter);
-                run("dotnet", args, &dir)
+                run(
+                    "dotnet",
+                    ["test", SOLUTION, "-c", "Debug", "--no-build"],
+                    &dir,
+                )
             } else {
                 let mut cmd = Command::new("dotnet");
                 cmd.args(["test", SOLUTION, "-c", "Debug"])
-                    .args(filter)
                     .current_dir(&dir);
                 set_native_lib_path(&mut cmd, &native);
                 spawn(cmd, "dotnet")
@@ -112,7 +95,6 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
         CsCmd::Example {
             name,
             debug,
-            no_sudo,
             args,
         } => {
             let native = build_ffi(root)?;
@@ -128,7 +110,7 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
                 &dir,
             )?;
             let exe = find_example_exe(&project_dir, config, &name)?;
-            run_example(&exe, &native, &args, no_sudo, &dir)
+            run_example(&exe, &native, &args, &dir)
         }
         CsCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
@@ -250,13 +232,7 @@ fn find_example_exe(project_dir: &Path, config: &str, name: &str) -> Result<Path
     bail!("built example executable not found under {}", bin.display());
 }
 
-fn run_example(
-    exe: &Path,
-    native: &Path,
-    args: &[String],
-    no_sudo: bool,
-    cwd: &Path,
-) -> Result<()> {
+fn run_example(exe: &Path, native: &Path, args: &[String], cwd: &Path) -> Result<()> {
     let exe = exe.to_string_lossy().into_owned();
     let native = native.to_string_lossy().into_owned();
     let lib_path_var = if cfg!(target_os = "macos") {
@@ -264,15 +240,9 @@ fn run_example(
     } else {
         "LD_LIBRARY_PATH"
     };
-    if !no_sudo && cfg!(unix) {
-        let mut sudo_args = vec![format!("{lib_path_var}={native}"), exe];
-        sudo_args.extend(args.iter().cloned());
-        run("sudo", sudo_args.iter().map(String::as_str), cwd)
-    } else {
-        let mut cmd = Command::new(&exe);
-        cmd.current_dir(cwd).args(args).env(lib_path_var, &native);
-        spawn(cmd, "example")
-    }
+    let mut cmd = Command::new(&exe);
+    cmd.current_dir(cwd).args(args).env(lib_path_var, &native);
+    spawn(cmd, "example")
 }
 
 fn set_native_lib_path(cmd: &mut Command, native: &Path) {

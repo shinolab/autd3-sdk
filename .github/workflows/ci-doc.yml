@@ -51,8 +51,6 @@ jobs:
             doc/codes/rust
             bindings/python
             xtask
-      - name: Install system deps
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-dotnet@v6
         with:

@@ -833,10 +833,6 @@ pub fn rewrite_console_version(root: &Path, version: &str) -> Result<usize> {
     rewrite_spans(root, console_version_spans, version)
 }
 
-pub fn rewrite_appliance_version(root: &Path, version: &str) -> Result<usize> {
-    rewrite_spans(root, appliance_version_spans, version)
-}
-
 pub fn rewrite_crate_version(root: &Path, version: &str) -> Result<usize> {
     let files = crate_pin_files(root, &root.join("doc"))?;
     let series = version_series(version);
@@ -919,7 +915,6 @@ fn verify_versions(root: &Path, doc: &Path) -> Result<()> {
     verify_firmware_series(root, doc)?;
     verify_unity_version(root, doc)?;
     verify_console_version(root, doc)?;
-    verify_appliance_version(root, doc)?;
     verify_crate_version(root, doc)
 }
 
@@ -1025,32 +1020,6 @@ fn verify_console_version(root: &Path, doc: &Path) -> Result<()> {
              (expected `{CONSOLE_TAG_MARKER}{expected}`):\n  {}\n\
              run `cargo xtask bump-version console <version>` (it rewrites these pages), or fix the link by hand. \
              frozen version snapshots are exempt: they record the console version of their own SDK release.",
-            offenders.join("\n  ")
-        );
-    }
-    Ok(())
-}
-
-fn verify_appliance_version(root: &Path, doc: &Path) -> Result<()> {
-    let expected = component_version(root, "appliance")?;
-    let found = collect_spans(doc, appliance_version_spans)?;
-    if found.is_empty() {
-        bail!(
-            "no `{APPLIANCE_TAG_MARKER}<version>` link found in the current docs; the appliance image \
-             download must point at a concrete release (the appliance follows the software version in Cargo.toml)"
-        );
-    }
-    let offenders: Vec<_> = found
-        .iter()
-        .filter(|(_, version)| *version != expected)
-        .map(|(page, version)| format!("{}: {APPLIANCE_TAG_MARKER}{version}", page.display()))
-        .collect();
-    if !offenders.is_empty() {
-        bail!(
-            "docs link to an appliance image release that does not match the software version \
-             (expected `{APPLIANCE_TAG_MARKER}{expected}`):\n  {}\n\
-             run `cargo xtask bump-version software <version>` (it rewrites these pages), or fix the link by hand. \
-             frozen version snapshots are exempt: they record the appliance version of their own SDK release.",
             offenders.join("\n  ")
         );
     }

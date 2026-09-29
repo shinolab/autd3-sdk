@@ -7,8 +7,6 @@ use clap::{Subcommand, ValueEnum};
 use crate::cpu::gen_param;
 use crate::util::{capture, host_triple, on_path, run_env, workspace_root};
 
-const LEGACY_FEATURE: &str = "autd3-rs/legacy";
-
 const MIRI_PACKAGES: &[&str] = &["autd3-cpu-wire", "autd3-cpu-fw", "autd3-rs-core"];
 
 const MIRI_FLAGS: &str = "-Zmiri-disable-isolation -Zmiri-ignore-leaks";
@@ -23,7 +21,6 @@ const MUTANTS_PACKAGES: &[&str] = &[
 
 const LEAK_SKIP: &[&str] = &[
     "shutdown_does_not_wait_for_a_pending_task",
-    "a_client_that_vanishes_without_closing_does_not_block_the_next_one",
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -123,11 +120,7 @@ fn package_args(packages: &[String]) -> Vec<String> {
 
 fn scope_args(packages: &[String]) -> Vec<String> {
     if packages.is_empty() {
-        vec![
-            "--workspace".to_string(),
-            "--features".to_string(),
-            LEGACY_FEATURE.to_string(),
-        ]
+        vec!["--workspace".to_string()]
     } else {
         package_args(packages)
     }

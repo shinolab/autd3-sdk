@@ -12,10 +12,6 @@ pub(crate) const WHEELS: &[&str] = &[
     "autd3-pattern",
     "autd3-pattern-holo",
     "autd3-modulation",
-    "autd3-link-echocat",
-    "autd3-link-remote",
-    "autd3-link-twincat",
-    "autd3-link-nop",
     "autd3",
     "autd3-emulator",
 ];
@@ -52,9 +48,6 @@ pub enum PyCmd {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
-        /// Do not wrap the run in `sudo`
-        #[arg(long)]
-        no_sudo: bool,
         /// Arguments forwarded to the example
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -116,7 +109,6 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
         PyCmd::Example {
             name,
             debug,
-            no_sudo,
             args,
         } => {
             let venv = ensure_venv(&dir)?;
@@ -126,7 +118,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             if !script.is_file() {
                 bail!("example not found: {}", script.display());
             }
-            run_example(&venv_python(&venv), &script, &args, no_sudo, &dir)
+            run_example(&venv_python(&venv), &script, &args, &dir)
         }
         PyCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
@@ -278,30 +270,12 @@ fn maturin(dir: &Path, venv: Option<&Path>, args: &[&str]) -> Result<()> {
     spawn(cmd, "uv")
 }
 
-fn run_example(
-    python: &Path,
-    script: &Path,
-    args: &[String],
-    no_sudo: bool,
-    cwd: &Path,
-) -> Result<()> {
+fn run_example(python: &Path, script: &Path, args: &[String], cwd: &Path) -> Result<()> {
     let python = python.to_string_lossy().into_owned();
     let script = script.to_string_lossy().into_owned();
-    if !no_sudo && cfg!(unix) {
-        let mut sudo_args: Vec<String> = Vec::new();
-        if let Ok(log) = std::env::var("RUST_LOG") {
-            sudo_args.push(format!("RUST_LOG={log}"));
-        }
-        sudo_args.push(python);
-        sudo_args.push("-B".to_owned());
-        sudo_args.push(script);
-        sudo_args.extend(args.iter().cloned());
-        run("sudo", sudo_args.iter().map(String::as_str), cwd)
-    } else {
-        let mut a = vec!["-B".to_owned(), script];
-        a.extend(args.iter().cloned());
-        run(&python, a.iter().map(String::as_str), cwd)
-    }
+    let mut a = vec!["-B".to_owned(), script];
+    a.extend(args.iter().cloned());
+    run(&python, a.iter().map(String::as_str), cwd)
 }
 
 fn spawn(mut cmd: Command, program: &str) -> Result<()> {

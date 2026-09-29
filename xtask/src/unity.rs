@@ -57,26 +57,6 @@ const PACKAGES: &[UnityPkg] = &[
         assembly: "AUTD3.Modulation",
         lib: "autd3_modulation",
     },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.link.echocat",
-        assembly: "AUTD3.Link.Echocat",
-        lib: "autd3_link_echocat",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.link.nop",
-        assembly: "AUTD3.Link.Nop",
-        lib: "autd3_link_nop",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.link.remote",
-        assembly: "AUTD3.Link.Remote",
-        lib: "autd3_link_remote",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.link.twincat",
-        assembly: "AUTD3.Link.TwinCAT",
-        lib: "autd3_link_twincat",
-    },
 ];
 
 #[derive(Subcommand)]
