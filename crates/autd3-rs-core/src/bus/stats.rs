@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, Clone, Default)]
-pub struct LinkStats {
+pub struct BusStats {
     stale_cycles: Arc<AtomicU64>,
     lost_cycles: Arc<AtomicU64>,
     phase_excursions: Arc<AtomicU64>,
@@ -12,7 +12,7 @@ pub struct LinkStats {
     worst_exchange_ns: Arc<AtomicU64>,
 }
 
-impl LinkStats {
+impl BusStats {
     #[must_use]
     pub fn stale_cycles(&self) -> u64 {
         self.stale_cycles.load(Ordering::Acquire)
@@ -98,8 +98,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn link_stats_counters() {
-        let stats = LinkStats::default();
+    fn bus_stats_counters() {
+        let stats = BusStats::default();
         let observer = stats.clone();
         stats.record_stale_cycle();
         stats.record_lost_cycle();
@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn exchange_times_keep_the_mean_and_the_worst() {
-        let stats = LinkStats::default();
+        let stats = BusStats::default();
         let observer = stats.clone();
         assert_eq!(observer.mean_exchange_ns(), 0, "no division by zero");
         stats.record_exchange(100_000);
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn phase_excursions_keep_the_worst_deviation() {
-        let stats = LinkStats::default();
+        let stats = BusStats::default();
         let observer = stats.clone();
         stats.record_phase_excursion(1_000);
         stats.record_phase_excursion(300);
@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn counters_can_be_advanced_in_bulk() {
-        let stats = LinkStats::default();
+        let stats = BusStats::default();
         stats.add_stale_cycles(5);
         stats.add_lost_cycles(2);
         stats.add_phase_excursions(7, 900);
@@ -148,7 +148,7 @@ mod tests {
     fn the_mean_never_exceeds_the_worst_sample_while_a_writer_is_running() {
         const SAMPLE_NS: u64 = 1_000_000_000;
 
-        let stats = LinkStats::default();
+        let stats = BusStats::default();
         let observer = stats.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let writer_stop = stop.clone();

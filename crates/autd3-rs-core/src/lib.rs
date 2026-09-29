@@ -1,7 +1,7 @@
+pub mod bus;
 pub mod common;
 pub mod error;
 pub mod geometry;
-pub mod link;
 pub mod params;
 pub mod protocol;
 pub mod rt;
@@ -14,18 +14,17 @@ pub use rt::{
 pub use chrono;
 pub use nalgebra;
 
+pub use bus::{
+    BusStats, CycleOutcome, DcClock, DcObservation, DeviceState, DeviceStatus, Interface,
+};
 pub use common::units;
 pub use common::{Angle, Freq, Length, Velocity};
-pub use error::{EncodeError, LinkError};
+pub use error::EncodeError;
 #[cfg(feature = "serde")]
 pub use geometry::LayoutError;
 pub use geometry::{
     Autd3, Device, Geometry, Point3, Quaternion, TransducerGroups, TransducerMask,
     TransducerMaskError, UnitQuaternion, UnitVector3, Vector3, offset, point,
-};
-pub use link::{
-    ConstStateChecker, CycleOutcome, DcClock, DcObservation, DeviceState, Interface, IntoLink,
-    Link, LinkStats, LinkStatus, StateCheck,
 };
 pub use protocol::{
     Cmd, DeviceErrorCode, MAX_INFLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, RxFrame, Seq,

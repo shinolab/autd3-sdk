@@ -1,4 +1,4 @@
-use crate::link::DcClock;
+use autd3_rs_core::DcClock;
 
 #[derive(Debug, Clone)]
 pub(crate) enum DcOffset {

@@ -501,9 +501,9 @@ fn a_dc_offset_moves_the_gpio_sys_time_trigger() {
 #[test]
 fn a_dc_clock_is_sampled_when_the_command_is_pushed_not_when_the_builder_is_made() {
     use crate::commands::operation::ChangePatternBank;
-    use crate::link::DcClock;
     use crate::value::{DcSysTime, TransitionMode};
     use autd3_cpu_wire::payload::ChangePatternBankPayload;
+    use autd3_rs_core::DcClock;
     use zerocopy::FromBytes;
 
     let host = DcSysTime::from_nanos(2_000_000_000);

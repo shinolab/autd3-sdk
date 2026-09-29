@@ -1,6 +1,4 @@
-use core::convert::Infallible;
-
-use autd3_rs_core::link::{ConstStateChecker, CycleOutcome, Link};
+use autd3_rs_core::bus::CycleOutcome;
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, TX_FRAME_BYTES};
 
 use crate::device::Device;
@@ -46,23 +44,17 @@ impl Audit {
     }
 }
 
-impl Link for Audit {
-    type Error = Infallible;
-    type Checker = ConstStateChecker;
-
-    fn num_devices(&self) -> usize {
+impl Audit {
+    #[must_use]
+    pub fn num_devices(&self) -> usize {
         self.devices.len()
     }
 
-    fn state_checker(&self) -> Self::Checker {
-        ConstStateChecker::new(self.devices.len())
-    }
-
-    fn cycle(
+    pub fn cycle(
         &mut self,
         tx: &[[u8; TX_FRAME_BYTES]],
         rx: &mut [[u8; RX_FRAME_BYTES]],
-    ) -> Result<CycleOutcome, Self::Error> {
+    ) -> CycleOutcome {
         let invalid = self.fault.invalid_cycles > 0;
         self.fault.invalid_cycles = self.fault.invalid_cycles.saturating_sub(1);
         let dropping = self.fault.drop_frames > 0;
@@ -76,10 +68,10 @@ impl Link for Audit {
                 device.send(tx).write_to(rx);
             }
         }
-        Ok(if invalid {
+        if invalid {
             CycleOutcome::stale()
         } else {
             CycleOutcome::valid()
-        })
+        }
     }
 }

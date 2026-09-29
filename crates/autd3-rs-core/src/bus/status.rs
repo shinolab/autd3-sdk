@@ -1,12 +1,12 @@
 use super::DeviceState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LinkStatus {
+pub struct DeviceStatus {
     devices: Vec<DeviceState>,
     recoveries: u64,
 }
 
-impl LinkStatus {
+impl DeviceStatus {
     #[must_use]
     pub fn new(devices: Vec<DeviceState>, recoveries: u64) -> Self {
         Self {
@@ -64,18 +64,18 @@ mod tests {
 
     #[test]
     fn link_status_predicates() {
-        let status = LinkStatus::op(2);
+        let status = DeviceStatus::op(2);
         assert!(status.all_op());
         assert!(!status.any_lost());
 
-        let status = LinkStatus::new(vec![DeviceState::Op, DeviceState::Lost], 0);
+        let status = DeviceStatus::new(vec![DeviceState::Op, DeviceState::Lost], 0);
         assert!(!status.all_op());
         assert!(status.any_lost());
     }
 
     #[test]
     fn set_devices_reuses_the_buffer() {
-        let mut status = LinkStatus::op(2);
+        let mut status = DeviceStatus::op(2);
         status.set_devices([DeviceState::Lost]);
         status.set_recoveries(3);
         assert_eq!(status.devices(), [DeviceState::Lost]);

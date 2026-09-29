@@ -1,6 +1,5 @@
 use autd3_cpu_fw::params::{VERSION_NUM_MAJOR, VERSION_NUM_MINOR, VERSION_NUM_PATCH};
 use autd3_cpu_fw::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
-use autd3_rs_core::link::Link;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, RX_FRAME_BYTES, Seq, TX_FRAME_BYTES, TxFrame};
 use autd3_rs_firmware_emulator::{Audit, Device};
 
@@ -109,13 +108,13 @@ fn synchronize_rejects_invalid_sync0_cycle() {
 }
 
 #[test]
-fn link_drives_multiple_independent_devices() {
-    let mut link = Audit::new([NUM_TRANSDUCERS, NUM_TRANSDUCERS, NUM_TRANSDUCERS]);
-    assert_eq!(link.num_devices(), 3);
+fn audit_drives_multiple_independent_devices() {
+    let mut audit = Audit::new([NUM_TRANSDUCERS, NUM_TRANSDUCERS, NUM_TRANSDUCERS]);
+    assert_eq!(audit.num_devices(), 3);
 
     let tx = vec![frame(0, Cmd::Reset); 3];
     let mut rx = vec![[0u8; RX_FRAME_BYTES]; 3];
-    let rx_valid = link.cycle(&tx, &mut rx).unwrap().rx_valid();
+    let rx_valid = audit.cycle(&tx, &mut rx).rx_valid();
     assert!(rx_valid);
     assert!(rx.iter().all(|r| r == &[0xFF, 0x00]));
 }

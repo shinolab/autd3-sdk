@@ -2,6 +2,8 @@
 //
 // Run with: cargo xtask example focus_sine
 
+use std::net::SocketAddrV6;
+
 use anyhow::Result;
 
 use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
@@ -9,8 +11,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
-use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{Client, ClientConfig, TransportOption};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -18,12 +19,14 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(
-        &geometry,
-        EchocatLinkOption::default(),
-        ClientConfig::default(),
-    )
-    .await?;
+    let option = TransportOption {
+        group: std::env::args()
+            .nth(1)
+            .map(|addr| addr.parse::<SocketAddrV6>())
+            .transpose()?,
+        ..TransportOption::default()
+    };
+    let client = Client::open(&geometry, option, ClientConfig::default()).await?;
 
     println!("devices: {}", client.num_devices());
     for (i, fw) in client.read_firmware_version().await?.iter().enumerate() {

@@ -9,8 +9,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{Client, ClientConfig, TransportOption};
 
 const NUM_POINTS: usize = 200;
 const RADIUS_MM: f32 = 30.0;
@@ -23,7 +22,7 @@ async fn main() -> Result<()> {
 
     let client = Client::open(
         &geometry,
-        EchocatLinkOption::default(),
+        TransportOption::default(),
         ClientConfig::default(),
     )
     .await?;

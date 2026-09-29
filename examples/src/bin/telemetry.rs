@@ -5,16 +5,14 @@
 //
 // Run with: cargo xtask example telemetry
 
-use std::net::SocketAddr;
+use std::net::SocketAddrV6;
 use std::time::Duration;
 
 use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{TracingOption, init_tracing};
-use autd3_rs::{Client, ClientConfig, Telemetry};
-use autd3_rs_link_echocat::EchocatLinkOption;
-use autd3_rs_link_remote::RemoteLinkOption;
+use autd3_rs::{Client, ClientConfig, Telemetry, TransportOption};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -23,24 +21,14 @@ async fn main() -> Result<()> {
     let _log_guard = init_tracing(TracingOption::default());
 
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let client = match std::env::args().nth(1) {
-        Some(addr) => {
-            Client::open(
-                &geometry,
-                RemoteLinkOption::new(addr.parse::<SocketAddr>()?),
-                ClientConfig::default(),
-            )
-            .await?
-        }
-        None => {
-            Client::open(
-                &geometry,
-                EchocatLinkOption::default(),
-                ClientConfig::default(),
-            )
-            .await?
-        }
+    let option = TransportOption {
+        group: std::env::args()
+            .nth(1)
+            .map(|addr| addr.parse::<SocketAddrV6>())
+            .transpose()?,
+        ..TransportOption::default()
     };
+    let client = Client::open(&geometry, option, ClientConfig::default()).await?;
 
     println!("devices: {}", client.num_devices());
     let mut baseline: Option<Vec<Vec<u8>>> = None;

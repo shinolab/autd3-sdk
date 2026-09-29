@@ -4,6 +4,8 @@ mod pool;
 mod rt;
 
 #[cfg(test)]
+mod resync_tests;
+#[cfg(test)]
 mod tests;
 
 pub use completion::ResponseFuture;
@@ -23,15 +25,17 @@ use zerocopy::FromBytes;
 use crate::commands::Pattern;
 use crate::commands::operation::{Clear, Distribution, Synchronize};
 use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
-use crate::error::{Error, LinkCause, PayloadError};
+use crate::error::{Error, NetworkCause, PayloadError};
 use crate::firmware_version::{FirmwareVersion, Version};
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
-use crate::link::{DcClock, IntoLink, Link, LinkStats};
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, DeviceErrorCode};
 use crate::telemetry::Telemetry;
+use crate::transport::Bus;
+use crate::udp::{StateChecker, TransportOption, UdpBus};
 use crate::value::{DcSysTime, Intensity};
+use autd3_rs_core::{BusStats, DcClock};
 
 use completion::{CompletionPool, Reply};
 use pool::SlotPool;
@@ -44,42 +48,55 @@ pub struct Client {
     pool: Arc<SlotPool>,
     completions: Arc<CompletionPool>,
     join: std::sync::Mutex<Option<JoinHandle<()>>>,
-    done: std::sync::Mutex<Option<oneshot::Receiver<Option<LinkCause>>>>,
+    done: std::sync::Mutex<Option<oneshot::Receiver<Option<NetworkCause>>>>,
     closed: Arc<AtomicBool>,
     stopping: AtomicBool,
     mirror: MirrorHandle,
     dc_clock: Option<DcClock>,
-    stats: LinkStats,
+    stats: BusStats,
 }
 
 impl Client {
-    pub fn open<'g, T: IntoLink + 'g>(
-        geometry: &'g Geometry,
-        link: T,
+    pub fn open(
+        geometry: &Geometry,
+        option: TransportOption,
         config: ClientConfig,
-    ) -> impl Future<Output = Result<Self, Error>> + Send + 'g {
+    ) -> impl Future<Output = Result<Self, Error>> + Send + '_ {
         Box::pin(async move {
-            Self::open_impl(geometry, link, config)
+            Self::open_with_checker(geometry, option, config)
                 .await
                 .map(|(client, _checker)| client)
         })
     }
 
-    pub fn open_with_checker<'g, T: IntoLink + 'g>(
-        geometry: &'g Geometry,
-        link: T,
+    pub fn open_with_checker(
+        geometry: &Geometry,
+        option: TransportOption,
         config: ClientConfig,
-    ) -> impl Future<Output = Result<(Self, <T::Link as Link>::Checker), Error>> + Send + 'g {
-        Box::pin(Self::open_impl(geometry, link, config))
+    ) -> impl Future<Output = Result<(Self, StateChecker), Error>> + Send + '_ {
+        Box::pin(async move {
+            let config = config.validate()?;
+            let num_devices = geometry.num_devices();
+            if num_devices == 0 || num_devices > MAX_DEVICES {
+                return Err(PayloadError::DeviceCountOutOfRange {
+                    got: num_devices,
+                    max: MAX_DEVICES,
+                }
+                .into());
+            }
+            let bus = UdpBus::open(&option, num_devices)?;
+            let checker = bus.state_checker();
+            let client = Self::open_bus(geometry, bus, config).await?;
+            Ok((client, checker))
+        })
     }
 
-    async fn open_impl<T: IntoLink>(
+    pub(crate) async fn open_bus<L: Bus>(
         geometry: &Geometry,
-        link: T,
+        mut link: L,
         config: ClientConfig,
-    ) -> Result<(Self, <T::Link as Link>::Checker), Error> {
+    ) -> Result<Self, Error> {
         let config = config.validate()?;
-        let mut link = link.into_link(geometry)?;
         let num_devices = link.num_devices();
         if num_devices == 0 || num_devices > MAX_DEVICES {
             close_unopened(&mut link);
@@ -93,20 +110,19 @@ impl Client {
             close_unopened(&mut link);
             return Err(PayloadError::GeometryDeviceMismatch {
                 geometry: geometry.num_devices(),
-                link: num_devices,
+                attached: num_devices,
             }
             .into());
         }
 
-        let checker = link.state_checker();
         let dc_clock = link.dc_clock();
         let stats = link.stats();
         let pool = SlotPool::new(num_devices, config.max_inflight.get());
         let completions = CompletionPool::new(config.max_inflight.get());
 
         let (cmd_tx, cmd_rx) = mpsc::channel::<CmdMessage>();
-        let (hs_done_tx, hs_done_rx) = oneshot::channel::<Result<(), LinkCause>>();
-        let (done_tx, done_rx) = oneshot::channel::<Option<LinkCause>>();
+        let (hs_done_tx, hs_done_rx) = oneshot::channel::<Result<(), NetworkCause>>();
+        let (done_tx, done_rx) = oneshot::channel::<Option<NetworkCause>>();
         let closed = Arc::new(AtomicBool::new(false));
         let closed_for_rt = Arc::clone(&closed);
 
@@ -115,7 +131,7 @@ impl Client {
             .spawn(move || {
                 rt::run_rt_thread(link, cmd_rx, config, hs_done_tx, done_tx, closed_for_rt);
             })
-            .map_err(|e| Error::Link(LinkCause::new(e)))?;
+            .map_err(|e| Error::Network(NetworkCause::new(e)))?;
 
         match hs_done_rx.await {
             Ok(Ok(())) => {
@@ -153,11 +169,11 @@ impl Client {
                     return Err(e);
                 }
                 tracing::info!(num_devices, "client opened");
-                Ok((client, checker))
+                Ok(client)
             }
             Ok(Err(cause)) => {
                 let _ = wait_rt(done_rx, join).await;
-                Err(Error::Link(cause))
+                Err(Error::Network(cause))
             }
             Err(_) => {
                 let _ = wait_rt(done_rx, join).await;
@@ -177,7 +193,7 @@ impl Client {
     }
 
     #[must_use]
-    pub fn link_stats(&self) -> LinkStats {
+    pub fn bus_stats(&self) -> BusStats {
         self.stats.clone()
     }
 
@@ -487,9 +503,9 @@ impl Drop for Client {
     }
 }
 
-fn close_unopened<L: Link>(link: &mut L) {
+fn close_unopened<L: Bus>(link: &mut L) {
     if let Err(e) = link.close() {
-        tracing::warn!(error = %e, "failed to close the link that never opened");
+        tracing::warn!(error = %e, "failed to close the bus that never opened");
     }
 }
 
@@ -507,16 +523,16 @@ fn warn_unknown(device: usize, what: &str, pre_latched: bool) {
     }
 }
 
-fn rt_outcome(done: Result<Option<LinkCause>, oneshot::Canceled>) -> Result<(), Error> {
+fn rt_outcome(done: Result<Option<NetworkCause>, oneshot::Canceled>) -> Result<(), Error> {
     match done {
         Ok(None) => Ok(()),
-        Ok(Some(cause)) => Err(Error::Link(cause)),
+        Ok(Some(cause)) => Err(Error::Network(cause)),
         Err(oneshot::Canceled) => Err(Error::RtPanicked),
     }
 }
 
 async fn wait_rt(
-    done: oneshot::Receiver<Option<LinkCause>>,
+    done: oneshot::Receiver<Option<NetworkCause>>,
     join: JoinHandle<()>,
 ) -> Result<(), Error> {
     let outcome = rt_outcome(done.await);

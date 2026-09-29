@@ -13,8 +13,9 @@ use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
-use autd3_rs::{Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{
+    Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture, TransportOption,
+};
 
 const TOTAL_POINTS: usize = 1000;
 
@@ -26,7 +27,7 @@ async fn main() -> Result<()> {
 
     let client = Client::open(
         &geometry,
-        EchocatLinkOption::default(),
+        TransportOption::default(),
         ClientConfig::default(),
     )
     .await?;

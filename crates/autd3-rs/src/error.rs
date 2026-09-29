@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use autd3_rs_core::error::{EncodeError, LinkError};
+use autd3_rs_core::error::EncodeError;
 use autd3_rs_core::protocol::describe_device_error;
 
 use crate::commands::PatternCompression;
@@ -12,16 +12,16 @@ use crate::telemetry::Telemetry;
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError, TransitionMode};
 
 #[derive(Clone)]
-pub struct LinkCause(Arc<dyn core::error::Error + Send + Sync>);
+pub struct NetworkCause(Arc<dyn core::error::Error + Send + Sync>);
 
-impl LinkCause {
+impl NetworkCause {
     #[must_use]
     pub fn new<E: core::error::Error + Send + Sync + 'static>(source: E) -> Self {
         Self(Arc::new(source))
     }
 }
 
-impl core::ops::Deref for LinkCause {
+impl core::ops::Deref for NetworkCause {
     type Target = dyn core::error::Error + Send + Sync + 'static;
 
     fn deref(&self) -> &Self::Target {
@@ -29,13 +29,13 @@ impl core::ops::Deref for LinkCause {
     }
 }
 
-impl core::fmt::Debug for LinkCause {
+impl core::fmt::Debug for NetworkCause {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Debug::fmt(&*self.0, f)
     }
 }
 
-impl core::fmt::Display for LinkCause {
+impl core::fmt::Display for NetworkCause {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Display::fmt(&*self.0, f)
     }
@@ -84,8 +84,8 @@ pub enum Error {
     #[error("ack timeout after {cycles} cycles")]
     Timeout { cycles: u32 },
 
-    #[error("link error: {0}")]
-    Link(#[source] LinkCause),
+    #[error("network error: {0}")]
+    Network(#[source] NetworkCause),
 
     #[error(transparent)]
     DcSysTime(#[from] autd3_rs_core::value::DcSysTimeError),
@@ -103,9 +103,9 @@ pub enum Error {
     RtPanicked,
 }
 
-impl From<LinkError> for Error {
-    fn from(e: LinkError) -> Self {
-        Error::Link(LinkCause::new(e))
+impl From<crate::udp::UdpError> for Error {
+    fn from(e: crate::udp::UdpError) -> Self {
+        Error::Network(NetworkCause::new(e))
     }
 }
 
@@ -124,11 +124,11 @@ pub enum PayloadError {
     #[error("max_inflight must be <= {max}")]
     MaxInflightTooLarge { max: usize },
 
-    #[error("link must expose 1..={max} devices, got {got}")]
+    #[error("the number of devices must be 1..={max}, got {got}")]
     DeviceCountOutOfRange { got: usize, max: usize },
 
-    #[error("geometry has {geometry} device(s) but link exposes {link}")]
-    GeometryDeviceMismatch { geometry: usize, link: usize },
+    #[error("geometry has {geometry} device(s) but {attached} are attached")]
+    GeometryDeviceMismatch { geometry: usize, attached: usize },
 
     #[error("expected {expected} datagram(s) (one per device), got {got}")]
     DatagramCountMismatch { expected: usize, got: usize },
@@ -237,25 +237,20 @@ mod tests {
     }
 
     #[test]
-    fn a_link_error_keeps_its_source_when_it_becomes_a_client_error() {
+    fn a_network_error_keeps_its_source_when_it_becomes_a_client_error() {
         let io = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
-        let e = Error::from(LinkError::with_source("failed to open the link", io));
+        let message = io.to_string();
+        let e = Error::from(crate::udp::UdpError::from(io));
 
-        assert_eq!(e.to_string(), "link error: failed to open the link");
-        assert_eq!(
-            chain(&e),
-            vec![
-                "failed to open the link".to_owned(),
-                std::io::Error::from(std::io::ErrorKind::PermissionDenied).to_string(),
-            ]
-        );
+        assert_eq!(e.to_string(), format!("network error: {message}"));
+        assert_eq!(chain(&e), vec![message.clone(), message]);
 
-        let link_error = core::error::Error::source(&e)
+        let udp_error = core::error::Error::source(&e)
             .expect("the cause must be reachable through source()")
-            .downcast_ref::<LinkError>()
-            .expect("the LinkError itself must survive the conversion");
+            .downcast_ref::<crate::udp::UdpError>()
+            .expect("the UdpError itself must survive the conversion");
         assert_eq!(
-            core::error::Error::source(link_error)
+            core::error::Error::source(udp_error)
                 .expect("the source must survive")
                 .downcast_ref::<std::io::Error>()
                 .map(std::io::Error::kind),
@@ -264,10 +259,10 @@ mod tests {
     }
 
     #[test]
-    fn a_link_error_without_a_source_ends_the_chain() {
-        let e = Error::from(LinkError::new("the bus is gone"));
+    fn a_network_error_without_a_source_ends_the_chain() {
+        let e = Error::from(crate::udp::UdpError::Closed);
 
-        assert_eq!(e.to_string(), "link error: the bus is gone");
-        assert_eq!(chain(&e), vec!["the bus is gone".to_owned()]);
+        assert_eq!(e.to_string(), "network error: the connection is closed");
+        assert_eq!(chain(&e), vec!["the connection is closed".to_owned()]);
     }
 }

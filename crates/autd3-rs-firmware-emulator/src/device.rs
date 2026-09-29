@@ -1,14 +1,10 @@
 use autd3_rs_core::protocol::{RX_FRAME_BYTES, RxFrame, TX_FRAME_BYTES};
 
 use crate::emu_fpga::FpgaEmulator;
-use crate::fw;
 use autd3_cpu_fw::Cpu;
 use autd3_cpu_fw::proto::Mode;
 use autd3_cpu_fw::proto::Telemetry;
 use autd3_cpu_fw::update::Slot;
-
-const WIRE_GAP_START: usize = fw::WIRE_RX_GAP_START;
-const WIRE_RX_FRAME_BYTES: usize = fw::WIRE_RX_FRAME_BYTES;
 
 pub struct Device {
     cpu: Cpu,
@@ -38,8 +34,7 @@ impl Device {
     }
 
     pub fn recv(&mut self, tx: &[u8; TX_FRAME_BYTES]) {
-        let wire = logical_to_wire(tx);
-        self.cpu.recv_ethercat(&mut self.fpga, &wire);
+        self.cpu.recv_frame(&mut self.fpga, tx);
     }
 
     pub fn process_one(&mut self) -> bool {
@@ -99,11 +94,4 @@ fn boot(fpga: &mut FpgaEmulator) -> Cpu {
     cpu.mark_boot_attempt(fpga);
     cpu.init(fpga);
     cpu
-}
-
-fn logical_to_wire(tx: &[u8; TX_FRAME_BYTES]) -> [u8; WIRE_RX_FRAME_BYTES] {
-    let mut wire = [0u8; WIRE_RX_FRAME_BYTES];
-    wire[..WIRE_GAP_START].copy_from_slice(&tx[..WIRE_GAP_START]);
-    wire[WIRE_GAP_START + 2..].copy_from_slice(&tx[WIRE_GAP_START..]);
-    wire
 }

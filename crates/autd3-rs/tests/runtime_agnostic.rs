@@ -5,15 +5,15 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use autd3_rs::commands::SetSilencer;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{Executor, block_on, oneshot};
+use autd3_rs::udp::emulator::UdpEmulator;
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_firmware_emulator::Audit;
 
 fn geometry(n: usize) -> Geometry {
     Geometry::new((0..n).map(|_| Autd3::default()).collect())
 }
 
-fn audit(n: usize) -> Audit {
-    Audit::new((0..n).map(|_| Autd3::NUM_TRANSDUCERS))
+fn emulator(n: usize) -> UdpEmulator {
+    UdpEmulator::spawn(n).unwrap()
 }
 
 async fn stream_silencer(client: &Client, rounds: usize) -> Result<(), autd3_rs::Error> {
@@ -32,7 +32,8 @@ async fn stream_silencer(client: &Client, rounds: usize) -> Result<(), autd3_rs:
 #[test]
 fn a_client_opens_and_closes_without_an_async_runtime() {
     block_on(async {
-        let client = Client::open(&geometry(2), audit(2), ClientConfig::default())
+        let emulator = emulator(2);
+        let client = Client::open(&geometry(2), emulator.option(), ClientConfig::default())
             .await
             .unwrap();
         assert_eq!(client.num_devices(), 2);
@@ -43,9 +44,10 @@ fn a_client_opens_and_closes_without_an_async_runtime() {
 }
 
 #[test]
-fn a_link_failure_surfaces_through_close_without_an_async_runtime() {
+fn a_second_close_is_harmless_without_an_async_runtime() {
     block_on(async {
-        let client = Client::open(&geometry(1), audit(1), ClientConfig::default())
+        let emulator = emulator(1);
+        let client = Client::open(&geometry(1), emulator.option(), ClientConfig::default())
             .await
             .unwrap();
         let versions = client.read_firmware_version().await.unwrap();
@@ -60,10 +62,11 @@ fn more_concurrent_sends_than_slots_all_complete_on_one_executor_thread() {
     const SENDERS: usize = 12;
     let max_inflight = NonZeroUsize::new(3).unwrap();
 
+    let emulator = emulator(1);
     let client = Arc::new(
         block_on(Client::open(
             &geometry(1),
-            audit(1),
+            emulator.option(),
             ClientConfig {
                 max_inflight,
                 ..ClientConfig::default()

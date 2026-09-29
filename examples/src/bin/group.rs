@@ -9,8 +9,7 @@ use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitQuaternion, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{Client, ClientConfig, TransportOption};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -26,7 +25,7 @@ async fn main() -> Result<()> {
 
     let client = Client::open(
         &geometry,
-        EchocatLinkOption::default(),
+        TransportOption::default(),
         ClientConfig::default(),
     )
     .await?;

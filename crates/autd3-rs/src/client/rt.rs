@@ -6,10 +6,10 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 
 use autd3_rs_core::rt::oneshot;
 
-use crate::error::{Error, LinkCause};
-use crate::link::Link;
+use crate::error::{Error, NetworkCause};
 use crate::protocol::{Cmd, RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
 use crate::response::Response;
+use crate::transport::Bus;
 
 use autd3_cpu_wire::Mode;
 use autd3_cpu_wire::payload::SetModePayload;
@@ -115,30 +115,30 @@ impl ResyncState {
     }
 }
 
-fn handshake_failed<E: core::error::Error + Send + Sync + 'static>(e: E) -> LinkCause {
+fn handshake_failed<E: core::error::Error + Send + Sync + 'static>(e: E) -> NetworkCause {
     tracing::error!("handshake failed: {e}");
-    LinkCause::new(e)
+    NetworkCause::new(e)
 }
 
-pub(super) fn run_rt_thread<L: Link>(
+pub(super) fn run_rt_thread<L: Bus>(
     link: L,
     cmd_rx: Receiver<CmdMessage>,
     config: ClientConfig,
-    hs_done_tx: oneshot::Sender<Result<(), LinkCause>>,
-    done_tx: oneshot::Sender<Option<LinkCause>>,
+    hs_done_tx: oneshot::Sender<Result<(), NetworkCause>>,
+    done_tx: oneshot::Sender<Option<NetworkCause>>,
     closed: Arc<AtomicBool>,
 ) {
     let cause = run_rt_loop(link, cmd_rx, config, hs_done_tx, closed);
     let _ = done_tx.send(cause);
 }
 
-fn run_rt_loop<L: Link>(
+fn run_rt_loop<L: Bus>(
     link: L,
     cmd_rx: Receiver<CmdMessage>,
     config: ClientConfig,
-    hs_done_tx: oneshot::Sender<Result<(), LinkCause>>,
+    hs_done_tx: oneshot::Sender<Result<(), NetworkCause>>,
     closed: Arc<AtomicBool>,
-) -> Option<LinkCause> {
+) -> Option<NetworkCause> {
     autd3_rs_core::apply_thread_tuning(autd3_rs_core::RtThreadTuning {
         priority: config.rt_priority,
         policy: config.rt_policy,
@@ -160,7 +160,7 @@ fn run_rt_loop<L: Link>(
     link_error.or(closed)
 }
 
-struct RtThread<L: Link> {
+struct RtThread<L: Bus> {
     link: L,
     cmd_rx: Receiver<CmdMessage>,
     config: ClientConfig,
@@ -184,7 +184,7 @@ enum StageOutcome {
     Disconnected,
 }
 
-impl<L: Link> RtThread<L> {
+impl<L: Bus> RtThread<L> {
     fn new(
         link: L,
         cmd_rx: Receiver<CmdMessage>,
@@ -219,7 +219,7 @@ impl<L: Link> RtThread<L> {
         }
     }
 
-    fn handshake(&mut self) -> Result<(), LinkCause> {
+    fn handshake(&mut self) -> Result<(), NetworkCause> {
         tracing::debug!(
             cycles = self.config.reset_resend_cycles.get(),
             low_latency = self.config.low_latency,
@@ -238,7 +238,7 @@ impl<L: Link> RtThread<L> {
         Ok(())
     }
 
-    fn negotiate_mode(&mut self) -> Result<Seq, LinkCause> {
+    fn negotiate_mode(&mut self) -> Result<Seq, NetworkCause> {
         let mode = if self.config.low_latency {
             Mode::LowLatency
         } else {
@@ -267,8 +267,8 @@ impl<L: Link> RtThread<L> {
         Ok(Seq::ZERO)
     }
 
-    fn run(&mut self) -> Option<LinkCause> {
-        let mut link_error: Option<LinkCause> = None;
+    fn run(&mut self) -> Option<NetworkCause> {
+        let mut link_error: Option<NetworkCause> = None;
         loop {
             if self.closed.load(Ordering::Acquire) {
                 break;
@@ -283,8 +283,8 @@ impl<L: Link> RtThread<L> {
             let rx_valid = match self.link.cycle(&self.tx_bufs, &mut self.rx_bufs) {
                 Ok(outcome) => outcome.rx_valid(),
                 Err(e) => {
-                    tracing::error!("link cycle failed: {e}");
-                    link_error = Some(LinkCause::new(e));
+                    tracing::error!("bus cycle failed: {e}");
+                    link_error = Some(NetworkCause::new(e));
                     break;
                 }
             };
@@ -404,7 +404,7 @@ impl<L: Link> RtThread<L> {
                 tracing::warn!(
                     pending = self.pending.len(),
                     cycles = self.stale_run,
-                    "no valid rx from link; failing pending frames with timeout"
+                    "no valid rx from the devices; failing pending frames with timeout"
                 );
             }
             self.fail_pending_timeout();
@@ -461,19 +461,19 @@ impl<L: Link> RtThread<L> {
         }
     }
 
-    fn close_link(&mut self) -> Option<LinkCause> {
+    fn close_link(&mut self) -> Option<NetworkCause> {
         match self.link.close() {
             Ok(()) => None,
             Err(e) => {
-                tracing::error!("link close failed: {e}");
-                Some(LinkCause::new(e))
+                tracing::error!("bus close failed: {e}");
+                Some(NetworkCause::new(e))
             }
         }
     }
 
-    fn teardown(&mut self, link_error: Option<&LinkCause>) {
+    fn teardown(&mut self, link_error: Option<&NetworkCause>) {
         tracing::debug!(pending = self.pending.len(), "RT thread stopping");
-        let cause = || link_error.map_or(Error::RtClosed, |cause| Error::Link(cause.clone()));
+        let cause = || link_error.map_or(Error::RtClosed, |cause| Error::Network(cause.clone()));
         if let Some(msg) = self.held_exclusive.take() {
             msg.response_tx.send(Err(cause()));
         }

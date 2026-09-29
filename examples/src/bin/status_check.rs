@@ -8,8 +8,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{TracingOption, init_tracing};
-use autd3_rs::{Client, ClientConfig, LinkStatus};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{Client, ClientConfig, DeviceStatus, TransportOption};
 
 const CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -21,13 +20,13 @@ async fn main() -> Result<()> {
 
     let (client, mut checker) = Client::open_with_checker(
         &geometry,
-        EchocatLinkOption::default(),
+        TransportOption::default(),
         ClientConfig::default(),
     )
     .await?;
 
-    println!("watching link status — press Ctrl+C to stop");
-    let mut last: Option<LinkStatus> = None;
+    println!("watching device status — press Ctrl+C to stop");
+    let mut last: Option<DeviceStatus> = None;
     loop {
         let status = checker.check()?;
         if last.as_ref() != Some(&status) {
@@ -44,7 +43,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn print_status(status: &LinkStatus) {
+fn print_status(status: &DeviceStatus) {
     for (i, state) in status.devices().iter().enumerate() {
         println!("device[{i}]: {state}");
     }

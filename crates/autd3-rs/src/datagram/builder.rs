@@ -4,7 +4,7 @@ use crate::commands::Command;
 use crate::commands::operation::Operation;
 use crate::error::{Error, PayloadError};
 use crate::geometry::{Device, Geometry};
-use crate::link::DcClock;
+use autd3_rs_core::DcClock;
 
 use super::dc_offset::DcOffset;
 use super::each::{EachFrame, EachOps, each_reflect};

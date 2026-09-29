@@ -159,6 +159,7 @@ name = "autd3-cpu-fw"
 version = "0.10.0"
 dependencies = [
  "autd3-cpu-wire",
+ "const_fn",
  "zerocopy",
 ]
 
@@ -175,6 +176,8 @@ version = "0.9.0"
 dependencies = [
  "autd3-cpu-wire",
  "autd3-rs-core",
+ "if-addrs",
+ "socket2",
  "thiserror",
  "thread-priority",
  "tracing",
@@ -505,6 +508,12 @@ name = "const-oid"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
+
+[[package]]
+name = "const_fn"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413d67b29ef1021b4d60f4aa1e925ca031751e213832b4b1d588fae623c05c60"
 
 [[package]]
 name = "constant_time_eq"
@@ -1338,6 +1347,16 @@ checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
+]
+
+[[package]]
+name = "if-addrs"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0a05c691e1fae256cf7013d99dad472dc52d5543322761f83ec8d47eab40d2b"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

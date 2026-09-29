@@ -1,7 +1,6 @@
 use crate::emu_fpga::FpgaEmulator;
 use autd3_cpu_fw::Port;
 use autd3_cpu_fw::port::FlashError;
-use autd3_cpu_fw::proto::TxFrame;
 use autd3_cpu_fw::update::{FLASH_SECTOR_BYTES, LOADER_REGION_END};
 
 fn flash_span(
@@ -43,8 +42,6 @@ impl Port for FpgaEmulator {
     fn al_status_code(&mut self) -> u16 {
         FpgaEmulator::al_status_code(self)
     }
-
-    fn publish_tx(&mut self, _tx: TxFrame) {}
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
         let start = usize::try_from(addr).map_err(|_| FlashError)?;

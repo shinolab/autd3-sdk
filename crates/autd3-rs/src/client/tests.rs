@@ -10,8 +10,9 @@ use crate::error::Error;
 use crate::firmware_version::{FirmwareVersion, Version};
 use crate::geometry::Device;
 use crate::geometry::{Autd3, Geometry};
-use crate::link::{CycleOutcome, Link, LinkStats};
 use crate::protocol::{Cmd, MAX_INFLIGHT, PAYLOAD_BYTES, RX_FRAME_BYTES, TX_FRAME_BYTES, TxFrame};
+use crate::transport::Bus;
+use autd3_rs_core::{BusStats, CycleOutcome};
 
 use crate::telemetry::Telemetry;
 use autd3_cpu_wire::Mode;
@@ -259,16 +260,11 @@ fn slave_cycle(
     true
 }
 
-impl Link for LoopbackLink {
+impl Bus for LoopbackLink {
     type Error = std::convert::Infallible;
-    type Checker = crate::link::ConstStateChecker;
 
     fn num_devices(&self) -> usize {
         self.slaves.len()
-    }
-
-    fn state_checker(&self) -> Self::Checker {
-        crate::link::ConstStateChecker::new(self.slaves.len())
     }
 
     fn cycle(
@@ -294,7 +290,7 @@ impl Link for LoopbackLink {
 struct LinkFailure;
 
 fn link_cause_is<E: core::error::Error + Send + Sync + 'static>(e: &Error) -> bool {
-    let Error::Link(cause) = e else {
+    let Error::Network(cause) = e else {
         return false;
     };
     cause.downcast_ref::<E>().is_some()
@@ -316,16 +312,11 @@ impl Drop for FailingLink {
     }
 }
 
-impl Link for FailingLink {
+impl Bus for FailingLink {
     type Error = LinkFailure;
-    type Checker = crate::link::ConstStateChecker;
 
     fn num_devices(&self) -> usize {
         self.inner.num_devices()
-    }
-
-    fn state_checker(&self) -> Self::Checker {
-        self.inner.state_checker()
     }
 
     fn cycle(
@@ -363,7 +354,7 @@ fn seq_after_open(slave: &Arc<StdMutex<Slave>>) -> u8 {
 
 async fn open_client() -> (Client, Arc<StdMutex<Slave>>) {
     let (link, slave) = slave_pair();
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     (client, slave)
@@ -475,13 +466,13 @@ async fn open_rejects_a_foreign_series_only_when_the_check_is_requested() {
 
     let (link, slave) = slave_pair();
     set_supported_series(&slave);
-    let client = Client::open(&geometry(1), link, config).await.unwrap();
+    let client = Client::open_bus(&geometry(1), link, config).await.unwrap();
     client.close().await.unwrap();
 
     let (link, slave) = slave_pair();
     set_supported_series(&slave);
     slave.lock().unwrap().fpga_version_major = FirmwareVersion::SUPPORTED_SERIES.0.wrapping_add(1);
-    let opened = Client::open(&geometry(1), link, config).await;
+    let opened = Client::open_bus(&geometry(1), link, config).await;
     assert!(matches!(
         opened.err(),
         Some(Error::UnsupportedFirmware { device: 0, .. })
@@ -490,7 +481,7 @@ async fn open_rejects_a_foreign_series_only_when_the_check_is_requested() {
     let (link, slave) = slave_pair();
     set_supported_series(&slave);
     slave.lock().unwrap().fpga_version_major = FirmwareVersion::SUPPORTED_SERIES.0.wrapping_add(1);
-    Client::open(&geometry(1), link, ClientConfig::default())
+    Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap()
         .close()
@@ -568,7 +559,7 @@ async fn read_firmware_version_reports_unknown_fpga_per_device() {
         s.fpga_version_patch = 3;
     }
     slaves[1].lock().unwrap().supports_fpga_version = false;
-    let client = Client::open(&geometry(2), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(2), link, ClientConfig::default())
         .await
         .unwrap();
     let v = client.read_firmware_version().await.unwrap();
@@ -619,7 +610,7 @@ async fn read_is_exclusive_and_correct_under_concurrent_writes() {
         s1.fpga_version_patch = 0xB5;
     }
     let client = Arc::new(
-        Client::open(&geometry(2), link, ClientConfig::default())
+        Client::open_bus(&geometry(2), link, ClientConfig::default())
             .await
             .unwrap(),
     );
@@ -670,7 +661,7 @@ async fn read_is_exclusive_and_correct_under_concurrent_writes() {
 #[tokio::test]
 async fn multi_device_per_device_payloads_yield_per_device_results() {
     let (link, _slaves) = slaves_pair(2);
-    let client = Client::open(&geometry(2), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(2), link, ClientConfig::default())
         .await
         .unwrap();
 
@@ -697,7 +688,7 @@ async fn multi_device_per_device_payloads_yield_per_device_results() {
 #[tokio::test]
 async fn multi_device_send_reports_failing_device_index() {
     let (link, slaves) = slaves_pair(2);
-    let client = Client::open(&geometry(2), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(2), link, ClientConfig::default())
         .await
         .unwrap();
     let err = send_op(&client, FailingCmd).await.unwrap_err();
@@ -718,7 +709,7 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
     let (link, slaves) = slaves_pair(2);
     slaves[1].lock().unwrap().fw_version_major = 0xB1;
     slaves[0].lock().unwrap().fw_version_major = 0xB0;
-    let client = Client::open(
+    let client = Client::open_bus(
         &geometry(2),
         link,
         ClientConfig {
@@ -762,7 +753,7 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
 #[tokio::test]
 async fn send_rejects_wrong_datagram_count() {
     let (link, _slaves) = slaves_pair(2);
-    let client = Client::open(&geometry(2), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(2), link, ClientConfig::default())
         .await
         .unwrap();
     let err = client
@@ -848,7 +839,7 @@ async fn a_foreign_series_warns_at_open_without_refusing_it() {
     }
 
     let mark = log.mark();
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .expect("a foreign series must not refuse the default open");
     let captured = log.since(mark);
@@ -872,7 +863,7 @@ async fn open_reads_the_firmware_version_even_when_the_check_is_off() {
     set_supported_series(&slave);
     slave.lock().unwrap().fw_version_minor = FirmwareVersion::SUPPORTED_SERIES.1.wrapping_add(1);
 
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
 
@@ -900,7 +891,7 @@ async fn low_latency_handshake_switches_slave_mode_and_continues_traffic() {
         low_latency: true,
         ..ClientConfig::default()
     };
-    let client = Client::open(&geometry(1), link, config).await.unwrap();
+    let client = Client::open_bus(&geometry(1), link, config).await.unwrap();
     {
         let s = slave.lock().unwrap();
         assert_eq!(
@@ -928,7 +919,7 @@ async fn default_config_negotiates_fifo_mode() {
 async fn handshake_clears_low_latency_left_by_a_previous_session() {
     let (link, slave) = slave_pair();
     slave.lock().unwrap().mode = Mode::LowLatency.as_u8();
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     {
@@ -951,7 +942,7 @@ async fn handshake_resets_slave_proto_state() {
         s.expected_seq = 42;
         s.ack = 41;
     }
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     let base = {
@@ -1022,7 +1013,7 @@ async fn pipeline_continues_after_device_error_in_the_middle() {
 async fn streaming_skip_recovers_via_resync_without_timeout() {
     let (link, slave) = slave_pair();
     slave.lock().unwrap().fw_version_major = 0xAB;
-    let client = Client::open(
+    let client = Client::open_bus(
         &geometry(1),
         link,
         ClientConfig {
@@ -1065,7 +1056,7 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
 #[tokio::test]
 async fn dead_link_gives_up_whole_window_in_bounded_time() {
     let (link, slave) = slave_pair();
-    let client = Client::open(
+    let client = Client::open_bus(
         &geometry(1),
         link,
         ClientConfig {
@@ -1148,7 +1139,7 @@ fn post_handshake_reset_count(slave: &Arc<StdMutex<Slave>>) -> usize {
 async fn inflight_held_across_stale_recovers_without_reset() {
     let (link, slave) = slave_pair();
     slave.lock().unwrap().fw_version_major = 0xAB;
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     let base = seq_after_open(&slave);
@@ -1182,7 +1173,7 @@ async fn inflight_held_across_stale_recovers_without_reset() {
 async fn streaming_holds_window_across_stale_and_recovers() {
     let (link, slave) = slave_pair();
     slave.lock().unwrap().fw_version_major = 0xAB;
-    let client = Client::open(
+    let client = Client::open_bus(
         &geometry(1),
         link,
         ClientConfig {
@@ -1231,7 +1222,7 @@ async fn streaming_holds_window_across_stale_and_recovers() {
 async fn frozen_ahead_desync_recovers_via_reset_resync() {
     let (link, slave) = slave_pair();
     slave.lock().unwrap().fw_version_major = 0xCD;
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     slave.lock().unwrap().expected_seq = 200;
@@ -1274,7 +1265,7 @@ async fn close_resolves_pending_with_rt_closed() {
 #[tokio::test]
 async fn open_rejects_oversize_max_inflight() {
     let (link, _slave) = slave_pair();
-    let res = Client::open(
+    let res = Client::open_bus(
         &geometry(1),
         link,
         ClientConfig {
@@ -1297,7 +1288,7 @@ async fn open_rejects_oversize_max_inflight() {
 #[tokio::test]
 async fn open_rejects_zero_devices() {
     let (link, _slaves) = slaves_pair(0);
-    let res = Client::open(&geometry(0), link, ClientConfig::default()).await;
+    let res = Client::open_bus(&geometry(0), link, ClientConfig::default()).await;
     assert!(matches!(res, Err(Error::InvalidPayload(_))));
 }
 
@@ -1372,7 +1363,7 @@ async fn opt_out_disables_precheck() {
         validate_state: false,
         ..ClientConfig::default()
     };
-    let client = Client::open(&geometry(1), link, config).await.unwrap();
+    let client = Client::open_bus(&geometry(1), link, config).await.unwrap();
     let mut builder = client.datagram_builder();
     builder.push(SetSilencer::default()).push(ConfigPattern {
         bank: PatternBank::B0,
@@ -1481,7 +1472,7 @@ async fn read_replies_never_count_as_device_errors() {
 #[tokio::test]
 async fn validation_opt_out_keeps_the_response_future_mirror_free() {
     let (link, slave) = slave_pair();
-    let client = Client::open(
+    let client = Client::open_bus(
         &geometry(1),
         link,
         ClientConfig {
@@ -1516,7 +1507,7 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
         slow_drop: None,
     };
     let max_inflight = NonZeroUsize::new(3).unwrap();
-    let client = Client::open(
+    let client = Client::open_bus(
         &geometry(1),
         link,
         ClientConfig {
@@ -1577,7 +1568,7 @@ async fn sending_after_the_rt_thread_died_fails_instead_of_blocking() {
         slow_drop: Some(Arc::clone(&entered_drop)),
     };
     let max_inflight = NonZeroUsize::new(1).unwrap();
-    let client = Client::open(
+    let client = Client::open_bus(
         &geometry(1),
         link,
         ClientConfig {
@@ -1720,7 +1711,7 @@ async fn transition_precheck_opts_out_with_validate_state() {
         validate_state: false,
         ..ClientConfig::default()
     };
-    let client = Client::open(&geometry(1), link, config).await.unwrap();
+    let client = Client::open_bus(&geometry(1), link, config).await.unwrap();
 
     let data = [0x80u8; 4];
     let mut builder = client.datagram_builder();
@@ -1742,7 +1733,7 @@ async fn build_rejects_per_device_group_under_strict_silencer() {
     use core::num::NonZeroU16;
 
     let (link, _slaves) = slaves_pair(2);
-    let client = Client::open(&geometry(2), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(2), link, ClientConfig::default())
         .await
         .unwrap();
 
@@ -1854,7 +1845,7 @@ async fn close_mutes_before_it_joins_the_rt_thread() {
 async fn close_joins_the_rt_thread_even_when_the_stop_frame_fails() {
     let (link, slave) = slave_pair();
     let max_inflight = NonZeroUsize::new(3).unwrap();
-    let client = Client::open(
+    let client = Client::open_bus(
         &geometry(1),
         link,
         ClientConfig {
@@ -1979,7 +1970,7 @@ impl CloseTracker {
 struct TrackedLink {
     inner: LoopbackLink,
     tracker: Arc<CloseTracker>,
-    stats: LinkStats,
+    stats: BusStats,
 }
 
 fn tracked_pair() -> (TrackedLink, Arc<CloseTracker>) {
@@ -1989,26 +1980,21 @@ fn tracked_pair() -> (TrackedLink, Arc<CloseTracker>) {
         TrackedLink {
             inner,
             tracker: Arc::clone(&tracker),
-            stats: LinkStats::default(),
+            stats: BusStats::default(),
         },
         tracker,
     )
 }
 
-impl Link for TrackedLink {
+impl Bus for TrackedLink {
     type Error = LinkFailure;
-    type Checker = crate::link::ConstStateChecker;
 
     fn num_devices(&self) -> usize {
         self.inner.num_devices()
     }
 
-    fn stats(&self) -> LinkStats {
+    fn stats(&self) -> BusStats {
         self.stats.clone()
-    }
-
-    fn state_checker(&self) -> Self::Checker {
-        self.inner.state_checker()
     }
 
     fn cycle(
@@ -2035,7 +2021,7 @@ impl Link for TrackedLink {
 #[tokio::test]
 async fn close_calls_the_link_close_exactly_once() {
     let (link, tracker) = tracked_pair();
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     client.close().await.unwrap();
@@ -2048,7 +2034,7 @@ async fn close_calls_the_link_close_exactly_once() {
 #[tokio::test]
 async fn dropping_the_client_still_closes_the_link() {
     let (link, tracker) = tracked_pair();
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     drop(client);
@@ -2058,7 +2044,7 @@ async fn dropping_the_client_still_closes_the_link() {
 #[tokio::test]
 async fn link_close_failure_surfaces_from_client_close() {
     let (link, tracker) = tracked_pair();
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     tracker.close_fails.store(true, AtomicOrdering::Release);
@@ -2071,7 +2057,7 @@ async fn link_close_failure_surfaces_from_client_close() {
 async fn the_link_is_closed_even_when_the_handshake_fails() {
     let (link, tracker) = tracked_pair();
     tracker.cycle_fails.store(true, AtomicOrdering::Release);
-    let opened = Client::open(&geometry(1), link, ClientConfig::default()).await;
+    let opened = Client::open_bus(&geometry(1), link, ClientConfig::default()).await;
     assert!(link_cause_is::<LinkFailure>(
         &opened.err().expect("open fails")
     ));
@@ -2081,7 +2067,7 @@ async fn the_link_is_closed_even_when_the_handshake_fails() {
 #[tokio::test]
 async fn a_link_rejected_by_the_device_count_check_is_still_closed() {
     let (link, tracker) = tracked_pair();
-    let opened = Client::open(&geometry(2), link, ClientConfig::default()).await;
+    let opened = Client::open_bus(&geometry(2), link, ClientConfig::default()).await;
     assert!(matches!(opened, Err(Error::InvalidPayload(_))));
     assert_eq!(tracker.closes(), 1);
 }
@@ -2089,7 +2075,7 @@ async fn a_link_rejected_by_the_device_count_check_is_still_closed() {
 #[tokio::test]
 async fn geometry_is_reachable_through_the_client() {
     let (link, _tracker) = tracked_pair();
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
     assert_eq!(client.geometry().num_devices(), 1);
@@ -2101,16 +2087,16 @@ async fn geometry_is_reachable_through_the_client() {
 }
 
 #[tokio::test]
-async fn link_stats_are_reachable_through_the_client() {
+async fn bus_stats_are_reachable_through_the_client() {
     let (link, _tracker) = tracked_pair();
-    let client = Client::open(&geometry(1), link, ClientConfig::default())
+    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
         .await
         .unwrap();
-    let stats = client.link_stats();
+    let stats = client.bus_stats();
     assert!(stats.exchanges() > 0);
     let before = stats.exchanges();
     send_nop(&client).await.unwrap();
-    assert!(client.link_stats().exchanges() > before);
+    assert!(client.bus_stats().exchanges() > before);
     client.close().await.unwrap();
-    assert_eq!(client.link_stats().mean_exchange_ns(), 1_000);
+    assert_eq!(client.bus_stats().mean_exchange_ns(), 1_000);
 }
