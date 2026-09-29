@@ -12,7 +12,8 @@ name = "autd3capi"
 crate-type = ["cdylib"]
 
 [dependencies]
-autd3-rs.workspace = true
+autd3-rs = { workspace = true, features = ["emulator"] }
+autd3-rs-core.workspace = true
 autd3-ffi-abi = { workspace = true, features = ["client"] }
 
 [lints]

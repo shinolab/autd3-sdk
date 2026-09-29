@@ -3,11 +3,13 @@ use std::num::{NonZeroU16, NonZeroU32, NonZeroUsize};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+mod udp;
+
 use autd3_ffi_abi::{
-    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, CheckerBackend, ClientBackend, ClientOpener,
-    CompletionCallback, CompletionCtx, IntensityBuffer, ModulationBuffer, PhaseBuffer,
-    ResponseTokenData, drop_handle, handle_mut, handle_ref, into_handle, slice_mut, slice_ref,
-    take_handle, to_rt_policy, to_rt_priority, write_cstr, write_out,
+    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, CheckerBackend, ClientBackend, CompletionCallback,
+    CompletionCtx, IntensityBuffer, ModulationBuffer, PhaseBuffer, ResponseTokenData, drop_handle,
+    handle_mut, handle_ref, into_handle, slice_mut, slice_ref, take_handle, to_rt_policy,
+    to_rt_priority, write_cstr, write_out,
 };
 use autd3_rs::commands::{
     BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
@@ -29,8 +31,6 @@ use autd3_rs::{
     Response, UnitVector3, Vector3, Velocity,
 };
 use autd3_rs::{DeviceState, Telemetry};
-
-mod legacy;
 
 pub(crate) fn executor() -> &'static Executor {
     static EXECUTOR: OnceLock<Executor> = OnceLock::new();
@@ -174,19 +174,6 @@ macro_rules! foci_points {
                 config: StmConfig,
                 option: FociStmOption,
                 builder: &mut CoreDatagramBuilder<'a>,
-            ) {
-                match self {
-                    $(FociPoints::$variant(v) => {
-                        builder.push(CoreFociStm::new(config, v.as_slice(), option));
-                    })*
-                }
-            }
-
-            pub(crate) fn push_legacy_into<'a>(
-                &'a self,
-                config: StmConfig,
-                option: FociStmOption,
-                builder: &mut autd3_rs::legacy::LegacyDatagramBuilder<'a>,
             ) {
                 match self {
                     $(FociPoints::$variant(v) => {
@@ -488,11 +475,6 @@ pub unsafe extern "C" fn autd3_client_config_set_rt_affinity(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_config_free(config: *mut ClientConfig) {
     unsafe { drop_handle(config) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_opener_free(opener: *mut ClientOpener) {
-    unsafe { drop_handle(opener) }
 }
 
 pub enum OwnedPatternIntensity {
@@ -1830,7 +1812,7 @@ pub struct StringArray(Vec<CString>);
 
 pub struct ByteArray(Vec<u8>);
 
-pub struct LinkStatus {
+pub struct DeviceStatus {
     devices: Vec<DeviceState>,
     recoveries: u64,
 }
@@ -1845,7 +1827,7 @@ pub(crate) fn to_cstrings(values: Vec<String>) -> Vec<CString> {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_open(
     geometry: *const Geometry,
-    link: *mut ClientOpener,
+    option: *mut udp::TransportOptionHandle,
     config: *const ClientConfig,
     cb: CompletionCallback,
     user_data: *mut c_void,
@@ -1859,12 +1841,12 @@ pub unsafe extern "C" fn autd3_client_open(
         ctx.invalid_argument("null argument");
         return;
     };
-    let Some(opener) = (unsafe { take_handle(link) }) else {
+    let Some(udp::TransportOptionHandle(option)) = (unsafe { take_handle(option) }) else {
         ctx.invalid_argument("null argument");
         return;
     };
 
-    let fut = opener(geometry.clone(), *config);
+    let fut = udp::open(geometry.clone(), option, *config);
     executor().spawn(async move {
         match fut.await {
             Ok(backend) => ctx.ok(into_handle(ClientHandle(backend)).cast()),
@@ -2125,14 +2107,14 @@ pub unsafe extern "C" fn autd3_checker_check(
     checker: *const CheckerHandle,
     out_err: *mut c_char,
     out_err_len: usize,
-) -> *mut LinkStatus {
+) -> *mut DeviceStatus {
     let Some(checker) = (unsafe { handle_ref(checker) }) else {
         unsafe { write_cstr(out_err, out_err_len, "null checker") };
         return std::ptr::null_mut();
     };
 
     match checker.0.check() {
-        Ok(status) => into_handle(LinkStatus {
+        Ok(status) => into_handle(DeviceStatus {
             devices: status.devices,
             recoveries: status.recoveries,
         }),
@@ -2226,7 +2208,7 @@ pub unsafe extern "C" fn autd3_string_array_free(array: *mut StringArray) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_status_recoveries(status: *const LinkStatus) -> u64 {
+pub unsafe extern "C" fn autd3_device_status_recoveries(status: *const DeviceStatus) -> u64 {
     let Some(status) = (unsafe { handle_ref(status) }) else {
         return 0;
     };
@@ -2235,7 +2217,7 @@ pub unsafe extern "C" fn autd3_link_status_recoveries(status: *const LinkStatus)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_status_num_devices(status: *const LinkStatus) -> usize {
+pub unsafe extern "C" fn autd3_device_status_num_devices(status: *const DeviceStatus) -> usize {
     let Some(status) = (unsafe { handle_ref(status) }) else {
         return 0;
     };
@@ -2244,8 +2226,8 @@ pub unsafe extern "C" fn autd3_link_status_num_devices(status: *const LinkStatus
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_status_device_state(
-    status: *const LinkStatus,
+pub unsafe extern "C" fn autd3_device_status_device_state(
+    status: *const DeviceStatus,
     index: usize,
     out_kind: *mut u8,
     out_bits: *mut u8,
@@ -2269,7 +2251,7 @@ pub unsafe extern "C" fn autd3_link_status_device_state(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_status_free(status: *mut LinkStatus) {
+pub unsafe extern "C" fn autd3_device_status_free(status: *mut DeviceStatus) {
     unsafe { drop_handle(status) }
 }
 
@@ -2456,7 +2438,7 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_open_leaves_the_link_handle_with_the_caller() {
+    fn a_failed_open_leaves_the_option_handle_with_the_caller() {
         extern "C" fn never_reports_success(
             code: i32,
             _value: *mut c_void,
@@ -2466,21 +2448,20 @@ mod tests {
             assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
         }
 
-        let opener: ClientOpener = Box::new(|_geometry, _config| unreachable!());
-        let opener = into_handle(opener);
+        let option = udp::autd3_transport_option_new();
         let config = autd3_client_config_new();
 
         unsafe {
             autd3_client_open(
                 std::ptr::null(),
-                opener,
+                option,
                 config,
                 Some(never_reports_success),
                 std::ptr::null_mut(),
             );
         }
 
-        assert!(unsafe { take_handle(opener) }.is_some());
+        assert!(unsafe { take_handle(option) }.is_some());
         unsafe { autd3_client_config_free(config) };
     }
 
