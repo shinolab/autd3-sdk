@@ -1,4 +1,5 @@
-mod link;
+mod connect;
+mod udp;
 
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
@@ -9,11 +10,11 @@ use clap::{Parser, ValueEnum};
 
 use autd3_cpu_wire::fpga_update::FpgaBootImage;
 use autd3_firmware_writer::bundle;
-use autd3_firmware_writer::series::Series;
-use autd3_rs_core::link::Link;
-use autd3_rs_firmware_ota::{CpuFirmwareImage, Driver, FPGA_RECONFIG_WAIT, FpgaFirmwareImage};
+use autd3_rs_firmware_ota::{
+    CpuFirmwareImage, Driver, Exchange, FPGA_RECONFIG_WAIT, FpgaFirmwareImage,
+};
 
-use link::{LinkArgs, LinkKind};
+use connect::{ConnectArgs, Connection, TransportKind};
 
 type Version = (u8, u8, u8);
 
@@ -44,12 +45,17 @@ impl Target {
 #[command(
     name = "autd3-rs-firmware-ota",
     about,
-    long_about = "Update the AUTD3 CPU / FPGA firmware over EtherCAT (no J-Link / Vivado).\n\n\
+    long_about = "Update the AUTD3 CPU / FPGA firmware over UDP (no J-Link / Vivado).\n\n\
         Pass a flash image, or --version to download a release bundle. The CPU image is \
         written to the inactive slot, the devices reboot into it, and the tool reconnects \
-        to confirm it; an unconfirmed image rolls back at the next reset. The FPGA image is \
+        to confirm it (the reboot leaves the devices unassigned, so the chain is enumerated \
+        again); an unconfirmed image rolls back at the next reset. The FPGA image is \
         written to the update slot and the FPGA reconfigures in place (golden image fallback).\n\n\
-        Requires firmware v0.9.0 or newer on the devices; older devices must be written via JTAG."
+        Only UDP firmware images (v0.10.0 or newer) are accepted. The tool first looks for \
+        devices over UDP and, if none answers, over EtherCAT: devices still running the \
+        EtherCAT firmware v0.9.x get the UDP CPU firmware over EtherCAT and are reached over \
+        UDP after the reboot (update the FPGA after that, e.g. --version with --target both). \
+        Devices older than v0.9.0 must be written via J-Link."
 )]
 struct Cli {
     #[arg(
@@ -91,7 +97,7 @@ struct Cli {
     slot_image: bool,
     #[arg(
         long,
-        help = "Expected number of devices (default: whatever the link reports)"
+        help = "Number of devices on the chain (default: whatever the enumeration finds)"
     )]
     devices: Option<usize>,
     #[arg(
@@ -129,7 +135,7 @@ struct Cli {
     )]
     confirm_only: bool,
     #[command(flatten)]
-    link: LinkArgs,
+    connect: ConnectArgs,
 }
 
 #[derive(Clone, Copy)]
@@ -159,6 +165,7 @@ enum Stage<'a> {
 struct Outcome {
     devices: usize,
     cpu_versions: Vec<Version>,
+    over_ethercat: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -173,18 +180,27 @@ struct TrialNotRunning {
 }
 
 fn open_and_run(cli: &Cli, devices: Option<usize>, stage: Stage<'_>) -> Result<Outcome> {
-    match cli.link.link {
-        LinkKind::Echocat => run(cli.link.open_echocat(devices)?, stage),
-        LinkKind::Twincat => run(cli.link.open_twincat(devices)?, stage),
-        LinkKind::Remote => run(cli.link.open_remote(devices)?, stage),
+    let connection = cli.connect.open(devices)?;
+    println!("connected over {}", connection.describe());
+    if connection.is_ethercat() && matches!(stage, Stage::FpgaUpdate { .. }) {
+        bail!(
+            "the devices still run the EtherCAT firmware v0.9.x; move the CPU to the UDP \
+             firmware first (write the CPU image, or pass --version with --target both), \
+             then update the FPGA over UDP"
+        );
     }
+    run(connection, stage)
+}
+
+fn reopen_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
+    run(cli.connect.open_udp(devices)?, stage)
 }
 
 fn fmt_version((major, minor, patch): Version) -> String {
     format!("{major}.{minor}.{patch}")
 }
 
-fn print_versions<L: Link>(driver: &mut Driver<L>, label: &str) -> Result<Vec<Version>> {
+fn print_versions<L: Exchange>(driver: &mut Driver<L>, label: &str) -> Result<Vec<Version>> {
     let versions = driver.read_cpu_version()?;
     for (device, &version) in versions.iter().enumerate() {
         println!(
@@ -195,7 +211,7 @@ fn print_versions<L: Link>(driver: &mut Driver<L>, label: &str) -> Result<Vec<Ve
     Ok(versions)
 }
 
-fn print_fpga<L: Link>(driver: &mut Driver<L>, label: &str) -> Result<Vec<FpgaBootImage>> {
+fn print_fpga<L: Exchange>(driver: &mut Driver<L>, label: &str) -> Result<Vec<FpgaBootImage>> {
     let versions = driver.read_fpga_version()?;
     let images = driver.read_fpga_boot_image()?;
     for (device, (&version, image)) in versions.iter().zip(&images).enumerate() {
@@ -258,7 +274,7 @@ fn check_expectation(versions: &[Version], expect: Expect<'_>) -> Result<()> {
     Ok(())
 }
 
-fn run_fpga<L: Link>(
+fn run_fpga<L: Exchange>(
     driver: &mut Driver<L>,
     image: &FpgaFirmwareImage,
     activate: bool,
@@ -296,13 +312,21 @@ fn run_fpga<L: Link>(
     Ok(())
 }
 
-fn run<L: Link>(link: L, stage: Stage<'_>) -> Result<Outcome> {
-    let mut driver = Driver::open(link).context("opening the link / protocol handshake")?;
+fn run(connection: Connection, stage: Stage<'_>) -> Result<Outcome> {
+    let over_ethercat = connection.is_ethercat();
+    let mut driver =
+        Driver::open(connection).context("opening the devices / protocol handshake")?;
     let devices = driver.num_devices();
     println!("{devices} device(s) on the bus");
     let cpu_versions = match stage {
         Stage::Update { image, activate } => {
             let before = print_versions(&mut driver, "before")?;
+            if over_ethercat {
+                println!(
+                    "writing the UDP firmware over EtherCAT; after the reboot the devices are \
+                     reached over UDP"
+                );
+            }
             driver.update(image, progress_printer(image.len()))?;
             end_progress();
             println!("image committed on every device");
@@ -311,7 +335,7 @@ fn run<L: Link>(link: L, stage: Stage<'_>) -> Result<Outcome> {
                 println!("activation acknowledged; the devices reboot in about 100 ms");
                 if let Err(e) = driver.close() {
                     eprintln!(
-                        "warning: closing the link after activation failed ({e:#}); \
+                        "warning: closing the connection after activation failed ({e:#}); \
                          this can happen while the devices reboot, continuing"
                     );
                 }
@@ -345,6 +369,7 @@ fn run<L: Link>(link: L, stage: Stage<'_>) -> Result<Outcome> {
     Ok(Outcome {
         devices,
         cpu_versions,
+        over_ethercat,
     })
 }
 
@@ -353,7 +378,7 @@ fn reconnect_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Result<Outc
     let mut attempt = 0;
     loop {
         attempt += 1;
-        match open_and_run(cli, Some(devices), stage) {
+        match reopen_and_run(cli, devices, stage) {
             Ok(outcome) => return Ok(outcome),
             Err(e) if e.downcast_ref::<TrialNotRunning>().is_some() => return Err(e),
             Err(e) if attempt < attempts => {
@@ -404,7 +429,7 @@ fn parse_version(version: &str) -> Option<Version> {
     parts.next().is_none().then_some(v)
 }
 
-fn main_cpu(cli: &Cli, bytes: Vec<u8>, release: Option<Version>) -> Result<()> {
+fn main_cpu(cli: &Cli, bytes: Vec<u8>, release: Option<Version>) -> Result<bool> {
     let image = if cli.slot_image {
         CpuFirmwareImage::from_slot_image(bytes)?
     } else {
@@ -425,7 +450,7 @@ fn main_cpu(cli: &Cli, bytes: Vec<u8>, release: Option<Version>) -> Result<()> {
                 expect: Expect::Anything,
             },
         )?;
-        return Ok(());
+        return Ok(false);
     }
     let activate = !cli.no_activate;
     let before = open_and_run(
@@ -442,11 +467,11 @@ fn main_cpu(cli: &Cli, bytes: Vec<u8>, release: Option<Version>) -> Result<()> {
              reset or power cycle. Run `--confirm-only` once it is up, or it rolls back at the \
              reset after that"
         );
-        return Ok(());
+        return Ok(before.over_ethercat);
     }
 
     let wait = Duration::from_secs(cli.reboot_wait_secs);
-    println!("waiting {wait:?} for the devices to reboot and the bus to re-enumerate");
+    println!("waiting {wait:?} for the devices to reboot before enumerating them again");
     std::thread::sleep(wait);
     let expect = release.map_or(Expect::ChangedFrom(&before.cpu_versions), Expect::Exactly);
     reconnect_and_run(
@@ -457,23 +482,26 @@ fn main_cpu(cli: &Cli, bytes: Vec<u8>, release: Option<Version>) -> Result<()> {
             expect,
         },
     )?;
+    if before.over_ethercat {
+        println!("the devices moved from the EtherCAT firmware to the UDP firmware");
+    }
     if cli.no_confirm {
         println!("not confirmed (--no-confirm); {CONFIRM_ONLY_HINT}");
-        return Ok(());
+        return Ok(before.over_ethercat);
     }
     println!("Ok!");
-    Ok(())
+    Ok(before.over_ethercat)
 }
 
 fn main_release(cli: &Cli, version: &str) -> Result<()> {
     if cli.confirm_only && cli.target != Target::Cpu {
         bail!("--confirm-only only applies to the CPU image; pass --target cpu");
     }
-    let bundle = bundle::fetch(version, cli.force_download, Series::Sdk)?;
+    let bundle = bundle::fetch(version, cli.force_download)?;
     if bundle.fpga_update.is_none() {
         bail!(
             "the release bundle has no FPGA update image (*-fpga-update.img): either this \
-             release predates EtherCAT updates (before v0.9.0) and must be written via JTAG, \
+             release predates firmware updates (before v0.9.0) and must be written via JTAG, \
              or the cached bundle is incomplete (retry with --force-download)"
         );
     }
@@ -495,30 +523,44 @@ fn main_release(cli: &Cli, version: &str) -> Result<()> {
     };
     let release = parse_version(version);
     let shown = version.trim_start_matches('v');
+    let mut moved = false;
     if let Some(bytes) = cpu {
         println!("== CPU firmware v{shown} ==");
-        main_cpu(cli, bytes, release)?;
+        moved = main_cpu(cli, bytes, release)?;
     }
     if let Some(bytes) = fpga {
         println!("== FPGA firmware v{shown} ==");
-        main_fpga(cli, bytes)?;
+        if moved && cli.no_activate {
+            println!(
+                "skipped: the UDP CPU image was written over EtherCAT but not activated \
+                 (--no-activate); after the next reset the devices run it, then update the \
+                 FPGA over UDP (--target fpga)"
+            );
+            return Ok(());
+        }
+        if moved {
+            let mut udp = cli.clone();
+            udp.connect.transport = TransportKind::Udp;
+            main_fpga(&udp, bytes)?;
+        } else {
+            main_fpga(cli, bytes)?;
+        }
     }
     Ok(())
 }
 
 fn main() -> Result<()> {
-    let mut cli = Cli::parse();
+    let cli = Cli::parse();
     if cli.devices == Some(0) {
         bail!("--devices must be at least 1");
     }
-    cli.link.resolve_remote()?;
     match (&cli.image, &cli.version) {
         (Some(path), _) => {
             let bytes = read_image(path)?;
             if cli.fpga {
                 main_fpga(&cli, bytes)
             } else {
-                main_cpu(&cli, bytes, None)
+                main_cpu(&cli, bytes, None).map(|_| ())
             }
         }
         (None, Some(version)) => main_release(&cli, version),

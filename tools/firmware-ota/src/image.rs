@@ -1,5 +1,6 @@
 use autd3_cpu_wire::update::{
-    IMAGE_APP_CAPACITY, IMAGE_VECTOR_BYTES, ImageHeader, Slot, crc32, is_plausible_length,
+    IMAGE_APP_CAPACITY, IMAGE_VECTOR_BYTES, ImageHeader, Slot, TRANSPORT_MARKER_BYTES,
+    TRANSPORT_MARKER_OFFSET, Transport, crc32, image_transport, is_plausible_length,
 };
 use zerocopy::FromBytes;
 
@@ -23,6 +24,17 @@ pub enum ImageError {
         "flash image slot-A header disagrees with its body (declared {declared} bytes, crc32 0x{crc32:08X})"
     )]
     HeaderMismatch { declared: usize, crc32: u32 },
+    #[error(
+        "CPU firmware image is not a UDP firmware (reads as {found:?}); EtherCAT images (v0.9.x and older) cannot be written over UDP"
+    )]
+    NotUdp { found: Option<Transport> },
+}
+
+fn transport_of(body: &[u8]) -> Option<Transport> {
+    let at = TRANSPORT_MARKER_OFFSET as usize;
+    let marker: &[u8; TRANSPORT_MARKER_BYTES] =
+        body.get(at..at + TRANSPORT_MARKER_BYTES)?.try_into().ok()?;
+    image_transport(marker)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,6 +54,10 @@ impl CpuFirmwareImage {
                 min_exclusive: IMAGE_VECTOR_BYTES as usize,
                 max: (IMAGE_VECTOR_BYTES + IMAGE_APP_CAPACITY) as usize,
             });
+        }
+        let found = transport_of(&body);
+        if found != Some(Transport::Udp) {
+            return Err(ImageError::NotUdp { found });
         }
         let crc32 = crc32(&body);
         Ok(Self { body, crc32 })
@@ -95,6 +111,18 @@ mod tests {
     use super::*;
     use zerocopy::IntoBytes;
 
+    fn marked(mut body: Vec<u8>, transport: Transport) -> Vec<u8> {
+        let at = TRANSPORT_MARKER_OFFSET as usize;
+        if body.len() >= at + TRANSPORT_MARKER_BYTES {
+            body[at..at + TRANSPORT_MARKER_BYTES].copy_from_slice(&transport.marker());
+        }
+        body
+    }
+
+    fn udp(body: Vec<u8>) -> Vec<u8> {
+        marked(body, Transport::Udp)
+    }
+
     fn flash_with(body: &[u8]) -> Vec<u8> {
         let mut flash = vec![0xFFu8; Slot::A.image_base() as usize + body.len()];
         let header = ImageHeader::new(0, u32::try_from(body.len()).unwrap(), crc32(body));
@@ -106,7 +134,7 @@ mod tests {
 
     #[test]
     fn slot_image_carries_its_crc() {
-        let body = b"123456789".repeat(8);
+        let body = udp(b"123456789".repeat(8));
         let image = CpuFirmwareImage::from_slot_image(body.clone()).unwrap();
         assert_eq!(image.len(), body.len());
         assert_eq!(image.crc32(), crc32(&body));
@@ -121,19 +149,18 @@ mod tests {
         let max = (IMAGE_VECTOR_BYTES + IMAGE_APP_CAPACITY) as usize;
         for len in [IMAGE_VECTOR_BYTES as usize, max + 1] {
             assert!(matches!(
-                CpuFirmwareImage::from_slot_image(vec![0; len]),
+                CpuFirmwareImage::from_slot_image(udp(vec![0; len])),
                 Err(ImageError::LengthOutOfRange { .. })
             ));
         }
-        assert!(
-            CpuFirmwareImage::from_slot_image(vec![0; IMAGE_VECTOR_BYTES as usize + 1]).is_ok()
-        );
-        assert!(CpuFirmwareImage::from_slot_image(vec![0; max]).is_ok());
+        let shortest = IMAGE_VECTOR_BYTES as usize + TRANSPORT_MARKER_BYTES;
+        assert!(CpuFirmwareImage::from_slot_image(udp(vec![0; shortest])).is_ok());
+        assert!(CpuFirmwareImage::from_slot_image(udp(vec![0; max])).is_ok());
     }
 
     #[test]
     fn flash_image_extracts_the_stamped_slot_a_body() {
-        let body: Vec<u8> = (0..3000u32).map(|i| (i * 7).to_le_bytes()[0]).collect();
+        let body = udp((0..3000u32).map(|i| (i * 7).to_le_bytes()[0]).collect());
         let image = CpuFirmwareImage::from_flash_image(&flash_with(&body)).unwrap();
         assert_eq!(image.as_bytes(), &body[..]);
     }
@@ -149,12 +176,35 @@ mod tests {
             CpuFirmwareImage::from_flash_image(&unstamped),
             Err(ImageError::HeaderMissing { .. })
         ));
-        let mut flash = flash_with(&[1u8; 500]);
+        let mut flash = flash_with(&udp(vec![1u8; 500]));
         let last = flash.len() - 1;
         flash[last] ^= 0xFF;
         assert!(matches!(
             CpuFirmwareImage::from_flash_image(&flash),
             Err(ImageError::HeaderMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn only_udp_images_are_accepted() {
+        let body = vec![0x5Au8; 1000];
+        assert_eq!(
+            CpuFirmwareImage::from_slot_image(body.clone()),
+            Err(ImageError::NotUdp {
+                found: Some(Transport::EtherCat)
+            })
+        );
+        assert_eq!(
+            CpuFirmwareImage::from_slot_image(marked(body.clone(), Transport::EtherCat)),
+            Err(ImageError::NotUdp {
+                found: Some(Transport::EtherCat)
+            })
+        );
+        let mut unknown = udp(body);
+        unknown[TRANSPORT_MARKER_OFFSET as usize + 4] = 0x7F;
+        assert_eq!(
+            CpuFirmwareImage::from_slot_image(unknown),
+            Err(ImageError::NotUdp { found: None })
+        );
     }
 }

@@ -4,8 +4,8 @@ use autd3_cpu_wire::fpga_update::{FPGA_FUNC_FLASH_OTA, FpgaBootImage};
 use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 use autd3_cpu_wire::payload::{SetModePayload, UpdateBeginPayload, UpdateChunkPayload};
 use autd3_cpu_wire::{Mode, describe_device_error};
-use autd3_rs_core::link::Link;
-use autd3_rs_core::protocol::{Cmd, RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs::protocol::{Cmd, RX_FRAME_BYTES, RxFrame, Seq, TX_FRAME_BYTES, TxFrame};
+use autd3_rs::{CycleOutcome, UdpBus, UdpError};
 use zerocopy::FromBytes;
 
 use crate::fpga_image::FpgaFirmwareImage;
@@ -22,12 +22,12 @@ pub const FPGA_UPDATE_CHUNK_TIMEOUT: Duration = Duration::from_secs(20);
 pub const FPGA_UPDATE_COMMIT_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FPGA_RECONFIG_WAIT: Duration =
     Duration::from_millis(autd3_cpu_wire::fpga_update::FPGA_RECONFIG_WORST_MS as u64 + 2000);
-pub const MIN_CPU_FIRMWARE_VERSION: (u8, u8, u8) = (0, 9, 0);
+pub const MIN_CPU_FIRMWARE_VERSION: (u8, u8, u8) = (0, 10, 0);
 
 #[derive(Debug, thiserror::Error)]
 pub enum DriverError {
-    #[error("link error: {0}")]
-    Link(#[source] Box<dyn core::error::Error + Send + Sync>),
+    #[error("network error: {0}")]
+    Network(#[source] Box<dyn core::error::Error + Send + Sync>),
     #[error("device {device} did not acknowledge {cmd:?} within {timeout:?}; {}", timeout_hint(*cmd))]
     Timeout {
         device: usize,
@@ -47,7 +47,7 @@ pub enum DriverError {
     #[error("mode negotiation failed: the devices did not acknowledge SetMode")]
     ModeNegotiation,
     #[error(
-        "device {device} runs CPU firmware {}.{}.{}, but EtherCAT update needs {}.{}.{} or newer; flash it once via J-Link",
+        "device {device} runs CPU firmware {}.{}.{}, but the update needs {}.{}.{} or newer; flash it once via J-Link",
         found.0, found.1, found.2, required.0, required.1, required.2
     )]
     UnsupportedFirmware {
@@ -65,7 +65,7 @@ fn timeout_hint(cmd: Cmd) -> &'static str {
         Cmd::FpgaUpdateBegin | Cmd::FpgaUpdateChunk | Cmd::FpgaUpdateCommit => {
             "the device stays locked with its output off until the next power cycle; power-cycle it and rerun the FPGA update"
         }
-        _ => "check the link (cable, master state) and rerun",
+        _ => "check the cable and the host firewall, then rerun",
     }
 }
 
@@ -86,12 +86,15 @@ fn device_hint(cmd: Cmd, code: u8) -> &'static str {
 }
 
 #[must_use]
-pub fn first_unsupported(versions: &[(u8, u8, u8)]) -> Option<(usize, (u8, u8, u8))> {
+pub fn first_unsupported(
+    versions: &[(u8, u8, u8)],
+    min: (u8, u8, u8),
+) -> Option<(usize, (u8, u8, u8))> {
     versions
         .iter()
         .copied()
         .enumerate()
-        .find(|&(_, version)| version < MIN_CPU_FIRMWARE_VERSION)
+        .find(|&(_, version)| version < min)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,22 +103,68 @@ pub struct UpdateProgress {
     pub total: usize,
 }
 
-pub struct Driver<L: Link> {
-    link: L,
+pub trait Exchange {
+    type Error: core::error::Error + Send + Sync + 'static;
+
+    fn num_devices(&self) -> usize;
+
+    fn min_cpu_firmware_version(&self) -> (u8, u8, u8) {
+        MIN_CPU_FIRMWARE_VERSION
+    }
+
+    fn wait_next_cycle(&mut self) {}
+
+    fn cycle(
+        &mut self,
+        tx: &[[u8; TX_FRAME_BYTES]],
+        rx: &mut [[u8; RX_FRAME_BYTES]],
+    ) -> Result<CycleOutcome, Self::Error>;
+
+    fn close(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+impl Exchange for UdpBus {
+    type Error = UdpError;
+
+    fn num_devices(&self) -> usize {
+        UdpBus::num_devices(self)
+    }
+
+    fn wait_next_cycle(&mut self) {
+        UdpBus::wait_next_cycle(self);
+    }
+
+    fn cycle(
+        &mut self,
+        tx: &[[u8; TX_FRAME_BYTES]],
+        rx: &mut [[u8; RX_FRAME_BYTES]],
+    ) -> Result<CycleOutcome, UdpError> {
+        UdpBus::cycle(self, tx, rx)
+    }
+
+    fn close(&mut self) -> Result<(), UdpError> {
+        UdpBus::close(self)
+    }
+}
+
+pub struct Driver<L: Exchange> {
+    inner: L,
     tx: Vec<[u8; TX_FRAME_BYTES]>,
     rx: Vec<[u8; RX_FRAME_BYTES]>,
     next_seq: Seq,
 }
 
-fn link_err<E: core::error::Error + Send + Sync + 'static>(e: E) -> DriverError {
-    DriverError::Link(Box::new(e))
+fn network_err<E: core::error::Error + Send + Sync + 'static>(e: E) -> DriverError {
+    DriverError::Network(Box::new(e))
 }
 
-impl<L: Link> Driver<L> {
-    pub fn open(link: L) -> Result<Self, DriverError> {
-        let n = link.num_devices();
+impl<L: Exchange> Driver<L> {
+    pub fn open(inner: L) -> Result<Self, DriverError> {
+        let n = inner.num_devices();
         let mut driver = Self {
-            link,
+            inner,
             tx: vec![[0; TX_FRAME_BYTES]; n],
             rx: vec![[0; RX_FRAME_BYTES]; n],
             next_seq: Seq::ZERO,
@@ -130,11 +179,11 @@ impl<L: Link> Driver<L> {
     }
 
     fn cycle(&mut self) -> Result<bool, DriverError> {
-        self.link.wait_next_cycle();
-        self.link
+        self.inner.wait_next_cycle();
+        self.inner
             .cycle(&self.tx, &mut self.rx)
-            .map(autd3_rs_core::CycleOutcome::rx_valid)
-            .map_err(link_err)
+            .map(CycleOutcome::rx_valid)
+            .map_err(network_err)
     }
 
     fn stage(&mut self, frame: &TxFrame) {
@@ -391,12 +440,13 @@ impl<L: Link> Driver<L> {
     }
 
     pub fn ensure_update_supported(&mut self) -> Result<(), DriverError> {
-        match first_unsupported(&self.read_cpu_version()?) {
+        let required = self.inner.min_cpu_firmware_version();
+        match first_unsupported(&self.read_cpu_version()?, required) {
             None => Ok(()),
             Some((device, found)) => Err(DriverError::UnsupportedFirmware {
                 device,
                 found,
-                required: MIN_CPU_FIRMWARE_VERSION,
+                required,
             }),
         }
     }
@@ -416,12 +466,12 @@ impl<L: Link> Driver<L> {
     }
 
     pub fn close(mut self) -> Result<(), DriverError> {
-        self.link.close().map_err(link_err)
+        self.inner.close().map_err(network_err)
     }
 
     #[must_use]
-    pub fn into_link(self) -> L {
-        self.link
+    pub fn into_inner(self) -> L {
+        self.inner
     }
 }
 
@@ -431,12 +481,14 @@ mod tests {
 
     #[test]
     fn the_gate_names_the_first_device_below_the_minimum() {
-        assert_eq!(first_unsupported(&[]), None);
-        assert_eq!(first_unsupported(&[(0, 9, 0), (1, 0, 0)]), None);
+        let min = MIN_CPU_FIRMWARE_VERSION;
+        assert_eq!(first_unsupported(&[], min), None);
+        assert_eq!(first_unsupported(&[(0, 10, 0), (1, 0, 0)], min), None);
         assert_eq!(
-            first_unsupported(&[(0, 9, 0), (0, 8, 99), (0, 6, 1)]),
-            Some((1, (0, 8, 99)))
+            first_unsupported(&[(0, 10, 0), (0, 9, 99), (0, 6, 1)], min),
+            Some((1, (0, 9, 99)))
         );
-        assert_eq!(first_unsupported(&[(0, 6, 1)]), Some((0, (0, 6, 1))));
+        assert_eq!(first_unsupported(&[(0, 6, 1)], min), Some((0, (0, 6, 1))));
+        assert_eq!(first_unsupported(&[(0, 9, 0)], (0, 9, 0)), None);
     }
 }
