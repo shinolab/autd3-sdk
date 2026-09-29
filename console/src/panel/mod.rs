@@ -1,12 +1,8 @@
-mod appliance;
 mod firmware;
 mod simulator;
-mod twincat;
 
-pub use appliance::AppliancePanel;
 pub use firmware::FirmwarePanel;
 pub use simulator::SimulatorPanel;
-pub use twincat::TwinCatPanel;
 
 use std::io;
 use std::path::Path;

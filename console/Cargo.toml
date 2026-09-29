@@ -5,7 +5,7 @@ edition = "2024"
 license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"
-description = "GUI console that launches AUTD3 tools (simulator / TwinCAT setup)"
+description = "GUI console that launches AUTD3 tools (simulator / firmware)"
 publish = false
 
 [[bin]]
@@ -13,10 +13,6 @@ name = "autd3-console"
 path = "src/main.rs"
 
 [dependencies]
-autd3-rs-appliance = { path = "../appliance/lib", features = [
-    "client",
-    "release",
-] }
 serde_json = { version = "1.0.150", default-features = false, features = ["std"] }
 eframe = { version = "0.36.0", default-features = false, features = [
     "glow",
@@ -32,9 +28,6 @@ axoupdater = { version = "0.10.0", default-features = false, features = [
     "github_releases",
 ] }
 tokio = { version = "1.52.3", default-features = false, features = ["rt"] }
-
-[target.'cfg(windows)'.dependencies]
-rust-embed = { version = "8.12.0", default-features = false }
 
 [lints]
 workspace = true

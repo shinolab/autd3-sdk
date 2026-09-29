@@ -13,7 +13,7 @@ use ota::OtaConfig;
 const SUBDIR: &str = "firmware";
 const BIN: &str = "autd3-firmware-writer";
 const OTA_BIN: &str = "autd3-rs-firmware-ota";
-const MIN_OTA_VERSION: (u64, u64, u64) = (0, 9, 0);
+const MIN_OTA_VERSION: (u64, u64, u64) = (0, 10, 0);
 
 fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
     let mut parts = version.trim_start_matches('v').split('.');
@@ -28,7 +28,8 @@ fn supports_ota(version: &str) -> bool {
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Method {
     #[default]
-    Ethercat,
+    #[serde(alias = "Ethercat")]
+    Ota,
     Jtag,
 }
 
@@ -36,14 +37,14 @@ impl Method {
     fn label(self) -> &'static str {
         match self {
             Method::Jtag => "JTAG",
-            Method::Ethercat => "EtherCAT (OTA)",
+            Method::Ota => "OTA",
         }
     }
 
     fn bin(self) -> &'static str {
         match self {
             Method::Jtag => BIN,
-            Method::Ethercat => OTA_BIN,
+            Method::Ota => OTA_BIN,
         }
     }
 }
@@ -104,11 +105,11 @@ impl FirmwareConfig {
                 "--target".to_string(),
                 self.target.arg().to_string(),
             ]),
-            Method::Ethercat if !supports_ota(&version) => Err(format!(
-                "v{version} predates EtherCAT updates (needs v{}.{}.{} or newer); choose Method = JTAG",
+            Method::Ota if !supports_ota(&version) => Err(format!(
+                "v{version} is an EtherCAT firmware (UDP updates need v{}.{}.{} or newer); choose Method = JTAG",
                 MIN_OTA_VERSION.0, MIN_OTA_VERSION.1, MIN_OTA_VERSION.2
             )),
-            Method::Ethercat => self.ota.args(&version, self.target.arg()),
+            Method::Ota => Ok(self.ota.args(&version, self.target.arg())),
         }
     }
 
@@ -256,7 +257,7 @@ impl FirmwarePanel {
                             .show_ui(ui, |ui| {
                                 for v in &self.versions {
                                     let ota_only =
-                                        self.config.method == Method::Ethercat && !supports_ota(v);
+                                        self.config.method == Method::Ota && !supports_ota(v);
                                     let label = if ota_only {
                                         format!("{v} (JTAG only)")
                                     } else {
@@ -294,7 +295,7 @@ impl FirmwarePanel {
                 ui.label("Method");
                 ui.add_enabled_ui(!locked, |ui| {
                     ui.horizontal(|ui| {
-                        for m in [Method::Ethercat, Method::Jtag] {
+                        for m in [Method::Ota, Method::Jtag] {
                             ui.selectable_value(&mut self.config.method, m, m.label());
                         }
                     });
@@ -311,19 +312,6 @@ impl FirmwarePanel {
         {
             ui.colored_label(egui::Color32::LIGHT_RED, invalid);
         }
-        if self.config.method == Method::Ethercat
-            && self
-                .proc
-                .as_ref()
-                .and_then(|p| p.logs().last())
-                .is_some_and(|last| last == ota::MISSING_DLL_EXIT)
-        {
-            ui.colored_label(
-                egui::Color32::LIGHT_RED,
-                "autd3-rs-firmware-ota could not start: a required DLL is missing \
-                 (install Npcap for EtherCAT updates).",
-            );
-        }
     }
 
     fn method_ui(&mut self, ui: &mut egui::Ui, locked: bool) {
@@ -334,20 +322,20 @@ impl FirmwarePanel {
                      installed and on PATH. Connect the configuration cable and power on the AUTD3.",
                 );
             }
-            Method::Ethercat => {
+            Method::Ota => {
                 egui::ScrollArea::vertical()
                     .id_salt("ota-settings")
                     .max_height(ui.available_height() * 0.5)
                     .show(ui, |ui| self.config.ota.ui(ui, !locked));
                 ui.weak(
-                    "Updates the firmware over EtherCAT without a cable. The devices must \
-                     already run CPU/FPGA firmware v0.9 or newer (write it once via JTAG \
-                     otherwise); CPU is updated first, then FPGA. Transducer output stops \
-                     during the update; do not power off the devices while it runs.",
+                    "Updates the firmware over the network without a cable. Devices running \
+                     the UDP firmware v0.10 or newer are updated over UDP; devices still on \
+                     the EtherCAT firmware v0.9.x are found over EtherCAT and moved to the UDP \
+                     firmware (needs Npcap on Windows; older devices must be written once via \
+                     JTAG). CPU is updated first, then FPGA. Transducer output stops during the \
+                     update; do not power off the devices while it runs.",
                 );
-                let bin = tool_bin(SUBDIR, OTA_BIN)
-                    .map_or_else(|_| OTA_BIN.to_string(), |p| p.display().to_string());
-                ui.weak(self.config.ota.hint(&bin));
+                ui.weak(OtaConfig::hint());
             }
         }
     }
@@ -370,7 +358,7 @@ impl FirmwarePanel {
     fn start(&mut self) {
         self.error = None;
         match self.config.method {
-            Method::Ethercat => self.start_verify(),
+            Method::Ota => self.start_verify(),
             Method::Jtag => self.start_flash(),
         }
     }
@@ -468,24 +456,24 @@ mod tests {
     }
 
     #[test]
-    fn ethercat_hands_the_version_and_target_to_the_ota_tool() {
+    fn ota_hands_the_version_and_target_to_the_ota_tool() {
         let config = FirmwareConfig {
-            version: Some("0.9.0".to_string()),
+            version: Some("0.10.0".to_string()),
             target: Target::Cpu,
-            method: Method::Ethercat,
+            method: Method::Ota,
             ota: OtaConfig::default(),
         };
         let args = config.args().unwrap();
-        assert_eq!(args[..4], ["--version", "0.9.0", "--target", "cpu"]);
+        assert_eq!(args[..4], ["--version", "0.10.0", "--target", "cpu"]);
         assert_eq!(config.method.bin(), "autd3-rs-firmware-ota");
     }
 
     #[test]
     fn the_version_is_read_back_before_the_write_with_the_very_same_arguments() {
         let config = FirmwareConfig {
-            version: Some("0.9.0".to_string()),
+            version: Some("0.10.0".to_string()),
             target: Target::Both,
-            method: Method::Ethercat,
+            method: Method::Ota,
             ota: OtaConfig::default(),
         };
         let args = config.args().unwrap();
@@ -503,20 +491,20 @@ mod tests {
     }
 
     #[test]
-    fn ethercat_refuses_versions_that_predate_ota_but_jtag_takes_them() {
+    fn ota_refuses_ethercat_versions_but_jtag_takes_them() {
         let mut config = FirmwareConfig {
-            version: Some("0.8.0".to_string()),
+            version: Some("0.9.0".to_string()),
             target: Target::Both,
-            method: Method::Ethercat,
+            method: Method::Ota,
             ota: OtaConfig::default(),
         };
         let err = config.args().unwrap_err();
         assert!(err.contains("JTAG"), "{err}");
         config.method = Method::Jtag;
         assert!(config.args().is_ok());
-        assert!(supports_ota("0.9.0"));
+        assert!(supports_ota("0.10.0"));
         assert!(supports_ota("v1.0.0"));
-        assert!(!supports_ota("0.8.99"));
+        assert!(!supports_ota("0.9.99"));
         assert!(!supports_ota("latest"));
     }
 
@@ -526,7 +514,25 @@ mod tests {
             serde_json::from_str(r#"{"version":"0.8.0","target":"Cpu"}"#).unwrap();
         assert_eq!(config.version.as_deref(), Some("0.8.0"));
         assert!(config.target == Target::Cpu);
-        assert_eq!(config.method, Method::Ethercat);
+        assert_eq!(config.method, Method::Ota);
         assert_eq!(config.ota, OtaConfig::default());
+    }
+
+    #[test]
+    fn a_config_saved_with_the_ethercat_method_loads_as_ota() {
+        let config: FirmwareConfig = serde_json::from_str(r#"{"method":"Ethercat"}"#).unwrap();
+        assert_eq!(config.method, Method::Ota);
+    }
+
+    #[test]
+    fn a_config_saved_with_an_ethercat_link_keeps_its_other_settings() {
+        for link in ["Echocat", "TwinCat"] {
+            let json = format!(
+                r#"{{"version":"0.9.0","method":"Ethercat","ota":{{"link":"{link}","echocat":{{"interface":"eth0"}}}}}}"#
+            );
+            let config: FirmwareConfig = serde_json::from_str(&json).unwrap();
+            assert_eq!(config.version.as_deref(), Some("0.9.0"));
+            assert_eq!(config.ota, OtaConfig::default());
+        }
     }
 }
