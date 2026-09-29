@@ -1,34 +1,19 @@
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddrV6;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use autd3_rs::MAX_INFLIGHT;
-use autd3_rs_link_echocat::{FramePhase, SleepStrategy};
-use autd3_rs_link_twincat::AmsNetId;
 use clap::{ArgGroup, Parser, ValueEnum};
 
 pub const DEFAULT_MAX_SAMPLES: u64 = 1_000_000;
-
-#[cfg(target_os = "windows")]
-pub const DEFAULT_SYNC0_PERIOD: &str = "2ms";
-#[cfg(not(target_os = "windows"))]
-pub const DEFAULT_SYNC0_PERIOD: &str = "1ms";
+pub const DEFAULT_CYCLE: &str = "1ms";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
     #[default]
     StopAndWait,
     Streaming,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum LinkKind {
-    #[default]
-    Echocat,
-    Twincat,
-    Remote,
-    Nop,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -46,13 +31,6 @@ impl Command {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum SleepStrategyArg {
-    #[default]
-    Sleep,
-    Spin,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum RtPolicy {
     Normal,
     #[default]
@@ -67,13 +45,18 @@ pub enum RtPolicy {
     group(ArgGroup::new("stop").args(["count", "duration"]).multiple(false))
 )]
 pub struct Cli {
-    #[arg(long, value_enum, default_value_t = LinkKind::Echocat)]
-    pub link: LinkKind,
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Run against the in-process UDP device emulator instead of real devices \
+                (baseline of the host side; no hardware needed)."
+    )]
+    pub emulator: bool,
     #[arg(
         long,
         value_enum,
         default_value_t = Command::Pattern,
-        help = "Command to measure. nop touches no FPGA register (pure link path), \
+        help = "Command to measure. nop touches no FPGA register (pure communication path), \
                 write-pattern-buffer writes FPGA RAM without latching, \
                 pattern is the fused write+config+bank-change that latches CTL_FLAG once per frame."
     )]
@@ -81,44 +64,36 @@ pub struct Cli {
     #[arg(
         long,
         default_value = None,
-        help = "EtherCAT network interface"
+        help = "Network interface the devices hang off (maps to TransportOption.iface). \
+                Omit to pick the one whose devices answer."
     )]
     pub interface: Option<String>,
-    #[arg(long)]
-    pub devices: Option<usize>,
-    #[arg(
-        long = "sync0-period",
-        value_parser = humantime::parse_duration,
-        default_value = DEFAULT_SYNC0_PERIOD,
-        help = "SYNC0 / EtherCAT cycle period, e.g. 1ms / 500us (maps to *LinkOption.sync0_period). \
-                Defaults to 2ms on Windows (absorbs DPC wake jitter, matching every link's own Windows default) and 1ms elsewhere."
-    )]
-    pub sync0_period: Duration,
     #[arg(
         long,
-        alias = "frame-phase-percent",
-        default_value_t = 0,
-        help = "Where the process data sits in the SYNC0 period, as a percent of it. \
-                With --link echocat it moves the frame \
-                (EchocatLinkOption.frame_phase = period * percent); 0 lets the measured exchange \
-                centre it."
+        help = "Send the multicast management messages here instead of ff02::1 \
+                (maps to TransportOption.group), e.g. the simulator's [::1]:44336."
     )]
-    pub shift_percent: u8,
+    pub group: Option<SocketAddrV6>,
     #[arg(
-        long = "sleep-strategy",
-        value_enum,
-        default_value_t = SleepStrategyArg::Sleep,
-        help = "--link echocat only: how the RT thread waits for the next cycle (maps to EchocatLinkOption.sleep_strategy)."
+        long,
+        default_value_t = 1,
+        help = "Device count of the geometry. Opening fails when it does not match the chain."
     )]
-    pub sleep_strategy: SleepStrategyArg,
+    pub devices: usize,
     #[arg(
-        long = "spin-margin",
+        long,
         value_parser = humantime::parse_duration,
-        default_value = "1ms",
-        help = "How long before the deadline --sleep-strategy spin stops sleeping and busy-waits. \
-                Must exceed how far the OS oversleeps (0.5-0.7ms on Windows even under timeBeginPeriod(1))."
+        default_value = DEFAULT_CYCLE,
+        help = "Send period, e.g. 1ms / 500us (maps to TransportOption.cycle)."
     )]
-    pub spin_margin: Duration,
+    pub cycle: Duration,
+    #[arg(
+        long = "reply-timeout",
+        value_parser = humantime::parse_duration,
+        help = "How long a cycle waits for every reply (maps to TransportOption.reply_timeout). \
+                Omit to keep the library default."
+    )]
+    pub reply_timeout: Option<Duration>,
     #[arg(long)]
     pub count: Option<u64>,
     #[arg(long, value_parser = humantime::parse_duration)]
@@ -170,21 +145,6 @@ pub struct Cli {
         help = "maps to ClientConfig.low_latency"
     )]
     pub low_latency: bool,
-    #[arg(
-        long,
-        help = "--link remote only: address of the appliance's wire port. \
-                Omit to find it over mDNS."
-    )]
-    pub addr: Option<SocketAddr>,
-    #[arg(
-        long,
-        help = "--link remote only: instance name to pick when several appliances answer."
-    )]
-    pub instance: Option<String>,
-    #[arg(long)]
-    pub twincat_remote: Option<IpAddr>,
-    #[arg(long)]
-    pub ams_net_id: Option<AmsNetId>,
     #[arg(long, default_value_t = false)]
     pub no_win_perf_tune: bool,
     #[arg(
@@ -213,79 +173,17 @@ impl Cli {
                 self.max_inflight,
             ));
         }
-        if self.shift_percent > 100 {
-            return Err(format!(
-                "--shift-percent {} must be in 0..=100",
-                self.shift_percent
-            ));
+        if self.devices == 0 {
+            return Err("--devices must be at least 1".to_string());
         }
-        if self.link == LinkKind::Echocat && self.shift_percent == 100 {
-            return Err(
-                "--shift-percent 100 lands the frame on the SYNC0 edge with --link echocat, \
-                 where the firmware drops it as a sequence mismatch; use 1..=99, or 0 to let \
-                 the measured exchange centre it"
-                    .to_string(),
-            );
+        if self.interface.is_some() && self.group.is_some() {
+            return Err("--interface and --group are mutually exclusive".to_string());
         }
-        if self.link == LinkKind::Twincat {
-            if self.twincat_remote.is_some() && self.ams_net_id.is_none() {
-                return Err("--ams-net-id is required when --twincat-remote is set".to_string());
-            }
-        } else if self.twincat_remote.is_some() || self.ams_net_id.is_some() {
-            return Err(
-                "--twincat-remote / --ams-net-id are only valid with --link twincat".to_string(),
-            );
+        if self.emulator && (self.interface.is_some() || self.group.is_some()) {
+            return Err("--interface / --group are not valid with --emulator".to_string());
         }
-        if self.link != LinkKind::Echocat && self.sleep_strategy != SleepStrategyArg::Sleep {
-            return Err(
-                "--sleep-strategy is only valid with --link echocat: the other links do not \
-                 drive the cycle wait themselves"
-                    .to_string(),
-            );
-        }
-        if self.sleep_strategy == SleepStrategyArg::Spin && self.spin_margin.is_zero() {
-            return Err(
-                "--spin-margin 0s leaves no room for the OS to oversleep past the deadline"
-                    .to_string(),
-            );
-        }
-        if self.link != LinkKind::Remote && (self.addr.is_some() || self.instance.is_some()) {
-            return Err("--addr / --instance are only valid with --link remote".to_string());
-        }
-        if self.link == LinkKind::Remote {
-            if self.devices.is_none() {
-                return Err(
-                    "--devices is required with --link remote: the appliance rejects a client \
-                     whose geometry does not match the bus"
-                        .to_string(),
-                );
-            }
-            if self.interface.is_some() {
-                return Err(
-                    "--interface is not valid with --link remote: the appliance owns the \
-                     EtherCAT interface"
-                        .to_string(),
-                );
-            }
-            if self.shift_percent != 0 {
-                return Err(
-                    "--shift-percent is not valid with --link remote: the appliance owns SYNC0"
-                        .to_string(),
-                );
-            }
-            if self.addr.is_some() && self.instance.is_some() {
-                return Err("--instance is redundant with --addr".to_string());
-            }
-        }
-        if self.link == LinkKind::Nop {
-            if self.devices.is_none() {
-                return Err("--devices is required with --link nop".to_string());
-            }
-            if self.interface.is_some() {
-                return Err("--interface is not valid with --link nop".to_string());
-            }
-        } else if self.sync0_period.is_zero() {
-            return Err("--sync0-period 0ms (free-run) is only valid with --link nop".to_string());
+        if self.cycle.is_zero() {
+            return Err("--cycle must be longer than 0".to_string());
         }
         if let Some(p) = self.rt_priority
             && p > 99
@@ -293,27 +191,5 @@ impl Cli {
             return Err(format!("--rt-priority {p} must be in 0..=99"));
         }
         Ok(())
-    }
-
-    pub fn sync0_shift(&self) -> Duration {
-        let nanos = self.sync0_period.as_nanos() * u128::from(self.shift_percent) / 100;
-        Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
-    }
-
-    pub fn echocat_frame_phase(&self) -> FramePhase {
-        if self.shift_percent == 0 {
-            FramePhase::Auto
-        } else {
-            FramePhase::At(self.sync0_shift())
-        }
-    }
-
-    pub fn echocat_sleep_strategy(&self) -> SleepStrategy {
-        match self.sleep_strategy {
-            SleepStrategyArg::Sleep => SleepStrategy::Sleep,
-            SleepStrategyArg::Spin => SleepStrategy::Spin {
-                margin: self.spin_margin,
-            },
-        }
     }
 }

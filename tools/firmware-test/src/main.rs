@@ -10,11 +10,9 @@ use clap::Parser;
 use autd3_rs::commands::Command;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
-use autd3_rs::{Client, ClientConfig, DatagramBuilder};
-use autd3_rs_link_remote::{DiscoveryOption, RemoteLinkOption, ServerKind, discover};
-use autd3_rs_link_twincat::TwinCATLinkOption;
+use autd3_rs::{Client, ClientConfig, DatagramBuilder, TransportOption};
 
-use crate::cli::{Cli, LinkKind};
+use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
 
 pub struct Ctx<'a> {
@@ -89,23 +87,6 @@ async fn main() -> Result<()> {
     run(&cli).await
 }
 
-fn remote_option(cli: &Cli) -> Result<RemoteLinkOption> {
-    if let Some(addr) = cli.remote_addr {
-        return Ok(RemoteLinkOption::new(addr));
-    }
-    let default = DiscoveryOption::default();
-    let appliance = discover(&DiscoveryOption {
-        timeout: cli
-            .discovery_timeout_ms
-            .map_or(default.timeout, Duration::from_millis),
-        instance: cli.remote_instance.clone(),
-        kind: Some(ServerKind::Appliance),
-    })
-    .context("finding the appliance over mDNS (or pass --remote-addr)")?;
-    println!("appliance: {appliance}");
-    Ok(RemoteLinkOption::new(appliance.addr))
-}
-
 async fn run(cli: &Cli) -> Result<()> {
     let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()).collect());
     let config = ClientConfig {
@@ -113,26 +94,15 @@ async fn run(cli: &Cli) -> Result<()> {
         ..Default::default()
     };
 
-    let sync0_period = Duration::from_micros(cli.cycle_us);
-    let client = match cli.link {
-        LinkKind::Echocat => {
-            let option = autd3_rs_link_echocat::EchocatLinkOption {
-                iface: cli.interface.clone().into(),
-                sync0_period,
-                ..Default::default()
-            };
-            Client::open(&geometry, option, config).await
-        }
-        LinkKind::Twincat => {
-            let option = match (cli.twincat_remote, cli.ams_net_id) {
-                (Some(addr), Some(ams_net_id)) => TwinCATLinkOption::remote(addr, ams_net_id),
-                _ => TwinCATLinkOption::local(),
-            };
-            Client::open(&geometry, option, config).await
-        }
-        LinkKind::Remote => Client::open(&geometry, remote_option(cli)?, config).await,
-    }
-    .context("opening link / client handshake")?;
+    let option = TransportOption {
+        iface: cli.interface.clone().into(),
+        group: cli.group,
+        cycle: Duration::from_micros(cli.cycle_us),
+        ..Default::default()
+    };
+    let client = Client::open(&geometry, option, config)
+        .await
+        .context("opening the devices / client handshake")?;
 
     run_session(&client, &geometry).await;
 

@@ -2,7 +2,7 @@ use core::num::NonZeroU32;
 use std::fmt::Write;
 use std::time::Duration;
 
-use crate::cli::{Cli, LinkKind, Mode, RtPolicy, SleepStrategyArg};
+use crate::cli::{Cli, Mode, RtPolicy};
 
 pub fn print(cli: &Cli) {
     println!();
@@ -11,75 +11,38 @@ pub fn print(cli: &Cli) {
 }
 
 fn render(cli: &Cli) -> String {
-    let mut imports: Vec<&str> = vec!["Client", "ClientConfig", "RtSchedulePolicy"];
+    let mut imports: Vec<&str> = vec![
+        "Client",
+        "ClientConfig",
+        "RtSchedulePolicy",
+        "TransportOption",
+    ];
     let mut body = String::new();
 
-    link_block(cli, &mut body, &mut imports);
+    option_block(cli, &mut body, &mut imports);
     push_config(&mut body, &mut imports, &Config::from(cli));
 
-    let mut out = imports_block(
-        cli.link,
-        cli.sleep_strategy == SleepStrategyArg::Spin,
-        cli.shift_percent != 0,
-        &imports,
-    );
+    let mut out = imports_block(&imports);
     out.push('\n');
     out.push_str(&body);
     out
 }
 
-fn link_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
-    let sync0_period = cli.sync0_period;
-    match cli.link {
-        LinkKind::Echocat => {
-            imports.push("std::time::Duration");
-            let _ = writeln!(body, "let link = EchocatLink::open(&EchocatLinkOption {{");
-            if let Some(iface) = &cli.interface {
-                let _ = writeln!(body, "    iface: {iface:?}.into(),");
-            }
-            let _ = writeln!(body, "    sync0_period: {},", fmt_duration(sync0_period));
-            if cli.shift_percent != 0 {
-                let _ = writeln!(
-                    body,
-                    "    frame_phase: FramePhase::At({}),",
-                    fmt_duration(cli.sync0_shift()),
-                );
-            }
-            if cli.sleep_strategy == SleepStrategyArg::Spin {
-                let _ = writeln!(
-                    body,
-                    "    sleep_strategy: SleepStrategy::Spin {{ margin: {} }},",
-                    fmt_duration(cli.spin_margin),
-                );
-            }
-            let _ = writeln!(body, "    ..Default::default()");
-            let _ = writeln!(body, "}})?;");
-        }
-        LinkKind::Twincat => {
-            let _ = writeln!(
-                body,
-                "let link = TwinCATLink::open(TwinCATLinkOption::local())?; \
-                 // or ::remote(addr, ams_net_id)",
-            );
-        }
-        LinkKind::Remote => match &cli.addr {
-            Some(addr) => {
-                let _ = writeln!(
-                    body,
-                    "let link = RemoteLinkOption::new(\"{addr}\".parse()?);"
-                );
-            }
-            None => {
-                let _ = writeln!(body, "let link = RemoteLinkOption::discover()?;");
-            }
-        },
-        LinkKind::Nop => {
-            let _ = writeln!(
-                body,
-                "// --link nop is a benchmark stub; use a real link (echocat/twincat) here.",
-            );
-        }
+fn option_block(cli: &Cli, body: &mut String, imports: &mut Vec<&'static str>) {
+    imports.push("std::time::Duration");
+    let _ = writeln!(body, "let option = TransportOption {{");
+    if let Some(iface) = &cli.interface {
+        let _ = writeln!(body, "    iface: {iface:?}.into(),");
     }
+    if let Some(group) = &cli.group {
+        let _ = writeln!(body, "    group: Some(\"{group}\".parse()?),");
+    }
+    let _ = writeln!(body, "    cycle: {},", fmt_duration(cli.cycle));
+    if let Some(reply_timeout) = cli.reply_timeout {
+        let _ = writeln!(body, "    reply_timeout: {},", fmt_duration(reply_timeout));
+    }
+    let _ = writeln!(body, "    ..Default::default()");
+    let _ = writeln!(body, "}};");
 }
 
 impl From<&Cli> for Config {
@@ -99,7 +62,7 @@ impl From<&Cli> for Config {
     }
 }
 
-fn imports_block(link: LinkKind, spin: bool, frame_phase: bool, imports: &[&str]) -> String {
+fn imports_block(imports: &[&str]) -> String {
     let mut out = String::new();
     for imp in imports.iter().filter(|s| s.starts_with("std::")) {
         let _ = writeln!(out, "use {imp};");
@@ -110,26 +73,6 @@ fn imports_block(link: LinkKind, spin: bool, frame_phase: bool, imports: &[&str]
         .filter(|s| !s.starts_with("std::"))
         .collect();
     let _ = writeln!(out, "use autd3_rs::{{{}}};", autd.join(", "));
-    match link {
-        LinkKind::Echocat => {
-            let _ = writeln!(
-                out,
-                "use autd3_rs_link_echocat::{{EchocatLink, EchocatLinkOption{}{}}};",
-                if frame_phase { ", FramePhase" } else { "" },
-                if spin { ", SleepStrategy" } else { "" },
-            );
-        }
-        LinkKind::Twincat => {
-            let _ = writeln!(
-                out,
-                "use autd3_rs_link_twincat::{{TwinCATLink, TwinCATLinkOption}};",
-            );
-        }
-        LinkKind::Remote => {
-            let _ = writeln!(out, "use autd3_rs_link_remote::RemoteLinkOption;");
-        }
-        LinkKind::Nop => {}
-    }
     out
 }
 
@@ -207,6 +150,6 @@ fn push_config(body: &mut String, imports: &mut Vec<&'static str>, c: &Config) {
     let _ = writeln!(body, "}};");
     let _ = writeln!(
         body,
-        "let client = Client::open(&geometry, link, config).await?;"
+        "let client = Client::open(&geometry, option, config).await?;"
     );
 }

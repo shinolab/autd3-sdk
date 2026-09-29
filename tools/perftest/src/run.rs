@@ -8,18 +8,15 @@ use anyhow::{Context, Result};
 use autd3_rs::commands::{ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::TX_FRAME_BYTES;
+use autd3_rs::udp::emulator::UdpEmulator;
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
-    Client, ClientConfig, CoreId, Error as ClientError, Frames, IntoLink, Link, LinkStats,
-    ResponseFuture, RtPriority, RtSchedulePolicy, StateCheck,
+    BusStats, Client, ClientConfig, CoreId, Error as ClientError, Frames, ResponseFuture,
+    RtPriority, RtSchedulePolicy, StateChecker, TransportOption,
 };
-use autd3_rs_link_remote::{DiscoveryOption, RemoteLink, ServerKind, discover};
 
-use autd3_rs_link_twincat::{TwinCATLink, TwinCATLinkOption};
-
-use crate::cli::{Cli, Command, LinkKind, Mode, RtPolicy};
+use crate::cli::{Cli, Command, Mode, RtPolicy};
 use crate::mem::{self, MemProfile};
-use crate::nop::PacedNop;
 use crate::stats::{Sample, SampleStatus};
 
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
@@ -188,7 +185,7 @@ impl StateCheckGuard {
     }
 }
 
-fn spawn_state_check<C: StateCheck>(mut checker: C, interval: Duration) -> StateCheckGuard {
+fn spawn_state_check(mut checker: StateChecker, interval: Duration) -> StateCheckGuard {
     let stop = Arc::new(AtomicBool::new(false));
     let join = tokio::spawn({
         let stop = Arc::clone(&stop);
@@ -205,85 +202,33 @@ fn spawn_state_check<C: StateCheck>(mut checker: C, interval: Duration) -> State
 }
 
 pub async fn run(cli: &Cli) -> Result<RunOutput> {
-    match cli.link {
-        LinkKind::Echocat => {
-            let link_cfg = autd3_rs_link_echocat::EchocatLinkOption {
-                iface: cli.interface.clone().into(),
-                sync0_period: cli.sync0_period,
-                frame_phase: cli.echocat_frame_phase(),
-                sleep_strategy: cli.echocat_sleep_strategy(),
-                ..Default::default()
-            };
-            let link = tokio::task::spawn_blocking(move || {
-                autd3_rs_link_echocat::EchocatLink::open(&link_cfg)
-            })
-            .await
-            .expect("open task panicked")
-            .context("opening EtherCAT link (echocat)")?;
-            let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_bus_link(link, cli)).await;
-            guard.stop().await;
-            out
-        }
-        LinkKind::Twincat => {
-            let opt = match (cli.twincat_remote, cli.ams_net_id) {
-                (Some(addr), Some(ams_net_id)) => TwinCATLinkOption::remote(addr, ams_net_id),
-                _ => TwinCATLinkOption::local(),
-            };
-            let link = tokio::task::spawn_blocking(move || TwinCATLink::open(opt))
-                .await
-                .expect("open task panicked")
-                .context("opening TwinCAT link")?;
-            let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_bus_link(link, cli)).await;
-            guard.stop().await;
-            out
-        }
-        LinkKind::Remote => {
-            let num_devices = cli.devices.expect("--devices validated for --link remote");
-            let addr = if let Some(addr) = cli.addr {
-                addr
-            } else {
-                let appliance = discover(&DiscoveryOption {
-                    instance: cli.instance.clone(),
-                    kind: Some(ServerKind::Appliance),
-                    ..Default::default()
-                })
-                .context("finding the appliance over mDNS")?;
-                eprintln!("appliance: {} at {}", appliance.instance, appliance.addr);
-                appliance.addr
-            };
-            let link = tokio::task::spawn_blocking(move || {
-                let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
-                RemoteLink::open(addr, None, &geometry)
-            })
-            .await
-            .expect("open task panicked")
-            .with_context(|| format!("opening the remote link to {addr}"))?;
-            let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_bus_link(link, cli)).await;
-            guard.stop().await;
-            out
-        }
-        LinkKind::Nop => {
-            let num_devices = cli.devices.expect("--devices validated for --link nop");
-            let link = PacedNop::new(cli.sync0_period);
-            Box::pin(run_with_link(link, num_devices, cli)).await
-        }
+    let emulator = cli
+        .emulator
+        .then(|| UdpEmulator::spawn(cli.devices))
+        .transpose()
+        .context("starting the UDP device emulator")?;
+    let mut option = match &emulator {
+        Some(emulator) => emulator.option(),
+        None => TransportOption {
+            iface: cli.interface.clone().into(),
+            group: cli.group,
+            ..Default::default()
+        },
+    };
+    option.cycle = cli.cycle;
+    if let Some(reply_timeout) = cli.reply_timeout {
+        option.reply_timeout = reply_timeout;
     }
+    let out = Box::pin(run_with_option(option, cli.devices, cli)).await;
+    drop(emulator);
+    out
 }
 
-async fn run_with_bus_link<L: Link>(link: L, cli: &Cli) -> Result<RunOutput> {
-    let num_devices = link.num_devices();
-    if let Some(expected) = cli.devices
-        && num_devices != expected
-    {
-        anyhow::bail!("expected {expected} device(s) on the bus, found {num_devices}");
-    }
-    run_with_link(link, num_devices, cli).await
-}
-
-async fn run_with_link<T: IntoLink>(link: T, num_devices: usize, cli: &Cli) -> Result<RunOutput> {
+async fn run_with_option(
+    option: TransportOption,
+    num_devices: usize,
+    cli: &Cli,
+) -> Result<RunOutput> {
     eprintln!("devices: {num_devices}");
 
     let max_inflight = match cli.mode {
@@ -291,9 +236,9 @@ async fn run_with_link<T: IntoLink>(link: T, num_devices: usize, cli: &Cli) -> R
         Mode::Streaming => cli.max_inflight.max(1),
     };
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
-    let client = Box::pin(Client::open(
+    let (client, checker) = Box::pin(Client::open_with_checker(
         &geometry,
-        link,
+        option,
         ClientConfig {
             timeout_cycles: cli.timeout_cycles,
             max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
@@ -316,6 +261,7 @@ async fn run_with_link<T: IntoLink>(link: T, num_devices: usize, cli: &Cli) -> R
     ))
     .await
     .context("client handshake")?;
+    let guard = spawn_state_check(checker, STATE_CHECK_INTERVAL);
 
     let fw = client
         .read_firmware_version()
@@ -341,16 +287,17 @@ async fn run_with_link<T: IntoLink>(link: T, num_devices: usize, cli: &Cli) -> R
     spawn_signal_listener(Arc::clone(&shutdown));
 
     let sender = Sender::new(&client, &geometry, cli)?;
-    let link_stats = client.link_stats();
+    let bus_stats = client.bus_stats();
 
     let output = match cli.mode {
-        Mode::StopAndWait => run_stop_and_wait(&client, cli, sender, shutdown, &link_stats).await,
+        Mode::StopAndWait => run_stop_and_wait(&client, cli, sender, shutdown, &bus_stats).await,
         Mode::Streaming => {
-            run_streaming(&client, cli, sender, shutdown, max_inflight, &link_stats).await
+            run_streaming(&client, cli, sender, shutdown, max_inflight, &bus_stats).await
         }
     };
 
     let _ = client.close().await;
+    guard.stop().await;
 
     output
 }
@@ -360,7 +307,7 @@ async fn run_stop_and_wait(
     cli: &Cli,
     mut sender: Sender,
     shutdown: Arc<AtomicBool>,
-    link_stats: &LinkStats,
+    bus_stats: &BusStats,
 ) -> Result<RunOutput> {
     let mut recorded = Recorder::new(cli);
     let mut index: u64 = 0;
@@ -396,9 +343,9 @@ async fn run_stop_and_wait(
             Ok(()) => SampleStatus::Ok,
             Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),
             Err(ClientError::Timeout { .. }) => SampleStatus::Timeout,
-            Err(ClientError::Link(cause)) => {
-                eprintln!("link error: {cause}");
-                SampleStatus::LinkError
+            Err(ClientError::Network(cause)) => {
+                eprintln!("network error: {cause}");
+                SampleStatus::NetworkError
             }
             Err(ClientError::InvalidPayload(e)) => {
                 anyhow::bail!("payload rejected by the local encoder: {e}");
@@ -415,7 +362,7 @@ async fn run_stop_and_wait(
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
                 rt_closed = true;
-                SampleStatus::LinkError
+                SampleStatus::NetworkError
             }
             Err(e) => anyhow::bail!("{e}"),
         };
@@ -443,8 +390,8 @@ async fn run_stop_and_wait(
         warmup: cli.warmup,
         elapsed: start.elapsed(),
         frame_bytes: TX_FRAME_BYTES,
-        stale_cycles: link_stats.stale_cycles(),
-        lost_cycles: link_stats.lost_cycles(),
+        stale_cycles: bus_stats.stale_cycles(),
+        lost_cycles: bus_stats.lost_cycles(),
         mem,
     })
 }
@@ -455,7 +402,7 @@ async fn run_streaming(
     mut sender: Sender,
     shutdown: Arc<AtomicBool>,
     max_inflight: usize,
-    link_stats: &LinkStats,
+    bus_stats: &BusStats,
 ) -> Result<RunOutput> {
     let mut recorded = Recorder::new(cli);
     let mut pending: VecDeque<PendingFuture> = VecDeque::with_capacity(max_inflight);
@@ -506,9 +453,9 @@ async fn run_streaming(
                 Some(&code) => SampleStatus::DeviceError(code),
             },
             Err(ClientError::Timeout { .. }) => SampleStatus::Timeout,
-            Err(ClientError::Link(cause)) => {
-                eprintln!("link error: {cause}");
-                SampleStatus::LinkError
+            Err(ClientError::Network(cause)) => {
+                eprintln!("network error: {cause}");
+                SampleStatus::NetworkError
             }
             Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),
             Err(ClientError::InvalidPayload(e)) => {
@@ -526,7 +473,7 @@ async fn run_streaming(
             Err(ClientError::RtClosed) => {
                 eprintln!("client RT thread closed unexpectedly");
                 rt_closed = true;
-                SampleStatus::LinkError
+                SampleStatus::NetworkError
             }
             Err(e) => anyhow::bail!("{e}"),
         };
@@ -557,8 +504,8 @@ async fn run_streaming(
         warmup: cli.warmup,
         elapsed: start.elapsed(),
         frame_bytes: TX_FRAME_BYTES,
-        stale_cycles: link_stats.stale_cycles(),
-        lost_cycles: link_stats.lost_cycles(),
+        stale_cycles: bus_stats.stale_cycles(),
+        lost_cycles: bus_stats.lost_cycles(),
         mem,
     })
 }
@@ -586,15 +533,15 @@ struct Counters {
     ok: u64,
     timeouts: u64,
     device_errors: u64,
-    link_errors: u64,
+    network_errors: u64,
 }
 
 impl std::fmt::Display for Counters {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "ok={} timeout={} dev_err={} link_err={}    ",
-            self.ok, self.timeouts, self.device_errors, self.link_errors
+            "ok={} timeout={} dev_err={} net_err={}    ",
+            self.ok, self.timeouts, self.device_errors, self.network_errors
         )
     }
 }
@@ -605,7 +552,7 @@ struct Progress {
     completed: u64,
     ok: u64,
     timeouts: u64,
-    link_errors: u64,
+    network_errors: u64,
     device_errors: u64,
     last_render: Instant,
     rendered_once: bool,
@@ -619,7 +566,7 @@ impl Progress {
             completed: 0,
             ok: 0,
             timeouts: 0,
-            link_errors: 0,
+            network_errors: 0,
             device_errors: 0,
             last_render: Instant::now()
                 .checked_sub(PROGRESS_INTERVAL)
@@ -633,7 +580,7 @@ impl Progress {
         match status {
             SampleStatus::Ok => self.ok += 1,
             SampleStatus::Timeout => self.timeouts += 1,
-            SampleStatus::LinkError => self.link_errors += 1,
+            SampleStatus::NetworkError => self.network_errors += 1,
             SampleStatus::DeviceError(_) => self.device_errors += 1,
         }
         let now = Instant::now();
@@ -648,7 +595,7 @@ impl Progress {
             ok: self.ok,
             timeouts: self.timeouts,
             device_errors: self.device_errors,
-            link_errors: self.link_errors,
+            network_errors: self.network_errors,
         };
         if let Some(total) = self.count_total {
             eprint!("\r[{:>8}/{total}] {tail}", self.completed);
@@ -690,7 +637,7 @@ fn estimate_capacity(cli: &Cli) -> usize {
         return usize::try_from(n).unwrap_or(usize::MAX);
     }
     if let Some(d) = cli.duration
-        && let Some(cycles) = d.as_micros().checked_div(cli.sync0_period.as_micros())
+        && let Some(cycles) = d.as_micros().checked_div(cli.cycle.as_micros())
     {
         return cycles as usize;
     }

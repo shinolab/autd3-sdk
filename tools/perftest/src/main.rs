@@ -1,6 +1,5 @@
 mod cli;
 mod mem;
-mod nop;
 mod report;
 mod run;
 mod snippet;

@@ -7,7 +7,7 @@ use crate::mem::MemProfile;
 use crate::stats::{Sample, SampleStatus, Summary};
 
 pub fn print_summary(s: &Summary) {
-    let total = s.success + s.timeouts + s.link_errors + s.device_errors.values().sum::<u64>();
+    let total = s.success + s.timeouts + s.network_errors + s.device_errors.values().sum::<u64>();
 
     println!();
     println!("=== perftest summary ===");
@@ -15,7 +15,7 @@ pub fn print_summary(s: &Summary) {
     println!("total sends     : {total}");
     println!("  success       : {}", s.success);
     println!("  timeouts      : {}", s.timeouts);
-    println!("  link errors   : {}", s.link_errors);
+    println!("  network errors: {}", s.network_errors);
     if s.device_errors.is_empty() {
         println!("  device errors : 0");
     } else {
@@ -113,7 +113,7 @@ fn status_str(s: SampleStatus) -> String {
         SampleStatus::Ok => "ok".to_string(),
         SampleStatus::DeviceError(code) => format!("dev:{code:#04x}"),
         SampleStatus::Timeout => "timeout".to_string(),
-        SampleStatus::LinkError => "link".to_string(),
+        SampleStatus::NetworkError => "network".to_string(),
     }
 }
 

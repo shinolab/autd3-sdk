@@ -1,8 +1,6 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use crate::series::Series;
-
 const FPGA_UPDATE_SUFFIX: &str = "-fpga-update.img";
 
 #[derive(Debug, thiserror::Error)]
@@ -58,14 +56,25 @@ pub struct Bundle {
     pub fpga_update: Option<PathBuf>,
 }
 
-pub fn fetch(version: &str, force_download: bool, series: Series) -> Result<Bundle> {
+pub const RELEASES_API: &str =
+    "https://api.github.com/repos/shinolab/autd3-sdk/releases?per_page=100";
+pub const TAG_PREFIX: &str = "firmware-v";
+
+#[must_use]
+pub fn bundle_url(version: &str) -> String {
+    format!(
+        "https://github.com/shinolab/autd3-sdk/releases/download/firmware-v{version}/autd3-sdk-firmware-v{version}.zip"
+    )
+}
+
+pub fn fetch(version: &str, force_download: bool) -> Result<Bundle> {
     let version = version.trim_start_matches('v');
-    let dir = download_and_extract(version, force_download, series)?;
+    let dir = download_and_extract(version, force_download)?;
     find(&dir)
 }
 
-fn download_and_extract(version: &str, force: bool, series: Series) -> Result<PathBuf> {
-    let dest = std::env::temp_dir().join(series.cache_dir_name(version));
+fn download_and_extract(version: &str, force: bool) -> Result<PathBuf> {
+    let dest = std::env::temp_dir().join(format!("autd3-sdk-firmware-v{version}"));
     if dest.is_dir() && !force {
         eprintln!("Using cached firmware at {}", dest.display());
         return Ok(dest);
@@ -74,7 +83,7 @@ fn download_and_extract(version: &str, force: bool, series: Series) -> Result<Pa
         std::fs::remove_dir_all(&dest).map_err(io_err("removing stale cache", &dest))?;
     }
 
-    let url = series.bundle_url(version);
+    let url = bundle_url(version);
     eprintln!("Downloading {url}");
     let resp = ureq::get(&url)
         .call()
@@ -202,7 +211,7 @@ mod tests {
 
     #[test]
     fn a_bundle_without_an_update_image_still_resolves() {
-        let dir = scratch("legacy");
+        let dir = scratch("no-update-image");
         std::fs::write(dir.join("fw.bin"), b"x").unwrap();
         std::fs::write(dir.join("fw.mcs"), b"x").unwrap();
         let bundle = find(&dir).unwrap();
