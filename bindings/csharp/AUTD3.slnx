@@ -5,14 +5,9 @@
     <Project Path="src/AUTD3.Pattern/AUTD3.Pattern.csproj" />
     <Project Path="src/AUTD3.Pattern.Holo/AUTD3.Pattern.Holo.csproj" />
     <Project Path="src/AUTD3.Modulation/AUTD3.Modulation.csproj" />
-    <Project Path="src/AUTD3.Link.Echocat/AUTD3.Link.Echocat.csproj" />
-    <Project Path="src/AUTD3.Link.Remote/AUTD3.Link.Remote.csproj" />
-    <Project Path="src/AUTD3.Link.Nop/AUTD3.Link.Nop.csproj" />
-    <Project Path="src/AUTD3.Link.TwinCAT/AUTD3.Link.TwinCAT.csproj" />
   </Folder>
   <Folder Name="/examples/">
     <Project Path="examples/FocusSine/FocusSine.csproj" />
-    <Project Path="examples/LegacyFocusSine/LegacyFocusSine.csproj" />
     <Project Path="examples/StatusCheck/StatusCheck.csproj" />
     <Project Path="examples/LowLatency/LowLatency.csproj" />
     <Project Path="examples/SendModes/SendModes.csproj" />
@@ -21,7 +16,6 @@
     <Project Path="examples/FociStm/FociStm.csproj" />
     <Project Path="examples/PatternStm/PatternStm.csproj" />
     <Project Path="examples/Group/Group.csproj" />
-    <Project Path="examples/RemoteClient/RemoteClient.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AUTD3.Tests/AUTD3.Tests.csproj" />

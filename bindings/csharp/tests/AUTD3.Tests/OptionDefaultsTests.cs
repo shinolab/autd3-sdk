@@ -1,5 +1,4 @@
 using AUTD3.Holo;
-using AUTD3.Legacy;
 using Xunit;
 
 namespace AUTD3.Tests
@@ -35,16 +34,6 @@ namespace AUTD3.Tests
             Assert.Equal(5u, gs.Repeat);
             Assert.Equal(new GsOption().Constraint, gs.Constraint);
             Assert.True(gs.Parallel);
-        }
-
-        [Fact]
-        public void LegacyClientConfigMatchesTheRustDefault()
-        {
-            var config = new LegacyClientConfig();
-            Assert.Equal(2000u, config.TimeoutCycles);
-            Assert.Equal(RtPriority.Default, config.RtPriority);
-            Assert.Equal(RtSchedulePolicy.Fifo, config.RtPolicy);
-            Assert.Null(config.RtAffinity);
         }
 
         [Fact]

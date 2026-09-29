@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 internal static class Program
@@ -19,7 +18,7 @@ internal static class Program
             new Autd3(new Vector3(Autd3.DeviceWidth, 0f, 0f)),
         });
 
-        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
 

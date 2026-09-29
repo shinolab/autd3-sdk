@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
-using AUTD3.Legacy;
 using Xunit;
 
 namespace AUTD3.Tests
@@ -29,7 +28,8 @@ namespace AUTD3.Tests
         public async Task AwaitUsingReleasesTheClient()
         {
             using var geometry = SingleDevice();
-            var client = await Client.OpenAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            using var emulator = new UdpEmulator(1);
+            var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
             await using (client)
             {
                 Assert.Equal(1, client.NumDevices);
@@ -41,7 +41,8 @@ namespace AUTD3.Tests
         public async Task AwaitUsingReleasesTheClientOnException()
         {
             using var geometry = SingleDevice();
-            var client = await Client.OpenAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            using var emulator = new UdpEmulator(1);
+            var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
             await Assert.ThrowsAsync<Marker>(async () =>
             {
                 await using (client)
@@ -56,7 +57,8 @@ namespace AUTD3.Tests
         public async Task ExplicitCloseInsideAwaitUsingIsSafe()
         {
             using var geometry = SingleDevice();
-            await using var client = await Client.OpenAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            using var emulator = new UdpEmulator(1);
+            await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
             await client.CloseAsync();
         }
 
@@ -64,7 +66,8 @@ namespace AUTD3.Tests
         public async Task DisposingTwiceIsSafe()
         {
             using var geometry = SingleDevice();
-            var client = await Client.OpenAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            using var emulator = new UdpEmulator(1);
+            var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
             await client.DisposeAsync();
             await client.DisposeAsync();
             client.Dispose();
@@ -80,7 +83,8 @@ namespace AUTD3.Tests
                 {
                     SynchronizationContext.SetSynchronizationContext(new NonPumpingContext());
                     using var geometry = SingleDevice();
-                    var client = Client.OpenAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig()).GetAwaiter().GetResult();
+                    using var emulator = new UdpEmulator(1);
+                    var client = Client.OpenAsync(geometry, emulator.Option(), new ClientConfig()).GetAwaiter().GetResult();
                     client.Dispose();
                     Assert.Throws<ObjectDisposedException>(() => client.NumDevices);
                     tcs.SetResult(true);
@@ -96,18 +100,6 @@ namespace AUTD3.Tests
             var finished = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
             Assert.Same(tcs.Task, finished);
             Assert.True(await tcs.Task);
-        }
-
-        [Fact]
-        public async Task LegacyClientSupportsAwaitUsing()
-        {
-            using var geometry = SingleDevice();
-            var client = await LegacyClient.OpenAsync(geometry, new AUTD3.Link.Nop(), new LegacyClientConfig());
-            await using (client)
-            {
-                Assert.Equal(1, client.NumDevices);
-            }
-            Assert.Throws<ObjectDisposedException>(() => client.NumDevices);
         }
     }
 }

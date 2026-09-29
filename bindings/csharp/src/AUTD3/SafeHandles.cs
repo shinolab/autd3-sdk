@@ -53,43 +53,4 @@ namespace AUTD3
             return true;
         }
     }
-
-    internal sealed class LegacyDatagramBuilderHandle : Autd3SafeHandle
-    {
-        internal LegacyDatagramBuilderHandle(IntPtr handle) : base(handle)
-        {
-        }
-
-        protected override bool ReleaseHandle()
-        {
-            NativeLegacyClient.autd3_legacy_datagram_builder_free(handle);
-            return true;
-        }
-    }
-
-    internal sealed class LegacyFramesHandle : Autd3SafeHandle
-    {
-        internal LegacyFramesHandle(IntPtr handle) : base(handle)
-        {
-        }
-
-        protected override bool ReleaseHandle()
-        {
-            NativeLegacyClient.autd3_legacy_frames_free(handle);
-            return true;
-        }
-    }
-
-    internal sealed class LegacyClientHandle : Autd3SafeHandle
-    {
-        internal LegacyClientHandle(IntPtr handle) : base(handle)
-        {
-        }
-
-        protected override bool ReleaseHandle()
-        {
-            NativeLegacyClient.autd3_legacy_client_free(handle);
-            return true;
-        }
-    }
 }

@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 namespace AUTD3.Samples
@@ -14,6 +13,7 @@ namespace AUTD3.Samples
     // The Nop link runs without hardware; swap it for new Echocat(...) on a real device.
     public sealed class FocusSineSample : MonoBehaviour
     {
+        private UdpEmulator _emulator;
         private Client _client;
         private Geometry _geometry;
 
@@ -21,7 +21,8 @@ namespace AUTD3.Samples
         {
             _geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.zero) });
             // Fully qualified: the enclosing AUTD3 namespace also has a `Nop` command.
-            _client = await Client.OpenAsync(_geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            _emulator = new UdpEmulator(1);
+            _client = await Client.OpenAsync(_geometry, _emulator.Option(), new ClientConfig());
 
             var target = _geometry.Center + new Vector3(0f, 0f, -0.15f);
             var wavelength = Pattern.Wavelength(340 * m / s);
@@ -56,6 +57,8 @@ namespace AUTD3.Samples
             }
             _geometry?.Dispose();
             _geometry = null;
+            _emulator?.Dispose();
+            _emulator = null;
         }
     }
 }

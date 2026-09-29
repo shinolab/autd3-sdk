@@ -124,7 +124,7 @@ namespace AUTD3
         }
     }
 
-    internal static class LinkOptionNative
+    internal static class OptionNative
     {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int SetDurationFn(IntPtr option, ulong ns);
@@ -137,9 +137,6 @@ namespace AUTD3
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int GetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        internal delegate IntPtr OpenFn(IntPtr option, byte[] outErr, UIntPtr outErrLen);
 
         internal static void Apply(string field, int code)
         {
@@ -172,20 +169,6 @@ namespace AUTD3
         {
             Apply("preset", get(option, out var hasValue, out var ns));
             return hasValue ? FromNanos(ns) : (TimeSpan?)null;
-        }
-
-        internal static IntPtr TakeOpener(string link, IntPtr option, OpenFn open)
-        {
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            var opener = open(option, err, (UIntPtr)err.Length);
-            if (opener == IntPtr.Zero)
-            {
-                var reason = NativeUtil.Utf8(err);
-                throw new Autd3Exception(reason.Length == 0
-                    ? $"failed to create {link} link"
-                    : $"failed to create {link} link: {reason}");
-            }
-            return opener;
         }
 
         internal static ulong ToNanos(TimeSpan value) => (ulong)value.Ticks * 100UL;

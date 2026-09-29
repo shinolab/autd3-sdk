@@ -174,7 +174,8 @@ namespace AUTD3.Tests
         public async System.Threading.Tasks.Task OpenWithCheckerReportsStatus()
         {
             using var geometry = SingleDevice();
-            var (client, checker) = await Client.OpenWithCheckerAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            using var emulator = new UdpEmulator(1);
+            var (client, checker) = await Client.OpenWithCheckerAsync(geometry, emulator.Option(), new ClientConfig());
             using var c = client;
             using var k = checker;
             var status = checker.Check();
@@ -188,7 +189,8 @@ namespace AUTD3.Tests
         public async System.Threading.Tasks.Task GeometryIsReachableThroughTheClient()
         {
             using var geometry = SingleDevice();
-            using var client = await Client.OpenAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            using var emulator = new UdpEmulator(1);
+            using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
             Assert.Equal(client.NumDevices, client.Geometry.NumDevices);
             Assert.Equal(geometry.NumTransducers, client.Geometry.NumTransducers);
             await client.CloseAsync();
@@ -198,7 +200,8 @@ namespace AUTD3.Tests
         public async System.Threading.Tasks.Task ResponseTokenIsDirectlyAwaitable()
         {
             using var geometry = SingleDevice();
-            using var client = await Client.OpenAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            using var emulator = new UdpEmulator(1);
+            using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
             using var builder = client.DatagramBuilder();
             builder.Push(new Synchronize());
             using var frames = builder.Build();

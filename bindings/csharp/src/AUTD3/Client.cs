@@ -23,12 +23,12 @@ namespace AUTD3
         public bool ReadsEnabled => (Raw & (1 << 7)) != 0;
     }
 
-    public sealed class LinkStatus
+    public sealed class DeviceStatus
     {
         public IReadOnlyList<DeviceState> Devices { get; }
         public ulong Recoveries { get; }
 
-        internal LinkStatus(IReadOnlyList<DeviceState> devices, ulong recoveries)
+        internal DeviceStatus(IReadOnlyList<DeviceState> devices, ulong recoveries)
         {
             Devices = devices;
             Recoveries = recoveries;
@@ -66,7 +66,7 @@ namespace AUTD3
 
         public override bool Equals(object? obj)
         {
-            if (obj is not LinkStatus other)
+            if (obj is not DeviceStatus other)
             {
                 return false;
             }
@@ -95,10 +95,10 @@ namespace AUTD3
             return hash.ToHashCode();
         }
 
-        public static bool operator ==(LinkStatus? left, LinkStatus? right) =>
+        public static bool operator ==(DeviceStatus? left, DeviceStatus? right) =>
             left is null ? right is null : left.Equals(right);
 
-        public static bool operator !=(LinkStatus? left, LinkStatus? right) => !(left == right);
+        public static bool operator !=(DeviceStatus? left, DeviceStatus? right) => !(left == right);
     }
 
     public sealed class Checker : IDisposable
@@ -110,7 +110,7 @@ namespace AUTD3
             _handle = new CheckerHandle(handle);
         }
 
-        public LinkStatus Check()
+        public DeviceStatus Check()
         {
             var err = new byte[NativeAbi.ErrorBufferLength];
             var status = NativeClient.autd3_checker_check(_handle, err, (UIntPtr)err.Length);
@@ -120,21 +120,21 @@ namespace AUTD3
             }
             try
             {
-                var count = (int)NativeClient.autd3_link_status_num_devices(status);
+                var count = (int)NativeClient.autd3_device_status_num_devices(status);
                 var devices = new List<DeviceState>(count);
                 for (var i = 0; i < count; i++)
                 {
-                    if (!NativeClient.autd3_link_status_device_state(status, (UIntPtr)i, out var kind, out var bits))
+                    if (!NativeClient.autd3_device_status_device_state(status, (UIntPtr)i, out var kind, out var bits))
                     {
                         throw new Autd3Exception("failed to read device state");
                     }
                     devices.Add(DeviceState.FromNative(kind, bits));
                 }
-                return new LinkStatus(devices, NativeClient.autd3_link_status_recoveries(status));
+                return new DeviceStatus(devices, NativeClient.autd3_device_status_recoveries(status));
             }
             finally
             {
-                NativeClient.autd3_link_status_free(status);
+                NativeClient.autd3_device_status_free(status);
             }
         }
 
@@ -221,9 +221,9 @@ namespace AUTD3
             _geometry = geometry;
         }
 
-        public static async Task<Client> OpenAsync(Geometry geometry, ILink link, ClientConfig config)
+        public static async Task<Client> OpenAsync(Geometry geometry, TransportOption option, ClientConfig config)
         {
-            var opener = link.TakeOpener();
+            var optionHandle = option.CreateHandle();
 
             IntPtr configHandle;
             try
@@ -232,7 +232,7 @@ namespace AUTD3
             }
             catch
             {
-                NativeClient.autd3_client_opener_free(opener);
+                NativeClient.autd3_transport_option_free(optionHandle);
                 throw;
             }
 
@@ -240,7 +240,7 @@ namespace AUTD3
             try
             {
                 task = AsyncOps.InvokeAsync((cb, ud) =>
-                    NativeClient.autd3_client_open(geometry.Handle, opener, configHandle, cb, ud));
+                    NativeClient.autd3_client_open(geometry.Handle, optionHandle, configHandle, cb, ud));
             }
             finally
             {
@@ -250,9 +250,9 @@ namespace AUTD3
             return new Client(value, geometry);
         }
 
-        public static async Task<(Client Client, Checker Checker)> OpenWithCheckerAsync(Geometry geometry, ILink link, ClientConfig config)
+        public static async Task<(Client Client, Checker Checker)> OpenWithCheckerAsync(Geometry geometry, TransportOption option, ClientConfig config)
         {
-            var client = await OpenAsync(geometry, link, config).ConfigureAwait(false);
+            var client = await OpenAsync(geometry, option, config).ConfigureAwait(false);
             var checker = NativeClient.autd3_client_checker(client.Handle);
             if (checker == IntPtr.Zero)
             {

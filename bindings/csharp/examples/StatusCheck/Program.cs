@@ -7,7 +7,6 @@ using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 
 internal static class Program
 {
@@ -16,7 +15,7 @@ internal static class Program
     private static async Task Main()
     {
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
-        var (client, checker) = await Client.OpenWithCheckerAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        var (client, checker) = await Client.OpenWithCheckerAsync(geometry, new TransportOption(), new ClientConfig());
         await using var _client = client;
         using var _checker = checker;
 
