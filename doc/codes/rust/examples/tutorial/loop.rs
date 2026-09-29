@@ -10,13 +10,14 @@ use autd3_rs::value::{
     ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, TransitionMode,
 };
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_nop::Nop;
+use autd3_rs::udp::emulator::UdpEmulator;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
+    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
+    let client = Client::open(&geometry, emulator.option(), ClientConfig::default()).await?;
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let radius = (30.0 * mm).mm();

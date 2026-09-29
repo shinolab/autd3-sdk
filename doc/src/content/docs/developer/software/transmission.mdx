@@ -34,10 +34,10 @@ for frame in &frames {
   R["RT スレッド (専用 OS スレッド)"]
   D["デバイス"]
   U -- "mpsc" --> R
-  R -- "EtherCAT" --> D`}
+  R -- "UDP" --> D`}
 />
 
-RT スレッドは EtherCAT の周期でひたすら送受信を繰り返しており, ユーザースレッドはそこへコマンドを渡して結果を待つ.
+RT スレッドは通信周期でひたすら送受信を繰り返しており, ユーザースレッドはそこへコマンドを渡して結果を待つ.
 以下では, デバイス 2 台に `PerDevice` のフレームを 1 つ送る場合を例に, 送信から受信までの処理を追う.
 
 ### ① Slot を借りる
@@ -194,7 +194,7 @@ stop-and-wait では `pending` の要素は常に高々 1 つである.
 let CycleOutcome { rx_valid } = self.link.cycle(&self.tx_bufs, &mut self.rx_bufs)?;
 ```
 
-`Link::cycle` が 1 サイクル分の PDO 送受信を行う.
+`UdpBus::cycle` (内部 trait `Bus` 越し) が 1 サイクル分の送受信を行う.
 
 デバイスは受け取ったフレームを処理し, 結果を次のサイクルの RX に載せる.
 したがって, サイクル N で送ったフレームの ACK が読めるのは早くてもサイクル N+1 である.
@@ -203,7 +203,7 @@ let CycleOutcome { rx_valid } = self.link.cycle(&self.tx_bufs, &mut self.rx_bufs
 つまり同じ SEQ のフレームがもう一度流れる.
 
 :::note
-EtherCAT では同じフレームを何度も送る必要がある.
+送るものが無いサイクルでも同じフレームを送り続ける (デバイスはこれをホストが生きている信号としても使う).
 ファームウェア側で同じ SEQ のフレームを受け取った場合に無視するようにしているので, 同一フレームの再送は無害.
 :::
 
@@ -211,7 +211,7 @@ EtherCAT では同じフレームを何度も送る必要がある.
 ### ⑤ ACK を集める
 
 `rx_valid` が真 (つまり正しくデータが受信できている) なら `route_acks` が呼ばれる.
-`rx_valid` をどう返すかは `Link` の実装に依存するが, 通常は, WKC が期待値と一致しているかどうかで判定する. `false` になるのは例えばSafe-OPに落ちた場合などである.
+`UdpBus` は全デバイスの返信が `reply_timeout` 内に揃ったかどうかで `rx_valid` を判定する.
 
 ```rust
 let front_seq = pending.front().seq;
@@ -386,13 +386,13 @@ dev1 は seq4 の ACK を報告していないが, `ack=5` から遡って処理
 RT ループは毎サイクル, 送受信の結果に応じて 3 つの経路へ分岐する.
 
 ```rust
-let mut link_error: Option<LinkCause> = None;
+let mut link_error: Option<NetworkCause> = None;
 loop {
     if closed { break }
     if matches!(stage_tx(), StageOutcome::Disconnected) { break }
     let rx_valid = match self.link.cycle(&self.tx_bufs, &mut self.rx_bufs) {
         Ok(CycleOutcome { rx_valid }) => rx_valid,
-        Err(e) => { link_error = Some(LinkCause::new(e)); break }
+        Err(e) => { link_error = Some(NetworkCause::new(e)); break }
     };
     if reset_remaining > 0 { advance_reset_phase() }
     else if rx_valid { handle_healthy() }   // 正常系 = route_acks
@@ -406,16 +406,16 @@ teardown(link_error.as_ref());
 |              | 判定                       | 意味                              | 担当             |
 | ------------ | -------------------------- | --------------------------------- | ---------------- |
 | リンク断     | `cycle()` が `Err`         | ソケット自体の異常.               | `teardown`       |
-| RX 不信頼    | `rx_valid == false`        | WKC 不一致 / 全デバイスが OP でない. | `handle_stale`   |
+| RX 不信頼    | `rx_valid == false`        | 返信が揃わない (途絶・再起動).       | `handle_stale`   |
 | ACK 停滞     | `rx_valid` だが先頭が進まない | フレーム喪失, デバイス停止.        | `ResyncState`    |
 
-Link 側の異常は Client 側ではどうすることもできないので, ループを抜けて RT スレッドを終了させる.
+通信の異常は Client 側ではどうすることもできないので, ループを抜けて RT スレッドを終了させる.
 
 終了処理は理由によらず `teardown` に一本化されている.
 
 ```rust
-fn teardown(&mut self, link_error: Option<&LinkCause>) {
-    let cause = || link_error.map_or(Error::RtClosed, |cause| Error::Link(cause.clone()));
+fn teardown(&mut self, link_error: Option<&NetworkCause>) {
+    let cause = || link_error.map_or(Error::RtClosed, |cause| Error::Network(cause.clone()));
     if let Some(msg) = self.held_exclusive.take() { /* cause() を返して Slot を戻す */ }
     for entry in self.pending.drain(..) { /* 同上 */ }
     while let Ok(msg) = self.cmd_rx.try_recv() { /* 同上 */ }
@@ -547,7 +547,7 @@ Reset は冪等であり, SEQ 一致チェックも受けないため, 届きさ
 
 ### 異常 RX
 
-`rx_valid = false` はデバイスがEtherCATバスに参加していない状態であり, 再送しても `Cmd::Reset` を送っても届かないのでどうしようもない.
+`rx_valid = false` が続くのはデバイスとの通信が途絶えている状態であり, 再送しても `Cmd::Reset` を送っても届かないのでどうしようもない.
 そのため, `stale_limit` サイクル待って一括でタイムアウトさせる.
 
 この間は `route_acks` も `advance_head` も呼ばれないため, 先頭の `age` は進まない.

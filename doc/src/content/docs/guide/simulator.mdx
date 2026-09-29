@@ -5,6 +5,8 @@ sidebar:
   order: 8
 ---
 
+import CodeTabs from "@components/CodeTabs.astro";
+
 `Simulator` は, AUTD3 の出力音場をブラウザ上で可視化する音場シミュレータ.
 実機がなくても, クライアントが送ったデータから生成される音場を確認できる.
 
@@ -13,8 +15,22 @@ sidebar:
 `Simulator` は GUI コンソール `autd3-console` に同梱されている.
 
 [コンソール](/autd3-sdk/guide/console/) の手順で `autd3-console` を入手して起動し, 上部の「Simulator」タブを開く.
+タブの「Group address」(既定 `[::1]:44336`) が Client の `TransportOption` の `group` に渡すアドレス, 「Geometry JSON」がジオメトリのファイル (空なら原点に 1 台) である.
 
 ## 接続
 
-`Simulator` は内部で `RemoteServer` を起動しているため, クライアントからは [`RemoteLink`](/autd3-sdk/api/link/remote/) で接続する.
-接続先は `127.0.0.1:<link-port>` ( デフォルトは 8080 ).
+`Simulator` はホスト上 (`::1`) で AUTD3 のデバイス群を模擬し, 実機と同じ UDP で待ち受ける.
+クライアントからは, [`TransportOption`](/autd3-sdk/api/connection/) の `group` を Simulator の待ち受けアドレス (デフォルトは `[::1]:44336`) に向けて開く.
+
+<CodeTabs
+  rust={'let option = TransportOption {\n    group: Some("[::1]:44336".parse()?),\n    ..Default::default()\n};\nlet client = Client::open(&geometry, option, ClientConfig::default()).await?;'}
+  python={'option = TransportOption(group="[::1]:44336")\nclient = await Client.open(geometry, option, ClientConfig())'}
+  csharp={'var option = new TransportOption { Group = "[::1]:44336" };\nvar client = await Client.OpenAsync(geometry, option, new ClientConfig());'}
+/>
+
+Simulator は全台を 1 プロセスで処理するので, 返信が既定の `reply_timeout` (1 ms) に間に合わないことがある. 返信が揃わない周期が続く場合は `reply_timeout` を広げる (`UdpEmulator` の `option()` は 50 ms を使っている).
+
+Simulator が模擬するデバイスの配置は Simulator 側で与える.
+Simulator を単体で起動する場合は `--geometry <file>` に `Geometry` の JSON (`Geometry::to_json` の出力) を渡す (省略すると原点に 1 台).
+台数がクライアントのジオメトリと合わなければ, 開くのに失敗する.
+待ち受けアドレスは `--group` で変更できる.

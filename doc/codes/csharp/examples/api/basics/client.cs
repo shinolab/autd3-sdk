@@ -1,8 +1,6 @@
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
-using Nop = AUTD3.Link.Nop;
 
 namespace DocSamples.ApiBasicsClient;
 
@@ -11,7 +9,8 @@ internal static class Sample
     internal static async Task Run()
     {
         var layout = new Geometry(new[] { new Autd3(Vector3.Zero) });
-        var client = await Client.OpenAsync(layout, new Nop(), new ClientConfig());
+        using var emulator = new UdpEmulator(layout.NumDevices);
+        var client = await Client.OpenAsync(layout, emulator.Option(), new ClientConfig());
 
         var frames = client.DatagramBuilder().Build();
         var frame = frames[0];
@@ -37,7 +36,8 @@ internal static class Sample
         var scopedLayout = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         // ANCHOR: context_manager
-        await using (var scoped = await Client.OpenAsync(scopedLayout, new Nop(), new ClientConfig()))
+        using var scopedEmulator = new UdpEmulator(scopedLayout.NumDevices);
+        await using (var scoped = await Client.OpenAsync(scopedLayout, scopedEmulator.Option(), new ClientConfig()))
         {
             await scoped.SendCheckedAsync(frame);
         }

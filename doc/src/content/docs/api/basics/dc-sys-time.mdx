@@ -1,6 +1,6 @@
 ---
 title: DcSysTime
-description: EtherCAT 分散クロック上の同期時刻 DcSysTime の API と演算
+description: デバイスの時刻 DcSysTime の API と演算
 sidebar:
   order: 5
 ---
@@ -11,11 +11,17 @@ import sample from "@codes/rust/examples/api/basics/dc-sys-time.rs?raw";
 import pySample from "@codes/python/examples/api/basics/dc-sys-time.py?raw";
 import csSample from "@codes/csharp/examples/api/basics/dc-sys-time.cs?raw";
 
-`DcSysTime` は, **EtherCAT 分散クロック (Distributed Clock, DC)** 上の時刻を表す型.
+`DcSysTime` は, **デバイスの時刻**を表す型.
 [`TransitionMode::SysTime`](/autd3-sdk/getting-started/tutorial/loop/) や [`GpioOut::SysTimeEq`](/autd3-sdk/api/command/gpio/) などで用いる.
 
-EtherCAT では, 全スレーブで同期したクロック (分散クロック) があり, 各デバイスはこれに同期して動作する.
+各デバイスは自身のクロックを持ち, 出力の切り替えなどはこの時刻で行う.
 この時刻は 64 bitの ns 単位のカウンタで, 2000年1月1日 00:00:00 (UTC) から数える.
+`Client` を開いたときにホストの時刻に合わせられ, ホストの時刻とのずれは SDK が補正する.
+
+:::caution
+現在のバージョンでは, デバイス間の時刻の同期は取らない.
+各デバイスは開いたときに合わせた時刻から自走するので, デバイス間の時刻は水晶のずれ (数十 ppm) で少しずつ離れていく.
+:::
 
 ## 構築
 

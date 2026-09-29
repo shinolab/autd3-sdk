@@ -17,7 +17,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 `Client` is the central object that sends commands and reads state.
 The basic and command APIs, including `Client`, are provided by the main package.
-Connecting to real hardware and the like additionally requires a [Link](/autd3-sdk/en/api/link/).
+The destination (real devices, the [device emulator](/autd3-sdk/en/api/connection/device-emulator/), or the Simulator) is given by [`TransportOption`](/autd3-sdk/en/api/connection/).
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
@@ -26,10 +26,10 @@ Connecting to real hardware and the like additionally requires a [Link](/autd3-s
 | Parameter  | Type            | Description                    |
 | ---------- | --------------- | ----------------------------- |
 | `geometry` | `&Geometry`     | Physical layout of the devices |
-| `link`     | `impl IntoLink` | Link                          |
+| `option`   | `TransportOption`     | [Connection settings](/autd3-sdk/en/api/connection/) |
 | `config`   | `ClientConfig`  | See below                     |
 
-To continuously monitor the operating state of the link, use `open_with_checker` and drive the returned `Checker` (see [Link State Monitoring](/autd3-sdk/en/guide/state-check/)).
+To continuously monitor the operating state of the devices, use `open_with_checker` and drive the returned `StateChecker` (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
 
 ## API
 

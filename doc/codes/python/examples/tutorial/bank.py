@@ -2,9 +2,8 @@ import asyncio
 
 import numpy as np
 
-import autd3_link_echocat as echocat
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, TransportOption
 from autd3.commands import Pattern
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
@@ -15,7 +14,7 @@ async def main() -> None:
 
     async with await Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        TransportOption(),
         ClientConfig(),
     ) as client:
         wavelength = pattern.wavelength(340 * m / s)

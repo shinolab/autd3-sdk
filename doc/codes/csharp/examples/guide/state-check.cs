@@ -2,7 +2,6 @@ using System;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 
 namespace DocSamples.GuideStateCheck;
 
@@ -17,7 +16,7 @@ internal static class Sample
         // ANCHOR: open
         var (client, checker) = await Client.OpenWithCheckerAsync(
             geometry,
-            new EchocatLinkOption(),
+            new TransportOption(),
             new ClientConfig()
         );
         // ANCHOR_END: open
@@ -25,7 +24,7 @@ internal static class Sample
         await using (client)
         {
             // ANCHOR: poll
-            LinkStatus? last = null;
+            DeviceStatus? last = null;
             while (true)
             {
                 var status = checker.Check();

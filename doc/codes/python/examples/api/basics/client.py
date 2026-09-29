@@ -1,14 +1,14 @@
 import asyncio
 
-import autd3_link_nop as nop
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, UdpEmulator
 from autd3.commands import Clear
 from autd3.geometry import Autd3, Geometry
 
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-    client = await Client.open(geometry, nop.Nop(), ClientConfig())
+    emulator = UdpEmulator(geometry.num_devices())
+    client = await Client.open(geometry, emulator.option(), ClientConfig())
 
     builder = client.datagram_builder()
     builder.push(Clear())
@@ -35,7 +35,8 @@ async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     # ANCHOR: context_manager
-    async with await Client.open(geometry, nop.Nop(), ClientConfig()) as client:
+    emulator = UdpEmulator(geometry.num_devices())
+    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
         await client.send_checked(frame)
     # ANCHOR_END: context_manager
 

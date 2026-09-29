@@ -1,8 +1,6 @@
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
-using Nop = AUTD3.Link.Nop;
 
 // HIDE
 namespace DocSamples.ApiCommandPhaseCorrectionExample;
@@ -13,7 +11,8 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
-await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
+using var emulator = new UdpEmulator(geometry.NumDevices);
+await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
 
 var phases = new Phase[geometry.NumDevices][];
 for (var i = 0; i < geometry.NumDevices; i++)

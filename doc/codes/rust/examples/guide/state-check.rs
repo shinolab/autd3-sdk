@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, ClientConfig, LinkStatus};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{Client, ClientConfig, DeviceStatus};
+use autd3_rs::TransportOption;
 
 const CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -13,14 +13,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR: open
     let (client, mut checker) = Client::open_with_checker(
         &geometry,
-        EchocatLinkOption::default(),
+        TransportOption::default(),
         ClientConfig::default(),
     )
     .await?;
     // ANCHOR_END: open
 
     // ANCHOR: poll
-    let mut last: Option<LinkStatus> = None;
+    let mut last: Option<DeviceStatus> = None;
     loop {
         let status = checker.check()?;
         if last.as_ref() != Some(&status) {

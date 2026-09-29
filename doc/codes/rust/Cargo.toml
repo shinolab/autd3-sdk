@@ -9,15 +9,11 @@ autoexamples = false
 [workspace]
 
 [dependencies]
-autd3-rs = { path = "../../../crates/autd3-rs", features = ["legacy"] }
+autd3-rs = { path = "../../../crates/autd3-rs", features = ["emulator"] }
 autd3-rs-pattern = { path = "../../../crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { path = "../../../crates/autd3-rs-pattern-holo" }
 autd3-rs-modulation = { path = "../../../crates/autd3-rs-modulation" }
 autd3-rs-emulator = { path = "../../../extras/autd3-rs-emulator" }
-autd3-rs-link-nop = { path = "../../../crates/autd3-rs-link-nop" }
-autd3-rs-link-echocat = { path = "../../../crates/autd3-rs-link-echocat" }
-autd3-rs-link-remote = { path = "../../../crates/autd3-rs-link-remote" }
-autd3-rs-link-twincat = { path = "../../../crates/autd3-rs-link-twincat" }
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 anyhow = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
@@ -298,20 +294,12 @@ name = "api_compute_pattern_set"
 path = "examples/api/compute/pattern/set.rs"
 
 [[example]]
-name = "api_link_echocat"
-path = "examples/api/link/echocat.rs"
+name = "api_connection_device_emulator"
+path = "examples/api/connection/device-emulator.rs"
 
 [[example]]
-name = "api_link_remote_client"
-path = "examples/api/link/remote_client.rs"
-
-[[example]]
-name = "api_link_remote_server"
-path = "examples/api/link/remote_server.rs"
-
-[[example]]
-name = "api_link_twincat"
-path = "examples/api/link/twincat.rs"
+name = "api_connection_udp"
+path = "examples/api/connection/udp.rs"
 
 [[example]]
 name = "guide_custom_modulation"
@@ -324,10 +312,6 @@ path = "examples/guide/custom-pattern.rs"
 [[example]]
 name = "guide_emulator"
 path = "examples/guide/emulator.rs"
-
-[[example]]
-name = "guide_legacy"
-path = "examples/guide/legacy.rs"
 
 [[example]]
 name = "guide_state_check"

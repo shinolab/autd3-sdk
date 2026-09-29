@@ -1,8 +1,6 @@
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
-using Nop = AUTD3.Link.Nop;
 using static AUTD3.Units;
 
 namespace DocSamples.ApiBasicsDatagramBuilder;
@@ -12,7 +10,8 @@ internal static class Sample
     internal static async Task Run()
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero), new Autd3(Vector3.Zero) });
-        await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
+        using var emulator = new UdpEmulator(geometry.NumDevices);
+        await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 

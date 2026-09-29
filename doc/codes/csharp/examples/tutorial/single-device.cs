@@ -3,7 +3,6 @@ using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 // HIDE
@@ -20,7 +19,7 @@ var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 // Open the client over an echocat link.
 await using var client = await Client.OpenAsync(
     geometry,
-    new EchocatLinkOption(),
+    new TransportOption(),
     new ClientConfig()
 );
 

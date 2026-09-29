@@ -3,14 +3,13 @@ use anyhow::Result;
 use std::num::{NonZeroU32, NonZeroUsize};
 
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, ClientConfig, MAX_INFLIGHT, RtPriority, RtSchedulePolicy};
-use autd3_rs_link_nop::Nop;
+use autd3_rs::{Client, ClientConfig, MAX_INFLIGHT, RtPriority, RtSchedulePolicy, TransportOption};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let link = Nop;
+    let udp = TransportOption::default();
     let option =
         // ANCHOR: config
         ClientConfig {
@@ -29,7 +28,7 @@ async fn main() -> Result<()> {
         // ANCHOR_END: config
         ;
     // ANCHOR: api
-    Client::open(&geometry, link, option).await?;
+    Client::open(&geometry, udp, option).await?;
     // ANCHOR_END: api
 
     Ok(())

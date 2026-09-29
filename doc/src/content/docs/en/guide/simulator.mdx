@@ -5,6 +5,8 @@ sidebar:
   order: 8
 ---
 
+import CodeTabs from "@components/CodeTabs.astro";
+
 `Simulator` is a sound field simulator that visualizes the AUTD3 output sound field in a browser.
 Even without real hardware, you can check the sound field generated from the data sent by the client.
 
@@ -13,8 +15,22 @@ Even without real hardware, you can check the sound field generated from the dat
 `Simulator` is bundled with the GUI console `autd3-console`.
 
 Obtain `autd3-console` as described in [Console](/autd3-sdk/en/guide/console/), launch it, and open the "Simulator" tab at the top.
+The tab's "Group address" (`[::1]:44336` by default) is the address to pass as `group` in the client's `TransportOption`, and "Geometry JSON" is the geometry file (one device at the origin when empty).
 
 ## Connecting
 
-Since `Simulator` internally launches a `RemoteServer`, the client connects to it with [`RemoteLink`](/autd3-sdk/en/api/link/remote/).
-The connection target is `127.0.0.1:<link-port>` (default is 8080).
+`Simulator` emulates a chain of AUTD3 devices on the host (`::1`) and listens over the same UDP as real devices.
+The client opens it with the `group` of [`TransportOption`](/autd3-sdk/en/api/connection/) pointing at the Simulator's address (default `[::1]:44336`).
+
+<CodeTabs
+  rust={'let option = TransportOption {\n    group: Some("[::1]:44336".parse()?),\n    ..Default::default()\n};\nlet client = Client::open(&geometry, option, ClientConfig::default()).await?;'}
+  python={'option = TransportOption(group="[::1]:44336")\nclient = await Client.open(geometry, option, ClientConfig())'}
+  csharp={'var option = new TransportOption { Group = "[::1]:44336" };\nvar client = await Client.OpenAsync(geometry, option, new ClientConfig());'}
+/>
+
+The Simulator serves every device in one process, so its replies may miss the default `reply_timeout` (1 ms). If cycles keep going without all replies, widen `reply_timeout` (`UdpEmulator::option()` uses 50 ms).
+
+The layout of the emulated devices is given on the Simulator side.
+When launching the Simulator by itself, pass a `Geometry` JSON (the output of `Geometry::to_json`) to `--geometry <file>` (one device at the origin when omitted).
+Opening fails if the number of devices differs from the client's geometry.
+The listening address can be changed with `--group`.

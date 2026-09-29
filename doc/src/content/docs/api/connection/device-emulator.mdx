@@ -1,0 +1,27 @@
+---
+title: デバイスエミュレータ
+description: ハードウェア無しで Client を開くための UDP デバイスエミュレータ
+sidebar:
+  order: 1
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/connection/device-emulator.rs?raw";
+import pySample from "@codes/python/examples/api/connection/device-emulator.py?raw";
+import csSample from "@codes/csharp/examples/api/connection/device-emulator.cs?raw";
+
+`UdpEmulator` は, ホスト上 (`::1`) で AUTD3 のデバイス群を模擬する.
+実機が無くても `Client` を開いて, 実機と同じ UDP の経路でコマンドを送れる.
+各デバイスのデータは実際の CPU ファームウェアのロジックと FPGA のエミュレータが処理する.
+テスト・サンプル・動作確認に使う.
+
+<CodeTabs rust={sample} python={pySample} csharp={csSample} />
+
+- `UdpEmulator::spawn(n)` (Python は `UdpEmulator(n)`, C# は `new UdpEmulator(n)`) で `n` 台のデバイスを立てる
+- `option()` が, エミュレータに向けた [`TransportOption`](/autd3-sdk/api/connection/) を返す. これを `Client::open` に渡す
+- `reboot(i)` は `i` 台目の再起動を模擬する. その機体より先の機体も含めて通信できなくなり, [状態監視](/autd3-sdk/guide/state-check/) では `Lost` になる
+- Rust では `with_device(i, ..)` で `i` 台目のファームウェアと FPGA の状態を観測できる
+- Rust では `autd3-rs` の feature `emulator` を有効にする. Python / C# では本体に含まれる
+
+エミュレータは同期パルスの精度などハードウェアの時間的な振る舞いは再現しない.
+出力される音場を確認したい場合は [Simulator](/autd3-sdk/guide/simulator/) を使う.

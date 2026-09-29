@@ -2,10 +2,9 @@ import asyncio
 
 import numpy as np
 
-import autd3_link_echocat as echocat
 import autd3_modulation as modulation
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, TransportOption
 from autd3.commands import Modulation, Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
@@ -16,7 +15,7 @@ async def main() -> None:
 
     async with await Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        TransportOption(),
         ClientConfig(),
     ) as client:
         target = geometry.center() + np.array([0.0, 0.0, 150.0])

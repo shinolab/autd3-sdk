@@ -2,36 +2,28 @@ import runpy
 import sys
 
 import autd3
-import autd3_link_nop as _nop
 
+_emulators = []
 _orig_open = autd3.Client.open
 
-def _patched_open(geometry, link, config):
-    return _orig_open(geometry, _nop.Nop(), config)
+
+def _emulated(geometry):
+    emulator = autd3.UdpEmulator(geometry.num_devices())
+    _emulators.append(emulator)
+    return emulator.option()
+
+
+def _patched_open(geometry, option, config):
+    return _orig_open(geometry, _emulated(geometry), config)
 
 autd3.Client.open = staticmethod(_patched_open)
-
-_orig_legacy_open = autd3.LegacyClient.open
-
-def _patched_legacy_open(geometry, link, config):
-    return _orig_legacy_open(geometry, _nop.Nop(), config)
-
-autd3.LegacyClient.open = staticmethod(_patched_legacy_open)
 
 if hasattr(autd3.Client, "open_with_checker"):
     _orig_open_with_checker = autd3.Client.open_with_checker
 
-    def _patched_open_with_checker(geometry, link, config):
-        return _orig_open_with_checker(geometry, _nop.Nop(), config)
+    def _patched_open_with_checker(geometry, option, config):
+        return _orig_open_with_checker(geometry, _emulated(geometry), config)
 
     autd3.Client.open_with_checker = staticmethod(_patched_open_with_checker)
-
-if hasattr(autd3.LegacyClient, "open_with_checker"):
-    _orig_legacy_open_with_checker = autd3.LegacyClient.open_with_checker
-
-    def _patched_legacy_open_with_checker(geometry, link, config):
-        return _orig_legacy_open_with_checker(geometry, _nop.Nop(), config)
-
-    autd3.LegacyClient.open_with_checker = staticmethod(_patched_legacy_open_with_checker)
 
 runpy.run_path(sys.argv[1], run_name="__main__")

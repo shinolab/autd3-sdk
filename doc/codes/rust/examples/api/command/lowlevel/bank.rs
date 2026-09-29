@@ -8,7 +8,7 @@ use autd3_rs::commands::{
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
-use autd3_rs_link_nop::Nop;
+use autd3_rs::udp::emulator::UdpEmulator;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {

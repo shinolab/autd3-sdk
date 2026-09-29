@@ -45,10 +45,10 @@ import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
 
 ## OS チューニング
 
-ホストで EtherCAT を動かす場合, EtherCAT のリアルタイム性は OS の設定にも左右される.
+ホストから UDP で直接つなぐ場合, 周期通信のリアルタイム性は OS の設定にも左右される.
 スレッドの優先度・CPU アフィニティ・タイマ精度などを調整することで, ジッタを抑えてより安定した高レート送信ができる可能性がある.
 
-これらは `ClientConfig` の `rt_priority` / `rt_policy` / `rt_affinity`, および Link Option の `sync0_period` / `sync0_shift` (echocat では `frame_phase`) として設定できる.
+これらは `ClientConfig` の `rt_priority` / `rt_policy` / `rt_affinity`, および `TransportOption` の `cycle` / `reply_timeout` として設定できる.
 適切な値は環境によって異なるため, 実測して決めるのがよい.
 
 ## Windows のドライバ設定
@@ -68,6 +68,5 @@ Windows では NIC のドライバを最新のものにしたうえで, 以下�
 リポジトリには, 性能の計測とチューニングのためのツールが用意されている.
 
 - `cargo xtask tool perftest`: スループットとレイテンシを計測する
-- `cargo xtask tool synctune`: 同期の安定性を計測し最適なパラメータを探索する
 
 詳しい使い方は各ツールの `--help` を参照.

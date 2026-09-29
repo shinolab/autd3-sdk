@@ -45,10 +45,10 @@ To avoid per-frame allocation, reuse buffers.
 
 ## OS Tuning
 
-When EtherCAT runs on the host, its real-time performance also depends on the OS settings.
+When the host connects directly over UDP, the real-time performance of the cyclic communication also depends on the OS settings.
 By adjusting thread priority, CPU affinity, timer precision, and so on, jitter can be suppressed, potentially enabling more stable high-rate transmission.
 
-These can be set as `rt_priority` / `rt_policy` / `rt_affinity` of `ClientConfig`, and `sync0_period` / `sync0_shift` (`frame_phase` on echocat) of the Link Option.
+These can be set as `rt_priority` / `rt_policy` / `rt_affinity` of `ClientConfig`, and `cycle` / `reply_timeout` of `TransportOption`.
 The appropriate values differ by environment, so it is best to measure and decide.
 
 ## Windows Driver Settings
@@ -68,6 +68,5 @@ In Device Manager, open the adapter properties → Advanced
 The repository provides tools for measuring and tuning performance.
 
 - `cargo xtask tool perftest`: measures throughput and latency.
-- `cargo xtask tool synctune`: measures synchronization stability and searches for the optimal parameters.
 
 See each tool's `--help` for details.

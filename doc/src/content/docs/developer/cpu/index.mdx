@@ -1,6 +1,6 @@
 ---
 title: CPU ファームウェア
-description: EtherCAT スレーブとして動作し FPGA へデータを書き込む CPU ボードのファームウェア
+description: ホストと UDP で通信し FPGA へデータを書き込む CPU ボードのファームウェア
 sidebar:
   order: 0
 ---
@@ -9,17 +9,18 @@ import Math from "@components/Math.astro";
 import MathBlock from "@components/MathBlock.astro";
 import Mermaid from "@components/Mermaid.astro";
 
-CPU ボード (AP-RZT-01, Alpha Project) は Renesas RZ/T1 (Arm Cortex-R4F) を搭載しており, EtherCAT スレーブとして動作する.
-これの役割は, EtherCAT の PDO で受け取ったフレームを解釈し, FPGA 内の BRAM へ書き込むことである.
+CPU ボード (AP-RZT-01, Alpha Project) は Renesas RZ/T1 (Arm Cortex-R4F) を搭載している.
+これの役割は, ホストから UDP (IPv6 リンクローカル) で受け取ったフレームを解釈し, FPGA 内の BRAM へ書き込むことである.
+RZ/T1 内蔵の Ethernet スイッチ (ETHSW) の 2 ポートを使い, デバイスをデイジーチェーンで接続する.
 
 ソースは `firmware/cpu/` 以下にあり, `no_std` Rust で記述されている.
 2 つのクレートに分かれている.
 
-- `fw/` (`autd3-cpu-fw`): プロトコル解釈・コマンド処理・FPGA 書き込みなどの可搬ロジック.
-  ハードウェアには `Port` trait 越しにのみアクセスし, `unsafe` を含まない.
+- `fw/` (`autd3-cpu-fw`): プロトコル解釈・コマンド処理・FPGA 書き込み, および IPv6 / UDP / ICMPv6 の解析と組み立て (`net`), 列挙と受信振り分け (`node`) などの可搬ロジック.
+  ハードウェアには `Port` trait (コマンド層) と `Nic` trait (ネットワーク) 越しにのみアクセスし, `unsafe` を含まない.
   ホストテストと `autd3-rs-firmware-emulator` からも同じコードが使われる.
 - `board/` (`autd3-cpu`): 実機ターゲット (armv7r-none-eabi) の staticlib.
-  レジスタ定義・BSP・`Port` trait の実機実装・C-ABI エクスポート・panic handler を持ち, `unsafe` はここに閉じ込める.
+  レジスタ定義・BSP・ETHSW / GMAC のドライバ・`Port` / `Nic` trait の実機実装・`main`・panic handler を持ち, `unsafe` はここに閉じ込める.
 
 ## 開発環境構築
 
@@ -55,8 +56,9 @@ cargo xtask cpu format --fix  # rustfmt 実書き換え
 1. `arm-none-eabi-gcc` で `platform/autd3-platform.o` とリンカスクリプト `platform/autd3-cpu.ld` を用いてリンクする.
 1. `objcopy` で `build/autd3-cpu.bin` を生成する.
 
-`platform/autd3-platform.o` は EtherCAT スレーブコントローラの初期化などを含む非公開コードのビルド済みオブジェクトである.
-両者の C-ABI 境界 (`init_app` / `recv_ethercat` / `app_process_pending` / `bsp_*`) は `board/src/lib.rs` の `#[unsafe(no_mangle)]` エクスポートが実装する.
+`platform/autd3-platform.o` はローダ・スタートアップ・シリアルフラッシュドライバを含む非公開コードのビルド済みオブジェクトである.
+スタートアップは `board/src/lib.rs` の `main` を呼び, 以後の初期化とメインループはすべて Rust 側で行う.
+ビルドの最後に, イメージ内のトランスポートマーカ (UDP 版であることを示す) を検査する.
 
 ### 実機書き込み
 
@@ -65,21 +67,20 @@ cargo xtask cpu format --fix  # rustfmt 実書き換え
 
 ### ホストテスト
 
-`fw/` は `Port` trait (`fpga_write` / `fpga_read` / `memory_barrier` / `sleep_ms` など) 以外のハードウェア依存を持たない.
+`fw/` は `Port` trait (`fpga_write` / `fpga_read` / `memory_barrier` など) と `Nic` trait 以外のハードウェア依存を持たない.
 `cargo xtask cpu test` では `fw/src/tests/mock.rs` の `MockPort` がこれを置き換え, FPGA への書き込みを記録する.
-`fw/src/tests/` がプロトコル層 (`Cpu::recv_ethercat` / `Cpu::process_one`) の振る舞いを検証する.
+`fw/src/tests/` がプロトコル層 (`Cpu::recv_frame` / `Cpu::process_one`) の振る舞いを, `fw/src/net` と `fw/src/node` のテストがネットワーク処理と列挙の振る舞いを検証する.
 
 ## フレーム処理
 
-EtherCAT の 1 サイクルにつき, マスタからスレーブへ 626 byte, スレーブからマスタへ 2 byte が転送される.
+ホストは周期ごとに各デバイスへ 1 つの UDP データグラム (デバイス側ポート 44336) を送る.
+データグラムは 4 byte のヘッダ (版数・種別・メッセージ ID) の後ろに 626 byte のフレームを持つ.
 
 受信フレームは先頭が `seq` (1 byte), `cmd` (1 byte) で, 残り 624 byte がペイロードである.
-送信フレームは `ack` (1 byte) と `data` (1 byte) からなる.
+デバイスは受信割り込みの中でフレームをコマンド層 (`Cpu::recv_frame`) へ渡し, その場で `ack` (1 byte) と `data` (1 byte) を載せた返信を送る.
+返信にはこのほか, デバイスの状態フラグ・ID・デバイスの時刻が載る.
 
-:::note
-諸事情により, EtherCAT のプロセスデータ上では, オフセット 498 から 2 byte のギャップがある.
-`recv_ethercat` はこのギャップを取り除いてからフレームを解釈する.
-:::
+ネットワーク処理 (受信・返信・近隣探索・列挙) はすべて割り込みの中で行うので, メインループが長い処理で止まっていても返信は返り続ける.
 
 同じ `seq` かつ同じ `cmd` のフレームは再送とみなして無視する.
 
@@ -88,7 +89,7 @@ EtherCAT の 1 サイクルにつき, マスタからスレーブへ 626 byte, �
 <Mermaid
   title="フレーム処理モード"
   code={`flowchart TB
-  RX["recv_ethercat (EtherCAT 割り込み)"]
+  RX["recv_frame (Ethernet 受信割り込み)"]
   MODE{"mode"}
   FIFO[("FIFO (深さ 8)")]
   MAIN["app_process_pending (メインループ)"]
@@ -100,7 +101,7 @@ EtherCAT の 1 サイクルにつき, マスタからスレーブへ 626 byte, �
 />
 
 - `MODE_FIFO` (既定): 受信フレームを深さ 8 のリングバッファに積むだけで割り込みを抜け, メインループの `app_process_pending()` が処理する. 割り込み時間が短く済むが, `ack` が返るまでの遅延が増える.
-- `MODE_LOW_LATENCY`: 受信割り込みの中で直接処理する. 遅延は小さいが, 処理時間の長いコマンドが EtherCAT サイクルを圧迫する.
+- `MODE_LOW_LATENCY`: 受信割り込みの中で直接処理する. 遅延は小さいが, 処理時間の長いコマンドが受信割り込みを長引かせる.
 
 FIFO が満杯の場合, フレームは捨てられる.
 `ack` が進まないため, クライアント側が再送する.
@@ -122,8 +123,8 @@ FIFO が満杯の場合, フレームは捨てられる.
 | `0x05` | `ERR_INVALID_TRANSITION_MODE`  | 遷移モードと繰り返し回数の組み合わせが不正 |
 | `0x06` | `ERR_MISS_TRANSITION_TIME`     | `SysTime` 遷移の指定時刻が近すぎる・過去である |
 | `0x07` | `ERR_FPGA_TIMEOUT`             | FPGA が制御フラグを期限内にクリアしない     |
-| `0x08` | `ERR_SYNC_NOT_READY`           | EtherCAT の DC が未設定で Sync0 時刻が読めない |
-| `0x09` | `ERR_INVALID_SYNC0_CYCLE`      | Sync0 周期が未設定, または <Math tex="\SI{500}{us}" /> の整数倍でない |
+| `0x08` | `ERR_SYNC_NOT_READY`           | 同期パルスがまだ動いていない (時刻合わせ前) |
+| `0x09` | `ERR_INVALID_SYNC0_CYCLE`      | 同期パルスの周期が <Math tex="\SI{500}{us}" /> の整数倍でない |
 
 ## FPGA への書き込み
 
@@ -143,18 +144,23 @@ FPGA 側の「書き込み先を切り替えるレジスタ」(`MOD_MEM_WR_BANK`
 
 ## 同期
 
+FPGA の同期入力 (`CAT_SYNC0` ピン) には, ETHSW のタイマから作った同期パルスを入れる.
+ホストは `Client` (`UdpBus`) を開くときに全デバイスへ現在時刻を送り (`SetTime`), 各デバイスは ETHSW のタイマをその時刻に合わせたうえで,
+タイマの SYNCOUT (<Math tex="\SI{500}{us}" /> 周期) から ELC → MTU → PPG を経て, 立ち上がりが <Math tex="\SI{1}{ms}" /> 境界に乗る <Math tex="\SI{1}{ms}" /> 周期のパルスを作る.
+現在のバージョンでは, デバイス間のタイマの同期は取らない.
+
 `CMD_SYNCHRONIZE` は以下を行う.
 
-1. Sync0 の発火周期を読み出す
-1. 周期を検証する. <Math tex="0" /> ( DC が設定されてない ) や <Math tex="\SI{500}{us}" /> の整数倍でない場合は `ERR_INVALID_SYNC0_CYCLE` を返す
+1. 同期パルスの周期 (<Math tex="\SI{1}{ms}" />) を読み出す
+1. 周期を検証する. <Math tex="\SI{500}{us}" /> の整数倍でない場合は `ERR_INVALID_SYNC0_CYCLE` を返す
 1. 周期を FPGA内部の`SYS_TIME` の単位 (<Math tex="\SI{20.48}{MHz}" />) へ変換する
 
     <MathBlock tex={String.raw`
     \text{cycle\_ticks} = \text{cycle\_ns} \times \frac{\SI{20.48}{MHz}}{\SI{1}{GHz}} = 64 \times \frac{\text{cycle\_ns}}{3125}
     `} />
 
-1. 次に Sync0 が発火する EtherCAT システム時刻を読み出す. 現在時刻がそれに近すぎる (<Math tex="\SI{250}{us}" /> 未満) 場合は次の発火まで待つ.
-    - DC が未設定で時刻が読めない場合は `ERR_SYNC_NOT_READY` を返す
+1. 次に同期パルスが立ち上がるデバイス時刻 (現在時刻から <Math tex="\SI{250}{us}" /> 以上先の最初の <Math tex="\SI{1}{ms}" /> 境界) を求める.
+    - 同期パルスがまだ動いていない場合は `ERR_SYNC_NOT_READY` を返す
 1. その時刻を `ADDR_ECAT_SYNC_TIME_*` へ, 変換した周期を `ADDR_ECAT_SYNC_CYCLE_*` へ書き込む.
 1. `SYNC_SET` フラグを立て, FPGA の [Synchronizer](/autd3-sdk/developer/fpga/synchronizer/) が `SYS_TIME` をセットするのを待つ.
 

@@ -1,14 +1,13 @@
 import asyncio
 
-import autd3_link_nop as nop
-from autd3 import MAX_INFLIGHT, Client, ClientConfig, RtPriority, RtSchedulePolicy
+from autd3 import MAX_INFLIGHT, Client, ClientConfig, RtPriority, RtSchedulePolicy, TransportOption
 from autd3.geometry import Autd3, Geometry
 
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    link = nop.Nop()
+    udp = TransportOption()
     option = (
         # ANCHOR: config
         ClientConfig(
@@ -26,7 +25,7 @@ async def main() -> None:
         # ANCHOR_END: config
     )
     # ANCHOR: api
-    await Client.open(geometry, link, option)
+    await Client.open(geometry, udp, option)
     # ANCHOR_END: api
 
 

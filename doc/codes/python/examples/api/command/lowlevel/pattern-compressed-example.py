@@ -2,19 +2,19 @@ import asyncio
 
 import numpy as np
 
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, UdpEmulator
 from autd3.commands import ChangePatternBank, ConfigPattern, PatternCompression, StmConfig, WritePatternCompressed
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
-from autd3_link_nop import Nop
 from autd3_pattern import focus
 from autd3_pattern import wavelength as calc_wavelength
 
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-    async with await Client.open(geometry, Nop(), ClientConfig()) as client:
+    emulator = UdpEmulator(geometry.num_devices())
+    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
         wavelength = calc_wavelength(340 * m / s)
         patterns = []
         for x in (-30.0, -10.0, 10.0, 30.0):

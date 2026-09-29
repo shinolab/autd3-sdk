@@ -2,17 +2,17 @@ import asyncio
 
 import numpy as np
 
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, UdpEmulator
 from autd3.commands import FociStm, FociStmOption, circle
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
-from autd3_link_nop import Nop
 
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-    async with await Client.open(geometry, Nop(), ClientConfig()) as client:
+    emulator = UdpEmulator(geometry.num_devices())
+    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
         center = geometry.center() + np.array([0.0, 0.0, 150.0])
         points = []
         circle(center, 30.0, 200, [0.0, 0.0, 1.0], Intensity.MAX, points)

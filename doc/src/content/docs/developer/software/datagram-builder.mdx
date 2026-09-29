@@ -7,7 +7,7 @@ sidebar:
 
 import Mermaid from "@components/Mermaid.astro";
 
-`DatagramBuilder` は, ユーザーが積んだコマンドを EtherCAT の 1 サイクルで送れる単位 (フレーム) の列へ変換するコンポーネント.
+`DatagramBuilder` は, ユーザーが積んだコマンドを 1 周期で送れる単位 (フレーム) の列へ変換するコンポーネント.
 実装は `crates/autd3-rs/src/datagram/` にある.
 
 <Mermaid
@@ -350,7 +350,7 @@ dev1 |   ---    |    ---    |
 ### フレームへの展開
 
 `Step::Each` は「デバイス毎に長さが異なる可能性のある op 列」を保持する.
-EtherCAT は全デバイスへ同時に 1 フレームを送るため, 尺を揃える必要があり, 不足分は `Nop` で埋められる.
+`UdpBus` は 1 周期に全デバイスへ 1 フレームずつ送るため, 尺を揃える必要があり, 不足分は `Nop` で埋められる.
 
 ```
         frame 0     frame 1     frame 2

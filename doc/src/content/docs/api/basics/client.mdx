@@ -17,7 +17,7 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 `Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
 `Client` を含む基礎・コマンドの API は本体パッケージが提供する.
-実機等への接続には, これとは別に [Link](/autd3-sdk/api/link/) が必要.
+接続先 (実機・[デバイスエミュレータ](/autd3-sdk/api/connection/device-emulator/)・Simulator) は [`TransportOption`](/autd3-sdk/api/connection/) で指定する.
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
@@ -26,10 +26,10 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | 引数       | 型             | 説明                 |
 | ---------- | -------------- | -------------------- |
 | `geometry` | `&Geometry`    | デバイスの物理配置   |
-| `link`     | `impl IntoLink`| リンク               |
+| `option`   | `TransportOption`    | [接続の設定](/autd3-sdk/api/connection/) |
 | `config`   | `ClientConfig` | 下記参照             |
 
-リンクの稼働状態を継続的に監視したい場合は `open_with_checker` を使い, 返り値の `Checker` を駆動する ([リンクの状態監視](/autd3-sdk/guide/state-check/) 参照).
+デバイスの稼働状態を継続的に監視したい場合は `open_with_checker` を使い, 返り値の `StateChecker` を駆動する ([状態監視](/autd3-sdk/guide/state-check/) 参照).
 
 ## API
 

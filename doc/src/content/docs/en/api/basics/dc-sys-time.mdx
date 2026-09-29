@@ -1,6 +1,6 @@
 ---
 title: DcSysTime
-description: The API and arithmetic of DcSysTime, the synchronized time on the EtherCAT distributed clock
+description: The API and arithmetic of DcSysTime, the time of the devices
 sidebar:
   order: 5
 ---
@@ -11,11 +11,17 @@ import sample from "@codes/rust/examples/api/basics/dc-sys-time.rs?raw";
 import pySample from "@codes/python/examples/api/basics/dc-sys-time.py?raw";
 import csSample from "@codes/csharp/examples/api/basics/dc-sys-time.cs?raw";
 
-`DcSysTime` is a type representing a time on the **EtherCAT distributed clock (Distributed Clock, DC)**.
+`DcSysTime` is a type representing a **time of the devices**.
 It is used with [`TransitionMode::SysTime`](/autd3-sdk/en/getting-started/tutorial/loop/), [`GpioOut::SysTimeEq`](/autd3-sdk/en/api/command/gpio/), and the like.
 
-In EtherCAT, there is a clock synchronized across all slaves (the distributed clock), and each device operates in sync with it.
+Each device has its own clock, and output switching and the like happen on this time.
 This time is a 64-bit counter in ns units, counted from 2000-01-01 00:00:00 (UTC).
+It is set to the host time when the `Client` opens, and the SDK corrects the offset from the host time.
+
+:::caution
+This version does not synchronize the time between devices.
+Each device free-runs from the time set on open, so the time of different devices drifts apart slowly with the crystal tolerance (tens of ppm).
+:::
 
 ## Construction
 

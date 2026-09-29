@@ -1,0 +1,92 @@
+---
+title: 接続 (TransportOption)
+description: UDP/IPv6 リンクローカルで AUTD3 と直接通信する
+sidebar:
+  order: 0
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/connection/udp.rs?raw";
+import pySample from "@codes/python/examples/api/connection/udp.py?raw";
+import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
+
+`Client` は, ホストの NIC から AUTD3 のデイジーチェーンへ UDP で直接つなぐ.
+通信は IPv6 のリンクローカルアドレスだけで行う. 接続の設定は `Client::open` の第 2 引数 `TransportOption` で渡す.
+Link のような通信路の差し替えは無い (ハードウェア無しで試す場合は [デバイスエミュレータ](/autd3-sdk/api/connection/device-emulator/), 音場の確認は [Simulator](/autd3-sdk/guide/simulator/) を使う).
+
+- ホストの NIC に IP アドレスを設定する必要はない (IPv6 のリンクローカルアドレスは OS が自動で付ける)
+- root / 管理者権限も, npcap などの追加ドライバも要らない (普通の UDP ソケットを使う)
+- Windows / Linux / macOS で動く
+
+使う前に, ホストのファイアウォールと NIC の設定が必要になる.
+[ホストのネットワーク設定](/autd3-sdk/getting-started/setup/network/) を参照すること.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| フィールド            | 型          | 既定値  | 説明                                                                                          |
+| --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
+| `iface`               | `Interface` | `Auto`  | デバイスをつないだ NIC. `Auto` で自動検出, `Name(..)` で名前指定                                |
+| `group`               | アドレス    | なし    | 管理メッセージのマルチキャスト (`ff02::1`) の送り先を差し替える. デバイスエミュレータと Simulator 用で, 実機では使わない |
+| `cycle`               | `Duration`  | 1 ms    | 送信周期                                                                                      |
+| `reply_timeout`       | `Duration`  | 1 ms    | 1 周期で全台の返信を待つ上限. 過ぎた周期は受信なしとして扱う                                     |
+| `response_timeout`    | `Duration`  | 200 ms  | 列挙などの管理メッセージの返信を待つ時間                                                        |
+| `enumeration_timeout` | `Duration`  | 10 s    | 列挙で台数がジオメトリに届くまで再試行する上限                                                  |
+| `sync_timeout`        | `Duration`  | 5 s     | 時刻合わせの後, 全台が同期パルスを出し始めるまで待つ上限                                        |
+
+AUTD3 は 1 台ごとに 1 フレーム分の中継遅延 (1 台あたり約 57 µs) がかかる.
+台数が多い (十数台を超える) 構成では, `reply_timeout` と `cycle` を広げること.
+
+## インターフェースの自動検出
+
+`iface` が `Auto` の場合, IPv6 リンクローカルアドレスを持つ全てのインターフェースに問い合わせ, AUTD3 が応答したものを使う.
+2 つ以上のインターフェースで応答があった場合は, 開くのに失敗するので `Name(..)` で指定すること.
+
+<CodeTabs rust={excerpt(sample, "iface")} />
+
+## 開くときの処理
+
+`Client::open` の中で, 次の処理が順に行われる (低レベルの `UdpBus::open` も同じ).
+
+1. インターフェースの決定
+1. 列挙: ホストに近い機体から順に ID (0, 1, 2, ...) を割り当てる. ID の順がジオメトリのデバイスの順になる
+1. 台数の照合: 見つかった台数がジオメトリのデバイス数と一致しなければ, 開くのに失敗する
+1. 時刻合わせ: 全台にホストの時刻を送り, 各デバイスが同期パルスを出し始めるのを待つ
+
+電源を入れた直後の機体は, リンクの確立に数秒かかることがある.
+台数が足りない間は `enumeration_timeout` まで待って再試行する.
+
+## 状態監視
+
+`Client::open_with_checker` が返す `StateChecker` は, 各デバイスの状態を次のように報告する.
+
+| 状態     | 意味                                                                     |
+| -------- | ------------------------------------------------------------------------ |
+| `Op`     | 返信があり, 同期パルスが動いている                                       |
+| `SafeOp` | 返信はあるが, 同期パルスがまだ動いていない                               |
+| `Lost`   | 返信が 10 周期続けて無い, または機体が再起動した                         |
+
+途中の 1 台を再起動すると, その機体より先の機体も全て `Lost` になる.
+`Lost` からは自動で復帰しないので, 開き直すこと.
+詳しくは [状態監視](/autd3-sdk/guide/state-check/) を参照.
+
+## 制約
+
+- デバイス間の同期は取らない. 各デバイスは開いたときに合わせた時刻から自走するので, デバイス間の位相は水晶のずれ (数十 ppm) で少しずつ離れていく
+- 実行中の機体の抜き差しには追従しない. 検出したら開き直すこと
+- ホストとデバイスの間に L2 スイッチを挟むことは推奨しない. 挟む場合は MLD snooping を無効にすること
+
+## エラー
+
+通信の失敗は `Error::Network` として返る. 原因は `UdpError` で, `source()` を辿って取り出せる (Python / C# では共通の例外で届く).
+主なものは次の通り.
+
+| `UdpError`             | 原因                                                              |
+| ---------------------- | ----------------------------------------------------------------- |
+| `NoInterfaceFound`     | どのインターフェースでも AUTD3 が応答しなかった                   |
+| `AmbiguousInterface`   | 2 つ以上のインターフェースで応答があった. `iface` で指定する       |
+| `DeviceCountMismatch`  | 見つかった台数がジオメトリのデバイス数と一致しない                |
+| `EnumerationTimeout`   | `enumeration_timeout` までに台数がそろわなかった                   |
+| `SyncTimeout`          | `sync_timeout` までに同期パルスが動き出さなかった                  |
