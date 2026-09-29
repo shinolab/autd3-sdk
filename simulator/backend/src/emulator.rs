@@ -1,7 +1,7 @@
 use core::f32::consts::PI;
 
+use autd3_rs::geometry::Geometry;
 use autd3_rs_firmware_emulator::{Device as EmuDevice, FpgaEmulator};
-use autd3_rs_link_remote::DeviceLayout;
 use autd3_rs_simulator_protocol::{DeviceState, ServerMsg, TransState, TransducerInfo};
 
 const ULTRASOUND_PERIOD_COUNT: f32 = 512.0;
@@ -72,20 +72,23 @@ fn gpio_waveform(fpga: &FpgaEmulator, raw: u64) -> Vec<u8> {
 }
 
 #[must_use]
-pub fn geometry_msg_from_layout(layout: &[DeviceLayout]) -> ServerMsg {
-    let transducers = layout
+pub fn geometry_msg(geometry: &Geometry) -> ServerMsg {
+    let transducers = geometry
         .iter()
         .flat_map(|dev| {
-            dev.transducers.iter().map(|t| TransducerInfo {
-                pos: t.pos,
-                dir: t.dir,
-            })
+            dev.positions()
+                .iter()
+                .zip(dev.directions())
+                .map(|(pos, dir)| TransducerInfo {
+                    pos: [pos.x, pos.y, pos.z],
+                    dir: [dir.x, dir.y, dir.z],
+                })
         })
         .collect();
     ServerMsg::Geometry { transducers }
 }
 
-pub fn extract_device_states(devices: &[EmuDevice]) -> Vec<DeviceState> {
+pub fn extract_device_states(devices: &[&EmuDevice]) -> Vec<DeviceState> {
     devices
         .iter()
         .map(|dev| {
@@ -123,7 +126,7 @@ pub fn extract_device_states(devices: &[EmuDevice]) -> Vec<DeviceState> {
         .collect()
 }
 
-pub fn extract_states_into(devices: &[EmuDevice], out: &mut Vec<TransState>, mod_enabled: bool) {
+pub fn extract_states_into(devices: &[&EmuDevice], out: &mut Vec<TransState>, mod_enabled: bool) {
     out.clear();
     for dev in devices {
         let fpga = dev.fpga();
@@ -152,9 +155,11 @@ mod tests {
     use core::num::NonZeroU16;
 
     use approx::assert_relative_eq;
-    use autd3_rs::commands::{Modulation, Nop, Pattern, SetPulseWidthTable};
+    use autd3_rs::commands::{
+        FixedUpdateRate, Modulation, Nop, Pattern, SetOutputMask, SetPulseWidthTable, SetSilencer,
+    };
+    use autd3_rs::geometry::{Autd3, Point3, UnitQuaternion};
     use autd3_rs::value::{Intensity, Phase, SamplingConfig};
-    use autd3_rs_link_remote::TransducerLayout;
 
     use crate::harness::Harness;
 
@@ -298,40 +303,20 @@ mod tests {
 
     #[test]
     fn geometry_message_flattens_every_device() {
-        let layout = vec![
-            DeviceLayout {
-                transducers: vec![
-                    TransducerLayout {
-                        pos: [0.0, 0.0, 0.0],
-                        dir: [0.0, 0.0, 1.0],
-                    },
-                    TransducerLayout {
-                        pos: [10.16, 0.0, 0.0],
-                        dir: [0.0, 0.0, 1.0],
-                    },
-                ],
-            },
-            DeviceLayout {
-                transducers: vec![TransducerLayout {
-                    pos: [0.0, 200.0, 0.0],
-                    dir: [0.0, 0.0, -1.0],
-                }],
-            },
-        ];
-        let ServerMsg::Geometry { transducers } = geometry_msg_from_layout(&layout) else {
+        let geometry = Geometry::new(vec![
+            Autd3::default(),
+            Autd3::new(Point3::new(0.0, 200.0, 0.0), UnitQuaternion::identity()),
+        ]);
+        let ServerMsg::Geometry { transducers } = geometry_msg(&geometry) else {
             panic!("expected a geometry message");
         };
-        assert_eq!(transducers.len(), 3);
-        assert_relative_eq!(transducers[1].pos[..], [10.16, 0.0, 0.0][..]);
-        assert_relative_eq!(transducers[2].dir[..], [0.0, 0.0, -1.0][..]);
-    }
-
-    #[test]
-    fn geometry_message_of_an_empty_layout_is_empty() {
-        let ServerMsg::Geometry { transducers } = geometry_msg_from_layout(&[]) else {
-            panic!("expected a geometry message");
-        };
-        assert!(transducers.is_empty());
+        assert_eq!(transducers.len(), 2 * Autd3::NUM_TRANSDUCERS);
+        let second = geometry.iter().nth(1).unwrap().position(0);
+        assert_relative_eq!(
+            transducers[Autd3::NUM_TRANSDUCERS].pos[..],
+            [second.x, second.y, second.z][..]
+        );
+        assert_relative_eq!(transducers[0].dir[..], [0.0, 0.0, 1.0][..]);
     }
 
     #[test]
@@ -368,5 +353,47 @@ mod tests {
         assert_eq!(state.mod_buffer, vec![0xFF, 0xFF]);
         assert_eq!(state.gpio_types, [0, 0, 0, 0]);
         assert!(state.gpio_out.iter().all(|w| w == &constant_wave(0)));
+    }
+
+    #[test]
+    fn every_transducer_of_every_device_has_a_state() {
+        let mut h = Harness::new(2);
+        h.send(Nop);
+        let expected: usize = h.devices.iter().map(|d| d.fpga().num_transducers()).sum();
+        assert_eq!(h.states().len(), expected);
+        assert_eq!(h.device_states().len(), 2);
+    }
+
+    #[test]
+    fn output_mask_is_reflected_in_the_state() {
+        let mut h = Harness::new(1);
+        h.send(Nop);
+        assert!(h.states().iter().all(|s| s.enable));
+
+        let num_transducers = h.fpga().num_transducers();
+        let masks = vec![(0..num_transducers).map(|i| i % 2 == 0).collect::<Vec<_>>()];
+        h.send(SetOutputMask { masks: &masks });
+
+        let states = h.states();
+        assert_eq!(states.len(), num_transducers);
+        assert!(states.iter().step_by(2).all(|s| s.enable));
+        assert!(states.iter().skip(1).step_by(2).all(|s| !s.enable));
+    }
+
+    #[test]
+    fn silencer_mode_switches_the_reported_registers() {
+        let mut h = Harness::new(1);
+        h.send(Nop);
+        assert!(!h.device_states()[0].silencer_fixed_update_rate);
+
+        h.send(SetSilencer::new(FixedUpdateRate {
+            intensity: NonZeroU16::new(3).unwrap(),
+            phase: NonZeroU16::new(5).unwrap(),
+        }));
+
+        let state = h.device_states().into_iter().next().unwrap();
+        assert!(state.silencer_fixed_update_rate);
+        assert_eq!(state.silencer_intensity, 3);
+        assert_eq!(state.silencer_phase, 5);
     }
 }

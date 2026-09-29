@@ -2,39 +2,67 @@ mod control;
 mod emulator;
 #[cfg(test)]
 mod harness;
-mod link;
-mod mdns;
 mod server;
 
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{Ipv6Addr, SocketAddrV6};
 use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use autd3_rs::geometry::{Autd3, Geometry};
+use autd3_rs::udp::emulator::UdpEmulator;
 use autd3_rs_core::rt::{TracingOption, init_tracing};
-use autd3_rs_link_remote::{
-    BusOption, DeviceLayout, RemoteLinkError, RemoteServer, RemoteServerOption,
-};
-use autd3_rs_simulator_protocol::ServerMsg;
+use autd3_rs_simulator_protocol::{DeviceState, ServerMsg, TransState};
 use clap::Parser;
 use tokio::sync::watch;
 
 use crate::control::ControlState;
-use crate::emulator::geometry_msg_from_layout;
-use crate::link::{EmulatorLink, SharedDeviceStates, SharedStates};
+use crate::emulator::{extract_device_states, extract_states_into, geometry_msg};
 use crate::server::{AppState, router};
+
+pub const DEFAULT_GROUP_PORT: u16 = 44336;
+const STATE_PERIOD: Duration = Duration::from_millis(33);
+const DEVICE_STATE_PERIOD: Duration = Duration::from_millis(200);
+
+type SharedStates = Arc<Mutex<Vec<TransState>>>;
+type SharedDeviceStates = Arc<Mutex<Vec<DeviceState>>>;
 
 #[derive(Parser)]
 struct Args {
     #[arg(long, default_value_t = 8081)]
     http_port: u16,
-    #[arg(long, default_value_t = 8080)]
-    link_port: u16,
+    #[arg(
+        long,
+        default_value_t = SocketAddrV6::new(Ipv6Addr::LOCALHOST, DEFAULT_GROUP_PORT, 0, 0),
+        help = "Loopback address the emulated devices take the multicast management messages on; \
+                open the client on the same host with TransportOption.group set to it"
+    )]
+    group: SocketAddrV6,
+    #[arg(
+        long,
+        help = "Geometry JSON (Geometry::to_json). Omit for a single AUTD3 at the origin"
+    )]
+    geometry: Option<PathBuf>,
     #[arg(long)]
     web_dir: Option<PathBuf>,
-    #[arg(long)]
-    no_mdns: bool,
+}
+
+fn load_geometry(path: Option<&PathBuf>) -> Result<Geometry> {
+    let Some(path) = path else {
+        return Ok(Geometry::new(vec![Autd3::default()]));
+    };
+    let json = std::fs::read_to_string(path)
+        .with_context(|| format!("reading the geometry {}", path.display()))?;
+    let geometry = Geometry::from_json(&json)
+        .with_context(|| format!("parsing the geometry {}", path.display()))?;
+    anyhow::ensure!(
+        geometry.num_devices() > 0,
+        "the geometry {} has no device",
+        path.display()
+    );
+    Ok(geometry)
 }
 
 #[tokio::main]
@@ -42,67 +70,33 @@ async fn main() -> Result<()> {
     let _log_guard = init_tracing(TracingOption::default());
     let args = Args::parse();
 
+    let geometry = load_geometry(args.geometry.as_ref())?;
     let control = Arc::new(ControlState::default());
     let states: SharedStates = Arc::new(Mutex::new(Vec::new()));
     let device_states: SharedDeviceStates = Arc::new(Mutex::new(Vec::new()));
 
-    let empty_geometry: Arc<str> = serde_json::to_string(&ServerMsg::Geometry {
-        transducers: Vec::new(),
-    })?
-    .into();
-    let (geometry_tx, geometry_rx) = watch::channel(empty_geometry);
+    let emulator = Arc::new(
+        UdpEmulator::spawn_at(args.group, geometry.num_devices())
+            .with_context(|| format!("binding the emulated devices at {}", args.group))?,
+    );
+    tracing::info!(
+        "{} emulated device(s) take management messages on {}",
+        geometry.num_devices(),
+        emulator.group()
+    );
+    spawn_sampler(
+        Arc::clone(&emulator),
+        Arc::clone(&states),
+        Arc::clone(&device_states),
+        Arc::clone(&control),
+    );
 
-    let link_addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, args.link_port));
-    let advertise = !args.no_mdns;
-    {
-        let states = Arc::clone(&states);
-        let device_states = Arc::clone(&device_states);
-        let control = Arc::clone(&control);
-        std::thread::spawn(move || {
-            let factory = move |layout: &[DeviceLayout]| -> Result<EmulatorLink, RemoteLinkError> {
-                match serde_json::to_string(&geometry_msg_from_layout(layout)) {
-                    Ok(json) => {
-                        let _ = geometry_tx.send(json.into());
-                    }
-                    Err(e) => tracing::error!("failed to serialize client geometry: {e}"),
-                }
-                let counts: Vec<usize> = layout.iter().map(|d| d.transducers.len()).collect();
-                Ok(EmulatorLink::new(
-                    counts,
-                    Arc::clone(&states),
-                    Arc::clone(&device_states),
-                    Arc::clone(&control),
-                ))
-            };
-            tracing::info!("remote link server listening on {link_addr}");
-            let option = RemoteServerOption {
-                bus: BusOption {
-                    rt_priority: None,
-                    ..BusOption::default()
-                },
-                ..RemoteServerOption::new(link_addr)
-            };
-            let mut server = match RemoteServer::new(option, factory) {
-                Ok(server) => server,
-                Err(e) => {
-                    tracing::error!("remote link server stopped: {e}");
-                    return;
-                }
-            };
-            let port = server
-                .local_addr()
-                .map_or(link_addr.port(), |addr| addr.port());
-            let _advertisement = advertise.then(|| mdns::advertise(port)).flatten();
-            if let Err(e) = server.serve() {
-                tracing::error!("remote link server stopped: {e}");
-            }
-        });
-    }
+    let geometry_json: Arc<str> = serde_json::to_string(&geometry_msg(&geometry))?.into();
+    let (_geometry_tx, geometry_rx) = watch::channel(geometry_json);
 
-    let state_rx = spawn_json_broadcaster(states, Duration::from_millis(33), |states| {
-        ServerMsg::State { states }
-    })?;
-    let device_rx = spawn_json_broadcaster(device_states, Duration::from_millis(200), |devices| {
+    let state_rx =
+        spawn_json_broadcaster(states, STATE_PERIOD, |states| ServerMsg::State { states })?;
+    let device_rx = spawn_json_broadcaster(device_states, DEVICE_STATE_PERIOD, |devices| {
         ServerMsg::DeviceStates { devices }
     })?;
 
@@ -122,6 +116,31 @@ async fn main() -> Result<()> {
     );
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+fn spawn_sampler(
+    emulator: Arc<UdpEmulator>,
+    states: SharedStates,
+    device_states: SharedDeviceStates,
+    control: Arc<ControlState>,
+) {
+    std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        loop {
+            let mod_enabled = control.mod_enabled.load(Ordering::Relaxed);
+            let devices = emulator.with_devices(|devices| {
+                extract_states_into(devices, &mut buffer, mod_enabled);
+                extract_device_states(devices)
+            });
+            if let Ok(mut guard) = states.lock() {
+                guard.clone_from(&buffer);
+            }
+            if let Ok(mut guard) = device_states.lock() {
+                *guard = devices;
+            }
+            std::thread::sleep(STATE_PERIOD);
+        }
+    });
 }
 
 fn spawn_json_broadcaster<T, F>(
