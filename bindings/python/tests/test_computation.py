@@ -611,17 +611,9 @@ def test_device_accessors() -> None:
     assert len(dev.center()) == 3
 
 
-def test_link_options_construct() -> None:
-    import autd3_link_nop as nop
-    import autd3_link_remote as remote
-    import autd3_link_twincat as twincat
-
-    remote.RemoteLinkOption("127.0.0.1:8080")
-    remote.RemoteLinkOption("127.0.0.1:8080", timeout=autd3.Duration.from_millis(500))
-    twincat.TwinCATLinkOption.local()
-    twincat.TwinCATLinkOption.remote("169.254.1.1", "1.2.3.4.1.1")
-    twincat.TwinCATLinkOption.local_with_timeouts(connect=autd3.Duration.from_millis(100))
-    nop.Nop()
+def test_transport_options_construct() -> None:
+    autd3.TransportOption()
+    autd3.TransportOption(iface="eth0", cycle=autd3.Duration.from_millis(2))
 
 
 def test_loop_behavior_and_transition_mode() -> None:

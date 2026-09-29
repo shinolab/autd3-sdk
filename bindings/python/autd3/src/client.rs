@@ -3,16 +3,16 @@ use std::sync::{Arc, Mutex};
 use crate::config::ClientConfig;
 use crate::datagram::{DatagramBuilder, Frame};
 use crate::future::{completed_into_py, future_into_py};
+use crate::udp::TransportOption;
 use autd3_python_capsule::{
-    ClientBackend, LegacyClientBackend, ResponseToken, capsule_of, geometry_from_capsule,
-    take_client_opener, to_pyerr, to_pyerr_gil,
+    ClientBackend, ResponseToken, capsule_of, geometry_from_capsule, to_pyerr, to_pyerr_gil,
 };
 use autd3_rs::Geometry;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-#[pyclass(name = "LinkStatus", module = "autd3")]
-pub struct LinkStatus {
+#[pyclass(name = "DeviceStatus", module = "autd3")]
+pub struct DeviceStatus {
     #[pyo3(get)]
     device_states: Vec<String>,
     #[pyo3(get)]
@@ -24,7 +24,7 @@ pub struct LinkStatus {
 }
 
 #[pymethods]
-impl LinkStatus {
+impl DeviceStatus {
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         other
             .extract::<PyRef<'_, Self>>()
@@ -33,7 +33,7 @@ impl LinkStatus {
 
     fn __repr__(&self) -> String {
         format!(
-            "LinkStatus(devices={:?}, all_op={}, any_lost={}, recoveries={})",
+            "DeviceStatus(devices={:?}, all_op={}, any_lost={}, recoveries={})",
             self.device_states, self.all_op, self.any_lost, self.recoveries
         )
     }
@@ -93,15 +93,17 @@ impl Client {
     fn open<'py>(
         py: Python<'py>,
         geometry: &Bound<'py, PyAny>,
-        link: &Bound<'py, PyAny>,
+        option: &TransportOption,
         config: &ClientConfig,
     ) -> PyResult<Bound<'py, PyAny>> {
         let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
-        let opener = take_client_opener(&capsule_of(link)?)?;
+        let option = option.inner.clone();
         let config = config.inner;
         future_into_py(py, async move {
             let geometry_for_client = Arc::new(geometry.clone());
-            let backend = opener(geometry, config).await.map_err(to_pyerr_gil)?;
+            let backend = crate::udp::open(geometry, option, config)
+                .await
+                .map_err(to_pyerr_gil)?;
             Ok(Client {
                 backend: Arc::from(backend),
                 geometry: geometry_for_client,
@@ -113,16 +115,19 @@ impl Client {
     fn open_with_checker<'py>(
         py: Python<'py>,
         geometry: &Bound<'py, PyAny>,
-        link: &Bound<'py, PyAny>,
+        option: &TransportOption,
         config: &ClientConfig,
     ) -> PyResult<Bound<'py, PyAny>> {
         let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
-        let opener = take_client_opener(&capsule_of(link)?)?;
+        let option = option.inner.clone();
         let config = config.inner;
         future_into_py(py, async move {
             let geometry_for_client = Arc::new(geometry.clone());
-            let backend: Arc<dyn ClientBackend> =
-                Arc::from(opener(geometry, config).await.map_err(to_pyerr_gil)?);
+            let backend: Arc<dyn ClientBackend> = Arc::from(
+                crate::udp::open(geometry, option, config)
+                    .await
+                    .map_err(to_pyerr_gil)?,
+            );
             Ok((
                 Client {
                     backend: Arc::clone(&backend),
@@ -290,7 +295,6 @@ impl ResponseFuture {
 
 pub(crate) enum CheckerSource {
     Current(Arc<dyn ClientBackend>),
-    Legacy(Arc<dyn LegacyClientBackend>),
 }
 
 #[pyclass(name = "Checker", module = "autd3")]
@@ -300,12 +304,11 @@ pub struct Checker {
 
 #[pymethods]
 impl Checker {
-    fn check(&self, py: Python<'_>) -> PyResult<LinkStatus> {
+    fn check(&self, py: Python<'_>) -> PyResult<DeviceStatus> {
         let status = match &self.source {
             CheckerSource::Current(backend) => backend.check_status().map_err(|e| to_pyerr(py, e)),
-            CheckerSource::Legacy(backend) => backend.check_status().map_err(|e| to_pyerr(py, e)),
         }?;
-        Ok(LinkStatus {
+        Ok(DeviceStatus {
             device_states: status.device_states,
             all_op: status.all_op,
             any_lost: status.any_lost,

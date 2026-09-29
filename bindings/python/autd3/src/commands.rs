@@ -9,7 +9,6 @@ use autd3_rs::commands::{
     Synchronize as CoreSynchronize,
 };
 use autd3_rs::geometry::Autd3;
-use autd3_rs::legacy::LegacyDatagramBuilder;
 use autd3_rs::value::{Phase, PulseWidth as CorePulseWidth};
 
 use crate::ops::DcSysTime;
@@ -32,7 +31,6 @@ fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
 
 pub(crate) trait PushCommand: Send + Sync {
     fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>);
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>);
 }
 
 macro_rules! simple_command {
@@ -42,8 +40,6 @@ macro_rules! simple_command {
 
         impl PushCommand for $data {
             fn push_into<'a>(&'a $self, $builder: &mut CoreDatagramBuilder<'a>) $body
-
-            fn push_legacy_into<'a>(&'a $self, $builder: &mut LegacyDatagramBuilder<'a>) $body
         }
 
         #[pyclass(name = $pyname, module = "autd3.commands")]
@@ -108,10 +104,6 @@ struct ForceFanCmd {
 
 impl PushCommand for ForceFanCmd {
     fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        builder.push(CoreForceFan { value: self.value });
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
         builder.push(CoreForceFan { value: self.value });
     }
 }
@@ -207,17 +199,6 @@ struct SetSilencerCmd {
 
 impl PushCommand for SetSilencerCmd {
     fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        match self.config {
-            SilencerConfigKind::Completion(c) => {
-                builder.push(SetSilencer::new(c));
-            }
-            SilencerConfigKind::UpdateRate(c) => {
-                builder.push(SetSilencer::new(c));
-            }
-        }
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
         match self.config {
             SilencerConfigKind::Completion(c) => {
                 builder.push(SetSilencer::new(c));
@@ -374,12 +355,6 @@ impl PushCommand for SetGpioOutCmd {
             outputs: self.outputs,
         });
     }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
-        builder.push(SetGpioOut {
-            outputs: self.outputs,
-        });
-    }
 }
 
 #[pyclass(name = "SetGpioOut", module = "autd3.commands")]
@@ -419,12 +394,6 @@ impl PushCommand for EmulateGpioInCmd {
             values: self.values,
         });
     }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
-        builder.push(EmulateGpioIn {
-            values: self.values,
-        });
-    }
 }
 
 #[pyclass(name = "EmulateGpioIn", module = "autd3.commands")]
@@ -458,12 +427,6 @@ struct SetOutputMaskCmd {
 
 impl PushCommand for SetOutputMaskCmd {
     fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        builder.push(SetOutputMask {
-            masks: self.masks.as_slice(),
-        });
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
         builder.push(SetOutputMask {
             masks: self.masks.as_slice(),
         });
@@ -507,12 +470,6 @@ struct SetPhaseCorrectionCmd {
 
 impl PushCommand for SetPhaseCorrectionCmd {
     fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        builder.push(SetPhaseCorrection {
-            phases: self.phases.as_slice(),
-        });
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
         builder.push(SetPhaseCorrection {
             phases: self.phases.as_slice(),
         });
@@ -563,10 +520,6 @@ struct SetPulseWidthTableCmd {
 
 impl PushCommand for SetPulseWidthTableCmd {
     fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        builder.push(CoreSetPulseWidthTable { table: &self.table });
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
         builder.push(CoreSetPulseWidthTable { table: &self.table });
     }
 }

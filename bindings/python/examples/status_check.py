@@ -8,7 +8,6 @@ import asyncio
 import signal
 
 import autd3
-import autd3_link_echocat as echocat
 
 CHECK_INTERVAL = 0.1
 
@@ -18,7 +17,7 @@ async def main() -> None:
 
     client, checker = await autd3.Client.open_with_checker(
         geometry,
-        echocat.EchocatLinkOption(),
+        autd3.TransportOption(),
         autd3.ClientConfig(),
     )
 

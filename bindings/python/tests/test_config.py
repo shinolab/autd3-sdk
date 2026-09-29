@@ -22,7 +22,6 @@ def test_rt_schedule_policy_is_settable() -> None:
         autd3.RtSchedulePolicy.RoundRobin,
     ):
         autd3.ClientConfig(rt_policy=policy)
-        autd3.LegacyClientConfig(rt_policy=policy)
 
 
 def test_require_supported_firmware_is_settable() -> None:
@@ -33,7 +32,6 @@ def test_require_supported_firmware_is_settable() -> None:
 def test_rt_priority_accepts_a_priority_or_none() -> None:
     for priority in (autd3.RtPriority(49), autd3.RtPriority.MIN, autd3.RtPriority.MAX, None):
         autd3.ClientConfig(rt_priority=priority)
-        autd3.LegacyClientConfig(rt_priority=priority)
 
 
 def test_rt_priority_rejects_an_out_of_range_value() -> None:
@@ -54,8 +52,6 @@ def test_zero_valued_config_fields_are_rejected() -> None:
         autd3.ClientConfig(timeout_cycles=0)
     with pytest.raises(ValueError):
         autd3.ClientConfig(max_inflight=0)
-    with pytest.raises(ValueError):
-        autd3.LegacyClientConfig(timeout_cycles=0)
 
 
 def test_the_mutable_capsule_keeps_its_buffer_alive() -> None:

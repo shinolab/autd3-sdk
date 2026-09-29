@@ -5,10 +5,10 @@ mod commands;
 mod config;
 mod datagram;
 mod future;
-mod legacy;
 mod ops;
 mod runtime;
 mod stm;
+mod udp;
 
 #[pymodule]
 fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -21,17 +21,13 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<client::Checker>()?;
     m.add_class::<client::Response>()?;
     m.add_class::<client::ResponseFuture>()?;
-    m.add_class::<client::LinkStatus>()?;
+    m.add_class::<client::DeviceStatus>()?;
+    m.add_class::<udp::TransportOption>()?;
+    m.add_class::<udp::UdpEmulator>()?;
     m.add_class::<client::FpgaState>()?;
     m.add_class::<config::ClientConfig>()?;
     m.add_class::<config::RtPriority>()?;
     m.add_class::<config::RtSchedulePolicy>()?;
-    m.add_class::<legacy::LegacyClient>()?;
-    m.add_class::<legacy::LegacyClientConfig>()?;
-    m.add_class::<legacy::LegacyDatagramBuilder>()?;
-    m.add_class::<legacy::LegacyFrames>()?;
-    m.add_class::<legacy::LegacyFrame>()?;
-    m.add_class::<legacy::LegacyChangePatternBank>()?;
     m.add_class::<datagram::DatagramBuilder>()?;
     m.add_class::<datagram::Frames>()?;
     m.add_class::<datagram::Frame>()?;

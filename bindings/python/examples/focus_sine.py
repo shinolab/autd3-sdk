@@ -10,7 +10,6 @@ import signal
 import numpy as np
 
 import autd3
-import autd3_link_echocat as echocat
 import autd3_modulation as modulation
 import autd3_pattern as pattern
 from autd3.units import Hz, m, s
@@ -21,7 +20,7 @@ async def main() -> None:
 
     async with await autd3.Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
         print("devices:", client.num_devices())

@@ -420,24 +420,6 @@ impl DatagramBuilder {
         }
     }
 
-    pub(crate) fn pop_pushed(&mut self, obj: &Bound<'_, PyAny>) -> PyResult<Pending> {
-        self.push(obj)?;
-        self.pending
-            .pop()
-            .ok_or_else(|| PyValueError::new_err("Unknown datagram type"))
-    }
-
-    pub(crate) fn pop_pushed_each(
-        &mut self,
-        py: Python<'_>,
-        assign: &Bound<'_, PyAny>,
-    ) -> PyResult<Pending> {
-        self.push_each(py, assign)?;
-        self.pending
-            .pop()
-            .ok_or_else(|| PyValueError::new_err("Unknown datagram type"))
-    }
-
     fn dc_offset_ns(&self) -> i64 {
         self.backend.as_ref().map_or(0, |b| b.dc_offset_ns())
     }
