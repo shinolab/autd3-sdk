@@ -175,6 +175,56 @@ pub fn select_boot_slot(a: Option<SlotCandidate>, b: Option<SlotCandidate>) -> O
     select_slot(eligible(a), eligible(b)).or_else(|| select_slot(any(a), any(b)))
 }
 
+pub const TRANSPORT_MARKER_OFFSET: u32 = IMAGE_VECTOR_BYTES;
+pub const TRANSPORT_MARKER_MAGIC: u32 = u32::from_le_bytes(*b"A3TR");
+pub const TRANSPORT_MARKER_BYTES: usize = 8;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[non_exhaustive]
+pub enum Transport {
+    EtherCat,
+    Udp,
+}
+
+impl Transport {
+    #[must_use]
+    pub const fn as_u32(self) -> u32 {
+        match self {
+            Self::EtherCat => 0,
+            Self::Udp => 1,
+        }
+    }
+
+    #[must_use]
+    pub const fn from_u32(value: u32) -> Option<Self> {
+        match value {
+            0 => Some(Self::EtherCat),
+            1 => Some(Self::Udp),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn marker(self) -> [u8; TRANSPORT_MARKER_BYTES] {
+        let magic = TRANSPORT_MARKER_MAGIC.to_le_bytes();
+        let kind = self.as_u32().to_le_bytes();
+        [
+            magic[0], magic[1], magic[2], magic[3], kind[0], kind[1], kind[2], kind[3],
+        ]
+    }
+}
+
+#[must_use]
+pub const fn image_transport(marker: &[u8; TRANSPORT_MARKER_BYTES]) -> Option<Transport> {
+    let magic = u32::from_le_bytes([marker[0], marker[1], marker[2], marker[3]]);
+    if magic != TRANSPORT_MARKER_MAGIC {
+        return Some(Transport::EtherCat);
+    }
+    Transport::from_u32(u32::from_le_bytes([
+        marker[4], marker[5], marker[6], marker[7],
+    ]))
+}
+
 pub const CRC32_INIT: u32 = 0xFFFF_FFFF;
 
 #[must_use]
@@ -304,6 +354,29 @@ mod tests {
         assert_eq!(select_boot_slot(spent(1), spent(2)), Some((Slot::B, 2)));
         assert_eq!(select_boot_slot(None, spent(2)), Some((Slot::B, 2)));
         assert_eq!(select_boot_slot(None, None), None);
+    }
+
+    #[test]
+    fn an_image_without_a_marker_is_ethercat() {
+        let code = [0x00, 0x48, 0x2D, 0xE9, 0x04, 0xB0, 0x8D, 0xE2];
+        assert_eq!(image_transport(&code), Some(Transport::EtherCat));
+        assert_eq!(image_transport(&[0xFF; 8]), Some(Transport::EtherCat));
+    }
+
+    #[test]
+    fn a_marker_names_its_transport() {
+        assert_eq!(
+            image_transport(&Transport::Udp.marker()),
+            Some(Transport::Udp)
+        );
+        assert_eq!(
+            image_transport(&Transport::EtherCat.marker()),
+            Some(Transport::EtherCat)
+        );
+        let mut unknown = Transport::Udp.marker();
+        unknown[4] = 7;
+        assert_eq!(image_transport(&unknown), None);
+        assert_eq!(&Transport::Udp.marker()[..4], b"A3TR");
     }
 
     #[test]

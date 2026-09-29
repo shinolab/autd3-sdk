@@ -144,19 +144,6 @@ fn reset_landing_inside_a_drain_step_still_rolls_back_the_discarded_frame() {
 }
 
 #[test]
-fn reset_between_tx_store_and_publish_is_republished_by_the_same_drain_step() {
-    let mut h = Harness::new();
-
-    h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
-    h.arm_isr_reset();
-
-    assert!(h.process_one());
-    assert_eq!(h.ack(), 0xFF);
-    assert_eq!(h.expected_seq(), 0);
-    assert!(!h.process_one());
-}
-
-#[test]
 fn fifo_overflow_drops_beyond_capacity_and_accepts_after_drain() {
     let mut h = Harness::new();
 

@@ -6,7 +6,8 @@ pub use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 pub use autd3_cpu_wire::payload::{UpdateBeginPayload, UpdateChunkPayload};
 use autd3_cpu_wire::update::{
     CRC32_INIT, IMAGE_HEADER_ATTEMPTS_OFFSET, IMAGE_HEADER_STATUS_OFFSET, IMAGE_MAX_ATTEMPTS,
-    IMAGE_STATUS_CONFIRMED, SlotCandidate, next_attempts, select_boot_slot,
+    IMAGE_STATUS_CONFIRMED, SlotCandidate, TRANSPORT_MARKER_BYTES, TRANSPORT_MARKER_OFFSET,
+    Transport, image_transport, next_attempts, select_boot_slot,
 };
 pub use autd3_cpu_wire::update::{
     FLASH_PAGE_BYTES, FLASH_SECTOR_BYTES, ImageHeader, SLOT_BYTES, SLOT_HEADER_BYTES, Slot,
@@ -256,6 +257,16 @@ impl Cpu {
         self.update.state.set(State::Idle);
         if image_crc32(port, slot, length)? != crc32 {
             return Err(Error::UpdateImageInvalid);
+        }
+        let mut marker = [0u8; TRANSPORT_MARKER_BYTES];
+        slot_read(
+            port,
+            slot,
+            SLOT_HEADER_BYTES + TRANSPORT_MARKER_OFFSET,
+            &mut marker,
+        )?;
+        if image_transport(&marker) != Some(Transport::Udp) {
+            return Err(Error::UpdateTransportMismatch);
         }
         let header = ImageHeader::new_trial(generation, length, crc32);
         slot_write(port, slot, 0, header.as_bytes())?;

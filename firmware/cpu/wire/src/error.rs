@@ -18,6 +18,7 @@ crate::wire_enum! {
         FpgaUpdateInProgress = 0x10,
         FpgaReconfigFailed = 0x11,
         UpdateActivating = 0x12,
+        UpdateTransportMismatch = 0x13,
     }
 }
 
@@ -32,10 +33,10 @@ impl Error {
             Self::InvalidTransitionMode => "invalid transition mode for the target loop behavior",
             Self::MissTransitionTime => "sys-time transition is too close to now (would be missed)",
             Self::FpgaTimeout => "FPGA did not acknowledge a register update in time",
-            Self::SyncNotReady => "EtherCAT DC is not configured (no SYNC0 time available)",
-            Self::InvalidSync0Cycle => {
-                "invalid Sync0 cycle time (master's DC config missing or not a multiple of 500us)"
+            Self::SyncNotReady => {
+                "the sync pulse is not running yet (the device has not received SetTime)"
             }
+            Self::InvalidSync0Cycle => "invalid sync cycle time (not a multiple of 500us)",
             Self::UpdateNotStarted => "firmware update session is not open (UpdateBegin required)",
             Self::UpdateImageInvalid => "firmware image CRC32 mismatch after write-back",
             Self::UpdateFlash => "serial flash erase/program/read failed",
@@ -54,6 +55,9 @@ impl Error {
             }
             Self::UpdateActivating => {
                 "a firmware activation is pending; the device reboots within 100 ms"
+            }
+            Self::UpdateTransportMismatch => {
+                "the firmware image is not a UDP firmware (EtherCAT images are rejected)"
             }
         }
     }

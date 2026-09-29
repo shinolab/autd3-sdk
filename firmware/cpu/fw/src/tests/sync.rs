@@ -2,10 +2,7 @@ use crate::params::{
     ADDR_CTL_FLAG, ADDR_ECAT_SYNC_CYCLE_0, ADDR_ECAT_SYNC_CYCLE_1, ADDR_ECAT_SYNC_TIME_0,
     ADDR_MOD_CYCLE0, CTL_FLAG_SYNC_SET,
 };
-use crate::proto::{
-    Cmd, DEVICE_TO_HOST_BYTES, Error, HOST_TO_DEVICE_BYTES, PAYLOAD_BYTES, WIRE_RX_FRAME_BYTES,
-    WIRE_RX_GAP_END, WIRE_RX_GAP_START,
-};
+use crate::proto::{Cmd, DEVICE_TO_HOST_BYTES, Error, HOST_TO_DEVICE_BYTES, PAYLOAD_BYTES};
 use crate::tests::builders::{config_mod, write_foci_buffer, write_mod_buffer};
 use crate::tests::mock::{Frame, Harness};
 
@@ -151,7 +148,4 @@ fn struct_sizes_match_spec() {
     assert_eq!(HOST_TO_DEVICE_BYTES, 626);
     assert_eq!(HOST_TO_DEVICE_BYTES, 2 + PAYLOAD_BYTES);
     assert_eq!(DEVICE_TO_HOST_BYTES, 2);
-    assert_eq!(WIRE_RX_FRAME_BYTES, 628);
-    assert_eq!(WIRE_RX_FRAME_BYTES, HOST_TO_DEVICE_BYTES + 2);
-    assert_eq!(WIRE_RX_GAP_END - WIRE_RX_GAP_START, 2);
 }

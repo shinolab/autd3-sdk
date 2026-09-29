@@ -1,4 +1,3 @@
-use core::cell::Cell;
 use std::boxed::Box;
 use std::rc::Rc;
 use std::vec;
@@ -21,8 +20,8 @@ use crate::params::{
 };
 use crate::port::{FlashError, Port};
 use crate::proto::{
-    Cmd, EMISSION_RAM_WORDS, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS, PAYLOAD_BYTES, Telemetry,
-    TxFrame, WIRE_RX_FRAME_BYTES, WIRE_RX_GAP_END, WIRE_RX_GAP_START,
+    Cmd, EMISSION_RAM_WORDS, HOST_TO_DEVICE_BYTES, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS,
+    PAYLOAD_BYTES, Telemetry, TxFrame,
 };
 use autd3_cpu_wire::fpga_update::{FPGA_FLASH_BYTES, FPGA_GOLDEN_REGION_END, FPGA_SECTOR_BYTES};
 use autd3_cpu_wire::update::{FLASH_BYTES, FLASH_SECTOR_BYTES, LOADER_REGION_END, crc32};
@@ -36,9 +35,7 @@ const LATCH_MASK: u16 = CTL_FLAG_MOD_SET
     | CTL_FLAG_DEBUG_SET
     | CTL_FLAG_SYNC_SET;
 
-struct IsrPort {
-    published_tx: Rc<Cell<Option<TxFrame>>>,
-}
+struct IsrPort;
 
 impl Port for IsrPort {
     fn fpga_write(&mut self, _addr: u16, _value: u16) {}
@@ -57,9 +54,6 @@ impl Port for IsrPort {
     }
     fn al_status_code(&mut self) -> u16 {
         0
-    }
-    fn publish_tx(&mut self, tx: TxFrame) {
-        self.published_tx.set(Some(tx));
     }
 
     fn flash_read(&mut self, _addr: u32, _buf: &mut [u8]) -> Result<(), FlashError> {
@@ -108,7 +102,6 @@ pub(crate) struct MockPort {
     pub fpga_usr_access: u32,
     pub fpga_reboots: u32,
     pub fpga_reboots_to_ignore: u32,
-    published_tx: Rc<Cell<Option<TxFrame>>>,
     isr_frame: Option<(Rc<Cpu>, u8, u8)>,
 }
 
@@ -145,7 +138,6 @@ impl MockPort {
             fpga_usr_access: 0,
             fpga_reboots: 0,
             fpga_reboots_to_ignore: 0,
-            published_tx: Rc::new(Cell::new(None)),
             isr_frame: None,
         }
     }
@@ -268,13 +260,10 @@ impl MockPort {
         let Some((cpu, seq, cmd)) = self.isr_frame.take() else {
             return;
         };
-        let mut wire = [0u8; WIRE_RX_FRAME_BYTES];
-        wire[0] = seq;
-        wire[1] = cmd;
-        let mut isr_port = IsrPort {
-            published_tx: Rc::clone(&self.published_tx),
-        };
-        cpu.recv_ethercat(&mut isr_port, &wire);
+        let mut frame = [0u8; HOST_TO_DEVICE_BYTES];
+        frame[0] = seq;
+        frame[1] = cmd;
+        cpu.recv_frame(&mut IsrPort, &frame);
     }
 }
 
@@ -335,11 +324,6 @@ impl Port for MockPort {
 
     fn al_status_code(&mut self) -> u16 {
         self.al_status_code
-    }
-
-    fn publish_tx(&mut self, tx: TxFrame) {
-        self.fire_isr_frame();
-        self.published_tx.set(Some(tx));
     }
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
@@ -432,14 +416,12 @@ impl Frame {
         f
     }
 
-    pub(crate) fn wire(&self) -> Box<[u8; WIRE_RX_FRAME_BYTES]> {
-        let mut wire = Box::new([0u8; WIRE_RX_FRAME_BYTES]);
-        wire[0] = self.seq;
-        wire[1] = self.cmd;
-        let head = WIRE_RX_GAP_START - 2;
-        wire[2..WIRE_RX_GAP_START].copy_from_slice(&self.payload[..head]);
-        wire[WIRE_RX_GAP_END..].copy_from_slice(&self.payload[head..]);
-        wire
+    pub(crate) fn bytes(&self) -> Box<[u8; HOST_TO_DEVICE_BYTES]> {
+        let mut bytes = Box::new([0u8; HOST_TO_DEVICE_BYTES]);
+        bytes[0] = self.seq;
+        bytes[1] = self.cmd;
+        bytes[2..].copy_from_slice(&self.payload[..]);
+        bytes
     }
 }
 
@@ -472,7 +454,7 @@ impl Harness {
     }
 
     pub(crate) fn deliver_no_drain(&mut self, frame: &Frame) {
-        self.cpu.recv_ethercat(&mut self.port, &frame.wire());
+        self.cpu.recv_frame(&mut self.port, &frame.bytes());
     }
 
     pub(crate) fn process_one(&mut self) -> bool {
@@ -480,9 +462,7 @@ impl Harness {
     }
 
     fn tx(&self) -> TxFrame {
-        let tx = self.cpu.tx();
-        assert_eq!(self.port.published_tx.get(), Some(tx));
-        tx
+        self.cpu.tx()
     }
 
     pub(crate) fn ack(&self) -> u8 {

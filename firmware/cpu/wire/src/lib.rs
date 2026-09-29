@@ -47,6 +47,7 @@ mod mode;
 pub mod params;
 pub mod payload;
 mod telemetry;
+pub mod udp;
 pub mod update;
 
 pub use cmd::Cmd;

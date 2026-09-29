@@ -60,8 +60,12 @@ extern "C" fn cmi0_entry() {
 
 extern "C" fn cmi0_isr() {
     write32(VIC_PIC0, 1 << VIC_INTNO_CMI0);
-    TICK_MS.fetch_add(1, Ordering::Relaxed);
+    crate::udp::tick(TICK_MS.fetch_add(1, Ordering::Relaxed).wrapping_add(1));
     write32(VIC_HVA0, 0);
+}
+
+pub(crate) fn now_ms() -> u32 {
+    TICK_MS.load(Ordering::Relaxed)
 }
 
 pub(crate) fn elapsed_ms() -> u32 {

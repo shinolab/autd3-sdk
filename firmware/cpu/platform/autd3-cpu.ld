@@ -43,6 +43,7 @@ SECTIONS
 	.text 0x00040000 :
 	{
 		_text = .;
+		KEEP(* (.image_info))
 		* (.text)
 		* (.text.*)
 		. = ALIGN(8);

@@ -14,8 +14,8 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{
-    AL_STATUS_CODE_SM_WATCHDOG, AL_STATUS_CODE_SYNC_ERROR, Cmd, Error, FAILSAFE_TICKS, Mode,
-    RxFrame, Telemetry, TxFrame, WIRE_RX_FRAME_BYTES,
+    AL_STATUS_CODE_SM_WATCHDOG, AL_STATUS_CODE_SYNC_ERROR, Cmd, Error, FAILSAFE_TICKS,
+    HOST_TO_DEVICE_BYTES, Mode, RxFrame, Telemetry, TxFrame,
 };
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
@@ -79,7 +79,7 @@ impl Cpu {
         self.update.init();
         self.fpga_update.init();
         self.reset_telemetry();
-        self.set_tx(port, 0xFF, 0);
+        self.set_tx(0xFF, 0);
         self.last_seq.store(0xFF, Ordering::Relaxed);
         self.last_cmd.store(0xFF, Ordering::Relaxed);
         self.fifo.reset();
@@ -174,7 +174,7 @@ impl Cpu {
         self.mode.store(mode as u8, Ordering::Relaxed);
     }
 
-    pub fn recv_ethercat<P: Port>(&self, port: &mut P, frame: &[u8; WIRE_RX_FRAME_BYTES]) {
+    pub fn recv_frame<P: Port>(&self, port: &mut P, frame: &[u8; HOST_TO_DEVICE_BYTES]) {
         let seq = frame[0];
         let raw_cmd = frame[1];
         if seq == self.last_seq.load(Ordering::Relaxed)
@@ -197,7 +197,7 @@ impl Cpu {
         let tail = self.fifo.tail_acquire();
         let inline_ok = preempt || (self.mode() == Mode::LowLatency && tail == head && !deferred);
         if inline_ok {
-            self.handle_frame(port, &RxFrame::from_wire(frame));
+            self.handle_frame(port, &RxFrame::from_frame(frame));
             self.last_seq.store(seq, Ordering::Relaxed);
             self.last_cmd.store(raw_cmd, Ordering::Relaxed);
             return;
@@ -207,7 +207,7 @@ impl Cpu {
             self.bump(Telemetry::FifoDrop);
             return;
         }
-        self.slots[Fifo::slot(head)].set(RxFrame::from_wire(frame));
+        self.slots[Fifo::slot(head)].set(RxFrame::from_frame(frame));
         self.fifo.publish(head);
         self.last_seq.store(seq, Ordering::Relaxed);
         self.last_cmd.store(raw_cmd, Ordering::Relaxed);
@@ -230,7 +230,7 @@ impl Cpu {
         let in_frame = self.slots[Fifo::slot(tail)].get();
         self.handle_frame(port, &in_frame);
         if self.fifo.is_before_flush(flush_gen, tail) {
-            self.apply_preempt(port);
+            self.apply_preempt();
         }
         self.fifo.commit(tail);
         true
@@ -240,20 +240,19 @@ impl Cpu {
         while self.process_one(port) {}
     }
 
-    fn apply_preempt<P: Port>(&self, port: &mut P) {
+    fn apply_preempt(&self) {
         self.expected_seq.store(0, Ordering::Relaxed);
-        self.set_tx(port, 0xFF, 0);
+        self.set_tx(0xFF, 0);
     }
 
-    fn set_tx<P: Port>(&self, port: &mut P, ack: u8, data: u8) {
+    fn set_tx(&self, ack: u8, data: u8) {
         self.tx.store(pack_tx(ack, data), Ordering::Relaxed);
-        port.publish_tx(TxFrame { ack, data });
     }
 
     fn handle_frame<P: Port>(&self, port: &mut P, in_frame: &RxFrame) {
         let cmd = Cmd::from_u8(in_frame.cmd);
         if cmd == Some(Cmd::Reset) {
-            self.apply_preempt(port);
+            self.apply_preempt();
             return;
         }
         if in_frame.seq == self.expected_seq.load(Ordering::Relaxed) {
@@ -263,7 +262,7 @@ impl Cpu {
                 Some(cmd) => self.dispatch(port, cmd, &in_frame.payload),
                 None => self.latch_error(Error::UnknownCmd),
             };
-            self.set_tx(port, in_frame.seq, data);
+            self.set_tx(in_frame.seq, data);
             self.bump(Telemetry::Processed);
         } else {
             self.bump(Telemetry::SeqMismatch);

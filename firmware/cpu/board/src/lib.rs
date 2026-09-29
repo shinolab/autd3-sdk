@@ -3,12 +3,12 @@
 mod bsp;
 mod port;
 mod regs;
+mod udp;
 
 use core::arch::asm;
 use core::panic::PanicInfo;
 
 use autd3_cpu_fw::Cpu;
-use autd3_cpu_fw::proto::WIRE_RX_FRAME_BYTES;
 
 use crate::port::HwPort;
 
@@ -18,76 +18,40 @@ unsafe impl Sync for StaticCpu {}
 
 static CPU: StaticCpu = StaticCpu(Cpu::new());
 
-#[unsafe(no_mangle)]
-pub extern "C" fn app_mark_boot_attempt() {
-    CPU.0.mark_boot_attempt(&mut HwPort);
+fn cpu() -> &'static Cpu {
+    &CPU.0
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn init_app() {
-    CPU.0.init(&mut HwPort);
+unsafe extern "C" {
+    fn sflash_init();
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn recv_ethercat(frame: *const u8) {
-    #[cfg(feature = "isr-probe")]
-    bsp::io::isr_probe_high();
-    let frame = unsafe { &*(frame.cast::<[u8; WIRE_RX_FRAME_BYTES]>()) };
-    CPU.0.recv_ethercat(&mut HwPort, frame);
-    #[cfg(feature = "isr-probe")]
-    bsp::io::isr_probe_low();
-}
+const PRCR_UNLOCK_ALL: u32 = 0x0000_A503;
+const FPGA_STARTUP_MS: u16 = 200;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn app_process_pending() {
-    CPU.0.process_pending(&mut HwPort);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn app_tick() {
-    for _ in 0..bsp::timer::elapsed_ms() {
-        CPU.0.tick_1ms(&mut HwPort);
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bsp_clock_init() {
-    bsp::clock::init();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bsp_bus_init() {
-    bsp::bus::init();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bsp_io_init() {
+pub extern "C" fn main() -> ! {
     bsp::io::init();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bsp_vic_init() {
+    bsp::bus::init();
+    bsp::clock::init();
     bsp::vic::init();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bsp_timer_init() {
     bsp::timer::init();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bsp_irq_enable() {
+    regs::write32(regs::SYSTEM_PRCR, PRCR_UNLOCK_ALL);
+    let _ = regs::read32(regs::SYSTEM_PRCR);
+    bsp::io::leds_on();
+    bsp::timer::delay_ms(FPGA_STARTUP_MS);
+    udp::init();
+    unsafe { sflash_init() };
+    cpu().mark_boot_attempt(&mut HwPort);
+    cpu().init(&mut HwPort);
+    udp::start();
     bsp::vic::irq_enable();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bsp_delay_ms(ms: u16) {
-    bsp::timer::delay_ms(ms);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn bsp_vic_install(intno: u32, priority: u32, handler: Option<extern "C" fn()>) {
-    bsp::vic::install(intno, priority, handler.map_or(0, |f| f as usize));
+    loop {
+        cpu().process_pending(&mut HwPort);
+        for _ in 0..bsp::timer::elapsed_ms() {
+            cpu().tick_1ms(&mut HwPort);
+        }
+    }
 }
 
 #[panic_handler]

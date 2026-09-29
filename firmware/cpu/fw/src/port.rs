@@ -1,5 +1,3 @@
-use crate::proto::TxFrame;
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FlashError;
 
@@ -17,8 +15,6 @@ pub trait Port {
     fn sync0_cycle_ns(&mut self) -> u32;
 
     fn al_status_code(&mut self) -> u16;
-
-    fn publish_tx(&mut self, tx: TxFrame);
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError>;
 

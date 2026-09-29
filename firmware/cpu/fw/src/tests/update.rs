@@ -5,7 +5,8 @@ use zerocopy::{FromBytes, IntoBytes};
 
 use autd3_cpu_wire::update::{
     FLASH_SECTOR_BYTES, IMAGE_APP_CAPACITY, IMAGE_VECTOR_BYTES, ImageHeader, LOADER_REGION_END,
-    SLOT_HEADER_BYTES, SLOT_IMAGE_CAPACITY, Slot, crc32,
+    SLOT_HEADER_BYTES, SLOT_IMAGE_CAPACITY, Slot, TRANSPORT_MARKER_BYTES, TRANSPORT_MARKER_OFFSET,
+    Transport, crc32,
 };
 
 use crate::cmd::update::{
@@ -39,7 +40,7 @@ fn chunk(seq: u8, offset: u32, data: &[u8]) -> Frame {
     )
 }
 
-fn image(len: usize, seed: u32) -> Vec<u8> {
+fn unmarked_image(len: usize, seed: u32) -> Vec<u8> {
     let mut x = seed | 1;
     (0..len)
         .map(|_| {
@@ -49,6 +50,18 @@ fn image(len: usize, seed: u32) -> Vec<u8> {
             (x >> 8) as u8
         })
         .collect()
+}
+
+fn marked(mut img: Vec<u8>, transport: Transport) -> Vec<u8> {
+    let at = TRANSPORT_MARKER_OFFSET as usize;
+    if img.len() >= at + TRANSPORT_MARKER_BYTES {
+        img[at..at + TRANSPORT_MARKER_BYTES].copy_from_slice(&transport.marker());
+    }
+    img
+}
+
+fn image(len: usize, seed: u32) -> Vec<u8> {
+    marked(unmarked_image(len, seed), Transport::Udp)
 }
 
 fn send_image(h: &mut Harness, seq: &mut u8, img: &[u8]) {
@@ -704,4 +717,47 @@ fn confirm_is_deferred_even_in_low_latency_mode() {
     assert_eq!(h.data(), 0);
     assert!(!header_of(&h, Slot::B).needs_confirmation());
     assert!(!h.process_one());
+}
+
+fn commit_result(h: &mut Harness, img: &[u8]) -> u8 {
+    h.deliver(&Frame::new(0, Cmd::Reset));
+    let mut seq = 0;
+    h.deliver(&begin(seq, img.len() as u32, crc32(img)));
+    assert_eq!(h.data(), 0);
+    seq += 1;
+    send_image(h, &mut seq, img);
+    h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
+    h.data()
+}
+
+#[test]
+fn an_image_without_a_transport_marker_is_rejected_as_ethercat() {
+    let (mut h, _) = running_from_slot_a();
+    let img = unmarked_image(900, 41);
+    assert_eq!(
+        commit_result(&mut h, &img),
+        Error::UpdateTransportMismatch as u8
+    );
+    assert!(!header_of(&h, Slot::B).is_plausible());
+    assert_eq!(h.cpu.update.state(), State::Idle);
+}
+
+#[test]
+fn an_explicit_ethercat_marker_is_rejected() {
+    let (mut h, _) = running_from_slot_a();
+    let img = marked(unmarked_image(900, 43), Transport::EtherCat);
+    assert_eq!(
+        commit_result(&mut h, &img),
+        Error::UpdateTransportMismatch as u8
+    );
+    assert!(!header_of(&h, Slot::B).is_plausible());
+}
+
+#[test]
+fn a_udp_image_is_committed() {
+    let (mut h, _) = running_from_slot_a();
+    let img = image(900, 42);
+    assert_eq!(commit_result(&mut h, &img), 0);
+    assert!(header_of(&h, Slot::B).is_trial());
+    assert_eq!(h.cpu.update.state(), State::Committed);
 }

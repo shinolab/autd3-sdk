@@ -85,8 +85,6 @@ pub(crate) const CMT0_CMCR_CMIE: u16 = 1 << 6;
 
 pub(crate) const PORT5_PDR: usize = 0xA000_000A;
 pub(crate) const PORTA_PDR: usize = 0xA000_0014;
-#[cfg(feature = "isr-probe")]
-pub(crate) const PORTA_PODR: usize = 0xA000_004A;
 pub(crate) const PORTF_PDR: usize = 0xA000_001E;
 pub(crate) const PORTN_PDR: usize = 0xA000_002C;
 pub(crate) const PORTN_PODR: usize = 0xA000_0056;
@@ -149,10 +147,3 @@ pub(crate) const MPC_PH5PFS: usize = 0xA000_028D;
 pub(crate) const MPC_PH6PFS: usize = 0xA000_028E;
 pub(crate) const MPC_PH7PFS: usize = 0xA000_028F;
 pub(crate) const MPC_PK0PFS: usize = 0xA000_0298;
-
-pub(crate) const ECATC_AL_STATUS_CODE: usize = 0xA00D_0134;
-pub(crate) const ECATC_DC_SYS_TIME_LO: usize = 0xA00D_0910;
-pub(crate) const ECATC_DC_SYS_TIME_HI: usize = 0xA00D_0914;
-pub(crate) const ECATC_DC_CYC_START_TIME_LO: usize = 0xA00D_0990;
-pub(crate) const ECATC_DC_CYC_START_TIME_HI: usize = 0xA00D_0994;
-pub(crate) const ECATC_DC_SYNC0_CYC_TIME: usize = 0xA00D_09A0;
