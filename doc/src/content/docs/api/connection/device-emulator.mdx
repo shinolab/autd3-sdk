@@ -23,5 +23,6 @@ import csSample from "@codes/csharp/examples/api/connection/device-emulator.cs?r
 - Rust では `with_device(i, ..)` で `i` 台目のファームウェアと FPGA の状態を観測できる
 - Rust では `autd3-rs` の feature `emulator` を有効にする. Python / C# では本体に含まれる
 
+デバイス間の同期 (PTP) は模擬する: ID 0 の時刻合わせから少し後 (50 ms) に他の機体が同期したとみなす.
 エミュレータは同期パルスの精度などハードウェアの時間的な振る舞いは再現しない.
 出力される音場を確認したい場合は [Simulator](/autd3-sdk/guide/simulator/) を使う.

@@ -214,6 +214,19 @@ fn an_echo_reply_mirrors_the_request_body() {
 }
 
 #[test]
+fn a_ptp_frame_is_recognised_by_its_ethertype() {
+    let mut frame = vec![0u8; 60];
+    frame[6..12].copy_from_slice(&UNIT_MAC);
+    frame[12..14].copy_from_slice(&ETHERTYPE_PTP.to_be_bytes());
+    frame[14] = 0x08;
+    let Some(Packet::Ptp { src_mac, message }) = parse(&frame) else {
+        panic!("not ptp");
+    };
+    assert_eq!(src_mac, UNIT_MAC);
+    assert_eq!(message[0], 0x08);
+}
+
+#[test]
 fn malformed_frames_are_dropped() {
     assert_eq!(parse(&[]), None);
     assert_eq!(parse(&[0u8; 13]), None);

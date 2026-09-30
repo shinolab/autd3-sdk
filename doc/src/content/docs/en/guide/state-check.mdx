@@ -28,7 +28,7 @@ Take the `StateChecker` with `state_checker` of the [`Driver`](/autd3-sdk/en/api
 - `all_ready`: whether all devices are in the `Ready` state.
 - `any_lost`: whether any device is in the `Lost` state.
 
-See [Connection](/autd3-sdk/en/api/connection/#state-monitoring) for the meaning of each state. A device is `Ready` when its sync pulse is running, `Syncing` while it is not running yet, and `Lost` when its replies stop or it reboots; there is no automatic recovery from `Lost` (reopen the client).
+See [Connection](/autd3-sdk/en/api/connection/#state-monitoring) for the meaning of each state. A device is `Ready` when it follows the time of ID 0 and its sync pulse is running, `Syncing` while it is still following or its sync pulse is not running yet, and `Lost` when its replies stop or it reboots; there is no automatic recovery from `Lost` (reopen the client).
 
 The following is an example that calls `check` at fixed intervals and outputs only when the state changes.
 

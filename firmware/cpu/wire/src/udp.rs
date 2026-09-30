@@ -1,4 +1,4 @@
-use zerocopy::little_endian::{U16, U64};
+use zerocopy::little_endian::{I32, U16, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use crate::frame::{FRAME_BYTES_MAX, FRAME_HEADER_BYTES, REPLY_DATA_BYTES_MAX};
@@ -10,6 +10,7 @@ pub const UNASSIGNED_ID: u8 = 0xFF;
 pub const MAC_PREFIX: [u8; 5] = [0x02, 0x41, 0x55, 0x54, 0x44];
 pub const ALL_NODES: [u8; 16] = [0xFF, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01];
 pub const ALL_NODES_MAC: [u8; 6] = [0x33, 0x33, 0x00, 0x00, 0x00, 0x01];
+pub const PTP_MULTICAST_MAC: [u8; 6] = [0x01, 0x1B, 0x19, 0x00, 0x00, 0x00];
 
 pub const RESET_ID_CLOSE_DELAY_MS: u32 = 20;
 pub const FAILSAFE_TIMEOUT_MS: u32 = 500;
@@ -22,6 +23,11 @@ pub const FLAG_ASSIGNED: u8 = 1 << 0;
 pub const FLAG_DOWNSTREAM_OPEN: u8 = 1 << 1;
 pub const FLAG_DOWNSTREAM_LINK: u8 = 1 << 2;
 pub const FLAG_SYNC_READY: u8 = 1 << 3;
+pub const FLAG_PTP_LOCKED: u8 = 1 << 4;
+pub const FLAG_GRANDMASTER: u8 = 1 << 5;
+
+pub const ROLE_SLAVE: u8 = 0;
+pub const ROLE_GRANDMASTER: u8 = 1;
 
 pub const UPSTREAM_UNKNOWN: u8 = 0xFF;
 
@@ -44,6 +50,7 @@ crate::wire_enum! {
         UnsupportedVersion = 0x01,
         NotAssigned = 0x02,
         InvalidPayload = 0x03,
+        NotGrandmaster = 0x04,
     }
 }
 
@@ -74,6 +81,7 @@ impl Header {
 #[repr(C)]
 pub struct AssignIdBody {
     pub unit_id: u8,
+    pub role: u8,
 }
 
 #[derive(
@@ -96,6 +104,7 @@ pub struct UnitInfo {
     pub fw_version: [u8; 3],
     pub reserved2: u8,
     pub sys_time: U64,
+    pub ptp_offset_ns: I32,
 }
 
 #[derive(
@@ -136,7 +145,7 @@ pub const MAX_REPLY_BYTES: usize = if FRAME_REPLY_BYTES_MAX > UNIT_INFO_REPLY_BY
 };
 
 const _: () = assert!(HEADER_BYTES == 4);
-const _: () = assert!(core::mem::size_of::<UnitInfo>() == 16);
+const _: () = assert!(core::mem::size_of::<UnitInfo>() == 20);
 const _: () = assert!(core::mem::size_of::<FrameReply>() == 12);
 const _: () = assert!(FRAME_REPLY_BYTES_MAX <= MAX_REPLY_BYTES);
 const _: () = assert!(UNIT_INFO_REPLY_BYTES <= MAX_REPLY_BYTES);

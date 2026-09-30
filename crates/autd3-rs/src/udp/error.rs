@@ -32,7 +32,9 @@ pub enum UdpError {
     UnexpectedUnit { unit_id: u8, addr: SocketAddrV6 },
     #[error("unit {0} did not answer the cross-check")]
     MissingUnit(u8),
-    #[error("units {not_ready:?} did not start their sync pulse within {timeout:?}")]
+    #[error(
+        "units {not_ready:?} did not lock to the grandmaster and start their sync pulse within {timeout:?}"
+    )]
     SyncTimeout {
         not_ready: Vec<u8>,
         timeout: Duration,

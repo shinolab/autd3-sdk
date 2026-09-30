@@ -7,7 +7,7 @@ reply_timeout = Duration.from_millis(1)
 lost_timeout = Duration.from_millis(100)
 response_timeout = Duration.from_millis(200)
 enumeration_timeout = Duration.from_secs(10)
-sync_timeout = Duration.from_secs(5)
+sync_timeout = Duration.from_secs(10)
 # ANCHOR: api
 TransportOption(
     iface=iface,

@@ -16,6 +16,7 @@ pub const MIN_FRAME: usize = 60;
 pub const MAX_FRAME: usize = 1514;
 
 pub const ETHERTYPE_IPV6: u16 = 0x86DD;
+pub const ETHERTYPE_PTP: u16 = 0x88F7;
 
 pub const NEXT_HEADER_UDP: u8 = 17;
 pub const NEXT_HEADER_ICMPV6: u8 = 58;

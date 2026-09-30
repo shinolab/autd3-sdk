@@ -2,7 +2,8 @@ use std::net::SocketAddrV6;
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{
-    AssignIdBody, FLAG_ASSIGNED, FLAG_SYNC_READY, Kind, SetTimeBody, Status, UnblockReply, UnitInfo,
+    AssignIdBody, FLAG_ASSIGNED, FLAG_PTP_LOCKED, FLAG_SYNC_READY, Kind, ROLE_GRANDMASTER,
+    ROLE_SLAVE, SetTimeBody, Status, UnblockReply, UnitInfo,
 };
 use autd3_rs_core::value::SysTime;
 use zerocopy::little_endian::U64;
@@ -17,6 +18,8 @@ const RESET_SETTLE: Duration = Duration::from_millis(100);
 const DISCOVER_LINGER: Duration = Duration::from_millis(10);
 const DISCOVER_RETRY_INTERVAL: Duration = Duration::from_millis(100);
 const SYNC_POLL_INTERVAL: Duration = Duration::from_millis(50);
+const GRANDMASTER: u8 = 0;
+const SYNCED: u8 = FLAG_PTP_LOCKED | FLAG_SYNC_READY;
 
 pub(crate) fn same_endpoint(a: SocketAddrV6, b: SocketAddrV6) -> bool {
     a.ip() == b.ip() && a.port() == b.port()
@@ -42,6 +45,14 @@ fn check_status(response: &Response, kind: Kind, unit: u8) -> Result<(), UdpErro
 
 fn unit_id(index: usize) -> u8 {
     u8::try_from(index).expect("at most 255 units")
+}
+
+const fn role(unit: u8) -> u8 {
+    if unit == GRANDMASTER {
+        ROLE_GRANDMASTER
+    } else {
+        ROLE_SLAVE
+    }
 }
 
 struct Enumerator<'a> {
@@ -112,7 +123,10 @@ impl Enumerator<'_> {
     }
 
     fn assign(&mut self, target: SocketAddrV6, unit: u8) -> Result<SocketAddrV6, UdpError> {
-        let body = AssignIdBody { unit_id: unit };
+        let body = AssignIdBody {
+            unit_id: unit,
+            role: role(unit),
+        };
         if let Some(response) = self.unicast(target, Kind::AssignId, body.as_bytes())? {
             check_status(&response, Kind::AssignId, unit)?;
             return Ok(response.src);
@@ -226,31 +240,27 @@ impl Enumerator<'_> {
         }
     }
 
-    fn set_time(&mut self, units: &[SocketAddrV6]) -> Result<(), UdpError> {
-        for (index, &addr) in units.iter().enumerate() {
-            let unit = unit_id(index);
-            let mut answered = None;
-            for _ in 0..UNICAST_ATTEMPTS {
-                let body = SetTimeBody {
-                    sys_time: U64::new(SysTime::now()?.sys_time()),
-                };
-                answered = self.channel.exchange(
-                    addr,
-                    Kind::SetTime,
-                    body.as_bytes(),
-                    self.option.response_timeout,
-                )?;
-                if answered.is_some() {
-                    break;
-                }
+    fn set_time(&mut self, grandmaster: SocketAddrV6) -> Result<(), UdpError> {
+        let mut answered = None;
+        for _ in 0..UNICAST_ATTEMPTS {
+            let body = SetTimeBody {
+                sys_time: U64::new(SysTime::now()?.sys_time()),
+            };
+            answered = self.channel.exchange(
+                grandmaster,
+                Kind::SetTime,
+                body.as_bytes(),
+                self.option.response_timeout,
+            )?;
+            if answered.is_some() {
+                break;
             }
-            let response = answered.ok_or(UdpError::NoResponse {
-                kind: Kind::SetTime,
-                unit,
-            })?;
-            check_status(&response, Kind::SetTime, unit)?;
         }
-        Ok(())
+        let response = answered.ok_or(UdpError::NoResponse {
+            kind: Kind::SetTime,
+            unit: GRANDMASTER,
+        })?;
+        check_status(&response, Kind::SetTime, GRANDMASTER)
     }
 
     fn wait_sync(&mut self, units: &[SocketAddrV6]) -> Result<(), UdpError> {
@@ -266,7 +276,7 @@ impl Enumerator<'_> {
                     .get(index)
                     .is_some_and(|&addr| same_endpoint(addr, response.src))
                 {
-                    ready[index] = info.flags & FLAG_SYNC_READY != 0;
+                    ready[index] = info.flags & SYNCED == SYNCED;
                 }
             }
             let not_ready: Vec<u8> = ready
@@ -289,17 +299,34 @@ impl Enumerator<'_> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Bringup {
+    Synchronized,
+    Unsynchronized,
+}
+
 pub(crate) fn bring_up(
     channel: &mut Channel,
     option: &TransportOption,
     expected: usize,
+    bringup: Bringup,
 ) -> Result<Vec<SocketAddrV6>, UdpError> {
     let mut enumerator = Enumerator { channel, option };
     enumerator.reset()?;
     let units = enumerator.enumerate(expected)?;
     enumerator.cross_check(&units)?;
-    enumerator.set_time(&units)?;
+    if bringup == Bringup::Unsynchronized {
+        tracing::info!(
+            units = units.len(),
+            "enumerated the units without synchronizing them"
+        );
+        return Ok(units);
+    }
+    enumerator.set_time(units[usize::from(GRANDMASTER)])?;
     enumerator.wait_sync(&units)?;
-    tracing::info!(units = units.len(), "all units run their sync pulse");
+    tracing::info!(
+        units = units.len(),
+        "all units are locked to the grandmaster and run their sync pulse"
+    );
     Ok(units)
 }

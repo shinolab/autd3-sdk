@@ -10,7 +10,7 @@ use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use autd3_cpu_fw::net::{MAX_FRAME, Mac};
-use autd3_cpu_fw::nic::{Nic, RxMeta};
+use autd3_cpu_fw::nic::{Nic, RxMeta, TxStamp};
 use autd3_cpu_fw::node::{CommandLayer, Node, Received};
 use autd3_cpu_fw::proto::{Disposition, Reply};
 use autd3_cpu_fw::udp::SYNC_CYCLE_NS;
@@ -25,6 +25,7 @@ use crate::port::HwPort;
 static IMAGE_INFO: [u8; TRANSPORT_MARKER_BYTES] = Transport::Udp.marker();
 
 const TX_RING: usize = 8;
+const RX_TAG_TIMESTAMP_BYTES: usize = 4;
 const RX_TAG_PORT_BYTE: usize = 4;
 const RX_TAG_PORT_BIT: u8 = 7;
 const PHY_ADDRESS_BASE: u32 = 1;
@@ -41,7 +42,7 @@ struct HwNic {
 }
 
 impl Nic for HwNic {
-    fn send(&mut self, frame: &[u8], port: u8) -> bool {
+    fn send(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
         let Some(buffer) = (0..TX_RING)
             .map(|k| (self.next_tx + k) % TX_RING)
             .find(|&slot| self.tx[slot] != 0)
@@ -53,15 +54,31 @@ impl Nic for HwNic {
             return false;
         };
         self.frame_id = self.frame_id.wrapping_add(1);
-        gmac::send(buffer, frame, self.frame_id, port)
+        gmac::send(buffer, frame, self.frame_id, port, timestamp)
     }
 
     fn now(&mut self) -> Option<u64> {
         ethsw::capture()
     }
 
+    fn step(&mut self, offset_ns: i64) -> bool {
+        ethsw::step_time(offset_ns)
+    }
+
     fn set_time(&mut self, ns: u64) -> bool {
         ethsw::set_time(ns)
+    }
+
+    fn set_drift(&mut self, ppb: i32) {
+        ethsw::set_drift(ppb);
+    }
+
+    fn clear_tx_timestamps(&mut self) {
+        ethsw::clear_tx_timestamps();
+    }
+
+    fn take_tx_timestamp(&mut self, port: u8) -> Option<TxStamp> {
+        ethsw::take_tx_timestamp(port)
     }
 
     fn set_forwarding(&mut self, open: bool) {
@@ -173,8 +190,11 @@ extern "C" fn ethdmair_isr() {
         if rx.valid {
             let len = gmac::copy_rx(&rx, &mut net.rx);
             if len > RX_TAG_PORT_BYTE {
+                let mut timestamp = [0u8; RX_TAG_TIMESTAMP_BYTES];
+                timestamp.copy_from_slice(&net.rx[..RX_TAG_TIMESTAMP_BYTES]);
                 let meta = RxMeta {
                     port: (net.rx[RX_TAG_PORT_BYTE] >> RX_TAG_PORT_BIT) & 1,
+                    timestamp_ns: u32::from_le_bytes(timestamp),
                 };
                 let received =
                     net.node
@@ -186,6 +206,7 @@ extern "C" fn ethdmair_isr() {
             }
         }
         gmac::release(rx.buffer);
+        pulse::service();
     }
     vic::end_of_interrupt();
 }

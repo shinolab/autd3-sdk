@@ -31,7 +31,7 @@ impl Default for TransportOption {
             lost_timeout: Duration::from_millis(100),
             response_timeout: Duration::from_millis(200),
             enumeration_timeout: Duration::from_secs(10),
-            sync_timeout: Duration::from_secs(5),
+            sync_timeout: Duration::from_secs(10),
         }
     }
 }
@@ -87,7 +87,7 @@ mod tests {
         assert_eq!(option.lost_timeout, Duration::from_millis(100));
         assert_eq!(option.response_timeout, Duration::from_millis(200));
         assert_eq!(option.enumeration_timeout, Duration::from_secs(10));
-        assert_eq!(option.sync_timeout, Duration::from_secs(5));
+        assert_eq!(option.sync_timeout, Duration::from_secs(10));
         assert!(option.validate().is_ok());
     }
 

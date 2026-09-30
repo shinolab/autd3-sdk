@@ -28,7 +28,7 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 - `all_ready`: 全デバイスが `Ready` 状態か.
 - `any_lost`: いずれかのデバイスが `Lost` 状態か.
 
-各状態の意味は [接続](/autd3-sdk/api/connection/#状態監視) を参照. 同期パルスが動いていれば `Ready`, まだ動いていなければ `Syncing`, 返信が途絶えるか機体が再起動すると `Lost` になり, `Lost` からは自動で復帰しない (開き直す).
+各状態の意味は [接続](/autd3-sdk/api/connection/#状態監視) を参照. ID 0 に時刻が合っていて同期パルスが動いていれば `Ready`, 時刻を合わせている途中か同期パルスがまだ動いていなければ `Syncing`, 返信が途絶えるか機体が再起動すると `Lost` になり, `Lost` からは自動で復帰しない (開き直す).
 
 以下は, 一定間隔で `check` を呼び, 状態が変化したときだけ出力する例.
 

@@ -149,6 +149,83 @@ fn replies_feed_the_device_clock() {
     assert!(observation.offset_ns.abs() < 1_000_000_000);
 }
 
+fn heartbeat_states(bus: &mut UdpBus, n: usize) -> Vec<DeviceState> {
+    let mut checker = bus.state_checker();
+    let msg_id = bus.heartbeat().unwrap();
+    assert_eq!(collect(bus, msg_id, n).len(), n);
+    checker.check().unwrap().devices().to_vec()
+}
+
+#[test]
+fn every_unit_is_locked_to_the_grandmaster_when_open_returns() {
+    let emulator = UdpEmulator::spawn(3).unwrap();
+    let mut bus = open(&emulator, 3);
+    assert_eq!(heartbeat_states(&mut bus, 3), [DeviceState::Ready; 3]);
+}
+
+#[test]
+fn a_unit_that_does_not_lock_fails_the_open_with_a_sync_timeout() {
+    let emulator = UdpEmulator::spawn(3).unwrap();
+    emulator.set_ptp_lock_blocked(2, true);
+    let option = TransportOption {
+        sync_timeout: Duration::from_millis(300),
+        ..emulator.option()
+    };
+    match UdpBus::open(&option, 3) {
+        Err(UdpError::SyncTimeout { not_ready, timeout }) => {
+            assert_eq!(not_ready, [2]);
+            assert_eq!(timeout, Duration::from_millis(300));
+        }
+        other => panic!("expected a sync timeout, got {:?}", other.err()),
+    }
+
+    emulator.set_ptp_lock_blocked(2, false);
+    let mut bus = open(&emulator, 3);
+    assert_eq!(heartbeat_states(&mut bus, 3), [DeviceState::Ready; 3]);
+}
+
+#[test]
+fn an_unsynchronized_open_skips_the_lock_wait() {
+    let emulator = UdpEmulator::spawn(3).unwrap();
+    for unit in 1..3 {
+        emulator.set_ptp_lock_blocked(unit, true);
+    }
+    let option = TransportOption {
+        sync_timeout: Duration::ZERO,
+        ..emulator.option()
+    };
+    let mut bus = UdpBus::open_unsynchronized(&option, 3).unwrap();
+    assert_eq!(bus.num_devices(), 3);
+    let msg_id = bus.send(&frames(3, 0, Cmd::Reset)).unwrap();
+    assert_eq!(collect(&mut bus, msg_id, 3).len(), 3);
+    assert_eq!(heartbeat_states(&mut bus, 3), [DeviceState::Syncing; 3]);
+}
+
+#[test]
+fn a_unit_that_loses_its_lock_is_syncing_until_it_locks_again() {
+    let emulator = UdpEmulator::spawn(2).unwrap();
+    let mut bus = open(&emulator, 2);
+    assert_eq!(heartbeat_states(&mut bus, 2), [DeviceState::Ready; 2]);
+
+    emulator.set_ptp_lock_blocked(1, true);
+    assert_eq!(
+        heartbeat_states(&mut bus, 2),
+        [DeviceState::Ready, DeviceState::Syncing]
+    );
+    emulator.set_ptp_lock_blocked(0, true);
+    assert_eq!(
+        heartbeat_states(&mut bus, 2),
+        [DeviceState::Ready, DeviceState::Syncing]
+    );
+
+    emulator.set_ptp_lock_blocked(1, false);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while heartbeat_states(&mut bus, 2) != [DeviceState::Ready; 2] {
+        assert!(Instant::now() < deadline, "the unit did not lock again");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 #[test]
 fn a_rebooted_middle_device_is_lost_with_everything_behind_it() {
     let emulator = UdpEmulator::spawn(3).unwrap();

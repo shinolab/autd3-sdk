@@ -35,7 +35,7 @@ See [Host Network Setup](/autd3-sdk/en/getting-started/setup/network/).
 | `lost_timeout`        | `Duration`  | 100 ms  | A device with no reply for this long is reported `Lost`. Longer than `heartbeat`               |
 | `response_timeout`    | `Duration`  | 200 ms  | How long to wait for the reply to a management message such as the enumeration                 |
 | `enumeration_timeout` | `Duration`  | 10 s    | How long the enumeration retries until the device count reaches the geometry                  |
-| `sync_timeout`        | `Duration`  | 5 s     | How long to wait, after setting the time, until every device starts its sync pulse            |
+| `sync_timeout`        | `Duration`  | 10 s    | How long to wait, after setting the time, until every device is synchronized and starts its sync pulse |
 
 A command is sent as soon as there is something to send, and each device replies when it has finished handling it.
 Nothing is sent on a fixed cycle; only while there is nothing to send, a liveness check goes out every `heartbeat`.
@@ -57,7 +57,7 @@ If AUTD3 answers on two or more interfaces, opening fails; name the interface wi
 1. Choose the interface
 1. Enumerate: assign IDs (0, 1, 2, ...) from the device nearest to the host. The ID order is the device order of the geometry
 1. Check the count: if the number of devices found differs from the number of devices in the geometry, opening fails
-1. Set the time: send the host time to every device and wait until each device starts its sync pulse
+1. Set the time: send the host time to the device with ID 0. The other devices follow its time ([Synchronization Between Devices](#synchronization-between-devices)). Wait until every device is synchronized and starts its sync pulse
 
 A device that was just powered on may take a few seconds to bring up its link.
 While devices are missing, the enumeration waits and retries until `enumeration_timeout`.
@@ -68,17 +68,25 @@ The checker returned by `Driver::state_checker` reports each device as follows.
 
 | State    | Meaning                                                            |
 | -------- | ------------------------------------------------------------------ |
-| `Ready`   | The device replies and its sync pulse is running                  |
-| `Syncing` | The device replies but its sync pulse is not running yet          |
+| `Ready`   | The device replies, follows the time of ID 0, and its sync pulse is running |
+| `Syncing` | The device replies but is still following the time of ID 0, or its sync pulse is not running yet |
 | `Lost`    | No reply for `lost_timeout`, or the device rebooted               |
 
 Rebooting one device in the middle makes every device beyond it `Lost` as well.
 There is no automatic recovery from `Lost`; reopen the client.
 See [State Check](/autd3-sdk/en/guide/state-check/) for details.
 
+## Synchronization Between Devices
+
+The devices align their time with IEEE 1588 (PTP) using the hardware timestamps of the Ethernet switch on each device.
+The device with ID 0 is the reference (grandmaster), and the other devices follow its time. The host PC does not take part in PTP, so it needs no setup.
+
+- Opening waits until every device follows the time of ID 0. If a device does not, opening fails after `sync_timeout`
+- Since all devices share the same time, transitions and GPIO outputs using `SysTime` happen together on every device
+- A device that falls out of sync after opening is reported as `Syncing`, and returns to `Ready` once it follows again. Reopen the client if it stays `Syncing`
+
 ## Limitations
 
-- Devices are not synchronized with each other. Each device free-runs from the time set on open, so the phase between devices drifts slowly with the crystal tolerance (tens of ppm)
 - Hot-plugging devices while running is not followed. Reopen once it is detected
 - Putting an L2 switch between the host and the devices is not recommended. If you do, disable MLD snooping
 
@@ -93,4 +101,4 @@ The main ones are:
 | `AmbiguousInterface`   | Devices answered on two or more interfaces. Choose one with `iface` |
 | `DeviceCountMismatch`  | The number of devices found differs from the geometry              |
 | `EnumerationTimeout`   | The devices did not all appear within `enumeration_timeout`         |
-| `SyncTimeout`          | The sync pulse did not start within `sync_timeout`                  |
+| `SyncTimeout`          | A device did not follow the time of ID 0 or start its sync pulse within `sync_timeout` |

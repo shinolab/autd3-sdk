@@ -7,18 +7,20 @@ use zerocopy::little_endian::U64;
 
 use autd3_cpu_wire::udp::{
     ALL_NODES, AssignIdBody, FLAG_ASSIGNED, FLAG_DOWNSTREAM_LINK, FLAG_DOWNSTREAM_OPEN,
-    FLAG_SYNC_READY, FrameReply, HEADER_BYTES, Header, Kind, PORT, PROTOCOL_VERSION, SetTimeBody,
-    Status, UNASSIGNED_ID, UnblockReply, UnitInfo, mac, solicited_node, unit_address,
+    FLAG_GRANDMASTER, FLAG_PTP_LOCKED, FLAG_SYNC_READY, FrameReply, HEADER_BYTES, Header, Kind,
+    PORT, PROTOCOL_VERSION, ROLE_GRANDMASTER, ROLE_SLAVE, SetTimeBody, Status, UNASSIGNED_ID,
+    UnblockReply, UnitInfo, mac, solicited_node, unit_address,
 };
 
 use super::{CommandLayer, Node, Received};
 use crate::net::{
-    self, ETH_HEADER, ETHERTYPE_IPV6, Endpoint, ICMPV6_ECHO_REQUEST, ICMPV6_NEIGHBOR_SOLICITATION,
-    IPV6_HEADER, Ipv6, MAX_FRAME, Mac, NEXT_HEADER_ICMPV6, Packet, UDP_PAYLOAD_OFFSET,
+    self, ETH_HEADER, ETHERTYPE_IPV6, ETHERTYPE_PTP, Endpoint, ICMPV6_ECHO_REQUEST,
+    ICMPV6_NEIGHBOR_SOLICITATION, IPV6_HEADER, Ipv6, MAX_FRAME, Mac, NEXT_HEADER_ICMPV6, Packet,
+    UDP_PAYLOAD_OFFSET,
 };
-use crate::nic::RxMeta;
+use crate::nic::{NS_PER_SEC, Nic, RxMeta, other_port};
 use crate::proto::{Disposition, FRAME_BYTES_MAX, Reply as CmdReply};
-use crate::sim_nic::SimNic;
+use crate::sim_nic::{SimClock, SimNic};
 
 const HOST_MAC: Mac = [0x3C, 0x7C, 0x3F, 0x11, 0x22, 0x33];
 const HOST_IP: Ipv6 = [
@@ -66,8 +68,11 @@ struct Reply {
 
 impl Harness {
     fn new() -> Self {
-        let mut nic = SimNic::new();
-        nic.time = 5_000_000_000;
+        Self::with_clock(SimClock::new(5_000_000_000.0, 0.0))
+    }
+
+    fn with_clock(clock: SimClock) -> Self {
+        let mut nic = SimNic::with_clock(clock);
         let mut node = Node::new();
         node.init(&mut nic);
         nic.sent.clear();
@@ -110,7 +115,14 @@ impl Harness {
     }
 
     fn deliver(&mut self, frame: &[u8]) -> Received {
-        let rx = RxMeta { port: UPSTREAM };
+        let rx = RxMeta {
+            port: UPSTREAM,
+            timestamp_ns: 0,
+        };
+        self.deliver_at(frame, rx)
+    }
+
+    fn deliver_at(&mut self, frame: &[u8], rx: RxMeta) -> Received {
         self.node
             .on_frame(&mut self.nic, self.now_ms, frame, rx, &mut self.cmds)
     }
@@ -155,7 +167,10 @@ impl Harness {
     }
 
     fn assign(&mut self, id: u8) {
-        let body = AssignIdBody { unit_id: id };
+        let body = AssignIdBody {
+            unit_id: id,
+            role: role_of(id),
+        };
         self.send(unit_address(UNASSIGNED_ID), Kind::AssignId, body.as_bytes());
         let r = self.only_reply();
         assert_eq!(r.body, [Status::Ok.as_u8()]);
@@ -166,6 +181,14 @@ impl Harness {
             self.now_ms += 1;
             self.node.tick(&mut self.nic, self.now_ms);
         }
+    }
+}
+
+fn role_of(id: u8) -> u8 {
+    if id == 0 {
+        ROLE_GRANDMASTER
+    } else {
+        ROLE_SLAVE
     }
 }
 
@@ -205,7 +228,10 @@ fn an_unassigned_unit_answers_read_unit_info_and_discover() {
 #[test]
 fn assign_id_is_accepted_only_by_unicast_and_moves_the_address() {
     let mut h = Harness::new();
-    let body = AssignIdBody { unit_id: 3 };
+    let body = AssignIdBody {
+        unit_id: 3,
+        role: ROLE_SLAVE,
+    };
     h.send(ALL_NODES, Kind::AssignId, body.as_bytes());
     assert!(h.replies().is_empty());
     assert!(!h.node.is_assigned());
@@ -244,8 +270,17 @@ fn the_reserved_id_is_refused() {
     let mut h = Harness::new();
     let body = AssignIdBody {
         unit_id: UNASSIGNED_ID,
+        role: ROLE_SLAVE,
     };
     h.send(unit_address(UNASSIGNED_ID), Kind::AssignId, body.as_bytes());
+    assert_eq!(h.only_reply().body, [Status::InvalidPayload.as_u8()]);
+    let body = AssignIdBody {
+        unit_id: 1,
+        role: 2,
+    };
+    h.send(unit_address(UNASSIGNED_ID), Kind::AssignId, body.as_bytes());
+    assert_eq!(h.only_reply().body, [Status::InvalidPayload.as_u8()]);
+    h.send(unit_address(UNASSIGNED_ID), Kind::AssignId, &[1]);
     assert_eq!(h.only_reply().body, [Status::InvalidPayload.as_u8()]);
     h.send(unit_address(UNASSIGNED_ID), Kind::AssignId, &[]);
     assert_eq!(h.only_reply().body, [Status::InvalidPayload.as_u8()]);
@@ -275,7 +310,7 @@ fn unblock_opens_the_downstream_and_reports_its_link() {
     let info = h.unit_info(unit_address(0));
     assert_eq!(
         info.flags,
-        FLAG_ASSIGNED | FLAG_DOWNSTREAM_OPEN | FLAG_DOWNSTREAM_LINK
+        FLAG_ASSIGNED | FLAG_DOWNSTREAM_OPEN | FLAG_DOWNSTREAM_LINK | FLAG_GRANDMASTER
     );
 }
 
@@ -292,30 +327,55 @@ fn set_time_needs_an_assigned_unit() {
 }
 
 #[test]
-fn every_assigned_unit_takes_the_host_time_and_arms_its_pulse() {
-    for id in [0, 2] {
-        let mut h = Harness::new();
-        h.assign(id);
-        let t = SetTimeBody {
-            sys_time: U64::new(812_000_000_123_456_789),
-        };
-        h.send(unit_address(id), Kind::SetTime, &t.as_bytes()[..4]);
-        assert_eq!(h.only_reply().body, [Status::InvalidPayload.as_u8()]);
-        h.send(ALL_NODES, Kind::SetTime, t.as_bytes());
-        assert!(h.replies().is_empty());
-        assert_eq!(h.nic.time_set, None);
+fn the_grandmaster_takes_the_host_time_locks_and_arms_its_pulse() {
+    let mut h = Harness::new();
+    h.assign(0);
+    assert_eq!(
+        h.unit_info(unit_address(0)).flags,
+        FLAG_ASSIGNED | FLAG_GRANDMASTER
+    );
+    let t = SetTimeBody {
+        sys_time: U64::new(812_000_000_123_456_789),
+    };
+    h.send(unit_address(0), Kind::SetTime, &t.as_bytes()[..4]);
+    assert_eq!(h.only_reply().body, [Status::InvalidPayload.as_u8()]);
+    h.send(ALL_NODES, Kind::SetTime, t.as_bytes());
+    assert!(h.replies().is_empty());
+    assert_eq!(h.nic.time_set, None);
 
-        h.send(unit_address(id), Kind::SetTime, t.as_bytes());
-        assert_eq!(h.only_reply().body, [Status::Ok.as_u8()]);
-        assert_eq!(h.nic.time_set, Some(812_000_000_123_456_789));
-        assert_eq!(h.nic.pulse_armed, 1);
-        assert_eq!(h.unit_info(unit_address(id)).flags, FLAG_ASSIGNED);
+    h.send(unit_address(0), Kind::SetTime, t.as_bytes());
+    assert_eq!(h.only_reply().body, [Status::Ok.as_u8()]);
+    assert_eq!(h.nic.time_set, Some(812_000_000_123_456_789));
+    assert_eq!(h.nic.pulse_armed, 1);
+    assert!(h.node.is_locked());
+    assert_eq!(
+        h.unit_info(unit_address(0)).flags,
+        FLAG_ASSIGNED | FLAG_GRANDMASTER | FLAG_PTP_LOCKED
+    );
 
-        h.nic.pulse_ready = true;
-        let info = h.unit_info(unit_address(id));
-        assert_eq!(info.flags, FLAG_ASSIGNED | FLAG_SYNC_READY);
-        assert_eq!(info.sys_time.get(), 812_000_000_123_456_789);
-    }
+    h.nic.pulse_ready = true;
+    let info = h.unit_info(unit_address(0));
+    assert_eq!(
+        info.flags,
+        FLAG_ASSIGNED | FLAG_GRANDMASTER | FLAG_PTP_LOCKED | FLAG_SYNC_READY
+    );
+    assert_eq!(info.sys_time.get(), 812_000_000_123_456_789);
+    assert_eq!(info.ptp_offset_ns.get(), 0);
+}
+
+#[test]
+fn a_slave_refuses_set_time_and_waits_for_ptp() {
+    let mut h = Harness::new();
+    h.assign(2);
+    let t = SetTimeBody {
+        sys_time: U64::new(812_000_000_123_456_789),
+    };
+    h.send(unit_address(2), Kind::SetTime, t.as_bytes());
+    assert_eq!(h.only_reply().body, [Status::NotGrandmaster.as_u8()]);
+    assert_eq!(h.nic.time_set, None);
+    assert_eq!(h.nic.pulse_armed, 0);
+    assert!(!h.node.is_locked());
+    assert_eq!(h.unit_info(unit_address(2)).flags, FLAG_ASSIGNED);
 }
 
 #[test]
@@ -582,4 +642,228 @@ fn echo_is_answered_only_on_unicast() {
     icmp.resize(400, 0);
     h.deliver(&icmp_frame(own, 64, &icmp));
     assert!(h.nic.sent.is_empty());
+}
+
+const WIRE_DELAY_NS: f64 = 700.0;
+const HOP_NS: f64 = 10_000.0;
+const HOST_TIME: u64 = 812_000_000_123_456_789;
+
+struct Wired {
+    gm: Harness,
+    slave: Harness,
+}
+
+fn is_ptp(frame: &[u8]) -> bool {
+    frame.get(12..14) == Some(&ETHERTYPE_PTP.to_be_bytes()[..])
+}
+
+impl Wired {
+    fn new(slave_crystal_ppb: f64) -> Self {
+        let mut gm = Harness::new();
+        let mut slave = Harness::with_clock(SimClock::new(1_000_000.0, slave_crystal_ppb));
+        gm.assign(0);
+        slave.assign(1);
+        let t = SetTimeBody {
+            sys_time: U64::new(HOST_TIME),
+        };
+        gm.send(unit_address(0), Kind::SetTime, t.as_bytes());
+        assert_eq!(gm.only_reply().body, [Status::Ok.as_u8()]);
+        Self { gm, slave }
+    }
+
+    fn deliver(&mut self) {
+        loop {
+            let from_gm = core::mem::take(&mut self.gm.nic.sent);
+            let from_slave = core::mem::take(&mut self.slave.nic.sent);
+            if from_gm.is_empty() && from_slave.is_empty() {
+                return;
+            }
+            self.gm.nic.t += HOP_NS;
+            self.slave.nic.t = self.gm.nic.t;
+            for f in from_gm {
+                if f.port != other_port(UPSTREAM) || !is_ptp(&f.frame) {
+                    continue;
+                }
+                let rx = RxMeta {
+                    port: UPSTREAM,
+                    timestamp_ns: (self.slave.nic.local_at(f.at + WIRE_DELAY_NS) % NS_PER_SEC)
+                        as u32,
+                };
+                self.slave.deliver_at(&f.frame, rx);
+            }
+            for f in from_slave {
+                if f.port != UPSTREAM || !is_ptp(&f.frame) {
+                    continue;
+                }
+                let rx = RxMeta {
+                    port: other_port(UPSTREAM),
+                    timestamp_ns: (self.gm.nic.local_at(f.at + WIRE_DELAY_NS) % NS_PER_SEC) as u32,
+                };
+                self.gm.deliver_at(&f.frame, rx);
+            }
+        }
+    }
+
+    fn run_ms(&mut self, ms: u32) {
+        for _ in 0..ms {
+            self.gm.nic.t += 1e6;
+            self.slave.nic.t = self.gm.nic.t;
+            self.gm.tick(1);
+            self.slave.tick(1);
+            self.deliver();
+        }
+    }
+
+    fn true_offset(&self) -> f64 {
+        (self.slave.nic.clock.at(self.slave.nic.t) - self.gm.nic.clock.at(self.gm.nic.t)) as f64
+    }
+}
+
+#[test]
+fn the_grandmaster_sends_timestamped_syncs_downstream_only_after_set_time() {
+    let mut h = Harness::new();
+    h.assign(0);
+    h.tick(100);
+    assert!(h.nic.sent.is_empty());
+    let t = SetTimeBody {
+        sys_time: U64::new(HOST_TIME),
+    };
+    h.send(unit_address(0), Kind::SetTime, t.as_bytes());
+    h.replies();
+    h.tick(1);
+    assert_eq!(h.nic.sent.len(), 1);
+    let sync = &h.nic.sent[0];
+    assert!(is_ptp(&sync.frame));
+    assert_eq!(sync.port, other_port(UPSTREAM));
+    assert!(sync.timestamp);
+    h.tick(1);
+    assert_eq!(h.nic.sent.len(), 2);
+    assert!(!h.nic.sent[1].timestamp);
+}
+
+#[test]
+fn an_unassigned_unit_ignores_ptp() {
+    let mut wired = Wired::new(0.0);
+    wired.run_ms(20);
+    let mut idle = Harness::new();
+    let frames: Vec<Vec<u8>> = wired.gm.nic.sent.iter().map(|s| s.frame.clone()).collect();
+    wired.run_ms(20);
+    for f in wired
+        .gm
+        .nic
+        .sent
+        .iter()
+        .map(|s| s.frame.clone())
+        .chain(frames)
+    {
+        idle.deliver(&f);
+    }
+    assert!(idle.nic.sent.is_empty());
+    assert_eq!(idle.nic.steps, 0);
+}
+
+#[test]
+fn a_slave_locks_to_the_grandmaster_and_then_arms_its_pulse() {
+    let mut wired = Wired::new(-60_000.0);
+    assert_eq!(wired.slave.nic.pulse_armed, 0);
+    wired.run_ms(5000);
+    assert!(wired.slave.node.is_locked());
+    assert_eq!(wired.slave.nic.pulse_armed, 1);
+    assert!(wired.true_offset().abs() < 100.0, "{}", wired.true_offset());
+    let info = wired.slave.unit_info(unit_address(1));
+    assert_eq!(info.flags & FLAG_PTP_LOCKED, FLAG_PTP_LOCKED);
+    assert_eq!(info.flags & FLAG_GRANDMASTER, 0);
+    assert!(info.ptp_offset_ns.get().abs() < 100);
+    let now = wired.slave.nic.now().unwrap();
+    assert!(now.abs_diff(wired.gm.nic.now().unwrap()) < 100);
+    assert!(now >= HOST_TIME);
+}
+
+#[test]
+fn a_step_unlocks_the_slave_and_stops_its_pulse_until_it_locks_again() {
+    let mut wired = Wired::new(25_000.0);
+    wired.run_ms(5000);
+    assert!(wired.slave.node.is_locked());
+    wired.slave.nic.pulse_ready = true;
+    wired.slave.nic.step(200_000);
+    wired.run_ms(100);
+    assert!(!wired.slave.node.is_locked());
+    assert!(wired.slave.nic.pulse_stopped >= 1);
+    assert!(!wired.slave.nic.pulse_ready);
+    assert_eq!(
+        wired.slave.unit_info(unit_address(1)).flags & (FLAG_PTP_LOCKED | FLAG_SYNC_READY),
+        0
+    );
+    wired.run_ms(5000);
+    assert!(wired.slave.node.is_locked());
+    assert_eq!(wired.slave.nic.pulse_armed, 2);
+    assert!(wired.true_offset().abs() < 100.0, "{}", wired.true_offset());
+}
+
+#[test]
+fn a_locked_slave_stops_its_pulse_before_it_steps() {
+    let mut wired = Wired::new(25_000.0);
+    wired.run_ms(5000);
+    assert!(wired.slave.node.is_locked());
+    let stepped = wired.slave.nic.steps;
+    wired.slave.nic.jump(3_000_000);
+    wired.run_ms(100);
+    assert!(wired.slave.nic.steps > stepped);
+    assert_eq!(wired.slave.nic.steps_with_pulse, 0);
+}
+
+#[test]
+fn a_slave_that_stops_hearing_the_grandmaster_drops_its_lock_and_pulse() {
+    let mut wired = Wired::new(-30_000.0);
+    wired.run_ms(5000);
+    assert!(wired.slave.node.is_locked());
+    wired.slave.nic.pulse_ready = true;
+    let stopped = wired.slave.nic.pulse_stopped;
+    for _ in 0..900 {
+        wired.gm.nic.t += 1e6;
+        wired.slave.nic.t = wired.gm.nic.t;
+        wired.slave.tick(1);
+    }
+    assert!(wired.slave.node.is_locked());
+    for _ in 0..200 {
+        wired.gm.nic.t += 1e6;
+        wired.slave.nic.t = wired.gm.nic.t;
+        wired.slave.tick(1);
+    }
+    assert!(!wired.slave.node.is_locked());
+    assert_eq!(wired.slave.nic.pulse_stopped, stopped + 1);
+    assert_eq!(
+        wired.slave.unit_info(unit_address(1)).flags & (FLAG_PTP_LOCKED | FLAG_SYNC_READY),
+        0
+    );
+    wired.gm.now_ms = wired.slave.now_ms;
+    wired.run_ms(3000);
+    assert!(wired.slave.node.is_locked());
+    assert_eq!(wired.slave.nic.pulse_armed, 2);
+}
+
+#[test]
+fn the_drift_is_written_only_when_it_changes() {
+    let mut wired = Wired::new(0.0);
+    wired.run_ms(5000);
+    let exchanges = 5000 / 16;
+    assert!(wired.slave.nic.drift_writes < exchanges);
+}
+
+#[test]
+fn reset_id_forgets_the_role_and_the_lock() {
+    let mut wired = Wired::new(0.0);
+    wired.run_ms(5000);
+    assert!(wired.slave.node.is_locked());
+    wired.slave.send(ALL_NODES, Kind::ResetId, &[]);
+    wired.slave.replies();
+    wired.slave.tick(50);
+    assert!(!wired.slave.node.is_locked());
+    assert_eq!(wired.slave.nic.drift_ppb, 0);
+    wired.gm.send(ALL_NODES, Kind::ResetId, &[]);
+    wired.gm.replies();
+    wired.gm.tick(50);
+    assert!(!wired.gm.node.is_locked());
+    assert!(!wired.gm.node.is_grandmaster());
+    assert_eq!(wired.gm.unit_info(unit_address(UNASSIGNED_ID)).flags, 0);
 }

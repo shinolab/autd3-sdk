@@ -173,15 +173,10 @@ async fn send_config_pattern_once(client: &Client) -> Result<()> {
     Ok(())
 }
 
-async fn send_set_gpio_out_once(client: &Client) -> Result<()> {
+async fn send_set_gpio_out_once(client: &Client, output: GpioOut) -> Result<()> {
     let mut builder = client.datagram_builder();
     builder.push(SetGpioOut {
-        outputs: [
-            GpioOut::BaseSignal,
-            GpioOut::Off,
-            GpioOut::Off,
-            GpioOut::Off,
-        ],
+        outputs: [output, GpioOut::Off, GpioOut::Off, GpioOut::Off],
     });
     for frame in &builder.build()? {
         client.send_checked(frame).await?;
@@ -333,10 +328,16 @@ async fn run_with_option(
             .context("initial ConfigPattern")?;
     }
     if cli.gpio_base_signal {
-        send_set_gpio_out_once(&client)
+        send_set_gpio_out_once(&client, GpioOut::BaseSignal)
             .await
             .context("initial SetGpioOut")?;
         eprintln!("GPIO[0]: BaseSignal (probe it to check inter-device sync)");
+    }
+    if cli.gpio_sync {
+        send_set_gpio_out_once(&client, GpioOut::Sync)
+            .await
+            .context("initial SetGpioOut")?;
+        eprintln!("GPIO[0]: Sync (probe it to check the sync pulse of every device)");
     }
 
     let shutdown = Arc::new(AtomicBool::new(false));

@@ -149,9 +149,15 @@ FPGA 側の「書き込み先を切り替えるレジスタ」(`MOD_MEM_WR_BANK`
 ## 同期
 
 FPGA の同期入力 (`CAT_SYNC0` ピン) には, ETHSW のタイマから作った同期パルスを入れる.
-ホストは `Client` (`UdpBus`) を開くときに全デバイスへ現在時刻を送り (`SetTime`), 各デバイスは ETHSW のタイマをその時刻に合わせたうえで,
 タイマの SYNCOUT (<Math tex="\SI{500}{us}" /> 周期) から ELC → MTU → PPG を経て, 立ち上がりが <Math tex="\SI{1}{ms}" /> 境界に乗る <Math tex="\SI{1}{ms}" /> 周期のパルスを作る.
-現在のバージョンでは, デバイス間のタイマの同期は取らない.
+
+ETHSW のタイマはデバイス間で PTP (IEEE 1588, L2, E2E, two-step) によって揃える (`fw/src/ptp`).
+
+- ID 0 のデバイスが grandmaster (GM) になる. ホストは `Client` (`UdpBus`) を開くときに GM にだけ現在時刻を送る (`SetTime`). GM 以外は `SetTime` を `NotGrandmaster` で拒否する
+- GM は <Math tex="\SI{16}{ms}" /> ごとに下流ポートへ `Sync` / `Follow_Up` を送り, `Delay_Req` に `Delay_Resp` で答える. 中継する各デバイスの ETHSW が Transparent Clock として滞留時間を `correctionField` に足す
+- 他のデバイス (slave) は上流ポートから届く `Sync` と自分の `Delay_Req` から GM とのずれを求め, 固定小数点の PI サーボでタイマの周波数を補正する. ずれが <Math tex="\SI{10}{us}" /> を超えるとタイマをステップする
+- ずれが <Math tex="\SI{100}{ns}" /> 未満の状態が 64 回続くとロックとみなし, 同期パルスを張り直す. ステップするとロックを外して同期パルスを止める
+- PTP の処理は受信割り込みと 1 ms のタイマ割り込みだけで行うので, メインループが止まっても (フラッシュの消去など) 同期は保たれる
 
 `CMD_SYNCHRONIZE` は以下を行う.
 

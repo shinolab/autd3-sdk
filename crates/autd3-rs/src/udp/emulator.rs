@@ -6,15 +6,16 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{
-    AssignIdBody, FLAG_ASSIGNED, FLAG_DOWNSTREAM_LINK, FLAG_DOWNSTREAM_OPEN, FLAG_SYNC_READY,
-    FrameReply, Header, Kind, PROTOCOL_VERSION, RESET_ID_CLOSE_DELAY_MS, SetTimeBody, Status,
-    UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo,
+    AssignIdBody, FLAG_ASSIGNED, FLAG_DOWNSTREAM_LINK, FLAG_DOWNSTREAM_OPEN, FLAG_GRANDMASTER,
+    FLAG_PTP_LOCKED, FLAG_SYNC_READY, FrameReply, Header, Kind, PROTOCOL_VERSION,
+    RESET_ID_CLOSE_DELAY_MS, ROLE_GRANDMASTER, ROLE_SLAVE, SetTimeBody, Status, UNASSIGNED_ID,
+    UPSTREAM_UNKNOWN, UnblockReply, UnitInfo,
 };
 use autd3_rs_core::FRAME_BYTES_MAX;
 use autd3_rs_core::value::SysTime;
 use autd3_rs_firmware_emulator::Device;
 use autd3_rs_firmware_emulator::autd3_cpu_fw::proto::{Disposition, Drained, Reply};
-use zerocopy::little_endian::U64;
+use zerocopy::little_endian::{I32, U64};
 use zerocopy::{FromBytes, IntoBytes};
 
 use super::option::TransportOption;
@@ -22,6 +23,7 @@ use super::option::TransportOption;
 const NUM_TRANSDUCERS: usize = 249;
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const PULSE_DELAY: Duration = Duration::from_millis(50);
+const LOCK_DELAY: Duration = Duration::from_millis(50);
 const MAX_TICKS_PER_FRAME: u128 = 1000;
 const UPSTREAM_PORT: u8 = 0;
 
@@ -35,19 +37,33 @@ struct Unit {
     device: Device,
     socket: Arc<UdpSocket>,
     id: Option<u8>,
+    grandmaster: bool,
     clock_offset_ns: i64,
     open: bool,
     close_at: Option<Instant>,
+    locked_at: Option<Instant>,
     ready_at: Option<Instant>,
+    lock_blocked: bool,
     last_tick: Instant,
 }
 
 impl Unit {
     fn forget(&mut self) {
         self.id = None;
+        self.grandmaster = false;
         self.open = false;
         self.close_at = None;
+        self.unlock();
+    }
+
+    fn unlock(&mut self) {
+        self.locked_at = None;
         self.ready_at = None;
+    }
+
+    fn lock_at(&mut self, at: Instant) {
+        self.locked_at = Some(at);
+        self.ready_at = Some(at + PULSE_DELAY);
     }
 }
 
@@ -62,6 +78,25 @@ fn host_now_ns() -> i64 {
 impl Chain {
     fn unit_now(&self, index: usize) -> u64 {
         u64::try_from(host_now_ns().saturating_add(self.units[index].clock_offset_ns)).unwrap_or(0)
+    }
+
+    fn grandmaster_offset(&self) -> Option<i64> {
+        self.units
+            .iter()
+            .find(|u| u.id.is_some() && u.grandmaster && u.locked_at.is_some())
+            .map(|u| u.clock_offset_ns)
+    }
+
+    fn follow_grandmaster(&mut self, index: usize, now: Instant) {
+        let Some(offset) = self.grandmaster_offset() else {
+            return;
+        };
+        let unit = &mut self.units[index];
+        if unit.id.is_none() || unit.grandmaster || unit.lock_blocked {
+            return;
+        }
+        unit.clock_offset_ns = offset;
+        unit.lock_at(now + LOCK_DELAY);
     }
 
     fn apply_pending(&mut self, now: Instant) {
@@ -100,6 +135,12 @@ impl Chain {
         }
         if unit.ready_at.is_some_and(|at| at <= now) {
             flags |= FLAG_SYNC_READY;
+        }
+        if unit.locked_at.is_some_and(|at| at <= now) {
+            flags |= FLAG_PTP_LOCKED;
+        }
+        if unit.grandmaster {
+            flags |= FLAG_GRANDMASTER;
         }
         flags
     }
@@ -141,6 +182,7 @@ impl Chain {
             ],
             reserved2: 0,
             sys_time: U64::new(self.unit_now(index)),
+            ptp_offset_ns: I32::new(0),
         }
     }
 
@@ -199,7 +241,7 @@ impl Chain {
             }
             Kind::AssignId if unicast => {
                 for i in targets {
-                    self.assign(i, src, header, body);
+                    self.assign(i, src, header, body, now);
                 }
             }
             Kind::UnblockDownstream if unicast => {
@@ -224,7 +266,7 @@ impl Chain {
         }
     }
 
-    fn assign(&mut self, index: usize, src: SocketAddr, header: Header, body: &[u8]) {
+    fn assign(&mut self, index: usize, src: SocketAddr, header: Header, body: &[u8], now: Instant) {
         if self.units[index].id.is_some() {
             return;
         }
@@ -232,11 +274,16 @@ impl Chain {
             self.reply_status(index, src, header, Status::InvalidPayload, &[]);
             return;
         };
-        if request.unit_id == UNASSIGNED_ID {
+        if request.unit_id == UNASSIGNED_ID
+            || !matches!(request.role, ROLE_SLAVE | ROLE_GRANDMASTER)
+        {
             self.reply_status(index, src, header, Status::InvalidPayload, &[]);
             return;
         }
-        self.units[index].id = Some(request.unit_id);
+        let unit = &mut self.units[index];
+        unit.id = Some(request.unit_id);
+        unit.grandmaster = request.role == ROLE_GRANDMASTER;
+        self.follow_grandmaster(index, now);
         self.reply_status(index, src, header, Status::Ok, &[]);
     }
 
@@ -250,11 +297,16 @@ impl Chain {
     ) {
         let status = if self.units[index].id.is_none() {
             Status::NotAssigned
+        } else if !self.units[index].grandmaster {
+            Status::NotGrandmaster
         } else if let Ok((request, _)) = SetTimeBody::read_from_prefix(body) {
             let target = i64::try_from(request.sys_time.get()).unwrap_or(i64::MAX);
             let unit = &mut self.units[index];
             unit.clock_offset_ns = target.saturating_sub(host_now_ns());
-            unit.ready_at = Some(now + PULSE_DELAY);
+            unit.lock_at(now);
+            for slave in 0..self.units.len() {
+                self.follow_grandmaster(slave, now);
+            }
             Status::Ok
         } else {
             Status::InvalidPayload
@@ -388,10 +440,13 @@ impl UdpEmulator {
                 device: Device::new(NUM_TRANSDUCERS),
                 socket,
                 id: None,
+                grandmaster: false,
                 clock_offset_ns: -boot,
                 open: false,
                 close_at: None,
+                locked_at: None,
                 ready_at: None,
+                lock_blocked: false,
                 last_tick: now,
             });
         }
@@ -468,6 +523,18 @@ impl UdpEmulator {
         let chain = lock(&self.chain);
         let devices: Vec<&Device> = chain.units.iter().map(|unit| &unit.device).collect();
         f(&devices)
+    }
+
+    pub fn set_ptp_lock_blocked(&self, index: usize, blocked: bool) {
+        let mut chain = lock(&self.chain);
+        chain.units[index].lock_blocked = blocked;
+        if blocked {
+            if !chain.units[index].grandmaster {
+                chain.units[index].unlock();
+            }
+        } else if chain.units[index].locked_at.is_none() {
+            chain.follow_grandmaster(index, Instant::now());
+        }
     }
 
     pub fn reboot(&self, index: usize) {

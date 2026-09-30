@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
-use autd3_cpu_wire::udp::{FLAG_ASSIGNED, FLAG_SYNC_READY};
+use autd3_cpu_wire::udp::{FLAG_ASSIGNED, FLAG_PTP_LOCKED, FLAG_SYNC_READY};
 use autd3_rs_core::{DeviceState, DeviceStatus};
 
 use super::error::UdpError;
@@ -10,6 +10,7 @@ use super::error::UdpError;
 const STATE_READY: u8 = 0;
 const STATE_SYNCING: u8 = 1;
 const STATE_LOST: u8 = 2;
+const SYNCED: u8 = FLAG_PTP_LOCKED | FLAG_SYNC_READY;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Tracker {
@@ -41,7 +42,7 @@ impl Tracker {
             return false;
         }
         self.unanswered_since = None;
-        self.state = if flags & FLAG_SYNC_READY != 0 {
+        self.state = if flags & SYNCED == SYNCED {
             DeviceState::Ready
         } else {
             DeviceState::Syncing
@@ -127,7 +128,7 @@ impl StateChecker {
 mod tests {
     use super::*;
 
-    const READY: u8 = FLAG_ASSIGNED | FLAG_SYNC_READY;
+    const READY: u8 = FLAG_ASSIGNED | FLAG_PTP_LOCKED | FLAG_SYNC_READY;
     const LOST_AFTER: Duration = Duration::from_millis(100);
 
     #[test]
@@ -143,6 +144,17 @@ mod tests {
         assert!(t.replied(0, 0, FLAG_ASSIGNED));
         assert_eq!(t.state(), DeviceState::Syncing);
         assert!(t.replied(0, 0, READY));
+        assert_eq!(t.state(), DeviceState::Ready);
+    }
+
+    #[test]
+    fn a_reply_without_the_ptp_lock_is_syncing() {
+        let mut t = Tracker::new();
+        assert!(t.replied(1, 1, FLAG_ASSIGNED | FLAG_SYNC_READY));
+        assert_eq!(t.state(), DeviceState::Syncing);
+        assert!(t.replied(1, 1, FLAG_ASSIGNED | FLAG_PTP_LOCKED));
+        assert_eq!(t.state(), DeviceState::Syncing);
+        assert!(t.replied(1, 1, READY));
         assert_eq!(t.state(), DeviceState::Ready);
     }
 

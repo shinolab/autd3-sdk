@@ -18,10 +18,8 @@ Each device has its own clock, and output switching and the like happen on this 
 This time is a 64-bit counter in ns units, counted from 2000-01-01 00:00:00 (UTC).
 It is set to the host time when the `Client` opens, and the SDK corrects the offset from the host time.
 
-:::caution
-This version does not synchronize the time between devices.
-Each device free-runs from the time set on open, so the time of different devices drifts apart slowly with the crystal tolerance (tens of ppm).
-:::
+The devices share the same time through PTP ([Synchronization Between Devices](/autd3-sdk/en/api/connection/#synchronization-between-devices)).
+So the same `SysTime` makes every device act at the same moment.
 
 ## Construction
 

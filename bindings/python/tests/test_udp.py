@@ -22,7 +22,7 @@ def test_defaults_follow_the_spec() -> None:
     assert option.lost_timeout.as_millis() == 100
     assert option.response_timeout.as_millis() == 200
     assert option.enumeration_timeout.as_millis() == 10_000
-    assert option.sync_timeout.as_millis() == 5_000
+    assert option.sync_timeout.as_millis() == 10_000
 
 
 def test_fields_round_trip() -> None:

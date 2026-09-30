@@ -86,13 +86,17 @@ pub(crate) const SW_MAC_TX_SECTION_FULL: usize = 0x28;
 pub(crate) const TSM_CONFIG: usize = 0xA00C_C004;
 pub(crate) const TSM_IRQ_STAT_ACK: usize = 0xA00C_C008;
 pub(crate) const PORT0_CTRL: usize = 0xA00C_C020;
+pub(crate) const PORT0_TIME: usize = 0xA00C_C024;
 pub(crate) const PORT1_CTRL: usize = 0xA00C_C028;
+pub(crate) const PORT1_TIME: usize = 0xA00C_C02C;
 pub(crate) const ATIME_CTRL: usize = 0xA00C_C120;
 pub(crate) const ATIME: usize = 0xA00C_C124;
+pub(crate) const ATIME_OFFSET: usize = 0xA00C_C128;
 pub(crate) const ATIME_EVT_PERIOD: usize = 0xA00C_C12C;
 pub(crate) const ATIME_CORR: usize = 0xA00C_C130;
 pub(crate) const ATIME_INC: usize = 0xA00C_C134;
 pub(crate) const ATIME_SEC: usize = 0xA00C_C138;
+pub(crate) const ATIME_OFFS_CORR: usize = 0xA00C_C13C;
 
 pub(crate) const MTU_TSTRA: usize = 0xA006_A080;
 pub(crate) const MTU0_TCR: usize = 0xA006_A100;

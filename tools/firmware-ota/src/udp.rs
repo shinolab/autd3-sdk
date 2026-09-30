@@ -38,7 +38,7 @@ pub struct UdpArgs {
     pub enumeration_timeout_ms: Option<u64>,
     #[arg(
         long,
-        help = "How long to wait for every device to start its sync pulse, milliseconds"
+        help = "How long to wait for every device to lock to the grandmaster and start its sync pulse, milliseconds"
     )]
     pub sync_timeout_ms: Option<u64>,
 }
@@ -74,11 +74,11 @@ impl UdpArgs {
     pub fn open(&self, expected: Option<usize>) -> Result<UdpBus, UdpError> {
         let option = self.option();
         if let Some(devices) = expected {
-            return UdpBus::open(&option, devices);
+            return UdpBus::open_unsynchronized(&option, devices);
         }
         let mut devices = 1;
         loop {
-            match UdpBus::open(&option, devices) {
+            match UdpBus::open_unsynchronized(&option, devices) {
                 Err(UdpError::DeviceCountMismatch { found, .. })
                     if found > devices && found <= MAX_DEVICES =>
                 {

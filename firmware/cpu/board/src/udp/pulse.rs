@@ -1,4 +1,4 @@
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use super::ethsw;
 use super::regs::VIC_INTNO_TGIA0;
@@ -32,6 +32,7 @@ const PO16: u8 = 1 << 0;
 
 static ARMED: AtomicBool = AtomicBool::new(false);
 static READY: AtomicBool = AtomicBool::new(false);
+static SERVED_LATCH: AtomicU64 = AtomicU64::new(u64::MAX);
 
 pub(crate) fn is_ready() -> bool {
     READY.load(Ordering::Acquire)
@@ -81,6 +82,7 @@ pub(crate) fn arm() {
     write8(ELC_ELOPA, ELOPA_MTU0_CAPTURE);
     write8(ELC_ELCR, ELCR_ENABLE);
     vic::clear_edge(VIC_INTNO_TGIA0);
+    SERVED_LATCH.store(ethsw::syncout_latch(), Ordering::Relaxed);
     if ethsw::start_syncout(HALF_PERIOD_NS) {
         ARMED.store(true, Ordering::Release);
     }
@@ -93,9 +95,19 @@ pub(crate) fn next_level_is_high(latch_ns: u64) -> bool {
 }
 
 pub(crate) fn on_capture() {
-    let high = next_level_is_high(ethsw::syncout_latch());
+    let latch = ethsw::syncout_latch();
+    let high = next_level_is_high(latch);
     write8(PPG1_NDRL, if high { PO16 } else { 0 });
+    SERVED_LATCH.store(latch, Ordering::Relaxed);
     if ARMED.load(Ordering::Acquire) {
         READY.store(true, Ordering::Release);
+    }
+}
+
+pub(crate) fn service() {
+    if ARMED.load(Ordering::Acquire)
+        && ethsw::syncout_latch() != SERVED_LATCH.load(Ordering::Relaxed)
+    {
+        on_capture();
     }
 }

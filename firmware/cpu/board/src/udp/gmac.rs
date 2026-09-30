@@ -34,6 +34,7 @@ const TX_DESCRIPTOR_END: u32 = 0xFFFF_FFFF;
 
 const TXCTL_PORT_SHIFT: u32 = 9;
 const TXCTL_FORCED_FORWARDING: u32 = 1 << 8;
+const TXCTL_TIMESTAMP: u32 = 1 << 7;
 const TXCTL_TCPIP_ACC_OFF: u32 = 1 << 5;
 const TXCTL_APAD: u32 = 1 << 2;
 
@@ -109,17 +110,20 @@ fn read_word(addr: u32) -> u32 {
     unsafe { (addr as usize as *const u32).read_volatile() }
 }
 
-pub(crate) fn send(buffer: u32, frame: &[u8], frame_id: u32, port: u8) -> bool {
+pub(crate) fn send(buffer: u32, frame: &[u8], frame_id: u32, port: u8, timestamp: bool) -> bool {
     let Ok(len) = u32::try_from(frame.len()) else {
         return false;
     };
     if TX_DATA_OFFSET + TX_CONTROL_BYTES + len > TX_BUFFER_BYTES {
         return false;
     }
-    let flags = ((1 << (port & 1)) << TXCTL_PORT_SHIFT)
+    let mut flags = ((1 << (port & 1)) << TXCTL_PORT_SHIFT)
         | TXCTL_FORCED_FORWARDING
         | TXCTL_TCPIP_ACC_OFF
         | TXCTL_APAD;
+    if timestamp {
+        flags |= TXCTL_TIMESTAMP;
+    }
     let data = buffer + TX_DATA_OFFSET;
     write_word(data, ((len + 3) << 16) | flags);
     write_word(data + 4, frame_id);

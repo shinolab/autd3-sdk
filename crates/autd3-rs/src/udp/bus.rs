@@ -9,7 +9,7 @@ use autd3_rs_core::{BusStats, DeviceClock, FRAME_BYTES_MAX};
 use zerocopy::FromBytes;
 
 use super::channel::{Channel, all_nodes};
-use super::enumerate::{bring_up, same_endpoint};
+use super::enumerate::{Bringup, bring_up, same_endpoint};
 use super::error::UdpError;
 use super::iface;
 use super::option::TransportOption;
@@ -41,6 +41,21 @@ pub struct UdpBus {
 
 impl UdpBus {
     pub fn open(option: &TransportOption, num_devices: usize) -> Result<Self, UdpError> {
+        Self::open_with(option, num_devices, Bringup::Synchronized)
+    }
+
+    pub fn open_unsynchronized(
+        option: &TransportOption,
+        num_devices: usize,
+    ) -> Result<Self, UdpError> {
+        Self::open_with(option, num_devices, Bringup::Unsynchronized)
+    }
+
+    fn open_with(
+        option: &TransportOption,
+        num_devices: usize,
+        bringup: Bringup,
+    ) -> Result<Self, UdpError> {
         option.validate()?;
         let timer_resolution = TimerResolutionGuard::new(TIMER_RESOLUTION_MS);
         if !(1..=255).contains(&num_devices) {
@@ -52,7 +67,7 @@ impl UdpBus {
             let candidate = iface::resolve(&option.iface, option.response_timeout)?;
             Channel::open(all_nodes(candidate.scope), Some(candidate.scope))?
         };
-        let units = bring_up(&mut channel, option, num_devices)?;
+        let units = bring_up(&mut channel, option, num_devices, bringup)?;
         Ok(Self {
             channel,
             trackers: vec![Tracker::new(); units.len()],

@@ -1,6 +1,6 @@
 use super::{
-    ETH_HEADER, ETHERTYPE_IPV6, ICMPV6_ECHO_REQUEST, ICMPV6_NEIGHBOR_SOLICITATION, IPV6_HEADER,
-    Ipv6, Mac, NEXT_HEADER_ICMPV6, NEXT_HEADER_UDP, UDP_HEADER,
+    ETH_HEADER, ETHERTYPE_IPV6, ETHERTYPE_PTP, ICMPV6_ECHO_REQUEST, ICMPV6_NEIGHBOR_SOLICITATION,
+    IPV6_HEADER, Ipv6, Mac, NEXT_HEADER_ICMPV6, NEXT_HEADER_UDP, UDP_HEADER,
 };
 
 const ICMPV6_HEADER: usize = 4;
@@ -18,6 +18,10 @@ pub struct Udp<'a> {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Packet<'a> {
+    Ptp {
+        src_mac: Mac,
+        message: &'a [u8],
+    },
     Udp(Udp<'a>),
     NeighborSolicitation {
         src_mac: Mac,
@@ -48,6 +52,10 @@ pub fn parse(frame: &[u8]) -> Option<Packet<'_>> {
     let ethertype = be16(frame, 12)?;
     let body = frame.get(ETH_HEADER..)?;
     match ethertype {
+        ETHERTYPE_PTP => Some(Packet::Ptp {
+            src_mac,
+            message: body,
+        }),
         ETHERTYPE_IPV6 => parse_ipv6(src_mac, body),
         _ => None,
     }

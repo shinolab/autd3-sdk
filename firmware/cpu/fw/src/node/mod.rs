@@ -1,19 +1,21 @@
 #[cfg(test)]
 mod tests;
 
-use zerocopy::little_endian::U64;
+use zerocopy::little_endian::{I32, U64};
 use zerocopy::{FromBytes, IntoBytes};
 
 use autd3_cpu_wire::udp::{
     ALL_NODES, AssignIdBody, FLAG_ASSIGNED, FLAG_DOWNSTREAM_LINK, FLAG_DOWNSTREAM_OPEN,
-    FLAG_SYNC_READY, FrameReply, HEADER_BYTES, Header, Kind, PORT, PROTOCOL_VERSION,
-    RESET_ID_CLOSE_DELAY_MS, SetTimeBody, Status, UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply,
-    UnitInfo, link_local, mac, solicited_node,
+    FLAG_GRANDMASTER, FLAG_PTP_LOCKED, FLAG_SYNC_READY, FrameReply, HEADER_BYTES, Header, Kind,
+    PORT, PROTOCOL_VERSION, RESET_ID_CLOSE_DELAY_MS, ROLE_GRANDMASTER, ROLE_SLAVE, SetTimeBody,
+    Status, UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo, link_local, mac,
+    solicited_node,
 };
 
 use crate::net::{self, Endpoint, Ipv6, Mac, NDP_HOP_LIMIT, Packet, UDP_PAYLOAD_OFFSET, Udp};
 use crate::nic::{Nic, RxMeta, other_port};
 use crate::proto::{Disposition, FRAME_BYTES_MAX, FRAME_HEADER_BYTES, REPLY_DATA_BYTES_MAX, Reply};
+use crate::ptp::{Event, Ptp, Role};
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
 pub const TX_BUF_BYTES: usize = 320;
@@ -37,6 +39,7 @@ const _: () = assert!(TX_BUF_BYTES >= UDP_PAYLOAD_OFFSET + autd3_cpu_wire::udp::
 
 pub struct Node {
     unit_id: u8,
+    grandmaster: bool,
     upstream: Option<u8>,
     open: bool,
     downstream_link: bool,
@@ -44,6 +47,7 @@ pub struct Node {
     mac: Mac,
     addr: Ipv6,
     host: Option<(u8, Endpoint)>,
+    ptp: Ptp,
     buf: [u8; TX_BUF_BYTES],
 }
 
@@ -66,6 +70,7 @@ impl Node {
     pub const fn new() -> Self {
         Self {
             unit_id: UNASSIGNED_ID,
+            grandmaster: false,
             upstream: None,
             open: false,
             downstream_link: false,
@@ -73,6 +78,7 @@ impl Node {
             mac: mac(UNASSIGNED_ID),
             addr: link_local(mac(UNASSIGNED_ID)),
             host: None,
+            ptp: Ptp::new(),
             buf: [0; TX_BUF_BYTES],
         }
     }
@@ -101,6 +107,16 @@ impl Node {
         self.addr
     }
 
+    #[must_use]
+    pub const fn is_grandmaster(&self) -> bool {
+        self.grandmaster
+    }
+
+    #[must_use]
+    pub const fn is_locked(&self) -> bool {
+        self.ptp.is_locked()
+    }
+
     pub fn flags<N: Nic>(&self, nic: &mut N) -> u8 {
         let mut flags = 0;
         if self.is_assigned() {
@@ -115,12 +131,19 @@ impl Node {
         if nic.pulse_ready() {
             flags |= FLAG_SYNC_READY;
         }
+        if self.ptp.is_locked() {
+            flags |= FLAG_PTP_LOCKED;
+        }
+        if self.grandmaster {
+            flags |= FLAG_GRANDMASTER;
+        }
         flags
     }
 
     fn unassign<N: Nic>(&mut self, nic: &mut N) {
         nic.set_forwarding(false);
         self.unit_id = UNASSIGNED_ID;
+        self.grandmaster = false;
         self.upstream = None;
         self.open = false;
         self.downstream_link = false;
@@ -129,6 +152,7 @@ impl Node {
         self.addr = link_local(self.mac);
         self.host = None;
         nic.set_mac(self.mac);
+        self.ptp.reset(nic);
         nic.stop_pulse();
     }
 
@@ -137,6 +161,16 @@ impl Node {
             && now_ms.wrapping_sub(at).cast_signed() >= 0
         {
             self.unassign(nic);
+        }
+        let event = self.ptp.tick(nic, now_ms);
+        Self::apply(nic, event);
+    }
+
+    fn apply<N: Nic>(nic: &mut N, event: Event) {
+        match event {
+            Event::Locked => nic.arm_pulse(),
+            Event::Lost => nic.stop_pulse(),
+            Event::Stepped | Event::None => {}
         }
     }
 
@@ -162,6 +196,13 @@ impl Node {
         cmds: &mut C,
     ) -> Received {
         match net::parse(frame) {
+            Some(Packet::Ptp { message, .. }) => {
+                if self.is_assigned() {
+                    let event = self.ptp.on_message(nic, message, rx, now_ms);
+                    Self::apply(nic, event);
+                }
+                Received::Nothing
+            }
             Some(Packet::NeighborSolicitation {
                 src_mac,
                 src_ip,
@@ -181,7 +222,7 @@ impl Node {
                         src_ip,
                     )
                 {
-                    nic.send(&self.buf[..len], rx.port);
+                    nic.send(&self.buf[..len], rx.port, false);
                 }
                 Received::Nothing
             }
@@ -196,7 +237,7 @@ impl Node {
                     && let Some(len) =
                         net::echo_reply(&mut self.buf, self.mac, self.addr, src_mac, src_ip, body)
                 {
-                    nic.send(&self.buf[..len], rx.port);
+                    nic.send(&self.buf[..len], rx.port, false);
                 }
                 Received::Nothing
             }
@@ -294,16 +335,26 @@ impl Node {
             self.status(nic, reply, Status::InvalidPayload);
             return;
         };
+        let role = match req.role {
+            ROLE_GRANDMASTER => Role::Master,
+            ROLE_SLAVE => Role::Slave,
+            _ => {
+                self.status(nic, reply, Status::InvalidPayload);
+                return;
+            }
+        };
         if req.unit_id == UNASSIGNED_ID {
             self.status(nic, reply, Status::InvalidPayload);
             return;
         }
         self.unit_id = req.unit_id;
+        self.grandmaster = role == Role::Master;
         self.upstream = Some(port & 1);
         self.close_at = None;
         self.mac = mac(req.unit_id);
         self.addr = link_local(self.mac);
         nic.set_mac(self.mac);
+        self.ptp.configure(nic, role, self.mac, port);
         self.status(nic, reply, Status::Ok);
     }
 
@@ -325,13 +376,20 @@ impl Node {
         if !self.is_assigned() {
             return Status::NotAssigned;
         }
+        if !self.grandmaster {
+            return Status::NotGrandmaster;
+        }
         let Ok((req, _)) = SetTimeBody::ref_from_prefix(body) else {
             return Status::InvalidPayload;
         };
         nic.stop_pulse();
         if !nic.set_time(req.sys_time.get()) {
+            if self.ptp.is_locked() {
+                nic.arm_pulse();
+            }
             return Status::InvalidPayload;
         }
+        self.ptp.time_set();
         nic.arm_pulse();
         Status::Ok
     }
@@ -345,7 +403,17 @@ impl Node {
             fw_version: [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH],
             reserved2: 0,
             sys_time: U64::new(nic.now().unwrap_or(0)),
+            ptp_offset_ns: I32::new(self.ptp_offset_ns()),
         }
+    }
+
+    fn ptp_offset_ns(&self) -> i32 {
+        if !self.is_assigned() || self.grandmaster {
+            return 0;
+        }
+        self.ptp
+            .last_offset()
+            .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
     }
 
     fn frame_reply<N: Nic>(&mut self, nic: &mut N, reply: &ReplyTo, state: &Reply) {
@@ -399,7 +467,7 @@ impl Node {
             port: PORT,
         };
         if let Some(len) = net::udp(&mut self.buf, &src, &reply.to, at - UDP_PAYLOAD_OFFSET) {
-            nic.send(&self.buf[..len], reply.port);
+            nic.send(&self.buf[..len], reply.port, false);
         }
     }
 }

@@ -125,6 +125,13 @@ pub struct Cli {
     #[arg(
         long,
         default_value_t = false,
+        conflicts_with = "gpio_base_signal",
+        help = "Emit Sync (high on the FPGA clock that detects the sync input edge) on GPIO[0] to probe the sync pulse itself on a scope"
+    )]
+    pub gpio_sync: bool,
+    #[arg(
+        long,
+        default_value_t = false,
         help = "Stop at the first failed send and exit non-zero (soak testing). \
                 The summary is still printed."
     )]

@@ -16,7 +16,7 @@ async fn main() -> Result<()> {
     let lost_timeout = Duration::from_millis(100);
     let response_timeout = Duration::from_millis(200);
     let enumeration_timeout = Duration::from_secs(10);
-    let sync_timeout = Duration::from_secs(5);
+    let sync_timeout = Duration::from_secs(10);
     // ANCHOR: api
     TransportOption {
         iface,

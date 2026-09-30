@@ -1,15 +1,16 @@
 use autd3_cpu_fw::net::Mac;
+use autd3_cpu_fw::nic::{NS_PER_SEC, TxStamp};
 
 use super::irq::without_irq;
 use super::regs::{
-    ATIME, ATIME_CORR, ATIME_CTRL, ATIME_EVT_PERIOD, ATIME_INC, ATIME_SEC, EMACRST, ETHPHYLNK,
-    ETHSFTRST, ETHSWMD, ETHSWMTC, ETSPCMD, MACSEL, MII_CTRL0, MII_CTRL1, PORT0_CTRL, PORT1_CTRL,
-    SPCMD, SW_ADR_TABLE, SW_ADR_TABLE_ENTRIES, SW_BCAST_DEFAULT_MASK, SW_HUB_CONTROL,
-    SW_INPUT_LEARN_BLOCK, SW_MAC_BASE, SW_MAC_COMMAND_CONFIG, SW_MAC_FRM_LENGTH,
-    SW_MAC_TX_SECTION_EMPTY, SW_MAC_TX_SECTION_FULL, SW_MCAST_DEFAULT_MASK, SW_MGMT_CONFIG,
-    SW_OQMGR_STATUS, SW_PORT_ENA, SW_QMGR_ST_MINCELLS, SW_QMGR_WEIGHTS, SW_UCAST_DEFAULT_MASK,
-    SWTMEN, SWTMLATNS, SWTMLATSEC, SWTMPNS, SWTMPSEC, SWTMSTNS, SWTMSTSEC, TSM_CONFIG,
-    TSM_IRQ_STAT_ACK,
+    ATIME, ATIME_CORR, ATIME_CTRL, ATIME_EVT_PERIOD, ATIME_INC, ATIME_OFFS_CORR, ATIME_OFFSET,
+    ATIME_SEC, EMACRST, ETHPHYLNK, ETHSFTRST, ETHSWMD, ETHSWMTC, ETSPCMD, MACSEL, MII_CTRL0,
+    MII_CTRL1, PORT0_CTRL, PORT0_TIME, PORT1_CTRL, PORT1_TIME, SPCMD, SW_ADR_TABLE,
+    SW_ADR_TABLE_ENTRIES, SW_BCAST_DEFAULT_MASK, SW_HUB_CONTROL, SW_INPUT_LEARN_BLOCK, SW_MAC_BASE,
+    SW_MAC_COMMAND_CONFIG, SW_MAC_FRM_LENGTH, SW_MAC_TX_SECTION_EMPTY, SW_MAC_TX_SECTION_FULL,
+    SW_MCAST_DEFAULT_MASK, SW_MGMT_CONFIG, SW_OQMGR_STATUS, SW_PORT_ENA, SW_QMGR_ST_MINCELLS,
+    SW_QMGR_WEIGHTS, SW_UCAST_DEFAULT_MASK, SWTMEN, SWTMLATNS, SWTMLATSEC, SWTMPNS, SWTMPSEC,
+    SWTMSTNS, SWTMSTSEC, TSM_CONFIG, TSM_IRQ_STAT_ACK,
 };
 use crate::bsp::timer::delay_ms;
 use crate::regs::{read32, write32};
@@ -45,14 +46,22 @@ const STATIC_ENTRY_PORT_INTERNAL: u32 = 1 << 23;
 
 const CLKPERD_NS: u32 = 10;
 const ATIME_INC_10NS: u32 = (CLKPERD_NS << 8) | CLKPERD_NS;
+const CORRINC_SHIFT: u32 = 8;
+const DRIFT_PPB_PER_CYCLE: u64 = 100_000_000;
+const MAX_DRIFCORVAL: u64 = 0x7FFF_FFFF;
+const IMMEDIATE_OFFSET_LIMIT_NS: i64 = 500_000_000;
 const EVENT_PERIOD_NS: u32 = 1_000_000_000;
+const IMMEDIATE_OFFSET_MARGIN_NS: i64 = 10_000_000;
+const PORT_CTRL_TSVALID: u32 = 1;
+const PORT_CTRL_TSOVR: u32 = 1 << 1;
+const PORT_CTRL_TSKEEP: u32 = 1 << 2;
+const PORT_TS: [(usize, usize); 2] = [(PORT0_CTRL, PORT0_TIME), (PORT1_CTRL, PORT1_TIME)];
 const ATIME_CTRL_ENABLE_WRAP: u32 = (1 << 0) | (1 << 5);
 const ATIME_CTRL_CAPTURE: u32 = 1 << 11;
 const CAPTURE_MAX_POLLS: u32 = 10_000;
 const TSM_IRQ_CLEAR_ALL: u32 = 0x301F;
 
 const SYNCOUT_START_DELAY_SEC: u64 = 2;
-const NS_PER_SEC: u64 = 1_000_000_000;
 
 fn unlock(reg: usize) {
     for value in PROTECT_SEQUENCE {
@@ -185,6 +194,60 @@ pub(crate) fn set_time(ns: u64) -> bool {
         write32(ATIME, (ns % NS_PER_SEC) as u32);
     });
     true
+}
+
+pub(crate) fn step_time(offset_ns: i64) -> bool {
+    let Some(now) = capture() else {
+        return false;
+    };
+    let within_second = (now % NS_PER_SEC).cast_signed() + offset_ns;
+    if let Ok(immediate) = i32::try_from(offset_ns)
+        && offset_ns.abs() < IMMEDIATE_OFFSET_LIMIT_NS
+        && (IMMEDIATE_OFFSET_MARGIN_NS..NS_PER_SEC.cast_signed() - IMMEDIATE_OFFSET_MARGIN_NS)
+            .contains(&within_second)
+    {
+        write32(ATIME_OFFS_CORR, 0);
+        write32(ATIME_OFFSET, immediate.cast_unsigned());
+        return true;
+    }
+    let Some(target) = now.checked_add_signed(offset_ns) else {
+        return false;
+    };
+    set_time(target)
+}
+
+pub(crate) fn set_drift(ppb: i32) {
+    let magnitude = u64::from(ppb.unsigned_abs());
+    let drifcorval = (DRIFT_PPB_PER_CYCLE + magnitude / 2)
+        .checked_div(magnitude)
+        .map_or(0, |v| v.clamp(1, MAX_DRIFCORVAL) as u32);
+    let corrinc = match ppb {
+        p if p > 0 => CLKPERD_NS + 1,
+        p if p < 0 => CLKPERD_NS - 1,
+        _ => CLKPERD_NS,
+    };
+    write32(ATIME_INC, (corrinc << CORRINC_SHIFT) | CLKPERD_NS);
+    write32(ATIME_CORR, drifcorval);
+}
+
+pub(crate) fn clear_tx_timestamps() {
+    for (ctrl, _) in PORT_TS {
+        write32(ctrl, PORT_CTRL_TSKEEP);
+    }
+}
+
+pub(crate) fn take_tx_timestamp(port: u8) -> Option<TxStamp> {
+    let (ctrl, time) = PORT_TS[usize::from(port & 1)];
+    let status = read32(ctrl);
+    if status & PORT_CTRL_TSVALID == 0 {
+        return None;
+    }
+    let ns = read32(time);
+    write32(ctrl, PORT_CTRL_TSKEEP);
+    Some(TxStamp {
+        ns,
+        overwritten: status & PORT_CTRL_TSOVR != 0,
+    })
 }
 
 pub(crate) fn stop_syncout() {

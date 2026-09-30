@@ -16,6 +16,7 @@ pub mod node;
 pub mod params;
 pub mod port;
 pub mod proto;
+pub mod ptp;
 #[cfg(test)]
 mod sim_nic;
 mod sync;

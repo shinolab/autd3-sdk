@@ -22,7 +22,7 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(200), option.ResponseTimeout);
             Assert.Equal(TimeSpan.FromSeconds(10), option.EnumerationTimeout);
-            Assert.Equal(TimeSpan.FromSeconds(5), option.SyncTimeout);
+            Assert.Equal(TimeSpan.FromSeconds(10), option.SyncTimeout);
         }
 
         [Fact]
