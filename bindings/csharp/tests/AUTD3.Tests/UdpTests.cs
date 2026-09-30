@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -42,7 +43,11 @@ namespace AUTD3.Tests
             var option = emulator.Option();
             Assert.NotNull(option.Group);
             using var geometry = Devices(2);
-            var (client, checker) = await Client.OpenWithCheckerAsync(geometry, option, new ClientConfig());
+            var (driver, connector) = Driver.Open(option, geometry.NumDevices);
+            using var d = driver;
+            using var checker = driver.StateChecker();
+            var runner = Task.Run(driver.Run);
+            var client = await Client.OpenAsync(geometry, connector, new ClientConfig());
             await using (client)
             {
                 Assert.Equal(2, client.NumDevices);
@@ -56,17 +61,65 @@ namespace AUTD3.Tests
                     Assert.Equal(counters.Get(Telemetry.Failsafe), counters[Telemetry.Failsafe]);
                 }
             }
+            await runner;
         }
 
         [Fact]
-        public async Task ADeviceCountMismatchFailsToOpen()
+        public async Task TheCallerCanPollTheDriver()
+        {
+            using var emulator = new UdpEmulator(1);
+            using var geometry = Devices(1);
+            var (driver, connector) = Driver.Open(emulator.Option(), geometry.NumDevices);
+            using var d = driver;
+            var runner = new Thread(() =>
+            {
+                while (driver.Poll(out var wait))
+                {
+                    driver.Wait(wait);
+                }
+            })
+            { IsBackground = true };
+            runner.Start();
+            await using (var client = await Client.OpenAsync(geometry, connector, new ClientConfig()))
+            {
+                Assert.Single(await client.ReadFirmwareVersionAsync());
+            }
+            Assert.True(runner.Join(TimeSpan.FromSeconds(10)));
+            Assert.False(driver.Poll(out _));
+        }
+
+        [Fact]
+        public async Task AConnectorIsUsedOnlyOnce()
+        {
+            using var emulator = new UdpEmulator(1);
+            using var geometry = Devices(1);
+            var (driver, connector) = Driver.Open(emulator.Option(), geometry.NumDevices);
+            using var d = driver;
+            var runner = Task.Run(driver.Run);
+            await using (var client = await Client.OpenAsync(geometry, connector, new ClientConfig()))
+            {
+                await Assert.ThrowsAsync<Autd3Exception>(() => Client.OpenAsync(geometry, connector, new ClientConfig()));
+            }
+            await runner;
+        }
+
+        [Fact]
+        public void DisposingAnUnusedConnectorClosesTheDriver()
+        {
+            using var emulator = new UdpEmulator(1);
+            var (driver, connector) = Driver.Open(emulator.Option(), 1);
+            using var d = driver;
+            connector.Dispose();
+            driver.Run();
+            Assert.False(driver.Poll(out _));
+        }
+
+        [Fact]
+        public void ADeviceCountMismatchFailsToOpen()
         {
             using var emulator = new UdpEmulator(1);
             using var geometry = Devices(2);
-            await Assert.ThrowsAnyAsync<Autd3Exception>(async () =>
-            {
-                await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
-            });
+            Assert.ThrowsAny<Autd3Exception>(() => Driver.Open(emulator.Option(), geometry.NumDevices));
         }
 
         [Fact]

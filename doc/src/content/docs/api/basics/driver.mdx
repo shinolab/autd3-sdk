@@ -1,0 +1,79 @@
+---
+title: Driver
+description: デバイスとの送受信を回す Driver
+sidebar:
+  order: 2
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import thread from "@codes/rust/examples/api/basics/driver-thread.rs?raw";
+import sleep from "@codes/rust/examples/api/basics/driver-sleep.rs?raw";
+import tokio from "@codes/rust/examples/api/basics/driver-tokio.rs?raw";
+import pyThread from "@codes/python/examples/api/basics/driver-thread.py?raw";
+import pySleep from "@codes/python/examples/api/basics/driver-sleep.py?raw";
+import csThread from "@codes/csharp/examples/api/basics/driver-thread.cs?raw";
+import csSleep from "@codes/csharp/examples/api/basics/driver-sleep.cs?raw";
+
+ライブラリは送受信のためのスレッドを立てない.
+デバイスとの送受信 (コマンドの送信・返信の振り分け・再送・生存確認) は `Driver` が行い, それをどのスレッドで・どの優先度で・どの間隔で回すかはユーザーが決める.
+
+## 生成の順序
+
+1. `Driver::open(&option, num_devices)` でデバイスを開く (同期. 列挙と ID の割り当てを行う). `Driver` と `Connector` が返る
+2. `Driver` を回し始める
+3. `Client::open(&geometry, connector, config)` を await する
+
+接続の手順 (handshake) は回っている `Driver` が進めるので, `Driver` を回さずに `Client::open` を await すると返らない.
+`Connector` は 1 回だけ使える. `Client::open` に渡さずに捨てると `Driver` は閉じる.
+
+## 回し方
+
+### 専用のスレッドで回す
+
+もっとも簡単な方法. `run` は `Driver` が閉じるまで返らない.
+
+<CodeTabs rust={excerpt(thread)} python={excerpt(pyThread)} csharp={excerpt(csThread)} />
+
+### スレッドで `poll` と Sleep を回す
+
+`poll` はブロックしない 1 ステップで, 返信の読み出し・コマンドの送信・再送や生存確認のタイマを進める.
+`poll` の呼び出しが遅れても, 遅れるのは応答だけで, 余計な再送やタイムアウト・`Lost` の誤判定は起きない
+(`poll` は届いている返信を読み切ってからタイマを判定する).
+守るべき制約は, デバイスの failsafe (500 ms) より十分短い間隔で `poll` を呼ぶことである.
+
+ただし, デバイス時刻の推定 (`DeviceClock`) は返信を読んだ時刻を基準にするので, この回し方では Sleep の間隔ぶん過去へずれる.
+`TransitionMode::SysTime` や GPIO の `SysTimeEq` などデバイス時刻を使う機能を使う場合は, `run` (既定の待ち方) か非同期の読み出し待ちで回すこと.
+
+<CodeTabs rust={excerpt(sleep)} python={excerpt(pySleep)} csharp={excerpt(csSleep)} />
+
+### tokio のタスクで回す (Rust のみ)
+
+`notified()` (コマンドが積まれたら起きる future) と, ソケットの読み出し待ち (`AsFd`. Windows では `AsRawSocket`), `poll` が返す期限を組み合わせる.
+以下は Unix の例である.
+
+<CodeTabs rust={excerpt(tokio)} />
+
+## API
+
+| メソッド             | 返り値                                 | 説明 |
+| -------------------- | -------------------------------------- | ---- |
+| `Driver::open(option, n)` | `Result<(Driver, Connector), Error>` | デバイスを開く (同期) |
+| `poll()`             | `Poll`                                 | 1 ステップ進める. `Poll::Next(deadline)` は次に呼ぶべき期限, `Poll::Closed` は閉じた |
+| `wait(deadline)`     | —                                      | 返信・新しいコマンド・期限のいずれかまで待つ (ブロッキング) |
+| `notified()`         | `Notified`                             | コマンドが積まれたら完了する future |
+| `run()`              | `Result<(), Error>`                    | `poll` と `wait` を閉じるまで繰り返す. 閉じた原因を返す |
+| `close()`            | `Result<(), Error>`                    | 閉じる. 閉じた原因を返す |
+| `state_checker()`    | `StateChecker`                         | [状態監視](/autd3-sdk/guide/state-check/) |
+| `stats()`            | `BusStats`                             | 通信の品質カウンタ |
+
+## 終了
+
+- `Client::close` は停止フレームを送ったあと `Driver` を閉じ, 閉じるのを待つ (`Driver` を回していないと返らない)
+- `Client` を捨てると `Driver` は閉じる (待たない)
+- `Driver` を捨てる・`close` する・通信エラーが起きると, 送信の完了待ちはすべてエラーで返る
+
+## スレッドの優先度
+
+ライブラリにはスレッドの優先度・CPU アフィニティの設定は無い.
+必要なら `Driver` を回すスレッドにユーザーが直接設定する.

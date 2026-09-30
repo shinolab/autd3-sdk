@@ -1,11 +1,12 @@
 import asyncio
 import collections
 import math
+import threading
 
 import numpy as np
 
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig, MAX_INFLIGHT, TransportOption
+from autd3 import Client, ClientConfig, Driver, MAX_INFLIGHT, TransportOption
 from autd3.commands import ConfigPattern, SetSilencer, WritePatternBuffer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
@@ -18,9 +19,11 @@ RADIUS_MM = 30.0
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
+    driver, connector = Driver.open(TransportOption(), geometry.num_devices())
+    threading.Thread(target=driver.run, daemon=True).start()
     async with await Client.open(
         geometry,
-        TransportOption(),
+        connector,
         ClientConfig(),
     ) as client:
         phases = geometry.phase_buffer()

@@ -14,6 +14,7 @@ namespace AUTD3.Samples
     public sealed class FocusSineSample : MonoBehaviour
     {
         private UdpEmulator _emulator;
+        private Driver _driver;
         private Client _client;
         private Geometry _geometry;
 
@@ -22,7 +23,12 @@ namespace AUTD3.Samples
             _geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.zero) });
             // Fully qualified: the enclosing AUTD3 namespace also has a `Nop` command.
             _emulator = new UdpEmulator(1);
-            _client = await Client.OpenAsync(_geometry, _emulator.Option(), new ClientConfig());
+            var option = _emulator.Option();
+            var numDevices = _geometry.NumDevices;
+            var (driver, connector) = await System.Threading.Tasks.Task.Run(() => Driver.Open(option, numDevices));
+            _driver = driver;
+            new System.Threading.Thread(driver.Run) { IsBackground = true }.Start();
+            _client = await Client.OpenAsync(_geometry, connector, new ClientConfig());
 
             var target = _geometry.Center + new Vector3(0f, 0f, -0.15f);
             var wavelength = Pattern.Wavelength(340 * m / s);
@@ -55,6 +61,8 @@ namespace AUTD3.Samples
                 _client.Dispose();
                 _client = null;
             }
+            _driver?.Dispose();
+            _driver = null;
             _geometry?.Dispose();
             _geometry = null;
             _emulator?.Dispose();

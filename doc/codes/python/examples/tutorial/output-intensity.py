@@ -1,10 +1,11 @@
 import asyncio
+import threading
 
 import numpy as np
 
 import autd3_modulation as modulation
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig, TransportOption
+from autd3 import Client, ClientConfig, Driver, TransportOption
 from autd3.commands import Modulation, Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
@@ -13,9 +14,11 @@ from autd3.value import Intensity, SamplingConfig
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
+    driver, connector = Driver.open(TransportOption(), geometry.num_devices())
+    threading.Thread(target=driver.run, daemon=True).start()
     async with await Client.open(
         geometry,
-        TransportOption(),
+        connector,
         ClientConfig(),
     ) as client:
         target = geometry.center() + np.array([0.0, 0.0, 150.0])

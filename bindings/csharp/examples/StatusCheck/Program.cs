@@ -15,9 +15,11 @@ internal static class Program
     private static async Task Main()
     {
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
-        var (client, checker) = await Client.OpenWithCheckerAsync(geometry, new TransportOption(), new ClientConfig());
-        await using var _client = client;
-        using var _checker = checker;
+        var (driver, connector) = Driver.Open(new TransportOption(), geometry.NumDevices);
+        using var _driver = driver;
+        using var checker = driver.StateChecker();
+        new Thread(driver.Run) { IsBackground = true }.Start();
+        await using var client = await Client.OpenAsync(geometry, connector, new ClientConfig());
 
         Console.WriteLine("watching link status — press Ctrl+C to stop");
         using var cts = new CancellationTokenSource();

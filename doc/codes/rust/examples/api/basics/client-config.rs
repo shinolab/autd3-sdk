@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::udp::DEVICE_QUEUE_FRAMES;
-use autd3_rs::{Client, ClientConfig, RtPriority, RtSchedulePolicy, TransportOption};
+use autd3_rs::{Client, ClientConfig, Driver, TransportOption};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -19,9 +19,6 @@ async fn main() -> Result<()> {
             max_inflight: NonZeroUsize::new(DEVICE_QUEUE_FRAMES).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            rt_priority: Some(RtPriority::new(80).unwrap()),
-            rt_policy: RtSchedulePolicy::Fifo,
-            rt_affinity: None,
             validate_state: true,
             require_supported_firmware: false,
             ..Default::default()
@@ -29,7 +26,9 @@ async fn main() -> Result<()> {
         // ANCHOR_END: config
         ;
     // ANCHOR: api
-    Client::open(&geometry, udp, option).await?;
+    let (mut driver, connector) = Driver::open(&udp, geometry.num_devices())?;
+    std::thread::spawn(move || driver.run());
+    let client = Client::open(&geometry, connector, option).await?;
     // ANCHOR_END: api
 
     Ok(())

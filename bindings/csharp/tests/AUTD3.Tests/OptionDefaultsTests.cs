@@ -14,9 +14,6 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromMilliseconds(10), config.AckTimeout);
             Assert.Equal(7u, config.MaxInflight);
             Assert.Equal(8u, config.MaxResyncRounds);
-            Assert.Equal(RtPriority.Default, config.RtPriority);
-            Assert.Equal(RtSchedulePolicy.Fifo, config.RtPolicy);
-            Assert.Null(config.RtAffinity);
             Assert.True(config.ValidateState);
             Assert.False(config.RequireSupportedFirmware);
         }
@@ -24,9 +21,8 @@ namespace AUTD3.Tests
         [Fact]
         public void InitializerKeepsTheOtherDefaults()
         {
-            var config = new ClientConfig { MaxInflight = 4, RtPriority = null };
+            var config = new ClientConfig { MaxInflight = 4 };
             Assert.Equal(4u, config.MaxInflight);
-            Assert.Null(config.RtPriority);
             Assert.Equal(TimeSpan.FromMilliseconds(10), config.AckTimeout);
             Assert.True(config.ValidateState);
 

@@ -10,16 +10,12 @@ pub fn print(cli: &Cli) {
 }
 
 fn render(cli: &Cli) -> String {
-    let mut imports: Vec<&str> = vec![
-        "Client",
-        "ClientConfig",
-        "RtSchedulePolicy",
-        "TransportOption",
-    ];
+    let mut imports: Vec<&str> = vec!["Client", "ClientConfig", "Driver", "TransportOption"];
     let mut body = String::new();
 
     option_block(cli, &mut body, &mut imports);
     push_config(&mut body, &mut imports, &Config::from(cli));
+    push_open(&mut body, &Config::from(cli));
 
     let mut out = imports_block(&imports);
     out.push('\n');
@@ -69,9 +65,15 @@ fn imports_block(imports: &[&str]) -> String {
     let autd: Vec<&str> = imports
         .iter()
         .copied()
-        .filter(|s| !s.starts_with("std::"))
+        .filter(|s| !s.starts_with("std::") && !s.starts_with("thread_priority::"))
         .collect();
     let _ = writeln!(out, "use autd3_rs::{{{}}};", autd.join(", "));
+    for imp in imports
+        .iter()
+        .filter(|s| s.starts_with("thread_priority::"))
+    {
+        let _ = writeln!(out, "use {imp};");
+    }
     out
 }
 
@@ -90,9 +92,11 @@ fn fmt_duration(d: Duration) -> String {
 
 fn rt_policy(p: RtPolicy) -> &'static str {
     match p {
-        RtPolicy::Normal => "RtSchedulePolicy::Normal",
-        RtPolicy::Fifo => "RtSchedulePolicy::Fifo",
-        RtPolicy::RoundRobin => "RtSchedulePolicy::RoundRobin",
+        RtPolicy::Normal => "ThreadSchedulePolicy::Normal(NormalThreadSchedulePolicy::Other)",
+        RtPolicy::Fifo => "ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::Fifo)",
+        RtPolicy::RoundRobin => {
+            "ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::RoundRobin)"
+        }
     }
 }
 
@@ -129,22 +133,48 @@ fn push_config(body: &mut String, imports: &mut Vec<&'static str>, c: &Config) {
     if c.low_latency {
         let _ = writeln!(body, "    low_latency: true,");
     }
-    if let Some(p) = c.rt_priority {
-        need("RtPriority");
-        let _ = writeln!(
-            body,
-            "    rt_priority: Some(RtPriority::new({p}).unwrap()),",
-        );
-    }
-    let _ = writeln!(body, "    rt_policy: {},", rt_policy(c.rt_policy));
-    if let Some(id) = c.rt_affinity {
-        need("CoreId");
-        let _ = writeln!(body, "    rt_affinity: Some(CoreId {{ id: {id} }}),");
-    }
     let _ = writeln!(body, "    ..Default::default()");
     let _ = writeln!(body, "}};");
+    if c.rt_priority.is_some() {
+        need("thread_priority::*");
+    }
+}
+
+fn push_open(body: &mut String, c: &Config) {
     let _ = writeln!(
         body,
-        "let client = Client::open(&geometry, option, config).await?;"
+        "let (mut driver, connector) = Driver::open(&option, geometry.num_devices())?;"
+    );
+    if c.rt_priority.is_none() && c.rt_affinity.is_none() {
+        let _ = writeln!(body, "std::thread::spawn(move || driver.run());");
+    } else {
+        let _ = writeln!(body, "std::thread::spawn(move || {{");
+        if let Some(p) = c.rt_priority {
+            let _ = writeln!(
+                body,
+                "    let priority = ThreadPriority::Crossplatform({p}u8.try_into().unwrap());"
+            );
+            if cfg!(target_os = "linux") {
+                let _ = writeln!(
+                    body,
+                    "    let _ = set_thread_priority_and_policy(thread_native_id(), priority, {});",
+                    rt_policy(c.rt_policy),
+                );
+            } else {
+                let _ = writeln!(body, "    let _ = set_current_thread_priority(priority);");
+            }
+        }
+        if let Some(id) = c.rt_affinity {
+            let _ = writeln!(
+                body,
+                "    core_affinity::set_for_current(core_affinity::CoreId {{ id: {id} }});"
+            );
+        }
+        let _ = writeln!(body, "    driver.run()");
+        let _ = writeln!(body, "}});");
+    }
+    let _ = writeln!(
+        body,
+        "let client = Client::open(&geometry, connector, config).await?;"
     );
 }

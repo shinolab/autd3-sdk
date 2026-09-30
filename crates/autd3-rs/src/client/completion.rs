@@ -14,18 +14,18 @@ struct Inner {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Reply {
+pub(crate) enum Reply {
     Ack,
     Value,
 }
 
 impl Reply {
-    pub(super) fn exclusive(self) -> bool {
+    pub(crate) fn exclusive(self) -> bool {
         matches!(self, Self::Value)
     }
 }
 
-pub(super) struct Completion {
+pub(crate) struct Completion {
     index: Option<usize>,
     refs: AtomicUsize,
     inner: Mutex<Inner>,
@@ -76,20 +76,20 @@ impl Completion {
             return Poll::Ready(result);
         }
         if inner.sender_gone {
-            return Poll::Ready(Err(Error::RtClosed));
+            return Poll::Ready(Err(Error::DriverClosed));
         }
         inner.waker = Some(cx.waker().clone());
         Poll::Pending
     }
 }
 
-pub(super) struct CompletionPool {
+pub(crate) struct CompletionPool {
     entries: Vec<Arc<Completion>>,
     free: Mutex<Vec<usize>>,
 }
 
 impl CompletionPool {
-    pub(super) fn new(capacity: usize) -> Arc<Self> {
+    pub(crate) fn new(capacity: usize) -> Arc<Self> {
         Arc::new(Self {
             entries: (0..capacity)
                 .map(|index| Arc::new(Completion::new(Some(index))))
@@ -98,7 +98,7 @@ impl CompletionPool {
         })
     }
 
-    pub(super) fn channel(
+    pub(crate) fn channel(
         self: &Arc<Self>,
         mirror: Option<MirrorHandle>,
         reply: Reply,
@@ -148,14 +148,14 @@ impl CompletionPool {
     }
 }
 
-pub(super) struct CompletionSender {
+pub(crate) struct CompletionSender {
     completion: Arc<Completion>,
     pool: Arc<CompletionPool>,
     completed: bool,
 }
 
 impl CompletionSender {
-    pub(super) fn send(mut self, result: Result<Response, Error>) {
+    pub(crate) fn send(mut self, result: Result<Response, Error>) {
         self.completion.complete(result);
         self.completed = true;
     }
@@ -201,7 +201,7 @@ impl Future for ResponseFuture {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let Some(completion) = self.completion.as_ref() else {
-            return self.finish(Err(Error::RtClosed));
+            return self.finish(Err(Error::DriverClosed));
         };
         match completion.poll(cx) {
             Poll::Ready(result) => {
@@ -250,7 +250,7 @@ mod tests {
         let pool = CompletionPool::new(1);
         let (tx, rx) = pool.channel(None, Reply::Ack);
         drop(tx);
-        assert!(matches!(rx.await, Err(Error::RtClosed)));
+        assert!(matches!(rx.await, Err(Error::DriverClosed)));
         assert_eq!(free_len(&pool), 1);
     }
 
@@ -294,7 +294,7 @@ mod tests {
     fn a_recycled_entry_starts_clean() {
         let pool = CompletionPool::new(1);
         let (tx, rx) = pool.channel(None, Reply::Ack);
-        tx.send(Err(Error::RtClosed));
+        tx.send(Err(Error::DriverClosed));
         drop(rx);
         let entry = &pool.entries[0];
         assert_eq!(entry.refs.load(Ordering::Relaxed), 0);

@@ -1,6 +1,7 @@
 import asyncio
+import threading
 
-from autd3 import Client, ClientConfig, TransportOption
+from autd3 import Client, ClientConfig, Driver, TransportOption
 from autd3.geometry import Autd3, Geometry
 
 # xtask:long-running  # [hide]
@@ -12,11 +13,10 @@ async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     # ANCHOR: open
-    client, checker = await Client.open_with_checker(
-        geometry,
-        TransportOption(),
-        ClientConfig(),
-    )
+    driver, connector = Driver.open(TransportOption(), geometry.num_devices())
+    checker = driver.state_checker()
+    threading.Thread(target=driver.run, daemon=True).start()
+    client = await Client.open(geometry, connector, ClientConfig())
     # ANCHOR_END: open
 
     async with client:

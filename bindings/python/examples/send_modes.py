@@ -7,6 +7,7 @@ Run with: cargo xtask py example send_modes
 import asyncio
 import collections
 import math
+import threading
 import time
 
 import numpy as np
@@ -40,9 +41,11 @@ def write_focus(client: autd3.Client, phases: object) -> object:
 async def main() -> None:
     geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
+    driver, connector = autd3.Driver.open(autd3.TransportOption(), geometry.num_devices())
+    threading.Thread(target=driver.run, daemon=True).start()
     async with await autd3.Client.open(
         geometry,
-        autd3.TransportOption(),
+        connector,
         autd3.ClientConfig(),
     ) as client:
         center = geometry.center()

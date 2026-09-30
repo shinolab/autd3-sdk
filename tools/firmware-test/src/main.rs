@@ -10,7 +10,7 @@ use clap::Parser;
 use autd3_rs::commands::Command;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
-use autd3_rs::{Client, ClientConfig, DatagramBuilder, TransportOption};
+use autd3_rs::{Client, ClientConfig, DatagramBuilder, Driver, TransportOption};
 
 use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
@@ -100,13 +100,20 @@ async fn run(cli: &Cli) -> Result<()> {
         heartbeat: Duration::from_micros(cli.heartbeat_us),
         ..Default::default()
     };
-    let client = Client::open(&geometry, option, config)
+    let (mut driver, connector) =
+        Driver::open(&option, geometry.num_devices()).context("opening the devices")?;
+    let driver = std::thread::spawn(move || driver.run());
+    let client = Client::open(&geometry, connector, config)
         .await
-        .context("opening the devices / client handshake")?;
+        .context("client handshake")?;
 
     run_session(&client, &geometry).await;
 
     client.close().await.context("closing client")?;
+    driver
+        .join()
+        .map_err(|_| anyhow::anyhow!("the driver thread panicked"))?
+        .context("closing the driver")?;
     println!("Ok!");
     Ok(())
 }

@@ -2,12 +2,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::config::ClientConfig;
 use crate::datagram::{DatagramBuilder, Frame};
+use crate::driver::Connector;
 use crate::future::{completed_into_py, future_into_py};
-use crate::udp::TransportOption;
 use autd3_python_capsule::{
     ClientBackend, ResponseToken, capsule_of, geometry_from_capsule, to_pyerr, to_pyerr_gil,
 };
 use autd3_rs::Geometry;
+use autd3_rs::udp::StateChecker;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -125,50 +126,21 @@ impl Client {
     fn open<'py>(
         py: Python<'py>,
         geometry: &Bound<'py, PyAny>,
-        option: &TransportOption,
+        connector: &Connector,
         config: &ClientConfig,
     ) -> PyResult<Bound<'py, PyAny>> {
         let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
-        let option = option.inner.clone();
+        let connector = connector.take(py)?;
         let config = config.inner;
         future_into_py(py, async move {
             let geometry_for_client = Arc::new(geometry.clone());
-            let backend = crate::udp::open(geometry, option, config)
+            let backend = crate::udp::open(geometry, connector, config)
                 .await
                 .map_err(to_pyerr_gil)?;
             Ok(Client {
                 backend: Arc::from(backend),
                 geometry: geometry_for_client,
             })
-        })
-    }
-
-    #[staticmethod]
-    fn open_with_checker<'py>(
-        py: Python<'py>,
-        geometry: &Bound<'py, PyAny>,
-        option: &TransportOption,
-        config: &ClientConfig,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
-        let option = option.inner.clone();
-        let config = config.inner;
-        future_into_py(py, async move {
-            let geometry_for_client = Arc::new(geometry.clone());
-            let backend: Arc<dyn ClientBackend> = Arc::from(
-                crate::udp::open(geometry, option, config)
-                    .await
-                    .map_err(to_pyerr_gil)?,
-            );
-            Ok((
-                Client {
-                    backend: Arc::clone(&backend),
-                    geometry: geometry_for_client,
-                },
-                Checker {
-                    source: CheckerSource::Current(backend),
-                },
-            ))
         })
     }
 
@@ -331,25 +303,24 @@ impl ResponseFuture {
     }
 }
 
-pub(crate) enum CheckerSource {
-    Current(Arc<dyn ClientBackend>),
-}
-
 #[pyclass(name = "Checker", module = "autd3")]
 pub struct Checker {
-    pub(crate) source: CheckerSource,
+    pub(crate) inner: Arc<Mutex<StateChecker>>,
 }
 
 #[pymethods]
 impl Checker {
     fn check(&self, py: Python<'_>) -> PyResult<DeviceStatus> {
-        let status = match &self.source {
-            CheckerSource::Current(backend) => backend.check_status().map_err(|e| to_pyerr(py, e)),
-        }?;
+        let status = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .check()
+            .map_err(|e| to_pyerr(py, e))?;
         Ok(DeviceStatus {
-            device_states: status.device_states,
-            all_ready: status.all_ready,
-            any_lost: status.any_lost,
+            device_states: status.devices().iter().map(ToString::to_string).collect(),
+            all_ready: status.all_ready(),
+            any_lost: status.any_lost(),
         })
     }
 }

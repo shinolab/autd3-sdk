@@ -15,7 +15,7 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
 ## StateChecker の取得
 
-通常の [`Client::open`](/autd3-sdk/api/basics/client/) の代わりに `open_with_checker` を使うと, `Client` と `StateChecker` の組が返る.
+[`Driver`](/autd3-sdk/api/basics/driver/) の `state_checker` で `StateChecker` を取る. `Driver` を回すスレッドへ渡す前に取っておく.
 
 <CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} csharp={excerpt(csSample, "open")} />
 

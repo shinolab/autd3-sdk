@@ -3,7 +3,6 @@ use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 
 use autd3_rs_core::value::{Intensity, Phase};
-use autd3_rs_core::{RtPriority, RtSchedulePolicy};
 
 const fn parse_version_field(s: &str) -> u16 {
     let bytes = s.as_bytes();
@@ -145,43 +144,6 @@ pub const AUTD3_ERR_NETWORK: i32 = -4;
 pub const AUTD3_ERR_INVALID_ARGUMENT: i32 = -5;
 pub const AUTD3_ERR_UNSUPPORTED_FIRMWARE: i32 = -6;
 pub const AUTD3_ERR_ABORTED: i32 = -7;
-
-pub const AUTD3_RT_PRIORITY_DEFAULT: u8 = 0;
-pub const AUTD3_RT_PRIORITY_DISABLED: u8 = 1;
-pub const AUTD3_RT_PRIORITY_EXPLICIT: u8 = 2;
-pub const AUTD3_RT_PRIORITY_MIN: u8 = 3;
-pub const AUTD3_RT_PRIORITY_MAX: u8 = 4;
-
-#[must_use]
-pub fn to_rt_priority(mode: u8, value: u8) -> Option<Option<RtPriority>> {
-    match mode {
-        AUTD3_RT_PRIORITY_DEFAULT => Some(autd3_rs_core::default_rt_priority()),
-        AUTD3_RT_PRIORITY_DISABLED => Some(None),
-        AUTD3_RT_PRIORITY_EXPLICIT => RtPriority::new(value).map(Some),
-        AUTD3_RT_PRIORITY_MIN => Some(Some(RtPriority::MIN)),
-        AUTD3_RT_PRIORITY_MAX => Some(Some(RtPriority::MAX)),
-        _ => None,
-    }
-}
-
-#[must_use]
-pub fn to_rt_policy(value: u8) -> Option<RtSchedulePolicy> {
-    match value {
-        0 => Some(RtSchedulePolicy::Normal),
-        1 => Some(RtSchedulePolicy::Fifo),
-        2 => Some(RtSchedulePolicy::RoundRobin),
-        _ => None,
-    }
-}
-
-#[must_use]
-pub fn from_rt_policy(policy: RtSchedulePolicy) -> u8 {
-    match policy {
-        RtSchedulePolicy::Normal => 0,
-        RtSchedulePolicy::RoundRobin => 2,
-        _ => 1,
-    }
-}
 
 #[repr(transparent)]
 pub struct Buffer<T>(pub Vec<Vec<T>>);
@@ -426,7 +388,6 @@ mod client {
             frame: Option<usize>,
         ) -> BoxFuture<ResponseTokenData>;
         fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()>;
-        fn checker(&self) -> Box<dyn CheckerBackend>;
         fn stop(&self) -> BoxFuture<()>;
         fn close(&self) -> BoxFuture<()>;
     }

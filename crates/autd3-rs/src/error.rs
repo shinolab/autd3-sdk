@@ -96,11 +96,8 @@ pub enum Error {
     #[error(transparent)]
     Encode(#[from] EncodeError),
 
-    #[error("client RT worker is no longer alive")]
-    RtClosed,
-
-    #[error("RT thread panicked")]
-    RtPanicked,
+    #[error("the driver is closed")]
+    DriverClosed,
 }
 
 impl From<crate::udp::UdpError> for Error {

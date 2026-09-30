@@ -19,6 +19,10 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 `Client` を含む基礎・コマンドの API は本体パッケージが提供する.
 接続先 (実機・[デバイスエミュレータ](/autd3-sdk/api/connection/device-emulator/)・Simulator) は [`TransportOption`](/autd3-sdk/api/connection/) で指定する.
 
+`Client` を開く前に [`Driver`](/autd3-sdk/api/basics/driver/) を開いて回し始める必要がある.
+`Driver::open` が返す `Connector` を `Client::open` に渡す.
+ライブラリは送受信のためのスレッドを立てないので, `Driver` を回さずに `Client::open` を await すると返らない.
+
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
 <CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} csharp={excerpt(csOpen, "api")} />
@@ -26,10 +30,10 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | 引数       | 型             | 説明                 |
 | ---------- | -------------- | -------------------- |
 | `geometry` | `&Geometry`    | デバイスの物理配置   |
-| `option`   | `TransportOption`    | [接続の設定](/autd3-sdk/api/connection/) |
+| `connector` | `Connector`   | `Driver::open` が返したもの. 1 回だけ使える |
 | `config`   | `ClientConfig` | 下記参照             |
 
-デバイスの稼働状態を継続的に監視したい場合は `open_with_checker` を使い, 返り値の `StateChecker` を駆動する ([状態監視](/autd3-sdk/guide/state-check/) 参照).
+デバイスの稼働状態を継続的に監視したい場合は `Driver::state_checker` で取った `StateChecker` を駆動する ([状態監視](/autd3-sdk/guide/state-check/) 参照).
 
 ## API
 
@@ -60,9 +64,6 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | `max_inflight`         | `NonZeroUsize`        | `7`             | 応答を待たずに送ってよいフレーム数 (既定はデバイスの受信キューの容量) |
 | `max_resync_rounds`    | `NonZeroU32`          | `8`             | 再同期を試みる最大ラウンド数                               |
 | `low_latency`          | `bool`                | `false`         | 低レイテンシモード          |
-| `rt_priority`          | `Option<RtPriority>` | Windows: `TimeCritical` / その他: `80` | RT スレッドの優先度. `None` にすると OS 既定. |
-| `rt_policy`            | `RtSchedulePolicy`    | `Fifo`          | `rt_priority` 指定時のスケジューリングポリシー. `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
-| `rt_affinity`          | `Option<CoreId>`      | `None`          | RT スレッドの CPU affinity (`None` なら OS 既定)      |
 | `validate_state`       | `bool`                | `true`          | 送信前検証を有効にする                     |
 | `require_supported_firmware` | `bool`          | `false`         | `true`なら接続時にファームウェアがサポートされているか検査する |
 

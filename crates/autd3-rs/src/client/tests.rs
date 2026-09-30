@@ -21,7 +21,6 @@ use crate::telemetry::Telemetry;
 use autd3_cpu_wire::Mode;
 
 use super::{Client, ClientConfig};
-use crate::RtSchedulePolicy;
 
 fn first_bytes(response: &Response) -> Vec<u8> {
     response
@@ -323,12 +322,16 @@ impl Bus for LoopbackLink {
         Ok(self.msg_id)
     }
 
-    fn recv(&mut self, deadline: Instant) -> Result<Option<Reply>, Self::Error> {
-        if let Some(reply) = self.queue.pop_front() {
-            return Ok(Some(reply));
+    fn try_recv(&mut self) -> Result<Option<Reply>, Self::Error> {
+        Ok(self.queue.pop_front())
+    }
+
+    fn wait_readable(&mut self, deadline: Instant) -> Result<bool, Self::Error> {
+        if !self.queue.is_empty() {
+            return Ok(true);
         }
         Self::wait(deadline);
-        Ok(None)
+        Ok(false)
     }
 }
 
@@ -384,11 +387,18 @@ impl Bus for FailingLink {
         Ok(self.inner.heartbeat().expect("loopback never fails"))
     }
 
-    fn recv(&mut self, deadline: Instant) -> Result<Option<Reply>, Self::Error> {
+    fn try_recv(&mut self) -> Result<Option<Reply>, Self::Error> {
         if self.fail.load(AtomicOrdering::Relaxed) {
             return Err(LinkFailure);
         }
-        Ok(self.inner.recv(deadline).expect("loopback never fails"))
+        Ok(self.inner.try_recv().expect("loopback never fails"))
+    }
+
+    fn wait_readable(&mut self, deadline: Instant) -> Result<bool, Self::Error> {
+        Ok(self
+            .inner
+            .wait_readable(deadline)
+            .expect("loopback never fails"))
     }
 }
 
@@ -700,9 +710,6 @@ async fn multi_device_skip_on_one_device_recovers_via_resync() {
             max_inflight: NonZeroUsize::new(16).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            rt_priority: None,
-            rt_policy: RtSchedulePolicy::default(),
-            rt_affinity: None,
             validate_state: true,
             ..Default::default()
         },
@@ -996,9 +1003,6 @@ async fn streaming_skip_recovers_via_resync_without_timeout() {
             max_inflight: NonZeroUsize::new(16).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            rt_priority: None,
-            rt_policy: RtSchedulePolicy::default(),
-            rt_affinity: None,
             validate_state: true,
             ..Default::default()
         },
@@ -1038,9 +1042,6 @@ async fn dead_link_gives_up_whole_window_in_bounded_time() {
             max_inflight: NonZeroUsize::new(8).unwrap(),
             max_resync_rounds: NonZeroU32::new(3).unwrap(),
             low_latency: false,
-            rt_priority: None,
-            rt_policy: RtSchedulePolicy::default(),
-            rt_affinity: None,
             validate_state: true,
             ..Default::default()
         },
@@ -1153,9 +1154,6 @@ async fn streaming_holds_window_across_stale_and_recovers() {
             max_inflight: NonZeroUsize::new(8).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            rt_priority: None,
-            rt_policy: RtSchedulePolicy::default(),
-            rt_affinity: None,
             validate_state: true,
             ..Default::default()
         },
@@ -1228,8 +1226,8 @@ async fn close_resolves_pending_with_rt_closed() {
     );
     let err = f.await.unwrap_err();
     assert!(
-        matches!(err, Error::RtClosed) || matches!(err, Error::Timeout { .. }),
-        "expected RtClosed or Timeout, got {err:?}",
+        matches!(err, Error::DriverClosed) || matches!(err, Error::Timeout { .. }),
+        "expected DriverClosed or Timeout, got {err:?}",
     );
 }
 
@@ -1244,9 +1242,6 @@ async fn open_rejects_oversize_max_inflight() {
             max_inflight: NonZeroUsize::new(MAX_INFLIGHT + 1).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            rt_priority: None,
-            rt_policy: RtSchedulePolicy::default(),
-            rt_affinity: None,
             validate_state: true,
             ..Default::default()
         },
@@ -1502,7 +1497,7 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
 
     let closed = client.close().await;
     assert!(
-        matches!(closed, Err(Error::RtClosed))
+        matches!(closed, Err(Error::DriverClosed))
             || closed
                 .as_ref()
                 .err()
@@ -1557,7 +1552,7 @@ async fn sending_after_the_rt_thread_died_fails_instead_of_blocking() {
             .expect("a send must not block once the RT thread is gone")
             .unwrap_err();
         assert!(
-            matches!(err, Error::RtClosed) || link_cause_is::<LinkFailure>(&err),
+            matches!(err, Error::DriverClosed) || link_cause_is::<LinkFailure>(&err),
             "{err:?}"
         );
     }
@@ -1566,7 +1561,7 @@ async fn sending_after_the_rt_thread_died_fails_instead_of_blocking() {
         .await
         .expect("close must return once the RT thread is gone");
     assert!(
-        matches!(closed, Err(Error::RtClosed))
+        matches!(closed, Err(Error::DriverClosed))
             || closed
                 .as_ref()
                 .err()
@@ -1837,7 +1832,7 @@ async fn close_joins_the_rt_thread_even_when_the_stop_frame_fails() {
     );
     assert!(matches!(
         send_nop(&client).await.unwrap_err(),
-        Error::RtClosed
+        Error::DriverClosed
     ));
 }
 
@@ -1981,8 +1976,15 @@ impl Bus for TrackedLink {
         Ok(self.inner.heartbeat().expect("loopback never fails"))
     }
 
-    fn recv(&mut self, deadline: Instant) -> Result<Option<Reply>, Self::Error> {
-        Ok(self.inner.recv(deadline).expect("loopback never fails"))
+    fn try_recv(&mut self) -> Result<Option<Reply>, Self::Error> {
+        Ok(self.inner.try_recv().expect("loopback never fails"))
+    }
+
+    fn wait_readable(&mut self, deadline: Instant) -> Result<bool, Self::Error> {
+        Ok(self
+            .inner
+            .wait_readable(deadline)
+            .expect("loopback never fails"))
     }
 
     fn close(&mut self) -> Result<(), Self::Error> {
@@ -2010,10 +2012,12 @@ async fn close_calls_the_link_close_exactly_once() {
 #[tokio::test]
 async fn dropping_the_client_still_closes_the_link() {
     let (link, tracker) = tracked_pair();
-    let client = Client::open_bus(&geometry(1), link, ClientConfig::default())
+    let (connector, driver) = super::spawn_driver(link);
+    let client = Client::open(&geometry(1), connector, ClientConfig::default())
         .await
         .unwrap();
     drop(client);
+    driver.join().unwrap().unwrap();
     assert_eq!(tracker.closes(), 1);
 }
 
@@ -2043,8 +2047,10 @@ async fn the_link_is_closed_even_when_the_handshake_fails() {
 #[tokio::test]
 async fn a_link_rejected_by_the_device_count_check_is_still_closed() {
     let (link, tracker) = tracked_pair();
-    let opened = Client::open_bus(&geometry(2), link, ClientConfig::default()).await;
+    let (connector, driver) = super::spawn_driver(link);
+    let opened = Client::open(&geometry(2), connector, ClientConfig::default()).await;
     assert!(matches!(opened, Err(Error::InvalidPayload(_))));
+    driver.join().unwrap().unwrap();
     assert_eq!(tracker.closes(), 1);
 }
 

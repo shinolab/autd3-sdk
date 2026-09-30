@@ -9,7 +9,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig, TransportOption};
+use autd3_rs::{Client, ClientConfig, Driver, TransportOption};
 
 const NUM_POINTS: usize = 200;
 const RADIUS_MM: f32 = 30.0;
@@ -20,12 +20,10 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(
-        &geometry,
-        TransportOption::default(),
-        ClientConfig::default(),
-    )
-    .await?;
+    let (mut driver, connector) =
+        Driver::open(&TransportOption::default(), geometry.num_devices())?;
+    std::thread::spawn(move || driver.run());
+    let client = Client::open(&geometry, connector, ClientConfig::default()).await?;
 
     println!("devices: {}", client.num_devices());
 

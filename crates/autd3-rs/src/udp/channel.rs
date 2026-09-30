@@ -26,6 +26,7 @@ pub(crate) struct Datagram<'a> {
 
 pub(crate) struct Channel {
     socket: UdpSocket,
+    nonblocking: bool,
     group: SocketAddrV6,
     msg_id: u16,
     send_buf: Vec<u8>,
@@ -67,11 +68,41 @@ impl Channel {
         socket.bind(&SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0).into())?;
         Ok(Self {
             socket: socket.into(),
+            nonblocking: false,
             group,
             msg_id: 0,
             send_buf: Vec::with_capacity(SEND_BUFFER_BYTES),
             recv_buf: Box::new([0; RECV_BUFFER_BYTES]),
         })
+    }
+
+    pub(crate) fn socket(&self) -> &UdpSocket {
+        &self.socket
+    }
+
+    fn set_nonblocking(&mut self, nonblocking: bool) -> io::Result<()> {
+        if self.nonblocking != nonblocking {
+            self.socket.set_nonblocking(nonblocking)?;
+            self.nonblocking = nonblocking;
+        }
+        Ok(())
+    }
+
+    fn arm(&mut self, deadline: Instant) -> io::Result<()> {
+        let now = Instant::now();
+        if now >= deadline {
+            return self.set_nonblocking(true);
+        }
+        self.set_nonblocking(false)?;
+        self.socket.set_read_timeout(Some(deadline - now))
+    }
+
+    pub(crate) fn wait_readable(&mut self, deadline: Instant) -> io::Result<bool> {
+        self.arm(deadline)?;
+        match self.socket.peek_from(&mut self.recv_buf[..]) {
+            Err(e) if is_timeout(&e) => Ok(false),
+            _ => Ok(true),
+        }
     }
 
     pub(crate) fn group(&self) -> SocketAddrV6 {
@@ -117,17 +148,8 @@ impl Channel {
 
     pub(crate) fn recv(&mut self, deadline: Instant) -> io::Result<Option<Datagram<'_>>> {
         let (len, src) = loop {
-            let now = Instant::now();
-            let received = if now >= deadline {
-                self.socket.set_nonblocking(true)?;
-                let received = self.socket.recv_from(&mut self.recv_buf[..]);
-                self.socket.set_nonblocking(false)?;
-                received
-            } else {
-                self.socket.set_read_timeout(Some(deadline - now))?;
-                self.socket.recv_from(&mut self.recv_buf[..])
-            };
-            match received {
+            self.arm(deadline)?;
+            match self.socket.recv_from(&mut self.recv_buf[..]) {
                 Ok((len, SocketAddr::V6(src))) if len >= HEADER_BYTES => break (len, src),
                 Ok(_) => {}
                 Err(e) if is_timeout(&e) => return Ok(None),

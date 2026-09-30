@@ -15,7 +15,7 @@ The `StateChecker` lets you monitor whether the communication with the devices i
 
 ## Obtaining the StateChecker
 
-Using `open_with_checker` instead of the usual [`Client::open`](/autd3-sdk/en/api/basics/client/) returns a pair of `Client` and `StateChecker`.
+Take the `StateChecker` with `state_checker` of the [`Driver`](/autd3-sdk/en/api/basics/driver/). Take it before handing the `Driver` to the thread that runs it.
 
 <CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} csharp={excerpt(csSample, "open")} />
 

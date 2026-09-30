@@ -49,8 +49,8 @@ cargo xtask tool perftest --mem-profile -- --devices 2 --count 10000
 | `--mode <MODE>`       | `stop-and-wait` (default) or `streaming`. See below. |
 | `--max-inflight <N>`  | Pipeline depth in `streaming` mode (`ClientConfig.max_inflight`). Default = 127 (the SEQ-wrap cap). Ignored in `stop-and-wait`. Alias: `--inflight`. |
 | `--low-latency`       | Request the device's low-latency (inline ISR) processing mode instead of the default FIFO path (`ClientConfig.low_latency`). Default: off. |
-| `--rt-priority <N>` / `--rt-policy <P>` / `--rt-affinity <CORE>` | RT thread scheduling (`ClientConfig.rt_priority` / `rt_policy` / `rt_affinity`). `--rt-priority` is 0..=99; omit it to keep the library default (TimeCritical on Windows, SCHED_FIFO 80 elsewhere). `--rt-affinity` alias: `--rt-core`. |
-| `--no-win-perf-tune`  | Skip `PerfTuning::apply()` (the 1 ms timer resolution and HIGH process priority raised on Windows). Default: off. |
+| `--rt-priority <N>` / `--rt-policy <P>` / `--rt-affinity <CORE>` | Scheduling of the thread perftest spawns to run the `Driver` (the library itself spawns no thread). `--rt-priority` is 0..=99 and `--rt-policy` (default `fifo`, Linux only) applies only with it; omit both to run the driver at the normal priority, as an application does by default. `--rt-affinity` alias: `--rt-core`. |
+| `--poll-sleep <DUR>`  | Run the driver as a `poll` loop that sleeps `DUR` between polls instead of `Driver::run`, e.g. `1ms`. Latency grows by up to `DUR`; retransmissions and lost replies must stay 0. Default: off. |
 
 `--command` selects what is sent, which isolates where the time goes:
 

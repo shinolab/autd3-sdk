@@ -168,22 +168,31 @@ pub struct Cli {
         help = "maps to ClientConfig.low_latency"
     )]
     pub low_latency: bool,
-    #[arg(long, default_value_t = false)]
-    pub no_win_perf_tune: bool,
     #[arg(
         long,
-        help = "maps to ClientConfig.rt_priority (0..=99). Omit to keep the library default \
-                (TimeCritical on Windows, SCHED_FIFO 80 elsewhere)."
+        help = "Run the driver thread at this priority (0..=99). Omit to run it at the normal \
+                priority, which is what an application gets by default."
     )]
     pub rt_priority: Option<u8>,
-    #[arg(long, value_enum, default_value_t = RtPolicy::Fifo, help = "maps to ClientConfig.rt_policy")]
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = RtPolicy::Fifo,
+        help = "Scheduling policy of the driver thread when --rt-priority is given (Linux)."
+    )]
     pub rt_policy: RtPolicy,
     #[arg(
         long = "rt-affinity",
         alias = "rt-core",
-        help = "Pin the RT thread to this CPU core (maps to ClientConfig.rt_affinity)."
+        help = "Pin the driver thread to this CPU core."
     )]
     pub rt_affinity: Option<usize>,
+    #[arg(
+        long,
+        value_parser = humantime::parse_duration,
+        help = "Run the driver as a `poll` loop that sleeps this long between polls, instead of `Driver::run`."
+    )]
+    pub poll_sleep: Option<Duration>,
 }
 
 impl Cli {

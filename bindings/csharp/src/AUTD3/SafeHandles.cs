@@ -41,6 +41,19 @@ namespace AUTD3
         }
     }
 
+    internal sealed class DriverHandle : Autd3SafeHandle
+    {
+        internal DriverHandle(IntPtr handle) : base(handle)
+        {
+        }
+
+        protected override bool ReleaseHandle()
+        {
+            NativeClient.autd3_driver_free(handle);
+            return true;
+        }
+    }
+
     internal sealed class CheckerHandle : Autd3SafeHandle
     {
         internal CheckerHandle(IntPtr handle) : base(handle)

@@ -6,6 +6,7 @@ Run with: cargo xtask py example holo
 
 import asyncio
 import signal
+import threading
 
 import numpy as np
 
@@ -20,9 +21,11 @@ from autd3_pattern_holo import dB
 async def main() -> None:
     geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
+    driver, connector = autd3.Driver.open(autd3.TransportOption(), geometry.num_devices())
+    threading.Thread(target=driver.run, daemon=True).start()
     async with await autd3.Client.open(
         geometry,
-        autd3.TransportOption(),
+        connector,
         autd3.ClientConfig(),
     ) as client:
         center = geometry.center()

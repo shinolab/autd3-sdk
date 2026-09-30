@@ -2,12 +2,10 @@ use std::net::SocketAddrV6;
 use std::sync::Arc;
 use std::time::Duration;
 
-use autd3_python_capsule::{
-    BoxFuture, ClientBackend, DeviceStatusData, ResponseToken, network_err,
-};
+use autd3_python_capsule::{BoxFuture, ClientBackend, ResponseToken, network_err};
+use autd3_rs::udp::TransportOption as CoreOption;
 use autd3_rs::udp::emulator::UdpEmulator as CoreEmulator;
-use autd3_rs::udp::{StateChecker, TransportOption as CoreOption};
-use autd3_rs::{Client, ClientConfig, Error, Frames, Geometry, Interface};
+use autd3_rs::{Client, ClientConfig, Connector, Error, Frames, Geometry, Interface};
 use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::sync::{Mutex, PoisonError};
@@ -40,7 +38,6 @@ fn parse_group(group: Option<&str>) -> PyResult<Option<SocketAddrV6>> {
 
 pub(crate) struct UdpBackend {
     client: Arc<Client>,
-    checker: Arc<Mutex<StateChecker>>,
 }
 
 impl ClientBackend for UdpBackend {
@@ -109,20 +106,6 @@ impl ClientBackend for UdpBackend {
                 }
             }
             Ok::<(), Error>(())
-        })
-    }
-
-    fn check_status(&self) -> Result<DeviceStatusData, Error> {
-        let status = self
-            .checker
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .check()
-            .map_err(Error::from)?;
-        Ok(DeviceStatusData {
-            device_states: status.devices().iter().map(ToString::to_string).collect(),
-            all_ready: status.all_ready(),
-            any_lost: status.any_lost(),
         })
     }
 
@@ -300,12 +283,11 @@ impl UdpEmulator {
 
 pub(crate) async fn open(
     geometry: Geometry,
-    option: CoreOption,
+    connector: Connector,
     config: ClientConfig,
 ) -> Result<Box<dyn ClientBackend>, Error> {
-    let (client, checker) = Client::open_with_checker(&geometry, option, config).await?;
+    let client = Client::open(&geometry, connector, config).await?;
     Ok(Box::new(UdpBackend {
         client: Arc::new(client),
-        checker: Arc::new(Mutex::new(checker)),
     }))
 }

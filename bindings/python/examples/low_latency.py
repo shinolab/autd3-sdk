@@ -5,6 +5,7 @@ Run with: cargo xtask py example low_latency
 """
 
 import asyncio
+import threading
 import time
 
 import numpy as np
@@ -21,9 +22,11 @@ ENABLE_LOW_LATENCY = True
 async def main() -> None:
     geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
+    driver, connector = autd3.Driver.open(autd3.TransportOption(), geometry.num_devices())
+    threading.Thread(target=driver.run, daemon=True).start()
     async with await autd3.Client.open(
         geometry,
-        autd3.TransportOption(),
+        connector,
         autd3.ClientConfig(low_latency=ENABLE_LOW_LATENCY),
     ) as client:
         print("devices:", client.num_devices())

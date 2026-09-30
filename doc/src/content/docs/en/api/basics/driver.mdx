@@ -1,0 +1,79 @@
+---
+title: Driver
+description: The Driver that runs the exchange with the devices
+sidebar:
+  order: 2
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import thread from "@codes/rust/examples/api/basics/driver-thread.rs?raw";
+import sleep from "@codes/rust/examples/api/basics/driver-sleep.rs?raw";
+import tokio from "@codes/rust/examples/api/basics/driver-tokio.rs?raw";
+import pyThread from "@codes/python/examples/api/basics/driver-thread.py?raw";
+import pySleep from "@codes/python/examples/api/basics/driver-sleep.py?raw";
+import csThread from "@codes/csharp/examples/api/basics/driver-thread.cs?raw";
+import csSleep from "@codes/csharp/examples/api/basics/driver-sleep.cs?raw";
+
+The library spawns no thread for sending and receiving.
+The `Driver` performs the exchange with the devices (sending commands, routing replies, retransmission, liveness checks), and you decide on which thread, at which priority, and at what interval it runs.
+
+## Order of Creation
+
+1. Open the devices with `Driver::open(&option, num_devices)` (synchronous; it enumerates the devices and assigns their IDs). It returns a `Driver` and a `Connector`
+2. Start running the `Driver`
+3. Await `Client::open(&geometry, connector, config)`
+
+The running `Driver` advances the connection handshake, so awaiting `Client::open` without running the `Driver` never returns.
+The `Connector` can be used once. Dropping it without passing it to `Client::open` closes the `Driver`.
+
+## Ways to Run It
+
+### On a Dedicated Thread
+
+The simplest way. `run` does not return until the `Driver` closes.
+
+<CodeTabs rust={excerpt(thread)} python={excerpt(pyThread)} csharp={excerpt(csThread)} />
+
+### `poll` and Sleep on a Thread
+
+`poll` is a non-blocking step that reads the replies, sends commands, and advances the timers for retransmission and liveness checks.
+Calling `poll` late only delays responses; it causes no spurious retransmission, timeout, or `Lost` report
+(`poll` drains the received replies before it looks at the timers).
+The constraint is to call `poll` at intervals well within the device failsafe (500 ms).
+
+Note, however, that the device time estimate (`DeviceClock`) is based on when a reply is read, so with this way of running it lags behind by the sleep interval.
+When you use features that rely on the device time, such as `TransitionMode::SysTime` or the GPIO `SysTimeEq`, run the `Driver` with `run` (the default way of waiting) or with asynchronous readiness.
+
+<CodeTabs rust={excerpt(sleep)} python={excerpt(pySleep)} csharp={excerpt(csSleep)} />
+
+### As a tokio Task (Rust Only)
+
+Combine `notified()` (a future that completes when a command is queued), readiness of the socket (`AsFd`; `AsRawSocket` on Windows), and the deadline returned by `poll`.
+The example below is for Unix.
+
+<CodeTabs rust={excerpt(tokio)} />
+
+## API
+
+| Method               | Returns                                | Description |
+| -------------------- | -------------------------------------- | ----------- |
+| `Driver::open(option, n)` | `Result<(Driver, Connector), Error>` | Open the devices (synchronous) |
+| `poll()`             | `Poll`                                 | Advance one step. `Poll::Next(deadline)` is when to call next, `Poll::Closed` means closed |
+| `wait(deadline)`     | —                                      | Wait for a reply, a new command, or the deadline (blocking) |
+| `notified()`         | `Notified`                             | A future that completes when a command is queued |
+| `run()`              | `Result<(), Error>`                    | Repeat `poll` and `wait` until closed. Returns why it closed |
+| `close()`            | `Result<(), Error>`                    | Close. Returns why it closed |
+| `state_checker()`    | `StateChecker`                         | [State monitoring](/autd3-sdk/en/guide/state-check/) |
+| `stats()`            | `BusStats`                             | Communication quality counters |
+
+## Shutdown
+
+- `Client::close` sends the stop frame, closes the `Driver`, and waits for it to close (it never returns if the `Driver` is not running)
+- Dropping the `Client` closes the `Driver` (without waiting)
+- Dropping or closing the `Driver`, or a network error, resolves every pending completion with an error
+
+## Thread Priority
+
+The library has no settings for thread priority or CPU affinity.
+Set them yourself on the thread that runs the `Driver` if needed.

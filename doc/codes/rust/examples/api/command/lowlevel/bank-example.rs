@@ -4,7 +4,7 @@ use autd3_rs::commands::{ChangePatternBank, ConfigPattern, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
-use autd3_rs::{Client, ClientConfig};
+use autd3_rs::{Client, ClientConfig, Driver};
 use autd3_rs::udp::emulator::UdpEmulator;
 use autd3_rs_pattern::{focus, wavelength};
 
@@ -14,7 +14,9 @@ async fn main() -> anyhow::Result<()> {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
     let emulator = UdpEmulator::spawn(geometry.num_devices())?;
-    let client = Client::open(&geometry, emulator.option(), ClientConfig::default()).await?;
+    let (mut driver, connector) = Driver::open(&emulator.option(), geometry.num_devices())?;
+    std::thread::spawn(move || driver.run());
+    let client = Client::open(&geometry, connector, ClientConfig::default()).await?;
 
     let mut phases = geometry.phase_buffer();
     focus(

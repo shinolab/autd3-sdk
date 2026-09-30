@@ -10,7 +10,6 @@ mod imp {
 
     pub struct PerfTuning {
         timer_set: bool,
-        priority_set: bool,
     }
 
     impl PerfTuning {
@@ -21,22 +20,10 @@ mod imp {
             let timer_set = unsafe { timeBeginPeriod(TIMER_PERIOD_MS) } == TIMERR_NOERROR;
             // SAFETY: GetCurrentProcess returns a pseudo-handle that needs no
             // close; SetPriorityClass only reads it.
-            let priority_set =
-                unsafe { SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS) != 0 };
-            Self {
-                timer_set,
-                priority_set,
+            unsafe {
+                SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
             }
-        }
-
-        #[must_use]
-        pub fn timer_boosted(&self) -> bool {
-            self.timer_set
-        }
-
-        #[must_use]
-        pub fn high_priority(&self) -> bool {
-            self.priority_set
+            Self { timer_set }
         }
     }
 
@@ -60,16 +47,6 @@ mod imp {
         #[must_use]
         pub fn apply() -> Self {
             Self
-        }
-
-        #[must_use]
-        pub fn timer_boosted(&self) -> bool {
-            false
-        }
-
-        #[must_use]
-        pub fn high_priority(&self) -> bool {
-            false
         }
     }
 }

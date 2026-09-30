@@ -16,7 +16,7 @@ autd3-rs-modulation = { path = "../../../crates/autd3-rs-modulation" }
 autd3-rs-emulator = { path = "../../../extras/autd3-rs-emulator" }
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 anyhow = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
 
 [lints.rust]
 unused = "allow"
@@ -32,6 +32,18 @@ path = "examples/api/basics/client.rs"
 [[example]]
 name = "api_basics_datagram_builder"
 path = "examples/api/basics/datagram-builder.rs"
+
+[[example]]
+name = "api_basics_driver_sleep"
+path = "examples/api/basics/driver-sleep.rs"
+
+[[example]]
+name = "api_basics_driver_thread"
+path = "examples/api/basics/driver-thread.rs"
+
+[[example]]
+name = "api_basics_driver_tokio"
+path = "examples/api/basics/driver-tokio.rs"
 
 [[example]]
 name = "api_basics_geometry"

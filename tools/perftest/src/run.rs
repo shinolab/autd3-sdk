@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use autd3_rs::commands::{
     ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WriteModulationBuffer, WritePatternBuffer,
 };
+use autd3_rs::driver::Poll;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::params::MOD_BUFFER_SAMPLES;
 use autd3_rs::protocol::FRAME_HEADER_BYTES;
@@ -16,13 +17,14 @@ use autd3_rs::value::{
     Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
 };
 use autd3_rs::{
-    BusStats, Client, ClientConfig, CoreId, Error as ClientError, Frames, ResponseFuture,
-    RtPriority, RtSchedulePolicy, StateChecker, Telemetry, TelemetryCounters, TransportOption,
+    BusStats, Client, ClientConfig, Driver, Error as ClientError, Frames, ResponseFuture,
+    StateChecker, Telemetry, TelemetryCounters, TransportOption,
 };
 
-use crate::cli::{Cli, Command, Mode, RtPolicy};
+use crate::cli::{Cli, Command, Mode};
 use crate::mem::{self, MemProfile};
 use crate::stats::{Sample, SampleStatus};
+use crate::tune::{self, ThreadTuning};
 
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
 const STATE_CHECK_INTERVAL: Duration = Duration::from_millis(100);
@@ -31,7 +33,7 @@ pub struct RunOutput {
     pub samples: Vec<Sample>,
     pub sends: u64,
     pub stopped_on_error: Option<(u64, SampleStatus)>,
-    pub rt_closed: bool,
+    pub driver_closed: bool,
     pub warmup: u64,
     pub elapsed: Duration,
     pub frame_bytes: usize,
@@ -281,24 +283,34 @@ async fn run_with_option(
         _ => cli.max_inflight.max(1),
     };
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
-    let (client, checker) = Box::pin(Client::open_with_checker(
+    let (mut driver, connector) =
+        Driver::open(&option, num_devices).context("opening the devices")?;
+    let checker = driver.state_checker();
+    let tuning = ThreadTuning::from(cli);
+    let poll_sleep = cli.poll_sleep;
+    let driver = std::thread::Builder::new()
+        .name("autd3-driver".to_owned())
+        .spawn(move || {
+            tune::apply(tuning);
+            match poll_sleep {
+                Some(nap) => {
+                    while let Poll::Next(_) = driver.poll() {
+                        std::thread::sleep(nap);
+                    }
+                    driver.close()
+                }
+                None => driver.run(),
+            }
+        })
+        .context("spawning the driver thread")?;
+    let client = Box::pin(Client::open(
         &geometry,
-        option,
+        connector,
         ClientConfig {
             ack_timeout: cli.ack_timeout,
             max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
             max_resync_rounds: cli.max_resync_rounds,
             low_latency: cli.low_latency,
-            rt_priority: match cli.rt_priority {
-                Some(p) => Some(RtPriority::new(p).expect("validated to 0..=99")),
-                None => ClientConfig::default().rt_priority,
-            },
-            rt_policy: match cli.rt_policy {
-                RtPolicy::Normal => RtSchedulePolicy::Normal,
-                RtPolicy::Fifo => RtSchedulePolicy::Fifo,
-                RtPolicy::RoundRobin => RtSchedulePolicy::RoundRobin,
-            },
-            rt_affinity: cli.rt_affinity.map(|id| CoreId { id }),
             validate_state: false,
             ..Default::default()
         },
@@ -357,6 +369,11 @@ async fn run_with_option(
 
     let _ = client.close().await;
     guard.stop().await;
+    match driver.join() {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => eprintln!("the driver closed with an error: {e}"),
+        Err(_) => eprintln!("the driver thread panicked"),
+    }
 
     output
 }
@@ -403,7 +420,7 @@ async fn run_stop_and_wait(
     let mut recorded = Recorder::new(cli);
     let mut index: u64 = 0;
     let mut stopped_on_error = None;
-    let mut rt_closed = false;
+    let mut driver_closed = false;
     let mut progress = Progress::new(cli);
 
     let mem_recorder = mem::start();
@@ -448,9 +465,9 @@ async fn run_stop_and_wait(
             Err(e @ ClientError::TransitionConstraint { .. }) => {
                 anyhow::bail!("rejected by the local transition precheck: {e}");
             }
-            Err(ClientError::RtClosed) => {
-                eprintln!("client RT thread closed unexpectedly");
-                rt_closed = true;
+            Err(ClientError::DriverClosed) => {
+                eprintln!("the driver closed unexpectedly");
+                driver_closed = true;
                 SampleStatus::NetworkError
             }
             Err(e) => anyhow::bail!("{e}"),
@@ -458,7 +475,7 @@ async fn run_stop_and_wait(
 
         recorded.push(Sample { index, rtt, status });
         progress.observe(status, start.elapsed());
-        if rt_closed {
+        if driver_closed {
             break;
         }
         if cli.stop_on_error && status != SampleStatus::Ok {
@@ -475,7 +492,7 @@ async fn run_stop_and_wait(
         samples: recorded.samples,
         sends: recorded.sends,
         stopped_on_error,
-        rt_closed,
+        driver_closed,
         warmup: cli.warmup,
         elapsed: start.elapsed(),
         frame_bytes: sender.frame_bytes(),
@@ -498,7 +515,7 @@ async fn run_streaming(
     let mut sends_issued: u64 = 0;
     let mut sample_index: u64 = 0;
     let mut stopped_on_error = None;
-    let mut rt_closed = false;
+    let mut driver_closed = false;
     let mut progress = Progress::new(cli);
 
     let mem_recorder = mem::start();
@@ -517,9 +534,9 @@ async fn run_streaming(
                 .await
             {
                 Ok(fut) => fut,
-                Err(ClientError::RtClosed) => {
-                    eprintln!("client RT thread closed unexpectedly");
-                    rt_closed = true;
+                Err(ClientError::DriverClosed) => {
+                    eprintln!("the driver closed unexpectedly");
+                    driver_closed = true;
                     break;
                 }
                 Err(e) => return Err(e.into()),
@@ -559,9 +576,9 @@ async fn run_streaming(
             Err(e @ ClientError::TransitionConstraint { .. }) => {
                 anyhow::bail!("rejected by the local transition precheck: {e}");
             }
-            Err(ClientError::RtClosed) => {
-                eprintln!("client RT thread closed unexpectedly");
-                rt_closed = true;
+            Err(ClientError::DriverClosed) => {
+                eprintln!("the driver closed unexpectedly");
+                driver_closed = true;
                 SampleStatus::NetworkError
             }
             Err(e) => anyhow::bail!("{e}"),
@@ -572,7 +589,7 @@ async fn run_streaming(
             status,
         });
         progress.observe(status, start.elapsed());
-        if rt_closed {
+        if driver_closed {
             break;
         }
         if cli.stop_on_error && status != SampleStatus::Ok {
@@ -589,7 +606,7 @@ async fn run_streaming(
         samples: recorded.samples,
         sends: recorded.sends,
         stopped_on_error,
-        rt_closed,
+        driver_closed,
         warmup: cli.warmup,
         elapsed: start.elapsed(),
         frame_bytes: sender.frame_bytes(),

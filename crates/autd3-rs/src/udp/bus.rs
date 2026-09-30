@@ -207,6 +207,15 @@ impl UdpBus {
         }
     }
 
+    pub fn try_recv(&mut self) -> Result<Option<Reply>, UdpError> {
+        self.recv(Instant::now())
+    }
+
+    pub fn wait_readable(&mut self, deadline: Instant) -> Result<bool, UdpError> {
+        self.ensure_open()?;
+        Ok(self.channel.wait_readable(deadline)?)
+    }
+
     fn mark_requested(&mut self) {
         let now = Instant::now();
         for tracker in &mut self.trackers {
@@ -290,11 +299,43 @@ impl crate::transport::Bus for UdpBus {
         UdpBus::heartbeat(self)
     }
 
-    fn recv(&mut self, deadline: Instant) -> Result<Option<Reply>, UdpError> {
-        UdpBus::recv(self, deadline)
+    fn try_recv(&mut self) -> Result<Option<Reply>, UdpError> {
+        UdpBus::try_recv(self)
+    }
+
+    fn wait_readable(&mut self, deadline: Instant) -> Result<bool, UdpError> {
+        UdpBus::wait_readable(self, deadline)
     }
 
     fn close(&mut self) -> Result<(), UdpError> {
         UdpBus::close(self)
+    }
+}
+
+#[cfg(unix)]
+impl std::os::fd::AsFd for UdpBus {
+    fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        self.channel.socket().as_fd()
+    }
+}
+
+#[cfg(unix)]
+impl std::os::fd::AsRawFd for UdpBus {
+    fn as_raw_fd(&self) -> std::os::fd::RawFd {
+        self.channel.socket().as_raw_fd()
+    }
+}
+
+#[cfg(windows)]
+impl std::os::windows::io::AsSocket for UdpBus {
+    fn as_socket(&self) -> std::os::windows::io::BorrowedSocket<'_> {
+        self.channel.socket().as_socket()
+    }
+}
+
+#[cfg(windows)]
+impl std::os::windows::io::AsRawSocket for UdpBus {
+    fn as_raw_socket(&self) -> std::os::windows::io::RawSocket {
+        self.channel.socket().as_raw_socket()
     }
 }

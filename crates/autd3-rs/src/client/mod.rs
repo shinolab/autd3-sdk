@@ -1,7 +1,6 @@
-mod completion;
+pub(crate) mod completion;
 mod config;
-mod pool;
-mod rt;
+pub(crate) mod pool;
 
 #[cfg(test)]
 mod resync_tests;
@@ -13,9 +12,6 @@ pub use config::{ClientConfig, MAX_DEVICES};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, PoisonError};
-use std::thread::JoinHandle;
-
-use std::sync::mpsc;
 
 use autd3_rs_core::rt::oneshot;
 
@@ -25,6 +21,7 @@ use zerocopy::FromBytes;
 use crate::commands::Pattern;
 use crate::commands::operation::{Clear, Distribution, Synchronize};
 use crate::datagram::{Datagram, DatagramBuilder, Frame, Mirror, MirrorHandle};
+use crate::driver::{CmdMessage, Connect, Connector, Link};
 use crate::error::{Error, NetworkCause, PayloadError};
 use crate::firmware_version::FirmwareVersion;
 use crate::fpga_state::FpgaState;
@@ -33,82 +30,57 @@ use crate::mirror::FirmwareState;
 use crate::protocol::Cmd;
 use crate::response::Response;
 use crate::telemetry::TelemetryCounters;
-use crate::transport::Bus;
-use crate::udp::{StateChecker, TransportOption, UdpBus};
 use crate::value::{Intensity, SysTime};
 use autd3_rs_core::{BusStats, DeviceClock};
 
 use completion::{CompletionPool, Reply};
 use pool::SlotPool;
-use rt::CmdMessage;
+
+type DoneReceiver = oneshot::Receiver<Option<NetworkCause>>;
 
 pub struct Client {
-    cmd_tx: mpsc::Sender<CmdMessage>,
+    link: Link,
     geometry: Arc<Geometry>,
     num_devices: usize,
     pool: Arc<SlotPool>,
     completions: Arc<CompletionPool>,
-    join: std::sync::Mutex<Option<JoinHandle<()>>>,
-    done: std::sync::Mutex<Option<oneshot::Receiver<Option<NetworkCause>>>>,
-    closed: Arc<AtomicBool>,
+    done: std::sync::Mutex<Option<DoneReceiver>>,
     stopping: AtomicBool,
     mirror: MirrorHandle,
     device_clock: Option<DeviceClock>,
     stats: BusStats,
 }
 
+async fn closed_cause(done: DoneReceiver) -> Error {
+    match done.await {
+        Ok(Some(cause)) => Error::Network(cause),
+        _ => Error::DriverClosed,
+    }
+}
+
 impl Client {
     pub fn open(
         geometry: &Geometry,
-        option: TransportOption,
+        connector: Connector,
         config: ClientConfig,
     ) -> impl Future<Output = Result<Self, Error>> + Send + '_ {
-        Box::pin(async move {
-            Self::open_with_checker(geometry, option, config)
-                .await
-                .map(|(client, _checker)| client)
-        })
+        Box::pin(Self::open_impl(geometry, connector, config))
     }
 
-    pub fn open_with_checker(
+    async fn open_impl(
         geometry: &Geometry,
-        option: TransportOption,
-        config: ClientConfig,
-    ) -> impl Future<Output = Result<(Self, StateChecker), Error>> + Send + '_ {
-        Box::pin(async move {
-            let config = config.validate()?;
-            let num_devices = geometry.num_devices();
-            if num_devices == 0 || num_devices > MAX_DEVICES {
-                return Err(PayloadError::DeviceCountOutOfRange {
-                    got: num_devices,
-                    max: MAX_DEVICES,
-                }
-                .into());
-            }
-            let bus = UdpBus::open(&option, num_devices)?;
-            let checker = bus.state_checker();
-            let client = Self::open_bus(geometry, bus, config).await?;
-            Ok((client, checker))
-        })
-    }
-
-    pub(crate) async fn open_bus<L: Bus>(
-        geometry: &Geometry,
-        mut link: L,
+        connector: Connector,
         config: ClientConfig,
     ) -> Result<Self, Error> {
+        let Connector {
+            link,
+            done,
+            num_devices,
+            stats,
+            device_clock,
+        } = connector;
         let config = config.validate()?;
-        let num_devices = link.num_devices();
-        if num_devices == 0 || num_devices > MAX_DEVICES {
-            close_unopened(&mut link);
-            return Err(PayloadError::DeviceCountOutOfRange {
-                got: num_devices,
-                max: MAX_DEVICES,
-            }
-            .into());
-        }
         if geometry.num_devices() != num_devices {
-            close_unopened(&mut link);
             return Err(PayloadError::GeometryDeviceMismatch {
                 geometry: geometry.num_devices(),
                 attached: num_devices,
@@ -116,36 +88,28 @@ impl Client {
             .into());
         }
 
-        let device_clock = link.device_clock();
-        let stats = link.stats();
-        let pool = SlotPool::new(num_devices, config.max_inflight.get());
-        let completions = CompletionPool::new(config.max_inflight.get());
-
-        let (cmd_tx, cmd_rx) = mpsc::channel::<CmdMessage>();
-        let (hs_done_tx, hs_done_rx) = oneshot::channel::<Result<(), NetworkCause>>();
-        let (done_tx, done_rx) = oneshot::channel::<Option<NetworkCause>>();
-        let closed = Arc::new(AtomicBool::new(false));
-        let closed_for_rt = Arc::clone(&closed);
-
-        let join = std::thread::Builder::new()
-            .name("autd3-rs-rt".to_owned())
-            .spawn(move || {
-                rt::run_rt_thread(link, cmd_rx, config, hs_done_tx, done_tx, closed_for_rt);
+        let (hs_tx, hs_rx) = oneshot::channel::<Result<(), NetworkCause>>();
+        if link
+            .queue
+            .push_connect(Connect {
+                config: config.transport(),
+                done: hs_tx,
             })
-            .map_err(|e| Error::Network(NetworkCause::new(e)))?;
+            .is_err()
+        {
+            return Err(closed_cause(done).await);
+        }
 
-        match hs_done_rx.await {
+        match hs_rx.await {
             Ok(Ok(())) => {
-                tracing::debug!("RT thread handshake complete");
+                tracing::debug!("driver handshake complete");
                 let client = Self {
-                    cmd_tx,
+                    link,
                     geometry: Arc::new(geometry.clone()),
                     num_devices,
-                    pool,
-                    completions,
-                    join: std::sync::Mutex::new(Some(join)),
-                    done: std::sync::Mutex::new(Some(done_rx)),
-                    closed,
+                    pool: SlotPool::new(num_devices, config.max_inflight.get()),
+                    completions: CompletionPool::new(config.max_inflight.get()),
+                    done: std::sync::Mutex::new(Some(done)),
                     stopping: AtomicBool::new(false),
                     mirror: MirrorHandle {
                         state: Arc::new(std::sync::Mutex::new(Mirror::Desynced)),
@@ -172,15 +136,20 @@ impl Client {
                 tracing::info!(num_devices, "client opened");
                 Ok(client)
             }
-            Ok(Err(cause)) => {
-                let _ = wait_rt(done_rx, join).await;
-                Err(Error::Network(cause))
-            }
-            Err(_) => {
-                let _ = wait_rt(done_rx, join).await;
-                Err(Error::RtClosed)
-            }
+            Ok(Err(cause)) => Err(Error::Network(cause)),
+            Err(oneshot::Canceled) => Err(closed_cause(done).await),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn open_bus<B: crate::transport::Bus>(
+        geometry: &Geometry,
+        bus: B,
+        config: ClientConfig,
+    ) -> Result<Self, Error> {
+        crate::driver::check_device_count(bus.num_devices())?;
+        let (connector, _join) = spawn_driver(bus);
+        Self::open(geometry, connector, config).await
     }
 
     #[must_use]
@@ -291,17 +260,18 @@ impl Client {
         let (response_tx, response_rx) =
             self.completions.channel(self.mirror_for_response(), reply);
         if self
-            .cmd_tx
-            .send(CmdMessage {
+            .link
+            .queue
+            .push_cmd(CmdMessage {
                 frame: slot,
                 response_tx,
                 exclusive: reply.exclusive(),
             })
             .is_err()
         {
-            tracing::warn!("RT thread is closed; frame dropped");
+            tracing::warn!("the driver is closed; frame dropped");
             self.mark_desynced();
-            return Err(Error::RtClosed);
+            return Err(Error::DriverClosed);
         }
         Ok(response_rx)
     }
@@ -428,54 +398,29 @@ impl Client {
         } else {
             Ok(())
         };
-        self.closed.store(true, Ordering::Release);
+        self.link.queue.request_close();
         let done = self
             .done
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
-        let joined = if let Some(done) = done {
-            rt_outcome(done.await)
-        } else {
-            Ok(())
+        let closed = match done {
+            Some(done) => match done.await {
+                Ok(None) => Ok(()),
+                Ok(Some(cause)) => Err(Error::Network(cause)),
+                Err(oneshot::Canceled) => Err(Error::DriverClosed),
+            },
+            None => Ok(()),
         };
-        stopped.and(joined)
+        stopped.and(closed)
     }
 }
 
-impl Drop for Client {
-    fn drop(&mut self) {
-        self.closed.store(true, Ordering::Release);
-        let join = self
-            .join
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take();
-        if let Some(join) = join {
-            let _ = join.join();
-        }
-    }
-}
-
-fn close_unopened<L: Bus>(link: &mut L) {
-    if let Err(e) = link.close() {
-        tracing::warn!(error = %e, "failed to close the bus that never opened");
-    }
-}
-
-fn rt_outcome(done: Result<Option<NetworkCause>, oneshot::Canceled>) -> Result<(), Error> {
-    match done {
-        Ok(None) => Ok(()),
-        Ok(Some(cause)) => Err(Error::Network(cause)),
-        Err(oneshot::Canceled) => Err(Error::RtPanicked),
-    }
-}
-
-async fn wait_rt(
-    done: oneshot::Receiver<Option<NetworkCause>>,
-    join: JoinHandle<()>,
-) -> Result<(), Error> {
-    let outcome = rt_outcome(done.await);
-    let _ = join.join();
-    outcome
+#[cfg(test)]
+pub(crate) fn spawn_driver<B: crate::transport::Bus>(
+    bus: B,
+) -> (Connector, std::thread::JoinHandle<Result<(), Error>>) {
+    let (mut engine, connector) = crate::driver::attach(bus);
+    let join = std::thread::spawn(move || engine.run());
+    (connector, join)
 }

@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -10,7 +11,9 @@ internal static class Sample
     {
         var layout = new Geometry(new[] { new Autd3(Vector3.Zero) });
         using var emulator = new UdpEmulator(layout.NumDevices);
-        var client = await Client.OpenAsync(layout, emulator.Option(), new ClientConfig());
+        var (driver, connector) = Driver.Open(emulator.Option(), layout.NumDevices);
+        new Thread(driver.Run) { IsBackground = true }.Start();
+        var client = await Client.OpenAsync(layout, connector, new ClientConfig());
 
         var frames = client.DatagramBuilder().Build();
         var frame = frames[0];
@@ -37,7 +40,9 @@ internal static class Sample
 
         // ANCHOR: context_manager
         using var scopedEmulator = new UdpEmulator(scopedLayout.NumDevices);
-        await using (var scoped = await Client.OpenAsync(scopedLayout, scopedEmulator.Option(), new ClientConfig()))
+        var (scopedDriver, scopedConnector) = Driver.Open(scopedEmulator.Option(), scopedLayout.NumDevices);
+        new Thread(scopedDriver.Run) { IsBackground = true }.Start();
+        await using (var scoped = await Client.OpenAsync(scopedLayout, scopedConnector, new ClientConfig()))
         {
             await scoped.SendCheckedAsync(frame);
         }

@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -14,11 +15,10 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         // ANCHOR: open
-        var (client, checker) = await Client.OpenWithCheckerAsync(
-            geometry,
-            new TransportOption(),
-            new ClientConfig()
-        );
+        var (driver, connector) = Driver.Open(new TransportOption(), geometry.NumDevices);
+        var checker = driver.StateChecker();
+        new Thread(driver.Run) { IsBackground = true }.Start();
+        var client = await Client.OpenAsync(geometry, connector, new ClientConfig());
         // ANCHOR_END: open
 
         await using (client)

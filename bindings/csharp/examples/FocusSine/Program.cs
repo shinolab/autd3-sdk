@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
 using static AUTD3.Units;
@@ -13,7 +14,10 @@ internal static class Program
     {
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
 
-        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+        var (driver, connector) = Driver.Open(new TransportOption(), geometry.NumDevices);
+        using var _driver = driver;
+        new Thread(driver.Run) { IsBackground = true }.Start();
+        await using var client = await Client.OpenAsync(geometry, connector, new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
         var versions = await client.ReadFirmwareVersionAsync();

@@ -199,12 +199,6 @@ mod client {
 
     pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send>>;
 
-    pub struct DeviceStatusData {
-        pub device_states: Vec<String>,
-        pub all_ready: bool,
-        pub any_lost: bool,
-    }
-
     pub struct ResponseToken {
         fut: ResponseFuture,
     }
@@ -230,7 +224,6 @@ mod client {
         fn read_telemetry(&self) -> BoxFuture<Vec<autd3_rs::TelemetryCounters>>;
         fn send(&self, datagrams: Arc<Frames>, index: usize) -> BoxFuture<ResponseToken>;
         fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()>;
-        fn check_status(&self) -> Result<DeviceStatusData, Error>;
         fn stop(&self) -> BoxFuture<()>;
         fn close(&self) -> BoxFuture<()>;
     }
@@ -238,6 +231,6 @@ mod client {
 
 #[cfg(feature = "client")]
 pub use client::{
-    BoxFuture, ClientBackend, DeviceStatusData, FRAME_CAPSULE_NAME, ResponseToken,
-    frame_from_capsule, frame_into_capsule, network_err,
+    BoxFuture, ClientBackend, FRAME_CAPSULE_NAME, ResponseToken, frame_from_capsule,
+    frame_into_capsule, network_err,
 };

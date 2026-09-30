@@ -17,9 +17,11 @@ internal static class Sample
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
 // Open the client over an echocat link.
+var (driver, connector) = Driver.Open(new TransportOption(), geometry.NumDevices);
+new Thread(driver.Run) { IsBackground = true }.Start();
 await using var client = await Client.OpenAsync(
     geometry,
-    new TransportOption(),
+    connector,
     new ClientConfig()
 );
 

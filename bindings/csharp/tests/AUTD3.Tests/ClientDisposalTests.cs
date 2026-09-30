@@ -29,7 +29,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var emulator = new UdpEmulator(1);
-            var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
+            var client = await Client.OpenAsync(geometry, Driven.Start(emulator, geometry), new ClientConfig());
             await using (client)
             {
                 Assert.Equal(1, client.NumDevices);
@@ -42,7 +42,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var emulator = new UdpEmulator(1);
-            var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
+            var client = await Client.OpenAsync(geometry, Driven.Start(emulator, geometry), new ClientConfig());
             await Assert.ThrowsAsync<Marker>(async () =>
             {
                 await using (client)
@@ -58,7 +58,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var emulator = new UdpEmulator(1);
-            await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
+            await using var client = await Client.OpenAsync(geometry, Driven.Start(emulator, geometry), new ClientConfig());
             await client.CloseAsync();
         }
 
@@ -67,7 +67,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var emulator = new UdpEmulator(1);
-            var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
+            var client = await Client.OpenAsync(geometry, Driven.Start(emulator, geometry), new ClientConfig());
             await client.DisposeAsync();
             await client.DisposeAsync();
             client.Dispose();
@@ -84,7 +84,7 @@ namespace AUTD3.Tests
                     SynchronizationContext.SetSynchronizationContext(new NonPumpingContext());
                     using var geometry = SingleDevice();
                     using var emulator = new UdpEmulator(1);
-                    var client = Client.OpenAsync(geometry, emulator.Option(), new ClientConfig()).GetAwaiter().GetResult();
+                    var client = Client.OpenAsync(geometry, Driven.Start(emulator, geometry), new ClientConfig()).GetAwaiter().GetResult();
                     client.Dispose();
                     Assert.Throws<ObjectDisposedException>(() => client.NumDevices);
                     tcs.SetResult(true);

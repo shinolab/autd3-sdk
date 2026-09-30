@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -20,16 +21,15 @@ internal static class Sample
                 MaxInflight = 7,
                 MaxResyncRounds = 8,
                 LowLatency = false,
-                RtPriority = new RtPriority(80),
-                RtPolicy = RtSchedulePolicy.Fifo,
-                RtAffinity = null,
                 ValidateState = true,
                 RequireSupportedFirmware = false,
             }
             // ANCHOR_END: config
             ;
+        var (driver, connector) = Driver.Open(udp, geometry.NumDevices);
+        new Thread(driver.Run) { IsBackground = true }.Start();
         // ANCHOR: api
-        await Client.OpenAsync(geometry, udp, option);
+        await Client.OpenAsync(geometry, connector, option);
         // ANCHOR_END: api
     }
 }

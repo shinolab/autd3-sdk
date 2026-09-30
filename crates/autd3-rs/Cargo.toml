@@ -28,15 +28,7 @@ if-addrs = { workspace = true, features = ["link-local"] }
 socket2.workspace = true
 thiserror.workspace = true
 zerocopy.workspace = true
-thread-priority.workspace = true
 tracing.workspace = true
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", default-features = false, features = [
-    "Win32_Media",
-    "Win32_System_Threading",
-    "Win32_Foundation",
-] }
 
 [dev-dependencies]
 autd3-cpu-fw.workspace = true
@@ -48,6 +40,7 @@ tokio = { workspace = true, features = [
     "sync",
     "time",
     "macros",
+    "net",
     "rt",
     "rt-multi-thread",
 ] }

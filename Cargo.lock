@@ -96,11 +96,9 @@ dependencies = [
  "if-addrs",
  "socket2",
  "thiserror",
- "thread-priority",
  "tokio",
  "tracing",
  "tracing-subscriber",
- "windows-sys 0.61.2",
  "zerocopy",
 ]
 
@@ -111,12 +109,10 @@ dependencies = [
  "approx",
  "autd3-cpu-wire",
  "chrono",
- "core_affinity",
  "nalgebra",
  "serde",
  "serde_json",
  "thiserror",
- "thread-priority",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -213,7 +209,9 @@ dependencies = [
  "anyhow",
  "autd3-rs",
  "clap",
+ "core_affinity",
  "humantime",
+ "thread-priority",
  "tokio",
 ]
 
@@ -237,9 +235,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.13.1"
+version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
+checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
 name = "bumpalo"
@@ -627,9 +625,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hermit-abi"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
+checksum = "e17592d60ebacc7d5e169f4663c5f84f9161cc90328abcfe8456f41e4dfcb284"
 
 [[package]]
 name = "http"
@@ -1265,7 +1263,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d2e834949be5111506bb252643498af1514f600d9e1dceedaa42afae155b67f"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "cfg-if",
  "libc",
  "log",
@@ -1332,6 +1330,7 @@ dependencies = [
  "mio",
  "pin-project-lite",
  "signal-hook-registry",
+ "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",
 ]

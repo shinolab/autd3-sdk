@@ -19,7 +19,7 @@ impl ReplyValue {
     };
 }
 
-pub(super) struct SlotData {
+pub(crate) struct SlotData {
     num_devices: usize,
     dist: Distribution,
     payload: Box<[u8]>,
@@ -40,7 +40,7 @@ impl SlotData {
         }
     }
 
-    pub(super) fn reset(&mut self, dist: Distribution) {
+    pub(crate) fn reset(&mut self, dist: Distribution) {
         self.dist = dist;
         self.status.fill(0);
         self.values.fill(ReplyValue::EMPTY);
@@ -55,14 +55,14 @@ impl SlotData {
         }
     }
 
-    pub(super) fn payload_mut(&mut self, device: usize) -> &mut [u8; PAYLOAD_BYTES] {
+    pub(crate) fn payload_mut(&mut self, device: usize) -> &mut [u8; PAYLOAD_BYTES] {
         let base = device * PAYLOAD_BYTES;
         (&mut self.payload[base..base + PAYLOAD_BYTES])
             .try_into()
             .expect("exact payload length")
     }
 
-    pub(super) fn set_cmd(&mut self, device: usize, cmd: Cmd) {
+    pub(crate) fn set_cmd(&mut self, device: usize, cmd: Cmd) {
         self.cmds[device] = cmd;
     }
 
@@ -73,16 +73,16 @@ impl SlotData {
         }
     }
 
-    pub(super) fn cmd_for(&self, device: usize) -> Cmd {
+    pub(crate) fn cmd_for(&self, device: usize) -> Cmd {
         self.cmds[self.source(device)]
     }
 
-    pub(super) fn payload_for(&self, device: usize) -> &[u8] {
+    pub(crate) fn payload_for(&self, device: usize) -> &[u8] {
         let base = self.source(device) * PAYLOAD_BYTES;
         &self.payload[base..base + PAYLOAD_BYTES]
     }
 
-    pub(super) fn record_reply(&mut self, device: usize, status: u8, data: &[u8]) {
+    pub(crate) fn record_reply(&mut self, device: usize, status: u8, data: &[u8]) {
         self.status[device] = status;
         let len = data.len().min(REPLY_DATA_BYTES_MAX);
         let value = &mut self.values[device];
@@ -90,7 +90,7 @@ impl SlotData {
         value.bytes[..len].copy_from_slice(&data[..len]);
     }
 
-    pub(super) fn response(&self) -> Response {
+    pub(crate) fn response(&self) -> Response {
         if self.values.iter().all(|v| v.len == 0) {
             return Response::from_status(&self.status);
         }
@@ -104,7 +104,7 @@ impl SlotData {
     }
 }
 
-pub(super) struct Slot {
+pub(crate) struct Slot {
     pool: Arc<SlotPool>,
     data: Option<SlotData>,
 }
@@ -131,13 +131,13 @@ impl Drop for Slot {
     }
 }
 
-pub(super) struct SlotPool {
+pub(crate) struct SlotPool {
     free: Mutex<Vec<SlotData>>,
     permits: Semaphore,
 }
 
 impl SlotPool {
-    pub(super) fn new(num_devices: usize, capacity: usize) -> Arc<Self> {
+    pub(crate) fn new(num_devices: usize, capacity: usize) -> Arc<Self> {
         let free = (0..capacity).map(|_| SlotData::new(num_devices)).collect();
         Arc::new(Self {
             free: Mutex::new(free),
@@ -145,7 +145,7 @@ impl SlotPool {
         })
     }
 
-    pub(super) async fn acquire(self: &Arc<Self>) -> Slot {
+    pub(crate) async fn acquire(self: &Arc<Self>) -> Slot {
         self.permits.acquire().await.forget();
         let data = self
             .free
@@ -160,7 +160,7 @@ impl SlotPool {
     }
 
     #[cfg(test)]
-    pub(super) fn available_permits(&self) -> usize {
+    pub(crate) fn available_permits(&self) -> usize {
         self.permits.available_permits()
     }
 

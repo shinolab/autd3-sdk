@@ -46,9 +46,10 @@ To avoid per-frame allocation, reuse buffers.
 ## OS Tuning
 
 When the host connects directly over UDP, the real-time performance of sending and receiving also depends on the OS settings.
-By adjusting thread priority, CPU affinity, timer precision, and so on, jitter can be suppressed, potentially enabling more stable high-rate transmission.
+By adjusting the priority, CPU affinity, and so on of the thread that runs the [`Driver`](/autd3-sdk/en/api/basics/driver/), jitter can be suppressed, potentially enabling more stable high-rate transmission.
 
-These can be set as `rt_priority` / `rt_policy` / `rt_affinity` / `ack_timeout` of `ClientConfig`, and `heartbeat` / `reply_timeout` of `TransportOption`.
+You spawn that thread yourself, so set its priority and affinity directly (the library has no settings for them).
+Transmission control is set as `ack_timeout` of `ClientConfig`, and `heartbeat` / `reply_timeout` of `TransportOption`.
 The appropriate values differ by environment, so it is best to measure and decide.
 
 ## Windows Driver Settings

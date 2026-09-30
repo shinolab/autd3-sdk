@@ -18,8 +18,10 @@ mem-profile = []
 [dependencies]
 autd3-rs = { workspace = true, features = ["emulator", "logging"] }
 clap.workspace = true
+core_affinity.workspace = true
 humantime.workspace = true
 anyhow.workspace = true
+thread-priority.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "macros", "rt", "rt-multi-thread", "signal"] }
 
 [lints]

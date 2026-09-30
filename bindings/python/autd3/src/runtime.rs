@@ -97,6 +97,7 @@ pub(crate) fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) -> PyRes
 
 #[pyfunction]
 pub(crate) fn _shutdown_runtime(py: Python<'_>) {
+    py.detach(crate::driver::shutdown_drivers);
     py.detach(crate::udp::shutdown_emulators);
     let runtime = {
         let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);

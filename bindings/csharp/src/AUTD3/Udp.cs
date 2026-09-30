@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace AUTD3
 {
@@ -86,6 +87,119 @@ namespace AUTD3
             finally
             {
                 NativeClient.autd3_udp_free_string(group);
+            }
+        }
+    }
+
+    public sealed class Driver : IDisposable
+    {
+        private readonly DriverHandle _handle;
+
+        private Driver(IntPtr handle)
+        {
+            _handle = new DriverHandle(handle);
+        }
+
+        public static (Driver Driver, Connector Connector) Open(TransportOption option, int numDevices)
+        {
+            if (numDevices < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(numDevices));
+            }
+            var optionHandle = option.CreateHandle();
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var code = NativeClient.autd3_driver_open(optionHandle, (UIntPtr)numDevices, out var driver, out var connector, err, (UIntPtr)err.Length);
+            if (code != 0)
+            {
+                throw new Autd3Exception(NativeUtil.Utf8(err));
+            }
+            return (new Driver(driver), new Connector(connector));
+        }
+
+        public void Run()
+        {
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            if (NativeClient.autd3_driver_run(Handle, err, (UIntPtr)err.Length) != 0)
+            {
+                throw new Autd3Exception(NativeUtil.Utf8(err));
+            }
+        }
+
+        public bool Poll(out TimeSpan wait)
+        {
+            switch (NativeClient.autd3_driver_poll(Handle, out var ns))
+            {
+                case 0:
+                    wait = TimeSpan.FromTicks((long)Math.Min(ns / 100, (ulong)TimeSpan.MaxValue.Ticks));
+                    return true;
+                case 1:
+                    wait = TimeSpan.Zero;
+                    return false;
+                default:
+                    throw new Autd3Exception("the driver is already being driven by another thread");
+            }
+        }
+
+        public void Wait(TimeSpan wait)
+        {
+            var ns = wait <= TimeSpan.Zero ? 0UL : OptionNative.ToNanos(wait);
+            if (NativeClient.autd3_driver_wait(Handle, ns) != 0)
+            {
+                throw new Autd3Exception("the driver is already being driven by another thread");
+            }
+        }
+
+        public Checker StateChecker()
+        {
+            var checker = NativeClient.autd3_driver_state_checker(Handle);
+            if (checker == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create checker");
+            }
+            return new Checker(checker);
+        }
+
+        private DriverHandle Handle => _handle.IsClosed ? throw new ObjectDisposedException(nameof(Driver)) : _handle;
+
+        public void Dispose() => _handle.Dispose();
+    }
+
+    public sealed class Connector : IDisposable
+    {
+        private IntPtr _handle;
+
+        internal Connector(IntPtr handle)
+        {
+            _handle = handle;
+        }
+
+        internal IntPtr Take()
+        {
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle == IntPtr.Zero)
+            {
+                throw new Autd3Exception("the connector has already been used");
+            }
+            GC.SuppressFinalize(this);
+            return handle;
+        }
+
+        public void Dispose()
+        {
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
+            {
+                NativeClient.autd3_connector_free(handle);
+            }
+            GC.SuppressFinalize(this);
+        }
+
+        ~Connector()
+        {
+            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
+            if (handle != IntPtr.Zero)
+            {
+                NativeClient.autd3_connector_free(handle);
             }
         }
     }

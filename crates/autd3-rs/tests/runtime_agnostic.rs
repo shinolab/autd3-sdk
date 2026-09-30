@@ -6,7 +6,7 @@ use autd3_rs::commands::SetSilencer;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{Executor, block_on, oneshot};
 use autd3_rs::udp::emulator::UdpEmulator;
-use autd3_rs::{Client, ClientConfig};
+use autd3_rs::{Client, ClientConfig, Connector, Driver};
 
 fn geometry(n: usize) -> Geometry {
     Geometry::new((0..n).map(|_| Autd3::default()).collect())
@@ -14,6 +14,12 @@ fn geometry(n: usize) -> Geometry {
 
 fn emulator(n: usize) -> UdpEmulator {
     UdpEmulator::spawn(n).unwrap()
+}
+
+fn run_driver(emulator: &UdpEmulator) -> Connector {
+    let (mut driver, connector) = Driver::open(&emulator.option(), emulator.num_devices()).unwrap();
+    std::thread::spawn(move || driver.run());
+    connector
 }
 
 async fn stream_silencer(client: &Client, rounds: usize) -> Result<(), autd3_rs::Error> {
@@ -33,7 +39,7 @@ async fn stream_silencer(client: &Client, rounds: usize) -> Result<(), autd3_rs:
 fn a_client_opens_and_closes_without_an_async_runtime() {
     block_on(async {
         let emulator = emulator(2);
-        let client = Client::open(&geometry(2), emulator.option(), ClientConfig::default())
+        let client = Client::open(&geometry(2), run_driver(&emulator), ClientConfig::default())
             .await
             .unwrap();
         assert_eq!(client.num_devices(), 2);
@@ -47,7 +53,7 @@ fn a_client_opens_and_closes_without_an_async_runtime() {
 fn a_second_close_is_harmless_without_an_async_runtime() {
     block_on(async {
         let emulator = emulator(1);
-        let client = Client::open(&geometry(1), emulator.option(), ClientConfig::default())
+        let client = Client::open(&geometry(1), run_driver(&emulator), ClientConfig::default())
             .await
             .unwrap();
         let versions = client.read_firmware_version().await.unwrap();
@@ -66,7 +72,7 @@ fn more_concurrent_sends_than_slots_all_complete_on_one_executor_thread() {
     let client = Arc::new(
         block_on(Client::open(
             &geometry(1),
-            emulator.option(),
+            run_driver(&emulator),
             ClientConfig {
                 max_inflight,
                 ..ClientConfig::default()

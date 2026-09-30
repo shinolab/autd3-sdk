@@ -6,6 +6,7 @@ Run with: cargo xtask py example status_check
 
 import asyncio
 import signal
+import threading
 
 import autd3
 
@@ -15,11 +16,10 @@ CHECK_INTERVAL = 0.1
 async def main() -> None:
     geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    client, checker = await autd3.Client.open_with_checker(
-        geometry,
-        autd3.TransportOption(),
-        autd3.ClientConfig(),
-    )
+    driver, connector = autd3.Driver.open(autd3.TransportOption(), geometry.num_devices())
+    checker = driver.state_checker()
+    threading.Thread(target=driver.run, daemon=True).start()
+    client = await autd3.Client.open(geometry, connector, autd3.ClientConfig())
 
     async with client:
         print("watching link status — press Ctrl+C to stop")

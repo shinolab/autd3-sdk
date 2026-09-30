@@ -274,45 +274,31 @@ namespace AUTD3
             _geometry = geometry;
         }
 
-        public static async Task<Client> OpenAsync(Geometry geometry, TransportOption option, ClientConfig config)
+        public static async Task<Client> OpenAsync(Geometry geometry, Connector connector, ClientConfig config)
         {
-            var optionHandle = option.CreateHandle();
-
-            IntPtr configHandle;
-            try
-            {
-                configHandle = config.CreateHandle();
-            }
-            catch
-            {
-                NativeClient.autd3_transport_option_free(optionHandle);
-                throw;
-            }
+            var connectorHandle = connector.Take();
 
             Task<IntPtr> task;
             try
             {
-                task = AsyncOps.InvokeAsync((cb, ud) =>
-                    NativeClient.autd3_client_open(geometry.Handle, optionHandle, configHandle, cb, ud));
+                var configHandle = config.CreateHandle();
+                try
+                {
+                    task = AsyncOps.InvokeAsync((cb, ud) =>
+                        NativeClient.autd3_client_open(geometry.Handle, connectorHandle, configHandle, cb, ud));
+                }
+                finally
+                {
+                    NativeClient.autd3_client_config_free(configHandle);
+                }
             }
-            finally
+            catch
             {
-                NativeClient.autd3_client_config_free(configHandle);
+                NativeClient.autd3_connector_free(connectorHandle);
+                throw;
             }
             var value = await task.ConfigureAwait(false);
             return new Client(value, geometry);
-        }
-
-        public static async Task<(Client Client, Checker Checker)> OpenWithCheckerAsync(Geometry geometry, TransportOption option, ClientConfig config)
-        {
-            var client = await OpenAsync(geometry, option, config).ConfigureAwait(false);
-            var checker = NativeClient.autd3_client_checker(client.Handle);
-            if (checker == IntPtr.Zero)
-            {
-                client.Dispose();
-                throw new Autd3Exception("failed to create checker");
-            }
-            return (client, new Checker(checker));
         }
 
         public int NumDevices => (int)NativeClient.autd3_client_num_devices(Handle);

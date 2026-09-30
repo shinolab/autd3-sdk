@@ -1,9 +1,10 @@
 import asyncio
 import math
+import threading
 
 import numpy as np
 
-from autd3 import Client, ClientConfig, UdpEmulator
+from autd3 import Client, ClientConfig, Driver, UdpEmulator
 from autd3.commands import PatternStm, PatternStmMode, PatternStmOption
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
@@ -15,7 +16,9 @@ from autd3_pattern import wavelength as calc_wavelength
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
     emulator = UdpEmulator(geometry.num_devices())
-    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
+    driver, connector = Driver.open(emulator.option(), geometry.num_devices())
+    threading.Thread(target=driver.run, daemon=True).start()
+    async with await Client.open(geometry, connector, ClientConfig()) as client:
         center = geometry.center() + np.array([0.0, 0.0, 150.0])
         wavelength = calc_wavelength(340 * m / s)
         patterns = []

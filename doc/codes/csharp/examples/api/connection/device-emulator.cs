@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -10,7 +11,9 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero), new Autd3(new Vector3(192, 0, 0)) });
         using var emulator = new UdpEmulator(geometry.NumDevices);
-        await using (var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig()))
+        var (driver, connector) = Driver.Open(emulator.Option(), geometry.NumDevices);
+        new Thread(driver.Run) { IsBackground = true }.Start();
+        await using (var client = await Client.OpenAsync(geometry, connector, new ClientConfig()))
         {
             var builder = client.DatagramBuilder();
             builder.Push(new SetSilencer());

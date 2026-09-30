@@ -33,7 +33,9 @@ pub(crate) trait Bus: Send + 'static {
 
     fn heartbeat(&mut self) -> Result<u16, Self::Error>;
 
-    fn recv(&mut self, deadline: Instant) -> Result<Option<Reply>, Self::Error>;
+    fn try_recv(&mut self) -> Result<Option<Reply>, Self::Error>;
+
+    fn wait_readable(&mut self, deadline: Instant) -> Result<bool, Self::Error>;
 
     fn close(&mut self) -> Result<(), Self::Error> {
         Ok(())

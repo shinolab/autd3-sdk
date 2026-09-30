@@ -2,16 +2,18 @@ use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::udp::emulator::UdpEmulator;
 use autd3_rs::value::{Intensity, Phase, SamplingConfig};
-use autd3_rs::{Client, ClientConfig, DeviceState};
+use autd3_rs::{Client, ClientConfig, DeviceState, Driver};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_client_drives_the_emulated_chain() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
-    let (client, mut checker) =
-        Client::open_with_checker(&geometry, emulator.option(), ClientConfig::default())
-            .await
-            .unwrap();
+    let (mut driver, connector) = Driver::open(&emulator.option(), 2).unwrap();
+    let mut checker = driver.state_checker();
+    let driver = std::thread::spawn(move || driver.run());
+    let client = Client::open(&geometry, connector, ClientConfig::default())
+        .await
+        .unwrap();
     assert_eq!(client.num_devices(), 2);
     assert!(client.clock_offset_ns().abs() < 1_000_000_000);
 
@@ -48,13 +50,17 @@ async fn a_client_drives_the_emulated_chain() {
     assert_eq!(status.devices(), [DeviceState::Ready; 2]);
 
     client.close().await.unwrap();
+    driver.join().unwrap().unwrap();
+    assert!(checker.check().is_err());
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_full_modulation_buffer_streams_through_the_emulated_chain() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
-    let client = Client::open(&geometry, emulator.option(), ClientConfig::default())
+    let (mut driver, connector) = Driver::open(&emulator.option(), 2).unwrap();
+    std::thread::spawn(move || driver.run());
+    let client = Client::open(&geometry, connector, ClientConfig::default())
         .await
         .unwrap();
 

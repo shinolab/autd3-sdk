@@ -105,15 +105,6 @@ namespace AUTD3
         internal static extern int autd3_client_config_set_max_resync_rounds(IntPtr config, uint value);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_set_rt_priority(IntPtr config, byte mode, byte value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_set_rt_policy(IntPtr config, byte value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_set_rt_affinity(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasAffinity, UIntPtr coreId);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_config_free(IntPtr config);
 
 
@@ -142,7 +133,28 @@ namespace AUTD3
         internal static extern void autd3_datagrams_free(IntPtr datagrams);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_open(GeometryHandle geometry, IntPtr option, IntPtr config, CompletionCallback cb, IntPtr userData);
+        internal static extern void autd3_client_open(GeometryHandle geometry, IntPtr connector, IntPtr config, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_driver_open(IntPtr option, UIntPtr numDevices, out IntPtr driver, out IntPtr connector, byte[] err, UIntPtr errLen);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_driver_poll(DriverHandle driver, out ulong waitNs);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_driver_wait(DriverHandle driver, ulong waitNs);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_driver_run(DriverHandle driver, byte[] err, UIntPtr errLen);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_driver_state_checker(DriverHandle driver);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_driver_free(IntPtr driver);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_connector_free(IntPtr connector);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern UIntPtr autd3_client_num_devices(ClientHandle client);
@@ -210,9 +222,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_string_array_free(IntPtr array);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_client_checker(ClientHandle client);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_checker_check(CheckerHandle checker, byte[] err, UIntPtr errLen);

@@ -7,10 +7,6 @@ pub mod protocol;
 pub mod rt;
 pub mod value;
 
-pub use rt::{
-    CoreId, RtPriority, RtSchedulePolicy, RtThreadTuning, apply_thread_tuning, default_rt_priority,
-};
-
 pub use chrono;
 pub use nalgebra;
 

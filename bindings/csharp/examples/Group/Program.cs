@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
 using static AUTD3.Units;
@@ -18,7 +19,10 @@ internal static class Program
             new Autd3(new Vector3(Autd3.DeviceWidth, 0f, 0f)),
         });
 
-        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+        var (driver, connector) = Driver.Open(new TransportOption(), geometry.NumDevices);
+        using var _driver = driver;
+        new Thread(driver.Run) { IsBackground = true }.Start();
+        await using var client = await Client.OpenAsync(geometry, connector, new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
 

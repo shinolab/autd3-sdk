@@ -172,18 +172,22 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public async System.Threading.Tasks.Task OpenWithCheckerReportsStatus()
+        public async System.Threading.Tasks.Task TheDriverCheckerReportsStatus()
         {
             using var geometry = SingleDevice();
             using var emulator = new UdpEmulator(1);
-            var (client, checker) = await Client.OpenWithCheckerAsync(geometry, emulator.Option(), new ClientConfig());
-            using var c = client;
-            using var k = checker;
+            var (driver, connector) = Driver.Open(emulator.Option(), geometry.NumDevices);
+            using var d = driver;
+            using var checker = driver.StateChecker();
+            var runner = System.Threading.Tasks.Task.Run(driver.Run);
+            using var client = await Client.OpenAsync(geometry, connector, new ClientConfig());
             var status = checker.Check();
             Assert.Equal(DeviceState.Ready, Assert.Single(status.Devices));
             Assert.True(status.AllReady);
             Assert.False(status.AnyLost);
             await client.CloseAsync();
+            await runner;
+            Assert.Throws<Autd3Exception>(() => checker.Check());
         }
 
         [Fact]
@@ -191,7 +195,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var emulator = new UdpEmulator(1);
-            using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
+            using var client = await Client.OpenAsync(geometry, Driven.Start(emulator, geometry), new ClientConfig());
             Assert.Equal(client.NumDevices, client.Geometry.NumDevices);
             Assert.Equal(geometry.NumTransducers, client.Geometry.NumTransducers);
             await client.CloseAsync();
@@ -202,7 +206,7 @@ namespace AUTD3.Tests
         {
             using var geometry = SingleDevice();
             using var emulator = new UdpEmulator(1);
-            using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
+            using var client = await Client.OpenAsync(geometry, Driven.Start(emulator, geometry), new ClientConfig());
             using var builder = client.DatagramBuilder();
             builder.Push(new Synchronize());
             using var frames = builder.Build();

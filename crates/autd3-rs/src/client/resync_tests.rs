@@ -108,22 +108,28 @@ impl Bus for SharedAudit {
         Ok(self.msg_id)
     }
 
-    fn recv(&mut self, deadline: Instant) -> Result<Option<Reply>, Self::Error> {
-        if let Some(r) = self.queue.pop_front() {
-            return Ok(Some(Reply::new(
+    fn try_recv(&mut self) -> Result<Option<Reply>, Self::Error> {
+        Ok(self.queue.pop_front().map(|r| {
+            Reply::new(
                 r.device,
                 r.msg_id,
                 r.reply.ack,
                 r.reply.status,
                 0x09,
                 r.reply.data(),
-            )));
+            )
+        }))
+    }
+
+    fn wait_readable(&mut self, deadline: Instant) -> Result<bool, Self::Error> {
+        if !self.queue.is_empty() {
+            return Ok(true);
         }
         let now = Instant::now();
         if deadline > now {
             std::thread::sleep(deadline - now);
         }
-        Ok(None)
+        Ok(false)
     }
 }
 

@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{TracingOption, init_tracing};
-use autd3_rs::{Client, ClientConfig, DeviceStatus, TransportOption};
+use autd3_rs::{Client, ClientConfig, DeviceStatus, Driver, TransportOption};
 
 const CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -18,12 +18,11 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let (client, mut checker) = Client::open_with_checker(
-        &geometry,
-        TransportOption::default(),
-        ClientConfig::default(),
-    )
-    .await?;
+    let (mut driver, connector) =
+        Driver::open(&TransportOption::default(), geometry.num_devices())?;
+    let mut checker = driver.state_checker();
+    std::thread::spawn(move || driver.run());
+    let client = Client::open(&geometry, connector, ClientConfig::default()).await?;
 
     println!("watching device status — press Ctrl+C to stop");
     let mut last: Option<DeviceStatus> = None;

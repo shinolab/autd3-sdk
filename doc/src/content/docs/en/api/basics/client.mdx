@@ -19,6 +19,10 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 The basic and command APIs, including `Client`, are provided by the main package.
 The destination (real devices, the [device emulator](/autd3-sdk/en/api/connection/device-emulator/), or the Simulator) is given by [`TransportOption`](/autd3-sdk/en/api/connection/).
 
+Before opening a `Client`, open a [`Driver`](/autd3-sdk/en/api/basics/driver/) and start running it.
+Pass the `Connector` returned by `Driver::open` to `Client::open`.
+The library spawns no thread for sending and receiving, so awaiting `Client::open` without running the `Driver` never returns.
+
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
 <CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} csharp={excerpt(csOpen, "api")} />
@@ -26,10 +30,10 @@ The destination (real devices, the [device emulator](/autd3-sdk/en/api/connectio
 | Parameter  | Type            | Description                    |
 | ---------- | --------------- | ----------------------------- |
 | `geometry` | `&Geometry`     | Physical layout of the devices |
-| `option`   | `TransportOption`     | [Connection settings](/autd3-sdk/en/api/connection/) |
+| `connector` | `Connector`    | Returned by `Driver::open`. Usable once |
 | `config`   | `ClientConfig`  | See below                     |
 
-To continuously monitor the operating state of the devices, use `open_with_checker` and drive the returned `StateChecker` (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
+To continuously monitor the operating state of the devices, drive the `StateChecker` taken from `Driver::state_checker` (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
 
 ## API
 
@@ -58,9 +62,6 @@ To continuously monitor the operating state of the devices, use `open_with_check
 | `max_inflight`         | `NonZeroUsize`           | `7`     | Frames that may be sent without waiting for a reply (the default is the capacity of the device receive queue) |
 | `max_resync_rounds`    | `NonZeroU32`             | `8`     | Maximum number of rounds to attempt resynchronization      |
 | `low_latency`          | `bool`                   | `false` | Low-latency mode                                           |
-| `rt_priority`          | `Option<RtPriority>` | Windows: `TimeCritical` / otherwise: `80` | Priority of the RT thread. Setting `None` leaves the OS default. |
-| `rt_policy`            | `RtSchedulePolicy`       | `Fifo`  | Scheduling policy used when `rt_priority` is set: `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
-| `rt_affinity`          | `Option<CoreId>`         | `None`  | CPU core affinity of the RT thread (OS default if `None`)  |
 | `validate_state`       | `bool`                   | `true`  | Enable pre-send validation                                 |
 | `require_supported_firmware` | `bool`             | `false` | Check the firmware series on open (Rust only) |
 

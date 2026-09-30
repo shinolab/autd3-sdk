@@ -2,7 +2,7 @@ use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
-use autd3_rs::{Client, ClientConfig};
+use autd3_rs::{Client, ClientConfig, Driver};
 use autd3_rs::TransportOption;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -11,12 +11,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     // Open the client over an echocat link.
-    let client = Client::open(
-        &geometry,
-        TransportOption::default(),
-        ClientConfig::default(),
-    )
-    .await?;
+    let (mut driver, connector) =
+        Driver::open(&TransportOption::default(), geometry.num_devices())?;
+    std::thread::spawn(move || driver.run());
+    let client = Client::open(&geometry, connector, ClientConfig::default()).await?;
 
     // Generate a focus 150 mm above the array center.
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);

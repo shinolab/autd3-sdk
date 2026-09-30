@@ -8,8 +8,7 @@ mod udp;
 use autd3_ffi_abi::{
     AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, CheckerBackend, ClientBackend, CompletionCallback,
     CompletionCtx, IntensityBuffer, ModulationBuffer, PhaseBuffer, ResponseTokenData, drop_handle,
-    handle_mut, handle_ref, into_handle, slice_mut, slice_ref, take_handle, to_rt_policy,
-    to_rt_priority, write_cstr, write_out,
+    handle_mut, handle_ref, into_handle, slice_mut, slice_ref, take_handle, write_cstr, write_out,
 };
 use autd3_rs::commands::{
     BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
@@ -27,7 +26,7 @@ use autd3_rs::value::{
     PatternBank, Phase, PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
-    ClientConfig, CoreId, DatagramBuilder as CoreDatagramBuilder, Frames, Geometry, Length, Point3,
+    ClientConfig, DatagramBuilder as CoreDatagramBuilder, Frames, Geometry, Length, Point3,
     Response, UnitVector3, Vector3, Velocity,
 };
 use autd3_rs::{DeviceState, TelemetryCounters};
@@ -427,47 +426,6 @@ client_config_setter!(
     u32,
     NonZeroU32
 );
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_set_rt_priority(
-    config: *mut ClientConfig,
-    mode: u8,
-    value: u8,
-) -> i32 {
-    let (Some(config), Some(rt_priority)) =
-        (unsafe { handle_mut(config) }, to_rt_priority(mode, value))
-    else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.rt_priority = rt_priority;
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_set_rt_policy(
-    config: *mut ClientConfig,
-    value: u8,
-) -> i32 {
-    let (Some(config), Some(rt_policy)) = (unsafe { handle_mut(config) }, to_rt_policy(value))
-    else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.rt_policy = rt_policy;
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_set_rt_affinity(
-    config: *mut ClientConfig,
-    has_affinity: bool,
-    core_id: usize,
-) -> i32 {
-    let Some(config) = (unsafe { handle_mut(config) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.rt_affinity = has_affinity.then_some(CoreId { id: core_id });
-    AUTD3_OK
-}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_config_free(config: *mut ClientConfig) {
@@ -1794,7 +1752,7 @@ pub unsafe extern "C" fn autd3_datagrams_free(datagrams: *mut Arc<Frames>) {
 
 pub struct ClientHandle(Box<dyn ClientBackend>);
 
-pub struct CheckerHandle(Box<dyn CheckerBackend>);
+pub struct CheckerHandle(pub(crate) Box<dyn CheckerBackend>);
 
 pub struct StringArray(Vec<CString>);
 
@@ -1816,7 +1774,7 @@ pub(crate) fn to_cstrings(values: Vec<String>) -> Vec<CString> {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_open(
     geometry: *const Geometry,
-    option: *mut udp::TransportOptionHandle,
+    connector: *mut udp::ConnectorHandle,
     config: *const ClientConfig,
     cb: CompletionCallback,
     user_data: *mut c_void,
@@ -1830,12 +1788,12 @@ pub unsafe extern "C" fn autd3_client_open(
         ctx.invalid_argument("null argument");
         return;
     };
-    let Some(udp::TransportOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+    let Some(udp::ConnectorHandle(connector)) = (unsafe { take_handle(connector) }) else {
         ctx.invalid_argument("null argument");
         return;
     };
 
-    let fut = udp::open(geometry.clone(), option, *config);
+    let fut = udp::open(geometry.clone(), connector, *config);
     executor().spawn(async move {
         match fut.await {
             Ok(backend) => ctx.ok(into_handle(ClientHandle(backend)).cast()),
@@ -2101,15 +2059,6 @@ pub unsafe extern "C" fn autd3_u32_array_free(array: *mut U32Array) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_checker(client: *const ClientHandle) -> *mut CheckerHandle {
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        return std::ptr::null_mut();
-    };
-
-    into_handle(CheckerHandle(client.0.checker()))
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_checker_check(
     checker: *const CheckerHandle,
     out_err: *mut c_char,
@@ -2256,8 +2205,6 @@ autd3_ffi_abi::export_abi_version!();
 #[cfg(test)]
 mod tests {
     use super::*;
-    use autd3_ffi_abi::{AUTD3_RT_PRIORITY_DEFAULT, AUTD3_RT_PRIORITY_MAX, AUTD3_RT_PRIORITY_MIN};
-    use autd3_rs::RtPriority;
 
     #[test]
     fn a_new_client_config_matches_the_rust_default() {
@@ -2269,49 +2216,11 @@ mod tests {
         assert_eq!(expected.max_inflight, config.max_inflight);
         assert_eq!(expected.max_resync_rounds, config.max_resync_rounds);
         assert_eq!(expected.low_latency, config.low_latency);
-        assert_eq!(expected.rt_priority, config.rt_priority);
-        assert_eq!(expected.rt_policy, config.rt_policy);
-        assert_eq!(expected.rt_affinity, config.rt_affinity);
         assert_eq!(expected.validate_state, config.validate_state);
         assert_eq!(
             expected.require_supported_firmware,
             config.require_supported_firmware
         );
-    }
-
-    #[test]
-    fn the_default_rt_priority_mode_keeps_the_rust_default() {
-        let handle = autd3_client_config_new();
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_client_config_set_rt_priority(handle, AUTD3_RT_PRIORITY_DEFAULT, 0)
-        });
-        let config = unsafe { take_handle(handle) }.unwrap();
-        assert_eq!(ClientConfig::default().rt_priority, config.rt_priority);
-        assert!(config.rt_priority.is_some());
-    }
-
-    #[test]
-    fn the_min_and_max_rt_priority_modes_select_the_bounds() {
-        for (mode, expected) in [
-            (AUTD3_RT_PRIORITY_MIN, RtPriority::MIN),
-            (AUTD3_RT_PRIORITY_MAX, RtPriority::MAX),
-        ] {
-            let handle = autd3_client_config_new();
-            assert_eq!(AUTD3_OK, unsafe {
-                autd3_client_config_set_rt_priority(handle, mode, 0)
-            });
-            let config = unsafe { take_handle(handle) }.unwrap();
-            assert_eq!(Some(expected), config.rt_priority);
-        }
-    }
-
-    #[test]
-    fn an_unknown_rt_priority_mode_is_rejected() {
-        let handle = autd3_client_config_new();
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_config_set_rt_priority(handle, 9, 0)
-        });
-        unsafe { autd3_client_config_free(handle) };
     }
 
     #[test]
@@ -2442,34 +2351,6 @@ mod tests {
         unsafe { autd3_op_free(nested) };
         unsafe { autd3_datagram_builder_free(builder) };
         unsafe { drop_handle(geometry) };
-    }
-
-    #[test]
-    fn a_failed_open_leaves_the_option_handle_with_the_caller() {
-        extern "C" fn never_reports_success(
-            code: i32,
-            _value: *mut c_void,
-            _msg: *const c_char,
-            _user_data: *mut c_void,
-        ) {
-            assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        }
-
-        let option = udp::autd3_transport_option_new();
-        let config = autd3_client_config_new();
-
-        unsafe {
-            autd3_client_open(
-                std::ptr::null(),
-                option,
-                config,
-                Some(never_reports_success),
-                std::ptr::null_mut(),
-            );
-        }
-
-        assert!(unsafe { take_handle(option) }.is_some());
-        unsafe { autd3_client_config_free(config) };
     }
 
     #[test]

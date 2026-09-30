@@ -4,11 +4,11 @@ mod raw;
 mod reg;
 #[cfg(test)]
 mod sim;
+mod tuning;
 
 use std::io;
 use std::time::{Duration, Instant};
 
-use autd3_rs::PerfTuning;
 use autd3_rs::protocol::{Cmd, FRAME_HEADER_BYTES, Seq};
 use autd3_rs::value::SysTimeError;
 
@@ -17,6 +17,7 @@ use frame::FrameError;
 use master::{Master, MasterConfig};
 use raw::{PERMISSION_HINT, RawBus, RawSocket};
 use reg::AlState;
+use tuning::PerfTuning;
 
 pub const MIN_ETHERCAT_CPU_FIRMWARE_VERSION: (u8, u8, u8) = (0, 9, 0);
 

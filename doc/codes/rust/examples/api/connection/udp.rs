@@ -3,7 +3,7 @@ use std::time::Duration;
 use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, ClientConfig, Interface};
+use autd3_rs::{Driver, Interface};
 use autd3_rs::TransportOption;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
     Interface::Name("eth0".to_string());
     // ANCHOR_END: iface
 
-    let _ = Client::open(&geometry, TransportOption::default(), ClientConfig::default());
+    let _ = Driver::open(&TransportOption::default(), geometry.num_devices());
 
     Ok(())
 }

@@ -1,8 +1,9 @@
 import asyncio
+import threading
 
 import numpy as np
 
-from autd3 import Client, ClientConfig, TransportOption
+from autd3 import Client, ClientConfig, Driver, TransportOption
 from autd3.commands import FociStm, FociStmOption
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz
@@ -11,9 +12,11 @@ from autd3.value import ControlPoint, ControlPoints
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
+    driver, connector = Driver.open(TransportOption(), geometry.num_devices())
+    threading.Thread(target=driver.run, daemon=True).start()
     async with await Client.open(
         geometry,
-        TransportOption(),
+        connector,
         ClientConfig(),
     ) as client:
         center = geometry.center() + np.array([0.0, 0.0, 150.0])

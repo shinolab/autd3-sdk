@@ -1,6 +1,6 @@
 ---
 title: 送信処理
-description: RT スレッドによるフレーム送信, SEQ/ACK による多重化, 障害回復
+description: Driver によるフレーム送信, SEQ/ACK による多重化, 障害回復
 sidebar:
   order: 2
 ---
@@ -8,7 +8,7 @@ sidebar:
 import Mermaid from "@components/Mermaid.astro";
 
 [DatagramBuilder](/autd3-sdk/developer/software/datagram-builder/) が生成した `Frame` を実際にデバイスへ送り届ける処理について述べる.
-実装は `crates/autd3-rs/src/client/` にある.
+実装は `crates/autd3-rs/src/client/` と `crates/autd3-rs/src/driver/` にある.
 
 `Frames` は複数のフレームを持ち, 送信ループは `Client` ではなくユーザー側が書く.
 
@@ -25,19 +25,20 @@ for frame in &frames {
 
 ## stop-and-wait
 
-`Client` は 2 つのスレッドに分かれている.
+送受信は `Client` と [`Driver`](/autd3-sdk/api/basics/driver/) に分かれている.
 
 <Mermaid
-  title="2 つのスレッド"
+  title="Client と Driver"
   code={`flowchart LR
-  U["ユーザースレッド (非同期)"]
-  R["RT スレッド (専用 OS スレッド)"]
+  U["Client (非同期)"]
+  R["Driver (ユーザーが回す)"]
   D["デバイス"]
-  U -- "mpsc" --> R
+  U -- "コマンドキュー" --> R
   R -- "UDP" --> D`}
 />
 
-RT スレッドはコマンドが届いたらすぐにデバイスへ送り, デバイスの返信を振り分けている. ユーザースレッドはそこへコマンドを渡して結果を待つ.
+`Driver` はコマンドが積まれたらすぐにデバイスへ送り, デバイスの返信を振り分けている. `Client` はそこへコマンドを積んで結果を待つ.
+ライブラリはスレッドを立てないので, `Driver` をどのスレッドで回すか (あるいは async ランタイムのタスクで回すか) はユーザーが決める.
 以下では, デバイス 2 台に `PerDevice` のフレームを 1 つ送る場合を例に, 送信から受信までの処理を追う.
 
 ### ① Slot を借りる
@@ -66,7 +67,7 @@ async fn send_datagrams(&self, datagrams: &[Datagram]) -> Result<ResponseFuture,
 }
 ```
 
-`Frame` は `Frames` の中身を借りているだけなので, そのまま RT スレッドへ渡すことはできない.
+`Frame` は `Frames` の中身を借りているだけなので, そのまま `Driver` へ渡すことはできない.
 そこで `SlotPool` から `Slot` を借り, ペイロードをそこへ写す.
 
 ```rust
@@ -94,46 +95,43 @@ pub(super) async fn acquire(&self) -> Slot {
 `Semaphore` の許可を取ってから free list から 1 つ取り出す.
 空きが無ければ `.await` で待つ.
 
-### ② RT スレッドへ渡す
+### ② Driver へ渡す
 
 ```rust
-async fn dispatch(&self, slot: Slot, exclusive: bool) -> Result<ResponseFuture, Error> {
-    let (response_tx, response_rx) = self.completions.channel();
-    if let Err(e) = self.cmd_tx.send(CmdMessage { frame: slot, response_tx, exclusive }).await {
-        self.pool.release(e.0.frame);
-        return Err(Error::RtClosed);
+fn dispatch(&self, slot: Slot, reply: Reply) -> Result<ResponseFuture, Error> {
+    let (response_tx, response_rx) = self.completions.channel(self.mirror_for_response(), reply);
+    if self.link.queue.push_cmd(CmdMessage { frame: slot, response_tx, exclusive: reply.exclusive() }).is_err() {
+        return Err(Error::DriverClosed);
     }
     Ok(response_rx)
 }
 ```
 
-完了通知用のチャネルを 1 組作り, `Slot` と送信側 (`response_tx`) をまとめて RT スレッドへ送る.
+完了通知用のチャネルを 1 組作り, `Slot` と送信側 (`response_tx`) をまとめてコマンドキューへ積む.
 受信側 (`response_rx`) が `ResponseFuture` としてユーザーへ返る.
+コマンドキューは `Mutex<VecDeque>` に Waker を登録できるようにしたもので, 積むと待っている `Driver` (`wait` 中のスレッド, または `notified()` の future) が起きる.
 
 ここで `send` は終わりであり, ユーザーは `ResponseFuture` を `await` して待つ.
 
 :::note
-コマンドチャネルの容量は 1 である.
-キューイングは RT スレッド側が担い, ユーザー側には溜めない.
+in-flight の上限は `SlotPool` の容量 (`max_inflight`) で決まる.
+キューに積めるのは `Slot` を借りられたコマンドだけなので, キューが際限なく伸びることはない.
 :::
 
-以下は RT スレッド側の処理である.
+以下は `Driver` 側の処理である.
 
 ### ③ 送る
 
-RT スレッドはループの先頭で `pickup` を呼び, 送ってよい枠 (窓) がある限りコマンドを取り出してすぐに送る.
+`Driver::poll` は返信を読み切ったあと `pickup` を呼び, 送ってよい枠 (窓) がある限りコマンドを取り出してすぐに送る.
 
 ```rust
-fn pickup(&mut self) -> Result<Step, NetworkCause> {
+fn pickup(&mut self) -> Result<(), NetworkCause> {
     /* 再送モード中や exclusive の待ちは省略 */
     while self.window_open() {                    // pending.len() < max_inflight など
-        match self.cmd_rx.try_recv() {
-            Ok(msg) => self.accept(msg)?,          // exclusive なら pending が空になるまで保留
-            Err(TryRecvError::Empty) => break,
-            Err(TryRecvError::Disconnected) => return Ok(Step::Disconnected),
-        }
+        let Some(msg) = self.queue.pop_cmd() else { break };
+        self.accept(msg)?;                         // exclusive なら pending が空になるまで保留
     }
-    Ok(Step::Continue)
+    Ok(())
 }
 
 fn stage_new(&mut self, msg: CmdMessage) -> Result<(), NetworkCause> {
@@ -179,15 +177,18 @@ stop-and-wait では `pending` の要素は常に高々 1 つである.
 
 ### ④ 返信を待つ
 
-送った後は, ソケットで次の期限まで返信を待つ.
+送った後の `poll` は, 次に呼ぶべき期限を返す.
+期限は「先頭が `ack_timeout` を過ぎる時刻」「次の生存確認の時刻」「生存確認の返信待ちの締め切り」のうち最も早いものである.
+`Driver::wait` (既定の待ち方) はソケットを覗いて (読まずに) 返信が来るのを待ち, 窓に空きがあれば短い間隔 (200 µs) でコマンドキューも見る.
+次の `poll` はまずソケットを非ブロッキングで読み切り, 返信を振り分ける.
 
 ```rust
-if let Some(reply) = self.recv(deadline)? {        // UdpBus::recv
-    self.handle_reply(&reply);
+while let Some(reply) = self.bus.try_recv()? {
+    self.dispatch_reply(&reply)?;
 }
 ```
 
-期限は「先頭が `ack_timeout` を過ぎる時刻」「次の生存確認の時刻」, 窓に空きがあれば「新しいコマンドを拾うための短い間隔 (200 µs)」のうち最も早いものである.
+返信を読み切ってからタイマ (再送・生存確認・途絶) を判定するので, `poll` の呼び出しが遅れても届いている返信を見落として誤って再送することは無い.
 
 デバイスは各フレームの扱いを終えた時点で 1 回返信する.
 FIFO モードではメインループが処理した後に, Low Latency モードでは受信割り込みの中で処理した直後に返信が届く.
@@ -197,7 +198,7 @@ FIFO モードではメインループが処理した後に, Low Latency モー�
 送るものが無い間は, `heartbeat` (既定 10 ms) ごとに全デバイスへ生存確認 (`Heartbeat`) を送る.
 デバイスはこれをホストが生きている信号として使い (500 ms 届かないと出力を止める), 現在の `ack` を載せて返信する.
 ホストはこの返信で状態監視とデバイス時刻の観測を行う.
-pending も生存確認の返信待ちも無い間は, RT スレッドはソケットではなくコマンドのチャネルで待つので, 新しいコマンドが来ればすぐに起きる.
+pending も生存確認の返信待ちも無い間は, `Driver::wait` はソケットではなくコマンドキューで待つので, 新しいコマンドが来ればすぐに起きる.
 :::
 
 ### ⑤ ACK を集める
@@ -253,21 +254,21 @@ while pending.front().is_some_and(|e| e.acked == all_acked) {
 ```
 
 `Slot` に記録した応答を `Response` へ写して送信側へ渡す. `Slot` は `Inflight` と一緒に破棄され, プールへ戻る.
-これでユーザースレッドの `ResponseFuture` が起こされる.
+これで `Client` 側の `ResponseFuture` が起こされる.
 
 ### 全体の流れ
 
 <Mermaid
   title="stop-and-wait の 1 フレーム"
   code={`sequenceDiagram
-  participant U as ユーザースレッド
+  participant U as Client
   participant P as SlotPool
-  participant R as RT スレッド
+  participant R as Driver
   participant D as デバイス
   U->>P: acquire()
   P-->>U: Slot
   U->>U: Frame のペイロードを Slot へ写す
-  U->>R: CmdMessage (mpsc)
+  U->>R: CmdMessage (コマンドキュー)
   Note over U: ResponseFuture を await
   R->>R: stage_frame: Slot → bufs
   R->>D: Frame (seq)
@@ -375,15 +376,23 @@ dev1 は seq4 の ACK を報告していないが, `ack=5` から遡って処理
 ## 異常系
 
 ここまでは正常系だった.
-RT ループは毎回, 次の順で処理する.
+`Driver::poll` は毎回, 次の順で処理する.
 
 ```rust
-loop {
-    if closed { return Ok(()) }
-    if matches!(self.pickup()?, Step::Disconnected) { return Ok(()) }
+fn step(&mut self) -> Result<(), NetworkCause> {
+    while let Some(reply) = self.try_recv()? {
+        self.dispatch_reply(&reply)?;
+    }
+    let requests = self.queue.requests();
+    if requests.close {
+        self.shutdown(None);
+        return Ok(());
+    }
+    /* 接続要求なら handshake を始める. handshake と Reset は poll をまたぐ状態として進む */
+    self.pickup()?;
     self.check_head(Instant::now())?;       // ACK 停滞の検出と再送・Reset
     self.check_heartbeat(Instant::now())?;  // 生存確認
-    if matches!(self.wait()?, Step::Disconnected) { return Ok(()) }   // 返信かコマンドを待つ
+    Ok(())
 }
 ```
 
@@ -391,27 +400,30 @@ loop {
 
 |              | 判定                                  | 意味                                        | 担当             |
 | ------------ | ------------------------------------- | ------------------------------------------- | ---------------- |
-| ソケットの異常 | `send` / `recv` が `Err`              | ソケット自体の異常.                         | `teardown`       |
+| ソケットの異常 | `send` / `recv` が `Err`              | ソケット自体の異常.                         | `shutdown`       |
 | ACK 停滞     | 先頭が `ack_timeout` の間進まない      | フレーム・返信の喪失, FIFO の溢れ, デバイスの停止・途絶. | `check_head`     |
 
-ソケットの異常は Client 側ではどうすることもできないので, ループを抜けて RT スレッドを終了させる.
+ソケットの異常は Client 側ではどうすることもできないので, `Driver` を閉じる (以後の `poll` は `Poll::Closed` を返す).
 
-終了処理は理由によらず `teardown` に一本化されている.
+終了処理は理由 (終了要求・ソケットの異常・`Driver` の Drop) によらず `shutdown` に一本化されている.
 
 ```rust
-fn teardown(&mut self, link_error: Option<&NetworkCause>) {
-    let cause = || link_error.map_or(Error::RtClosed, |cause| Error::Network(cause.clone()));
-    if let Some(msg) = self.held_exclusive.take() { /* cause() を返して Slot を戻す */ }
+fn shutdown(&mut self, cause: Option<NetworkCause>) {
+    let (queued, connect) = self.queue.shut();
+    let error = || cause.clone().map_or(Error::DriverClosed, Error::Network);
+    if let Some(msg) = self.held_exclusive.take() { /* error() を返して Slot を戻す */ }
     for entry in self.pending.drain(..) { /* 同上 */ }
-    while let Ok(msg) = self.cmd_rx.try_recv() { /* 同上 */ }
+    for msg in queued { /* 同上 */ }
+    /* UdpBus::close を呼び, Client へ閉じた原因を通知する */
 }
 ```
 
-`pending` / `held_exclusive` / チャネルに残った `CmdMessage` を掃除し, それぞれについて
-待っている `ResponseFuture` に `cause()` を返し, `Slot` をプールへ戻す.
+`queue.shut()` はキューを閉じて, 以後の `send` をすぐに `Error::DriverClosed` で失敗させる.
+`pending` / `held_exclusive` / キューに残った `CmdMessage` を掃除し, それぞれについて
+待っている `ResponseFuture` にエラーを返し, `Slot` をプールへ戻す.
 
-`teardown`による後処理は正常系ではほぼ意味を持たない.
-一方ソケットの異常では RT スレッドだけが死に, `Client` は生き残る.
+`shutdown`による後処理は正常系ではほぼ意味を持たない.
+一方ソケットの異常では `Driver` だけが閉じ, `Client` は生き残る.
 このとき後処理を怠ると, デッドロックが発生する可能性がある.
 `SlotPool::acquire` は取得した `Semaphore` の許可を `forget` するため,  in-flight の `Slot` を回収しないと, プールが枯渇し以降の `send` が `acquire` で永久にブロックする可能性がある.
 
@@ -503,7 +515,7 @@ UDP 版では Reset にも返信があるので, 届いたことを確かめて�
 ### タイムアウト後
 
 `fail_pending_timeout` は全 `ResponseFuture` に `Error::Timeout` を返す.
-RT ループ自体は継続し, 次のコマンドを受け付ける.
+`Driver` 自体は継続し, 次のコマンドを受け付ける.
 
 ## mirror の Desync 
 

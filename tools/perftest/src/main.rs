@@ -4,9 +4,9 @@ mod report;
 mod run;
 mod snippet;
 mod stats;
+mod tune;
 
 use anyhow::Result;
-use autd3_rs::PerfTuning;
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use clap::Parser;
 
@@ -27,30 +27,12 @@ async fn main() -> Result<()> {
         anyhow::bail!(msg);
     }
 
-    let _tuning = (!cli.no_win_perf_tune).then(|| {
-        let tuning = PerfTuning::apply();
-        eprintln!(
-            "perf-tune: timer={}, priority={}",
-            if tuning.timer_boosted() {
-                "1ms"
-            } else {
-                "default"
-            },
-            if tuning.high_priority() {
-                "HIGH"
-            } else {
-                "default"
-            },
-        );
-        tuning
-    });
-
     let output = Box::pin(run(&cli)).await?;
     let RunOutput {
         samples,
         sends,
         stopped_on_error,
-        rt_closed,
+        driver_closed,
         warmup,
         elapsed,
         frame_bytes,
@@ -97,9 +79,9 @@ async fn main() -> Result<()> {
     if let Some((index, status)) = stopped_on_error {
         anyhow::bail!("stopped at send #{index}: {status:?} (--stop-on-error)");
     }
-    if rt_closed {
+    if driver_closed {
         anyhow::bail!(
-            "the client RT thread died before the run finished; \
+            "the driver closed before the run finished; \
              the summary covers only what was sent until then"
         );
     }

@@ -12,7 +12,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{TracingOption, init_tracing};
-use autd3_rs::{Client, ClientConfig, Telemetry, TelemetryCounters, TransportOption};
+use autd3_rs::{Client, ClientConfig, Driver, Telemetry, TelemetryCounters, TransportOption};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -28,7 +28,9 @@ async fn main() -> Result<()> {
             .transpose()?,
         ..TransportOption::default()
     };
-    let client = Client::open(&geometry, option, ClientConfig::default()).await?;
+    let (mut driver, connector) = Driver::open(&option, geometry.num_devices())?;
+    std::thread::spawn(move || driver.run());
+    let client = Client::open(&geometry, connector, ClientConfig::default()).await?;
 
     println!("devices: {}", client.num_devices());
     let mut baseline: Option<Vec<TelemetryCounters>> = None;

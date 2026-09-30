@@ -1,6 +1,7 @@
 import asyncio
+import threading
 
-from autd3 import Client, ClientConfig, Duration, RtPriority, RtSchedulePolicy, TransportOption
+from autd3 import Client, ClientConfig, Driver, Duration, TransportOption
 from autd3.geometry import Autd3, Geometry
 
 
@@ -15,16 +16,15 @@ async def main() -> None:
             max_inflight=7,
             max_resync_rounds=8,
             low_latency=False,
-            rt_priority=RtPriority(80),
-            rt_policy=RtSchedulePolicy.Fifo,
-            rt_affinity=None,
             validate_state=True,
             require_supported_firmware=False,
         )
         # ANCHOR_END: config
     )
     # ANCHOR: api
-    await Client.open(geometry, udp, option)
+    driver, connector = Driver.open(udp, geometry.num_devices())
+    threading.Thread(target=driver.run, daemon=True).start()
+    await Client.open(geometry, connector, option)
     # ANCHOR_END: api
 
 

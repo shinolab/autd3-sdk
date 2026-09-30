@@ -1,13 +1,10 @@
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::time::Duration;
 
-use autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES;
-use autd3_rs_core::CoreId;
-use autd3_rs_core::RtPriority;
-use autd3_rs_core::RtSchedulePolicy;
-
+use crate::driver::TransportConfig;
 use crate::error::{Error, PayloadError};
 use crate::protocol::MAX_INFLIGHT;
+use autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES;
 
 pub const MAX_DEVICES: usize = 128;
 pub const ACK_TIMEOUT_MAX: Duration = Duration::from_secs(3600);
@@ -18,9 +15,6 @@ pub struct ClientConfig {
     pub max_inflight: NonZeroUsize,
     pub max_resync_rounds: NonZeroU32,
     pub low_latency: bool,
-    pub rt_priority: Option<RtPriority>,
-    pub rt_policy: RtSchedulePolicy,
-    pub rt_affinity: Option<CoreId>,
     pub validate_state: bool,
     pub require_supported_firmware: bool,
 }
@@ -32,9 +26,6 @@ impl Default for ClientConfig {
             max_inflight: NonZeroUsize::new(DEVICE_QUEUE_FRAMES).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             low_latency: false,
-            rt_priority: autd3_rs_core::default_rt_priority(),
-            rt_policy: RtSchedulePolicy::default(),
-            rt_affinity: None,
             validate_state: true,
             require_supported_firmware: false,
         }
@@ -42,6 +33,15 @@ impl Default for ClientConfig {
 }
 
 impl ClientConfig {
+    pub(crate) fn transport(self) -> TransportConfig {
+        TransportConfig {
+            ack_timeout: self.ack_timeout,
+            max_inflight: self.max_inflight,
+            max_resync_rounds: self.max_resync_rounds,
+            low_latency: self.low_latency,
+        }
+    }
+
     pub(super) fn validate(self) -> Result<Self, Error> {
         if self.max_inflight.get() > MAX_INFLIGHT {
             return Err(PayloadError::MaxInflightTooLarge { max: MAX_INFLIGHT }.into());

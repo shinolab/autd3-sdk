@@ -5,6 +5,7 @@ Run with: cargo xtask py example multi_device
 """
 
 import asyncio
+import threading
 
 import autd3
 from scipy.spatial.transform import Rotation
@@ -21,9 +22,11 @@ async def main() -> None:
         ]
     )
 
+    driver, connector = autd3.Driver.open(autd3.TransportOption(), geometry.num_devices())
+    threading.Thread(target=driver.run, daemon=True).start()
     async with await autd3.Client.open(
         geometry,
-        autd3.TransportOption(),
+        connector,
         autd3.ClientConfig(),
     ) as client:
         print("devices:", client.num_devices())

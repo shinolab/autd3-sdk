@@ -6,65 +6,12 @@ namespace AUTD3
 {
 
 
-    public enum RtSchedulePolicy : byte
-    {
-        Normal = 0,
-        Fifo = 1,
-        RoundRobin = 2,
-    }
-
-    public readonly struct RtPriority : IEquatable<RtPriority>
-    {
-        private const byte ModeDefault = 0;
-        private const byte ModeDisabled = 1;
-        private const byte ModeExplicit = 2;
-        private const byte ModeMin = 3;
-        private const byte ModeMax = 4;
-
-        internal byte Mode { get; }
-        internal byte Value { get; }
-
-        private RtPriority(byte mode, byte value)
-        {
-            Mode = mode;
-            Value = value;
-        }
-
-        public RtPriority(byte value) : this(ModeExplicit, value)
-        {
-        }
-
-        public static RtPriority Default => default;
-        public static RtPriority Min => new RtPriority(ModeMin, 0);
-        public static RtPriority Max => new RtPriority(ModeMax, 0);
-
-        public bool Equals(RtPriority other) => Mode == other.Mode && Value == other.Value;
-        public override bool Equals(object? obj) => obj is RtPriority other && Equals(other);
-        public override int GetHashCode() => HashCode.Combine(Mode, Value);
-        public static bool operator ==(RtPriority left, RtPriority right) => left.Equals(right);
-        public static bool operator !=(RtPriority left, RtPriority right) => !left.Equals(right);
-
-        internal static (byte Mode, byte Value) ToNative(RtPriority? priority) =>
-            priority is { } p ? (p.Mode, p.Value) : (ModeDisabled, (byte)0);
-
-        public override string ToString() => Mode switch
-        {
-            ModeExplicit => $"RtPriority({Value})",
-            ModeMin => "RtPriority.Min",
-            ModeMax => "RtPriority.Max",
-            _ => "RtPriority.Default",
-        };
-    }
-
     public readonly struct ClientConfig
     {
         public bool LowLatency { get; init; } = false;
         public TimeSpan AckTimeout { get; init; } = TimeSpan.FromMilliseconds(10);
         public uint MaxInflight { get; init; } = 7;
         public uint MaxResyncRounds { get; init; } = 8;
-        public RtPriority? RtPriority { get; init; } = AUTD3.RtPriority.Default;
-        public RtSchedulePolicy RtPolicy { get; init; } = RtSchedulePolicy.Fifo;
-        public ulong? RtAffinity { get; init; } = null;
         public bool ValidateState { get; init; } = true;
         public bool RequireSupportedFirmware { get; init; } = false;
 
@@ -85,10 +32,6 @@ namespace AUTD3
                 NativeConfig.Apply("ackTimeout", AckTimeout < TimeSpan.Zero ? -1 : NativeClient.autd3_client_config_set_ack_timeout_ns(handle, OptionNative.ToNanos(AckTimeout)));
                 NativeConfig.Apply("maxInflight", NativeClient.autd3_client_config_set_max_inflight(handle, (UIntPtr)MaxInflight));
                 NativeConfig.Apply("maxResyncRounds", NativeClient.autd3_client_config_set_max_resync_rounds(handle, MaxResyncRounds));
-                var (rtPriorityMode, rtPriorityValue) = AUTD3.RtPriority.ToNative(RtPriority);
-                NativeConfig.Apply("rtPriority", NativeClient.autd3_client_config_set_rt_priority(handle, rtPriorityMode, rtPriorityValue));
-                NativeConfig.Apply("rtPolicy", NativeClient.autd3_client_config_set_rt_policy(handle, (byte)RtPolicy));
-                NativeConfig.Apply("rtAffinity", NativeClient.autd3_client_config_set_rt_affinity(handle, RtAffinity.HasValue, (UIntPtr)(RtAffinity ?? 0)));
                 NativeConfig.Apply("validateState", NativeClient.autd3_client_config_set_validate_state(handle, ValidateState));
                 NativeConfig.Apply("requireSupportedFirmware", NativeClient.autd3_client_config_set_require_supported_firmware(handle, RequireSupportedFirmware));
             }

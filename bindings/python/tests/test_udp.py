@@ -1,4 +1,5 @@
 import asyncio
+import threading
 
 import pytest
 
@@ -49,9 +50,11 @@ def test_the_client_opens_the_emulated_chain() -> None:
     assert emulator.num_devices == 2
 
     async def run() -> None:
-        client, checker = await autd3.Client.open_with_checker(
-            geometry(2), emulator.option(), autd3.ClientConfig()
-        )
+        driver, connector = autd3.Driver.open(emulator.option(), 2)
+        checker = driver.state_checker()
+        runner = threading.Thread(target=driver.run, daemon=True)
+        runner.start()
+        client = await autd3.Client.open(geometry(2), connector, autd3.ClientConfig())
         async with client:
             assert client.num_devices() == 2
             assert len(await client.read_firmware_version()) == 2
@@ -66,6 +69,10 @@ def test_the_client_opens_the_emulated_chain() -> None:
                 assert counters[autd3.value.Telemetry.Failsafe] == counters.get(
                     autd3.value.Telemetry.Failsafe
                 )
+        await asyncio.to_thread(runner.join)
+        assert driver.poll() is None
+        with pytest.raises(autd3_core.Autd3Error):
+            checker.check()
 
     asyncio.run(run())
 
@@ -73,8 +80,11 @@ def test_the_client_opens_the_emulated_chain() -> None:
 def test_a_device_count_mismatch_fails_to_open() -> None:
     emulator = autd3.UdpEmulator(1)
 
+    driver, connector = autd3.Driver.open(emulator.option(), 1)
+    threading.Thread(target=driver.run, daemon=True).start()
+
     async def run() -> None:
-        await autd3.Client.open(geometry(2), emulator.option(), autd3.ClientConfig())
+        await autd3.Client.open(geometry(2), connector, autd3.ClientConfig())
 
     with pytest.raises(autd3_core.Autd3Error):
         asyncio.run(run())

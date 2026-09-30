@@ -46,9 +46,10 @@ import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
 ## OS チューニング
 
 ホストから UDP で直接つなぐ場合, 送受信のリアルタイム性は OS の設定にも左右される.
-スレッドの優先度・CPU アフィニティ・タイマ精度などを調整することで, ジッタを抑えてより安定した高レート送信ができる可能性がある.
+[`Driver`](/autd3-sdk/api/basics/driver/) を回すスレッドの優先度・CPU アフィニティなどを調整することで, ジッタを抑えてより安定した高レート送信ができる可能性がある.
 
-これらは `ClientConfig` の `rt_priority` / `rt_policy` / `rt_affinity` / `ack_timeout`, および `TransportOption` の `heartbeat` / `reply_timeout` として設定できる.
+スレッドはユーザーが立てるので, 優先度やアフィニティはそのスレッドにユーザーが直接設定する (ライブラリに設定項目は無い).
+送信の制御は `ClientConfig` の `ack_timeout`, および `TransportOption` の `heartbeat` / `reply_timeout` として設定できる.
 適切な値は環境によって異なるため, 実測して決めるのがよい.
 
 ## Windows のドライバ設定

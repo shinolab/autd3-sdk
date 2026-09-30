@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
 using static AUTD3.Units;
@@ -11,7 +12,9 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+        var (driver, connector) = Driver.Open(new TransportOption(), geometry.NumDevices);
+        new Thread(driver.Run) { IsBackground = true }.Start();
+        await using var client = await Client.OpenAsync(geometry, connector, new ClientConfig());
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 

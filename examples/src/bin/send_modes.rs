@@ -14,7 +14,7 @@ use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
 use autd3_rs::{
-    Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture, TransportOption,
+    Client, ClientConfig, Driver, Frames, Length, MAX_INFLIGHT, ResponseFuture, TransportOption,
 };
 
 const TOTAL_POINTS: usize = 1000;
@@ -25,12 +25,10 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(
-        &geometry,
-        TransportOption::default(),
-        ClientConfig::default(),
-    )
-    .await?;
+    let (mut driver, connector) =
+        Driver::open(&TransportOption::default(), geometry.num_devices())?;
+    std::thread::spawn(move || driver.run());
+    let client = Client::open(&geometry, connector, ClientConfig::default()).await?;
 
     configure(&client).await?;
 
