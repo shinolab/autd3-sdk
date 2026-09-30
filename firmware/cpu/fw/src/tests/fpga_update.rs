@@ -266,6 +266,30 @@ fn a_crc_mismatch_keeps_the_device_locked_and_needs_a_new_session() {
 }
 
 #[test]
+fn a_new_session_after_a_crc_mismatch_completes_without_a_power_cycle() {
+    let mut h = ota_capable();
+    let img = image(1000, 6);
+    h.deliver(&begin(0, img.len() as u32, crc32(&img) ^ 1));
+    let mut seq = 1;
+    send_image(&mut h, &mut seq, &img);
+    h.deliver(&Frame::new(seq, Cmd::FpgaUpdateCommit));
+    assert_eq!(h.status(), Error::UpdateImageInvalid as u8);
+    seq = seq.wrapping_add(1);
+
+    let retry = image(1000, 7);
+    run_update(&mut h, &mut seq, &retry);
+    assert_eq!(h.cpu.fpga_update.state(), State::Committed);
+    assert_eq!(slot(&h, retry.len()), retry.as_slice());
+    h.deliver(&Frame::new(seq, Cmd::FpgaUpdateActivate));
+    assert_eq!(h.status(), 0);
+    h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
+    assert_eq!(h.port.fpga_reboots, 1);
+    assert!(!h.cpu.fpga_update.is_locked());
+    h.deliver(&Frame::new(seq.wrapping_add(1), Cmd::Clear));
+    assert_eq!(h.status(), 0);
+}
+
+#[test]
 fn commit_without_a_session_is_rejected() {
     let mut h = ota_capable();
     h.deliver(&Frame::new(0, Cmd::FpgaUpdateCommit));

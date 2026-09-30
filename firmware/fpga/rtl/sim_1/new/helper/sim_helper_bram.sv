@@ -19,15 +19,15 @@ module sim_helper_bram #(
 
   memory_bus_if memory_bus ();
   assign memory_bus.BUS_CLK = CPU_CKIO;
-  assign memory_bus.EN = ~CPU_CN;
-  assign memory_bus.WE = ~CPU_WE0_N;
+  assign memory_bus.CS_N = CPU_CN;
+  assign memory_bus.WE_N = CPU_WE0_N;
   assign memory_bus.BRAM_SELECT = CPU_ADDR[16:15];
   assign memory_bus.BRAM_ADDR = CPU_ADDR[14:1];
   assign memory_bus.DATA_IN = CPU_DATA;
 
   logic cpu_rd = 1'b0;
   logic cpu_rdwr = 1'b0;
-  assign memory_bus.RD   = cpu_rd;
+  assign memory_bus.RD_N = ~cpu_rd;
   assign memory_bus.RDWR = cpu_rdwr;
 
   logic bus_active = 1'b0;

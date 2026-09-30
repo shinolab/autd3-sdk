@@ -25,12 +25,40 @@ module memory (
   logic [15:0] flash_dout;
   logic flash_rd_sel = 1'b0;
 
+  (* IOB = "TRUE" *) logic cs_n_iob = 1'b1;
+  (* IOB = "TRUE" *) logic we_n_iob = 1'b1;
+  (* IOB = "TRUE" *) logic [1:0] select_iob = '0;
+  (* IOB = "TRUE" *) logic [13:0] addr_iob = '0;
+  (* IOB = "TRUE" *) logic [15:0] data_iob = '0;
+
+  logic en_q = 1'b0;
+  logic we_q = 1'b0;
+  logic [1:0] select_q = '0;
+  logic [13:0] addr_q = '0;
+  logic [15:0] data_q = '0;
+  logic we_done = 1'b0;
+
   assign bus_clk = MEM_BUS.BUS_CLK;
-  assign select = MEM_BUS.BRAM_SELECT;
-  assign en = MEM_BUS.EN;
-  assign we = MEM_BUS.WE;
-  assign addr = MEM_BUS.BRAM_ADDR;
-  assign data_in = MEM_BUS.DATA_IN;
+
+  always_ff @(posedge bus_clk) begin
+    cs_n_iob <= MEM_BUS.CS_N;
+    we_n_iob <= MEM_BUS.WE_N;
+    select_iob <= MEM_BUS.BRAM_SELECT;
+    addr_iob <= MEM_BUS.BRAM_ADDR;
+    data_iob <= MEM_BUS.DATA_IN;
+    en_q <= ~cs_n_iob;
+    we_q <= ~we_n_iob;
+    select_q <= select_iob;
+    addr_q <= addr_iob;
+    data_q <= data_iob;
+    we_done <= (we_done | we) & ~we_n_iob;
+  end
+
+  assign we = en_q & we_q & ~we_n_iob & ~we_done;
+  assign en = we ? en_q : ~cs_n_iob;
+  assign select = we ? select_q : select_iob;
+  assign addr = we ? addr_q : addr_iob;
+  assign data_in = data_q;
   assign MEM_BUS.DATA_OUT = data_out;
   assign data_out = flash_rd_sel ? flash_dout : ctl_dout;
 
@@ -221,10 +249,8 @@ module memory (
   end
   /////////////////////////////    EMISSION   /////////////////////////////
 
-  logic [2:0] ctl_we_edge = 3'b000;
   always_ff @(posedge bus_clk) begin
-    ctl_we_edge <= {ctl_we_edge[1:0], we & ctl_en};
-    if (ctl_we_edge == 3'b011) begin
+    if (we & ctl_en) begin
       case (addr)
         ADDR_MOD_MEM_WR_BANK: mod_mem_wr_bank <= data_in[0];
         ADDR_MOD_MEM_WR_PAGE: mod_mem_wr_page <= data_in[0];
