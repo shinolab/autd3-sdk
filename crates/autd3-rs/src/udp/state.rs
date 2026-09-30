@@ -64,6 +64,10 @@ impl Tracker {
     pub(crate) fn state(self) -> DeviceState {
         self.state
     }
+
+    pub(crate) const fn is_lost(self) -> bool {
+        self.lost
+    }
 }
 
 #[derive(Debug)]
