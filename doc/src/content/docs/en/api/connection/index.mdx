@@ -85,9 +85,23 @@ The device with ID 0 is the reference (grandmaster), and the other devices follo
 - Since all devices share the same time, transitions and GPIO outputs using `SysTime` happen together on every device
 - A device that falls out of sync after opening is reported as `Syncing`, and returns to `Ready` once it follows again. Reopen the client if it stays `Syncing`
 
+### Synchronization Accuracy
+
+Measured on real hardware with four daisy-chained devices by comparing the rising edges of each device's GPIO output with those of ID 0 (2026-09-30, more than 10,000 edges on an oscilloscope).
+
+| Output                                        | Mean offset | Standard deviation | Peak-to-peak |
+| --------------------------------------------- | ----------- | ------------------ | ------------ |
+| `BaseSignal`                                  | 5–32 ns     | about 29 ns        | about 300 ns |
+| `SysTimeEq` (the same `SysTime` on every device) | 12–20 ns    | about 29 ns        | about 270 ns |
+| Bank switch with `TransitionMode::SysTime`    | 5–9 ns      | about 30 ns        | about 250 ns |
+
+- Most of the standard deviation and peak-to-peak comes from the FPGA counting the interval between sync pulses (1 ms) with its own oscillator, not from the time alignment between devices. It does not change under load such as continuous pattern writes or a saturated link, and there is no drift over a 12-minute measurement
+- The mean offset is the sum of the path asymmetry of each link between neighboring devices (at most a few tens of ns per link). It changes every time a link comes up again, such as after reconnecting a cable or power-cycling (by up to about 30 ns on a link). There is no calibration mechanism
+
 ## Limitations
 
 - Hot-plugging devices while running is not followed. Reopen once it is detected
+- The mean offset between devices accumulates the asymmetry of every link on the chain. The worst case with four devices is about 30 ns, but it can grow on a longer chain
 - Putting an L2 switch between the host and the devices is not recommended. If you do, disable MLD snooping
 
 ## Errors
