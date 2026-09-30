@@ -154,19 +154,21 @@ impl UdpBus {
         }
         self.msg_id = self.msg_id.wrapping_add(1);
         let msg_id = self.msg_id;
+        let now = Instant::now();
         let mut failure = SendFailure::default();
-        for ((addr, frame), tracker) in self.units.iter().zip(frames).zip(&self.trackers).rev() {
-            if tracker.is_lost() {
+        for index in (0..self.units.len()).rev() {
+            if self.trackers[index].is_lost() {
                 continue;
             }
-            let frame = frame.as_ref();
-            failure.record(
-                *addr,
-                self.channel
-                    .send(*addr, Kind::Frame, msg_id, &frame[..trimmed_len(frame)]),
-            );
+            let addr = self.units[index];
+            let frame = frames[index].as_ref();
+            let sent = self
+                .channel
+                .send(addr, Kind::Frame, msg_id, &frame[..trimmed_len(frame)]);
+            if failure.record(addr, sent) {
+                self.trackers[index].requested(now);
+            }
         }
-        self.mark_requested();
         failure.into_result()?;
         Ok(msg_id)
     }
@@ -175,19 +177,23 @@ impl UdpBus {
         self.ensure_open()?;
         self.msg_id = self.msg_id.wrapping_add(1);
         let msg_id = self.msg_id;
+        let now = Instant::now();
         let mut failure = SendFailure::default();
-        for (addr, tracker) in self.units.iter().zip(&self.trackers).rev() {
-            if tracker.is_lost() {
+        for index in (0..self.units.len()).rev() {
+            if self.trackers[index].is_lost() {
                 continue;
             }
-            failure.record(
-                *addr,
-                self.channel.send(*addr, Kind::Heartbeat, msg_id, &[]),
-            );
+            let addr = self.units[index];
+            let sent = self.channel.send(addr, Kind::Heartbeat, msg_id, &[]);
+            if failure.record(addr, sent) {
+                self.trackers[index].requested(now);
+            }
         }
-        self.mark_requested();
+        let attempted = failure.attempted;
         failure.into_result()?;
-        self.stats.record_heartbeat();
+        if attempted > 0 {
+            self.stats.record_heartbeat();
+        }
         Ok(msg_id)
     }
 
@@ -237,13 +243,6 @@ impl UdpBus {
         Ok(self.channel.wait_readable(deadline)?)
     }
 
-    fn mark_requested(&mut self) {
-        let now = Instant::now();
-        for tracker in &mut self.trackers {
-            tracker.requested(now);
-        }
-    }
-
     fn expire(&mut self, now: Instant) {
         for (index, tracker) in self.trackers.iter_mut().enumerate() {
             tracker.expire(now, self.lost_timeout);
@@ -268,12 +267,16 @@ struct SendFailure {
 }
 
 impl SendFailure {
-    fn record(&mut self, dst: SocketAddrV6, result: std::io::Result<()>) {
+    fn record(&mut self, dst: SocketAddrV6, result: std::io::Result<()>) -> bool {
         self.attempted += 1;
-        if let Err(e) = result {
-            tracing::warn!(%dst, "sending to a device failed; skipping it: {e}");
-            self.failed += 1;
-            self.first.get_or_insert(e);
+        match result {
+            Ok(()) => true,
+            Err(e) => {
+                tracing::warn!(%dst, "sending to a device failed; skipping it: {e}");
+                self.failed += 1;
+                self.first.get_or_insert(e);
+                false
+            }
         }
     }
 
@@ -428,15 +431,31 @@ mod tests {
         assert_eq!(drain(&lost), 0);
     }
 
+    fn port_zero() -> SocketAddrV6 {
+        SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn a_send_fails_when_every_unit_it_reaches_fails() {
         let (_lost, lost_addr) = spy();
-        let unroutable = SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0);
-        let (_emulator, mut bus) = bus_with(vec![unroutable, lost_addr]);
+        let (_emulator, mut bus) = bus_with(vec![port_zero(), lost_addr]);
         make_lost(&mut bus, 1);
 
         assert!(bus.heartbeat().is_err());
         assert!(bus.send(&[[0u8; FRAME_BYTES_MAX]; 2]).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_unit_the_request_never_reached_is_not_counted_as_unanswered() {
+        let (_silent, silent_addr) = spy();
+        let (_emulator, mut bus) = bus_with(vec![port_zero(), silent_addr]);
+
+        bus.heartbeat().unwrap();
+        bus.expire(Instant::now() + bus.lost_timeout * 2);
+
+        assert!(!bus.trackers[0].is_lost());
+        assert!(bus.trackers[1].is_lost());
     }
 }

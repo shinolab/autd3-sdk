@@ -250,6 +250,11 @@ fn a_rebooted_middle_device_is_lost_with_everything_behind_it() {
         checker.check().unwrap().devices(),
         [DeviceState::Ready, DeviceState::Lost, DeviceState::Lost]
     );
+    for _ in 0..3 {
+        let msg_id = bus.heartbeat().unwrap();
+        let replies = collect_within(&mut bus, msg_id, 1, Duration::from_millis(100));
+        assert_eq!(replies.iter().map(|r| r.device).collect::<Vec<_>>(), [0]);
+    }
 
     bus.close().unwrap();
     assert!(matches!(checker.check(), Err(UdpError::Closed)));
