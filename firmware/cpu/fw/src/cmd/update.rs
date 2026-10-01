@@ -5,13 +5,13 @@ use zerocopy::{FromBytes, IntoBytes};
 pub use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 pub use autd3_cpu_wire::payload::{UpdateBeginPayload, UpdateChunkPayload};
 use autd3_cpu_wire::update::{
-    CRC32_INIT, IMAGE_HEADER_ATTEMPTS_OFFSET, IMAGE_HEADER_STATUS_OFFSET, IMAGE_MAX_ATTEMPTS,
+    CRC32, IMAGE_HEADER_ATTEMPTS_OFFSET, IMAGE_HEADER_STATUS_OFFSET, IMAGE_MAX_ATTEMPTS,
     IMAGE_STATUS_CONFIRMED, SlotCandidate, TRANSPORT_MARKER_BYTES, TRANSPORT_MARKER_OFFSET,
     Transport, image_transport, next_attempts, select_boot_slot,
 };
 pub use autd3_cpu_wire::update::{
     FLASH_PAGE_BYTES, FLASH_SECTOR_BYTES, ImageHeader, SLOT_BYTES, SLOT_HEADER_BYTES, Slot,
-    crc32_finish, crc32_update, is_plausible_length, select_slot,
+    is_plausible_length, select_slot,
 };
 
 use crate::app::Cpu;
@@ -127,16 +127,16 @@ fn slot_erase<P: Port>(port: &mut P, slot: Slot, len: u32) -> Result<(), Error> 
 }
 
 fn image_crc32<P: Port>(port: &mut P, slot: Slot, length: u32) -> Result<u32, Error> {
-    let mut crc = CRC32_INIT;
+    let mut digest = CRC32.digest();
     let mut buf = [0u8; READBACK_BYTES];
     let mut offset = 0u32;
     while offset < length {
         let n = (length - offset).min(READBACK_BYTES as u32) as usize;
         slot_read(port, slot, SLOT_HEADER_BYTES + offset, &mut buf[..n])?;
-        crc = crc32_update(crc, &buf[..n]);
+        digest.update(&buf[..n]);
         offset += n as u32;
     }
-    Ok(crc32_finish(crc))
+    Ok(digest.finalize())
 }
 
 fn read_header<P: Port>(port: &mut P, slot: Slot) -> Result<ImageHeader, Error> {

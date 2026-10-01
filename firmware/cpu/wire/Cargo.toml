@@ -13,6 +13,7 @@ categories = ["science"]
 
 [dependencies]
 zerocopy.workspace = true
+crc.workspace = true
 
 [lints]
 workspace = true

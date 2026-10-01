@@ -41,6 +41,26 @@ fn upper(frame: &[u8]) -> &[u8] {
     &frame[ETH_HEADER + IPV6_HEADER..ETH_HEADER + IPV6_HEADER + len]
 }
 
+fn upper_layer_checksum(src: &Ipv6, dst: &Ipv6, next_header: u8, upper: &[u8]) -> u16 {
+    let mut words: Vec<u8> = Vec::new();
+    words.extend_from_slice(src);
+    words.extend_from_slice(dst);
+    words.extend_from_slice(&(upper.len() as u32).to_be_bytes());
+    words.extend_from_slice(&[0, 0, 0, next_header]);
+    words.extend_from_slice(upper);
+    if words.len() % 2 == 1 {
+        words.push(0);
+    }
+    let mut sum: u64 = words
+        .chunks(2)
+        .map(|w| u64::from(u16::from_be_bytes([w[0], w[1]])))
+        .sum();
+    while sum > 0xFFFF {
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+    !(sum as u16)
+}
+
 fn tag_overwritten(mut frame: Vec<u8>) -> Vec<u8> {
     frame[0..4].copy_from_slice(&0x1234_5678u32.to_le_bytes());
     frame[4] = 0x80;
@@ -81,26 +101,10 @@ fn the_checksum_matches_an_independent_sum() {
     let payload = [0xDE, 0xAD, 0xBE, 0xEF, 0x01];
     let frame = udp_frame(&payload);
     let up = upper(&frame);
-    let mut words: Vec<u8> = Vec::new();
-    words.extend_from_slice(&HOST_IP);
-    words.extend_from_slice(&UNIT_IP);
-    words.extend_from_slice(&(up.len() as u32).to_be_bytes());
-    words.extend_from_slice(&[0, 0, 0, NEXT_HEADER_UDP]);
     let mut body = up.to_vec();
     body[6] = 0;
     body[7] = 0;
-    words.extend_from_slice(&body);
-    if words.len() % 2 == 1 {
-        words.push(0);
-    }
-    let mut sum: u64 = words
-        .chunks(2)
-        .map(|w| u64::from(u16::from_be_bytes([w[0], w[1]])))
-        .sum();
-    while sum > 0xFFFF {
-        sum = (sum & 0xFFFF) + (sum >> 16);
-    }
-    let expected = !(sum as u16);
+    let expected = upper_layer_checksum(&HOST_IP, &UNIT_IP, NEXT_HEADER_UDP, &body);
     assert_eq!(u16::from_be_bytes([up[6], up[7]]), expected);
 }
 
@@ -249,5 +253,152 @@ fn malformed_frames_are_dropped() {
 
     let mut frame = udp_frame(&[1, 2, 3, 4]);
     frame[ETH_HEADER + 6] = 6;
+    assert_eq!(parse(&frame), None);
+}
+
+fn hex(bytes: &[u8]) -> std::string::String {
+    use core::fmt::Write;
+    let mut s = std::string::String::new();
+    for b in bytes {
+        write!(s, "{b:02x}").unwrap();
+    }
+    s
+}
+
+const GOLDEN_UDP: &str = "3c7c3f11223302415554440186dd60000000000d1140fe80000000000000004155fffe544401fe800000000000003e7c3ffffe112233ad30c350000d92604155544433";
+const GOLDEN_NA: &str = "3c7c3f11223302415554440186dd6000000000203afffe80000000000000004155fffe544401fe800000000000003e7c3ffffe1122338800ae9c60000000fe80000000000000004155fffe5444010201024155544401";
+const GOLDEN_ECHO_REPLY: &str = "3c7c3f11223302415554440186dd60000000000d3a40fe80000000000000004155fffe544401fe800000000000003e7c3ffffe112233810038531234000770696e6721";
+
+#[test]
+fn a_udp_frame_matches_the_golden_bytes() {
+    let payload = b"AUTD3";
+    let mut buf = vec![0xCCu8; 128];
+    buf[UDP_PAYLOAD_OFFSET..UDP_PAYLOAD_OFFSET + payload.len()].copy_from_slice(payload);
+    let len = udp(&mut buf, &unit(), &host(), payload.len()).unwrap();
+    assert_eq!(hex(&buf[..len]), GOLDEN_UDP);
+}
+
+#[test]
+fn a_neighbor_advertisement_matches_the_golden_bytes() {
+    let mut buf = vec![0xCCu8; 128];
+    let len = neighbor_advertisement(&mut buf, UNIT_MAC, UNIT_IP, HOST_MAC, HOST_IP).unwrap();
+    assert_eq!(hex(&buf[..len]), GOLDEN_NA);
+}
+
+#[test]
+fn an_echo_reply_matches_the_golden_bytes() {
+    let body = [0x12, 0x34, 0x00, 0x07, b'p', b'i', b'n', b'g', b'!'];
+    let mut buf = vec![0xCCu8; 128];
+    let len = echo_reply(&mut buf, UNIT_MAC, UNIT_IP, HOST_MAC, HOST_IP, &body).unwrap();
+    assert_eq!(hex(&buf[..len]), GOLDEN_ECHO_REPLY);
+}
+
+fn echo_request(body: &[u8]) -> Vec<u8> {
+    let mut req = vec![0u8; ETH_HEADER + IPV6_HEADER + 4 + body.len()];
+    req[6..12].copy_from_slice(&HOST_MAC);
+    req[12..14].copy_from_slice(&ETHERTYPE_IPV6.to_be_bytes());
+    let ip = &mut req[ETH_HEADER..];
+    ip[0] = 0x60;
+    ip[4..6].copy_from_slice(&((4 + body.len()) as u16).to_be_bytes());
+    ip[6] = NEXT_HEADER_ICMPV6;
+    ip[7] = 64;
+    ip[8..24].copy_from_slice(&HOST_IP);
+    ip[24..40].copy_from_slice(&UNIT_IP);
+    ip[IPV6_HEADER] = ICMPV6_ECHO_REQUEST;
+    ip[IPV6_HEADER + 4..].copy_from_slice(body);
+    req
+}
+
+#[test]
+fn short_or_unknown_icmpv6_messages_are_dropped() {
+    let mut short_ns = neighbor_solicitation(UNIT_IP, 255);
+    short_ns[ETH_HEADER + 4..ETH_HEADER + 6].copy_from_slice(&23u16.to_be_bytes());
+    assert_eq!(parse(&short_ns), None);
+
+    assert_eq!(parse(&echo_request(&[1, 2, 3])), None);
+    assert!(matches!(
+        parse(&echo_request(&[1, 2, 3, 4])),
+        Some(Packet::EchoRequest {
+            body: [1, 2, 3, 4],
+            ..
+        })
+    ));
+
+    let mut reply = echo_request(&[1, 2, 3, 4]);
+    reply[ETH_HEADER + IPV6_HEADER] = ICMPV6_ECHO_REPLY;
+    assert_eq!(parse(&reply), None);
+}
+
+#[test]
+fn a_padded_echo_request_ends_at_the_ipv6_payload() {
+    let mut req = echo_request(&[9, 8, 7, 6]);
+    req.extend_from_slice(&[0xAA; 6]);
+    assert!(matches!(
+        parse(&req),
+        Some(Packet::EchoRequest {
+            body: [9, 8, 7, 6],
+            ..
+        })
+    ));
+}
+
+#[test]
+fn a_udp_length_beyond_the_ipv6_payload_is_dropped() {
+    let mut frame = udp_frame(&[1, 2, 3, 4]);
+    frame[ETH_HEADER + IPV6_HEADER + 4..ETH_HEADER + IPV6_HEADER + 6]
+        .copy_from_slice(&13u16.to_be_bytes());
+    assert_eq!(parse(&frame), None);
+}
+
+#[test]
+fn a_bare_ptp_header_is_still_ptp() {
+    let mut frame = vec![0u8; ETH_HEADER];
+    frame[12..14].copy_from_slice(&ETHERTYPE_PTP.to_be_bytes());
+    assert!(matches!(
+        parse(&frame),
+        Some(Packet::Ptp { message: [], .. })
+    ));
+}
+
+#[test]
+fn zero_lengths_are_not_read_as_jumbograms() {
+    let mut frame = udp_frame(&[1, 2, 3, 4]);
+    frame[ETH_HEADER + 4..ETH_HEADER + 6].copy_from_slice(&0u16.to_be_bytes());
+    assert_eq!(parse(&frame), None);
+
+    let mut frame = udp_frame(&[1, 2, 3, 4]);
+    frame[ETH_HEADER + IPV6_HEADER + 4..ETH_HEADER + IPV6_HEADER + 6]
+        .copy_from_slice(&0u16.to_be_bytes());
+    assert_eq!(parse(&frame), None);
+}
+
+#[test]
+fn icmpv6_with_a_nonzero_code_is_dropped() {
+    let mut ns = neighbor_solicitation(UNIT_IP, 255);
+    ns[ETH_HEADER + IPV6_HEADER + 1] = 1;
+    assert_eq!(parse(&ns), None);
+
+    let mut req = echo_request(&[1, 2, 3, 4]);
+    req[ETH_HEADER + IPV6_HEADER + 1] = 1;
+    assert_eq!(parse(&req), None);
+}
+
+#[test]
+fn an_echo_body_shorter_than_its_identifier_is_not_answered() {
+    let mut buf = vec![0u8; 128];
+    assert_eq!(
+        echo_reply(&mut buf, UNIT_MAC, UNIT_IP, HOST_MAC, HOST_IP, &[1, 2, 3]),
+        None
+    );
+}
+
+#[test]
+fn extension_headers_are_not_walked() {
+    let mut frame = udp_frame(&[1, 2, 3, 4]);
+    frame[ETH_HEADER + 6] = 60;
+    assert_eq!(parse(&frame), None);
+
+    let mut frame = udp_frame(&[1, 2, 3, 4]);
+    frame[ETH_HEADER + 6] = 44;
     assert_eq!(parse(&frame), None);
 }

@@ -279,6 +279,53 @@ fn messages_round_trip() {
     assert_eq!(message::parse(&v1[ETH_HEADER..len]), None);
 }
 
+fn hex(bytes: &[u8]) -> std::string::String {
+    use core::fmt::Write;
+    let mut s = std::string::String::new();
+    for b in bytes {
+        write!(s, "{b:02x}").unwrap();
+    }
+    s
+}
+
+const GOLDEN_SYNC: &str = "011b1900000002415554440188f70002002c00000200fffffffffffafffd0000000001020304050607080001beef007f0003123456783ade68b100000000000000000000";
+const GOLDEN_FOLLOW_UP: &str = "011b1900000002415554440188f70802002c00000000fffffffffffafffd0000000001020304050607080001beef027f0003123456783ade68b100000000000000000000";
+const GOLDEN_DELAY_REQ: &str = "011b1900000002415554440188f70102002c00000000fffffffffffafffd0000000001020304050607080001beef017f0003123456783ade68b100000000000000000000";
+const GOLDEN_DELAY_RESP: &str = "011b1900000002415554440188f70902003600000000fffffffffffafffd0000000001020304050607080001beef037f0003123456783ade68b101020304050607080001";
+
+#[test]
+fn every_message_kind_matches_the_golden_bytes() {
+    let cases = [
+        (MSG_SYNC, None, GOLDEN_SYNC),
+        (message::MSG_FOLLOW_UP, None, GOLDEN_FOLLOW_UP),
+        (message::MSG_DELAY_REQ, None, GOLDEN_DELAY_REQ),
+        (
+            MSG_DELAY_RESP,
+            Some([1, 2, 3, 4, 5, 6, 7, 8, 0, 1]),
+            GOLDEN_DELAY_RESP,
+        ),
+    ];
+    for (kind, requesting, golden) in cases {
+        let mut buf = [0xCCu8; FRAME_CAP];
+        let out = Outgoing {
+            kind,
+            seq: 0xBEEF,
+            timestamp: 0x0003_1234_5678 * NS_PER_SEC + 987_654_321,
+            correction: -(5 << 16) - 3,
+            requesting,
+        };
+        let len = message::build(&mut buf, SLAVE_MAC, [1, 2, 3, 4, 5, 6, 7, 8], &out);
+        assert_eq!(hex(&buf), golden, "kind {kind}");
+        let m = message::parse(&buf[ETH_HEADER..len]).unwrap();
+        assert_eq!(m.kind, kind);
+        assert_eq!(m.seq, 0xBEEF);
+        assert_eq!(m.timestamp, out.timestamp);
+        assert_eq!(m.correction, out.correction);
+        assert_eq!(m.requesting, requesting);
+        assert_eq!(m.source, [1, 2, 3, 4, 5, 6, 7, 8, 0, 1]);
+    }
+}
+
 #[test]
 fn the_servo_needs_64_quiet_samples_to_lock() {
     let mut servo = Servo::new();

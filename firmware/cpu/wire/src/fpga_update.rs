@@ -1,3 +1,6 @@
+use zerocopy::FromBytes;
+use zerocopy::big_endian::U32;
+
 use crate::params::{
     FLASH_END, FLASH_IMAGE_BASE, FLASH_USR_ACCESS_GOLDEN, FLASH_USR_ACCESS_UPDATE,
     FLASH_WRITABLE_BASE, FUNC_FLASH_OTA_BIT,
@@ -117,8 +120,8 @@ impl BitstreamSummary {
 }
 
 fn word_at(bytes: &[u8], offset: usize) -> Option<u32> {
-    let b = bytes.get(offset..offset + 4)?;
-    Some(u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    let (word, _) = U32::read_from_prefix(bytes.get(offset..)?).ok()?;
+    Some(word.get())
 }
 
 fn find_sync(bytes: &[u8], from: usize) -> Option<usize> {

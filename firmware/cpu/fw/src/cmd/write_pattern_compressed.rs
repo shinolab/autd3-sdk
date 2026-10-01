@@ -1,4 +1,5 @@
 use zerocopy::FromBytes;
+use zerocopy::little_endian::U16;
 
 pub use autd3_cpu_wire::payload::WritePatternCompressedPayload;
 
@@ -43,20 +44,22 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
     if usize::from(p.bank) >= NUM_BANKS
         || p.count < 1
         || p.count > max_count
-        || rest.len() < groups * 2 * NUM_TRANSDUCERS
         || offset
             .saturating_add(u32::from(p.count - 1) * EMISSION_SLOT_WORDS + NUM_TRANSDUCERS as u32)
             > EMISSION_RAM_WORDS
     {
         return Err(Error::InvalidPayload);
     }
+    let Ok((words, _)) = <[U16]>::ref_from_prefix_with_elems(rest, groups * NUM_TRANSDUCERS) else {
+        return Err(Error::InvalidPayload);
+    };
 
     let mut slot = [0u8; 2 * NUM_TRANSDUCERS];
     for g in 0..p.count {
-        let group = &rest[usize::from(g / per_word) * 2 * NUM_TRANSDUCERS..];
+        let group = &words[usize::from(g / per_word) * NUM_TRANSDUCERS..][..NUM_TRANSDUCERS];
         let sub = u16::from(g % per_word);
-        for t in 0..NUM_TRANSDUCERS {
-            let w = u16::from_le_bytes([group[2 * t], group[2 * t + 1]]);
+        for (t, w) in group.iter().enumerate() {
+            let w = w.get();
             let phase = match format {
                 PatternFormat::PhaseFull => (w >> (8 * sub)) as u8,
                 PatternFormat::PhaseHalf => {

@@ -1,3 +1,4 @@
+use crc::{CRC_32_ISO_HDLC, Crc, Table};
 use zerocopy::little_endian::U32;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
@@ -177,7 +178,16 @@ pub fn select_boot_slot(a: Option<SlotCandidate>, b: Option<SlotCandidate>) -> O
 
 pub const TRANSPORT_MARKER_OFFSET: u32 = IMAGE_VECTOR_BYTES;
 pub const TRANSPORT_MARKER_MAGIC: u32 = u32::from_le_bytes(*b"A3TR");
-pub const TRANSPORT_MARKER_BYTES: usize = 8;
+pub const TRANSPORT_MARKER_BYTES: usize = size_of::<TransportMarker>();
+
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+struct TransportMarker {
+    magic: U32,
+    kind: U32,
+}
+
+const _: () = assert!(TRANSPORT_MARKER_BYTES == 8);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[non_exhaustive]
@@ -206,51 +216,27 @@ impl Transport {
 
     #[must_use]
     pub const fn marker(self) -> [u8; TRANSPORT_MARKER_BYTES] {
-        let magic = TRANSPORT_MARKER_MAGIC.to_le_bytes();
-        let kind = self.as_u32().to_le_bytes();
-        [
-            magic[0], magic[1], magic[2], magic[3], kind[0], kind[1], kind[2], kind[3],
-        ]
+        zerocopy::transmute!(TransportMarker {
+            magic: U32::new(TRANSPORT_MARKER_MAGIC),
+            kind: U32::new(self.as_u32()),
+        })
     }
 }
 
 #[must_use]
 pub const fn image_transport(marker: &[u8; TRANSPORT_MARKER_BYTES]) -> Option<Transport> {
-    let magic = u32::from_le_bytes([marker[0], marker[1], marker[2], marker[3]]);
-    if magic != TRANSPORT_MARKER_MAGIC {
+    let marker: TransportMarker = zerocopy::transmute!(*marker);
+    if marker.magic.get() != TRANSPORT_MARKER_MAGIC {
         return Some(Transport::EtherCat);
     }
-    Transport::from_u32(u32::from_le_bytes([
-        marker[4], marker[5], marker[6], marker[7],
-    ]))
+    Transport::from_u32(marker.kind.get())
 }
 
-pub const CRC32_INIT: u32 = 0xFFFF_FFFF;
+pub static CRC32: Crc<u32, Table<1>> = Crc::<u32, Table<1>>::new(&CRC_32_ISO_HDLC);
 
 #[must_use]
-pub const fn crc32_update(mut crc: u32, bytes: &[u8]) -> u32 {
-    let mut i = 0;
-    while i < bytes.len() {
-        crc ^= bytes[i] as u32;
-        let mut bit = 0;
-        while bit < 8 {
-            let mask = 0u32.wrapping_sub(crc & 1);
-            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
-            bit += 1;
-        }
-        i += 1;
-    }
-    crc
-}
-
-#[must_use]
-pub const fn crc32_finish(crc: u32) -> u32 {
-    !crc
-}
-
-#[must_use]
-pub const fn crc32(bytes: &[u8]) -> u32 {
-    crc32_finish(crc32_update(CRC32_INIT, bytes))
+pub fn crc32(bytes: &[u8]) -> u32 {
+    CRC32.checksum(bytes)
 }
 
 #[cfg(test)]
@@ -266,9 +252,10 @@ mod tests {
     #[test]
     fn crc32_streams_in_pieces() {
         let whole = crc32(b"hello world");
-        let mut crc = crc32_update(CRC32_INIT, b"hello ");
-        crc = crc32_update(crc, b"world");
-        assert_eq!(crc32_finish(crc), whole);
+        let mut digest = CRC32.digest();
+        digest.update(b"hello ");
+        digest.update(b"world");
+        assert_eq!(digest.finalize(), whole);
     }
 
     #[test]
@@ -354,6 +341,12 @@ mod tests {
         assert_eq!(select_boot_slot(spent(1), spent(2)), Some((Slot::B, 2)));
         assert_eq!(select_boot_slot(None, spent(2)), Some((Slot::B, 2)));
         assert_eq!(select_boot_slot(None, None), None);
+    }
+
+    #[test]
+    fn the_marker_bytes_are_fixed() {
+        assert_eq!(Transport::Udp.marker(), *b"A3TR\x01\0\0\0");
+        assert_eq!(Transport::EtherCat.marker(), *b"A3TR\0\0\0\0");
     }
 
     #[test]
