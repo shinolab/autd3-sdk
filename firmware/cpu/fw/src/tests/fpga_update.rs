@@ -107,7 +107,7 @@ fn an_fpga_without_flash_access_is_left_alone() {
     h.deliver(&begin(0, 100, 0));
     assert_eq!(h.status(), Error::UpdateUnsupported as u8);
     assert!(!h.cpu.fpga_update.is_locked());
-    assert!(h.port.fpga_flash_ops.is_empty());
+    assert_eq!(h.port.fpga_flash_ops, []);
     assert!(!output_muted(&h));
 }
 
@@ -119,7 +119,7 @@ fn begin_rejects_implausible_lengths() {
     h.deliver(&begin(1, FPGA_IMAGE_CAPACITY + 1, 0));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert!(!h.cpu.fpga_update.is_locked());
-    assert!(h.port.fpga_flash_ops.is_empty());
+    assert_eq!(h.port.fpga_flash_ops, []);
 }
 
 #[test]
@@ -611,7 +611,7 @@ fn fpga_update_commands_are_deferred_even_in_low_latency_mode() {
     assert_eq!(h.ack(), 0);
     h.deliver_no_drain(&begin(1, 100, 0));
     assert_eq!(h.ack(), 0);
-    assert!(h.port.fpga_flash_ops.is_empty());
+    assert_eq!(h.port.fpga_flash_ops, []);
     assert!(h.process_one());
     assert_eq!(h.ack(), 1);
     assert_eq!(erased_sectors(&h).len(), 1);

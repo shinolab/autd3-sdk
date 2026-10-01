@@ -209,7 +209,6 @@ mod client {
             Self { fut }
         }
 
-        #[must_use]
         pub fn wait(self) -> BoxFuture<Response> {
             Box::pin(self.fut)
         }

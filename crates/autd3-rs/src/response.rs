@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn status_exposes_only_the_recorded_devices() {
         assert_eq!(Response::from_status(&[0x00, 0xAB]).status(), [0x00, 0xAB]);
-        assert!(Response::from_status(&[]).status().is_empty());
+        assert_eq!(Response::from_status(&[]).status(), [0u8; 0]);
     }
 
     #[test]
@@ -94,8 +94,8 @@ mod tests {
         let response = Response::with_values(&[0, 0], vec![vec![1, 2], vec![3]]);
         assert_eq!(response.value(0), [1, 2]);
         assert_eq!(response.value(1), [3]);
-        assert!(response.value(2).is_empty());
-        assert!(Response::from_status(&[0]).value(0).is_empty());
+        assert_eq!(response.value(2), [0u8; 0]);
+        assert_eq!(Response::from_status(&[0]).value(0), [0u8; 0]);
     }
 
     #[test]

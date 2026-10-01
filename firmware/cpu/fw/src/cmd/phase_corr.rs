@@ -13,7 +13,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
     };
     for j in 0..PHASE_CORR_WORDS {
         let lo = u16::from(p.data[2 * j]);
-        let hi = p.data.get(2 * j + 1).copied().unwrap_or(0) as u16;
+        let hi = u16::from(p.data.get(2 * j + 1).copied().unwrap_or(0));
         fpga::write(
             port,
             BRAM_SELECT_CONTROLLER,

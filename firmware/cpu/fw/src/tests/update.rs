@@ -119,7 +119,7 @@ fn begin_refuses_to_erase_when_no_slot_is_valid() {
     h.deliver(&begin(0, 5000, 0));
     assert_eq!(h.status(), Error::UpdateFlash as u8);
     assert_eq!(h.cpu.update.state(), State::Idle);
-    assert!(h.port.erased.is_empty());
+    assert_eq!(h.port.erased, []);
     assert!(h.port.flash.iter().all(|&b| b == 0xFF));
 
     h.deliver(&chunk(1, 0, &[1, 2, 3]));
@@ -133,7 +133,7 @@ fn begin_refuses_when_the_only_header_has_a_wrong_crc() {
     h.port.flash[corrupt] ^= 0x10;
     h.deliver(&begin(0, 5000, 0));
     assert_eq!(h.status(), Error::UpdateFlash as u8);
-    assert!(h.port.erased.is_empty());
+    assert_eq!(h.port.erased, []);
 }
 
 #[test]
@@ -235,7 +235,7 @@ fn chunk_and_commit_without_begin_are_rejected() {
     assert_eq!(h.status(), Error::UpdateNotStarted as u8);
     h.deliver(&Frame::new(1, Cmd::UpdateCommit));
     assert_eq!(h.status(), Error::UpdateNotStarted as u8);
-    assert!(h.port.erased.is_empty());
+    assert_eq!(h.port.erased, []);
     assert!(h.port.flash.iter().all(|&b| b == 0xFF));
 }
 
@@ -292,7 +292,7 @@ fn begin_rejects_lengths_the_loader_cannot_copy() {
         assert_eq!(h.status(), Error::InvalidPayload as u8, "length {length}");
     }
     assert_eq!(h.cpu.update.state(), State::Idle);
-    assert!(h.port.erased.is_empty());
+    assert_eq!(h.port.erased, []);
     h.deliver(&begin(5, max, 0));
     assert_eq!(h.status(), 0);
     assert_eq!(h.port.erased, [(Slot::B.base(), erased_len(max))]);
@@ -343,7 +343,7 @@ fn update_commands_are_deferred_even_in_low_latency_mode() {
     let img = image(100, 10);
     h.deliver_no_drain(&begin(1, img.len() as u32, crc32(&img)));
     assert_eq!(h.ack(), 0);
-    assert!(h.port.erased.is_empty());
+    assert_eq!(h.port.erased, []);
     h.deliver_no_drain(&Frame::new(2, Cmd::Nop));
     assert_eq!(h.ack(), 0);
 
@@ -645,7 +645,7 @@ fn begin_is_rejected_while_an_activation_is_pending() {
     h.deliver(&fpga_begin(seq, 100, 0));
     assert_eq!(h.status(), Error::UpdateActivating as u8);
     assert_eq!(h.port.erased.len(), erased_before);
-    assert!(h.port.fpga_flash_ops.is_empty());
+    assert_eq!(h.port.fpga_flash_ops, []);
     assert!(!h.cpu.fpga_update.is_locked());
     assert_eq!(h.cpu.update.state(), State::Committed);
     h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));

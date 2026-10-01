@@ -386,7 +386,7 @@ fn a_frame_reaches_the_command_layer_and_is_answered_at_once() {
         h.send(unit_address(UNASSIGNED_ID), Kind::Frame, &body),
         Received::Nothing
     );
-    assert!(h.cmds.frames.is_empty());
+    assert_eq!(h.cmds.frames, []);
     assert!(h.replies().is_empty());
 
     h.assign(1);
@@ -458,7 +458,7 @@ fn a_deferred_frame_is_answered_by_the_completion() {
     let (reply, data) = parse_frame_reply(&r.body);
     assert_eq!(reply.ack, 3);
     assert_eq!(reply.status, 0x02);
-    assert!(data.is_empty());
+    assert_eq!(data, []);
 }
 
 #[test]
@@ -504,7 +504,7 @@ fn a_heartbeat_is_answered_with_the_current_result() {
         h.send(unit_address(4), Kind::Heartbeat, &[]),
         Received::HostMessage
     );
-    assert!(h.cmds.frames.is_empty());
+    assert_eq!(h.cmds.frames, []);
     let r = h.only_reply();
     assert_eq!(r.header, Header::new(Kind::Heartbeat, 0x4242));
     let (reply, data) = parse_frame_reply(&r.body);

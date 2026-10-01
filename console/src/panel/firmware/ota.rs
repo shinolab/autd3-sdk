@@ -107,7 +107,13 @@ impl OtaConfig {
         );
         ui.end_row();
 
-        optional_row(ui, "Heartbeat", &mut u.heartbeat_us, DEFAULT_HEARTBEAT_US, " µs");
+        optional_row(
+            ui,
+            "Heartbeat",
+            &mut u.heartbeat_us,
+            DEFAULT_HEARTBEAT_US,
+            " µs",
+        );
     }
 
     fn udp_advanced_ui(&mut self, ui: &mut egui::Ui) {

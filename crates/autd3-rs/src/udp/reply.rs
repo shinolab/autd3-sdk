@@ -42,6 +42,6 @@ mod tests {
     fn data_is_clamped_to_the_reply_limit() {
         let reply = Reply::new(1, 2, 3, 0, 0, &[7; REPLY_DATA_BYTES_MAX + 5]);
         assert_eq!(reply.data().len(), REPLY_DATA_BYTES_MAX);
-        assert!(Reply::new(0, 0, 0, 0, 0, &[]).data().is_empty());
+        assert_eq!(Reply::new(0, 0, 0, 0, 0, &[]).data(), [0u8; 0]);
     }
 }

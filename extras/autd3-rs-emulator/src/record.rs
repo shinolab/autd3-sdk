@@ -3,7 +3,7 @@
 use autd3_rs_core::common::ULTRASOUND_PERIOD;
 use autd3_rs_core::geometry::Point3;
 use autd3_rs_core::params::ULTRASOUND_FREQ_HZ;
-use autd3_rs_core::value::{SysTime, PULSE_WIDTH_PERIOD};
+use autd3_rs_core::value::{PULSE_WIDTH_PERIOD, SysTime};
 
 pub(crate) const ULTRASOUND_PERIOD_COUNT: usize = PULSE_WIDTH_PERIOD as usize;
 pub(crate) const OUTPUT_VOLTAGE: f32 = 12.0;
