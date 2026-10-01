@@ -18,7 +18,29 @@ proc add_missing_files {fileset patterns} {
     }
 }
 
+proc remove_stale_files {project_directory fileset} {
+    set stale [list]
+    foreach f [get_files -quiet -norecurse -of_objects [get_filesets $fileset]] {
+        set path [get_property NAME $f]
+        if {[string equal [file extension $path] ".xci"]} {
+            set name [file rootname [file tail $path]]
+            set present [file exists [file join $project_directory rtl/sources_1/ip $name "$name.xci"]]
+        } else {
+            set present [file exists $path]
+        }
+        if {!$present} {
+            lappend stale $path
+        }
+    }
+    foreach path $stale {
+        remove_files -fileset [get_filesets $fileset] $path
+        puts "removed from $fileset: $path"
+    }
+}
+
 proc sync_project_sources {project_directory} {
+    remove_stale_files $project_directory sources_1
+    remove_stale_files $project_directory sim_1
     add_missing_files sources_1 [list \
         [file join $project_directory rtl/sources_1/new/*.sv] \
         [file join $project_directory rtl/sources_1/new/*/*.sv] \

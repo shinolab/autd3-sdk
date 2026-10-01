@@ -12,7 +12,7 @@ module gpio_output #(
     input wire THERMO,
     input wire FORCE_FAN,
     input wire SYNC,
-    input wire ECAT_SYNC_RAW,
+    input wire SYNC_IN_RAW,
     input wire PATTERN_BANK,
     input wire MOD_BANK,
     input wire [15:0] PATTERN_IDX,
@@ -26,7 +26,7 @@ module gpio_output #(
   logic sync_raw_sel[4] = '{4{1'b0}};
 
   for (genvar i = 0; i < 4; i++) begin : gen_out
-    assign GPIO_OUT[i] = sync_raw_sel[i] ? ECAT_SYNC_RAW : gpio_out[i];
+    assign GPIO_OUT[i] = sync_raw_sel[i] ? SYNC_IN_RAW : gpio_out[i];
   end
 
   always_ff @(posedge CLK) begin

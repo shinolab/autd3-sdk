@@ -5,7 +5,7 @@ use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, FRAME_BYTES_MAX, Seq, TxFram
 use autd3_rs_firmware_emulator::{Audit, Device};
 use zerocopy::FromBytes;
 
-const ADDR_SYNC_CYCLE_0: u16 = 0x14;
+const ADDR_SYNC_TIME_0: u16 = 0x10;
 
 const NUM_TRANSDUCERS: usize = 249;
 
@@ -61,14 +61,18 @@ fn init_enables_all_outputs_by_default() {
 }
 
 #[test]
-fn synchronize_writes_the_fixed_sync_cycle() {
+fn synchronize_writes_the_next_sync_edge_in_sys_time_ticks() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset));
+    device.fpga_mut().set_next_sync_edge(3_000_000);
 
     let rx = device.send(&frame(0, Cmd::Synchronize));
     assert_eq!(rx.ack, 0);
     assert_eq!(rx.status, DeviceErrorCode::None as u8);
-    assert_eq!(device.fpga().controller_reg(ADDR_SYNC_CYCLE_0), 20480);
+    let sync_time: Vec<u16> = (0..4)
+        .map(|i| device.fpga().controller_reg(ADDR_SYNC_TIME_0 + i))
+        .collect();
+    assert_eq!(sync_time, [61440, 0, 0, 0]);
 }
 
 #[test]

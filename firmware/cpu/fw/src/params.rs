@@ -3,6 +3,7 @@
 // Firmware-internal FPGA register map.
 
 pub use autd3_cpu_wire::params::*;
+pub const SYNC_CYCLE_TICKS: u16 = 20480;
 pub const FLASH_BUF_BYTES: usize = 1024;
 
 pub const CTL_FLAG_BIT_MOD_SET: u16 = 0;
@@ -68,8 +69,6 @@ pub const ADDR_SYNC_TIME_0: u16 = 0x10;
 pub const ADDR_SYNC_TIME_1: u16 = 0x11;
 pub const ADDR_SYNC_TIME_2: u16 = 0x12;
 pub const ADDR_SYNC_TIME_3: u16 = 0x13;
-pub const ADDR_SYNC_CYCLE_0: u16 = 0x14;
-pub const ADDR_SYNC_CYCLE_1: u16 = 0x15;
 pub const ADDR_MOD_MEM_WR_BANK: u16 = 0x20;
 pub const ADDR_MOD_MEM_WR_PAGE: u16 = 0x21;
 pub const ADDR_MOD_REQ_RD_BANK: u16 = 0x22;

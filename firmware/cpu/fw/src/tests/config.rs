@@ -1,11 +1,11 @@
 use crate::fpga::{REP_INFINITE, SYS_TIME_TRANSITION_MARGIN_NS, TransitionMode};
 use crate::params::{
     ADDR_CTL_FLAG, ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_REP0, ADDR_MOD_REQ_RD_BANK,
-    ADDR_MOD_TRANSITION_MODE, ADDR_PATTERN_CYCLE0, ADDR_PATTERN_FREQ_DIV0, ADDR_PATTERN_MODE0,
-    ADDR_PATTERN_NUM_FOCI0, ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_SOUND_SPEED0,
-    ADDR_PATTERN_TRANSITION_MODE, ADDR_PATTERN_TRANSITION_VALUE_0, CTL_FLAG_MOD_SET,
-    CTL_FLAG_PATTERN_SET, EMISSION_MAX_INDICES, EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW, NUM_BANKS,
-    NUM_FOCI_MAX,
+    ADDR_MOD_TRANSITION_MODE, ADDR_MOD_TRANSITION_VALUE_0, ADDR_PATTERN_CYCLE0,
+    ADDR_PATTERN_FREQ_DIV0, ADDR_PATTERN_MODE0, ADDR_PATTERN_NUM_FOCI0, ADDR_PATTERN_REP0,
+    ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_SOUND_SPEED0, ADDR_PATTERN_TRANSITION_MODE,
+    ADDR_PATTERN_TRANSITION_VALUE_0, CTL_FLAG_MOD_SET, CTL_FLAG_PATTERN_SET, EMISSION_MAX_INDICES,
+    EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW, NUM_BANKS, NUM_FOCI_MAX,
 };
 use crate::proto::{BUFFER_SIZE_MIN, Error, MAX_FOCI_TOTAL, MOD_BUFFER_SAMPLES};
 use crate::tests::builders::{
@@ -267,7 +267,7 @@ fn change_pattern_bank_writes_transition_and_req_bank_and_latches() {
 }
 
 #[test]
-fn change_pattern_bank_writes_transition_value() {
+fn change_pattern_bank_writes_sys_time_transition_in_sys_time_ticks() {
     let mut h = Harness::new();
 
     h.deliver(&config_pattern_rep(
@@ -294,10 +294,10 @@ fn change_pattern_bank_writes_transition_value() {
         h.ctl(ADDR_PATTERN_TRANSITION_MODE),
         TransitionMode::SysTime as u16
     );
-    assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_VALUE_0), 0xCDEF);
-    assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_VALUE_0 + 1), 0x89AB);
-    assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_VALUE_0 + 2), 0x4567);
-    assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_VALUE_0 + 3), 0x0123);
+    assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_VALUE_0), 0x26C0);
+    assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_VALUE_0 + 1), 0x77B8);
+    assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_VALUE_0 + 2), 0xF719);
+    assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_VALUE_0 + 3), 0x0005);
 }
 
 #[test]
@@ -406,6 +406,22 @@ fn change_pattern_bank_rejects_immediate_transition_on_finite_loop() {
     h.deliver(&change_pattern_bank(2, 1, TransitionMode::SyncIdx, 0));
     assert_eq!(h.status(), 0);
     assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
+}
+
+#[test]
+fn change_mod_bank_writes_gpio_pin_unconverted() {
+    let mut h = Harness::new();
+    h.deliver(&config_mod_rep(0, 1, 10, 100, 4));
+    assert_eq!(h.status(), 0);
+
+    h.deliver(&change_mod_bank(1, 1, TransitionMode::Gpio, 3));
+
+    assert_eq!(h.status(), 0);
+    assert_eq!(h.ctl(ADDR_MOD_TRANSITION_MODE), TransitionMode::Gpio as u16);
+    assert_eq!(h.ctl(ADDR_MOD_TRANSITION_VALUE_0), 3);
+    assert_eq!(h.ctl(ADDR_MOD_TRANSITION_VALUE_0 + 1), 0);
+    assert_eq!(h.ctl(ADDR_MOD_TRANSITION_VALUE_0 + 2), 0);
+    assert_eq!(h.ctl(ADDR_MOD_TRANSITION_VALUE_0 + 3), 0);
 }
 
 #[test]

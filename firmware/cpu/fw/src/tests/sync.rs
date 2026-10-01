@@ -1,26 +1,21 @@
-use crate::params::{
-    ADDR_CTL_FLAG, ADDR_MOD_CYCLE0, ADDR_SYNC_CYCLE_0, ADDR_SYNC_CYCLE_1, ADDR_SYNC_TIME_0,
-    CTL_FLAG_SYNC_SET,
-};
+use crate::params::{ADDR_CTL_FLAG, ADDR_MOD_CYCLE0, ADDR_SYNC_TIME_0, CTL_FLAG_SYNC_SET};
 use crate::proto::{Cmd, Error, FRAME_BYTES_MAX, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX};
 use crate::tests::builders::{config_mod, write_foci_buffer, write_mod_buffer};
 use crate::tests::mock::{Frame, Harness};
 
 #[test]
-fn synchronize_writes_next_sync_edge_and_latches() {
+fn synchronize_writes_next_sync_edge_in_sys_time_ticks_and_latches() {
     let mut h = Harness::new();
-    h.port.next_sync_edge = 0x1122_3344_5566_7788;
+    h.port.next_sync_edge = 1_700_000_000_123_000_000;
 
     h.deliver(&Frame::new(0, Cmd::Synchronize));
 
     assert_eq!(h.ack(), 0);
     assert_eq!(h.status(), 0);
-    assert_eq!(h.ctl(ADDR_SYNC_TIME_0), 0x7788);
-    assert_eq!(h.ctl(ADDR_SYNC_TIME_0 + 1), 0x5566);
-    assert_eq!(h.ctl(ADDR_SYNC_TIME_0 + 2), 0x3344);
-    assert_eq!(h.ctl(ADDR_SYNC_TIME_0 + 3), 0x1122);
-    assert_eq!(h.ctl(ADDR_SYNC_CYCLE_0), 20480);
-    assert_eq!(h.ctl(ADDR_SYNC_CYCLE_1), 0);
+    assert_eq!(h.ctl(ADDR_SYNC_TIME_0), 0x7000);
+    assert_eq!(h.ctl(ADDR_SYNC_TIME_0 + 1), 0xB0A6);
+    assert_eq!(h.ctl(ADDR_SYNC_TIME_0 + 2), 0xB0F7);
+    assert_eq!(h.ctl(ADDR_SYNC_TIME_0 + 3), 0x007B);
     assert_eq!(h.latch_count(CTL_FLAG_SYNC_SET), 1);
     assert_eq!(h.ctl(ADDR_CTL_FLAG) & CTL_FLAG_SYNC_SET, 0);
 }

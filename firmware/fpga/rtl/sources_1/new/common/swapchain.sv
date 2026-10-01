@@ -55,18 +55,8 @@ module swapchain (
   assign TRANSITION_PENDING = state == WAIT_START;
   assign target_bank = (state == WAIT_START) ? req_bank : bank;
 
-  logic [$clog2(Latency)-1:0] addsub_latency;
-  logic wait_transition;
+  logic [$clog2(Latency+1)-1:0] addsub_latency;
   logic [56:0] transition_time;
-  logic transition_time_din_valid = 1'b0;
-  logic transition_time_dout_valid;
-  ec_time_to_sys_time ec_time_to_sys_time (
-      .CLK(CLK),
-      .EC_TIME(TRANSITION_VALUE),
-      .DIN_VALID(transition_time_din_valid),
-      .SYS_TIME(transition_time),
-      .DOUT_VALID(transition_time_dout_valid)
-  );
   sub57_57 addsub_diff_time (
       .CLK(CLK),
       .A  (SYS_TIME),
@@ -92,8 +82,7 @@ module swapchain (
       req_bank <= REQ_RD_BANK;
       transition_mode <= TRANSITION_MODE;
       gpio_pin <= TRANSITION_VALUE[1:0];
-      transition_time_din_valid <= TRANSITION_MODE == params::TRANSITION_MODE_SYS_TIME;
-      wait_transition <= 1'b1;
+      transition_time <= TRANSITION_VALUE[56:0];
       addsub_latency <= '0;
       state <= WAIT_START;
     end else begin
@@ -110,24 +99,17 @@ module swapchain (
               end
             end
             params::TRANSITION_MODE_SYS_TIME: begin
-              transition_time_din_valid <= 1'b0;
-              if (wait_transition) begin
-                if (transition_time_dout_valid) begin
-                  wait_transition <= 1'b0;
+              if (addsub_latency == Latency) begin
+                if (time_diff >= 58'sd0) begin
+                  stop <= 1'b0;
+                  loop_cnt <= '0;
+                  bank <= req_bank;
+                  idx_mode <= IDX_MODE_TIC;
+                  tic_idx[req_bank] <= '0;
+                  state <= FINITE_LOOP;
                 end
               end else begin
-                if (addsub_latency == Latency - 1) begin
-                  if (time_diff >= 58'sd0) begin
-                    stop <= 1'b0;
-                    loop_cnt <= '0;
-                    bank <= req_bank;
-                    idx_mode <= IDX_MODE_TIC;
-                    tic_idx[req_bank] <= '0;
-                    state <= FINITE_LOOP;
-                  end
-                end else begin
-                  addsub_latency <= addsub_latency + 1;
-                end
+                addsub_latency <= addsub_latency + 1;
               end
             end
             params::TRANSITION_MODE_GPIO: begin

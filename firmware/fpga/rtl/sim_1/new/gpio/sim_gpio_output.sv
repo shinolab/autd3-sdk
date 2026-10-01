@@ -21,7 +21,7 @@ module sim_gpio_output ();
   logic thermo;
   logic force_fan;
   logic sync;
-  logic ecat_sync_raw;
+  logic sync_in_raw;
   logic pattern_bank;
   logic mod_bank;
   logic [15:0] pattern_idx;
@@ -41,7 +41,7 @@ module sim_gpio_output ();
       .THERMO(thermo),
       .FORCE_FAN(force_fan),
       .SYNC(sync),
-      .ECAT_SYNC_RAW(ecat_sync_raw),
+      .SYNC_IN_RAW(sync_in_raw),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
       .PATTERN_IDX(pattern_idx),
@@ -83,7 +83,7 @@ module sim_gpio_output ();
     thermo = 1'b0;
     force_fan = 1'b0;
     sync = 1'b0;
-    ecat_sync_raw = 1'b0;
+    sync_in_raw = 1'b0;
     pattern_bank = 1'b0;
     mod_bank = 1'b0;
     pattern_idx = 16'd0;
@@ -122,16 +122,16 @@ module sim_gpio_output ();
     debug_settings.UPDATE <= 1'b0;
     repeat (2) @(posedge CLK);
     for (int i = 0; i < 4; i++) begin
-      #3 ecat_sync_raw = 1'b1;
+      #3 sync_in_raw = 1'b1;
       #1 for (int k = 0; k < 4; k++) `ASSERT_EQ(1'b1, gpio_out[k]);
-      #3 ecat_sync_raw = 1'b0;
+      #3 sync_in_raw = 1'b0;
       #1 for (int k = 0; k < 4; k++) `ASSERT_EQ(1'b0, gpio_out[k]);
     end
     @(posedge CLK);
     for (int k = 1; k < 4; k++) debug_settings.VALUE[k] <= {params::GPIO_O_TYPE_NONE, 56'd0};
-    ecat_sync_raw = 1'b1;
+    sync_in_raw = 1'b1;
     check(params::GPIO_O_TYPE_NONE, 56'd0, 1'b0);
-    ecat_sync_raw = 1'b0;
+    sync_in_raw = 1'b0;
 
     mod_bank = 1'b1;
     check(params::GPIO_O_TYPE_MOD_BANK, 56'd0, 1'b1);

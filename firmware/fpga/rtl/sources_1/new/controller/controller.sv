@@ -133,15 +133,13 @@ module controller (
     RD_DEBUG_VALUE3_2,
     RD_DEBUG_VALUE3_3,
     DEBUG_CLR_UPDATE_SETTINGS_BIT,
-    REQ_ECAT_SYNC_TIME_0,
-    REQ_ECAT_SYNC_TIME_1,
-    REQ_ECAT_SYNC_TIME_2,
-    REQ_ECAT_SYNC_TIME_3_RD_ECAT_SYNC_TIME_0,
-    REQ_ECAT_SYNC_CYCLE_0_RD_ECAT_SYNC_TIME_1,
-    REQ_ECAT_SYNC_CYCLE_1_RD_ECAT_SYNC_TIME_2,
-    RD_ECAT_SYNC_TIME_3,
-    RD_ECAT_SYNC_CYCLE_0,
-    RD_ECAT_SYNC_CYCLE_1,
+    REQ_SYNC_TIME_0,
+    REQ_SYNC_TIME_1,
+    REQ_SYNC_TIME_2,
+    REQ_SYNC_TIME_3_RD_SYNC_TIME_0,
+    RD_SYNC_TIME_1,
+    RD_SYNC_TIME_2,
+    RD_SYNC_TIME_3,
     SYNC_CLR_UPDATE_SETTINGS_BIT
   } state_t;
 
@@ -218,7 +216,7 @@ module controller (
             state <= REQ_DEBUG_VALUE0_0;
           end else if (ctl_flags[params::CTL_FLAG_BIT_SYNC_SET]) begin
             ctl_flags <= ctl_flags & ~(1 << params::CTL_FLAG_BIT_SYNC_SET);
-            state <= REQ_ECAT_SYNC_TIME_0;
+            state <= REQ_SYNC_TIME_0;
           end else begin
             ctl_flags_cand <= dout;
             if (dout == ctl_flags_cand) begin
@@ -620,51 +618,41 @@ module controller (
           state <= WAIT_1;
         end
 
-        REQ_ECAT_SYNC_TIME_0: begin
+        REQ_SYNC_TIME_0: begin
           we <= 1'b0;
           addr <= params::ADDR_SYNC_TIME_0;
-          state <= REQ_ECAT_SYNC_TIME_1;
+          state <= REQ_SYNC_TIME_1;
         end
-        REQ_ECAT_SYNC_TIME_1: begin
+        REQ_SYNC_TIME_1: begin
           addr  <= params::ADDR_SYNC_TIME_1;
-          state <= REQ_ECAT_SYNC_TIME_2;
+          state <= REQ_SYNC_TIME_2;
         end
-        REQ_ECAT_SYNC_TIME_2: begin
+        REQ_SYNC_TIME_2: begin
           addr  <= params::ADDR_SYNC_TIME_2;
-          state <= REQ_ECAT_SYNC_TIME_3_RD_ECAT_SYNC_TIME_0;
+          state <= REQ_SYNC_TIME_3_RD_SYNC_TIME_0;
         end
-        REQ_ECAT_SYNC_TIME_3_RD_ECAT_SYNC_TIME_0: begin
+        REQ_SYNC_TIME_3_RD_SYNC_TIME_0: begin
           addr <= params::ADDR_SYNC_TIME_3;
-          SYNC_SETTINGS.ECAT_SYNC_TIME[15:0] <= dout;
-          state <= REQ_ECAT_SYNC_CYCLE_0_RD_ECAT_SYNC_TIME_1;
+          SYNC_SETTINGS.SYNC_TIME[15:0] <= dout;
+          state <= RD_SYNC_TIME_1;
         end
-        REQ_ECAT_SYNC_CYCLE_0_RD_ECAT_SYNC_TIME_1: begin
-          addr <= params::ADDR_SYNC_CYCLE_0;
-          SYNC_SETTINGS.ECAT_SYNC_TIME[31:16] <= dout;
-          state <= REQ_ECAT_SYNC_CYCLE_1_RD_ECAT_SYNC_TIME_2;
-        end
-        REQ_ECAT_SYNC_CYCLE_1_RD_ECAT_SYNC_TIME_2: begin
-          addr <= params::ADDR_SYNC_CYCLE_1;
-          SYNC_SETTINGS.ECAT_SYNC_TIME[47:32] <= dout;
-          state <= RD_ECAT_SYNC_TIME_3;
-        end
-        RD_ECAT_SYNC_TIME_3: begin
-          SYNC_SETTINGS.ECAT_SYNC_TIME[63:48] <= dout;
+        RD_SYNC_TIME_1: begin
+          SYNC_SETTINGS.SYNC_TIME[31:16] <= dout;
           we <= 1'b1;
           addr <= params::ADDR_CTL_FLAG;
           din <= ctl_flags;
-          state <= RD_ECAT_SYNC_CYCLE_0;
+          state <= RD_SYNC_TIME_2;
         end
-        RD_ECAT_SYNC_CYCLE_0: begin
-          SYNC_SETTINGS.ECAT_SYNC_CYCLE[15:0] <= dout;
+        RD_SYNC_TIME_2: begin
+          SYNC_SETTINGS.SYNC_TIME[47:32] <= dout;
           we <= 1'b1;
           addr <= params::ADDR_FPGA_STATE;
           din <= fpga_state_din();
           fpga_state_prev <= fpga_state_din();
-          state <= RD_ECAT_SYNC_CYCLE_1;
+          state <= RD_SYNC_TIME_3;
         end
-        RD_ECAT_SYNC_CYCLE_1: begin
-          SYNC_SETTINGS.ECAT_SYNC_CYCLE[31:16] <= dout;
+        RD_SYNC_TIME_3: begin
+          SYNC_SETTINGS.SYNC_TIME[63:48] <= dout;
           SYNC_SETTINGS.UPDATE <= 1'b1;
           we <= 1'b0;
           addr <= params::ADDR_CTL_FLAG;
@@ -726,8 +714,7 @@ module controller (
     DEBUG_SETTINGS.VALUE[2] = {params::GPIO_O_TYPE_NONE, 56'd0};
     DEBUG_SETTINGS.VALUE[3] = {params::GPIO_O_TYPE_NONE, 56'd0};
     SYNC_SETTINGS.UPDATE = 1'b0;
-    SYNC_SETTINGS.ECAT_SYNC_TIME = 64'd0;
-    SYNC_SETTINGS.ECAT_SYNC_CYCLE = 32'd0;
+    SYNC_SETTINGS.SYNC_TIME = 64'd0;
   end
 
 endmodule

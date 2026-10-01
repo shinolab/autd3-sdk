@@ -37,6 +37,23 @@ wire_enum! {
 
 pub const SYS_TIME_TRANSITION_MARGIN_NS: u64 = 10_000_000;
 
+const SYS_TIME_PERIOD_NS: u64 = 3125;
+const SYS_TIME_TICKS_PER_PERIOD: u64 = 64;
+
+#[must_use]
+pub const fn sys_time_ticks(ns: u64) -> u64 {
+    ns / SYS_TIME_PERIOD_NS * SYS_TIME_TICKS_PER_PERIOD
+}
+
+#[must_use]
+pub fn transition_register_value(transition_mode: TransitionMode, transition_value: u64) -> u64 {
+    if transition_mode == TransitionMode::SysTime {
+        sys_time_ticks(transition_value)
+    } else {
+        transition_value
+    }
+}
+
 pub use autd3_cpu_wire::payload::{
     SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
     SILENCER_DEFAULT_UPDATE_RATE,

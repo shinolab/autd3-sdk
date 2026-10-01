@@ -157,7 +157,7 @@ module main #(
   synchronizer synchronizer (
       .CLK(clk),
       .SYNC_SETTINGS(sync_settings),
-      .ECAT_SYNC(CAT_SYNC0),
+      .SYNC_IN(CAT_SYNC0),
       .SYS_TIME(sys_time),
       .SYNC(sync),
       .SKIP_ONE_ASSERT(skip_one_assert),
@@ -268,7 +268,7 @@ module main #(
       .THERMO(thermo_sync),
       .FORCE_FAN(FORCE_FAN),
       .SYNC(sync),
-      .ECAT_SYNC_RAW(CAT_SYNC0),
+      .SYNC_IN_RAW(CAT_SYNC0),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
       .PATTERN_IDX(pattern_idx),

@@ -190,8 +190,7 @@ module sim_controller ();
     silencer_settings_in.COMPLETION_STEPS_PHASE = sim_helper_random.range(8'hFF, 0);
 
     sync_settings_in.UPDATE = 1'b1;
-    sync_settings_in.ECAT_SYNC_TIME = sim_helper_random.range(64'hFFFFFFFFFFFFFFFF, 0);
-    sync_settings_in.ECAT_SYNC_CYCLE = sim_helper_random.range(32'hFFFFFFFF, 0);
+    sync_settings_in.SYNC_TIME = sim_helper_random.range(64'hFFFFFFFFFFFFFFFF, 0);
 
     debug_settings_in.UPDATE = 1'b1;
     debug_settings_in.VALUE[0] = sim_helper_random.range(64'hFFFF, 0);

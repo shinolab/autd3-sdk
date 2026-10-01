@@ -177,8 +177,7 @@ fn sync_group() -> Group {
     Group {
         name: "SYNC",
         params: vec![
-            Param::new("ECAT_SYNC_TIME", 64, "ECAT_SYNC_TIME", Int(0)),
-            Param::new("ECAT_SYNC_CYCLE", 32, "ECAT_SYNC_CYCLE", Int(0)),
+            Param::new("SYNC_TIME", 64, "SYNC_TIME", Int(0)),
         ],
     }
 }

@@ -114,7 +114,7 @@ impl Swapchain {
             State::WaitStart => {
                 let fire = match self.transition_mode {
                     MODE_SYNC_IDX => last_lap < lap,
-                    MODE_SYS_TIME => self.transition_value <= sys_time_ns,
+                    MODE_SYS_TIME => self.transition_value <= Self::fpga_sys_time(sys_time_ns),
                     MODE_GPIO => gpio_in[self.transition_value as usize & 0x3],
 
                     _ => true,
@@ -268,7 +268,15 @@ mod tests {
     fn pending_transition_is_replaced_by_request_to_previous_bank() {
         let mut sc = Swapchain::new();
         sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
-        sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, MODE_SYS_TIME, 1_000 * LAP_NS);
+        sc.set(
+            LAP_NS / 2,
+            0,
+            1,
+            CYCLE,
+            1,
+            MODE_SYS_TIME,
+            Swapchain::fpga_sys_time(1_000 * LAP_NS),
+        );
         assert!(sc.transition_pending());
 
         sc.set(LAP_NS / 2 + 1, 0, 1, CYCLE, 1, MODE_SYNC_IDX, 0);

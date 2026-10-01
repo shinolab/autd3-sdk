@@ -41,6 +41,7 @@ const FW_INTERNAL_PREFIXES: &[&str] = &[
     "FLASH_OP_",
     "FLASH_ERR_",
     "FLASH_BUF_",
+    "SYNC_CYCLE_",
 ];
 
 fn is_fw_internal(name: &str) -> bool {

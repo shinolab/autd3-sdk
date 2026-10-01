@@ -4,7 +4,10 @@ pub use autd3_cpu_wire::payload::ChangeModBankPayload;
 
 use crate::app::Cpu;
 use crate::cmd::BankChange;
-use crate::fpga::{self, SYS_TIME_TRANSITION_MARGIN_NS, TransitionMode, validate_transition_mode};
+use crate::fpga::{
+    self, SYS_TIME_TRANSITION_MARGIN_NS, TransitionMode, transition_register_value,
+    validate_transition_mode,
+};
 use crate::params::{
     ADDR_MOD_REP0, ADDR_MOD_REQ_RD_BANK, ADDR_MOD_TRANSITION_MODE, ADDR_MOD_TRANSITION_VALUE_0,
     BRAM_SELECT_CONTROLLER, CTL_FLAG_MOD_SET, NUM_BANKS,
@@ -73,7 +76,7 @@ impl Cpu {
         Ok(BankChange {
             bank,
             transition_mode,
-            transition_value,
+            transition_value: transition_register_value(transition_mode, transition_value),
         })
     }
 
