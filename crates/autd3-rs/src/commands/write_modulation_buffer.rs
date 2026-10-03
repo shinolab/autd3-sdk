@@ -1,9 +1,12 @@
+use autd3_cpu_wire::payload::WriteModPayload;
+
 use crate::datagram::DatagramBuilder;
 use crate::error::PayloadError;
+use crate::protocol::PAYLOAD_BYTES;
 use crate::value::ModulationBank;
 
 use super::Command;
-use super::operation::{MOD_WRITE_MAX_DATA_LEN, WriteModulationChunk};
+use super::operation::WriteModulationChunk;
 
 #[derive(Clone, Copy, Debug)]
 pub struct WriteModulationBuffer<'a> {
@@ -18,10 +21,11 @@ impl<'a> Command<'a> for WriteModulationBuffer<'a> {
             builder.reject(PayloadError::ModulationDataEmpty);
             return;
         }
-        for (i, chunk) in self.data.chunks(MOD_WRITE_MAX_DATA_LEN).enumerate() {
+        let max_data_len = PAYLOAD_BYTES - size_of::<WriteModPayload>();
+        for (i, chunk) in self.data.chunks(max_data_len).enumerate() {
             builder.push(WriteModulationChunk {
                 bank: self.bank,
-                offset: self.offset + i * MOD_WRITE_MAX_DATA_LEN,
+                offset: self.offset + i * max_data_len,
                 data: chunk,
             });
         }
@@ -35,7 +39,6 @@ mod tests {
     use crate::error::Error;
     use crate::params::MOD_BUFFER_SAMPLES;
     use crate::test_utils::test_geometry_arc;
-    use autd3_cpu_wire::payload::WriteModPayload;
     const HEADER_BYTES: usize = core::mem::size_of::<WriteModPayload>();
 
     fn expand(op: WriteModulationBuffer<'_>) -> Result<Frames, Error> {
@@ -68,7 +71,8 @@ mod tests {
 
     #[test]
     fn write_modulation_buffer_splits_with_advancing_even_offset() {
-        let total = MOD_WRITE_MAX_DATA_LEN + 562;
+        let max_data_len = PAYLOAD_BYTES - size_of::<WriteModPayload>();
+        let total = max_data_len + 562;
         let data: Vec<u8> = (0..total).map(|i| u8::try_from(i % 256).unwrap()).collect();
         let frames = expand(WriteModulationBuffer {
             bank: ModulationBank::B0,
@@ -78,20 +82,16 @@ mod tests {
         .unwrap();
 
         assert_eq!(frames.len(), 2);
-        assert_eq!(
-            MOD_WRITE_MAX_DATA_LEN % 2,
-            0,
-            "split must keep offsets even"
-        );
+        assert_eq!(max_data_len % 2, 0, "split must keep offsets even");
 
         let p0 = payload(&frames, 0);
         assert_eq!(&p0[2..6], &100u32.to_le_bytes());
-        assert_eq!(&p0[HEADER_BYTES..], &data[..MOD_WRITE_MAX_DATA_LEN]);
+        assert_eq!(&p0[HEADER_BYTES..], &data[..max_data_len]);
 
         let p1 = payload(&frames, 1);
-        let max = u32::try_from(MOD_WRITE_MAX_DATA_LEN).unwrap();
+        let max = u32::try_from(max_data_len).unwrap();
         assert_eq!(&p1[2..6], &(100 + max).to_le_bytes());
-        assert_eq!(&p1[HEADER_BYTES..], &data[MOD_WRITE_MAX_DATA_LEN..]);
+        assert_eq!(&p1[HEADER_BYTES..], &data[max_data_len..]);
     }
 
     #[test]
@@ -105,7 +105,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             frames.len(),
-            MOD_BUFFER_SAMPLES.div_ceil(MOD_WRITE_MAX_DATA_LEN)
+            MOD_BUFFER_SAMPLES.div_ceil(PAYLOAD_BYTES - size_of::<WriteModPayload>())
         );
     }
 

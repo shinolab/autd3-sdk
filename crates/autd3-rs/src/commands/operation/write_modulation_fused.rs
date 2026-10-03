@@ -10,9 +10,6 @@ use crate::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode}
 
 use super::{Distribution, Encoded, Operation, write_header};
 
-const MOD_FUSED_HEADER_BYTES: usize = core::mem::size_of::<WriteModulationFusedPayload>();
-pub(crate) const MOD_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - MOD_FUSED_HEADER_BYTES;
-
 #[derive(Clone, Copy, Debug)]
 pub struct WriteModulationFused<'a> {
     pub bank: ModulationBank,
@@ -25,7 +22,7 @@ pub struct WriteModulationFused<'a> {
 impl WriteModulationFused<'_> {
     #[must_use]
     pub fn fits_single_frame(len: usize) -> bool {
-        len > 0 && len <= MOD_FUSED_MAX_DATA_LEN
+        len > 0 && len <= PAYLOAD_BYTES - size_of::<WriteModulationFusedPayload>()
     }
 }
 
@@ -49,11 +46,12 @@ impl Operation for WriteModulationFused<'_> {
             }
             .into());
         }
-        if self.data.len() > MOD_FUSED_MAX_DATA_LEN {
+        let capacity = PAYLOAD_BYTES - size_of::<WriteModulationFusedPayload>();
+        if self.data.len() > capacity {
             return Err(PayloadError::ModulationWriteExceedsCapacity {
                 offset: 0,
                 end: self.data.len(),
-                capacity: MOD_FUSED_MAX_DATA_LEN,
+                capacity,
             }
             .into());
         }
@@ -134,15 +132,13 @@ mod tests {
         assert_eq!(&out[2..4], &10u16.to_le_bytes(), "divider");
         assert_eq!(&out[4..8], &4u32.to_le_bytes(), "size");
         assert_eq!(&out[8..10], &9u16.to_le_bytes(), "Finite(10) => rep 9");
-        assert_eq!(
-            &out[MOD_FUSED_HEADER_BYTES..MOD_FUSED_HEADER_BYTES + 4],
-            &data
-        );
+        assert_eq!(&out[size_of::<WriteModulationFusedPayload>()..][..4], &data);
     }
 
     #[test]
     fn fused_modulation_rejects_more_than_one_frame() {
-        let data = vec![0x80u8; MOD_FUSED_MAX_DATA_LEN + 1];
+        let capacity = PAYLOAD_BYTES - size_of::<WriteModulationFusedPayload>();
+        let data = vec![0x80u8; capacity + 1];
         let op = WriteModulationFused {
             bank: ModulationBank::B0,
             data: &data,
@@ -156,12 +152,8 @@ mod tests {
             Err(Error::InvalidPayload(_))
         ));
 
-        assert!(!WriteModulationFused::fits_single_frame(
-            MOD_FUSED_MAX_DATA_LEN + 1
-        ));
-        assert!(WriteModulationFused::fits_single_frame(
-            MOD_FUSED_MAX_DATA_LEN
-        ));
+        assert!(!WriteModulationFused::fits_single_frame(capacity + 1));
+        assert!(WriteModulationFused::fits_single_frame(capacity));
         assert!(!WriteModulationFused::fits_single_frame(0));
     }
 

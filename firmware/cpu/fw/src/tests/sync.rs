@@ -3,6 +3,10 @@ use crate::proto::{Cmd, Error, FRAME_BYTES_MAX, PAYLOAD_BYTES, REPLY_DATA_BYTES_
 use crate::tests::builders::{config_mod, write_foci_buffer, write_mod_buffer};
 use crate::tests::mock::{Frame, Harness};
 
+const _: () = assert!(FRAME_BYTES_MAX == 1448);
+const _: () = assert!(FRAME_BYTES_MAX == 2 + PAYLOAD_BYTES);
+const _: () = assert!(REPLY_DATA_BYTES_MAX == 32);
+
 #[test]
 fn synchronize_writes_next_sync_edge_in_sys_time_ticks_and_latches() {
     let mut h = Harness::new();
@@ -86,11 +90,4 @@ fn fpga_state_survives_reset() {
     assert_eq!(h.emission_word(0, 0), 0x5A5A);
     assert_eq!(h.mod_word(1, 4), 0x0077);
     assert_eq!(h.ctl(ADDR_MOD_CYCLE0 + 1), 255);
-}
-
-#[test]
-fn struct_sizes_match_spec() {
-    assert_eq!(FRAME_BYTES_MAX, 1448);
-    assert_eq!(FRAME_BYTES_MAX, 2 + PAYLOAD_BYTES);
-    assert_eq!(REPLY_DATA_BYTES_MAX, 32);
 }

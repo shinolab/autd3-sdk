@@ -147,7 +147,7 @@ impl<'a> Command<'a> for Modulation<'a> {
 
 ```
 ops = [ Step::Op(WriteModulationChunk { offset: 0 })
-      , Step::Op(WriteModulationChunk { offset: MOD_WRITE_MAX_DATA_LEN })
+      , Step::Op(WriteModulationChunk { offset: PAYLOAD_BYTES - size_of::<WriteModPayload>() })
       , ...
       , Step::Op(ConfigModulation)
       , Step::Op(ChangeModulationBank) ]

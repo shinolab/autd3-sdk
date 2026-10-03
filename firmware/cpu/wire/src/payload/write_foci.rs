@@ -2,7 +2,8 @@ use zerocopy::little_endian::U32;
 use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
 use super::try_read_header;
-use crate::layout::{EMISSION_RAM_WORDS, FOCI_WRITE_MAX_DATA_LEN};
+use crate::PAYLOAD_BYTES;
+use crate::layout::EMISSION_RAM_WORDS;
 use crate::{Error, PatternBank};
 
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
@@ -17,7 +18,7 @@ impl WriteFociPayload {
     pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (p, data) = try_read_header::<Self>(payload)?;
         if !data.len().is_multiple_of(2)
-            || data.len() > FOCI_WRITE_MAX_DATA_LEN
+            || data.len() > PAYLOAD_BYTES - core::mem::size_of::<Self>()
             || p.offset.get().saturating_add((data.len() / 2) as u32) > EMISSION_RAM_WORDS as u32
         {
             return Err(Error::InvalidPayload);

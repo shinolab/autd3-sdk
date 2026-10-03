@@ -106,20 +106,17 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::operation::MAX_FOCI_PER_FRAME;
     use crate::geometry::Point3;
-    use crate::protocol::Cmd;
+    use crate::params::FOCUS_WORDS;
+    use crate::protocol::{Cmd, PAYLOAD_BYTES};
     use crate::test_utils::test_geometry_arc;
     use crate::value::{Intensity, Phase, SamplingConfig};
     use core::num::NonZeroU16;
 
     use crate::value::{ControlPoint, Focus};
+    use autd3_cpu_wire::payload::{WriteFociPayload, WritePatternFusedPayload};
 
-    use crate::commands::operation::{
-        PATTERN_FUSED_HEADER_BYTES as FH, PATTERN_FUSED_MAX_FOCI_PER_FRAME,
-    };
-
-    fn fused_payload<const N: usize>(stm: FociStm<'_, N>) -> [u8; crate::protocol::PAYLOAD_BYTES] {
+    fn fused_payload<const N: usize>(stm: FociStm<'_, N>) -> [u8; PAYLOAD_BYTES] {
         let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(stm);
         let datagrams = b.build().unwrap();
@@ -162,7 +159,8 @@ mod tests {
         }
         .encode()
         .unwrap();
-        let first = u64::from_le_bytes(payload[FH..FH + 8].try_into().unwrap());
+        let data = &payload[size_of::<WritePatternFusedPayload>()..];
+        let first = u64::from_le_bytes(data[..8].try_into().unwrap());
         assert_eq!(first, expected);
     }
 
@@ -190,8 +188,9 @@ mod tests {
             FociStmOption::default(),
         ));
 
-        let f0 = u64::from_le_bytes(payload[FH..FH + 8].try_into().unwrap());
-        let f1 = u64::from_le_bytes(payload[FH + 8..FH + 16].try_into().unwrap());
+        let data = &payload[size_of::<WritePatternFusedPayload>()..];
+        let f0 = u64::from_le_bytes(data[..8].try_into().unwrap());
+        let f1 = u64::from_le_bytes(data[8..16].try_into().unwrap());
         assert_eq!((f0 >> 54) & 0xFF, 0x80, "first focus = intensity");
         assert_eq!(
             (f1 >> 54) & 0xFF,
@@ -207,7 +206,9 @@ mod tests {
 
     #[test]
     fn foci_stm_auto_splits_write_frames() {
-        let points: Vec<ControlPoints<1>> = (0..MAX_FOCI_PER_FRAME + 5)
+        let max_foci_per_frame =
+            (PAYLOAD_BYTES - size_of::<WriteFociPayload>()) / (FOCUS_WORDS * 2);
+        let points: Vec<ControlPoints<1>> = (0..max_foci_per_frame + 5)
             .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32 * 0.1)))
             .collect();
         let stm = FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default());
@@ -229,7 +230,7 @@ mod tests {
             datagrams.frame(2).unwrap().datagrams()[0].cmd,
             Cmd::ConfigPattern
         );
-        let size = u32::try_from(MAX_FOCI_PER_FRAME + 5).unwrap();
+        let size = u32::try_from(max_foci_per_frame + 5).unwrap();
         assert_eq!(
             &datagrams.frame(2).unwrap().datagrams()[0].payload[4..8],
             &size.to_le_bytes()
@@ -329,7 +330,8 @@ mod tests {
 
     #[test]
     fn long_foci_stm_falls_back_to_the_multi_frame_path() {
-        let points: Vec<ControlPoints<1>> = (0..=PATTERN_FUSED_MAX_FOCI_PER_FRAME)
+        let capacity = (PAYLOAD_BYTES - size_of::<WritePatternFusedPayload>()) / (FOCUS_WORDS * 2);
+        let points: Vec<ControlPoints<1>> = (0..=capacity)
             .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32 * 0.1)))
             .collect();
         let stm = FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default());

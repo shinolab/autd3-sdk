@@ -3,7 +3,8 @@ use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
 use super::config_pattern::validate_pattern_config;
 use super::{EmissionType, TransitionMode, try_read_header};
-use crate::layout::{PATTERN_FUSED_MAX_DATA_LEN, PATTERN_RAW_DATA_LEN};
+use crate::PAYLOAD_BYTES;
+use crate::layout::PATTERN_RAW_DATA_LEN;
 use crate::{Error, PatternBank};
 
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
@@ -27,7 +28,7 @@ impl WritePatternFusedPayload {
         let (p, data) = try_read_header::<Self>(payload)?;
         let data_len = data.len();
         if !data_len.is_multiple_of(2)
-            || data_len > PATTERN_FUSED_MAX_DATA_LEN
+            || data_len > PAYLOAD_BYTES - core::mem::size_of::<Self>()
             || (p.emission_type == EmissionType::Raw
                 && (p.size.get() != 1 || data_len != PATTERN_RAW_DATA_LEN))
         {

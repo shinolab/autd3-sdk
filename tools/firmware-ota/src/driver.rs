@@ -159,8 +159,6 @@ pub enum Dialect {
 }
 
 pub const LEGACY_PAYLOAD_BYTES: usize = 624;
-pub const LEGACY_CHUNK_MAX_DATA_LEN: usize =
-    LEGACY_PAYLOAD_BYTES - core::mem::size_of::<LegacyUpdateChunkPayload>();
 
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
@@ -626,7 +624,7 @@ impl<L: Exchange> Driver<L> {
     fn chunk_len(&self) -> usize {
         match self.inner.dialect() {
             Dialect::Udp => UPDATE_CHUNK_MAX_DATA_LEN,
-            Dialect::Legacy => LEGACY_CHUNK_MAX_DATA_LEN,
+            Dialect::Legacy => LEGACY_PAYLOAD_BYTES - size_of::<LegacyUpdateChunkPayload>(),
         }
     }
 

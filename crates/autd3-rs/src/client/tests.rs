@@ -5,9 +5,7 @@ use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
 use std::time::{Duration, Instant};
 
-use crate::commands::operation::{
-    Distribution, Encoded, Nop, Operation, PATTERN_FUSED_HEADER_BYTES,
-};
+use crate::commands::operation::{Distribution, Encoded, Nop, Operation};
 use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::firmware_version::{FirmwareVersion, Version};
@@ -21,6 +19,7 @@ use autd3_rs_core::BusStats;
 
 use crate::telemetry::Telemetry;
 use autd3_cpu_wire::Mode;
+use autd3_cpu_wire::payload::WritePatternFusedPayload;
 
 use super::{Client, ClientConfig};
 
@@ -245,7 +244,7 @@ fn slave_frame(slave: &mut Slave, frame: &[u8]) -> bool {
             0
         }
         Cmd::WritePatternFused => {
-            let start = PATTERN_FUSED_HEADER_BYTES + Autd3::NUM_TRANSDUCERS;
+            let start = size_of::<WritePatternFusedPayload>() + Autd3::NUM_TRANSDUCERS;
             let end = start + Autd3::NUM_TRANSDUCERS;
             slave.muted = parsed.payload[start..end].iter().all(|&b| b == 0);
             0

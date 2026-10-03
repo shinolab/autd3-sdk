@@ -80,10 +80,9 @@ impl<'a> Command<'a> for Modulation<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::Cmd;
+    use crate::protocol::{Cmd, PAYLOAD_BYTES};
     use crate::test_utils::test_geometry_arc;
-
-    use crate::commands::operation::MOD_FUSED_MAX_DATA_LEN;
+    use autd3_cpu_wire::payload::WriteModulationFusedPayload;
 
     fn fused_payload(m: Modulation<'_>) -> Vec<u8> {
         let mut b = DatagramBuilder::new(test_geometry_arc(1));
@@ -107,10 +106,7 @@ mod tests {
         assert_eq!(payload[0], 1, "bank B1");
         assert_eq!(payload[1], 0xFF, "IMMEDIATE");
         assert_eq!(&payload[4..8], &20u32.to_le_bytes(), "size");
-        assert_eq!(
-            payload.len(),
-            size_of::<autd3_cpu_wire::payload::WriteModulationFusedPayload>() + 20
-        );
+        assert_eq!(payload.len(), size_of::<WriteModulationFusedPayload>() + 20);
     }
 
     #[test]
@@ -160,7 +156,7 @@ mod tests {
 
     #[test]
     fn long_modulation_falls_back_to_the_three_frame_path() {
-        let data = vec![0x80u8; MOD_FUSED_MAX_DATA_LEN + 1];
+        let data = vec![0x80u8; PAYLOAD_BYTES - size_of::<WriteModulationFusedPayload>() + 1];
         let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(Modulation::with_bank(
             ModulationBank::B1,

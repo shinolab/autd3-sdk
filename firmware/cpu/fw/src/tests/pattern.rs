@@ -16,9 +16,8 @@ use crate::tests::builders::{
     write_pattern_raw_multi,
 };
 use crate::tests::mock::{Frame, Harness};
-use autd3_cpu_wire::PatternBank;
-use autd3_cpu_wire::layout::MOD_WRITE_MAX_DATA_LEN;
-use autd3_cpu_wire::payload::PatternFormat;
+use autd3_cpu_wire::payload::{PatternFormat, WriteModPayload};
+use autd3_cpu_wire::{PAYLOAD_BYTES, PatternBank};
 
 fn bad_bank() -> u8 {
     u8::try_from(NUM_BANKS).unwrap()
@@ -565,7 +564,7 @@ fn write_mod_buffer_accepts_chunked_writes_up_to_capacity() {
     let mut written: u32 = 0;
     let mut last = 0u8;
     while written < MOD_BUFFER_SAMPLES {
-        let len = u32::try_from(MOD_WRITE_MAX_DATA_LEN)
+        let len = u32::try_from(PAYLOAD_BYTES - size_of::<WriteModPayload>())
             .unwrap()
             .min(MOD_BUFFER_SAMPLES - written);
         last = (written >> 8) as u8;

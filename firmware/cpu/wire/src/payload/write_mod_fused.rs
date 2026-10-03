@@ -3,7 +3,7 @@ use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
 use super::config_mod::validate_mod_config;
 use super::{TransitionMode, try_read_header};
-use crate::layout::MOD_FUSED_MAX_DATA_LEN;
+use crate::PAYLOAD_BYTES;
 use crate::{Error, ModulationBank};
 
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
@@ -21,7 +21,7 @@ pub struct WriteModulationFusedPayload {
 impl WriteModulationFusedPayload {
     pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (p, data) = try_read_header::<Self>(payload)?;
-        if data.len() > MOD_FUSED_MAX_DATA_LEN {
+        if data.len() > PAYLOAD_BYTES - core::mem::size_of::<Self>() {
             return Err(Error::InvalidPayload);
         }
         validate_mod_config(p.divider.get(), p.size.get())?;

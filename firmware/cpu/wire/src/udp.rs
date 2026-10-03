@@ -6,6 +6,8 @@ use crate::frame::{FRAME_BYTES_MAX, FRAME_HEADER_BYTES, REPLY_DATA_BYTES_MAX};
 pub const PORT: u16 = 0xAD30;
 pub const PROTOCOL_VERSION: u8 = 2;
 
+const _: () = assert!(PORT == 44336);
+
 pub const UNASSIGNED_ID: u8 = 0xFF;
 pub const MAC_PREFIX: [u8; 5] = [0x02, 0x41, 0x55, 0x54, 0x44];
 pub const ALL_NODES: [u8; 16] = [0xFF, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01];
@@ -212,11 +214,6 @@ pub const fn unit_address(unit_id: u8) -> [u8; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_port_spells_ad30() {
-        assert_eq!(PORT, 44336);
-    }
 
     #[test]
     fn the_unassigned_address_is_modified_eui64_of_the_default_mac() {

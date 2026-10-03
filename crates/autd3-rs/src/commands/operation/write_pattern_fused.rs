@@ -15,13 +15,8 @@ use crate::value::{
 use super::write_pattern_buffer::{PatternIntensity, encode_raw_slot};
 use super::{Distribution, Encoded, Operation, check_index_advance, write_header};
 
-pub(crate) const PATTERN_FUSED_HEADER_BYTES: usize =
-    core::mem::size_of::<WritePatternFusedPayload>();
-const PATTERN_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - PATTERN_FUSED_HEADER_BYTES;
-pub(crate) const PATTERN_FUSED_MAX_FOCI_PER_FRAME: usize =
-    PATTERN_FUSED_MAX_DATA_LEN / (FOCUS_WORDS * 2);
-
-const _: () = assert!(PATTERN_RAW_DATA_LEN <= PATTERN_FUSED_MAX_DATA_LEN);
+const _: () =
+    assert!(PATTERN_RAW_DATA_LEN <= PAYLOAD_BYTES - size_of::<WritePatternFusedPayload>());
 
 #[derive(Clone, Copy, Debug)]
 pub struct WritePatternFused<'a> {
@@ -148,7 +143,9 @@ impl Operation for WritePatternFused<'_> {
 impl<const N: usize> WriteFociStmFused<'_, N> {
     #[must_use]
     pub fn fits_single_frame(points: usize) -> bool {
-        points > 0 && points * N <= PATTERN_FUSED_MAX_FOCI_PER_FRAME
+        points > 0
+            && points * N
+                <= (PAYLOAD_BYTES - size_of::<WritePatternFusedPayload>()) / (FOCUS_WORDS * 2)
     }
 }
 
@@ -182,11 +179,12 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
             .into());
         }
         let total = size * N;
-        if total > PATTERN_FUSED_MAX_FOCI_PER_FRAME {
+        let capacity = (PAYLOAD_BYTES - size_of::<WritePatternFusedPayload>()) / (FOCUS_WORDS * 2);
+        if total > capacity {
             return Err(PayloadError::FociWriteExceedsCapacity {
                 offset: 0,
                 end: total,
-                capacity: PATTERN_FUSED_MAX_FOCI_PER_FRAME,
+                capacity,
             }
             .into());
         }
@@ -283,9 +281,10 @@ mod tests {
         assert_eq!(out[8], 0, "num_foci unused for raw");
         assert_eq!(out[9], 0xFF, "IMMEDIATE");
         assert_eq!(&out[12..14], &0xFFFFu16.to_le_bytes(), "infinite rep");
+        let data = &out[size_of::<WritePatternFusedPayload>()..];
         for i in 0..n {
-            assert_eq!(out[PATTERN_FUSED_HEADER_BYTES + i], phases[0][i].0);
-            assert_eq!(out[PATTERN_FUSED_HEADER_BYTES + n + i], intensities[0][i].0);
+            assert_eq!(data[i], phases[0][i].0);
+            assert_eq!(data[n + i], intensities[0][i].0);
         }
     }
 
@@ -331,7 +330,7 @@ mod tests {
         .encode()
         .unwrap();
         let first = u64::from_le_bytes(
-            out[PATTERN_FUSED_HEADER_BYTES..PATTERN_FUSED_HEADER_BYTES + 8]
+            out[size_of::<WritePatternFusedPayload>()..][..8]
                 .try_into()
                 .unwrap(),
         );
@@ -340,7 +339,8 @@ mod tests {
 
     #[test]
     fn fused_foci_rejects_more_than_one_frame() {
-        let points: Vec<ControlPoints<1>> = (0..=PATTERN_FUSED_MAX_FOCI_PER_FRAME)
+        let capacity = (PAYLOAD_BYTES - size_of::<WritePatternFusedPayload>()) / (FOCUS_WORDS * 2);
+        let points: Vec<ControlPoints<1>> = (0..=capacity)
             .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32 * 0.1)))
             .collect();
         let op = WriteFociStmFused {
@@ -357,12 +357,8 @@ mod tests {
             Err(Error::InvalidPayload(_))
         ));
 
-        assert!(!WriteFociStmFused::<1>::fits_single_frame(
-            PATTERN_FUSED_MAX_FOCI_PER_FRAME + 1
-        ));
-        assert!(WriteFociStmFused::<1>::fits_single_frame(
-            PATTERN_FUSED_MAX_FOCI_PER_FRAME
-        ));
+        assert!(!WriteFociStmFused::<1>::fits_single_frame(capacity + 1));
+        assert!(WriteFociStmFused::<1>::fits_single_frame(capacity));
     }
 
     #[test]

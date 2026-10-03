@@ -2,7 +2,8 @@ use zerocopy::little_endian::U32;
 use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
 use super::try_read_header;
-use crate::layout::{MOD_BUFFER_SAMPLES, MOD_WRITE_MAX_DATA_LEN};
+use crate::PAYLOAD_BYTES;
+use crate::layout::MOD_BUFFER_SAMPLES;
 use crate::{Error, ModulationBank};
 
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
@@ -18,7 +19,7 @@ impl WriteModPayload {
         let (p, data) = try_read_header::<Self>(payload)?;
         let offset = p.offset.get();
         if !offset.is_multiple_of(2)
-            || data.len() > MOD_WRITE_MAX_DATA_LEN
+            || data.len() > PAYLOAD_BYTES - core::mem::size_of::<Self>()
             || offset.saturating_add(data.len() as u32) > MOD_BUFFER_SAMPLES as u32
         {
             return Err(Error::InvalidPayload);
