@@ -1,0 +1,71 @@
+use zerocopy::little_endian::U16;
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
+
+use super::try_read_header;
+use crate::frame::PAYLOAD_BYTES;
+use crate::params::{EMISSION_MAX_INDICES, NUM_TRANSDUCERS};
+use crate::{Error, PatternBank};
+
+crate::wire_enum! {
+    pub enum PhaseDepth {
+        Bits8 = 0x08,
+        Bits4 = 0x04,
+    }
+}
+
+impl PhaseDepth {
+    #[must_use]
+    pub const fn bytes_per_pattern(self) -> usize {
+        match self {
+            Self::Bits8 => NUM_TRANSDUCERS,
+            Self::Bits4 => NUM_TRANSDUCERS.div_ceil(2),
+        }
+    }
+
+    #[must_use]
+    pub const fn max_count(self) -> usize {
+        (PAYLOAD_BYTES - core::mem::size_of::<WritePatternPhasePayload>())
+            / self.bytes_per_pattern()
+    }
+
+    #[must_use]
+    pub const fn phase(self, phases: &[u8], t: usize) -> u8 {
+        match self {
+            Self::Bits8 => phases[t],
+            Self::Bits4 => ((phases[t / 2] >> (4 * (t % 2))) & 0x0F) * 0x11,
+        }
+    }
+}
+
+#[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct WritePatternPhasePayload {
+    pub bank: PatternBank,
+    pub depth: PhaseDepth,
+    pub count: u8,
+    pub intensity: u8,
+    pub index: U16,
+}
+
+impl WritePatternPhasePayload {
+    pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (p, rest) = try_read_header::<Self>(payload)?;
+        let count = usize::from(p.count);
+        if !(1..=p.depth.max_count()).contains(&count)
+            || u32::from(p.index.get()) + count as u32 > EMISSION_MAX_INDICES
+            || rest.len() != count * p.depth.bytes_per_pattern()
+        {
+            return Err(Error::InvalidPayload);
+        }
+        Ok((p, rest))
+    }
+}
+
+const _: () = assert!(core::mem::offset_of!(WritePatternPhasePayload, bank) == 0);
+const _: () = assert!(core::mem::offset_of!(WritePatternPhasePayload, depth) == 1);
+const _: () = assert!(core::mem::offset_of!(WritePatternPhasePayload, count) == 2);
+const _: () = assert!(core::mem::offset_of!(WritePatternPhasePayload, intensity) == 3);
+const _: () = assert!(core::mem::offset_of!(WritePatternPhasePayload, index) == 4);
+const _: () = assert!(core::mem::size_of::<WritePatternPhasePayload>() == 6);
+const _: () = assert!(PhaseDepth::Bits8.max_count() == 5);
+const _: () = assert!(PhaseDepth::Bits4.max_count() == 11);

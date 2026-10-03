@@ -1,5 +1,5 @@
 use autd3_rs::commands::{
-    ChangePatternBank, ConfigPattern, PatternCompression, StmConfig, WritePatternCompressed,
+    ChangePatternBank, ConfigPattern, PhaseDepth, StmConfig, WritePatternPhase,
 };
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
@@ -36,21 +36,12 @@ async fn main() -> anyhow::Result<()> {
     let bank = PatternBank::B0;
 
     let mut builder = client.datagram_builder();
-    builder.push(WritePatternCompressed {
+    builder.push(WritePatternPhase {
         bank,
         index: 0,
-        format: PatternCompression::PhaseHalf,
+        depth: PhaseDepth::Bits4,
         intensity: Intensity::MAX,
-        patterns: [
-            Some(&patterns[0][..]),
-            Some(&patterns[1][..]),
-            Some(&patterns[2][..]),
-            Some(&patterns[3][..]),
-            None,
-            None,
-            None,
-            None,
-        ],
+        patterns: &patterns,
     });
     builder.push(ConfigPattern {
         bank,

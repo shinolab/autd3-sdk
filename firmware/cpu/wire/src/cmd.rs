@@ -8,7 +8,7 @@ crate::wire_enum! {
         WriteFociBuffer = 0x10,
         ConfigPattern = 0x11,
         ChangePatternBank = 0x12,
-        WritePatternCompressed = 0x13,
+        WritePatternPhase = 0x13,
         WritePatternRaw = 0x15,
         WritePatternFused = 0x16,
         WriteModulationBuffer = 0x20,

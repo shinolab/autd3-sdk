@@ -5,13 +5,6 @@ using System.Runtime.InteropServices;
 
 namespace AUTD3
 {
-    public enum PatternStmMode : byte
-    {
-        PhaseIntensityFull = 0,
-        PhaseFull = 1,
-        PhaseHalf = 2,
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     internal struct Autd3StmControlPointNative
     {
@@ -58,7 +51,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint indexOffset, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] phases, UIntPtr numPatterns, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte mode, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] phases, UIntPtr numPatterns, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte phaseDepth, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_stm_circle(float[] center, float radiusMm, UIntPtr numPoints, float[] normal, byte intensity, Autd3StmControlPointNative[] outPoints, byte[] outIntensities);
@@ -193,7 +186,7 @@ namespace AUTD3
     public readonly struct PatternStmOption
     {
         public PatternBank Bank { get; init; } = PatternBank.B0;
-        public PatternStmMode Mode { get; init; } = PatternStmMode.PhaseIntensityFull;
+        public PhaseDepth PhaseDepth { get; init; } = PhaseDepth.Bits8;
         public LoopBehavior LoopBehavior { get; init; } = LoopBehavior.Infinite;
         public TransitionMode TransitionMode { get; init; } = TransitionMode.Immediate;
 
@@ -335,7 +328,7 @@ namespace AUTD3
             {
                 return NativeStm.autd3_op_pattern_stm(configHandle, phaseLease.Pointers, (UIntPtr)phaseLease.Pointers.Length,
                     intensityLease.Pointers, (UIntPtr)intensityLease.Pointers.Length, _intensities.Uniform,
-                    (byte)_option.Bank, (byte)_option.Mode, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value, _option.TransitionMode.MarginNs);
+                    (byte)_option.Bank, (byte)_option.PhaseDepth, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value, _option.TransitionMode.MarginNs);
             }
             finally
             {

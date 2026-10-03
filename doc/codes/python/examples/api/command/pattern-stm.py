@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 
-from autd3.commands import ChangePatternBank, ConfigPattern, PatternStm, PatternStmMode, PatternStmOption, StmConfig, WritePatternBuffer
+from autd3.commands import ChangePatternBank, ConfigPattern, PatternStm, PatternStmOption, PhaseDepth, StmConfig, WritePatternPhase
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
@@ -31,14 +31,14 @@ for i in range(NUM_POINTS):
 intensities = Intensity.MAX
 freq = 1.0 * Hz
 bank = PatternBank.B0
-mode = PatternStmMode.PhaseIntensityFull
+phase_depth = PhaseDepth.Bits8
 loop_behavior = LoopBehavior.Infinite
 transition_mode = TransitionMode.Immediate
 option = (
     # ANCHOR: option
     PatternStmOption(
         bank,
-        mode,
+        phase_depth,
         loop_behavior,
         transition_mode,
     )
@@ -49,12 +49,14 @@ PatternStm(freq, patterns, intensities, option)
 # ANCHOR_END: api
 
 # ANCHOR: equivalent
-for index, phases in enumerate(patterns):
-    WritePatternBuffer(
+max_count = option.phase_depth.max_count()
+for index in range(0, len(patterns), max_count):
+    WritePatternPhase(
         bank=option.bank,
         index=index,
-        phases=phases,
-        intensities=intensities,
+        depth=option.phase_depth,
+        intensity=intensities,
+        patterns=patterns[index : index + max_count],
     )
 ConfigPattern(
     bank=option.bank,

@@ -72,26 +72,12 @@ fn config_change(bank: u8) -> (Vec<u8>, Vec<u8>) {
     (config, change)
 }
 
-#[test]
-fn phase_full_pattern_decompresses_to_two_indices() {
-    let phases: Vec<(u8, u8)> = (0..NUM_TRANSDUCERS)
-        .map(|i| (i as u8, (255 - i) as u8))
-        .collect();
-
-    let mut write = vec![BANK, 1, 2, 0x80];
-    write.extend_from_slice(&0u32.to_le_bytes());
-    for &(p0, p1) in &phases {
-        let word = u16::from(p0) | (u16::from(p1) << 8);
-        write.extend_from_slice(&word.to_le_bytes());
-    }
-
+fn send_phase_pattern(write: &[u8]) -> Device {
     let (config, change) = config_change(BANK);
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
-        device
-            .send(&frame(0, Cmd::WritePatternCompressed, &write))
-            .status,
+        device.send(&frame(0, Cmd::WritePatternPhase, write)).status,
         0
     );
     assert_eq!(
@@ -104,67 +90,52 @@ fn phase_full_pattern_decompresses_to_two_indices() {
             .status,
         0
     );
+    device
+}
 
-    let idx0 = device.fpga().emissions_at(BANK as usize, 0);
-    let idx1 = device.fpga().emissions_at(BANK as usize, 1);
-    for (i, &(p0, p1)) in phases.iter().enumerate() {
-        assert_eq!(idx0.0[i], Phase(p0), "index 0 phase t={i}");
-        assert_eq!(idx0.1[i], Intensity(0x80), "index 0 intensity t={i}");
-        assert_eq!(idx1.0[i], Phase(p1), "index 1 phase t={i}");
-        assert_eq!(idx1.1[i], Intensity(0x80), "index 1 intensity t={i}");
+#[test]
+fn phase_bits8_pattern_expands_to_consecutive_indices() {
+    let phase = |g: usize, t: usize| (t * 3 + g * 17) as u8;
+
+    let mut write = vec![BANK, 8, 4, 0x80];
+    write.extend_from_slice(&0u16.to_le_bytes());
+    for g in 0..4 {
+        write.extend((0..NUM_TRANSDUCERS).map(|t| phase(g, t)));
+    }
+
+    let device = send_phase_pattern(&write);
+    for g in 0..4 {
+        let (phases, intensities) = device.fpga().emissions_at(BANK as usize, g);
+        for t in 0..NUM_TRANSDUCERS {
+            assert_eq!(phases[t], Phase(phase(g, t)), "g={g} t={t}");
+            assert_eq!(intensities[t], Intensity(0x80), "g={g} t={t}");
+        }
     }
 }
 
 #[test]
-fn phase_half_pattern_decompresses_to_four_indices() {
-    let nibbles: Vec<[u8; 4]> = (0..NUM_TRANSDUCERS)
-        .map(|i| {
-            [
-                (i & 0x0F) as u8,
-                ((i + 1) & 0x0F) as u8,
-                ((i + 2) & 0x0F) as u8,
-                ((i + 3) & 0x0F) as u8,
-            ]
-        })
-        .collect();
+fn phase_bits4_pattern_expands_nibbles_to_full_range() {
+    let nibble = |g: usize, t: usize| ((t + g) & 0x0F) as u8;
 
-    let mut write = vec![BANK, 2, 4, 0xFF];
-    write.extend_from_slice(&0u32.to_le_bytes());
-    for n in &nibbles {
-        let word = u16::from(n[0])
-            | (u16::from(n[1]) << 4)
-            | (u16::from(n[2]) << 8)
-            | (u16::from(n[3]) << 12);
-        write.extend_from_slice(&word.to_le_bytes());
+    let mut write = vec![BANK, 4, 4, 0xFF];
+    write.extend_from_slice(&0u16.to_le_bytes());
+    for g in 0..4 {
+        write.extend((0..NUM_TRANSDUCERS.div_ceil(2)).map(|i| {
+            let hi = if 2 * i + 1 < NUM_TRANSDUCERS {
+                nibble(g, 2 * i + 1)
+            } else {
+                0
+            };
+            nibble(g, 2 * i) | (hi << 4)
+        }));
     }
 
-    let (config, change) = config_change(BANK);
-    let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(
-        device
-            .send(&frame(0, Cmd::WritePatternCompressed, &write))
-            .status,
-        0
-    );
-    assert_eq!(
-        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
-        0
-    );
-    assert_eq!(
-        device
-            .send(&frame(2, Cmd::ChangePatternBank, &change))
-            .status,
-        0
-    );
-
+    let device = send_phase_pattern(&write);
     for g in 0..4 {
-        let idx = device.fpga().emissions_at(BANK as usize, g);
-        for (i, n) in nibbles.iter().enumerate() {
-            let p4 = n[g];
-            let expected = (p4 << 4) | p4;
-            assert_eq!(idx.0[i], Phase(expected), "g={g} t={i}");
-            assert_eq!(idx.1[i], Intensity(0xFF), "g={g} t={i}");
+        let (phases, intensities) = device.fpga().emissions_at(BANK as usize, g);
+        for t in 0..NUM_TRANSDUCERS {
+            assert_eq!(phases[t], Phase(nibble(g, t) * 0x11), "g={g} t={t}");
+            assert_eq!(intensities[t], Intensity(0xFF), "g={g} t={t}");
         }
     }
 }

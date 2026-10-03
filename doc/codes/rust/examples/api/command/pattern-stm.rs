@@ -1,6 +1,6 @@
 use autd3_rs::commands::{
-    ChangePatternBank, ConfigPattern, PatternStm, PatternStmMode, PatternStmOption, StmConfig,
-    WritePatternBuffer,
+    ChangePatternBank, ConfigPattern, PatternStm, PatternStmOption, PhaseDepth, StmConfig,
+    WritePatternPhase,
 };
 use autd3_rs::geometry::{offset, Autd3, Geometry};
 use autd3_rs::units::{m, mm, s, Hz};
@@ -36,14 +36,14 @@ fn main() {
     let intensities = Intensity::MAX;
     let freq = 1.0 * Hz;
     let bank = PatternBank::B0;
-    let mode = PatternStmMode::PhaseIntensityFull;
+    let phase_depth = PhaseDepth::Bits8;
     let loop_behavior = LoopBehavior::Infinite;
     let transition_mode = TransitionMode::Immediate;
     let option =
         // ANCHOR: option
         PatternStmOption {
             bank,
-            mode,
+            phase_depth,
             loop_behavior,
             transition_mode,
             ..Default::default()
@@ -55,8 +55,15 @@ fn main() {
     // ANCHOR_END: api
 
     // ANCHOR: equivalent
-    for (index, phases) in patterns.iter().enumerate() {
-        WritePatternBuffer::new(option.bank, index, phases, intensities);
+    let max_count = option.phase_depth.max_count();
+    for (k, chunk) in patterns.chunks(max_count).enumerate() {
+        WritePatternPhase {
+            bank: option.bank,
+            index: k * max_count,
+            depth: option.phase_depth,
+            intensity: intensities,
+            patterns: chunk,
+        };
     }
     ConfigPattern {
         bank: option.bank,

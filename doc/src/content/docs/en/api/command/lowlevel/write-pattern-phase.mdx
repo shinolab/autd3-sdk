@@ -1,0 +1,44 @@
+---
+title: WritePatternPhase
+description: Write uniform-intensity Patterns as phases only
+sidebar:
+  order: 12.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/pattern-phase-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/pattern-phase-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/pattern-phase-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`WritePatternPhase` is a lightweight version of [`WritePatternBuffer`](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) for Patterns whose intensity is shared by every transducer and every Pattern.
+It is a low-level command that writes multiple Patterns into a single frame by sending only the phase information.
+The intensity is a single `intensity` value shared by every transducer and every Pattern.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "compressed")} python={excerpt(pySample, "compressed")} csharp={excerpt(csSample, "compressed")} />
+
+| Field       | Type                  | Description                                                  |
+| ----------- | --------------------- | ------------------------------------------------------------ |
+| `bank`      | `PatternBank`         | Destination bank                                             |
+| `index`     | `usize`               | Start index for writing within the bank                      |
+| `depth`     | `PhaseDepth`          | Bit depth of the phase (see below)                           |
+| `intensity` | `Intensity`           | Intensity shared by every transducer and Pattern             |
+| `patterns`  | `&[Vec<Vec<Phase>>]`  | Sequence of phases to write (1 to `depth.max_count()` items) |
+
+## PhaseDepth
+
+| Variant | Patterns per frame (`max_count()`) | Description                                      |
+| ------- | ---------------------------------- | ------------------------------------------------ |
+| `Bits8` | 5                                  | Sends the phase at full resolution (8 bit) (default) |
+| `Bits4` | 11                                 | Sends the phase quantized to its upper 4 bits    |
+
+## Example
+
+An example of writing 4 Patterns in a single command with `Bits4` and playing them as STM with `ConfigPattern` + `ChangePatternBank`.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

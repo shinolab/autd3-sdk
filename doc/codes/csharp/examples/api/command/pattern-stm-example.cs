@@ -44,7 +44,7 @@ builder.Push(new PatternStm(
     new PatternStmOption
     {
         Bank = PatternBank.B0,
-        Mode = PatternStmMode.PhaseIntensityFull,
+        PhaseDepth = PhaseDepth.Bits8,
         LoopBehavior = LoopBehavior.Infinite,
         TransitionMode = TransitionMode.Immediate,
     }

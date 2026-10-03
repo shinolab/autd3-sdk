@@ -114,8 +114,8 @@ name = "api_command_lowlevel_mod_bank"
 path = "examples/api/command/lowlevel/mod-bank.rs"
 
 [[example]]
-name = "api_command_lowlevel_pattern_compressed_example"
-path = "examples/api/command/lowlevel/pattern-compressed-example.rs"
+name = "api_command_lowlevel_pattern_phase_example"
+path = "examples/api/command/lowlevel/pattern-phase-example.rs"
 
 [[example]]
 name = "api_command_modulation_example"

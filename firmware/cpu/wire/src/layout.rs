@@ -1,6 +1,6 @@
 use crate::frame::PAYLOAD_BYTES;
 use crate::params::{EMISSION_MAX_INDICES, NUM_TRANSDUCERS};
-use crate::payload::{UpdateChunkPayload, WritePatternCompressedPayload};
+use crate::payload::UpdateChunkPayload;
 
 pub use crate::params::{EMISSION_SLOT_WORDS, FOCUS_WORDS, MOD_BUFFER_SAMPLES, PWE_TABLE_SIZE};
 
@@ -14,20 +14,7 @@ pub const GPIO_OUT_NUM: usize = 4;
 
 pub const PATTERN_RAW_DATA_LEN: usize = 2 * NUM_TRANSDUCERS;
 pub const PATTERN_RAW_MAX_COUNT: usize = 2;
-pub const PATTERN_COMPRESSED_GROUP_BYTES: usize = 2 * NUM_TRANSDUCERS;
-pub const PATTERN_COMPRESSED_MAX_GROUPS: usize = 2;
 const UPDATE_CHUNK_ALIGN: usize = 32;
 pub const UPDATE_CHUNK_MAX_DATA_LEN: usize =
     (PAYLOAD_BYTES - core::mem::size_of::<UpdateChunkPayload>()) / UPDATE_CHUNK_ALIGN
         * UPDATE_CHUNK_ALIGN;
-
-const _: () = assert!(
-    core::mem::size_of::<WritePatternCompressedPayload>()
-        + PATTERN_COMPRESSED_MAX_GROUPS * PATTERN_COMPRESSED_GROUP_BYTES
-        <= PAYLOAD_BYTES
-);
-const _: () = assert!(
-    core::mem::size_of::<WritePatternCompressedPayload>()
-        + (PATTERN_COMPRESSED_MAX_GROUPS + 1) * PATTERN_COMPRESSED_GROUP_BYTES
-        > PAYLOAD_BYTES
-);

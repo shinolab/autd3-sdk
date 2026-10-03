@@ -14,10 +14,9 @@ use autd3_rs::commands::{
     BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
     ConfigModulation, ConfigPattern, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
     FociStm as CoreFociStm, FociStmOption, ForceFan, GpioOut, Modulation, Nop, PWE_TABLE_SIZE,
-    Pattern, PatternCompression, PatternIntensity, PatternStm, PatternStmMode, PatternStmOption,
-    SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig,
-    StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
-    WritePatternCompressed, circle, line,
+    Pattern, PatternIntensity, PatternStm, PatternStmOption, PhaseDepth, SetGpioOut, SetOutputMask,
+    SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig, StmIntensity, Synchronize,
+    WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, WritePatternPhase, circle, line,
 };
 use autd3_rs::rt::Executor;
 use autd3_rs::units::Hz;
@@ -120,11 +119,10 @@ fn rep_to_loop_behavior(rep: u16) -> LoopBehavior {
     }
 }
 
-fn to_pattern_stm_mode(mode: u8) -> Option<PatternStmMode> {
-    match mode {
-        0 => Some(PatternStmMode::PhaseIntensityFull),
-        1 => Some(PatternStmMode::PhaseFull),
-        2 => Some(PatternStmMode::PhaseHalf),
+fn to_phase_depth(bits: u8) -> Option<PhaseDepth> {
+    match bits {
+        8 => Some(PhaseDepth::Bits8),
+        4 => Some(PhaseDepth::Bits4),
         _ => None,
     }
 }
@@ -489,10 +487,10 @@ pub enum Pending {
         index_offset: usize,
         points: FociPoints,
     },
-    WritePatternCompressed {
+    WritePatternPhase {
         bank: PatternBank,
-        index: u32,
-        format: PatternCompression,
+        index: u16,
+        depth: PhaseDepth,
         intensity: Intensity,
         patterns: Vec<Vec<Vec<Phase>>>,
     },
@@ -561,7 +559,7 @@ pub enum Pending {
         phases: Vec<Vec<Vec<Phase>>>,
         intensities: OwnedStmIntensity,
         bank: PatternBank,
-        mode: PatternStmMode,
+        phase_depth: PhaseDepth,
         loop_behavior: LoopBehavior,
         transition_mode: TransitionMode,
     },
@@ -600,14 +598,6 @@ unsafe fn owned_stm_intensity(
     } else {
         OwnedStmIntensity::PerIndex(buffers)
     })
-}
-
-fn to_pattern_compression(v: u8) -> Option<PatternCompression> {
-    match v {
-        1 => Some(PatternCompression::PhaseFull),
-        2 => Some(PatternCompression::PhaseHalf),
-        _ => None,
-    }
 }
 
 #[unsafe(no_mangle)]
@@ -757,46 +747,39 @@ pub unsafe extern "C" fn autd3_op_write_foci_buffer(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_op_write_pattern_compressed(
+pub unsafe extern "C" fn autd3_op_write_pattern_phase(
     bank: u8,
-    index: u32,
-    format: u8,
+    index: u16,
+    depth: u8,
     intensity: u8,
     patterns: *const *const PhaseBuffer,
     num_patterns: usize,
 ) -> *mut Pending {
-    if num_patterns == 0 || num_patterns > PatternCompression::PhaseHalf.per_frame() {
-        return std::ptr::null_mut();
-    }
-    let (Some(bank), Some(format)) = (to_pattern_bank(bank), to_pattern_compression(format)) else {
+    let (Some(bank), Some(depth)) = (to_pattern_bank(bank), to_phase_depth(depth)) else {
         return std::ptr::null_mut();
     };
-
-    let Some(slice) = (unsafe { slice_ref(patterns, num_patterns) }) else {
+    let Some(patterns) = (unsafe { slice_ref(patterns, num_patterns) }).and_then(|ptrs| {
+        ptrs.iter()
+            .map(|&p| unsafe { handle_ref(p) }.map(|p| p.0.clone()))
+            .collect::<Option<Vec<_>>>()
+    }) else {
         return std::ptr::null_mut();
     };
-    let mut patterns = Vec::with_capacity(slice.len());
-    for p in slice {
-        let Some(pattern) = (unsafe { handle_ref(*p) }) else {
-            return std::ptr::null_mut();
-        };
-        patterns.push(pattern.0.clone());
-    }
-    into_handle(Pending::WritePatternCompressed {
+    into_handle(Pending::WritePatternPhase {
         bank,
         index,
-        format,
+        depth,
         intensity: Intensity(intensity),
         patterns,
     })
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_compression_per_frame(format: u8, out: *mut usize) -> i32 {
-    let Some(format) = to_pattern_compression(format) else {
+pub unsafe extern "C" fn autd3_phase_depth_max_count(depth: u8, out: *mut usize) -> i32 {
+    let Some(depth) = to_phase_depth(depth) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    unsafe { write_out(out, format.per_frame()) }
+    unsafe { write_out(out, depth.max_count()) }
 }
 
 #[unsafe(no_mangle)]
@@ -1174,7 +1157,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     num_intensities: usize,
     uniform_intensity: u8,
     bank: u8,
-    mode: u8,
+    phase_depth: u8,
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
@@ -1185,9 +1168,9 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     }) else {
         return std::ptr::null_mut();
     };
-    let (Some(bank), Some(mode), Some(transition_mode)) = (
+    let (Some(bank), Some(phase_depth), Some(transition_mode)) = (
         to_pattern_bank(bank),
-        to_pattern_stm_mode(mode),
+        to_phase_depth(phase_depth),
         to_transition_mode(transition_mode, transition_value, transition_margin_ns),
     ) else {
         return std::ptr::null_mut();
@@ -1215,7 +1198,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
         phases,
         intensities,
         bank,
-        mode,
+        phase_depth,
         loop_behavior: rep_to_loop_behavior(loop_rep),
         transition_mode,
     })
@@ -1355,18 +1338,18 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             index_offset,
             points,
         } => points.boxed_write_foci(*bank, *index_offset),
-        Pending::WritePatternCompressed {
+        Pending::WritePatternPhase {
             bank,
             index,
-            format,
+            depth,
             intensity,
             patterns,
-        } => WritePatternCompressed {
+        } => WritePatternPhase {
             bank: *bank,
-            index: usize::try_from(*index).unwrap_or(usize::MAX),
-            format: *format,
+            index: usize::from(*index),
+            depth: *depth,
             intensity: *intensity,
-            patterns: std::array::from_fn(|i| patterns.get(i).map(Vec::as_slice)),
+            patterns,
         }
         .boxed(),
         Pending::FociStm {
@@ -1390,7 +1373,7 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             phases,
             intensities,
             bank,
-            mode,
+            phase_depth,
             loop_behavior,
             transition_mode,
         } => PatternStm::new(
@@ -1399,7 +1382,7 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             intensities.as_ref(),
             PatternStmOption {
                 bank: *bank,
-                mode: *mode,
+                phase_depth: *phase_depth,
                 loop_behavior: *loop_behavior,
                 transition_mode: *transition_mode,
             },
@@ -1550,19 +1533,19 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
             } => {
                 points.push_write_foci_into(*bank, *index_offset, &mut core);
             }
-            Pending::WritePatternCompressed {
+            Pending::WritePatternPhase {
                 bank,
                 index,
-                format,
+                depth,
                 intensity,
                 patterns,
             } => {
-                core.push(WritePatternCompressed {
+                core.push(WritePatternPhase {
                     bank: *bank,
-                    index: usize::try_from(*index).unwrap_or(usize::MAX),
-                    format: *format,
+                    index: usize::from(*index),
+                    depth: *depth,
                     intensity: *intensity,
-                    patterns: std::array::from_fn(|i| patterns.get(i).map(Vec::as_slice)),
+                    patterns,
                 });
             }
             Pending::ConfigPattern {
@@ -1701,7 +1684,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 phases,
                 intensities,
                 bank,
-                mode,
+                phase_depth,
                 loop_behavior,
                 transition_mode,
             } => {
@@ -1711,7 +1694,7 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                     intensities.as_ref(),
                     PatternStmOption {
                         bank: *bank,
-                        mode: *mode,
+                        phase_depth: *phase_depth,
                         loop_behavior: *loop_behavior,
                         transition_mode: *transition_mode,
                     },
@@ -2240,8 +2223,8 @@ mod tests {
         assert!(to_pattern_bank(2).is_none());
         assert!(to_modulation_bank(2).is_none());
         assert!(to_gpio_in(4).is_none());
-        assert!(to_pattern_stm_mode(3).is_none());
-        assert!(to_pattern_compression(0).is_none());
+        assert!(to_phase_depth(0).is_none());
+        assert!(to_phase_depth(2).is_none());
         assert!(to_transition_mode(0x03, 0, 0).is_none());
         assert!(to_gpio_out(&Autd3GpioOut { kind: 14, value: 0 }).is_none());
     }

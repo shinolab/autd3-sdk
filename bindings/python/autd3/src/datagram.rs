@@ -9,11 +9,9 @@ use autd3_rs::commands::{
     ChangeModulationBank as CoreChangeModulationBank, ChangePatternBank as CoreChangePatternBank,
     Command as CoreCommand, ConfigFociStm as CoreConfigFociStm,
     ConfigModulation as CoreConfigModulation, ConfigPattern as CoreConfigPattern,
-    Modulation as CoreModulation, Pattern as CorePattern,
-    PatternCompression as CorePatternCompression, PatternIntensity as CorePatternIntensity,
-    WriteModulationBuffer as CoreWriteModulationBuffer,
-    WritePatternBuffer as CoreWritePatternBuffer,
-    WritePatternCompressed as CoreWritePatternCompressed,
+    Modulation as CoreModulation, Pattern as CorePattern, PatternIntensity as CorePatternIntensity,
+    PhaseDepth as CorePhaseDepth, WriteModulationBuffer as CoreWriteModulationBuffer,
+    WritePatternBuffer as CoreWritePatternBuffer, WritePatternPhase as CoreWritePatternPhase,
 };
 use autd3_rs::value::{
     Intensity, LoopBehavior as CoreLoopBehavior, ModulationBank as CoreModulationBank,
@@ -181,10 +179,10 @@ pub(crate) enum Pending {
         index_offset: usize,
         points: crate::stm::FociPoints,
     },
-    WritePatternCompressed {
+    WritePatternPhase {
         bank: CorePatternBank,
-        index: u32,
-        format: CorePatternCompression,
+        index: u16,
+        depth: CorePhaseDepth,
         intensity: Intensity,
         patterns: Vec<Vec<Vec<Phase>>>,
     },
@@ -349,19 +347,19 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
         } => {
             points.push_write_foci(*bank, *index_offset, builder);
         }
-        Pending::WritePatternCompressed {
+        Pending::WritePatternPhase {
             bank,
             index,
-            format,
+            depth,
             intensity,
             patterns,
         } => {
-            builder.push(CoreWritePatternCompressed {
+            builder.push(CoreWritePatternPhase {
                 bank: *bank,
-                index: usize::try_from(*index).unwrap_or(usize::MAX),
-                format: *format,
+                index: usize::from(*index),
+                depth: *depth,
                 intensity: *intensity,
-                patterns: std::array::from_fn(|i| patterns.get(i).map(Vec::as_slice)),
+                patterns,
             });
         }
         Pending::FociStm {
@@ -529,12 +527,12 @@ impl DatagramBuilder {
             });
             return Ok(());
         }
-        if let Ok(op) = obj.cast::<ops::WritePatternCompressed>() {
+        if let Ok(op) = obj.cast::<ops::WritePatternPhase>() {
             let op = op.borrow();
-            self.pending.push(Pending::WritePatternCompressed {
+            self.pending.push(Pending::WritePatternPhase {
                 bank: op.bank,
                 index: op.index,
-                format: op.format,
+                depth: op.depth,
                 intensity: op.intensity,
                 patterns: op.patterns.clone(),
             });

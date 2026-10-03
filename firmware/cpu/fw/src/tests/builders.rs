@@ -1,6 +1,6 @@
 use core::mem::offset_of;
 
-use autd3_cpu_wire::payload::{EmissionType, PatternFormat};
+use autd3_cpu_wire::payload::{EmissionType, PhaseDepth};
 use autd3_cpu_wire::{ModulationBank, PatternBank};
 use zerocopy::FromZeros;
 use zerocopy::little_endian::{U16, U32, U64};
@@ -19,8 +19,8 @@ use crate::cmd::silencer::SilencerPayload;
 use crate::cmd::write_foci::WriteFociPayload;
 use crate::cmd::write_mod::WriteModPayload;
 use crate::cmd::write_mod_fused::WriteModulationFusedPayload;
-use crate::cmd::write_pattern_compressed::WritePatternCompressedPayload;
 use crate::cmd::write_pattern_fused::WritePatternFusedPayload;
+use crate::cmd::write_pattern_phase::WritePatternPhasePayload;
 use crate::cmd::write_pattern_raw::WritePatternRawPayload;
 use crate::fpga::{REP_INFINITE, TransitionMode};
 use crate::params::NUM_BANKS;
@@ -117,41 +117,25 @@ pub(crate) fn raw_words_to_soa(words: &[u16]) -> std::vec::Vec<u16> {
         .collect()
 }
 
-pub(crate) fn write_pattern_compressed(
+pub(crate) fn write_pattern_phase(
     seq: u8,
     bank: u8,
-    offset_words: u32,
-    format: u8,
-    count: u8,
-    words: &[u16],
-) -> Frame {
-    write_pattern_compressed_with_intensity(seq, bank, offset_words, format, count, 0xFF, words)
-}
-
-pub(crate) fn write_pattern_compressed_with_intensity(
-    seq: u8,
-    bank: u8,
-    offset_words: u32,
-    format: u8,
+    index: u16,
+    depth: u8,
     count: u8,
     intensity: u8,
-    words: &[u16],
+    data: &[u8],
 ) -> Frame {
-    let header = WritePatternCompressedPayload {
+    let header = WritePatternPhasePayload {
         bank: PatternBank::B0,
-        format: PatternFormat::PhaseFull,
+        depth: PhaseDepth::Bits8,
         count,
         intensity,
-        offset: U32::new(offset_words),
+        index: U16::new(index),
     };
-    let mut f = Frame::from_parts(
-        seq,
-        Cmd::WritePatternCompressed,
-        &header,
-        &words_to_bytes(words),
-    );
-    f.set_payload_byte(offset_of!(WritePatternCompressedPayload, bank), bank);
-    f.set_payload_byte(offset_of!(WritePatternCompressedPayload, format), format);
+    let mut f = Frame::from_parts(seq, Cmd::WritePatternPhase, &header, data);
+    f.set_payload_byte(offset_of!(WritePatternPhasePayload, bank), bank);
+    f.set_payload_byte(offset_of!(WritePatternPhasePayload, depth), depth);
     f
 }
 

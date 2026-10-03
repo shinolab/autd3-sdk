@@ -1,4 +1,4 @@
-from autd3.commands import ChangePatternBank, ConfigPattern, PatternCompression, WritePatternBuffer, WritePatternCompressed
+from autd3.commands import ChangePatternBank, ConfigPattern, PhaseDepth, WritePatternBuffer, WritePatternPhase
 from autd3.geometry import Autd3, Geometry
 from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 
@@ -41,13 +41,13 @@ p2 = geometry.phase_buffer()
 p3 = geometry.phase_buffer()
 patterns = [p0, p1, p2, p3]
 index = 0
-format = PatternCompression.PhaseHalf
+depth = PhaseDepth.Bits4
 intensity = Intensity.MAX
 # ANCHOR: compressed
-WritePatternCompressed(
+WritePatternPhase(
     bank=bank,
     index=index,
-    format=format,
+    depth=depth,
     intensity=intensity,
     patterns=patterns,
 )

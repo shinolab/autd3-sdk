@@ -16,7 +16,7 @@ sidebar:
 
 Foci STM 用の焦点列を書く [WriteFociBuffer](/autd3-sdk/api/command/lowlevel/write-foci-buffer/) とその設定 [ConfigFociStm](/autd3-sdk/api/command/lowlevel/config-foci-stm/) もここに含む.
 
-Pattern バッファへの書き込みには, 位相のみを圧縮して送り 1 フレームに複数 Pattern を書き込む [WritePatternCompressed](/autd3-sdk/api/command/lowlevel/write-pattern-compressed/) もある.
-強度は最大で固定されるが, 高頻度更新で送信量を削減したい場合に有効.
+Pattern バッファへの書き込みには, 位相のみを送り 1 フレームに複数 Pattern を書き込む [WritePatternPhase](/autd3-sdk/api/command/lowlevel/write-pattern-phase/) もある.
+強度は全振動子・全 Pattern で共通の 1 値になるが, 高頻度更新で送信量を削減したい場合に有効.
 
 バンク切り替えの考え方は [バンクの切り替えチュートリアル](/autd3-sdk/getting-started/tutorial/bank/) を, ループや遷移については [ループと遷移チュートリアル](/autd3-sdk/getting-started/tutorial/loop/) を参照.

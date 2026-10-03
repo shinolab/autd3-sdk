@@ -41,7 +41,7 @@ internal static class Sample
         // ANCHOR_END: change
     }
 
-    internal static void RunCompressed()
+    internal static void RunPhase()
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
@@ -51,14 +51,14 @@ internal static class Sample
         var p2 = geometry.PhaseBuffer();
         var p3 = geometry.PhaseBuffer();
         var patterns = new[] { p0, p1, p2, p3 };
-        var index = 0u;
-        var format = PatternCompression.PhaseHalf;
+        ushort index = 0;
+        var depth = PhaseDepth.Bits4;
         var intensity = Intensity.Max;
         // ANCHOR: compressed
-        new WritePatternCompressed(
+        new WritePatternPhase(
             bank: bank,
             index: index,
-            format: format,
+            depth: depth,
             intensity: intensity,
             patterns: patterns
         );

@@ -4,7 +4,7 @@ import threading
 import numpy as np
 
 from autd3 import Client, ClientConfig, Driver, UdpEmulator
-from autd3.commands import ChangePatternBank, ConfigPattern, PatternCompression, StmConfig, WritePatternCompressed
+from autd3.commands import ChangePatternBank, ConfigPattern, PhaseDepth, StmConfig, WritePatternPhase
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
@@ -34,10 +34,10 @@ async def main() -> None:
 
         builder = client.datagram_builder()
         builder.push(
-            WritePatternCompressed(
+            WritePatternPhase(
                 bank=bank,
                 index=0,
-                format=PatternCompression.PhaseHalf,
+                depth=PhaseDepth.Bits4,
                 intensity=Intensity.MAX,
                 patterns=patterns,
             )

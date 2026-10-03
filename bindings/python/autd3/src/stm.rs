@@ -3,9 +3,8 @@ use core::time::Duration;
 use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
 use autd3_rs::commands::{
     FociStm as CoreFociStm, FociStmOption as CoreFociStmOption,
-    PatternStmMode as CorePatternStmMode, PatternStmOption as CorePatternStmOption,
-    StmConfig as CoreStmConfig, StmIntensity as CoreStmIntensity, circle as core_circle,
-    line as core_line,
+    PatternStmOption as CorePatternStmOption, StmConfig as CoreStmConfig,
+    StmIntensity as CoreStmIntensity, circle as core_circle, line as core_line,
 };
 use autd3_rs::value::{
     ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity, Nearest,
@@ -229,31 +228,6 @@ impl FociStmOption {
     }
 }
 
-#[pyclass(name = "PatternStmMode", module = "autd3.commands", from_py_object)]
-#[derive(Clone, Copy)]
-pub struct PatternStmMode(pub(crate) CorePatternStmMode);
-
-#[pymethods]
-impl PatternStmMode {
-    #[classattr]
-    #[pyo3(name = "PhaseIntensityFull")]
-    fn phase_intensity_full() -> Self {
-        Self(CorePatternStmMode::PhaseIntensityFull)
-    }
-
-    #[classattr]
-    #[pyo3(name = "PhaseFull")]
-    fn phase_full() -> Self {
-        Self(CorePatternStmMode::PhaseFull)
-    }
-
-    #[classattr]
-    #[pyo3(name = "PhaseHalf")]
-    fn phase_half() -> Self {
-        Self(CorePatternStmMode::PhaseHalf)
-    }
-}
-
 #[pyclass(
     name = "PatternStmOption",
     module = "autd3.commands",
@@ -266,10 +240,10 @@ pub struct PatternStmOption {
 #[pymethods]
 impl PatternStmOption {
     #[new]
-    #[pyo3(signature = (bank = None, mode = None, loop_behavior = None, transition_mode = None))]
+    #[pyo3(signature = (bank = None, phase_depth = None, loop_behavior = None, transition_mode = None))]
     fn new(
         bank: Option<ops::PatternBank>,
-        mode: Option<PatternStmMode>,
+        phase_depth: Option<ops::PhaseDepth>,
         loop_behavior: Option<ops::LoopBehavior>,
         transition_mode: Option<ops::TransitionMode>,
     ) -> Self {
@@ -277,8 +251,8 @@ impl PatternStmOption {
         if let Some(b) = bank {
             inner.bank = b.0;
         }
-        if let Some(m) = mode {
-            inner.mode = m.0;
+        if let Some(d) = phase_depth {
+            inner.phase_depth = d.0;
         }
         if let Some(l) = loop_behavior {
             inner.loop_behavior = l.0;
@@ -295,8 +269,8 @@ impl PatternStmOption {
     }
 
     #[getter]
-    fn mode(&self) -> PatternStmMode {
-        PatternStmMode(self.inner.mode)
+    fn phase_depth(&self) -> ops::PhaseDepth {
+        ops::PhaseDepth(self.inner.phase_depth)
     }
 
     #[getter]
@@ -548,7 +522,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ControlPoint>()?;
     m.add_class::<ControlPoints>()?;
     m.add_class::<FociStmOption>()?;
-    m.add_class::<PatternStmMode>()?;
     m.add_class::<PatternStmOption>()?;
     m.add_class::<FociStm>()?;
     m.add_class::<WriteFociBuffer>()?;

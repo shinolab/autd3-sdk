@@ -54,10 +54,10 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void PatternCompressionPerFrame()
+        public void PhaseDepthMaxCount()
         {
-            Assert.Equal(4, PatternCompression.PhaseFull.PerFrame());
-            Assert.Equal(8, PatternCompression.PhaseHalf.PerFrame());
+            Assert.Equal(5, PhaseDepth.Bits8.MaxCount());
+            Assert.Equal(11, PhaseDepth.Bits4.MaxCount());
         }
 
         [Fact]

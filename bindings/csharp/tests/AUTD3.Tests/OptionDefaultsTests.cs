@@ -43,7 +43,7 @@ namespace AUTD3.Tests
 
             var pattern = new PatternStmOption();
             Assert.Equal(PatternBank.B0, pattern.Bank);
-            Assert.Equal(PatternStmMode.PhaseIntensityFull, pattern.Mode);
+            Assert.Equal(PhaseDepth.Bits8, pattern.PhaseDepth);
             Assert.Equal(LoopBehavior.Infinite, pattern.LoopBehavior);
             Assert.Equal(TransitionMode.Immediate, pattern.TransitionMode);
         }

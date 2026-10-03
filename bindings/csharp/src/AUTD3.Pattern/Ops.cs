@@ -9,42 +9,37 @@ namespace AUTD3
         B1 = 1,
     }
 
-    public enum PatternCompression : byte
+    public enum PhaseDepth : byte
     {
-        PhaseFull = 1,
-        PhaseHalf = 2,
+        Bits8 = 8,
+        Bits4 = 4,
     }
 
-    public static class PatternCompressionExt
+    public static class PhaseDepthExt
     {
-        public static int PerFrame(this PatternCompression format)
+        public static int MaxCount(this PhaseDepth depth)
         {
-            if (NativePattern.autd3_pattern_compression_per_frame((byte)format, out var perFrame) != 0)
+            if (NativePattern.autd3_phase_depth_max_count((byte)depth, out var maxCount) != 0)
             {
-                throw new Autd3Exception($"unknown pattern compression format {format}");
+                throw new Autd3Exception($"unknown phase depth {depth}");
             }
-            return (int)perFrame;
+            return (int)maxCount;
         }
     }
 
-    public sealed class WritePatternCompressed : ICommand
+    public sealed class WritePatternPhase : ICommand
     {
         private readonly PatternBank _bank;
-        private readonly uint _index;
-        private readonly PatternCompression _format;
+        private readonly ushort _index;
+        private readonly PhaseDepth _depth;
         private readonly Intensity _intensity;
         private readonly PhaseBuffer[] _patterns;
 
-        public WritePatternCompressed(PatternBank bank, uint index, PatternCompression format, Intensity intensity, PhaseBuffer[] patterns)
+        public WritePatternPhase(PatternBank bank, ushort index, PhaseDepth depth, Intensity intensity, PhaseBuffer[] patterns)
         {
-            var max = PatternCompression.PhaseHalf.PerFrame();
-            if (patterns.Length == 0 || patterns.Length > max)
-            {
-                throw new Autd3Exception($"WritePatternCompressed expects 1..={max} pattern buffers");
-            }
             _bank = bank;
             _index = index;
-            _format = format;
+            _depth = depth;
             _intensity = intensity;
             _patterns = patterns;
         }
@@ -57,7 +52,7 @@ namespace AUTD3
                 handles[i] = _patterns[i].Handle;
             }
             using var lease = new HandleArray(handles);
-            return NativePattern.autd3_op_write_pattern_compressed((byte)_bank, _index, (byte)_format, _intensity.Value, lease.Pointers, (UIntPtr)lease.Pointers.Length);
+            return NativePattern.autd3_op_write_pattern_phase((byte)_bank, _index, (byte)_depth, _intensity.Value, lease.Pointers, (UIntPtr)lease.Pointers.Length);
         }
     }
 

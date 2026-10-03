@@ -1,4 +1,4 @@
-use autd3_rs::commands::{PatternStm, PatternStmMode, PatternStmOption};
+use autd3_rs::commands::{PatternStm, PatternStmOption, PhaseDepth};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
         Intensity::MAX,
         PatternStmOption {
             bank: PatternBank::B0,
-            mode: PatternStmMode::PhaseIntensityFull,
+            phase_depth: PhaseDepth::Bits8,
             loop_behavior: LoopBehavior::Infinite,
             transition_mode: TransitionMode::Immediate,
             ..Default::default()

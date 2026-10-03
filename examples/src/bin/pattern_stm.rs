@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 
-use autd3_rs::commands::{PatternStm, PatternStmMode, PatternStmOption, SetSilencer};
+use autd3_rs::commands::{PatternStm, PatternStmOption, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
@@ -49,10 +49,7 @@ async fn main() -> Result<()> {
         1.0 * Hz,
         &patterns,
         Intensity::MAX,
-        PatternStmOption {
-            mode: PatternStmMode::PhaseFull,
-            ..Default::default()
-        },
+        PatternStmOption::default(),
     ));
     let datagrams = builder.build()?;
     let mut pending = Vec::with_capacity(datagrams.len());

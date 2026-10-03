@@ -48,7 +48,6 @@ async def main() -> None:
                 1.0 * Hz,
                 patterns,
                 autd3.value.Intensity.MAX,
-                autd3.commands.PatternStmOption(mode=autd3.commands.PatternStmMode.PhaseFull),
             )
         )
         for frame in builder.build():

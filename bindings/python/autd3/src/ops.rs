@@ -3,7 +3,7 @@ use core::time::Duration;
 
 use autd3_python_capsule::{capsule_of, modulation_from_capsule};
 use autd3_rs::Velocity;
-use autd3_rs::commands::PatternCompression as CorePatternCompression;
+use autd3_rs::commands::PhaseDepth as CorePhaseDepth;
 use autd3_rs::value::{
     GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
     ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase,
@@ -255,58 +255,52 @@ impl WritePatternBuffer {
     }
 }
 
-#[pyclass(name = "PatternCompression", module = "autd3.commands", from_py_object)]
+#[pyclass(name = "PhaseDepth", module = "autd3.commands", from_py_object)]
 #[derive(Clone, Copy)]
-pub struct PatternCompression(pub(crate) CorePatternCompression);
+pub struct PhaseDepth(pub(crate) CorePhaseDepth);
 
 #[pymethods]
-impl PatternCompression {
+impl PhaseDepth {
     #[classattr]
-    #[pyo3(name = "PhaseFull")]
-    fn phase_full() -> Self {
-        Self(CorePatternCompression::PhaseFull)
+    #[pyo3(name = "Bits8")]
+    fn bits8() -> Self {
+        Self(CorePhaseDepth::Bits8)
     }
 
     #[classattr]
-    #[pyo3(name = "PhaseHalf")]
-    fn phase_half() -> Self {
-        Self(CorePatternCompression::PhaseHalf)
+    #[pyo3(name = "Bits4")]
+    fn bits4() -> Self {
+        Self(CorePhaseDepth::Bits4)
     }
 
-    fn per_frame(&self) -> usize {
-        self.0.per_frame()
+    fn max_count(&self) -> usize {
+        self.0.max_count()
     }
 
     fn __repr__(&self) -> String {
-        format!("PatternCompression.{:?}", self.0)
+        format!("PhaseDepth.{:?}", self.0)
     }
 }
 
-#[pyclass(name = "WritePatternCompressed", module = "autd3.commands")]
-pub struct WritePatternCompressed {
+#[pyclass(name = "WritePatternPhase", module = "autd3.commands")]
+pub struct WritePatternPhase {
     pub(crate) bank: CorePatternBank,
-    pub(crate) index: u32,
-    pub(crate) format: CorePatternCompression,
+    pub(crate) index: u16,
+    pub(crate) depth: CorePhaseDepth,
     pub(crate) intensity: Intensity,
     pub(crate) patterns: Vec<Vec<Vec<Phase>>>,
 }
 
 #[pymethods]
-impl WritePatternCompressed {
+impl WritePatternPhase {
     #[new]
     fn new(
         bank: PatternBank,
-        index: u32,
-        format: PatternCompression,
+        index: u16,
+        depth: PhaseDepth,
         intensity: u8,
         patterns: Vec<Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
-        let max = CorePatternCompression::PhaseHalf.per_frame();
-        if patterns.is_empty() || patterns.len() > max {
-            return Err(PyValueError::new_err(format!(
-                "WritePatternCompressed expects 1..={max} phase buffers"
-            )));
-        }
         let patterns = patterns
             .iter()
             .map(crate::datagram::extract_phases)
@@ -314,7 +308,7 @@ impl WritePatternCompressed {
         Ok(Self {
             bank: bank.0,
             index,
-            format: format.0,
+            depth: depth.0,
             intensity: Intensity(intensity),
             patterns,
         })

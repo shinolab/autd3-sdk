@@ -422,7 +422,7 @@ impl Cpu {
             Cmd::ReadFirmwareInfo => return Ok(Self::read_firmware_info(port)),
             Cmd::WriteFociBuffer => cmd::write_foci::handle(port, payload),
             Cmd::WritePatternRaw => cmd::write_pattern_raw::handle(port, payload),
-            Cmd::WritePatternCompressed => cmd::write_pattern_compressed::handle(port, payload),
+            Cmd::WritePatternPhase => cmd::write_pattern_phase::handle(port, payload),
             Cmd::WritePatternFused => self.write_pattern_fused(port, payload),
             Cmd::WriteModulationBuffer => cmd::write_mod::handle(port, payload),
             Cmd::WriteModulationFused => self.write_mod_fused(port, payload),

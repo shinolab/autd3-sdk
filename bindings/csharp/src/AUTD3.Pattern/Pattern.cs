@@ -293,7 +293,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_write_pattern_buffer(byte bank, ushort index, PhaseBufferHandle phases, IntPtr intensities, byte uniformIntensity);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_write_pattern_compressed(byte bank, uint index, byte format, byte intensity, IntPtr[] patterns, UIntPtr numPatterns);
+        internal static extern IntPtr autd3_op_write_pattern_phase(byte bank, ushort index, byte depth, byte intensity, IntPtr[] patterns, UIntPtr numPatterns);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_config_pattern(byte bank, IntPtr samplingConfig, uint size, ushort rep);
@@ -305,7 +305,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_change_pattern_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_compression_per_frame(byte format, out UIntPtr @out);
+        internal static extern int autd3_phase_depth_max_count(byte depth, out UIntPtr @out);
     }
 
     internal sealed class PhaseBufferHandle : Autd3SafeHandle

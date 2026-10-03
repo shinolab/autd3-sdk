@@ -28,7 +28,7 @@ internal static class Sample
         }
         var freq = 1.0f * Hz;
         var bank = PatternBank.B0;
-        var mode = PatternStmMode.PhaseIntensityFull;
+        var phaseDepth = PhaseDepth.Bits8;
         var loopBehavior = LoopBehavior.Infinite;
         var transitionMode = TransitionMode.Immediate;
         var option =
@@ -36,7 +36,7 @@ internal static class Sample
             new PatternStmOption
             {
                 Bank = bank,
-                Mode = mode,
+                PhaseDepth = phaseDepth,
                 LoopBehavior = loopBehavior,
                 TransitionMode = transitionMode,
             }
@@ -47,13 +47,15 @@ internal static class Sample
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
-        for (var index = 0; index < patterns.Length; index++)
+        var maxCount = option.PhaseDepth.MaxCount();
+        for (var index = 0; index < patterns.Length; index += maxCount)
         {
-            new WritePatternBuffer(
+            new WritePatternPhase(
                 bank: option.Bank,
                 index: (ushort)index,
-                phases: patterns[index],
-                intensities: intensities
+                depth: option.PhaseDepth,
+                intensity: intensities,
+                patterns: patterns[index..Math.Min(index + maxCount, patterns.Length)]
             );
         }
         new ConfigPattern(

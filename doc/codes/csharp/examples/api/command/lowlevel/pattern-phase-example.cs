@@ -5,7 +5,7 @@ using AUTD3;
 using static AUTD3.Units;
 
 // HIDE
-namespace DocSamples.ApiCommandLowlevelPatternCompressedExample;
+namespace DocSamples.ApiCommandLowlevelPatternPhaseExample;
 
 internal static class Sample
 {
@@ -36,10 +36,10 @@ for (var i = 0; i < offsets.Length; i++)
 var bank = PatternBank.B0;
 
 var builder = client.DatagramBuilder();
-builder.Push(new WritePatternCompressed(
+builder.Push(new WritePatternPhase(
     bank: bank,
     index: 0,
-    format: PatternCompression.PhaseHalf,
+    depth: PhaseDepth.Bits4,
     intensity: Intensity.Max,
     patterns: patterns
 ));

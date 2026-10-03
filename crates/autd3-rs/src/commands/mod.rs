@@ -13,13 +13,12 @@ pub use write_modulation_buffer::WriteModulationBuffer;
 pub use operation::{
     ChangeModulationBank, ChangePatternBank, Clear, ConfigFociStm, ConfigModulation, ConfigPattern,
     Distribution, EmulateGpioIn, Encoded, FixedCompletionTime, FixedUpdateRate, ForceFan, GpioOut,
-    Nop, Operation, PWE_TABLE_SIZE, PatternCompression, PatternIntensity, SetGpioOut,
-    SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, SilencerConfig,
-    Synchronize, WritePatternBuffer, WritePatternCompressed,
+    Nop, Operation, PWE_TABLE_SIZE, PatternIntensity, PhaseDepth, SetGpioOut, SetOutputMask,
+    SetPhaseCorrection, SetPulseWidthTable, SetSilencer, SilencerConfig, Synchronize,
+    WritePatternBuffer, WritePatternPhase,
 };
 pub use stm::{
-    FociStm, FociStmOption, PatternStm, PatternStmMode, PatternStmOption, StmConfig, StmIntensity,
-    circle, line,
+    FociStm, FociStmOption, PatternStm, PatternStmOption, StmConfig, StmIntensity, circle, line,
 };
 
 use crate::datagram::DatagramBuilder;

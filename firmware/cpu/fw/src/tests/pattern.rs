@@ -11,12 +11,11 @@ use zerocopy::little_endian::U32;
 use crate::cmd::write_foci::WriteFociPayload;
 use crate::proto::{Cmd, EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, Error, MOD_BUFFER_SAMPLES};
 use crate::tests::builders::{
-    assert_fpga_unchanged, fpga_snapshot, write_foci_buffer, write_mod_buffer,
-    write_pattern_compressed, write_pattern_compressed_with_intensity, write_pattern_raw,
-    write_pattern_raw_multi,
+    assert_fpga_unchanged, fpga_snapshot, write_foci_buffer, write_mod_buffer, write_pattern_phase,
+    write_pattern_raw, write_pattern_raw_multi,
 };
 use crate::tests::mock::{Frame, Harness};
-use autd3_cpu_wire::payload::{PatternFormat, WriteModPayload};
+use autd3_cpu_wire::payload::{PhaseDepth, WriteModPayload};
 use autd3_cpu_wire::{PAYLOAD_BYTES, PatternBank};
 
 fn bad_bank() -> u8 {
@@ -236,245 +235,169 @@ fn write_foci_buffer_rejects_invalid_payloads() {
     assert_fpga_unchanged(&before, &h);
 }
 
-#[test]
-fn write_pattern_compressed_phase_full_decompresses_two_indices() {
-    let mut h = Harness::new();
+fn bits8_phase(g: usize, t: usize) -> u8 {
+    (t * 3 + g * 17) as u8
+}
 
-    let words: Vec<u16> = (0..NUM_TRANSDUCERS)
-        .map(|t| {
-            let t = t as u16;
-            let p0 = t & 0xFF;
-            let p1 = 0xFF - (t & 0xFF);
-            p0 | (p1 << 8)
+fn bits4_phase(g: usize, t: usize) -> u8 {
+    ((t + g) & 0x0F) as u8
+}
+
+fn pack_bits4(count: usize) -> Vec<u8> {
+    (0..count)
+        .flat_map(|g| {
+            (0..NUM_TRANSDUCERS.div_ceil(2)).map(move |i| {
+                let lo = bits4_phase(g, 2 * i);
+                let hi = if 2 * i + 1 < NUM_TRANSDUCERS {
+                    bits4_phase(g, 2 * i + 1)
+                } else {
+                    0
+                };
+                lo | (hi << 4)
+            })
         })
+        .collect()
+}
+
+#[test]
+fn write_pattern_phase_bits8_writes_consecutive_indices() {
+    let mut h = Harness::new();
+
+    let count = PhaseDepth::Bits8.max_count();
+    let data: Vec<u8> = (0..count)
+        .flat_map(|g| (0..NUM_TRANSDUCERS).map(move |t| bits8_phase(g, t)))
         .collect();
-    let slot = 5 * EMISSION_SLOT_WORDS;
-    h.deliver(&write_pattern_compressed(
+    h.deliver(&write_pattern_phase(
         0,
         1,
-        slot,
-        PatternFormat::PhaseFull as u8,
-        2,
-        &words,
-    ));
-    assert_eq!(h.status(), 0);
-
-    for t in 0..NUM_TRANSDUCERS {
-        let p0 = (t & 0xFF) as u16;
-        let p1 = 0xFF - (t & 0xFF) as u16;
-        assert_eq!(h.emission_word(1, slot as usize + t), 0xFF00 | p0);
-        assert_eq!(
-            h.emission_word(1, slot as usize + EMISSION_SLOT_WORDS as usize + t),
-            0xFF00 | p1
-        );
-    }
-}
-
-#[test]
-fn write_pattern_compressed_reads_the_second_group_of_words() {
-    let mut h = Harness::new();
-
-    let mut words = vec![0x2211_u16; NUM_TRANSDUCERS];
-    words.extend(vec![0x4433_u16; NUM_TRANSDUCERS]);
-    h.deliver(&write_pattern_compressed(
-        0,
-        0,
-        0,
-        PatternFormat::PhaseFull as u8,
-        4,
-        &words,
-    ));
-    assert_eq!(h.status(), 0);
-    let slot = EMISSION_SLOT_WORDS as usize;
-    assert_eq!(h.emission_word(0, 0), 0xFF11);
-    assert_eq!(h.emission_word(0, slot), 0xFF22);
-    assert_eq!(h.emission_word(0, 2 * slot), 0xFF33);
-    assert_eq!(h.emission_word(0, 3 * slot + NUM_TRANSDUCERS - 1), 0xFF44);
-
-    let mut half = vec![0x4321_u16; NUM_TRANSDUCERS];
-    half.extend(vec![0x8765_u16; NUM_TRANSDUCERS]);
-    h.deliver(&write_pattern_compressed(
-        1,
-        1,
-        0,
-        PatternFormat::PhaseHalf as u8,
-        8,
-        &half,
-    ));
-    assert_eq!(h.status(), 0);
-    let expected = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
-    for (g, &phase) in expected.iter().enumerate() {
-        assert_eq!(h.emission_word(1, g * slot), 0xFF00 | phase);
-    }
-}
-
-#[test]
-fn write_pattern_compressed_phase_full_partial_count_writes_single_slot() {
-    let mut h = Harness::new();
-
-    let words = vec![0x00AB_u16; NUM_TRANSDUCERS];
-    let slot = 2 * EMISSION_SLOT_WORDS;
-    h.deliver(&write_pattern_compressed(
-        0,
-        0,
-        slot,
-        PatternFormat::PhaseFull as u8,
-        1,
-        &words,
-    ));
-    assert_eq!(h.status(), 0);
-
-    assert_eq!(h.emission_word(0, slot as usize), 0xFF00 | 0xAB);
-    assert_eq!(
-        h.emission_word(0, slot as usize + EMISSION_SLOT_WORDS as usize),
-        0
-    );
-}
-
-#[test]
-fn write_pattern_compressed_phase_half_decompresses_four_indices() {
-    let mut h = Harness::new();
-
-    let words: Vec<u16> = (0..NUM_TRANSDUCERS)
-        .map(|t| {
-            let t = t as u16;
-            let n0 = t & 0x0F;
-            let n1 = (t + 1) & 0x0F;
-            let n2 = (t + 2) & 0x0F;
-            let n3 = (t + 3) & 0x0F;
-            n0 | (n1 << 4) | (n2 << 8) | (n3 << 12)
-        })
-        .collect();
-    let slot = 7 * EMISSION_SLOT_WORDS;
-    h.deliver(&write_pattern_compressed(
-        0,
-        0,
-        slot,
-        PatternFormat::PhaseHalf as u8,
-        4,
-        &words,
-    ));
-    assert_eq!(h.status(), 0);
-
-    for t in 0..NUM_TRANSDUCERS {
-        for g in 0..4usize {
-            let p4 = ((t + g) & 0x0F) as u16;
-            let expected = 0xFF00 | (p4 << 4) | p4;
-            assert_eq!(
-                h.emission_word(0, slot as usize + g * EMISSION_SLOT_WORDS as usize + t),
-                expected
-            );
-        }
-    }
-}
-
-#[test]
-fn write_pattern_compressed_fills_every_slot_with_the_header_intensity() {
-    let mut h = Harness::new();
-
-    let full = vec![0x3412_u16; NUM_TRANSDUCERS];
-    let half = vec![0x4321_u16; NUM_TRANSDUCERS];
-    let full_slot = 3 * EMISSION_SLOT_WORDS;
-    let half_slot = 9 * EMISSION_SLOT_WORDS;
-    h.deliver(&write_pattern_compressed_with_intensity(
-        0,
-        0,
-        full_slot,
-        PatternFormat::PhaseFull as u8,
-        2,
+        5,
+        PhaseDepth::Bits8 as u8,
+        count as u8,
         0x80,
-        &full,
-    ));
-    assert_eq!(h.status(), 0);
-    h.deliver(&write_pattern_compressed_with_intensity(
-        1,
-        0,
-        half_slot,
-        PatternFormat::PhaseHalf as u8,
-        4,
-        0x00,
-        &half,
+        &data,
     ));
     assert_eq!(h.status(), 0);
 
-    for t in 0..NUM_TRANSDUCERS {
-        for (g, phase) in [0x12u16, 0x34].into_iter().enumerate() {
+    let slot = EMISSION_SLOT_WORDS as usize;
+    for g in 0..count {
+        for t in 0..NUM_TRANSDUCERS {
             assert_eq!(
-                h.emission_word(0, (full_slot + g as u32 * EMISSION_SLOT_WORDS) as usize + t),
-                0x8000 | phase
+                h.emission_word(1, (5 + g) * slot + t),
+                0x8000 | u16::from(bits8_phase(g, t)),
+                "pattern {g} transducer {t}"
             );
         }
-        for (g, phase) in [0x11u16, 0x22, 0x33, 0x44].into_iter().enumerate() {
+    }
+    assert_eq!(h.emission_word(0, 5 * slot), 0);
+}
+
+#[test]
+fn write_pattern_phase_bits4_unpacks_nibbles_to_full_range() {
+    let mut h = Harness::new();
+
+    let count = PhaseDepth::Bits4.max_count();
+    h.deliver(&write_pattern_phase(
+        0,
+        0,
+        7,
+        PhaseDepth::Bits4 as u8,
+        count as u8,
+        0x42,
+        &pack_bits4(count),
+    ));
+    assert_eq!(h.status(), 0);
+
+    let slot = EMISSION_SLOT_WORDS as usize;
+    for g in 0..count {
+        for t in 0..NUM_TRANSDUCERS {
             assert_eq!(
-                h.emission_word(0, (half_slot + g as u32 * EMISSION_SLOT_WORDS) as usize + t),
-                phase
+                h.emission_word(0, (7 + g) * slot + t),
+                0x4200 | u16::from(bits4_phase(g, t) * 0x11),
+                "pattern {g} transducer {t}"
             );
         }
     }
 }
 
 #[test]
-fn write_pattern_compressed_rejects_invalid_payloads() {
+fn write_pattern_phase_single_pattern_leaves_the_next_slot_untouched() {
     let mut h = Harness::new();
 
-    let full = vec![0x1234_u16; NUM_TRANSDUCERS];
-
-    h.deliver(&write_pattern_compressed(0, 0, 0, 0, 1, &full));
-    assert_eq!(h.status(), Error::InvalidPayload as u8);
-
-    h.deliver(&write_pattern_compressed(1, 0, 0, 3, 1, &full));
-    assert_eq!(h.status(), Error::InvalidPayload as u8);
-
-    h.deliver(&write_pattern_compressed(
+    h.deliver(&write_pattern_phase(
+        0,
+        0,
         2,
-        0,
-        0,
-        PatternFormat::PhaseFull as u8,
-        0,
-        &full,
+        PhaseDepth::Bits8 as u8,
+        1,
+        0xFF,
+        &[0xAB; NUM_TRANSDUCERS],
     ));
+    assert_eq!(h.status(), 0);
+
+    let slot = EMISSION_SLOT_WORDS as usize;
+    assert_eq!(h.emission_word(0, 2 * slot), 0xFFAB);
+    assert_eq!(h.emission_word(0, 2 * slot + NUM_TRANSDUCERS - 1), 0xFFAB);
+    assert_eq!(h.emission_word(0, 3 * slot), 0);
+}
+
+#[test]
+fn write_pattern_phase_rejects_invalid_payloads() {
+    let mut h = Harness::new();
+    let one = [0x12u8; NUM_TRANSDUCERS];
+    let bits8 = PhaseDepth::Bits8 as u8;
+    let before = fpga_snapshot(&h);
+
+    h.deliver(&write_pattern_phase(0, bad_bank(), 0, bits8, 1, 0xFF, &one));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
 
-    h.deliver(&write_pattern_compressed(
-        3,
-        0,
-        0,
-        PatternFormat::PhaseFull as u8,
-        5,
-        &full,
-    ));
+    h.deliver(&write_pattern_phase(1, 0, 0, 0, 1, 0xFF, &one));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
 
-    h.deliver(&write_pattern_compressed(
+    h.deliver(&write_pattern_phase(2, 0, 0, 3, 1, 0xFF, &one));
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    h.deliver(&write_pattern_phase(3, 0, 0, bits8, 0, 0xFF, &[]));
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    let bits8_full = vec![0x12u8; PhaseDepth::Bits8.max_count() * NUM_TRANSDUCERS];
+    h.deliver(&write_pattern_phase(
         4,
         0,
         0,
-        PatternFormat::PhaseHalf as u8,
-        9,
-        &full,
+        bits8,
+        PhaseDepth::Bits8.max_count() as u8 + 1,
+        0xFF,
+        &bits8_full,
     ));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
 
-    h.deliver(&write_pattern_compressed(
+    let bits4_full = pack_bits4(PhaseDepth::Bits4.max_count());
+    h.deliver(&write_pattern_phase(
         5,
         0,
-        EMISSION_RAM_WORDS - EMISSION_SLOT_WORDS,
-        PatternFormat::PhaseFull as u8,
-        2,
-        &full,
+        0,
+        PhaseDepth::Bits4 as u8,
+        PhaseDepth::Bits4.max_count() as u8 + 1,
+        0xFF,
+        &bits4_full,
     ));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
 
-    let before = fpga_snapshot(&h);
-    h.deliver(&write_pattern_compressed(
+    let two = [0x12u8; 2 * NUM_TRANSDUCERS];
+    h.deliver(&write_pattern_phase(
         6,
         0,
-        u32::MAX,
-        PatternFormat::PhaseFull as u8,
-        1,
-        &full,
+        u16::try_from(EMISSION_MAX_INDICES - 1).unwrap(),
+        bits8,
+        2,
+        0xFF,
+        &two,
     ));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    h.deliver(&write_pattern_phase(7, 0, u16::MAX, bits8, 1, 0xFF, &one));
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
     assert_fpga_unchanged(&before, &h);
 }
 
@@ -530,14 +453,42 @@ fn write_pattern_raw_rejects_a_length_mismatching_count() {
 }
 
 #[test]
-fn write_pattern_compressed_rejects_a_length_mismatching_count() {
+fn write_pattern_phase_rejects_a_length_mismatching_count() {
     let mut h = Harness::new();
-    let full = vec![0x1234_u16; NUM_TRANSDUCERS];
+    let bits8 = PhaseDepth::Bits8 as u8;
     let before = fpga_snapshot(&h);
 
-    let mut long = write_pattern_compressed(0, 0, 0, 1, 1, &full);
-    long.set_payload_byte(8 + 2 * NUM_TRANSDUCERS, 0);
-    h.deliver(&long);
+    h.deliver(&write_pattern_phase(
+        0,
+        0,
+        0,
+        bits8,
+        1,
+        0xFF,
+        &[0x12; NUM_TRANSDUCERS + 1],
+    ));
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    h.deliver(&write_pattern_phase(
+        1,
+        0,
+        0,
+        bits8,
+        2,
+        0xFF,
+        &[0x12; 2 * NUM_TRANSDUCERS - 1],
+    ));
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    h.deliver(&write_pattern_phase(
+        2,
+        0,
+        0,
+        PhaseDepth::Bits4 as u8,
+        1,
+        0xFF,
+        &[0x12; NUM_TRANSDUCERS],
+    ));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_fpga_unchanged(&before, &h);
 }

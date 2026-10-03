@@ -5,7 +5,7 @@ import threading
 import numpy as np
 
 from autd3 import Client, ClientConfig, Driver, UdpEmulator
-from autd3.commands import PatternStm, PatternStmMode, PatternStmOption
+from autd3.commands import PatternStm, PatternStmOption, PhaseDepth
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
@@ -42,7 +42,7 @@ async def main() -> None:
                 Intensity.MAX,
                 PatternStmOption(
                     bank=PatternBank.B0,
-                    mode=PatternStmMode.PhaseIntensityFull,
+                    phase_depth=PhaseDepth.Bits8,
                     loop_behavior=LoopBehavior.Infinite,
                     transition_mode=TransitionMode.Immediate,
                 ),

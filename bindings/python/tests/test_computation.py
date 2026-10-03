@@ -491,6 +491,43 @@ def test_stm_foci_and_pattern() -> None:
     assert len(datagrams) > 0
 
 
+def test_pattern_stm_phase_depth() -> None:
+    geo = geometry()
+    wavelength = pattern.wavelength(340 * m / s)
+    frames = []
+    for x in range(12):
+        buf = geo.phase_buffer()
+        pattern.focus(geo, geo.center() + np.array([float(x), 0.0, 150.0]), wavelength, buf)
+        frames.append(buf)
+
+    assert autd3.commands.PhaseDepth.Bits8.max_count() == 5
+    assert autd3.commands.PhaseDepth.Bits4.max_count() == 11
+
+    builder = autd3.DatagramBuilder(geo)
+    builder.push(
+        autd3.commands.PatternStm(
+            autd3.commands.StmConfig(autd3.value.SamplingConfig.FREQ_4K),
+            frames,
+            autd3.value.Intensity.MAX,
+            autd3.commands.PatternStmOption(phase_depth=autd3.commands.PhaseDepth.Bits4),
+        )
+    )
+    assert len(builder.build()) == 4
+
+    amps = [geo.intensity_buffer() for _ in frames]
+    builder = autd3.DatagramBuilder(geo)
+    builder.push(
+        autd3.commands.PatternStm(
+            autd3.commands.StmConfig(autd3.value.SamplingConfig.FREQ_4K),
+            frames,
+            amps,
+            autd3.commands.PatternStmOption(phase_depth=autd3.commands.PhaseDepth.Bits4),
+        )
+    )
+    with pytest.raises(autd3.Autd3Error, match="Bits4"):
+        builder.build()
+
+
 def test_push_each() -> None:
     geo = autd3.geometry.Geometry([
         autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
@@ -626,7 +663,7 @@ def test_loop_behavior_and_transition_mode() -> None:
     builder = autd3.DatagramBuilder(geo)
     builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, buf, amps))
     builder.push(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 1, buf, amps))
-    builder.push(autd3.commands.WritePatternCompressed(autd3.value.PatternBank.B1, 2, autd3.commands.PatternCompression.PhaseFull, autd3.value.Intensity.MAX, [buf, buf]))
+    builder.push(autd3.commands.WritePatternPhase(autd3.value.PatternBank.B1, 2, autd3.commands.PhaseDepth.Bits8, autd3.value.Intensity.MAX, [buf, buf]))
     builder.push(
         autd3.commands.ConfigPattern(
             autd3.value.PatternBank.B1,

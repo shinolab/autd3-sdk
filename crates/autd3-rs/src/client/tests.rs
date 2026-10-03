@@ -251,7 +251,7 @@ fn slave_frame(slave: &mut Slave, frame: &[u8]) -> bool {
         }
         Cmd::WritePatternRaw
         | Cmd::WriteFociBuffer
-        | Cmd::WritePatternCompressed
+        | Cmd::WritePatternPhase
         | Cmd::WriteModulationBuffer
         | Cmd::WriteModulationFused
         | Cmd::ConfigModulation

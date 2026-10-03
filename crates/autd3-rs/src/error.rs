@@ -6,7 +6,7 @@ use thiserror::Error;
 use autd3_rs_core::error::EncodeError;
 use autd3_rs_core::protocol::describe_device_error;
 
-use crate::commands::PatternCompression;
+use crate::commands::PhaseDepth;
 use crate::firmware_version::FirmwareVersion;
 use crate::mirror::{BankLoop, SilencerAxis};
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError, TransitionMode};
@@ -168,10 +168,10 @@ pub enum PayloadError {
     #[error("pattern size {size} must be >= {min}")]
     PatternSizeTooSmall { size: usize, min: usize },
 
-    #[error("{count} patterns do not fit the {format} compression, which carries {max} per frame")]
-    PatternCountExceedsFormat {
+    #[error("{count} patterns do not fit the {depth:?} phase depth, which carries {max} per frame")]
+    PatternCountExceedsDepth {
         count: usize,
-        format: &'static str,
+        depth: PhaseDepth,
         max: usize,
     },
 
@@ -208,9 +208,9 @@ pub enum PayloadError {
     PatternStmLengthMismatch { phases: usize, intensities: usize },
 
     #[error(
-        "the {format:?} compression carries a single uniform intensity; per-transducer or per-index intensities are not supported"
+        "the {depth:?} phase depth carries a single uniform intensity; per-transducer or per-index intensities are not supported"
     )]
-    PatternCompressionRequiresUniformIntensity { format: PatternCompression },
+    PhaseDepthRequiresUniformIntensity { depth: PhaseDepth },
 
     #[error("pattern STM index {index} out of range 0..{max}")]
     PatternIndexOutOfRange { index: usize, max: usize },
