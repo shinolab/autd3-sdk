@@ -543,14 +543,12 @@ fn write_mod_buffer_rejects_invalid_payloads() {
 
     h.deliver(&write_mod_buffer(0, bad_bank(), 0, &[0x01]));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
-    h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.reply_data(), [Error::InvalidPayload as u8]);
 
-    h.deliver(&write_mod_buffer(2, 0, 1, &[0x01, 0x02]));
+    h.deliver(&write_mod_buffer(1, 0, 1, &[0x01, 0x02]));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&write_mod_buffer(
-        4,
+        2,
         0,
         MOD_BUFFER_SAMPLES - 2,
         &[0x01, 0x02, 0x03],
@@ -559,7 +557,7 @@ fn write_mod_buffer_rejects_invalid_payloads() {
     assert_eq!(h.mod_word(0, MOD_BUFFER_SAMPLES as usize / 2 - 1), 0);
 
     let before = fpga_snapshot(&h);
-    h.deliver(&write_mod_buffer(5, 0, u32::MAX - 1, &[0x01, 0x02]));
+    h.deliver(&write_mod_buffer(3, 0, u32::MAX - 1, &[0x01, 0x02]));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_fpga_unchanged(&before, &h);
 }

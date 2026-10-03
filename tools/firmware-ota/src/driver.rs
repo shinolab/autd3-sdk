@@ -170,6 +170,7 @@ pub struct LegacyUpdateChunkPayload {
 const _: () = assert!(core::mem::size_of::<LegacyUpdateChunkPayload>() == 6);
 
 const LEGACY_READ_ERROR_DETAIL: u8 = 0xE0;
+const LEGACY_ERR_FPGA_RECONFIG_FAILED: u8 = 0x11;
 const LEGACY_READ_CPU_VERSION: [u8; 3] = [0xE1, 0xE2, 0xE3];
 const LEGACY_READ_FPGA_VERSION: [u8; 3] = [0xE4, 0xE5, 0xE6];
 const LEGACY_READ_FPGA_FUNCTIONS: u8 = 0xE9;
@@ -509,17 +510,6 @@ impl<L: Exchange> Driver<L> {
         }
     }
 
-    fn read_error_detail(&mut self) -> Result<Vec<u8>, DriverError> {
-        match self.inner.dialect() {
-            Dialect::Legacy => self.legacy_read(LEGACY_READ_ERROR_DETAIL),
-            Dialect::Udp => Ok(self
-                .read(Cmd::ReadErrorDetail)?
-                .into_iter()
-                .map(|value| value.first().copied().unwrap_or(0))
-                .collect()),
-        }
-    }
-
     pub fn read_fpga_boot_image(&mut self) -> Result<Vec<FpgaBootImage>, DriverError> {
         if self.inner.dialect() == Dialect::Udp {
             return Ok(self
@@ -531,9 +521,9 @@ impl<L: Exchange> Driver<L> {
                 .collect());
         }
         let unknown_cmd = autd3_cpu_wire::Error::UnknownCmd.as_u8();
-        let before = self.read_error_detail()?;
+        let before = self.legacy_read(LEGACY_READ_ERROR_DETAIL)?;
         let raw = self.legacy_read(LEGACY_READ_FPGA_BOOT_IMAGE)?;
-        let after = self.read_error_detail()?;
+        let after = self.legacy_read(LEGACY_READ_ERROR_DETAIL)?;
         Ok(raw
             .into_iter()
             .zip(before.into_iter().zip(after))
@@ -560,12 +550,17 @@ impl<L: Exchange> Driver<L> {
     }
 
     pub fn ensure_fpga_reconfigured(&mut self) -> Result<(), DriverError> {
-        let failed = autd3_cpu_wire::Error::FpgaReconfigFailed.as_u8();
-        match self
-            .read_error_detail()?
-            .iter()
-            .position(|&detail| detail == failed)
-        {
+        let failed = match self.inner.dialect() {
+            Dialect::Legacy => self
+                .legacy_read(LEGACY_READ_ERROR_DETAIL)?
+                .iter()
+                .position(|&detail| detail == LEGACY_ERR_FPGA_RECONFIG_FAILED),
+            Dialect::Udp => self
+                .read_fpga_boot_image()?
+                .iter()
+                .position(|&image| image == FpgaBootImage::ReconfigFailed),
+        };
+        match failed {
             None => Ok(()),
             Some(device) => Err(DriverError::FpgaReconfigFailed { device }),
         }

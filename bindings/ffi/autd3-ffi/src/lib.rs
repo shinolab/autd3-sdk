@@ -1973,29 +1973,6 @@ pub unsafe extern "C" fn autd3_client_read_telemetry(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_read_error_detail(
-    client: *const ClientHandle,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
-        return;
-    };
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        ctx.err("null client");
-        return;
-    };
-
-    let fut = client.0.read_error_detail();
-    executor().spawn(async move {
-        match fut.await {
-            Ok(detail) => ctx.ok(into_handle(ByteArray(detail)).cast()),
-            Err(e) => ctx.err_of(&e),
-        }
-    });
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_byte_array_len(array: *const ByteArray) -> usize {
     let Some(array) = (unsafe { handle_ref(array) }) else {
         return 0;

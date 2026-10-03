@@ -177,13 +177,6 @@ impl Client {
         })
     }
 
-    fn read_error_detail<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let backend = Arc::clone(&self.backend);
-        future_into_py(py, async move {
-            backend.read_error_detail().await.map_err(to_pyerr_gil)
-        })
-    }
-
     fn read_telemetry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let backend = Arc::clone(&self.backend);
         future_into_py(py, async move {

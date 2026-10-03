@@ -51,6 +51,7 @@ pub(crate) struct FpgaUpdateSession {
     reconfig: Cell<Reconfig>,
     reboot_attempts: Cell<u8>,
     locked: AtomicBool,
+    reconfig_failed: AtomicBool,
 }
 
 impl FpgaUpdateSession {
@@ -60,6 +61,7 @@ impl FpgaUpdateSession {
             reconfig: Cell::new(Reconfig::None),
             reboot_attempts: Cell::new(0),
             locked: AtomicBool::new(false),
+            reconfig_failed: AtomicBool::new(false),
         }
     }
 
@@ -68,6 +70,11 @@ impl FpgaUpdateSession {
         self.reconfig.set(Reconfig::None);
         self.reboot_attempts.set(0);
         self.locked.store(false, Ordering::Relaxed);
+        self.reconfig_failed.store(false, Ordering::Relaxed);
+    }
+
+    pub(crate) fn reconfig_failed(&self) -> bool {
+        self.reconfig_failed.load(Ordering::Relaxed)
     }
 
     pub(crate) fn is_locked(&self) -> bool {
@@ -186,7 +193,7 @@ pub(crate) fn supports_flash<P: Port>(port: &mut P) -> bool {
     functions != 0xFF && functions & FPGA_FUNC_FLASH_OTA != 0
 }
 
-pub(crate) fn boot_image<P: Port>(port: &mut P) -> FpgaBootImage {
+fn boot_image<P: Port>(port: &mut P) -> FpgaBootImage {
     if !supports_flash(port) {
         return FpgaBootImage::Unknown;
     }
@@ -196,6 +203,14 @@ pub(crate) fn boot_image<P: Port>(port: &mut P) -> FpgaBootImage {
 }
 
 impl Cpu {
+    pub(crate) fn fpga_boot_image<P: Port>(&self, port: &mut P) -> FpgaBootImage {
+        if self.fpga_update.reconfig_failed() {
+            FpgaBootImage::ReconfigFailed
+        } else {
+            boot_image(port)
+        }
+    }
+
     fn fpga_reconfiguring(&self) -> bool {
         self.fpga_update.reconfig.get() != Reconfig::None
     }
@@ -334,9 +349,9 @@ impl Cpu {
             self.fpga_update.reconfig.set(Reconfig::Reboot(1));
             return;
         }
-        if !reconfigured {
-            self.record_error_detail(Error::FpgaReconfigFailed);
-        }
+        self.fpga_update
+            .reconfig_failed
+            .store(!reconfigured, Ordering::Relaxed);
         self.fpga_update.state.set(State::Idle);
         self.fpga_update.reconfig.set(Reconfig::None);
         self.reinit_fpga(port);

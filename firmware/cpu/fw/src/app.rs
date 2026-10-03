@@ -28,7 +28,6 @@ pub struct Cpu {
     telemetry: [AtomicU32; Telemetry::CPU_COUNTER_COUNT],
     failsafe_fired: AtomicBool,
     expected_seq: AtomicU8,
-    error_detail: Cell<Option<Error>>,
     pub(crate) silencer: cmd::silencer::SilencerGuard,
     pub(crate) update: cmd::update::UpdateSession,
     pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
@@ -78,7 +77,6 @@ const fn takes_payload(cmd: Cmd) -> bool {
         cmd,
         Cmd::Reset
             | Cmd::Nop
-            | Cmd::ReadErrorDetail
             | Cmd::ReadFpgaState
             | Cmd::ReadTelemetry
             | Cmd::ReadFirmwareInfo
@@ -115,7 +113,6 @@ impl Cpu {
             telemetry: [const { AtomicU32::new(0) }; Telemetry::CPU_COUNTER_COUNT],
             failsafe_fired: AtomicBool::new(false),
             expected_seq: AtomicU8::new(0),
-            error_detail: Cell::new(None),
             silencer: cmd::silencer::SilencerGuard::new(),
             update: cmd::update::UpdateSession::new(),
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
@@ -129,10 +126,7 @@ impl Cpu {
     pub fn init<P: Port>(&self, port: &mut P) {
         self.set_mode(Mode::Fifo);
         self.expected_seq.store(0, Ordering::Relaxed);
-        self.error_detail.set(None);
-        if let Err(err) = fpga::init(port, self.mode()) {
-            self.error_detail.set(Some(err));
-        }
+        let _ = fpga::init(port, self.mode());
         self.silencer.init();
         self.update.init();
         self.fpga_update.init();
@@ -143,14 +137,8 @@ impl Cpu {
         self.fifo.reset();
     }
 
-    pub(crate) fn record_error_detail(&self, err: Error) {
-        self.error_detail.set(Some(err));
-    }
-
     pub(crate) fn reinit_fpga<P: Port>(&self, port: &mut P) {
-        if let Err(err) = fpga::init(port, self.mode()) {
-            self.error_detail.set(Some(err));
-        }
+        let _ = fpga::init(port, self.mode());
         self.silencer.init();
     }
 
@@ -214,11 +202,6 @@ impl Cpu {
     #[cfg(all(test, not(loom)))]
     pub(crate) fn expected_seq(&self) -> u8 {
         self.expected_seq.load(Ordering::Relaxed)
-    }
-
-    #[cfg(all(test, not(loom)))]
-    pub(crate) fn set_error_detail(&self, err: Error) {
-        self.error_detail.set(Some(err));
     }
 
     #[must_use]
@@ -349,7 +332,7 @@ impl Cpu {
             match outcome {
                 Ok(data) => self.set_reply(in_frame.seq, 0, data.as_slice()),
                 Err(err) => {
-                    self.latch_error(err);
+                    self.bump(Telemetry::DispatchError);
                     self.set_reply(in_frame.seq, err as u8, &[]);
                 }
             }
@@ -357,11 +340,6 @@ impl Cpu {
         } else {
             self.bump(Telemetry::SeqMismatch);
         }
-    }
-
-    fn latch_error(&self, err: Error) {
-        self.error_detail.set(Some(err));
-        self.bump(Telemetry::DispatchError);
     }
 
     fn read_telemetry<P: Port>(&self, port: &mut P) -> ReplyData {
@@ -381,7 +359,7 @@ impl Cpu {
         ReplyData::from_slice(&bytes)
     }
 
-    fn read_firmware_info<P: Port>(port: &mut P) -> ReplyData {
+    fn read_firmware_info<P: Port>(&self, port: &mut P) -> ReplyData {
         let major = fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR);
         let info = FirmwareInfo {
             cpu_version: [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH],
@@ -391,7 +369,7 @@ impl Cpu {
                 fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_PATCH) as u8,
             ],
             fpga_functions: (major >> 8) as u8,
-            fpga_boot_image: cmd::fpga_update::boot_image(port) as u8,
+            fpga_boot_image: self.fpga_boot_image(port) as u8,
         };
         ReplyData::from_slice(info.as_bytes())
     }
@@ -405,12 +383,6 @@ impl Cpu {
         }
         let result = match cmd {
             Cmd::Reset | Cmd::Nop => Ok(()),
-            Cmd::ReadErrorDetail => {
-                return Ok(ReplyData::from_slice(&[self
-                    .error_detail
-                    .get()
-                    .map_or(0, |err| err as u8)]));
-            }
             Cmd::ReadFpgaState => {
                 return Ok(ReplyData::from_slice(&[fpga::read(
                     port,
@@ -419,7 +391,7 @@ impl Cpu {
                 ) as u8]));
             }
             Cmd::ReadTelemetry => return Ok(self.read_telemetry(port)),
-            Cmd::ReadFirmwareInfo => return Ok(Self::read_firmware_info(port)),
+            Cmd::ReadFirmwareInfo => return Ok(self.read_firmware_info(port)),
             Cmd::WriteFociBuffer => cmd::write_foci::handle(port, payload),
             Cmd::WritePatternRaw => cmd::write_pattern_raw::handle(port, payload),
             Cmd::WritePatternPhase => cmd::write_pattern_phase::handle(port, payload),

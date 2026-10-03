@@ -39,6 +39,7 @@ crate::wire_enum! {
         Unknown = 0x00,
         Golden = 0x01,
         Update = 0x02,
+        ReconfigFailed = 0x03,
     }
 }
 

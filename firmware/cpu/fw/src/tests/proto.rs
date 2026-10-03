@@ -1,6 +1,6 @@
 use crate::cmd::config_mod::ConfigModPayload;
 use crate::cmd::force_fan::ForceFanPayload;
-use crate::proto::{Cmd, Disposition, Error, FRAME_BYTES_MAX};
+use crate::proto::{Cmd, Disposition, Error, FRAME_BYTES_MAX, Telemetry};
 use crate::tests::builders::{config_mod, force_fan, write_foci_buffer};
 use crate::tests::mock::{Frame, Harness};
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
@@ -15,7 +15,6 @@ fn initial_ack_is_sentinel_byte() {
 #[test]
 fn matching_seq_advances_ack_and_expected_seq() {
     let mut h = Harness::new();
-    h.cpu.set_error_detail(Error::MissTransitionTime);
 
     h.deliver(&Frame::new(0, Cmd::Nop));
     assert_eq!(h.ack(), 0);
@@ -30,12 +29,6 @@ fn matching_seq_advances_ack_and_expected_seq() {
         h.firmware_info().cpu_version,
         [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH]
     );
-
-    h.deliver(&Frame::new(2, Cmd::ReadErrorDetail));
-    assert_eq!(h.ack(), 2);
-    assert_eq!(h.expected_seq(), 3);
-    assert_eq!(h.status(), 0);
-    assert_eq!(h.reply_data(), [Error::MissTransitionTime as u8]);
 }
 
 #[test]
@@ -47,12 +40,13 @@ fn mismatched_seq_is_dropped() {
 }
 
 #[test]
-fn unknown_cmd_sets_error_detail() {
+fn unknown_cmd_reports_unknown_cmd_and_advances_seq() {
     let mut h = Harness::new();
     h.deliver(&Frame::raw(0, 0x7F));
     assert_eq!(h.status(), Error::UnknownCmd as u8);
-    h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.reply_data(), [Error::UnknownCmd as u8]);
+    assert_eq!(h.ack(), 0);
+    assert_eq!(h.expected_seq(), 1);
+    assert_eq!(h.telemetry(Telemetry::DispatchError), 1);
 }
 
 #[test]
@@ -61,9 +55,6 @@ fn every_cmd_has_a_dispatch_arm() {
         let mut h = Harness::new();
         h.deliver(&Frame::new(0, cmd));
         assert_ne!(h.status(), Error::UnknownCmd as u8, "{cmd:?}");
-        let next_seq = u8::from(cmd != Cmd::Reset);
-        h.deliver(&Frame::new(next_seq, Cmd::ReadErrorDetail));
-        assert_ne!(h.reply_data(), [Error::UnknownCmd as u8], "{cmd:?}");
     }
 }
 
@@ -100,7 +91,6 @@ fn reset_during_inflight_drain_overrides_stale_frame() {
 #[test]
 fn reset_returns_proto_state_to_post_boot_baseline() {
     let mut h = Harness::new();
-    h.cpu.set_error_detail(Error::SyncNotReady);
 
     h.deliver(&Frame::new(0, Cmd::Nop));
     h.deliver(&Frame::new(1, Cmd::Nop));
@@ -116,22 +106,17 @@ fn reset_returns_proto_state_to_post_boot_baseline() {
         h.firmware_info().cpu_version,
         [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH]
     );
-    h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.reply_data(), [Error::SyncNotReady as u8]);
 }
 
 #[test]
 fn nop_acks_without_changing_state() {
     let mut h = Harness::new();
-    h.cpu.set_error_detail(Error::FpgaTimeout);
 
     h.deliver(&Frame::new(0, Cmd::Nop));
     assert_eq!(h.ack(), 0);
     assert_eq!(h.status(), 0);
     assert_eq!(h.expected_seq(), 1);
-
-    h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.reply_data(), [Error::FpgaTimeout as u8]);
+    assert_eq!(h.telemetry(Telemetry::DispatchError), 0);
 }
 
 #[test]
@@ -145,7 +130,7 @@ fn seq_wraparound_boundary() {
 }
 
 #[test]
-fn unknown_non_streaming_cmd_sets_error_detail() {
+fn unknown_non_streaming_cmd_reports_unknown_cmd() {
     let mut h = Harness::new();
     h.deliver(&Frame::raw(0, 0xEE));
     assert_eq!(h.status(), Error::UnknownCmd as u8);

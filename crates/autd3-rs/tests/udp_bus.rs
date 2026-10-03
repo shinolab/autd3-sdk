@@ -87,13 +87,13 @@ fn every_frame_is_answered_once_with_its_result() {
     assert_eq!(replies.len(), 2);
     assert!(replies.iter().all(|r| r.ack == 0xFF));
 
-    let msg_id = bus.send(&frames(2, 0, Cmd::ReadErrorDetail)).unwrap();
+    let msg_id = bus.send(&frames(2, 0, Cmd::Nop)).unwrap();
     let replies = collect(&mut bus, msg_id, 2);
     assert_eq!(replies.iter().map(|r| r.device).collect::<Vec<_>>(), [0, 1]);
     assert!(
         replies
             .iter()
-            .all(|r| r.ack == 0 && r.status == 0 && r.data() == [0])
+            .all(|r| r.ack == 0 && r.status == 0 && r.data().is_empty())
     );
 }
 

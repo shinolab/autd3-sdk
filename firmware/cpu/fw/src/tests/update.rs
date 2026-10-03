@@ -220,8 +220,6 @@ fn commit_rejects_a_crc_mismatch_and_leaves_the_slot_invalid() {
     assert_eq!(h.status(), Error::UpdateNotStarted as u8);
     h.deliver(&Frame::new(seq + 3, Cmd::UpdateActivate));
     assert_eq!(h.status(), Error::UpdateNotCommitted as u8);
-    h.deliver(&Frame::new(seq + 4, Cmd::ReadErrorDetail));
-    assert_eq!(h.reply_data(), [Error::UpdateNotCommitted as u8]);
 }
 
 #[test]

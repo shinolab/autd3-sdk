@@ -145,7 +145,7 @@ fn unknown_command_reports_error() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
 
-    let mut bad = frame(0, Cmd::ReadErrorDetail, &[]);
+    let mut bad = frame(0, Cmd::Nop, &[]);
     bad[1] = 0x7F;
     let rx = device.send(&bad);
 

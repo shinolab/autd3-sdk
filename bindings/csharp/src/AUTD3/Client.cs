@@ -350,9 +350,6 @@ namespace AUTD3
             return states;
         }
 
-        public Task<byte[]> ReadErrorDetailAsync() =>
-            ReadByteArrayAsync((cb, ud) => NativeClient.autd3_client_read_error_detail(Handle, cb, ud));
-
         public async Task<IReadOnlyList<TelemetryCounters>> ReadTelemetryAsync()
         {
             var array = await AsyncOps.InvokeAsync((cb, ud) =>

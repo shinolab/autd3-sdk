@@ -15,7 +15,6 @@ crate::wire_enum! {
         UpdateNothingToConfirm = 0x0E,
         UpdateUnsupported = 0x0F,
         FpgaUpdateInProgress = 0x10,
-        FpgaReconfigFailed = 0x11,
         UpdateActivating = 0x12,
         UpdateTransportMismatch = 0x13,
     }
@@ -47,9 +46,6 @@ impl Error {
             }
             Self::FpgaUpdateInProgress => {
                 "an FPGA update is in progress; output commands are rejected until the FPGA reboots"
-            }
-            Self::FpgaReconfigFailed => {
-                "the FPGA did not reconfigure after the update was activated (the new image boots at the next power cycle)"
             }
             Self::UpdateActivating => {
                 "a firmware activation is pending; the device reboots within 100 ms"

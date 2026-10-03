@@ -364,7 +364,7 @@ mod fpga {
         let mut driver = Driver::open(audit).unwrap();
         assert_eq!(
             driver.read_fpga_boot_image().unwrap(),
-            [FpgaBootImage::Update, FpgaBootImage::Update]
+            [FpgaBootImage::Update, FpgaBootImage::ReconfigFailed]
         );
         assert!(matches!(
             driver.ensure_fpga_reconfigured(),

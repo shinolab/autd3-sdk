@@ -48,11 +48,6 @@ impl ClientBackend for UdpBackend {
         })
     }
 
-    fn read_error_detail(&self) -> BoxFuture<Vec<u8>> {
-        let client = Arc::clone(&self.client);
-        Box::pin(async move { client.read_error_detail().await })
-    }
-
     fn read_telemetry(&self) -> BoxFuture<Vec<autd3_rs::TelemetryCounters>> {
         let client = Arc::clone(&self.client);
         Box::pin(async move { client.read_telemetry().await })

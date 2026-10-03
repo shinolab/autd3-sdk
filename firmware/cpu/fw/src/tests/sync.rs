@@ -33,9 +33,6 @@ fn synchronize_returns_sync_not_ready_before_the_pulse_runs() {
     assert_eq!(h.status(), Error::SyncNotReady as u8);
     assert_eq!(h.ctl(ADDR_SYNC_TIME_0), 0);
     assert_eq!(h.latch_count(CTL_FLAG_SYNC_SET), 0);
-
-    h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.reply_data(), [Error::SyncNotReady as u8]);
 }
 
 #[test]
@@ -47,21 +44,7 @@ fn set_and_wait_update_times_out_when_latch_stuck() {
     h.deliver(&Frame::new(0, Cmd::Synchronize));
     assert_eq!(h.status(), Error::FpgaTimeout as u8);
 
-    h.deliver(&Frame::new(1, Cmd::ReadErrorDetail));
-    assert_eq!(h.reply_data(), [Error::FpgaTimeout as u8]);
-
     h.port.latch_stuck = false;
-}
-
-#[test]
-fn fpga_init_latch_timeout_is_latched_into_error_detail() {
-    let mut h = Harness::new();
-    h.port.latch_stuck = true;
-    h.init();
-    h.port.latch_stuck = false;
-
-    h.deliver(&Frame::new(0, Cmd::ReadErrorDetail));
-    assert_eq!(h.reply_data(), [Error::FpgaTimeout as u8]);
 }
 
 #[test]

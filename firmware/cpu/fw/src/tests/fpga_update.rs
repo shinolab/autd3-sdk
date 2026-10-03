@@ -315,12 +315,10 @@ fn output_commands_are_rejected_while_locked() {
     assert_eq!(h.status(), 0);
     h.deliver(&Frame::new(5, Cmd::ReadFirmwareInfo));
     assert_eq!(h.ack(), 5);
-    h.deliver(&Frame::new(6, Cmd::ReadErrorDetail));
-    assert_eq!(h.reply_data(), [Error::FpgaUpdateInProgress as u8]);
-    h.deliver(&Frame::new(7, Cmd::UpdateActivate));
+    h.deliver(&Frame::new(6, Cmd::UpdateActivate));
     assert_eq!(h.status(), Error::FpgaUpdateInProgress as u8);
     assert_eq!(h.port.reset_count, 0);
-    h.deliver(&begin(8, 100, 0));
+    h.deliver(&begin(7, 100, 0));
     assert_eq!(h.status(), 0);
 }
 
@@ -398,9 +396,9 @@ fn reboot_requests(h: &Harness) -> usize {
         .count()
 }
 
-fn error_detail(h: &mut Harness, seq: u8) -> u8 {
-    h.deliver(&Frame::new(seq, Cmd::ReadErrorDetail));
-    h.reply_data()[0]
+fn boot_image(h: &mut Harness, seq: u8) -> u8 {
+    h.deliver(&Frame::new(seq, Cmd::ReadFirmwareInfo));
+    h.firmware_info().fpga_boot_image
 }
 
 #[test]
@@ -421,7 +419,7 @@ fn an_ignored_reboot_is_retried_after_the_settle_time() {
     assert!(!h.cpu.fpga_update.is_locked());
     assert_eq!(h.cpu.fpga_update.reconfig(), Reconfig::None);
     assert!((0..OUTPUT_MASK_WORDS).all(|i| h.output_mask(i) == 0xFFFF));
-    assert_ne!(error_detail(&mut h, seq), Error::FpgaReconfigFailed as u8);
+    assert_ne!(boot_image(&mut h, seq), FpgaBootImage::ReconfigFailed as u8);
 }
 
 #[test]
@@ -435,10 +433,30 @@ fn an_fpga_that_never_reconfigures_is_reported_and_released() {
     assert!(!h.cpu.fpga_update.is_locked());
     assert_eq!(h.cpu.fpga_update.state(), State::Idle);
     assert!((0..OUTPUT_MASK_WORDS).all(|i| h.output_mask(i) == 0xFFFF));
-    assert_eq!(error_detail(&mut h, seq), Error::FpgaReconfigFailed as u8);
+    assert_eq!(boot_image(&mut h, seq), FpgaBootImage::ReconfigFailed as u8);
     h.tick_1ms(10_000);
     assert_eq!(reboot_requests(&h), usize::from(FPGA_REBOOT_ATTEMPTS));
     assert_eq!(h.port.fpga_reboots, 0);
+}
+
+#[test]
+fn a_later_successful_reconfiguration_clears_the_failure() {
+    let (mut h, mut seq) = activated(59);
+    h.port.fpga_reboots_to_ignore = u32::MAX;
+    h.tick_1ms(FPGA_RECONFIG_WORST_MS);
+    assert_eq!(boot_image(&mut h, seq), FpgaBootImage::ReconfigFailed as u8);
+    seq = seq.wrapping_add(1);
+
+    h.port.fpga_reboots_to_ignore = 0;
+    run_update(&mut h, &mut seq, &image(700, 61));
+    h.deliver(&Frame::new(seq, Cmd::FpgaUpdateActivate));
+    assert_eq!(h.status(), 0);
+    h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
+    assert!(!h.cpu.fpga_update.is_locked());
+    assert_ne!(
+        boot_image(&mut h, seq.wrapping_add(1)),
+        FpgaBootImage::ReconfigFailed as u8
+    );
 }
 
 #[test]
@@ -453,7 +471,7 @@ fn a_reboot_write_ignored_while_busy_is_detected() {
     h.tick_1ms(1 + u32::from(FPGA_RECONFIG_SETTLE_MS));
     assert_eq!(h.port.fpga_reboots, 1);
     assert!(!h.cpu.fpga_update.is_locked());
-    assert_ne!(error_detail(&mut h, seq), Error::FpgaReconfigFailed as u8);
+    assert_ne!(boot_image(&mut h, seq), FpgaBootImage::ReconfigFailed as u8);
 }
 
 #[test]

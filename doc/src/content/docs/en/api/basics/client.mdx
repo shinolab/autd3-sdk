@@ -45,7 +45,6 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `geometry()`              | —     | `&Geometry`                           | Device layout given at open time                           |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
-| `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | Error detail of each device                                |
 | `datagram_builder()`      | —     | `DatagramBuilder`                     | [DatagramBuilder](/autd3-sdk/en/api/basics/datagram-builder/) |
 | `send(frame)`             | ✓     | `Result<ResponseFuture, Error>`       | Enqueue a frame into the send queue. Awaiting the `ResponseFuture` yields the response (`Response`) |
 | `send_checked(frame)`     | ✓     | `Result<(), Error>`                   | Send and confirm the response                              |

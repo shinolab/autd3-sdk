@@ -367,11 +367,6 @@ impl Client {
             })
     }
 
-    pub async fn read_error_detail(&self) -> Result<Vec<u8>, Error> {
-        self.read_values(Cmd::ReadErrorDetail, |value| value.first().copied())
-            .await
-    }
-
     pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, Error> {
         self.read_values(Cmd::ReadFpgaState, |value| {
             value.first().copied().map(FpgaState)

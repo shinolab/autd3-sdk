@@ -160,11 +160,6 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
 
     silencer_phase_checks(ctx).await?;
 
-    let errors = ctx.client.read_error_detail().await?;
-    for (i, code) in errors.iter().enumerate() {
-        println!("  device[{i}] latched error-detail: {code:#04x}");
-    }
-
     wait_enter("The firmware rejected each malformed command with the expected error code").await;
     Ok(())
 }

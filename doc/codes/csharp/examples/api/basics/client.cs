@@ -24,7 +24,6 @@ internal static class Sample
 
         var firmware = await client.ReadFirmwareVersionAsync();
         var fpgaState = await client.ReadFpgaStateAsync();
-        var errorDetail = await client.ReadErrorDetailAsync();
 
         var datagramBuilder = client.DatagramBuilder();
         var resp = await await client.SendAsync(frame);
@@ -34,7 +33,7 @@ internal static class Sample
         await client.CloseAsync();
         // ANCHOR_END: api
 
-        _ = (numDevices, geometry, firmware, fpgaState, errorDetail, datagramBuilder);
+        _ = (numDevices, geometry, firmware, fpgaState, datagramBuilder);
 
         var scopedLayout = new Geometry(new[] { new Autd3(Vector3.Zero) });
 

@@ -114,7 +114,7 @@ struct Slave {
     fpga_version_major: u8,
     fpga_version_minor: u8,
     fpga_version_patch: u8,
-    error_detail: u8,
+    last_error: u8,
     fpga_state: u8,
     fpga_functions: u8,
     telemetry: [u32; Telemetry::ALL.len()],
@@ -139,7 +139,7 @@ impl Slave {
             fpga_version_major: 0,
             fpga_version_minor: 0,
             fpga_version_patch: 0,
-            error_detail: 0,
+            last_error: 0,
             fpga_state: 0,
             fpga_functions: 0,
             telemetry: [0; Telemetry::ALL.len()],
@@ -175,7 +175,7 @@ const ERR_INVALID_DATA: u8 = 0x03;
 
 fn handle_nop(payload: &[u8; PAYLOAD_BYTES], slave: &mut Slave) -> u8 {
     if payload[0] == FAIL_MARKER {
-        slave.error_detail = ERR_INVALID_DATA;
+        slave.last_error = ERR_INVALID_DATA;
         ERR_INVALID_DATA
     } else {
         0
@@ -194,7 +194,6 @@ fn read_value(slave: &Slave, cmd: Cmd) -> Vec<u8> {
             slave.fpga_functions,
             0,
         ],
-        Cmd::ReadErrorDetail => vec![slave.error_detail],
         Cmd::ReadFpgaState => vec![slave.fpga_state],
         Cmd::ReadTelemetry => slave
             .telemetry
@@ -239,7 +238,7 @@ fn slave_frame(slave: &mut Slave, frame: &[u8]) -> bool {
     slave.value.clear();
     let status = match parsed.cmd {
         Cmd::Nop => handle_nop(&parsed.payload, slave),
-        Cmd::ReadFirmwareInfo | Cmd::ReadErrorDetail | Cmd::ReadFpgaState | Cmd::ReadTelemetry => {
+        Cmd::ReadFirmwareInfo | Cmd::ReadFpgaState | Cmd::ReadTelemetry => {
             slave.value = read_value(slave, parsed.cmd);
             0
         }
@@ -441,7 +440,7 @@ async fn successful_send_advances_seq_and_leaves_no_error() {
     let s = slave.lock().unwrap();
     assert_eq!(s.ack, base);
     assert_eq!(s.expected_seq, base + 1);
-    assert_eq!(s.error_detail, 0);
+    assert_eq!(s.last_error, 0);
 }
 
 #[tokio::test]
@@ -567,22 +566,6 @@ async fn open_rejects_a_foreign_series_only_when_the_check_is_requested() {
 }
 
 #[tokio::test]
-async fn read_error_detail_returns_error_code() {
-    let (client, slave) = open_client().await;
-    slave.lock().unwrap().error_detail = 0x7A;
-    let e = client.read_error_detail().await.unwrap();
-    assert_eq!(e, vec![0x7A]);
-}
-
-#[tokio::test]
-async fn device_error_is_observable_via_read_error_detail() {
-    let (client, _slave) = open_client().await;
-    let _ = send_op(&client, FailingCmd).await;
-    let detail = client.read_error_detail().await.unwrap();
-    assert_eq!(detail, vec![ERR_INVALID_DATA]);
-}
-
-#[tokio::test]
 async fn read_is_exclusive_and_correct_under_concurrent_writes() {
     let (link, slaves) = slaves_pair(2);
     {
@@ -690,7 +673,7 @@ async fn multi_device_send_reports_failing_device_index() {
         other => panic!("expected DeviceError, got {other:?}"),
     }
     for slave in &slaves {
-        assert_eq!(slave.lock().unwrap().error_detail, ERR_INVALID_DATA);
+        assert_eq!(slave.lock().unwrap().last_error, ERR_INVALID_DATA);
     }
 }
 
@@ -942,11 +925,11 @@ async fn two_stage_await_resolves_in_order() {
     let (client, slave) = open_client().await;
     {
         let mut s = slave.lock().unwrap();
-        s.error_detail = 0xAA;
+        s.fw_version_major = 0xAA;
         s.fpga_state = 0xBB;
     }
     let f1 = client
-        .send_broadcast(&Datagram::no_payload(Cmd::ReadErrorDetail))
+        .send_broadcast(&Datagram::no_payload(Cmd::ReadFirmwareInfo))
         .await
         .unwrap();
     let f2 = client
@@ -1414,11 +1397,9 @@ async fn read_replies_never_count_as_device_errors() {
     {
         let mut s = slave.lock().unwrap();
         s.fpga_state = 0x80;
-        s.error_detail = 0x7F;
     }
 
     assert_eq!(client.read_fpga_state().await.unwrap()[0].0, 0x80);
-    assert_eq!(client.read_error_detail().await.unwrap(), [0x7F]);
 
     assert!(
         matches!(
@@ -1481,11 +1462,11 @@ async fn link_failure_returns_queued_slots_to_the_pool() {
 
     slave.lock().unwrap().drop_next = u32::MAX;
     let inflight = client
-        .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadErrorDetail))
+        .send_broadcast_exclusive(&Datagram::no_payload(Cmd::ReadFpgaState))
         .await
         .unwrap();
     let queued = client
-        .send_broadcast(&Datagram::no_payload(Cmd::ReadErrorDetail))
+        .send_broadcast(&Datagram::no_payload(Cmd::ReadFpgaState))
         .await
         .unwrap();
 
@@ -1768,7 +1749,7 @@ async fn stop_leaves_the_link_synced_for_later_frames() {
     let (client, slave) = open_client().await;
 
     client.stop().await.unwrap();
-    client.read_error_detail().await.unwrap();
+    client.read_fpga_state().await.unwrap();
 
     let s = slave.lock().unwrap();
     assert_eq!(s.ack, s.expected_seq.wrapping_sub(1));

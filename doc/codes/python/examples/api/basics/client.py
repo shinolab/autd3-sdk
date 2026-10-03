@@ -23,7 +23,6 @@ async def main() -> None:
 
     firmware = await client.read_firmware_version()
     fpga_state = await client.read_fpga_state()
-    error_detail = await client.read_error_detail()
 
     datagram_builder = client.datagram_builder()
     resp = await (await client.send(frame))
@@ -33,7 +32,7 @@ async def main() -> None:
     await client.close()
     # ANCHOR_END: api
 
-    _ = (num_devices, geometry, firmware, fpga_state, error_detail, datagram_builder, resp)
+    _ = (num_devices, geometry, firmware, fpga_state, datagram_builder, resp)
 
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
