@@ -6,11 +6,12 @@ use autd3_python_capsule::{
     modulation_from_capsule, phases_from_capsule, to_pyerr,
 };
 use autd3_rs::commands::{
-    ActivateModulationBank as CoreActivateModulationBank, ActivatePatternBank as CoreActivatePatternBank,
-    Command as CoreCommand, ConfigFociStm as CoreConfigFociStm,
-    ConfigModulation as CoreConfigModulation, ConfigPattern as CoreConfigPattern,
-    Modulation as CoreModulation, Pattern as CorePattern, PatternIntensity as CorePatternIntensity,
-    PhaseDepth as CorePhaseDepth, WriteModulationBuffer as CoreWriteModulationBuffer,
+    ActivateModulationBank as CoreActivateModulationBank,
+    ActivatePatternBank as CoreActivatePatternBank, Command as CoreCommand,
+    ConfigFociStm as CoreConfigFociStm, ConfigModulation as CoreConfigModulation,
+    ConfigPattern as CoreConfigPattern, Modulation as CoreModulation, Pattern as CorePattern,
+    PatternIntensity as CorePatternIntensity, PhaseDepth as CorePhaseDepth,
+    WriteModulationBuffer as CoreWriteModulationBuffer,
     WritePatternBuffer as CoreWritePatternBuffer, WritePatternPhase as CoreWritePatternPhase,
 };
 use autd3_rs::value::{
