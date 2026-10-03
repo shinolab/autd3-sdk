@@ -20,7 +20,7 @@ use crate::params::{
 };
 use crate::port::{FlashError, Port};
 use crate::proto::{
-    Cmd, Drained, EMISSION_RAM_WORDS, FRAME_BYTES_MAX, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS,
+    Cmd, Drained, EMISSION_RAM_WORDS, FRAME_HEADER_BYTES, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS,
     PAYLOAD_BYTES, Reply, Telemetry,
 };
 use autd3_cpu_wire::fpga_update::{FPGA_FLASH_BYTES, FPGA_GOLDEN_REGION_END, FPGA_SECTOR_BYTES};
@@ -365,6 +365,7 @@ impl Port for MockPort {
 pub(crate) struct Frame {
     seq: u8,
     cmd: u8,
+    len: usize,
     payload: Box<[u8; PAYLOAD_BYTES]>,
 }
 
@@ -377,6 +378,7 @@ impl Frame {
         Self {
             seq,
             cmd,
+            len: 0,
             payload: Box::new([0; PAYLOAD_BYTES]),
         }
     }
@@ -389,6 +391,7 @@ impl Frame {
         let mut f = Self::new(seq, cmd);
         let bytes = payload.as_bytes();
         f.payload[..bytes.len()].copy_from_slice(bytes);
+        f.len = bytes.len();
         f
     }
 
@@ -401,18 +404,24 @@ impl Frame {
         let mut f = Self::from_payload(seq, cmd, header);
         let h = core::mem::size_of::<H>();
         f.payload[h..h + data.len()].copy_from_slice(data);
+        f.len = h + data.len();
         f
     }
 
     pub(crate) fn set_payload_byte(&mut self, index: usize, value: u8) {
         self.payload[index] = value;
+        self.len = self.len.max(index + 1);
     }
 
-    pub(crate) fn bytes(&self) -> Box<[u8; FRAME_BYTES_MAX]> {
-        let mut bytes = Box::new([0u8; FRAME_BYTES_MAX]);
-        bytes[0] = self.seq;
-        bytes[1] = self.cmd;
-        bytes[2..].copy_from_slice(&self.payload[..]);
+    pub(crate) fn set_len(&mut self, len: usize) {
+        self.len = len;
+    }
+
+    pub(crate) fn bytes(&self) -> std::vec::Vec<u8> {
+        let mut bytes = std::vec::Vec::with_capacity(FRAME_HEADER_BYTES + self.len);
+        bytes.push(self.seq);
+        bytes.push(self.cmd);
+        bytes.extend_from_slice(&self.payload[..self.len]);
         bytes
     }
 }

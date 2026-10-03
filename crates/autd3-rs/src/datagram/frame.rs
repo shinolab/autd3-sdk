@@ -1,5 +1,5 @@
 use crate::client::MAX_DEVICES;
-use crate::commands::operation::{Distribution, Operation};
+use crate::commands::operation::{Distribution, Encoded, Operation};
 use crate::error::{Error, PayloadError};
 use crate::geometry::Geometry;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -10,6 +10,7 @@ use super::each::{each_encode, each_frames};
 pub struct Datagram {
     pub cmd: Cmd,
     pub payload: [u8; PAYLOAD_BYTES],
+    pub payload_len: usize,
 }
 
 impl Datagram {
@@ -18,7 +19,13 @@ impl Datagram {
         Self {
             cmd,
             payload: [0u8; PAYLOAD_BYTES],
+            payload_len: 0,
         }
+    }
+
+    #[must_use]
+    pub fn payload(&self) -> &[u8] {
+        &self.payload[..self.payload_len]
     }
 }
 
@@ -42,10 +49,13 @@ impl<'a> Frame<'a> {
 
 fn encode_slots(
     slots: &mut [Datagram],
-    mut encode: impl FnMut(usize, &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error>,
+    mut encode: impl FnMut(usize, &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error>,
 ) -> Result<(), Error> {
     for (device, slot) in slots.iter_mut().enumerate() {
-        slot.cmd = encode(device, &mut slot.payload)?;
+        let encoded = encode(device, &mut slot.payload)?;
+        debug_assert!(encoded.len <= PAYLOAD_BYTES);
+        slot.cmd = encoded.cmd;
+        slot.payload_len = encoded.len;
     }
     Ok(())
 }

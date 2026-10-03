@@ -1,6 +1,6 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
+use autd3_rs_core::protocol::{Cmd, Seq, TxFrame};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
@@ -12,18 +12,13 @@ const BIT_MOD_BANK: u8 = 1 << 1;
 const BIT_PATTERN_BANK: u8 = 1 << 2;
 const BIT_PATTERN_MODE: u8 = 1 << 3;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
-    let mut tx = TxFrame::new(Seq::new(seq), cmd);
-    tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; FRAME_BYTES_MAX];
-    tx.write_to(&mut buf);
-    buf
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> Vec<u8> {
+    TxFrame::with_payload(Seq::new(seq), cmd, payload).to_vec()
 }
 
 fn write_modulation(bank: u8, samples: &[u8]) -> Vec<u8> {
     let mut w = vec![bank, 0];
     w.extend_from_slice(&0u32.to_le_bytes());
-    w.extend_from_slice(&(samples.len() as u16).to_le_bytes());
     w.extend_from_slice(samples);
     w
 }
@@ -39,6 +34,7 @@ fn config_modulation(bank: u8, size: usize, rep: u16) -> Vec<u8> {
 fn change_mod_bank(bank: u8) -> Vec<u8> {
     let mut c = vec![bank, IMMEDIATE];
     c.extend_from_slice(&0u64.to_le_bytes());
+    c.extend_from_slice(&0u32.to_le_bytes());
     c
 }
 
@@ -62,6 +58,7 @@ fn config_pattern(bank: u8, size: usize, rep: u16) -> Vec<u8> {
 fn change_pattern_bank(bank: u8) -> Vec<u8> {
     let mut c = vec![bank, IMMEDIATE];
     c.extend_from_slice(&0u64.to_le_bytes());
+    c.extend_from_slice(&0u32.to_le_bytes());
     c
 }
 

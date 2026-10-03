@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use crate::Telemetry;
 use crate::commands::SetSilencer;
 use crate::geometry::{Autd3, Geometry};
-use crate::protocol::{Cmd, FRAME_BYTES_MAX, TxFrame};
-use crate::transport::Bus;
+use crate::protocol::{Cmd, TxFrame};
+use crate::transport::{Bus, FrameBuf};
 use crate::udp::Reply;
 use crate::{Client, ClientConfig};
 use autd3_cpu_fw::proto::Mode;
@@ -66,10 +66,8 @@ impl SharedAudit {
         let mut audit = self.audit.lock().unwrap();
         let device = audit.device_mut(device);
         let mut seq = crate::protocol::Seq::new(device.reply().ack).next();
-        let mut bytes = [0u8; FRAME_BYTES_MAX];
         for _ in 0..frames {
-            TxFrame::new(seq, Cmd::Nop).write_to(&mut bytes);
-            let _ = device.recv(&bytes, 0);
+            let _ = device.recv(&TxFrame::new(seq, Cmd::Nop).to_vec(), 0);
             device.process_pending();
             seq = seq.next();
         }
@@ -87,15 +85,15 @@ impl Bus for SharedAudit {
         self.msg_id.wrapping_add(1)
     }
 
-    fn send(&mut self, frames: &[[u8; FRAME_BYTES_MAX]]) -> Result<u16, Self::Error> {
-        if let Some(frame) = frames.first().and_then(|f| TxFrame::parse(f).ok()) {
+    fn send(&mut self, frames: &[FrameBuf]) -> Result<u16, Self::Error> {
+        if let Some(frame) = frames.first().and_then(|f| TxFrame::parse(f.as_ref())) {
             if frame.cmd == Cmd::Reset {
                 self.resets.fetch_add(1, Ordering::Relaxed);
             }
             self.sent.lock().unwrap().push((frame.seq.get(), frame.cmd));
         }
         self.msg_id = self.msg_id.wrapping_add(1);
-        let refs: Vec<&[u8]> = frames.iter().map(|f| &f[..]).collect();
+        let refs: Vec<&[u8]> = frames.iter().map(AsRef::as_ref).collect();
         let replies = self.audit.lock().unwrap().send(&refs, self.msg_id);
         self.queue.extend(replies);
         Ok(self.msg_id)

@@ -12,10 +12,10 @@ pub use write_modulation_buffer::WriteModulationBuffer;
 
 pub use operation::{
     ChangeModulationBank, ChangePatternBank, Clear, ConfigFociStm, ConfigModulation, ConfigPattern,
-    Distribution, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, ForceFan, GpioOut, Nop,
-    Operation, PWE_TABLE_SIZE, PatternCompression, PatternIntensity, SetGpioOut, SetOutputMask,
-    SetPhaseCorrection, SetPulseWidthTable, SetSilencer, SilencerConfig, Synchronize,
-    WritePatternBuffer, WritePatternCompressed,
+    Distribution, EmulateGpioIn, Encoded, FixedCompletionTime, FixedUpdateRate, ForceFan, GpioOut,
+    Nop, Operation, PWE_TABLE_SIZE, PatternCompression, PatternIntensity, SetGpioOut,
+    SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, SilencerConfig,
+    Synchronize, WritePatternBuffer, WritePatternCompressed,
 };
 pub use stm::{
     FociStm, FociStmOption, PatternStm, PatternStmMode, PatternStmOption, StmConfig, StmIntensity,

@@ -1,5 +1,7 @@
-use crate::proto::{Cmd, Error};
-use crate::tests::builders::write_foci_buffer;
+use crate::cmd::config_mod::ConfigModPayload;
+use crate::cmd::force_fan::ForceFanPayload;
+use crate::proto::{Cmd, Disposition, Error, FRAME_BYTES_MAX};
+use crate::tests::builders::{config_mod, force_fan, write_foci_buffer};
 use crate::tests::mock::{Frame, Harness};
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
@@ -202,4 +204,50 @@ fn handshake_survives_worst_case_dedup_collision_after_crashed_client() {
     assert_eq!(h.ack(), 0);
     assert_eq!(h.status(), 0);
     assert_eq!(h.expected_seq(), 1);
+}
+
+#[test]
+fn payload_free_commands_reject_a_payload() {
+    let mut h = Harness::new();
+    let mut nop = Frame::new(0, Cmd::Nop);
+    nop.set_payload_byte(0, 0);
+    h.deliver(&nop);
+    assert_eq!(h.ack(), 0);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    let mut read = Frame::new(1, Cmd::ReadFirmwareInfo);
+    read.set_payload_byte(0, 0);
+    h.deliver(&read);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+    assert_eq!(h.reply_data(), [] as [u8; 0]);
+}
+
+#[test]
+fn fixed_length_payloads_must_match_exactly() {
+    let mut h = Harness::new();
+    let mut long = force_fan(0, 1);
+    long.set_payload_byte(size_of::<ForceFanPayload>(), 0);
+    h.deliver(&long);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    let mut short = config_mod(1, 0, 10, 4);
+    short.set_len(size_of::<ConfigModPayload>() - 1);
+    h.deliver(&short);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    h.deliver(&force_fan(2, 1));
+    assert_eq!(h.status(), 0);
+}
+
+#[test]
+fn an_oversized_frame_is_dropped() {
+    let mut h = Harness::new();
+    let mut frame = std::vec![0u8; FRAME_BYTES_MAX + 1];
+    frame[1] = Cmd::Nop as u8;
+    assert_eq!(
+        h.cpu.recv_frame(&mut h.port, &frame, 0),
+        Disposition::Dropped
+    );
+    assert_eq!(h.ack(), 0xFF);
+    assert_eq!(h.expected_seq(), 0);
 }

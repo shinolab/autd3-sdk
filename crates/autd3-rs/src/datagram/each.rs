@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
-use crate::commands::operation::{Distribution, Nop, Operation};
+use crate::commands::operation::{Distribution, Encoded, Nop, Operation};
 use crate::error::Error;
 use crate::geometry::Device;
 use crate::mirror::FirmwareState;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::PAYLOAD_BYTES;
 
 pub(crate) type EachOps<'a> = Vec<Vec<Box<dyn Operation + 'a>>>;
 
@@ -17,7 +17,7 @@ pub(crate) fn each_encode(
     device: &Device,
     frame: usize,
     out: &mut [u8; PAYLOAD_BYTES],
-) -> Result<Cmd, Error> {
+) -> Result<Encoded, Error> {
     match devices.get(device.idx()).and_then(|ops| ops.get(frame)) {
         Some(op) => op.encode(device, out),
         None => Nop.encode(device, out),
@@ -60,7 +60,7 @@ impl Operation for EachFrame<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         each_encode(&self.devices, device, self.frame, out)
     }
 

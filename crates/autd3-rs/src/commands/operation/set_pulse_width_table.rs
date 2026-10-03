@@ -7,7 +7,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PULSE_WIDTH_PERIOD, PulseWidth};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Encoded, Operation};
 
 pub use autd3_cpu_wire::layout::PWE_TABLE_SIZE;
 
@@ -36,13 +36,13 @@ impl Operation for SetPulseWidthTable<'_> {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let (p, _) = PwePayload::mut_from_prefix(&mut out[..]).unwrap();
         for (dst, &v) in p.table.iter_mut().zip(self.table.iter()) {
             let pulse_width = v.pulse_width()?;
             *dst = U16::new(pulse_width);
         }
-        Ok(Cmd::SetPulseWidthTable)
+        Ok(Encoded::header::<PwePayload>(Cmd::SetPulseWidthTable))
     }
 }
 
@@ -61,7 +61,7 @@ mod tests {
         let cmd = SetPulseWidthTable { table: &table }
             .encode(&test_device(0), &mut out)
             .unwrap();
-        assert_eq!(cmd, Cmd::SetPulseWidthTable);
+        assert_eq!(cmd, Encoded::header::<PwePayload>(Cmd::SetPulseWidthTable));
         assert_eq!(&out[0..2], &0u16.to_le_bytes());
         assert_eq!(&out[2..4], &1u16.to_le_bytes());
         assert_eq!(&out[510..512], &255u16.to_le_bytes());

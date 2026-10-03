@@ -7,7 +7,7 @@ use autd3_rs::commands::Distribution;
 use autd3_rs::{DatagramBuilder, Frame};
 use autd3_rs_core::common::ULTRASOUND_PERIOD;
 use autd3_rs_core::geometry::{Geometry, Point3};
-use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq};
+use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
 use autd3_rs_firmware_emulator::{Device, SilencerEmulator};
 
 use crate::client_api::ClientApi;
@@ -135,10 +135,8 @@ impl Recorder {
                 Distribution::PerDevice => &frame.datagrams()[d],
             };
             let mut buf = [0u8; FRAME_BYTES_MAX];
-            buf[0] = seq.get();
-            buf[1] = dg.cmd.as_u8();
-            buf[2..].copy_from_slice(&dg.payload);
-            let _ = self.devices[d].send(&buf);
+            let len = TxFrame::with_payload(seq, dg.cmd, dg.payload()).write_to(&mut buf);
+            let _ = self.devices[d].send(&buf[..len]);
         }
         self.seq = self.seq.next();
         if touches_silencer {

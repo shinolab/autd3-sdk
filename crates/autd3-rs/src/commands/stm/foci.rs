@@ -313,7 +313,7 @@ mod tests {
         ));
 
         assert_eq!(payload[9], 0x02, "GPIO");
-        assert_eq!(&payload[16..24], &1u64.to_le_bytes());
+        assert_eq!(&payload[14..22], &1u64.to_le_bytes());
     }
 
     #[test]

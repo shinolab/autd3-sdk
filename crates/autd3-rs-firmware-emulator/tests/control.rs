@@ -1,13 +1,10 @@
-use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
+use autd3_rs_core::protocol::{Cmd, Seq, TxFrame};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
-    let mut buf = [0u8; FRAME_BYTES_MAX];
-    TxFrame::new(Seq::new(seq), cmd).write_to(&mut buf);
-    buf[2..2 + payload.len()].copy_from_slice(payload);
-    buf
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> Vec<u8> {
+    TxFrame::with_payload(Seq::new(seq), cmd, payload).to_vec()
 }
 
 #[test]

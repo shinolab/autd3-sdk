@@ -2,7 +2,7 @@ use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Encoded, Operation};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Synchronize;
@@ -14,7 +14,7 @@ impl Operation for Synchronize {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        Ok(Cmd::Synchronize)
+    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        Ok(Encoded::no_payload(Cmd::Synchronize))
     }
 }

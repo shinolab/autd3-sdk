@@ -1,6 +1,6 @@
 use std::vec::Vec;
 
-use zerocopy::little_endian::{U16, U32};
+use zerocopy::little_endian::U32;
 use zerocopy::{FromBytes, IntoBytes};
 
 use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
@@ -33,7 +33,6 @@ fn chunk(seq: u8, offset: u32, data: &[u8]) -> Frame {
         Cmd::UpdateChunk,
         &UpdateChunkPayload {
             offset: U32::new(offset),
-            data_len: U16::new(data.len() as u16),
         },
         data,
     )
@@ -252,9 +251,8 @@ fn chunk_out_of_range_is_invalid_payload() {
         Cmd::UpdateChunk,
         &UpdateChunkPayload {
             offset: U32::new(0),
-            data_len: U16::new((UPDATE_CHUNK_MAX_DATA_LEN + 1) as u16),
         },
-        &[],
+        &[0; UPDATE_CHUNK_MAX_DATA_LEN + 1],
     );
     h.deliver(&oversized);
     assert_eq!(h.status(), Error::InvalidPayload as u8);

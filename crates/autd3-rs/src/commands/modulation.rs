@@ -85,14 +85,14 @@ mod tests {
 
     use crate::commands::operation::MOD_FUSED_MAX_DATA_LEN;
 
-    fn fused_payload(m: Modulation<'_>) -> [u8; crate::protocol::PAYLOAD_BYTES] {
+    fn fused_payload(m: Modulation<'_>) -> Vec<u8> {
         let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(m);
         let datagrams = b.build().unwrap();
         assert_eq!(datagrams.len(), 1, "short modulation fuses into 1 frame");
         let f = datagrams.frame(0).unwrap();
         assert_eq!(f.datagrams()[0].cmd, Cmd::WriteModulationFused);
-        f.datagrams()[0].payload
+        f.datagrams()[0].payload().to_vec()
     }
 
     #[test]
@@ -107,7 +107,10 @@ mod tests {
         assert_eq!(payload[0], 1, "bank B1");
         assert_eq!(payload[1], 0xFF, "IMMEDIATE");
         assert_eq!(&payload[4..8], &20u32.to_le_bytes(), "size");
-        assert_eq!(&payload[10..12], &20u16.to_le_bytes(), "data_len");
+        assert_eq!(
+            payload.len(),
+            size_of::<autd3_cpu_wire::payload::WriteModulationFusedPayload>() + 20
+        );
     }
 
     #[test]
@@ -122,7 +125,7 @@ mod tests {
         let data = vec![0x80u8; 4];
         let payload = fused_payload(Modulation::new(SamplingConfig::FREQ_4K, &data));
         assert_eq!(payload[1], 0xFF, "IMMEDIATE");
-        assert_eq!(&payload[12..20], &0u64.to_le_bytes());
+        assert_eq!(&payload[10..18], &0u64.to_le_bytes());
     }
 
     #[test]
@@ -139,7 +142,7 @@ mod tests {
         });
 
         assert_eq!(payload[1], 0x01, "SYS_TIME");
-        assert_eq!(&payload[12..20], &0xDEAD_BEEFu64.to_le_bytes());
+        assert_eq!(&payload[10..18], &0xDEAD_BEEFu64.to_le_bytes());
     }
 
     #[test]

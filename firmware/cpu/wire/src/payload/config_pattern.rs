@@ -1,7 +1,7 @@
 use zerocopy::little_endian::{U16, U32};
 use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
-use super::try_read_header;
+use super::try_read_exact;
 use crate::layout::{BUFFER_SIZE_MIN, MAX_FOCI_TOTAL};
 use crate::params::{
     EMISSION_MAX_INDICES, EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW, NUM_FOCI_MAX, REP_INFINITE,
@@ -56,7 +56,7 @@ pub(super) fn validate_pattern_config(
 
 impl ConfigPatternPayload {
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        let (p, _) = try_read_header::<Self>(payload)?;
+        let p = try_read_exact::<Self>(payload)?;
         validate_pattern_config(
             p.emission_type,
             p.divider.get(),

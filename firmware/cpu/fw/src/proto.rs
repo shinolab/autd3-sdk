@@ -19,6 +19,7 @@ pub struct RxFrame {
     pub seq: u8,
     pub cmd: u8,
     pub msg_id: u16,
+    pub len: u16,
     pub payload: [u8; PAYLOAD_BYTES],
 }
 
@@ -27,6 +28,7 @@ impl RxFrame {
         seq: 0,
         cmd: 0,
         msg_id: 0,
+        len: 0,
         payload: [0; PAYLOAD_BYTES],
     };
 
@@ -39,7 +41,13 @@ impl RxFrame {
         let body = frame.get(FRAME_HEADER_BYTES..).unwrap_or(&[]);
         let len = body.len().min(PAYLOAD_BYTES);
         rx.payload[..len].copy_from_slice(&body[..len]);
+        rx.len = len as u16;
         rx
+    }
+
+    #[must_use]
+    pub fn payload(&self) -> &[u8] {
+        &self.payload[..usize::from(self.len)]
     }
 }
 

@@ -8,7 +8,7 @@ use crate::params::{BUFFER_SIZE_MIN, MOD_BUFFER_SAMPLES};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 
-use super::{Distribution, Operation, write_header};
+use super::{Distribution, Encoded, Operation, write_header};
 
 const MOD_FUSED_HEADER_BYTES: usize = core::mem::size_of::<WriteModulationFusedPayload>();
 pub(crate) const MOD_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - MOD_FUSED_HEADER_BYTES;
@@ -40,7 +40,7 @@ impl Operation for WriteModulationFused<'_> {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         if self.data.len() < BUFFER_SIZE_MIN {
             return Err(PayloadError::ModulationSizeOutOfRange {
                 size: self.data.len(),
@@ -67,7 +67,6 @@ impl Operation for WriteModulationFused<'_> {
         }
         let divider = self.config.divide()?;
         let margin_ns = self.transition_mode.margin_ns()?;
-        let len = u16::try_from(self.data.len()).expect("bounded by MOD_FUSED_MAX_DATA_LEN");
 
         let rest = write_header(
             out,
@@ -79,13 +78,15 @@ impl Operation for WriteModulationFused<'_> {
                     u32::try_from(self.data.len()).expect("bounded by MOD_BUFFER_SAMPLES"),
                 ),
                 rep: U16::new(self.loop_behavior.rep()),
-                data_len: U16::new(len),
                 transition_value: U64::new(self.transition_mode.value()),
                 margin_ns: U32::new(margin_ns),
             },
         );
         rest[..self.data.len()].copy_from_slice(self.data);
-        Ok(Cmd::WriteModulationFused)
+        Ok(Encoded::header_with_data::<WriteModulationFusedPayload>(
+            Cmd::WriteModulationFused,
+            self.data.len(),
+        ))
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
@@ -124,13 +125,15 @@ mod tests {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
-        assert_eq!(cmd, Cmd::WriteModulationFused);
+        assert_eq!(
+            cmd,
+            Encoded::header_with_data::<WriteModulationFusedPayload>(Cmd::WriteModulationFused, 4)
+        );
         assert_eq!(out[0], 1, "bank B1");
         assert_eq!(out[1], 0xFF, "IMMEDIATE");
         assert_eq!(&out[2..4], &10u16.to_le_bytes(), "divider");
         assert_eq!(&out[4..8], &4u32.to_le_bytes(), "size");
         assert_eq!(&out[8..10], &9u16.to_le_bytes(), "Finite(10) => rep 9");
-        assert_eq!(&out[10..12], &4u16.to_le_bytes(), "data_len");
         assert_eq!(
             &out[MOD_FUSED_HEADER_BYTES..MOD_FUSED_HEADER_BYTES + 4],
             &data

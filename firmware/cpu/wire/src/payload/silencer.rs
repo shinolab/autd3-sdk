@@ -1,7 +1,7 @@
 use zerocopy::little_endian::U16;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
-use super::read_header;
+use super::read_exact;
 use crate::Error;
 use crate::params::SILENCER_FLAG_FIXED_UPDATE_RATE_MODE;
 
@@ -25,7 +25,7 @@ pub struct SilencerPayload {
 
 impl SilencerPayload {
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        let (p, _) = read_header::<Self>(payload)?;
+        let p = read_exact::<Self>(payload)?;
         let (intensity, phase) = if (p.flag & SILENCER_FLAG_FIXED_UPDATE_RATE_MODE) != 0 {
             (p.update_rate_intensity, p.update_rate_phase)
         } else {

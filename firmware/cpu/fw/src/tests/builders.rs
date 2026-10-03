@@ -71,7 +71,6 @@ pub(crate) fn write_foci_buffer(seq: u8, bank: u8, offset_words: u32, words: &[u
         bank: PatternBank::B0,
         reserved: 0,
         offset: U32::new(offset_words),
-        data_len: U16::new((words.len() * 2) as u16),
     };
     let mut f = Frame::from_parts(seq, Cmd::WriteFociBuffer, &header, &words_to_bytes(words));
     f.set_payload_byte(offset_of!(WriteFociPayload, bank), bank);
@@ -161,7 +160,6 @@ pub(crate) fn write_mod_buffer(seq: u8, bank: u8, offset: u32, data: &[u8]) -> F
         bank: ModulationBank::B0,
         reserved: 0,
         offset: U32::new(offset),
-        data_len: U16::new(data.len() as u16),
     };
     let mut f = Frame::from_parts(seq, Cmd::WriteModulationBuffer, &header, data);
     f.set_payload_byte(offset_of!(WriteModPayload, bank), bank);
@@ -320,10 +318,9 @@ pub(crate) fn write_pattern_fused(seq: u8, f: &FusedPattern, words: &[u16]) -> F
         transition_mode: f.transition_mode,
         sound_speed: U16::new(f.sound_speed),
         rep: U16::new(f.rep),
-        data_len: U16::new((words.len() * 2) as u16),
         transition_value: U64::new(f.transition_value),
         margin_ns: U32::new(f.margin_ns),
-        reserved: U32::new(0),
+        reserved: [0; 6],
     };
     let mut frame = Frame::from_parts(seq, Cmd::WritePatternFused, &header, &words_to_bytes(words));
     frame.set_payload_byte(offset_of!(WritePatternFusedPayload, bank), f.bank);
@@ -365,7 +362,6 @@ pub(crate) fn write_mod_fused(seq: u8, f: &FusedMod, data: &[u8]) -> Frame {
         divider: U16::new(f.divider),
         size: U32::new(f.size),
         rep: U16::new(f.rep),
-        data_len: U16::new(data.len() as u16),
         transition_value: U64::new(f.transition_value),
         margin_ns: U32::new(f.margin_ns),
     };

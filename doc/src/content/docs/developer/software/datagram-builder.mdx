@@ -23,7 +23,7 @@ import Mermaid from "@components/Mermaid.astro";
 |              | 型             | 内容                                                                      |
 | ------------ | -------------- | ------------------------------------------------------------------------- |
 | ユーザー向け | `Command<'a>`  | 複数の`Operation`を束ねたもの. `expand` で自身を `Operation` の列へ展開.  |
-| 中間         | `Operation`    | 1 フレーム分の処理に対応. `encode` でペイロードに内容書き出す.            |
+| 中間         | `Operation`    | 1 フレーム分の処理に対応. `encode` でペイロードに内容を書き出し, `Cmd` と書いた長さ (`Encoded`) を返す. |
 | 出力         | `Frames`       | 実際に送出する `Datagram` の連結バッファとフレーム境界.                   |
 
 ```rust
@@ -34,7 +34,7 @@ pub trait Command<'a> {
 
 pub trait Operation {
     fn distribution(&self) -> Distribution;
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error>;
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error>;
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error>;
 }
 ```

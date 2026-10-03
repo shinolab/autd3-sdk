@@ -60,6 +60,34 @@ use crate::params::BUFFER_SIZE_MIN;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::LoopBehavior;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Encoded {
+    pub cmd: Cmd,
+    pub len: usize,
+}
+
+impl Encoded {
+    #[must_use]
+    pub const fn new(cmd: Cmd, len: usize) -> Self {
+        Self { cmd, len }
+    }
+
+    #[must_use]
+    pub const fn no_payload(cmd: Cmd) -> Self {
+        Self::new(cmd, 0)
+    }
+
+    #[must_use]
+    pub const fn header<H>(cmd: Cmd) -> Self {
+        Self::new(cmd, size_of::<H>())
+    }
+
+    #[must_use]
+    pub const fn header_with_data<H>(cmd: Cmd, data_len: usize) -> Self {
+        Self::new(cmd, size_of::<H>() + data_len)
+    }
+}
+
 pub(crate) fn write_header<'a, H: IntoBytes + Immutable>(
     out: &'a mut [u8; PAYLOAD_BYTES],
     header: &H,
@@ -85,7 +113,7 @@ pub enum Distribution {
 pub trait Operation: crate::sealed::Sealed {
     fn distribution(&self) -> Distribution;
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error>;
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error>;
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
         let _ = (device, state);

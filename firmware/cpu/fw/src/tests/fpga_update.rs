@@ -1,6 +1,6 @@
 use std::vec::Vec;
 
-use zerocopy::little_endian::{U16, U32};
+use zerocopy::little_endian::U32;
 
 use autd3_cpu_wire::fpga_update::{
     FPGA_FUNC_FLASH_OTA, FPGA_GOLDEN_REGION_END, FPGA_IMAGE_BASE, FPGA_IMAGE_CAPACITY,
@@ -39,7 +39,6 @@ fn chunk(seq: u8, offset: u32, data: &[u8]) -> Frame {
         Cmd::FpgaUpdateChunk,
         &UpdateChunkPayload {
             offset: U32::new(offset),
-            data_len: U16::new(data.len() as u16),
         },
         data,
     )

@@ -4,7 +4,7 @@ use crate::params::EMISSION_MAX_INDICES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Intensity, PatternBank, Phase};
 
-use super::{Distribution, Operation, write_header};
+use super::{Distribution, Encoded, Operation, write_header};
 use autd3_cpu_wire::layout::{PATTERN_RAW_DATA_LEN, PATTERN_RAW_MAX_COUNT};
 use autd3_cpu_wire::params::NUM_TRANSDUCERS;
 use autd3_cpu_wire::payload::WritePatternRawPayload;
@@ -128,7 +128,7 @@ fn encode_raw_frame(
     slots: &[(&[Vec<Phase>], PatternIntensity<'_>)],
     device: &Device,
     out: &mut [u8; PAYLOAD_BYTES],
-) -> Result<Cmd, Error> {
+) -> Result<Encoded, Error> {
     let last = index + slots.len().max(1) - 1;
     if last >= EMISSION_MAX_INDICES {
         return Err(PayloadError::PatternIndexOutOfRange {
@@ -149,7 +149,10 @@ fn encode_raw_frame(
         let (dst_phases, dst_intensities) = data.split_at_mut(NUM_TRANSDUCERS);
         encode_raw_slot(phases, intensities, device, dst_phases, dst_intensities)?;
     }
-    Ok(Cmd::WritePatternRaw)
+    Ok(Encoded::header_with_data::<WritePatternRawPayload>(
+        Cmd::WritePatternRaw,
+        slots.len() * PATTERN_RAW_DATA_LEN,
+    ))
 }
 
 impl Operation for WritePatternBuffer<'_> {
@@ -157,7 +160,7 @@ impl Operation for WritePatternBuffer<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         encode_raw_frame(
             self.bank,
             self.index,
@@ -183,7 +186,7 @@ impl Operation for WritePatternBuffers<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         encode_raw_frame(
             self.bank,
             self.index,
@@ -219,7 +222,13 @@ mod tests {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = op.encode(&dev, &mut out).unwrap();
 
-        assert_eq!(cmd, Cmd::WritePatternRaw);
+        assert_eq!(
+            cmd,
+            Encoded::header_with_data::<WritePatternRawPayload>(
+                Cmd::WritePatternRaw,
+                PATTERN_RAW_DATA_LEN
+            )
+        );
         assert_eq!(out[0], 1);
         assert_eq!(out[1], 1, "count");
         assert_eq!(&out[2..4], &3u16.to_le_bytes());
@@ -305,7 +314,13 @@ mod tests {
             ],
         };
         let mut out = [0u8; PAYLOAD_BYTES];
-        assert_eq!(op.encode(&dev, &mut out).unwrap(), Cmd::WritePatternRaw);
+        assert_eq!(
+            op.encode(&dev, &mut out).unwrap(),
+            Encoded::header_with_data::<WritePatternRawPayload>(
+                Cmd::WritePatternRaw,
+                2 * PATTERN_RAW_DATA_LEN
+            )
+        );
         assert_eq!(out[1], 2, "count");
         assert_eq!(&out[2..4], &10u16.to_le_bytes());
         assert_eq!(out[PHASES_OFFSET], 1);

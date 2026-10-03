@@ -1,6 +1,6 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
+use autd3_rs_core::protocol::{Cmd, Seq, TxFrame};
 use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_firmware_emulator::Device;
 
@@ -8,12 +8,8 @@ const NUM_TRANSDUCERS: usize = 249;
 const BANK: u8 = 1;
 const DIVIDER: u16 = 512;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
-    let mut tx = TxFrame::new(Seq::new(seq), cmd);
-    tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; FRAME_BYTES_MAX];
-    tx.write_to(&mut buf);
-    buf
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> Vec<u8> {
+    TxFrame::with_payload(Seq::new(seq), cmd, payload).to_vec()
 }
 
 type Pattern = (Vec<Phase>, Vec<Intensity>);
@@ -81,7 +77,6 @@ fn fused_path(pattern: &Pattern) -> Device {
     p[9] = 0xFF;
     p[10..12].copy_from_slice(&0u16.to_le_bytes());
     p[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-    p[14..16].copy_from_slice(&((NUM_TRANSDUCERS * 2) as u16).to_le_bytes());
     p.extend_from_slice(&soa_bytes(pattern));
 
     let mut device = Device::new(NUM_TRANSDUCERS);
@@ -123,7 +118,6 @@ fn fused_modulation_produces_the_same_state_as_the_three_frame_path() {
 
     let mut write = vec![BANK, 0];
     write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&(data.len() as u16).to_le_bytes());
     write.extend_from_slice(&data);
 
     let mut config = vec![0u8; 10];
@@ -155,13 +149,12 @@ fn fused_modulation_produces_the_same_state_as_the_three_frame_path() {
         0
     );
 
-    let mut p = vec![0u8; 24];
+    let mut p = vec![0u8; 22];
     p[0] = BANK;
     p[1] = 0xFF;
     p[2..4].copy_from_slice(&DIVIDER.to_le_bytes());
     p[4..8].copy_from_slice(&(data.len() as u32).to_le_bytes());
     p[8..10].copy_from_slice(&0xFFFFu16.to_le_bytes());
-    p[10..12].copy_from_slice(&(data.len() as u16).to_le_bytes());
     p.extend_from_slice(&data);
 
     let mut fused = Device::new(NUM_TRANSDUCERS);
@@ -200,13 +193,12 @@ fn fused_modulation_finite_loop_arms_and_stops_from_a_single_latch() {
     let bank = 1u8;
     let rep = 1u16;
 
-    let mut p = vec![0u8; 24];
+    let mut p = vec![0u8; 22];
     p[0] = bank;
     p[1] = 0x00;
     p[2..4].copy_from_slice(&1u16.to_le_bytes());
     p[4..8].copy_from_slice(&(samples.len() as u32).to_le_bytes());
     p[8..10].copy_from_slice(&rep.to_le_bytes());
-    p[10..12].copy_from_slice(&(samples.len() as u16).to_le_bytes());
     p.extend_from_slice(&samples);
 
     let mut device = Device::new(NUM_TRANSDUCERS);

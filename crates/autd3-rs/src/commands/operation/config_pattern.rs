@@ -9,7 +9,7 @@ use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_F
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
-use super::{Distribution, Operation, check_index_advance, write_header};
+use super::{Distribution, Encoded, Operation, check_index_advance, write_header};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigPattern {
@@ -52,7 +52,7 @@ impl Operation for ConfigPattern {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let divider = self.config.divide()?;
         if self.size == 0 || self.size > EMISSION_MAX_INDICES {
             return Err(PayloadError::StmSizeOutOfRange {
@@ -77,7 +77,7 @@ impl Operation for ConfigPattern {
                 rep: U16::new(self.loop_behavior.rep()),
             },
         );
-        Ok(Cmd::ConfigPattern)
+        Ok(Encoded::header::<ConfigPatternPayload>(Cmd::ConfigPattern))
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
@@ -93,7 +93,7 @@ impl Operation for ConfigFociStm {
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let divider = self.config.divide()?;
         if self.size < BUFFER_SIZE_MIN {
             return Err(PayloadError::PatternSizeTooSmall {
@@ -135,7 +135,7 @@ impl Operation for ConfigFociStm {
                 rep: U16::new(self.loop_behavior.rep()),
             },
         );
-        Ok(Cmd::ConfigPattern)
+        Ok(Encoded::header::<ConfigPatternPayload>(Cmd::ConfigPattern))
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
@@ -151,8 +151,9 @@ mod tests {
 
     fn encode(op: &impl Operation) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), &mut out)?;
-        Ok((cmd, out))
+        let encoded = op.encode(&test_device(0), &mut out)?;
+        assert_eq!(encoded.len, size_of::<ConfigPatternPayload>());
+        Ok((encoded.cmd, out))
     }
 
     #[test]

@@ -60,8 +60,7 @@ async fn send_datagrams(&self, datagrams: &[Datagram]) -> Result<ResponseFuture,
     let mut slot = self.pool.acquire().await;      // ①
     slot.reset(Distribution::PerDevice);
     for (device, datagram) in datagrams.iter().enumerate() {
-        slot.payload_mut(device).copy_from_slice(&datagram.payload);
-        slot.set_cmd(device, datagram.cmd);
+        slot.set(device, datagram);
     }
     self.dispatch(slot, false).await
 }
@@ -72,16 +71,16 @@ async fn send_datagrams(&self, datagrams: &[Datagram]) -> Result<ResponseFuture,
 
 ```rust
 struct Slot {
-    num_devices: usize,
     dist: Distribution,
     payload: Box<[u8]>,     // num_devices * PAYLOAD_BYTES
-    cmds: Box<[Cmd]>,
+    heads: Box<[FrameHead]>,
     status: Box<[u8]>,      // 各デバイスからの応答 (エラーコード)
     values: Box<[Value]>,   // 各デバイスからの読み出し値 (最大 32 byte)
 }
 ```
 
 `Slot` は送信内容と応答の両方を持つ, 1 回の送信に対応する構造体である.
+`FrameHead` はデバイスごとの `Cmd` とペイロード長の組で, `payload_for` はその長さで切ったペイロードを返す.
 
 なお, アロケーションを回避するため, `Slot` は毎回確保するのではなくプールから借りる.
 
@@ -147,17 +146,15 @@ fn stage_new(&mut self, msg: CmdMessage) -> Result<(), NetworkCause> {
 `stage_frame` が `Slot` の内容を送信バッファへ展開する.
 
 ```rust
-fn stage_frame(seq: Seq, frame: &Slot, bufs: &mut [[u8; FRAME_BYTES_MAX]]) {
+fn stage_frame(seq: Seq, frame: &Slot, bufs: &mut [FrameBuf]) {
     for (device, buf) in bufs.iter_mut().enumerate() {
-        buf[0] = seq.get();
-        buf[1] = frame.cmd_for(device).as_u8();
-        buf[2..].copy_from_slice(frame.payload_for(device));
+        buf.stage(seq, frame.cmd_for(device), frame.payload_for(device));
     }
 }
 ```
 
-フレームの先頭 2 byte が `Seq` と `Cmd`, 残りがペイロードである.
-`UdpBus::send` はペイロード末尾の 0 を省いて送る (デバイスは受け取らなかった部分を 0 で埋める).
+`FrameBuf` は 1448 byte の固定長バッファと実際の長さの組で, フレームの先頭 2 byte が `Seq` と `Cmd`, 残りがペイロードである.
+ペイロードは `encode` が返した長さのまま送る (末尾の 0 も省かない). デバイスはデータグラムの長さをペイロード長として扱う.
 `Seq` はこの送信に割り当てられた 8 bit の通し番号で, 0 → 1 → … → 255 → 0 とラップする.
 
 送信中のコマンドは `pending` に積まれる.

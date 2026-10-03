@@ -4,9 +4,9 @@ use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::ModulationBank;
 
-use super::{Distribution, Operation, write_header};
+use super::{Distribution, Encoded, Operation, write_header};
 use autd3_cpu_wire::payload::WriteModPayload;
-use zerocopy::little_endian::{U16, U32};
+use zerocopy::little_endian::U32;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct WriteModulationChunk<'a> {
@@ -22,7 +22,7 @@ impl Operation for WriteModulationChunk<'_> {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         if self.data.is_empty() {
             return Err(PayloadError::ModulationDataEmpty.into());
         }
@@ -43,7 +43,6 @@ impl Operation for WriteModulationChunk<'_> {
         }
 
         let offset = u32::try_from(self.offset).expect("bounded by MOD_BUFFER_SAMPLES");
-        let len = u16::try_from(self.data.len()).expect("bounded by MOD_WRITE_MAX_DATA_LEN");
 
         let rest = write_header(
             out,
@@ -51,11 +50,13 @@ impl Operation for WriteModulationChunk<'_> {
                 bank: self.bank,
                 reserved: 0,
                 offset: U32::new(offset),
-                data_len: U16::new(len),
             },
         );
         rest[..self.data.len()].copy_from_slice(self.data);
-        Ok(Cmd::WriteModulationBuffer)
+        Ok(Encoded::header_with_data::<WriteModPayload>(
+            Cmd::WriteModulationBuffer,
+            self.data.len(),
+        ))
     }
 }
 
@@ -76,17 +77,19 @@ mod tests {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
-        assert_eq!(cmd, Cmd::WriteModulationBuffer);
+        assert_eq!(
+            cmd,
+            Encoded::header_with_data::<WriteModPayload>(Cmd::WriteModulationBuffer, 3)
+        );
         assert_eq!(out[0], 1);
         assert_eq!(out[1], 0);
         assert_eq!(&out[2..6], &0x0102u32.to_le_bytes());
-        assert_eq!(&out[6..8], &3u16.to_le_bytes());
         assert_eq!(&out[HEADER_BYTES..HEADER_BYTES + 3], &[0xAA, 0xBB, 0xCC]);
     }
 
     #[test]
     fn write_modulation_chunk_rejects_invalid_windows() {
-        let encode = |offset: usize, data: &[u8]| -> Result<Cmd, Error> {
+        let encode = |offset: usize, data: &[u8]| -> Result<Encoded, Error> {
             let mut out = [0u8; PAYLOAD_BYTES];
             WriteModulationChunk {
                 bank: ModulationBank::B0,

@@ -24,8 +24,12 @@ impl WritePatternRawPayload {
         {
             return Err(Error::InvalidPayload);
         }
-        let (slots, _) = rest.as_chunks::<PATTERN_RAW_DATA_LEN>();
-        let slots = slots.get(..count).ok_or(Error::InvalidPayload)?;
+        let (slots, []) = rest.as_chunks::<PATTERN_RAW_DATA_LEN>() else {
+            return Err(Error::InvalidPayload);
+        };
+        if slots.len() != count {
+            return Err(Error::InvalidPayload);
+        }
         Ok((p, slots))
     }
 }

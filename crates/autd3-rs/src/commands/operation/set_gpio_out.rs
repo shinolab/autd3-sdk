@@ -7,7 +7,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::SysTime;
 
-use super::{Distribution, Operation};
+use super::{Distribution, Encoded, Operation};
 
 use autd3_cpu_wire::params::{
     GPIO_O_TYPE_BASE_SIG, GPIO_O_TYPE_DIRECT, GPIO_O_TYPE_FORCE_FAN, GPIO_O_TYPE_IS_STM_MODE,
@@ -91,12 +91,12 @@ impl Operation for SetGpioOut {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let (p, _) = GpioOutPayload::mut_from_prefix(&mut out[..]).unwrap();
         *p = GpioOutPayload {
             values: core::array::from_fn(|i| U64::new(self.outputs[i].encode())),
         };
-        Ok(Cmd::SetGpioOut)
+        Ok(Encoded::header::<GpioOutPayload>(Cmd::SetGpioOut))
     }
 }
 
@@ -118,7 +118,7 @@ mod tests {
         }
         .encode(&test_device(0), &mut out)
         .unwrap();
-        assert_eq!(cmd, Cmd::SetGpioOut);
+        assert_eq!(cmd, Encoded::header::<GpioOutPayload>(Cmd::SetGpioOut));
         assert_eq!(&out[0..8], &0u64.to_le_bytes());
         assert_eq!(
             &out[8..16],

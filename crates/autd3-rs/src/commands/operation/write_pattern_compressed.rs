@@ -5,7 +5,7 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Intensity, PatternBank, Phase};
 
 use super::write_pattern_buffer::device_phases;
-use super::{Distribution, Operation, write_header};
+use super::{Distribution, Encoded, Operation, write_header};
 use autd3_cpu_wire::layout::{PATTERN_COMPRESSED_GROUP_BYTES, PATTERN_COMPRESSED_MAX_GROUPS};
 use autd3_cpu_wire::params::NUM_TRANSDUCERS;
 use autd3_cpu_wire::payload::{PatternFormat, WritePatternCompressedPayload};
@@ -70,7 +70,7 @@ impl Operation for WritePatternCompressed<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let count = self.count();
         if count == 0 {
             return Err(PayloadError::PatternSizeTooSmall {
@@ -100,6 +100,7 @@ impl Operation for WritePatternCompressed<'_> {
         }
         let offset =
             u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");
+        let groups = count.div_ceil(self.format.per_word());
         let rest = write_header(
             out,
             &WritePatternCompressedPayload {
@@ -112,7 +113,7 @@ impl Operation for WritePatternCompressed<'_> {
         );
         for (group, words) in rest
             .chunks_mut(PATTERN_COMPRESSED_GROUP_BYTES)
-            .take(count.div_ceil(self.format.per_word()))
+            .take(groups)
             .enumerate()
         {
             words
@@ -125,7 +126,10 @@ impl Operation for WritePatternCompressed<'_> {
                     *dst = self.pack_word(device.idx(), group, t).to_le_bytes();
                 });
         }
-        Ok(Cmd::WritePatternCompressed)
+        Ok(Encoded::header_with_data::<WritePatternCompressedPayload>(
+            Cmd::WritePatternCompressed,
+            groups * PATTERN_COMPRESSED_GROUP_BYTES,
+        ))
     }
 }
 
@@ -202,7 +206,13 @@ mod tests {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
-        assert_eq!(cmd, Cmd::WritePatternCompressed);
+        assert_eq!(
+            cmd,
+            Encoded::header_with_data::<WritePatternCompressedPayload>(
+                Cmd::WritePatternCompressed,
+                PATTERN_COMPRESSED_GROUP_BYTES
+            )
+        );
         assert_eq!(out[1], 1, "format = PhaseFull");
         assert_eq!(out[2], 2, "count = 2");
         assert_eq!(out[3], 0xFF, "intensity");

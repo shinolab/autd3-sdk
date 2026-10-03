@@ -3,7 +3,7 @@ use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Encoded, Operation};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Clear;
@@ -15,8 +15,8 @@ impl Operation for Clear {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        Ok(Cmd::Clear)
+    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        Ok(Encoded::no_payload(Cmd::Clear))
     }
 
     fn reflect(&self, _device: usize, state: &mut FirmwareState) -> Result<(), Error> {
@@ -34,7 +34,7 @@ mod tests {
     fn clear_is_no_payload_broadcast() {
         let mut out = [0xAAu8; PAYLOAD_BYTES];
         let cmd = Clear.encode(&test_device(0), &mut out).unwrap();
-        assert_eq!(cmd, Cmd::Clear);
+        assert_eq!(cmd, Encoded::no_payload(Cmd::Clear));
         assert_eq!(Clear.distribution(), Distribution::Broadcast);
     }
 

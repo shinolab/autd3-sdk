@@ -6,10 +6,9 @@ use crate::params::{
     ADDR_MOD_MEM_WR_PAGE, ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, EMISSION_MAX_INDICES,
     NUM_BANKS, NUM_TRANSDUCERS,
 };
-use zerocopy::little_endian::{U16, U32};
+use zerocopy::little_endian::U32;
 
 use crate::cmd::write_foci::WriteFociPayload;
-use crate::cmd::write_mod::WriteModPayload;
 use crate::proto::{Cmd, EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, Error, MOD_BUFFER_SAMPLES};
 use crate::tests::builders::{
     assert_fpga_unchanged, fpga_snapshot, write_foci_buffer, write_mod_buffer,
@@ -17,9 +16,9 @@ use crate::tests::builders::{
     write_pattern_raw_multi,
 };
 use crate::tests::mock::{Frame, Harness};
-use autd3_cpu_wire::layout::{FOCI_WRITE_MAX_DATA_LEN, MOD_WRITE_MAX_DATA_LEN};
+use autd3_cpu_wire::PatternBank;
+use autd3_cpu_wire::layout::MOD_WRITE_MAX_DATA_LEN;
 use autd3_cpu_wire::payload::PatternFormat;
-use autd3_cpu_wire::{ModulationBank, PatternBank};
 
 fn bad_bank() -> u8 {
     u8::try_from(NUM_BANKS).unwrap()
@@ -213,19 +212,15 @@ fn write_foci_buffer_rejects_invalid_payloads() {
         bank: PatternBank::B0,
         reserved: 0,
         offset: U32::new(0),
-        data_len: U16::new(3),
     };
-    h.deliver(&Frame::from_payload(1, Cmd::WriteFociBuffer, &odd));
+    h.deliver(&Frame::from_parts(
+        1,
+        Cmd::WriteFociBuffer,
+        &odd,
+        &[0x01, 0x02, 0x03],
+    ));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
-
-    let too_long = WriteFociPayload {
-        bank: PatternBank::B0,
-        reserved: 0,
-        offset: U32::new(0),
-        data_len: U16::new(u16::try_from(FOCI_WRITE_MAX_DATA_LEN + 2).unwrap()),
-    };
-    h.deliver(&Frame::from_payload(2, Cmd::WriteFociBuffer, &too_long));
-    assert_eq!(h.status(), Error::InvalidPayload as u8);
+    assert_eq!(h.emission_word(0, 0), 0);
 
     h.deliver(&write_foci_buffer(
         3,
@@ -508,6 +503,47 @@ fn write_mod_buffer_odd_length_pads_high_byte() {
 }
 
 #[test]
+fn write_mod_buffer_writes_trailing_zero_samples() {
+    let mut h = Harness::new();
+    h.deliver(&write_mod_buffer(0, 0, 0, &[0x11, 0x22, 0x33, 0x44]));
+    h.deliver(&write_mod_buffer(1, 0, 0, &[0x55, 0x00, 0x00, 0x00]));
+    assert_eq!(h.status(), 0);
+    assert_eq!(h.mod_word(0, 0), 0x0055);
+    assert_eq!(h.mod_word(0, 1), 0x0000);
+}
+
+#[test]
+fn write_pattern_raw_rejects_a_length_mismatching_count() {
+    let mut h = Harness::new();
+    let (phases, intensities) = raw_pattern();
+    let before = fpga_snapshot(&h);
+
+    let mut long = write_pattern_raw(0, 0, 0, &phases, &intensities);
+    long.set_payload_byte(4 + 2 * NUM_TRANSDUCERS, 0);
+    h.deliver(&long);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+
+    let mut short = write_pattern_raw(1, 0, 0, &phases, &intensities);
+    short.set_len(4 + 2 * NUM_TRANSDUCERS - 1);
+    h.deliver(&short);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+    assert_fpga_unchanged(&before, &h);
+}
+
+#[test]
+fn write_pattern_compressed_rejects_a_length_mismatching_count() {
+    let mut h = Harness::new();
+    let full = vec![0x1234_u16; NUM_TRANSDUCERS];
+    let before = fpga_snapshot(&h);
+
+    let mut long = write_pattern_compressed(0, 0, 0, 1, 1, &full);
+    long.set_payload_byte(8 + 2 * NUM_TRANSDUCERS, 0);
+    h.deliver(&long);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+    assert_fpga_unchanged(&before, &h);
+}
+
+#[test]
 fn write_mod_buffer_crosses_page_boundary() {
     let mut h = Harness::new();
 
@@ -561,19 +597,6 @@ fn write_mod_buffer_rejects_invalid_payloads() {
     assert_eq!(h.reply_data(), [Error::InvalidPayload as u8]);
 
     h.deliver(&write_mod_buffer(2, 0, 1, &[0x01, 0x02]));
-    assert_eq!(h.status(), Error::InvalidPayload as u8);
-
-    let too_long = WriteModPayload {
-        bank: ModulationBank::B0,
-        reserved: 0,
-        offset: U32::new(0),
-        data_len: U16::new(u16::try_from(MOD_WRITE_MAX_DATA_LEN + 1).unwrap()),
-    };
-    h.deliver(&Frame::from_payload(
-        3,
-        Cmd::WriteModulationBuffer,
-        &too_long,
-    ));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     h.deliver(&write_mod_buffer(

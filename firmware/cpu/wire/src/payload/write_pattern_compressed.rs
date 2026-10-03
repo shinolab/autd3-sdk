@@ -57,8 +57,7 @@ impl WritePatternCompressedPayload {
             return Err(Error::InvalidPayload);
         }
         let groups = usize::from(p.count.div_ceil(per_word));
-        let Ok((words, _)) = <[U16]>::ref_from_prefix_with_elems(rest, groups * NUM_TRANSDUCERS)
-        else {
+        let Ok(words) = <[U16]>::ref_from_bytes_with_elems(rest, groups * NUM_TRANSDUCERS) else {
             return Err(Error::InvalidPayload);
         };
         Ok((p, words))

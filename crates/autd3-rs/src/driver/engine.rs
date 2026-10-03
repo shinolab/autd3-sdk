@@ -9,8 +9,8 @@ use autd3_rs_core::rt::oneshot;
 
 use crate::client::MAX_DEVICES;
 use crate::error::{Error, NetworkCause};
-use crate::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
-use crate::transport::{Bus, BusTiming};
+use crate::protocol::{Cmd, Seq, TxFrame};
+use crate::transport::{Bus, BusTiming, FrameBuf};
 use crate::udp::Reply;
 
 use autd3_cpu_wire::Mode;
@@ -46,11 +46,9 @@ enum HandshakeError {
     },
 }
 
-fn stage_frame(seq: Seq, frame: &crate::client::pool::Slot, bufs: &mut [[u8; FRAME_BYTES_MAX]]) {
+fn stage_frame(seq: Seq, frame: &crate::client::pool::Slot, bufs: &mut [FrameBuf]) {
     for (device, buf) in bufs.iter_mut().enumerate() {
-        buf[0] = seq.get();
-        buf[1] = frame.cmd_for(device).as_u8();
-        buf[2..].copy_from_slice(frame.payload_for(device));
+        buf.stage(seq, frame.cmd_for(device), frame.payload_for(device));
     }
 }
 
@@ -150,7 +148,7 @@ pub(crate) struct Engine<B: Bus> {
     thread_waker_key: Option<u64>,
 
     all_acked: u128,
-    bufs: Vec<[u8; FRAME_BYTES_MAX]>,
+    bufs: Vec<FrameBuf>,
 
     next_seq: Seq,
     epoch: u16,
@@ -181,7 +179,7 @@ impl<B: Bus> Engine<B> {
             timing: bus.timing(),
             stats: bus.stats(),
             epoch: bus.next_msg_id(),
-            bufs: vec![[0u8; FRAME_BYTES_MAX]; num_devices],
+            bufs: vec![FrameBuf::new(); num_devices],
             bus,
             queue,
             done_tx: Some(done_tx),
@@ -304,7 +302,7 @@ impl<B: Bus> Engine<B> {
 
     fn stage_all(&mut self, frame: &TxFrame) {
         for buf in &mut self.bufs {
-            frame.write_to(buf);
+            buf.stage_frame(frame);
         }
     }
 
@@ -326,13 +324,14 @@ impl<B: Bus> Engine<B> {
     }
 
     fn start_mode(&mut self) -> Result<Rounds, NetworkCause> {
-        let mut frame = TxFrame::new(Seq::ZERO, Cmd::SetMode);
-        SetModePayload {
+        let payload = SetModePayload {
             mode: self.config.mode(),
-        }
-        .write_to_prefix(&mut frame.payload)
-        .expect("SetMode payload fits in the frame");
-        self.start_rounds(&frame)
+        };
+        self.start_rounds(&TxFrame::with_payload(
+            Seq::ZERO,
+            Cmd::SetMode,
+            payload.as_bytes(),
+        ))
     }
 
     fn advance_rounds(

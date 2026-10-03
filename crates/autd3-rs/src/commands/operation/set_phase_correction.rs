@@ -6,7 +6,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::Phase;
 
-use super::{Distribution, Operation};
+use super::{Distribution, Encoded, Operation};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SetPhaseCorrection<'a> {
@@ -20,7 +20,7 @@ impl Operation for SetPhaseCorrection<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let phases = self
             .phases
             .get(device.idx())
@@ -41,7 +41,7 @@ impl Operation for SetPhaseCorrection<'_> {
             .iter_mut()
             .zip(phases)
             .for_each(|(dst, phase)| *dst = phase.0);
-        Ok(Cmd::SetPhaseCorrection)
+        Ok(Encoded::header::<PhaseCorrPayload>(Cmd::SetPhaseCorrection))
     }
 }
 
@@ -61,7 +61,10 @@ mod tests {
         let cmd = SetPhaseCorrection { phases: &data }
             .encode(&dev, &mut out)
             .unwrap();
-        assert_eq!(cmd, Cmd::SetPhaseCorrection);
+        assert_eq!(
+            cmd,
+            Encoded::header::<PhaseCorrPayload>(Cmd::SetPhaseCorrection)
+        );
         for (i, p) in phases.iter().enumerate() {
             assert_eq!(out[i], p.0);
         }

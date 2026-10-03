@@ -8,7 +8,7 @@ use crate::params::{BUFFER_SIZE_MIN, MOD_BUFFER_SAMPLES};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
 
-use super::{Distribution, Operation, write_header};
+use super::{Distribution, Encoded, Operation, write_header};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigModulation {
@@ -25,7 +25,7 @@ impl Operation for ConfigModulation {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let divider = self.config.divide()?;
         if self.size < BUFFER_SIZE_MIN || self.size > MOD_BUFFER_SAMPLES {
             return Err(PayloadError::ModulationSizeOutOfRange {
@@ -45,7 +45,7 @@ impl Operation for ConfigModulation {
                 rep: U16::new(self.loop_behavior.rep()),
             },
         );
-        Ok(Cmd::ConfigModulation)
+        Ok(Encoded::header::<ConfigModPayload>(Cmd::ConfigModulation))
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
@@ -67,8 +67,9 @@ mod tests {
 
     fn encode(op: ConfigModulation) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), &mut out)?;
-        Ok((cmd, out))
+        let encoded = op.encode(&test_device(0), &mut out)?;
+        assert_eq!(encoded.len, size_of::<ConfigModPayload>());
+        Ok((encoded.cmd, out))
     }
 
     #[test]

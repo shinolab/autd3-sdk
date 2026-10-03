@@ -1,7 +1,7 @@
 use autd3_cpu_fw::params::{VERSION_NUM_MAJOR, VERSION_NUM_MINOR, VERSION_NUM_PATCH};
 use autd3_cpu_fw::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 use autd3_cpu_wire::payload::FirmwareInfo;
-use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, FRAME_BYTES_MAX, Seq, TxFrame};
+use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, Seq, TxFrame};
 use autd3_rs_firmware_emulator::{Audit, Device};
 use zerocopy::FromBytes;
 
@@ -9,10 +9,8 @@ const ADDR_SYNC_TIME_0: u16 = 0x10;
 
 const NUM_TRANSDUCERS: usize = 249;
 
-fn frame(seq: u8, cmd: Cmd) -> [u8; FRAME_BYTES_MAX] {
-    let mut buf = [0u8; FRAME_BYTES_MAX];
-    TxFrame::new(Seq::new(seq), cmd).write_to(&mut buf);
-    buf
+fn frame(seq: u8, cmd: Cmd) -> Vec<u8> {
+    TxFrame::new(Seq::new(seq), cmd).to_vec()
 }
 
 #[test]

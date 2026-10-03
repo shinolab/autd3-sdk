@@ -5,7 +5,7 @@ use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Encoded, Operation};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SetOutputMask<'a> {
@@ -19,7 +19,7 @@ impl Operation for SetOutputMask<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let mask = self
             .masks
             .get(device.idx())
@@ -39,7 +39,7 @@ impl Operation for SetOutputMask<'_> {
         mask.iter()
             .zip(p.data.iter_mut())
             .for_each(|(&on, dst)| *dst = u8::from(on));
-        Ok(Cmd::SetOutputMask)
+        Ok(Encoded::header::<OutputMaskPayload>(Cmd::SetOutputMask))
     }
 }
 
@@ -62,7 +62,10 @@ mod tests {
         let cmd = SetOutputMask { masks: &data }
             .encode(&dev, &mut out)
             .unwrap();
-        assert_eq!(cmd, Cmd::SetOutputMask);
+        assert_eq!(
+            cmd,
+            Encoded::header::<OutputMaskPayload>(Cmd::SetOutputMask)
+        );
         assert_eq!(out[0], 1);
         assert_eq!(out[1], 0);
         assert_eq!(out[3], 1);

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{FrameReply, Kind, PROTOCOL_VERSION};
-use autd3_rs_core::protocol::trimmed_len;
+use autd3_rs_core::protocol::FRAME_HEADER_BYTES;
 use autd3_rs_core::value::SysTime;
 use autd3_rs_core::{BusStats, DeviceClock, FRAME_BYTES_MAX};
 use zerocopy::FromBytes;
@@ -148,7 +148,7 @@ impl UdpBus {
         if let Some(len) = frames
             .iter()
             .map(|frame| frame.as_ref().len())
-            .find(|len| !(2..=FRAME_BYTES_MAX).contains(len))
+            .find(|len| !(FRAME_HEADER_BYTES..=FRAME_BYTES_MAX).contains(len))
         {
             return Err(UdpError::InvalidFrameLength(len));
         }
@@ -162,9 +162,7 @@ impl UdpBus {
             }
             let addr = self.units[index];
             let frame = frames[index].as_ref();
-            let sent = self
-                .channel
-                .send(addr, Kind::Frame, msg_id, &frame[..trimmed_len(frame)]);
+            let sent = self.channel.send(addr, Kind::Frame, msg_id, frame);
             if failure.record(addr, sent) {
                 self.trackers[index].requested(now);
             }
@@ -317,7 +315,7 @@ impl crate::transport::Bus for UdpBus {
         UdpBus::next_msg_id(self)
     }
 
-    fn send(&mut self, frames: &[[u8; FRAME_BYTES_MAX]]) -> Result<u16, UdpError> {
+    fn send(&mut self, frames: &[crate::transport::FrameBuf]) -> Result<u16, UdpError> {
         UdpBus::send(self, frames)
     }
 
@@ -413,7 +411,7 @@ mod tests {
         make_lost(&mut bus, 1);
 
         bus.heartbeat().unwrap();
-        bus.send(&[[0u8; FRAME_BYTES_MAX]; 2]).unwrap();
+        bus.send(&[[0u8; FRAME_HEADER_BYTES]; 2]).unwrap();
 
         assert_eq!(drain(&live), 2);
         assert_eq!(drain(&lost), 0);
@@ -426,7 +424,7 @@ mod tests {
         make_lost(&mut bus, 0);
 
         bus.heartbeat().unwrap();
-        bus.send(&[[0u8; FRAME_BYTES_MAX]; 1]).unwrap();
+        bus.send(&[[0u8; FRAME_HEADER_BYTES]; 1]).unwrap();
 
         assert_eq!(drain(&lost), 0);
     }
@@ -443,7 +441,7 @@ mod tests {
         make_lost(&mut bus, 1);
 
         assert!(bus.heartbeat().is_err());
-        assert!(bus.send(&[[0u8; FRAME_BYTES_MAX]; 2]).is_err());
+        assert!(bus.send(&[[0u8; FRAME_HEADER_BYTES]; 2]).is_err());
     }
 
     #[cfg(target_os = "linux")]

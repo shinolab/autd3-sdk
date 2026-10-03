@@ -1,6 +1,6 @@
 use super::*;
 use crate::commands::operation::{
-    ConfigModulation, ConfigPattern, Distribution, Operation, WritePatternBuffer,
+    ConfigModulation, ConfigPattern, Distribution, Encoded, Operation, WritePatternBuffer,
 };
 use crate::commands::{Command, Pattern, WriteModulationBuffer};
 use crate::error::{Error, PayloadError};
@@ -19,9 +19,9 @@ impl Operation for Marker {
         Distribution::PerDevice
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         out[0] = self.0;
-        Ok(Cmd::ConfigModulation)
+        Ok(Encoded::new(Cmd::ConfigModulation, 1))
     }
 }
 
@@ -46,12 +46,12 @@ impl Operation for FailAt {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         if device.idx() == self.0 {
             return Err(PayloadError::ModulationDataEmpty.into());
         }
         out[0] = 0xFF;
-        Ok(Cmd::ConfigModulation)
+        Ok(Encoded::new(Cmd::ConfigModulation, 1))
     }
 }
 
@@ -413,8 +413,8 @@ fn a_dc_offset_moves_sys_time_transitions_onto_the_bus_clock() {
         let mut b = DatagramBuilder::with_clock_offset(test_geometry_arc(1), offset_ns);
         b.push(cmd);
         let frames = b.build().unwrap();
-        let payload = frames.frame(0).unwrap().datagrams()[0].payload;
-        let p = ChangePatternBankPayload::parse(&payload[..]).unwrap();
+        let p = ChangePatternBankPayload::parse(frames.frame(0).unwrap().datagrams()[0].payload())
+            .unwrap();
         p.transition_value.get()
     };
 
@@ -451,8 +451,9 @@ fn a_dc_offset_reaches_per_device_commands_too() {
     let frames = b.build().unwrap();
 
     for device in 0..2 {
-        let payload = frames.frame(0).unwrap().datagrams()[device].payload;
-        let p = ChangePatternBankPayload::parse(&payload[..]).unwrap();
+        let p =
+            ChangePatternBankPayload::parse(frames.frame(0).unwrap().datagrams()[device].payload())
+                .unwrap();
         assert_eq!(
             p.transition_value.get(),
             host.sys_time() + offset_ns.cast_unsigned(),
@@ -481,8 +482,7 @@ fn a_dc_offset_moves_the_gpio_sys_time_trigger() {
             ],
         });
         let frames = b.build().unwrap();
-        let payload = frames.frame(0).unwrap().datagrams()[0].payload;
-        let p = GpioOutPayload::parse(&payload[..]).unwrap();
+        let p = GpioOutPayload::parse(frames.frame(0).unwrap().datagrams()[0].payload()).unwrap();
         p.values[0].get()
     };
 
@@ -521,8 +521,8 @@ fn a_device_clock_is_sampled_when_the_command_is_pushed_not_when_the_builder_is_
     b.push(cmd);
     let frames = b.build().unwrap();
 
-    let payload = frames.frame(0).unwrap().datagrams()[0].payload;
-    let p = ChangePatternBankPayload::parse(&payload[..]).unwrap();
+    let p =
+        ChangePatternBankPayload::parse(frames.frame(0).unwrap().datagrams()[0].payload()).unwrap();
     assert_eq!(
         p.transition_value.get(),
         host.sys_time() + offset_ns.cast_unsigned(),
@@ -553,8 +553,9 @@ fn a_dc_offset_reaches_the_fused_modulation_frame() {
     let frames = b.build().unwrap();
 
     assert_eq!(cmd_at(&frames, 0, 0), Cmd::WriteModulationFused);
-    let payload = frames.frame(0).unwrap().datagrams()[0].payload;
-    let (p, _) = WriteModulationFusedPayload::parse(&payload[..]).unwrap();
+    let (p, _) =
+        WriteModulationFusedPayload::parse(frames.frame(0).unwrap().datagrams()[0].payload())
+            .unwrap();
     assert_eq!(
         p.transition_value.get(),
         host.sys_time() + offset_ns.cast_unsigned(),

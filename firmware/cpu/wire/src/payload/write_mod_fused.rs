@@ -14,19 +14,16 @@ pub struct WriteModulationFusedPayload {
     pub divider: U16,
     pub size: U32,
     pub rep: U16,
-    pub data_len: U16,
     pub transition_value: U64,
     pub margin_ns: U32,
 }
 
 impl WriteModulationFusedPayload {
     pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {
-        let (p, rest) = try_read_header::<Self>(payload)?;
-        let data_len = usize::from(p.data_len.get());
-        if data_len > MOD_FUSED_MAX_DATA_LEN {
+        let (p, data) = try_read_header::<Self>(payload)?;
+        if data.len() > MOD_FUSED_MAX_DATA_LEN {
             return Err(Error::InvalidPayload);
         }
-        let data = rest.get(..data_len).ok_or(Error::InvalidPayload)?;
         validate_mod_config(p.divider.get(), p.size.get())?;
         Ok((p, data))
     }
@@ -37,7 +34,6 @@ const _: () = assert!(core::mem::offset_of!(WriteModulationFusedPayload, transit
 const _: () = assert!(core::mem::offset_of!(WriteModulationFusedPayload, divider) == 2);
 const _: () = assert!(core::mem::offset_of!(WriteModulationFusedPayload, size) == 4);
 const _: () = assert!(core::mem::offset_of!(WriteModulationFusedPayload, rep) == 8);
-const _: () = assert!(core::mem::offset_of!(WriteModulationFusedPayload, data_len) == 10);
-const _: () = assert!(core::mem::offset_of!(WriteModulationFusedPayload, transition_value) == 12);
-const _: () = assert!(core::mem::offset_of!(WriteModulationFusedPayload, margin_ns) == 20);
-const _: () = assert!(core::mem::size_of::<WriteModulationFusedPayload>() == 24);
+const _: () = assert!(core::mem::offset_of!(WriteModulationFusedPayload, transition_value) == 10);
+const _: () = assert!(core::mem::offset_of!(WriteModulationFusedPayload, margin_ns) == 18);
+const _: () = assert!(core::mem::size_of::<WriteModulationFusedPayload>() == 22);

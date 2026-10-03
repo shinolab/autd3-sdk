@@ -3,7 +3,7 @@ use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
 use zerocopy::IntoBytes;
 
-use autd3_cpu_wire::payload::FirmwareInfo;
+use autd3_cpu_wire::payload::{FirmwareInfo, expect_empty};
 
 use crate::cmd;
 use crate::fifo::{FIFO_DEPTH, Fifo};
@@ -14,8 +14,8 @@ use crate::params::{
 };
 use crate::port::Port;
 use crate::proto::{
-    Cmd, Disposition, Drained, Error, FAILSAFE_TIMEOUT_MS, Mode, REPLY_DATA_BYTES_MAX, Reply,
-    RxFrame, Telemetry,
+    Cmd, Disposition, Drained, Error, FAILSAFE_TIMEOUT_MS, FRAME_BYTES_MAX, Mode,
+    REPLY_DATA_BYTES_MAX, Reply, RxFrame, Telemetry,
 };
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
@@ -71,6 +71,25 @@ impl ReplyData {
     fn as_slice(&self) -> &[u8] {
         &self.bytes[..usize::from(self.len)]
     }
+}
+
+const fn takes_payload(cmd: Cmd) -> bool {
+    !matches!(
+        cmd,
+        Cmd::Reset
+            | Cmd::Nop
+            | Cmd::ReadErrorDetail
+            | Cmd::ReadFpgaState
+            | Cmd::ReadTelemetry
+            | Cmd::ReadFirmwareInfo
+            | Cmd::UpdateCommit
+            | Cmd::UpdateActivate
+            | Cmd::UpdateConfirm
+            | Cmd::FpgaUpdateCommit
+            | Cmd::FpgaUpdateActivate
+            | Cmd::Synchronize
+            | Cmd::Clear
+    )
 }
 
 fn empty(result: Result<(), Error>) -> Outcome {
@@ -215,6 +234,9 @@ impl Cpu {
         let (Some(&seq), Some(&raw_cmd)) = (frame.first(), frame.get(1)) else {
             return Disposition::Dropped;
         };
+        if frame.len() > FRAME_BYTES_MAX {
+            return Disposition::Dropped;
+        }
         if seq == self.last_seq.load(Ordering::Relaxed)
             && raw_cmd == self.last_cmd.load(Ordering::Relaxed)
         {
@@ -321,7 +343,7 @@ impl Cpu {
             self.expected_seq
                 .store(in_frame.seq.wrapping_add(1), Ordering::Relaxed);
             let outcome = match cmd {
-                Some(cmd) => self.dispatch(port, cmd, &in_frame.payload),
+                Some(cmd) => self.dispatch(port, cmd, in_frame.payload()),
                 None => Err(Error::UnknownCmd),
             };
             match outcome {
@@ -377,6 +399,9 @@ impl Cpu {
     fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> Outcome {
         if self.fpga_update.is_locked() && !cmd::fpga_update::allowed_while_locked(cmd) {
             return Err(Error::FpgaUpdateInProgress);
+        }
+        if !takes_payload(cmd) {
+            expect_empty(payload)?;
         }
         let result = match cmd {
             Cmd::Reset | Cmd::Nop => Ok(()),

@@ -1,19 +1,15 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use autd3_rs_core::params::REP_INFINITE;
-use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
+use autd3_rs_core::protocol::{Cmd, Seq, TxFrame};
 use autd3_rs_core::value::{Intensity, Phase, TransitionMode};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
 const BANK: u8 = 1;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
-    let mut tx = TxFrame::new(Seq::new(seq), cmd);
-    tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; FRAME_BYTES_MAX];
-    tx.write_to(&mut buf);
-    buf
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> Vec<u8> {
+    TxFrame::with_payload(Seq::new(seq), cmd, payload).to_vec()
 }
 
 #[test]
@@ -39,7 +35,7 @@ fn raw_pattern_round_trips_to_emissions() {
     config[10..12].copy_from_slice(&0u16.to_le_bytes());
     config[12..14].copy_from_slice(&REP_INFINITE.to_le_bytes());
 
-    let mut change = vec![0u8; 10];
+    let mut change = vec![0u8; 14];
     change[0] = BANK;
     change[1] = TransitionMode::Immediate.try_as_wire().unwrap().as_u8();
 
@@ -66,12 +62,12 @@ fn raw_pattern_round_trips_to_emissions() {
 }
 
 fn config_change(bank: u8) -> (Vec<u8>, Vec<u8>) {
-    let mut config = vec![0u8; 12];
+    let mut config = vec![0u8; 14];
     config[0] = bank;
     config[1] = 0x01;
     config[2..4].copy_from_slice(&512u16.to_le_bytes());
     config[4..8].copy_from_slice(&4u32.to_le_bytes());
-    let mut change = vec![0u8; 10];
+    let mut change = vec![0u8; 14];
     change[0] = bank;
     (config, change)
 }

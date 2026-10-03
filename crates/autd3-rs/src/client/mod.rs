@@ -221,8 +221,7 @@ impl Client {
         let mut slot = self.pool.acquire().await;
         slot.reset(Distribution::PerDevice);
         for (device, datagram) in datagrams.iter().enumerate() {
-            slot.payload_mut(device).copy_from_slice(&datagram.payload);
-            slot.set_cmd(device, datagram.cmd);
+            slot.set(device, datagram);
         }
         self.dispatch(slot, Reply::Ack)
     }
@@ -231,8 +230,7 @@ impl Client {
         tracing::trace!(cmd = ?datagram.cmd, "sending broadcast frame");
         let mut slot = self.pool.acquire().await;
         slot.reset(Distribution::Broadcast);
-        slot.payload_mut(0).copy_from_slice(&datagram.payload);
-        slot.set_cmd(0, datagram.cmd);
+        slot.set(0, datagram);
         self.dispatch(slot, Reply::Ack)
     }
 
@@ -240,8 +238,7 @@ impl Client {
         tracing::trace!(cmd = ?datagram.cmd, "sending exclusive broadcast frame");
         let mut slot = self.pool.acquire().await;
         slot.reset(Distribution::Broadcast);
-        slot.payload_mut(0).copy_from_slice(&datagram.payload);
-        slot.set_cmd(0, datagram.cmd);
+        slot.set(0, datagram);
         self.dispatch(slot, Reply::Value)
     }
 

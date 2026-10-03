@@ -7,7 +7,7 @@ use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PatternBank, TransitionMode};
 
-use super::{Distribution, Operation, write_header};
+use super::{Distribution, Encoded, Operation, write_header};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ChangePatternBank {
@@ -26,7 +26,7 @@ impl Operation for ChangePatternBank {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let margin_ns = self.transition_mode.margin_ns()?;
         write_header(
             out,
@@ -37,7 +37,9 @@ impl Operation for ChangePatternBank {
                 margin_ns: U32::new(margin_ns),
             },
         );
-        Ok(Cmd::ChangePatternBank)
+        Ok(Encoded::header::<ChangePatternBankPayload>(
+            Cmd::ChangePatternBank,
+        ))
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
@@ -58,8 +60,9 @@ mod tests {
 
     fn encode(op: ChangePatternBank) -> (Cmd, [u8; PAYLOAD_BYTES]) {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), &mut out).unwrap();
-        (cmd, out)
+        let encoded = op.encode(&test_device(0), &mut out).unwrap();
+        assert_eq!(encoded.len, size_of::<ChangePatternBankPayload>());
+        (encoded.cmd, out)
     }
 
     #[test]

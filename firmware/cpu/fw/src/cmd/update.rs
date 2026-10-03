@@ -221,7 +221,7 @@ impl Cpu {
             return Err(Error::UpdateNotStarted);
         };
         let (chunk, data) = UpdateChunkPayload::parse(payload)?;
-        if !chunk.fits_in(length) {
+        if !chunk.fits_in(data, length) {
             return Err(Error::InvalidPayload);
         }
         if data.is_empty() {

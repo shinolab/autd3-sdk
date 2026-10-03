@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use autd3_rs_core::rt::Semaphore;
 
 use crate::commands::operation::Distribution;
+use crate::datagram::Datagram;
 use crate::protocol::{Cmd, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX};
 use crate::response::Response;
 
@@ -19,11 +20,23 @@ impl ReplyValue {
     };
 }
 
+#[derive(Clone, Copy)]
+struct FrameHead {
+    cmd: Cmd,
+    payload_len: usize,
+}
+
+impl FrameHead {
+    const EMPTY: Self = Self {
+        cmd: Cmd::Reset,
+        payload_len: 0,
+    };
+}
+
 pub(crate) struct SlotData {
-    num_devices: usize,
     dist: Distribution,
     payload: Box<[u8]>,
-    cmds: Box<[Cmd]>,
+    heads: Box<[FrameHead]>,
     status: Box<[u8]>,
     values: Box<[ReplyValue]>,
 }
@@ -31,10 +44,9 @@ pub(crate) struct SlotData {
 impl SlotData {
     fn new(num_devices: usize) -> Self {
         Self {
-            num_devices,
             dist: Distribution::Broadcast,
             payload: vec![0u8; num_devices * PAYLOAD_BYTES].into_boxed_slice(),
-            cmds: vec![Cmd::Reset; num_devices].into_boxed_slice(),
+            heads: vec![FrameHead::EMPTY; num_devices].into_boxed_slice(),
             status: vec![0u8; num_devices].into_boxed_slice(),
             values: vec![ReplyValue::EMPTY; num_devices].into_boxed_slice(),
         }
@@ -44,26 +56,16 @@ impl SlotData {
         self.dist = dist;
         self.status.fill(0);
         self.values.fill(ReplyValue::EMPTY);
-        let used = self.encode_devices_for(dist) * PAYLOAD_BYTES;
-        self.payload[..used].fill(0);
     }
 
-    fn encode_devices_for(&self, dist: Distribution) -> usize {
-        match dist {
-            Distribution::Broadcast => 1,
-            Distribution::PerDevice => self.num_devices,
-        }
-    }
-
-    pub(crate) fn payload_mut(&mut self, device: usize) -> &mut [u8; PAYLOAD_BYTES] {
+    pub(crate) fn set(&mut self, device: usize, datagram: &Datagram) {
+        let payload = datagram.payload();
         let base = device * PAYLOAD_BYTES;
-        (&mut self.payload[base..base + PAYLOAD_BYTES])
-            .try_into()
-            .expect("exact payload length")
-    }
-
-    pub(crate) fn set_cmd(&mut self, device: usize, cmd: Cmd) {
-        self.cmds[device] = cmd;
+        self.payload[base..base + payload.len()].copy_from_slice(payload);
+        self.heads[device] = FrameHead {
+            cmd: datagram.cmd,
+            payload_len: payload.len(),
+        };
     }
 
     fn source(&self, device: usize) -> usize {
@@ -74,12 +76,13 @@ impl SlotData {
     }
 
     pub(crate) fn cmd_for(&self, device: usize) -> Cmd {
-        self.cmds[self.source(device)]
+        self.heads[self.source(device)].cmd
     }
 
     pub(crate) fn payload_for(&self, device: usize) -> &[u8] {
-        let base = self.source(device) * PAYLOAD_BYTES;
-        &self.payload[base..base + PAYLOAD_BYTES]
+        let source = self.source(device);
+        let base = source * PAYLOAD_BYTES;
+        &self.payload[base..base + self.heads[source].payload_len]
     }
 
     pub(crate) fn record_reply(&mut self, device: usize, status: u8, data: &[u8]) {

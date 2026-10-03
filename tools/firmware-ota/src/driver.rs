@@ -6,9 +6,10 @@ use autd3_cpu_wire::payload::{
     FirmwareInfo, SetModePayload, UpdateBeginPayload, UpdateChunkPayload,
 };
 use autd3_cpu_wire::{Mode, describe_device_error};
-use autd3_rs::protocol::{Cmd, FRAME_BYTES_MAX, FRAME_HEADER_BYTES, PAYLOAD_BYTES, Seq};
+use autd3_rs::protocol::{Cmd, FRAME_HEADER_BYTES, PAYLOAD_BYTES, Seq};
 use autd3_rs::{UdpBus, UdpError};
-use zerocopy::{FromBytes, IntoBytes};
+use zerocopy::little_endian::{U16, U32};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use crate::fpga_image::FpgaFirmwareImage;
 use crate::image::CpuFirmwareImage;
@@ -159,7 +160,16 @@ pub enum Dialect {
 
 pub const LEGACY_PAYLOAD_BYTES: usize = 624;
 pub const LEGACY_CHUNK_MAX_DATA_LEN: usize =
-    LEGACY_PAYLOAD_BYTES - core::mem::size_of::<UpdateChunkPayload>();
+    LEGACY_PAYLOAD_BYTES - core::mem::size_of::<LegacyUpdateChunkPayload>();
+
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct LegacyUpdateChunkPayload {
+    pub offset: U32,
+    pub data_len: U16,
+}
+
+const _: () = assert!(core::mem::size_of::<LegacyUpdateChunkPayload>() == 6);
 
 const LEGACY_READ_ERROR_DETAIL: u8 = 0xE0;
 const LEGACY_READ_CPU_VERSION: [u8; 3] = [0xE1, 0xE2, 0xE3];
@@ -176,6 +186,7 @@ pub struct DeviceReply {
 pub struct Frame {
     pub cmd: u8,
     pub payload: [u8; PAYLOAD_BYTES],
+    pub payload_len: usize,
 }
 
 impl Frame {
@@ -184,15 +195,30 @@ impl Frame {
         Self {
             cmd: cmd.into().id(),
             payload: [0; PAYLOAD_BYTES],
+            payload_len: 0,
         }
     }
 
     #[must_use]
-    pub fn bytes(&self, seq: Seq) -> [u8; FRAME_BYTES_MAX] {
-        let mut bytes = [0; FRAME_BYTES_MAX];
-        bytes[0] = seq.get();
-        bytes[1] = self.cmd;
-        bytes[FRAME_HEADER_BYTES..].copy_from_slice(&self.payload);
+    pub fn with_payload(
+        cmd: impl Into<Request>,
+        header: &(impl IntoBytes + Immutable),
+        data: &[u8],
+    ) -> Self {
+        let mut frame = Self::new(cmd);
+        let header = header.as_bytes();
+        frame.payload[..header.len()].copy_from_slice(header);
+        frame.payload[header.len()..header.len() + data.len()].copy_from_slice(data);
+        frame.payload_len = header.len() + data.len();
+        frame
+    }
+
+    #[must_use]
+    pub fn bytes(&self, seq: Seq) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(FRAME_HEADER_BYTES + self.payload_len);
+        bytes.push(seq.get());
+        bytes.push(self.cmd);
+        bytes.extend_from_slice(&self.payload[..self.payload_len]);
         bytes
     }
 }
@@ -345,10 +371,7 @@ impl<L: Exchange> Driver<L> {
         if !self.inner.reset(DEFAULT_TIMEOUT).map_err(network_err)? {
             return Err(DriverError::ResetUnconfirmed);
         }
-        let mut frame = Frame::new(Cmd::SetMode);
-        SetModePayload { mode: Mode::Fifo }
-            .write_to_prefix(&mut frame.payload)
-            .expect("SetMode payload fits in the frame");
+        let frame = Frame::with_payload(Cmd::SetMode, &SetModePayload { mode: Mode::Fifo }, &[]);
         match self
             .inner
             .exchange(Seq::ZERO, &frame, DEFAULT_TIMEOUT)
@@ -616,24 +639,41 @@ impl<L: Exchange> Driver<L> {
         mut on_progress: impl FnMut(UpdateProgress),
     ) -> Result<(), DriverError> {
         let total = bytes.len();
-        let mut begin = Frame::new(begin_cmd);
-        let (p, _) = UpdateBeginPayload::mut_from_prefix(&mut begin.payload).unwrap();
-        p.length
-            .set(u32::try_from(total).expect("bounded by the slot capacity"));
-        p.crc32.set(crc32);
+        let begin = Frame::with_payload(
+            begin_cmd,
+            &UpdateBeginPayload {
+                length: U32::new(u32::try_from(total).expect("bounded by the slot capacity")),
+                crc32: U32::new(crc32),
+            },
+            &[],
+        );
         self.send_checked(&begin, begin_timeout)?;
         on_progress(UpdateProgress { sent: 0, total });
 
         let chunk_len = self.chunk_len();
         for (index, data) in bytes.chunks(chunk_len).enumerate() {
             let offset = index * chunk_len;
-            let mut chunk = Frame::new(chunk_cmd);
-            let (p, rest) = UpdateChunkPayload::mut_from_prefix(&mut chunk.payload).unwrap();
-            p.offset
-                .set(u32::try_from(offset).expect("bounded by the slot capacity"));
-            p.data_len
-                .set(u16::try_from(data.len()).expect("bounded by the chunk size"));
-            rest[..data.len()].copy_from_slice(data);
+            let offset_field =
+                U32::new(u32::try_from(offset).expect("bounded by the slot capacity"));
+            let chunk = match self.inner.dialect() {
+                Dialect::Udp => Frame::with_payload(
+                    chunk_cmd,
+                    &UpdateChunkPayload {
+                        offset: offset_field,
+                    },
+                    data,
+                ),
+                Dialect::Legacy => Frame::with_payload(
+                    chunk_cmd,
+                    &LegacyUpdateChunkPayload {
+                        offset: offset_field,
+                        data_len: U16::new(
+                            u16::try_from(data.len()).expect("bounded by the chunk size"),
+                        ),
+                    },
+                    data,
+                ),
+            };
             self.send_checked(&chunk, chunk_timeout)?;
             on_progress(UpdateProgress {
                 sent: offset + data.len(),

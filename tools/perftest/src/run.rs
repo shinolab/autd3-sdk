@@ -139,10 +139,7 @@ impl Sender {
             frame
                 .datagrams()
                 .iter()
-                .map(|d| {
-                    FRAME_HEADER_BYTES
-                        + d.payload.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1)
-                })
+                .map(|d| FRAME_HEADER_BYTES + d.payload_len)
                 .max()
                 .unwrap_or(FRAME_HEADER_BYTES)
         })

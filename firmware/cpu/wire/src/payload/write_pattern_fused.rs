@@ -17,16 +17,15 @@ pub struct WritePatternFusedPayload {
     pub transition_mode: TransitionMode,
     pub sound_speed: U16,
     pub rep: U16,
-    pub data_len: U16,
     pub transition_value: U64,
     pub margin_ns: U32,
-    pub reserved: U32,
+    pub reserved: [u8; 6],
 }
 
 impl WritePatternFusedPayload {
     pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {
-        let (p, rest) = try_read_header::<Self>(payload)?;
-        let data_len = usize::from(p.data_len.get());
+        let (p, data) = try_read_header::<Self>(payload)?;
+        let data_len = data.len();
         if !data_len.is_multiple_of(2)
             || data_len > PATTERN_FUSED_MAX_DATA_LEN
             || (p.emission_type == EmissionType::Raw
@@ -34,7 +33,6 @@ impl WritePatternFusedPayload {
         {
             return Err(Error::InvalidPayload);
         }
-        let data = rest.get(..data_len).ok_or(Error::InvalidPayload)?;
         validate_pattern_config(
             p.emission_type,
             p.divider.get(),
@@ -55,7 +53,7 @@ const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, num_foci) 
 const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, transition_mode) == 9);
 const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, sound_speed) == 10);
 const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, rep) == 12);
-const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, data_len) == 14);
-const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, transition_value) == 16);
-const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, margin_ns) == 24);
+const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, transition_value) == 14);
+const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, margin_ns) == 22);
+const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, reserved) == 26);
 const _: () = assert!(core::mem::size_of::<WritePatternFusedPayload>() == 32);

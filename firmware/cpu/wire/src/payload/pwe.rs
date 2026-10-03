@@ -1,7 +1,7 @@
 use zerocopy::little_endian::U16;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
-use super::read_header;
+use super::read_exact;
 use crate::Error;
 use crate::frame::PAYLOAD_BYTES;
 use crate::layout::PWE_TABLE_SIZE;
@@ -14,7 +14,7 @@ pub struct PwePayload {
 
 impl PwePayload {
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        read_header(payload).map(|(p, _)| p)
+        read_exact(payload)
     }
 }
 

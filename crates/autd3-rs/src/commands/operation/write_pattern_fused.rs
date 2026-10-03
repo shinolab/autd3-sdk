@@ -13,7 +13,7 @@ use crate::value::{
 };
 
 use super::write_pattern_buffer::{PatternIntensity, encode_raw_slot};
-use super::{Distribution, Operation, check_index_advance, write_header};
+use super::{Distribution, Encoded, Operation, check_index_advance, write_header};
 
 pub(crate) const PATTERN_FUSED_HEADER_BYTES: usize =
     core::mem::size_of::<WritePatternFusedPayload>();
@@ -97,7 +97,7 @@ impl Operation for WritePatternFused<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         check_index_advance(1, self.loop_behavior)?;
         let divider = self.config.divide()?;
         let margin_ns = self.transition_mode.margin_ns()?;
@@ -113,12 +113,9 @@ impl Operation for WritePatternFused<'_> {
                 transition_mode: self.transition_mode.try_as_wire()?,
                 sound_speed: U16::new(0),
                 rep: U16::new(self.loop_behavior.rep()),
-                data_len: U16::new(
-                    u16::try_from(PATTERN_RAW_DATA_LEN).expect("bounded by frame capacity"),
-                ),
                 transition_value: U64::new(self.transition_mode.value()),
                 margin_ns: U32::new(margin_ns),
-                reserved: U32::new(0),
+                reserved: [0; 6],
             },
         );
         let (dst_phases, dst_intensities) =
@@ -130,7 +127,10 @@ impl Operation for WritePatternFused<'_> {
             dst_phases,
             dst_intensities,
         )?;
-        Ok(Cmd::WritePatternFused)
+        Ok(Encoded::header_with_data::<WritePatternFusedPayload>(
+            Cmd::WritePatternFused,
+            PATTERN_RAW_DATA_LEN,
+        ))
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
@@ -164,7 +164,7 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let size = self.points.len();
         if size < BUFFER_SIZE_MIN {
             return Err(PayloadError::PatternSizeTooSmall {
@@ -204,7 +204,6 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
             return Err(PayloadError::SoundSpeedZero.into());
         }
         let margin_ns = self.transition_mode.margin_ns()?;
-        let data_len = u16::try_from(total * FOCUS_WORDS * 2).expect("bounded by frame");
 
         let rest = write_header(
             out,
@@ -217,17 +216,19 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
                 transition_mode: self.transition_mode.try_as_wire()?,
                 sound_speed: U16::new(sound_speed),
                 rep: U16::new(self.loop_behavior.rep()),
-                data_len: U16::new(data_len),
                 transition_value: U64::new(self.transition_mode.value()),
                 margin_ns: U32::new(margin_ns),
-                reserved: U32::new(0),
+                reserved: [0; 6],
             },
         );
         for (dst, k) in rest.as_chunks_mut::<8>().0.iter_mut().zip(0..total) {
             let focus = self.points[k / N].focus(device, k % N);
             *dst = focus.encode()?.to_le_bytes();
         }
-        Ok(Cmd::WritePatternFused)
+        Ok(Encoded::header_with_data::<WritePatternFusedPayload>(
+            Cmd::WritePatternFused,
+            total * FOCUS_WORDS * 2,
+        ))
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
@@ -271,7 +272,10 @@ mod tests {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
-        assert_eq!(cmd, Cmd::WritePatternFused);
+        assert_eq!(
+            cmd,
+            Encoded::header_with_data::<WritePatternFusedPayload>(Cmd::WritePatternFused, 498)
+        );
         assert_eq!(out[0], 1, "bank B1");
         assert_eq!(out[1], EmissionType::Raw.as_u8());
         assert_eq!(&out[2..4], &7u16.to_le_bytes(), "divider");
@@ -279,7 +283,6 @@ mod tests {
         assert_eq!(out[8], 0, "num_foci unused for raw");
         assert_eq!(out[9], 0xFF, "IMMEDIATE");
         assert_eq!(&out[12..14], &0xFFFFu16.to_le_bytes(), "infinite rep");
-        assert_eq!(&out[14..16], &498u16.to_le_bytes(), "data_len");
         for i in 0..n {
             assert_eq!(out[PATTERN_FUSED_HEADER_BYTES + i], phases[0][i].0);
             assert_eq!(out[PATTERN_FUSED_HEADER_BYTES + n + i], intensities[0][i].0);
@@ -310,12 +313,14 @@ mod tests {
         let mut out = [0u8; PAYLOAD_BYTES];
         let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
-        assert_eq!(cmd, Cmd::WritePatternFused);
+        assert_eq!(
+            cmd,
+            Encoded::header_with_data::<WritePatternFusedPayload>(Cmd::WritePatternFused, 16)
+        );
         assert_eq!(out[1], EmissionType::Foci.as_u8());
         assert_eq!(&out[4..8], &2u32.to_le_bytes(), "size = sample count");
         assert_eq!(out[8], 1, "num_foci = N");
         assert_eq!(&out[10..12], &21760u16.to_le_bytes(), "340 m/s * 64");
-        assert_eq!(&out[14..16], &16u16.to_le_bytes(), "data_len = 2 foci");
 
         let expected = Focus {
             x: 0,
@@ -385,8 +390,8 @@ mod tests {
 
         assert_eq!(out[9], 0x01, "SYS_TIME");
         assert_eq!(&out[12..14], &7u16.to_le_bytes(), "Finite(8) => rep 7");
-        assert_eq!(&out[16..24], &0xDEAD_BEEFu64.to_le_bytes());
-        assert_eq!(&out[24..28], &1_000_000u32.to_le_bytes());
+        assert_eq!(&out[14..22], &0xDEAD_BEEFu64.to_le_bytes());
+        assert_eq!(&out[22..26], &1_000_000u32.to_le_bytes());
     }
 
     #[test]

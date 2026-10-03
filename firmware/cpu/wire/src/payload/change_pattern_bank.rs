@@ -1,7 +1,7 @@
 use zerocopy::little_endian::{U32, U64};
 use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
-use super::{TransitionMode, try_read_header};
+use super::{TransitionMode, try_read_exact};
 use crate::{Error, PatternBank};
 
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
@@ -15,7 +15,7 @@ pub struct ChangePatternBankPayload {
 
 impl ChangePatternBankPayload {
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        try_read_header(payload).map(|(p, _)| p)
+        try_read_exact(payload)
     }
 }
 

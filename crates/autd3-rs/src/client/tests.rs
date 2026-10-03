@@ -5,15 +5,17 @@ use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
 use std::time::{Duration, Instant};
 
-use crate::commands::operation::{Distribution, Nop, Operation, PATTERN_FUSED_HEADER_BYTES};
+use crate::commands::operation::{
+    Distribution, Encoded, Nop, Operation, PATTERN_FUSED_HEADER_BYTES,
+};
 use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::firmware_version::{FirmwareVersion, Version};
 use crate::geometry::Device;
 use crate::geometry::{Autd3, Geometry};
-use crate::protocol::{Cmd, FRAME_BYTES_MAX, MAX_INFLIGHT, PAYLOAD_BYTES, TxFrame};
+use crate::protocol::{Cmd, MAX_INFLIGHT, PAYLOAD_BYTES, TxFrame};
 use crate::response::Response;
-use crate::transport::Bus;
+use crate::transport::{Bus, FrameBuf};
 use crate::udp::Reply;
 use autd3_rs_core::BusStats;
 
@@ -45,9 +47,9 @@ impl Operation for FailingCmd {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         out[0] = FAIL_MARKER;
-        Ok(Cmd::Nop)
+        Ok(Encoded::new(Cmd::Nop, 1))
     }
 }
 
@@ -209,7 +211,7 @@ fn read_value(slave: &Slave, cmd: Cmd) -> Vec<u8> {
     }
 }
 
-fn slave_frame(slave: &mut Slave, frame: &[u8; FRAME_BYTES_MAX]) -> bool {
+fn slave_frame(slave: &mut Slave, frame: &[u8]) -> bool {
     let parsed = TxFrame::parse(frame).expect("loopback only sees known cmds");
     slave.sent_log.push((parsed.seq.get(), parsed.cmd));
 
@@ -300,11 +302,11 @@ impl Bus for LoopbackLink {
         self.msg_id.wrapping_add(1)
     }
 
-    fn send(&mut self, frames: &[[u8; FRAME_BYTES_MAX]]) -> Result<u16, Self::Error> {
+    fn send(&mut self, frames: &[FrameBuf]) -> Result<u16, Self::Error> {
         self.msg_id = self.msg_id.wrapping_add(1);
         for (device, (frame, slave)) in frames.iter().zip(&self.slaves).enumerate() {
             let mut s = slave.lock().unwrap();
-            if slave_frame(&mut s, frame) {
+            if slave_frame(&mut s, frame.as_ref()) {
                 self.queue.push_back(s.reply(device, self.msg_id));
             }
         }
@@ -373,7 +375,7 @@ impl Bus for FailingLink {
         self.inner.next_msg_id()
     }
 
-    fn send(&mut self, frames: &[[u8; FRAME_BYTES_MAX]]) -> Result<u16, Self::Error> {
+    fn send(&mut self, frames: &[FrameBuf]) -> Result<u16, Self::Error> {
         if self.fail.load(AtomicOrdering::Relaxed) {
             return Err(LinkFailure);
         }
@@ -658,10 +660,7 @@ async fn multi_device_per_device_payloads_yield_per_device_results() {
         .await
         .unwrap();
 
-    let ok = Datagram {
-        cmd: Cmd::Nop,
-        payload: [0u8; PAYLOAD_BYTES],
-    };
+    let ok = Datagram::no_payload(Cmd::Nop);
     let bad_payload = failing_payload();
 
     let fut = client
@@ -670,6 +669,7 @@ async fn multi_device_per_device_payloads_yield_per_device_results() {
             Datagram {
                 cmd: Cmd::Nop,
                 payload: bad_payload,
+                payload_len: 1,
             },
         ])
         .await
@@ -977,6 +977,7 @@ async fn pipeline_continues_after_device_error_in_the_middle() {
         .send_broadcast(&Datagram {
             cmd: Cmd::Nop,
             payload: bad_payload,
+            payload_len: 1,
         })
         .await
         .unwrap();
@@ -1965,7 +1966,7 @@ impl Bus for TrackedLink {
         self.inner.next_msg_id()
     }
 
-    fn send(&mut self, frames: &[[u8; FRAME_BYTES_MAX]]) -> Result<u16, Self::Error> {
+    fn send(&mut self, frames: &[FrameBuf]) -> Result<u16, Self::Error> {
         if self.tracker.send_fails.load(AtomicOrdering::Acquire) {
             return Err(LinkFailure);
         }

@@ -52,6 +52,22 @@ pub use write_pattern_compressed::{PatternFormat, WritePatternCompressedPayload}
 pub use write_pattern_fused::WritePatternFusedPayload;
 pub use write_pattern_raw::WritePatternRawPayload;
 
+pub fn expect_empty(payload: &[u8]) -> Result<(), Error> {
+    if payload.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::InvalidPayload)
+    }
+}
+
+fn read_exact<T: FromBytes + KnownLayout + Immutable>(payload: &[u8]) -> Result<T, Error> {
+    T::read_from_bytes(payload).map_err(|_| Error::InvalidPayload)
+}
+
+fn try_read_exact<T: TryFromBytes + KnownLayout + Immutable>(payload: &[u8]) -> Result<T, Error> {
+    T::try_read_from_bytes(payload).map_err(|_| Error::InvalidPayload)
+}
+
 fn read_header<T: FromBytes + KnownLayout + Immutable>(
     payload: &[u8],
 ) -> Result<(T, &[u8]), Error> {

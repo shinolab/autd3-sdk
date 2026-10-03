@@ -34,7 +34,6 @@ mod tests {
     use crate::datagram::Frames;
     use crate::error::Error;
     use crate::params::MOD_BUFFER_SAMPLES;
-    use crate::protocol::PAYLOAD_BYTES;
     use crate::test_utils::test_geometry_arc;
     use autd3_cpu_wire::payload::WriteModPayload;
     const HEADER_BYTES: usize = core::mem::size_of::<WriteModPayload>();
@@ -45,8 +44,10 @@ mod tests {
         b.build()
     }
 
-    fn payload(frames: &Frames, index: usize) -> [u8; PAYLOAD_BYTES] {
-        frames.frame(index).unwrap().datagrams()[0].payload
+    fn payload(frames: &Frames, index: usize) -> Vec<u8> {
+        frames.frame(index).unwrap().datagrams()[0]
+            .payload()
+            .to_vec()
     }
 
     #[test]
@@ -62,8 +63,7 @@ mod tests {
         let p = payload(&frames, 0);
         assert_eq!(p[0], 1);
         assert_eq!(&p[2..6], &0x0102u32.to_le_bytes());
-        assert_eq!(&p[6..8], &3u16.to_le_bytes());
-        assert_eq!(&p[8..11], &[0xAA, 0xBB, 0xCC]);
+        assert_eq!(&p[HEADER_BYTES..], &[0xAA, 0xBB, 0xCC]);
     }
 
     #[test]
@@ -86,21 +86,12 @@ mod tests {
 
         let p0 = payload(&frames, 0);
         assert_eq!(&p0[2..6], &100u32.to_le_bytes());
-        let max = u16::try_from(MOD_WRITE_MAX_DATA_LEN).unwrap();
-        assert_eq!(&p0[6..8], &max.to_le_bytes());
-        assert_eq!(
-            &p0[HEADER_BYTES..HEADER_BYTES + MOD_WRITE_MAX_DATA_LEN],
-            &data[..MOD_WRITE_MAX_DATA_LEN]
-        );
+        assert_eq!(&p0[HEADER_BYTES..], &data[..MOD_WRITE_MAX_DATA_LEN]);
 
         let p1 = payload(&frames, 1);
-        assert_eq!(&p1[2..6], &(100 + u32::from(max)).to_le_bytes());
-        let rest = u16::try_from(total - MOD_WRITE_MAX_DATA_LEN).unwrap();
-        assert_eq!(&p1[6..8], &rest.to_le_bytes());
-        assert_eq!(
-            &p1[HEADER_BYTES..HEADER_BYTES + usize::from(rest)],
-            &data[MOD_WRITE_MAX_DATA_LEN..]
-        );
+        let max = u32::try_from(MOD_WRITE_MAX_DATA_LEN).unwrap();
+        assert_eq!(&p1[2..6], &(100 + max).to_le_bytes());
+        assert_eq!(&p1[HEADER_BYTES..], &data[MOD_WRITE_MAX_DATA_LEN..]);
     }
 
     #[test]

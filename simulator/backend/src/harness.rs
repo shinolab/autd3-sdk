@@ -52,14 +52,11 @@ impl Harness {
                     Distribution::PerDevice => &datagrams[index],
                 };
                 let mut bytes = [0u8; FRAME_BYTES_MAX];
-                TxFrame {
-                    seq: Seq::new(self.seq),
-                    cmd: datagram.cmd,
-                    payload: datagram.payload,
-                }
-                .write_to(&mut bytes);
+                let len =
+                    TxFrame::with_payload(Seq::new(self.seq), datagram.cmd, datagram.payload())
+                        .write_to(&mut bytes);
                 device.fpga_mut().update_with_sys_time(sys_time_ns);
-                let _ = device.send(&bytes);
+                let _ = device.send(&bytes[..len]);
             }
             self.seq = self.seq.wrapping_add(1);
         }

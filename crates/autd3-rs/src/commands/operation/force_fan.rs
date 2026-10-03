@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation, write_header};
+use super::{Distribution, Encoded, Operation, write_header};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct ForceFan {
@@ -18,9 +18,9 @@ impl Operation for ForceFan {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         write_header(out, &ForceFanPayload { value: self.value });
-        Ok(Cmd::ForceFan)
+        Ok(Encoded::header::<ForceFanPayload>(Cmd::ForceFan))
     }
 }
 
@@ -35,7 +35,7 @@ mod tests {
         let cmd = ForceFan { value: true }
             .encode(&test_device(0), &mut out)
             .unwrap();
-        assert_eq!(cmd, Cmd::ForceFan);
+        assert_eq!(cmd, Encoded::header::<ForceFanPayload>(Cmd::ForceFan));
         assert_eq!(out[0], 1);
 
         let mut out = [0u8; PAYLOAD_BYTES];

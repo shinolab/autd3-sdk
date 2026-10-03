@@ -432,6 +432,36 @@ mod tests {
 
     struct Firmware(std::sync::Arc<std::sync::Mutex<autd3_rs_firmware_emulator::Device>>);
 
+    fn legacy_to_current(outputs: &[u8]) -> Vec<u8> {
+        use autd3_cpu_wire::payload::{SetModePayload, UpdateBeginPayload, UpdateChunkPayload};
+        use zerocopy::{FromBytes, IntoBytes};
+
+        use crate::driver::LegacyUpdateChunkPayload;
+
+        let (header, payload) = outputs.split_at(FRAME_HEADER_BYTES);
+        let mut frame = header.to_vec();
+        match Cmd::from_u8(header[1]) {
+            Some(Cmd::UpdateBegin) => {
+                frame.extend_from_slice(&payload[..size_of::<UpdateBeginPayload>()]);
+            }
+            Some(Cmd::SetMode) => {
+                frame.extend_from_slice(&payload[..size_of::<SetModePayload>()]);
+            }
+            Some(Cmd::UpdateChunk) => {
+                let (chunk, data) = LegacyUpdateChunkPayload::ref_from_prefix(payload).unwrap();
+                frame.extend_from_slice(
+                    UpdateChunkPayload {
+                        offset: chunk.offset,
+                    }
+                    .as_bytes(),
+                );
+                frame.extend_from_slice(&data[..usize::from(chunk.data_len.get())]);
+            }
+            _ => {}
+        }
+        frame
+    }
+
     impl sim::ProcessData for Firmware {
         fn exchange(&mut self, outputs: &[u8], inputs: &mut [u8]) {
             let (seq, cmd) = (outputs[0], outputs[1]);
@@ -442,7 +472,7 @@ mod tests {
                     .unwrap()
                     .send(&[seq, Cmd::ReadFirmwareInfo.as_u8()])
             } else {
-                self.0.lock().unwrap().send(outputs)
+                self.0.lock().unwrap().send(&legacy_to_current(outputs))
             };
             inputs[0] = reply.ack;
             inputs[1] = if legacy_version && reply.ack == seq {

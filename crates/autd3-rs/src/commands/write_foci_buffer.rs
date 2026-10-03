@@ -41,7 +41,6 @@ mod tests {
     use crate::error::Error;
     use crate::geometry::Point3;
     use crate::params::{FOCUS_WORDS, MAX_FOCI_TOTAL};
-    use crate::protocol::PAYLOAD_BYTES;
     use crate::test_utils::{test_device, test_geometry_arc};
     use autd3_cpu_wire::payload::WriteFociPayload;
     const HEADER_BYTES: usize = core::mem::size_of::<WriteFociPayload>();
@@ -52,8 +51,10 @@ mod tests {
         b.build()
     }
 
-    fn payload(frames: &Frames, index: usize) -> [u8; PAYLOAD_BYTES] {
-        frames.frame(index).unwrap().datagrams()[0].payload
+    fn payload(frames: &Frames, index: usize) -> Vec<u8> {
+        frames.frame(index).unwrap().datagrams()[0]
+            .payload()
+            .to_vec()
     }
 
     #[test]
@@ -74,16 +75,14 @@ mod tests {
         let p0 = payload(&frames, 0);
         let word_offset0 = u32::try_from(10 * FOCUS_WORDS).unwrap();
         assert_eq!(&p0[2..6], &word_offset0.to_le_bytes());
-        let len0 = u16::try_from(MAX_FOCI_PER_FRAME * 8).unwrap();
-        assert_eq!(&p0[6..8], &len0.to_le_bytes());
+        assert_eq!(p0.len(), HEADER_BYTES + MAX_FOCI_PER_FRAME * 8);
         let first = u64::from_le_bytes(p0[HEADER_BYTES..HEADER_BYTES + 8].try_into().unwrap());
         assert_eq!(first, points[0].focus(&test_device(0), 0).encode().unwrap());
 
         let p1 = payload(&frames, 1);
         let word_offset1 = u32::try_from((10 + MAX_FOCI_PER_FRAME) * FOCUS_WORDS).unwrap();
         assert_eq!(&p1[2..6], &word_offset1.to_le_bytes());
-        let rest = u16::try_from((total - MAX_FOCI_PER_FRAME) * 8).unwrap();
-        assert_eq!(&p1[6..8], &rest.to_le_bytes());
+        assert_eq!(p1.len(), HEADER_BYTES + (total - MAX_FOCI_PER_FRAME) * 8);
         let first_of_rest =
             u64::from_le_bytes(p1[HEADER_BYTES..HEADER_BYTES + 8].try_into().unwrap());
         assert_eq!(

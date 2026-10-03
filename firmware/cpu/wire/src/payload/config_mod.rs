@@ -1,7 +1,7 @@
 use zerocopy::little_endian::{U16, U32};
 use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
-use super::try_read_header;
+use super::try_read_exact;
 use crate::layout::{BUFFER_SIZE_MIN, MOD_BUFFER_SAMPLES};
 use crate::{Error, ModulationBank};
 
@@ -24,7 +24,7 @@ pub(super) fn validate_mod_config(divider: u16, size: u32) -> Result<(), Error> 
 
 impl ConfigModPayload {
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        let (p, _) = try_read_header::<Self>(payload)?;
+        let p = try_read_exact::<Self>(payload)?;
         validate_mod_config(p.divider.get(), p.size.get())?;
         Ok(p)
     }

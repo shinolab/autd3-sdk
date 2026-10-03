@@ -15,7 +15,7 @@ use crate::params::{
 };
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Encoded, Operation};
 
 fn write_payload(
     out: &mut [u8; PAYLOAD_BYTES],
@@ -55,7 +55,7 @@ mod sealed {
 
 pub trait SilencerConfig: sealed::Sealed + Copy {
     #[doc(hidden)]
-    fn write_payload(&self, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error>;
+    fn write_payload(&self, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error>;
 
     #[doc(hidden)]
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error>;
@@ -80,7 +80,7 @@ impl Default for FixedCompletionTime {
 
 impl sealed::Sealed for FixedCompletionTime {}
 impl SilencerConfig for FixedCompletionTime {
-    fn write_payload(&self, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn write_payload(&self, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let intensity = completion_time_to_steps(self.intensity)?;
         let phase = completion_time_to_steps(self.phase)?;
         let flag = if self.strict_mode {
@@ -96,7 +96,7 @@ impl SilencerConfig for FixedCompletionTime {
             intensity,
             phase,
         );
-        Ok(Cmd::SetSilencer)
+        Ok(Encoded::header::<SilencerPayload>(Cmd::SetSilencer))
     }
 
     fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
@@ -120,7 +120,7 @@ pub struct FixedUpdateRate {
 
 impl sealed::Sealed for FixedUpdateRate {}
 impl SilencerConfig for FixedUpdateRate {
-    fn write_payload(&self, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn write_payload(&self, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         write_payload(
             out,
             SILENCER_FLAG_FIXED_UPDATE_RATE_MODE,
@@ -129,7 +129,7 @@ impl SilencerConfig for FixedUpdateRate {
             SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY,
             SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
         );
-        Ok(Cmd::SetSilencer)
+        Ok(Encoded::header::<SilencerPayload>(Cmd::SetSilencer))
     }
 
     fn reflect(&self, _device: usize, state: &mut FirmwareState) -> Result<(), Error> {
@@ -174,7 +174,7 @@ impl<T: SilencerConfig> Operation for SetSilencer<T> {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         self.config.write_payload(out)
     }
 
@@ -190,8 +190,9 @@ mod tests {
 
     fn encode<T: SilencerConfig>(config: T) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = SetSilencer::new(config).encode(&test_device(0), &mut out)?;
-        Ok((cmd, out))
+        let encoded = SetSilencer::new(config).encode(&test_device(0), &mut out)?;
+        assert_eq!(encoded.len, size_of::<SilencerPayload>());
+        Ok((encoded.cmd, out))
     }
 
     fn nz(v: u16) -> NonZeroU16 {
@@ -242,7 +243,7 @@ mod tests {
         let cmd = SetSilencer::disable()
             .encode(&test_device(0), &mut out)
             .unwrap();
-        assert_eq!(cmd, Cmd::SetSilencer);
+        assert_eq!(cmd, Encoded::header::<SilencerPayload>(Cmd::SetSilencer));
         assert_eq!(out[0], 0);
         assert_eq!(&out[6..8], &1u16.to_le_bytes());
         assert_eq!(&out[8..10], &1u16.to_le_bytes());

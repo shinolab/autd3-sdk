@@ -26,8 +26,10 @@ pub const PATTERN_RAW_DATA_LEN: usize = 2 * NUM_TRANSDUCERS;
 pub const PATTERN_RAW_MAX_COUNT: usize = 2;
 pub const PATTERN_COMPRESSED_GROUP_BYTES: usize = 2 * NUM_TRANSDUCERS;
 pub const PATTERN_COMPRESSED_MAX_GROUPS: usize = 2;
+const UPDATE_CHUNK_ALIGN: usize = 32;
 pub const UPDATE_CHUNK_MAX_DATA_LEN: usize =
-    PAYLOAD_BYTES - core::mem::size_of::<UpdateChunkPayload>();
+    (PAYLOAD_BYTES - core::mem::size_of::<UpdateChunkPayload>()) / UPDATE_CHUNK_ALIGN
+        * UPDATE_CHUNK_ALIGN;
 
 const _: () = assert!(
     core::mem::size_of::<WritePatternCompressedPayload>()

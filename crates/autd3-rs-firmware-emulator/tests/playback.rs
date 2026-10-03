@@ -1,17 +1,13 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use autd3_rs_core::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
+use autd3_rs_core::protocol::{Cmd, Seq, TxFrame};
 use autd3_rs_firmware_emulator::Device;
 
 const NUM_TRANSDUCERS: usize = 249;
 const ULTRASOUND_PERIOD_NS: u64 = 25_000;
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; FRAME_BYTES_MAX] {
-    let mut tx = TxFrame::new(Seq::new(seq), cmd);
-    tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; FRAME_BYTES_MAX];
-    tx.write_to(&mut buf);
-    buf
+fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> Vec<u8> {
+    TxFrame::with_payload(Seq::new(seq), cmd, payload).to_vec()
 }
 
 #[test]
@@ -22,7 +18,6 @@ fn modulation_buffer_and_index_follow_time() {
 
     let mut write = vec![bank, 0];
     write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
     write.extend_from_slice(&samples);
 
     let mut config = vec![bank, 0];
@@ -32,6 +27,7 @@ fn modulation_buffer_and_index_follow_time() {
 
     let mut change = vec![bank, 0xFF];
     change.extend_from_slice(&0u64.to_le_bytes());
+    change.extend_from_slice(&0u32.to_le_bytes());
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
@@ -78,7 +74,6 @@ fn modulation_finite_loop_stops_after_rep() {
 
     let mut write = vec![bank, 0];
     write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
     write.extend_from_slice(&samples);
 
     let mut config = vec![bank, 0];
@@ -88,6 +83,7 @@ fn modulation_finite_loop_stops_after_rep() {
 
     let mut change = vec![bank, 0x00];
     change.extend_from_slice(&0u64.to_le_bytes());
+    change.extend_from_slice(&0u32.to_le_bytes());
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
@@ -120,7 +116,6 @@ fn sys_time_transition_within_margin_is_rejected() {
 
     let mut write = vec![bank, 0];
     write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
     write.extend_from_slice(&samples);
 
     let mut config = vec![bank, 0];
@@ -132,6 +127,7 @@ fn sys_time_transition_within_margin_is_rejected() {
     let change = |value: u64| {
         let mut c = vec![bank, 0x01];
         c.extend_from_slice(&value.to_le_bytes());
+        c.extend_from_slice(&0u32.to_le_bytes());
         c
     };
 
@@ -176,7 +172,6 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
 
     let mut write = vec![bank, 0];
     write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
     write.extend_from_slice(&samples);
 
     let mut config = vec![bank, 0];
@@ -186,6 +181,7 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
 
     let mut change = vec![bank, TRANSITION_MODE_GPIO];
     change.extend_from_slice(&GPIO_IN_PIN.to_le_bytes());
+    change.extend_from_slice(&0u32.to_le_bytes());
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));

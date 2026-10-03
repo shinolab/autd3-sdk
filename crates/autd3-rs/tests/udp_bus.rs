@@ -1,16 +1,12 @@
 use std::time::{Duration, Instant};
 
 use autd3_rs::DeviceState;
-use autd3_rs::protocol::{Cmd, FRAME_BYTES_MAX, Seq, TxFrame};
+use autd3_rs::protocol::{Cmd, Seq, TxFrame};
 use autd3_rs::udp::emulator::UdpEmulator;
 use autd3_rs::udp::{Reply, TransportOption, UdpBus, UdpError};
 
-fn frames(n: usize, seq: u8, cmd: Cmd) -> Vec<[u8; FRAME_BYTES_MAX]> {
-    let mut tx = vec![[0u8; FRAME_BYTES_MAX]; n];
-    for buf in &mut tx {
-        TxFrame::new(Seq::new(seq), cmd).write_to(buf);
-    }
-    tx
+fn frames(n: usize, seq: u8, cmd: Cmd) -> Vec<Vec<u8>> {
+    vec![TxFrame::new(Seq::new(seq), cmd).to_vec(); n]
 }
 
 fn collect(bus: &mut UdpBus, msg_id: u16, n: usize) -> Vec<Reply> {

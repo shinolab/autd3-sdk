@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation, write_header};
+use super::{Distribution, Encoded, Operation, write_header};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct EmulateGpioIn {
@@ -18,7 +18,7 @@ impl Operation for EmulateGpioIn {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         write_header(
             out,
             &GpioInPayload {
@@ -28,7 +28,7 @@ impl Operation for EmulateGpioIn {
                 gpio_in_3: self.values[3],
             },
         );
-        Ok(Cmd::EmulateGpioIn)
+        Ok(Encoded::header::<GpioInPayload>(Cmd::EmulateGpioIn))
     }
 }
 
@@ -45,7 +45,7 @@ mod tests {
         }
         .encode(&test_device(0), &mut out)
         .unwrap();
-        assert_eq!(cmd, Cmd::EmulateGpioIn);
+        assert_eq!(cmd, Encoded::header::<GpioInPayload>(Cmd::EmulateGpioIn));
         assert_eq!(&out[..4], &[0, 1, 0, 1]);
     }
 }

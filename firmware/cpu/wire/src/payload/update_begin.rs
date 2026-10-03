@@ -1,7 +1,7 @@
 use zerocopy::little_endian::U32;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
-use super::read_header;
+use super::read_exact;
 use crate::Error;
 
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
@@ -13,7 +13,7 @@ pub struct UpdateBeginPayload {
 
 impl UpdateBeginPayload {
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
-        read_header(payload).map(|(p, _)| p)
+        read_exact(payload)
     }
 }
 

@@ -2,7 +2,7 @@ use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Encoded, Operation};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Nop;
@@ -14,8 +14,8 @@ impl Operation for Nop {
         Distribution::Broadcast
     }
 
-    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        Ok(Cmd::Nop)
+    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        Ok(Encoded::no_payload(Cmd::Nop))
     }
 }
 
@@ -28,7 +28,7 @@ mod tests {
     fn nop_is_no_payload_broadcast() {
         let mut out = [0xAAu8; PAYLOAD_BYTES];
         let cmd = Nop.encode(&test_device(0), &mut out).unwrap();
-        assert_eq!(cmd, Cmd::Nop);
+        assert_eq!(cmd, Encoded::no_payload(Cmd::Nop));
         assert_eq!(Nop.distribution(), Distribution::Broadcast);
     }
 }
