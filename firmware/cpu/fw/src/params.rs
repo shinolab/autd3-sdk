@@ -28,15 +28,13 @@ pub const CTL_FLAG_BIT_FORCE_FAN: u16 = 13;
 pub const CTL_FLAG_FORCE_FAN: u16 = 1 << CTL_FLAG_BIT_FORCE_FAN;
 
 pub const BRAM_SELECT_CONTROLLER: u8 = 0x0;
-pub const BRAM_SELECT_MOD: u8 = 0x1;
-pub const BRAM_SELECT_PWE_TABLE: u8 = 0x2;
-pub const BRAM_SELECT_EMISSION: u8 = 0x3;
-
-pub const BRAM_CNT_SELECT_MAIN: u8 = 0x0;
-pub const BRAM_CNT_SELECT_PHASE_CORR: u8 = 0x1;
-pub const BRAM_CNT_SELECT_OUTPUT_MASK: u8 = 0x2;
-pub const BRAM_CNT_SELECT_FLASH: u8 = 0x3;
-pub const BRAM_CNT_SELECT_FLASH_BUF: u8 = 0x4;
+pub const BRAM_SELECT_PHASE_CORR: u8 = 0x1;
+pub const BRAM_SELECT_OUTPUT_MASK: u8 = 0x2;
+pub const BRAM_SELECT_FLASH: u8 = 0x3;
+pub const BRAM_SELECT_FLASH_BUF: u8 = 0x4;
+pub const BRAM_SELECT_PWE_TABLE: u8 = 0x6;
+pub const BRAM_SELECT_MOD: u8 = 0x40;
+pub const BRAM_SELECT_EMISSION: u8 = 0xC0;
 
 pub const ADDR_FLASH_CMD: u16 = 0x0;
 pub const ADDR_FLASH_ADDR_0: u16 = 0x1;

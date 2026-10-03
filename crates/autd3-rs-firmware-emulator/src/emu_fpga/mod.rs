@@ -47,16 +47,14 @@ const EMISSION_SLOT_WORDS: usize = fw::EMISSION_SLOT_WORDS as usize;
 const EMISSION_RAM_WORDS: usize = fw::EMISSION_RAM_WORDS as usize;
 const MOD_RAM_WORDS: usize = (fw::MOD_BUFFER_SAMPLES / 2) as usize;
 
-const SELECT_CONTROLLER: u16 = fw::BRAM_SELECT_CONTROLLER as u16;
-const SELECT_MOD: u16 = fw::BRAM_SELECT_MOD as u16;
-const SELECT_PWE_TABLE: u16 = fw::BRAM_SELECT_PWE_TABLE as u16;
-const SELECT_EMISSION: u16 = fw::BRAM_SELECT_EMISSION as u16;
-
-const CNT_SELECT_MAIN: usize = fw::BRAM_CNT_SELECT_MAIN as usize;
-const CNT_SELECT_PHASE_CORR: usize = fw::BRAM_CNT_SELECT_PHASE_CORR as usize;
-const CNT_SELECT_OUTPUT_MASK: usize = fw::BRAM_CNT_SELECT_OUTPUT_MASK as usize;
-const CNT_SELECT_FLASH: usize = fw::BRAM_CNT_SELECT_FLASH as usize;
-const CNT_SELECT_FLASH_BUF: usize = fw::BRAM_CNT_SELECT_FLASH_BUF as usize;
+const SELECT_CONTROLLER: usize = fw::BRAM_SELECT_CONTROLLER as usize;
+const SELECT_PHASE_CORR: usize = fw::BRAM_SELECT_PHASE_CORR as usize;
+const SELECT_OUTPUT_MASK: usize = fw::BRAM_SELECT_OUTPUT_MASK as usize;
+const SELECT_FLASH: usize = fw::BRAM_SELECT_FLASH as usize;
+const SELECT_FLASH_BUF: usize = fw::BRAM_SELECT_FLASH_BUF as usize;
+const SELECT_PWE_TABLE: usize = fw::BRAM_SELECT_PWE_TABLE as usize;
+const SELECT_MOD: usize = fw::BRAM_SELECT_MOD as usize;
+const SELECT_EMISSION: usize = fw::BRAM_SELECT_EMISSION as usize;
 
 const LATCH_MASK: u16 = fw::CTL_FLAG_MOD_SET
     | fw::CTL_FLAG_PATTERN_SET
@@ -203,29 +201,27 @@ impl FpgaEmulator {
     }
 
     pub(crate) fn write(&mut self, addr: u16, value: u16) {
-        let select = (addr >> 14) & 0x3;
+        let select = (addr >> 8) as usize;
         let a = (addr & 0x3FFF) as usize;
-        match select {
-            SELECT_CONTROLLER => self.write_controller(a, value),
-            SELECT_MOD => {
+        match select >> 6 {
+            sel if sel == SELECT_MOD >> 6 => {
                 let bank = self.controller[reg(fw::ADDR_MOD_MEM_WR_BANK)] as usize;
                 let page = self.controller[reg(fw::ADDR_MOD_MEM_WR_PAGE)] as usize;
                 self.mod_ram[bank][(page << 14) | a] = value;
             }
-            SELECT_PWE_TABLE => self.pwe[a & (PWE_TABLE_SIZE - 1)] = value,
-            SELECT_EMISSION => {
+            sel if sel == SELECT_EMISSION >> 6 => {
                 let bank = self.controller[reg(fw::ADDR_PATTERN_MEM_WR_BANK)] as usize;
                 let page = self.controller[reg(fw::ADDR_PATTERN_MEM_WR_PAGE)] as usize;
                 self.em_ram[bank][(page << 14) | a] = value;
             }
-            _ => {}
+            _ => self.write_controller(addr as usize, value),
         }
     }
 
     fn write_controller(&mut self, a: usize, value: u16) {
         match a >> 8 {
-            CNT_SELECT_MAIN => {
-                if a == reg(fw::ADDR_CTL_FLAG) {
+            SELECT_CONTROLLER => {
+                if a & 0xFF == reg(fw::ADDR_CTL_FLAG) {
                     for bit in 0..16 {
                         if value & LATCH_MASK & (1 << bit) != 0 {
                             self.latch_count[bit] += 1;
@@ -242,29 +238,30 @@ impl FpgaEmulator {
                     self.controller[a & 0xFF] = value;
                 }
             }
-            CNT_SELECT_PHASE_CORR => self.phase_corr[a & 0xFF] = value,
-            CNT_SELECT_OUTPUT_MASK => self.output_mask[a & (OUTPUT_MASK_WORDS - 1)] = value,
-            CNT_SELECT_FLASH => {
+            SELECT_PHASE_CORR => self.phase_corr[a & 0xFF] = value,
+            SELECT_OUTPUT_MASK => self.output_mask[a & (OUTPUT_MASK_WORDS - 1)] = value,
+            SELECT_PWE_TABLE => self.pwe[a & (PWE_TABLE_SIZE - 1)] = value,
+            SELECT_FLASH => {
                 self.flash.write_reg(a & 0xFF, value);
                 if self.flash.take_reboot_request() {
                     self.reconfigure();
                 }
             }
-            sel if sel >> 1 == CNT_SELECT_FLASH_BUF >> 1 => self.flash.write_buf(a & 0x1FF, value),
+            sel if sel >> 1 == SELECT_FLASH_BUF >> 1 => self.flash.write_buf(a & 0x1FF, value),
             _ => {}
         }
     }
 
     pub(crate) fn read(&self, addr: u16) -> u16 {
-        let select = (addr >> 14) & 0x3;
-        let a = (addr & 0x3FFF) as usize;
-        if select == SELECT_CONTROLLER && (a >> 8) == CNT_SELECT_MAIN {
+        let select = (addr >> 8) as usize;
+        let a = addr as usize;
+        if select == SELECT_CONTROLLER {
             if a & 0xFF == reg(fw::ADDR_FPGA_STATE) {
                 u16::from(self.fpga_state())
             } else {
                 self.controller[a & 0xFF]
             }
-        } else if select == SELECT_CONTROLLER && (a >> 8) == CNT_SELECT_FLASH {
+        } else if select == SELECT_FLASH {
             self.flash.read_reg(a & 0xFF)
         } else {
             0

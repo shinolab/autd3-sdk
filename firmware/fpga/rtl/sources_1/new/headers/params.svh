@@ -54,20 +54,16 @@ package params;
     FPGA_STATE_BIT_READS_ENABLED = 7
   } fpga_state_bit_t;
 
-  typedef enum logic [1:0] {
-    BRAM_SELECT_CONTROLLER = 2'h0,
-    BRAM_SELECT_MOD = 2'h1,
-    BRAM_SELECT_PWE_TABLE = 2'h2,
-    BRAM_SELECT_EMISSION = 2'h3
+  typedef enum logic [7:0] {
+    BRAM_SELECT_CONTROLLER  = 8'h00,
+    BRAM_SELECT_PHASE_CORR  = 8'h01,
+    BRAM_SELECT_OUTPUT_MASK = 8'h02,
+    BRAM_SELECT_FLASH       = 8'h03,
+    BRAM_SELECT_FLASH_BUF   = 8'h04,
+    BRAM_SELECT_PWE_TABLE   = 8'h06,
+    BRAM_SELECT_MOD         = 8'h40,
+    BRAM_SELECT_EMISSION    = 8'hC0
   } bram_select_t;
-
-  typedef enum logic [5:0] {
-    BRAM_CNT_SELECT_MAIN = 6'h00,
-    BRAM_CNT_SELECT_PHASE_CORR = 6'h01,
-    BRAM_CNT_SELECT_OUTPUT_MASK = 6'h02,
-    BRAM_CNT_SELECT_FLASH = 6'h03,
-    BRAM_CNT_SELECT_FLASH_BUF = 6'h04
-  } bram_cnt_select_t;
 
   typedef enum logic [7:0] {
     ADDR_FLASH_CMD          = 8'h00,

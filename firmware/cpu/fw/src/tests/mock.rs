@@ -11,12 +11,12 @@ use crate::params::{
     ADDR_CTL_FLAG, ADDR_FLASH_ADDR_0, ADDR_FLASH_ADDR_1, ADDR_FLASH_CMD, ADDR_FLASH_LEN_0,
     ADDR_FLASH_LEN_1, ADDR_FLASH_RESULT_0, ADDR_FLASH_RESULT_1, ADDR_FLASH_STATUS,
     ADDR_FLASH_USR_ACCESS_0, ADDR_FLASH_USR_ACCESS_1, ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE,
-    ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, BRAM_CNT_SELECT_FLASH,
-    BRAM_CNT_SELECT_FLASH_BUF, BRAM_CNT_SELECT_MAIN, BRAM_CNT_SELECT_OUTPUT_MASK,
-    BRAM_CNT_SELECT_PHASE_CORR, BRAM_SELECT_CONTROLLER, BRAM_SELECT_EMISSION, BRAM_SELECT_MOD,
-    BRAM_SELECT_PWE_TABLE, CTL_FLAG_DEBUG_SET, CTL_FLAG_MOD_SET, CTL_FLAG_PATTERN_SET,
-    CTL_FLAG_SILENCER_SET, CTL_FLAG_SYNC_SET, FLASH_BUF_BYTES, FLASH_ERR_INVALID, FLASH_ERR_NONE,
-    FLASH_OP_CRC32, FLASH_OP_ERASE, FLASH_OP_PROGRAM, FLASH_OP_READ_ID, FLASH_OP_REBOOT, NUM_BANKS,
+    ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, BRAM_SELECT_CONTROLLER,
+    BRAM_SELECT_EMISSION, BRAM_SELECT_FLASH, BRAM_SELECT_FLASH_BUF, BRAM_SELECT_MOD,
+    BRAM_SELECT_OUTPUT_MASK, BRAM_SELECT_PHASE_CORR, BRAM_SELECT_PWE_TABLE, CTL_FLAG_DEBUG_SET,
+    CTL_FLAG_MOD_SET, CTL_FLAG_PATTERN_SET, CTL_FLAG_SILENCER_SET, CTL_FLAG_SYNC_SET,
+    FLASH_BUF_BYTES, FLASH_ERR_INVALID, FLASH_ERR_NONE, FLASH_OP_CRC32, FLASH_OP_ERASE,
+    FLASH_OP_PROGRAM, FLASH_OP_READ_ID, FLASH_OP_REBOOT, NUM_BANKS,
 };
 use crate::port::{FlashError, Port};
 use crate::proto::{
@@ -145,7 +145,7 @@ impl MockPort {
 
     fn write_controller(&mut self, addr: u16, value: u16) {
         match (addr >> 8) as u8 {
-            BRAM_CNT_SELECT_MAIN => {
+            BRAM_SELECT_CONTROLLER => {
                 if addr == ADDR_CTL_FLAG {
                     for bit in 0..16usize {
                         if (value & LATCH_MASK & (1 << bit)) != 0 {
@@ -161,8 +161,8 @@ impl MockPort {
                     self.ctl[(addr & 0xFF) as usize] = value;
                 }
             }
-            BRAM_CNT_SELECT_FLASH if self.fpga_flash_dropped_reg == Some(addr & 0xFF) => {}
-            BRAM_CNT_SELECT_FLASH => {
+            BRAM_SELECT_FLASH if self.fpga_flash_dropped_reg == Some(addr & 0xFF) => {}
+            BRAM_SELECT_FLASH => {
                 self.fpga_flash_reg[(addr & 0xF) as usize] = value;
                 if addr & 0xFF != ADDR_FLASH_CMD {
                     self.fpga_flash_target_unflushed = true;
@@ -173,13 +173,14 @@ impl MockPort {
                     self.run_flash_command(value as u8);
                 }
             }
-            sel if sel >> 1 == BRAM_CNT_SELECT_FLASH_BUF >> 1 => {
+            sel if sel >> 1 == BRAM_SELECT_FLASH_BUF >> 1 => {
                 self.fpga_flash_buf[(addr & 0x1FF) as usize] = value;
             }
-            BRAM_CNT_SELECT_PHASE_CORR => self.phase_corr[(addr & 0xFF) as usize] = value,
-            BRAM_CNT_SELECT_OUTPUT_MASK => {
+            BRAM_SELECT_PHASE_CORR => self.phase_corr[(addr & 0xFF) as usize] = value,
+            BRAM_SELECT_OUTPUT_MASK => {
                 self.output_mask[(addr as usize) & (OUTPUT_MASK_WORDS - 1)] = value;
             }
+            BRAM_SELECT_PWE_TABLE => self.pwe[(addr as usize) & (PWE_TABLE_SIZE - 1)] = value,
             _ => {}
         }
     }
@@ -262,33 +263,30 @@ impl MockPort {
 impl Port for MockPort {
     fn fpga_write(&mut self, addr: u16, value: u16) {
         self.fire_isr_frame();
-        let select = ((addr >> 14) & 0x3) as u8;
+        let select = (addr >> 8) as u8;
         let a = addr & 0x3FFF;
-        match select {
-            BRAM_SELECT_CONTROLLER => self.write_controller(a, value),
-            BRAM_SELECT_MOD => {
+        match select >> 6 {
+            sel if sel == BRAM_SELECT_MOD >> 6 => {
                 let bank = self.ctl[ADDR_MOD_MEM_WR_BANK as usize] as usize;
                 let page = self.ctl[ADDR_MOD_MEM_WR_PAGE as usize] as usize;
                 self.mod_ram[bank][(page << 14) | a as usize] = value;
             }
-            BRAM_SELECT_PWE_TABLE => self.pwe[(addr as usize) & (PWE_TABLE_SIZE - 1)] = value,
-            BRAM_SELECT_EMISSION => {
+            sel if sel == BRAM_SELECT_EMISSION >> 6 => {
                 let bank = self.ctl[ADDR_PATTERN_MEM_WR_BANK as usize] as usize;
                 let page = self.ctl[ADDR_PATTERN_MEM_WR_PAGE as usize] as usize;
                 self.em_ram[bank][(page << 14) | a as usize] = value;
             }
-            _ => {}
+            _ => self.write_controller(addr, value),
         }
     }
 
     fn fpga_read(&mut self, addr: u16) -> u16 {
-        let select = ((addr >> 14) & 0x3) as u8;
-        let a = addr & 0x3FFF;
-        if select == BRAM_SELECT_CONTROLLER && (a >> 8) as u8 == BRAM_CNT_SELECT_MAIN {
-            return self.ctl[(a & 0xFF) as usize];
+        let select = (addr >> 8) as u8;
+        if select == BRAM_SELECT_CONTROLLER {
+            return self.ctl[(addr & 0xFF) as usize];
         }
-        if select == BRAM_SELECT_CONTROLLER && (a >> 8) as u8 == BRAM_CNT_SELECT_FLASH {
-            return match a & 0xFF {
+        if select == BRAM_SELECT_FLASH {
+            return match addr & 0xFF {
                 ADDR_FLASH_USR_ACCESS_0 => self.fpga_usr_access as u16,
                 ADDR_FLASH_USR_ACCESS_1 => (self.fpga_usr_access >> 16) as u16,
                 r if r < 16 => self.fpga_flash_reg[r as usize],

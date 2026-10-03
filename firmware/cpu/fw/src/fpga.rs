@@ -6,9 +6,9 @@ use crate::params::{
     ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_TRANSITION_MODE, ADDR_PATTERN_TRANSITION_VALUE_0,
     ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, ADDR_SILENCER_COMPLETION_STEPS_PHASE,
     ADDR_SILENCER_FLAG, ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE,
-    BRAM_CNT_SELECT_OUTPUT_MASK, BRAM_CNT_SELECT_PHASE_CORR, BRAM_SELECT_CONTROLLER,
-    BRAM_SELECT_EMISSION, BRAM_SELECT_MOD, BRAM_SELECT_PWE_TABLE, CTL_FLAG_DEBUG_SET,
-    CTL_FLAG_MOD_SET, CTL_FLAG_PATTERN_SET, CTL_FLAG_SILENCER_SET, NUM_BANKS, NUM_TRANSDUCERS,
+    BRAM_SELECT_CONTROLLER, BRAM_SELECT_EMISSION, BRAM_SELECT_MOD, BRAM_SELECT_OUTPUT_MASK,
+    BRAM_SELECT_PHASE_CORR, BRAM_SELECT_PWE_TABLE, CTL_FLAG_DEBUG_SET, CTL_FLAG_MOD_SET,
+    CTL_FLAG_PATTERN_SET, CTL_FLAG_SILENCER_SET, NUM_BANKS, NUM_TRANSDUCERS,
 };
 pub use crate::params::{PWE_TABLE_SIZE, REP_INFINITE};
 use crate::port::Port;
@@ -48,11 +48,11 @@ pub const FPGA_WAIT_UPDATE_MAX_POLLS: u32 = 1_000_000;
 pub const FPGA_WAIT_UPDATE_MAX_POLLS_INLINE: u32 = 1_000;
 
 pub fn write<P: Port>(port: &mut P, select: u8, addr: u16, value: u16) {
-    port.fpga_write((u16::from(select) << 14) | (addr & 0x3FFF), value);
+    port.fpga_write((u16::from(select) << 8) | addr, value);
 }
 
 pub fn read<P: Port>(port: &mut P, select: u8, addr: u16) -> u16 {
-    port.fpga_read((u16::from(select) << 14) | (addr & 0x3FFF))
+    port.fpga_read((u16::from(select) << 8) | addr)
 }
 
 fn write_switch<P: Port>(port: &mut P, reg: u16, value: u16) {
@@ -312,20 +312,10 @@ fn init_pattern<P: Port>(port: &mut P) {
 
 fn init_tables<P: Port>(port: &mut P) {
     for i in 0..PHASE_CORR_WORDS as u16 {
-        write(
-            port,
-            BRAM_SELECT_CONTROLLER,
-            (u16::from(BRAM_CNT_SELECT_PHASE_CORR) << 8) | i,
-            0,
-        );
+        write(port, BRAM_SELECT_PHASE_CORR, i, 0);
     }
     for i in 0..OUTPUT_MASK_WORDS as u16 {
-        write(
-            port,
-            BRAM_SELECT_CONTROLLER,
-            (u16::from(BRAM_CNT_SELECT_OUTPUT_MASK) << 8) | i,
-            0xFFFF,
-        );
+        write(port, BRAM_SELECT_OUTPUT_MASK, i, 0xFFFF);
     }
 
     for (i, v) in ASIN_TABLE.iter().enumerate() {

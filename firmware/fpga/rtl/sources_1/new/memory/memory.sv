@@ -17,8 +17,8 @@ module memory (
   logic bus_clk;
   logic en;
   logic we;
-  logic [1:0] select;
-  logic [13:0] addr;
+  logic [15:0] addr;
+  logic [7:0] select;
   logic [15:0] data_in;
   logic [15:0] data_out;
   logic [15:0] ctl_dout;
@@ -27,14 +27,12 @@ module memory (
 
   (* IOB = "TRUE" *) logic cs_n_iob = 1'b1;
   (* IOB = "TRUE" *) logic we_n_iob = 1'b1;
-  (* IOB = "TRUE" *) logic [1:0] select_iob = '0;
-  (* IOB = "TRUE" *) logic [13:0] addr_iob = '0;
+  (* IOB = "TRUE" *) logic [15:0] addr_iob = '0;
   (* IOB = "TRUE" *) logic [15:0] data_iob = '0;
 
   logic en_q = 1'b0;
   logic we_q = 1'b0;
-  logic [1:0] select_q = '0;
-  logic [13:0] addr_q = '0;
+  logic [15:0] addr_q = '0;
   logic [15:0] data_q = '0;
   logic we_done = 1'b0;
 
@@ -43,12 +41,10 @@ module memory (
   always_ff @(posedge bus_clk) begin
     cs_n_iob <= MEM_BUS.CS_N;
     we_n_iob <= MEM_BUS.WE_N;
-    select_iob <= MEM_BUS.BRAM_SELECT;
     addr_iob <= MEM_BUS.BRAM_ADDR;
     data_iob <= MEM_BUS.DATA_IN;
     en_q <= ~cs_n_iob;
     we_q <= ~we_n_iob;
-    select_q <= select_iob;
     addr_q <= addr_iob;
     data_q <= data_iob;
     we_done <= (we_done | we) & ~we_n_iob;
@@ -56,19 +52,16 @@ module memory (
 
   assign we = en_q & we_q & ~we_n_iob & ~we_done;
   assign en = we ? en_q : ~cs_n_iob;
-  assign select = we ? select_q : select_iob;
   assign addr = we ? addr_q : addr_iob;
+  assign select = addr[15:8];
   assign data_in = data_q;
   assign MEM_BUS.DATA_OUT = data_out;
   assign data_out = flash_rd_sel ? flash_dout : ctl_dout;
 
-  logic [5:0] cnt_sel;
-  assign cnt_sel = addr[13:8];
-
   ///////////////////////////// Controller ////////////////////////////
   logic ctl_en;
 
-  assign ctl_en = (cnt_sel == BRAM_CNT_SELECT_MAIN) & (select == BRAM_SELECT_CONTROLLER) & en;
+  assign ctl_en = (select == BRAM_SELECT_CONTROLLER) & en;
 
   BRAM_CONTROLLER ctl_bram (
       .clka (bus_clk),
@@ -85,13 +78,15 @@ module memory (
   );
   ///////////////////////////// Controller ////////////////////////////
 
-  localparam logic [5:0] FlashBufSelect = BRAM_CNT_SELECT_FLASH_BUF;
+  localparam logic [7:0] FlashBufSelect = BRAM_SELECT_FLASH_BUF;
+  localparam logic [7:0] ModSelect = BRAM_SELECT_MOD;
+  localparam logic [7:0] EmissionSelect = BRAM_SELECT_EMISSION;
 
   logic flash_reg_en;
   logic flash_buf_en;
 
-  assign flash_reg_en = (cnt_sel == BRAM_CNT_SELECT_FLASH) & (select == BRAM_SELECT_CONTROLLER) & en;
-  assign flash_buf_en = (cnt_sel[5:1] == FlashBufSelect[5:1]) & (select == BRAM_SELECT_CONTROLLER) & en;
+  assign flash_reg_en = (select == BRAM_SELECT_FLASH) & en;
+  assign flash_buf_en = (select[7:1] == FlashBufSelect[7:1]) & en;
 
   always_ff @(posedge bus_clk) begin
     if (flash_reg_en) begin
@@ -119,7 +114,7 @@ module memory (
   logic [7:0] phase_corr_idx;
   logic [7:0] phase_corr_dout;
 
-  assign phase_corr_en = (cnt_sel == BRAM_CNT_SELECT_PHASE_CORR) & (select == BRAM_SELECT_CONTROLLER) & en;
+  assign phase_corr_en = (select == BRAM_SELECT_PHASE_CORR) & en;
   assign phase_corr_idx = PHASE_CORR_BUS.IDX;
   assign PHASE_CORR_BUS.VALUE = phase_corr_dout;
 
@@ -144,7 +139,7 @@ module memory (
 
   logic [255:0] output_mask_dout;
 
-  assign output_mask_en = (cnt_sel == BRAM_CNT_SELECT_OUTPUT_MASK) & (select == BRAM_SELECT_CONTROLLER) & en;
+  assign output_mask_en = (select == BRAM_SELECT_OUTPUT_MASK) & en;
   assign OUTPUT_MASK_BUS.VALUE = output_mask_dout;
   BRAM_OUTPUT_MASK output_mask_bram (
       .clka (bus_clk),
@@ -201,13 +196,13 @@ module memory (
   assign mod_idx = MOD_BUS.IDX;
   assign MOD_BUS.VALUE = mod_value[MOD_BUS.BANK];
   for (genvar i = 0; i < NumBanks; i++) begin : gen_mod_bram
-    assign mod_en[i] = (select == BRAM_SELECT_MOD) & en & (mod_mem_wr_bank == i);
+    assign mod_en[i] = (select[7:6] == ModSelect[7:6]) & en & (mod_mem_wr_bank == i);
     assign mod_rd_en[i] = MOD_BUS.RD_EN & (MOD_BUS.BANK == i);
     BRAM_MOD mod_bram (
         .clka (bus_clk),
         .ena  (mod_en[i]),
         .wea  (we),
-        .addra({mod_mem_wr_page, addr}),
+        .addra({mod_mem_wr_page, addr[13:0]}),
         .dina (data_in),
         .douta(),
         .clkb (CLK),
@@ -233,13 +228,13 @@ module memory (
   assign pattern_idx = EMISSION_BUS.ADDR;
   assign EMISSION_BUS.VALUE = emission_value[EMISSION_BUS.BANK];
   for (genvar i = 0; i < NumBanks; i++) begin : gen_emission_bram
-    assign emission_en[i] = (select == BRAM_SELECT_EMISSION) & en & (pattern_mem_wr_bank == i);
+    assign emission_en[i] = (select[7:6] == EmissionSelect[7:6]) & en & (pattern_mem_wr_bank == i);
     assign emission_rd_en[i] = EMISSION_BUS.RD_EN & (EMISSION_BUS.BANK == i);
     bram_emission emission_bram (
         .clka (bus_clk),
         .ena  (emission_en[i]),
         .wea  (we),
-        .addra({pattern_mem_wr_page, addr}),
+        .addra({pattern_mem_wr_page, addr[13:0]}),
         .dina (data_in),
         .clkb (CLK),
         .enb  (emission_rd_en[i]),
@@ -251,7 +246,7 @@ module memory (
 
   always_ff @(posedge bus_clk) begin
     if (we & ctl_en) begin
-      case (addr)
+      case (addr[7:0])
         ADDR_MOD_MEM_WR_BANK: mod_mem_wr_bank <= data_in[0];
         ADDR_MOD_MEM_WR_PAGE: mod_mem_wr_page <= data_in[0];
         ADDR_PATTERN_MEM_WR_BANK: pattern_mem_wr_bank <= data_in[0];

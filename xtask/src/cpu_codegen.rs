@@ -36,7 +36,6 @@ const IP_CONSTS: &[IpConst] = &[
 const FW_INTERNAL_PREFIXES: &[&str] = &[
     "ADDR_",
     "BRAM_SELECT_",
-    "BRAM_CNT_SELECT_",
     "CTL_FLAG_",
     "FLASH_OP_",
     "FLASH_ERR_",
@@ -78,7 +77,6 @@ fn rust_type(name: &str) -> &'static str {
         || name.starts_with("FLASH_ERR_")
         || name.starts_with("VERSION_NUM_")
         || name.starts_with("BRAM_SELECT_")
-        || name.starts_with("BRAM_CNT_SELECT_")
         || name.starts_with("TRANSITION_MODE_")
         || name.starts_with("EMISSION_TYPE_")
         || name.starts_with("GPIO_O_TYPE_")

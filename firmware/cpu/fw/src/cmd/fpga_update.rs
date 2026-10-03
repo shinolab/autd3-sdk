@@ -13,9 +13,9 @@ use crate::fpga;
 use crate::params::{
     ADDR_FLASH_ADDR_0, ADDR_FLASH_ADDR_1, ADDR_FLASH_CMD, ADDR_FLASH_LEN_0, ADDR_FLASH_LEN_1,
     ADDR_FLASH_RESULT_0, ADDR_FLASH_RESULT_1, ADDR_FLASH_STATUS, ADDR_FLASH_USR_ACCESS_0,
-    ADDR_FLASH_USR_ACCESS_1, ADDR_VERSION_NUM_MAJOR, BRAM_CNT_SELECT_FLASH,
-    BRAM_CNT_SELECT_FLASH_BUF, BRAM_SELECT_CONTROLLER, FLASH_BUF_BYTES, FLASH_OP_CRC32,
-    FLASH_OP_ERASE, FLASH_OP_PROGRAM, FLASH_OP_REBOOT,
+    ADDR_FLASH_USR_ACCESS_1, ADDR_VERSION_NUM_MAJOR, BRAM_SELECT_CONTROLLER, BRAM_SELECT_FLASH,
+    BRAM_SELECT_FLASH_BUF, FLASH_BUF_BYTES, FLASH_OP_CRC32, FLASH_OP_ERASE, FLASH_OP_PROGRAM,
+    FLASH_OP_REBOOT,
 };
 use crate::port::Port;
 use crate::proto::{Cmd, Error};
@@ -101,20 +101,12 @@ pub(crate) fn allowed_while_locked(cmd: Cmd) -> bool {
             || matches!(cmd.as_u8() >> 4, 0x7 | 0xE))
 }
 
-fn flash_reg(addr: u16) -> u16 {
-    (u16::from(BRAM_CNT_SELECT_FLASH) << 8) | addr
-}
-
-fn flash_buf(index: usize) -> u16 {
-    (u16::from(BRAM_CNT_SELECT_FLASH_BUF) << 8) + index as u16
-}
-
 fn write_reg<P: Port>(port: &mut P, addr: u16, value: u16) {
-    fpga::write(port, BRAM_SELECT_CONTROLLER, flash_reg(addr), value);
+    fpga::write(port, BRAM_SELECT_FLASH, addr, value);
 }
 
 fn read_reg<P: Port>(port: &mut P, addr: u16) -> u16 {
-    fpga::read(port, BRAM_SELECT_CONTROLLER, flash_reg(addr))
+    fpga::read(port, BRAM_SELECT_FLASH, addr)
 }
 
 const TARGET_REGS: [u16; 4] = [
@@ -185,7 +177,7 @@ fn load_buffer<P: Port>(port: &mut P, data: &[u8]) {
     for (i, pair) in data.chunks(2).enumerate() {
         let lo = u16::from(pair[0]);
         let hi = u16::from(pair.get(1).copied().unwrap_or(0xFF));
-        fpga::write(port, BRAM_SELECT_CONTROLLER, flash_buf(i), lo | (hi << 8));
+        fpga::write(port, BRAM_SELECT_FLASH_BUF, i as u16, lo | (hi << 8));
     }
 }
 

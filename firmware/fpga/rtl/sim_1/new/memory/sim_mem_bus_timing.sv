@@ -59,8 +59,7 @@ module sim_mem_bus_timing ();
   assign memory_bus.WE_N = we_n;
   assign memory_bus.RD_N = rd_n;
   assign memory_bus.RDWR = rdwr;
-  assign memory_bus.BRAM_SELECT = bus_addr[15:14];
-  assign memory_bus.BRAM_ADDR = bus_addr[13:0];
+  assign memory_bus.BRAM_ADDR = bus_addr;
   assign memory_bus.DATA_IN = wdata;
 
   logic [15:0] expected[SIZE];
@@ -71,7 +70,7 @@ module sim_mem_bus_timing ();
   end
 
   function automatic logic [15:0] ctl_addr(input logic [7:0] idx);
-    return {BRAM_SELECT_CONTROLLER, BRAM_CNT_SELECT_MAIN, idx};
+    return {BRAM_SELECT_CONTROLLER, idx};
   endfunction
 
   task automatic align();

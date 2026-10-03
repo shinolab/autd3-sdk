@@ -21,8 +21,7 @@ module sim_helper_bram #(
   assign memory_bus.BUS_CLK = CPU_CKIO;
   assign memory_bus.CS_N = CPU_CN;
   assign memory_bus.WE_N = CPU_WE0_N;
-  assign memory_bus.BRAM_SELECT = CPU_ADDR[16:15];
-  assign memory_bus.BRAM_ADDR = CPU_ADDR[14:1];
+  assign memory_bus.BRAM_ADDR = CPU_ADDR[16:1];
   assign memory_bus.DATA_IN = CPU_DATA;
 
   logic cpu_rd = 1'b0;
@@ -32,10 +31,10 @@ module sim_helper_bram #(
 
   logic bus_active = 1'b0;
 
-  task automatic bram_write(input logic [1:0] select, input logic [13:0] addr, input logic [15:0] data_in);
+  task automatic bram_write(input logic [7:0] select, input logic [13:0] addr, input logic [15:0] data_in);
     bus_active = 1'b1;
     @(posedge CPU_CKIO);
-    bram_addr <= {select, addr};
+    bram_addr <= {select, 8'h00} | {2'b00, addr};
     CPU_CN <= 0;
     bus_data_reg <= data_in;
     @(posedge CPU_CKIO);
@@ -52,13 +51,13 @@ module sim_helper_bram #(
   endtask
 
   task automatic write_cnt(logic [7:0] addr, logic [15:0] data);
-    bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_MAIN, addr}, data);
+    bram_write(BRAM_SELECT_CONTROLLER, addr, data);
   endtask
 
-  task automatic bram_read(input logic [1:0] select, input logic [13:0] addr, output logic [15:0] data_out);
+  task automatic bram_read(input logic [7:0] select, input logic [13:0] addr, output logic [15:0] data_out);
     bus_active = 1'b1;
     @(posedge CPU_CKIO);
-    bram_addr <= {select, addr};
+    bram_addr <= {select, 8'h00} | {2'b00, addr};
     CPU_CN <= 0;
     bus_data_reg <= 16'bzzzzzzzzzzzzzzzz;
     cpu_rd <= 1'b1;
@@ -72,18 +71,18 @@ module sim_helper_bram #(
   endtask
 
   task automatic read_cnt(input logic [7:0] addr, output logic [15:0] data_out);
-    bram_read(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_MAIN, addr}, data_out);
+    bram_read(BRAM_SELECT_CONTROLLER, addr, data_out);
   endtask
 
   task automatic write_phase_corr(input logic [7:0] value[256]);
     for (int i = 0; i < 128; i++) begin
-      bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_PHASE_CORR, i[7:0]}, {value[2*i+1], value[2*i]});
+      bram_write(BRAM_SELECT_PHASE_CORR, i[7:0], {value[2*i+1], value[2*i]});
     end
   endtask
 
   task automatic write_output_mask(input logic [255:0] value);
     for (int j = 0; j < 16; j++) begin
-      bram_write(BRAM_SELECT_CONTROLLER, {2'b00, BRAM_CNT_SELECT_OUTPUT_MASK, 4'b0000, j[3:0]}, value[16*j+:16]);
+      bram_write(BRAM_SELECT_OUTPUT_MASK, j[3:0], value[16*j+:16]);
     end
   endtask
 
