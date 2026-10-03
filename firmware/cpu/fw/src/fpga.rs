@@ -20,12 +20,9 @@ pub use autd3_cpu_wire::payload::{EmissionType, TransitionMode};
 
 pub const SYS_TIME_TRANSITION_MARGIN_NS: u64 = 10_000_000;
 
-const SYS_TIME_PERIOD_NS: u64 = 3125;
-const SYS_TIME_TICKS_PER_PERIOD: u64 = 64;
-
 #[must_use]
 pub const fn sys_time_ticks(ns: u64) -> u64 {
-    ns / SYS_TIME_PERIOD_NS * SYS_TIME_TICKS_PER_PERIOD
+    ns / 3125 * 64
 }
 
 #[must_use]
@@ -141,7 +138,7 @@ pub fn write_ram<P: Port>(
         |i| {
             let lo = u16::from(src[2 * i]);
             let hi = src.get(2 * i + 1).copied().map_or(0, u16::from);
-            lo | (hi << 8)
+            (hi << 8) | lo
         },
     );
 }
@@ -165,7 +162,7 @@ pub fn write_ram_interleaved<P: Port>(
         bank,
         offset,
         NUM_TRANSDUCERS,
-        |i| u16::from(lo[i]) | (u16::from(hi[i]) << 8),
+        |i| (u16::from(hi[i]) << 8) | u16::from(lo[i]),
     );
 }
 
