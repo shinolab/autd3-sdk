@@ -11,8 +11,6 @@ use autd3_cpu_wire::payload::WritePatternRawPayload;
 use zerocopy::IntoBytes;
 use zerocopy::little_endian::U16;
 
-const RAW_HEADER_BYTES: usize = core::mem::size_of::<WritePatternRawPayload>();
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PatternIntensity<'a> {
     Uniform(Intensity),
@@ -197,15 +195,17 @@ impl Operation for WritePatternBuffers<'_> {
     }
 }
 
-const _: () =
-    assert!(RAW_HEADER_BYTES + PATTERN_RAW_MAX_COUNT * PATTERN_RAW_DATA_LEN <= PAYLOAD_BYTES);
+const _: () = assert!(
+    size_of::<WritePatternRawPayload>() + PATTERN_RAW_MAX_COUNT * PATTERN_RAW_DATA_LEN
+        <= PAYLOAD_BYTES
+);
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_utils::test_device;
-    const PHASES_OFFSET: usize = RAW_HEADER_BYTES;
-    const INTENSITIES_OFFSET: usize = RAW_HEADER_BYTES + NUM_TRANSDUCERS;
+    const PHASES_OFFSET: usize = size_of::<WritePatternRawPayload>();
+    const INTENSITIES_OFFSET: usize = size_of::<WritePatternRawPayload>() + NUM_TRANSDUCERS;
 
     #[test]
     fn write_pattern_lays_out_phases_then_intensities() {

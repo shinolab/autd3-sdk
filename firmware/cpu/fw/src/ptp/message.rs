@@ -23,9 +23,6 @@ const LOG_INTERVAL_UNSPECIFIED: u8 = 0x7F;
 pub const PORT_NUMBER: u16 = 1;
 
 pub const PORT_IDENTITY_LEN: usize = 10;
-pub const HEADER_LEN: usize = size_of::<Header>();
-pub const EVENT_LEN: usize = size_of::<EventMessage>();
-pub const DELAY_RESP_LEN: usize = size_of::<DelayResp>();
 pub const FRAME_CAP: usize = MIN_FRAME + 8;
 
 const TIMESTAMP_SEC_BYTES: usize = 6;
@@ -70,11 +67,11 @@ struct DelayResp {
     requesting: PortIdentity,
 }
 
-const _: () = assert!(HEADER_LEN == 34);
+const _: () = assert!(size_of::<Header>() == 34);
 const _: () = assert!(size_of::<Timestamp>() == 10);
-const _: () = assert!(EVENT_LEN == 44);
-const _: () = assert!(DELAY_RESP_LEN == 54);
-const _: () = assert!(ETH_HEADER + DELAY_RESP_LEN == FRAME_CAP);
+const _: () = assert!(size_of::<EventMessage>() == 44);
+const _: () = assert!(size_of::<DelayResp>() == 54);
+const _: () = assert!(ETH_HEADER + size_of::<DelayResp>() == FRAME_CAP);
 
 impl Timestamp {
     fn from_ns(ns: u64) -> Self {
@@ -152,10 +149,10 @@ pub struct Outgoing {
 #[must_use]
 pub fn build(buf: &mut [u8; FRAME_CAP], mac: Mac, clock_id: [u8; 8], out: &Outgoing) -> usize {
     let (len, control) = match out.kind {
-        MSG_SYNC => (EVENT_LEN, CONTROL_SYNC),
-        MSG_FOLLOW_UP => (EVENT_LEN, CONTROL_FOLLOW_UP),
-        MSG_DELAY_REQ => (EVENT_LEN, CONTROL_DELAY_REQ),
-        _ => (DELAY_RESP_LEN, CONTROL_DELAY_RESP),
+        MSG_SYNC => (size_of::<EventMessage>(), CONTROL_SYNC),
+        MSG_FOLLOW_UP => (size_of::<EventMessage>(), CONTROL_FOLLOW_UP),
+        MSG_DELAY_REQ => (size_of::<EventMessage>(), CONTROL_DELAY_REQ),
+        _ => (size_of::<DelayResp>(), CONTROL_DELAY_RESP),
     };
     let eth = Ethernet2Header {
         source: mac,

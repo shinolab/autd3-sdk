@@ -164,7 +164,6 @@ mod tests {
     use super::*;
     use crate::geometry::Autd3;
     use crate::test_utils::test_device;
-    const HEADER_BYTES: usize = core::mem::size_of::<WritePatternCompressedPayload>();
 
     fn slots<'a>(
         patterns: &[&'a [Vec<Phase>]],
@@ -218,9 +217,9 @@ mod tests {
         assert_eq!(out[3], 0xFF, "intensity");
         let expected_offset = u32::try_from(4 * EMISSION_SLOT_WORDS).unwrap();
         assert_eq!(&out[4..8], &expected_offset.to_le_bytes());
+        let data = &out[size_of::<WritePatternCompressedPayload>()..];
         for i in 0..Autd3::NUM_TRANSDUCERS {
-            let word =
-                u16::from_le_bytes([out[HEADER_BYTES + 2 * i], out[HEADER_BYTES + 2 * i + 1]]);
+            let word = u16::from_le_bytes([data[2 * i], data[2 * i + 1]]);
             let expected = u16::from(p0[0][i].0) | (u16::from(p1[0][i].0) << 8);
             assert_eq!(word, expected, "t={i}");
         }
@@ -257,9 +256,9 @@ mod tests {
 
         assert_eq!(out[1], 2, "format = PhaseHalf");
         assert_eq!(out[2], 4, "count = 4");
+        let data = &out[size_of::<WritePatternCompressedPayload>()..];
         for i in 0..Autd3::NUM_TRANSDUCERS {
-            let word =
-                u16::from_le_bytes([out[HEADER_BYTES + 2 * i], out[HEADER_BYTES + 2 * i + 1]]);
+            let word = u16::from_le_bytes([data[2 * i], data[2 * i + 1]]);
             let expected = u16::from(p0[0][i].0 >> 4)
                 | (u16::from(p1[0][i].0 >> 4) << 4)
                 | (u16::from(p2[0][i].0 >> 4) << 8)
@@ -283,7 +282,9 @@ mod tests {
         op.encode(&test_device(0), &mut out).unwrap();
         assert_eq!(out[2], 4, "count");
         let word = |group: usize, t: usize| {
-            let at = HEADER_BYTES + group * PATTERN_COMPRESSED_GROUP_BYTES + 2 * t;
+            let at = size_of::<WritePatternCompressedPayload>()
+                + group * PATTERN_COMPRESSED_GROUP_BYTES
+                + 2 * t;
             u16::from_le_bytes([out[at], out[at + 1]])
         };
         assert_eq!(word(0, 0), 0x2010);

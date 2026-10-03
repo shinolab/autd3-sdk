@@ -7,8 +7,8 @@ use zerocopy::little_endian::U64;
 
 use autd3_cpu_wire::udp::{
     ALL_NODES, AssignIdBody, FLAG_ASSIGNED, FLAG_DOWNSTREAM_LINK, FLAG_DOWNSTREAM_OPEN,
-    FLAG_GRANDMASTER, FLAG_PTP_LOCKED, FLAG_SYNC_READY, FrameReply, HEADER_BYTES, Header, Kind,
-    PORT, PROTOCOL_VERSION, ROLE_GRANDMASTER, ROLE_SLAVE, SetTimeBody, Status, UNASSIGNED_ID,
+    FLAG_GRANDMASTER, FLAG_PTP_LOCKED, FLAG_SYNC_READY, FrameReply, Header, Kind, PORT,
+    PROTOCOL_VERSION, ROLE_GRANDMASTER, ROLE_SLAVE, SetTimeBody, Status, UNASSIGNED_ID,
     UnblockReply, UnitInfo, mac, solicited_node, unit_address,
 };
 
@@ -95,10 +95,8 @@ impl Harness {
             kind,
             msg_id: zerocopy::little_endian::U16::new(msg_id),
         };
-        buf[UDP_PAYLOAD_OFFSET..UDP_PAYLOAD_OFFSET + HEADER_BYTES]
-            .copy_from_slice(header.as_bytes());
-        buf[UDP_PAYLOAD_OFFSET + HEADER_BYTES..UDP_PAYLOAD_OFFSET + HEADER_BYTES + body.len()]
-            .copy_from_slice(body);
+        buf[UDP_PAYLOAD_OFFSET..][..size_of::<Header>()].copy_from_slice(header.as_bytes());
+        buf[UDP_PAYLOAD_OFFSET + size_of::<Header>()..][..body.len()].copy_from_slice(body);
         let src = Endpoint {
             mac: HOST_MAC,
             ip: HOST_IP,
@@ -109,7 +107,7 @@ impl Harness {
             ip: dst,
             port: PORT,
         };
-        let len = net::udp(&mut buf, &src, &to, HEADER_BYTES + body.len()).unwrap();
+        let len = net::udp(&mut buf, &src, &to, size_of::<Header>() + body.len()).unwrap();
         buf[0..6].copy_from_slice(&[0xAA; 6]);
         self.deliver(&buf[..len])
     }

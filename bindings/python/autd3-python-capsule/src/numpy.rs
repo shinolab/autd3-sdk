@@ -109,10 +109,14 @@ pub fn f32_vec3_rows(
     py: Python<'_>,
     rows: impl ExactSizeIterator<Item = [f32; 3]>,
 ) -> PyResult<Bound<'_, PyAny>> {
-    const F32: usize = size_of::<f32>();
     let n = rows.len();
-    let buf = PyByteArray::new_with(py, n * 3 * F32, |b| {
-        for (dst, v) in b.as_chunks_mut::<F32>().0.iter_mut().zip(rows.flatten()) {
+    let buf = PyByteArray::new_with(py, n * 3 * size_of::<f32>(), |b| {
+        for (dst, v) in b
+            .as_chunks_mut::<{ size_of::<f32>() }>()
+            .0
+            .iter_mut()
+            .zip(rows.flatten())
+        {
             *dst = v.to_ne_bytes();
         }
         Ok(())

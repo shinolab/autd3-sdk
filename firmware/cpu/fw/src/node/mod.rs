@@ -6,10 +6,9 @@ use zerocopy::{FromBytes, IntoBytes};
 
 use autd3_cpu_wire::udp::{
     ALL_NODES, AssignIdBody, FLAG_ASSIGNED, FLAG_DOWNSTREAM_LINK, FLAG_DOWNSTREAM_OPEN,
-    FLAG_GRANDMASTER, FLAG_PTP_LOCKED, FLAG_SYNC_READY, FrameReply, HEADER_BYTES, Header, Kind,
-    PORT, PROTOCOL_VERSION, RESET_ID_CLOSE_DELAY_MS, ROLE_GRANDMASTER, ROLE_SLAVE, SetTimeBody,
-    Status, UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo, link_local, mac,
-    solicited_node,
+    FLAG_GRANDMASTER, FLAG_PTP_LOCKED, FLAG_SYNC_READY, FrameReply, Header, Kind, PORT,
+    PROTOCOL_VERSION, RESET_ID_CLOSE_DELAY_MS, ROLE_GRANDMASTER, ROLE_SLAVE, SetTimeBody, Status,
+    UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo, link_local, mac, solicited_node,
 };
 
 use crate::net::{self, Endpoint, Ipv6, Mac, NDP_HOP_LIMIT, Packet, UDP_PAYLOAD_OFFSET, Udp};
@@ -33,9 +32,24 @@ pub trait CommandLayer {
     fn reply(&mut self) -> Reply;
 }
 
-const FRAME_REPLY_HEAD_BYTES: usize = core::mem::size_of::<FrameReply>();
-
-const _: () = assert!(TX_BUF_BYTES >= UDP_PAYLOAD_OFFSET + autd3_cpu_wire::udp::MAX_REPLY_BYTES);
+const _: () = assert!(
+    TX_BUF_BYTES
+        >= UDP_PAYLOAD_OFFSET
+            + size_of::<Header>()
+            + size_of::<FrameReply>()
+            + REPLY_DATA_BYTES_MAX
+);
+const _: () = assert!(
+    TX_BUF_BYTES
+        >= UDP_PAYLOAD_OFFSET + size_of::<Header>() + size_of::<Status>() + size_of::<UnitInfo>()
+);
+const _: () = assert!(
+    TX_BUF_BYTES
+        >= UDP_PAYLOAD_OFFSET
+            + size_of::<Header>()
+            + size_of::<Status>()
+            + size_of::<UnblockReply>()
+);
 
 pub struct Node {
     unit_id: u8,
@@ -425,14 +439,14 @@ impl Node {
             sys_time: U64::new(nic.now().unwrap_or(0)),
         };
         let data = state.data();
-        let mut body = [0u8; FRAME_REPLY_HEAD_BYTES + REPLY_DATA_BYTES_MAX];
-        body[..FRAME_REPLY_HEAD_BYTES].copy_from_slice(head.as_bytes());
-        body[FRAME_REPLY_HEAD_BYTES..FRAME_REPLY_HEAD_BYTES + data.len()].copy_from_slice(data);
+        let mut body = [0u8; size_of::<FrameReply>() + REPLY_DATA_BYTES_MAX];
+        body[..size_of::<FrameReply>()].copy_from_slice(head.as_bytes());
+        body[size_of::<FrameReply>()..][..data.len()].copy_from_slice(data);
         self.send_reply(
             nic,
             reply,
             None,
-            &body[..FRAME_REPLY_HEAD_BYTES + data.len()],
+            &body[..size_of::<FrameReply>() + data.len()],
         );
     }
 
@@ -453,8 +467,8 @@ impl Node {
             msg_id: zerocopy::little_endian::U16::new(reply.msg_id),
         };
         let mut at = UDP_PAYLOAD_OFFSET;
-        self.buf[at..at + HEADER_BYTES].copy_from_slice(header.as_bytes());
-        at += HEADER_BYTES;
+        self.buf[at..][..size_of::<Header>()].copy_from_slice(header.as_bytes());
+        at += size_of::<Header>();
         if let Some(status) = status {
             self.buf[at] = status.as_u8();
             at += 1;

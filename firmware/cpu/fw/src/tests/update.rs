@@ -14,8 +14,6 @@ use crate::cmd::update::{ACTIVATE_DELAY_MS, State, UpdateBeginPayload, UpdateChu
 use crate::proto::{Cmd, Error, Mode};
 use crate::tests::mock::{Frame, Harness};
 
-const HEADER_BYTES: usize = core::mem::size_of::<ImageHeader>();
-
 fn begin(seq: u8, length: u32, crc: u32) -> Frame {
     Frame::from_payload(
         seq,
@@ -82,7 +80,7 @@ fn run_update(h: &mut Harness, seq: &mut u8, img: &[u8]) {
 
 fn header_of(h: &Harness, slot: Slot) -> ImageHeader {
     let base = slot.base() as usize;
-    ImageHeader::read_from_bytes(&h.port.flash[base..base + HEADER_BYTES]).unwrap()
+    ImageHeader::read_from_bytes(&h.port.flash[base..][..size_of::<ImageHeader>()]).unwrap()
 }
 
 fn slot_image(h: &Harness, slot: Slot, len: usize) -> &[u8] {
@@ -93,7 +91,7 @@ fn slot_image(h: &Harness, slot: Slot, len: usize) -> &[u8] {
 fn stamp(h: &mut Harness, slot: Slot, generation: u32, img: &[u8]) {
     let header = ImageHeader::new(generation, img.len() as u32, crc32(img));
     let base = slot.base() as usize;
-    h.port.flash[base..base + HEADER_BYTES].copy_from_slice(header.as_bytes());
+    h.port.flash[base..][..size_of::<ImageHeader>()].copy_from_slice(header.as_bytes());
     let image_base = slot.image_base() as usize;
     h.port.flash[image_base..image_base + img.len()].copy_from_slice(img);
 }
@@ -555,7 +553,7 @@ fn a_spent_trial_still_boots_when_no_other_slot_is_valid() {
     let mut header = ImageHeader::new_trial(4, img.len() as u32, crc32(&img));
     header.attempts = U32::new(0xFFFF_FFFE);
     let base = Slot::B.base() as usize;
-    h.port.flash[base..base + HEADER_BYTES].copy_from_slice(header.as_bytes());
+    h.port.flash[base..][..size_of::<ImageHeader>()].copy_from_slice(header.as_bytes());
     let image_base = Slot::B.image_base() as usize;
     h.port.flash[image_base..image_base + img.len()].copy_from_slice(&img);
 

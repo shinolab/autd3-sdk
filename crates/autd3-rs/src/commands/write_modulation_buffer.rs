@@ -39,7 +39,6 @@ mod tests {
     use crate::error::Error;
     use crate::params::MOD_BUFFER_SAMPLES;
     use crate::test_utils::test_geometry_arc;
-    const HEADER_BYTES: usize = core::mem::size_of::<WriteModPayload>();
 
     fn expand(op: WriteModulationBuffer<'_>) -> Result<Frames, Error> {
         let mut b = DatagramBuilder::new(test_geometry_arc(1));
@@ -66,7 +65,7 @@ mod tests {
         let p = payload(&frames, 0);
         assert_eq!(p[0], 1);
         assert_eq!(&p[2..6], &0x0102u32.to_le_bytes());
-        assert_eq!(&p[HEADER_BYTES..], &[0xAA, 0xBB, 0xCC]);
+        assert_eq!(&p[size_of::<WriteModPayload>()..], &[0xAA, 0xBB, 0xCC]);
     }
 
     #[test]
@@ -86,12 +85,12 @@ mod tests {
 
         let p0 = payload(&frames, 0);
         assert_eq!(&p0[2..6], &100u32.to_le_bytes());
-        assert_eq!(&p0[HEADER_BYTES..], &data[..max_data_len]);
+        assert_eq!(&p0[size_of::<WriteModPayload>()..], &data[..max_data_len]);
 
         let p1 = payload(&frames, 1);
         let max = u32::try_from(max_data_len).unwrap();
         assert_eq!(&p1[2..6], &(100 + max).to_le_bytes());
-        assert_eq!(&p1[HEADER_BYTES..], &data[max_data_len..]);
+        assert_eq!(&p1[size_of::<WriteModPayload>()..], &data[max_data_len..]);
     }
 
     #[test]

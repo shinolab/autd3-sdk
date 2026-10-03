@@ -64,7 +64,6 @@ impl Operation for WriteModulationChunk<'_> {
 mod tests {
     use super::*;
     use crate::test_utils::test_device;
-    const HEADER_BYTES: usize = core::mem::size_of::<WriteModPayload>();
 
     #[test]
     fn write_modulation_chunk_writes_header_and_body() {
@@ -84,7 +83,10 @@ mod tests {
         assert_eq!(out[0], 1);
         assert_eq!(out[1], 0);
         assert_eq!(&out[2..6], &0x0102u32.to_le_bytes());
-        assert_eq!(&out[HEADER_BYTES..HEADER_BYTES + 3], &[0xAA, 0xBB, 0xCC]);
+        assert_eq!(
+            &out[size_of::<WriteModPayload>()..][..3],
+            &[0xAA, 0xBB, 0xCC]
+        );
     }
 
     #[test]

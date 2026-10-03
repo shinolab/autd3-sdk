@@ -2,7 +2,7 @@ use std::io;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 use std::time::{Duration, Instant};
 
-use autd3_cpu_wire::udp::{ALL_NODES, HEADER_BYTES, Header, Kind, PORT, PROTOCOL_VERSION};
+use autd3_cpu_wire::udp::{ALL_NODES, Header, Kind, PORT, PROTOCOL_VERSION};
 use socket2::{Domain, Protocol, Socket, Type};
 use zerocopy::{FromBytes, IntoBytes};
 
@@ -150,7 +150,7 @@ impl Channel {
         let (len, src) = loop {
             self.arm(deadline)?;
             match self.socket.recv_from(&mut self.recv_buf[..]) {
-                Ok((len, SocketAddr::V6(src))) if len >= HEADER_BYTES => break (len, src),
+                Ok((len, SocketAddr::V6(src))) if len >= size_of::<Header>() => break (len, src),
                 Ok(_) => {}
                 Err(e) if is_timeout(&e) => return Ok(None),
                 Err(e) if is_transient(&e) => {}

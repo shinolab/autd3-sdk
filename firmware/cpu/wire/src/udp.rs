@@ -1,7 +1,7 @@
 use zerocopy::little_endian::{I32, U16, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
-use crate::frame::{FRAME_BYTES_MAX, FRAME_HEADER_BYTES, REPLY_DATA_BYTES_MAX};
+use crate::frame::FRAME_BYTES_MAX;
 
 pub const PORT: u16 = 0xAD30;
 pub const PROTOCOL_VERSION: u8 = 2;
@@ -129,30 +129,10 @@ pub struct UnblockReply {
     pub downstream_link: u8,
 }
 
-pub const HEADER_BYTES: usize = core::mem::size_of::<Header>();
-pub const STATUS_BYTES: usize = 1;
-pub const FRAME_REQUEST_BYTES_MIN: usize = HEADER_BYTES + FRAME_HEADER_BYTES;
-pub const FRAME_REQUEST_BYTES_MAX: usize = HEADER_BYTES + FRAME_BYTES_MAX;
-pub const FRAME_REPLY_BYTES_MIN: usize = HEADER_BYTES + core::mem::size_of::<FrameReply>();
-pub const FRAME_REPLY_BYTES_MAX: usize = FRAME_REPLY_BYTES_MIN + REPLY_DATA_BYTES_MAX;
-pub const UNIT_INFO_REPLY_BYTES: usize =
-    HEADER_BYTES + STATUS_BYTES + core::mem::size_of::<UnitInfo>();
-pub const UNBLOCK_REPLY_BYTES: usize =
-    HEADER_BYTES + STATUS_BYTES + core::mem::size_of::<UnblockReply>();
-pub const STATUS_REPLY_BYTES: usize = HEADER_BYTES + STATUS_BYTES;
-pub const MAX_REPLY_BYTES: usize = if FRAME_REPLY_BYTES_MAX > UNIT_INFO_REPLY_BYTES {
-    FRAME_REPLY_BYTES_MAX
-} else {
-    UNIT_INFO_REPLY_BYTES
-};
-
-const _: () = assert!(HEADER_BYTES == 4);
+const _: () = assert!(core::mem::size_of::<Header>() == 4);
 const _: () = assert!(core::mem::size_of::<UnitInfo>() == 20);
 const _: () = assert!(core::mem::size_of::<FrameReply>() == 12);
-const _: () = assert!(FRAME_REPLY_BYTES_MAX <= MAX_REPLY_BYTES);
-const _: () = assert!(UNIT_INFO_REPLY_BYTES <= MAX_REPLY_BYTES);
-const _: () = assert!(FRAME_REQUEST_BYTES_MAX == 1452);
-const _: () = assert!(UNBLOCK_REPLY_BYTES <= MAX_REPLY_BYTES);
+const _: () = assert!(core::mem::size_of::<Header>() + FRAME_BYTES_MAX == 1452);
 
 #[must_use]
 pub const fn mac(unit_id: u8) -> [u8; 6] {
