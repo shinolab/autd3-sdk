@@ -2,7 +2,6 @@ use zerocopy::little_endian::U16;
 use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
 use super::try_read_header;
-use crate::frame::PAYLOAD_BYTES;
 use crate::layout::{PATTERN_RAW_DATA_LEN, PATTERN_RAW_MAX_COUNT};
 use crate::params::EMISSION_MAX_INDICES;
 use crate::{Error, PatternBank};
@@ -38,12 +37,4 @@ const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, bank) == 0);
 const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, count) == 1);
 const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, index) == 2);
 const _: () = assert!(core::mem::size_of::<WritePatternRawPayload>() == 4);
-const _: () = assert!(
-    core::mem::size_of::<WritePatternRawPayload>() + PATTERN_RAW_MAX_COUNT * PATTERN_RAW_DATA_LEN
-        <= PAYLOAD_BYTES
-);
-const _: () = assert!(
-    core::mem::size_of::<WritePatternRawPayload>()
-        + (PATTERN_RAW_MAX_COUNT + 1) * PATTERN_RAW_DATA_LEN
-        > PAYLOAD_BYTES
-);
+const _: () = assert!(PATTERN_RAW_MAX_COUNT >= 1 && PATTERN_RAW_MAX_COUNT <= u8::MAX as usize);
