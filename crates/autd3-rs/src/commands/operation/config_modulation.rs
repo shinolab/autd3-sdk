@@ -1,5 +1,4 @@
 use autd3_cpu_wire::payload::ConfigModPayload;
-use zerocopy::FromBytes;
 use zerocopy::little_endian::{U16, U32};
 
 use crate::error::{Error, PayloadError};
@@ -9,7 +8,7 @@ use crate::params::{BUFFER_SIZE_MIN, MOD_BUFFER_SAMPLES};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, write_header};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigModulation {
@@ -36,14 +35,16 @@ impl Operation for ConfigModulation {
             }
             .into());
         }
-        let (p, _) = ConfigModPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *p = ConfigModPayload {
-            bank: self.bank.as_u8(),
-            reserved: 0,
-            divider: U16::new(divider),
-            size: U32::new(u32::try_from(self.size).expect("bounded by MOD_BUFFER_SAMPLES")),
-            rep: U16::new(self.loop_behavior.rep()),
-        };
+        write_header(
+            out,
+            &ConfigModPayload {
+                bank: self.bank,
+                reserved: 0,
+                divider: U16::new(divider),
+                size: U32::new(u32::try_from(self.size).expect("bounded by MOD_BUFFER_SAMPLES")),
+                rep: U16::new(self.loop_behavior.rep()),
+            },
+        );
         Ok(Cmd::ConfigModulation)
     }
 

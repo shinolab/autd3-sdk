@@ -1,19 +1,16 @@
-use zerocopy::FromBytes;
-
 pub use autd3_cpu_wire::payload::WritePatternFusedPayload;
 
-use super::write_pattern_raw::{self, PATTERN_RAW_DATA_LEN};
+use super::config_pattern::PatternConfig;
+use super::write_pattern_raw;
 use crate::app::Cpu;
+use crate::cmd::TransitionRequest;
 use crate::fpga::{self, EmissionType};
 use crate::params::{
     ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, BRAM_SELECT_EMISSION, CTL_FLAG_PATTERN_SET,
-    EMISSION_TYPE_RAW, NUM_BANKS, NUM_TRANSDUCERS,
+    NUM_TRANSDUCERS,
 };
 use crate::port::Port;
-use crate::proto::{Error, PAYLOAD_BYTES};
-
-const PATTERN_FUSED_MAX_DATA_LEN: usize =
-    PAYLOAD_BYTES - core::mem::size_of::<WritePatternFusedPayload>();
+use crate::proto::Error;
 
 impl Cpu {
     pub(crate) fn write_pattern_fused<P: Port>(
@@ -21,43 +18,29 @@ impl Cpu {
         port: &mut P,
         payload: &[u8],
     ) -> Result<(), Error> {
-        let Ok((p, rest)) = WritePatternFusedPayload::ref_from_prefix(payload) else {
-            return Err(Error::InvalidPayload);
+        let (p, data) = WritePatternFusedPayload::parse(payload)?;
+        let cfg = PatternConfig {
+            bank: p.bank.as_u8(),
+            emission_type: p.emission_type,
+            divider: p.divider.get(),
+            size: p.size.get(),
+            num_foci: p.num_foci,
+            sound_speed: p.sound_speed.get(),
+            rep: p.rep.get(),
         };
-        let bank = p.bank;
-        let data_len = usize::from(p.data_len.get());
-        let emission_type = p.emission_type;
-
-        if usize::from(bank) >= NUM_BANKS
-            || !data_len.is_multiple_of(2)
-            || data_len > PATTERN_FUSED_MAX_DATA_LEN
-            || data_len > rest.len()
-            || (emission_type == EMISSION_TYPE_RAW
-                && (p.size.get() != 1 || data_len != PATTERN_RAW_DATA_LEN))
-        {
-            return Err(Error::InvalidPayload);
-        }
-
-        let cfg = self.validate_pattern_config(
-            bank,
-            emission_type,
-            p.divider.get(),
-            p.size.get(),
-            p.num_foci,
-            p.sound_speed.get(),
-            p.rep.get(),
-        )?;
+        let bank = cfg.bank;
         let change = self.validate_pattern_change(
             port,
             bank,
             cfg.divider,
             cfg.rep,
-            p.transition_mode,
-            p.transition_value.get(),
-            p.margin_ns.get(),
+            &TransitionRequest {
+                mode: p.transition_mode,
+                value: p.transition_value.get(),
+                margin_ns: p.margin_ns.get(),
+            },
         )?;
 
-        let data = &rest[..data_len];
         if let Some((phases, intensities)) = data.split_first_chunk::<NUM_TRANSDUCERS>()
             && let Ok(intensities) = <&[u8; NUM_TRANSDUCERS]>::try_from(intensities)
             && cfg.emission_type == EmissionType::Raw

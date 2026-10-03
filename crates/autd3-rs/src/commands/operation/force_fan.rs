@@ -1,11 +1,10 @@
 use autd3_cpu_wire::payload::ForceFanPayload;
-use zerocopy::FromBytes;
 
 use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, write_header};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct ForceFan {
@@ -20,10 +19,7 @@ impl Operation for ForceFan {
     }
 
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        let (p, _) = ForceFanPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *p = ForceFanPayload {
-            value: u8::from(self.value),
-        };
+        write_header(out, &ForceFanPayload { value: self.value });
         Ok(Cmd::ForceFan)
     }
 }

@@ -8,9 +8,8 @@ use crate::params::{
 };
 use zerocopy::little_endian::{U16, U32};
 
-use crate::cmd::write_foci::{FOCI_WRITE_MAX_DATA_LEN, WriteFociPayload};
-use crate::cmd::write_mod::{MOD_WRITE_MAX_DATA_LEN, WriteModPayload};
-use crate::cmd::write_pattern_compressed::PatternFormat;
+use crate::cmd::write_foci::WriteFociPayload;
+use crate::cmd::write_mod::WriteModPayload;
 use crate::proto::{Cmd, EMISSION_RAM_WORDS, EMISSION_SLOT_WORDS, Error, MOD_BUFFER_SAMPLES};
 use crate::tests::builders::{
     assert_fpga_unchanged, fpga_snapshot, write_foci_buffer, write_mod_buffer,
@@ -18,6 +17,9 @@ use crate::tests::builders::{
     write_pattern_raw_multi,
 };
 use crate::tests::mock::{Frame, Harness};
+use autd3_cpu_wire::layout::{FOCI_WRITE_MAX_DATA_LEN, MOD_WRITE_MAX_DATA_LEN};
+use autd3_cpu_wire::payload::PatternFormat;
+use autd3_cpu_wire::{ModulationBank, PatternBank};
 
 fn bad_bank() -> u8 {
     u8::try_from(NUM_BANKS).unwrap()
@@ -208,7 +210,7 @@ fn write_foci_buffer_rejects_invalid_payloads() {
     assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     let odd = WriteFociPayload {
-        bank: 0,
+        bank: PatternBank::B0,
         reserved: 0,
         offset: U32::new(0),
         data_len: U16::new(3),
@@ -217,7 +219,7 @@ fn write_foci_buffer_rejects_invalid_payloads() {
     assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     let too_long = WriteFociPayload {
-        bank: 0,
+        bank: PatternBank::B0,
         reserved: 0,
         offset: U32::new(0),
         data_len: U16::new(u16::try_from(FOCI_WRITE_MAX_DATA_LEN + 2).unwrap()),
@@ -562,7 +564,7 @@ fn write_mod_buffer_rejects_invalid_payloads() {
     assert_eq!(h.status(), Error::InvalidPayload as u8);
 
     let too_long = WriteModPayload {
-        bank: 0,
+        bank: ModulationBank::B0,
         reserved: 0,
         offset: U32::new(0),
         data_len: U16::new(u16::try_from(MOD_WRITE_MAX_DATA_LEN + 1).unwrap()),

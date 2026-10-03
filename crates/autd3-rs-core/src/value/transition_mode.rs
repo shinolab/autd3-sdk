@@ -1,5 +1,7 @@
 use core::time::Duration;
 
+use autd3_cpu_wire::payload::TransitionMode as WireTransitionMode;
+
 use super::{GpioIn, SysTime};
 use crate::error::EncodeError;
 
@@ -20,13 +22,13 @@ pub enum TransitionMode {
 
 impl TransitionMode {
     #[doc(hidden)]
-    pub const fn try_as_u8(self) -> Result<u8, EncodeError> {
+    pub const fn try_as_wire(self) -> Result<WireTransitionMode, EncodeError> {
         match self {
-            TransitionMode::SyncIdx => Ok(autd3_cpu_wire::params::TRANSITION_MODE_SYNC_IDX),
-            TransitionMode::SysTime { .. } => Ok(autd3_cpu_wire::params::TRANSITION_MODE_SYS_TIME),
-            TransitionMode::Gpio(_) => Ok(autd3_cpu_wire::params::TRANSITION_MODE_GPIO),
-            TransitionMode::Ext => Ok(autd3_cpu_wire::params::TRANSITION_MODE_EXT),
-            TransitionMode::Immediate => Ok(0xFF),
+            TransitionMode::SyncIdx => Ok(WireTransitionMode::SyncIdx),
+            TransitionMode::SysTime { .. } => Ok(WireTransitionMode::SysTime),
+            TransitionMode::Gpio(_) => Ok(WireTransitionMode::Gpio),
+            TransitionMode::Ext => Ok(WireTransitionMode::Ext),
+            TransitionMode::Immediate => Ok(WireTransitionMode::Immediate),
             TransitionMode::Later => Err(EncodeError::TransitionLaterNotEncodable),
         }
     }
@@ -84,17 +86,18 @@ mod tests {
 
     #[test]
     fn wire_mode_bytes() {
-        assert_eq!(TransitionMode::SyncIdx.try_as_u8(), Ok(0x00));
-        assert_eq!(sys_time(0).try_as_u8(), Ok(0x01));
-        assert_eq!(TransitionMode::Gpio(GpioIn::I0).try_as_u8(), Ok(0x02));
-        assert_eq!(TransitionMode::Ext.try_as_u8(), Ok(0xF0));
-        assert_eq!(TransitionMode::Immediate.try_as_u8(), Ok(0xFF));
+        let byte = |mode: TransitionMode| mode.try_as_wire().map(WireTransitionMode::as_u8);
+        assert_eq!(byte(TransitionMode::SyncIdx), Ok(0x00));
+        assert_eq!(byte(sys_time(0)), Ok(0x01));
+        assert_eq!(byte(TransitionMode::Gpio(GpioIn::I0)), Ok(0x02));
+        assert_eq!(byte(TransitionMode::Ext), Ok(0xF0));
+        assert_eq!(byte(TransitionMode::Immediate), Ok(0xFF));
     }
 
     #[test]
     fn later_has_no_wire_byte() {
         assert_eq!(
-            TransitionMode::Later.try_as_u8(),
+            TransitionMode::Later.try_as_wire(),
             Err(EncodeError::TransitionLaterNotEncodable)
         );
     }

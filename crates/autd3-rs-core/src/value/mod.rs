@@ -1,4 +1,3 @@
-mod bank;
 mod control_point;
 mod focus;
 mod gpio;
@@ -10,7 +9,7 @@ mod sampling_config;
 mod sys_time;
 mod transition_mode;
 
-pub use bank::{ModulationBank, PatternBank};
+pub use autd3_cpu_wire::{ModulationBank, PatternBank};
 pub use control_point::{ControlPoint, ControlPoints};
 #[doc(hidden)]
 pub use focus::Focus;

@@ -1,5 +1,4 @@
 use autd3_cpu_wire::payload::WriteModulationFusedPayload;
-use zerocopy::FromBytes;
 use zerocopy::little_endian::{U16, U32, U64};
 
 use crate::error::{Error, PayloadError};
@@ -9,7 +8,7 @@ use crate::params::{BUFFER_SIZE_MIN, MOD_BUFFER_SAMPLES};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, write_header};
 
 const MOD_FUSED_HEADER_BYTES: usize = core::mem::size_of::<WriteModulationFusedPayload>();
 pub(crate) const MOD_FUSED_MAX_DATA_LEN: usize = PAYLOAD_BYTES - MOD_FUSED_HEADER_BYTES;
@@ -70,17 +69,21 @@ impl Operation for WriteModulationFused<'_> {
         let margin_ns = self.transition_mode.margin_ns()?;
         let len = u16::try_from(self.data.len()).expect("bounded by MOD_FUSED_MAX_DATA_LEN");
 
-        let (h, rest) = WriteModulationFusedPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *h = WriteModulationFusedPayload {
-            bank: self.bank.as_u8(),
-            transition_mode: self.transition_mode.try_as_u8()?,
-            divider: U16::new(divider),
-            size: U32::new(u32::try_from(self.data.len()).expect("bounded by MOD_BUFFER_SAMPLES")),
-            rep: U16::new(self.loop_behavior.rep()),
-            data_len: U16::new(len),
-            transition_value: U64::new(self.transition_mode.value()),
-            margin_ns: U32::new(margin_ns),
-        };
+        let rest = write_header(
+            out,
+            &WriteModulationFusedPayload {
+                bank: self.bank,
+                transition_mode: self.transition_mode.try_as_wire()?,
+                divider: U16::new(divider),
+                size: U32::new(
+                    u32::try_from(self.data.len()).expect("bounded by MOD_BUFFER_SAMPLES"),
+                ),
+                rep: U16::new(self.loop_behavior.rep()),
+                data_len: U16::new(len),
+                transition_value: U64::new(self.transition_mode.value()),
+                margin_ns: U32::new(margin_ns),
+            },
+        );
         rest[..self.data.len()].copy_from_slice(self.data);
         Ok(Cmd::WriteModulationFused)
     }

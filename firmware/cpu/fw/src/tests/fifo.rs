@@ -1,14 +1,14 @@
 use crate::fifo::{FIFO_DEPTH, Fifo};
-use zerocopy::FromZeros;
+use core::mem::offset_of;
 
 use crate::cmd::set_mode::SetModePayload;
 use crate::proto::{Cmd, Drained, Error, Mode};
 use crate::tests::mock::{Frame, Harness};
 
 fn set_mode(seq: u8, mode: u8) -> Frame {
-    let mut p = SetModePayload::new_zeroed();
-    p.mode = mode;
-    Frame::from_payload(seq, Cmd::SetMode, &p)
+    let mut f = Frame::from_payload(seq, Cmd::SetMode, &SetModePayload { mode: Mode::Fifo });
+    f.set_payload_byte(offset_of!(SetModePayload, mode), mode);
+    f
 }
 
 #[test]

@@ -1,3 +1,7 @@
+use core::mem::offset_of;
+
+use crate::cmd::change_mod_bank::ChangeModBankPayload;
+use crate::cmd::change_pattern_bank::ChangePatternBankPayload;
 use crate::fpga::{REP_INFINITE, SYS_TIME_TRANSITION_MARGIN_NS, TransitionMode};
 use crate::params::{
     ADDR_CTL_FLAG, ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_REP0, ADDR_MOD_REQ_RD_BANK,
@@ -341,6 +345,28 @@ fn change_mod_bank_rejects_invalid_bank() {
     ));
     assert_eq!(h.status(), Error::InvalidPayload as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
+}
+
+#[test]
+fn change_bank_rejects_unknown_transition_mode_as_invalid_payload() {
+    let mut h = Harness::new();
+    let unknown = 0x03;
+    assert_eq!(TransitionMode::from_u8(unknown), None);
+
+    let mut frame = change_mod_bank(0, 1, TransitionMode::Ext, 0);
+    frame.set_payload_byte(offset_of!(ChangeModBankPayload, transition_mode), unknown);
+    h.deliver(&frame);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+    assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
+
+    let mut frame = change_pattern_bank(1, 1, TransitionMode::Immediate, 0);
+    frame.set_payload_byte(
+        offset_of!(ChangePatternBankPayload, transition_mode),
+        unknown,
+    );
+    h.deliver(&frame);
+    assert_eq!(h.status(), Error::InvalidPayload as u8);
+    assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 }
 
 #[test]

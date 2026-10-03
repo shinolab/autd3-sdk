@@ -1,17 +1,14 @@
-use zerocopy::FromBytes;
-
 pub use autd3_cpu_wire::payload::WriteModulationFusedPayload;
 
+use super::config_mod::ModConfig;
 use crate::app::Cpu;
+use crate::cmd::TransitionRequest;
 use crate::fpga;
 use crate::params::{
-    ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE, BRAM_SELECT_MOD, CTL_FLAG_MOD_SET, NUM_BANKS,
+    ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE, BRAM_SELECT_MOD, CTL_FLAG_MOD_SET,
 };
 use crate::port::Port;
-use crate::proto::{Error, PAYLOAD_BYTES};
-
-const MOD_FUSED_MAX_DATA_LEN: usize =
-    PAYLOAD_BYTES - core::mem::size_of::<WriteModulationFusedPayload>();
+use crate::proto::Error;
 
 impl Cpu {
     pub(crate) fn write_mod_fused<P: Port>(
@@ -19,28 +16,23 @@ impl Cpu {
         port: &mut P,
         payload: &[u8],
     ) -> Result<(), Error> {
-        let Ok((p, rest)) = WriteModulationFusedPayload::ref_from_prefix(payload) else {
-            return Err(Error::InvalidPayload);
+        let (p, data) = WriteModulationFusedPayload::parse(payload)?;
+        let cfg = ModConfig {
+            bank: p.bank.as_u8(),
+            divider: p.divider.get(),
+            size: p.size.get(),
+            rep: p.rep.get(),
         };
-        let bank = p.bank;
-        let data_len = p.data_len.get();
-
-        if usize::from(bank) >= NUM_BANKS
-            || usize::from(data_len) > MOD_FUSED_MAX_DATA_LEN
-            || usize::from(data_len) > rest.len()
-        {
-            return Err(Error::InvalidPayload);
-        }
-
-        let cfg = self.validate_mod_config(bank, p.divider.get(), p.size.get(), p.rep.get())?;
         let change = self.validate_mod_change(
             port,
-            bank,
+            cfg.bank,
             cfg.divider,
             cfg.rep,
-            p.transition_mode,
-            p.transition_value.get(),
-            p.margin_ns.get(),
+            &TransitionRequest {
+                mode: p.transition_mode,
+                value: p.transition_value.get(),
+                margin_ns: p.margin_ns.get(),
+            },
         )?;
 
         fpga::write_ram(
@@ -48,9 +40,9 @@ impl Cpu {
             BRAM_SELECT_MOD,
             ADDR_MOD_MEM_WR_BANK,
             ADDR_MOD_MEM_WR_PAGE,
-            bank,
+            cfg.bank,
             0,
-            &rest[..usize::from(data_len)],
+            data,
         );
         self.write_mod_config(port, &cfg);
         self.write_mod_change(port, &change);

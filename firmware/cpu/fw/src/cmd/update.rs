@@ -2,7 +2,6 @@ use core::cell::Cell;
 
 use zerocopy::{FromBytes, IntoBytes};
 
-pub use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 pub use autd3_cpu_wire::payload::{UpdateBeginPayload, UpdateChunkPayload};
 use autd3_cpu_wire::update::{
     CRC32, IMAGE_HEADER_ATTEMPTS_OFFSET, IMAGE_HEADER_STATUS_OFFSET, IMAGE_MAX_ATTEMPTS,
@@ -180,9 +179,7 @@ impl Cpu {
             return Err(Error::UpdateActivating);
         }
         self.update.state.set(State::Idle);
-        let Ok((p, _)) = UpdateBeginPayload::ref_from_prefix(payload) else {
-            return Err(Error::InvalidPayload);
-        };
+        let p = UpdateBeginPayload::parse(payload)?;
         let length = p.length.get();
         if !is_plausible_length(length) {
             return Err(Error::InvalidPayload);
@@ -223,25 +220,14 @@ impl Cpu {
         let State::Receiving { slot, length, .. } = self.update.state.get() else {
             return Err(Error::UpdateNotStarted);
         };
-        let Ok((p, rest)) = UpdateChunkPayload::ref_from_prefix(payload) else {
-            return Err(Error::InvalidPayload);
-        };
-        let offset = p.offset.get();
-        let data_len = p.data_len.get();
-        if usize::from(data_len) > UPDATE_CHUNK_MAX_DATA_LEN
-            || offset.saturating_add(u32::from(data_len)) > length
-        {
+        let (chunk, data) = UpdateChunkPayload::parse(payload)?;
+        if !chunk.fits_in(length) {
             return Err(Error::InvalidPayload);
         }
-        if data_len == 0 {
+        if data.is_empty() {
             return Ok(());
         }
-        slot_write(
-            port,
-            slot,
-            SLOT_HEADER_BYTES + offset,
-            &rest[..usize::from(data_len)],
-        )
+        slot_write(port, slot, SLOT_HEADER_BYTES + chunk.offset.get(), data)
     }
 
     pub(crate) fn update_commit<P: Port>(&self, port: &mut P) -> Result<(), Error> {

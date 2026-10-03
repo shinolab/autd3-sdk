@@ -1,16 +1,11 @@
-use zerocopy::FromBytes;
-
 pub use autd3_cpu_wire::payload::ChangePatternBankPayload;
 
 use crate::app::Cpu;
-use crate::cmd::BankChange;
-use crate::fpga::{
-    self, SYS_TIME_TRANSITION_MARGIN_NS, TransitionMode, transition_register_value,
-    validate_transition_mode,
-};
+use crate::cmd::{BankChange, TransitionRequest};
+use crate::fpga::{self, transition_register_value, validate_transition_mode};
 use crate::params::{
     ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_TRANSITION_MODE,
-    ADDR_PATTERN_TRANSITION_VALUE_0, BRAM_SELECT_CONTROLLER, CTL_FLAG_PATTERN_SET, NUM_BANKS,
+    ADDR_PATTERN_TRANSITION_VALUE_0, BRAM_SELECT_CONTROLLER, CTL_FLAG_PATTERN_SET,
 };
 use crate::port::Port;
 use crate::proto::Error;
@@ -21,13 +16,8 @@ impl Cpu {
         port: &mut P,
         payload: &[u8],
     ) -> Result<(), Error> {
-        let Ok((p, _)) = ChangePatternBankPayload::ref_from_prefix(payload) else {
-            return Err(Error::InvalidPayload);
-        };
-        let bank = p.bank;
-        if usize::from(bank) >= NUM_BANKS {
-            return Err(Error::InvalidPayload);
-        }
+        let p = ChangePatternBankPayload::parse(payload)?;
+        let bank = p.bank.as_u8();
         let rep = fpga::read(
             port,
             BRAM_SELECT_CONTROLLER,
@@ -38,45 +28,38 @@ impl Cpu {
             bank,
             self.silencer.pattern_freq_div[usize::from(bank)].get(),
             rep,
-            p.transition_mode,
-            p.transition_value.get(),
-            p.margin_ns.get(),
+            &TransitionRequest {
+                mode: p.transition_mode,
+                value: p.transition_value.get(),
+                margin_ns: p.margin_ns.get(),
+            },
         )?;
         self.write_pattern_change(port, &change);
         self.set_and_wait_update(port, CTL_FLAG_PATTERN_SET)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn validate_pattern_change<P: Port>(
         &self,
         port: &mut P,
         bank: u8,
         divider: u16,
         rep: u16,
-        transition_mode: u8,
-        transition_value: u64,
-        margin_ns_raw: u32,
+        transition: &TransitionRequest,
     ) -> Result<BankChange, Error> {
-        let margin_ns = if margin_ns_raw == 0 {
-            SYS_TIME_TRANSITION_MARGIN_NS
-        } else {
-            u64::from(margin_ns_raw)
-        };
-
-        if usize::from(bank) >= NUM_BANKS {
-            return Err(Error::InvalidPayload);
-        }
         if self.silencer.violates_pattern_div(divider) {
             return Err(Error::InvalidSilencerSetting);
         }
-        let Some(transition_mode) = TransitionMode::from_u8(transition_mode) else {
-            return Err(Error::InvalidTransitionMode);
-        };
-        validate_transition_mode(port, rep, transition_mode, transition_value, margin_ns)?;
+        validate_transition_mode(
+            port,
+            rep,
+            transition.mode,
+            transition.value,
+            transition.margin_ns(),
+        )?;
         Ok(BankChange {
             bank,
-            transition_mode,
-            transition_value: transition_register_value(transition_mode, transition_value),
+            transition_mode: transition.mode,
+            transition_value: transition_register_value(transition.mode, transition.value),
         })
     }
 

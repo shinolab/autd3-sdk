@@ -1,7 +1,8 @@
 use crate::frame::PAYLOAD_BYTES;
 use crate::params::{EMISSION_MAX_INDICES, NUM_TRANSDUCERS};
 use crate::payload::{
-    UpdateChunkPayload, WriteFociPayload, WriteModPayload, WritePatternCompressedPayload,
+    UpdateChunkPayload, WriteFociPayload, WriteModPayload, WriteModulationFusedPayload,
+    WritePatternCompressedPayload, WritePatternFusedPayload,
 };
 
 pub use crate::params::{EMISSION_SLOT_WORDS, FOCUS_WORDS, MOD_BUFFER_SAMPLES, PWE_TABLE_SIZE};
@@ -16,6 +17,10 @@ pub const GPIO_OUT_NUM: usize = 4;
 
 pub const MOD_WRITE_MAX_DATA_LEN: usize = PAYLOAD_BYTES - core::mem::size_of::<WriteModPayload>();
 pub const FOCI_WRITE_MAX_DATA_LEN: usize = PAYLOAD_BYTES - core::mem::size_of::<WriteFociPayload>();
+pub const MOD_FUSED_MAX_DATA_LEN: usize =
+    PAYLOAD_BYTES - core::mem::size_of::<WriteModulationFusedPayload>();
+pub const PATTERN_FUSED_MAX_DATA_LEN: usize =
+    PAYLOAD_BYTES - core::mem::size_of::<WritePatternFusedPayload>();
 pub const MAX_FOCI_PER_FRAME: usize = FOCI_WRITE_MAX_DATA_LEN / (FOCUS_WORDS * 2);
 pub const PATTERN_RAW_DATA_LEN: usize = 2 * NUM_TRANSDUCERS;
 pub const PATTERN_RAW_MAX_COUNT: usize = 2;

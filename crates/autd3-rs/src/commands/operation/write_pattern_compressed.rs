@@ -5,11 +5,10 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Intensity, PatternBank, Phase};
 
 use super::write_pattern_buffer::device_phases;
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, write_header};
 use autd3_cpu_wire::layout::{PATTERN_COMPRESSED_GROUP_BYTES, PATTERN_COMPRESSED_MAX_GROUPS};
 use autd3_cpu_wire::params::NUM_TRANSDUCERS;
-use autd3_cpu_wire::payload::WritePatternCompressedPayload;
-use zerocopy::FromBytes;
+use autd3_cpu_wire::payload::{PatternFormat, WritePatternCompressedPayload};
 use zerocopy::little_endian::U32;
 
 pub const PATTERN_MAX_PER_FRAME: usize = 4 * PATTERN_COMPRESSED_MAX_GROUPS;
@@ -47,10 +46,10 @@ impl PatternCompression {
         }
     }
 
-    const fn as_u8(self) -> u8 {
+    const fn as_wire(self) -> PatternFormat {
         match self {
-            PatternCompression::PhaseFull => 1,
-            PatternCompression::PhaseHalf => 2,
+            PatternCompression::PhaseFull => PatternFormat::PhaseFull,
+            PatternCompression::PhaseHalf => PatternFormat::PhaseHalf,
         }
     }
 }
@@ -101,14 +100,16 @@ impl Operation for WritePatternCompressed<'_> {
         }
         let offset =
             u32::try_from(self.index * EMISSION_SLOT_WORDS).expect("bounded by EMISSION_RAM_WORDS");
-        let (h, rest) = WritePatternCompressedPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *h = WritePatternCompressedPayload {
-            bank: self.bank.as_u8(),
-            format: self.format.as_u8(),
-            count: u8::try_from(count).expect("count <= PATTERN_MAX_PER_FRAME"),
-            intensity: self.intensity.0,
-            offset: U32::new(offset),
-        };
+        let rest = write_header(
+            out,
+            &WritePatternCompressedPayload {
+                bank: self.bank,
+                format: self.format.as_wire(),
+                count: u8::try_from(count).expect("count <= PATTERN_MAX_PER_FRAME"),
+                intensity: self.intensity.0,
+                offset: U32::new(offset),
+            },
+        );
         for (group, words) in rest
             .chunks_mut(PATTERN_COMPRESSED_GROUP_BYTES)
             .take(count.div_ceil(self.format.per_word()))

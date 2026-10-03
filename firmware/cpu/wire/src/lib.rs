@@ -1,10 +1,22 @@
 #![no_std]
+#![allow(clippy::cast_possible_truncation)]
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! wire_enum {
     ($vis:vis enum $name:ident { $($variant:ident = $value:expr,)+ }) => {
-        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+        #[derive(
+            Clone,
+            Copy,
+            PartialEq,
+            Eq,
+            Debug,
+            ::zerocopy::TryFromBytes,
+            ::zerocopy::IntoBytes,
+            ::zerocopy::KnownLayout,
+            ::zerocopy::Immutable,
+            ::zerocopy::Unaligned,
+        )]
         #[repr(u8)]
         #[non_exhaustive]
         $vis enum $name {
@@ -38,6 +50,7 @@ macro_rules! wire_enum {
     };
 }
 
+mod bank;
 mod cmd;
 mod error;
 pub mod fpga_update;
@@ -50,6 +63,7 @@ mod telemetry;
 pub mod udp;
 pub mod update;
 
+pub use bank::{ModulationBank, PatternBank};
 pub use cmd::Cmd;
 pub use error::{Error, describe_device_error};
 pub use frame::{

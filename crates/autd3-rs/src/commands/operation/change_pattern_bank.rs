@@ -1,5 +1,4 @@
 use autd3_cpu_wire::payload::ChangePatternBankPayload;
-use zerocopy::FromBytes;
 use zerocopy::little_endian::{U32, U64};
 
 use crate::error::Error;
@@ -8,7 +7,7 @@ use crate::mirror::FirmwareState;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PatternBank, TransitionMode};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, write_header};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ChangePatternBank {
@@ -29,13 +28,15 @@ impl Operation for ChangePatternBank {
 
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
         let margin_ns = self.transition_mode.margin_ns()?;
-        let (p, _) = ChangePatternBankPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *p = ChangePatternBankPayload {
-            bank: self.bank.as_u8(),
-            transition_mode: self.transition_mode.try_as_u8()?,
-            transition_value: U64::new(self.transition_mode.value()),
-            margin_ns: U32::new(margin_ns),
-        };
+        write_header(
+            out,
+            &ChangePatternBankPayload {
+                bank: self.bank,
+                transition_mode: self.transition_mode.try_as_wire()?,
+                transition_value: U64::new(self.transition_mode.value()),
+                margin_ns: U32::new(margin_ns),
+            },
+        );
         Ok(Cmd::ChangePatternBank)
     }
 

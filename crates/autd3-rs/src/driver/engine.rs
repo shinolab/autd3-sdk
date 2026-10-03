@@ -15,7 +15,7 @@ use crate::udp::Reply;
 
 use autd3_cpu_wire::Mode;
 use autd3_cpu_wire::payload::SetModePayload;
-use zerocopy::FromBytes;
+use zerocopy::IntoBytes;
 
 use super::Poll;
 use super::queue::{CmdMessage, Connect, Queue, TransportConfig};
@@ -327,8 +327,11 @@ impl<B: Bus> Engine<B> {
 
     fn start_mode(&mut self) -> Result<Rounds, NetworkCause> {
         let mut frame = TxFrame::new(Seq::ZERO, Cmd::SetMode);
-        let (p, _) = SetModePayload::mut_from_prefix(&mut frame.payload).unwrap();
-        p.mode = self.config.mode().as_u8();
+        SetModePayload {
+            mode: self.config.mode(),
+        }
+        .write_to_prefix(&mut frame.payload)
+        .expect("SetMode payload fits in the frame");
         self.start_rounds(&frame)
     }
 

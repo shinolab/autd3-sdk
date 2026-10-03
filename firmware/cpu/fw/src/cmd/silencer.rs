@@ -1,7 +1,5 @@
 use core::cell::Cell;
 
-use zerocopy::FromBytes;
-
 pub use autd3_cpu_wire::payload::{
     SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
     SILENCER_FLAG_STRICT_MODE, SilencerPayload,
@@ -68,9 +66,7 @@ impl SilencerGuard {
 
 impl Cpu {
     pub(crate) fn set_silencer<P: Port>(&self, port: &mut P, payload: &[u8]) -> Result<(), Error> {
-        let Ok((p, _)) = SilencerPayload::ref_from_prefix(payload) else {
-            return Err(Error::InvalidPayload);
-        };
+        let p = SilencerPayload::parse(payload)?;
         let flag = p.flag;
         let update_rate_intensity = p.update_rate_intensity.get();
         let update_rate_phase = p.update_rate_phase.get();
@@ -78,14 +74,8 @@ impl Cpu {
         let completion_steps_phase = p.completion_steps_phase.get();
 
         if (flag & SILENCER_FLAG_FIXED_UPDATE_RATE_MODE) != 0 {
-            if update_rate_intensity == 0 || update_rate_phase == 0 {
-                return Err(Error::InvalidPayload);
-            }
             self.silencer.strict_mode.set(false);
         } else {
-            if completion_steps_intensity == 0 || completion_steps_phase == 0 {
-                return Err(Error::InvalidPayload);
-            }
             if (flag & SILENCER_FLAG_STRICT_MODE) != 0 {
                 let mod_div =
                     self.silencer.mod_freq_div[self.silencer.mod_bank.get() as usize].get();

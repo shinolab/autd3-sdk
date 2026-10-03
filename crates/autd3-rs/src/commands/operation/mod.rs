@@ -51,12 +51,23 @@ pub(crate) use write_pattern_fused::{
     PATTERN_FUSED_HEADER_BYTES, PATTERN_FUSED_MAX_FOCI_PER_FRAME,
 };
 
+use zerocopy::{Immutable, IntoBytes};
+
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::mirror::FirmwareState;
 use crate::params::BUFFER_SIZE_MIN;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::LoopBehavior;
+
+pub(crate) fn write_header<'a, H: IntoBytes + Immutable>(
+    out: &'a mut [u8; PAYLOAD_BYTES],
+    header: &H,
+) -> &'a mut [u8] {
+    let (dst, rest) = out.split_at_mut(core::mem::size_of::<H>());
+    header.write_to(dst).expect("header fits in the payload");
+    rest
+}
 
 pub(crate) fn check_index_advance(size: usize, loop_behavior: LoopBehavior) -> Result<(), Error> {
     if size < BUFFER_SIZE_MIN && !matches!(loop_behavior, LoopBehavior::Infinite) {

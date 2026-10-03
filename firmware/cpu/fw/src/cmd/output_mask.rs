@@ -1,5 +1,3 @@
-use zerocopy::FromBytes;
-
 pub use autd3_cpu_wire::payload::OutputMaskPayload;
 
 use crate::fpga;
@@ -8,9 +6,7 @@ use crate::port::Port;
 use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
-    let Ok((p, _)) = OutputMaskPayload::ref_from_prefix(payload) else {
-        return Err(Error::InvalidPayload);
-    };
+    let p = OutputMaskPayload::parse(payload)?;
     for (j, chunk) in p.data.chunks(16).enumerate() {
         let value = chunk
             .iter()

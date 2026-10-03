@@ -4,9 +4,8 @@ use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::ModulationBank;
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, write_header};
 use autd3_cpu_wire::payload::WriteModPayload;
-use zerocopy::FromBytes;
 use zerocopy::little_endian::{U16, U32};
 
 #[derive(Clone, Copy, Debug)]
@@ -46,13 +45,15 @@ impl Operation for WriteModulationChunk<'_> {
         let offset = u32::try_from(self.offset).expect("bounded by MOD_BUFFER_SAMPLES");
         let len = u16::try_from(self.data.len()).expect("bounded by MOD_WRITE_MAX_DATA_LEN");
 
-        let (h, rest) = WriteModPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *h = WriteModPayload {
-            bank: self.bank.as_u8(),
-            reserved: 0,
-            offset: U32::new(offset),
-            data_len: U16::new(len),
-        };
+        let rest = write_header(
+            out,
+            &WriteModPayload {
+                bank: self.bank,
+                reserved: 0,
+                offset: U32::new(offset),
+                data_len: U16::new(len),
+            },
+        );
         rest[..self.data.len()].copy_from_slice(self.data);
         Ok(Cmd::WriteModulationBuffer)
     }

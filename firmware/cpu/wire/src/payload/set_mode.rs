@@ -1,9 +1,18 @@
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+use super::try_read_header;
+use crate::{Error, Mode};
+
+#[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct SetModePayload {
-    pub mode: u8,
+    pub mode: Mode,
+}
+
+impl SetModePayload {
+    pub fn parse(payload: &[u8]) -> Result<Self, Error> {
+        try_read_header(payload).map(|(p, _)| p)
+    }
 }
 
 const _: () = assert!(core::mem::size_of::<SetModePayload>() == 1);

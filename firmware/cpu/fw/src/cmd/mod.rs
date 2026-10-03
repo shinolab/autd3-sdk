@@ -22,7 +22,23 @@ pub(crate) mod write_pattern_compressed;
 pub(crate) mod write_pattern_fused;
 pub(crate) mod write_pattern_raw;
 
-use crate::fpga::TransitionMode;
+use crate::fpga::{SYS_TIME_TRANSITION_MARGIN_NS, TransitionMode};
+
+pub(crate) struct TransitionRequest {
+    pub(crate) mode: TransitionMode,
+    pub(crate) value: u64,
+    pub(crate) margin_ns: u32,
+}
+
+impl TransitionRequest {
+    pub(crate) fn margin_ns(&self) -> u64 {
+        if self.margin_ns == 0 {
+            SYS_TIME_TRANSITION_MARGIN_NS
+        } else {
+            u64::from(self.margin_ns)
+        }
+    }
+}
 
 pub(crate) struct BankChange {
     pub(crate) bank: u8,

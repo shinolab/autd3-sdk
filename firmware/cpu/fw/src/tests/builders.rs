@@ -1,3 +1,7 @@
+use core::mem::offset_of;
+
+use autd3_cpu_wire::payload::{EmissionType, PatternFormat};
+use autd3_cpu_wire::{ModulationBank, PatternBank};
 use zerocopy::FromZeros;
 use zerocopy::little_endian::{U16, U32, U64};
 
@@ -64,12 +68,14 @@ fn words_to_bytes(words: &[u16]) -> std::vec::Vec<u8> {
 
 pub(crate) fn write_foci_buffer(seq: u8, bank: u8, offset_words: u32, words: &[u16]) -> Frame {
     let header = WriteFociPayload {
-        bank,
+        bank: PatternBank::B0,
         reserved: 0,
         offset: U32::new(offset_words),
         data_len: U16::new((words.len() * 2) as u16),
     };
-    Frame::from_parts(seq, Cmd::WriteFociBuffer, &header, &words_to_bytes(words))
+    let mut f = Frame::from_parts(seq, Cmd::WriteFociBuffer, &header, &words_to_bytes(words));
+    f.set_payload_byte(offset_of!(WriteFociPayload, bank), bank);
+    f
 }
 
 pub(crate) fn write_pattern_raw(
@@ -89,7 +95,7 @@ pub(crate) fn write_pattern_raw_multi(
     slots: &[(&[u8], &[u8])],
 ) -> Frame {
     let header = WritePatternRawPayload {
-        bank,
+        bank: PatternBank::B0,
         count: u8::try_from(slots.len()).unwrap(),
         index: U16::new(index),
     };
@@ -97,7 +103,9 @@ pub(crate) fn write_pattern_raw_multi(
         .iter()
         .flat_map(|(phases, intensities)| phases.iter().chain(intensities.iter()).copied())
         .collect();
-    Frame::from_parts(seq, Cmd::WritePatternRaw, &header, &data)
+    let mut f = Frame::from_parts(seq, Cmd::WritePatternRaw, &header, &data);
+    f.set_payload_byte(offset_of!(WritePatternRawPayload, bank), bank);
+    f
 }
 
 pub(crate) fn raw_words_to_soa(words: &[u16]) -> std::vec::Vec<u16> {
@@ -131,28 +139,33 @@ pub(crate) fn write_pattern_compressed_with_intensity(
     words: &[u16],
 ) -> Frame {
     let header = WritePatternCompressedPayload {
-        bank,
-        format,
+        bank: PatternBank::B0,
+        format: PatternFormat::PhaseFull,
         count,
         intensity,
         offset: U32::new(offset_words),
     };
-    Frame::from_parts(
+    let mut f = Frame::from_parts(
         seq,
         Cmd::WritePatternCompressed,
         &header,
         &words_to_bytes(words),
-    )
+    );
+    f.set_payload_byte(offset_of!(WritePatternCompressedPayload, bank), bank);
+    f.set_payload_byte(offset_of!(WritePatternCompressedPayload, format), format);
+    f
 }
 
 pub(crate) fn write_mod_buffer(seq: u8, bank: u8, offset: u32, data: &[u8]) -> Frame {
     let header = WriteModPayload {
-        bank,
+        bank: ModulationBank::B0,
         reserved: 0,
         offset: U32::new(offset),
         data_len: U16::new(data.len() as u16),
     };
-    Frame::from_parts(seq, Cmd::WriteModulationBuffer, &header, data)
+    let mut f = Frame::from_parts(seq, Cmd::WriteModulationBuffer, &header, data);
+    f.set_payload_byte(offset_of!(WriteModPayload, bank), bank);
+    f
 }
 
 pub(crate) fn config_mod(seq: u8, bank: u8, divider: u16, size: u32) -> Frame {
@@ -160,12 +173,16 @@ pub(crate) fn config_mod(seq: u8, bank: u8, divider: u16, size: u32) -> Frame {
 }
 
 pub(crate) fn config_mod_rep(seq: u8, bank: u8, divider: u16, size: u32, rep: u16) -> Frame {
-    let mut p = ConfigModPayload::new_zeroed();
-    p.bank = bank;
-    p.divider = U16::new(divider);
-    p.size = U32::new(size);
-    p.rep = U16::new(rep);
-    Frame::from_payload(seq, Cmd::ConfigModulation, &p)
+    let p = ConfigModPayload {
+        bank: ModulationBank::B0,
+        reserved: 0,
+        divider: U16::new(divider),
+        size: U32::new(size),
+        rep: U16::new(rep),
+    };
+    let mut f = Frame::from_payload(seq, Cmd::ConfigModulation, &p);
+    f.set_payload_byte(offset_of!(ConfigModPayload, bank), bank);
+    f
 }
 
 pub(crate) fn config_pattern(
@@ -200,15 +217,23 @@ pub(crate) fn config_pattern_rep(
     sound_speed: u16,
     rep: u16,
 ) -> Frame {
-    let mut p = ConfigPatternPayload::new_zeroed();
-    p.bank = bank;
-    p.emission_type = emission_type;
-    p.divider = U16::new(divider);
-    p.size = U32::new(size);
-    p.num_foci = num_foci;
-    p.sound_speed = U16::new(sound_speed);
-    p.rep = U16::new(rep);
-    Frame::from_payload(seq, Cmd::ConfigPattern, &p)
+    let p = ConfigPatternPayload {
+        bank: PatternBank::B0,
+        emission_type: EmissionType::Foci,
+        divider: U16::new(divider),
+        size: U32::new(size),
+        num_foci,
+        reserved: 0,
+        sound_speed: U16::new(sound_speed),
+        rep: U16::new(rep),
+    };
+    let mut f = Frame::from_payload(seq, Cmd::ConfigPattern, &p);
+    f.set_payload_byte(offset_of!(ConfigPatternPayload, bank), bank);
+    f.set_payload_byte(
+        offset_of!(ConfigPatternPayload, emission_type),
+        emission_type,
+    );
+    f
 }
 
 pub(crate) fn change_pattern_bank(
@@ -217,11 +242,15 @@ pub(crate) fn change_pattern_bank(
     transition_mode: TransitionMode,
     transition_value: u64,
 ) -> Frame {
-    let mut p = ChangePatternBankPayload::new_zeroed();
-    p.bank = bank;
-    p.transition_mode = transition_mode as u8;
-    p.transition_value = U64::new(transition_value);
-    Frame::from_payload(seq, Cmd::ChangePatternBank, &p)
+    let p = ChangePatternBankPayload {
+        bank: PatternBank::B0,
+        transition_mode,
+        transition_value: U64::new(transition_value),
+        margin_ns: U32::new(0),
+    };
+    let mut f = Frame::from_payload(seq, Cmd::ChangePatternBank, &p);
+    f.set_payload_byte(offset_of!(ChangePatternBankPayload, bank), bank);
+    f
 }
 
 pub(crate) fn change_mod_bank(
@@ -240,12 +269,15 @@ pub(crate) fn change_mod_bank_with_margin(
     transition_value: u64,
     margin_ns: u32,
 ) -> Frame {
-    let mut p = ChangeModBankPayload::new_zeroed();
-    p.bank = bank;
-    p.transition_mode = transition_mode as u8;
-    p.transition_value = U64::new(transition_value);
-    p.margin_ns = U32::new(margin_ns);
-    Frame::from_payload(seq, Cmd::ChangeModulationBank, &p)
+    let p = ChangeModBankPayload {
+        bank: ModulationBank::B0,
+        transition_mode,
+        transition_value: U64::new(transition_value),
+        margin_ns: U32::new(margin_ns),
+    };
+    let mut f = Frame::from_payload(seq, Cmd::ChangeModulationBank, &p);
+    f.set_payload_byte(offset_of!(ChangeModBankPayload, bank), bank);
+    f
 }
 
 pub(crate) struct FusedPattern {
@@ -280,12 +312,12 @@ impl FusedPattern {
 
 pub(crate) fn write_pattern_fused(seq: u8, f: &FusedPattern, words: &[u16]) -> Frame {
     let header = WritePatternFusedPayload {
-        bank: f.bank,
-        emission_type: f.emission_type,
+        bank: PatternBank::B0,
+        emission_type: EmissionType::Foci,
         divider: U16::new(f.divider),
         size: U32::new(f.size),
         num_foci: f.num_foci,
-        transition_mode: f.transition_mode as u8,
+        transition_mode: f.transition_mode,
         sound_speed: U16::new(f.sound_speed),
         rep: U16::new(f.rep),
         data_len: U16::new((words.len() * 2) as u16),
@@ -293,7 +325,13 @@ pub(crate) fn write_pattern_fused(seq: u8, f: &FusedPattern, words: &[u16]) -> F
         margin_ns: U32::new(f.margin_ns),
         reserved: U32::new(0),
     };
-    Frame::from_parts(seq, Cmd::WritePatternFused, &header, &words_to_bytes(words))
+    let mut frame = Frame::from_parts(seq, Cmd::WritePatternFused, &header, &words_to_bytes(words));
+    frame.set_payload_byte(offset_of!(WritePatternFusedPayload, bank), f.bank);
+    frame.set_payload_byte(
+        offset_of!(WritePatternFusedPayload, emission_type),
+        f.emission_type,
+    );
+    frame
 }
 
 pub(crate) struct FusedMod {
@@ -322,8 +360,8 @@ impl FusedMod {
 
 pub(crate) fn write_mod_fused(seq: u8, f: &FusedMod, data: &[u8]) -> Frame {
     let header = WriteModulationFusedPayload {
-        bank: f.bank,
-        transition_mode: f.transition_mode as u8,
+        bank: ModulationBank::B0,
+        transition_mode: f.transition_mode,
         divider: U16::new(f.divider),
         size: U32::new(f.size),
         rep: U16::new(f.rep),
@@ -331,7 +369,9 @@ pub(crate) fn write_mod_fused(seq: u8, f: &FusedMod, data: &[u8]) -> Frame {
         transition_value: U64::new(f.transition_value),
         margin_ns: U32::new(f.margin_ns),
     };
-    Frame::from_parts(seq, Cmd::WriteModulationFused, &header, data)
+    let mut frame = Frame::from_parts(seq, Cmd::WriteModulationFused, &header, data);
+    frame.set_payload_byte(offset_of!(WriteModulationFusedPayload, bank), f.bank);
+    frame
 }
 
 pub(crate) fn set_silencer(
@@ -352,18 +392,23 @@ pub(crate) fn set_silencer(
 }
 
 pub(crate) fn force_fan(seq: u8, value: u8) -> Frame {
-    let mut p = ForceFanPayload::new_zeroed();
-    p.value = value;
-    Frame::from_payload(seq, Cmd::ForceFan, &p)
+    let mut f = Frame::from_payload(seq, Cmd::ForceFan, &ForceFanPayload { value: false });
+    f.set_payload_byte(offset_of!(ForceFanPayload, value), value);
+    f
 }
 
 pub(crate) fn gpio_in(seq: u8, values: [u8; 4]) -> Frame {
-    let mut p = GpioInPayload::new_zeroed();
-    p.gpio_in_0 = values[0];
-    p.gpio_in_1 = values[1];
-    p.gpio_in_2 = values[2];
-    p.gpio_in_3 = values[3];
-    Frame::from_payload(seq, Cmd::EmulateGpioIn, &p)
+    let p = GpioInPayload {
+        gpio_in_0: false,
+        gpio_in_1: false,
+        gpio_in_2: false,
+        gpio_in_3: false,
+    };
+    let mut f = Frame::from_payload(seq, Cmd::EmulateGpioIn, &p);
+    for (i, value) in values.into_iter().enumerate() {
+        f.set_payload_byte(offset_of!(GpioInPayload, gpio_in_0) + i, value);
+    }
+    f
 }
 
 pub(crate) fn phase_corr(seq: u8, phases: &[u8]) -> Frame {

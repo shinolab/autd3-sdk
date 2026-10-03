@@ -1,14 +1,33 @@
 use zerocopy::little_endian::{U16, U32};
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+use super::try_read_header;
+use crate::layout::{BUFFER_SIZE_MIN, MOD_BUFFER_SAMPLES};
+use crate::{Error, ModulationBank};
+
+#[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct ConfigModPayload {
-    pub bank: u8,
+    pub bank: ModulationBank,
     pub reserved: u8,
     pub divider: U16,
     pub size: U32,
     pub rep: U16,
+}
+
+pub(super) fn validate_mod_config(divider: u16, size: u32) -> Result<(), Error> {
+    if divider == 0 || !(BUFFER_SIZE_MIN as u32..=MOD_BUFFER_SAMPLES as u32).contains(&size) {
+        return Err(Error::InvalidPayload);
+    }
+    Ok(())
+}
+
+impl ConfigModPayload {
+    pub fn parse(payload: &[u8]) -> Result<Self, Error> {
+        let (p, _) = try_read_header::<Self>(payload)?;
+        validate_mod_config(p.divider.get(), p.size.get())?;
+        Ok(p)
+    }
 }
 
 const _: () = assert!(core::mem::offset_of!(ConfigModPayload, bank) == 0);

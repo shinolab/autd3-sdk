@@ -1,16 +1,13 @@
-use zerocopy::FromBytes;
-
 pub use autd3_cpu_wire::payload::ConfigPatternPayload;
 
 use crate::app::Cpu;
-use crate::fpga::{self, EmissionType, REP_INFINITE};
+use crate::fpga::{self, EmissionType};
 use crate::params::{
     ADDR_PATTERN_CYCLE0, ADDR_PATTERN_FREQ_DIV0, ADDR_PATTERN_MODE0, ADDR_PATTERN_NUM_FOCI0,
     ADDR_PATTERN_REP0, ADDR_PATTERN_SOUND_SPEED0, BRAM_SELECT_CONTROLLER, CTL_FLAG_PATTERN_SET,
-    EMISSION_MAX_INDICES, NUM_BANKS, NUM_FOCI_MAX,
 };
 use crate::port::Port;
-use crate::proto::{BUFFER_SIZE_MIN, Error, MAX_FOCI_TOTAL};
+use crate::proto::Error;
 
 pub(crate) struct PatternConfig {
     pub(crate) bank: u8,
@@ -28,67 +25,21 @@ impl Cpu {
         port: &mut P,
         payload: &[u8],
     ) -> Result<(), Error> {
-        let Ok((p, _)) = ConfigPatternPayload::ref_from_prefix(payload) else {
-            return Err(Error::InvalidPayload);
+        let p = ConfigPatternPayload::parse(payload)?;
+        let cfg = PatternConfig {
+            bank: p.bank.as_u8(),
+            emission_type: p.emission_type,
+            divider: p.divider.get(),
+            size: p.size.get(),
+            num_foci: p.num_foci,
+            sound_speed: p.sound_speed.get(),
+            rep: p.rep.get(),
         };
-        let cfg = self.validate_pattern_config(
-            p.bank,
-            p.emission_type,
-            p.divider.get(),
-            p.size.get(),
-            p.num_foci,
-            p.sound_speed.get(),
-            p.rep.get(),
-        )?;
-        self.write_pattern_config(port, &cfg);
-        self.set_and_wait_update(port, CTL_FLAG_PATTERN_SET)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn validate_pattern_config(
-        &self,
-        bank: u8,
-        emission_type: u8,
-        divider: u16,
-        size: u32,
-        num_foci: u8,
-        sound_speed: u16,
-        rep: u16,
-    ) -> Result<PatternConfig, Error> {
-        let Some(emission_type) = EmissionType::from_u8(emission_type) else {
-            return Err(Error::InvalidPayload);
-        };
-        if usize::from(bank) >= NUM_BANKS
-            || divider == 0
-            || size == 0
-            || (size < BUFFER_SIZE_MIN && rep != REP_INFINITE)
-        {
-            return Err(Error::InvalidPayload);
-        }
-        if match emission_type {
-            EmissionType::Raw => size > EMISSION_MAX_INDICES,
-            EmissionType::Foci => {
-                size < BUFFER_SIZE_MIN
-                    || num_foci == 0
-                    || num_foci > NUM_FOCI_MAX
-                    || size > MAX_FOCI_TOTAL / u32::from(num_foci)
-                    || sound_speed == 0
-            }
-        } {
-            return Err(Error::InvalidPayload);
-        }
-        if self.silencer.violates_pattern_div(divider) {
+        if self.silencer.violates_pattern_div(cfg.divider) {
             return Err(Error::InvalidSilencerSetting);
         }
-        Ok(PatternConfig {
-            bank,
-            emission_type,
-            divider,
-            size,
-            num_foci,
-            sound_speed,
-            rep,
-        })
+        self.write_pattern_config(port, &cfg);
+        self.set_and_wait_update(port, CTL_FLAG_PATTERN_SET)
     }
 
     pub(crate) fn write_pattern_config<P: Port>(&self, port: &mut P, cfg: &PatternConfig) {

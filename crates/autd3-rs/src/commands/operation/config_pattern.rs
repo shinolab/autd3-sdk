@@ -1,6 +1,4 @@
-use autd3_cpu_wire::params::{EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW};
-use autd3_cpu_wire::payload::ConfigPatternPayload;
-use zerocopy::FromBytes;
+use autd3_cpu_wire::payload::{ConfigPatternPayload, EmissionType};
 use zerocopy::little_endian::{U16, U32};
 
 use crate::Velocity;
@@ -11,7 +9,7 @@ use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_F
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
-use super::{Distribution, Operation, check_index_advance};
+use super::{Distribution, Operation, check_index_advance, write_header};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigPattern {
@@ -66,17 +64,19 @@ impl Operation for ConfigPattern {
         }
         check_index_advance(self.size, self.loop_behavior)?;
         let size = u32::try_from(self.size).expect("bounded by capacity checks");
-        let (p, _) = ConfigPatternPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *p = ConfigPatternPayload {
-            bank: self.bank.as_u8(),
-            emission_type: EMISSION_TYPE_RAW,
-            divider: U16::new(divider),
-            size: U32::new(size),
-            num_foci: 0,
-            reserved: 0,
-            sound_speed: U16::new(0),
-            rep: U16::new(self.loop_behavior.rep()),
-        };
+        write_header(
+            out,
+            &ConfigPatternPayload {
+                bank: self.bank,
+                emission_type: EmissionType::Raw,
+                divider: U16::new(divider),
+                size: U32::new(size),
+                num_foci: 0,
+                reserved: 0,
+                sound_speed: U16::new(0),
+                rep: U16::new(self.loop_behavior.rep()),
+            },
+        );
         Ok(Cmd::ConfigPattern)
     }
 
@@ -122,17 +122,19 @@ impl Operation for ConfigFociStm {
             return Err(PayloadError::SoundSpeedZero.into());
         }
         let size = u32::try_from(self.size).expect("bounded by capacity checks");
-        let (p, _) = ConfigPatternPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *p = ConfigPatternPayload {
-            bank: self.bank.as_u8(),
-            emission_type: EMISSION_TYPE_FOCI,
-            divider: U16::new(divider),
-            size: U32::new(size),
-            num_foci: self.num_foci,
-            reserved: 0,
-            sound_speed: U16::new(sound_speed),
-            rep: U16::new(self.loop_behavior.rep()),
-        };
+        write_header(
+            out,
+            &ConfigPatternPayload {
+                bank: self.bank,
+                emission_type: EmissionType::Foci,
+                divider: U16::new(divider),
+                size: U32::new(size),
+                num_foci: self.num_foci,
+                reserved: 0,
+                sound_speed: U16::new(sound_speed),
+                rep: U16::new(self.loop_behavior.rep()),
+            },
+        );
         Ok(Cmd::ConfigPattern)
     }
 

@@ -3,15 +3,14 @@ use std::vec::Vec;
 use zerocopy::little_endian::{U16, U32};
 use zerocopy::{FromBytes, IntoBytes};
 
+use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 use autd3_cpu_wire::update::{
     FLASH_SECTOR_BYTES, IMAGE_APP_CAPACITY, IMAGE_VECTOR_BYTES, ImageHeader, LOADER_REGION_END,
     SLOT_HEADER_BYTES, SLOT_IMAGE_CAPACITY, Slot, TRANSPORT_MARKER_BYTES, TRANSPORT_MARKER_OFFSET,
     Transport, crc32,
 };
 
-use crate::cmd::update::{
-    ACTIVATE_DELAY_MS, State, UPDATE_CHUNK_MAX_DATA_LEN, UpdateBeginPayload, UpdateChunkPayload,
-};
+use crate::cmd::update::{ACTIVATE_DELAY_MS, State, UpdateBeginPayload, UpdateChunkPayload};
 use crate::proto::{Cmd, Error, Mode};
 use crate::tests::mock::{Frame, Harness};
 

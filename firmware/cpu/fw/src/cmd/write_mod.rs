@@ -1,36 +1,20 @@
-use zerocopy::FromBytes;
-
-pub use autd3_cpu_wire::layout::MOD_WRITE_MAX_DATA_LEN;
 pub use autd3_cpu_wire::payload::WriteModPayload;
 
 use crate::fpga;
-use crate::params::{ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE, BRAM_SELECT_MOD, NUM_BANKS};
+use crate::params::{ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE, BRAM_SELECT_MOD};
 use crate::port::Port;
-use crate::proto::{Error, MOD_BUFFER_SAMPLES};
+use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
-    let Ok((p, rest)) = WriteModPayload::ref_from_prefix(payload) else {
-        return Err(Error::InvalidPayload);
-    };
-    let offset = p.offset.get();
-    let data_len = p.data_len.get();
-
-    if usize::from(p.bank) >= NUM_BANKS
-        || !offset.is_multiple_of(2)
-        || usize::from(data_len) > MOD_WRITE_MAX_DATA_LEN
-        || offset.saturating_add(u32::from(data_len)) > MOD_BUFFER_SAMPLES
-    {
-        return Err(Error::InvalidPayload);
-    }
-
+    let (p, data) = WriteModPayload::parse(payload)?;
     fpga::write_ram(
         port,
         BRAM_SELECT_MOD,
         ADDR_MOD_MEM_WR_BANK,
         ADDR_MOD_MEM_WR_PAGE,
-        p.bank,
-        offset / 2,
-        &rest[..usize::from(data_len)],
+        p.bank.as_u8(),
+        p.offset.get() / 2,
+        data,
     );
     Ok(())
 }

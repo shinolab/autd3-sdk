@@ -4,12 +4,12 @@ use crate::params::EMISSION_MAX_INDICES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Intensity, PatternBank, Phase};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, write_header};
 use autd3_cpu_wire::layout::{PATTERN_RAW_DATA_LEN, PATTERN_RAW_MAX_COUNT};
 use autd3_cpu_wire::params::NUM_TRANSDUCERS;
 use autd3_cpu_wire::payload::WritePatternRawPayload;
+use zerocopy::IntoBytes;
 use zerocopy::little_endian::U16;
-use zerocopy::{FromBytes, IntoBytes};
 
 const RAW_HEADER_BYTES: usize = core::mem::size_of::<WritePatternRawPayload>();
 
@@ -137,10 +137,14 @@ fn encode_raw_frame(
         }
         .into());
     }
-    let (p, rest) = WritePatternRawPayload::mut_from_prefix(&mut out[..]).unwrap();
-    p.bank = bank.as_u8();
-    p.count = u8::try_from(slots.len()).expect("at most PATTERN_RAW_MAX_COUNT slots");
-    p.index = U16::new(u16::try_from(index).expect("bounded by EMISSION_MAX_INDICES"));
+    let rest = write_header(
+        out,
+        &WritePatternRawPayload {
+            bank,
+            count: u8::try_from(slots.len()).expect("at most PATTERN_RAW_MAX_COUNT slots"),
+            index: U16::new(u16::try_from(index).expect("bounded by EMISSION_MAX_INDICES")),
+        },
+    );
     for (&(phases, intensities), data) in slots.iter().zip(rest.chunks_mut(PATTERN_RAW_DATA_LEN)) {
         let (dst_phases, dst_intensities) = data.split_at_mut(NUM_TRANSDUCERS);
         encode_raw_slot(phases, intensities, device, dst_phases, dst_intensities)?;

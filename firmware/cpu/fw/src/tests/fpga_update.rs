@@ -11,7 +11,7 @@ use autd3_cpu_wire::update::crc32;
 use crate::cmd::fpga_update::{
     FPGA_REBOOT_ATTEMPTS, FPGA_REBOOT_DELAY_MS, FPGA_RECONFIG_SETTLE_MS, Reconfig, State,
 };
-use crate::cmd::update::{UPDATE_CHUNK_MAX_DATA_LEN, UpdateBeginPayload, UpdateChunkPayload};
+use crate::cmd::update::{UpdateBeginPayload, UpdateChunkPayload};
 use crate::params::{
     ADDR_FLASH_CMD, ADDR_FLASH_LEN_0, ADDR_VERSION_NUM_MAJOR, FLASH_BUF_BYTES, FLASH_ERR_PROTECTED,
     FLASH_OP_CRC32, FLASH_OP_ERASE, FLASH_OP_PROGRAM, FLASH_OP_REBOOT,
@@ -20,6 +20,7 @@ use crate::proto::{Cmd, Error, Mode, OUTPUT_MASK_WORDS};
 use crate::tests::builders::output_mask;
 use crate::tests::mock::{Frame, Harness};
 use autd3_cpu_wire::fpga_update::FPGA_RECONFIG_WORST_MS;
+use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 
 fn begin(seq: u8, length: u32, crc: u32) -> Frame {
     Frame::from_payload(

@@ -1,13 +1,22 @@
 use zerocopy::little_endian::{U32, U64};
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+use super::{TransitionMode, try_read_header};
+use crate::{Error, ModulationBank};
+
+#[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct ChangeModBankPayload {
-    pub bank: u8,
-    pub transition_mode: u8,
+    pub bank: ModulationBank,
+    pub transition_mode: TransitionMode,
     pub transition_value: U64,
     pub margin_ns: U32,
+}
+
+impl ChangeModBankPayload {
+    pub fn parse(payload: &[u8]) -> Result<Self, Error> {
+        try_read_header(payload).map(|(p, _)| p)
+    }
 }
 
 const _: () = assert!(core::mem::offset_of!(ChangeModBankPayload, bank) == 0);

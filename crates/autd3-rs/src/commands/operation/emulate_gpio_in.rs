@@ -1,11 +1,10 @@
 use autd3_cpu_wire::payload::GpioInPayload;
-use zerocopy::FromBytes;
 
 use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, write_header};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct EmulateGpioIn {
@@ -20,13 +19,15 @@ impl Operation for EmulateGpioIn {
     }
 
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        let (p, _) = GpioInPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *p = GpioInPayload {
-            gpio_in_0: u8::from(self.values[0]),
-            gpio_in_1: u8::from(self.values[1]),
-            gpio_in_2: u8::from(self.values[2]),
-            gpio_in_3: u8::from(self.values[3]),
-        };
+        write_header(
+            out,
+            &GpioInPayload {
+                gpio_in_0: self.values[0],
+                gpio_in_1: self.values[1],
+                gpio_in_2: self.values[2],
+                gpio_in_3: self.values[3],
+            },
+        );
         Ok(Cmd::EmulateGpioIn)
     }
 }

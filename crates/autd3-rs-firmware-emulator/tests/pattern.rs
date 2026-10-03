@@ -41,7 +41,7 @@ fn raw_pattern_round_trips_to_emissions() {
 
     let mut change = vec![0u8; 10];
     change[0] = BANK;
-    change[1] = TransitionMode::Immediate.try_as_u8().unwrap();
+    change[1] = TransitionMode::Immediate.try_as_wire().unwrap().as_u8();
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));

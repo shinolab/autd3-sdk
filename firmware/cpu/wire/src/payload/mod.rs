@@ -1,3 +1,7 @@
+use zerocopy::{FromBytes, Immutable, KnownLayout, TryFromBytes};
+
+use crate::Error;
+
 mod change_mod_bank;
 mod change_pattern_bank;
 mod config_mod;
@@ -11,6 +15,7 @@ mod phase_corr;
 mod pwe;
 mod set_mode;
 mod silencer;
+mod transition_mode;
 mod update_begin;
 mod update_chunk;
 mod write_foci;
@@ -23,7 +28,7 @@ mod write_pattern_raw;
 pub use change_mod_bank::ChangeModBankPayload;
 pub use change_pattern_bank::ChangePatternBankPayload;
 pub use config_mod::ConfigModPayload;
-pub use config_pattern::ConfigPatternPayload;
+pub use config_pattern::{ConfigPatternPayload, EmissionType};
 pub use firmware_info::FirmwareInfo;
 pub use force_fan::ForceFanPayload;
 pub use gpio_in::GpioInPayload;
@@ -37,11 +42,24 @@ pub use silencer::{
     SILENCER_DEFAULT_UPDATE_RATE, SILENCER_FLAG_BIT_STRICT_MODE, SILENCER_FLAG_STRICT_MODE,
     SilencerPayload,
 };
+pub use transition_mode::TransitionMode;
 pub use update_begin::UpdateBeginPayload;
 pub use update_chunk::UpdateChunkPayload;
 pub use write_foci::WriteFociPayload;
 pub use write_mod::WriteModPayload;
 pub use write_mod_fused::WriteModulationFusedPayload;
-pub use write_pattern_compressed::WritePatternCompressedPayload;
+pub use write_pattern_compressed::{PatternFormat, WritePatternCompressedPayload};
 pub use write_pattern_fused::WritePatternFusedPayload;
 pub use write_pattern_raw::WritePatternRawPayload;
+
+fn read_header<T: FromBytes + KnownLayout + Immutable>(
+    payload: &[u8],
+) -> Result<(T, &[u8]), Error> {
+    T::read_from_prefix(payload).map_err(|_| Error::InvalidPayload)
+}
+
+fn try_read_header<T: TryFromBytes + KnownLayout + Immutable>(
+    payload: &[u8],
+) -> Result<(T, &[u8]), Error> {
+    T::try_read_from_prefix(payload).map_err(|_| Error::InvalidPayload)
+}

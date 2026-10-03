@@ -1,7 +1,5 @@
 use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
-use autd3_cpu_wire::params::{EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW};
-use autd3_cpu_wire::payload::WritePatternFusedPayload;
-use zerocopy::FromBytes;
+use autd3_cpu_wire::payload::{EmissionType, WritePatternFusedPayload};
 use zerocopy::little_endian::{U16, U32, U64};
 
 use crate::Velocity;
@@ -15,7 +13,7 @@ use crate::value::{
 };
 
 use super::write_pattern_buffer::{PatternIntensity, encode_raw_slot};
-use super::{Distribution, Operation, check_index_advance};
+use super::{Distribution, Operation, check_index_advance, write_header};
 
 pub(crate) const PATTERN_FUSED_HEADER_BYTES: usize =
     core::mem::size_of::<WritePatternFusedPayload>();
@@ -104,7 +102,25 @@ impl Operation for WritePatternFused<'_> {
         let divider = self.config.divide()?;
         let margin_ns = self.transition_mode.margin_ns()?;
 
-        let (h, rest) = WritePatternFusedPayload::mut_from_prefix(&mut out[..]).unwrap();
+        let rest = write_header(
+            out,
+            &WritePatternFusedPayload {
+                bank: self.bank,
+                emission_type: EmissionType::Raw,
+                divider: U16::new(divider),
+                size: U32::new(1),
+                num_foci: 0,
+                transition_mode: self.transition_mode.try_as_wire()?,
+                sound_speed: U16::new(0),
+                rep: U16::new(self.loop_behavior.rep()),
+                data_len: U16::new(
+                    u16::try_from(PATTERN_RAW_DATA_LEN).expect("bounded by frame capacity"),
+                ),
+                transition_value: U64::new(self.transition_mode.value()),
+                margin_ns: U32::new(margin_ns),
+                reserved: U32::new(0),
+            },
+        );
         let (dst_phases, dst_intensities) =
             rest[..PATTERN_RAW_DATA_LEN].split_at_mut(PATTERN_RAW_DATA_LEN / 2);
         encode_raw_slot(
@@ -114,22 +130,6 @@ impl Operation for WritePatternFused<'_> {
             dst_phases,
             dst_intensities,
         )?;
-        *h = WritePatternFusedPayload {
-            bank: self.bank.as_u8(),
-            emission_type: EMISSION_TYPE_RAW,
-            divider: U16::new(divider),
-            size: U32::new(1),
-            num_foci: 0,
-            transition_mode: self.transition_mode.try_as_u8()?,
-            sound_speed: U16::new(0),
-            rep: U16::new(self.loop_behavior.rep()),
-            data_len: U16::new(
-                u16::try_from(PATTERN_RAW_DATA_LEN).expect("bounded by frame capacity"),
-            ),
-            transition_value: U64::new(self.transition_mode.value()),
-            margin_ns: U32::new(margin_ns),
-            reserved: U32::new(0),
-        };
         Ok(Cmd::WritePatternFused)
     }
 
@@ -206,21 +206,23 @@ impl<const N: usize> Operation for WriteFociStmFused<'_, N> {
         let margin_ns = self.transition_mode.margin_ns()?;
         let data_len = u16::try_from(total * FOCUS_WORDS * 2).expect("bounded by frame");
 
-        let (h, rest) = WritePatternFusedPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *h = WritePatternFusedPayload {
-            bank: self.bank.as_u8(),
-            emission_type: EMISSION_TYPE_FOCI,
-            divider: U16::new(divider),
-            size: U32::new(u32::try_from(size).expect("bounded by capacity checks")),
-            num_foci,
-            transition_mode: self.transition_mode.try_as_u8()?,
-            sound_speed: U16::new(sound_speed),
-            rep: U16::new(self.loop_behavior.rep()),
-            data_len: U16::new(data_len),
-            transition_value: U64::new(self.transition_mode.value()),
-            margin_ns: U32::new(margin_ns),
-            reserved: U32::new(0),
-        };
+        let rest = write_header(
+            out,
+            &WritePatternFusedPayload {
+                bank: self.bank,
+                emission_type: EmissionType::Foci,
+                divider: U16::new(divider),
+                size: U32::new(u32::try_from(size).expect("bounded by capacity checks")),
+                num_foci,
+                transition_mode: self.transition_mode.try_as_wire()?,
+                sound_speed: U16::new(sound_speed),
+                rep: U16::new(self.loop_behavior.rep()),
+                data_len: U16::new(data_len),
+                transition_value: U64::new(self.transition_mode.value()),
+                margin_ns: U32::new(margin_ns),
+                reserved: U32::new(0),
+            },
+        );
         for (dst, k) in rest.as_chunks_mut::<8>().0.iter_mut().zip(0..total) {
             let focus = self.points[k / N].focus(device, k % N);
             *dst = focus.encode()?.to_le_bytes();
@@ -271,7 +273,7 @@ mod tests {
 
         assert_eq!(cmd, Cmd::WritePatternFused);
         assert_eq!(out[0], 1, "bank B1");
-        assert_eq!(out[1], EMISSION_TYPE_RAW);
+        assert_eq!(out[1], EmissionType::Raw.as_u8());
         assert_eq!(&out[2..4], &7u16.to_le_bytes(), "divider");
         assert_eq!(&out[4..8], &1u32.to_le_bytes(), "size = 1 index");
         assert_eq!(out[8], 0, "num_foci unused for raw");
@@ -309,7 +311,7 @@ mod tests {
         let cmd = op.encode(&test_device(0), &mut out).unwrap();
 
         assert_eq!(cmd, Cmd::WritePatternFused);
-        assert_eq!(out[1], EMISSION_TYPE_FOCI);
+        assert_eq!(out[1], EmissionType::Foci.as_u8());
         assert_eq!(&out[4..8], &2u32.to_le_bytes(), "size = sample count");
         assert_eq!(out[8], 1, "num_foci = N");
         assert_eq!(&out[10..12], &21760u16.to_le_bytes(), "340 m/s * 64");

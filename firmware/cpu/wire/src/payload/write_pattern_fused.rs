@@ -1,21 +1,50 @@
 use zerocopy::little_endian::{U16, U32, U64};
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+use super::config_pattern::validate_pattern_config;
+use super::{EmissionType, TransitionMode, try_read_header};
+use crate::layout::{PATTERN_FUSED_MAX_DATA_LEN, PATTERN_RAW_DATA_LEN};
+use crate::{Error, PatternBank};
+
+#[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct WritePatternFusedPayload {
-    pub bank: u8,
-    pub emission_type: u8,
+    pub bank: PatternBank,
+    pub emission_type: EmissionType,
     pub divider: U16,
     pub size: U32,
     pub num_foci: u8,
-    pub transition_mode: u8,
+    pub transition_mode: TransitionMode,
     pub sound_speed: U16,
     pub rep: U16,
     pub data_len: U16,
     pub transition_value: U64,
     pub margin_ns: U32,
     pub reserved: U32,
+}
+
+impl WritePatternFusedPayload {
+    pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (p, rest) = try_read_header::<Self>(payload)?;
+        let data_len = usize::from(p.data_len.get());
+        if !data_len.is_multiple_of(2)
+            || data_len > PATTERN_FUSED_MAX_DATA_LEN
+            || (p.emission_type == EmissionType::Raw
+                && (p.size.get() != 1 || data_len != PATTERN_RAW_DATA_LEN))
+        {
+            return Err(Error::InvalidPayload);
+        }
+        let data = rest.get(..data_len).ok_or(Error::InvalidPayload)?;
+        validate_pattern_config(
+            p.emission_type,
+            p.divider.get(),
+            p.size.get(),
+            p.num_foci,
+            p.sound_speed.get(),
+            p.rep.get(),
+        )?;
+        Ok((p, data))
+    }
 }
 
 const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, bank) == 0);

@@ -8,7 +8,7 @@ use autd3_cpu_wire::payload::{
 use autd3_cpu_wire::{Mode, describe_device_error};
 use autd3_rs::protocol::{Cmd, FRAME_BYTES_MAX, FRAME_HEADER_BYTES, PAYLOAD_BYTES, Seq};
 use autd3_rs::{UdpBus, UdpError};
-use zerocopy::FromBytes;
+use zerocopy::{FromBytes, IntoBytes};
 
 use crate::fpga_image::FpgaFirmwareImage;
 use crate::image::CpuFirmwareImage;
@@ -346,8 +346,9 @@ impl<L: Exchange> Driver<L> {
             return Err(DriverError::ResetUnconfirmed);
         }
         let mut frame = Frame::new(Cmd::SetMode);
-        let (p, _) = SetModePayload::mut_from_prefix(&mut frame.payload).unwrap();
-        p.mode = Mode::Fifo.as_u8();
+        SetModePayload { mode: Mode::Fifo }
+            .write_to_prefix(&mut frame.payload)
+            .expect("SetMode payload fits in the frame");
         match self
             .inner
             .exchange(Seq::ZERO, &frame, DEFAULT_TIMEOUT)

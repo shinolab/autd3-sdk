@@ -1,17 +1,35 @@
 use zerocopy::little_endian::{U16, U32, U64};
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+use super::config_mod::validate_mod_config;
+use super::{TransitionMode, try_read_header};
+use crate::layout::MOD_FUSED_MAX_DATA_LEN;
+use crate::{Error, ModulationBank};
+
+#[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct WriteModulationFusedPayload {
-    pub bank: u8,
-    pub transition_mode: u8,
+    pub bank: ModulationBank,
+    pub transition_mode: TransitionMode,
     pub divider: U16,
     pub size: U32,
     pub rep: U16,
     pub data_len: U16,
     pub transition_value: U64,
     pub margin_ns: U32,
+}
+
+impl WriteModulationFusedPayload {
+    pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (p, rest) = try_read_header::<Self>(payload)?;
+        let data_len = usize::from(p.data_len.get());
+        if data_len > MOD_FUSED_MAX_DATA_LEN {
+            return Err(Error::InvalidPayload);
+        }
+        let data = rest.get(..data_len).ok_or(Error::InvalidPayload)?;
+        validate_mod_config(p.divider.get(), p.size.get())?;
+        Ok((p, data))
+    }
 }
 
 const _: () = assert!(core::mem::offset_of!(WriteModulationFusedPayload, bank) == 0);

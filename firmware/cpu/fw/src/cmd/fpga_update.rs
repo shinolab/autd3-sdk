@@ -1,13 +1,10 @@
 use core::cell::Cell;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use zerocopy::FromBytes;
-
 pub use autd3_cpu_wire::fpga_update::{
     FPGA_FUNC_FLASH_OTA, FPGA_IMAGE_BASE, FPGA_REBOOT_ATTEMPTS, FPGA_REBOOT_DELAY_MS,
     FPGA_RECONFIG_SETTLE_MS, FPGA_SECTOR_BYTES, FpgaBootImage, is_plausible_fpga_length,
 };
-use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 use autd3_cpu_wire::payload::{UpdateBeginPayload, UpdateChunkPayload};
 
 use crate::app::Cpu;
@@ -223,9 +220,7 @@ impl Cpu {
             return Err(Error::UpdateActivating);
         }
         self.fpga_update.state.set(State::Idle);
-        let Ok((p, _)) = UpdateBeginPayload::ref_from_prefix(payload) else {
-            return Err(Error::InvalidPayload);
-        };
+        let p = UpdateBeginPayload::parse(payload)?;
         let length = p.length.get();
         if !is_plausible_fpga_length(length) {
             return Err(Error::InvalidPayload);
@@ -257,21 +252,15 @@ impl Cpu {
         else {
             return Err(Error::UpdateNotStarted);
         };
-        let Ok((p, rest)) = UpdateChunkPayload::ref_from_prefix(payload) else {
-            return Err(Error::InvalidPayload);
-        };
-        let offset = p.offset.get();
-        let data_len = p.data_len.get();
-        if usize::from(data_len) > UPDATE_CHUNK_MAX_DATA_LEN
-            || offset.saturating_add(u32::from(data_len)) > length
-        {
+        let (chunk, data) = UpdateChunkPayload::parse(payload)?;
+        if !chunk.fits_in(length) {
             return Err(Error::InvalidPayload);
         }
-        if data_len == 0 {
+        if data.is_empty() {
             return Ok(());
         }
-        let start = FPGA_IMAGE_BASE + offset;
-        let end = start + u32::from(data_len);
+        let start = FPGA_IMAGE_BASE + chunk.offset.get();
+        let end = start + data.len() as u32;
         let mut erased = erased_end;
         while erased < end {
             run_command(port, FLASH_OP_ERASE, erased, FPGA_SECTOR_BYTES)?;
@@ -282,10 +271,7 @@ impl Cpu {
                 erased_end: erased,
             });
         }
-        for (k, part) in rest[..usize::from(data_len)]
-            .chunks(FLASH_BUF_BYTES)
-            .enumerate()
-        {
+        for (k, part) in data.chunks(FLASH_BUF_BYTES).enumerate() {
             load_buffer(port, part);
             run_command(
                 port,

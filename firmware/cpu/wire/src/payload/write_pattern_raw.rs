@@ -1,15 +1,33 @@
 use zerocopy::little_endian::U16;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
+use super::try_read_header;
 use crate::frame::PAYLOAD_BYTES;
 use crate::layout::{PATTERN_RAW_DATA_LEN, PATTERN_RAW_MAX_COUNT};
+use crate::params::EMISSION_MAX_INDICES;
+use crate::{Error, PatternBank};
 
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct WritePatternRawPayload {
-    pub bank: u8,
+    pub bank: PatternBank,
     pub count: u8,
     pub index: U16,
+}
+
+impl WritePatternRawPayload {
+    pub fn parse(payload: &[u8]) -> Result<(Self, &[[u8; PATTERN_RAW_DATA_LEN]]), Error> {
+        let (p, rest) = try_read_header::<Self>(payload)?;
+        let count = usize::from(p.count);
+        if !(1..=PATTERN_RAW_MAX_COUNT).contains(&count)
+            || u32::from(p.index.get()) + count as u32 > EMISSION_MAX_INDICES
+        {
+            return Err(Error::InvalidPayload);
+        }
+        let (slots, _) = rest.as_chunks::<PATTERN_RAW_DATA_LEN>();
+        let slots = slots.get(..count).ok_or(Error::InvalidPayload)?;
+        Ok((p, slots))
+    }
 }
 
 const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, bank) == 0);

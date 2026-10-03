@@ -398,7 +398,6 @@ fn a_dc_offset_moves_sys_time_transitions_onto_the_bus_clock() {
     use crate::commands::operation::ChangePatternBank;
     use crate::value::{SysTime, TransitionMode};
     use autd3_cpu_wire::payload::ChangePatternBankPayload;
-    use zerocopy::FromBytes;
 
     let host = SysTime::from_nanos(2_000_000_000);
     let offset_ns = 29_348_000i64;
@@ -415,7 +414,7 @@ fn a_dc_offset_moves_sys_time_transitions_onto_the_bus_clock() {
         b.push(cmd);
         let frames = b.build().unwrap();
         let payload = frames.frame(0).unwrap().datagrams()[0].payload;
-        let (p, _) = ChangePatternBankPayload::ref_from_prefix(&payload[..]).unwrap();
+        let p = ChangePatternBankPayload::parse(&payload[..]).unwrap();
         p.transition_value.get()
     };
 
@@ -436,7 +435,6 @@ fn a_dc_offset_reaches_per_device_commands_too() {
     use crate::commands::operation::ChangePatternBank;
     use crate::value::{SysTime, TransitionMode};
     use autd3_cpu_wire::payload::ChangePatternBankPayload;
-    use zerocopy::FromBytes;
 
     let host = SysTime::from_nanos(2_000_000_000);
     let offset_ns = 1_234_567i64;
@@ -454,7 +452,7 @@ fn a_dc_offset_reaches_per_device_commands_too() {
 
     for device in 0..2 {
         let payload = frames.frame(0).unwrap().datagrams()[device].payload;
-        let (p, _) = ChangePatternBankPayload::ref_from_prefix(&payload[..]).unwrap();
+        let p = ChangePatternBankPayload::parse(&payload[..]).unwrap();
         assert_eq!(
             p.transition_value.get(),
             host.sys_time() + offset_ns.cast_unsigned(),
@@ -468,7 +466,6 @@ fn a_dc_offset_moves_the_gpio_sys_time_trigger() {
     use crate::commands::operation::{GpioOut, SetGpioOut};
     use crate::value::SysTime;
     use autd3_cpu_wire::payload::GpioOutPayload;
-    use zerocopy::FromBytes;
 
     let host = SysTime::from_nanos(2_000_000_000);
     let offset_ns = 29_348_000i64;
@@ -485,7 +482,7 @@ fn a_dc_offset_moves_the_gpio_sys_time_trigger() {
         });
         let frames = b.build().unwrap();
         let payload = frames.frame(0).unwrap().datagrams()[0].payload;
-        let (p, _) = GpioOutPayload::ref_from_prefix(&payload[..]).unwrap();
+        let p = GpioOutPayload::parse(&payload[..]).unwrap();
         p.values[0].get()
     };
 
@@ -504,7 +501,6 @@ fn a_device_clock_is_sampled_when_the_command_is_pushed_not_when_the_builder_is_
     use crate::value::{SysTime, TransitionMode};
     use autd3_cpu_wire::payload::ChangePatternBankPayload;
     use autd3_rs_core::DeviceClock;
-    use zerocopy::FromBytes;
 
     let host = SysTime::from_nanos(2_000_000_000);
     let offset_ns = 29_348_000i64;
@@ -526,7 +522,7 @@ fn a_device_clock_is_sampled_when_the_command_is_pushed_not_when_the_builder_is_
     let frames = b.build().unwrap();
 
     let payload = frames.frame(0).unwrap().datagrams()[0].payload;
-    let (p, _) = ChangePatternBankPayload::ref_from_prefix(&payload[..]).unwrap();
+    let p = ChangePatternBankPayload::parse(&payload[..]).unwrap();
     assert_eq!(
         p.transition_value.get(),
         host.sys_time() + offset_ns.cast_unsigned(),
@@ -539,7 +535,6 @@ fn a_dc_offset_reaches_the_fused_modulation_frame() {
     use crate::commands::Modulation;
     use crate::value::{SysTime, TransitionMode};
     use autd3_cpu_wire::payload::WriteModulationFusedPayload;
-    use zerocopy::FromBytes;
 
     let host = SysTime::from_nanos(2_000_000_000);
     let offset_ns = 29_348_000i64;
@@ -559,7 +554,7 @@ fn a_dc_offset_reaches_the_fused_modulation_frame() {
 
     assert_eq!(cmd_at(&frames, 0, 0), Cmd::WriteModulationFused);
     let payload = frames.frame(0).unwrap().datagrams()[0].payload;
-    let (p, _) = WriteModulationFusedPayload::ref_from_prefix(&payload[..]).unwrap();
+    let (p, _) = WriteModulationFusedPayload::parse(&payload[..]).unwrap();
     assert_eq!(
         p.transition_value.get(),
         host.sys_time() + offset_ns.cast_unsigned(),

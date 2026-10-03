@@ -4,9 +4,8 @@ use crate::params::{FOCUS_WORDS, MAX_FOCI_TOTAL};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{ControlPoints, PatternBank};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Operation, write_header};
 use autd3_cpu_wire::payload::WriteFociPayload;
-use zerocopy::FromBytes;
 use zerocopy::little_endian::{U16, U32};
 
 #[derive(Clone, Debug)]
@@ -45,13 +44,15 @@ impl<const N: usize> Operation for WriteFociChunk<'_, N> {
         let word_offset = u32::try_from((base + start) * FOCUS_WORDS).expect("bounded by capacity");
         let len = u16::try_from(self.focus_len * FOCUS_WORDS * 2).expect("bounded by frame");
 
-        let (h, rest) = WriteFociPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *h = WriteFociPayload {
-            bank: self.bank.as_u8(),
-            reserved: 0,
-            offset: U32::new(word_offset),
-            data_len: U16::new(len),
-        };
+        let rest = write_header(
+            out,
+            &WriteFociPayload {
+                bank: self.bank,
+                reserved: 0,
+                offset: U32::new(word_offset),
+                data_len: U16::new(len),
+            },
+        );
         for (dst, k) in rest
             .as_chunks_mut::<8>()
             .0
