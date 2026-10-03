@@ -22,6 +22,8 @@ pub struct SilencerGuardState {
     pub pattern_freq_div: [u16; NUM_BANKS],
     pub mod_bank: u8,
     pub pattern_bank: u8,
+    pub mod_latched_div: u16,
+    pub pattern_latched_div: u16,
 }
 
 impl SilencerGuardState {
@@ -35,6 +37,8 @@ impl SilencerGuardState {
             pattern_freq_div: [FREQ_DIV_NO_LIMIT; NUM_BANKS],
             mod_bank: 0,
             pattern_bank: 0,
+            mod_latched_div: FREQ_DIV_NO_LIMIT,
+            pattern_latched_div: FREQ_DIV_NO_LIMIT,
         }
     }
 
@@ -87,8 +91,9 @@ impl SilencerGuardState {
         completion_intensity: u16,
         completion_phase: u16,
     ) -> Result<(), Error> {
-        let mod_div = self.mod_freq_div[usize::from(self.mod_bank)];
-        let pattern_div = self.pattern_freq_div[usize::from(self.pattern_bank)];
+        let mod_div = self.mod_freq_div[usize::from(self.mod_bank)].min(self.mod_latched_div);
+        let pattern_div =
+            self.pattern_freq_div[usize::from(self.pattern_bank)].min(self.pattern_latched_div);
         if mod_div < completion_intensity {
             return Err(violation(
                 device,
@@ -126,10 +131,12 @@ impl SilencerGuardState {
 
     pub fn note_mod_bank(&mut self, bank: u8) {
         self.mod_bank = bank;
+        self.mod_latched_div = self.mod_freq_div[usize::from(bank)];
     }
 
     pub fn note_pattern_bank(&mut self, bank: u8) {
         self.pattern_bank = bank;
+        self.pattern_latched_div = self.pattern_freq_div[usize::from(bank)];
     }
 
     pub fn apply_completion(
@@ -234,7 +241,7 @@ mod tests {
     }
 
     #[test]
-    fn change_bank_uses_target_bank_divider() {
+    fn activate_bank_uses_target_bank_divider() {
         let mut g = SilencerGuardState::boot_default();
         g.note_mod_div(1, 5);
         g.apply_completion(10, 40, true);

@@ -64,7 +64,7 @@ internal static class Sample
             size: (uint)patterns.Length,
             loopBehavior: option.LoopBehavior
         );
-        new ChangePatternBank(
+        new ActivatePatternBank(
             bank: option.Bank,
             transitionMode: option.TransitionMode
         );

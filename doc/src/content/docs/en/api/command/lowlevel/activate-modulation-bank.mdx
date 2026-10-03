@@ -1,5 +1,5 @@
 ---
-title: ChangeModulationBank
+title: ActivateModulationBank
 description: Switching the Modulation bank
 sidebar:
   order: 17
@@ -14,7 +14,7 @@ import csSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank.cs?ra
 import csFullSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
-`ChangeModulationBank` is a low-level command that switches the Modulation bank to be played.
+`ActivateModulationBank` is a low-level command that switches the Modulation bank to be played.
 
 ## API
 
@@ -41,7 +41,7 @@ The margin defaults to 10 ms.
 
 `Later` means "only write to the bank, do not transition".
 Specifying it as the `transition_mode` of `Modulation` / `FociStm` / `PatternStm` writes and configures the bank without sending the trailing bank change.
-Specifying it on `ChangeModulationBank` / `ChangePatternBank` themselves, which are the transition commands, is a build-time error.
+Specifying it on `ActivateModulationBank` / `ActivatePatternBank` themselves, which are the transition commands, is a build-time error.
 Because `Later` never transitions, it is also exempt from the `LoopBehavior` combination constraint.
 
 See [GPIO pins](/autd3-sdk/en/hardware/gpio/) for details on `Gpio(GpioIn)`.
@@ -51,6 +51,6 @@ For details on bank operation see the [bank switching tutorial](/autd3-sdk/en/ge
 
 ## Example
 
-`ChangeModulationBank` is sent after preparing the bank with `WriteModulationBuffer` + `ConfigModulation` to switch the playback target.
+`ActivateModulationBank` is sent after preparing the bank with `WriteModulationBuffer` + `ConfigModulation` to switch the playback target.
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

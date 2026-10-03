@@ -3,10 +3,10 @@ use std::f32::consts::PI;
 
 use anyhow::Result;
 
-use autd3_rs::commands::{ConfigPattern, SetSilencer, WritePatternBuffer};
+use autd3_rs::commands::{ActivatePatternBank, ConfigPattern, SetSilencer, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
-use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 use autd3_rs::{Client, ClientConfig, Driver, Frames, MAX_INFLIGHT, ResponseFuture};
 use autd3_rs::udp::emulator::UdpEmulator;
 
@@ -35,6 +35,10 @@ async fn main() -> Result<()> {
                 config: SamplingConfig::FREQ_40K,
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
+            })
+            .push(ActivatePatternBank {
+                bank: PatternBank::B0,
+                transition_mode: TransitionMode::Immediate,
             });
         for frame in &builder.build()? {
             client.send_checked(frame).await?;

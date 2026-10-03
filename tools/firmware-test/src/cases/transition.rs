@@ -3,7 +3,7 @@ use core::f32::consts::PI;
 use anyhow::Result;
 
 use autd3_rs::commands::{
-    ChangePatternBank, EmulateGpioIn, FociStm, FociStmOption, Modulation, SetSilencer,
+    ActivatePatternBank, EmulateGpioIn, FociStm, FociStmOption, Modulation, SetSilencer,
 };
 use autd3_rs::geometry::{Point3, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
@@ -30,12 +30,12 @@ fn circle_foci(center: Point3<f32>) -> Vec<ControlPoints<1>> {
         .collect()
 }
 
-async fn change_bank(
+async fn activate_bank(
     ctx: &Ctx<'_>,
     bank: PatternBank,
     transition_mode: TransitionMode,
 ) -> Result<()> {
-    ctx.send(ChangePatternBank {
+    ctx.send(ActivatePatternBank {
         bank,
         transition_mode,
     })
@@ -75,7 +75,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     .await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
     let at = SysTime::from_nanos(SysTime::now()?.sys_time() + 2_000_000_000);
-    change_bank(
+    activate_bank(
         ctx,
         PatternBank::B1,
         TransitionMode::SysTime {
@@ -89,7 +89,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await;
 
-    change_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
+    activate_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
     wait_enter("The 0.5 Hz STM is applied again").await;
 
     write_foci_bank(
@@ -100,7 +100,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
         LoopBehavior::ONCE,
     )
     .await?;
-    change_bank(ctx, PatternBank::B1, TransitionMode::Gpio(GpioIn::I0)).await?;
+    activate_bank(ctx, PatternBank::B1, TransitionMode::Gpio(GpioIn::I0)).await?;
     wait_enter("Press Enter when the focus reaches the device's left edge").await;
     ctx.send(EmulateGpioIn {
         values: [true, false, false, false],

@@ -19,7 +19,7 @@ use autd3_rs_core::BusStats;
 
 use crate::telemetry::Telemetry;
 use autd3_cpu_wire::Mode;
-use autd3_cpu_wire::payload::WritePatternFusedPayload;
+use autd3_cpu_wire::payload::WritePatternRawPayload;
 
 use super::{Client, ClientConfig};
 
@@ -243,21 +243,19 @@ fn slave_frame(slave: &mut Slave, frame: &[u8]) -> bool {
             slave.value = read_value(slave, parsed.cmd);
             0
         }
-        Cmd::WritePatternFused => {
-            let start = size_of::<WritePatternFusedPayload>() + Autd3::NUM_TRANSDUCERS;
+        Cmd::WritePatternRaw => {
+            let start = size_of::<WritePatternRawPayload>() + Autd3::NUM_TRANSDUCERS;
             let end = start + Autd3::NUM_TRANSDUCERS;
             slave.muted = parsed.payload[start..end].iter().all(|&b| b == 0);
             0
         }
-        Cmd::WritePatternRaw
-        | Cmd::WriteFociBuffer
+        Cmd::WriteFociBuffer
         | Cmd::WritePatternPhase
         | Cmd::WriteModulationBuffer
-        | Cmd::WriteModulationFused
         | Cmd::ConfigModulation
         | Cmd::ConfigPattern
-        | Cmd::ChangePatternBank
-        | Cmd::ChangeModulationBank
+        | Cmd::ActivatePatternBank
+        | Cmd::ActivateModulationBank
         | Cmd::SetSilencer
         | Cmd::SetPhaseCorrection
         | Cmd::SetPulseWidthTable
@@ -1757,7 +1755,7 @@ async fn stop_mutes_via_a_null_pattern() {
     assert!(
         s.sent_log
             .iter()
-            .any(|(_, cmd)| *cmd == Cmd::WritePatternFused)
+            .any(|(_, cmd)| *cmd == Cmd::WritePatternRaw)
     );
     assert!(
         !s.sent_log.iter().any(|(_, cmd)| *cmd == Cmd::SetOutputMask),
@@ -1782,7 +1780,7 @@ fn distinct_pattern_frames(slave: &Arc<StdMutex<Slave>>) -> usize {
         .unwrap()
         .sent_log
         .iter()
-        .filter(|(_, cmd)| *cmd == Cmd::WritePatternFused)
+        .filter(|(_, cmd)| *cmd == Cmd::WritePatternRaw)
         .map(|(seq, _)| *seq)
         .collect();
     seqs.sort_unstable();

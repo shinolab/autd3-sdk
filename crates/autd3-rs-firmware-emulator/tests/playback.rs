@@ -45,7 +45,7 @@ fn modulation_buffer_and_index_follow_time() {
     );
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ChangeModulationBank, &change))
+            .send(&frame(2, Cmd::ActivateModulationBank, &change))
             .status,
         0
     );
@@ -89,7 +89,7 @@ fn modulation_finite_loop_stops_after_rep() {
     device.send(&frame(0, Cmd::Reset, &[]));
     device.send(&frame(0, Cmd::WriteModulationBuffer, &write));
     device.send(&frame(1, Cmd::ConfigModulation, &config));
-    device.send(&frame(2, Cmd::ChangeModulationBank, &change));
+    device.send(&frame(2, Cmd::ActivateModulationBank, &change));
 
     let mut indices = Vec::new();
     for i in 0..24u64 {
@@ -141,7 +141,7 @@ fn sys_time_transition_within_margin_is_rejected() {
         device
             .send(&frame(
                 2,
-                Cmd::ChangeModulationBank,
+                Cmd::ActivateModulationBank,
                 &change(sys_time + MARGIN_NS - 1)
             ))
             .status,
@@ -153,7 +153,7 @@ fn sys_time_transition_within_margin_is_rejected() {
         device
             .send(&frame(
                 3,
-                Cmd::ChangeModulationBank,
+                Cmd::ActivateModulationBank,
                 &change(sys_time + MARGIN_NS)
             ))
             .status,
@@ -189,7 +189,7 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
     device.send(&frame(1, Cmd::ConfigModulation, &config));
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ChangeModulationBank, &change))
+            .send(&frame(2, Cmd::ActivateModulationBank, &change))
             .status,
         0
     );

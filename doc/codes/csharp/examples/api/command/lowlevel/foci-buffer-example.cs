@@ -47,7 +47,7 @@ builder.Push(new ConfigFociStm(
     soundSpeed: 340.0f * m / s,
     loopBehavior: LoopBehavior.Infinite
 ));
-builder.Push(new ChangePatternBank(
+builder.Push(new ActivatePatternBank(
     bank: bank,
     transitionMode: TransitionMode.Immediate
 ));

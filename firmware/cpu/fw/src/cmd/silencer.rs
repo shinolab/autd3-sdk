@@ -23,6 +23,8 @@ pub(crate) struct SilencerGuard {
     pub(crate) pattern_freq_div: [Cell<u16>; NUM_BANKS],
     pub(crate) mod_bank: Cell<u8>,
     pub(crate) pattern_bank: Cell<u8>,
+    pub(crate) mod_latched_div: Cell<u16>,
+    pub(crate) pattern_latched_div: Cell<u16>,
 }
 
 impl SilencerGuard {
@@ -35,6 +37,8 @@ impl SilencerGuard {
             pattern_freq_div: [const { Cell::new(0xFFFF) }; NUM_BANKS],
             mod_bank: Cell::new(0),
             pattern_bank: Cell::new(0),
+            mod_latched_div: Cell::new(0xFFFF),
+            pattern_latched_div: Cell::new(0xFFFF),
         }
     }
 
@@ -52,6 +56,8 @@ impl SilencerGuard {
         }
         self.mod_bank.set(0);
         self.pattern_bank.set(0);
+        self.mod_latched_div.set(0xFFFF);
+        self.pattern_latched_div.set(0xFFFF);
     }
 
     pub(crate) fn violates_mod_div(&self, divider: u16) -> bool {
@@ -77,10 +83,13 @@ impl Cpu {
             self.silencer.strict_mode.set(false);
         } else {
             if (flag & SILENCER_FLAG_STRICT_MODE) != 0 {
-                let mod_div =
-                    self.silencer.mod_freq_div[self.silencer.mod_bank.get() as usize].get();
-                let pattern_div =
-                    self.silencer.pattern_freq_div[self.silencer.pattern_bank.get() as usize].get();
+                let mod_div = self.silencer.mod_freq_div[self.silencer.mod_bank.get() as usize]
+                    .get()
+                    .min(self.silencer.mod_latched_div.get());
+                let pattern_div = self.silencer.pattern_freq_div
+                    [self.silencer.pattern_bank.get() as usize]
+                    .get()
+                    .min(self.silencer.pattern_latched_div.get());
                 if mod_div < completion_steps_intensity
                     || pattern_div < completion_steps_intensity
                     || pattern_div < completion_steps_phase

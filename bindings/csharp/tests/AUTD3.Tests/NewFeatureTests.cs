@@ -308,11 +308,11 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void ABankChangeRefusesToNotTransition()
+        public void ABankActivationRefusesToNotTransition()
         {
             using var geometry = SingleDevice();
             using var builder = new DatagramBuilder(geometry);
-            builder.Push(new ChangeModulationBank(ModulationBank.B1, TransitionMode.Later));
+            builder.Push(new ActivateModulationBank(ModulationBank.B1, TransitionMode.Later));
             var e = Assert.Throws<Autd3Exception>(() => builder.Build());
             Assert.Contains("Later", e.Message);
         }

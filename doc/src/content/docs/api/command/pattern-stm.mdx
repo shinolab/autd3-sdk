@@ -49,7 +49,7 @@ import { excerpt } from "@lib/excerpt";
 | `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`             | ループ回数                   |
 | `transition_mode` | `TransitionMode` | `TransitionMode::Immediate`          | バンク切替時の遷移タイミング |
 
-`loop_behavior` と `transition_mode` の挙動は[再生制御](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) を参照.
+`loop_behavior` と `transition_mode` の挙動は[再生制御](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) を参照.
 
 ## 転送形式
 
@@ -65,7 +65,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## 等価な低レベルコマンド
 
-`PatternStm` は内部で [WritePatternPhase](/autd3-sdk/api/command/lowlevel/write-pattern-phase/) または [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) (各 index) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つへ展開される.
+`PatternStm` は内部で [WritePatternPhase](/autd3-sdk/api/command/lowlevel/write-pattern-phase/) または [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) (各 index) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つへ展開される.
 以下は `intensities` が一様値のときの `PatternStm::new(freq, &phases, intensities, option)` と等価な組み合わせである.
 `intensities` が振動子ごとの値のときは `WritePatternPhase` の代わりに `WritePatternBuffer` が各 index に使われる.
 

@@ -62,6 +62,19 @@ const LATCH_MASK: u16 = fw::CTL_FLAG_MOD_SET
     | fw::CTL_FLAG_DEBUG_SET
     | fw::CTL_FLAG_SYNC_SET;
 
+const MOD_CONFIG_REGS: [u16; 3] = [
+    fw::ADDR_MOD_CYCLE0,
+    fw::ADDR_MOD_FREQ_DIV0,
+    fw::ADDR_MOD_REP0,
+];
+const PATTERN_CONFIG_REGS: [u16; 6] = [
+    fw::ADDR_PATTERN_MODE0,
+    fw::ADDR_PATTERN_CYCLE0,
+    fw::ADDR_PATTERN_FREQ_DIV0,
+    fw::ADDR_PATTERN_SOUND_SPEED0,
+    fw::ADDR_PATTERN_NUM_FOCI0,
+    fw::ADDR_PATTERN_REP0,
+];
 const CTL_FLAG_MOD_SET: u16 = fw::CTL_FLAG_MOD_SET;
 const CTL_FLAG_PATTERN_SET: u16 = fw::CTL_FLAG_PATTERN_SET;
 const CTL_FLAG_GPIO_IN: [u16; 4] = [
@@ -79,6 +92,7 @@ const fn reg(a: u16) -> usize {
 pub struct FpgaEmulator {
     num_transducers: usize,
     controller: Box<[u16; 256]>,
+    latched_config: Box<[u16; 256]>,
     phase_corr: Box<[u16; 256]>,
     output_mask: Box<[u16; OUTPUT_MASK_WORDS]>,
     pwe: Box<[u16; PWE_TABLE_SIZE]>,
@@ -111,6 +125,7 @@ impl FpgaEmulator {
         Self {
             num_transducers,
             controller,
+            latched_config: Box::new([0u16; 256]),
             phase_corr: Box::new([0u16; 256]),
             output_mask: Box::new([0u16; OUTPUT_MASK_WORDS]),
             pwe: Box::new([0u16; PWE_TABLE_SIZE]),
@@ -229,9 +244,11 @@ impl FpgaEmulator {
                     }
                     self.controller[reg(fw::ADDR_CTL_FLAG)] = value & !LATCH_MASK;
                     if value & CTL_FLAG_MOD_SET != 0 {
+                        self.latch_config(&MOD_CONFIG_REGS);
                         self.arm_mod_swapchain();
                     }
                     if value & CTL_FLAG_PATTERN_SET != 0 {
+                        self.latch_config(&PATTERN_CONFIG_REGS);
                         self.arm_pattern_swapchain();
                     }
                 } else {
@@ -282,10 +299,17 @@ impl FpgaEmulator {
             .sum()
     }
 
+    fn latch_config(&mut self, regs: &[u16]) {
+        for base in regs {
+            let range = reg(*base)..reg(*base) + NUM_BANKS;
+            self.latched_config[range.clone()].copy_from_slice(&self.controller[range]);
+        }
+    }
+
     fn arm_mod_swapchain(&mut self) {
         let req = self.controller[reg(fw::ADDR_MOD_REQ_RD_BANK)] as usize;
-        let rep = self.controller[reg(fw::ADDR_MOD_REP0) + req];
-        let freq_div = self.controller[reg(fw::ADDR_MOD_FREQ_DIV0) + req];
+        let rep = self.latched_config[reg(fw::ADDR_MOD_REP0) + req];
+        let freq_div = self.latched_config[reg(fw::ADDR_MOD_FREQ_DIV0) + req];
         let cycle = self.modulation_cycle(req);
         let mode = self.controller[reg(fw::ADDR_MOD_TRANSITION_MODE)] as u8;
         let value = self.reg_u64(reg(fw::ADDR_MOD_TRANSITION_VALUE_0));
@@ -295,8 +319,8 @@ impl FpgaEmulator {
 
     fn arm_pattern_swapchain(&mut self) {
         let req = self.controller[reg(fw::ADDR_PATTERN_REQ_RD_BANK)] as usize;
-        let rep = self.controller[reg(fw::ADDR_PATTERN_REP0) + req];
-        let freq_div = self.controller[reg(fw::ADDR_PATTERN_FREQ_DIV0) + req];
+        let rep = self.latched_config[reg(fw::ADDR_PATTERN_REP0) + req];
+        let freq_div = self.latched_config[reg(fw::ADDR_PATTERN_FREQ_DIV0) + req];
         let cycle = self.pattern_cycle(req);
         let mode = self.controller[reg(fw::ADDR_PATTERN_TRANSITION_MODE)] as u8;
         let value = self.reg_u64(reg(fw::ADDR_PATTERN_TRANSITION_VALUE_0));
@@ -510,27 +534,27 @@ impl FpgaEmulator {
 
     #[must_use]
     pub fn modulation_cycle(&self, bank: usize) -> usize {
-        self.controller[reg(fw::ADDR_MOD_CYCLE0) + bank] as usize + 1
+        self.latched_config[reg(fw::ADDR_MOD_CYCLE0) + bank] as usize + 1
     }
 
     #[must_use]
     pub fn modulation_freq_div(&self, bank: usize) -> u16 {
-        self.controller[reg(fw::ADDR_MOD_FREQ_DIV0) + bank]
+        self.latched_config[reg(fw::ADDR_MOD_FREQ_DIV0) + bank]
     }
 
     #[must_use]
     pub fn pattern_cycle(&self, bank: usize) -> usize {
-        self.controller[reg(fw::ADDR_PATTERN_CYCLE0) + bank] as usize + 1
+        self.latched_config[reg(fw::ADDR_PATTERN_CYCLE0) + bank] as usize + 1
     }
 
     #[must_use]
     pub fn pattern_freq_div(&self, bank: usize) -> u16 {
-        self.controller[reg(fw::ADDR_PATTERN_FREQ_DIV0) + bank]
+        self.latched_config[reg(fw::ADDR_PATTERN_FREQ_DIV0) + bank]
     }
 
     #[must_use]
     pub fn pattern_mode(&self, bank: usize) -> u16 {
-        self.controller[reg(fw::ADDR_PATTERN_MODE0) + bank]
+        self.latched_config[reg(fw::ADDR_PATTERN_MODE0) + bank]
     }
 
     #[must_use]

@@ -15,11 +15,11 @@ Guidelines for drawing out performance in situations that demand throughput, suc
 
 ## Composite Commands and Low-Level Commands
 
-[Pattern](/autd3-sdk/en/api/command/pattern/) is a composite command that performs the buffer write, the playback configuration and the bank switch together, but these are fused into a single frame.
-It therefore costs the same number of frames as one low-level command, so for a plain focal point update you may send `Pattern` itself at high frequency.
+[Pattern](/autd3-sdk/en/api/command/pattern/) is a composite command that performs the buffer write, the playback configuration and the bank switch together, and it expands into these three frames every time it is sent.
 
 However, once the [bank](/autd3-sdk/en/getting-started/tutorial/bank/) is set, all that is needed for a per-frame focal point update is rewriting the buffer, that is, only `WritePatternBuffer`.
-Sending only `WritePatternBuffer` skips the per-frame playback configuration and bank switch, making the per-frame work on the device lighter.
+Sending only `WritePatternBuffer` skips the playback configuration and bank switch of every update, cutting one update from three frames to one.
+The playback configuration takes effect when `ActivatePatternBank` is sent, so the initial setup must include `ActivatePatternBank`.
 
 Set the bank once at the beginning. (You may use `Pattern` for the first time.)
 

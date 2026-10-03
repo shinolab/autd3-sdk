@@ -2,7 +2,7 @@ use core::num::NonZeroU16;
 
 use anyhow::Result;
 
-use autd3_rs::commands::{ChangePatternBank, ConfigModulation, ConfigPattern, SetSilencer};
+use autd3_rs::commands::{ActivatePatternBank, ConfigModulation, ConfigPattern, SetSilencer};
 use autd3_rs::value::{
     LoopBehavior, ModulationBank, PatternBank, SamplingConfig, SysTime, TransitionMode,
 };
@@ -111,7 +111,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
         "infinite loop + SyncIdx",
         {
             let mut b = ctx.client.datagram_builder();
-            b.push(ChangePatternBank {
+            b.push(ActivatePatternBank {
                 bank: PatternBank::B1,
                 transition_mode: TransitionMode::SyncIdx,
             });
@@ -127,7 +127,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
         "SysTime in the past",
         {
             let mut b = ctx.client.datagram_builder();
-            b.push(ChangePatternBank {
+            b.push(ActivatePatternBank {
                 bank: PatternBank::B1,
                 transition_mode: TransitionMode::SysTime {
                     time: SysTime::from_nanos(0),

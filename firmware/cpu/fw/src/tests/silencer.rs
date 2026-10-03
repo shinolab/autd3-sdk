@@ -10,7 +10,7 @@ use crate::params::{
     SILENCER_FLAG_FIXED_UPDATE_RATE_MODE,
 };
 use crate::proto::{Cmd, Error, OUTPUT_MASK_WORDS};
-use crate::tests::builders::{change_mod_bank, config_mod, config_pattern, set_silencer};
+use crate::tests::builders::{activate_mod_bank, config_mod, config_pattern, set_silencer};
 use crate::tests::mock::{Frame, Harness};
 
 #[test]
@@ -178,6 +178,23 @@ fn strict_silencer_rejected_when_active_sampling_too_fast() {
 }
 
 #[test]
+fn strict_silencer_rejected_while_a_too_fast_divider_is_still_latched() {
+    let mut h = Harness::new();
+    h.deliver(&config_mod(0, 0, 5, 100));
+    h.deliver(&activate_mod_bank(1, 0, TransitionMode::Immediate, 0));
+    assert_eq!(h.status(), 0);
+    h.deliver(&config_mod(2, 0, 100, 100));
+    assert_eq!(h.status(), 0);
+
+    h.deliver(&set_silencer(3, SILENCER_FLAG_STRICT_MODE, 256, 256, 8, 40));
+    assert_eq!(h.status(), Error::InvalidSilencerSetting as u8);
+
+    h.deliver(&activate_mod_bank(4, 0, TransitionMode::Immediate, 0));
+    h.deliver(&set_silencer(5, SILENCER_FLAG_STRICT_MODE, 256, 256, 8, 40));
+    assert_eq!(h.status(), 0);
+}
+
+#[test]
 fn fixed_update_rate_mode_releases_guard() {
     let mut h = Harness::new();
     h.deliver(&set_silencer(
@@ -220,7 +237,7 @@ fn strict_silencer_rejects_switch_to_too_fast_bank() {
     ));
     assert_eq!(h.status(), 0);
 
-    h.deliver(&change_mod_bank(2, 1, TransitionMode::Immediate, 0));
+    h.deliver(&activate_mod_bank(2, 1, TransitionMode::Immediate, 0));
     assert_eq!(h.status(), Error::InvalidSilencerSetting as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 }
@@ -263,7 +280,7 @@ fn clear_restores_silencer_and_bank_baseline() {
     assert_eq!(h.status(), 0);
     h.deliver(&config_mod(1, 1, 50, 100));
     assert_eq!(h.status(), 0);
-    h.deliver(&change_mod_bank(2, 1, TransitionMode::Immediate, 0));
+    h.deliver(&activate_mod_bank(2, 1, TransitionMode::Immediate, 0));
     assert_eq!(h.status(), 0);
 
     h.deliver(&Frame::new(3, Cmd::Clear));

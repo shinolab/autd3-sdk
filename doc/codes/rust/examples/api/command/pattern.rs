@@ -1,7 +1,7 @@
 use core::num::NonZeroU16;
 
 use autd3_rs::DatagramBuilder;
-use autd3_rs::commands::{ChangePatternBank, ConfigPattern, Pattern, WritePatternBuffer};
+use autd3_rs::commands::{ActivatePatternBank, ConfigPattern, Pattern, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 
@@ -36,7 +36,7 @@ fn main() {
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
     };
-    ChangePatternBank {
+    ActivatePatternBank {
         bank,
         transition_mode,
     };

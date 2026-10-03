@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use autd3_rs::commands::{
-    ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WriteModulationBuffer, WritePatternBuffer,
+    ActivatePatternBank, ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WriteModulationBuffer,
+    WritePatternBuffer,
 };
 use autd3_rs::driver::Poll;
 use autd3_rs::geometry::{Autd3, Geometry};
@@ -14,10 +15,10 @@ use autd3_rs::params::MOD_BUFFER_SAMPLES;
 use autd3_rs::protocol::FRAME_HEADER_BYTES;
 use autd3_rs::udp::emulator::UdpEmulator;
 use autd3_rs::value::{
-    Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
+    Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
-    BusStats, Client, ClientConfig, Driver, Error as ClientError, Frames, ResponseFuture,
+    BusStats, Client, ClientConfig, Driver, Error as ClientError, Frame, Frames, ResponseFuture,
     StateChecker, Telemetry, TelemetryCounters, TransportOption,
 };
 
@@ -49,6 +50,7 @@ struct Sender {
     intensities: Vec<Vec<Intensity>>,
     modulation: Vec<u8>,
     tick: u8,
+    next_frame: usize,
 }
 
 impl Sender {
@@ -75,6 +77,7 @@ impl Sender {
                 Vec::new()
             },
             tick: 0,
+            next_frame: 0,
         };
         if cli.command == Command::Nop {
             let mut builder = client.datagram_builder();
@@ -134,6 +137,19 @@ impl Sender {
 }
 
 impl Sender {
+    fn next_frame(&mut self, client: &Client) -> Result<Frame<'_>> {
+        if self.next_frame >= self.frames.len() {
+            self.prepare(client)?;
+            self.next_frame = 0;
+        }
+        let frame = self
+            .frames
+            .frame(self.next_frame)
+            .context("the command built no frame")?;
+        self.next_frame += 1;
+        Ok(frame)
+    }
+
     fn frame_bytes(&self) -> usize {
         self.frames.frame(0).map_or(FRAME_HEADER_BYTES, |frame| {
             frame
@@ -158,12 +174,17 @@ fn fill_phases(phases: &mut [Vec<Phase>], tick: u8) {
 
 async fn send_config_pattern_once(client: &Client) -> Result<()> {
     let mut builder = client.datagram_builder();
-    builder.push(ConfigPattern {
-        bank: PatternBank::B0,
-        config: SamplingConfig::FREQ_4K,
-        size: 1,
-        loop_behavior: LoopBehavior::Infinite,
-    });
+    builder
+        .push(ConfigPattern {
+            bank: PatternBank::B0,
+            config: SamplingConfig::FREQ_4K,
+            size: 1,
+            loop_behavior: LoopBehavior::Infinite,
+        })
+        .push(ActivatePatternBank {
+            bank: PatternBank::B0,
+            transition_mode: TransitionMode::Immediate,
+        });
     for frame in &builder.build()? {
         client.send_checked(frame).await?;
     }
@@ -322,7 +343,7 @@ async fn run_with_option(
     if cli.command.is_pattern() {
         send_config_pattern_once(&client)
             .await
-            .context("initial ConfigPattern")?;
+            .context("initial ConfigPattern + ActivatePatternBank")?;
     }
     if cli.gpio_base_signal {
         send_set_gpio_out_once(&client, GpioOut::BaseSignal)
@@ -525,12 +546,9 @@ async fn run_streaming(
         let need_send = streaming_need_send(cli, sends_issued, start);
 
         if need_send && pending.len() < max_inflight {
-            sender.prepare(client)?;
+            let frame = sender.next_frame(client)?;
             let sent_at = Instant::now();
-            let fut = match client
-                .send(sender.frames.frame(0).expect("one frame"))
-                .await
-            {
+            let fut = match client.send(frame).await {
                 Ok(fut) => fut,
                 Err(ClientError::DriverClosed) => {
                     eprintln!("the driver closed unexpectedly");

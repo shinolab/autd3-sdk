@@ -140,18 +140,18 @@ namespace AUTD3
         }
     }
 
-    public sealed class ChangePatternBank : ICommand
+    public sealed class ActivatePatternBank : ICommand
     {
         private readonly PatternBank _bank;
         private readonly TransitionMode _transitionMode;
 
-        public ChangePatternBank(PatternBank bank, TransitionMode? transitionMode = null)
+        public ActivatePatternBank(PatternBank bank, TransitionMode? transitionMode = null)
         {
             _bank = bank;
             _transitionMode = transitionMode ?? TransitionMode.Immediate;
         }
 
         IntPtr ICommand.CreateOp() =>
-            NativePattern.autd3_op_change_pattern_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value, _transitionMode.MarginNs);
+            NativePattern.autd3_op_activate_pattern_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value, _transitionMode.MarginNs);
     }
 }

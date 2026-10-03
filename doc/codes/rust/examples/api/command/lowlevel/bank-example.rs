@@ -1,6 +1,6 @@
 use core::num::NonZeroU16;
 
-use autd3_rs::commands::{ChangePatternBank, ConfigPattern, WritePatternBuffer};
+use autd3_rs::commands::{ActivatePatternBank, ConfigPattern, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
     });
-    builder.push(ChangePatternBank {
+    builder.push(ActivatePatternBank {
         bank,
         transition_mode: TransitionMode::Immediate,
     });

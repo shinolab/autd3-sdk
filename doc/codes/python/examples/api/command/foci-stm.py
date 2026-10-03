@@ -1,6 +1,6 @@
 import numpy as np
 
-from autd3.commands import ChangePatternBank, ConfigFociStm, FociStm, FociStmOption, StmConfig, WriteFociBuffer, circle, line
+from autd3.commands import ActivatePatternBank, ConfigFociStm, FociStm, FociStmOption, StmConfig, WriteFociBuffer, circle, line
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
@@ -56,7 +56,7 @@ ConfigFociStm(
     sound_speed=option.sound_speed,
     loop_behavior=option.loop_behavior,
 )
-ChangePatternBank(
+ActivatePatternBank(
     bank=option.bank,
     transition_mode=option.transition_mode,
 )

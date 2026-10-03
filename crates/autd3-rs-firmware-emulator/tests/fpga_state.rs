@@ -31,7 +31,7 @@ fn config_modulation(bank: u8, size: usize, rep: u16) -> Vec<u8> {
     c
 }
 
-fn change_mod_bank(bank: u8) -> Vec<u8> {
+fn activate_mod_bank(bank: u8) -> Vec<u8> {
     let mut c = vec![bank, IMMEDIATE];
     c.extend_from_slice(&0u64.to_le_bytes());
     c.extend_from_slice(&0u32.to_le_bytes());
@@ -55,7 +55,7 @@ fn config_pattern(bank: u8, size: usize, rep: u16) -> Vec<u8> {
     c
 }
 
-fn change_pattern_bank(bank: u8) -> Vec<u8> {
+fn activate_pattern_bank(bank: u8) -> Vec<u8> {
     let mut c = vec![bank, IMMEDIATE];
     c.extend_from_slice(&0u64.to_le_bytes());
     c.extend_from_slice(&0u32.to_le_bytes());
@@ -104,7 +104,11 @@ fn modulation_bank_switch_reflects_in_state() {
     ));
     assert_eq!(0, read_state(&mut device, 2) & BIT_MOD_BANK);
 
-    device.send(&frame(3, Cmd::ChangeModulationBank, &change_mod_bank(1)));
+    device.send(&frame(
+        3,
+        Cmd::ActivateModulationBank,
+        &activate_mod_bank(1),
+    ));
     assert_eq!(1, device.fpga().current_mod_bank());
     assert_eq!(BIT_MOD_BANK, read_state(&mut device, 4) & BIT_MOD_BANK);
 }
@@ -122,7 +126,11 @@ fn pattern_bank_switch_reflects_in_state() {
     ));
     assert_eq!(0, read_state(&mut device, 2) & BIT_PATTERN_BANK);
 
-    device.send(&frame(3, Cmd::ChangePatternBank, &change_pattern_bank(1)));
+    device.send(&frame(
+        3,
+        Cmd::ActivatePatternBank,
+        &activate_pattern_bank(1),
+    ));
     assert_eq!(1, device.fpga().current_pattern_bank());
     let state = read_state(&mut device, 4);
     assert_eq!(BIT_PATTERN_BANK | BIT_PATTERN_MODE, state);
@@ -138,7 +146,11 @@ fn multi_index_pattern_reports_stm_mode() {
         Cmd::ConfigPattern,
         &config_pattern(0, 4, REP_INFINITE),
     ));
-    device.send(&frame(1, Cmd::ChangePatternBank, &change_pattern_bank(0)));
+    device.send(&frame(
+        1,
+        Cmd::ActivatePatternBank,
+        &activate_pattern_bank(0),
+    ));
 
     assert!(!device.fpga().is_pattern_mode());
     assert_eq!(0, read_state(&mut device, 2) & BIT_PATTERN_MODE);

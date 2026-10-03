@@ -2,8 +2,8 @@ use zerocopy::{FromBytes, Immutable, KnownLayout, TryFromBytes};
 
 use crate::Error;
 
-mod change_mod_bank;
-mod change_pattern_bank;
+mod activate_mod_bank;
+mod activate_pattern_bank;
 mod config_mod;
 mod config_pattern;
 mod firmware_info;
@@ -20,13 +20,11 @@ mod update_begin;
 mod update_chunk;
 mod write_foci;
 mod write_mod;
-mod write_mod_fused;
-mod write_pattern_fused;
 mod write_pattern_phase;
 mod write_pattern_raw;
 
-pub use change_mod_bank::ChangeModBankPayload;
-pub use change_pattern_bank::ChangePatternBankPayload;
+pub use activate_mod_bank::ActivateModBankPayload;
+pub use activate_pattern_bank::ActivatePatternBankPayload;
 pub use config_mod::ConfigModPayload;
 pub use config_pattern::{ConfigPatternPayload, EmissionType};
 pub use firmware_info::FirmwareInfo;
@@ -47,8 +45,6 @@ pub use update_begin::UpdateBeginPayload;
 pub use update_chunk::UpdateChunkPayload;
 pub use write_foci::WriteFociPayload;
 pub use write_mod::WriteModPayload;
-pub use write_mod_fused::WriteModulationFusedPayload;
-pub use write_pattern_fused::WritePatternFusedPayload;
 pub use write_pattern_phase::{PhaseDepth, WritePatternPhasePayload};
 pub use write_pattern_raw::WritePatternRawPayload;
 

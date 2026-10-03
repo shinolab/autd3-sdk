@@ -3,7 +3,7 @@ use core::num::NonZeroU16;
 use anyhow::Result;
 
 use autd3_rs::commands::{
-    ChangeModulationBank, ChangePatternBank, ConfigFociStm, ConfigModulation, ConfigPattern,
+    ActivateModulationBank, ActivatePatternBank, ConfigFociStm, ConfigModulation, ConfigPattern,
     Modulation, Pattern, SetSilencer, StmConfig, WriteFociBuffer, WriteModulationBuffer,
     WritePatternBuffer,
 };
@@ -71,8 +71,8 @@ pub async fn write_pattern_bank(ctx: &Ctx<'_>, bank: PatternBank, pattern: &Buff
     Ok(())
 }
 
-pub async fn change_pattern_bank(ctx: &Ctx<'_>, bank: PatternBank) -> Result<()> {
-    ctx.send(ChangePatternBank {
+pub async fn activate_pattern_bank(ctx: &Ctx<'_>, bank: PatternBank) -> Result<()> {
+    ctx.send(ActivatePatternBank {
         bank,
         transition_mode: TransitionMode::Immediate,
     })
@@ -203,8 +203,8 @@ pub async fn expect_firmware_error(
     }
 }
 
-pub async fn change_mod_bank(ctx: &Ctx<'_>, bank: ModulationBank) -> Result<()> {
-    ctx.send(ChangeModulationBank {
+pub async fn activate_mod_bank(ctx: &Ctx<'_>, bank: ModulationBank) -> Result<()> {
+    ctx.send(ActivateModulationBank {
         bank,
         transition_mode: TransitionMode::Immediate,
     })
@@ -242,8 +242,8 @@ pub async fn write_foci_bank(
     Ok(())
 }
 
-pub async fn change_pattern_bank_sync(ctx: &Ctx<'_>, bank: PatternBank) -> Result<()> {
-    ctx.send(ChangePatternBank {
+pub async fn activate_pattern_bank_sync(ctx: &Ctx<'_>, bank: PatternBank) -> Result<()> {
+    ctx.send(ActivatePatternBank {
         bank,
         transition_mode: TransitionMode::SyncIdx,
     })

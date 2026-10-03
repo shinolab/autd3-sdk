@@ -11,7 +11,7 @@ use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 use crate::Ctx;
 use crate::cases::ERR_INVALID_TRANSITION_MODE;
 use crate::cases::pattern_util::{
-    change_mod_bank, expect_firmware_error, focus_at, report_fpga_state, send_pattern_mod,
+    activate_mod_bank, expect_firmware_error, focus_at, report_fpga_state, send_pattern_mod,
     write_mod_bank,
 };
 use crate::io::wait_enter;
@@ -35,7 +35,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("No AM is applied").await;
     report_fpga_state(ctx, "B1 static", Some(ModulationBank::B1), None, None).await?;
 
-    change_mod_bank(ctx, ModulationBank::B0).await?;
+    activate_mod_bank(ctx, ModulationBank::B0).await?;
     wait_enter("AM is applied again").await;
     report_fpga_state(ctx, "back to B0", Some(ModulationBank::B0), None, None).await?;
 
@@ -45,7 +45,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("AM is still applied").await;
     report_fpga_state(ctx, "B0 stays active", Some(ModulationBank::B0), None, None).await?;
 
-    change_mod_bank(ctx, ModulationBank::B1).await?;
+    activate_mod_bank(ctx, ModulationBank::B1).await?;
     wait_enter("No AM is applied").await;
     report_fpga_state(ctx, "switch to B1", Some(ModulationBank::B1), None, None).await?;
 
@@ -71,7 +71,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
         .await?;
     wait_enter(&format!("A single pop is heard once every {period:?}")).await;
 
-    change_mod_bank(ctx, ModulationBank::B1).await?;
+    activate_mod_bank(ctx, ModulationBank::B1).await?;
 
     let saw_config = SamplingConfig::new(Nearest(256.0 * Hz));
     let ramp: Vec<u8> = (0..=255u8).collect();

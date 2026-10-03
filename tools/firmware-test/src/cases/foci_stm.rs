@@ -15,7 +15,7 @@ use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 use crate::Ctx;
 use crate::cases::ERR_INVALID_TRANSITION_MODE;
 use crate::cases::pattern_util::{
-    change_pattern_bank, change_pattern_bank_sync, expect_firmware_error, report_fpga_state,
+    activate_pattern_bank, activate_pattern_bank_sync, expect_firmware_error, report_fpga_state,
     write_foci_bank,
 };
 use crate::io::wait_enter;
@@ -76,7 +76,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("The STM frequency changed to 1 Hz").await;
     report_fpga_state(ctx, "B1 1Hz", None, Some(PatternBank::B1), Some(false)).await?;
 
-    change_pattern_bank(ctx, PatternBank::B0).await?;
+    activate_pattern_bank(ctx, PatternBank::B0).await?;
     wait_enter("The STM frequency returned to 0.5 Hz").await;
     report_fpga_state(ctx, "back to B0", None, Some(PatternBank::B0), Some(false)).await?;
 
@@ -92,7 +92,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
-    change_pattern_bank_sync(ctx, PatternBank::B1).await?;
+    activate_pattern_bank_sync(ctx, PatternBank::B1).await?;
     wait_enter("The trajectory reverses at the right edge, then stops after one cycle").await;
 
     let indices = MAX_FOCI_TOTAL / 8;

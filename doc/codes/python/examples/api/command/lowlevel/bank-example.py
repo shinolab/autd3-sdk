@@ -4,7 +4,7 @@ import threading
 import numpy as np
 
 from autd3 import Client, ClientConfig, Driver, UdpEmulator
-from autd3.commands import ChangePatternBank, ConfigPattern, WritePatternBuffer
+from autd3.commands import ActivatePatternBank, ConfigPattern, WritePatternBuffer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
@@ -45,7 +45,7 @@ async def main() -> None:
             )
         )
         builder.push(
-            ChangePatternBank(
+            ActivatePatternBank(
                 bank=bank,
                 transition_mode=TransitionMode.Immediate,
             )

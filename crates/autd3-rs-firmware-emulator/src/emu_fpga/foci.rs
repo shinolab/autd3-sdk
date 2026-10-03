@@ -85,12 +85,12 @@ fn read_focus(ram: &[u16], word_base: usize) -> u64 {
 impl FpgaEmulator {
     #[must_use]
     pub fn sound_speed(&self, bank: usize) -> u16 {
-        self.controller[fw::ADDR_PATTERN_SOUND_SPEED0 as usize + bank]
+        self.latched_config[fw::ADDR_PATTERN_SOUND_SPEED0 as usize + bank]
     }
 
     #[must_use]
     pub fn num_foci(&self, bank: usize) -> usize {
-        self.controller[fw::ADDR_PATTERN_NUM_FOCI0 as usize + bank] as usize
+        self.latched_config[fw::ADDR_PATTERN_NUM_FOCI0 as usize + bank] as usize
     }
 
     #[must_use]

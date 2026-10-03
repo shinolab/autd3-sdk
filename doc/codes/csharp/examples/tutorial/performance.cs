@@ -38,6 +38,10 @@ internal static class Sample
             size: 1,
             loopBehavior: LoopBehavior.Infinite
         ));
+        builder.Push(new ActivatePatternBank(
+            bank: PatternBank.B0,
+            transitionMode: TransitionMode.Immediate
+        ));
         foreach (var frame in builder.Build())
         {
             await client.SendCheckedAsync(frame);

@@ -11,7 +11,7 @@ use autd3_ffi_abi::{
     handle_mut, handle_ref, into_handle, slice_mut, slice_ref, take_handle, write_cstr, write_out,
 };
 use autd3_rs::commands::{
-    BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
+    ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, ConfigFociStm,
     ConfigModulation, ConfigPattern, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
     FociStm as CoreFociStm, FociStmOption, ForceFan, GpioOut, Modulation, Nop, PWE_TABLE_SIZE,
     Pattern, PatternIntensity, PatternStm, PatternStmOption, PhaseDepth, SetGpioOut, SetOutputMask,
@@ -508,7 +508,7 @@ pub enum Pending {
         sound_speed: Velocity,
         loop_behavior: LoopBehavior,
     },
-    ChangePatternBank {
+    ActivatePatternBank {
         bank: PatternBank,
         transition_mode: TransitionMode,
     },
@@ -523,7 +523,7 @@ pub enum Pending {
         size: u32,
         loop_behavior: LoopBehavior,
     },
-    ChangeModulationBank {
+    ActivateModulationBank {
         bank: ModulationBank,
         transition_mode: TransitionMode,
     },
@@ -829,7 +829,7 @@ pub unsafe extern "C" fn autd3_op_config_foci_stm(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_change_pattern_bank(
+pub extern "C" fn autd3_op_activate_pattern_bank(
     bank: u8,
     transition_mode: u8,
     transition_value: u64,
@@ -841,7 +841,7 @@ pub extern "C" fn autd3_op_change_pattern_bank(
     ) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::ChangePatternBank {
+    into_handle(Pending::ActivatePatternBank {
         bank,
         transition_mode,
     })
@@ -886,7 +886,7 @@ pub unsafe extern "C" fn autd3_op_config_modulation(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_change_modulation_bank(
+pub extern "C" fn autd3_op_activate_modulation_bank(
     bank: u8,
     transition_mode: u8,
     transition_value: u64,
@@ -898,7 +898,7 @@ pub extern "C" fn autd3_op_change_modulation_bank(
     ) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::ChangeModulationBank {
+    into_handle(Pending::ActivateModulationBank {
         bank,
         transition_mode,
     })
@@ -1274,10 +1274,10 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             loop_behavior: *loop_behavior,
         }
         .boxed(),
-        Pending::ChangePatternBank {
+        Pending::ActivatePatternBank {
             bank,
             transition_mode,
-        } => ChangePatternBank {
+        } => ActivatePatternBank {
             bank: *bank,
             transition_mode: *transition_mode,
         }
@@ -1300,10 +1300,10 @@ fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
             loop_behavior: *loop_behavior,
         }
         .boxed(),
-        Pending::ChangeModulationBank {
+        Pending::ActivateModulationBank {
             bank,
             transition_mode,
-        } => ChangeModulationBank {
+        } => ActivateModulationBank {
             bank: *bank,
             transition_mode: *transition_mode,
         }
@@ -1578,11 +1578,11 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                     loop_behavior: *loop_behavior,
                 });
             }
-            Pending::ChangePatternBank {
+            Pending::ActivatePatternBank {
                 bank,
                 transition_mode,
             } => {
-                core.push(ChangePatternBank {
+                core.push(ActivatePatternBank {
                     bank: *bank,
                     transition_mode: *transition_mode,
                 });
@@ -1607,11 +1607,11 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                     loop_behavior: *loop_behavior,
                 });
             }
-            Pending::ChangeModulationBank {
+            Pending::ActivateModulationBank {
                 bank,
                 transition_mode,
             } => {
-                core.push(ChangeModulationBank {
+                core.push(ActivateModulationBank {
                     bank: *bank,
                     transition_mode: *transition_mode,
                 });

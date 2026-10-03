@@ -1,8 +1,8 @@
 """Command / datagram types (mirrors ``autd3_rs::commands``)."""
 
 from ._autd3 import (
-    ChangeModulationBank,
-    ChangePatternBank,
+    ActivateModulationBank,
+    ActivatePatternBank,
     Clear,
     ConfigFociStm,
     ConfigModulation,
@@ -36,8 +36,8 @@ from ._autd3 import (
 )
 
 __all__ = [
-    "ChangeModulationBank",
-    "ChangePatternBank",
+    "ActivateModulationBank",
+    "ActivatePatternBank",
     "Clear",
     "ConfigFociStm",
     "ConfigModulation",

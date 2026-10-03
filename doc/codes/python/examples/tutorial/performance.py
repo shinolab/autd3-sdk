@@ -7,10 +7,10 @@ import numpy as np
 
 import autd3_pattern as pattern
 from autd3 import Client, ClientConfig, Driver, MAX_INFLIGHT, TransportOption
-from autd3.commands import ConfigPattern, SetSilencer, WritePatternBuffer
+from autd3.commands import ActivatePatternBank, ConfigPattern, SetSilencer, WritePatternBuffer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
-from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig
+from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 
 NUM_POINTS = 1000
 RADIUS_MM = 30.0
@@ -45,6 +45,12 @@ async def main() -> None:
                 config=SamplingConfig.FREQ_40K,
                 size=1,
                 loop_behavior=LoopBehavior.Infinite,
+            )
+        )
+        builder.push(
+            ActivatePatternBank(
+                bank=PatternBank.B0,
+                transition_mode=TransitionMode.Immediate,
             )
         )
         for frame in builder.build():

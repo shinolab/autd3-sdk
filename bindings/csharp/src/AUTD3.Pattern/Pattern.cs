@@ -302,7 +302,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_config_foci_stm(byte bank, IntPtr samplingConfig, uint size, byte numFoci, float soundSpeedMPerS, ushort rep);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_change_pattern_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+        internal static extern IntPtr autd3_op_activate_pattern_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_phase_depth_max_count(byte depth, out UIntPtr @out);

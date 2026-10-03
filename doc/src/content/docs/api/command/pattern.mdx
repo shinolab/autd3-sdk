@@ -52,11 +52,11 @@ patternの計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/patte
 
 ## 等価な低レベルコマンド
 
-`Pattern` は [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の 3 つと等価であり, これらは 1 フレームに融合して送られる.
+`Pattern` は [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つと等価であり, この順に 3 フレームへ展開して送られる.
 以下は `Pattern { bank, phases, intensities }` と等価な組み合わせである.
 
-`transition_mode` に `TransitionMode::Later` を指定した場合は融合せず, `WritePatternBuffer` + `ConfigPattern` の 2 フレームに分解して送る (`ChangePatternBank` を送らない).
-詳細は [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) の `TransitionMode` を参照.
+`transition_mode` に `TransitionMode::Later` を指定した場合は `WritePatternBuffer` + `ConfigPattern` の 2 フレームだけを送る (`ActivatePatternBank` を送らない).
+詳細は [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の `TransitionMode` を参照.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

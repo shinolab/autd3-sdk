@@ -3,7 +3,7 @@ use core::num::NonZeroU16;
 use anyhow::Result;
 
 use autd3_rs::commands::{
-    ChangePatternBank, ConfigPattern, PhaseDepth, WritePatternBuffer, WritePatternPhase,
+    ActivatePatternBank, ConfigPattern, PhaseDepth, WritePatternBuffer, WritePatternPhase,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
     // ANCHOR_END: config
     let transition_mode = TransitionMode::Immediate;
     // ANCHOR: change
-    ChangePatternBank {
+    ActivatePatternBank {
         bank,
         transition_mode,
     };

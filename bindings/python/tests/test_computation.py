@@ -594,7 +594,7 @@ def test_later_stages_a_bank_without_changing_it() -> None:
 
     builder = autd3.DatagramBuilder(geo)
     builder.push(
-        autd3.commands.ChangeModulationBank(
+        autd3.commands.ActivateModulationBank(
             autd3.value.ModulationBank.B1,
             transition_mode=autd3.value.TransitionMode.Later,
         )
@@ -673,7 +673,7 @@ def test_loop_behavior_and_transition_mode() -> None:
         )
     )
     builder.push(
-        autd3.commands.ChangePatternBank(
+        autd3.commands.ActivatePatternBank(
             autd3.value.PatternBank.B1,
             transition_mode=autd3.value.TransitionMode.Gpio(autd3.value.GpioIn.I1),
         )

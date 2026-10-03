@@ -1,5 +1,5 @@
-pub(crate) mod change_mod_bank;
-pub(crate) mod change_pattern_bank;
+pub(crate) mod activate_mod_bank;
+pub(crate) mod activate_pattern_bank;
 pub(crate) mod clear;
 pub(crate) mod config_mod;
 pub(crate) mod config_pattern;
@@ -17,8 +17,6 @@ pub(crate) mod sync;
 pub(crate) mod update;
 pub(crate) mod write_foci;
 pub(crate) mod write_mod;
-pub(crate) mod write_mod_fused;
-pub(crate) mod write_pattern_fused;
 pub(crate) mod write_pattern_phase;
 pub(crate) mod write_pattern_raw;
 
@@ -40,7 +38,7 @@ impl TransitionRequest {
     }
 }
 
-pub(crate) struct BankChange {
+pub(crate) struct BankActivation {
     pub(crate) bank: u8,
     pub(crate) transition_mode: TransitionMode,
     pub(crate) transition_value: u64,

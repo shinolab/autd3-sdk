@@ -6,7 +6,9 @@ use crate::params::{
     ADDR_FPGA_STATE, ADDR_MOD_REQ_RD_BANK, ADDR_VERSION_NUM_MAJOR, NUM_TRANSDUCERS,
 };
 use crate::proto::{Cmd, Error, FAILSAFE_TIMEOUT_MS, OUTPUT_MASK_WORDS, Telemetry};
-use crate::tests::builders::{change_mod_bank_with_margin, config_mod_rep, force_fan, output_mask};
+use crate::tests::builders::{
+    activate_mod_bank_with_margin, config_mod_rep, force_fan, output_mask,
+};
 use crate::tests::mock::{Frame, Harness};
 
 fn read_telemetry(h: &mut Harness, seq: u8) -> std::vec::Vec<u32> {
@@ -188,12 +190,12 @@ fn read_fpga_functions_returns_version_register_high_byte() {
 }
 
 #[test]
-fn change_bank_margin_overrides_default() {
+fn activate_bank_margin_overrides_default() {
     let mut h = Harness::new();
     h.deliver(&config_mod_rep(0, 1, 10, 100, 4));
     h.port.sys_time = 1_000_000_000;
 
-    h.deliver(&change_mod_bank_with_margin(
+    h.deliver(&activate_mod_bank_with_margin(
         1,
         1,
         TransitionMode::SysTime,
@@ -203,7 +205,7 @@ fn change_bank_margin_overrides_default() {
     assert_eq!(h.status(), Error::MissTransitionTime as u8);
     assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
-    h.deliver(&change_mod_bank_with_margin(
+    h.deliver(&activate_mod_bank_with_margin(
         2,
         1,
         TransitionMode::SysTime,

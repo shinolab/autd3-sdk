@@ -1,7 +1,7 @@
 use super::StmConfig;
 use crate::commands::Command;
 use crate::commands::operation::{
-    ChangePatternBank, ConfigPattern, PatternIntensity, PhaseDepth, WritePatternBuffers,
+    ActivatePatternBank, ConfigPattern, PatternIntensity, PhaseDepth, WritePatternBuffers,
     WritePatternPhase,
 };
 use crate::datagram::DatagramBuilder;
@@ -171,7 +171,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
             loop_behavior: self.option.loop_behavior,
         });
         if !self.option.transition_mode.is_later() {
-            builder.push(ChangePatternBank {
+            builder.push(ActivatePatternBank {
                 bank,
                 transition_mode: self.option.transition_mode,
             });
@@ -225,7 +225,7 @@ mod tests {
         );
 
         let chg = datagrams.frame(3).unwrap();
-        assert_eq!(chg.datagrams()[0].cmd, Cmd::ChangePatternBank);
+        assert_eq!(chg.datagrams()[0].cmd, Cmd::ActivatePatternBank);
         assert_eq!(chg.datagrams()[0].payload[1], 0xFF, "IMMEDIATE");
     }
 

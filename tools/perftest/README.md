@@ -58,11 +58,12 @@ cargo xtask tool perftest --mem-profile -- --devices 2 --count 10000
 |------------------------|----------------|----------------|----------|
 | `nop`                  | no             | no             | the communication path only; the firmware acks without touching a single FPGA register |
 | `write-pattern-buffer` | yes            | no             | communication + FPGA RAM streaming |
-| `pattern` (default)    | yes            | once per frame | the production path: the fused write+config+bank-change |
+| `pattern` (default)    | yes            | once per pattern | the production path: write + config + bank-activation, 3 frames |
 
-Every frame is the same size on the wire regardless of command, and the fused `pattern` is a single
-frame, so all three are directly comparable frame-for-frame. The differences are the FPGA RAM write
-and the per-frame latch.
+`nop` and `write-pattern-buffer` are one frame per sample. `pattern` is three frames (write, config,
+bank change), of which only the bank change latches: in `stop-and-wait` one sample is
+the whole pattern (three round trips), in `streaming` every frame is its own sample, so `--count`
+counts frames and three of them make one pattern.
 
 ## Modes
 

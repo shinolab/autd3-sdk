@@ -65,7 +65,7 @@ pub struct Cli {
         default_value_t = Command::Pattern,
         help = "Command to measure. nop touches no FPGA register (pure communication path), \
                 write-pattern-buffer writes FPGA RAM without latching, \
-                pattern is the fused write+config+bank-change that latches CTL_FLAG once per frame, \
+                pattern is the production write + config + bank-activation (3 frames, 1 CTL_FLAG latch), \
                 write-modulation-buffer writes the whole modulation buffer of bank 1 per sample \
                 (its frames pipelined up to --max-inflight; stop-and-wait only)."
     )]

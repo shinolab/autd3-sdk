@@ -15,6 +15,8 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/foci-buffe
 import { excerpt } from "@lib/excerpt";
 
 `ConfigFociStm` は, Foci STM バンクの再生パラメータを設定する低レベルコマンド.
+設定は書き込まれるだけで, 再生には [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) を送った時点で反映される.
+再生中のバンクの設定を変える場合も, 同じバンクを指す `ActivatePatternBank` を続けて送る.
 
 ## API
 
@@ -29,13 +31,13 @@ import { excerpt } from "@lib/excerpt";
 | `sound_speed`   | `Velocity`       | 焦点計算に使う音速                                 |
 | `loop_behavior` | `LoopBehavior`   | 再生ループ回数 (`Infinite` / `Finite`)             |
 
-`loop_behavior` と遷移の反映タイミングは [ChangePatternBank](/autd3-sdk/api/command/lowlevel/change-pattern-bank/) を参照.
+`loop_behavior` と遷移の反映タイミングは [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) を参照.
 
 `size` の下限は 2.
 単一焦点を静的に出したい場合は STM ではなく [Pattern](/autd3-sdk/api/command/pattern/) を使う.
 
 ## Example
 
-`ConfigFociStm` は `WriteFociBuffer` で焦点列を書き込んだ後, `ChangePatternBank` で再生を切り替える流れの中で使う.
+`ConfigFociStm` は `WriteFociBuffer` で焦点列を書き込んだ後, `ActivatePatternBank` で再生を切り替える流れの中で使う.
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

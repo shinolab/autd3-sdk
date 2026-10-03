@@ -1,4 +1,4 @@
-use autd3_rs::commands::{ChangeModulationBank, ConfigModulation, WriteModulationBuffer};
+use autd3_rs::commands::{ActivateModulationBank, ConfigModulation, WriteModulationBuffer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::units::Hz;
 use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
         size: data.len(),
         loop_behavior: LoopBehavior::Infinite,
     });
-    builder.push(ChangeModulationBank {
+    builder.push(ActivateModulationBank {
         bank,
         transition_mode: TransitionMode::Immediate,
     });

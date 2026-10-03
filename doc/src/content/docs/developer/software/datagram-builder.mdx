@@ -121,26 +121,22 @@ ops = [ Step::Op(Clear) ]
 
 #### 例: 複数の Operation へ展開されるコマンド
 
-`Modulation` は変調データのサイズによって展開先が変わる.
+`Modulation` は「バッファ書き込み → 設定 → バンク切り替え」の 3 段に展開される.
 
 ```rust
 impl<'a> Command<'a> for Modulation<'a> {
     fn expand(self, builder: &mut DatagramBuilder<'a>) {
-        let size = self.data.len();
-        if WriteModulationFused::fits_single_frame(size) {
-            builder.push(WriteModulationFused { .. });
-            return;
-        }
         builder
             .push(WriteModulationBuffer { bank: self.bank, offset: 0, data: self.data })
-            .push(ConfigModulation { .. })
-            .push(ChangeModulationBank { .. });
+            .push(ConfigModulation { .. });
+        if !self.transition_mode.is_later() {
+            builder.push(ActivateModulationBank { .. });
+        }
     }
 }
 ```
 
-1 フレームに収まるなら, データと設定を 1 つにまとめた `WriteModulationFused` へ展開する.
-収まらないなら「バッファ書き込み → 設定 → バンク切り替え」の 3 段に分ける.
+`transition_mode` が `Later` のときは, バンク切り替えを積まない.
 
 さらに `WriteModulationBuffer` 自身も `Command` であり, `WriteModulationChunk` へ分割される.
 したがって, 1 フレームに収まらないサイズの `Modulation` を 1 つ `push` すると, `ops` は次のようになる.
@@ -150,7 +146,7 @@ ops = [ Step::Op(WriteModulationChunk { offset: 0 })
       , Step::Op(WriteModulationChunk { offset: PAYLOAD_BYTES - size_of::<WriteModPayload>() })
       , ...
       , Step::Op(ConfigModulation)
-      , Step::Op(ChangeModulationBank) ]
+      , Step::Op(ActivateModulationBank) ]
 ```
 
 ### build

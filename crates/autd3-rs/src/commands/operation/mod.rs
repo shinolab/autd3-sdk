@@ -1,5 +1,5 @@
-mod change_mod_bank;
-mod change_pattern_bank;
+mod activate_mod_bank;
+mod activate_pattern_bank;
 mod clear;
 mod config_modulation;
 mod config_pattern;
@@ -14,13 +14,11 @@ mod set_silencer;
 mod synchronize;
 mod write_foci_chunk;
 mod write_modulation_chunk;
-mod write_modulation_fused;
 mod write_pattern_buffer;
-mod write_pattern_fused;
 mod write_pattern_phase;
 
-pub use change_mod_bank::ChangeModulationBank;
-pub use change_pattern_bank::ChangePatternBank;
+pub use activate_mod_bank::ActivateModulationBank;
+pub use activate_pattern_bank::ActivatePatternBank;
 pub use clear::Clear;
 pub use config_modulation::ConfigModulation;
 pub use config_pattern::{ConfigFociStm, ConfigPattern};
@@ -35,10 +33,8 @@ pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, Silenc
 pub use synchronize::Synchronize;
 pub(crate) use write_foci_chunk::WriteFociChunk;
 pub(crate) use write_modulation_chunk::WriteModulationChunk;
-pub(crate) use write_modulation_fused::WriteModulationFused;
 pub(crate) use write_pattern_buffer::WritePatternBuffers;
 pub use write_pattern_buffer::{PatternIntensity, WritePatternBuffer};
-pub(crate) use write_pattern_fused::{WriteFociStmFused, WritePatternFused};
 pub use write_pattern_phase::{PhaseDepth, WritePatternPhase};
 
 use zerocopy::{Immutable, IntoBytes};

@@ -2,7 +2,7 @@ import asyncio
 import threading
 
 from autd3 import Client, ClientConfig, Driver, UdpEmulator
-from autd3.commands import ChangeModulationBank, ConfigModulation, WriteModulationBuffer
+from autd3.commands import ActivateModulationBank, ConfigModulation, WriteModulationBuffer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz
 from autd3.value import LoopBehavior, ModulationBank, SamplingConfig, TransitionMode
@@ -37,7 +37,7 @@ async def main() -> None:
             )
         )
         builder.push(
-            ChangeModulationBank(
+            ActivateModulationBank(
                 bank=bank,
                 transition_mode=TransitionMode.Immediate,
             )

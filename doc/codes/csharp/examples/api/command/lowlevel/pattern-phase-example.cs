@@ -49,7 +49,7 @@ builder.Push(new ConfigPattern(
     size: (uint)patterns.Length,
     loopBehavior: LoopBehavior.Infinite
 ));
-builder.Push(new ChangePatternBank(
+builder.Push(new ActivatePatternBank(
     bank: bank,
     transitionMode: TransitionMode.Immediate
 ));

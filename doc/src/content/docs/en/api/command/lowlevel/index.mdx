@@ -6,13 +6,13 @@ sidebar:
 ---
 
 Composite commands such as `Pattern` / `Modulation` are equivalent to a combination of the following low-level commands.
-When they fit in a single frame they are sent as one fused command.
+A composite command is expanded into these low-level commands when it is sent.
 
 | Category      | Pattern family                                                             | Modulation family                                                                |
 | ------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Buffer write  | [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) | [WriteModulationBuffer](/autd3-sdk/en/api/command/lowlevel/write-modulation-buffer/) |
 | Bank config   | [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/)           | [ConfigModulation](/autd3-sdk/en/api/command/lowlevel/config-modulation/)           |
-| Bank switch   | [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/)   | [ChangeModulationBank](/autd3-sdk/en/api/command/lowlevel/change-modulation-bank/)   |
+| Bank switch   | [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/)   | [ActivateModulationBank](/autd3-sdk/en/api/command/lowlevel/activate-modulation-bank/)   |
 
 This section also includes [WriteFociBuffer](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/), which writes a focal point sequence for Foci STM, and its configuration [ConfigFociStm](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/).
 

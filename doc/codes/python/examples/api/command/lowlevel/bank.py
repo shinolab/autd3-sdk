@@ -1,4 +1,4 @@
-from autd3.commands import ChangePatternBank, ConfigPattern, PhaseDepth, WritePatternBuffer, WritePatternPhase
+from autd3.commands import ActivatePatternBank, ConfigPattern, PhaseDepth, WritePatternBuffer, WritePatternPhase
 from autd3.geometry import Autd3, Geometry
 from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 
@@ -29,7 +29,7 @@ ConfigPattern(
 # ANCHOR_END: config
 transition_mode = TransitionMode.Immediate
 # ANCHOR: change
-ChangePatternBank(
+ActivatePatternBank(
     bank=bank,
     transition_mode=transition_mode,
 )

@@ -47,10 +47,10 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ops::WritePatternPhase>()?;
     m.add_class::<ops::ConfigPattern>()?;
     m.add_class::<ops::ConfigFociStm>()?;
-    m.add_class::<ops::ChangePatternBank>()?;
+    m.add_class::<ops::ActivatePatternBank>()?;
     m.add_class::<ops::WriteModulationBuffer>()?;
     m.add_class::<ops::ConfigModulation>()?;
-    m.add_class::<ops::ChangeModulationBank>()?;
+    m.add_class::<ops::ActivateModulationBank>()?;
     stm::register(m)?;
     commands::register(m)?;
     Ok(())

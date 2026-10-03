@@ -1,5 +1,5 @@
 use autd3_rs::commands::{
-    ChangePatternBank, ConfigPattern, PatternStm, PatternStmOption, PhaseDepth, StmConfig,
+    ActivatePatternBank, ConfigPattern, PatternStm, PatternStmOption, PhaseDepth, StmConfig,
     WritePatternPhase,
 };
 use autd3_rs::geometry::{offset, Autd3, Geometry};
@@ -71,7 +71,7 @@ fn main() {
         size: patterns.len(),
         loop_behavior: option.loop_behavior,
     };
-    ChangePatternBank {
+    ActivatePatternBank {
         bank: option.bank,
         transition_mode: option.transition_mode,
     };

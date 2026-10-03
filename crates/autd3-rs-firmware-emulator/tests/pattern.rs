@@ -51,7 +51,7 @@ fn raw_pattern_round_trips_to_emissions() {
     );
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ChangePatternBank, &change))
+            .send(&frame(2, Cmd::ActivatePatternBank, &change))
             .status,
         0
     );
@@ -86,7 +86,7 @@ fn send_phase_pattern(write: &[u8]) -> Device {
     );
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ChangePatternBank, &change))
+            .send(&frame(2, Cmd::ActivatePatternBank, &change))
             .status,
         0
     );

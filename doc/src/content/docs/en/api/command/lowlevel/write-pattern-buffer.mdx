@@ -31,7 +31,7 @@ On the wire the phases are sent first, followed by the intensities, and the devi
 ## Example
 
 Multiple low-level commands are sent together in a single datagram.
-The following is an example of playing a single Pattern via `WritePatternBuffer` → `ConfigPattern` → `ChangePatternBank` (equivalent to the high-level [Pattern](/autd3-sdk/en/api/command/pattern/)).
+The following is an example of playing a single Pattern via `WritePatternBuffer` → `ConfigPattern` → `ActivatePatternBank` (equivalent to the high-level [Pattern](/autd3-sdk/en/api/command/pattern/)).
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

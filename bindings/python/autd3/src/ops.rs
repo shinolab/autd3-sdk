@@ -385,14 +385,14 @@ impl ConfigFociStm {
     }
 }
 
-#[pyclass(name = "ChangePatternBank", module = "autd3.commands")]
-pub struct ChangePatternBank {
+#[pyclass(name = "ActivatePatternBank", module = "autd3.commands")]
+pub struct ActivatePatternBank {
     pub(crate) bank: CorePatternBank,
     pub(crate) transition_mode: CoreTransitionMode,
 }
 
 #[pymethods]
-impl ChangePatternBank {
+impl ActivatePatternBank {
     #[new]
     #[pyo3(signature = (bank, transition_mode = None))]
     fn new(bank: PatternBank, transition_mode: Option<TransitionMode>) -> Self {
@@ -452,14 +452,14 @@ impl ConfigModulation {
     }
 }
 
-#[pyclass(name = "ChangeModulationBank", module = "autd3.commands")]
-pub struct ChangeModulationBank {
+#[pyclass(name = "ActivateModulationBank", module = "autd3.commands")]
+pub struct ActivateModulationBank {
     pub(crate) bank: CoreModulationBank,
     pub(crate) transition_mode: CoreTransitionMode,
 }
 
 #[pymethods]
-impl ChangeModulationBank {
+impl ActivateModulationBank {
     #[new]
     #[pyo3(signature = (bank, transition_mode = None))]
     fn new(bank: ModulationBank, transition_mode: Option<TransitionMode>) -> Self {

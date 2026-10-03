@@ -6,7 +6,7 @@ use autd3_python_capsule::{
     modulation_from_capsule, phases_from_capsule, to_pyerr,
 };
 use autd3_rs::commands::{
-    ChangeModulationBank as CoreChangeModulationBank, ChangePatternBank as CoreChangePatternBank,
+    ActivateModulationBank as CoreActivateModulationBank, ActivatePatternBank as CoreActivatePatternBank,
     Command as CoreCommand, ConfigFociStm as CoreConfigFociStm,
     ConfigModulation as CoreConfigModulation, ConfigPattern as CoreConfigPattern,
     Modulation as CoreModulation, Pattern as CorePattern, PatternIntensity as CorePatternIntensity,
@@ -155,7 +155,7 @@ pub(crate) enum Pending {
         sound_speed: Velocity,
         loop_behavior: CoreLoopBehavior,
     },
-    ChangePatternBank {
+    ActivatePatternBank {
         bank: CorePatternBank,
         transition_mode: CoreTransitionMode,
     },
@@ -170,7 +170,7 @@ pub(crate) enum Pending {
         size: u32,
         loop_behavior: CoreLoopBehavior,
     },
-    ChangeModulationBank {
+    ActivateModulationBank {
         bank: CoreModulationBank,
         transition_mode: CoreTransitionMode,
     },
@@ -301,11 +301,11 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
                 loop_behavior: *loop_behavior,
             });
         }
-        Pending::ChangePatternBank {
+        Pending::ActivatePatternBank {
             bank,
             transition_mode,
         } => {
-            builder.push(CoreChangePatternBank {
+            builder.push(CoreActivatePatternBank {
                 bank: *bank,
                 transition_mode: *transition_mode,
             });
@@ -331,11 +331,11 @@ fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>)
                 loop_behavior: *loop_behavior,
             });
         }
-        Pending::ChangeModulationBank {
+        Pending::ActivateModulationBank {
             bank,
             transition_mode,
         } => {
-            builder.push(CoreChangeModulationBank {
+            builder.push(CoreActivateModulationBank {
                 bank: *bank,
                 transition_mode: *transition_mode,
             });
@@ -483,9 +483,9 @@ impl DatagramBuilder {
             });
             return Ok(());
         }
-        if let Ok(op) = obj.cast::<ops::ChangePatternBank>() {
+        if let Ok(op) = obj.cast::<ops::ActivatePatternBank>() {
             let op = op.borrow();
-            self.pending.push(Pending::ChangePatternBank {
+            self.pending.push(Pending::ActivatePatternBank {
                 bank: op.bank,
                 transition_mode: op.transition_mode,
             });
@@ -510,9 +510,9 @@ impl DatagramBuilder {
             });
             return Ok(());
         }
-        if let Ok(op) = obj.cast::<ops::ChangeModulationBank>() {
+        if let Ok(op) = obj.cast::<ops::ActivateModulationBank>() {
             let op = op.borrow();
-            self.pending.push(Pending::ChangeModulationBank {
+            self.pending.push(Pending::ActivateModulationBank {
                 bank: op.bank,
                 transition_mode: op.transition_mode,
             });

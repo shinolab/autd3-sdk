@@ -1,4 +1,4 @@
-use autd3_rs::commands::{ChangePatternBank, ConfigFociStm, StmConfig, WriteFociBuffer, circle};
+use autd3_rs::commands::{ActivatePatternBank, ConfigFociStm, StmConfig, WriteFociBuffer, circle};
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
         sound_speed: 340.0 * m / s,
         loop_behavior: LoopBehavior::Infinite,
     });
-    builder.push(ChangePatternBank {
+    builder.push(ActivatePatternBank {
         bank,
         transition_mode: TransitionMode::Immediate,
     });

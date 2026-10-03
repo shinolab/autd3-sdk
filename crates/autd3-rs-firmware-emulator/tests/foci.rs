@@ -54,7 +54,7 @@ fn single_focus_synthesizes_phases() {
     );
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ChangePatternBank, &change))
+            .send(&frame(2, Cmd::ActivatePatternBank, &change))
             .status,
         0
     );

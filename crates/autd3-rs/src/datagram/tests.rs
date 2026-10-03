@@ -184,8 +184,8 @@ fn push_each_accepts_heterogeneous_boxed_commands() {
     });
     let frames = b.build().unwrap();
 
-    assert_eq!(frames.len(), 1, "both commands are single-frame");
-    assert_eq!(cmd_at(&frames, 0, 0), Cmd::WritePatternFused);
+    assert_eq!(frames.len(), 3, "the pattern spans write + config + change");
+    assert_eq!(cmd_at(&frames, 0, 0), Cmd::WritePatternRaw);
     assert_eq!(cmd_at(&frames, 0, 1), Cmd::ConfigModulation);
 }
 
@@ -395,13 +395,13 @@ fn build_into_reuses_buffer_without_growing() {
 
 #[test]
 fn a_dc_offset_moves_sys_time_transitions_onto_the_bus_clock() {
-    use crate::commands::operation::ChangePatternBank;
+    use crate::commands::operation::ActivatePatternBank;
     use crate::value::{SysTime, TransitionMode};
-    use autd3_cpu_wire::payload::ChangePatternBankPayload;
+    use autd3_cpu_wire::payload::ActivatePatternBankPayload;
 
     let host = SysTime::from_nanos(2_000_000_000);
     let offset_ns = 29_348_000i64;
-    let cmd = ChangePatternBank {
+    let cmd = ActivatePatternBank {
         bank: PatternBank::B0,
         transition_mode: TransitionMode::SysTime {
             time: host,
@@ -413,8 +413,9 @@ fn a_dc_offset_moves_sys_time_transitions_onto_the_bus_clock() {
         let mut b = DatagramBuilder::with_clock_offset(test_geometry_arc(1), offset_ns);
         b.push(cmd);
         let frames = b.build().unwrap();
-        let p = ChangePatternBankPayload::parse(frames.frame(0).unwrap().datagrams()[0].payload())
-            .unwrap();
+        let p =
+            ActivatePatternBankPayload::parse(frames.frame(0).unwrap().datagrams()[0].payload())
+                .unwrap();
         p.transition_value.get()
     };
 
@@ -432,15 +433,15 @@ fn a_dc_offset_moves_sys_time_transitions_onto_the_bus_clock() {
 
 #[test]
 fn a_dc_offset_reaches_per_device_commands_too() {
-    use crate::commands::operation::ChangePatternBank;
+    use crate::commands::operation::ActivatePatternBank;
     use crate::value::{SysTime, TransitionMode};
-    use autd3_cpu_wire::payload::ChangePatternBankPayload;
+    use autd3_cpu_wire::payload::ActivatePatternBankPayload;
 
     let host = SysTime::from_nanos(2_000_000_000);
     let offset_ns = 1_234_567i64;
     let mut b = DatagramBuilder::with_clock_offset(test_geometry_arc(2), offset_ns);
     b.push_each(|_| {
-        Some(ChangePatternBank {
+        Some(ActivatePatternBank {
             bank: PatternBank::B0,
             transition_mode: TransitionMode::SysTime {
                 time: host,
@@ -451,9 +452,10 @@ fn a_dc_offset_reaches_per_device_commands_too() {
     let frames = b.build().unwrap();
 
     for device in 0..2 {
-        let p =
-            ChangePatternBankPayload::parse(frames.frame(0).unwrap().datagrams()[device].payload())
-                .unwrap();
+        let p = ActivatePatternBankPayload::parse(
+            frames.frame(0).unwrap().datagrams()[device].payload(),
+        )
+        .unwrap();
         assert_eq!(
             p.transition_value.get(),
             host.sys_time() + offset_ns.cast_unsigned(),
@@ -497,14 +499,14 @@ fn a_dc_offset_moves_the_gpio_sys_time_trigger() {
 
 #[test]
 fn a_device_clock_is_sampled_when_the_command_is_pushed_not_when_the_builder_is_made() {
-    use crate::commands::operation::ChangePatternBank;
+    use crate::commands::operation::ActivatePatternBank;
     use crate::value::{SysTime, TransitionMode};
-    use autd3_cpu_wire::payload::ChangePatternBankPayload;
+    use autd3_cpu_wire::payload::ActivatePatternBankPayload;
     use autd3_rs_core::DeviceClock;
 
     let host = SysTime::from_nanos(2_000_000_000);
     let offset_ns = 29_348_000i64;
-    let cmd = ChangePatternBank {
+    let cmd = ActivatePatternBank {
         bank: PatternBank::B0,
         transition_mode: TransitionMode::SysTime {
             time: host,
@@ -521,8 +523,8 @@ fn a_device_clock_is_sampled_when_the_command_is_pushed_not_when_the_builder_is_
     b.push(cmd);
     let frames = b.build().unwrap();
 
-    let p =
-        ChangePatternBankPayload::parse(frames.frame(0).unwrap().datagrams()[0].payload()).unwrap();
+    let p = ActivatePatternBankPayload::parse(frames.frame(0).unwrap().datagrams()[0].payload())
+        .unwrap();
     assert_eq!(
         p.transition_value.get(),
         host.sys_time() + offset_ns.cast_unsigned(),
@@ -531,10 +533,10 @@ fn a_device_clock_is_sampled_when_the_command_is_pushed_not_when_the_builder_is_
 }
 
 #[test]
-fn a_dc_offset_reaches_the_fused_modulation_frame() {
+fn a_dc_offset_reaches_the_modulation_change_frame() {
     use crate::commands::Modulation;
     use crate::value::{SysTime, TransitionMode};
-    use autd3_cpu_wire::payload::WriteModulationFusedPayload;
+    use autd3_cpu_wire::payload::ActivateModBankPayload;
 
     let host = SysTime::from_nanos(2_000_000_000);
     let offset_ns = 29_348_000i64;
@@ -552,13 +554,12 @@ fn a_dc_offset_reaches_the_fused_modulation_frame() {
     });
     let frames = b.build().unwrap();
 
-    assert_eq!(cmd_at(&frames, 0, 0), Cmd::WriteModulationFused);
-    let (p, _) =
-        WriteModulationFusedPayload::parse(frames.frame(0).unwrap().datagrams()[0].payload())
-            .unwrap();
+    assert_eq!(cmd_at(&frames, 2, 0), Cmd::ActivateModulationBank);
+    let p =
+        ActivateModBankPayload::parse(frames.frame(2).unwrap().datagrams()[0].payload()).unwrap();
     assert_eq!(
         p.transition_value.get(),
         host.sys_time() + offset_ns.cast_unsigned(),
-        "the fused write carries the transition too, so it needs the same retiming",
+        "the change expanded from a high-level command needs the same retiming",
     );
 }

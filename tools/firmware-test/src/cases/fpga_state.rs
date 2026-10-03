@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use autd3_rs::FpgaState;
 use autd3_rs::commands::{
-    ChangeModulationBank, ChangePatternBank, ConfigModulation, EmulateGpioIn, SetSilencer,
+    ActivateModulationBank, ActivatePatternBank, ConfigModulation, EmulateGpioIn, SetSilencer,
     WriteModulationBuffer,
 };
 use autd3_rs::geometry::{Point3, Vector3, offset};
@@ -99,7 +99,7 @@ async fn pattern_finite_loop(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
         LoopBehavior::ONCE,
     )
     .await?;
-    ctx.send(ChangePatternBank {
+    ctx.send(ActivatePatternBank {
         bank: PatternBank::B1,
         transition_mode: TransitionMode::SyncIdx,
     })
@@ -119,7 +119,7 @@ async fn pattern_finite_loop(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
     )
     .await?;
 
-    ctx.send(ChangePatternBank {
+    ctx.send(ActivatePatternBank {
         bank: PatternBank::B0,
         transition_mode: TransitionMode::Immediate,
     })
@@ -141,7 +141,7 @@ async fn pattern_gpio_pending(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> 
         LoopBehavior::ONCE,
     )
     .await?;
-    ctx.send(ChangePatternBank {
+    ctx.send(ActivatePatternBank {
         bank: PatternBank::B1,
         transition_mode: TransitionMode::Gpio(GpioIn::I0),
     })
@@ -171,7 +171,7 @@ async fn pattern_gpio_pending(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> 
         values: [false, false, false, false],
     })
     .await?;
-    ctx.send(ChangePatternBank {
+    ctx.send(ActivatePatternBank {
         bank: PatternBank::B0,
         transition_mode: TransitionMode::Immediate,
     })
@@ -198,7 +198,7 @@ async fn modulation_finite_loop(ctx: &Ctx<'_>) -> Result<()> {
     for frame in &builder.build()? {
         ctx.client.send_checked(frame).await?;
     }
-    ctx.send(ChangeModulationBank {
+    ctx.send(ActivateModulationBank {
         bank: ModulationBank::B1,
         transition_mode: TransitionMode::SyncIdx,
     })
@@ -218,7 +218,7 @@ async fn modulation_finite_loop(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await?;
 
-    ctx.send(ChangeModulationBank {
+    ctx.send(ActivateModulationBank {
         bank: ModulationBank::B0,
         transition_mode: TransitionMode::Immediate,
     })

@@ -1,5 +1,5 @@
 ---
-title: ChangePatternBank
+title: ActivatePatternBank
 description: Pattern バンクの切り替え
 sidebar:
   order: 14
@@ -14,7 +14,7 @@ import csSample from "@codes/csharp/examples/api/command/lowlevel/bank.cs?raw";
 import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
-`ChangePatternBank` は, 再生対象の Pattern バンクを切り替える低レベルコマンド.
+`ActivatePatternBank` は, 再生対象の Pattern バンクを切り替える低レベルコマンド.
 
 ## API
 
@@ -41,7 +41,7 @@ import { excerpt } from "@lib/excerpt";
 
 `Later` は「バンクへ書き込むだけで遷移しない」ことを表す.
 `Modulation` / `FociStm` / `PatternStm` の `transition_mode` に指定すると, 末尾のバンク切り替えを送らず書き込みと設定だけを行う.
-遷移コマンドである `ChangeModulationBank` / `ChangePatternBank` 自身に指定した場合はビルド時エラーになる.
+遷移コマンドである `ActivateModulationBank` / `ActivatePatternBank` 自身に指定した場合はビルド時エラーになる.
 また `Later` は遷移しないため, `LoopBehavior` との組み合わせ制約の対象外である.
 
 `Gpio(GpioIn)` の詳細は [GPIO ピン](/autd3-sdk/hardware/gpio/) を参照.
@@ -51,6 +51,6 @@ import { excerpt } from "@lib/excerpt";
 
 ## Example
 
-`ChangePatternBank` は `WritePatternBuffer` + `ConfigPattern` でバンクを準備した後に送り, 再生対象を切り替える.
+`ActivatePatternBank` は `WritePatternBuffer` + `ConfigPattern` でバンクを準備した後に送り, 再生対象を切り替える.
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

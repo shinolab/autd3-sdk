@@ -35,7 +35,7 @@ builder.Push(new ConfigModulation(
     size: (uint)data.Length,
     loopBehavior: LoopBehavior.Infinite
 ));
-builder.Push(new ChangeModulationBank(
+builder.Push(new ActivateModulationBank(
     bank: bank,
     transitionMode: TransitionMode.Immediate
 ));

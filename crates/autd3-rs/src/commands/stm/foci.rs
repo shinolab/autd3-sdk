@@ -1,6 +1,6 @@
 use super::StmConfig;
 use crate::Velocity;
-use crate::commands::operation::{ChangePatternBank, ConfigFociStm, WriteFociStmFused};
+use crate::commands::operation::{ActivatePatternBank, ConfigFociStm};
 use crate::commands::{Command, WriteFociBuffer};
 use crate::datagram::DatagramBuilder;
 use crate::value::{ControlPoints, LoopBehavior, PatternBank, TransitionMode};
@@ -54,34 +54,6 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
 
         let bank = self.option.bank;
-        if self.option.transition_mode.is_later() {
-            builder
-                .push(WriteFociBuffer {
-                    bank,
-                    index_offset: 0,
-                    points: self.points,
-                })
-                .push(ConfigFociStm {
-                    bank,
-                    config,
-                    size,
-                    num_foci,
-                    sound_speed: self.option.sound_speed,
-                    loop_behavior: self.option.loop_behavior,
-                });
-            return;
-        }
-        if WriteFociStmFused::<N>::fits_single_frame(n) {
-            builder.push(WriteFociStmFused {
-                bank,
-                points: self.points,
-                config,
-                sound_speed: self.option.sound_speed,
-                loop_behavior: self.option.loop_behavior,
-                transition_mode: self.option.transition_mode,
-            });
-            return;
-        }
         builder
             .push(WriteFociBuffer {
                 bank,
@@ -95,11 +67,13 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
                 num_foci,
                 sound_speed: self.option.sound_speed,
                 loop_behavior: self.option.loop_behavior,
-            })
-            .push(ChangePatternBank {
+            });
+        if !self.option.transition_mode.is_later() {
+            builder.push(ActivatePatternBank {
                 bank,
                 transition_mode: self.option.transition_mode,
             });
+        }
     }
 }
 
@@ -114,20 +88,27 @@ mod tests {
     use core::num::NonZeroU16;
 
     use crate::value::{ControlPoint, Focus};
-    use autd3_cpu_wire::payload::{WriteFociPayload, WritePatternFusedPayload};
+    use autd3_cpu_wire::payload::WriteFociPayload;
 
-    fn fused_payload<const N: usize>(stm: FociStm<'_, N>) -> [u8; PAYLOAD_BYTES] {
+    fn payloads<const N: usize>(stm: FociStm<'_, N>) -> [[u8; PAYLOAD_BYTES]; 3] {
         let mut b = DatagramBuilder::new(test_geometry_arc(1));
         b.push(stm);
         let datagrams = b.build().unwrap();
-        assert_eq!(datagrams.len(), 1, "short FociStm fuses into 1 frame");
-        let f = datagrams.frame(0).unwrap();
-        assert_eq!(f.datagrams()[0].cmd, Cmd::WritePatternFused);
-        f.datagrams()[0].payload
+        assert_eq!(datagrams.len(), 3, "write + config + change");
+        let cmds = [
+            Cmd::WriteFociBuffer,
+            Cmd::ConfigPattern,
+            Cmd::ActivatePatternBank,
+        ];
+        core::array::from_fn(|i| {
+            let f = datagrams.frame(i).unwrap();
+            assert_eq!(f.datagrams()[0].cmd, cmds[i]);
+            f.datagrams()[0].payload
+        })
     }
 
     #[test]
-    fn foci_stm_expands_to_a_single_fused_frame() {
+    fn foci_stm_expands_to_write_config_change() {
         let points = [
             ControlPoints::new(
                 [ControlPoint::new(Point3::new(0.0, 0.0, 150.0), Phase::ZERO)],
@@ -138,18 +119,18 @@ mod tests {
                 Intensity(0xBB),
             ),
         ];
-        let payload = fused_payload(FociStm::new(
+        let [write, config, change] = payloads(FociStm::new(
             SamplingConfig::FREQ_4K,
             &points,
             FociStmOption::default(),
         ));
 
-        assert_eq!(payload[1], 0, "Foci emission_type");
-        assert_eq!(&payload[2..4], &10u16.to_le_bytes(), "FREQ_4K divider");
-        assert_eq!(&payload[4..8], &2u32.to_le_bytes(), "size = sample count");
-        assert_eq!(payload[8], 1, "num_foci = N");
-        assert_eq!(payload[9], 0xFF, "IMMEDIATE");
-        assert_eq!(&payload[10..12], &21760u16.to_le_bytes(), "340 m/s * 64");
+        assert_eq!(config[1], 0, "Foci emission_type");
+        assert_eq!(&config[2..4], &10u16.to_le_bytes(), "FREQ_4K divider");
+        assert_eq!(&config[4..8], &2u32.to_le_bytes(), "size = sample count");
+        assert_eq!(config[8], 1, "num_foci = N");
+        assert_eq!(&config[10..12], &21760u16.to_le_bytes(), "340 m/s * 64");
+        assert_eq!(change[1], 0xFF, "IMMEDIATE");
 
         let expected = Focus {
             x: 0,
@@ -159,7 +140,7 @@ mod tests {
         }
         .encode()
         .unwrap();
-        let data = &payload[size_of::<WritePatternFusedPayload>()..];
+        let data = &write[size_of::<WriteFociPayload>()..];
         let first = u64::from_le_bytes(data[..8].try_into().unwrap());
         assert_eq!(first, expected);
     }
@@ -182,13 +163,13 @@ mod tests {
                 Intensity(0x40),
             ),
         ];
-        let payload = fused_payload(FociStm::new(
+        let [write, config, _] = payloads(FociStm::new(
             SamplingConfig::new(NonZeroU16::MIN),
             &points,
             FociStmOption::default(),
         ));
 
-        let data = &payload[size_of::<WritePatternFusedPayload>()..];
+        let data = &write[size_of::<WriteFociPayload>()..];
         let f0 = u64::from_le_bytes(data[..8].try_into().unwrap());
         let f1 = u64::from_le_bytes(data[8..16].try_into().unwrap());
         assert_eq!((f0 >> 54) & 0xFF, 0x80, "first focus = intensity");
@@ -201,7 +182,7 @@ mod tests {
         assert_eq!(f0 & 0x3_FFFF, 40);
         assert_eq!(f1 & 0x3_FFFF, 0x3_FFD8, "-40 in 18-bit two's complement");
 
-        assert_eq!(payload[8], 2, "num_foci = 2");
+        assert_eq!(config[8], 2, "num_foci = 2");
     }
 
     #[test]
@@ -218,6 +199,10 @@ mod tests {
         let datagrams = b.build().unwrap();
 
         assert_eq!(datagrams.len(), 4);
+        assert_eq!(
+            datagrams.frame(3).unwrap().datagrams()[0].cmd,
+            Cmd::ActivatePatternBank
+        );
         assert_eq!(
             datagrams.frame(0).unwrap().datagrams()[0].cmd,
             Cmd::WriteFociBuffer
@@ -253,7 +238,7 @@ mod tests {
             ControlPoints::from(Point3::new(0.0, 0.0, 1.0)),
             ControlPoints::from(Point3::new(0.0, 0.0, 2.0)),
         ];
-        let payload = fused_payload(FociStm::new(
+        let payloads = payloads(FociStm::new(
             SamplingConfig::FREQ_4K,
             &points,
             FociStmOption {
@@ -261,7 +246,9 @@ mod tests {
                 ..Default::default()
             },
         ));
-        assert_eq!(payload[0], 1, "bank B1");
+        for payload in payloads {
+            assert_eq!(payload[0], 1, "bank B1");
+        }
     }
 
     #[test]
@@ -273,18 +260,18 @@ mod tests {
             ControlPoints::from(Point3::new(0.0, 0.0, 2.0)),
         ];
 
-        let payload = fused_payload(FociStm::new(
+        let [_, config, _] = payloads(FociStm::new(
             SamplingConfig::FREQ_4K,
             &points,
             FociStmOption::default(),
         ));
         assert_eq!(
-            &payload[12..14],
+            &config[12..14],
             &0xFFFFu16.to_le_bytes(),
             "default = infinite"
         );
 
-        let payload = fused_payload(FociStm::new(
+        let [_, config, _] = payloads(FociStm::new(
             SamplingConfig::FREQ_4K,
             &points,
             FociStmOption {
@@ -293,18 +280,18 @@ mod tests {
                 ..Default::default()
             },
         ));
-        assert_eq!(&payload[12..14], &0u16.to_le_bytes(), "ONCE = rep 0");
+        assert_eq!(&config[12..14], &0u16.to_le_bytes(), "ONCE = rep 0");
     }
 
     #[test]
-    fn foci_stm_transition_mode_encodes_into_fused_frame() {
+    fn foci_stm_transition_mode_encodes_into_the_change_frame() {
         use crate::value::{GpioIn, TransitionMode};
 
         let points = [
             ControlPoints::from(Point3::new(0.0, 0.0, 1.0)),
             ControlPoints::from(Point3::new(0.0, 0.0, 2.0)),
         ];
-        let payload = fused_payload(FociStm::new(
+        let [_, _, change] = payloads(FociStm::new(
             SamplingConfig::FREQ_4K,
             &points,
             FociStmOption {
@@ -313,8 +300,8 @@ mod tests {
             },
         ));
 
-        assert_eq!(payload[9], 0x02, "GPIO");
-        assert_eq!(&payload[14..22], &1u64.to_le_bytes());
+        assert_eq!(change[1], 0x02, "GPIO");
+        assert_eq!(&change[2..10], &1u64.to_le_bytes());
     }
 
     #[test]
@@ -324,37 +311,8 @@ mod tests {
         let points: Vec<ControlPoints<1>> = (0..4)
             .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32)))
             .collect();
-        let payload = fused_payload(FociStm::new(1000.0 * Hz, &points, FociStmOption::default()));
-        assert_eq!(&payload[2..4], &10u16.to_le_bytes());
-    }
-
-    #[test]
-    fn long_foci_stm_falls_back_to_the_multi_frame_path() {
-        let capacity = (PAYLOAD_BYTES - size_of::<WritePatternFusedPayload>()) / (FOCUS_WORDS * 2);
-        let points: Vec<ControlPoints<1>> = (0..=capacity)
-            .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32 * 0.1)))
-            .collect();
-        let stm = FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default());
-
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(stm);
-        let datagrams = b.build().unwrap();
-
-        assert!(datagrams.len() >= 3, "falls back to write+config+change");
-        assert_eq!(
-            datagrams.frame(0).unwrap().datagrams()[0].cmd,
-            Cmd::WriteFociBuffer
-        );
-        let last = datagrams.len() - 1;
-        assert_eq!(
-            datagrams.frame(last).unwrap().datagrams()[0].cmd,
-            Cmd::ChangePatternBank
-        );
-        let size = u32::try_from(points.len()).unwrap();
-        assert_eq!(
-            &datagrams.frame(last - 1).unwrap().datagrams()[0].payload[4..8],
-            &size.to_le_bytes()
-        );
+        let [_, config, _] = payloads(FociStm::new(1000.0 * Hz, &points, FociStmOption::default()));
+        assert_eq!(&config[2..4], &10u16.to_le_bytes());
     }
 
     #[test]
@@ -375,11 +333,7 @@ mod tests {
         ));
         let datagrams = b.build().unwrap();
 
-        assert_eq!(
-            datagrams.len(),
-            2,
-            "write + config, no fusion and no change"
-        );
+        assert_eq!(datagrams.len(), 2, "write + config, no change");
         assert_eq!(
             datagrams.frame(0).unwrap().datagrams()[0].cmd,
             Cmd::WriteFociBuffer

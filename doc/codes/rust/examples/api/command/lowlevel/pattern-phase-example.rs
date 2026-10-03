@@ -1,5 +1,5 @@
 use autd3_rs::commands::{
-    ChangePatternBank, ConfigPattern, PhaseDepth, StmConfig, WritePatternPhase,
+    ActivatePatternBank, ConfigPattern, PhaseDepth, StmConfig, WritePatternPhase,
 };
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
         size: patterns.len(),
         loop_behavior: LoopBehavior::Infinite,
     });
-    builder.push(ChangePatternBank {
+    builder.push(ActivatePatternBank {
         bank,
         transition_mode: TransitionMode::Immediate,
     });

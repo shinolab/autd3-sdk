@@ -34,7 +34,7 @@ internal static class Sample
         // ANCHOR_END: config
         var transitionMode = TransitionMode.Immediate;
         // ANCHOR: change
-        new ChangePatternBank(
+        new ActivatePatternBank(
             bank: bank,
             transitionMode: transitionMode
         );
