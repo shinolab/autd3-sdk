@@ -86,7 +86,7 @@ fn quantize_intensity(value: f32, m: f32) -> u32 {
 
 fn pack(i: u32, base: u32, m: f32) -> u32 {
     let v = q[base + i];
-    return quantize_phase(v) | (quantize_intensity(length(v), m) << 8u);
+    return (quantize_intensity(length(v), m) << 8u) | quantize_phase(v);
 }
 
 @compute @workgroup_size(256)
@@ -107,5 +107,5 @@ fn quantize_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (i + 1u < d.len) {
         hi = pack(i + 1u, base, m);
     }
-    out[k * d.words + w] = lo | (hi << 16u);
+    out[k * d.words + w] = (hi << 16u) | lo;
 }
