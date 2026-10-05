@@ -5,7 +5,7 @@ use nalgebra::Complex;
 use rand::seq::SliceRandom;
 
 use autd3_rs_core::common::Length;
-use autd3_rs_core::geometry::{Device, Geometry};
+use autd3_rs_core::geometry::{Geometry, TransducerMask};
 use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::amp::Amplitude;
@@ -13,8 +13,7 @@ use crate::amplitude_target::AmplitudeTarget;
 use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
-use crate::mask::TransducerMask;
-use crate::propagation::propagate;
+use crate::propagation::{propagate, validate_dst_len, wavenumber};
 
 #[must_use]
 pub fn abs_objective_func(c: Complex<f32>, a: Amplitude) -> f32 {
@@ -54,12 +53,12 @@ pub fn greedy(
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
-    crate::mask::validate_dst_len(phases.len(), geometry)?;
-    crate::mask::validate_dst_len(intensities.len(), geometry)?;
+    validate_dst_len(phases.len(), geometry)?;
+    validate_dst_len(intensities.len(), geometry)?;
     let mask = option.mask;
     mask.validate(geometry)?;
 
-    let wavenumber = 2.0 * PI / wavelength.mm();
+    let k = wavenumber(wavelength);
     let m = foci.len();
     let levels = option.phase_quantization_levels.get();
 
@@ -67,8 +66,7 @@ pub fn greedy(
         .map(|i| Complex::new(0.0, 2.0 * PI * f32::from(i) / f32::from(levels)).exp())
         .collect();
 
-    let devices: Vec<&Device> = geometry.iter().collect();
-    let mut indices: Vec<(usize, usize)> = devices
+    let mut indices: Vec<(usize, usize)> = geometry
         .iter()
         .enumerate()
         .flat_map(|(d, dev)| {
@@ -93,11 +91,11 @@ pub fn greedy(
     let mut tmp = vec![Complex::new(0.0, 0.0); m];
 
     for &(d, t) in &indices {
-        let dev = devices[d];
+        let dev = &geometry[d];
         let pos = dev.positions()[t];
         let dir = dev.directions()[t];
         for (r, f) in tmp.iter_mut().zip(foci) {
-            *r = propagate(pos, dir, f.point, wavenumber, option.directivity) * amp;
+            *r = propagate(pos, dir, f.point, k, option.directivity) * amp;
         }
 
         let mut best_phase = Complex::new(0.0, 0.0);
@@ -129,15 +127,11 @@ pub fn greedy(
 
 #[cfg(test)]
 mod tests {
-    use autd3_rs_core::common::units::{m, s};
-    use autd3_rs_core::geometry::{Autd3, Geometry, Point3, TransducerMaskError, Vector3};
+    use autd3_rs_core::geometry::{Autd3, Point3, TransducerMaskError, Vector3};
 
     use super::*;
     use crate::Pa;
-
-    fn wavelength() -> Length {
-        autd3_rs_pattern::wavelength(340.0 * m / s)
-    }
+    use crate::test_utils::{geometry, slot, wavelength};
 
     fn single_focus() -> [AmplitudeTarget; 1] {
         [AmplitudeTarget {
@@ -146,14 +140,10 @@ mod tests {
         }]
     }
 
-    fn buffer(geometry: &Geometry) -> (Vec<Vec<Phase>>, Vec<Vec<Intensity>>) {
-        (geometry.phase_buffer(), geometry.intensity_buffer())
-    }
-
     #[test]
     fn empty_foci_is_error() {
-        let geometry = Geometry::new(vec![Autd3::default()]);
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let geometry = geometry(1);
+        let (mut phases, mut intensities) = slot(&geometry);
         assert_eq!(
             greedy(
                 &geometry,
@@ -169,8 +159,8 @@ mod tests {
 
     #[test]
     fn a_mask_that_does_not_match_the_geometry_is_an_error_not_a_panic() {
-        let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let geometry = geometry(2);
+        let (mut phases, mut intensities) = slot(&geometry);
 
         let one_device = vec![vec![true; Autd3::NUM_TRANSDUCERS]];
         let option = GreedyOption {
@@ -218,7 +208,7 @@ mod tests {
 
     #[test]
     fn a_dst_that_does_not_match_the_geometry_is_an_error_not_a_panic() {
-        let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
+        let geometry = geometry(2);
         let mut phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
         let mut intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]];
         assert_eq!(
@@ -239,8 +229,8 @@ mod tests {
 
     #[test]
     fn uniform_default_sets_all_max_and_focuses() {
-        let geometry = Geometry::new(vec![Autd3::default()]);
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let geometry = geometry(1);
+        let (mut phases, mut intensities) = slot(&geometry);
         greedy(
             &geometry,
             &single_focus(),

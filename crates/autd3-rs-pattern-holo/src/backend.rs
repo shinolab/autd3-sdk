@@ -6,7 +6,7 @@ use autd3_rs_core::value::{Intensity, Phase};
 use crate::amplitude_target::AmplitudeTarget;
 use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
-use crate::propagation::{emission, max_coefficient, propagate};
+use crate::propagation::{max_coefficient, phase_and_intensity, propagate};
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -190,7 +190,7 @@ fn back_prop(g: &DMatrix<Complex<f32>>) -> DMatrix<Complex<f32>> {
     DMatrix::from_vec(n, m, data)
 }
 
-pub(crate) fn hadamard_normalize(x: &mut DVector<Complex<f32>>, r: &DVector<Complex<f32>>) {
+fn hadamard_normalize(x: &mut DVector<Complex<f32>>, r: &DVector<Complex<f32>>) {
     for (b, a) in x.as_mut_slice().iter_mut().zip(r.as_slice()) {
         let inv = 1.0 / (b.re * b.re + b.im * b.im).sqrt();
         let (re, im) = (b.re * inv, b.im * inv);
@@ -212,7 +212,8 @@ fn quantized(
     constraint: IntensityConstraint,
 ) -> impl Iterator<Item = (Phase, Intensity)> + '_ {
     let max = max_coefficient(q);
-    q.iter().map(move |&v| emission(v, constraint, max))
+    q.iter()
+        .map(move |&v| phase_and_intensity(v, constraint, max))
 }
 
 fn quantize_slice(
@@ -227,13 +228,120 @@ fn quantize_slice(
     if parallel {
         return q
             .par_iter()
-            .map(|&v| emission(v, constraint, max))
+            .map(|&v| phase_and_intensity(v, constraint, max))
             .collect();
     }
-    q.iter().map(|&v| emission(v, constraint, max)).collect()
+    q.iter()
+        .map(|&v| phase_and_intensity(v, constraint, max))
+        .collect()
 }
 
 fn broadcast<T>(v: &[T], batch: usize) -> impl Iterator<Item = &T> {
     let stride = usize::from(v.len() > 1);
     (0..batch).map(move |k| &v[k * stride])
+}
+
+#[cfg(test)]
+mod tests {
+    use autd3_rs_core::geometry::{Geometry, TransducerMask, Vector3};
+
+    use super::*;
+    use crate::amp::Pa;
+    use crate::propagation::{enabled_transducers, target_amplitudes, wavenumber};
+    use crate::test_utils::{geometry, wavelength};
+
+    fn foci(g: &Geometry, nf: usize) -> Vec<AmplitudeTarget> {
+        (0..nf)
+            .map(|i| AmplitudeTarget {
+                point: g.center() + Vector3::new(i as f32 * 10.0, i as f32 * -5.0, 150.0),
+                amplitude: (3e3 + i as f32 * 200.0) * Pa,
+            })
+            .collect()
+    }
+
+    fn bits(v: &[nalgebra::DVector<Complex<f32>>]) -> Vec<(u32, u32)> {
+        v.iter()
+            .flatten()
+            .map(|c| (c.re.to_bits(), c.im.to_bits()))
+            .collect()
+    }
+
+    type Matrices = <NalgebraBackend as LinAlgBackend>::Matrix;
+    type Vectors = <NalgebraBackend as LinAlgBackend>::Vector;
+
+    fn problem(geo: &Geometry, foci: &[AmplitudeTarget]) -> (Matrices, Matrices, Vectors) {
+        let b = NalgebraBackend;
+        let (tr_pos, tr_dir) = enabled_transducers(geo, TransducerMask::AllEnabled);
+        let g = b.propagation_matrix(
+            &tr_pos,
+            &tr_dir,
+            foci,
+            1,
+            wavenumber(wavelength()),
+            Directivity::Sphere,
+        );
+        let bp = b.back_prop(&g);
+        (g, bp, target_amplitudes(&b, foci, 1))
+    }
+
+    fn normalized(mut x: Vectors, r: &Vectors) -> Vectors {
+        hadamard_normalize(&mut x[0], &r[0]);
+        x
+    }
+
+    #[test]
+    fn fused_gs_is_bit_identical() {
+        let b = NalgebraBackend;
+        for (devices, nf, repeat) in [(1, 1, 1), (1, 4, 7), (2, 16, 100)] {
+            let geo = geometry(devices);
+            let foci = foci(&geo, nf);
+            let (g, bp, amps) = problem(&geo, &foci);
+            let n = TransducerMask::AllEnabled.num_enabled(&geo);
+            let q0 = b.make_vector(1, vec![Complex::new(1.0, 0.0); n]);
+
+            let mut want = q0.clone();
+            for _ in 0..repeat {
+                let p = normalized(b.gemv(&g, &normalized(want, &q0)), &amps);
+                want = b.gemv(&bp, &p);
+            }
+
+            let mut got = q0.clone();
+            for _ in 0..repeat {
+                let p = b.gemv_hadamard_normalized(&g, got, &q0);
+                got = b.gemv_hadamard_normalized(&bp, p, &amps);
+            }
+
+            assert_eq!(bits(&want), bits(&got), "gs {devices}dev/{nf}foci/{repeat}");
+        }
+    }
+
+    #[test]
+    fn fused_gspat_is_bit_identical() {
+        let b = NalgebraBackend;
+        for (devices, nf, repeat) in [(1, 1, 1), (1, 4, 7), (2, 16, 100)] {
+            let geo = geometry(devices);
+            let foci = foci(&geo, nf);
+            let (g, bp, amps) = problem(&geo, &foci);
+            let r = b.gemm(&g, &bp);
+
+            let mut zeta = amps.clone();
+            let mut want = amps.clone();
+            for _ in 0..repeat {
+                want = b.gemv(&r, &zeta);
+                zeta = normalized(want.clone(), &amps);
+            }
+            b.amplitude_correct(&mut want, &amps);
+            let want = b.gemv(&bp, &want);
+
+            let mut got = b.repeat_gemv_normalized(&r, b.gemv(&r, &amps), &amps, repeat - 1);
+            b.amplitude_correct(&mut got, &amps);
+            let got = b.gemv(&bp, &got);
+
+            assert_eq!(
+                bits(&want),
+                bits(&got),
+                "gspat {devices}dev/{nf}foci/{repeat}"
+            );
+        }
+    }
 }

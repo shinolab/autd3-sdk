@@ -6,8 +6,9 @@ mod constraint;
 mod directivity;
 mod error;
 mod linear_synthesis;
-mod mask;
 mod propagation;
+#[cfg(test)]
+mod test_utils;
 
 pub use nalgebra;
 
@@ -24,36 +25,31 @@ pub use linear_synthesis::{
 
 #[cfg(test)]
 mod tests {
-    use autd3_rs_core::common::units::{m, s};
-    use autd3_rs_core::geometry::{
-        Autd3, Geometry, Point3, TransducerGroups, TransducerMask, UnitQuaternion,
-    };
+    use autd3_rs_core::geometry::{Autd3, Geometry, Point3, TransducerGroups, TransducerMask};
     use autd3_rs_core::value::{Intensity, Phase};
 
     use super::*;
-
-    fn wavelength() -> autd3_rs_core::common::Length {
-        autd3_rs_pattern::wavelength(340.0 * m / s)
-    }
-
-    fn single_device() -> Geometry {
-        Geometry::new(vec![Autd3::default()])
-    }
+    use crate::test_utils::{ALGORITHMS, geometry, slot, wavelength};
 
     fn focus_target(geometry: &Geometry) -> Point3<f32> {
         geometry.center() + autd3_rs_core::geometry::Vector3::new(0.0, 0.0, 150.0)
     }
 
-    type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
+    fn assert_matches_focus(phases: &[Vec<Phase>], geometry: &Geometry, target: Point3<f32>) {
+        let mut expected = geometry.phase_buffer();
+        autd3_rs_pattern::focus(geometry, target, wavelength(), &mut expected);
 
-    fn buffer(geometry: &Geometry) -> Buffers {
-        (geometry.phase_buffer(), geometry.intensity_buffer())
+        for (a, b) in phases[0].iter().zip(expected[0].iter()) {
+            let diff = a.0.wrapping_sub(b.0);
+            let diff = diff.min(0u8.wrapping_sub(diff));
+            assert!(diff <= 1, "phase mismatch: {a:?} vs {b:?}");
+        }
     }
 
     #[test]
     fn empty_foci_is_error() {
-        let geometry = single_device();
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let geometry = geometry(1);
+        let (mut phases, mut intensities) = slot(&geometry);
         assert_eq!(
             naive(
                 &NalgebraBackend,
@@ -69,16 +65,13 @@ mod tests {
     }
 
     #[test]
-    fn out_must_match_geometry() {
-        let geometry = Geometry::new(vec![
-            Autd3::default(),
-            Autd3::new(Point3::new(200.0, 0.0, 0.0), UnitQuaternion::identity()),
-        ]);
+    fn every_device_gets_an_output() {
+        let geometry = geometry(2);
         let foci = [AmplitudeTarget {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
         }];
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let (mut phases, mut intensities) = slot(&geometry);
         naive(
             &NalgebraBackend,
             &geometry,
@@ -100,12 +93,12 @@ mod tests {
 
     #[test]
     fn uniform_constraint_sets_all_intensities() {
-        let geometry = single_device();
+        let geometry = geometry(1);
         let foci = [AmplitudeTarget {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
         }];
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let (mut phases, mut intensities) = slot(&geometry);
         gspat(
             &NalgebraBackend,
             &geometry,
@@ -124,14 +117,14 @@ mod tests {
 
     #[test]
     fn naive_single_focus_phases_match_focus_pattern() {
-        let geometry = single_device();
+        let geometry = geometry(1);
         let target = focus_target(&geometry);
         let foci = [AmplitudeTarget {
             point: target,
             amplitude: 5e3 * Pa,
         }];
 
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let (mut phases, mut intensities) = slot(&geometry);
         naive(
             &NalgebraBackend,
             &geometry,
@@ -147,26 +140,19 @@ mod tests {
         )
         .unwrap();
 
-        let mut expected = geometry.phase_buffer();
-        autd3_rs_pattern::focus(&geometry, target, wavelength(), &mut expected);
-
-        for (a, b) in phases[0].iter().zip(expected[0].iter()) {
-            let diff = a.0.wrapping_sub(b.0);
-            let diff = diff.min(0u8.wrapping_sub(diff));
-            assert!(diff <= 1, "phase mismatch: {a:?} vs {b:?}");
-        }
+        assert_matches_focus(&phases, &geometry, target);
     }
 
     #[test]
     fn gspat_single_focus_phases_match_focus_pattern() {
-        let geometry = single_device();
+        let geometry = geometry(1);
         let target = focus_target(&geometry);
         let foci = [AmplitudeTarget {
             point: target,
             amplitude: 5e3 * Pa,
         }];
 
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let (mut phases, mut intensities) = slot(&geometry);
         gspat(
             &NalgebraBackend,
             &geometry,
@@ -181,69 +167,33 @@ mod tests {
         )
         .unwrap();
 
-        let mut expected = geometry.phase_buffer();
-        autd3_rs_pattern::focus(&geometry, target, wavelength(), &mut expected);
-
-        for (a, b) in phases[0].iter().zip(expected[0].iter()) {
-            let diff = a.0.wrapping_sub(b.0);
-            let diff = diff.min(0u8.wrapping_sub(diff));
-            assert!(diff <= 1, "phase mismatch: {a:?} vs {b:?}");
-        }
+        assert_matches_focus(&phases, &geometry, target);
     }
 
     #[test]
     fn all_algorithms_focus_on_target() {
-        let geometry = single_device();
+        let geometry = geometry(1);
         let target = focus_target(&geometry);
         let foci = [AmplitudeTarget {
             point: target,
             amplitude: 5e3 * Pa,
         }];
-        let lambda = wavelength();
 
-        let mut n = buffer(&geometry);
-        let mut g = buffer(&geometry);
-        let mut gp = buffer(&geometry);
-        naive(
-            &NalgebraBackend,
-            &geometry,
-            &foci,
-            lambda,
-            &NaiveOption::default(),
-            &mut n.0,
-            &mut n.1,
-        )
-        .unwrap();
-        gs(
-            &NalgebraBackend,
-            &geometry,
-            &foci,
-            lambda,
-            &GsOption::default(),
-            &mut g.0,
-            &mut g.1,
-        )
-        .unwrap();
-        gspat(
-            &NalgebraBackend,
-            &geometry,
-            &foci,
-            lambda,
-            &GspatOption::default(),
-            &mut gp.0,
-            &mut gp.1,
-        )
-        .unwrap();
-
-        for (phases, intensities) in [&n, &g, &gp] {
-            assert!(intensities[0].iter().any(|&i| i != Intensity::MIN));
-            assert!(phases[0].iter().any(|&p| p != phases[0][0]));
+        for (name, single, _) in ALGORITHMS {
+            let mut dst = slot(&geometry);
+            single(&geometry, &foci, TransducerMask::AllEnabled, &mut dst).unwrap();
+            let (phases, intensities) = dst;
+            assert!(
+                intensities[0].iter().any(|&i| i != Intensity::MIN),
+                "{name}"
+            );
+            assert!(phases[0].iter().any(|&p| p != phases[0][0]), "{name}");
         }
     }
 
     #[test]
     fn masked_transducers_are_null() {
-        let geometry = single_device();
+        let geometry = geometry(1);
         let foci = [AmplitudeTarget {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
@@ -255,7 +205,7 @@ mod tests {
         }
         let mask = TransducerMask::Masked(&enabled);
 
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let (mut phases, mut intensities) = slot(&geometry);
         naive(
             &NalgebraBackend,
             &geometry,
@@ -284,14 +234,14 @@ mod tests {
 
     #[test]
     fn group_mask_restricts_the_optimization_to_the_group() {
-        let geometry = single_device();
+        let geometry = geometry(1);
         let foci = [AmplitudeTarget {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
         }];
         let groups = TransducerGroups::new(&geometry, |_, tr| Some(tr % 2));
 
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let (mut phases, mut intensities) = slot(&geometry);
         naive(
             &NalgebraBackend,
             &geometry,
@@ -320,7 +270,7 @@ mod tests {
 
     #[test]
     fn group_compute_optimizes_each_group_over_its_own_transducers() {
-        let geometry = single_device();
+        let geometry = geometry(1);
         let foci = [AmplitudeTarget {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
@@ -328,7 +278,7 @@ mod tests {
         let groups = TransducerGroups::new(&geometry, |_, tr| Some(tr % 2 == 0));
         let other = (Phase(0x40), Intensity(0x20));
 
-        let (mut phases, mut intensities) = buffer(&geometry);
+        let (mut phases, mut intensities) = slot(&geometry);
         autd3_rs_pattern::group_compute(
             &geometry,
             &groups,

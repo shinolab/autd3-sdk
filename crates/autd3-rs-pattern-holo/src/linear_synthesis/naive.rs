@@ -1,5 +1,5 @@
 use autd3_rs_core::common::Length;
-use autd3_rs_core::geometry::Geometry;
+use autd3_rs_core::geometry::{Geometry, TransducerMask};
 use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::amplitude_target::AmplitudeTarget;
@@ -8,7 +8,6 @@ use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::linear_synthesis::batch::{BatchSetup, solve_batched};
-use crate::mask::TransducerMask;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NaiveOption<'a> {

@@ -1,5 +1,4 @@
 mod batch;
-mod fused_reference;
 mod gs;
 mod gspat;
 mod naive;

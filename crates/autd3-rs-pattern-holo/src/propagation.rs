@@ -3,7 +3,7 @@ use core::f32::consts::PI;
 use nalgebra::Complex;
 
 use autd3_rs_core::common::Length;
-use autd3_rs_core::geometry::{Geometry, Point3, UnitVector3};
+use autd3_rs_core::geometry::{Geometry, Point3, TransducerMask, UnitVector3};
 use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::amplitude_target::AmplitudeTarget;
@@ -11,7 +11,6 @@ use crate::backend::LinAlgBackend;
 use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
-use crate::mask::TransducerMask;
 
 const T4010A1_AMPLITUDE: f32 = 275.574_25 * 200.0;
 
@@ -69,6 +68,16 @@ pub(crate) fn batch_shape(foci: &[AmplitudeTarget], problems: usize) -> Result<u
     Ok(foci.len() / problems)
 }
 
+pub(crate) fn validate_dst_len(dst: usize, geometry: &Geometry) -> Result<(), HoloError> {
+    if dst != geometry.num_devices() {
+        return Err(HoloError::DstDeviceCountMismatch {
+            got: dst,
+            expected: geometry.num_devices(),
+        });
+    }
+    Ok(())
+}
+
 #[must_use]
 pub(crate) fn target_amplitudes<B: LinAlgBackend>(
     backend: &B,
@@ -83,7 +92,7 @@ pub(crate) fn target_amplitudes<B: LinAlgBackend>(
     )
 }
 
-pub(crate) fn emission(
+pub(crate) fn phase_and_intensity(
     v: Complex<f32>,
     constraint: IntensityConstraint,
     max_coefficient: f32,
