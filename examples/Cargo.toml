@@ -9,7 +9,7 @@ description = "examples for autd3-rs."
 publish = false
 
 [dependencies]
-autd3-rs = { workspace = true, features = ["legacy", "logging"] }
+autd3-rs = { workspace = true, features = ["logging"] }
 autd3-rs-pattern.workspace = true
 autd3-rs-pattern-holo.workspace = true
 autd3-rs-modulation.workspace = true

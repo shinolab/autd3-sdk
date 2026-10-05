@@ -1,7 +1,5 @@
 pub mod commands;
 pub mod error;
-#[cfg(feature = "legacy")]
-pub mod legacy;
 pub mod mirror;
 
 mod client;
