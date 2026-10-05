@@ -1,5 +1,5 @@
 use autd3_rs_core::common::Length;
-use autd3_rs_core::geometry::Geometry;
+use autd3_rs_core::geometry::{Geometry, TransducerMask};
 use autd3_rs_core::value::{Intensity, Phase};
 
 use crate::amplitude_target::AmplitudeTarget;
@@ -7,9 +7,8 @@ use crate::backend::LinAlgBackend;
 use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
-use crate::mask::TransducerMask;
 use crate::propagation::{
-    batch_shape, enabled_transducers, quantize, target_amplitudes, wavenumber,
+    batch_shape, enabled_transducers, quantize, target_amplitudes, validate_dst_len, wavenumber,
 };
 
 pub(crate) struct BatchSetup<'a> {
@@ -46,8 +45,8 @@ where
     let mask = setup.mask;
     mask.validate(geometry)?;
     for (p, i) in phases.iter_mut().zip(intensities.iter_mut()) {
-        crate::mask::validate_dst_len(p.as_mut().len(), geometry)?;
-        crate::mask::validate_dst_len(i.as_mut().len(), geometry)?;
+        validate_dst_len(p.as_mut().len(), geometry)?;
+        validate_dst_len(i.as_mut().len(), geometry)?;
     }
 
     let k = wavenumber(wavelength);
@@ -79,31 +78,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use autd3_rs_core::common::units::{m, s};
-    use autd3_rs_core::geometry::{Autd3, Geometry, Point3, UnitQuaternion, Vector3};
+    use autd3_rs_core::geometry::{Autd3, Geometry, TransducerMask, Vector3};
     use autd3_rs_core::value::{Intensity, Phase};
 
     use crate::amp::Pa;
     use crate::amplitude_target::AmplitudeTarget;
     use crate::backend::NalgebraBackend;
     use crate::error::HoloError;
-    use crate::linear_synthesis::{
-        GsOption, GspatOption, NaiveOption, gs, gs_batch, gspat, gspat_batch, naive, naive_batch,
-    };
-    use crate::mask::TransducerMask;
-
-    fn geometry(devices: usize) -> Geometry {
-        Geometry::new(
-            (0..devices)
-                .map(|i| {
-                    Autd3::new(
-                        Point3::new(i as f32 * 200.0, 0.0, 0.0),
-                        UnitQuaternion::identity(),
-                    )
-                })
-                .collect(),
-        )
-    }
+    use crate::linear_synthesis::{GsOption, gs, gs_batch};
+    use crate::test_utils::{ALGORITHMS, Batch, Slot, geometry, slot, wavelength};
 
     fn problem(g: &Geometry, seed: usize, nf: usize) -> Vec<AmplitudeTarget> {
         (0..nf)
@@ -117,13 +100,6 @@ mod tests {
                 amplitude: (3e3 + (seed * nf + i) as f32 * 100.0) * Pa,
             })
             .collect()
-    }
-
-    type Slot = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
-    type Batch = (Vec<Vec<Vec<Phase>>>, Vec<Vec<Vec<Intensity>>>);
-
-    fn slot(g: &Geometry) -> Slot {
-        (g.phase_buffer(), g.intensity_buffer())
     }
 
     fn filled(g: &Geometry, phase: Phase, intensity: Intensity) -> Slot {
@@ -141,10 +117,6 @@ mod tests {
         b.0.iter().cloned().zip(b.1.iter().cloned())
     }
 
-    fn wl() -> autd3_rs_core::common::Length {
-        autd3_rs_pattern::wavelength(340.0 * m / s)
-    }
-
     #[test]
     fn batch_matches_sequential() {
         let g = geometry(2);
@@ -155,76 +127,12 @@ mod tests {
             let mut batched = batch(&slot(&g), owned.len());
             let mut one = slot(&g);
 
-            naive_batch(
-                &NalgebraBackend,
-                &g,
-                &foci,
-                wl(),
-                &NaiveOption::default(),
-                &mut batched.0,
-                &mut batched.1,
-            )
-            .unwrap();
-            for (f, want) in owned.iter().zip(problems(&batched)) {
-                naive(
-                    &NalgebraBackend,
-                    &g,
-                    f,
-                    wl(),
-                    &NaiveOption::default(),
-                    &mut one.0,
-                    &mut one.1,
-                )
-                .unwrap();
-                assert_eq!(one, want, "naive {nf} foci");
-            }
-
-            gs_batch(
-                &NalgebraBackend,
-                &g,
-                &foci,
-                wl(),
-                &GsOption::default(),
-                &mut batched.0,
-                &mut batched.1,
-            )
-            .unwrap();
-            for (f, want) in owned.iter().zip(problems(&batched)) {
-                gs(
-                    &NalgebraBackend,
-                    &g,
-                    f,
-                    wl(),
-                    &GsOption::default(),
-                    &mut one.0,
-                    &mut one.1,
-                )
-                .unwrap();
-                assert_eq!(one, want, "gs {nf} foci");
-            }
-
-            gspat_batch(
-                &NalgebraBackend,
-                &g,
-                &foci,
-                wl(),
-                &GspatOption::default(),
-                &mut batched.0,
-                &mut batched.1,
-            )
-            .unwrap();
-            for (f, want) in owned.iter().zip(problems(&batched)) {
-                gspat(
-                    &NalgebraBackend,
-                    &g,
-                    f,
-                    wl(),
-                    &GspatOption::default(),
-                    &mut one.0,
-                    &mut one.1,
-                )
-                .unwrap();
-                assert_eq!(one, want, "gspat {nf} foci");
+            for (name, single, batched_fn) in ALGORITHMS {
+                batched_fn(&g, &foci, TransducerMask::AllEnabled, &mut batched).unwrap();
+                for (f, want) in owned.iter().zip(problems(&batched)) {
+                    single(&g, f, TransducerMask::AllEnabled, &mut one).unwrap();
+                    assert_eq!(one, want, "{name} {nf} foci");
+                }
             }
         }
     }
@@ -249,7 +157,7 @@ mod tests {
                 &NalgebraBackend,
                 &g,
                 &owned[0],
-                wl(),
+                wavelength(),
                 &GsOption {
                     mask,
                     parallel: true,
@@ -263,7 +171,7 @@ mod tests {
                 &NalgebraBackend,
                 &g,
                 &owned[0],
-                wl(),
+                wavelength(),
                 &GsOption {
                     mask,
                     parallel: false,
@@ -281,7 +189,7 @@ mod tests {
                 &NalgebraBackend,
                 &g,
                 &foci,
-                wl(),
+                wavelength(),
                 &GsOption {
                     mask,
                     parallel: true,
@@ -295,7 +203,7 @@ mod tests {
                 &NalgebraBackend,
                 &g,
                 &foci,
-                wl(),
+                wavelength(),
                 &GsOption {
                     mask,
                     parallel: false,
@@ -320,98 +228,14 @@ mod tests {
         let dirty = filled(&g, Phase(0x7F), Intensity(0xFF));
         let inactive = filled(&g, Phase::ZERO, Intensity::MIN);
 
-        let mut one = dirty.clone();
-        let mut batched = batch(&dirty, owned.len());
-        naive(
-            &NalgebraBackend,
-            &g,
-            &owned[0],
-            wl(),
-            &NaiveOption {
-                mask,
-                ..Default::default()
-            },
-            &mut one.0,
-            &mut one.1,
-        )
-        .unwrap();
-        naive_batch(
-            &NalgebraBackend,
-            &g,
-            &foci,
-            wl(),
-            &NaiveOption {
-                mask,
-                ..Default::default()
-            },
-            &mut batched.0,
-            &mut batched.1,
-        )
-        .unwrap();
-        assert_eq!(one, inactive, "naive single");
-        assert!(problems(&batched).all(|b| b == one), "naive batch");
-
-        let mut one = dirty.clone();
-        let mut batched = batch(&dirty, owned.len());
-        gs(
-            &NalgebraBackend,
-            &g,
-            &owned[0],
-            wl(),
-            &GsOption {
-                mask,
-                ..Default::default()
-            },
-            &mut one.0,
-            &mut one.1,
-        )
-        .unwrap();
-        gs_batch(
-            &NalgebraBackend,
-            &g,
-            &foci,
-            wl(),
-            &GsOption {
-                mask,
-                ..Default::default()
-            },
-            &mut batched.0,
-            &mut batched.1,
-        )
-        .unwrap();
-        assert_eq!(one, inactive, "gs single");
-        assert!(problems(&batched).all(|b| b == one), "gs batch");
-
-        let mut one = dirty.clone();
-        let mut batched = batch(&dirty, owned.len());
-        gspat(
-            &NalgebraBackend,
-            &g,
-            &owned[0],
-            wl(),
-            &GspatOption {
-                mask,
-                ..Default::default()
-            },
-            &mut one.0,
-            &mut one.1,
-        )
-        .unwrap();
-        gspat_batch(
-            &NalgebraBackend,
-            &g,
-            &foci,
-            wl(),
-            &GspatOption {
-                mask,
-                ..Default::default()
-            },
-            &mut batched.0,
-            &mut batched.1,
-        )
-        .unwrap();
-        assert_eq!(one, inactive, "gspat single");
-        assert!(problems(&batched).all(|b| b == one), "gspat batch");
+        for (name, single, batched_fn) in ALGORITHMS {
+            let mut one = dirty.clone();
+            let mut batched = batch(&dirty, owned.len());
+            single(&g, &owned[0], mask, &mut one).unwrap();
+            batched_fn(&g, &foci, mask, &mut batched).unwrap();
+            assert_eq!(one, inactive, "{name} single");
+            assert!(problems(&batched).all(|b| b == one), "{name} batch");
+        }
     }
 
     #[test]
@@ -425,7 +249,7 @@ mod tests {
                 &NalgebraBackend,
                 &g,
                 &foci,
-                wl(),
+                wavelength(),
                 &GsOption::default(),
                 &mut dst.0,
                 &mut dst.1
@@ -440,7 +264,7 @@ mod tests {
                 &NalgebraBackend,
                 &g,
                 &foci,
-                wl(),
+                wavelength(),
                 &GsOption::default(),
                 &mut [],
                 &mut []
@@ -452,7 +276,7 @@ mod tests {
                 &NalgebraBackend,
                 &g,
                 &[],
-                wl(),
+                wavelength(),
                 &GsOption::default(),
                 &mut [slot(&g).0],
                 &mut [slot(&g).1]
@@ -465,7 +289,7 @@ mod tests {
                 &NalgebraBackend,
                 &g,
                 &problem(&g, 0, 2),
-                wl(),
+                wavelength(),
                 &GsOption::default(),
                 &mut two.0,
                 &mut two.1[..1]
@@ -488,42 +312,13 @@ mod tests {
         });
 
         let mut one = short.clone();
-        assert_eq!(
-            naive(
-                &NalgebraBackend,
-                &g,
-                &foci,
-                wl(),
-                &NaiveOption::default(),
-                &mut one.0,
-                &mut one.1
-            ),
-            want
-        );
-        assert_eq!(
-            gs(
-                &NalgebraBackend,
-                &g,
-                &foci,
-                wl(),
-                &GsOption::default(),
-                &mut one.0,
-                &mut one.1
-            ),
-            want
-        );
-        assert_eq!(
-            gspat(
-                &NalgebraBackend,
-                &g,
-                &foci,
-                wl(),
-                &GspatOption::default(),
-                &mut one.0,
-                &mut one.1
-            ),
-            want
-        );
+        for (name, single, _) in ALGORITHMS {
+            assert_eq!(
+                single(&g, &foci, TransducerMask::AllEnabled, &mut one),
+                want,
+                "{name}"
+            );
+        }
 
         let mut phases = vec![slot(&g).0, short.0];
         let mut intensities = vec![slot(&g).1; 2];
@@ -532,7 +327,7 @@ mod tests {
                 &NalgebraBackend,
                 &g,
                 &problem(&g, 0, 4),
-                wl(),
+                wavelength(),
                 &GsOption::default(),
                 &mut phases,
                 &mut intensities
