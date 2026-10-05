@@ -131,6 +131,6 @@ mod tests {
         assert_eq!(groups.num_transducers_in(Side::Right), 0);
 
         let empty = TransducerGroups::<Side>::new(&geometry, |_, _| None);
-        assert!(empty.keys().is_empty());
+        assert_eq!(empty.keys(), []);
     }
 }

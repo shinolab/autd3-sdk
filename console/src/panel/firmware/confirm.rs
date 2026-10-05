@@ -205,7 +205,10 @@ mod tests {
 
     #[test]
     fn unrelated_lines_are_ignored_and_gaps_are_filled() {
-        assert!(parse(&logs(&["image: 1024 bytes, crc32 0x00000000"])).is_empty());
+        assert_eq!(
+            parse(&logs(&["image: 1024 bytes, crc32 0x00000000"])),
+            [] as [DeviceVersions; 0]
+        );
         let devices = parse(&logs(&[
             "device 1: CPU firmware now = 0.9.0",
             "device x: CPU firmware now = 0.9.0",

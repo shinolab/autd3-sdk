@@ -133,12 +133,11 @@ impl Cpu {
             self.al_err_ticks.store(0, Ordering::Relaxed);
             return;
         }
-        let update = self
+        let prev = self
             .al_err_ticks
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |t| {
-                Some(t.saturating_add(1))
+            .update(Ordering::Relaxed, Ordering::Relaxed, |t| {
+                t.saturating_add(1)
             });
-        let (Ok(prev) | Err(prev)) = update;
         let ticks = prev.saturating_add(1);
         if ticks == FAILSAFE_TICKS {
             cmd::failsafe::mute(port);

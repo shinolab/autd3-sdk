@@ -544,7 +544,10 @@ mod tests {
                 "400",
             ]
         );
-        assert!(tail(&OtaConfig::default().args("1.0.0", "cpu").unwrap()).is_empty());
+        assert_eq!(
+            tail(&OtaConfig::default().args("1.0.0", "cpu").unwrap()),
+            [] as [&str; 0]
+        );
     }
 
     #[test]
@@ -625,7 +628,10 @@ mod tests {
             link: LinkKind::Remote,
             ..OtaConfig::default()
         };
-        assert!(tail(&config.args("1.0.0", "both").unwrap()).is_empty());
+        assert_eq!(
+            tail(&config.args("1.0.0", "both").unwrap()),
+            [] as [&str; 0]
+        );
         config.remote.instance = " autd3-lab ".to_string();
         config.remote.discovery_timeout_ms = Some(5000);
         config.remote.timeout_ms = Some(800);

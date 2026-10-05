@@ -303,7 +303,7 @@ mod tests {
             other("console-v0.9.0", &["console-installer.sh"]),
             other("firmware-v0.9.0", &["autd3-sdk-firmware-v0.9.0.zip"]),
         ]);
-        assert!(parse_releases(&body).unwrap().is_empty());
+        assert_eq!(parse_releases(&body).unwrap(), [] as [ServerRelease; 0]);
     }
 
     #[test]
@@ -312,13 +312,16 @@ mod tests {
             &format!("{RELEASE_TAG_PREFIX}0.10.0"),
             &[(server_asset_name("0.10.0"), 6_749_168)],
         )]);
-        assert!(parse_releases(&body).unwrap().is_empty());
+        assert_eq!(parse_releases(&body).unwrap(), [] as [ServerRelease; 0]);
     }
 
     #[test]
     fn a_draft_release_is_not_offered() {
         let draft = with_server("0.10.0").replace("\"draft\": false", "\"draft\": true");
-        assert!(parse_releases(&feed(&[draft])).unwrap().is_empty());
+        assert_eq!(
+            parse_releases(&feed(&[draft])).unwrap(),
+            [] as [ServerRelease; 0]
+        );
     }
 
     #[test]
@@ -347,7 +350,7 @@ mod tests {
             .map(|i| other(&format!("console-v0.{i}.0"), &["console-installer.sh"]))
             .collect();
         let (found, entries) = page_releases(&feed(&full)).unwrap();
-        assert!(found.is_empty());
+        assert_eq!(found, [] as [ServerRelease; 0]);
         assert_eq!(
             entries, PER_PAGE,
             "the appliance releases can sit on a later page",

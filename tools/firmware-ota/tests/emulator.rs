@@ -347,7 +347,7 @@ mod fpga {
             Err(DriverError::FpgaUpdateUnsupported { device: 0 })
         ));
         let audit = driver.into_link();
-        assert!(audit.device(0).fpga().fpga_flash().is_empty());
+        assert_eq!(audit.device(0).fpga().fpga_flash(), [0u8; 0]);
     }
 
     #[test]

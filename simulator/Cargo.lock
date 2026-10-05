@@ -43,6 +43,7 @@ name = "autd3-cpu-fw"
 version = "0.10.0"
 dependencies = [
  "autd3-cpu-wire",
+ "const_fn",
  "zerocopy",
 ]
 
@@ -287,6 +288,12 @@ name = "const-oid"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
+
+[[package]]
+name = "const_fn"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413d67b29ef1021b4d60f4aa1e925ca031751e213832b4b1d588fae623c05c60"
 
 [[package]]
 name = "core_affinity"
