@@ -7,14 +7,12 @@ module phase_correction #(
     phase_corr_bus_if.out_port PHASE_CORR_BUS,
     input wire DIN_VALID,
     input wire [7:0] PHASE_IN,
-    output wire [7:0] PHASE_OUT,
-    output wire DOUT_VALID
+    output wire [7:0] PHASE_OUT
 );
 
   logic [7:0] addr;
   logic [7:0] dout;
 
-  logic dout_valid;
   logic [7:0] phase_in, phase_out;
 
   typedef enum logic [2:0] {
@@ -60,12 +58,9 @@ module phase_correction #(
   assign PHASE_CORR_BUS.RD_EN = (state != IDLE);
   assign dout = PHASE_CORR_BUS.VALUE;
 
-  assign DOUT_VALID = dout_valid;
-
   always_ff @(posedge CLK) begin
     case (state)
       IDLE: begin
-        dout_valid <= 1'b0;
         if (DIN_VALID) begin
           addr  <= 0;
           state <= WAIT_BRAM_0;
@@ -88,8 +83,7 @@ module phase_correction #(
         state <= RUN;
       end
       RUN: begin
-        addr <= addr + 1;
-        dout_valid <= 1'b1;
+        addr  <= addr + 1;
         state <= addr == DEPTH - 1 + 4 ? IDLE : state;
       end
       default: begin

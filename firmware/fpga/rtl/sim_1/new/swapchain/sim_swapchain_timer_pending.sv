@@ -3,7 +3,6 @@ module sim_swapchain_timer_pending ();
 
   `include "define.vh"
 
-  localparam int DEPTH = 249;
   localparam int DivLatency = 51;
   localparam int KickPeriod = 512;
   localparam int TotalLatency = 1 + KickPeriod + 2 * DivLatency + 8 + 1;
@@ -17,8 +16,6 @@ module sim_swapchain_timer_pending ();
       .SYS_TIME(sys_time)
   );
 
-  sim_helper_random sim_helper_random ();
-  sim_helper_bram #(.DEPTH(DEPTH)) sim_helper_bram ();
 
   settings::pattern_settings_t pattern_settings;
   logic update_settings;

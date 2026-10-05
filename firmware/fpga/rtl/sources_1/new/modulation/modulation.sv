@@ -74,7 +74,6 @@ module modulation #(
       .DEBUG_STOP(DEBUG_STOP)
   );
 
-  logic dbg_phase_correction_dout_valid;
   phase_correction #(
       .DEPTH(DEPTH)
   ) phase_correction (
@@ -82,8 +81,7 @@ module modulation #(
       .PHASE_CORR_BUS(PHASE_CORR_BUS),
       .DIN_VALID(DIN_VALID),
       .PHASE_IN(PHASE_IN),
-      .PHASE_OUT(PHASE_OUT),
-      .DOUT_VALID(dbg_phase_correction_dout_valid)
+      .PHASE_OUT(PHASE_OUT)
   );
 
 endmodule

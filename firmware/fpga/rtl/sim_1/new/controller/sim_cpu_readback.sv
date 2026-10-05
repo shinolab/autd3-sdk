@@ -8,7 +8,6 @@ module sim_cpu_readback ();
   logic CLK;
   logic locked;
 
-  sim_helper_random sim_helper_random ();
   sim_helper_bram #(.DEPTH(DEPTH)) sim_helper_bram ();
 
   cnt_bus_if cnt_bus ();

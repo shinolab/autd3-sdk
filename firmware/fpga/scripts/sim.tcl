@@ -55,12 +55,6 @@ foreach tb $tbs {
     } else {
         set logf $log_path
         if {![file exists $logf]} {
-            set found [glob -nocomplain [file join $project_directory "$project_name.sim" sim_1 behav xsim simulate.log]]
-            if {[llength $found] > 0} {
-                set logf [lindex $found 0]
-            }
-        }
-        if {![file exists $logf]} {
             set ok 0
             set reason "no simulate.log"
         } else {

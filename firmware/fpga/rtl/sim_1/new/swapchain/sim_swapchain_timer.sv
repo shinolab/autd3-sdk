@@ -4,7 +4,6 @@ module sim_swapchain_timer ();
   `include "define.vh"
 
   localparam int DivLatency = 50;
-  localparam int DEPTH = 249;
 
   logic CLK;
   logic locked;
@@ -15,8 +14,6 @@ module sim_swapchain_timer ();
       .SYS_TIME(sys_time)
   );
 
-  sim_helper_random sim_helper_random ();
-  sim_helper_bram #(.DEPTH(DEPTH)) sim_helper_bram ();
 
   settings::pattern_settings_t pattern_settings;
   logic update_settings;

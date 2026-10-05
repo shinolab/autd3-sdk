@@ -14,7 +14,6 @@ mod ffi;
 mod firmware;
 mod fpga;
 mod fpga_codegen;
-mod fpga_probe;
 mod holo_wgpu;
 mod license;
 mod py;

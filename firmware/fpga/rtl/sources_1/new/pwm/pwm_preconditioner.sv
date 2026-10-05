@@ -12,8 +12,6 @@ module pwm_preconditioner #(
     output var DOUT_VALID
 );
 
-  `include "define.vh"
-
   logic [8:0] rise_buf[DEPTH];
   logic [8:0] fall_buf[DEPTH];
 
