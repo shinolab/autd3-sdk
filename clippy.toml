@@ -1,1 +1,1 @@
-doc-valid-idents = ["EtherCAT", "TwinCAT3", "SwiftShader", ".."]
+doc-valid-idents = ["SwiftShader", ".."]
