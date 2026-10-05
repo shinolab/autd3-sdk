@@ -7,7 +7,7 @@ from autd3.units import m, s
 from autd3_core import Duration
 from autd3.commands import Pattern
 from autd3.value import Intensity
-from autd3_emulator import Emulator, Recorder, RangeXY, RmsRecordOption, InstantRecordOption
+from autd3_emulator import Emulator, Grid, Recorder, RmsRecordOption, InstantRecordOption
 
 geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 target = geometry.center() + np.array([0.0, 0.0, 150.0])
@@ -50,11 +50,11 @@ ultrasound = record.output_ultrasound()
 print(ultrasound)
 # ANCHOR_END: output
 
-rng = RangeXY(
-        (target[0] - 20.0, target[0] + 20.0),
-        (target[1] - 20.0, target[1] + 20.0),
-        float(target[2]),
-        1.0,
+rng = Grid(
+    x=(target[0] - 20.0, target[0] + 20.0),
+    y=(target[1] - 20.0, target[1] + 20.0),
+    z=float(target[2]),
+    resolution=1.0,
 )
 # ANCHOR: points
 rms = record.sound_field(rng, RmsRecordOption())
@@ -63,7 +63,7 @@ print(observe_points)
 # ANCHOR_END: points
 
 # ANCHOR: rms
-rng = RangeXY(
+rng = Grid(
     x=(target[0] - 20.0, target[0] + 20.0),
     y=(target[1] - 20.0, target[1] + 20.0),
     z=float(target[2]),

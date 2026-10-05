@@ -3,7 +3,7 @@ use autd3_rs::common::ULTRASOUND_PERIOD;
 use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitVector3, Vector3};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, Phase, SamplingConfig};
-use autd3_rs_emulator::{ClientApi, Emulator, RangeXY, RawColumn, Record, RmsRecordOption};
+use autd3_rs_emulator::{AxisOrder, ClientApi, Emulator, Grid, RawColumn, Record, RmsRecordOption};
 use autd3_rs_pattern::{
     HermiteGaussianOption, LaguerreGaussianOption, focus, hermite_gaussian_intensity,
     hermite_gaussian_phase, laguerre_gaussian_intensity, laguerre_gaussian_phase, wavelength,
@@ -45,11 +45,12 @@ fn record(geometry: Geometry, phases: Vec<Vec<Phase>>, intensities: Vec<Vec<Inte
 }
 
 fn rms_grid(record: &Record, target: Point3<f32>) -> Vec<f32> {
-    let range = RangeXY {
+    let range = Grid {
         x: (target.x - HALF_SPAN)..=(target.x + HALF_SPAN),
         y: (target.y - HALF_SPAN)..=(target.y + HALF_SPAN),
-        z: target.z,
+        z: target.z..=target.z,
         resolution: RESOLUTION,
+        order: AxisOrder::XYZ,
     };
     let mut rms = record
         .sound_field(range, RmsRecordOption::default())

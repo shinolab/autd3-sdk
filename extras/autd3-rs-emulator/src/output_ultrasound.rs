@@ -4,7 +4,7 @@
 use polars::frame::DataFrame;
 
 use crate::raw::RawFrame;
-use crate::record::{OUTPUT_VOLTAGE, Record, TS, TransducerRecord};
+use crate::record::{OUTPUT_VOLTAGE, Record, TS, TransducerRecord, output_raw};
 
 struct T4010A1BVDModel {
     state: (f32, f32, f32),
@@ -115,7 +115,7 @@ impl Record {
             .iter()
             .map(TransducerRecord::output_ultrasound)
             .collect();
-        crate::record::output_raw("p[a.u.]", self.records.len(), &per_tr)
+        output_raw("p[a.u.]", &per_tr)
     }
 
     #[cfg(feature = "polars")]

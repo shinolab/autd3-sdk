@@ -6,7 +6,9 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
 
-use autd3_rs_emulator::{ClientApi, Emulator, InstantRecordOption, RangeXY, RmsRecordOption};
+use autd3_rs_emulator::{
+    AxisOrder, ClientApi, Emulator, Grid, InstantRecordOption, RmsRecordOption,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
@@ -58,11 +60,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dbg!(ultrasound);
     // ANCHOR_END: output
 
-    let range = RangeXY {
+    let range = Grid {
         x: (target.x - 20.0)..=(target.x + 20.0),
         y: (target.y - 20.0)..=(target.y + 20.0),
-        z: target.z,
+        z: target.z..=target.z,
         resolution: 1.0,
+        order: AxisOrder::XYZ,
     };
     // ANCHOR: points
     let rms = record.sound_field(range, RmsRecordOption::default())?;
@@ -71,22 +74,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR_END: points
 
     // ANCHOR: rms
-    let range = RangeXY {
+    let range = Grid {
         x: (target.x - 20.0)..=(target.x + 20.0),
         y: (target.y - 20.0)..=(target.y + 20.0),
-        z: target.z,
+        z: target.z..=target.z,
         resolution: 1.0,
+        order: AxisOrder::XYZ,
     };
     let mut rms = record.sound_field(range.clone(), RmsRecordOption::default())?;
     let field = rms.next(Duration::from_micros(25))?;
     dbg!(field);
     // ANCHOR_END: rms
 
-    let range = RangeXY {
+    let range = Grid {
         x: (target.x - 20.0)..=(target.x + 20.0),
         y: (target.y - 20.0)..=(target.y + 20.0),
-        z: target.z,
+        z: target.z..=target.z,
         resolution: 1.0,
+        order: AxisOrder::XYZ,
     };
     // ANCHOR: instant
     let mut instant = record.sound_field(

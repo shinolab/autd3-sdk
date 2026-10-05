@@ -74,7 +74,7 @@ def test_record_option_sound_speed_is_velocity() -> None:
 
 def test_sound_field_rms() -> None:
     record = recorded(geometry())
-    rng = emu.RangeXY((-10.0, 10.0), (-10.0, 10.0), 150.0, 10.0)
+    rng = emu.Grid(x=(-10.0, 10.0), y=(-10.0, 10.0), z=150.0, resolution=10.0)
     rms = record.sound_field(rng, emu.RmsRecordOption())
 
     points = rms.observe_points()
@@ -88,9 +88,41 @@ def test_sound_field_rms() -> None:
 
 def test_sound_field_instant() -> None:
     record = recorded(geometry())
-    rng = emu.RangeXY((-10.0, 10.0), (-10.0, 10.0), 150.0, 10.0)
+    rng = emu.Grid(x=(-10.0, 10.0), y=(-10.0, 10.0), z=150.0, resolution=10.0)
     instant = record.sound_field(rng, emu.InstantRecordOption(time_step=Duration.from_micros(5)))
     instant.skip(Duration.from_micros(500))
     field = instant.next(ULTRASOUND_PERIOD)
     assert isinstance(field, pl.DataFrame)
     assert field.shape == (9, 5)
+
+
+def test_grid_axes_and_order() -> None:
+    record = recorded(geometry())
+
+    def points(grid: emu.Grid) -> list[tuple[float, float, float]]:
+        return record.sound_field(grid, emu.RmsRecordOption()).observe_points().rows()
+
+    assert points(emu.Grid(x=(0.0, 1.0), y=(10.0, 11.0), z=150.0, resolution=1.0)) == [
+        (0.0, 10.0, 150.0),
+        (1.0, 10.0, 150.0),
+        (0.0, 11.0, 150.0),
+        (1.0, 11.0, 150.0),
+    ]
+    assert points(emu.Grid(x=(0.0, 1.0), y=(10.0, 11.0), z=150.0, resolution=1.0, order="yxz")) == [
+        (0.0, 10.0, 150.0),
+        (0.0, 11.0, 150.0),
+        (1.0, 10.0, 150.0),
+        (1.0, 11.0, 150.0),
+    ]
+    assert points(emu.Grid(x=3.0, y=4.0, z=(150.0, 152.0), resolution=1.0)) == [
+        (3.0, 4.0, 150.0),
+        (3.0, 4.0, 151.0),
+        (3.0, 4.0, 152.0),
+    ]
+
+    with pytest.raises(ValueError):
+        emu.Grid(x=0.0, y=0.0, z=150.0, resolution=1.0, order="xy")
+    with pytest.raises(ValueError):
+        emu.Grid(x="0", y=0.0, z=150.0, resolution=1.0)
+    with pytest.raises(TypeError):
+        record.sound_field((0.0, 0.0, 150.0), emu.RmsRecordOption())

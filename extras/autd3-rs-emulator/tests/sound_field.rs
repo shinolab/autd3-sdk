@@ -6,7 +6,7 @@ use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::{Intensity, Phase, SamplingConfig};
 
 use autd3_rs_emulator::{
-    ClientApi, Emulator, InstantRecordOption, RangeXY, Record, RmsRecordOption,
+    AxisOrder, ClientApi, Emulator, Grid, InstantRecordOption, Record, RmsRecordOption,
 };
 
 fn recorded() -> Record {
@@ -38,12 +38,13 @@ fn recorded() -> Record {
         .unwrap()
 }
 
-fn range() -> RangeXY {
-    RangeXY {
+fn range() -> Grid {
+    Grid {
         x: -10.0..=10.0,
         y: -10.0..=10.0,
-        z: 150.0,
+        z: 150.0..=150.0,
         resolution: 10.0,
+        order: AxisOrder::XYZ,
     }
 }
 
@@ -112,12 +113,13 @@ mod gpu {
         }
     }
 
-    fn near_range() -> autd3_rs_emulator::RangeXY {
-        autd3_rs_emulator::RangeXY {
+    fn near_range() -> autd3_rs_emulator::Grid {
+        autd3_rs_emulator::Grid {
             x: -10.0..=10.0,
             y: -10.0..=10.0,
-            z: 1.0,
+            z: 1.0..=1.0,
             resolution: 10.0,
+            order: autd3_rs_emulator::AxisOrder::XYZ,
         }
     }
 

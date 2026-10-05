@@ -249,9 +249,24 @@ shape: (1_681, 25)
 ### 観測範囲
 
 `Range` は観測点の集合を表す.
-`RangeXY` のような平面のほか, 1 軸のみの `RangeX` 等, 3 軸すべての `RangeXYZ` 等がある.
-軸の順序 ( `RangeXY` と `RangeYX` 等 ) は観測点の列挙順を決める.
-`resolution` は各軸の刻み幅 ( mm ) である.
+格子状の観測点は `Grid` で指定する. `x` / `y` / `z` に各軸の範囲, `resolution` に刻み幅 ( mm ) を与える.
+固定したい軸は始点と終点を同じ値にする ( Rust は `150.0..=150.0`, Python は `150.0` ). これで直線・平面・立体を同じ型で書ける.
+
+`order` は観測点の列挙順で, 先頭の軸が最も速く変わる.
+Rust は `AxisOrder::XYZ` ( 既定 ) / `XZY` / `YXZ` / `YZX` / `ZXY` / `ZYX`, Python は `order="xyz"` ( 既定 ) のような文字列で指定する.
+
+格子に乗らない観測点は, Rust では `Point3` や `Vec<Point3>` をそのまま渡せる.
+
+:::note[以前の `RangeXY` 等からの移行]
+軸の組み合わせごとにあった `RangeX` 〜 `RangeZYX` は `Grid` に統合した.
+
+| 以前 | 現在 |
+| --- | --- |
+| `RangeXY { x, y, z: 150.0, resolution }` | `Grid { x, y, z: 150.0..=150.0, resolution, order: AxisOrder::XYZ }` |
+| `RangeYX { x, y, z: 150.0, resolution }` | `Grid { x, y, z: 150.0..=150.0, resolution, order: AxisOrder::YXZ }` |
+| `RangeZXY { x, y, z, resolution }` | `Grid { x, y, z, resolution, order: AxisOrder::ZXY }` |
+| `RangeXY((x0, x1), (y0, y1), 150.0, 1.0)` ( Python ) | `Grid(x=(x0, x1), y=(y0, y1), z=150.0, resolution=1.0)` |
+:::
 
 ### GPU バックエンド (Rust 版のみ)
 
