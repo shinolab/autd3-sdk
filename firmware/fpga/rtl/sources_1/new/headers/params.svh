@@ -12,9 +12,11 @@ package params;
 
   localparam int UltrasoundFreqHz = 40000;
   localparam bit [15:0] RepInfinite = 16'hFFFF;
+  localparam int SyncCycleTicks = 20480;
 
   localparam int FuncDynamicFreqBit = 1;
   localparam int FuncFlashOtaBit = 2;
+  localparam int FuncStrictSilencerGuardBit = 3;
   localparam int FuncEmulatorBit = 7;  // reserved
 
   localparam bit [23:0] FlashWritableBase = 24'h800000;
@@ -53,20 +55,16 @@ package params;
     FPGA_STATE_BIT_READS_ENABLED = 7
   } fpga_state_bit_t;
 
-  typedef enum logic [1:0] {
-    BRAM_SELECT_CONTROLLER = 2'h0,
-    BRAM_SELECT_MOD = 2'h1,
-    BRAM_SELECT_PWE_TABLE = 2'h2,
-    BRAM_SELECT_EMISSION = 2'h3
+  typedef enum logic [7:0] {
+    BRAM_SELECT_CONTROLLER  = 8'h00,
+    BRAM_SELECT_PHASE_CORR  = 8'h01,
+    BRAM_SELECT_OUTPUT_MASK = 8'h02,
+    BRAM_SELECT_FLASH       = 8'h03,
+    BRAM_SELECT_FLASH_BUF   = 8'h04,
+    BRAM_SELECT_PWE_TABLE   = 8'h06,
+    BRAM_SELECT_MOD         = 8'h40,
+    BRAM_SELECT_EMISSION    = 8'hC0
   } bram_select_t;
-
-  typedef enum logic [5:0] {
-    BRAM_CNT_SELECT_MAIN = 6'h00,
-    BRAM_CNT_SELECT_PHASE_CORR = 6'h01,
-    BRAM_CNT_SELECT_OUTPUT_MASK = 6'h02,
-    BRAM_CNT_SELECT_FLASH = 6'h03,
-    BRAM_CNT_SELECT_FLASH_BUF = 6'h04
-  } bram_cnt_select_t;
 
   typedef enum logic [7:0] {
     ADDR_FLASH_CMD          = 8'h00,
@@ -109,7 +107,10 @@ package params;
     EMISSION_TYPE_RAW  = 1'b1
   } emission_type_t;
 
-  typedef enum int {SILENCER_FLAG_BIT_FIXED_UPDATE_RATE_MODE = 0} silencer_mode_bit_t;
+  typedef enum int {
+    SILENCER_FLAG_BIT_FIXED_UPDATE_RATE_MODE = 0,
+    SILENCER_FLAG_BIT_STRICT_MODE = 1
+  } silencer_mode_bit_t;
 
   typedef enum logic [7:0] {
     GPIO_O_TYPE_NONE = 8'h00,
@@ -117,6 +118,7 @@ package params;
     GPIO_O_TYPE_THERMO = 8'h02,
     GPIO_O_TYPE_FORCE_FAN = 8'h03,
     GPIO_O_TYPE_SYNC = 8'h10,
+    GPIO_O_TYPE_SYNC_RAW = 8'h11,
     GPIO_O_TYPE_MOD_BANK = 8'h20,
     GPIO_O_TYPE_MOD_IDX = 8'h21,
     GPIO_O_TYPE_PATTERN_BANK = 8'h50,
@@ -129,18 +131,18 @@ package params;
   } debug_type_t;
 
   typedef enum logic [7:0] {
-    ADDR_CTL_FLAG          = 8'h00,
-    ADDR_FPGA_STATE        = 8'h01,
-    ADDR_VERSION_NUM_MAJOR = 8'h02,
-    ADDR_VERSION_NUM_MINOR = 8'h03,
-    ADDR_VERSION_NUM_PATCH = 8'h04,
+    ADDR_CTL_FLAG            = 8'h00,
+    ADDR_FPGA_STATE          = 8'h01,
+    ADDR_VERSION_NUM_MAJOR   = 8'h02,
+    ADDR_VERSION_NUM_MINOR   = 8'h03,
+    ADDR_VERSION_NUM_PATCH   = 8'h04,
+    ADDR_FUNCTION_BITS       = 8'h05,
+    ADDR_SILENCER_SET_RESULT = 8'h06,
 
-    ADDR_ECAT_SYNC_TIME_0  = 8'h10,
-    ADDR_ECAT_SYNC_TIME_1  = 8'h11,
-    ADDR_ECAT_SYNC_TIME_2  = 8'h12,
-    ADDR_ECAT_SYNC_TIME_3  = 8'h13,
-    ADDR_ECAT_SYNC_CYCLE_0 = 8'h14,
-    ADDR_ECAT_SYNC_CYCLE_1 = 8'h15,
+    ADDR_SYNC_TIME_0 = 8'h10,
+    ADDR_SYNC_TIME_1 = 8'h11,
+    ADDR_SYNC_TIME_2 = 8'h12,
+    ADDR_SYNC_TIME_3 = 8'h13,
 
     ADDR_MOD_MEM_WR_BANK        = 8'h20,
     ADDR_MOD_MEM_WR_PAGE        = 8'h21,

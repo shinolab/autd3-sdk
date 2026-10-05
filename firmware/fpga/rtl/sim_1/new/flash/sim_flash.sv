@@ -109,11 +109,11 @@ module sim_flash ();
   endfunction
 
   task automatic reg_write(input logic [7:0] a, input logic [15:0] v);
-    sim_helper_bram.bram_write(BRAM_SELECT_CONTROLLER, {BRAM_CNT_SELECT_FLASH, a}, v);
+    sim_helper_bram.bram_write(BRAM_SELECT_FLASH, a, v);
   endtask
 
   task automatic reg_read(input logic [7:0] a, output logic [15:0] v);
-    sim_helper_bram.bram_read(BRAM_SELECT_CONTROLLER, {BRAM_CNT_SELECT_FLASH, a}, v);
+    sim_helper_bram.bram_read(BRAM_SELECT_FLASH, a, v);
   endtask
 
   task automatic buf_write(input logic [7:0] bytes[$]);
@@ -122,7 +122,7 @@ module sim_flash ();
     for (int i = 0; i < (bytes.size() + 1) / 2; i++) begin
       lo = bytes[2*i];
       hi = (2 * i + 1 < bytes.size()) ? bytes[2*i+1] : 8'hFF;
-      sim_helper_bram.bram_write(BRAM_SELECT_CONTROLLER, {5'b00010, i[8:0]}, {hi, lo});
+      sim_helper_bram.bram_write(BRAM_SELECT_FLASH_BUF, i[8:0], {hi, lo});
     end
   endtask
 

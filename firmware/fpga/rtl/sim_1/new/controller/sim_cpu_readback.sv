@@ -95,7 +95,10 @@ module sim_cpu_readback ();
     repeat (64) @(posedge CLK);
 
     sim_helper_bram.read_cnt(params::ADDR_VERSION_NUM_MAJOR, value);
-    `ASSERT_EQ({8'd1 << params::FuncFlashOtaBit, params::VersionNumMajor}, value);
+    `ASSERT_EQ({8'h00, params::VersionNumMajor}, value);
+
+    sim_helper_bram.read_cnt(params::ADDR_FUNCTION_BITS, value);
+    `ASSERT_EQ({8'h00, (8'd1 << params::FuncFlashOtaBit) | (8'd1 << params::FuncStrictSilencerGuardBit)}, value);
 
     sim_helper_bram.read_cnt(params::ADDR_VERSION_NUM_MINOR, value);
     `ASSERT_EQ({8'h00, params::VersionNumMinor}, value);

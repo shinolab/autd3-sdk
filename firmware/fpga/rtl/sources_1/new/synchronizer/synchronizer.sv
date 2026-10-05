@@ -3,7 +3,7 @@
 module synchronizer (
     input wire CLK,
     input wire settings::sync_settings_t SYNC_SETTINGS,
-    input wire ECAT_SYNC,
+    input wire SYNC_IN,
     output var [56:0] SYS_TIME,
     output var SYNC,
     output var SKIP_ONE_ASSERT,
@@ -11,52 +11,30 @@ module synchronizer (
     output var [7:0] SYNC_RESYNC_COUNT
 );
 
-  localparam int AddSubLatency = 5;
+  localparam int CycleTicks = params::SyncCycleTicks;
+  localparam int HalfCycleTicks = CycleTicks / 2;
+  localparam int PhaseWidth = $clog2(CycleTicks + 2);
 
   localparam int AdjustCntBase = 3125;
   localparam int AdjustCntRange = 4096;
   localparam int AdjustCntOffset = AdjustCntBase - AdjustCntRange / 2;
 
-  localparam logic signed [57:0] DiffMax = 58'sd8191;
-
-  logic [63:0] ecat_sync_time = '0;
-  logic [31:0] ecat_sync_cycle = '0;
-  logic [56:0] sync_time;
-
-  logic [56:0] cycle_ticks;
-  assign cycle_ticks = {25'd0, ecat_sync_cycle};
+  localparam int DiffMax = 8191;
 
   (* ASYNC_REG = "true" *) logic [2:0] sync_tri = '0;
   logic sync;
+  assign sync = sync_tri[2:1] == 2'b01;
   assign SYNC = sync;
 
-  logic [56:0] sys_time = '0;
-  logic [56:0] next_sync_time = '0;
-  logic signed [13:0] sync_time_diff = '0;
-  logic [$clog2(AddSubLatency+1)-1:0] diff_cnt = '0;
-  logic [$clog2(AddSubLatency+1)-1:0] next_cnt = '0;
+  logic [56:0] sync_time = '0;
   logic set = 1'b0;
 
-  logic conv_settling = 1'b0;
-  logic conv_settle_cnt = 1'b0;
-  logic sync_time_dout_valid;
-  logic [56:0] pending_offset = '0;
-  logic [56:0] sync_time_adj = '0;
-
-  logic [56:0] a_diff, b_diff;
-  logic signed [57:0] s_diff;
-  logic [56:0] a_next = 0, b_next, s_next;
-
-  logic diff_overflow;
-  assign diff_overflow = (s_diff > DiffMax) || (s_diff < -DiffMax);
-
+  logic [56:0] sys_time = '0;
+  logic [PhaseWidth-1:0] phase = '0;
+  logic signed [13:0] sync_time_diff = '0;
+  logic skip_one_assert = 1'b0;
   logic [7:0] resync_count = '0;
-  assign SYNC_RESYNC_COUNT = resync_count;
   logic locked = 1'b0;
-
-  logic skip_one_assert;
-  assign SKIP_ONE_ASSERT = skip_one_assert;
-  assign SYNC_TIME_DIFF  = sync_time_diff;
 
   logic [31:0] xor_x = 32'd123456789;
   logic [31:0] xor_y = 32'd362436069;
@@ -67,110 +45,63 @@ module synchronizer (
   logic [12:0] adjust_cnt = '0;
   logic [12:0] adjust_cnt_cyc = 13'(AdjustCntBase);
 
-  ec_time_to_sys_time ec_time_to_sys_time (
-      .CLK(CLK),
-      .EC_TIME(ecat_sync_time),
-      .DIN_VALID(set),
-      .SYS_TIME(sync_time),
-      .DOUT_VALID(sync_time_dout_valid)
-  );
-
-  sub57_57 sub_diff (
-      .CLK(CLK),
-      .A  (a_diff),
-      .B  (b_diff),
-      .S  (s_diff)
-  );
-
-  add57_57 add_next (
-      .CLK(CLK),
-      .A  (a_next),
-      .B  (b_next),
-      .S  (s_next)
-  );
-
-  assign sync = sync_tri[2:1] == 2'b01;
   assign SYS_TIME = sys_time;
+  assign SKIP_ONE_ASSERT = skip_one_assert;
+  assign SYNC_TIME_DIFF = sync_time_diff;
+  assign SYNC_RESYNC_COUNT = resync_count;
+
+  logic signed [PhaseWidth:0] edge_diff;
+  assign edge_diff = (phase >= PhaseWidth'(HalfCycleTicks)) ? $signed({1'b0, PhaseWidth'(CycleTicks) - phase}) : -$signed({1'b0, phase});
+
+  logic edge_overflow;
+  assign edge_overflow = (edge_diff > DiffMax) || (edge_diff < -DiffMax);
+
+  logic [1:0] step;
+  always_comb begin
+    if (sync) step = 2'd1;
+    else if ((adjust_cnt != '0) || (sync_time_diff == '0)) step = 2'd1;
+    else if (sync_time_diff < 14'sd0) step = 2'd0;
+    else step = 2'd2;
+  end
+
+  logic [PhaseWidth-1:0] phase_next;
+  assign phase_next = (phase + PhaseWidth'(step) >= PhaseWidth'(CycleTicks)) ? phase + PhaseWidth'(step) - PhaseWidth'(CycleTicks) : phase + PhaseWidth'(step);
 
   always_ff @(posedge CLK) begin
     if (SYNC_SETTINGS.UPDATE) begin
       set <= 1'b1;
-      conv_settling <= 1'b1;
-      conv_settle_cnt <= 1'b0;
-      pending_offset <= '0;
-      ecat_sync_time <= SYNC_SETTINGS.ECAT_SYNC_TIME;
-      ecat_sync_cycle <= SYNC_SETTINGS.ECAT_SYNC_CYCLE;
-    end else begin
-      if (conv_settling & sync_time_dout_valid) begin
-        conv_settle_cnt <= 1'b1;
-        if (conv_settle_cnt) conv_settling <= 1'b0;
-      end
-      if (sync & set) begin
-        if (conv_settling) begin
-          pending_offset <= pending_offset + cycle_ticks;
-        end else begin
-          set <= 1'b0;
-        end
-      end
+      sync_time <= SYNC_SETTINGS.SYNC_TIME[56:0];
+    end else if (sync) begin
+      set <= 1'b0;
     end
   end
 
-  always_ff @(posedge CLK) sync_time_adj <= sync_time + pending_offset;
-
   always_ff @(posedge CLK) begin
     if (sync) begin
-      b_next   <= cycle_ticks;
-      next_cnt <= 0;
-      if (set & ~conv_settling) begin
-        sys_time <= sync_time_adj + 1;
-        a_diff <= '0;
-        b_diff <= '0;
-        a_next <= sync_time_adj;
+      skip_one_assert <= 1'b0;
+      if (set & ~SYNC_SETTINGS.UPDATE) begin
+        sys_time <= sync_time + 1;
+        phase <= PhaseWidth'(1);
         sync_time_diff <= '0;
         locked <= 1'b1;
         resync_count <= '0;
       end else begin
-        a_diff   <= next_sync_time;
-        b_diff   <= sys_time;
-        a_next   <= next_sync_time;
         sys_time <= sys_time + 1;
-      end
-      diff_cnt <= '0;
-      skip_one_assert <= 1'b0;
-    end else begin
-      if (diff_cnt == AddSubLatency + 1) begin
-        if ((adjust_cnt != '0) || (sync_time_diff == '0)) begin
-          sys_time <= sys_time + 1;
-          skip_one_assert <= 1'b0;
-        end else if (sync_time_diff < 14'sd0) begin
-          sys_time <= sys_time;
-          skip_one_assert <= 1'b0;
-          sync_time_diff <= sync_time_diff + 1;
+        if (edge_overflow) begin
+          phase <= PhaseWidth'(1);
+          sync_time_diff <= '0;
+          if (locked && (resync_count != 8'hFF)) resync_count <= resync_count + 8'd1;
         end else begin
-          sys_time <= sys_time + 2;
-          skip_one_assert <= 1'b1;
-          sync_time_diff <= sync_time_diff - 1;
+          phase <= phase_next;
+          sync_time_diff <= 14'(edge_diff);
         end
-      end else if (diff_cnt == AddSubLatency) begin
-        sync_time_diff <= diff_overflow ? 14'sd0 : 14'(s_diff);
-        if (locked && diff_overflow && (resync_count != 8'hFF)) resync_count <= resync_count + 8'd1;
-        diff_cnt <= diff_cnt + 1;
-        sys_time <= sys_time + 1;
-        skip_one_assert <= 1'b0;
-      end else begin
-        diff_cnt <= diff_cnt + 1;
-        sys_time <= sys_time + 1;
-        skip_one_assert <= 1'b0;
       end
-
-      if (next_cnt == AddSubLatency + 1) begin
-        next_cnt <= next_cnt;
-      end else if (next_cnt == AddSubLatency) begin
-        next_sync_time <= diff_overflow ? (b_diff + cycle_ticks) : s_next;
-        next_cnt <= next_cnt + 1;
-      end else begin
-        next_cnt <= next_cnt + 1;
-      end
+    end else begin
+      sys_time <= sys_time + 57'(step);
+      phase <= phase_next;
+      skip_one_assert <= step == 2'd2;
+      if (step == 2'd0) sync_time_diff <= sync_time_diff + 1;
+      else if (step == 2'd2) sync_time_diff <= sync_time_diff - 1;
     end
   end
 
@@ -188,7 +119,7 @@ module synchronizer (
 
   always_ff @(posedge CLK) adjust_cnt <= adjust_cnt == adjust_cnt_cyc ? '0 : adjust_cnt + 1;
 
-  always_ff @(posedge CLK) sync_tri <= {sync_tri[1:0], ECAT_SYNC};
+  always_ff @(posedge CLK) sync_tri <= {sync_tri[1:0], SYNC_IN};
 
 endmodule
 `default_nettype wire
