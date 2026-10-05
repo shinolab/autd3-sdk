@@ -39,11 +39,11 @@ fn propagation(gpu: &WgpuBackend, foci: usize) -> GpuMatrix {
         })
         .collect();
     let wavenumber = 2.0 * core::f32::consts::PI / autd3_rs_pattern::wavelength(340.0 * m / s).mm();
-    gpu.propagation_matrix(&tr_pos, &tr_dir, &f, wavenumber, Directivity::Sphere)
+    gpu.propagation_matrix(&tr_pos, &tr_dir, &f, 1, wavenumber, Directivity::Sphere)
 }
 
 fn measure(gpu: &WgpuBackend, label: &str, dispatches: usize, mut record: impl FnMut()) {
-    let sink = gpu.make_vector(vec![Complex::new(1.0, 0.0); 1]);
+    let sink = gpu.make_vector(1, vec![Complex::new(1.0, 0.0); 1]);
     for _ in 0..2 {
         for _ in 0..8 {
             record();
@@ -85,7 +85,7 @@ fn dispatch_cost_breakdown() {
         let t = Instant::now();
         let mut sink = Vec::with_capacity(2000);
         for _ in 0..2000 {
-            sink.push(gpu.make_vector(vec![Complex::new(1.0, 0.0); 4]));
+            sink.push(gpu.make_vector(1, vec![Complex::new(1.0, 0.0); 4]));
         }
         println!(
             "make_vector (small):        {:>6.2} us/call",
@@ -103,22 +103,11 @@ fn dispatch_cost_breakdown() {
         println!("--- 64 devices (n={N}) / {m} foci ---");
         let g = propagation(&gpu, m);
         let b = gpu.back_prop(&g);
-        let amps = gpu.make_vector(vec![Complex::new(1.0, 0.0); m]);
-        let q0 = gpu.make_vector(vec![Complex::new(1.0, 0.0); N]);
-        let p0 = gpu.make_vector(vec![Complex::new(1.0, 0.0); m]);
+        let ones = |len| gpu.make_vector(1, vec![Complex::new(1.0, 0.0); len]);
+        let amps = ones(m);
+        let q0 = ones(N);
+        let p0 = ones(m);
 
-        {
-            let mut q = gpu.clone_vector(&q0);
-            measure(&gpu, "hadamard_normalize(n)", 1, || {
-                gpu.hadamard_normalize(&mut q, &q0);
-            });
-        }
-        {
-            let mut p = gpu.clone_vector(&p0);
-            measure(&gpu, "hadamard_normalize(m)", 1, || {
-                gpu.hadamard_normalize(&mut p, &amps);
-            });
-        }
         measure(&gpu, "gemv(g) partial", 1, || {
             let _ = gpu.gemv(&g, &q0);
         });
@@ -129,16 +118,7 @@ fn dispatch_cost_breakdown() {
             let _ = gpu.gemv(&b, &gpu.gemv(&g, &q0));
         });
         {
-            let mut q = gpu.clone_vector(&q0);
-            measure(&gpu, "gs iteration (unfused)", 5, || {
-                gpu.hadamard_normalize(&mut q, &q0);
-                let mut p = gpu.gemv(&g, &q);
-                gpu.hadamard_normalize(&mut p, &amps);
-                q = gpu.gemv(&b, &p);
-            });
-        }
-        {
-            let mut q = Some(gpu.clone_vector(&q0));
+            let mut q = Some(ones(N));
             measure(&gpu, "gs iteration (fused)", 2, || {
                 let p = gpu.gemv_hadamard_normalized(&g, q.take().unwrap(), &q0);
                 q = Some(gpu.gemv_hadamard_normalized(&b, p, &amps));
@@ -172,8 +152,8 @@ fn quantize_cost() {
     );
     for batch in [1usize, 16, 64] {
         let data = vec![Complex::new(1.0, 0.5); batch * N];
-        let gpu_v = gpu.make_batch_vector(batch, data.clone());
-        let cpu_v = NalgebraBackend.make_batch_vector(batch, data);
+        let gpu_v = gpu.make_vector(batch, data.clone());
+        let cpu_v = NalgebraBackend.make_vector(batch, data);
         for (label, c) in [
             (
                 "clamp",
@@ -181,17 +161,17 @@ fn quantize_cost() {
             ),
             ("normalize", IntensityConstraint::Normalize),
         ] {
-            let _ = gpu.quantize_batch(&gpu_v, c, false);
+            let _ = gpu.quantize(&gpu_v, c, false);
             let t = Instant::now();
             for _ in 0..QUANTIZE_ITERS {
-                let _ = gpu.quantize_batch(&gpu_v, c, false);
+                let _ = gpu.quantize(&gpu_v, c, false);
             }
             let gpu_ms = t.elapsed().as_secs_f64() * 1e3 / QUANTIZE_ITERS as f64;
 
-            let _ = NalgebraBackend.quantize_batch(&cpu_v, c, true);
+            let _ = NalgebraBackend.quantize(&cpu_v, c, true);
             let t = Instant::now();
             for _ in 0..QUANTIZE_ITERS {
-                let _ = NalgebraBackend.quantize_batch(&cpu_v, c, true);
+                let _ = NalgebraBackend.quantize(&cpu_v, c, true);
             }
             let cpu_ms = t.elapsed().as_secs_f64() * 1e3 / QUANTIZE_ITERS as f64;
 
@@ -215,9 +195,10 @@ fn bind_group_reuse() {
     for m in [1usize, 16] {
         let g = propagation(&gpu, m);
         let b = gpu.back_prop(&g);
-        let amps = gpu.make_vector(vec![Complex::new(1.0, 0.0); m]);
-        let q0 = gpu.make_vector(vec![Complex::new(1.0, 0.0); N]);
-        let mut q = Some(gpu.clone_vector(&q0));
+        let ones = |len| gpu.make_vector(1, vec![Complex::new(1.0, 0.0); len]);
+        let amps = ones(m);
+        let q0 = ones(N);
+        let mut q = Some(ones(N));
         let built: Vec<String> = (0..10)
             .map(|_| {
                 let before = gpu.bind_groups_created();

@@ -397,3 +397,67 @@ fn rejects_malformed_batches() {
         })
     );
 }
+
+#[test]
+fn a_dst_that_does_not_match_the_geometry_is_an_error_not_a_panic() {
+    let g = geometry(2);
+    let foci = problem(&g, 0, 2);
+    let short = slot(&geometry(1));
+    let want = Err(HoloError::DstDeviceCountMismatch {
+        got: 1,
+        expected: 2,
+    });
+
+    let mut one = short.clone();
+    assert_eq!(
+        naive(
+            &NalgebraBackend,
+            &g,
+            &foci,
+            wl(),
+            &NaiveOption::default(),
+            &mut one.0,
+            &mut one.1
+        ),
+        want
+    );
+    assert_eq!(
+        gs(
+            &NalgebraBackend,
+            &g,
+            &foci,
+            wl(),
+            &GsOption::default(),
+            &mut one.0,
+            &mut one.1
+        ),
+        want
+    );
+    assert_eq!(
+        gspat(
+            &NalgebraBackend,
+            &g,
+            &foci,
+            wl(),
+            &GspatOption::default(),
+            &mut one.0,
+            &mut one.1
+        ),
+        want
+    );
+
+    let mut phases = vec![slot(&g).0, short.0];
+    let mut intensities = vec![slot(&g).1; 2];
+    assert_eq!(
+        gs_batch(
+            &NalgebraBackend,
+            &g,
+            &problem(&g, 0, 4),
+            wl(),
+            &GsOption::default(),
+            &mut phases,
+            &mut intensities
+        ),
+        want
+    );
+}

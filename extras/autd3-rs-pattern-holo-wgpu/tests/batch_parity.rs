@@ -141,58 +141,46 @@ fn broadcast_batch_operands_match_nalgebra() {
                 let flat: Vec<AmplitudeTarget> = owned.iter().flatten().copied().collect();
                 let label = format!("{devices}dev/{nf}foci/{problems}problems");
 
-                let a_host = cpu.batch_propagation_matrix(
-                    &pos,
-                    &dir,
-                    &flat,
-                    problems,
-                    k,
-                    Directivity::T4010A1,
-                );
-                let a_wgpu = gpu.batch_propagation_matrix(
-                    &pos,
-                    &dir,
-                    &flat,
-                    problems,
-                    k,
-                    Directivity::T4010A1,
-                );
-                let b_host = cpu.batch_back_prop(&a_host);
-                let b_wgpu = gpu.batch_back_prop(&a_wgpu);
+                let a_host =
+                    cpu.propagation_matrix(&pos, &dir, &flat, problems, k, Directivity::T4010A1);
+                let a_wgpu =
+                    gpu.propagation_matrix(&pos, &dir, &flat, problems, k, Directivity::T4010A1);
+                let b_host = cpu.back_prop(&a_host);
+                let b_wgpu = gpu.back_prop(&a_wgpu);
 
                 let shared = seeded(n, 0);
-                let p_host = cpu.batch_gemv(&a_host, &cpu.make_batch_vector(1, shared.clone()));
-                let p_wgpu = gpu.batch_gemv(&a_wgpu, &gpu.make_batch_vector(1, shared.clone()));
+                let p_host = cpu.gemv(&a_host, &cpu.make_vector(1, shared.clone()));
+                let p_wgpu = gpu.gemv(&a_wgpu, &gpu.make_vector(1, shared.clone()));
                 compare_values(
                     &format!("broadcast x gemv {label}"),
-                    &cpu.batch_vector_to_host(&p_host),
-                    &gpu.batch_vector_to_host(&p_wgpu),
+                    &cpu.vector_to_host(&p_host),
+                    &gpu.vector_to_host(&p_wgpu),
                 );
 
                 let amps = seeded(nf, 11);
-                let mut q_host = cpu.batch_gemv_hadamard_normalized(
+                let mut q_host = cpu.gemv_hadamard_normalized(
                     &b_host,
                     p_host,
-                    &cpu.make_batch_vector(1, amps.clone()),
+                    &cpu.make_vector(1, amps.clone()),
                 );
-                let mut q_wgpu = gpu.batch_gemv_hadamard_normalized(
+                let mut q_wgpu = gpu.gemv_hadamard_normalized(
                     &b_wgpu,
                     p_wgpu,
-                    &gpu.make_batch_vector(1, amps.clone()),
+                    &gpu.make_vector(1, amps.clone()),
                 );
                 compare_values(
                     &format!("broadcast r gemv {label}"),
-                    &cpu.batch_vector_to_host(&q_host),
-                    &gpu.batch_vector_to_host(&q_wgpu),
+                    &cpu.vector_to_host(&q_host),
+                    &gpu.vector_to_host(&q_wgpu),
                 );
 
                 let corr = seeded(n, 23);
-                cpu.batch_amplitude_correct(&mut q_host, &cpu.make_batch_vector(1, corr.clone()));
-                gpu.batch_amplitude_correct(&mut q_wgpu, &gpu.make_batch_vector(1, corr.clone()));
+                cpu.amplitude_correct(&mut q_host, &cpu.make_vector(1, corr.clone()));
+                gpu.amplitude_correct(&mut q_wgpu, &gpu.make_vector(1, corr.clone()));
                 compare_values(
                     &format!("broadcast r amplitude_correct {label}"),
-                    &cpu.batch_vector_to_host(&q_host),
-                    &gpu.batch_vector_to_host(&q_wgpu),
+                    &cpu.vector_to_host(&q_host),
+                    &gpu.vector_to_host(&q_wgpu),
                 );
             }
         }

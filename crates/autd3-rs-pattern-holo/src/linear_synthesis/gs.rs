@@ -13,7 +13,6 @@ use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::linear_synthesis::batch::{BatchSetup, solve_batched};
 use crate::mask::TransducerMask;
-use crate::propagation::{make_propagation_matrix, quantize, target_amplitudes};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GsOption<'a> {
@@ -36,7 +35,6 @@ impl Default for GsOption<'_> {
     }
 }
 
-#[allow(clippy::many_single_char_names)]
 pub fn gs<B: LinAlgBackend>(
     backend: &B,
     geometry: &Geometry,
@@ -46,45 +44,15 @@ pub fn gs<B: LinAlgBackend>(
     phases: &mut [Vec<Phase>],
     intensities: &mut [Vec<Intensity>],
 ) -> Result<(), HoloError> {
-    if foci.is_empty() {
-        return Err(HoloError::NoFoci);
-    }
-    crate::mask::validate_dst_len(phases.len(), geometry)?;
-    crate::mask::validate_dst_len(intensities.len(), geometry)?;
-    let mask = option.mask;
-    mask.validate(geometry)?;
-
-    let g = make_propagation_matrix(
+    solve(
         backend,
         geometry,
         foci,
         wavelength,
-        option.directivity,
-        mask,
-    );
-    let b = backend.back_prop(&g);
-    let amps = target_amplitudes(backend, foci);
-
-    let n = mask.num_enabled(geometry);
-    let q0 = backend.make_vector(vec![Complex::new(1.0, 0.0); n]);
-    let mut q = backend.clone_vector(&q0);
-
-    for _ in 0..option.repeat.get() {
-        let p = backend.gemv_hadamard_normalized(&g, q, &q0);
-        q = backend.gemv_hadamard_normalized(&b, p, &amps);
-    }
-
-    quantize(
-        backend,
-        geometry,
-        &q,
-        option.constraint,
-        mask,
-        option.parallel,
-        phases,
-        intensities,
-    );
-    Ok(())
+        option,
+        &mut [phases],
+        &mut [intensities],
+    )
 }
 
 pub fn gs_batch<B: LinAlgBackend>(
@@ -96,6 +64,31 @@ pub fn gs_batch<B: LinAlgBackend>(
     phases: &mut [Vec<Vec<Phase>>],
     intensities: &mut [Vec<Vec<Intensity>>],
 ) -> Result<(), HoloError> {
+    solve(
+        backend,
+        geometry,
+        foci,
+        wavelength,
+        option,
+        phases,
+        intensities,
+    )
+}
+
+fn solve<B, P, I>(
+    backend: &B,
+    geometry: &Geometry,
+    foci: &[AmplitudeTarget],
+    wavelength: Length,
+    option: &GsOption<'_>,
+    phases: &mut [P],
+    intensities: &mut [I],
+) -> Result<(), HoloError>
+where
+    B: LinAlgBackend,
+    P: AsMut<[Vec<Phase>]>,
+    I: AsMut<[Vec<Intensity>]>,
+{
     let setup = BatchSetup {
         constraint: option.constraint,
         directivity: option.directivity,
@@ -111,12 +104,12 @@ pub fn gs_batch<B: LinAlgBackend>(
         phases,
         intensities,
         |backend, g, amps, batch, n| {
-            let b = backend.batch_back_prop(g);
-            let q0 = backend.make_batch_vector(1, vec![Complex::new(1.0, 0.0); n]);
-            let mut q = backend.make_batch_vector(batch, vec![Complex::new(1.0, 0.0); batch * n]);
+            let b = backend.back_prop(g);
+            let q0 = backend.make_vector(1, vec![Complex::new(1.0, 0.0); n]);
+            let mut q = backend.make_vector(batch, vec![Complex::new(1.0, 0.0); batch * n]);
             for _ in 0..option.repeat.get() {
-                let p = backend.batch_gemv_hadamard_normalized(g, q, &q0);
-                q = backend.batch_gemv_hadamard_normalized(&b, p, amps);
+                let p = backend.gemv_hadamard_normalized(g, q, &q0);
+                q = backend.gemv_hadamard_normalized(&b, p, amps);
             }
             q
         },

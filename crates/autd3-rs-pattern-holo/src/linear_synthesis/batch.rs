@@ -9,7 +9,7 @@ use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::mask::TransducerMask;
 use crate::propagation::{
-    batch_shape, batch_target_amplitudes, enabled_transducers, quantize_batch, wavenumber,
+    batch_shape, enabled_transducers, quantize, target_amplitudes, wavenumber,
 };
 
 pub(crate) struct BatchSetup<'a> {
@@ -20,19 +20,21 @@ pub(crate) struct BatchSetup<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn solve_batched<B, F>(
+pub(crate) fn solve_batched<B, P, I, F>(
     backend: &B,
     geometry: &Geometry,
     foci: &[AmplitudeTarget],
     wavelength: Length,
     setup: &BatchSetup<'_>,
-    phases: &mut [Vec<Vec<Phase>>],
-    intensities: &mut [Vec<Vec<Intensity>>],
+    phases: &mut [P],
+    intensities: &mut [I],
     solve: F,
 ) -> Result<(), HoloError>
 where
     B: LinAlgBackend,
-    F: Fn(&B, &B::BatchMatrix, &B::BatchVector, usize, usize) -> B::BatchVector,
+    P: AsMut<[Vec<Phase>]>,
+    I: AsMut<[Vec<Intensity>]>,
+    F: Fn(&B, &B::Matrix, &B::Vector, usize, usize) -> B::Vector,
 {
     if phases.len() != intensities.len() {
         return Err(HoloError::DstProblemCountMismatch {
@@ -43,9 +45,9 @@ where
     let foci_per_problem = batch_shape(foci, phases.len())?;
     let mask = setup.mask;
     mask.validate(geometry)?;
-    for (p, i) in phases.iter().zip(intensities.iter()) {
-        crate::mask::validate_dst_len(p.len(), geometry)?;
-        crate::mask::validate_dst_len(i.len(), geometry)?;
+    for (p, i) in phases.iter_mut().zip(intensities.iter_mut()) {
+        crate::mask::validate_dst_len(p.as_mut().len(), geometry)?;
+        crate::mask::validate_dst_len(i.as_mut().len(), geometry)?;
     }
 
     let k = wavenumber(wavelength);
@@ -58,17 +60,10 @@ where
         .zip(phases.chunks_mut(chunk).zip(intensities.chunks_mut(chunk)))
     {
         let problems = phases.len();
-        let g = backend.batch_propagation_matrix(
-            &tr_pos,
-            &tr_dir,
-            foci,
-            problems,
-            k,
-            setup.directivity,
-        );
-        let amps = batch_target_amplitudes(backend, foci, problems);
+        let g = backend.propagation_matrix(&tr_pos, &tr_dir, foci, problems, k, setup.directivity);
+        let amps = target_amplitudes(backend, foci, problems);
         let q = solve(backend, &g, &amps, problems, enabled);
-        quantize_batch(
+        quantize(
             backend,
             geometry,
             &q,

@@ -31,33 +31,8 @@ pub(crate) fn propagate(
     Complex::new(r * cos, r * sin)
 }
 
-pub(crate) fn make_propagation_matrix<B: LinAlgBackend>(
-    backend: &B,
-    geometry: &Geometry,
-    foci: &[AmplitudeTarget],
-    wavelength: Length,
-    directivity: Directivity,
-    mask: TransducerMask<'_>,
-) -> B::Matrix {
-    let wavenumber = 2.0 * PI / wavelength.mm();
-    let (tr_pos, tr_dir) = enabled_transducers(geometry, mask);
-    backend.propagation_matrix(&tr_pos, &tr_dir, foci, wavenumber, directivity)
-}
-
 pub(crate) fn wavenumber(wavelength: Length) -> f32 {
     2.0 * PI / wavelength.mm()
-}
-
-#[must_use]
-pub(crate) fn target_amplitudes<B: LinAlgBackend>(
-    backend: &B,
-    foci: &[AmplitudeTarget],
-) -> B::Vector {
-    backend.make_vector(
-        foci.iter()
-            .map(|f| Complex::new(f.amplitude.pascal(), 0.0))
-            .collect(),
-    )
 }
 
 pub(crate) fn enabled_transducers(
@@ -95,12 +70,12 @@ pub(crate) fn batch_shape(foci: &[AmplitudeTarget], problems: usize) -> Result<u
 }
 
 #[must_use]
-pub(crate) fn batch_target_amplitudes<B: LinAlgBackend>(
+pub(crate) fn target_amplitudes<B: LinAlgBackend>(
     backend: &B,
     foci: &[AmplitudeTarget],
     problems: usize,
-) -> B::BatchVector {
-    backend.make_batch_vector(
+) -> B::Vector {
+    backend.make_vector(
         problems,
         foci.iter()
             .map(|f| Complex::new(f.amplitude.pascal(), 0.0))
@@ -127,42 +102,20 @@ pub(crate) fn max_coefficient(q: &[Complex<f32>]) -> f32 {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn quantize<B: LinAlgBackend>(
+pub(crate) fn quantize<B, P, I>(
     backend: &B,
     geometry: &Geometry,
     q: &B::Vector,
     constraint: IntensityConstraint,
     mask: TransducerMask<'_>,
     parallel: bool,
-    phases: &mut [Vec<Phase>],
-    intensities: &mut [Vec<Intensity>],
-) {
-    assert_eq!(
-        phases.len(),
-        geometry.num_devices(),
-        "phases must have one slot per device"
-    );
-    assert_eq!(
-        intensities.len(),
-        geometry.num_devices(),
-        "intensities must have one slot per device"
-    );
-    let (p, i) = backend.quantize(q, constraint, parallel);
-    scatter(&p, mask, Phase::ZERO, phases);
-    scatter(&i, mask, Intensity::MIN, intensities);
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn quantize_batch<B: LinAlgBackend>(
-    backend: &B,
-    geometry: &Geometry,
-    q: &B::BatchVector,
-    constraint: IntensityConstraint,
-    mask: TransducerMask<'_>,
-    parallel: bool,
-    phases: &mut [Vec<Vec<Phase>>],
-    intensities: &mut [Vec<Vec<Intensity>>],
-) {
+    phases: &mut [P],
+    intensities: &mut [I],
+) where
+    B: LinAlgBackend,
+    P: AsMut<[Vec<Phase>]>,
+    I: AsMut<[Vec<Intensity>]>,
+{
     let n = mask.num_enabled(geometry);
     let devices = geometry.num_devices();
     assert_eq!(
@@ -170,7 +123,7 @@ pub(crate) fn quantize_batch<B: LinAlgBackend>(
         intensities.len(),
         "phases and intensities must have one entry per problem"
     );
-    let (p, i) = backend.quantize_batch(q, constraint, parallel);
+    let (p, i) = backend.quantize(q, constraint, parallel);
     debug_assert_eq!(
         p.len(),
         n * phases.len(),
@@ -178,6 +131,7 @@ pub(crate) fn quantize_batch<B: LinAlgBackend>(
     );
     debug_assert_eq!(p.len(), i.len());
     for (k, (phases, intensities)) in phases.iter_mut().zip(intensities.iter_mut()).enumerate() {
+        let (phases, intensities) = (phases.as_mut(), intensities.as_mut());
         assert_eq!(
             phases.len(),
             devices,
