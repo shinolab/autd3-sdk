@@ -33,7 +33,7 @@ impl Operation for WriteModulationChunk<'_> {
             }
             .into());
         }
-        let end = self.offset + self.data.len();
+        let end = self.offset.saturating_add(self.data.len());
         if end > MOD_BUFFER_SAMPLES {
             return Err(PayloadError::ModulationWriteExceedsCapacity {
                 offset: self.offset,
@@ -98,6 +98,10 @@ mod tests {
         assert!(matches!(encode(1, &[0; 2]), Err(Error::InvalidPayload(_))));
         assert!(matches!(
             encode(MOD_BUFFER_SAMPLES - 2, &[0; 3]),
+            Err(Error::InvalidPayload(_))
+        ));
+        assert!(matches!(
+            encode(usize::MAX - 1, &[0; 2]),
             Err(Error::InvalidPayload(_))
         ));
     }
