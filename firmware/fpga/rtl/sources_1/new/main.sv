@@ -65,11 +65,14 @@ module main #(
   logic [15:0] pattern_cycle;
   logic pattern_stopped;
   logic pattern_transition_pending;
+  logic pattern_ext_active;
   logic mod_bank;
   logic [15:0] mod_idx;
   logic mod_stopped;
   logic mod_transition_pending;
+  logic mod_ext_active;
   logic gpio_in_soft[4];
+  logic failsafe;
   logic signed [13:0] sync_time_diff;
   logic [7:0] sync_resync_count;
 
@@ -139,6 +142,8 @@ module main #(
       .THERMO(thermo_sync),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
+      .PATTERN_EXT_ACTIVE(pattern_ext_active),
+      .MOD_EXT_ACTIVE(mod_ext_active),
       .PATTERN_CYCLE(pattern_cycle),
       .PATTERN_STOPPED(pattern_stopped),
       .MOD_STOPPED(mod_stopped),
@@ -151,13 +156,14 @@ module main #(
       .SYNC_SETTINGS(sync_settings),
       .DEBUG_SETTINGS(debug_settings),
       .FORCE_FAN(FORCE_FAN),
+      .FAILSAFE(failsafe),
       .GPIO_IN(gpio_in_soft)
   );
 
   synchronizer synchronizer (
       .CLK(clk),
       .SYNC_SETTINGS(sync_settings),
-      .ECAT_SYNC(CAT_SYNC0),
+      .SYNC_IN(CAT_SYNC0),
       .SYS_TIME(sys_time),
       .SYNC(sync),
       .SKIP_ONE_ASSERT(skip_one_assert),
@@ -184,11 +190,13 @@ module main #(
       .EMISSION_BUS_FOCUS(emission_bus.out_focus_port),
       .EMISSION_BUS_RAW(emission_bus.out_raw_port),
       .OUTPUT_MASK_BUS(output_mask_bus.out_port),
+      .FAILSAFE(failsafe),
       .INTENSITY(intensity),
       .PHASE(phase),
       .GPIO_IN(gpio_in),
       .STOP(pattern_stopped),
       .TRANSITION_PENDING(pattern_transition_pending),
+      .EXT_ACTIVE(pattern_ext_active),
       .DOUT_VALID(dout_valid),
       .DEBUG_IDX(pattern_idx),
       .DEBUG_BANK(pattern_bank),
@@ -212,6 +220,7 @@ module main #(
       .GPIO_IN(gpio_in),
       .STOP(mod_stopped),
       .TRANSITION_PENDING(mod_transition_pending),
+      .EXT_ACTIVE(mod_ext_active),
       .DEBUG_IDX(mod_idx),
       .DEBUG_BANK(mod_bank),
       .DEBUG_STOP()
@@ -268,6 +277,7 @@ module main #(
       .THERMO(thermo_sync),
       .FORCE_FAN(FORCE_FAN),
       .SYNC(sync),
+      .SYNC_IN_RAW(CAT_SYNC0),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
       .PATTERN_IDX(pattern_idx),

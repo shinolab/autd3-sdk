@@ -51,6 +51,7 @@ module sim_cpu_readback ();
   settings::sync_settings_t sync_settings;
   settings::debug_settings_t debug_settings;
   logic FORCE_FAN;
+  logic FAILSAFE;
 
   controller controller (
       .CLK(CLK),
@@ -70,6 +71,7 @@ module sim_cpu_readback ();
       .SYNC_SETTINGS(sync_settings),
       .DEBUG_SETTINGS(debug_settings),
       .FORCE_FAN(FORCE_FAN),
+      .FAILSAFE(FAILSAFE),
       .GPIO_IN(gpio_in)
   );
 
@@ -95,7 +97,10 @@ module sim_cpu_readback ();
     repeat (64) @(posedge CLK);
 
     sim_helper_bram.read_cnt(params::ADDR_VERSION_NUM_MAJOR, value);
-    `ASSERT_EQ({8'd1 << params::FuncFlashOtaBit, params::VersionNumMajor}, value);
+    `ASSERT_EQ({8'h00, params::VersionNumMajor}, value);
+
+    sim_helper_bram.read_cnt(params::ADDR_FUNCTION_BITS, value);
+    `ASSERT_EQ({8'h00, (8'd1 << params::FuncFlashOtaBit) | (8'd1 << params::FuncStrictSilencerGuardBit)}, value);
 
     sim_helper_bram.read_cnt(params::ADDR_VERSION_NUM_MINOR, value);
     `ASSERT_EQ({8'h00, params::VersionNumMinor}, value);
@@ -117,6 +122,25 @@ module sim_cpu_readback ();
 
     sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, value);
     `ASSERT_EQ(PersistentFlags, value);
+    `ASSERT_EQ(1'b0, FAILSAFE);
+    sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
+    `ASSERT_EQ(1'b0, value[params::FPGA_STATE_BIT_FAILSAFE]);
+
+    sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_FAILSAFE));
+    repeat (32) @(posedge CLK);
+    `ASSERT_EQ(1'b1, FAILSAFE);
+    `ASSERT_EQ(1'b1, FORCE_FAN);
+    sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
+    `ASSERT_EQ({sync_resync_count, 1'h1, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
+               value);
+    sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, value);
+    `ASSERT_EQ((PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_FAILSAFE)), value);
+
+    sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags);
+    repeat (32) @(posedge CLK);
+    `ASSERT_EQ(1'b0, FAILSAFE);
+    sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
+    `ASSERT_EQ(1'b0, value[params::FPGA_STATE_BIT_FAILSAFE]);
 
     $display("OK! sim_cpu_readback");
     $finish();

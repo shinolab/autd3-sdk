@@ -109,11 +109,11 @@ module sim_flash ();
   endfunction
 
   task automatic reg_write(input logic [7:0] a, input logic [15:0] v);
-    sim_helper_bram.bram_write(BRAM_SELECT_CONTROLLER, {BRAM_CNT_SELECT_FLASH, a}, v);
+    sim_helper_bram.bram_write(BRAM_SELECT_FLASH, a, v);
   endtask
 
   task automatic reg_read(input logic [7:0] a, output logic [15:0] v);
-    sim_helper_bram.bram_read(BRAM_SELECT_CONTROLLER, {BRAM_CNT_SELECT_FLASH, a}, v);
+    sim_helper_bram.bram_read(BRAM_SELECT_FLASH, a, v);
   endtask
 
   task automatic buf_write(input logic [7:0] bytes[$]);
@@ -122,7 +122,7 @@ module sim_flash ();
     for (int i = 0; i < (bytes.size() + 1) / 2; i++) begin
       lo = bytes[2*i];
       hi = (2 * i + 1 < bytes.size()) ? bytes[2*i+1] : 8'hFF;
-      sim_helper_bram.bram_write(BRAM_SELECT_CONTROLLER, {5'b00010, i[8:0]}, {hi, lo});
+      sim_helper_bram.bram_write(BRAM_SELECT_FLASH_BUF, i[8:0], {hi, lo});
     end
   endtask
 
@@ -191,7 +191,7 @@ module sim_flash ();
       model.mem[32'h80FFF8+i] = stale[i];
     end
 
-    start_cmd(FLASH_OP_READ_ID, 24'd0, 24'd0);
+    start_cmd(FLASH_OP_CRC32, 24'h000100, 24'd300);
     repeat (64) @(posedge CLK);
     reg_read(ADDR_FLASH_STATUS, value);
     `ASSERT_EQ(1'b1, value[0]);
@@ -199,7 +199,7 @@ module sim_flash ();
     eos = 1'b1;
     wait_cmd(err, result);
     `ASSERT_EQ(FLASH_ERR_NONE, err);
-    `ASSERT_EQ(32'h0020BA18, result);
+    `ASSERT_EQ(crc32(golden), result);
 
     reg_read(ADDR_FLASH_USR_ACCESS_0, value);
     `ASSERT_EQ(FlashUsrAccessUpdate[15:0], value);
@@ -217,6 +217,7 @@ module sim_flash ();
     expect_err(FLASH_OP_CRC32, 24'hFFFFF0, 24'h000011, FLASH_ERR_INVALID);
     expect_err(8'h7F, 24'h800000, 24'd1, FLASH_ERR_INVALID);
     expect_err(8'h00, 24'h800000, 24'd1, FLASH_ERR_INVALID);
+    expect_err(8'h01, 24'h800000, 24'd1, FLASH_ERR_INVALID);
 
     expect_err(FLASH_OP_ERASE, 24'h7F0000, 24'h020000, FLASH_ERR_PROTECTED);
     expect_err(FLASH_OP_ERASE, 24'h7FFFFF, 24'h000001, FLASH_ERR_PROTECTED);
@@ -288,7 +289,7 @@ module sim_flash ();
     start_cmd(FLASH_OP_ERASE, 24'hA00000, 24'h010000);
     reg_read(ADDR_FLASH_STATUS, value);
     `ASSERT_EQ(1'b1, value[0]);
-    reg_write(ADDR_FLASH_CMD, {8'd0, FLASH_OP_READ_ID});
+    reg_write(ADDR_FLASH_CMD, {8'd0, FLASH_OP_CRC32});
     reg_read(ADDR_FLASH_CMD, value);
     `ASSERT_EQ({8'd0, FLASH_OP_ERASE}, value);
     wait_cmd(err, result);
@@ -303,9 +304,9 @@ module sim_flash ();
     expect_err(FLASH_OP_ERASE, 24'hB00000, 24'h000001, FLASH_ERR_TIMEOUT);
     model.stuck_wip = 1'b0;
     model.wip = 1'b0;
-    run_cmd(FLASH_OP_READ_ID, 24'd0, 24'd0, err, result);
+    run_cmd(FLASH_OP_CRC32, 24'h000100, 24'd300, err, result);
     `ASSERT_EQ(FLASH_ERR_NONE, err);
-    `ASSERT_EQ(32'h0020BA18, result);
+    `ASSERT_EQ(crc32(golden), result);
 
     for (int i = 0; i < 300; i++) begin
       `ASSERT_EQ(golden[i], model.peek(32'h000100 + i));

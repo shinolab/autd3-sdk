@@ -44,6 +44,19 @@ impl Param {
 struct Group {
     name: &'static str,
     params: Vec<Param>,
+    reject: Option<&'static str>,
+}
+
+impl Group {
+    fn stage(&self) -> Option<String> {
+        self.reject
+            .map(|_| format!("{}_stage", self.name.to_lowercase()))
+    }
+
+    fn target(&self) -> String {
+        self.stage()
+            .unwrap_or_else(|| format!("{}_SETTINGS", self.name))
+    }
 }
 
 struct State {
@@ -66,6 +79,7 @@ fn mod_group() -> Group {
     use Def::{Int, Str};
     Group {
         name: "MOD",
+        reject: Some("mod_reject"),
         params: vec![
             Param::new("MOD_REQ_RD_BANK", 1, "REQ_RD_BANK", Int(0)),
             Param::new(
@@ -89,6 +103,7 @@ fn pattern_group() -> Group {
     use Def::{Int, Str};
     Group {
         name: "PATTERN",
+        reject: Some("pattern_reject"),
         params: vec![
             Param::new("PATTERN_REQ_RD_BANK", 1, "REQ_RD_BANK", Int(0)),
             Param::new(
@@ -128,6 +143,7 @@ fn silencer_group() -> Group {
     use Def::Int;
     Group {
         name: "SILENCER",
+        reject: Some("silencer_reject"),
         params: vec![
             Param::new("SILENCER_FLAG", 8, "FLAG", Int(0)),
             Param::new(
@@ -163,6 +179,7 @@ fn debug_group() -> Group {
     let debug_default = "{params::GPIO_O_TYPE_NONE, 56'd0}";
     Group {
         name: "DEBUG",
+        reject: None,
         params: vec![
             Param::new("DEBUG_VALUE0", 64, "VALUE[0]", Str(debug_default)),
             Param::new("DEBUG_VALUE1", 64, "VALUE[1]", Str(debug_default)),
@@ -176,10 +193,8 @@ fn sync_group() -> Group {
     use Def::Int;
     Group {
         name: "SYNC",
-        params: vec![
-            Param::new("ECAT_SYNC_TIME", 64, "ECAT_SYNC_TIME", Int(0)),
-            Param::new("ECAT_SYNC_CYCLE", 32, "ECAT_SYNC_CYCLE", Int(0)),
-        ],
+        reject: None,
+        params: vec![Param::new("SYNC_TIME", 64, "SYNC_TIME", Int(0))],
     }
 }
 
@@ -234,11 +249,18 @@ fn gen_states(group: &Group) -> Vec<State> {
         };
         states.push(gen_state(req, param));
     }
-    states.push(State {
-        name: format!("{}_CLR_UPDATE_SETTINGS_BIT", group.name),
-        req: Param::null(),
-        param: Param::null(),
-    });
+    let tails: &[&str] = if group.reject.is_some() {
+        &["VALIDATE", "COMMIT", "CLR_UPDATE_SETTINGS_BIT"]
+    } else {
+        &["COMMIT", "CLR_UPDATE_SETTINGS_BIT"]
+    };
+    for tail in tails {
+        states.push(State {
+            name: format!("{}_{tail}", group.name),
+            req: Param::null(),
+            param: Param::null(),
+        });
+    }
     states
 }
 
@@ -253,8 +275,7 @@ fn dout_range(width: u32) -> String {
 }
 
 fn generate(groups: &[Group]) -> String {
-    let all_states: Vec<(&str, Vec<State>)> =
-        groups.iter().map(|g| (g.name, gen_states(g))).collect();
+    let all_states: Vec<(&Group, Vec<State>)> = groups.iter().map(|g| (g, gen_states(g))).collect();
 
     let mut out = String::new();
     push_header(&mut out, &all_states);
@@ -264,16 +285,17 @@ fn generate(groups: &[Group]) -> String {
     out
 }
 
-fn push_header(out: &mut String, all_states: &[(&str, Vec<State>)]) {
+fn push_header(out: &mut String, all_states: &[(&Group, Vec<State>)]) {
     let total: usize = all_states.iter().map(|(_, s)| s.len()).sum();
-    let enum_width = (u32::try_from(8 + total).unwrap() - 1).ilog2() + 1;
+    let enum_width = (u32::try_from(11 + total).unwrap() - 1).ilog2() + 1;
 
     out.push_str(
-        "`timescale 1ns / 1ps\n`default_nettype none\nmodule controller (\n    input wire CLK,\n    input wire ENABLE,\n    input wire THERMO,\n    input wire PATTERN_BANK,\n    input wire MOD_BANK,\n    input wire [15:0] PATTERN_CYCLE,\n    input wire PATTERN_STOPPED,\n    input wire MOD_STOPPED,\n    input wire TRANSITION_PENDING,\n    input wire [7:0] SYNC_RESYNC_COUNT,\n    cnt_bus_if.out_port cnt_bus,\n    output var settings::mod_settings_t MOD_SETTINGS,\n    output var settings::pattern_settings_t PATTERN_SETTINGS,\n    output var settings::silencer_settings_t SILENCER_SETTINGS,\n    output var settings::sync_settings_t SYNC_SETTINGS,\n    output var settings::debug_settings_t DEBUG_SETTINGS,\n    output var FORCE_FAN,\n    output var GPIO_IN[4]\n);\n\n  localparam bit [7:0] FunctionBits = (1'b0 << params::FuncDynamicFreqBit)\n                                      | (1'b1 << params::FuncFlashOtaBit)\n                                      | (1'b0 << params::FuncEmulatorBit);\n\n  logic [15:0] ctl_flags = '0;\n  logic [15:0] ctl_flags_cand = '0;\n\n  logic we = 1'b0;\n  logic [7:0]  addr;\n  logic [15:0] din;\n  logic [15:0] dout;\n\n  logic [15:0] fpga_state_prev = 16'hFFFF;\n\n  assign cnt_bus.WE = we;\n  assign cnt_bus.ADDR = addr;\n  assign cnt_bus.DIN = din;\n  assign dout = cnt_bus.DOUT;\n\n  assign FORCE_FAN = ctl_flags[params::CTL_FLAG_BIT_FORCE_FAN];\n  assign GPIO_IN[0] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_0];\n  assign GPIO_IN[1] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_1];\n  assign GPIO_IN[2] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_2];\n  assign GPIO_IN[3] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_3];\n\n  function automatic logic [15:0] fpga_state_din();\n    logic [15:0] s = '0;\n    s[params::FPGA_STATE_BIT_THERMAL_ASSERT] = THERMO;\n    s[params::FPGA_STATE_BIT_MOD_BANK] = MOD_BANK;\n    s[params::FPGA_STATE_BIT_PATTERN_BANK] = PATTERN_BANK;\n    s[params::FPGA_STATE_BIT_PATTERN_MODE] = PATTERN_CYCLE == '0;\n    s[params::FPGA_STATE_BIT_PATTERN_STOPPED] = PATTERN_STOPPED;\n    s[params::FPGA_STATE_BIT_MOD_STOPPED] = MOD_STOPPED;\n    s[params::FPGA_STATE_BIT_TRANSITION_PENDING] = TRANSITION_PENDING;\n    s[15:8] = SYNC_RESYNC_COUNT;\n    return s;\n  endfunction\n\n",
+        "`timescale 1ns / 1ps\n`default_nettype none\nmodule controller (\n    input wire CLK,\n    input wire ENABLE,\n    input wire THERMO,\n    input wire PATTERN_BANK,\n    input wire MOD_BANK,\n    input wire PATTERN_EXT_ACTIVE,\n    input wire MOD_EXT_ACTIVE,\n    input wire [15:0] PATTERN_CYCLE,\n    input wire PATTERN_STOPPED,\n    input wire MOD_STOPPED,\n    input wire TRANSITION_PENDING,\n    input wire [7:0] SYNC_RESYNC_COUNT,\n    cnt_bus_if.out_port cnt_bus,\n    output var settings::mod_settings_t MOD_SETTINGS,\n    output var settings::pattern_settings_t PATTERN_SETTINGS,\n    output var settings::silencer_settings_t SILENCER_SETTINGS,\n    output var settings::sync_settings_t SYNC_SETTINGS,\n    output var settings::debug_settings_t DEBUG_SETTINGS,\n    output var FORCE_FAN,\n    output var FAILSAFE,\n    output var GPIO_IN[4]\n);\n\n  localparam bit [7:0] FunctionBits = (1'b0 << params::FuncDynamicFreqBit)\n                                      | (1'b1 << params::FuncFlashOtaBit)\n                                      | (1'b1 << params::FuncStrictSilencerGuardBit)\n                                      | (1'b0 << params::FuncEmulatorBit);\n\n  logic [15:0] ctl_flags = '0;\n  logic [15:0] ctl_flags_cand = '0;\n  logic [15:0] silencer_set_result = '0;\n\n  logic we = 1'b0;\n  logic [7:0]  addr;\n  logic [15:0] din;\n  logic [15:0] dout;\n\n  logic [15:0] fpga_state_prev = 16'hFFFF;\n\n  assign cnt_bus.WE = we;\n  assign cnt_bus.ADDR = addr;\n  assign cnt_bus.DIN = din;\n  assign dout = cnt_bus.DOUT;\n\n  assign FORCE_FAN = ctl_flags[params::CTL_FLAG_BIT_FORCE_FAN];\n  assign FAILSAFE = ctl_flags[params::CTL_FLAG_BIT_FAILSAFE];\n  assign GPIO_IN[0] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_0];\n  assign GPIO_IN[1] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_1];\n  assign GPIO_IN[2] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_2];\n  assign GPIO_IN[3] = ctl_flags[params::CTL_FLAG_BIT_GPIO_IN_3];\n\n  function automatic logic [15:0] fpga_state_din();\n    logic [15:0] s = '0;\n    s[params::FPGA_STATE_BIT_THERMAL_ASSERT] = THERMO;\n    s[params::FPGA_STATE_BIT_MOD_BANK] = MOD_BANK;\n    s[params::FPGA_STATE_BIT_PATTERN_BANK] = PATTERN_BANK;\n    s[params::FPGA_STATE_BIT_PATTERN_MODE] = PATTERN_CYCLE == '0;\n    s[params::FPGA_STATE_BIT_PATTERN_STOPPED] = PATTERN_STOPPED;\n    s[params::FPGA_STATE_BIT_MOD_STOPPED] = MOD_STOPPED;\n    s[params::FPGA_STATE_BIT_TRANSITION_PENDING] = TRANSITION_PENDING;\n    s[params::FPGA_STATE_BIT_FAILSAFE] = ctl_flags[params::CTL_FLAG_BIT_FAILSAFE];\n    s[15:8] = SYNC_RESYNC_COUNT;\n    return s;\n  endfunction\n\n",
     );
+    push_strict_guard(out);
     writeln!(out, "  typedef enum logic [{}:0] {{", enum_width - 1).unwrap();
     out.push_str(
-        "    REQ_WR_VER_PATCH,\n    REQ_WR_VER_MINOR,\n    REQ_WR_VER,\n    WAIT_WR_VER_0_REQ_RD_CTL_FLAG,\n    WR_VER_MINOR_WAIT_RD_CTL_FLAG_BIT_0,\n    WR_VER_WAIT_RD_CTL_FLAG_BIT_1,\n    WAIT_0,\n    WAIT_1,\n",
+        "    REQ_WR_VER_PATCH,\n    REQ_WR_VER_MINOR,\n    REQ_WR_VER,\n    REQ_WR_FUNCTION_BITS,\n    WAIT_WR_VER_0_REQ_RD_CTL_FLAG,\n    WR_VER_MINOR_WAIT_RD_CTL_FLAG_BIT_0,\n    WR_VER_WAIT_RD_CTL_FLAG_BIT_1,\n    WAIT_0,\n    WAIT_1,\n    SET_DONE_0,\n    SET_DONE_1,\n",
     );
     let enum_body: Vec<String> = all_states
         .iter()
@@ -284,18 +306,19 @@ fn push_header(out: &mut String, all_states: &[(&str, Vec<State>)]) {
     out.push_str("\n  } state_t;\n\n  state_t state = REQ_WR_VER_PATCH;\n");
 }
 
-fn push_dispatch(out: &mut String, all_states: &[(&str, Vec<State>)]) {
+fn push_dispatch(out: &mut String, all_states: &[(&Group, Vec<State>)]) {
     out.push_str(
         "\n  always_ff @(posedge CLK) begin\n    if (!ENABLE) begin\n      state <= REQ_WR_VER_PATCH;\n      we <= 1'b0;\n      fpga_state_prev <= 16'hFFFF;\n      ctl_flags <= '0;\n      ctl_flags_cand <= '0;\n",
     );
-    for (name, _) in all_states {
-        writeln!(out, "      {name}_SETTINGS.UPDATE <= 1'b0;").unwrap();
+    for (group, _) in all_states {
+        writeln!(out, "      {}_SETTINGS.UPDATE <= 1'b0;", group.name).unwrap();
     }
     out.push_str(
-        "    end else case (state)\n      REQ_WR_VER_PATCH: begin\n        we <= 1'b1;\n\n        din <= {8'd0, params::VersionNumPatch};\n        addr <= params::ADDR_VERSION_NUM_PATCH;\n\n        state <= REQ_WR_VER_MINOR;\n      end\n      REQ_WR_VER_MINOR: begin\n        din <= {8'd0, params::VersionNumMinor};\n        addr <= params::ADDR_VERSION_NUM_MINOR;\n\n        state <= REQ_WR_VER;\n      end\n      REQ_WR_VER: begin\n        din   <= {FunctionBits, params::VersionNumMajor};\n        addr  <= params::ADDR_VERSION_NUM_MAJOR;\n\n        state <= WAIT_WR_VER_0_REQ_RD_CTL_FLAG;\n      end\n      WAIT_WR_VER_0_REQ_RD_CTL_FLAG: begin\n        we <= 1'b0;\n        addr <= params::ADDR_CTL_FLAG;\n\n        state <= WR_VER_MINOR_WAIT_RD_CTL_FLAG_BIT_0;\n      end\n      WR_VER_MINOR_WAIT_RD_CTL_FLAG_BIT_0: begin\n        state <= WR_VER_WAIT_RD_CTL_FLAG_BIT_1;\n      end\n      WR_VER_WAIT_RD_CTL_FLAG_BIT_1: begin\n        state <= WAIT_0;\n      end\n\n      WAIT_0: begin\n        addr <= params::ADDR_FPGA_STATE;\n        if (fpga_state_din() != fpga_state_prev) begin\n          we <= 1'b1;\n          din <= fpga_state_din();\n          fpga_state_prev <= fpga_state_din();\n        end else begin\n          we <= 1'b0;\n        end\n\n       ",
+        "    end else case (state)\n      REQ_WR_VER_PATCH: begin\n        we <= 1'b1;\n\n        din <= {8'd0, params::VersionNumPatch};\n        addr <= params::ADDR_VERSION_NUM_PATCH;\n\n        state <= REQ_WR_VER_MINOR;\n      end\n      REQ_WR_VER_MINOR: begin\n        din <= {8'd0, params::VersionNumMinor};\n        addr <= params::ADDR_VERSION_NUM_MINOR;\n\n        state <= REQ_WR_VER;\n      end\n      REQ_WR_VER: begin\n        din   <= {8'd0, params::VersionNumMajor};\n        addr  <= params::ADDR_VERSION_NUM_MAJOR;\n\n        state <= REQ_WR_FUNCTION_BITS;\n      end\n      REQ_WR_FUNCTION_BITS: begin\n        din   <= {8'd0, FunctionBits};\n        addr  <= params::ADDR_FUNCTION_BITS;\n\n        state <= WAIT_WR_VER_0_REQ_RD_CTL_FLAG;\n      end\n      WAIT_WR_VER_0_REQ_RD_CTL_FLAG: begin\n        we <= 1'b0;\n        addr <= params::ADDR_CTL_FLAG;\n\n        state <= WR_VER_MINOR_WAIT_RD_CTL_FLAG_BIT_0;\n      end\n      WR_VER_MINOR_WAIT_RD_CTL_FLAG_BIT_0: begin\n        state <= WR_VER_WAIT_RD_CTL_FLAG_BIT_1;\n      end\n      WR_VER_WAIT_RD_CTL_FLAG_BIT_1: begin\n        state <= WAIT_0;\n      end\n\n      WAIT_0: begin\n        addr <= params::ADDR_FPGA_STATE;\n        if (fpga_state_din() != fpga_state_prev) begin\n          we <= 1'b1;\n          din <= fpga_state_din();\n          fpga_state_prev <= fpga_state_din();\n        end else begin\n          we <= 1'b0;\n        end\n\n       ",
     );
 
-    for (name, states) in all_states {
+    for (group, states) in all_states {
+        let name = group.name;
         write!(
             out,
             " if (ctl_flags[params::CTL_FLAG_BIT_{name}_SET]) begin\n          ctl_flags <= ctl_flags & ~(1 << params::CTL_FLAG_BIT_{name}_SET);\n          state <= {};\n        end else",
@@ -304,12 +327,42 @@ fn push_dispatch(out: &mut String, all_states: &[(&str, Vec<State>)]) {
         .unwrap();
     }
     out.push_str(
-        " begin\n          ctl_flags_cand <= dout;\n          if (dout == ctl_flags_cand) begin\n            ctl_flags <= dout;\n          end\n          state <= WAIT_1;\n        end\n      end\n      WAIT_1: begin\n        we <= 1'b0;\n        addr <= params::ADDR_CTL_FLAG;\n        state <= WAIT_0;\n      end\n",
+        " begin\n          ctl_flags_cand <= dout;\n          if (dout == ctl_flags_cand) begin\n            ctl_flags <= dout;\n          end\n          state <= WAIT_1;\n        end\n      end\n      WAIT_1: begin\n        we <= 1'b0;\n        addr <= params::ADDR_CTL_FLAG;\n        state <= WAIT_0;\n      end\n      SET_DONE_0: begin\n        we <= 1'b0;\n        state <= SET_DONE_1;\n      end\n      SET_DONE_1: begin\n        addr <= params::ADDR_FPGA_STATE;\n        state <= WAIT_1;\n      end\n",
     );
 }
 
-fn push_bodies(out: &mut String, all_states: &[(&str, Vec<State>)]) {
-    for (name, states) in all_states {
+fn push_strict_guard(out: &mut String) {
+    out.push_str(
+        "  settings::mod_settings_t mod_stage;\n  settings::pattern_settings_t pattern_stage;\n  settings::silencer_settings_t silencer_stage;\n\n  function automatic logic is_strict(input logic [7:0] flag);\n    return flag[params::SILENCER_FLAG_BIT_STRICT_MODE]\n           & ~flag[params::SILENCER_FLAG_BIT_FIXED_UPDATE_RATE_MODE];\n  endfunction\n\n",
+    );
+    for (name, extra) in [("mod", false), ("pattern", true)] {
+        let upper = name.to_uppercase();
+        let violates = |div: &str, steps: &str| {
+            if extra {
+                format!(
+                    "(({div} < {steps}.COMPLETION_STEPS_INTENSITY)\n           | ({div} < {steps}.COMPLETION_STEPS_PHASE))"
+                )
+            } else {
+                format!("({div} < {steps}.COMPLETION_STEPS_INTENSITY)")
+            }
+        };
+        writeln!(
+            out,
+            "  logic {name}_stage_finite;\n  logic {name}_now_finite;\n  logic {name}_stage_all;\n  logic {name}_now_all;\n  logic [params::NumBanks-1:0] {name}_stage_ng;\n  logic [params::NumBanks-1:0] {name}_now_ng;\n  logic {name}_reject;\n  assign {name}_stage_finite = {name}_stage.REP[{name}_stage.REQ_RD_BANK] != params::RepInfinite;\n  assign {name}_now_finite = {upper}_SETTINGS.REP[{upper}_SETTINGS.REQ_RD_BANK] != params::RepInfinite;\n  assign {name}_now_all = {name}_now_finite ? {upper}_EXT_ACTIVE\n      : ({upper}_SETTINGS.TRANSITION_MODE == params::TRANSITION_MODE_EXT);\n  assign {name}_stage_all = {name}_stage_finite ? {name}_now_all\n      : ({name}_stage.TRANSITION_MODE == params::TRANSITION_MODE_EXT);\n  for (genvar b = 0; b < params::NumBanks; b++) begin : gen_{name}_strict_guard\n    logic stage_used;\n    logic now_used;\n    assign stage_used = {name}_stage_all | ({name}_stage.REQ_RD_BANK == 1'(b))\n        | ({name}_stage_finite & ({upper}_BANK == 1'(b)));\n    assign now_used = {name}_now_all | ({upper}_SETTINGS.REQ_RD_BANK == 1'(b))\n        | ({name}_now_finite & ({upper}_BANK == 1'(b)));\n    assign {name}_stage_ng[b] = stage_used\n        & {};\n    assign {name}_now_ng[b] = now_used\n        & {};\n  end\n  assign {name}_reject = is_strict(SILENCER_SETTINGS.FLAG) & (|{name}_stage_ng);\n",
+            violates(&format!("{name}_stage.FREQ_DIV[b]"), "SILENCER_SETTINGS"),
+            violates(&format!("{upper}_SETTINGS.FREQ_DIV[b]"), "silencer_stage"),
+        )
+        .unwrap();
+    }
+    out.push_str(
+        "  logic silencer_reject;\n  assign silencer_reject = is_strict(silencer_stage.FLAG) & ((|mod_now_ng) | (|pattern_now_ng));\n\n",
+    );
+}
+
+fn push_bodies(out: &mut String, all_states: &[(&Group, Vec<State>)]) {
+    for (group, states) in all_states {
+        let name = group.name;
+        let target = group.target();
         let len = states.len();
         for (i, state) in states.iter().enumerate() {
             write!(out, "\n      {}: begin", state.name).unwrap();
@@ -325,31 +378,48 @@ fn push_bodies(out: &mut String, all_states: &[(&str, Vec<State>)]) {
             if !state.param.addr.is_empty() {
                 write!(
                     out,
-                    "\n        {name}_SETTINGS.{} <= dout{};",
+                    "\n        {target}.{} <= dout{};",
                     state.param.name,
                     dout_range(state.param.width)
                 )
                 .unwrap();
             }
 
-            if i == len - 4 {
-                out.push_str(
-                    "\n        we <= 1'b1;\n        addr <= params::ADDR_CTL_FLAG;\n        din <= ctl_flags;",
-                );
-            }
-
-            if i == len - 3 {
-                out.push_str(
-                    "\n        we <= 1'b1;\n        addr <= params::ADDR_FPGA_STATE;\n        din  <= fpga_state_din();\n        fpga_state_prev <= fpga_state_din();",
-                );
+            if i == len - 3
+                && let Some(reject) = group.reject
+            {
+                write!(
+                    out,
+                    "\n        silencer_set_result[params::CTL_FLAG_BIT_{name}_SET] <= {reject};"
+                )
+                .unwrap();
             }
 
             if i == len - 2 {
-                write!(
-                    out,
-                    "\n        {name}_SETTINGS.UPDATE <= 1'b1;\n        we <= 1'b0;\n        addr <= params::ADDR_CTL_FLAG;"
-                )
-                .unwrap();
+                if group.reject.is_some() {
+                    write!(
+                        out,
+                        "\n        if (!silencer_set_result[params::CTL_FLAG_BIT_{name}_SET]) begin"
+                    )
+                    .unwrap();
+                    if let Some(stage) = group.stage() {
+                        for param in &group.params {
+                            write!(
+                                out,
+                                "\n          {name}_SETTINGS.{0} <= {stage}.{0};",
+                                param.name
+                            )
+                            .unwrap();
+                        }
+                    }
+                    write!(
+                        out,
+                        "\n          {name}_SETTINGS.UPDATE <= 1'b1;\n        end\n        we <= 1'b1;\n        addr <= params::ADDR_SILENCER_SET_RESULT;\n        din <= silencer_set_result;"
+                    )
+                    .unwrap();
+                } else {
+                    write!(out, "\n        {name}_SETTINGS.UPDATE <= 1'b1;").unwrap();
+                }
             }
 
             if i + 1 < len {
@@ -359,7 +429,7 @@ fn push_bodies(out: &mut String, all_states: &[(&str, Vec<State>)]) {
             if i == len - 1 {
                 write!(
                     out,
-                    "\n        we <= 1'b1;\n        addr <= params::ADDR_FPGA_STATE;\n        din  <= fpga_state_din();\n        fpga_state_prev <= fpga_state_din();\n        ctl_flags_cand <= dout;\n        if (dout == ctl_flags_cand) begin\n          ctl_flags <= dout;\n        end\n        {name}_SETTINGS.UPDATE <= 1'b0;\n        state <= WAIT_1;"
+                    "\n        {name}_SETTINGS.UPDATE <= 1'b0;\n        we <= 1'b1;\n        addr <= params::ADDR_CTL_FLAG;\n        din <= ctl_flags;\n        ctl_flags_cand <= ctl_flags;\n        state <= SET_DONE_0;"
                 )
                 .unwrap();
             }

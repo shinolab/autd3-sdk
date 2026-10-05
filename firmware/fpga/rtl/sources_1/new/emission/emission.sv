@@ -11,12 +11,14 @@ module emission #(
     emission_bus_if.out_focus_port EMISSION_BUS_FOCUS,
     emission_bus_if.out_raw_port EMISSION_BUS_RAW,
     output_mask_bus_if.out_port OUTPUT_MASK_BUS,
+    input wire FAILSAFE,
     output wire [7:0] INTENSITY,
     output wire [7:0] PHASE,
     output wire DOUT_VALID,
     input wire GPIO_IN[4],
     output wire STOP,
     output wire TRANSITION_PENDING,
+    output wire EXT_ACTIVE,
     output wire [15:0] DEBUG_IDX,
     output wire DEBUG_BANK,
     output wire [15:0] DEBUG_CYCLE
@@ -79,6 +81,7 @@ module emission #(
       .GPIO_IN(GPIO_IN),
       .STOP(swapchain_stop),
       .TRANSITION_PENDING(TRANSITION_PENDING),
+      .EXT_ACTIVE(EXT_ACTIVE),
       .BANK(swapchain_bank),
       .IDX(swapchain_idx)
   );
@@ -133,6 +136,7 @@ module emission #(
   ) output_mask (
       .CLK(CLK),
       .MASK_VALUE(OUTPUT_MASK_BUS.VALUE),
+      .FAILSAFE(FAILSAFE),
       .DIN_VALID(dout_valid),
       .INTENSITY_IN(intensity),
       .INTENSITY_OUT(INTENSITY),

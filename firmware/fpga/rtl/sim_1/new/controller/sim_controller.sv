@@ -48,6 +48,8 @@ module sim_controller ();
   logic thermo;
   logic pattern_bank;
   logic mod_bank;
+  logic pattern_ext_active;
+  logic mod_ext_active;
   logic [15:0] pattern_cycle;
   logic pattern_stopped;
   logic mod_stopped;
@@ -67,6 +69,8 @@ module sim_controller ();
       .THERMO(thermo),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
+      .PATTERN_EXT_ACTIVE(pattern_ext_active),
+      .MOD_EXT_ACTIVE(mod_ext_active),
       .PATTERN_CYCLE(pattern_cycle),
       .PATTERN_STOPPED(pattern_stopped),
       .MOD_STOPPED(mod_stopped),
@@ -138,6 +142,106 @@ module sim_controller ();
   logic [15:0] fpga_state;
   logic [15:0] ctl_flag;
 
+  localparam bit [7:0] TransitionImmediate = 8'hFF;
+  localparam bit [7:0] SilencerStrict = 8'd1 << params::SILENCER_FLAG_BIT_STRICT_MODE;
+  localparam bit [7:0] SilencerFixedUpdateRate = 8'd1 << params::SILENCER_FLAG_BIT_FIXED_UPDATE_RATE_MODE;
+
+  int mod_updates = 0;
+  int pattern_updates = 0;
+  int silencer_updates = 0;
+
+  always @(posedge CLK) begin
+    if (mod_settings.UPDATE) mod_updates++;
+    if (pattern_settings.UPDATE) pattern_updates++;
+    if (silencer_settings.UPDATE) silencer_updates++;
+  end
+
+  task automatic latch(input int flag_bit, output logic rejected);
+    logic [15:0] value;
+    sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags | (16'd1 << flag_bit));
+    do begin
+      sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, value);
+    end while (value[flag_bit]);
+    sim_helper_bram.read_cnt(params::ADDR_SILENCER_SET_RESULT, value);
+    rejected = value[flag_bit];
+    repeat (8) @(posedge CLK);
+  endtask
+
+  task automatic latch_mod(input logic req, input logic [7:0] mode, input logic [15:0] div0, input logic [15:0] div1, input logic [15:0] rep0,
+                           input logic [15:0] rep1, input logic expect_rejected);
+    settings::mod_settings_t previous;
+    int updates;
+    logic rejected;
+    previous = mod_settings;
+    updates = mod_updates;
+    mod_settings_in.UPDATE = 1'b0;
+    mod_settings_in.REQ_RD_BANK = req;
+    mod_settings_in.TRANSITION_MODE = mode;
+    mod_settings_in.FREQ_DIV[0] = div0;
+    mod_settings_in.FREQ_DIV[1] = div1;
+    mod_settings_in.REP[0] = rep0;
+    mod_settings_in.REP[1] = rep1;
+    sim_helper_bram.write_mod_settings(mod_settings_in);
+    latch(params::CTL_FLAG_BIT_MOD_SET, rejected);
+    `ASSERT_EQ(expect_rejected, rejected);
+    if (expect_rejected) begin
+      `ASSERT_EQ(previous, mod_settings);
+      `ASSERT_EQ(updates, mod_updates);
+    end else begin
+      `ASSERT_EQ(mod_settings_in, mod_settings);
+      `ASSERT_EQ(updates + 1, mod_updates);
+    end
+  endtask
+
+  task automatic latch_pattern(input logic req, input logic [7:0] mode, input logic [15:0] div0, input logic [15:0] div1, input logic [15:0] rep0,
+                               input logic [15:0] rep1, input logic expect_rejected);
+    settings::pattern_settings_t previous;
+    int updates;
+    logic rejected;
+    previous = pattern_settings;
+    updates = pattern_updates;
+    pattern_settings_in.UPDATE = 1'b0;
+    pattern_settings_in.REQ_RD_BANK = req;
+    pattern_settings_in.TRANSITION_MODE = mode;
+    pattern_settings_in.FREQ_DIV[0] = div0;
+    pattern_settings_in.FREQ_DIV[1] = div1;
+    pattern_settings_in.REP[0] = rep0;
+    pattern_settings_in.REP[1] = rep1;
+    sim_helper_bram.write_pattern_settings(pattern_settings_in);
+    latch(params::CTL_FLAG_BIT_PATTERN_SET, rejected);
+    `ASSERT_EQ(expect_rejected, rejected);
+    if (expect_rejected) begin
+      `ASSERT_EQ(previous, pattern_settings);
+      `ASSERT_EQ(updates, pattern_updates);
+    end else begin
+      `ASSERT_EQ(pattern_settings_in, pattern_settings);
+      `ASSERT_EQ(updates + 1, pattern_updates);
+    end
+  endtask
+
+  task automatic latch_silencer(input logic [7:0] flag, input logic [15:0] steps_intensity, input logic [15:0] steps_phase,
+                                input logic expect_rejected);
+    settings::silencer_settings_t previous;
+    int updates;
+    logic rejected;
+    previous = silencer_settings;
+    updates = silencer_updates;
+    silencer_settings_in.UPDATE = 1'b0;
+    silencer_settings_in.FLAG = flag;
+    silencer_settings_in.COMPLETION_STEPS_INTENSITY = steps_intensity;
+    silencer_settings_in.COMPLETION_STEPS_PHASE = steps_phase;
+    sim_helper_bram.write_silencer_settings(silencer_settings_in);
+    latch(params::CTL_FLAG_BIT_SILENCER_SET, rejected);
+    `ASSERT_EQ(expect_rejected, rejected);
+    if (expect_rejected) begin
+      `ASSERT_EQ(previous, silencer_settings);
+      `ASSERT_EQ(updates, silencer_updates);
+    end else begin
+      `ASSERT_EQ(silencer_settings_in, silencer_settings);
+      `ASSERT_EQ(updates + 1, silencer_updates);
+    end
+  endtask
+
   initial begin
 
     enable_gate = 1'b1;
@@ -148,6 +252,8 @@ module sim_controller ();
     thermo = 1'b1;
     mod_bank = 1'b1;
     pattern_bank = 1'b0;
+    mod_ext_active = 1'b0;
+    pattern_ext_active = 1'b0;
     pattern_cycle = 16'd5;
     pattern_stopped = 1'b1;
     mod_stopped = 1'b0;
@@ -183,15 +289,14 @@ module sim_controller ();
     pattern_settings_in.NUM_FOCI[1] = sim_helper_random.range(8'd8, 0);
 
     silencer_settings_in.UPDATE = 1'b1;
-    silencer_settings_in.FLAG = sim_helper_random.range(8'hFF, 0);
+    silencer_settings_in.FLAG = sim_helper_random.range(8'hFF, 0) & ~(8'd1 << params::SILENCER_FLAG_BIT_STRICT_MODE);
     silencer_settings_in.UPDATE_RATE_INTENSITY = sim_helper_random.range(8'hFF, 0);
     silencer_settings_in.UPDATE_RATE_PHASE = sim_helper_random.range(8'hFF, 0);
     silencer_settings_in.COMPLETION_STEPS_INTENSITY = sim_helper_random.range(8'hFF, 0);
     silencer_settings_in.COMPLETION_STEPS_PHASE = sim_helper_random.range(8'hFF, 0);
 
     sync_settings_in.UPDATE = 1'b1;
-    sync_settings_in.ECAT_SYNC_TIME = sim_helper_random.range(64'hFFFFFFFFFFFFFFFF, 0);
-    sync_settings_in.ECAT_SYNC_CYCLE = sim_helper_random.range(32'hFFFFFFFF, 0);
+    sync_settings_in.SYNC_TIME = sim_helper_random.range(64'hFFFFFFFFFFFFFFFF, 0);
 
     debug_settings_in.UPDATE = 1'b1;
     debug_settings_in.VALUE[0] = sim_helper_random.range(64'hFFFF, 0);
@@ -323,6 +428,61 @@ module sim_controller ();
     assert_persistent_flags();
     sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, ctl_flag);
     `ASSERT_EQ(PersistentFlags, ctl_flag);
+
+    mod_bank = 1'b0;
+    pattern_bank = 1'b0;
+    latch_silencer(8'd0, 16'd8, 16'd8, 1'b0);
+    latch_pattern(1'b0, TransitionImmediate, 16'd100, 16'd100, 16'hFFFF, 16'hFFFF, 1'b0);
+
+    latch_mod(1'b0, TransitionImmediate, 16'd5, 16'd100, 16'hFFFF, 16'd0, 1'b0);
+    latch_mod(1'b1, params::TRANSITION_MODE_SYS_TIME, 16'd5, 16'd100, 16'hFFFF, 16'd0, 1'b0);
+    latch_silencer(SilencerStrict, 16'd8, 16'd8, 1'b1);
+    $display("OK! strict is rejected while a faster bank still plays ahead of a pending transition");
+
+    latch_mod(1'b0, params::TRANSITION_MODE_EXT, 16'd100, 16'd5, 16'hFFFF, 16'hFFFF, 1'b0);
+    latch_silencer(SilencerStrict, 16'd8, 16'd8, 1'b1);
+    mod_bank = 1'b1;
+    latch_silencer(SilencerStrict, 16'd8, 16'd8, 1'b1);
+    mod_bank = 1'b0;
+    $display("OK! strict is rejected while EXT alternates onto a faster bank");
+
+    mod_ext_active = 1'b1;
+    latch_mod(1'b0, params::TRANSITION_MODE_SYNC_IDX, 16'd100, 16'd5, 16'd0, 16'hFFFF, 1'b0);
+    latch_silencer(SilencerStrict, 16'd8, 16'd8, 1'b1);
+    mod_ext_active = 1'b0;
+    $display("OK! strict is rejected while EXT keeps alternating under a finite request to the playing bank");
+
+    latch_mod(1'b0, TransitionImmediate, 16'd100, 16'd5, 16'hFFFF, 16'hFFFF, 1'b0);
+    latch_silencer(SilencerStrict, 16'd8, 16'd8, 1'b0);
+    latch_mod(1'b0, TransitionImmediate, 16'd100, 16'd3, 16'hFFFF, 16'hFFFF, 1'b0);
+    $display("OK! a faster divider on an unused bank does not trip the guard");
+
+    latch_mod(1'b1, TransitionImmediate, 16'd100, 16'd3, 16'hFFFF, 16'hFFFF, 1'b1);
+    latch_mod(1'b0, params::TRANSITION_MODE_EXT, 16'd100, 16'd3, 16'hFFFF, 16'hFFFF, 1'b1);
+    latch_mod(1'b0, TransitionImmediate, 16'd7, 16'd100, 16'hFFFF, 16'hFFFF, 1'b1);
+    latch_mod(1'b0, TransitionImmediate, 16'd8, 16'd3, 16'hFFFF, 16'hFFFF, 1'b0);
+    $display("OK! a strict violation on the requested bank is rejected and leaves MOD_SETTINGS untouched");
+
+    latch_mod(1'b1, params::TRANSITION_MODE_SYS_TIME, 16'd3, 16'd100, 16'hFFFF, 16'd0, 1'b1);
+    latch_mod(1'b1, params::TRANSITION_MODE_SYS_TIME, 16'd8, 16'd100, 16'hFFFF, 16'd0, 1'b0);
+    latch_mod(1'b1, TransitionImmediate, 16'd3, 16'd100, 16'hFFFF, 16'hFFFF, 1'b0);
+    latch_silencer(SilencerStrict, 16'd8, 16'd8, 1'b0);
+    mod_bank = 1'b1;
+    $display("OK! a finite request keeps the playing bank under the guard, an immediate one releases it");
+
+    latch_silencer(SilencerStrict, 16'd8, 16'd40, 1'b0);
+    latch_pattern(1'b0, TransitionImmediate, 16'd39, 16'd100, 16'hFFFF, 16'hFFFF, 1'b1);
+    latch_pattern(1'b0, TransitionImmediate, 16'd40, 16'd7, 16'hFFFF, 16'hFFFF, 1'b0);
+    latch_silencer(SilencerStrict, 16'd8, 16'd41, 1'b1);
+    latch_silencer(SilencerStrict, 16'd41, 16'd8, 1'b1);
+    $display("OK! PATTERN is guarded on both intensity and phase");
+
+    latch_silencer(SilencerStrict | SilencerFixedUpdateRate, 16'd200, 16'd200, 1'b0);
+    latch_mod(1'b1, TransitionImmediate, 16'd3, 16'd1, 16'hFFFF, 16'hFFFF, 1'b0);
+    latch_pattern(1'b0, TransitionImmediate, 16'd1, 16'd1, 16'hFFFF, 16'hFFFF, 1'b0);
+    latch_silencer(SilencerStrict, 16'd2, 16'd2, 1'b1);
+    latch_silencer(8'd0, 16'd200, 16'd200, 1'b0);
+    $display("OK! fixed update rate mode releases the guard");
 
     $display("OK! sim_controller");
     $finish();

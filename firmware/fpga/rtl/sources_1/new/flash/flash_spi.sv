@@ -25,7 +25,6 @@ module flash_spi #(
 
   import params::*;
 
-  localparam logic [7:0] SPI_RDID = 8'h9F;
   localparam logic [7:0] SPI_RDSR = 8'h05;
   localparam logic [7:0] SPI_READ = 8'h03;
   localparam logic [7:0] SPI_WREN = 8'h06;
@@ -162,12 +161,6 @@ module flash_spi #(
           ret <= FINISH;
           state <= FINISH;
           case (CMD_OP)
-            FLASH_OP_READ_ID: begin
-              tx <= {SPI_RDID, 24'd0};
-              tx_bits <= 6'd8;
-              rx_left <= 24'd3;
-              state <= SELECT;
-            end
             FLASH_OP_CRC32: begin
               tx <= {SPI_READ, CMD_ADDR};
               tx_bits <= 6'd32;
@@ -368,8 +361,6 @@ module flash_spi #(
       FINISH: begin
         if (op == FLASH_OP_CRC32) begin
           result <= ~crc;
-        end else if (op == FLASH_OP_READ_ID) begin
-          result <= {8'd0, received};
         end else begin
           result <= 32'd0;
         end

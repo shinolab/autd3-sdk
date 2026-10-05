@@ -20,7 +20,6 @@ module flash_host (
   logic [23:0] addr_reg = 24'd0;
   logic [23:0] len_reg = 24'd0;
   logic req = 1'b0;
-  logic [2:0] we_edge = 3'b000;
   logic [15:0] rdata = 16'd0;
 
   (* ASYNC_REG = "TRUE" *) logic [1:0] ack_sync = 2'b00;
@@ -32,8 +31,7 @@ module flash_host (
 
   always_ff @(posedge BUS_CLK) begin
     ack_sync <= {ack_sync[0], ack};
-    we_edge  <= {we_edge[1:0], WE & REG_EN};
-    if (we_edge == 3'b011) begin
+    if (WE & REG_EN) begin
       case (ADDR[7:0])
         ADDR_FLASH_CMD: begin
           if (!busy) begin

@@ -27,6 +27,7 @@ module sim_output_mask ();
   logic [7:0] phase_buf[params::NumBanks][SIZE][DEPTH];
 
   logic [255:0] output_mask;
+  logic failsafe = 1'b0;
 
   cnt_bus_if cnt_bus ();
   phase_corr_bus_if phase_corr_bus ();
@@ -73,6 +74,7 @@ module sim_output_mask ();
       .EMISSION_BUS_FOCUS(emission_bus.out_focus_port),
       .EMISSION_BUS_RAW(emission_bus.out_raw_port),
       .OUTPUT_MASK_BUS(output_mask_bus.out_port),
+      .FAILSAFE(failsafe),
       .INTENSITY(intensity),
       .PHASE(phase),
       .DOUT_VALID(dout_valid),
@@ -127,7 +129,7 @@ module sim_output_mask ();
       end
       `ASSERT_EQ(bank, debug_bank);
       for (int i = 0; i < DEPTH; i++) begin
-        if (output_mask[i]) begin
+        if (output_mask[i] && !failsafe) begin
           `ASSERT_EQ(intensity_buf[bank][debug_idx][i], intensity);
         end else begin
           `ASSERT_EQ(8'h00, intensity);
@@ -185,6 +187,19 @@ module sim_output_mask ();
     random_mask();
     sim_helper_bram.write_output_mask(output_mask);
     check(1, "bank 1, mask rewritten while bank 1 is playing");
+
+    @(posedge CLK);
+    failsafe <= 1'b1;
+    check(1, "bank 1, failsafe gates every transducer");
+
+    switch_bank(0);
+    check(0, "bank 0, failsafe kept across the bank switch");
+
+    @(posedge CLK);
+    failsafe <= 1'b0;
+    check(0, "bank 0, the mask written before the failsafe is back after the release");
+
+    switch_bank(1);
 
     output_mask = '0;
     sim_helper_bram.write_output_mask(output_mask);
