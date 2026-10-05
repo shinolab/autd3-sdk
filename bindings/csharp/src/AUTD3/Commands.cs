@@ -16,6 +16,28 @@ namespace AUTD3
 
         static NativeCommand() => NativeAbi.Verify(Lib, autd3_abi_version());
 
+        internal static byte[] FlattenPerDevice<T>(T[][] src, Func<T, byte> value, out UIntPtr[] lens)
+        {
+            lens = new UIntPtr[src.Length];
+            var total = 0;
+            for (var d = 0; d < src.Length; d++)
+            {
+                lens[d] = (UIntPtr)src[d].Length;
+                total += src[d].Length;
+            }
+            var flat = new byte[total];
+            var offset = 0;
+            for (var d = 0; d < src.Length; d++)
+            {
+                for (var t = 0; t < src[d].Length; t++)
+                {
+                    flat[offset + t] = value(src[d][t]);
+                }
+                offset += src[d].Length;
+            }
+            return flat;
+        }
+
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
 
@@ -252,23 +274,7 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp()
         {
-            var lens = new UIntPtr[_masks.Length];
-            var total = 0;
-            for (var d = 0; d < _masks.Length; d++)
-            {
-                lens[d] = (UIntPtr)_masks[d].Length;
-                total += _masks[d].Length;
-            }
-            var flat = new byte[total];
-            var offset = 0;
-            for (var d = 0; d < _masks.Length; d++)
-            {
-                for (var t = 0; t < _masks[d].Length; t++)
-                {
-                    flat[offset + t] = (byte)(_masks[d][t] ? 1 : 0);
-                }
-                offset += _masks[d].Length;
-            }
+            var flat = NativeCommand.FlattenPerDevice(_masks, m => (byte)(m ? 1 : 0), out var lens);
             return NativeCommand.autd3_op_set_output_mask(flat, lens, (UIntPtr)_masks.Length);
         }
     }
@@ -355,23 +361,7 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp()
         {
-            var lens = new UIntPtr[_phases.Length];
-            var total = 0;
-            for (var d = 0; d < _phases.Length; d++)
-            {
-                lens[d] = (UIntPtr)_phases[d].Length;
-                total += _phases[d].Length;
-            }
-            var flat = new byte[total];
-            var offset = 0;
-            for (var d = 0; d < _phases.Length; d++)
-            {
-                for (var t = 0; t < _phases[d].Length; t++)
-                {
-                    flat[offset + t] = _phases[d][t].Value;
-                }
-                offset += _phases[d].Length;
-            }
+            var flat = NativeCommand.FlattenPerDevice(_phases, p => p.Value, out var lens);
             return NativeCommand.autd3_op_set_phase_correction(flat, lens, (UIntPtr)_phases.Length);
         }
     }

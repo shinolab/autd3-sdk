@@ -21,6 +21,41 @@ namespace AUTD3
         public byte PhaseOffset;
     }
 
+    internal static class FociPoints
+    {
+        internal static (Autd3StmControlPointNative[] Points, byte[] Intensities, byte NumFoci) Flatten(ControlPoints[] samples, string command)
+        {
+            if (samples.Length == 0)
+            {
+                throw new Autd3Exception($"{command} requires at least one sample");
+            }
+            var numFoci = (byte)samples[0].Points.Length;
+            var points = new Autd3StmControlPointNative[samples.Length * numFoci];
+            var intensities = new byte[samples.Length];
+            for (var i = 0; i < samples.Length; i++)
+            {
+                if (samples[i].Points.Length != numFoci)
+                {
+                    throw new Autd3Exception($"all {command} samples must have the same number of foci");
+                }
+                intensities[i] = samples[i].Intensity.Value;
+                for (var j = 0; j < numFoci; j++)
+                {
+                    var cp = samples[i].Points[j];
+                    var p = Coords.Point(cp.Point);
+                    points[i * numFoci + j] = new Autd3StmControlPointNative
+                    {
+                        X = p.X,
+                        Y = p.Y,
+                        Z = p.Z,
+                        PhaseOffset = cp.PhaseOffset.Value,
+                    };
+                }
+            }
+            return (points, intensities, numFoci);
+        }
+    }
+
     internal static class NativeStm
     {
         private const string Lib = "autd3capi";
@@ -217,33 +252,7 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp()
         {
-            if (_points.Length == 0)
-            {
-                throw new Autd3Exception("FociStm requires at least one sample");
-            }
-            var numFoci = (byte)_points[0].Points.Length;
-            var points = new Autd3StmControlPointNative[_points.Length * numFoci];
-            var intensities = new byte[_points.Length];
-            for (var i = 0; i < _points.Length; i++)
-            {
-                if (_points[i].Points.Length != numFoci)
-                {
-                    throw new Autd3Exception("all FociStm samples must have the same number of foci");
-                }
-                intensities[i] = _points[i].Intensity.Value;
-                for (var j = 0; j < numFoci; j++)
-                {
-                    var cp = _points[i].Points[j];
-                    var p = Coords.Point(cp.Point);
-                    points[i * numFoci + j] = new Autd3StmControlPointNative
-                    {
-                        X = p.X,
-                        Y = p.Y,
-                        Z = p.Z,
-                        PhaseOffset = cp.PhaseOffset.Value,
-                    };
-                }
-            }
+            var (points, intensities, numFoci) = FociPoints.Flatten(_points, "FociStm");
             var configHandle = _config.CreateHandle();
             try
             {
@@ -359,33 +368,7 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp()
         {
-            if (_points.Length == 0)
-            {
-                throw new Autd3Exception("WriteFociBuffer requires at least one sample");
-            }
-            var numFoci = (byte)_points[0].Points.Length;
-            var points = new Autd3StmControlPointNative[_points.Length * numFoci];
-            var intensities = new byte[_points.Length];
-            for (var i = 0; i < _points.Length; i++)
-            {
-                if (_points[i].Points.Length != numFoci)
-                {
-                    throw new Autd3Exception("all WriteFociBuffer samples must have the same number of foci");
-                }
-                intensities[i] = _points[i].Intensity.Value;
-                for (var j = 0; j < numFoci; j++)
-                {
-                    var cp = _points[i].Points[j];
-                    var p = Coords.Point(cp.Point);
-                    points[i * numFoci + j] = new Autd3StmControlPointNative
-                    {
-                        X = p.X,
-                        Y = p.Y,
-                        Z = p.Z,
-                        PhaseOffset = cp.PhaseOffset.Value,
-                    };
-                }
-            }
+            var (points, intensities, numFoci) = FociPoints.Flatten(_points, "WriteFociBuffer");
             return NativeStm.autd3_op_write_foci_buffer((byte)_bank, _indexOffset, points, (UIntPtr)_points.Length, numFoci, intensities);
         }
     }
