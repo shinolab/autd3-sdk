@@ -13,7 +13,6 @@ module sim_helper_bram #(
   logic CPU_CKIO;
   logic CPU_CN;
   logic CPU_WE0_N;
-  logic [15:0] CPU_DATA_READ;
   logic [15:0] bus_data_reg = 16'bzzzzzzzzzzzzzzzz;
   assign CPU_DATA = bus_data_reg;
 

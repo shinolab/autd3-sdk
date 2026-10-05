@@ -55,9 +55,7 @@ module sim_emission_foci ();
       .SYS_TIME(SYS_TIME)
   );
 
-  time_cnt_generator #(
-      .DEPTH(DEPTH)
-  ) time_cnt_generator (
+  time_cnt_generator time_cnt_generator (
       .CLK(CLK),
       .SYS_TIME(SYS_TIME),
       .SKIP_ONE_ASSERT(1'b0),

@@ -64,11 +64,6 @@ pub enum FpgaCmd {
     CommitIps,
     #[command(about = "Remove the Vivado project and its build outputs")]
     Clean(CleanArgs),
-    #[command(about = "Standalone probe bitstream that reads the configuration flash over JTAG")]
-    FlashProbe {
-        #[command(subcommand)]
-        cmd: crate::fpga_probe::FlashProbeCmd,
-    },
 }
 
 pub fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
@@ -88,7 +83,6 @@ pub fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
         FpgaCmd::GenController => crate::fpga_codegen::gen_controller(&fpga_dir),
         FpgaCmd::CommitIps => fpga_commit_ips(&fpga_dir),
         FpgaCmd::Clean(args) => crate::clean::scope(root, *args, clean),
-        FpgaCmd::FlashProbe { cmd } => crate::fpga_probe::run_flash_probe(&fpga_dir, cmd),
     }
 }
 
@@ -325,9 +319,6 @@ fn fpga_format(fpga_dir: &Path, fix: bool) -> Result<()> {
     let rtl_dir = fpga_dir.join("rtl");
     let mut files = Vec::new();
     collect_rtl_sources(&rtl_dir, &mut files)?;
-    for dir in ["flash-probe/rtl", "flash-probe/sim"] {
-        collect_rtl_sources(&fpga_dir.join(dir), &mut files)?;
-    }
     files.sort();
     if files.is_empty() {
         bail!("no SystemVerilog sources found under {}", rtl_dir.display());
@@ -430,7 +421,7 @@ pub fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
 }
 
 fn split_flash_image(mcs: &Path, update_image: &Path) -> Result<()> {
-    let (start, flash) = crate::fpga_probe::read_mcs(mcs)?;
+    let (start, flash) = read_mcs(mcs)?;
     if start != 0 {
         bail!("{} starts at 0x{start:X}, expected the golden image at 0x0", mcs.display());
     }
@@ -479,6 +470,61 @@ fn split_flash_image(mcs: &Path, update_image: &Path) -> Result<()> {
         summary.timer.unwrap_or_default()
     );
     Ok(())
+}
+
+fn read_mcs(path: &Path) -> Result<(u32, Vec<u8>)> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let mut records: Vec<(u32, Vec<u8>)> = Vec::new();
+    let mut base = 0u32;
+    for (index, line) in text.lines().enumerate() {
+        let line_no = index + 1;
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let hex = line
+            .strip_prefix(':')
+            .with_context(|| format!("line {line_no}: missing ':'"))?;
+        let bytes = (0..hex.len())
+            .step_by(2)
+            .map(|i| hex.get(i..i + 2).and_then(|b| u8::from_str_radix(b, 16).ok()))
+            .collect::<Option<Vec<u8>>>()
+            .with_context(|| format!("line {line_no}: malformed hex"))?;
+        if bytes.len() < 5 || bytes.len() != usize::from(bytes[0]) + 5 {
+            bail!("line {line_no}: bad record length");
+        }
+        if bytes.iter().fold(0u8, |acc, b| acc.wrapping_add(*b)) != 0 {
+            bail!("line {line_no}: checksum mismatch");
+        }
+        let offset = u32::from(u16::from_be_bytes([bytes[1], bytes[2]]));
+        let data = &bytes[4..bytes.len() - 1];
+        match bytes[3] {
+            0x00 => records.push((base + offset, data.to_vec())),
+            0x01 => break,
+            0x04 if data.len() == 2 => {
+                base = u32::from(u16::from_be_bytes([data[0], data[1]])) << 16;
+            }
+            t => bail!("line {line_no}: unsupported record type 0x{t:02X}"),
+        }
+    }
+
+    let start = records
+        .iter()
+        .map(|(addr, _)| *addr)
+        .min()
+        .with_context(|| format!("{} has no data records", path.display()))?;
+    let start_index = usize::try_from(start)?;
+    let mut end_index = start_index;
+    for (addr, data) in &records {
+        end_index = end_index.max(usize::try_from(*addr)? + data.len());
+    }
+    let mut image = vec![0xFF; end_index - start_index];
+    for (addr, data) in &records {
+        let offset = usize::try_from(*addr)? - start_index;
+        image[offset..offset + data.len()].copy_from_slice(data);
+    }
+    Ok((start, image))
 }
 
 fn fpga_flash(root: &Path, force: bool) -> Result<()> {

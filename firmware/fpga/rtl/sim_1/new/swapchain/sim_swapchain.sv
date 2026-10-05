@@ -3,7 +3,6 @@ module sim_swapchain ();
 
   `include "define.vh"
 
-  localparam int DEPTH = 249;
   localparam int ECAT_SYNC_BASE_CNT = 10240;
 
   logic CLK;

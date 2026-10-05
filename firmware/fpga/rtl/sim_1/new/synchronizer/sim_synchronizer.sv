@@ -8,7 +8,6 @@ module sim_synchronizer ();
   logic lock, lock_p50, lock_m50;
   logic [56:0] SYS_TIME, SYS_TIME_p50, SYS_TIME_m50;
   logic [56:0] SYS_TIME_WO_SYNC, SYS_TIME_p50_WO_SYNC, SYS_TIME_m50_WO_SYNC;
-  logic signed [64:0] diff_p50, diff_m50;
 
   logic signed [13:0] SYNC_TIME_DIFF, SYNC_TIME_DIFF_p50, SYNC_TIME_DIFF_m50;
 
@@ -35,8 +34,6 @@ module sim_synchronizer ();
   assign SYNC_SETTINGS.ECAT_SYNC_TIME = ecat_sync_time;
   assign SYNC_SETTINGS.ECAT_SYNC_CYCLE = 32'd10240 * ECAT_SYNC_CYCLE_TICKS;
 
-  assign diff_p50 = SYS_TIME_p50 - SYS_TIME;
-  assign diff_m50 = SYS_TIME_m50 - SYS_TIME;
 
   synchronizer synchronizer (
       .CLK(CLK),

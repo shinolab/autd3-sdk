@@ -101,7 +101,6 @@ module sim_mod_modulation ();
   endtask
 
   logic [7:0] expect_intensity;
-  logic [7:0] expect_phase;
   task automatic check();
     while (1) begin
       @(posedge CLK);
@@ -115,7 +114,6 @@ module sim_mod_modulation ();
       end else begin
         expect_intensity = (int'(intensity_buf[i]) * (mod_buf[bank_debug][cycle_buf[bank_debug]-1])) / 255;
       end
-      expect_phase = phase_buf[i];
       `ASSERT_EQ(expect_intensity, intensity_out);
       `ASSERT_EQ((phase_buf[i] + phase_corr_buf[i]) % 256, phase_out);
       @(posedge CLK);
