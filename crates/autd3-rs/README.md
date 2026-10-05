@@ -80,7 +80,6 @@ Pick the transport that matches your setup; all of them implement the same `Link
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `legacy` | no | Compatibility helpers for the pre-1.0 SDK |
 | `logging` | no | `tracing-subscriber` setup helpers under `autd3_rs::rt` |
 
 ## Citing

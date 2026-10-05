@@ -16,7 +16,6 @@ all-features = true
 
 [features]
 default = ["serde"]
-legacy = []
 logging = ["autd3-rs-core/logging"]
 serde = ["autd3-rs-core/serde"]
 

@@ -95,8 +95,6 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
                 "build",
                 "--workspace",
                 "--all-targets",
-                "--features",
-                "autd3-rs/legacy",
             ];
             run("cargo", args, root)
         }
@@ -107,8 +105,6 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
                 "--lib",
                 "--bins",
                 "--tests",
-                "--features",
-                "autd3-rs/legacy",
             ];
             if *no_pcap {
                 args.extend(PCAP_PACKAGES.iter().flat_map(|pkg| ["--exclude", *pkg]));
@@ -170,8 +166,6 @@ fn run_lint(root: &Path) -> Result<()> {
         "clippy",
         "--workspace",
         "--all-targets",
-        "--features",
-        "autd3-rs/legacy",
     ];
     args.extend(["--", "-D", "warnings"]);
     run("cargo", args, root)?;
@@ -240,8 +234,6 @@ fn run_coverage(root: &Path, no_pcap: bool, all: bool, open: bool) -> Result<()>
         "--lib",
         "--bins",
         "--tests",
-        "--features",
-        "autd3-rs/legacy",
     ];
     if no_pcap {
         test_args.extend(PCAP_PACKAGES.iter().flat_map(|pkg| ["--exclude", *pkg]));

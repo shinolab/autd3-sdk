@@ -6,26 +6,20 @@ use std::path::PathBuf as WinPathBuf;
 use anyhow::{Context, Result, bail};
 
 use autd3_firmware_writer::bundle::{self, Bundle};
-use autd3_firmware_writer::series::Series;
 
 use crate::Target;
 use crate::util::{run, which};
 
-pub fn write(
-    version: &str,
-    target: Option<Target>,
-    force_download: bool,
-    series: Series,
-) -> Result<()> {
+pub fn write(version: &str, target: Option<Target>, force_download: bool) -> Result<()> {
     let version = version.trim_start_matches('v');
 
     let Bundle {
         cpu,
         fpga_mcs: fpga,
         ..
-    } = bundle::fetch(version, force_download, series)?;
+    } = bundle::fetch(version, force_download)?;
 
-    eprintln!("Found firmwares ({} v{version}):", series.label());
+    eprintln!("Found firmwares (autd3-sdk v{version}):");
     match &cpu {
         Some(p) => eprintln!("  CPU : {}", p.display()),
         None => eprintln!("  CPU : (none)"),
