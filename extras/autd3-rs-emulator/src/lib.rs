@@ -12,10 +12,7 @@ mod sound_field;
 pub use aabb::Aabb;
 pub use client_api::ClientApi;
 pub use error::EmulatorError;
-pub use range::{
-    Range, RangeX, RangeXY, RangeXYZ, RangeXZ, RangeXZY, RangeY, RangeYX, RangeYXZ, RangeYZ,
-    RangeYZX, RangeZ, RangeZX, RangeZXY, RangeZY, RangeZYX,
-};
+pub use range::{AxisOrder, Grid, Range};
 pub use raw::{RawColumn, RawFrame};
 pub use record::Record;
 pub use recorder::Recorder;
@@ -39,10 +36,6 @@ impl Emulator {
     #[must_use]
     pub fn geometry(&self) -> &Geometry {
         &self.geometry
-    }
-
-    pub fn geometry_mut(&mut self) -> &mut Geometry {
-        &mut self.geometry
     }
 
     #[must_use]

@@ -4,7 +4,9 @@
 use polars::frame::DataFrame;
 
 use crate::raw::RawFrame;
-use crate::record::{OUTPUT_VOLTAGE, Record, TransducerRecord, ULTRASOUND_PERIOD_COUNT};
+use crate::record::{
+    OUTPUT_VOLTAGE, Record, TransducerRecord, ULTRASOUND_PERIOD_COUNT, output_raw,
+};
 
 impl TransducerRecord {
     fn voltage_frame(pw: u16, phase: u16, out: &mut Vec<f32>) {
@@ -53,7 +55,7 @@ impl Record {
             .iter()
             .map(TransducerRecord::output_voltage)
             .collect();
-        crate::record::output_raw("voltage[V]", self.records.len(), &per_tr)
+        output_raw("voltage[V]", &per_tr)
     }
 
     #[cfg(feature = "polars")]

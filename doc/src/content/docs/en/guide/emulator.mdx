@@ -249,9 +249,24 @@ shape: (1_681, 25)
 ### Observation Range
 
 `Range` represents a set of observation points.
-Besides planes such as `RangeXY`, there are single-axis variants such as `RangeX` and all-three-axis variants such as `RangeXYZ`.
-The order of the axes (`RangeXY` vs. `RangeYX`, etc.) determines the enumeration order of the observation points.
-`resolution` is the step width of each axis (mm).
+Use `Grid` for points on a regular grid: `x` / `y` / `z` give the range of each axis and `resolution` the step width (mm).
+To fix an axis, set its start and end to the same value (`150.0..=150.0` in Rust, `150.0` in Python). A line, a plane and a volume are all written with the same type.
+
+`order` is the enumeration order of the observation points; the first axis varies fastest.
+It is `AxisOrder::XYZ` (default) / `XZY` / `YXZ` / `YZX` / `ZXY` / `ZYX` in Rust, and a string such as `order="xyz"` (default) in Python.
+
+For points that are not on a grid, the Rust version also accepts a `Point3` or a `Vec<Point3>` directly.
+
+:::note[Migrating from `RangeXY` and friends]
+The per-axis-combination types `RangeX` through `RangeZYX` have been merged into `Grid`.
+
+| Before | Now |
+| --- | --- |
+| `RangeXY { x, y, z: 150.0, resolution }` | `Grid { x, y, z: 150.0..=150.0, resolution, order: AxisOrder::XYZ }` |
+| `RangeYX { x, y, z: 150.0, resolution }` | `Grid { x, y, z: 150.0..=150.0, resolution, order: AxisOrder::YXZ }` |
+| `RangeZXY { x, y, z, resolution }` | `Grid { x, y, z, resolution, order: AxisOrder::ZXY }` |
+| `RangeXY((x0, x1), (y0, y1), 150.0, 1.0)` (Python) | `Grid(x=(x0, x1), y=(y0, y1), z=150.0, resolution=1.0)` |
+:::
 
 ### GPU Backend (Rust version only)
 

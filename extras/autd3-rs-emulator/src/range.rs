@@ -2,7 +2,7 @@
 
 use std::ops::RangeInclusive;
 
-use autd3_rs_core::geometry::{Point3, Vector3};
+use autd3_rs_core::geometry::Point3;
 
 use crate::aabb::Aabb;
 
@@ -34,96 +34,86 @@ impl Range for Vec<Point3<f32>> {
     }
 
     fn aabb(&self) -> Aabb {
-        self.iter().fold(Aabb::empty(), |aabb, v| aabb.grow(*v))
+        Aabb::from_points(self.iter().copied())
     }
 }
 
-impl Range for Vec<Vector3<f32>> {
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AxisOrder {
+    #[default]
+    XYZ,
+    XZY,
+    YXZ,
+    YZX,
+    ZXY,
+    ZYX,
+}
+
+impl AxisOrder {
+    fn axes(self) -> [usize; 3] {
+        match self {
+            Self::XYZ => [0, 1, 2],
+            Self::XZY => [0, 2, 1],
+            Self::YXZ => [1, 0, 2],
+            Self::YZX => [1, 2, 0],
+            Self::ZXY => [2, 0, 1],
+            Self::ZYX => [2, 1, 0],
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Grid {
+    pub x: RangeInclusive<f32>,
+    pub y: RangeInclusive<f32>,
+    pub z: RangeInclusive<f32>,
+    pub resolution: f32,
+    pub order: AxisOrder,
+}
+
+impl Range for Grid {
     fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        self.iter().map(|v| (v.x, v.y, v.z))
+        let res = self.resolution;
+        let spec = [&self.x, &self.y, &self.z].map(|r| (*r.start(), n(*r.start(), *r.end(), res)));
+        let [inner, middle, outer] = self.order.axes();
+        (0..spec[outer].1).flat_map(move |i2| {
+            (0..spec[middle].1).flat_map(move |i1| {
+                (0..spec[inner].1).map(move |i0| {
+                    let mut p = [0.0; 3];
+                    p[inner] = spec[inner].0 + res * i0 as f32;
+                    p[middle] = spec[middle].0 + res * i1 as f32;
+                    p[outer] = spec[outer].0 + res * i2 as f32;
+                    (p[0], p[1], p[2])
+                })
+            })
+        })
     }
 
     fn aabb(&self) -> Aabb {
-        self.iter()
-            .fold(Aabb::empty(), |aabb, v| aabb.grow(Point3::from(*v)))
+        Aabb::from_points([
+            Point3::new(*self.x.start(), *self.y.start(), *self.z.start()),
+            Point3::new(*self.x.end(), *self.y.end(), *self.z.end()),
+        ])
     }
 }
 
-macro_rules! impl_range {
-    (@ty range) => { RangeInclusive<f32> };
-    (@ty scalar) => { f32 };
-    (@spec range, $v:expr, $res:expr) => { (*$v.start(), n(*$v.start(), *$v.end(), $res)) };
-    (@spec scalar, $v:expr, $res:expr) => { ($v, 1usize) };
-    (@min range, $v:expr) => { *$v.start() };
-    (@min scalar, $v:expr) => { $v };
-    (@max range, $v:expr) => { *$v.end() };
-    (@max scalar, $v:expr) => { $v };
-    (
-        $name:ident {
-            $ax:ident: $kx:ident,
-            $ay:ident: $ky:ident,
-            $az:ident: $kz:ident $(,)?
-        },
-        order: [$a0:ident, $a1:ident, $a2:ident] $(,)?
-    ) => {
-        #[derive(Clone, Debug)]
-        pub struct $name {
-            pub $ax: impl_range!(@ty $kx),
-            pub $ay: impl_range!(@ty $ky),
-            pub $az: impl_range!(@ty $kz),
-            pub resolution: f32,
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        impl Range for $name {
-            fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-                let res = self.resolution;
-                let $ax = impl_range!(@spec $kx, self.$ax, res);
-                let $ay = impl_range!(@spec $ky, self.$ay, res);
-                let $az = impl_range!(@spec $kz, self.$az, res);
-                (0..$a2.1).flat_map(move |i2| {
-                    let $a2 = $a2.0 + res * i2 as f32;
-                    (0..$a1.1).flat_map(move |i1| {
-                        let $a1 = $a1.0 + res * i1 as f32;
-                        (0..$a0.1).map(move |i0| {
-                            let $a0 = $a0.0 + res * i0 as f32;
-                            ($ax, $ay, $az)
-                        })
-                    })
-                })
-            }
+    #[test]
+    fn grid_aabb_is_well_formed_for_a_reversed_axis() {
+        let grid = Grid {
+            x: 1000.0..=100.0,
+            y: 0.0..=0.0,
+            z: 150.0..=150.0,
+            resolution: 1.0,
+            order: AxisOrder::XYZ,
+        };
 
-            fn aabb(&self) -> Aabb {
-                Aabb {
-                    min: Vector3::new(
-                        impl_range!(@min $kx, self.$ax),
-                        impl_range!(@min $ky, self.$ay),
-                        impl_range!(@min $kz, self.$az),
-                    )
-                    .into(),
-                    max: Vector3::new(
-                        impl_range!(@max $kx, self.$ax),
-                        impl_range!(@max $ky, self.$ay),
-                        impl_range!(@max $kz, self.$az),
-                    )
-                    .into(),
-                }
-            }
-        }
-    };
+        assert_eq!(grid.points().count(), 1);
+        let aabb = grid.aabb();
+        assert_eq!(aabb.min, Point3::new(100.0, 0.0, 150.0));
+        assert_eq!(aabb.max, Point3::new(1000.0, 0.0, 150.0));
+    }
 }
-
-impl_range!(RangeX { x: range, y: scalar, z: scalar }, order: [x, y, z]);
-impl_range!(RangeY { x: scalar, y: range, z: scalar }, order: [y, x, z]);
-impl_range!(RangeZ { x: scalar, y: scalar, z: range }, order: [z, x, y]);
-impl_range!(RangeXY { x: range, y: range, z: scalar }, order: [x, y, z]);
-impl_range!(RangeXZ { x: range, y: scalar, z: range }, order: [x, z, y]);
-impl_range!(RangeYX { x: range, y: range, z: scalar }, order: [y, x, z]);
-impl_range!(RangeYZ { x: scalar, y: range, z: range }, order: [y, z, x]);
-impl_range!(RangeZX { x: range, y: scalar, z: range }, order: [z, x, y]);
-impl_range!(RangeZY { x: scalar, y: range, z: range }, order: [z, y, x]);
-impl_range!(RangeXYZ { x: range, y: range, z: range }, order: [x, y, z]);
-impl_range!(RangeXZY { x: range, y: range, z: range }, order: [x, z, y]);
-impl_range!(RangeYXZ { x: range, y: range, z: range }, order: [y, x, z]);
-impl_range!(RangeYZX { x: range, y: range, z: range }, order: [y, z, x]);
-impl_range!(RangeZXY { x: range, y: range, z: range }, order: [z, x, y]);
-impl_range!(RangeZYX { x: range, y: range, z: range }, order: [z, y, x]);

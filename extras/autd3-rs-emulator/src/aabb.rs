@@ -29,27 +29,8 @@ impl Aabb {
     }
 }
 
-fn corners(aabb: &Aabb) -> Vec<Point3<f32>> {
-    [aabb.min.x, aabb.max.x]
-        .into_iter()
-        .flat_map(move |x| {
-            [aabb.min.y, aabb.max.y].into_iter().flat_map(move |y| {
-                [aabb.min.z, aabb.max.z]
-                    .into_iter()
-                    .map(move |z| Point3::new(x, y, z))
-            })
-        })
-        .collect()
-}
-
 pub(crate) fn aabb_max_dist(a: &Aabb, b: &Aabb) -> f32 {
-    let corners_a = corners(a);
-    let corners_b = corners(b);
-    corners_a
-        .into_iter()
-        .flat_map(|a| corners_b.iter().map(move |&b| (a, b)))
-        .map(|(a, b)| (a - b).norm())
-        .fold(f32::NEG_INFINITY, f32::max)
+    (a.max - b.min).sup(&(b.max - a.min)).norm()
 }
 
 pub(crate) fn aabb_min_dist(a: &Aabb, b: &Aabb) -> f32 {
@@ -61,4 +42,71 @@ pub(crate) fn aabb_min_dist(a: &Aabb, b: &Aabb) -> f32 {
         .map(|(min, max)| (min - max).powi(2))
         .sum::<f32>()
         .sqrt()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn corners(aabb: &Aabb) -> Vec<Point3<f32>> {
+        let mut out = Vec::new();
+        for x in [aabb.min.x, aabb.max.x] {
+            for y in [aabb.min.y, aabb.max.y] {
+                for z in [aabb.min.z, aabb.max.z] {
+                    out.push(Point3::new(x, y, z));
+                }
+            }
+        }
+        out
+    }
+
+    fn brute_force_max_dist(a: &Aabb, b: &Aabb) -> f32 {
+        corners(a)
+            .into_iter()
+            .flat_map(|p| corners(b).into_iter().map(move |q| (p - q).norm()))
+            .fold(f32::NEG_INFINITY, f32::max)
+    }
+
+    fn aabb(min: [f32; 3], max: [f32; 3]) -> Aabb {
+        Aabb {
+            min: Point3::from(min),
+            max: Point3::from(max),
+        }
+    }
+
+    #[test]
+    fn max_dist_of_separated_boxes_matches_the_corner_search() {
+        let a = aabb([0.0, 0.0, 0.0], [10.0, 20.0, 1.0]);
+        let b = aabb([-30.0, 50.0, 150.0], [-5.0, 70.0, 180.0]);
+        assert_eq!(
+            aabb_max_dist(&a, &b).to_bits(),
+            brute_force_max_dist(&a, &b).to_bits()
+        );
+        assert_eq!(
+            aabb_max_dist(&b, &a).to_bits(),
+            brute_force_max_dist(&a, &b).to_bits()
+        );
+    }
+
+    #[test]
+    fn max_dist_of_overlapping_boxes_matches_the_corner_search() {
+        let a = aabb([0.0, 0.0, 0.0], [10.0, 10.0, 10.0]);
+        let b = aabb([5.0, -5.0, 2.0], [7.0, 30.0, 4.0]);
+        assert_eq!(
+            aabb_max_dist(&a, &b).to_bits(),
+            brute_force_max_dist(&a, &b).to_bits()
+        );
+        assert_eq!(
+            aabb_max_dist(&a, &a).to_bits(),
+            brute_force_max_dist(&a, &a).to_bits()
+        );
+    }
+
+    #[test]
+    fn max_dist_of_points_is_their_distance() {
+        let a = aabb([1.0, 2.0, 3.0], [1.0, 2.0, 3.0]);
+        let b = aabb([4.0, 6.0, 3.0], [4.0, 6.0, 3.0]);
+        assert_eq!(aabb_max_dist(&a, &b), 5.0);
+        assert_eq!(aabb_max_dist(&a, &a), 0.0);
+    }
 }

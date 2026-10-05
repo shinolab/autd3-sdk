@@ -1,3 +1,4 @@
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -5,10 +6,8 @@ use autd3_python_capsule::{capsule_of, frame_from_capsule, geometry_from_capsule
 use autd3_rs_core::common::Velocity;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_emulator::{
-    ClientApi, Emulator as CoreEmulator, Instant as CoreInstant,
-    InstantRecordOption as CoreInstantOption, Range as RangeTrait, RangeX as CoreRangeX,
-    RangeXY as CoreRangeXY, RangeXYZ as CoreRangeXYZ, RangeXZ as CoreRangeXZ, RangeY as CoreRangeY,
-    RangeYZ as CoreRangeYZ, RangeZ as CoreRangeZ, RawColumn, RawFrame, Record as CoreRecord,
+    AxisOrder, ClientApi, Emulator as CoreEmulator, Grid as CoreGrid, Instant as CoreInstant,
+    InstantRecordOption as CoreInstantOption, RawColumn, RawFrame, Record as CoreRecord,
     Recorder as CoreRecorder, Rms as CoreRms, RmsRecordOption as CoreRmsOption,
 };
 use pyo3::exceptions::PyValueError;
@@ -51,257 +50,56 @@ fn raw_to_polars(py: Python<'_>, frame: RawFrame) -> PyResult<Bound<'_, PyAny>> 
     py.import("polars")?.getattr("DataFrame")?.call1((data,))
 }
 
-enum AnyRange {
-    X(CoreRangeX),
-    Y(CoreRangeY),
-    Z(CoreRangeZ),
-    Xy(CoreRangeXY),
-    Xz(CoreRangeXZ),
-    Yz(CoreRangeYZ),
-    Xyz(CoreRangeXYZ),
+fn extract_axis(obj: &Bound<'_, PyAny>) -> PyResult<RangeInclusive<f32>> {
+    if let Ok(v) = obj.extract::<f32>() {
+        return Ok(v..=v);
+    }
+    let (start, end): (f32, f32) = obj
+        .extract()
+        .map_err(|_| PyValueError::new_err("an axis must be a float or a (start, end) tuple"))?;
+    Ok(start..=end)
 }
 
-impl RangeTrait for AnyRange {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        let boxed: Box<dyn Iterator<Item = (f32, f32, f32)>> = match self {
-            AnyRange::X(r) => Box::new(r.points()),
-            AnyRange::Y(r) => Box::new(r.points()),
-            AnyRange::Z(r) => Box::new(r.points()),
-            AnyRange::Xy(r) => Box::new(r.points()),
-            AnyRange::Xz(r) => Box::new(r.points()),
-            AnyRange::Yz(r) => Box::new(r.points()),
-            AnyRange::Xyz(r) => Box::new(r.points()),
-        };
-        boxed
-    }
-
-    fn aabb(&self) -> autd3_rs_emulator::Aabb {
-        match self {
-            AnyRange::X(r) => r.aabb(),
-            AnyRange::Y(r) => r.aabb(),
-            AnyRange::Z(r) => r.aabb(),
-            AnyRange::Xy(r) => r.aabb(),
-            AnyRange::Xz(r) => r.aabb(),
-            AnyRange::Yz(r) => r.aabb(),
-            AnyRange::Xyz(r) => r.aabb(),
-        }
+fn extract_order(order: &str) -> PyResult<AxisOrder> {
+    match order {
+        "xyz" => Ok(AxisOrder::XYZ),
+        "xzy" => Ok(AxisOrder::XZY),
+        "yxz" => Ok(AxisOrder::YXZ),
+        "yzx" => Ok(AxisOrder::YZX),
+        "zxy" => Ok(AxisOrder::ZXY),
+        "zyx" => Ok(AxisOrder::ZYX),
+        _ => Err(PyValueError::new_err(
+            "order must be one of 'xyz', 'xzy', 'yxz', 'yzx', 'zxy', 'zyx'",
+        )),
     }
 }
 
-#[pyclass(name = "RangeX", module = "autd3_emulator")]
-pub struct RangeX {
-    x: (f32, f32),
-    y: f32,
-    z: f32,
-    resolution: f32,
+#[pyclass(name = "Grid", module = "autd3_emulator")]
+pub struct Grid {
+    inner: CoreGrid,
 }
 
 #[pymethods]
-impl RangeX {
+impl Grid {
     #[new]
-    fn new(x: (f32, f32), y: f32, z: f32, resolution: f32) -> Self {
-        Self {
-            x,
-            y,
-            z,
-            resolution,
-        }
+    #[pyo3(signature = (x, y, z, resolution, order = "xyz"))]
+    fn new(
+        x: &Bound<'_, PyAny>,
+        y: &Bound<'_, PyAny>,
+        z: &Bound<'_, PyAny>,
+        resolution: f32,
+        order: &str,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: CoreGrid {
+                x: extract_axis(x)?,
+                y: extract_axis(y)?,
+                z: extract_axis(z)?,
+                resolution,
+                order: extract_order(order)?,
+            },
+        })
     }
-}
-
-#[pyclass(name = "RangeY", module = "autd3_emulator")]
-pub struct RangeY {
-    x: f32,
-    y: (f32, f32),
-    z: f32,
-    resolution: f32,
-}
-
-#[pymethods]
-impl RangeY {
-    #[new]
-    fn new(x: f32, y: (f32, f32), z: f32, resolution: f32) -> Self {
-        Self {
-            x,
-            y,
-            z,
-            resolution,
-        }
-    }
-}
-
-#[pyclass(name = "RangeZ", module = "autd3_emulator")]
-pub struct RangeZ {
-    x: f32,
-    y: f32,
-    z: (f32, f32),
-    resolution: f32,
-}
-
-#[pymethods]
-impl RangeZ {
-    #[new]
-    fn new(x: f32, y: f32, z: (f32, f32), resolution: f32) -> Self {
-        Self {
-            x,
-            y,
-            z,
-            resolution,
-        }
-    }
-}
-
-#[pyclass(name = "RangeXY", module = "autd3_emulator")]
-pub struct RangeXY {
-    x: (f32, f32),
-    y: (f32, f32),
-    z: f32,
-    resolution: f32,
-}
-
-#[pymethods]
-impl RangeXY {
-    #[new]
-    fn new(x: (f32, f32), y: (f32, f32), z: f32, resolution: f32) -> Self {
-        Self {
-            x,
-            y,
-            z,
-            resolution,
-        }
-    }
-}
-
-#[pyclass(name = "RangeXZ", module = "autd3_emulator")]
-pub struct RangeXZ {
-    x: (f32, f32),
-    y: f32,
-    z: (f32, f32),
-    resolution: f32,
-}
-
-#[pymethods]
-impl RangeXZ {
-    #[new]
-    fn new(x: (f32, f32), y: f32, z: (f32, f32), resolution: f32) -> Self {
-        Self {
-            x,
-            y,
-            z,
-            resolution,
-        }
-    }
-}
-
-#[pyclass(name = "RangeYZ", module = "autd3_emulator")]
-pub struct RangeYZ {
-    x: f32,
-    y: (f32, f32),
-    z: (f32, f32),
-    resolution: f32,
-}
-
-#[pymethods]
-impl RangeYZ {
-    #[new]
-    fn new(x: f32, y: (f32, f32), z: (f32, f32), resolution: f32) -> Self {
-        Self {
-            x,
-            y,
-            z,
-            resolution,
-        }
-    }
-}
-
-#[pyclass(name = "RangeXYZ", module = "autd3_emulator")]
-pub struct RangeXYZ {
-    x: (f32, f32),
-    y: (f32, f32),
-    z: (f32, f32),
-    resolution: f32,
-}
-
-#[pymethods]
-impl RangeXYZ {
-    #[new]
-    fn new(x: (f32, f32), y: (f32, f32), z: (f32, f32), resolution: f32) -> Self {
-        Self {
-            x,
-            y,
-            z,
-            resolution,
-        }
-    }
-}
-
-fn extract_range(obj: &Bound<'_, PyAny>) -> PyResult<AnyRange> {
-    if let Ok(r) = obj.cast::<RangeX>() {
-        let r = r.borrow();
-        return Ok(AnyRange::X(CoreRangeX {
-            x: r.x.0..=r.x.1,
-            y: r.y,
-            z: r.z,
-            resolution: r.resolution,
-        }));
-    }
-    if let Ok(r) = obj.cast::<RangeY>() {
-        let r = r.borrow();
-        return Ok(AnyRange::Y(CoreRangeY {
-            x: r.x,
-            y: r.y.0..=r.y.1,
-            z: r.z,
-            resolution: r.resolution,
-        }));
-    }
-    if let Ok(r) = obj.cast::<RangeZ>() {
-        let r = r.borrow();
-        return Ok(AnyRange::Z(CoreRangeZ {
-            x: r.x,
-            y: r.y,
-            z: r.z.0..=r.z.1,
-            resolution: r.resolution,
-        }));
-    }
-    if let Ok(r) = obj.cast::<RangeXY>() {
-        let r = r.borrow();
-        return Ok(AnyRange::Xy(CoreRangeXY {
-            x: r.x.0..=r.x.1,
-            y: r.y.0..=r.y.1,
-            z: r.z,
-            resolution: r.resolution,
-        }));
-    }
-    if let Ok(r) = obj.cast::<RangeXZ>() {
-        let r = r.borrow();
-        return Ok(AnyRange::Xz(CoreRangeXZ {
-            x: r.x.0..=r.x.1,
-            y: r.y,
-            z: r.z.0..=r.z.1,
-            resolution: r.resolution,
-        }));
-    }
-    if let Ok(r) = obj.cast::<RangeYZ>() {
-        let r = r.borrow();
-        return Ok(AnyRange::Yz(CoreRangeYZ {
-            x: r.x,
-            y: r.y.0..=r.y.1,
-            z: r.z.0..=r.z.1,
-            resolution: r.resolution,
-        }));
-    }
-    if let Ok(r) = obj.cast::<RangeXYZ>() {
-        let r = r.borrow();
-        return Ok(AnyRange::Xyz(CoreRangeXYZ {
-            x: r.x.0..=r.x.1,
-            y: r.y.0..=r.y.1,
-            z: r.z.0..=r.z.1,
-            resolution: r.resolution,
-        }));
-    }
-    Err(PyValueError::new_err(
-        "expected a Range (RangeX/Y/Z/XY/XZ/YZ/XYZ)",
-    ))
 }
 
 #[pyclass(name = "RmsRecordOption", module = "autd3_emulator")]
@@ -469,16 +267,15 @@ impl Record {
     fn sound_field(
         &self,
         py: Python<'_>,
-        range: &Bound<'_, PyAny>,
+        range: &Grid,
         option: &Bound<'_, PyAny>,
     ) -> PyResult<Py<PyAny>> {
-        let any = extract_range(range)?;
         if let Ok(opt) = option.cast::<RmsRecordOption>() {
             let opt = opt.borrow();
             let rms = self
                 .inner
                 .sound_field(
-                    any,
+                    range.inner.clone(),
                     CoreRmsOption {
                         sound_speed: opt.sound_speed,
                     },
@@ -491,7 +288,7 @@ impl Record {
             let instant = self
                 .inner
                 .sound_field(
-                    any,
+                    range.inner.clone(),
                     CoreInstantOption {
                         sound_speed: opt.sound_speed,
                         time_step: Duration::from_nanos(opt.time_step_ns),
@@ -637,12 +434,6 @@ fn autd3_emulator(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Instant>()?;
     m.add_class::<RmsRecordOption>()?;
     m.add_class::<InstantRecordOption>()?;
-    m.add_class::<RangeX>()?;
-    m.add_class::<RangeY>()?;
-    m.add_class::<RangeZ>()?;
-    m.add_class::<RangeXY>()?;
-    m.add_class::<RangeXZ>()?;
-    m.add_class::<RangeYZ>()?;
-    m.add_class::<RangeXYZ>()?;
+    m.add_class::<Grid>()?;
     Ok(())
 }

@@ -12,7 +12,7 @@ use autd3_rs::commands::{Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 
-use autd3_rs_emulator::{ClientApi, Emulator, InstantRecordOption, RangeXY};
+use autd3_rs_emulator::{AxisOrder, ClientApi, Emulator, Grid, InstantRecordOption};
 
 #[path = "../plot.rs"]
 mod plot;
@@ -43,11 +43,12 @@ fn main() -> Result<()> {
 
     println!("calculating instantaneous sound field around the focus...");
     let mut instant = record.sound_field(
-        RangeXY {
+        Grid {
             x: (center.x - 20.0)..=(center.x + 20.0),
             y: (center.y - 20.0)..=(center.y + 20.0),
-            z: 150.0,
+            z: 150.0..=150.0,
             resolution: 1.0,
+            order: AxisOrder::XYZ,
         },
         InstantRecordOption {
             time_step: Duration::from_micros(1),
