@@ -9,7 +9,6 @@ use crate::util::{on_path, publish_workspace, publishable_members, run, run_buil
 const PCAP_PACKAGES: &[&str] = &[
     "autd3-rs-link-echocat",
     "autd3-rs-perftest",
-    "autd3-rs-synctune",
     "autd3-rs-examples",
     "autd3-rs-firmware-test",
     "autd3-rs-firmware-ota",

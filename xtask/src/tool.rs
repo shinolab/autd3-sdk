@@ -25,18 +25,6 @@ pub enum ToolCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// Measure the EtherCAT link stability (OP-state retention) and auto-tune sync0_period / sync0_shift
-    Synctune {
-        /// Build the dev profile instead of release
-        #[arg(long)]
-        debug: bool,
-        /// Do not wrap the run in `sudo`
-        #[arg(long)]
-        no_sudo: bool,
-        /// Arguments forwarded to the tool
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
     /// Run the interactive firmware acceptance tests against a real device
     FirmwareTest {
         /// Build the dev profile instead of release
@@ -144,11 +132,6 @@ pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
             let features: &[&str] = if mem_profile { &["mem-profile"] } else { &[] };
             run_bin(root, "autd3-rs-perftest", debug, no_sudo, features, &args)
         }
-        ToolCmd::Synctune {
-            debug,
-            no_sudo,
-            args,
-        } => run_bin(root, "autd3-rs-synctune", debug, no_sudo, &[], &args),
         ToolCmd::FirmwareTest {
             debug,
             no_sudo,

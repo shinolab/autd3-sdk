@@ -15,14 +15,10 @@ members = [
     "firmware/cpu/fw",
     "tools/perftest",
     "tools/wiretrace",
-    "tools/synctune",
     "tools/firmware-writer",
     "tools/firmware-test",
     "tools/firmware-ota",
     "examples",
-    "appliance/lib",
-    "appliance/cli",
-    "appliance/server",
 ]
 exclude = [
     "xtask",
@@ -71,12 +67,6 @@ clap = { version = "4.6.1", default-features = false, features = [
 humantime = { version = "2.3.0", default-features = false }
 mdns-sd = { version = "0.21.0", default-features = false }
 if-addrs = { version = "0.15.0", default-features = false }
-axum = { version = "0.8.9", default-features = false, features = [
-    "http1",
-    "json",
-    "tokio",
-    "query",
-] }
 serde = { version = "1.0.228", default-features = false, features = [
     "std",
     "derive",
@@ -84,12 +74,6 @@ serde = { version = "1.0.228", default-features = false, features = [
 serde_json = { version = "1.0.150", default-features = false, features = [
     "std",
 ] }
-toml = { version = "1.1.4", default-features = false, features = [
-    "parse",
-    "serde",
-] }
-serde_ignored = { version = "0.1.14", default-features = false }
-sha2 = { version = "0.11.0", default-features = false }
 anyhow = { version = "1.0.104", default-features = false, features = ["std"] }
 pcap-file = { version = "2.0.0", default-features = false }
 tracing = { version = "0.1.44", default-features = false }
@@ -104,7 +88,6 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 autd3-rs = { version = "0.9.0", path = "crates/autd3-rs" }
 autd3-cpu-wire = { version = "0.10.0", path = "firmware/cpu/wire" }
 autd3-cpu-fw = { version = "0.10.0", path = "firmware/cpu/fw" }
-autd3-rs-appliance = { version = "0.9.0", path = "appliance/lib" }
 autd3-rs-core = { version = "0.9.0", path = "crates/autd3-rs-core" }
 autd3-firmware-writer = { path = "tools/firmware-writer" }
 autd3-rs-firmware-emulator = { version = "0.9.0", path = "crates/autd3-rs-firmware-emulator" }

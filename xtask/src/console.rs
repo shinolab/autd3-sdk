@@ -50,7 +50,6 @@ const BINARIES: &[&str] = &[
     "autd3-rs-simulator",
     "autd3-firmware-writer",
     "autd3-rs-firmware-ota",
-    "autd3-appliance",
 ];
 
 pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
@@ -94,7 +93,6 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
         "console/target",
         "console/THIRD-PARTY-LICENSES.md",
         "console/.third-party-firmware.md",
-        "console/.third-party-appliance.md",
     ])?;
     cleaner.children("console/twincat", &[".gitkeep"])
 }
@@ -132,15 +130,12 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     )?;
     let ota_bin = cargo_bin(root, target, debug, "autd3-rs-firmware-ota");
 
-    run_cargo(cargo_build_args("autd3-appliance", target, debug), root)?;
-    let appliance_bin = cargo_bin(root, target, debug, "autd3-appliance");
-
     let out_dir = console_dir.join("target").join("distrib");
     if out_dir.exists() {
         std::fs::remove_dir_all(&out_dir)?;
     }
     std::fs::create_dir_all(&out_dir)?;
-    for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &ota_bin, &appliance_bin]
+    for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &ota_bin]
         .into_iter()
         .zip(BINARIES)
     {

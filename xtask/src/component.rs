@@ -71,19 +71,6 @@ pub const COMPONENTS: &[Component] = &[
         version_file: "console/Cargo.toml",
     },
     Component {
-        name: "appliance",
-        section: "Appliance",
-        tag_prefix: "appliance-v",
-        include_paths: &[
-            "appliance/**",
-            "crates/autd3-rs-appliance/**",
-            "tools/appliance/**",
-            "server/**",
-        ],
-        also_shipped_by: &[],
-        version_file: "Cargo.toml",
-    },
-    Component {
         name: "firmware",
         section: "Firmware",
         tag_prefix: "firmware-v",

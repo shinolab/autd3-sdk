@@ -18,7 +18,6 @@ const CRATE_PIN_PREFIX: &str = "autd3-";
 const CRATE_PIN_SKIP_DIRS: &[&str] = &["target", "node_modules", "3rdparty", "dist", "doc"];
 const UNITY_PKG_MARKER: &str = "\"com.shinolab.autd3-sdk";
 const CONSOLE_TAG_MARKER: &str = "console-v";
-const APPLIANCE_TAG_MARKER: &str = "appliance-v";
 const EXPECT_ERROR_MARKER: &str = "# xtask:expect-error";
 const LONG_RUNNING_MARKER: &str = "# xtask:long-running";
 const SAMPLE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -668,10 +667,6 @@ fn console_version_spans(text: &str) -> Vec<(usize, usize, String)> {
     semver_spans(text, CONSOLE_TAG_MARKER, false)
 }
 
-fn appliance_version_spans(text: &str) -> Vec<(usize, usize, String)> {
-    semver_spans(text, APPLIANCE_TAG_MARKER, false)
-}
-
 fn crate_version_spans(text: &str) -> Vec<(usize, usize, String)> {
     let mut spans = Vec::new();
     let mut offset = 0;
@@ -726,7 +721,6 @@ const SNAPSHOT_VERSION_SPANS: &[(&str, Spans)] = &[
     ("firmware series", firmware_series_spans),
     ("Unity package version", unity_version_spans),
     ("console release", console_version_spans),
-    ("appliance release", appliance_version_spans),
     ("crate version", crate_version_spans),
 ];
 
@@ -833,10 +827,6 @@ pub fn rewrite_console_version(root: &Path, version: &str) -> Result<usize> {
     rewrite_spans(root, console_version_spans, version)
 }
 
-pub fn rewrite_appliance_version(root: &Path, version: &str) -> Result<usize> {
-    rewrite_spans(root, appliance_version_spans, version)
-}
-
 pub fn rewrite_crate_version(root: &Path, version: &str) -> Result<usize> {
     let files = crate_pin_files(root, &root.join("doc"))?;
     let series = version_series(version);
@@ -882,7 +872,7 @@ pub fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
             software.clone()
         }
     };
-    let rules: [SyncRule; 5] = [
+    let rules: [SyncRule; 4] = [
         ("firmware series", firmware_series_spans, &|_| {
             firmware.clone()
         }),
@@ -891,9 +881,6 @@ pub fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
         }),
         ("console release", console_version_spans, &|_| {
             console.clone()
-        }),
-        ("appliance release", appliance_version_spans, &|_| {
-            software.clone()
         }),
         ("crate version", crate_version_spans, &crate_pin),
     ];
@@ -919,7 +906,6 @@ fn verify_versions(root: &Path, doc: &Path) -> Result<()> {
     verify_firmware_series(root, doc)?;
     verify_unity_version(root, doc)?;
     verify_console_version(root, doc)?;
-    verify_appliance_version(root, doc)?;
     verify_crate_version(root, doc)
 }
 
@@ -1025,32 +1011,6 @@ fn verify_console_version(root: &Path, doc: &Path) -> Result<()> {
              (expected `{CONSOLE_TAG_MARKER}{expected}`):\n  {}\n\
              run `cargo xtask bump-version console <version>` (it rewrites these pages), or fix the link by hand. \
              frozen version snapshots are exempt: they record the console version of their own SDK release.",
-            offenders.join("\n  ")
-        );
-    }
-    Ok(())
-}
-
-fn verify_appliance_version(root: &Path, doc: &Path) -> Result<()> {
-    let expected = component_version(root, "appliance")?;
-    let found = collect_spans(doc, appliance_version_spans)?;
-    if found.is_empty() {
-        bail!(
-            "no `{APPLIANCE_TAG_MARKER}<version>` link found in the current docs; the appliance image \
-             download must point at a concrete release (the appliance follows the software version in Cargo.toml)"
-        );
-    }
-    let offenders: Vec<_> = found
-        .iter()
-        .filter(|(_, version)| *version != expected)
-        .map(|(page, version)| format!("{}: {APPLIANCE_TAG_MARKER}{version}", page.display()))
-        .collect();
-    if !offenders.is_empty() {
-        bail!(
-            "docs link to an appliance image release that does not match the software version \
-             (expected `{APPLIANCE_TAG_MARKER}{expected}`):\n  {}\n\
-             run `cargo xtask bump-version software <version>` (it rewrites these pages), or fix the link by hand. \
-             frozen version snapshots are exempt: they record the appliance version of their own SDK release.",
             offenders.join("\n  ")
         );
     }

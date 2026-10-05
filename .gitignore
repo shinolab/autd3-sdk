@@ -7,12 +7,7 @@
 /firmware/cpu/board/target
 /crates/autd3-rs/tests/golden/generator/target
 /firmware/dist
-/appliance/server/bundle
-/appliance/server/release
 
-/appliance/image/*/.cache
-/appliance/image/*/.work
-/appliance/image/*/deploy
 
 *.jou
 *.log

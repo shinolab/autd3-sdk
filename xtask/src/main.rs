@@ -1,4 +1,3 @@
-mod appliance;
 mod bump;
 mod changelog;
 mod check;
@@ -26,7 +25,6 @@ mod util;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use appliance::{ApplianceCmd, run_appliance};
 use bump::{BumpVersionCmd, run_bump_version};
 use changelog::{ChangelogCmd, run_changelog};
 use check::{CheckCmd, run_check};
@@ -79,11 +77,6 @@ enum TopCmd {
     HoloWgpu {
         #[command(subcommand)]
         cmd: HoloWgpuCmd,
-    },
-    /// The EtherCAT master appliance (`appliance/`): its server and its SD image.
-    Appliance {
-        #[command(subcommand)]
-        cmd: ApplianceCmd,
     },
     /// The sound-field simulator (`simulator/`).
     Simulator {
@@ -175,7 +168,6 @@ fn main() -> Result<()> {
         TopCmd::Cpu { cmd } => run_cpu(&root, &cmd),
         TopCmd::Tool { cmd } => run_tool(&root, cmd),
         TopCmd::HoloWgpu { cmd } => run_holo_wgpu(&root, &cmd),
-        TopCmd::Appliance { cmd } => run_appliance(&root, &cmd),
         TopCmd::Simulator { cmd } => run_simulator(&root, &cmd),
         TopCmd::Console { cmd } => run_console(&root, &cmd),
         TopCmd::Emulator { cmd } => run_emulator(&root, &cmd),
@@ -195,7 +187,6 @@ fn main() -> Result<()> {
             cpu::clean(cleaner)?;
             tool::clean(cleaner)?;
             holo_wgpu::clean(cleaner)?;
-            appliance::clean(cleaner)?;
             simulator::clean(cleaner)?;
             console::clean(cleaner)?;
             emulator::clean(cleaner)?;
