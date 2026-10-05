@@ -390,37 +390,10 @@ fn broadcast_stride(v: &GpuVector) -> u32 {
 impl LinAlgBackend for WgpuBackend {
     type Matrix = GpuMatrix;
     type Vector = GpuVector;
-    type BatchMatrix = GpuMatrix;
-    type BatchVector = GpuVector;
 
-    fn make_matrix(&self, rows: usize, cols: usize, data: Vec<Complex<f32>>) -> Self::Matrix {
+    fn make_vector(&self, batch: usize, data: Vec<Complex<f32>>) -> Self::Vector {
         let raw = buffer::to_raw(&data);
-        GpuMatrix {
-            buf: self.storage_init(&raw),
-            rows,
-            cols,
-            batch: 1,
-            row_major: false,
-        }
-    }
-
-    fn make_vector(&self, data: Vec<Complex<f32>>) -> Self::Vector {
-        let raw = buffer::to_raw(&data);
-        GpuVector::new(self.storage_init(&raw), raw.len(), 1)
-    }
-
-    fn clone_vector(&self, v: &Self::Vector) -> Self::Vector {
-        self.materialize(v);
-        let bytes = bytes_of(v.len * v.batch);
-        let buf = self.storage(bytes);
-        self.with_encoder(|encoder| {
-            encoder.copy_buffer_to_buffer(&v.buf, 0, &buf, 0, bytes);
-        });
-        let mut pending = self.pending.borrow_mut();
-        pending.touched.insert(v.buf.id());
-        pending.touched.insert(buf.id());
-        drop(pending);
-        GpuVector::new(buf, v.len, v.batch)
+        GpuVector::new(self.storage_init(&raw), raw.len() / batch.max(1), batch)
     }
 
     fn vector_to_host(&self, v: &Self::Vector) -> Vec<Complex<f32>> {
@@ -436,10 +409,11 @@ impl LinAlgBackend for WgpuBackend {
         tr_pos: &[Point3<f32>],
         tr_dir: &[UnitVector3<f32>],
         foci: &[AmplitudeTarget],
+        batch: usize,
         wavenumber: f32,
         directivity: Directivity,
     ) -> Self::Matrix {
-        self.propagation(tr_pos, tr_dir, foci, 1, wavenumber, directivity)
+        self.propagation(tr_pos, tr_dir, foci, batch, wavenumber, directivity)
     }
 
     fn back_prop(&self, g: &Self::Matrix) -> Self::Matrix {
@@ -545,10 +519,6 @@ impl LinAlgBackend for WgpuBackend {
         self.repeat_normalized(a, x, r, repeat)
     }
 
-    fn hadamard_normalize(&self, x: &mut Self::Vector, r: &Self::Vector) {
-        self.elementwise(&self.pipelines.hadamard_normalize, x, r);
-    }
-
     fn amplitude_correct(&self, x: &mut Self::Vector, r: &Self::Vector) {
         self.elementwise(&self.pipelines.amplitude_correct, x, r);
     }
@@ -560,71 +530,6 @@ impl LinAlgBackend for WgpuBackend {
         _parallel: bool,
     ) -> (Vec<Phase>, Vec<Intensity>) {
         self.quantize_on_device(v, constraint)
-    }
-
-    fn quantize_batch(
-        &self,
-        v: &Self::BatchVector,
-        constraint: IntensityConstraint,
-        _parallel: bool,
-    ) -> (Vec<Phase>, Vec<Intensity>) {
-        self.quantize_on_device(v, constraint)
-    }
-
-    fn make_batch_vector(&self, batch: usize, data: Vec<Complex<f32>>) -> Self::BatchVector {
-        let raw = buffer::to_raw(&data);
-        GpuVector::new(self.storage_init(&raw), raw.len() / batch.max(1), batch)
-    }
-
-    fn batch_vector_to_host(&self, v: &Self::BatchVector) -> Vec<Complex<f32>> {
-        self.vector_to_host(v)
-    }
-
-    fn batch_propagation_matrix(
-        &self,
-        tr_pos: &[Point3<f32>],
-        tr_dir: &[UnitVector3<f32>],
-        foci: &[AmplitudeTarget],
-        batch: usize,
-        wavenumber: f32,
-        directivity: Directivity,
-    ) -> Self::BatchMatrix {
-        self.propagation(tr_pos, tr_dir, foci, batch, wavenumber, directivity)
-    }
-
-    fn batch_back_prop(&self, g: &Self::BatchMatrix) -> Self::BatchMatrix {
-        self.back_prop(g)
-    }
-
-    fn batch_gemm(&self, a: &Self::BatchMatrix, b: &Self::BatchMatrix) -> Self::BatchMatrix {
-        self.gemm(a, b)
-    }
-
-    fn batch_gemv(&self, a: &Self::BatchMatrix, x: &Self::BatchVector) -> Self::BatchVector {
-        self.gemv(a, x)
-    }
-
-    fn batch_gemv_hadamard_normalized(
-        &self,
-        a: &Self::BatchMatrix,
-        x: Self::BatchVector,
-        r: &Self::BatchVector,
-    ) -> Self::BatchVector {
-        self.gemv_hadamard_normalized(a, x, r)
-    }
-
-    fn batch_repeat_gemv_normalized(
-        &self,
-        a: &Self::BatchMatrix,
-        x: Self::BatchVector,
-        r: &Self::BatchVector,
-        repeat: usize,
-    ) -> Self::BatchVector {
-        self.repeat_normalized(a, x, r, repeat)
-    }
-
-    fn batch_amplitude_correct(&self, x: &mut Self::BatchVector, r: &Self::BatchVector) {
-        self.amplitude_correct(x, r);
     }
 
     fn max_batch(&self, bytes_per_problem: usize) -> usize {

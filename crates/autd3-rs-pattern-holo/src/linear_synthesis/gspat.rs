@@ -11,7 +11,6 @@ use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::linear_synthesis::batch::{BatchSetup, solve_batched};
 use crate::mask::TransducerMask;
-use crate::propagation::{make_propagation_matrix, quantize, target_amplitudes};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GspatOption<'a> {
@@ -34,7 +33,6 @@ impl Default for GspatOption<'_> {
     }
 }
 
-#[allow(clippy::many_single_char_names)]
 pub fn gspat<B: LinAlgBackend>(
     backend: &B,
     geometry: &Geometry,
@@ -44,43 +42,15 @@ pub fn gspat<B: LinAlgBackend>(
     phases: &mut [Vec<Phase>],
     intensities: &mut [Vec<Intensity>],
 ) -> Result<(), HoloError> {
-    if foci.is_empty() {
-        return Err(HoloError::NoFoci);
-    }
-    crate::mask::validate_dst_len(phases.len(), geometry)?;
-    crate::mask::validate_dst_len(intensities.len(), geometry)?;
-    let mask = option.mask;
-    mask.validate(geometry)?;
-
-    let g = make_propagation_matrix(
+    solve(
         backend,
         geometry,
         foci,
         wavelength,
-        option.directivity,
-        mask,
-    );
-    let b = backend.back_prop(&g);
-    let amps = target_amplitudes(backend, foci);
-
-    let r = backend.gemm(&g, &b);
-
-    let mut gamma =
-        backend.repeat_gemv_normalized(&r, backend.gemv(&r, &amps), &amps, option.repeat.get() - 1);
-    backend.amplitude_correct(&mut gamma, &amps);
-    let q = backend.gemv(&b, &gamma);
-
-    quantize(
-        backend,
-        geometry,
-        &q,
-        option.constraint,
-        mask,
-        option.parallel,
-        phases,
-        intensities,
-    );
-    Ok(())
+        option,
+        &mut [phases],
+        &mut [intensities],
+    )
 }
 
 pub fn gspat_batch<B: LinAlgBackend>(
@@ -92,6 +62,31 @@ pub fn gspat_batch<B: LinAlgBackend>(
     phases: &mut [Vec<Vec<Phase>>],
     intensities: &mut [Vec<Vec<Intensity>>],
 ) -> Result<(), HoloError> {
+    solve(
+        backend,
+        geometry,
+        foci,
+        wavelength,
+        option,
+        phases,
+        intensities,
+    )
+}
+
+fn solve<B, P, I>(
+    backend: &B,
+    geometry: &Geometry,
+    foci: &[AmplitudeTarget],
+    wavelength: Length,
+    option: &GspatOption<'_>,
+    phases: &mut [P],
+    intensities: &mut [I],
+) -> Result<(), HoloError>
+where
+    B: LinAlgBackend,
+    P: AsMut<[Vec<Phase>]>,
+    I: AsMut<[Vec<Intensity>]>,
+{
     let setup = BatchSetup {
         constraint: option.constraint,
         directivity: option.directivity,
@@ -107,16 +102,16 @@ pub fn gspat_batch<B: LinAlgBackend>(
         phases,
         intensities,
         |backend, g, amps, _, _| {
-            let b = backend.batch_back_prop(g);
-            let r = backend.batch_gemm(g, &b);
-            let mut gamma = backend.batch_repeat_gemv_normalized(
+            let b = backend.back_prop(g);
+            let r = backend.gemm(g, &b);
+            let mut gamma = backend.repeat_gemv_normalized(
                 &r,
-                backend.batch_gemv(&r, amps),
+                backend.gemv(&r, amps),
                 amps,
                 option.repeat.get() - 1,
             );
-            backend.batch_amplitude_correct(&mut gamma, amps);
-            backend.batch_gemv(&b, &gamma)
+            backend.amplitude_correct(&mut gamma, amps);
+            backend.gemv(&b, &gamma)
         },
     )
 }

@@ -11,7 +11,6 @@ pub(crate) struct Pipelines {
     pub(crate) propagation_layout: Layout,
     pub(crate) quantize_layout: Layout,
 
-    pub(crate) hadamard_normalize: wgpu::ComputePipeline,
     pub(crate) amplitude_correct: wgpu::ComputePipeline,
     pub(crate) gemv_rowwise: wgpu::ComputePipeline,
     pub(crate) gemv_rowwise_pending: wgpu::ComputePipeline,
@@ -113,12 +112,6 @@ impl Pipelines {
         let quant = module(device, include_str!("../shaders/quantize.wgsl"));
 
         Self {
-            hadamard_normalize: pipeline(
-                device,
-                &elementwise_layout,
-                &elementwise,
-                "hadamard_normalize",
-            ),
             amplitude_correct: pipeline(
                 device,
                 &elementwise_layout,

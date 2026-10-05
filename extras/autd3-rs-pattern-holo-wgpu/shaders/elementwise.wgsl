@@ -18,19 +18,6 @@ fn cmul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
 }
 
 @compute @workgroup_size(256)
-fn hadamard_normalize(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let i = gid.x;
-    if (i >= d.len) {
-        return;
-    }
-    let k = gid.z;
-    let xi = k * d.len + i;
-    let b = x[xi];
-    let inv = 1.0 / sqrt(b.x * b.x + b.y * b.y);
-    x[xi] = cmul(vec2<f32>(b.x * inv, b.y * inv), r[k * d.r_stride + i]);
-}
-
-@compute @workgroup_size(256)
 fn amplitude_correct(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
     if (i >= d.len) {

@@ -130,7 +130,7 @@ pub fn greedy(
 #[cfg(test)]
 mod tests {
     use autd3_rs_core::common::units::{m, s};
-    use autd3_rs_core::geometry::{Autd3, Geometry, Point3, Vector3};
+    use autd3_rs_core::geometry::{Autd3, Geometry, Point3, TransducerMaskError, Vector3};
 
     use super::*;
     use crate::Pa;
@@ -186,10 +186,10 @@ mod tests {
                 &mut phases,
                 &mut intensities
             ),
-            Err(HoloError::MaskDeviceCountMismatch {
+            Err(HoloError::Mask(TransducerMaskError::DeviceCountMismatch {
                 got: 1,
                 expected: 2
-            }),
+            })),
         );
 
         let short_row = vec![vec![true; Autd3::NUM_TRANSDUCERS], vec![true; 3]];
@@ -206,11 +206,13 @@ mod tests {
                 &mut phases,
                 &mut intensities
             ),
-            Err(HoloError::MaskTransducerCountMismatch {
-                device: 1,
-                got: 3,
-                expected: Autd3::NUM_TRANSDUCERS,
-            }),
+            Err(HoloError::Mask(
+                TransducerMaskError::TransducerCountMismatch {
+                    device: 1,
+                    got: 3,
+                    expected: Autd3::NUM_TRANSDUCERS,
+                }
+            )),
         );
     }
 
