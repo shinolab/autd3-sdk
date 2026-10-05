@@ -2,27 +2,20 @@ use core::f32::consts::PI;
 
 use autd3_rs_core::common::units::rad;
 use autd3_rs_core::common::{Angle, Length};
-use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitQuaternion, UnitVector3, Vector3};
+use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
 use autd3_rs_core::value::Phase;
-
-fn rotation(dir: UnitVector3<f32>) -> UnitQuaternion<f32> {
-    let v = Vector3::new(dir.y, -dir.x, 0.0);
-    let theta_v = v.norm().asin();
-    v.try_normalize(1.0e-6)
-        .map_or_else(UnitQuaternion::identity, |v| {
-            UnitQuaternion::new(v * -theta_v)
-        })
-}
 
 fn bessel_phase(
     position: Point3<f32>,
     apex: Point3<f32>,
-    rot: &UnitQuaternion<f32>,
-    theta: Angle,
+    direction: UnitVector3<f32>,
+    (sin, cos): (f32, f32),
     wavelength: Length,
 ) -> Phase {
-    let r = rot * (position - apex);
-    let dist = theta.rad().cos() * r.xy().norm() - theta.rad().sin() * r.z;
+    let r = position - apex;
+    let z = direction.dot(&r);
+    let rho = (r - direction.into_inner() * z).norm();
+    let dist = cos * rho - sin * z;
     Phase::from(-dist / wavelength.mm() * 2.0 * PI * rad)
 }
 
@@ -35,7 +28,7 @@ pub fn bessel_transducer(
     theta: Angle,
     wavelength: Length,
 ) -> Phase {
-    bessel_phase(position, apex, &rotation(direction), theta, wavelength)
+    bessel_phase(position, apex, direction, theta.rad().sin_cos(), wavelength)
 }
 
 pub fn bessel_device(
@@ -46,9 +39,9 @@ pub fn bessel_device(
     wavelength: Length,
     dst: &mut [Phase],
 ) {
-    let rot = rotation(direction);
+    let sin_cos = theta.rad().sin_cos();
     for (p, &pos) in dst.iter_mut().zip(device.positions()) {
-        *p = bessel_phase(pos, apex, &rot, theta, wavelength);
+        *p = bessel_phase(pos, apex, direction, sin_cos, wavelength);
     }
 }
 
@@ -77,29 +70,128 @@ mod tests {
 
     use super::*;
 
+    fn non_z_directions() -> [UnitVector3<f32>; 5] {
+        [
+            Vector3::new(0.3, 0.0, 1.0),
+            Vector3::new(0.1, -0.2, 1.0),
+            Vector3::new(1.0, 0.5, 0.0),
+            Vector3::new(-0.4, 0.7, -1.0),
+            Vector3::new(0.0, 0.0, -1.0),
+        ]
+        .map(UnitVector3::new_normalize)
+    }
+
+    fn perpendicular_basis(dir: UnitVector3<f32>) -> (Vector3<f32>, Vector3<f32>) {
+        let seed = if dir.x.abs() < 0.9 {
+            Vector3::x()
+        } else {
+            Vector3::y()
+        };
+        let u = dir.cross(&seed).normalize();
+        let v = dir.cross(&u);
+        (u, v)
+    }
+
+    fn assert_phase_close(actual: Phase, expected: Phase) {
+        let diff = actual.0.wrapping_sub(expected.0);
+        assert!(
+            diff.min(diff.wrapping_neg()) <= 1,
+            "{actual:?} != {expected:?}"
+        );
+    }
+
     #[test]
-    fn bessel_phase_matches_formula() {
-        let dev: Device = Autd3::default().into();
+    fn reversing_direction_negates_axial_phase() {
         let lambda = 8.5 * mm;
-        let apex = Point3::new(10.0, 20.0, 150.0);
-        let dir = UnitVector3::new_normalize(Vector3::new(0.1, -0.2, 1.0));
+        let apex = Point3::origin();
+        let pos = Point3::new(0.0, 0.0, 10.0);
         let theta = Angle::from_rad(0.3);
 
-        let rot = {
-            let v: Vector3<f32> = Vector3::new(dir.y, -dir.x, 0.0);
-            let theta_v = v.norm().asin();
-            v.try_normalize(1.0e-6)
-                .map_or_else(UnitQuaternion::identity, |v| {
-                    UnitQuaternion::new(v * -theta_v)
-                })
-        };
+        let forward = UnitVector3::new_normalize(Vector3::new(0.0, 0.0, 1.0));
+        let backward = UnitVector3::new_normalize(Vector3::new(0.0, 0.0, -1.0));
+        assert_eq!(
+            bessel_transducer(pos, apex, forward, theta, lambda),
+            Phase(0x59)
+        );
+        assert_eq!(
+            bessel_transducer(pos, apex, backward, theta, lambda),
+            Phase(0xA7)
+        );
+    }
 
-        for &pos in dev.positions() {
-            let p = bessel_transducer(pos, apex, dir, theta, lambda);
-            let r = rot * (pos - apex);
-            let dist = theta.rad().cos() * (r.x * r.x + r.y * r.y).sqrt() - theta.rad().sin() * r.z;
-            let expected = Phase::from(-dist / lambda.mm() * 2.0 * PI * rad);
-            assert_eq!(p, expected);
+    #[test]
+    fn off_axis_point_matches_known_phase() {
+        let lambda = 8.5 * mm;
+        let apex = Point3::origin();
+        let pos = Point3::new(30.0, 40.0, 10.0);
+        let dir = UnitVector3::new_normalize(Vector3::new(0.0, 0.0, 1.0));
+        let theta = Angle::from_rad(0.3);
+
+        assert_eq!(
+            bessel_transducer(pos, apex, dir, theta, lambda),
+            Phase(0xBA)
+        );
+    }
+
+    #[test]
+    fn points_on_axis_have_zero_radius() {
+        let lambda = 8.5 * mm;
+        let apex = Point3::new(10.0, 20.0, 150.0);
+        let theta = Angle::from_rad(0.3);
+
+        for dir in non_z_directions() {
+            for along in [-40.0f32, -5.0, 0.0, 12.5, 80.0] {
+                let pos = apex + dir.into_inner() * along;
+                let expected =
+                    Phase::from(theta.rad().sin() * along / lambda.mm() * 2.0 * PI * rad);
+                assert_phase_close(bessel_transducer(pos, apex, dir, theta, lambda), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn phase_is_symmetric_around_direction() {
+        let lambda = 8.5 * mm;
+        let apex = Point3::new(10.0, 20.0, 150.0);
+        let theta = Angle::from_rad(0.3);
+
+        for dir in non_z_directions() {
+            let (u, v) = perpendicular_basis(dir);
+            for (radius, along) in [(15.0f32, -60.0f32), (42.0, 30.0), (97.0, -140.0)] {
+                let at = |azimuth: f32| {
+                    let pos = apex
+                        + u * (radius * azimuth.cos())
+                        + v * (radius * azimuth.sin())
+                        + dir.into_inner() * along;
+                    bessel_transducer(pos, apex, dir, theta, lambda)
+                };
+                let reference = at(0.0);
+                for step in 1..12u8 {
+                    assert_phase_close(at(f32::from(step) * PI / 6.0), reference);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rotating_whole_setup_keeps_phase() {
+        let dev: Device = Autd3::default().into();
+        let lambda = 8.5 * mm;
+        let local_apex = Point3::new(10.0, 20.0, 150.0);
+        let world_apex = Point3::new(-35.0, 60.0, 90.0);
+        let theta = Angle::from_rad(0.3);
+        let z_axis = UnitVector3::new_normalize(Vector3::new(0.0, 0.0, 1.0));
+
+        for dir in non_z_directions() {
+            let (u, v) = perpendicular_basis(dir);
+            for &local in dev.positions() {
+                let r = local - local_apex;
+                let world = world_apex + u * r.x + v * r.y + dir.into_inner() * r.z;
+                assert_phase_close(
+                    bessel_transducer(world, world_apex, dir, theta, lambda),
+                    bessel_transducer(local, local_apex, z_axis, theta, lambda),
+                );
+            }
         }
     }
 
