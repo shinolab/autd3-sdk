@@ -331,7 +331,7 @@ mod tests {
         let ServerMsg::Geometry { transducers } = geometry_msg_from_layout(&[]) else {
             panic!("expected a geometry message");
         };
-        assert!(transducers.is_empty());
+        assert_eq!(transducers, [] as [TransducerInfo; 0]);
     }
 
     #[test]

@@ -110,7 +110,7 @@ mod tests {
     #[test]
     fn cycle_publishes_one_state_per_transducer_of_every_device() {
         let mut h = Harness::new(2);
-        assert!(h.states().is_empty());
+        assert_eq!(h.states(), [] as [TransState; 0]);
 
         h.send(Nop);
         let expected: usize = h

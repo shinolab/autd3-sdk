@@ -56,7 +56,7 @@ mod tests {
     #[test]
     fn data_exposes_only_the_recorded_devices() {
         assert_eq!(Response::from_slice(&[0x00, 0xAB]).data(), [0x00, 0xAB]);
-        assert!(Response::from_slice(&[]).data().is_empty());
+        assert_eq!(Response::from_slice(&[]).data(), [0u8; 0]);
     }
 
     #[test]

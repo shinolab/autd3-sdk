@@ -952,7 +952,7 @@ mod tests {
     fn the_saved_version_survives_the_first_listing_of_a_session() {
         let mut panel = panel("127.0.0.1:1");
         panel.config.version = Some("0.10.0".to_owned());
-        assert!(panel.releases.is_empty());
+        assert_eq!(panel.releases, [] as [ServerRelease; 0]);
         deliver_releases(&mut panel, Ok(vec![release("0.11.0"), release("0.10.0")]));
         assert_eq!(
             panel.config.version.as_deref(),
