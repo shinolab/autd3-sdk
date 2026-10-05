@@ -52,6 +52,7 @@ jobs:
               - *shared
               - 'xtask/**'
               - 'crates/**'
+              - 'firmware/cpu/wire/**'
               - 'firmware/cpu/fw/**'
               - 'tools/**'
               - 'examples/**'
@@ -76,7 +77,9 @@ jobs:
               - 'simulator/**'
               - 'crates/autd3-rs-core/**'
               - 'crates/autd3-rs-firmware-emulator/**'
-              - 'crates/autd3-rs-link-remote/**'
+              - 'crates/autd3-rs/**'
+              - 'firmware/cpu/wire/**'
+              - 'firmware/cpu/fw/**'
               - 'Cargo.toml'
               - '.cargo/**'
               - '.github/workflows/ci-simulator.yml'

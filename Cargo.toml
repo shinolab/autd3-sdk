@@ -6,15 +6,10 @@ members = [
     "crates/autd3-rs-firmware-emulator",
     "crates/autd3-rs-pattern",
     "crates/autd3-rs-pattern-holo",
-    "crates/autd3-rs-link-echocat",
-    "crates/autd3-rs-link-nop",
-    "crates/autd3-rs-link-remote",
-    "crates/autd3-rs-link-twincat",
     "crates/autd3-rs-modulation",
     "firmware/cpu/wire",
     "firmware/cpu/fw",
     "tools/perftest",
-    "tools/wiretrace",
     "tools/firmware-writer",
     "tools/firmware-test",
     "tools/firmware-ota",
@@ -56,7 +51,6 @@ tokio = { version = "1.52.3", default-features = false, features = [
 ] }
 thread-priority = { version = "3.1.1", default-features = false }
 socket2 = { version = "0.6.4", default-features = false }
-spin_sleep = { version = "1.3.3", default-features = false }
 clap = { version = "4.6.1", default-features = false, features = [
     "std",
     "derive",
@@ -65,7 +59,6 @@ clap = { version = "4.6.1", default-features = false, features = [
     "error-context",
 ] }
 humantime = { version = "2.3.0", default-features = false }
-mdns-sd = { version = "0.21.0", default-features = false }
 if-addrs = { version = "0.15.0", default-features = false }
 serde = { version = "1.0.228", default-features = false, features = [
     "std",
@@ -75,7 +68,6 @@ serde_json = { version = "1.0.150", default-features = false, features = [
     "std",
 ] }
 anyhow = { version = "1.0.104", default-features = false, features = ["std"] }
-pcap-file = { version = "2.0.0", default-features = false }
 tracing = { version = "0.1.44", default-features = false }
 tracing-appender = { version = "0.2.3", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = [
@@ -93,10 +85,6 @@ autd3-firmware-writer = { path = "tools/firmware-writer" }
 autd3-rs-firmware-emulator = { version = "0.9.0", path = "crates/autd3-rs-firmware-emulator" }
 autd3-rs-pattern = { version = "0.9.0", path = "crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { version = "0.9.0", path = "crates/autd3-rs-pattern-holo" }
-autd3-rs-link-echocat = { version = "0.9.0", path = "crates/autd3-rs-link-echocat" }
-autd3-rs-link-nop = { version = "0.9.0", path = "crates/autd3-rs-link-nop" }
-autd3-rs-link-remote = { version = "0.9.0", path = "crates/autd3-rs-link-remote" }
-autd3-rs-link-twincat = { version = "0.9.0", path = "crates/autd3-rs-link-twincat" }
 autd3-rs-modulation = { version = "0.9.0", path = "crates/autd3-rs-modulation" }
 
 [workspace.metadata.cargo-semver-checks.lints]

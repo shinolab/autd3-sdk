@@ -16,9 +16,6 @@ path = "src/main.rs"
 autd3-rs = { workspace = true, features = ["logging"] }
 autd3-rs-pattern.workspace = true
 autd3-rs-modulation.workspace = true
-autd3-rs-link-echocat.workspace = true
-autd3-rs-link-twincat.workspace = true
-autd3-rs-link-remote.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = [
