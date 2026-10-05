@@ -44,6 +44,8 @@ Each sample is the sum of all components multiplied by a scale <Math tex="s" /> 
 | `freq`     | `Freq<u32>` etc. | frequency of the component |
 | `option`   | `SineOption`   | per-component sine Option |
 
+The range check is applied to the synthesized value, so the `clamp` of each component's `SineOption` is not used. To clamp out-of-range values, set `clamp` of `FourierOption`.
+
 <CodeTabs rust={excerpt(sample, "components")} python={excerpt(pySample, "components")} csharp={excerpt(csSample, "components")} />
 
 ## FourierOption

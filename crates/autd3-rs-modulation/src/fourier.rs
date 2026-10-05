@@ -1,8 +1,9 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use crate::error::ModulationError;
-use crate::sampling_mode::SamplingMode;
-use crate::sine::{SineOption, sine_raw};
+use crate::quantize::quantize;
+use crate::sampling_mode::{SamplingMode, gcd};
+use crate::sine::{SineOption, sine_samples};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SineComponent<S> {
@@ -17,17 +18,8 @@ pub struct FourierOption {
     pub offset: u8,
 }
 
-fn gcd(mut a: usize, mut b: usize) -> usize {
-    while b != 0 {
-        let t = b;
-        b = a % b;
-        a = t;
-    }
-    a
-}
-
 fn lcm(a: usize, b: usize) -> usize {
-    match gcd(a, b) {
+    match gcd(a as u64, b as u64) as usize {
         0 => 0,
         g => a / g * b,
     }
@@ -51,7 +43,7 @@ pub fn fourier<S: Into<SamplingMode> + Copy>(
 
     let buffers = components
         .iter()
-        .map(|c| sine_raw(c.freq, &c.option))
+        .map(|c| sine_samples(c.freq, &c.option).map(Iterator::collect::<Vec<f32>>))
         .collect::<Result<Vec<_>, ModulationError>>()?;
 
     let scale = option.scale_factor.unwrap_or(1.0 / buffers.len() as f32);
@@ -65,21 +57,8 @@ pub fn fourier<S: Into<SamplingMode> + Copy>(
         }
     }
 
-    dst.clear();
-    dst.reserve(len);
-    let mut out_of_range = false;
-    for v in acc {
-        let v = (v * scale + offset).floor() as i32;
-        dst.push(if (0..=255).contains(&v) {
-            v as u8
-        } else if option.clamp {
-            v.clamp(0, 255) as u8
-        } else {
-            out_of_range = true;
-            0
-        });
-    }
-    if out_of_range {
+    let samples = acc.into_iter().map(|v| v * scale + offset);
+    if quantize(samples, option.clamp, dst) {
         return Err(ModulationError::FourierValueOutOfRange);
     }
     Ok(())
@@ -155,7 +134,11 @@ mod tests {
 
         let raws = components
             .iter()
-            .map(|c| sine_raw(c.freq, &c.option).unwrap())
+            .map(|c| {
+                sine_samples(c.freq, &c.option)
+                    .unwrap()
+                    .collect::<Vec<f32>>()
+            })
             .collect::<Vec<_>>();
         assert_eq!(buf.len(), raws.iter().fold(1, |acc, b| lcm(acc, b.len())));
         for (i, &v) in buf.iter().enumerate() {
@@ -222,6 +205,30 @@ mod tests {
             buf.as_slice(),
             &[
                 0, 39, 74, 103, 121, 127, 121, 103, 74, 39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            ]
+        );
+    }
+
+    #[test]
+    fn fourier_out_of_range_error_leaves_zero_at_the_offending_samples() {
+        let mut buf = vec![1, 2, 3];
+        let result = fourier(
+            &[SineComponent {
+                freq: 200 * Hz,
+                option: SineOption::default(),
+            }],
+            &FourierOption {
+                scale_factor: Some(1.5),
+                clamp: false,
+                offset: 0,
+            },
+            &mut buf,
+        );
+        assert_eq!(result, Err(ModulationError::FourierValueOutOfRange));
+        assert_eq!(
+            buf.as_slice(),
+            &[
+                192, 251, 0, 0, 0, 0, 0, 0, 0, 251, 191, 132, 79, 37, 10, 0, 10, 37, 79, 132
             ]
         );
     }
