@@ -46,7 +46,7 @@ impl From<Nearest<Freq<f32>>> for SamplingMode {
 }
 
 impl SamplingMode {
-    pub(crate) fn validate(self, config: SamplingConfig) -> Result<(u64, u64), ModulationError> {
+    pub(crate) fn validate(self, config: SamplingConfig) -> Result<(usize, u64), ModulationError> {
         match self {
             SamplingMode::ExactFreq(freq) => Self::validate_exact(freq, config),
             SamplingMode::ExactFreqFloat(freq) => Self::validate_exact_f(freq, config),
@@ -57,7 +57,7 @@ impl SamplingMode {
     fn validate_exact(
         freq: Freq<u32>,
         config: SamplingConfig,
-    ) -> Result<(u64, u64), ModulationError> {
+    ) -> Result<(usize, u64), ModulationError> {
         let nyquist = config.freq()?.hz() / 2.;
         if freq.hz() as f32 >= nyquist {
             return Err(ModulationError::FrequencyAboveNyquist {
@@ -71,13 +71,13 @@ impl SamplingMode {
         let fd = u64::from(freq.hz()) * u64::from(config.divide()?);
         let fs = u64::from(ULTRASOUND_FREQ.hz());
         let k = gcd(fs, fd);
-        Ok((fs / k, fd / k))
+        Ok(((fs / k) as usize, fd / k))
     }
 
     fn validate_exact_f(
         freq: Freq<f32>,
         config: SamplingConfig,
-    ) -> Result<(u64, u64), ModulationError> {
+    ) -> Result<(usize, u64), ModulationError> {
         if freq.hz() < 0. || freq.hz().is_nan() {
             return Err(ModulationError::FrequencyNotPositive { hz: freq.hz() });
         }
@@ -102,7 +102,7 @@ impl SamplingMode {
                 if !fnd.is_multiple_of(fs) {
                     return None;
                 }
-                Some((u64::from(n), fnd / fs))
+                Some((n as usize, fnd / fs))
             })
             .ok_or(ModulationError::FrequencyNotRepresentable { hz: freq.hz() })
     }
@@ -110,7 +110,7 @@ impl SamplingMode {
     fn validate_nearest(
         freq: Freq<f32>,
         config: SamplingConfig,
-    ) -> Result<(u64, u64), ModulationError> {
+    ) -> Result<(usize, u64), ModulationError> {
         let cfg_freq = config.freq()?.hz();
         let freq_min = cfg_freq / MOD_BUFFER_SAMPLES as f32;
         let freq_max = cfg_freq / 2.;
@@ -118,6 +118,6 @@ impl SamplingMode {
         if freq.is_nan() {
             return Err(ModulationError::FrequencyNaN);
         }
-        Ok(((cfg_freq / freq).round() as u64, 1))
+        Ok(((cfg_freq / freq).round() as usize, 1))
     }
 }

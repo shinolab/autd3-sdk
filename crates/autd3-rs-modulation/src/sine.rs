@@ -40,7 +40,6 @@ pub(crate) fn sine_samples<S: Into<SamplingMode>>(
 ) -> Result<impl ExactSizeIterator<Item = f32> + use<S>, ModulationError> {
     let mode: SamplingMode = freq.into();
     let (n, rep) = mode.validate(option.sampling_config)?;
-    let n = usize::try_from(n).map_err(|_| ModulationError::SampleCountOverflow)?;
 
     let amplitude = f32::from(option.amplitude);
     let offset = f32::from(option.offset);

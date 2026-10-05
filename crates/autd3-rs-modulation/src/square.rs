@@ -35,7 +35,6 @@ pub fn square<S: Into<SamplingMode>>(
 
     let mode: SamplingMode = freq.into();
     let (n, rep) = mode.validate(option.sampling_config)?;
-    let n = usize::try_from(n).map_err(|_| ModulationError::SampleCountOverflow)?;
 
     dst.clear();
     dst.reserve(n);
