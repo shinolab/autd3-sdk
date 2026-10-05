@@ -11,7 +11,8 @@ use autd3_rs_core::geometry::{Point3, UnitVector3};
 use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_pattern_holo::{AmplitudeTarget, Directivity, IntensityConstraint, LinAlgBackend};
 
-pub use buffer::{GpuMatrix, GpuVector, Pooled};
+use buffer::Pooled;
+pub use buffer::{GpuMatrix, GpuVector};
 
 const WG: u32 = 256;
 const COLS_PER_CHUNK: u32 = 1024;
@@ -81,8 +82,15 @@ impl<'a> Bindings<'a> {
 struct Pending {
     encoder: Option<wgpu::CommandEncoder>,
     pass: Option<wgpu::ComputePass<'static>>,
-    retired_uniforms: Vec<wgpu::Buffer>,
     touched: HashSet<u64>,
+}
+
+impl Pending {
+    fn encoder(&mut self, device: &wgpu::Device) -> &mut wgpu::CommandEncoder {
+        self.encoder.get_or_insert_with(|| {
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None })
+        })
+    }
 }
 
 struct UniformRing {
@@ -153,11 +161,6 @@ impl WgpuBackend {
         })
     }
 
-    #[must_use]
-    pub fn bind_groups_created(&self) -> u64 {
-        self.bind_groups_created.get()
-    }
-
     fn fresh_storage(&self, size: u64) -> Pooled {
         Pooled::new(
             &self.pool,
@@ -186,33 +189,24 @@ impl WgpuBackend {
         buf
     }
 
-    fn uniform(&self, dims: [u32; 8]) -> Uniform {
+    fn uniform(&self, dims: &[u32]) -> Uniform {
+        debug_assert!(dims.len() <= 8);
+        let mut padded = [0u32; 8];
+        padded[..dims.len()].copy_from_slice(dims);
         let mut ring = self.uniforms.borrow_mut();
         if ring.cursor == UNIFORM_SLOTS {
-            let fresh = uniform_chunk(&self.device, ring.stride);
-            let stale = core::mem::replace(&mut ring.buf, fresh);
-            self.pending.borrow_mut().retired_uniforms.push(stale);
+            ring.buf = uniform_chunk(&self.device, ring.stride);
             ring.cursor = 0;
             self.bind_cache.borrow_mut().clear();
         }
         let offset = ring.cursor * ring.stride;
         ring.cursor += 1;
         self.queue
-            .write_buffer(&ring.buf, offset, bytemuck::cast_slice(&dims));
+            .write_buffer(&ring.buf, offset, bytemuck::cast_slice(&padded));
         Uniform {
             buf: ring.buf.clone(),
             offset: u32::try_from(offset).unwrap_or(0),
         }
-    }
-
-    fn with_encoder<R>(&self, f: impl FnOnce(&mut wgpu::CommandEncoder) -> R) -> R {
-        let mut pending = self.pending.borrow_mut();
-        pending.pass = None;
-        let encoder = pending.encoder.get_or_insert_with(|| {
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None })
-        });
-        f(encoder)
     }
 
     fn bind_group(&self, layout: &pipelines::Layout, bindings: &Bindings<'_>) -> wgpu::BindGroup {
@@ -252,18 +246,14 @@ impl WgpuBackend {
             .touched
             .extend(bindings.buffers.iter().copied().filter(|id| *id != 0));
         if pending.pass.is_none() {
-            let encoder = pending.encoder.get_or_insert_with(|| {
-                self.device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None })
-            });
-            pending.pass = Some(
-                encoder
-                    .begin_compute_pass(&wgpu::ComputePassDescriptor {
-                        label: None,
-                        timestamp_writes: None,
-                    })
-                    .forget_lifetime(),
-            );
+            let pass = pending
+                .encoder(&self.device)
+                .begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: None,
+                    timestamp_writes: None,
+                })
+                .forget_lifetime();
+            pending.pass = Some(pass);
         }
         let pass = pending.pass.as_mut().unwrap();
         pass.set_pipeline(pipeline);
@@ -278,9 +268,13 @@ impl WgpuBackend {
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        self.with_encoder(|encoder| {
-            encoder.copy_buffer_to_buffer(src, 0, &staging, 0, bytes);
-        });
+        {
+            let mut pending = self.pending.borrow_mut();
+            pending.pass = None;
+            pending
+                .encoder(&self.device)
+                .copy_buffer_to_buffer(src, 0, &staging, 0, bytes);
+        }
         self.flush();
 
         let slice = staging.slice(..);
@@ -312,13 +306,11 @@ impl WgpuBackend {
     }
 
     fn flush(&self) {
-        self.pending.borrow_mut().pass = None;
-        let encoder = self.pending.borrow_mut().encoder.take();
-        if let Some(encoder) = encoder {
+        let mut pending = self.pending.borrow_mut();
+        pending.pass = None;
+        if let Some(encoder) = pending.encoder.take() {
             self.queue.submit(Some(encoder.finish()));
         }
-        let mut pending = self.pending.borrow_mut();
-        pending.retired_uniforms.clear();
         pending.touched.clear();
         drop(pending);
         self.uniforms.borrow_mut().cursor = 0;
@@ -329,7 +321,7 @@ impl WgpuBackend {
         let Some(partial) = taken else {
             return;
         };
-        let dims = self.uniform([to_u32(v.len), 0, partial.chunks, 0, 0, 0, 0, 0]);
+        let dims = self.uniform(&[to_u32(v.len), 0, partial.chunks]);
         self.dispatch(
             &self.pipelines.gemv_reduce,
             &self.pipelines.gemv_layout,
@@ -348,7 +340,7 @@ impl WgpuBackend {
     fn elementwise(&self, pipeline: &wgpu::ComputePipeline, x: &GpuVector, r: &GpuVector) {
         self.materialize(x);
         self.materialize(r);
-        let dims = self.uniform([to_u32(x.len), broadcast_stride(r), 0, 0, 0, 0, 0, 0]);
+        let dims = self.uniform(&[to_u32(x.len), broadcast_stride(r)]);
         self.dispatch(
             pipeline,
             &self.pipelines.elementwise_layout,
@@ -359,358 +351,6 @@ impl WgpuBackend {
             dims.offset,
             (div_ceil(x.len, WG), 1, to_u32(x.batch).max(1)),
         );
-    }
-}
-
-fn uniform_chunk(device: &wgpu::Device, stride: u64) -> wgpu::Buffer {
-    device.create_buffer(&wgpu::BufferDescriptor {
-        label: None,
-        size: stride * UNIFORM_SLOTS,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    })
-}
-
-fn to_u32(v: usize) -> u32 {
-    u32::try_from(v).unwrap_or(u32::MAX)
-}
-
-fn div_ceil(a: usize, b: u32) -> u32 {
-    to_u32(a.div_ceil(b as usize)).max(1)
-}
-
-fn bytes_of(elems: usize) -> u64 {
-    (elems as u64) * 8
-}
-
-fn broadcast_stride(v: &GpuVector) -> u32 {
-    if v.batch > 1 { to_u32(v.len) } else { 0 }
-}
-
-impl LinAlgBackend for WgpuBackend {
-    type Matrix = GpuMatrix;
-    type Vector = GpuVector;
-
-    fn make_vector(&self, batch: usize, data: Vec<Complex<f32>>) -> Self::Vector {
-        let raw = buffer::to_raw(&data);
-        GpuVector::new(self.storage_init(&raw), raw.len() / batch.max(1), batch)
-    }
-
-    fn vector_to_host(&self, v: &Self::Vector) -> Vec<Complex<f32>> {
-        self.materialize(v);
-        let total = v.len * v.batch;
-        self.read_back(&v.buf, bytes_of(total), |raw| {
-            buffer::from_raw(bytemuck::cast_slice(raw))
-        })
-    }
-
-    fn propagation_matrix(
-        &self,
-        tr_pos: &[Point3<f32>],
-        tr_dir: &[UnitVector3<f32>],
-        foci: &[AmplitudeTarget],
-        batch: usize,
-        wavenumber: f32,
-        directivity: Directivity,
-    ) -> Self::Matrix {
-        self.propagation(tr_pos, tr_dir, foci, batch, wavenumber, directivity)
-    }
-
-    fn back_prop(&self, g: &Self::Matrix) -> Self::Matrix {
-        let row_norm = self.storage((g.rows * g.batch) as u64 * 4);
-        let out = self.storage(bytes_of(g.rows * g.cols * g.batch));
-        let dims = self.uniform([
-            to_u32(g.rows),
-            to_u32(g.cols),
-            u32::from(g.row_major),
-            0,
-            0,
-            0,
-            0,
-            0,
-        ]);
-        let bindings = Bindings::default()
-            .storage(&g.buf)
-            .storage(&row_norm)
-            .storage(&out)
-            .uniform(&dims);
-        let batch = to_u32(g.batch).max(1);
-        self.dispatch(
-            &self.pipelines.back_prop_row_norm,
-            &self.pipelines.back_prop_layout,
-            &bindings,
-            dims.offset,
-            (to_u32(g.rows).max(1), 1, batch),
-        );
-        self.dispatch(
-            &self.pipelines.back_prop_write,
-            &self.pipelines.back_prop_layout,
-            &bindings,
-            dims.offset,
-            (div_ceil(g.rows * g.cols, WG), 1, batch),
-        );
-        GpuMatrix {
-            buf: out,
-            rows: g.cols,
-            cols: g.rows,
-            batch: g.batch,
-            row_major: false,
-        }
-    }
-
-    fn gemm(&self, a: &Self::Matrix, b: &Self::Matrix) -> Self::Matrix {
-        let (rows, inner, cols) = (a.rows, a.cols, b.cols);
-        let batch = a.batch;
-        let out = self.storage(bytes_of(rows * cols * batch));
-        let dims = self.uniform([
-            to_u32(rows),
-            to_u32(inner),
-            to_u32(cols),
-            u32::from(a.row_major),
-            u32::from(b.row_major),
-            0,
-            0,
-            0,
-        ]);
-        self.dispatch(
-            &self.pipelines.gemm,
-            &self.pipelines.gemm_layout,
-            &Bindings::default()
-                .storage(&a.buf)
-                .storage(&b.buf)
-                .storage(&out)
-                .uniform(&dims),
-            dims.offset,
-            (
-                to_u32(rows).max(1),
-                to_u32(cols).max(1),
-                to_u32(batch).max(1),
-            ),
-        );
-        GpuMatrix {
-            buf: out,
-            rows,
-            cols,
-            batch,
-            row_major: false,
-        }
-    }
-
-    fn gemv(&self, a: &Self::Matrix, x: &Self::Vector) -> Self::Vector {
-        self.gemv_maybe_normalized(a, x, None)
-    }
-
-    fn gemv_hadamard_normalized(
-        &self,
-        a: &Self::Matrix,
-        x: Self::Vector,
-        r: &Self::Vector,
-    ) -> Self::Vector {
-        self.gemv_maybe_normalized(a, &x, Some(r))
-    }
-
-    fn repeat_gemv_normalized(
-        &self,
-        a: &Self::Matrix,
-        x: Self::Vector,
-        r: &Self::Vector,
-        repeat: usize,
-    ) -> Self::Vector {
-        self.repeat_normalized(a, x, r, repeat)
-    }
-
-    fn amplitude_correct(&self, x: &mut Self::Vector, r: &Self::Vector) {
-        self.elementwise(&self.pipelines.amplitude_correct, x, r);
-    }
-
-    fn quantize(
-        &self,
-        v: &Self::Vector,
-        constraint: IntensityConstraint,
-        _parallel: bool,
-    ) -> (Vec<Phase>, Vec<Intensity>) {
-        self.quantize_on_device(v, constraint)
-    }
-
-    fn max_batch(&self, bytes_per_problem: usize) -> usize {
-        let limits = self.device.limits();
-        let cap = limits
-            .max_storage_buffer_binding_size
-            .min(limits.max_buffer_size);
-        let by_size = usize::try_from(cap / bytes_per_problem.max(1) as u64).unwrap_or(usize::MAX);
-        let by_dispatch =
-            usize::try_from(limits.max_compute_workgroups_per_dimension).unwrap_or(usize::MAX);
-        by_size.min(by_dispatch).max(1)
-    }
-}
-
-fn encode_constraint(constraint: IntensityConstraint) -> (u32, u32, u32) {
-    match constraint {
-        IntensityConstraint::Normalize => (0, 0, 0),
-        IntensityConstraint::Multiply(v) => (1, v.to_bits(), 0),
-        IntensityConstraint::Uniform(v) => (2, u32::from(v.0), 0),
-        IntensityConstraint::Clamp(min, max) => {
-            (3, f32::from(min.0).to_bits(), f32::from(max.0).to_bits())
-        }
-        other => {
-            tracing::warn!(
-                ?other,
-                "this backend has no shader for the constraint; falling back to Normalize"
-            );
-            (0, 0, 0)
-        }
-    }
-}
-
-impl WgpuBackend {
-    fn quantize_on_device(
-        &self,
-        v: &GpuVector,
-        constraint: IntensityConstraint,
-    ) -> (Vec<Phase>, Vec<Intensity>) {
-        self.materialize(v);
-        let (len, batch) = (v.len, v.batch.max(1));
-        let words = len.div_ceil(2);
-        let bytes = (words * batch) as u64 * 4;
-        let (mode, p0, p1) = encode_constraint(constraint);
-        let out = self.storage(bytes);
-        let max = (mode < 2).then(|| self.storage(batch as u64 * 4));
-        let max_buf: &Pooled = max.as_ref().unwrap_or(&self.unused_rw);
-        let dims = self.uniform([to_u32(len), mode, p0, p1, to_u32(words), 0, 0, 0]);
-        let bindings = Bindings::default()
-            .storage(&v.buf)
-            .storage(max_buf)
-            .storage(&out)
-            .uniform(&dims);
-        let z = to_u32(batch).max(1);
-        if max.is_some() {
-            self.dispatch(
-                &self.pipelines.quantize_max,
-                &self.pipelines.quantize_layout,
-                &bindings,
-                dims.offset,
-                (1, 1, z),
-            );
-        }
-        self.dispatch(
-            &self.pipelines.quantize_write,
-            &self.pipelines.quantize_layout,
-            &bindings,
-            dims.offset,
-            (div_ceil(words, WG), 1, z),
-        );
-
-        self.read_back(&out, bytes, |raw| {
-            let mut phases = Vec::with_capacity(len * batch);
-            let mut intensities = Vec::with_capacity(len * batch);
-            for k in 0..batch {
-                let at = k * words * 4;
-                for b in raw[at..at + len * 2].as_chunks::<2>().0 {
-                    phases.push(Phase(b[0]));
-                    intensities.push(Intensity(b[1]));
-                }
-            }
-            (phases, intensities)
-        })
-    }
-
-    fn propagation(
-        &self,
-        tr_pos: &[Point3<f32>],
-        tr_dir: &[UnitVector3<f32>],
-        foci: &[AmplitudeTarget],
-        batch: usize,
-        wavenumber: f32,
-        directivity: Directivity,
-    ) -> GpuMatrix {
-        let rows = foci.len() / batch.max(1);
-        let cols = tr_pos.len();
-        let pos: Vec<[f32; 4]> = tr_pos.iter().map(|p| [p.x, p.y, p.z, 0.0]).collect();
-        let dir: Vec<[f32; 4]> = tr_dir.iter().map(|d| [d.x, d.y, d.z, 0.0]).collect();
-        let tgt: Vec<[f32; 4]> = foci
-            .iter()
-            .map(|f| [f.point.x, f.point.y, f.point.z, 0.0])
-            .collect();
-        let pos = self.storage_init(&pos);
-        let dir = self.storage_init(&dir);
-        let tgt = self.storage_init(&tgt);
-        let out = self.storage(bytes_of(rows * cols * batch));
-        let dims = self.uniform([
-            to_u32(rows),
-            to_u32(cols),
-            wavenumber.to_bits(),
-            u32::from(directivity == Directivity::T4010A1),
-            0,
-            0,
-            0,
-            0,
-        ]);
-        self.dispatch(
-            &self.pipelines.propagation,
-            &self.pipelines.propagation_layout,
-            &Bindings::default()
-                .storage(&pos)
-                .storage(&dir)
-                .storage(&tgt)
-                .storage(&out)
-                .uniform(&dims),
-            dims.offset,
-            (div_ceil(rows * cols, WG), 1, to_u32(batch).max(1)),
-        );
-        GpuMatrix {
-            buf: out,
-            rows,
-            cols,
-            batch,
-            row_major: true,
-        }
-    }
-
-    fn repeat_normalized(
-        &self,
-        a: &GpuMatrix,
-        x: GpuVector,
-        r: &GpuVector,
-        repeat: usize,
-    ) -> GpuVector {
-        if repeat == 0 {
-            return x;
-        }
-        if a.rows != a.cols || a.cols > FUSED_REPEAT_LIMIT {
-            let mut x = x;
-            for _ in 0..repeat {
-                x = self.gemv_maybe_normalized(a, &x, Some(r));
-            }
-            return x;
-        }
-        self.materialize(&x);
-        self.materialize(r);
-        let (n, batch) = (a.cols, a.batch);
-        let out = self.storage(bytes_of(n * batch));
-        let dims = self.uniform([
-            to_u32(n),
-            to_u32(repeat),
-            broadcast_stride(r),
-            broadcast_stride(&x),
-            u32::from(a.row_major),
-            0,
-            0,
-            0,
-        ]);
-        self.dispatch(
-            &self.pipelines.repeat_gemv,
-            &self.pipelines.gemv_layout,
-            &Bindings::default()
-                .storage(&a.buf)
-                .storage(&x.buf)
-                .storage(&self.unused_rw)
-                .storage(&out)
-                .uniform(&dims)
-                .storage(&r.buf),
-            dims.offset,
-            (1, 1, to_u32(batch).max(1)),
-        );
-        GpuVector::new(out, n, batch)
     }
 
     fn gemv_maybe_normalized(
@@ -744,7 +384,7 @@ impl WgpuBackend {
             .as_ref()
             .or_else(|| x_partial.as_ref().map(|p| &p.buf))
             .unwrap_or(&self.unused_rw);
-        let dims = self.uniform([
+        let dims = self.uniform(&[
             to_u32(a.rows),
             to_u32(a.cols),
             chunks,
@@ -807,6 +447,307 @@ impl WgpuBackend {
     }
 }
 
+fn uniform_chunk(device: &wgpu::Device, stride: u64) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: stride * UNIFORM_SLOTS,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
+}
+
+fn to_u32(v: usize) -> u32 {
+    u32::try_from(v).unwrap_or(u32::MAX)
+}
+
+fn div_ceil(a: usize, b: u32) -> u32 {
+    to_u32(a.div_ceil(b as usize)).max(1)
+}
+
+fn bytes_of(elems: usize) -> u64 {
+    (elems as u64) * 8
+}
+
+fn broadcast_stride(v: &GpuVector) -> u32 {
+    if v.batch > 1 { to_u32(v.len) } else { 0 }
+}
+
+impl LinAlgBackend for WgpuBackend {
+    type Matrix = GpuMatrix;
+    type Vector = GpuVector;
+
+    fn make_vector(&self, batch: usize, data: Vec<Complex<f32>>) -> Self::Vector {
+        let raw = buffer::to_raw(&data);
+        GpuVector::new(self.storage_init(&raw), raw.len() / batch.max(1), batch)
+    }
+
+    fn vector_to_host(&self, v: &Self::Vector) -> Vec<Complex<f32>> {
+        self.materialize(v);
+        let total = v.len * v.batch;
+        self.read_back(&v.buf, bytes_of(total), |raw| {
+            buffer::from_raw(bytemuck::cast_slice(raw))
+        })
+    }
+
+    fn propagation_matrix(
+        &self,
+        tr_pos: &[Point3<f32>],
+        tr_dir: &[UnitVector3<f32>],
+        foci: &[AmplitudeTarget],
+        batch: usize,
+        wavenumber: f32,
+        directivity: Directivity,
+    ) -> Self::Matrix {
+        let rows = foci.len() / batch.max(1);
+        let cols = tr_pos.len();
+        let pos: Vec<[f32; 4]> = tr_pos.iter().map(|p| [p.x, p.y, p.z, 0.0]).collect();
+        let dir: Vec<[f32; 4]> = tr_dir.iter().map(|d| [d.x, d.y, d.z, 0.0]).collect();
+        let tgt: Vec<[f32; 4]> = foci
+            .iter()
+            .map(|f| [f.point.x, f.point.y, f.point.z, 0.0])
+            .collect();
+        let pos = self.storage_init(&pos);
+        let dir = self.storage_init(&dir);
+        let tgt = self.storage_init(&tgt);
+        let out = self.storage(bytes_of(rows * cols * batch));
+        let dims = self.uniform(&[
+            to_u32(rows),
+            to_u32(cols),
+            wavenumber.to_bits(),
+            u32::from(directivity == Directivity::T4010A1),
+        ]);
+        self.dispatch(
+            &self.pipelines.propagation,
+            &self.pipelines.propagation_layout,
+            &Bindings::default()
+                .storage(&pos)
+                .storage(&dir)
+                .storage(&tgt)
+                .storage(&out)
+                .uniform(&dims),
+            dims.offset,
+            (div_ceil(rows * cols, WG), 1, to_u32(batch).max(1)),
+        );
+        GpuMatrix {
+            buf: out,
+            rows,
+            cols,
+            batch,
+            row_major: true,
+        }
+    }
+
+    fn back_prop(&self, g: &Self::Matrix) -> Self::Matrix {
+        let row_norm = self.storage((g.rows * g.batch) as u64 * 4);
+        let out = self.storage(bytes_of(g.rows * g.cols * g.batch));
+        let dims = self.uniform(&[to_u32(g.rows), to_u32(g.cols), u32::from(g.row_major)]);
+        let bindings = Bindings::default()
+            .storage(&g.buf)
+            .storage(&row_norm)
+            .storage(&out)
+            .uniform(&dims);
+        let batch = to_u32(g.batch).max(1);
+        self.dispatch(
+            &self.pipelines.back_prop_row_norm,
+            &self.pipelines.back_prop_layout,
+            &bindings,
+            dims.offset,
+            (to_u32(g.rows).max(1), 1, batch),
+        );
+        self.dispatch(
+            &self.pipelines.back_prop_write,
+            &self.pipelines.back_prop_layout,
+            &bindings,
+            dims.offset,
+            (div_ceil(g.rows * g.cols, WG), 1, batch),
+        );
+        GpuMatrix {
+            buf: out,
+            rows: g.cols,
+            cols: g.rows,
+            batch: g.batch,
+            row_major: false,
+        }
+    }
+
+    fn gemm(&self, a: &Self::Matrix, b: &Self::Matrix) -> Self::Matrix {
+        let (rows, inner, cols) = (a.rows, a.cols, b.cols);
+        let batch = a.batch;
+        let out = self.storage(bytes_of(rows * cols * batch));
+        let dims = self.uniform(&[
+            to_u32(rows),
+            to_u32(inner),
+            to_u32(cols),
+            u32::from(a.row_major),
+            u32::from(b.row_major),
+        ]);
+        self.dispatch(
+            &self.pipelines.gemm,
+            &self.pipelines.gemm_layout,
+            &Bindings::default()
+                .storage(&a.buf)
+                .storage(&b.buf)
+                .storage(&out)
+                .uniform(&dims),
+            dims.offset,
+            (
+                to_u32(rows).max(1),
+                to_u32(cols).max(1),
+                to_u32(batch).max(1),
+            ),
+        );
+        GpuMatrix {
+            buf: out,
+            rows,
+            cols,
+            batch,
+            row_major: false,
+        }
+    }
+
+    fn gemv(&self, a: &Self::Matrix, x: &Self::Vector) -> Self::Vector {
+        self.gemv_maybe_normalized(a, x, None)
+    }
+
+    fn gemv_hadamard_normalized(
+        &self,
+        a: &Self::Matrix,
+        x: Self::Vector,
+        r: &Self::Vector,
+    ) -> Self::Vector {
+        self.gemv_maybe_normalized(a, &x, Some(r))
+    }
+
+    fn repeat_gemv_normalized(
+        &self,
+        a: &Self::Matrix,
+        x: Self::Vector,
+        r: &Self::Vector,
+        repeat: usize,
+    ) -> Self::Vector {
+        if repeat == 0 {
+            return x;
+        }
+        if a.rows != a.cols || a.cols > FUSED_REPEAT_LIMIT {
+            let mut x = x;
+            for _ in 0..repeat {
+                x = self.gemv_maybe_normalized(a, &x, Some(r));
+            }
+            return x;
+        }
+        self.materialize(&x);
+        self.materialize(r);
+        let (n, batch) = (a.cols, a.batch);
+        let out = self.storage(bytes_of(n * batch));
+        let dims = self.uniform(&[
+            to_u32(n),
+            to_u32(repeat),
+            broadcast_stride(r),
+            broadcast_stride(&x),
+            u32::from(a.row_major),
+        ]);
+        self.dispatch(
+            &self.pipelines.repeat_gemv,
+            &self.pipelines.gemv_layout,
+            &Bindings::default()
+                .storage(&a.buf)
+                .storage(&x.buf)
+                .storage(&self.unused_rw)
+                .storage(&out)
+                .uniform(&dims)
+                .storage(&r.buf),
+            dims.offset,
+            (1, 1, to_u32(batch).max(1)),
+        );
+        GpuVector::new(out, n, batch)
+    }
+
+    fn amplitude_correct(&self, x: &mut Self::Vector, r: &Self::Vector) {
+        self.elementwise(&self.pipelines.amplitude_correct, x, r);
+    }
+
+    fn quantize(
+        &self,
+        v: &Self::Vector,
+        constraint: IntensityConstraint,
+        _parallel: bool,
+    ) -> (Vec<Phase>, Vec<Intensity>) {
+        self.materialize(v);
+        let (len, batch) = (v.len, v.batch.max(1));
+        let words = len.div_ceil(2);
+        let bytes = (words * batch) as u64 * 4;
+        let (mode, p0, p1) = encode_constraint(constraint);
+        let out = self.storage(bytes);
+        let max = (mode < 2).then(|| self.storage(batch as u64 * 4));
+        let max_buf: &Pooled = max.as_ref().unwrap_or(&self.unused_rw);
+        let dims = self.uniform(&[to_u32(len), mode, p0, p1, to_u32(words)]);
+        let bindings = Bindings::default()
+            .storage(&v.buf)
+            .storage(max_buf)
+            .storage(&out)
+            .uniform(&dims);
+        let z = to_u32(batch).max(1);
+        if max.is_some() {
+            self.dispatch(
+                &self.pipelines.quantize_max,
+                &self.pipelines.quantize_layout,
+                &bindings,
+                dims.offset,
+                (1, 1, z),
+            );
+        }
+        self.dispatch(
+            &self.pipelines.quantize_write,
+            &self.pipelines.quantize_layout,
+            &bindings,
+            dims.offset,
+            (div_ceil(words, WG), 1, z),
+        );
+
+        self.read_back(&out, bytes, |raw| {
+            let mut phases = Vec::with_capacity(len * batch);
+            let mut intensities = Vec::with_capacity(len * batch);
+            for k in 0..batch {
+                let at = k * words * 4;
+                for b in raw[at..at + len * 2].as_chunks::<2>().0 {
+                    phases.push(Phase(b[0]));
+                    intensities.push(Intensity(b[1]));
+                }
+            }
+            (phases, intensities)
+        })
+    }
+
+    fn max_batch(&self, bytes_per_problem: usize) -> usize {
+        let limits = self.device.limits();
+        let cap = limits
+            .max_storage_buffer_binding_size
+            .min(limits.max_buffer_size);
+        let by_size = usize::try_from(cap / bytes_per_problem.max(1) as u64).unwrap_or(usize::MAX);
+        let by_dispatch =
+            usize::try_from(limits.max_compute_workgroups_per_dimension).unwrap_or(usize::MAX);
+        by_size.min(by_dispatch).max(1)
+    }
+}
+
+fn encode_constraint(constraint: IntensityConstraint) -> (u32, u32, u32) {
+    match constraint {
+        IntensityConstraint::Normalize => (0, 0, 0),
+        IntensityConstraint::Multiply(v) => (1, v.to_bits(), 0),
+        IntensityConstraint::Uniform(v) => (2, u32::from(v.0), 0),
+        IntensityConstraint::Clamp(min, max) => {
+            (3, f32::from(min.0).to_bits(), f32::from(max.0).to_bits())
+        }
+        other => {
+            tracing::warn!(
+                ?other,
+                "this backend has no shader for the constraint; falling back to Normalize"
+            );
+            (0, 0, 0)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -821,5 +762,43 @@ mod tests {
         let z = limits.max_compute_workgroups_per_dimension as usize;
         assert!(gpu.max_batch(1) <= z);
         assert!(gpu.max_batch(usize::MAX) >= 1);
+    }
+
+    #[test]
+    #[ignore = "requires a GPU; run explicitly to measure"]
+    fn bind_group_reuse() {
+        const N: usize = 249 * 64;
+        let Ok(gpu) = WgpuBackend::new() else {
+            eprintln!("no GPU");
+            return;
+        };
+        let tr_pos: Vec<_> = (0..N).map(|i| Point3::new(i as f32, 0.0, 0.0)).collect();
+        let tr_dir = vec![nalgebra::Vector3::z_axis(); N];
+        for m in [1usize, 16] {
+            let foci: Vec<_> = (0..m)
+                .map(|i| AmplitudeTarget {
+                    point: Point3::new(i as f32 * 10.0, 0.0, 150.0),
+                    amplitude: 5e3 * autd3_rs_pattern_holo::Pa,
+                })
+                .collect();
+            let g = gpu.propagation_matrix(&tr_pos, &tr_dir, &foci, 1, 0.74, Directivity::Sphere);
+            let b = gpu.back_prop(&g);
+            let ones = |len| gpu.make_vector(1, vec![Complex::new(1.0, 0.0); len]);
+            let amps = ones(m);
+            let q0 = ones(N);
+            let mut q = Some(ones(N));
+            let built: Vec<String> = (0..10)
+                .map(|_| {
+                    let before = gpu.bind_groups_created.get();
+                    let p = gpu.gemv_hadamard_normalized(&g, q.take().unwrap(), &q0);
+                    q = Some(gpu.gemv_hadamard_normalized(&b, p, &amps));
+                    (gpu.bind_groups_created.get() - before).to_string()
+                })
+                .collect();
+            println!(
+                "{m:>3} foci: bind groups built per gs iteration: {}",
+                built.join(" ")
+            );
+        }
     }
 }

@@ -184,32 +184,3 @@ fn quantize_cost() {
         }
     }
 }
-
-#[test]
-#[ignore = "requires a GPU; run explicitly to measure"]
-fn bind_group_reuse() {
-    let Ok(gpu) = WgpuBackend::new() else {
-        eprintln!("no GPU");
-        return;
-    };
-    for m in [1usize, 16] {
-        let g = propagation(&gpu, m);
-        let b = gpu.back_prop(&g);
-        let ones = |len| gpu.make_vector(1, vec![Complex::new(1.0, 0.0); len]);
-        let amps = ones(m);
-        let q0 = ones(N);
-        let mut q = Some(ones(N));
-        let built: Vec<String> = (0..10)
-            .map(|_| {
-                let before = gpu.bind_groups_created();
-                let p = gpu.gemv_hadamard_normalized(&g, q.take().unwrap(), &q0);
-                q = Some(gpu.gemv_hadamard_normalized(&b, p, &amps));
-                (gpu.bind_groups_created() - before).to_string()
-            })
-            .collect();
-        println!(
-            "{m:>3} foci: bind groups built per gs iteration: {}",
-            built.join(" ")
-        );
-    }
-}

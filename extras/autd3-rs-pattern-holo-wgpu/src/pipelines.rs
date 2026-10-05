@@ -100,7 +100,7 @@ impl Pipelines {
         );
         let mat_layout = layout(device, 2, &[Read, Read, ReadWrite, Uniform]);
         let back_prop_layout = layout(device, 3, &[Read, ReadWrite, ReadWrite, Uniform]);
-        let prop_layout = layout(device, 4, &[Read, Read, Read, ReadWrite, Uniform]);
+        let propagation_layout = layout(device, 4, &[Read, Read, Read, ReadWrite, Uniform]);
         let quantize_layout = layout(device, 5, &[Read, ReadWrite, ReadWrite, Uniform]);
 
         let elementwise = module(device, include_str!("../shaders/elementwise.wgsl"));
@@ -108,8 +108,8 @@ impl Pipelines {
         let repeat_mod = module(device, include_str!("../shaders/repeat_gemv.wgsl"));
         let mat_mod = module(device, include_str!("../shaders/gemm.wgsl"));
         let back_prop = module(device, include_str!("../shaders/back_prop.wgsl"));
-        let prop = module(device, include_str!("../shaders/propagation.wgsl"));
-        let quant = module(device, include_str!("../shaders/quantize.wgsl"));
+        let propagation = module(device, include_str!("../shaders/propagation.wgsl"));
+        let quantize = module(device, include_str!("../shaders/quantize.wgsl"));
 
         Self {
             amplitude_correct: pipeline(
@@ -126,15 +126,15 @@ impl Pipelines {
             gemm: pipeline(device, &mat_layout, &mat_mod, "main"),
             back_prop_row_norm: pipeline(device, &back_prop_layout, &back_prop, "row_norm_pass"),
             back_prop_write: pipeline(device, &back_prop_layout, &back_prop, "write_pass"),
-            propagation: pipeline(device, &prop_layout, &prop, "main"),
-            quantize_max: pipeline(device, &quantize_layout, &quant, "max_pass"),
-            quantize_write: pipeline(device, &quantize_layout, &quant, "quantize_pass"),
+            propagation: pipeline(device, &propagation_layout, &propagation, "main"),
+            quantize_max: pipeline(device, &quantize_layout, &quantize, "max_pass"),
+            quantize_write: pipeline(device, &quantize_layout, &quantize, "quantize_pass"),
 
             elementwise_layout,
             gemv_layout: vec_layout,
             gemm_layout: mat_layout,
             back_prop_layout,
-            propagation_layout: prop_layout,
+            propagation_layout,
             quantize_layout,
         }
     }

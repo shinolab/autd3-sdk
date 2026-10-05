@@ -21,7 +21,7 @@ impl BufferPool {
 
 const POOL_DEPTH: usize = 4;
 
-pub struct Pooled {
+pub(crate) struct Pooled {
     buf: Option<wgpu::Buffer>,
     id: u64,
     pool: Rc<BufferPool>,
