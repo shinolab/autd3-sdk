@@ -1,22 +1,40 @@
 use zerocopy::little_endian::U16;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
-use crate::frame::PAYLOAD_BYTES;
-use crate::params::NUM_TRANSDUCERS;
+use super::try_read_header;
+use crate::fpga_params::EMISSION_MAX_INDICES;
+use crate::layout::{PATTERN_RAW_DATA_LEN, PATTERN_RAW_MAX_COUNT};
+use crate::{Error, PatternBank};
 
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct WritePatternRawPayload {
-    pub bank: u8,
-    pub reserved: u8,
+    pub bank: PatternBank,
+    pub count: u8,
     pub index: U16,
-    pub phases: [u8; NUM_TRANSDUCERS],
-    pub intensities: [u8; NUM_TRANSDUCERS],
+}
+
+impl WritePatternRawPayload {
+    pub fn parse(payload: &[u8]) -> Result<(Self, &[[u8; PATTERN_RAW_DATA_LEN]]), Error> {
+        let (p, rest) = try_read_header::<Self>(payload)?;
+        let count = usize::from(p.count);
+        if !(1..=PATTERN_RAW_MAX_COUNT).contains(&count)
+            || u32::from(p.index.get()) + count as u32 > EMISSION_MAX_INDICES
+        {
+            return Err(Error::InvalidPayload);
+        }
+        let (slots, []) = rest.as_chunks::<PATTERN_RAW_DATA_LEN>() else {
+            return Err(Error::InvalidPayload);
+        };
+        if slots.len() != count {
+            return Err(Error::InvalidPayload);
+        }
+        Ok((p, slots))
+    }
 }
 
 const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, bank) == 0);
+const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, count) == 1);
 const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, index) == 2);
-const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, phases) == 4);
-const _: () =
-    assert!(core::mem::offset_of!(WritePatternRawPayload, intensities) == 4 + NUM_TRANSDUCERS);
-const _: () = assert!(core::mem::size_of::<WritePatternRawPayload>() <= PAYLOAD_BYTES);
+const _: () = assert!(core::mem::size_of::<WritePatternRawPayload>() == 4);
+const _: () = assert!(PATTERN_RAW_MAX_COUNT >= 1 && PATTERN_RAW_MAX_COUNT <= u8::MAX as usize);

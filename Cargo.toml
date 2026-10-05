@@ -43,6 +43,10 @@ thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 zerocopy = { version = "0.8.52", default-features = false, features = [
     "derive",
 ] }
+crc = { version = "3.4.0", default-features = false }
+enum-map = { version = "2.7.3", default-features = false }
+bitflags = { version = "2.13.2", default-features = false }
+etherparse = { version = "0.21.0", default-features = false }
 tokio = { version = "1.52.3", default-features = false, features = [
     "sync",
     "time",

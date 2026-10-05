@@ -11,9 +11,6 @@ publish = false
 [lib]
 crate-type = ["staticlib"]
 
-[features]
-isr-probe = []
-
 [dependencies]
 autd3-cpu-fw = { path = "../fw" }
 
@@ -22,7 +19,7 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
-opt-level = "s"
+opt-level = 2
 lto = true
 codegen-units = 1
 

@@ -1,27 +1,16 @@
-use core::arch::asm;
 use core::ffi::{c_int, c_ulong};
+use core::num::NonZeroU64;
 
 use autd3_cpu_fw::Port;
 use autd3_cpu_fw::port::FlashError;
-use autd3_cpu_fw::proto::TxFrame;
 use autd3_cpu_fw::update::{FLASH_BYTES, FLASH_SECTOR_BYTES, LOADER_REGION_END};
 
-use crate::regs::{
-    ECATC_AL_STATUS_CODE, ECATC_DC_CYC_START_TIME_HI, ECATC_DC_CYC_START_TIME_LO,
-    ECATC_DC_SYNC0_CYC_TIME, ECATC_DC_SYS_TIME_HI, ECATC_DC_SYS_TIME_LO, SYSTEM_PRCR, SYSTEM_SWRR1,
-    read16, read32, write32,
-};
+use crate::regs::{SYSTEM_PRCR, SYSTEM_SWRR1, dmb, write32};
+use crate::udp;
 
 const FPGA_BASE: usize = 0x4400_0000;
 
-#[repr(C)]
-struct TxWire {
-    _reserved: u16,
-    ack_data: u16,
-}
-
 unsafe extern "C" {
-    static mut _sTx: TxWire;
     fn sflash_read(buf: *mut u8, addr: c_ulong, size: c_int) -> c_int;
     fn sflash_write(buf: *const u8, addr: c_ulong, size: c_int) -> c_int;
     fn sflash_erase_area(addr: c_ulong, size: c_ulong) -> c_int;
@@ -35,8 +24,8 @@ const PRCR_RESET_UNLOCK: u32 = 0x0000_A502;
 const SWRR1_SOFTWARE_RESET: u32 = 0x4321_A501;
 
 fn flash_range_ok(addr: u32, len: usize) -> bool {
-    addr >= LOADER_REGION_END
-        && u32::try_from(len).is_ok_and(|len| addr.saturating_add(len) <= FLASH_BYTES)
+    (LOADER_REGION_END..=FLASH_BYTES).contains(&addr)
+        && u32::try_from(len).is_ok_and(|len| len <= FLASH_BYTES - addr)
 }
 
 fn flash_wait_idle() -> Result<(), FlashError> {
@@ -52,21 +41,6 @@ fn flash_wait_idle() -> Result<(), FlashError> {
 
 fn flash_result(code: c_int) -> Result<(), FlashError> {
     if code == 0 { Ok(()) } else { Err(FlashError) }
-}
-
-const MICROSECONDS: u64 = 1000;
-const SYNC0_GUARD_NS: u64 = 250 * MICROSECONDS;
-const SYNC0_MAX_POLLS: u32 = 1_000_000;
-
-fn read_dc_u64(lo: usize, hi: usize) -> u64 {
-    loop {
-        let low = read32(lo);
-        let high = read32(hi);
-        let low2 = read32(lo);
-        if low2 >= low {
-            return (u64::from(high) << 32) | u64::from(low);
-        }
-    }
 }
 
 pub(crate) struct HwPort;
@@ -85,44 +59,33 @@ impl Port for HwPort {
     }
 
     fn memory_barrier(&mut self) {
-        unsafe { asm!("dmb", options(nostack, preserves_flags)) };
+        dmb();
     }
 
-    fn next_sync0(&mut self) -> u64 {
-        let mut next_sync0 = read_dc_u64(ECATC_DC_CYC_START_TIME_LO, ECATC_DC_CYC_START_TIME_HI);
-        if next_sync0 == 0 {
-            return 0;
-        }
-        let mut sys_time = read_dc_u64(ECATC_DC_SYS_TIME_LO, ECATC_DC_SYS_TIME_HI);
-        let mut guard = 0u32;
-        while next_sync0 < sys_time + SYNC0_GUARD_NS {
-            guard += 1;
-            if guard > SYNC0_MAX_POLLS {
-                return 0;
-            }
-            sys_time = read_dc_u64(ECATC_DC_SYS_TIME_LO, ECATC_DC_SYS_TIME_HI);
-            if sys_time > next_sync0 {
-                next_sync0 = read_dc_u64(ECATC_DC_CYC_START_TIME_LO, ECATC_DC_CYC_START_TIME_HI);
-            }
-        }
-        next_sync0
+    fn next_sync_edge(&mut self, guard_ns: u32) -> Option<NonZeroU64> {
+        udp::next_sync_edge(guard_ns)
     }
 
-    fn dc_sys_time(&mut self) -> u64 {
-        read_dc_u64(ECATC_DC_SYS_TIME_LO, ECATC_DC_SYS_TIME_HI)
+    fn configure_ptp(&mut self, config: autd3_cpu_fw::ptp::Config) {
+        udp::configure_ptp(config);
     }
 
-    fn sync0_cycle_ns(&mut self) -> u32 {
-        read32(ECATC_DC_SYNC0_CYC_TIME)
+    fn set_fpga_bus_wait(&mut self, wait: autd3_cpu_fw::port::FpgaBusWait) {
+        dmb();
+        udp::set_fpga_bus_wait(u32::from(wait.as_u8()));
+        dmb();
     }
 
-    fn al_status_code(&mut self) -> u16 {
-        read16(ECATC_AL_STATUS_CODE)
+    fn sys_time(&mut self) -> Option<u64> {
+        udp::sys_time()
     }
 
-    fn publish_tx(&mut self, tx: TxFrame) {
-        let packed = u16::from(tx.ack) | (u16::from(tx.data) << 8);
-        unsafe { (&raw mut _sTx.ack_data).write_volatile(packed) };
+    fn host_idle_ms(&mut self) -> Option<u32> {
+        udp::host_idle_ms()
+    }
+
+    fn ptp_unlocked_ms(&mut self) -> Option<u32> {
+        udp::ptp_unlocked_ms()
     }
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {

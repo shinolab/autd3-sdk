@@ -1,6 +1,8 @@
 use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
+use super::try_read_exact;
+use crate::Error;
 use crate::frame::PAYLOAD_BYTES;
 use crate::layout::GPIO_OUT_NUM;
 
@@ -8,6 +10,12 @@ use crate::layout::GPIO_OUT_NUM;
 #[repr(C)]
 pub struct GpioOutPayload {
     pub values: [U64; GPIO_OUT_NUM],
+}
+
+impl GpioOutPayload {
+    pub fn parse(payload: &[u8]) -> Result<Self, Error> {
+        try_read_exact(payload)
+    }
 }
 
 const _: () = assert!(core::mem::size_of::<GpioOutPayload>() <= PAYLOAD_BYTES);

@@ -62,7 +62,7 @@ fn bundle(root: &Path, args: &BundleArgs) -> Result<()> {
         .context("no `firmware` component")?;
     let version = component.current_version(root)?;
 
-    let cpu = crate::cpu::cpu_build(root, false)?;
+    let cpu = crate::cpu::cpu_build(root)?;
     let fpga = crate::fpga::fpga_build(root, args.force)?;
 
     let stem = format!("autd3-sdk-firmware-v{version}");

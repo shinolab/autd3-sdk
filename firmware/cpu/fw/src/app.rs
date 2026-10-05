@@ -1,43 +1,89 @@
 use core::cell::Cell;
-use core::sync::atomic::{AtomicU8, AtomicU16, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 
-use zerocopy::FromBytes;
+use enum_map::EnumMap;
+use zerocopy::IntoBytes;
 
-pub use autd3_cpu_wire::payload::ReadTelemetryPayload;
+use autd3_cpu_wire::payload::FirmwareInfo;
 
 use crate::cmd;
+use crate::ctx::{IsrCell, MainCell};
 use crate::fifo::{FIFO_DEPTH, Fifo};
 use crate::fpga;
-use crate::params::{
-    ADDR_FPGA_STATE, ADDR_VERSION_NUM_MAJOR, ADDR_VERSION_NUM_MINOR, ADDR_VERSION_NUM_PATCH,
-    BRAM_SELECT_CONTROLLER,
+use crate::fpga_params::{
+    ADDR_FPGA_STATE, ADDR_FUNCTION_BITS, ADDR_VERSION_NUM_MAJOR, ADDR_VERSION_NUM_MINOR,
+    ADDR_VERSION_NUM_PATCH,
 };
 use crate::port::Port;
 use crate::proto::{
-    AL_STATUS_CODE_SM_WATCHDOG, AL_STATUS_CODE_SYNC_ERROR, Cmd, Error, FAILSAFE_TICKS, Mode,
-    RxFrame, Telemetry, TxFrame, WIRE_RX_FRAME_BYTES,
+    Cmd, Disposition, Drained, Error, FrameHeader, PAYLOAD_BYTES, Reply, ReplyData, RxFrame,
+    Telemetry,
 };
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
-pub struct Cpu {
-    mode: AtomicU8,
-    last_seq: AtomicU8,
-    last_cmd: AtomicU8,
-    slots: [Cell<RxFrame>; FIFO_DEPTH as usize],
-    fifo: Fifo,
-    telemetry: [AtomicU8; Telemetry::CPU_COUNTER_COUNT],
-    al_err_ticks: AtomicU16,
-    expected_seq: AtomicU8,
-    error_detail: Cell<Option<Error>>,
-    pub(crate) silencer: cmd::silencer::SilencerGuard,
-    pub(crate) update: cmd::update::UpdateSession,
-    pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
-    tx: AtomicU16,
+#[repr(C, align(4))]
+struct Slot {
+    msg_id: Cell<u16>,
+    len: Cell<u16>,
+    payload: Cell<[u8; PAYLOAD_BYTES]>,
+    header: Cell<FrameHeader>,
 }
 
-fn pack_tx(ack: u8, data: u8) -> u16 {
-    u16::from(ack) | (u16::from(data) << 8)
+const _: () = assert!(core::mem::offset_of!(Slot, payload).is_multiple_of(4));
+
+impl Slot {
+    const fn new() -> Self {
+        Self {
+            msg_id: Cell::new(0),
+            len: Cell::new(0),
+            payload: Cell::new([0; PAYLOAD_BYTES]),
+            header: Cell::new(FrameHeader { seq: 0, cmd: 0 }),
+        }
+    }
+
+    fn store(&self, header: FrameHeader, payload: &[u8], msg_id: u16) {
+        let cells = self.payload.as_array_of_cells();
+        let len = payload.len().min(cells.len());
+        for (cell, byte) in cells.iter().zip(&payload[..len]) {
+            cell.set(*byte);
+        }
+        self.len.set(len as u16);
+        self.msg_id.set(msg_id);
+        self.header.set(header);
+    }
+
+    fn load(&self, frame: &mut RxFrame) {
+        let len = usize::from(self.len.get()).min(PAYLOAD_BYTES);
+        for (byte, cell) in frame.payload[..len]
+            .iter_mut()
+            .zip(self.payload.as_array_of_cells())
+        {
+            *byte = cell.get();
+        }
+        frame.len = len as u16;
+        frame.msg_id = self.msg_id.get();
+        frame.header = self.header.get();
+    }
 }
+
+pub struct Cpu {
+    last_seq: IsrCell<u8>,
+    last_cmd: IsrCell<u8>,
+    slots: [Slot; FIFO_DEPTH as usize],
+    fifo: Fifo,
+    telemetry: EnumMap<Telemetry, AtomicU32>,
+    failsafe_fired: MainCell<bool>,
+    ptp_unlock_failsafe_fired: MainCell<bool>,
+    expected_seq: MainCell<u8>,
+    pub(crate) config: MainCell<cmd::cpu_config::CpuConfig>,
+    pub(crate) update: cmd::update::UpdateSession,
+    pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
+    results: [Cell<Reply>; FIFO_DEPTH as usize],
+}
+
+const _: () = assert!(FIFO_DEPTH as usize > autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES);
+
+type Outcome = Result<ReplyData, Error>;
 
 impl Default for Cpu {
     fn default() -> Self {
@@ -50,50 +96,25 @@ impl Cpu {
     #[const_fn::const_fn(cfg(not(loom)))]
     pub const fn new() -> Self {
         Self {
-            mode: AtomicU8::new(Mode::Fifo as u8),
-            last_seq: AtomicU8::new(0xFF),
-            last_cmd: AtomicU8::new(0xFF),
-            slots: [const { Cell::new(RxFrame::ZERO) }; FIFO_DEPTH as usize],
+            last_seq: IsrCell::new(0xFF),
+            last_cmd: IsrCell::new(0xFF),
+            slots: [const { Slot::new() }; FIFO_DEPTH as usize],
             fifo: Fifo::new(),
-            telemetry: [const { AtomicU8::new(0) }; Telemetry::CPU_COUNTER_COUNT],
-            al_err_ticks: AtomicU16::new(0),
-            expected_seq: AtomicU8::new(0),
-            error_detail: Cell::new(None),
-            silencer: cmd::silencer::SilencerGuard::new(),
+            telemetry: EnumMap::from_array([const { AtomicU32::new(0) }; Telemetry::ALL.len()]),
+            failsafe_fired: MainCell::new(false),
+            ptp_unlock_failsafe_fired: MainCell::new(false),
+            expected_seq: MainCell::new(0),
+            config: MainCell::new(cmd::cpu_config::default_config()),
             update: cmd::update::UpdateSession::new(),
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
-            tx: AtomicU16::new(0),
+            results: [const { Cell::new(Reply::RESET) }; FIFO_DEPTH as usize],
         }
     }
 }
 
 impl Cpu {
     pub fn init<P: Port>(&self, port: &mut P) {
-        self.set_mode(Mode::Fifo);
-        self.expected_seq.store(0, Ordering::Relaxed);
-        self.error_detail.set(None);
-        if let Err(err) = fpga::init(port, self.mode()) {
-            self.error_detail.set(Some(err));
-        }
-        self.silencer.init();
-        self.update.init();
-        self.fpga_update.init();
-        self.reset_telemetry();
-        self.set_tx(port, 0xFF, 0);
-        self.last_seq.store(0xFF, Ordering::Relaxed);
-        self.last_cmd.store(0xFF, Ordering::Relaxed);
-        self.fifo.reset();
-    }
-
-    pub(crate) fn record_error_detail(&self, err: Error) {
-        self.error_detail.set(Some(err));
-    }
-
-    pub(crate) fn reinit_fpga<P: Port>(&self, port: &mut P) {
-        if let Err(err) = fpga::init(port, self.mode()) {
-            self.error_detail.set(Some(err));
-        }
-        self.silencer.init();
+        let _ = fpga::init(port, self.config().fpga_wait_update_max_polls);
     }
 
     pub fn mark_boot_attempt<P: Port>(&self, port: &mut P) {
@@ -106,235 +127,198 @@ impl Cpu {
     }
 
     pub(crate) fn reset_telemetry(&self) {
-        for counter in &self.telemetry {
+        for counter in self.telemetry.values() {
             counter.store(0, Ordering::Relaxed);
         }
-        self.al_err_ticks.store(0, Ordering::Relaxed);
+        self.failsafe_fired.set(false);
+        self.ptp_unlock_failsafe_fired.set(false);
     }
 
     fn bump(&self, id: Telemetry) {
-        if let Some(counter) = self.telemetry.get(id as usize) {
-            counter.fetch_add(1, Ordering::Relaxed);
-        }
+        self.telemetry[id].fetch_add(1, Ordering::Relaxed);
     }
 
     #[must_use]
-    pub fn telemetry(&self, id: Telemetry) -> u8 {
-        self.telemetry
-            .get(id as usize)
-            .map_or(0, |counter| counter.load(Ordering::Relaxed))
+    pub fn telemetry(&self, id: Telemetry) -> u32 {
+        self.telemetry[id].load(Ordering::Relaxed)
     }
 
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
         self.update_tick(port);
         self.fpga_update_tick(port);
-        let code = port.al_status_code();
-        if code != AL_STATUS_CODE_SYNC_ERROR && code != AL_STATUS_CODE_SM_WATCHDOG {
-            self.al_err_ticks.store(0, Ordering::Relaxed);
+        let config = self.config();
+        let silent = cmd::failsafe::host_silent(port, &config);
+        self.failsafe(port, silent, &self.failsafe_fired, Telemetry::Failsafe);
+        let unlocked = cmd::failsafe::ptp_unlock_expired(port, &config);
+        self.failsafe(
+            port,
+            unlocked,
+            &self.ptp_unlock_failsafe_fired,
+            Telemetry::PtpUnlockFailsafe,
+        );
+    }
+
+    fn failsafe<P: Port>(
+        &self,
+        port: &mut P,
+        tripped: bool,
+        fired: &MainCell<bool>,
+        counter: Telemetry,
+    ) {
+        if !tripped {
+            fired.set(false);
             return;
         }
-        let prev = self
-            .al_err_ticks
-            .update(Ordering::Relaxed, Ordering::Relaxed, |t| {
-                t.saturating_add(1)
-            });
-        let ticks = prev.saturating_add(1);
-        if ticks == FAILSAFE_TICKS {
+        if !fired.get() {
+            fired.set(true);
             cmd::failsafe::mute(port);
-            self.bump(Telemetry::Failsafe);
+            self.bump(counter);
         }
     }
 
     #[must_use]
-    pub fn tx(&self) -> TxFrame {
-        let packed = self.tx.load(Ordering::Relaxed);
-        TxFrame {
-            ack: (packed & 0xFF) as u8,
-            data: (packed >> 8) as u8,
-        }
+    pub fn reply(&self) -> Reply {
+        self.result_before(self.fifo.tail_acquire())
+    }
+
+    fn result_before(&self, tail: u16) -> Reply {
+        self.results[Fifo::slot(tail.wrapping_sub(1))].get()
     }
 
     #[cfg(all(test, not(loom)))]
     pub(crate) fn expected_seq(&self) -> u8 {
-        self.expected_seq.load(Ordering::Relaxed)
+        self.expected_seq.get()
     }
 
-    #[cfg(all(test, not(loom)))]
-    pub(crate) fn set_error_detail(&self, err: Error) {
-        self.error_detail.set(Some(err));
-    }
-
-    #[must_use]
-    pub fn mode(&self) -> Mode {
-        Mode::from_u8(self.mode.load(Ordering::Relaxed)).unwrap_or(Mode::Fifo)
-    }
-
-    pub(crate) fn set_mode(&self, mode: Mode) {
-        self.mode.store(mode as u8, Ordering::Relaxed);
-    }
-
-    pub fn recv_ethercat<P: Port>(&self, port: &mut P, frame: &[u8; WIRE_RX_FRAME_BYTES]) {
-        let seq = frame[0];
-        let raw_cmd = frame[1];
-        if seq == self.last_seq.load(Ordering::Relaxed)
-            && raw_cmd == self.last_cmd.load(Ordering::Relaxed)
-        {
+    pub fn recv_frame(&self, frame: &[u8], msg_id: u16) -> Disposition {
+        let Some((header, payload)) = FrameHeader::parse(frame) else {
+            return Disposition::Dropped;
+        };
+        let FrameHeader { seq, cmd: raw_cmd } = *header;
+        if seq == self.last_seq.get() && raw_cmd == self.last_cmd.get() {
             self.bump(Telemetry::Dedup);
-            return;
+            return Disposition::Reply;
         }
 
         let head = self.fifo.head();
-        let cmd = Cmd::from_u8(raw_cmd);
-        let preempt = cmd == Some(Cmd::Reset);
-        if preempt {
-            self.fifo.request_flush(head);
-        }
-
-        let deferred = cmd.is_some_and(|cmd| {
-            cmd::update::is_update_cmd(cmd) || cmd::fpga_update::is_fpga_update_cmd(cmd)
-        });
-        let tail = self.fifo.tail_acquire();
-        let inline_ok = preempt || (self.mode() == Mode::LowLatency && tail == head && !deferred);
-        if inline_ok {
-            self.handle_frame(port, &RxFrame::from_wire(frame));
-            self.last_seq.store(seq, Ordering::Relaxed);
-            self.last_cmd.store(raw_cmd, Ordering::Relaxed);
-            return;
-        }
-
-        if Fifo::is_full(head, tail) {
+        if Fifo::is_full(head, self.fifo.tail_acquire()) {
             self.bump(Telemetry::FifoDrop);
-            return;
+            return Disposition::Dropped;
         }
-        self.slots[Fifo::slot(head)].set(RxFrame::from_wire(frame));
+        self.slots[Fifo::slot(head)].store(*header, payload, msg_id);
         self.fifo.publish(head);
-        self.last_seq.store(seq, Ordering::Relaxed);
-        self.last_cmd.store(raw_cmd, Ordering::Relaxed);
+        self.last_seq.set(seq);
+        self.last_cmd.set(raw_cmd);
+        Disposition::Deferred
     }
 
-    pub fn process_one<P: Port>(&self, port: &mut P) -> bool {
-        let flush_gen = self.fifo.begin_drain();
-        self.drain_step(port, flush_gen)
-    }
-
-    #[cfg(all(test, not(loom)))]
-    pub(crate) fn begin_drain(&self) -> u16 {
-        self.fifo.begin_drain()
-    }
-
-    pub(crate) fn drain_step<P: Port>(&self, port: &mut P, flush_gen: u16) -> bool {
+    pub fn process_one<P: Port>(&self, port: &mut P, work: &mut RxFrame) -> Drained {
         let Some(tail) = self.fifo.next() else {
-            return false;
+            return Drained::Empty;
         };
-        let in_frame = self.slots[Fifo::slot(tail)].get();
-        self.handle_frame(port, &in_frame);
-        if self.fifo.is_before_flush(flush_gen, tail) {
-            self.apply_preempt(port);
-        }
+        self.slots[Fifo::slot(tail)].load(work);
+        let result = self
+            .handle_frame(port, work)
+            .unwrap_or_else(|| self.result_before(tail));
+        self.results[Fifo::slot(tail)].set(result);
         self.fifo.commit(tail);
-        true
+        Drained::Completed {
+            msg_id: work.msg_id,
+        }
     }
 
     pub fn process_pending<P: Port>(&self, port: &mut P) {
-        while self.process_one(port) {}
+        let mut work = RxFrame::ZERO;
+        while self.process_one(port, &mut work) != Drained::Empty {}
     }
 
-    fn apply_preempt<P: Port>(&self, port: &mut P) {
-        self.expected_seq.store(0, Ordering::Relaxed);
-        self.set_tx(port, 0xFF, 0);
-    }
-
-    fn set_tx<P: Port>(&self, port: &mut P, ack: u8, data: u8) {
-        self.tx.store(pack_tx(ack, data), Ordering::Relaxed);
-        port.publish_tx(TxFrame { ack, data });
-    }
-
-    fn handle_frame<P: Port>(&self, port: &mut P, in_frame: &RxFrame) {
-        let cmd = Cmd::from_u8(in_frame.cmd);
+    fn handle_frame<P: Port>(&self, port: &mut P, in_frame: &RxFrame) -> Option<Reply> {
+        let cmd = Cmd::from_u8(in_frame.header.cmd);
         if cmd == Some(Cmd::Reset) {
-            self.apply_preempt(port);
-            return;
+            self.expected_seq.set(0);
+            return Some(Reply::RESET);
         }
-        if in_frame.seq == self.expected_seq.load(Ordering::Relaxed) {
-            self.expected_seq
-                .store(in_frame.seq.wrapping_add(1), Ordering::Relaxed);
-            let data = match cmd {
-                Some(cmd) => self.dispatch(port, cmd, &in_frame.payload),
-                None => self.latch_error(Error::UnknownCmd),
-            };
-            self.set_tx(port, in_frame.seq, data);
-            self.bump(Telemetry::Processed);
-        } else {
+        if in_frame.header.seq != self.expected_seq.get() {
             self.bump(Telemetry::SeqMismatch);
+            return None;
         }
-    }
-
-    fn latch_error(&self, err: Error) -> u8 {
-        self.error_detail.set(Some(err));
-        self.bump(Telemetry::DispatchError);
-        err as u8
-    }
-
-    fn read_telemetry<P: Port>(&self, port: &mut P, payload: &[u8]) -> u8 {
-        let Ok((p, _)) = ReadTelemetryPayload::ref_from_prefix(payload) else {
-            return self.latch_error(Error::InvalidPayload);
+        self.expected_seq.set(in_frame.header.seq.wrapping_add(1));
+        let outcome = match cmd {
+            Some(cmd) => self.dispatch(port, cmd, in_frame.payload()),
+            None => Err(Error::UnknownCmd),
         };
-        match Telemetry::from_u8(p.counter_id) {
-            Some(Telemetry::SyncResync) => {
-                (fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_FPGA_STATE) >> 8) as u8
+        let result = match outcome {
+            Ok(data) => Reply::new(in_frame.header.seq, Error::None, data),
+            Err(err) => {
+                self.bump(Telemetry::DispatchError);
+                Reply::new(in_frame.header.seq, err, ReplyData::EMPTY)
             }
-            Some(id) => self.telemetry(id),
-            None => self.latch_error(Error::InvalidPayload),
-        }
+        };
+        self.bump(Telemetry::Processed);
+        Some(result)
     }
 
-    fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> u8 {
-        if self.fpga_update.is_locked() && !cmd::fpga_update::allowed_while_locked(cmd) {
-            return self.latch_error(Error::FpgaUpdateInProgress);
+    fn read_telemetry<P: Port>(&self, port: &mut P) -> ReplyData {
+        let mut bytes = [0u8; Telemetry::REPLY_BYTES];
+        for (chunk, id) in bytes
+            .chunks_mut(Telemetry::COUNTER_BYTES)
+            .zip(Telemetry::ALL)
+        {
+            let value = match id {
+                Telemetry::SyncResync => u32::from(fpga::read_ctl(port, ADDR_FPGA_STATE) >> 8),
+                id => self.telemetry(*id),
+            };
+            chunk.copy_from_slice(&value.to_le_bytes());
         }
+        ReplyData::from_slice(&bytes)
+    }
+
+    fn read_firmware_info<P: Port>(&self, port: &mut P) -> ReplyData {
+        let info = FirmwareInfo {
+            cpu_version: [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH],
+            fpga_version: [
+                fpga::read_ctl(port, ADDR_VERSION_NUM_MAJOR) as u8,
+                fpga::read_ctl(port, ADDR_VERSION_NUM_MINOR) as u8,
+                fpga::read_ctl(port, ADDR_VERSION_NUM_PATCH) as u8,
+            ],
+            fpga_functions: fpga::read_ctl(port, ADDR_FUNCTION_BITS) as u8,
+            fpga_boot_image: self.fpga_boot_image(port) as u8,
+        };
+        ReplyData::from_slice(info.as_bytes())
+    }
+
+    fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> Outcome {
+        if self.fpga_update.is_locked() && !cmd::fpga_update::allowed_while_locked(cmd) {
+            return Err(Error::FpgaUpdateInProgress);
+        }
+        let config = self.config();
+        let max_polls = config.fpga_wait_update_max_polls;
         let result = match cmd {
-            Cmd::Reset | Cmd::Nop => Ok(()),
-            Cmd::ReadCpuFwVersionMajor => return FW_VERSION_MAJOR,
-            Cmd::ReadCpuFwVersionMinor => return FW_VERSION_MINOR,
-            Cmd::ReadCpuFwVersionPatch => return FW_VERSION_PATCH,
-            Cmd::ReadFpgaFwVersionMajor => {
-                return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR) as u8;
-            }
-            Cmd::ReadFpgaFwVersionMinor => {
-                return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MINOR) as u8;
-            }
-            Cmd::ReadFpgaFwVersionPatch => {
-                return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_PATCH) as u8;
-            }
-            Cmd::ReadErrorDetail => {
-                return self.error_detail.get().map_or(0, |err| err as u8);
-            }
+            Cmd::Nop => Ok(()),
+            Cmd::SetCpuConfig => self.set_cpu_config(port, payload),
             Cmd::ReadFpgaState => {
-                return fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_FPGA_STATE) as u8;
+                return Ok(ReplyData::from_slice(&[
+                    fpga::read_ctl(port, ADDR_FPGA_STATE) as u8,
+                ]));
             }
-            Cmd::ReadTelemetry => return self.read_telemetry(port, payload),
-            Cmd::ReadFpgaFunctions => {
-                return (fpga::read(port, BRAM_SELECT_CONTROLLER, ADDR_VERSION_NUM_MAJOR) >> 8)
-                    as u8;
-            }
-            Cmd::ReadFpgaBootImage => return cmd::fpga_update::boot_image(port) as u8,
+            Cmd::ReadTelemetry => return Ok(self.read_telemetry(port)),
+            Cmd::ReadFirmwareInfo => return Ok(self.read_firmware_info(port)),
             Cmd::WriteFociBuffer => cmd::write_foci::handle(port, payload),
             Cmd::WritePatternRaw => cmd::write_pattern_raw::handle(port, payload),
-            Cmd::WritePatternCompressed => cmd::write_pattern_compressed::handle(port, payload),
-            Cmd::WritePatternFused => self.write_pattern_fused(port, payload),
+            Cmd::WritePatternPhase => cmd::write_pattern_phase::handle(port, payload),
             Cmd::WriteModulationBuffer => cmd::write_mod::handle(port, payload),
-            Cmd::WriteModulationFused => self.write_mod_fused(port, payload),
-            Cmd::ConfigModulation => self.config_mod(port, payload),
-            Cmd::ConfigPattern => self.config_pattern(port, payload),
-            Cmd::ChangeModulationBank => self.change_mod_bank(port, payload),
-            Cmd::ChangePatternBank => self.change_pattern_bank(port, payload),
-            Cmd::SetSilencer => self.set_silencer(port, payload),
+            Cmd::ConfigModulation => cmd::config_mod::handle(port, payload),
+            Cmd::ConfigPattern => cmd::config_pattern::handle(port, payload),
+            Cmd::ActivateModulationBank => cmd::activate_mod_bank::handle(port, &config, payload),
+            Cmd::ActivatePatternBank => cmd::activate_pattern_bank::handle(port, &config, payload),
+            Cmd::SetSilencer => cmd::silencer::handle(port, payload, max_polls),
             Cmd::SetPhaseCorrection => cmd::phase_corr::handle(port, payload),
             Cmd::SetOutputMask => cmd::output_mask::handle(port, payload),
             Cmd::SetPulseWidthTable => cmd::pwe::handle(port, payload),
             Cmd::EmulateGpioIn => cmd::gpio_in::handle(port, payload),
-            Cmd::SetGpioOut => self.gpio_out(port, payload),
+            Cmd::SetGpioOut => cmd::gpio_out::handle(port, payload, max_polls),
             Cmd::ForceFan => cmd::force_fan::handle(port, payload),
+            Cmd::ReleaseFailsafe => cmd::failsafe::release(port, &config),
             Cmd::UpdateBegin => self.update_begin(port, payload),
             Cmd::UpdateChunk => self.update_chunk(port, payload),
             Cmd::UpdateCommit => self.update_commit(port),
@@ -344,22 +328,669 @@ impl Cpu {
             Cmd::FpgaUpdateChunk => self.fpga_update_chunk(port, payload),
             Cmd::FpgaUpdateCommit => self.fpga_update_commit(port),
             Cmd::FpgaUpdateActivate => self.fpga_update_activate(),
-            Cmd::Synchronize => self.sync(port),
-            Cmd::SetMode => self.set_mode_cmd(payload),
+            Cmd::Synchronize => cmd::sync::handle(port, &config),
             Cmd::Clear => self.clear(port),
             _ => Err(Error::UnknownCmd),
         };
-        match result {
-            Ok(()) => 0,
-            Err(err) => self.latch_error(err),
+        result.map(|()| ReplyData::EMPTY)
+    }
+}
+
+#[cfg(all(test, not(loom)))]
+mod tests {
+
+    use crate::cmd::config_mod::ConfigModPayload;
+    use crate::cmd::force_fan::ForceFanPayload;
+    use crate::fifo::FIFO_DEPTH;
+    use crate::fpga::{PHASE_CORR_WORDS, PWE_TABLE_SIZE, REP_INFINITE};
+    use crate::fpga_params::{
+        ADDR_FPGA_STATE, ADDR_FUNCTION_BITS, ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_REP0,
+        ADDR_PATTERN_CYCLE0, ADDR_PATTERN_MODE0, ADDR_PATTERN_REP0,
+        ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, ADDR_SILENCER_COMPLETION_STEPS_PHASE,
+        ADDR_SILENCER_FLAG, ADDR_SILENCER_SET_RESULT, ADDR_SILENCER_UPDATE_RATE_INTENSITY,
+        ADDR_SILENCER_UPDATE_RATE_PHASE, ADDR_VERSION_NUM_MAJOR, ADDR_VERSION_NUM_MINOR,
+        ADDR_VERSION_NUM_PATCH, CtlFlags, EmissionType, NUM_BANKS, NUM_TRANSDUCERS,
+    };
+    use crate::proto::{
+        Cmd, Disposition, Drained, Error, FRAME_BYTES_MAX, OUTPUT_MASK_WORDS, RxFrame, Telemetry,
+    };
+    use crate::test_utils::builders::{config_mod, force_fan, write_foci_buffer, write_mod_buffer};
+    use crate::test_utils::mock::{Frame, Harness};
+    use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
+
+    #[test]
+    fn initial_ack_is_sentinel_byte() {
+        let h = Harness::new();
+        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.expected_seq(), 0);
+    }
+
+    #[test]
+    fn matching_seq_advances_ack_and_expected_seq() {
+        let mut h = Harness::new();
+
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.expected_seq(), 1);
+        assert_eq!(h.status(), Error::None);
+
+        h.deliver(&Frame::new(1, Cmd::ReadFirmwareInfo));
+        assert_eq!(h.ack(), 1);
+        assert_eq!(h.expected_seq(), 2);
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(
+            h.firmware_info().cpu_version,
+            [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH]
+        );
+    }
+
+    #[test]
+    fn mismatched_seq_is_dropped() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(5, Cmd::Nop));
+        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.expected_seq(), 0);
+    }
+
+    #[test]
+    fn unknown_cmd_reports_unknown_cmd_and_advances_seq() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::raw(0, 0x7F));
+        assert_eq!(h.status(), Error::UnknownCmd);
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.expected_seq(), 1);
+        assert_eq!(h.telemetry(Telemetry::DispatchError), 1);
+    }
+
+    #[test]
+    fn every_cmd_has_a_dispatch_arm() {
+        for &cmd in Cmd::ALL {
+            let mut h = Harness::new();
+            h.deliver(&Frame::new(0, cmd));
+            assert_ne!(h.status(), Error::UnknownCmd, "{cmd:?}");
         }
     }
 
-    pub(crate) fn set_and_wait_update<P: Port>(
-        &self,
-        port: &mut P,
-        flag: u16,
-    ) -> Result<(), Error> {
-        fpga::set_and_wait_update(port, self.mode(), flag)
+    #[test]
+    fn duplicate_frame_is_suppressed_at_isr_boundary() {
+        let mut h = Harness::new();
+        let f = Frame::new(0, Cmd::Nop);
+        h.deliver(&f);
+        h.deliver(&f);
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.expected_seq(), 1);
+    }
+
+    #[test]
+    fn reset_arriving_during_a_dispatch_applies_after_that_frame() {
+        let mut h = Harness::new();
+
+        let stale = write_foci_buffer(0, 0, 0, &[0x5A5A]);
+        h.deliver_no_drain(&stale);
+        h.arm_isr_frame(0, Cmd::Reset);
+
+        assert!(h.process_one());
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.expected_seq(), 1);
+
+        assert!(h.process_one());
+        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.expected_seq(), 0);
+
+        assert!(!h.process_one());
+
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.expected_seq(), 1);
+    }
+
+    #[test]
+    fn reset_returns_proto_state_to_post_boot_baseline() {
+        let mut h = Harness::new();
+
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        h.deliver(&Frame::new(1, Cmd::Nop));
+        assert_eq!(h.ack(), 1);
+        assert_eq!(h.expected_seq(), 2);
+
+        h.deliver(&Frame::new(99, Cmd::Reset));
+        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.expected_seq(), 0);
+
+        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+        assert_eq!(
+            h.firmware_info().cpu_version,
+            [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH]
+        );
+    }
+
+    #[test]
+    fn nop_acks_without_changing_state() {
+        let mut h = Harness::new();
+
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.expected_seq(), 1);
+        assert_eq!(h.telemetry(Telemetry::DispatchError), 0);
+    }
+
+    #[test]
+    fn seq_wraparound_boundary() {
+        let mut h = Harness::new();
+        for i in 0..257u16 {
+            h.deliver(&Frame::new((i & 0xFF) as u8, Cmd::Nop));
+        }
+        assert_eq!(h.expected_seq(), 1);
+        assert_eq!(h.ack(), 0);
+    }
+
+    #[test]
+    fn unknown_non_streaming_cmd_reports_unknown_cmd() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::raw(0, 0xEE));
+        assert_eq!(h.status(), Error::UnknownCmd);
+    }
+
+    #[test]
+    fn consecutive_frames_each_process_immediately() {
+        let mut h = Harness::new();
+
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(h.ack(), 0);
+        h.deliver(&Frame::new(1, Cmd::Nop));
+        assert_eq!(h.ack(), 1);
+        h.deliver(&Frame::new(2, Cmd::Nop));
+        assert_eq!(h.ack(), 2);
+        assert_eq!(h.expected_seq(), 3);
+    }
+
+    #[test]
+    fn same_seq_different_cmd_is_not_suppressed_at_isr_boundary() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, Cmd::Reset));
+        assert_eq!(h.expected_seq(), 0);
+
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.expected_seq(), 1);
+    }
+
+    #[test]
+    fn dedup_state_resets_on_reboot() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(h.expected_seq(), 1);
+
+        h.reboot();
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(h.expected_seq(), 1);
+    }
+
+    #[test]
+    fn handshake_survives_worst_case_dedup_collision_after_crashed_client() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, Cmd::Reset));
+
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(h.expected_seq(), 1);
+
+        h.deliver(&Frame::new(0, Cmd::Reset));
+        h.deliver(&Frame::new(1, Cmd::Reset));
+
+        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.expected_seq(), 0);
+
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.expected_seq(), 1);
+    }
+
+    #[test]
+    fn fixed_length_payloads_must_match_exactly() {
+        let mut h = Harness::new();
+        let mut long = force_fan(0, 1);
+        long.set_payload_byte(size_of::<ForceFanPayload>(), 0);
+        h.deliver(&long);
+        assert_eq!(h.status(), Error::InvalidPayload);
+
+        let mut short = config_mod(1, 0, 10, 4);
+        short.set_len(size_of::<ConfigModPayload>() - 1);
+        h.deliver(&short);
+        assert_eq!(h.status(), Error::InvalidPayload);
+
+        h.deliver(&force_fan(2, 1));
+        assert_eq!(h.status(), Error::None);
+    }
+
+    #[test]
+    fn an_oversized_frame_is_dropped() {
+        let h = Harness::new();
+        let mut frame = std::vec![0u8; FRAME_BYTES_MAX + 1];
+        frame[1] = Cmd::Nop as u8;
+        assert_eq!(h.cpu.recv_frame(&frame, 0), Disposition::Dropped);
+        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.expected_seq(), 0);
+    }
+
+    #[test]
+    fn fifo_mode_defers_processing_until_drained() {
+        let mut h = Harness::new();
+
+        h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
+        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.expected_seq(), 0);
+
+        h.cpu.process_pending(&mut h.port);
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.expected_seq(), 1);
+    }
+
+    #[test]
+    fn fifo_mode_drains_in_order() {
+        let mut h = Harness::new();
+
+        h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
+        h.deliver_no_drain(&Frame::new(1, Cmd::Nop));
+        h.deliver_no_drain(&Frame::new(2, Cmd::Nop));
+        assert_eq!(h.expected_seq(), 0);
+
+        h.cpu.process_pending(&mut h.port);
+        assert_eq!(h.ack(), 2);
+        assert_eq!(h.expected_seq(), 3);
+    }
+
+    #[test]
+    fn reset_is_deferred_until_drained() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, Cmd::Nop));
+
+        h.deliver_no_drain(&Frame::new(0, Cmd::Reset));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.expected_seq(), 1);
+
+        assert!(h.process_one());
+        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.expected_seq(), 0);
+    }
+
+    #[test]
+    fn frames_queued_before_a_reset_are_processed_before_it() {
+        let mut h = Harness::new();
+
+        h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
+        h.deliver_no_drain(&Frame::new(1, Cmd::Nop));
+        h.deliver_no_drain(&Frame::new(2, Cmd::Nop));
+
+        assert!(h.process_one());
+        assert_eq!(h.ack(), 0);
+
+        h.deliver_no_drain(&Frame::new(0, Cmd::Reset));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.expected_seq(), 1);
+
+        assert!(h.process_one());
+        assert!(h.process_one());
+        assert_eq!(h.ack(), 2);
+        assert_eq!(h.expected_seq(), 3);
+
+        assert!(h.process_one());
+        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.expected_seq(), 0);
+        assert!(!h.process_one());
+        assert_eq!(h.telemetry(Telemetry::Processed), 3);
+    }
+
+    #[test]
+    fn a_frame_queued_after_a_reset_is_accepted_in_the_new_seq_space() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        h.deliver(&Frame::new(1, Cmd::Nop));
+
+        h.deliver_no_drain(&Frame::new(2, Cmd::Nop));
+        h.deliver_no_drain(&Frame::new(0, Cmd::Reset));
+        h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
+
+        h.cpu.process_pending(&mut h.port);
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.expected_seq(), 1);
+        assert_eq!(h.telemetry(Telemetry::SeqMismatch), 0);
+    }
+
+    #[test]
+    fn a_seq_mismatch_keeps_the_previous_result() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+        let before = h.cpu.reply();
+        assert_ne!(before.data(), []);
+
+        h.deliver(&Frame::new(9, Cmd::Nop));
+        assert_eq!(h.telemetry(Telemetry::SeqMismatch), 1);
+        assert_eq!(h.cpu.reply(), before);
+    }
+
+    #[test]
+    fn the_reply_follows_every_completed_frame_across_the_ring_wrap() {
+        let mut h = Harness::new();
+        for seq in 0..(3 * FIFO_DEPTH as u8) {
+            h.deliver(&Frame::new(seq, Cmd::Nop));
+            assert_eq!(h.ack(), seq);
+        }
+    }
+
+    #[test]
+    fn the_reply_is_reset_ack_until_the_first_frame_completes() {
+        let mut h = Harness::new();
+        for seq in 0..=(FIFO_DEPTH as u8) {
+            h.deliver(&Frame::new(seq, Cmd::Nop));
+        }
+        h.reboot();
+        assert_eq!(h.cpu.reply(), crate::proto::Reply::RESET);
+    }
+
+    #[test]
+    fn the_isr_sees_the_previous_result_while_a_frame_is_being_processed() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+        let previous = h.cpu.reply();
+
+        h.deliver_no_drain(&crate::test_utils::builders::write_foci_buffer(
+            1,
+            0,
+            0,
+            &[0x5A5A],
+        ));
+        h.arm_isr_frame(2, Cmd::Nop);
+        assert!(h.process_one());
+
+        assert_eq!(h.port.isr_seen_reply, Some(previous));
+        assert_eq!(h.ack(), 1);
+    }
+
+    #[test]
+    fn fifo_overflow_drops_beyond_capacity_and_accepts_after_drain() {
+        let mut h = Harness::new();
+
+        let capacity = u8::try_from(FIFO_DEPTH - 1).unwrap();
+        for i in 0..capacity {
+            h.deliver_no_drain(&Frame::new(i, Cmd::Nop));
+        }
+        h.deliver_no_drain(&Frame::new(capacity, Cmd::Nop));
+
+        h.cpu.process_pending(&mut h.port);
+        assert_eq!(h.ack(), capacity - 1);
+        assert_eq!(h.expected_seq(), capacity);
+
+        h.deliver(&Frame::new(capacity, Cmd::Nop));
+        assert_eq!(h.ack(), capacity);
+        assert_eq!(h.expected_seq(), capacity + 1);
+    }
+
+    #[test]
+    fn a_fifo_frame_completes_with_its_msg_id() {
+        let h = Harness::new();
+        let frame = Frame::new(0, Cmd::Nop).bytes();
+        assert_eq!(
+            h.cpu.recv_frame(&frame[..2], 0x1234),
+            crate::proto::Disposition::Deferred
+        );
+        let mut port = crate::test_utils::mock::MockPort::new();
+        let mut work = RxFrame::ZERO;
+        assert_eq!(
+            h.cpu.process_one(&mut port, &mut work),
+            Drained::Completed { msg_id: 0x1234 }
+        );
+        assert_eq!(h.cpu.process_one(&mut port, &mut work), Drained::Empty);
+        assert_eq!(h.cpu.reply().ack, 0);
+    }
+
+    #[test]
+    fn a_duplicate_is_answered_by_the_isr_and_a_reset_completes_with_its_msg_id() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(
+            h.cpu.recv_frame(&[0, Cmd::Nop as u8], 1),
+            crate::proto::Disposition::Reply
+        );
+        assert_eq!(
+            h.cpu.recv_frame(&[7, Cmd::Reset as u8], 2),
+            crate::proto::Disposition::Deferred
+        );
+        assert!(h.process_one());
+        assert_eq!(h.ack(), 0xFF);
+    }
+
+    #[test]
+    fn a_retransmitted_reset_is_answered_with_the_current_reply_until_it_is_processed() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        assert_eq!(
+            h.cpu.recv_frame(&[0, Cmd::Reset as u8], 1),
+            crate::proto::Disposition::Deferred
+        );
+        assert_eq!(
+            h.cpu.recv_frame(&[0, Cmd::Reset as u8], 2),
+            crate::proto::Disposition::Reply
+        );
+        assert_eq!(h.ack(), 0);
+
+        h.cpu.process_pending(&mut h.port);
+        assert_eq!(
+            h.cpu.recv_frame(&[0, Cmd::Reset as u8], 3),
+            crate::proto::Disposition::Reply
+        );
+        assert_eq!(h.ack(), 0xFF);
+    }
+
+    #[test]
+    fn a_full_fifo_drops_the_frame_without_a_reply() {
+        let h = Harness::new();
+        let capacity = u8::try_from(FIFO_DEPTH - 1).unwrap();
+        for seq in 0..capacity {
+            assert_eq!(
+                h.cpu.recv_frame(&[seq, Cmd::Nop as u8], 0),
+                crate::proto::Disposition::Deferred
+            );
+        }
+        assert_eq!(
+            h.cpu.recv_frame(&[capacity, Cmd::Nop as u8], 0),
+            crate::proto::Disposition::Dropped
+        );
+        assert_eq!(
+            h.cpu.recv_frame(&[0, Cmd::Reset as u8], 0),
+            crate::proto::Disposition::Dropped
+        );
+    }
+
+    fn read_telemetry(h: &mut Harness, seq: u8) -> std::vec::Vec<u32> {
+        h.deliver(&Frame::new(seq, Cmd::ReadTelemetry));
+        assert_eq!(h.status(), Error::None);
+        let data = h.reply_data();
+        assert_eq!(data.len(), Telemetry::REPLY_BYTES);
+        data.chunks(4)
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect()
+    }
+
+    #[test]
+    fn telemetry_counts_processed_frames() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(0, Cmd::Nop));
+        h.deliver(&Frame::new(1, Cmd::Nop));
+        assert_eq!(h.telemetry(Telemetry::Processed), 2);
+    }
+
+    #[test]
+    fn telemetry_counts_dedup_hits() {
+        let mut h = Harness::new();
+        let f = Frame::new(0, Cmd::Nop);
+        h.deliver(&f);
+        h.deliver(&f);
+        assert_eq!(h.telemetry(Telemetry::Dedup), 1);
+        assert_eq!(h.telemetry(Telemetry::Processed), 1);
+    }
+
+    #[test]
+    fn telemetry_counts_seq_mismatch() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(5, Cmd::Nop));
+        assert_eq!(h.telemetry(Telemetry::SeqMismatch), 1);
+        assert_eq!(h.telemetry(Telemetry::Processed), 0);
+    }
+
+    #[test]
+    fn telemetry_counts_dispatch_errors() {
+        let mut h = Harness::new();
+        h.deliver(&force_fan(0, 2));
+        assert_eq!(h.status(), Error::InvalidPayload);
+        assert_eq!(h.telemetry(Telemetry::DispatchError), 1);
+    }
+
+    #[test]
+    fn telemetry_counts_fifo_drops() {
+        let mut h = Harness::new();
+
+        let capacity = u8::try_from(FIFO_DEPTH - 1).unwrap();
+        for i in 0..=capacity {
+            h.deliver_no_drain(&Frame::new(i, Cmd::Nop));
+        }
+        assert_eq!(h.telemetry(Telemetry::FifoDrop), 1);
+    }
+
+    #[test]
+    fn read_telemetry_returns_every_counter_at_once() {
+        let mut h = Harness::new();
+        h.deliver(&force_fan(0, 2));
+
+        let counters = read_telemetry(&mut h, 1);
+        assert_eq!(counters.len(), Telemetry::ALL.len());
+        assert_eq!(counters[Telemetry::DispatchError as usize], 1);
+        assert_eq!(counters[Telemetry::Processed as usize], 1);
+        assert_eq!(counters[Telemetry::FifoDrop as usize], 0);
+    }
+
+    #[test]
+    fn read_telemetry_sync_resync_returns_fpga_state_high_byte() {
+        let mut h = Harness::new();
+        h.set_ctl(ADDR_FPGA_STATE, 0x2A83);
+        let counters = read_telemetry(&mut h, 0);
+        assert_eq!(counters[Telemetry::SyncResync as usize], 0x2A);
+    }
+
+    #[test]
+    fn telemetry_counters_are_wider_than_a_byte() {
+        let mut h = Harness::new();
+        let mut seq = 0u8;
+        for _ in 0..300 {
+            h.deliver(&Frame::new(seq, Cmd::Nop));
+            seq = seq.wrapping_add(1);
+        }
+        let counters = read_telemetry(&mut h, seq);
+        assert_eq!(counters[Telemetry::Processed as usize], 300);
+    }
+
+    #[test]
+    fn derived_telemetry_id_is_not_a_cpu_counter() {
+        let h = Harness::new();
+        for &id in Telemetry::ALL {
+            assert_eq!(h.telemetry(id), 0);
+        }
+        assert_eq!(h.telemetry(Telemetry::SyncResync), 0);
+    }
+
+    #[test]
+    fn read_fpga_functions_returns_function_bits_register() {
+        let mut h = Harness::new();
+        h.set_ctl(ADDR_FUNCTION_BITS, 0xA5);
+
+        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+        assert_eq!(h.firmware_info().fpga_functions, 0xA5);
+    }
+
+    #[test]
+    fn fpga_state_survives_reset() {
+        let mut h = Harness::new();
+
+        h.deliver(&write_foci_buffer(0, 0, 0, &[0x5A5A]));
+        h.deliver(&write_mod_buffer(1, 1, 8, &[0x77]));
+        h.deliver(&config_mod(2, 1, 5, 256));
+        assert_eq!(h.status(), Error::None);
+
+        h.deliver(&Frame::new(99, Cmd::Reset));
+        assert_eq!(h.expected_seq(), 0);
+
+        assert_eq!(h.emission_word(0, 0), 0x5A5A);
+        assert_eq!(h.mod_word(1, 4), 0x0077);
+        assert_eq!(h.ctl(ADDR_MOD_CYCLE0 + 1), 255);
+    }
+
+    #[test]
+    fn boot_brings_fpga_to_legacy_clear_baseline() {
+        let h = Harness::new();
+
+        assert_eq!(h.ctl(ADDR_SILENCER_FLAG), 0);
+        assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 256);
+        assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_PHASE), 256);
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_PHASE), 40);
+
+        for bank in 0..u8::try_from(NUM_BANKS).unwrap() {
+            assert_eq!(h.ctl(ADDR_MOD_CYCLE0 + u16::from(bank)), 1);
+            assert_eq!(h.ctl(ADDR_MOD_FREQ_DIV0 + u16::from(bank)), 0xFFFF);
+            assert_eq!(h.ctl(ADDR_MOD_REP0 + u16::from(bank)), REP_INFINITE);
+            assert_eq!(h.mod_word(bank, 0), 0xFFFF);
+        }
+
+        for bank in 0..u8::try_from(NUM_BANKS).unwrap() {
+            assert_eq!(
+                h.ctl(ADDR_PATTERN_MODE0 + u16::from(bank)),
+                u16::from(EmissionType::Raw.as_u8())
+            );
+            assert_eq!(h.ctl(ADDR_PATTERN_CYCLE0 + u16::from(bank)), 0);
+            assert_eq!(h.ctl(ADDR_PATTERN_REP0 + u16::from(bank)), REP_INFINITE);
+            assert_eq!(h.emission_word(bank, 0), 0);
+            assert_eq!(h.emission_word(bank, NUM_TRANSDUCERS - 1), 0);
+        }
+
+        assert_eq!(h.port.phase_corr[0], 0);
+        assert_eq!(h.port.phase_corr[PHASE_CORR_WORDS - 1], 0);
+        assert_eq!(h.port.output_mask[0], 0xFFFF);
+        assert_eq!(h.port.output_mask[OUTPUT_MASK_WORDS - 1], 0xFFFF);
+
+        assert_eq!(h.port.pwe[0], 0x00);
+        assert_eq!(h.port.pwe[1], 0x01);
+        assert_eq!(h.port.pwe[128], 0x56);
+        assert_eq!(h.port.pwe[PWE_TABLE_SIZE - 1], 0x100);
+
+        assert_eq!(h.latch_count(CtlFlags::MOD_SET), 1);
+        assert_eq!(h.latch_count(CtlFlags::PATTERN_SET), 1);
+        assert_eq!(h.latch_count(CtlFlags::SILENCER_SET), 1);
+        assert_eq!(h.latch_count(CtlFlags::DEBUG_SET), 1);
+        assert_eq!(h.ctl(ADDR_SILENCER_SET_RESULT), 0);
+        assert_eq!(h.latch_count(CtlFlags::SYNC_SET), 0);
+    }
+
+    #[test]
+    fn read_fpga_state_returns_register_byte() {
+        let mut h = Harness::new();
+        h.set_ctl(ADDR_FPGA_STATE, 0x83);
+        h.deliver(&Frame::new(0, Cmd::ReadFpgaState));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.reply_data(), [0x83]);
+    }
+
+    #[test]
+    fn read_fpga_fw_version_returns_register_bytes() {
+        let mut h = Harness::new();
+        h.set_ctl(ADDR_VERSION_NUM_MAJOR, 0x0A);
+        h.set_ctl(ADDR_VERSION_NUM_MINOR, 0x0B);
+        h.set_ctl(ADDR_VERSION_NUM_PATCH, 0x0C);
+
+        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.firmware_info().fpga_version, [0x0A, 0x0B, 0x0C]);
     }
 }

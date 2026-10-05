@@ -11,24 +11,16 @@ use crate::util::{run, run_env, which};
 #[derive(Subcommand)]
 pub enum CpuCmd {
     /// Build `board` and link it with `platform/autd3-platform.o` into the flashable `.bin`
-    Build {
-        /// Toggle PORTA pin 5 around the EtherCAT ISR frame handler so its width can be scoped
-        #[arg(long)]
-        isr_probe: bool,
-    },
+    Build,
     /// Build, then write the `.bin` to the device with J-Link
-    Flash {
-        /// Toggle PORTA pin 5 around the EtherCAT ISR frame handler so its width can be scoped
-        #[arg(long)]
-        isr_probe: bool,
-    },
+    Flash,
     /// Run the portable firmware logic (`autd3-cpu-fw`) tests on the host
     Test {
         /// Model-check the ISR/main-loop FIFO handoff with loom instead of the regular tests
         #[arg(long)]
         loom: bool,
     },
-    /// Regenerate `fw/src/params.rs` from the FPGA `params.svh`
+    /// Regenerate `fw/src/fpga_params.rs` from the FPGA `params.svh`
     GenParam,
     /// Write the slot-A image header (magic/generation 0/length/CRC32) into a linked `.bin`
     StampImage {
@@ -53,8 +45,8 @@ pub enum CpuCmd {
 
 pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
     match cmd {
-        CpuCmd::Build { isr_probe } => cpu_build(root, *isr_probe).map(|_| ()),
-        CpuCmd::Flash { isr_probe } => cpu_flash(root, *isr_probe),
+        CpuCmd::Build => cpu_build(root).map(|_| ()),
+        CpuCmd::Flash => cpu_flash(root),
         CpuCmd::Test { loom } => cpu_test(root, *loom),
         CpuCmd::GenParam => gen_param(root),
         CpuCmd::StampImage { bin } => stamp_image(bin),
@@ -84,8 +76,8 @@ fn board_dir(root: &Path) -> PathBuf {
     root.join("firmware/cpu/board")
 }
 
-fn cpu_flash(root: &Path, isr_probe: bool) -> Result<()> {
-    let bin = cpu_build(root, isr_probe)?;
+fn cpu_flash(root: &Path) -> Result<()> {
+    let bin = cpu_build(root)?;
 
     let jlink = match std::env::var("JLINK") {
         Ok(v) if !v.is_empty() => v,
@@ -175,7 +167,7 @@ fn tee_lines(reader: impl std::io::Read, log: &mut String) {
     }
 }
 
-pub fn cpu_build(root: &Path, isr_probe: bool) -> Result<PathBuf> {
+pub fn cpu_build(root: &Path) -> Result<PathBuf> {
     gen_param(root)?;
 
     let prefix = std::env::var("CROSS_COMPILE").unwrap_or_else(|_| "arm-none-eabi-".to_string());
@@ -193,7 +185,7 @@ pub fn cpu_build(root: &Path, isr_probe: bool) -> Result<PathBuf> {
     let platform_obj = cpu_dir.join("platform/autd3-platform.o");
     if !platform_obj.exists() {
         bail!(
-            "{} not found (it is committed to the repository; check your checkout)",
+            "{} not found (it is exported from the private platform build and committed to the repository; check your checkout)",
             platform_obj.display()
         );
     }
@@ -203,12 +195,7 @@ pub fn cpu_build(root: &Path, isr_probe: bool) -> Result<PathBuf> {
         .with_context(|| format!("creating {}", build_dir.display()))?;
 
     let board = board_dir(root);
-    let mut build_args = vec!["build", "--release"];
-    if isr_probe {
-        build_args.push("--features");
-        build_args.push("isr-probe");
-    }
-    run("cargo", build_args, &board).context(
+    run("cargo", ["build", "--release"], &board).context(
         "building the firmware staticlib failed \
          (is the target installed? `rustup target add armv7r-none-eabi`)",
     )?;

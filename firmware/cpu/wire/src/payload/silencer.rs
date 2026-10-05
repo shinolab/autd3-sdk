@@ -1,8 +1,11 @@
+use core::num::NonZeroU16;
+
 use zerocopy::little_endian::U16;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
-pub const SILENCER_FLAG_BIT_STRICT_MODE: u8 = 1;
-pub const SILENCER_FLAG_STRICT_MODE: u8 = 1 << SILENCER_FLAG_BIT_STRICT_MODE;
+use super::try_read_exact;
+use crate::Error;
+use crate::fpga_params::SilencerFlags;
 
 pub const SILENCER_DEFAULT_UPDATE_RATE: u16 = 256;
 pub const SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY: u16 = 10;
@@ -17,6 +20,36 @@ pub struct SilencerPayload {
     pub update_rate_phase: U16,
     pub completion_steps_intensity: U16,
     pub completion_steps_phase: U16,
+}
+
+impl SilencerPayload {
+    #[must_use]
+    pub const fn flags(&self) -> SilencerFlags {
+        SilencerFlags::from_bits_retain(self.flag)
+    }
+
+    #[must_use]
+    pub fn update_rate(&self) -> Option<(NonZeroU16, NonZeroU16)> {
+        NonZeroU16::new(self.update_rate_intensity.get())
+            .zip(NonZeroU16::new(self.update_rate_phase.get()))
+    }
+
+    #[must_use]
+    pub fn completion_steps(&self) -> Option<(NonZeroU16, NonZeroU16)> {
+        NonZeroU16::new(self.completion_steps_intensity.get())
+            .zip(NonZeroU16::new(self.completion_steps_phase.get()))
+    }
+
+    pub fn parse(payload: &[u8]) -> Result<Self, Error> {
+        let p = try_read_exact::<Self>(payload)?;
+        let active = if p.flags().contains(SilencerFlags::FIXED_UPDATE_RATE_MODE) {
+            p.update_rate()
+        } else {
+            p.completion_steps()
+        };
+        active.ok_or(Error::InvalidPayload)?;
+        Ok(p)
+    }
 }
 
 const _: () = assert!(core::mem::offset_of!(SilencerPayload, flag) == 0);
