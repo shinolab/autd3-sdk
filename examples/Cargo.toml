@@ -8,54 +8,6 @@ repository.workspace = true
 description = "examples for autd3-rs."
 publish = false
 
-[[bin]]
-name = "focus_sine"
-path = "src/bin/focus_sine.rs"
-
-[[bin]]
-name = "foci_stm"
-path = "src/bin/foci_stm.rs"
-
-[[bin]]
-name = "pattern_stm"
-path = "src/bin/pattern_stm.rs"
-
-[[bin]]
-name = "multi_device"
-path = "src/bin/multi_device.rs"
-
-[[bin]]
-name = "status_check"
-path = "src/bin/status_check.rs"
-
-[[bin]]
-name = "send_modes"
-path = "src/bin/send_modes.rs"
-
-[[bin]]
-name = "low_latency"
-path = "src/bin/low_latency.rs"
-
-[[bin]]
-name = "holo"
-path = "src/bin/holo.rs"
-
-[[bin]]
-name = "group"
-path = "src/bin/group.rs"
-
-[[bin]]
-name = "legacy_focus_sine"
-path = "src/bin/legacy_focus_sine.rs"
-
-[[bin]]
-name = "remote_server"
-path = "src/bin/remote_server.rs"
-
-[[bin]]
-name = "remote_client"
-path = "src/bin/remote_client.rs"
-
 [dependencies]
 autd3-rs = { workspace = true, features = ["legacy", "logging"] }
 autd3-rs-pattern.workspace = true
@@ -65,7 +17,6 @@ autd3-rs-link-remote.workspace = true
 autd3-rs-modulation.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = [
-    "sync",
     "time",
     "macros",
     "rt",
