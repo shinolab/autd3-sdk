@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
@@ -7,8 +7,8 @@ use crate::clean::{CleanArgs, Cleaner};
 use crate::simulator::build_backend_and_frontend;
 use crate::tool::build_twincat_cli;
 use crate::util::{
-    cargo_bin, cargo_build_args, copy_dir, copy_file, dist_target, ensure_rust_target, exe_name,
-    run, run_cargo,
+    cargo_bin, cargo_build_args, copy_file, dist_target, ensure_rust_target, exe_name, run,
+    run_cargo,
 };
 
 #[derive(Subcommand)]
@@ -37,12 +37,6 @@ pub enum ConsoleCmd {
     },
     /// Build every distributed binary into `console/target/distrib` (used by `dist`)
     Stage {
-        /// Build the dev profile instead of release
-        #[arg(long)]
-        debug: bool,
-    },
-    /// Stage the binaries and produce a self-contained archive
-    Bundle {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
@@ -90,8 +84,7 @@ pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
             }
             run("cargo", args, &dir)
         }
-        ConsoleCmd::Stage { debug } => stage(root, &dir, *debug).map(|_| ()),
-        ConsoleCmd::Bundle { debug } => bundle(root, &dir, *debug),
+        ConsoleCmd::Stage { debug } => stage(root, &dir, *debug),
         ConsoleCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
@@ -106,7 +99,7 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.children("console/twincat", &[".gitkeep"])
 }
 
-fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
+fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     check_versions_match(console_dir)?;
 
     let target = dist_target();
@@ -163,7 +156,7 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<PathBuf> {
         BINARIES.len(),
         out_dir.display()
     );
-    Ok(out_dir)
+    Ok(())
 }
 
 fn stage_twincat(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
@@ -225,87 +218,4 @@ fn package_version(manifest: &Path) -> Result<String> {
         .and_then(toml_edit::Item::as_str)
         .map(str::to_string)
         .with_context(|| format!("no [package] version in {}", manifest.display()))
-}
-
-fn bundle(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
-    let distrib = stage(root, console_dir, debug)?;
-
-    let out_dir = console_dir.join("target").join("bundle");
-    let staging = out_dir.join("autd3-console");
-    if staging.exists() {
-        std::fs::remove_dir_all(&staging)?;
-    }
-    copy_dir(&distrib, &staging)?;
-
-    let archive = if cfg!(target_os = "windows") {
-        let archive = out_dir.join(format!("autd3-console-{}.zip", bundle_os()));
-        zip_dir(&staging, &archive)?;
-        archive
-    } else {
-        let archive = out_dir.join(format!("autd3-console-{}.tar.gz", bundle_os()));
-        run(
-            "tar",
-            [
-                "czf",
-                &archive.to_string_lossy(),
-                "-C",
-                &out_dir.to_string_lossy(),
-                "autd3-console",
-            ],
-            &out_dir,
-        )?;
-        archive
-    };
-    println!("created {}", archive.display());
-    Ok(())
-}
-
-fn bundle_os() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "windows-x64"
-    } else if cfg!(target_os = "macos") {
-        "macos"
-    } else {
-        "linux-x64"
-    }
-}
-
-fn zip_dir(src: &Path, archive: &Path) -> Result<()> {
-    if let Some(parent) = archive.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let file = std::fs::File::create(archive)
-        .with_context(|| format!("creating {}", archive.display()))?;
-    let mut zip = zip::ZipWriter::new(file);
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
-    let root_name = src
-        .file_name()
-        .context("staging dir has no name")?
-        .to_string_lossy()
-        .into_owned();
-    add_to_zip(&mut zip, src, &root_name, options)?;
-    zip.finish()?;
-    Ok(())
-}
-
-fn add_to_zip(
-    zip: &mut zip::ZipWriter<std::fs::File>,
-    dir: &Path,
-    prefix: &str,
-    options: zip::write::SimpleFileOptions,
-) -> Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        let name = format!("{prefix}/{}", entry.file_name().to_string_lossy());
-        if path.is_dir() {
-            add_to_zip(zip, &path, &name, options)?;
-        } else {
-            zip.start_file(name, options)?;
-            let mut f = std::fs::File::open(&path)?;
-            std::io::copy(&mut f, zip)?;
-        }
-    }
-    Ok(())
 }

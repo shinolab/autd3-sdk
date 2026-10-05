@@ -17,5 +17,4 @@ The bundled `console-update` command does the same thing from a terminal.
 ```console
 cargo xtask console run       # build and run
 cargo xtask console stage     # build every distributed binary into console/target/distrib
-cargo xtask console bundle    # stage + archive
 ```
