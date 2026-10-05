@@ -96,7 +96,49 @@ pub fn use_app_ctx(saved: Settings) -> Ctx {
     }
 }
 
+fn set<T: 'static>(mut signal: Signal<T>, value: T) {
+    signal.set(value);
+}
+
 impl Ctx {
+    pub fn settings(&self) -> Settings {
+        Settings {
+            max_pressure: (self.max_pressure)(),
+            show_markers: (self.show_markers)(),
+            sound_speed: (self.sound_speed)(),
+            mod_enabled: (self.mod_enabled)(),
+            playing: (self.playing)(),
+            colormap: (self.colormap)(),
+            bg: (self.bg)(),
+            gizmo_on: (self.gizmo_on)(),
+            gizmo_rotate: (self.gizmo_rotate)(),
+            cam_free: (self.cam_free)(),
+            fov: (self.fov)(),
+            near: (self.near)(),
+            far: (self.far)(),
+            move_speed: (self.move_speed)(),
+            slice_resolution: (self.slice_res)(),
+        }
+    }
+
+    pub fn set_settings(&self, s: Settings) {
+        set(self.max_pressure, s.max_pressure);
+        set(self.show_markers, s.show_markers);
+        set(self.sound_speed, s.sound_speed);
+        set(self.mod_enabled, s.mod_enabled);
+        set(self.playing, s.playing);
+        set(self.colormap, s.colormap);
+        set(self.bg, s.bg);
+        set(self.gizmo_on, s.gizmo_on);
+        set(self.gizmo_rotate, s.gizmo_rotate);
+        set(self.cam_free, s.cam_free);
+        set(self.fov, s.fov);
+        set(self.near, s.near);
+        set(self.far, s.far);
+        set(self.move_speed, s.move_speed);
+        set(self.slice_res, s.slice_resolution);
+    }
+
     pub fn with_renderer<R>(&self, f: impl FnOnce(&mut Renderer) -> R) -> Option<R> {
         self.renderer.borrow_mut().as_mut().map(f)
     }
