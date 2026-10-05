@@ -1,8 +1,11 @@
 use core::f32::consts::PI;
 
-use autd3_rs_core::common::Length;
+use autd3_rs_core::common::{Angle, Length};
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3, Vector3};
 use autd3_rs_core::value::Intensity;
+
+use crate::each::{assert_one_slot_per_device, fill_from_positions};
+use crate::focus::focus_phase;
 
 pub(crate) struct AzimuthBasis {
     pub(crate) u: Vector3<f32>,
@@ -23,8 +26,11 @@ pub(crate) fn azimuth_basis(axis: UnitVector3<f32>) -> AzimuthBasis {
     AzimuthBasis { u, v }
 }
 
-#[derive(Clone, Copy)]
 pub(crate) struct GaussianBeam {
+    target: Point3<f32>,
+    axis: UnitVector3<f32>,
+    basis: AzimuthBasis,
+    wavelength: Length,
     waist_mm: f32,
     rayleigh_mm: f32,
 }
@@ -39,33 +45,41 @@ pub(crate) struct BeamSample {
 }
 
 impl GaussianBeam {
-    pub(crate) fn new(waist: Length, wavelength: Length) -> Self {
+    pub(crate) fn new(
+        target: Point3<f32>,
+        axis: UnitVector3<f32>,
+        basis: AzimuthBasis,
+        waist: Length,
+        wavelength: Length,
+    ) -> Self {
         let waist_mm = waist.mm();
         assert!(waist_mm > 0.0, "waist must be positive");
         Self {
+            target,
+            axis,
+            basis,
+            wavelength,
             waist_mm,
             rayleigh_mm: PI * waist_mm * waist_mm / wavelength.mm(),
         }
     }
 
-    pub(crate) fn sample(
-        self,
-        position: Point3<f32>,
-        target: Point3<f32>,
-        axis: UnitVector3<f32>,
-        basis: &AzimuthBasis,
-    ) -> BeamSample {
-        let offset = position - target;
-        let zeta = axis.dot(&offset) / self.rayleigh_mm;
+    pub(crate) fn sample(&self, position: Point3<f32>) -> BeamSample {
+        let offset = position - self.target;
+        let zeta = self.axis.dot(&offset) / self.rayleigh_mm;
         let spread = zeta.mul_add(zeta, 1.0).sqrt();
         BeamSample {
             offset,
-            x: basis.u.dot(&offset),
-            y: basis.v.dot(&offset),
+            x: self.basis.u.dot(&offset),
+            y: self.basis.v.dot(&offset),
             width_mm: self.waist_mm * spread,
             gouy: zeta.atan(),
             log_waist_ratio: -spread.ln(),
         }
+    }
+
+    pub(crate) fn focus_phase(&self, sample: &BeamSample) -> Angle {
+        focus_phase(sample.offset, self.wavelength)
     }
 }
 
@@ -123,9 +137,9 @@ fn write_scaled(
     log_max: f32,
     dst: &mut [Intensity],
 ) {
-    for (i, &pos) in dst.iter_mut().zip(device.positions()) {
-        *i = scaled_intensity(log_amplitude(pos), log_max);
-    }
+    fill_from_positions(device, dst, |pos| {
+        scaled_intensity(log_amplitude(pos), log_max)
+    });
 }
 
 pub(crate) fn write_intensity_device(
@@ -142,11 +156,7 @@ pub(crate) fn write_intensity(
     log_amplitude: impl Fn(Point3<f32>) -> f32,
     dst: &mut [Vec<Intensity>],
 ) {
-    assert_eq!(
-        dst.len(),
-        geometry.num_devices(),
-        "dst must have one slot per device"
-    );
+    assert_one_slot_per_device(geometry, dst);
     let log_max = geometry
         .iter()
         .map(|dev| max_log_amplitude(dev.positions(), &log_amplitude))
@@ -233,6 +243,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "waist must be positive")]
     fn zero_waist_is_rejected() {
-        let _ = GaussianBeam::new(Length::from_mm(0.0), Length::from_mm(8.5));
+        let axis = Vector3::z_axis();
+        let _ = GaussianBeam::new(
+            Point3::origin(),
+            axis,
+            azimuth_basis(axis),
+            Length::from_mm(0.0),
+            Length::from_mm(8.5),
+        );
     }
 }

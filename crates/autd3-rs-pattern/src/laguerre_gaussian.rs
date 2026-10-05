@@ -3,9 +3,9 @@ use autd3_rs_core::common::units::rad;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
 use autd3_rs_core::value::{Intensity, Phase};
 
-use crate::focus::focus_phase;
+use crate::each::{fill_from_positions, for_each_device};
 use crate::gaussian::{
-    AzimuthBasis, GaussianBeam, azimuth_basis, laguerre, write_intensity, write_intensity_device,
+    GaussianBeam, azimuth_basis, laguerre, write_intensity, write_intensity_device,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -16,13 +16,9 @@ pub struct LaguerreGaussianOption {
 }
 
 struct LaguerreGaussianMode {
-    target: Point3<f32>,
-    axis: UnitVector3<f32>,
-    basis: AzimuthBasis,
     beam: GaussianBeam,
     p: u32,
     l: i32,
-    wavelength: Length,
 }
 
 impl LaguerreGaussianMode {
@@ -33,13 +29,9 @@ impl LaguerreGaussianMode {
         wavelength: Length,
     ) -> Self {
         Self {
-            target,
-            axis,
-            basis: azimuth_basis(axis),
-            beam: GaussianBeam::new(option.waist, wavelength),
+            beam: GaussianBeam::new(target, axis, azimuth_basis(axis), option.waist, wavelength),
             p: option.p,
             l: option.l,
-            wavelength,
         }
     }
 
@@ -52,14 +44,11 @@ impl LaguerreGaussianMode {
     }
 
     fn phase(&self, position: Point3<f32>) -> Phase {
-        let s = self
-            .beam
-            .sample(position, self.target, self.axis, &self.basis);
+        let s = self.beam.sample(position);
         let gouy_order = (2 * self.p) as f32 + self.alpha() + 1.0;
         let azimuth = s.y.atan2(s.x);
         let phase = Phase::from(
-            focus_phase(s.offset, self.wavelength)
-                + (self.l as f32 * azimuth - gouy_order * s.gouy) * rad,
+            self.beam.focus_phase(&s) + (self.l as f32 * azimuth - gouy_order * s.gouy) * rad,
         );
         let radial = laguerre(
             self.p,
@@ -74,9 +63,7 @@ impl LaguerreGaussianMode {
     }
 
     fn log_amplitude(&self, position: Point3<f32>) -> f32 {
-        let s = self
-            .beam
-            .sample(position, self.target, self.axis, &self.basis);
+        let s = self.beam.sample(position);
         let arg = Self::radial_argument(s.x, s.y, s.width_mm);
         let alpha = self.alpha();
         let vortex_core = if self.l == 0 {
@@ -109,9 +96,7 @@ pub fn laguerre_gaussian_phase_device(
     dst: &mut [Phase],
 ) {
     let mode = LaguerreGaussianMode::new(target, axis, option, wavelength);
-    for (p, &pos) in dst.iter_mut().zip(device.positions()) {
-        *p = mode.phase(pos);
-    }
+    fill_from_positions(device, dst, |pos| mode.phase(pos));
 }
 
 pub fn laguerre_gaussian_phase(
@@ -122,14 +107,9 @@ pub fn laguerre_gaussian_phase(
     wavelength: Length,
     dst: &mut [Vec<Phase>],
 ) {
-    assert_eq!(
-        dst.len(),
-        geometry.num_devices(),
-        "dst must have one slot per device"
-    );
-    for (slot, dev) in dst.iter_mut().zip(geometry.iter()) {
+    for_each_device(geometry, dst, |dev, slot| {
         laguerre_gaussian_phase_device(dev, target, axis, option, wavelength, slot);
-    }
+    });
 }
 
 pub fn laguerre_gaussian_intensity_device(
@@ -162,6 +142,7 @@ mod tests {
     use autd3_rs_core::units::mm;
 
     use super::*;
+    use crate::focus::focus_phase;
     use crate::focus_transducer;
 
     const LAMBDA: Length = Length::from_mm(8.5);
@@ -269,9 +250,8 @@ mod tests {
         let target = Point3::new(0.0, 0.0, 150.0);
         let axis = Vector3::z_axis();
         let opt = option(1, 0);
-        let beam = GaussianBeam::new(opt.waist, LAMBDA);
-        let basis = azimuth_basis(axis);
-        let width = beam.sample(Point3::origin(), target, axis, &basis).width_mm;
+        let beam = GaussianBeam::new(target, axis, azimuth_basis(axis), opt.waist, LAMBDA);
+        let width = beam.sample(Point3::origin()).width_mm;
         let node = width / 2.0_f32.sqrt();
 
         let inner = Point3::new(node * 0.9, 0.0, 0.0);

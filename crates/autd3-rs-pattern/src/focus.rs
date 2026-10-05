@@ -5,6 +5,8 @@ use autd3_rs_core::common::{Angle, Length};
 use autd3_rs_core::geometry::{Device, Geometry, Point3, Vector3};
 use autd3_rs_core::value::Phase;
 
+use crate::each::{fill_from_positions, for_each_device};
+
 #[inline]
 pub(crate) fn focus_phase(offset: Vector3<f32>, wavelength: Length) -> Angle {
     -offset.norm() / wavelength.mm() * 2.0 * PI * rad
@@ -17,20 +19,13 @@ pub fn focus_transducer(position: Point3<f32>, target: Point3<f32>, wavelength: 
 }
 
 pub fn focus_device(device: &Device, target: Point3<f32>, wavelength: Length, dst: &mut [Phase]) {
-    for (p, &pos) in dst.iter_mut().zip(device.positions()) {
-        *p = focus_transducer(pos, target, wavelength);
-    }
+    fill_from_positions(device, dst, |pos| focus_transducer(pos, target, wavelength));
 }
 
 pub fn focus(geometry: &Geometry, target: Point3<f32>, wavelength: Length, dst: &mut [Vec<Phase>]) {
-    assert_eq!(
-        dst.len(),
-        geometry.num_devices(),
-        "dst must have one slot per device"
-    );
-    for (slot, dev) in dst.iter_mut().zip(geometry.iter()) {
+    for_each_device(geometry, dst, |dev, slot| {
         focus_device(dev, target, wavelength, slot);
-    }
+    });
 }
 
 #[cfg(test)]

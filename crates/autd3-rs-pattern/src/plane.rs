@@ -5,6 +5,8 @@ use autd3_rs_core::common::units::rad;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
 use autd3_rs_core::value::Phase;
 
+use crate::each::{fill_from_positions, for_each_device};
+
 #[must_use]
 #[inline]
 pub fn plane_transducer(
@@ -21,9 +23,9 @@ pub fn plane_device(
     wavelength: Length,
     dst: &mut [Phase],
 ) {
-    for (p, &pos) in dst.iter_mut().zip(device.positions()) {
-        *p = plane_transducer(pos, direction, wavelength);
-    }
+    fill_from_positions(device, dst, |pos| {
+        plane_transducer(pos, direction, wavelength)
+    });
 }
 
 pub fn plane(
@@ -32,14 +34,9 @@ pub fn plane(
     wavelength: Length,
     dst: &mut [Vec<Phase>],
 ) {
-    assert_eq!(
-        dst.len(),
-        geometry.num_devices(),
-        "dst must have one slot per device"
-    );
-    for (slot, dev) in dst.iter_mut().zip(geometry.iter()) {
+    for_each_device(geometry, dst, |dev, slot| {
         plane_device(dev, direction, wavelength, slot);
-    }
+    });
 }
 
 #[cfg(test)]
