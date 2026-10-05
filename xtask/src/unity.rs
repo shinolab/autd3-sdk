@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
@@ -7,13 +6,11 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 
 use crate::clean::{CleanArgs, Cleaner};
+use crate::cs::{BindingPkg, PACKAGES, RIDS, host_rid, rid_affix};
 use crate::util::{on_path, run, run_tool};
 
 pub const PKG_PREFIX: &str = "com.shinolab.autd3-sdk";
 
-const RIDS: &[&str] = &["win-x64", "linux-x64", "osx-arm64"];
-
-const CLIENT_PKG: &str = "com.shinolab.autd3-sdk";
 const CLIENT_SAMPLE: &str = "Samples~/FocusSine";
 
 const DOC_FILES: &[&str] = &[
@@ -23,60 +20,6 @@ const DOC_FILES: &[&str] = &[
     "THIRD-PARTY-LICENSES.md",
     "COPYING",
     "NOTICE",
-];
-
-struct UnityPkg {
-    id: &'static str,
-    assembly: &'static str,
-    lib: &'static str,
-}
-
-const PACKAGES: &[UnityPkg] = &[
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.core",
-        assembly: "AUTD3.Core",
-        lib: "autd3_core",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk",
-        assembly: "AUTD3",
-        lib: "autd3capi",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.pattern",
-        assembly: "AUTD3.Pattern",
-        lib: "autd3_pattern",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.pattern.holo",
-        assembly: "AUTD3.Pattern.Holo",
-        lib: "autd3_pattern_holo",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.modulation",
-        assembly: "AUTD3.Modulation",
-        lib: "autd3_modulation",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.link.echocat",
-        assembly: "AUTD3.Link.Echocat",
-        lib: "autd3_link_echocat",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.link.nop",
-        assembly: "AUTD3.Link.Nop",
-        lib: "autd3_link_nop",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.link.remote",
-        assembly: "AUTD3.Link.Remote",
-        lib: "autd3_link_remote",
-    },
-    UnityPkg {
-        id: "com.shinolab.autd3-sdk.link.twincat",
-        assembly: "AUTD3.Link.TwinCAT",
-        lib: "autd3_link_twincat",
-    },
 ];
 
 #[derive(Subcommand)]
@@ -137,7 +80,7 @@ fn build(root: &Path, manifest: bool) -> Result<()> {
     let rid = host_rid()?;
 
     for pkg in PACKAGES {
-        let pkg_dir = unity_dir.join(pkg.id);
+        let pkg_dir = unity_dir.join(pkg.unity_id);
         stage_package(root, pkg, &pkg_dir)?;
         stage_native(&native, rid, pkg, &pkg_dir)?;
     }
@@ -190,7 +133,7 @@ fn pack(root: &Path, native_dir: Option<&Path>, out: Option<PathBuf>) -> Result<
     std::fs::create_dir_all(&out_dir)?;
 
     for pkg in PACKAGES {
-        let pkg_dir = unity_dir.join(pkg.id);
+        let pkg_dir = unity_dir.join(pkg.unity_id);
         stage_package(root, pkg, &pkg_dir)?;
         for rid in &rids {
             let native =
@@ -198,7 +141,7 @@ fn pack(root: &Path, native_dir: Option<&Path>, out: Option<PathBuf>) -> Result<
             stage_native(&native, rid, pkg, &pkg_dir)?;
         }
         npm_pack(&pkg_dir, &out_dir)?;
-        let tarball = out_dir.join(format!("{}-{version}.tgz", pkg.id));
+        let tarball = out_dir.join(format!("{}-{version}.tgz", pkg.unity_id));
         verify_tarball(&tarball, pkg, &rids)?;
     }
 
@@ -211,7 +154,7 @@ fn pack(root: &Path, native_dir: Option<&Path>, out: Option<PathBuf>) -> Result<
     Ok(())
 }
 
-fn stage_package(root: &Path, pkg: &UnityPkg, pkg_dir: &Path) -> Result<()> {
+fn stage_package(root: &Path, pkg: &BindingPkg, pkg_dir: &Path) -> Result<()> {
     let csharp_src = root.join("bindings").join("csharp").join("src");
     let package_json = pkg_dir.join("package.json");
     let asmdef = pkg_dir.join(format!("{}.asmdef", pkg.assembly));
@@ -221,7 +164,7 @@ fn stage_package(root: &Path, pkg: &UnityPkg, pkg_dir: &Path) -> Result<()> {
         if !required.is_file() {
             bail!(
                 "missing committed package file for {}: {}",
-                pkg.id,
+                pkg.unity_id,
                 required.display()
             );
         }
@@ -233,21 +176,21 @@ fn stage_package(root: &Path, pkg: &UnityPkg, pkg_dir: &Path) -> Result<()> {
     stage_sources(&src_dir, pkg_dir)?;
     write_meta(
         &pkg_dir.join(format!("{}.asmdef.meta", pkg.assembly)),
-        &asmdef_meta(&guid_for(pkg.id, &format!("{}.asmdef", pkg.assembly))),
+        &asmdef_meta(&guid_for(pkg.unity_id, &format!("{}.asmdef", pkg.assembly))),
     )?;
     write_meta(
         &pkg_dir.join("csc.rsp.meta"),
-        &default_meta(&guid_for(pkg.id, "csc.rsp")),
+        &default_meta(&guid_for(pkg.unity_id, "csc.rsp")),
     )?;
     write_meta(
         &pkg_dir.join("package.json.meta"),
-        &package_manifest_meta(&guid_for(pkg.id, "package.json")),
+        &package_manifest_meta(&guid_for(pkg.unity_id, "package.json")),
     )?;
     for doc in DOC_FILES {
         if pkg_dir.join(doc).is_file() {
             write_meta(
                 &pkg_dir.join(format!("{doc}.meta")),
-                &default_meta(&guid_for(pkg.id, doc)),
+                &default_meta(&guid_for(pkg.unity_id, doc)),
             )?;
         }
     }
@@ -321,7 +264,7 @@ fn stage_sources(src_dir: &Path, pkg_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn stage_native(native: &Path, rid: &str, pkg: &UnityPkg, pkg_dir: &Path) -> Result<()> {
+fn stage_native(native: &Path, rid: &str, pkg: &BindingPkg, pkg_dir: &Path) -> Result<()> {
     let (prefix, ext) = rid_affix(rid);
     let file = format!("{prefix}{}.{ext}", pkg.lib);
     let src = native.join(&file);
@@ -338,15 +281,18 @@ fn stage_native(native: &Path, rid: &str, pkg: &UnityPkg, pkg_dir: &Path) -> Res
 
     write_meta(
         &pkg_dir.join("Plugins.meta"),
-        &folder_meta(&guid_for(pkg.id, "Plugins")),
+        &folder_meta(&guid_for(pkg.unity_id, "Plugins")),
     )?;
     write_meta(
         &plugins.join(format!("{rid}.meta")),
-        &folder_meta(&guid_for(pkg.id, &format!("Plugins/{rid}"))),
+        &folder_meta(&guid_for(pkg.unity_id, &format!("Plugins/{rid}"))),
     )?;
     write_meta(
         &rid_dir.join(format!("{file}.meta")),
-        &plugin_meta(&guid_for(pkg.id, &format!("Plugins/{rid}/{file}")), rid),
+        &plugin_meta(
+            &guid_for(pkg.unity_id, &format!("Plugins/{rid}/{file}")),
+            rid,
+        ),
     )?;
     Ok(())
 }
@@ -358,13 +304,16 @@ fn write_meta(path: &Path, content: &str) -> Result<()> {
 fn verify_versions(root: &Path, unity_dir: &Path) -> Result<String> {
     let mut version: Option<String> = None;
     for pkg in PACKAGES {
-        let path = unity_dir.join(pkg.id).join("package.json");
-        let found = package_json_version(&path)?;
+        let path = unity_dir.join(pkg.unity_id).join("package.json");
+        let text = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        let found = crate::component::after_quoted(&text, "\"version\":")
+            .with_context(|| format!("no \"version\" field in {}", path.display()))?;
         match &version {
             None => version = Some(found),
             Some(first) if *first != found => bail!(
                 "unity package versions diverge: {} is {found}, expected {first}",
-                pkg.id
+                pkg.unity_id
             ),
             Some(_) => {}
         }
@@ -383,7 +332,7 @@ fn verify_versions(root: &Path, unity_dir: &Path) -> Result<String> {
         );
     }
 
-    let cargo = workspace_version(&root.join("Cargo.toml"))?;
+    let cargo = crate::component::find("software")?.current_version(root)?;
     let cargo_minor: Vec<&str> = cargo.split('.').take(2).collect();
     if parts[..2] != cargo_minor[..] {
         bail!(
@@ -392,12 +341,12 @@ fn verify_versions(root: &Path, unity_dir: &Path) -> Result<String> {
     }
 
     for pkg in PACKAGES {
-        let path = unity_dir.join(pkg.id).join("package.json");
+        let path = unity_dir.join(pkg.unity_id).join("package.json");
         for (dep, req) in package_json_deps(&path)? {
             if req != version {
                 bail!(
                     "{}: dependency `{dep}` is pinned to `{req}`, expected `{version}`; npm rejects a package whose sibling dependency is not published",
-                    pkg.id
+                    pkg.unity_id
                 );
             }
         }
@@ -429,36 +378,7 @@ fn package_json_deps(path: &Path) -> Result<Vec<(String, String)>> {
     Ok(deps)
 }
 
-fn package_json_version(path: &Path) -> Result<String> {
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix("\"version\":") {
-            let value = rest
-                .trim()
-                .trim_end_matches(',')
-                .trim_matches('"')
-                .to_string();
-            return Ok(value);
-        }
-    }
-    bail!("no \"version\" field in {}", path.display())
-}
-
-fn workspace_version(cargo_toml: &Path) -> Result<String> {
-    let text = std::fs::read_to_string(cargo_toml)
-        .with_context(|| format!("reading {}", cargo_toml.display()))?;
-    let doc: toml_edit::DocumentMut = text
-        .parse()
-        .with_context(|| format!("parsing {}", cargo_toml.display()))?;
-    doc["workspace"]["package"]["version"]
-        .as_str()
-        .map(str::to_string)
-        .context("no [workspace.package] version")
-}
-
-fn verify_tarball(tarball: &Path, pkg: &UnityPkg, rids: &[&str]) -> Result<()> {
+fn verify_tarball(tarball: &Path, pkg: &BindingPkg, rids: &[&str]) -> Result<()> {
     let file =
         std::fs::File::open(tarball).with_context(|| format!("opening {}", tarball.display()))?;
     let mut archive = Archive::new(GzDecoder::new(file));
@@ -514,10 +434,10 @@ fn verify_tarball(tarball: &Path, pkg: &UnityPkg, rids: &[&str]) -> Result<()> {
     }
 
     let sample = entries.iter().any(|e| e.starts_with(CLIENT_SAMPLE));
-    if pkg.id == CLIENT_PKG && !sample {
+    if pkg.unity_id == PKG_PREFIX && !sample {
         bail!("{}: missing {CLIENT_SAMPLE}", tarball.display());
     }
-    if pkg.id != CLIENT_PKG && sample {
+    if pkg.unity_id != PKG_PREFIX && sample {
         bail!("{}: unexpected {CLIENT_SAMPLE}", tarball.display());
     }
     Ok(())
@@ -526,8 +446,8 @@ fn verify_tarball(tarball: &Path, pkg: &UnityPkg, rids: &[&str]) -> Result<()> {
 fn emit_manifest(unity_dir: &Path) {
     println!("\n// add these to your Unity project's Packages/manifest.json \"dependencies\":");
     for pkg in PACKAGES {
-        let path = unity_dir.join(pkg.id);
-        println!("  \"{}\": \"file:{}\",", pkg.id, path.display());
+        let path = unity_dir.join(pkg.unity_id);
+        println!("  \"{}\": \"file:{}\",", pkg.unity_id, path.display());
     }
 }
 
@@ -547,22 +467,17 @@ fn test(root: &Path, unity_editor: Option<PathBuf>) -> Result<()> {
         .join("AUTD3.Unity.Tests")
         .join("AUTD3.Unity.Tests.csproj");
     let cwd = proj.parent().unwrap();
-    let mut cmd = Command::new("dotnet");
-    cmd.args([
-        "test",
-        &proj.to_string_lossy(),
-        "-c",
-        "Debug",
-        &format!("-p:UnityManagedDir={}", managed.display()),
-    ])
-    .current_dir(cwd);
-    let status = cmd
-        .status()
-        .with_context(|| "failed to spawn `dotnet`".to_string())?;
-    if !status.success() {
-        bail!("`dotnet test` exited with {status}");
-    }
-    Ok(())
+    run(
+        "dotnet",
+        [
+            "test",
+            &proj.to_string_lossy(),
+            "-c",
+            "Debug",
+            &format!("-p:UnityManagedDir={}", managed.display()),
+        ],
+        cwd,
+    )
 }
 
 fn resolve_managed_dir(unity_editor: Option<PathBuf>) -> Result<PathBuf> {
@@ -582,26 +497,6 @@ fn resolve_managed_dir(unity_editor: Option<PathBuf>) -> Result<PathBuf> {
         }
     }
     Ok(editor.join("Data").join("Managed").join("UnityEngine"))
-}
-
-fn host_rid() -> Result<&'static str> {
-    Ok(match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("linux", "x86_64") => "linux-x64",
-        ("windows", "x86_64") => "win-x64",
-        ("macos", "aarch64") => "osx-arm64",
-        ("macos", "x86_64") => "osx-x64",
-        (os, arch) => bail!("unsupported host {os}/{arch} for `unity build`"),
-    })
-}
-
-fn rid_affix(rid: &str) -> (&'static str, &'static str) {
-    if rid.starts_with("win") {
-        ("", "dll")
-    } else if rid.starts_with("osx") {
-        ("lib", "dylib")
-    } else {
-        ("lib", "so")
-    }
 }
 
 fn guid_for(pkg_id: &str, rel: &str) -> String {

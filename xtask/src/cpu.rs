@@ -6,7 +6,8 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{run, run_env, which};
+use crate::cpu_codegen::gen_param;
+use crate::util::{cargo_clippy, cargo_fmt, run, run_env, which};
 
 #[derive(Subcommand)]
 pub enum CpuCmd {
@@ -264,7 +265,10 @@ pub fn stamp_image(bin: &Path) -> Result<()> {
     let header = ImageHeader::new(0, body_len as u32, crc32(&image[body_at..]));
     let slot = &mut image[header_at..header_at + core::mem::size_of::<ImageHeader>()];
     if slot != header.as_bytes() && slot.iter().any(|&b| b != 0xFF) {
-        bail!("{} already carries a different slot-A header", bin.display());
+        bail!(
+            "{} already carries a different slot-A header",
+            bin.display()
+        );
     }
     slot.copy_from_slice(header.as_bytes());
     std::fs::write(bin, &image).with_context(|| format!("writing {}", bin.display()))?;
@@ -273,10 +277,6 @@ pub fn stamp_image(bin: &Path) -> Result<()> {
         header.crc32.get()
     );
     Ok(())
-}
-
-pub fn gen_param(root: &Path) -> Result<()> {
-    crate::cpu_codegen::gen_param(root)
 }
 
 fn cpu_test(root: &Path, loom: bool) -> Result<()> {
@@ -312,36 +312,11 @@ fn cpu_lint(root: &Path, loom: bool) -> Result<()> {
             &[("RUSTFLAGS", OsStr::new("--cfg loom"))],
         );
     }
-    run(
-        "cargo",
-        [
-            "clippy",
-            "-p",
-            "autd3-cpu-fw",
-            "--all-targets",
-            "--",
-            "-D",
-            "warnings",
-        ],
-        root,
-    )?;
-    run(
-        "cargo",
-        ["clippy", "--release", "--", "-D", "warnings"],
-        &board_dir(root),
-    )
+    cargo_clippy(root, &["-p", "autd3-cpu-fw", "--all-targets"])?;
+    cargo_clippy(&board_dir(root), &["--release"])
 }
 
 fn cpu_format(root: &Path, fix: bool) -> Result<()> {
-    let mut args = vec!["fmt", "-p", "autd3-cpu-fw"];
-    if !fix {
-        args.extend(["--", "--check"]);
-    }
-    run("cargo", args, root)?;
-
-    let mut board_args = vec!["fmt"];
-    if !fix {
-        board_args.extend(["--", "--check"]);
-    }
-    run("cargo", board_args, &board_dir(root))
+    cargo_fmt(root, &["-p", "autd3-cpu-fw"], fix)?;
+    cargo_fmt(&board_dir(root), &[], fix)
 }

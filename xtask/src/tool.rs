@@ -1,16 +1,13 @@
-use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use clap::Subcommand;
 
-use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{on_path, run, run_built_bin, which};
+use crate::util::{cargo_bin, cargo_build_args, run};
 
 #[derive(Subcommand)]
 pub enum ToolCmd {
-    /// Measure the EtherCAT link performance
+    /// Measure the communication performance
     Perftest {
         /// Build the dev profile instead of release
         #[arg(long)]
@@ -30,92 +27,16 @@ pub enum ToolCmd {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
-        /// Do not wrap the run in `sudo`
-        #[arg(long)]
-        no_sudo: bool,
         /// Arguments forwarded to the tool
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// Update the CPU / FPGA firmware over EtherCAT (no J-Link / Vivado) and reboot the devices
+    /// Update the CPU / FPGA firmware over UDP (no J-Link / Vivado) and reboot the devices
     FirmwareOta {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
-        /// Do not wrap the run in `sudo`
-        #[arg(long)]
-        no_sudo: bool,
         /// Arguments forwarded to the tool (the flash image path or `--version X.Y.Z` first)
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-    #[command(
-        about = "Replay and analyse an AUTD3 EtherCAT wire capture (pcap/pcapng) offline"
-    )]
-    Wiretrace {
-        #[arg(long, help = "Build the dev profile instead of release")]
-        debug: bool,
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            help = "Arguments forwarded to the tool"
-        )]
-        args: Vec<String>,
-    },
-    /// Set up TwinCAT (Windows only: .NET Framework 4.8 + the TwinCAT XAE COM API)
-    Twincat {
-        #[command(subcommand)]
-        cmd: TwincatCmd,
-    },
-    #[command(about = "Remove the `tools/` build outputs (the Rust ones live in `rust clean`)")]
-    Clean(CleanArgs),
-}
-
-#[derive(Subcommand)]
-pub enum TwincatCmd {
-    /// Build twincat-cli without running it
-    Build {
-        /// Build the Debug configuration instead of Release
-        #[arg(long)]
-        debug: bool,
-    },
-
-    /// Generate the TwinCAT project and activate its configuration
-    Run {
-        /// Build the Debug configuration instead of Release
-        #[arg(long)]
-        debug: bool,
-        /// Arguments forwarded to twincat-cli
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    /// Open the generated TwinCAT project in the XAE Shell
-    Open {
-        /// Build the Debug configuration instead of Release
-        #[arg(long)]
-        debug: bool,
-        /// Arguments forwarded to twincat-cli
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    /// Diagnose the TwinCAT installation and the AUTD3 ESI/adapter setup
-    Doctor {
-        /// Build the Debug configuration instead of Release
-        #[arg(long)]
-        debug: bool,
-        /// Arguments forwarded to twincat-cli
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    /// Install the AUTD3 ESI file into the TwinCAT installation
-    InstallEsi {
-        /// Build the Debug configuration instead of Release
-        #[arg(long)]
-        debug: bool,
-        /// Arguments forwarded to twincat-cli
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -130,259 +51,77 @@ pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
             args,
         } => {
             let features: &[&str] = if mem_profile { &["mem-profile"] } else { &[] };
-            run_bin(root, "autd3-rs-perftest", debug, no_sudo, features, &args)
+            let bin = build_bin(root, "autd3-rs-perftest", debug, features)?;
+            run_privileged(&bin, &args, no_sudo, root)
         }
-        ToolCmd::FirmwareTest {
-            debug,
-            no_sudo,
-            args,
-        } => run_bin(root, "autd3-rs-firmware-test", debug, no_sudo, &[], &args),
-        ToolCmd::FirmwareOta {
-            debug,
-            no_sudo,
-            args,
-        } => run_bin(root, "autd3-rs-firmware-ota", debug, no_sudo, &[], &args),
-        ToolCmd::Wiretrace { debug, args } => {
-            run_bin(root, "autd3-rs-wiretrace", debug, true, &[], &args)
+        ToolCmd::FirmwareTest { debug, args } => {
+            let bin = build_bin(root, "autd3-rs-firmware-test", debug, &[])?;
+            run(&bin.to_string_lossy(), &args, root)
         }
-        ToolCmd::Twincat { cmd } => run_twincat(root, cmd),
-        ToolCmd::Clean(args) => crate::clean::scope(root, args, clean),
-    }
-}
-
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
-    cleaner.paths(&[
-        "tools/twincat-cli/bin",
-        "tools/twincat-cli/obj",
-        "tools/twincat-cli/.vs",
-        "tools/twincat-cli/THIRD-PARTY-LICENSES.md",
-    ])
-}
-
-fn run_twincat(root: &Path, cmd: TwincatCmd) -> Result<()> {
-    if !cfg!(target_os = "windows") {
-        bail!(
-            "`tool twincat` is Windows-only: twincat-cli targets .NET Framework 4.8 and \
-             drives the TwinCAT XAE Shell through the DTE COM API"
-        );
-    }
-
-    let dir = root.join("tools").join("twincat-cli");
-
-    if let TwincatCmd::Build { debug } = cmd {
-        let exe = build_twincat_cli(root, debug)?;
-        println!("built {}", exe.display());
-        return Ok(());
-    }
-
-    let (sub, debug, args) = match cmd {
-        TwincatCmd::Build { .. } => unreachable!(),
-        TwincatCmd::Run { debug, args } => ("run", debug, args),
-        TwincatCmd::Open { debug, args } => ("open", debug, args),
-        TwincatCmd::Doctor { debug, args } => ("doctor", debug, args),
-        TwincatCmd::InstallEsi { debug, args } => ("install-esi", debug, args),
-    };
-
-    let exe = ensure_built(&dir, debug)?;
-    run_cli(&exe, &dir, sub, &args)
-}
-
-fn run_cli(exe: &Path, dir: &Path, sub: &str, args: &[String]) -> Result<()> {
-    let cli_args = std::iter::once(sub).chain(args.iter().map(String::as_str));
-    run(&exe.to_string_lossy(), cli_args, dir)
-}
-
-pub fn build_twincat_cli(root: &Path, debug: bool) -> Result<PathBuf> {
-    let exe = ensure_built(&root.join("tools").join("twincat-cli"), debug)?;
-    if !exe.is_file() {
-        bail!(
-            "twincat-cli build did not produce {} (MSBuild ran but the merged exe is missing; \
-             check the ILRepack step)",
-            exe.display()
-        );
-    }
-    Ok(exe)
-}
-
-fn ensure_built(dir: &Path, debug: bool) -> Result<PathBuf> {
-    let config = if debug { "Debug" } else { "Release" };
-    let exe = dir
-        .join("bin")
-        .join(config)
-        .join("net48")
-        .join("dist")
-        .join("twincat-cli.exe");
-
-    if exe.is_file() && !is_stale(dir, &exe)? {
-        return Ok(exe);
-    }
-
-    let msbuild = find_msbuild().context(
-        "could not locate MSBuild.exe; install Visual Studio or Build Tools with the \
-         \"MSBuild\" component (the TwinCAT XAE Shell install includes it)",
-    )?;
-    let msbuild = msbuild.to_string_lossy().into_owned();
-
-    generate_twincat_licenses(dir);
-
-    let config_arg = format!("-p:Configuration={config}");
-    run(
-        &msbuild,
-        ["twincat-cli.csproj", "-nologo", "-restore", &config_arg],
-        dir,
-    )?;
-    Ok(exe)
-}
-
-fn generate_twincat_licenses(dir: &Path) {
-    if !on_path("dotnet") {
-        eprintln!(
-            "warning: `dotnet` not found; skipping twincat-cli third-party license generation"
-        );
-        return;
-    }
-    if run("dotnet", ["tool", "restore"], dir).is_err() {
-        eprintln!(
-            "warning: `dotnet tool restore` failed; skipping twincat-cli third-party license generation"
-        );
-        return;
-    }
-    let export = dir.join("obj").join("license-texts");
-    let _ = std::fs::remove_dir_all(&export);
-    if std::fs::create_dir_all(&export).is_err() {
-        return;
-    }
-    let export_arg = export.to_string_lossy().into_owned();
-    let ran = run(
-        "dotnet",
-        [
-            "tool",
-            "run",
-            "dotnet-project-licenses",
-            "-i",
-            "twincat-cli.csproj",
-            "-t",
-            "-e",
-            "-f",
-            &export_arg,
-        ],
-        dir,
-    );
-    if ran.is_err() {
-        eprintln!(
-            "warning: dotnet-project-licenses failed; twincat-cli will show a fallback license \
-             notice. Verify the tool/flags on Windows."
-        );
-        return;
-    }
-    if let Err(e) = assemble_twincat_licenses(&export, &dir.join("THIRD-PARTY-LICENSES.md")) {
-        eprintln!("warning: failed to assemble twincat-cli THIRD-PARTY-LICENSES.md: {e}");
-    }
-}
-
-fn assemble_twincat_licenses(export: &Path, out: &Path) -> Result<()> {
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(export)?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.is_file())
-        .collect();
-    entries.sort();
-    let mut body = String::from(
-        "# Third-Party Licenses (NuGet)\n\nThis tool bundles the following NuGet packages \
-         (merged via ILRepack). Their license texts follow.\n\nTwinCAT / Beckhoff.TwinCAT.Ads \
-         packages are licensed by Beckhoff Automation under their own terms; see \
-         https://www.beckhoff.com/.\n",
-    );
-    for path in entries {
-        let name = path.file_stem().map_or_else(
-            || "package".to_string(),
-            |s| s.to_string_lossy().into_owned(),
-        );
-        let text = std::fs::read_to_string(&path).unwrap_or_default();
-        let _ = write!(body, "\n## {name}\n\n```\n{}\n```\n", text.trim_end());
-    }
-    std::fs::write(out, body).with_context(|| format!("writing {}", out.display()))?;
-    Ok(())
-}
-
-fn is_stale(dir: &Path, exe: &Path) -> Result<bool> {
-    let exe_mtime = exe.metadata()?.modified()?;
-    Ok(newest_source_mtime(dir)?.is_some_and(|m| m > exe_mtime))
-}
-
-fn newest_source_mtime(dir: &Path) -> Result<Option<std::time::SystemTime>> {
-    let mut newest: Option<std::time::SystemTime> = None;
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        let file_type = entry.file_type()?;
-        if file_type.is_dir() {
-            let name = entry.file_name();
-            if matches!(name.to_str(), Some("bin" | "obj" | ".vs")) {
-                continue;
-            }
-            if let Some(m) = newest_source_mtime(&path)? {
-                newest = Some(newest.map_or(m, |n| n.max(m)));
-            }
-        } else if matches!(
-            path.extension().and_then(|e| e.to_str()),
-            Some("cs" | "csproj" | "config" | "xml" | "sln")
-        ) {
-            let m = entry.metadata()?.modified()?;
-            newest = Some(newest.map_or(m, |n| n.max(m)));
+        ToolCmd::FirmwareOta { debug, args } => {
+            let bin = build_bin(root, "autd3-rs-firmware-ota", debug, &[])?;
+            run(&bin.to_string_lossy(), &args, root)
         }
     }
-    Ok(newest)
 }
 
-fn find_msbuild() -> Option<PathBuf> {
-    if let Ok(pf86) = std::env::var("ProgramFiles(x86)") {
-        let vswhere = Path::new(&pf86).join(r"Microsoft Visual Studio\Installer\vswhere.exe");
-        if vswhere.is_file()
-            && let Ok(out) = Command::new(&vswhere)
-                .args([
-                    "-latest",
-                    "-products",
-                    "*",
-                    "-requires",
-                    "Microsoft.Component.MSBuild",
-                    "-find",
-                    r"MSBuild\**\Bin\MSBuild.exe",
-                ])
-                .output()
-            && let Some(line) = String::from_utf8_lossy(&out.stdout)
-                .lines()
-                .map(str::trim)
-                .find(|l| !l.is_empty())
-        {
-            let p = PathBuf::from(line);
-            if p.is_file() {
-                return Some(p);
-            }
-        }
-    }
-    which("msbuild")
-}
-
-fn run_bin(
-    root: &Path,
-    pkg: &str,
-    debug: bool,
-    no_sudo: bool,
-    features: &[&str],
-    args: &[String],
-) -> Result<()> {
-    let mut build_args: Vec<&str> = vec!["build", "-p", pkg];
-    if !debug {
-        build_args.push("--release");
-    }
+fn build_bin(root: &Path, pkg: &str, debug: bool, features: &[&str]) -> Result<PathBuf> {
+    let mut build_args = cargo_build_args(pkg, None, debug);
     let features_arg = features.join(",");
     if !features.is_empty() {
         build_args.push("--features");
         build_args.push(&features_arg);
     }
     run("cargo", build_args, root)?;
+    Ok(cargo_bin(root, None, debug, pkg))
+}
 
-    let profile = if debug { "debug" } else { "release" };
-    let bin = root.join("target").join(profile).join(pkg);
-    run_built_bin(&bin, args, no_sudo, root)
+#[cfg(target_os = "linux")]
+fn setcap_program() -> Option<String> {
+    if crate::util::on_path("setcap") {
+        return Some("setcap".to_owned());
+    }
+    ["/usr/bin/setcap", "/usr/sbin/setcap", "/sbin/setcap"]
+        .into_iter()
+        .find(|path| Path::new(path).is_file())
+        .map(str::to_owned)
+}
+
+const RUN_CAPABILITIES: &str = "cap_sys_nice+ep";
+
+#[cfg(target_os = "linux")]
+fn grant_capabilities(bin: &Path) -> bool {
+    let Some(setcap) = setcap_program() else {
+        return false;
+    };
+    std::process::Command::new("sudo")
+        .args(["-n", &setcap, RUN_CAPABILITIES])
+        .arg(bin)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn grant_capabilities(_bin: &Path) -> bool {
+    false
+}
+
+fn run_privileged(bin: &Path, args: &[String], no_sudo: bool, cwd: &Path) -> Result<()> {
+    let bin_str = bin.to_string_lossy().into_owned();
+    if no_sudo || !cfg!(unix) {
+        return run(&bin_str, args.iter().map(String::as_str), cwd);
+    }
+    if grant_capabilities(bin) {
+        println!("granted {RUN_CAPABILITIES} to {bin_str}; running without sudo");
+        return run(&bin_str, args.iter().map(String::as_str), cwd);
+    }
+    let mut sudo_args: Vec<String> = Vec::with_capacity(args.len() + 2);
+    if let Ok(log) = std::env::var("RUST_LOG") {
+        sudo_args.push(format!("RUST_LOG={log}"));
+    }
+    sudo_args.push(bin_str);
+    sudo_args.extend(args.iter().cloned());
+    run("sudo", sudo_args.iter().map(String::as_str), cwd)
 }

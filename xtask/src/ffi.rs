@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{cargo_fmt_packages, run};
+use crate::util::{cargo_clippy, cargo_fmt_packages, run};
 
 const CSHARP_SRC: &str = "bindings/csharp/src";
 
@@ -63,11 +63,7 @@ pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
             &[],
             *open,
         ),
-        FfiCmd::Lint => {
-            let mut args = vec!["clippy", "--workspace", "--all-targets"];
-            args.extend(["--", "-D", "warnings"]);
-            run("cargo", args, &dir)
-        }
+        FfiCmd::Lint => cargo_clippy(&dir, &["--workspace", "--all-targets"]),
         FfiCmd::Format { fix } => cargo_fmt_packages(&dir, *fix),
         FfiCmd::Drift => drift(root, &dir),
         FfiCmd::Clean(args) => crate::clean::scope(root, *args, clean),

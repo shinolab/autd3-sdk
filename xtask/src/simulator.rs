@@ -7,8 +7,8 @@ use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{
-    capture, cargo_bin, cargo_build_args, copy_dir, on_path, run, run_built_bin, run_cargo,
-    run_env, run_tool,
+    capture, cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_dir, on_path, run,
+    run_cargo, run_env, run_tool,
 };
 
 pub fn build_backend_and_frontend(
@@ -92,9 +92,12 @@ pub enum SimulatorCmd {
         /// Port the frontend is served on
         #[arg(long, default_value_t = 8081)]
         port: u16,
-        /// Port the client Link connects to
-        #[arg(long, default_value_t = 8080)]
-        link_port: u16,
+        /// Address the emulated devices take the management messages on (default: [::1]:44336)
+        #[arg(long)]
+        group: Option<String>,
+        /// Geometry JSON of the emulated devices (default: a single AUTD3)
+        #[arg(long)]
+        geometry: Option<PathBuf>,
     },
     #[command(about = "Fail on known vulnerabilities in the frontend's npm dependencies")]
     Audit,
@@ -113,54 +116,33 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
             &sim,
         ),
         SimulatorCmd::Lint => {
-            run(
-                "cargo",
-                [
-                    "clippy",
-                    "--workspace",
-                    "--all-targets",
-                    "--",
-                    "-D",
-                    "warnings",
-                ],
-                &sim,
-            )?;
+            cargo_clippy(&sim, &["--workspace", "--all-targets"])?;
             ensure_css(&frontend)?;
-            run(
-                "cargo",
-                [
-                    "clippy",
-                    "--target",
-                    "wasm32-unknown-unknown",
-                    "--all-targets",
-                    "--",
-                    "-D",
-                    "warnings",
-                ],
+            cargo_clippy(
                 &frontend,
+                &["--target", "wasm32-unknown-unknown", "--all-targets"],
             )
         }
         SimulatorCmd::Format { fix } => {
-            let check: &[&str] = if *fix { &[] } else { &["--", "--check"] };
-            let mut sim_args = vec![
-                "fmt",
-                "-p",
-                "autd3-rs-simulator",
-                "-p",
-                "autd3-rs-simulator-protocol",
-            ];
-            sim_args.extend_from_slice(check);
-            run("cargo", sim_args, &sim)?;
-            let mut frontend_args = vec!["fmt", "-p", "autd3-rs-simulator-frontend"];
-            frontend_args.extend_from_slice(check);
-            run("cargo", frontend_args, &frontend)
+            cargo_fmt(
+                &sim,
+                &[
+                    "-p",
+                    "autd3-rs-simulator",
+                    "-p",
+                    "autd3-rs-simulator-protocol",
+                ],
+                *fix,
+            )?;
+            cargo_fmt(&frontend, &["-p", "autd3-rs-simulator-frontend"], *fix)
         }
         SimulatorCmd::Run {
             debug,
             open,
             skip_web_build,
             port,
-            link_port,
+            group,
+            geometry,
         } => run_serve(
             &sim,
             &frontend,
@@ -168,7 +150,8 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
             *open,
             *skip_web_build,
             *port,
-            *link_port,
+            group.as_deref(),
+            geometry.as_deref(),
         ),
         SimulatorCmd::Audit => {
             if !on_path("npm") {
@@ -343,10 +326,9 @@ fn run_serve(
     open: bool,
     skip_web_build: bool,
     port: u16,
-    link_port: u16,
+    group: Option<&str>,
+    geometry: Option<&Path>,
 ) -> Result<()> {
-    let profile = if debug { "debug" } else { "release" };
-
     if !skip_web_build {
         build_frontend(frontend, debug)?;
     }
@@ -359,15 +341,18 @@ fn run_serve(
         );
     }
 
-    let mut build_args: Vec<&str> = vec!["build", "-p", "autd3-rs-simulator"];
-    if !debug {
-        build_args.push("--release");
-    }
-    run("cargo", build_args, sim)?;
-    let bin = sim.join("target").join(profile).join("autd3-rs-simulator");
+    run(
+        "cargo",
+        cargo_build_args("autd3-rs-simulator", None, debug),
+        sim,
+    )?;
+    let bin = cargo_bin(sim, None, debug, "autd3-rs-simulator");
 
     let url = format!("http://127.0.0.1:{port}");
-    println!("simulator UI at {url} (remote link on port {link_port})");
+    println!(
+        "simulator UI at {url} (devices on {})",
+        group.unwrap_or("[::1]:44336")
+    );
     if open {
         let url = url.clone();
         std::thread::spawn(move || {
@@ -376,15 +361,22 @@ fn run_serve(
         });
     }
 
-    let args = vec![
+    let mut args = vec![
         "--http-port".to_string(),
         port.to_string(),
-        "--link-port".to_string(),
-        link_port.to_string(),
         "--web-dir".to_string(),
         public.to_string_lossy().into_owned(),
     ];
-    run_built_bin(&bin, &args, true, sim)
+    if let Some(group) = group {
+        args.extend(["--group".to_string(), group.to_string()]);
+    }
+    if let Some(geometry) = geometry {
+        args.extend([
+            "--geometry".to_string(),
+            geometry.to_string_lossy().into_owned(),
+        ]);
+    }
+    run(&bin.to_string_lossy(), &args, sim)
 }
 
 fn open_browser(url: &str) -> Result<()> {

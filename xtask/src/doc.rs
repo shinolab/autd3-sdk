@@ -9,7 +9,6 @@ use clap::Subcommand;
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::component::COMPONENTS;
 use crate::py::{WHEELS, develop, ensure_venv, pip_install, venv_python};
 use crate::util::{capture, on_path, run, run_tool};
 
@@ -331,7 +330,7 @@ fn preserve_snapshot_versions(doc: &Path, slug: &str) -> Result<()> {
         let frozen = capture("git", &["show", &format!(":./{rel}")], doc)?;
         let mut text =
             fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
-        for (label, spans) in SNAPSHOT_VERSION_SPANS {
+        for (label, spans, _) in SNAPSHOT_VERSION_SPANS {
             let was = spans(&frozen);
             let now = spans(&text);
             if was.len() != now.len() {
@@ -717,12 +716,37 @@ fn crate_version_spans(text: &str) -> Vec<(usize, usize, String)> {
 
 type Spans = fn(&str) -> Vec<(usize, usize, String)>;
 
-const SNAPSHOT_VERSION_SPANS: &[(&str, Spans)] = &[
-    ("firmware series", firmware_series_spans),
-    ("Unity package version", unity_version_spans),
-    ("console release", console_version_spans),
-    ("crate version", crate_version_spans),
+struct SnapshotVersions {
+    software: String,
+    firmware: String,
+    unity: String,
+    console: String,
+}
+
+type SnapshotPin = fn(&SnapshotVersions, &str) -> String;
+
+const SNAPSHOT_VERSION_SPANS: &[(&str, Spans, SnapshotPin)] = &[
+    ("firmware series", firmware_series_spans, |v, _| {
+        v.firmware.clone()
+    }),
+    ("Unity package version", unity_version_spans, |v, _| {
+        v.unity.clone()
+    }),
+    ("console release", console_version_spans, |v, _| {
+        v.console.clone()
+    }),
+    ("crate version", crate_version_spans, |v, old| {
+        crate_pin(old, &v.software)
+    }),
 ];
+
+fn crate_pin(old: &str, version: &str) -> String {
+    if old.split('.').count() == 2 {
+        version_series(version)
+    } else {
+        version.to_owned()
+    }
+}
 
 fn crate_pin_files(root: &Path, doc: &Path) -> Result<Vec<PathBuf>> {
     let mut files = doc_pages(doc)?;
@@ -808,11 +832,7 @@ fn collect_spans_in(files: &[PathBuf], spans: Spans) -> Result<Vec<(PathBuf, Str
 }
 
 fn component_version(root: &Path, name: &str) -> Result<String> {
-    COMPONENTS
-        .iter()
-        .find(|c| c.name == name)
-        .with_context(|| format!("missing `{name}` component"))?
-        .current_version(root)
+    crate::component::find(name)?.current_version(root)
 }
 
 pub fn rewrite_firmware_series(root: &Path, series: &str) -> Result<usize> {
@@ -829,17 +849,8 @@ pub fn rewrite_console_version(root: &Path, version: &str) -> Result<usize> {
 
 pub fn rewrite_crate_version(root: &Path, version: &str) -> Result<usize> {
     let files = crate_pin_files(root, &root.join("doc"))?;
-    let series = version_series(version);
-    rewrite_spans_in(&files, crate_version_spans, &|old| {
-        if old.split('.').count() == 2 {
-            series.clone()
-        } else {
-            version.to_owned()
-        }
-    })
+    rewrite_spans_in(&files, crate_version_spans, &|old| crate_pin(old, version))
 }
-
-type SyncRule<'a> = (&'a str, Spans, &'a dyn Fn(&str) -> String);
 
 pub fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
     let doc = root.join("doc");
@@ -859,35 +870,16 @@ pub fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
         );
     }
 
-    let software = component_version(root, "software")?;
-    let series = version_series(&software);
-    let firmware = format!("{}.x", crate::bump::firmware_series(root)?);
-    let unity = component_version(root, "unity")?;
-    let console = component_version(root, "console")?;
-
-    let crate_pin = |old: &str| {
-        if old.split('.').count() == 2 {
-            series.clone()
-        } else {
-            software.clone()
-        }
+    let versions = SnapshotVersions {
+        software: component_version(root, "software")?,
+        firmware: format!("{}.x", crate::bump::firmware_series(root)?),
+        unity: component_version(root, "unity")?,
+        console: component_version(root, "console")?,
     };
-    let rules: [SyncRule; 4] = [
-        ("firmware series", firmware_series_spans, &|_| {
-            firmware.clone()
-        }),
-        ("Unity package version", unity_version_spans, &|_| {
-            unity.clone()
-        }),
-        ("console release", console_version_spans, &|_| {
-            console.clone()
-        }),
-        ("crate version", crate_version_spans, &crate_pin),
-    ];
 
     let mut total = 0;
-    for (label, spans, new) in rules {
-        let count = rewrite_spans_in(&pages, spans, new)?;
+    for (label, spans, pin) in SNAPSHOT_VERSION_SPANS {
+        let count = rewrite_spans_in(&pages, *spans, &|old| pin(&versions, old))?;
         if count > 0 {
             println!("doc: rewrote the {label} in {count} {slug} page(s)");
         }

@@ -80,6 +80,13 @@ pub const COMPONENTS: &[Component] = &[
     },
 ];
 
+pub fn find(name: &str) -> Result<&'static Component> {
+    COMPONENTS
+        .iter()
+        .find(|c| c.name == name)
+        .with_context(|| format!("missing `{name}` component"))
+}
+
 impl Component {
     pub fn tag_pattern(&self) -> String {
         format!("^({})[0-9]", self.tag_prefixes().join("|"))
@@ -138,7 +145,7 @@ fn between(text: &str, open: &str, close: &str) -> Option<String> {
     Some(text[start..end].trim().to_string())
 }
 
-fn after_quoted(text: &str, key: &str) -> Option<String> {
+pub(crate) fn after_quoted(text: &str, key: &str) -> Option<String> {
     let start = text.find(key)? + key.len();
     let rest = text[start..].trim_start();
     let rest = rest.strip_prefix('"')?;
@@ -152,10 +159,7 @@ pub fn release_sections(primary: &'static Component) -> Vec<&'static Component> 
         "console" => &["console", "simulator"],
         _ => return vec![primary],
     };
-    names
-        .iter()
-        .filter_map(|name| COMPONENTS.iter().find(|c| c.name == *name))
-        .collect()
+    names.iter().filter_map(|name| find(name).ok()).collect()
 }
 
 pub fn detect<'a>(versioned: &'a str) -> Option<(&'static Component, &'a str)> {
