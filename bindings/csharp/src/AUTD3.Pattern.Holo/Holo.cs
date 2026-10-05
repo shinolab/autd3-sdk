@@ -234,19 +234,7 @@ namespace AUTD3.Holo
             {
                 throw new Autd3Exception($"the mask has {mask.Length} device slots but the buffer has {numDevices} devices");
             }
-            var flat = new byte[numDevices * Autd3.NumTransducers];
-            for (var d = 0; d < numDevices; d++)
-            {
-                if (mask[d].Length != Autd3.NumTransducers)
-                {
-                    throw new Autd3Exception($"each device mask requires {Autd3.NumTransducers} values");
-                }
-                for (var t = 0; t < Autd3.NumTransducers; t++)
-                {
-                    flat[d * Autd3.NumTransducers + t] = (byte)(mask[d][t] ? 1 : 0);
-                }
-            }
-            return flat;
+            return BufferArray.Flatten(mask, m => (byte)(m ? 1 : 0), "mask values");
         }
 
         public static void Naive(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, NaiveOption option, PhaseBuffer phases, IntensityBuffer intensities)
