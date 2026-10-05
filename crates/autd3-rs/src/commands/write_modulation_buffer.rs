@@ -21,7 +21,7 @@ impl<'a> Command<'a> for WriteModulationBuffer<'a> {
         for (i, chunk) in self.data.chunks(MOD_WRITE_MAX_DATA_LEN).enumerate() {
             builder.push(WriteModulationChunk {
                 bank: self.bank,
-                offset: self.offset + i * MOD_WRITE_MAX_DATA_LEN,
+                offset: self.offset.saturating_add(i * MOD_WRITE_MAX_DATA_LEN),
                 data: chunk,
             });
         }
