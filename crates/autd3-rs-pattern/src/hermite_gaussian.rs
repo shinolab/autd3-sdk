@@ -5,7 +5,7 @@ use autd3_rs_core::common::units::rad;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
 use autd3_rs_core::value::{Intensity, Phase};
 
-use crate::focus::focus_phase;
+use crate::each::{fill_from_positions, for_each_device};
 use crate::gaussian::{
     AzimuthBasis, GaussianBeam, azimuth_basis, hermite, write_intensity, write_intensity_device,
 };
@@ -28,13 +28,9 @@ fn hermite_basis(axis: UnitVector3<f32>, x_dir: UnitVector3<f32>) -> AzimuthBasi
 }
 
 struct HermiteGaussianMode {
-    target: Point3<f32>,
-    axis: UnitVector3<f32>,
-    basis: AzimuthBasis,
     beam: GaussianBeam,
     m: u32,
     n: u32,
-    wavelength: Length,
 }
 
 impl HermiteGaussianMode {
@@ -46,13 +42,15 @@ impl HermiteGaussianMode {
         wavelength: Length,
     ) -> Self {
         Self {
-            target,
-            axis,
-            basis: hermite_basis(axis, x_dir),
-            beam: GaussianBeam::new(option.waist, wavelength),
+            beam: GaussianBeam::new(
+                target,
+                axis,
+                hermite_basis(axis, x_dir),
+                option.waist,
+                wavelength,
+            ),
             m: option.m,
             n: option.n,
-            wavelength,
         }
     }
 
@@ -66,11 +64,9 @@ impl HermiteGaussianMode {
     }
 
     fn phase(&self, position: Point3<f32>) -> Phase {
-        let s = self
-            .beam
-            .sample(position, self.target, self.axis, &self.basis);
+        let s = self.beam.sample(position);
         let gouy_order = (self.m + self.n) as f32 + 1.0;
-        let phase = Phase::from(focus_phase(s.offset, self.wavelength) - gouy_order * s.gouy * rad);
+        let phase = Phase::from(self.beam.focus_phase(&s) - gouy_order * s.gouy * rad);
         let (polynomial, _) = self.envelope(s.x, s.y, s.width_mm);
         if polynomial < 0.0 {
             phase + Phase::PI
@@ -80,9 +76,7 @@ impl HermiteGaussianMode {
     }
 
     fn log_amplitude(&self, position: Point3<f32>) -> f32 {
-        let s = self
-            .beam
-            .sample(position, self.target, self.axis, &self.basis);
+        let s = self.beam.sample(position);
         let (polynomial, decay) = self.envelope(s.x, s.y, s.width_mm);
         s.log_waist_ratio + polynomial.abs().ln() - decay
     }
@@ -111,9 +105,7 @@ pub fn hermite_gaussian_phase_device(
     dst: &mut [Phase],
 ) {
     let mode = HermiteGaussianMode::new(target, axis, x_dir, option, wavelength);
-    for (p, &pos) in dst.iter_mut().zip(device.positions()) {
-        *p = mode.phase(pos);
-    }
+    fill_from_positions(device, dst, |pos| mode.phase(pos));
 }
 
 pub fn hermite_gaussian_phase(
@@ -125,14 +117,9 @@ pub fn hermite_gaussian_phase(
     wavelength: Length,
     dst: &mut [Vec<Phase>],
 ) {
-    assert_eq!(
-        dst.len(),
-        geometry.num_devices(),
-        "dst must have one slot per device"
-    );
-    for (slot, dev) in dst.iter_mut().zip(geometry.iter()) {
+    for_each_device(geometry, dst, |dev, slot| {
         hermite_gaussian_phase_device(dev, target, axis, x_dir, option, wavelength, slot);
-    }
+    });
 }
 
 pub fn hermite_gaussian_intensity_device(

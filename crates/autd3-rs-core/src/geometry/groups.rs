@@ -82,6 +82,18 @@ impl<K: Copy + Eq> TransducerGroups<K> {
         })
     }
 
+    pub fn masks(&self) -> impl Iterator<Item = (K, TransducerMask<'_>)> {
+        self.keys.iter().enumerate().map(|(index, &key)| {
+            (
+                key,
+                TransducerMask::Group {
+                    indices: &self.indices,
+                    index,
+                },
+            )
+        })
+    }
+
     fn position(&self, key: K) -> Option<usize> {
         self.keys.iter().position(|&k| k == key)
     }
@@ -132,5 +144,25 @@ mod tests {
 
         let empty = TransducerGroups::<Side>::new(&geometry, |_, _| None);
         assert_eq!(empty.keys(), []);
+    }
+
+    #[test]
+    fn masks_lists_every_key_in_first_appearance_order() {
+        let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
+        let groups = TransducerGroups::new(&geometry, |device, tr| match (device.idx(), tr % 3) {
+            (_, 0) => None,
+            (0, _) => Some(Side::Right),
+            _ => Some(Side::Left),
+        });
+
+        let masks: Vec<_> = groups.masks().collect();
+        assert_eq!(masks.len(), 2);
+        for (&key, (listed, mask)) in groups.keys().iter().zip(masks) {
+            assert_eq!(listed, key);
+            assert_eq!(Some(mask), groups.mask(key));
+        }
+
+        let empty = TransducerGroups::<Side>::new(&geometry, |_, _| None);
+        assert_eq!(empty.masks().count(), 0);
     }
 }

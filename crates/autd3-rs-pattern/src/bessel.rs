@@ -5,6 +5,8 @@ use autd3_rs_core::common::{Angle, Length};
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
 use autd3_rs_core::value::Phase;
 
+use crate::each::{fill_from_positions, for_each_device};
+
 fn bessel_phase(
     position: Point3<f32>,
     apex: Point3<f32>,
@@ -40,9 +42,9 @@ pub fn bessel_device(
     dst: &mut [Phase],
 ) {
     let sin_cos = theta.rad().sin_cos();
-    for (p, &pos) in dst.iter_mut().zip(device.positions()) {
-        *p = bessel_phase(pos, apex, direction, sin_cos, wavelength);
-    }
+    fill_from_positions(device, dst, |pos| {
+        bessel_phase(pos, apex, direction, sin_cos, wavelength)
+    });
 }
 
 pub fn bessel(
@@ -53,14 +55,9 @@ pub fn bessel(
     wavelength: Length,
     dst: &mut [Vec<Phase>],
 ) {
-    assert_eq!(
-        dst.len(),
-        geometry.num_devices(),
-        "dst must have one slot per device"
-    );
-    for (slot, dev) in dst.iter_mut().zip(geometry.iter()) {
+    for_each_device(geometry, dst, |dev, slot| {
         bessel_device(dev, apex, direction, theta, wavelength, slot);
-    }
+    });
 }
 
 #[cfg(test)]

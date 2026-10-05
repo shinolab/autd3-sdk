@@ -1,4 +1,5 @@
 mod bessel;
+mod each;
 mod focus;
 mod gaussian;
 mod group;

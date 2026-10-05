@@ -94,6 +94,7 @@ fn assert_same_shape<A, B>(scratch: &[Vec<A>], dst: &[Vec<B>]) {
     );
 }
 
+#[inline(never)]
 fn fill_unassigned<K: Copy + Eq, T: Copy>(
     groups: &TransducerGroups<K>,
     null: T,
@@ -108,6 +109,7 @@ fn fill_unassigned<K: Copy + Eq, T: Copy>(
     }
 }
 
+#[inline(never)]
 fn copy_group<K: Copy + Eq, T: Copy>(
     groups: &TransducerGroups<K>,
     index: usize,
@@ -137,10 +139,7 @@ where
 {
     fill_unassigned(groups, Phase::ZERO, phases);
     fill_unassigned(groups, Intensity::MIN, intensities);
-    for (index, &key) in groups.keys().iter().enumerate() {
-        let Some(mask) = groups.mask(key) else {
-            continue;
-        };
+    for (index, (key, mask)) in groups.masks().enumerate() {
         for slot in scratch_phases.iter_mut() {
             slot.fill(Phase::ZERO);
         }
