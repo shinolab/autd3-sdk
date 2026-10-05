@@ -66,8 +66,6 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             )?;
             bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
             bump_console(root, &core)?;
-            let pages = crate::doc::rewrite_appliance_version(root, &core)?;
-            println!("Updated appliance image link in {pages} doc page(s) -> appliance-v{core}");
             let pins = crate::doc::rewrite_crate_version(root, &core)?;
             println!("Updated crate version pins in {pins} doc page(s)/README(s) -> {core}");
             println!(
@@ -103,10 +101,6 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
                 "Updated firmware version (fw/wire/board Cargo.toml + params.svh, regenerated params.rs) -> {core}"
             );
         }
-        "appliance" => bail!(
-            "the appliance image follows the software version; bump `software` and push a `v*` tag \
-             (release-image.yml publishes the `appliance-v*` release)"
-        ),
         other => bail!("no version-bump implementation for component `{other}`"),
     }
 
