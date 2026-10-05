@@ -51,8 +51,6 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           shared-key: check-sanitizer-${{ matrix.kind }}
-      - name: Install pcap
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - run: cargo xtask check sanitizer ${{ matrix.kind }}
 
   careful:
@@ -71,8 +69,6 @@ jobs:
         with:
           tool: cargo-binstall
       - run: cargo binstall -y cargo-careful@0.4.10
-      - name: Install pcap
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - run: cargo xtask check careful
 
   mutants:
@@ -94,8 +90,6 @@ jobs:
         with:
           tool: cargo-binstall
       - run: cargo binstall -y cargo-mutants@27.1.0
-      - name: Install pcap
-        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - name: Mutate
         id: mutate
         continue-on-error: true
