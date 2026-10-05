@@ -42,11 +42,11 @@ fn main() {
     dioxus::launch(App);
 }
 
-async fn init_renderer() -> Result<Renderer, String> {
+async fn init_renderer(saved: &Settings) -> Result<Renderer, String> {
     let canvas = canvas_element("field")
         .await
         .ok_or_else(|| "canvas element not found".to_string())?;
-    Renderer::new(canvas)
+    Renderer::new(canvas, saved)
         .await
         .map_err(|e| format!("WebGPU init failed: {e}"))
 }
@@ -91,39 +91,11 @@ fn App() -> Element {
     let mut device_states = ctx.device_states;
     let playing = ctx.playing;
 
-    let max_pressure = ctx.max_pressure;
-    let show_markers = ctx.show_markers;
-    let sound_speed = ctx.sound_speed;
-    let mod_enabled = ctx.mod_enabled;
-    let colormap = ctx.colormap;
-    let bg = ctx.bg;
     let gizmo_on = ctx.gizmo_on;
     let gizmo_rotate = ctx.gizmo_rotate;
-    let cam_free = ctx.cam_free;
-    let fov = ctx.fov;
-    let near = ctx.near;
-    let far = ctx.far;
-    let move_speed = ctx.move_speed;
-    let slice_res = ctx.slice_res;
-    use_effect(move || {
-        Settings {
-            max_pressure: max_pressure(),
-            show_markers: show_markers(),
-            sound_speed: sound_speed(),
-            mod_enabled: mod_enabled(),
-            playing: playing(),
-            colormap: colormap(),
-            bg: bg(),
-            gizmo_on: gizmo_on(),
-            gizmo_rotate: gizmo_rotate(),
-            cam_free: cam_free(),
-            fov: fov(),
-            near: near(),
-            far: far(),
-            move_speed: move_speed(),
-            slice_resolution: slice_res(),
-        }
-        .save();
+    use_effect({
+        let ctx = ctx.clone();
+        move || ctx.settings().save()
     });
 
     use_effect({
@@ -180,21 +152,8 @@ fn App() -> Element {
                     enabled: saved.mod_enabled,
                 });
 
-                match init_renderer().await {
-                    Ok(mut r) => {
-                        r.set_max_pressure(saved.max_pressure);
-                        r.set_sound_speed(saved.sound_speed);
-                        r.set_show_markers(saved.show_markers);
-                        r.set_colormap(u32::from(saved.colormap));
-                        r.set_background(saved.bg);
-                        r.set_camera_free(saved.cam_free);
-                        r.set_fov(saved.fov);
-                        r.set_near(saved.near);
-                        r.set_far(saved.far);
-                        r.set_move_speed(saved.move_speed);
-                        r.set_slice_resolution(saved.slice_resolution);
-                        *renderer.borrow_mut() = Some(r);
-                    }
+                match init_renderer(&saved).await {
+                    Ok(r) => *renderer.borrow_mut() = Some(r),
                     Err(e) => error.set(Some(e)),
                 }
 

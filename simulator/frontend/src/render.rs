@@ -8,12 +8,11 @@ use bytemuck::{Pod, Zeroable};
 use glam::{EulerRot, Quat, Vec2, Vec3};
 use wgpu::util::DeviceExt;
 
+use crate::settings::Settings;
 use camera::Camera;
 pub use gizmo::{DragUpdate, GizmoMode};
 use gizmo::{Gizmo, RING_SEGMENTS};
 
-pub const SOUND_SPEED_MM_S: f32 = 340_000.0;
-const MAX_PRESSURE: f32 = 8000.0;
 const SLICE_MARGIN_MM: f32 = 40.0;
 const SLICE_HEIGHT_MM: f32 = 260.0;
 const SLICE_BOTTOM_MM: f32 = -10.0;
@@ -34,12 +33,6 @@ const FIELD_WORKGROUP: u32 = 8;
 const SCENE_STAGES: wgpu::ShaderStages =
     wgpu::ShaderStages::VERTEX_FRAGMENT.union(wgpu::ShaderStages::COMPUTE);
 pub const DEFAULT_BG_RGB: [f32; 3] = [0.467, 0.463, 0.482];
-const DEFAULT_BG: wgpu::Color = wgpu::Color {
-    r: DEFAULT_BG_RGB[0] as f64,
-    g: DEFAULT_BG_RGB[1] as f64,
-    b: DEFAULT_BG_RGB[2] as f64,
-    a: 1.0,
-};
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -107,7 +100,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(canvas: web_sys::HtmlCanvasElement) -> Result<Self, String> {
+    pub async fn new(
+        canvas: web_sys::HtmlCanvasElement,
+        settings: &Settings,
+    ) -> Result<Self, String> {
         let (width, height) = backing_size(&canvas);
         canvas.set_width(width);
         canvas.set_height(height);
@@ -162,7 +158,7 @@ impl Renderer {
             free: true,
         };
         camera.aim_at_pivot();
-        Ok(Self {
+        let mut renderer = Self {
             canvas,
             surface,
             config,
@@ -196,7 +192,7 @@ impl Renderer {
             aspect: width as f32 / height as f32,
             num_trans: 0,
             show_markers: true,
-            bg: DEFAULT_BG,
+            bg: clear_color(settings.bg),
             geometry_key: None,
             axis_range: [(0.0, 0.0); 3],
             slice_center: Vec3::ZERO,
@@ -204,7 +200,23 @@ impl Renderer {
             slice_size: Vec2::ZERO,
             texels_per_mm: FIELD_TEXELS_PER_MM,
             gizmo: Gizmo::new(),
-        })
+        };
+        renderer.apply_settings(settings);
+        Ok(renderer)
+    }
+
+    pub fn apply_settings(&mut self, s: &Settings) {
+        self.set_max_pressure(s.max_pressure);
+        self.set_sound_speed(s.sound_speed);
+        self.set_show_markers(s.show_markers);
+        self.set_colormap(u32::from(s.colormap));
+        self.set_background(s.bg);
+        self.set_camera_free(s.cam_free);
+        self.set_fov(s.fov);
+        self.set_near(s.near);
+        self.set_far(s.far);
+        self.set_move_speed(s.move_speed);
+        self.set_slice_resolution(s.slice_resolution);
     }
 
     pub fn sync_size(&mut self) {
@@ -400,12 +412,7 @@ impl Renderer {
     }
 
     pub fn set_background(&mut self, rgb: [f32; 3]) {
-        self.bg = wgpu::Color {
-            r: f64::from(rgb[0]),
-            g: f64::from(rgb[1]),
-            b: f64::from(rgb[2]),
-            a: 1.0,
-        };
+        self.bg = clear_color(rgb);
     }
 
     pub fn set_gizmo_visible(&mut self, visible: bool) {
@@ -707,15 +714,7 @@ impl Renderer {
         self.apply_slice();
         self.create_field();
 
-        if self.uniforms.sound_speed == 0.0 {
-            self.uniforms.sound_speed = SOUND_SPEED_MM_S;
-        }
-        if self.uniforms.max_pressure == 0.0 {
-            self.uniforms.max_pressure = MAX_PRESSURE;
-        }
-        if self.uniforms.marker_size == 0.0 {
-            self.uniforms.marker_size = MARKER_SIZE_MM;
-        }
+        self.uniforms.marker_size = MARKER_SIZE_MM;
         self.uniforms.num_trans = self.num_trans;
 
         let extent = (max[0] - min[0]).max(max[1] - min[1]).max(SLICE_HEIGHT_MM);
@@ -742,6 +741,15 @@ fn geometry_key(positions: &[[f32; 4]], directions: &[[f32; 4]]) -> u64 {
     bytemuck::cast_slice::<_, u8>(positions).hash(&mut hasher);
     bytemuck::cast_slice::<_, u8>(directions).hash(&mut hasher);
     hasher.finish()
+}
+
+fn clear_color(rgb: [f32; 3]) -> wgpu::Color {
+    wgpu::Color {
+        r: f64::from(rgb[0]),
+        g: f64::from(rgb[1]),
+        b: f64::from(rgb[2]),
+        a: 1.0,
+    }
 }
 
 fn backing_size(canvas: &web_sys::HtmlCanvasElement) -> (u32, u32) {

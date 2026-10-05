@@ -30,7 +30,6 @@ autd3-rs-link-remote = { path = "../crates/autd3-rs-link-remote", default-featur
 autd3-rs-simulator-protocol = { path = "protocol" }
 tokio = { version = "1.52.3", default-features = false, features = [
     "sync",
-    "time",
     "macros",
     "rt",
 ] }
