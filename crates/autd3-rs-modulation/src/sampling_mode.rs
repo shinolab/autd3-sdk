@@ -10,7 +10,7 @@ use autd3_rs_core::value::{Nearest, SamplingConfig, is_integer};
 
 use crate::error::ModulationError;
 
-fn gcd(mut a: u64, mut b: u64) -> u64 {
+pub(crate) fn gcd(mut a: u64, mut b: u64) -> u64 {
     while b != 0 {
         let t = b;
         b = a % b;

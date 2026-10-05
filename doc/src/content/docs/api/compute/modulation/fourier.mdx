@@ -44,6 +44,8 @@ import { excerpt } from "@lib/excerpt";
 | `freq`     | `Freq<u32>` 等 | 成分の周波数            |
 | `option`   | `SineOption`   | 成分ごとの正弦波 Option |
 
+値域の判定は合成後の値に対して行うため, 成分の `SineOption` の `clamp` は使われない. 範囲外の値を丸めるには `FourierOption` の `clamp` を指定する. 
+
 <CodeTabs rust={excerpt(sample, "components")} python={excerpt(pySample, "components")} csharp={excerpt(csSample, "components")} />
 
 ## FourierOption

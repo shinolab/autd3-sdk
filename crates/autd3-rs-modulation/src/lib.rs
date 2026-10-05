@@ -1,6 +1,7 @@
 mod constant;
 mod error;
 mod fourier;
+mod quantize;
 mod radiation_pressure;
 mod sampling;
 mod sampling_mode;

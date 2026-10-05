@@ -10,6 +10,7 @@ use autd3_rs_core::common::Angle;
 use autd3_rs_core::value::SamplingConfig;
 
 use crate::error::ModulationError;
+use crate::quantize::quantize;
 use crate::sampling_mode::SamplingMode;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -33,10 +34,10 @@ impl Default for SineOption {
     }
 }
 
-pub(crate) fn sine_raw<S: Into<SamplingMode>>(
+pub(crate) fn sine_samples<S: Into<SamplingMode>>(
     freq: S,
     option: &SineOption,
-) -> Result<Vec<f32>, ModulationError> {
+) -> Result<impl ExactSizeIterator<Item = f32> + use<S>, ModulationError> {
     let mode: SamplingMode = freq.into();
     let (n, rep) = mode.validate(option.sampling_config)?;
     let n = usize::try_from(n).map_err(|_| ModulationError::SampleCountOverflow)?;
@@ -45,12 +46,10 @@ pub(crate) fn sine_raw<S: Into<SamplingMode>>(
     let offset = f32::from(option.offset);
     let phase = option.phase.rad();
 
-    Ok((0..n)
-        .map(|i| {
-            let t = (rep * i as u64) as f32 / n as f32;
-            (amplitude / 2.0 * (2.0 * PI * t + phase).sin()) + offset
-        })
-        .collect())
+    Ok((0..n).map(move |i| {
+        let t = (rep * i as u64) as f32 / n as f32;
+        (amplitude / 2.0 * (2.0 * PI * t + phase).sin()) + offset
+    }))
 }
 
 pub fn sine<S: Into<SamplingMode>>(
@@ -58,23 +57,7 @@ pub fn sine<S: Into<SamplingMode>>(
     option: &SineOption,
     dst: &mut Vec<u8>,
 ) -> Result<(), ModulationError> {
-    let raw = sine_raw(freq, option)?;
-
-    dst.clear();
-    dst.reserve(raw.len());
-    let mut out_of_range = false;
-    for v in raw {
-        let v = v.floor() as i16;
-        dst.push(if (0..=255).contains(&v) {
-            v as u8
-        } else if option.clamp {
-            v.clamp(0, 255) as u8
-        } else {
-            out_of_range = true;
-            0
-        });
-    }
-    if out_of_range {
+    if quantize(sine_samples(freq, option)?, option.clamp, dst) {
         return Err(ModulationError::SineValueOutOfRange);
     }
     Ok(())
@@ -146,6 +129,25 @@ mod tests {
             buf.as_slice(),
             &[
                 0, 39, 74, 103, 121, 127, 121, 103, 74, 39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            ]
+        );
+    }
+
+    #[test]
+    fn sine_out_of_range_error_leaves_zero_at_the_offending_samples() {
+        let mut buf = vec![1, 2, 3];
+        let opt = SineOption {
+            offset: 0xFF,
+            ..Default::default()
+        };
+        assert_eq!(
+            sine(200 * Hz, &opt, &mut buf),
+            Err(ModulationError::SineValueOutOfRange)
+        );
+        assert_eq!(
+            buf.as_slice(),
+            &[
+                255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 215, 180, 151, 133, 127, 133, 151, 180, 215
             ]
         );
     }
