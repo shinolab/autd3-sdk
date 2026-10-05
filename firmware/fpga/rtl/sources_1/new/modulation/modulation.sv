@@ -17,6 +17,7 @@ module modulation #(
     input wire GPIO_IN[4],
     output wire STOP,
     output wire TRANSITION_PENDING,
+    output wire EXT_ACTIVE,
     output wire [15:0] DEBUG_IDX,
     output wire DEBUG_BANK,
     output wire DEBUG_STOP
@@ -51,6 +52,7 @@ module modulation #(
       .GPIO_IN(GPIO_IN),
       .STOP(stop),
       .TRANSITION_PENDING(TRANSITION_PENDING),
+      .EXT_ACTIVE(EXT_ACTIVE),
       .BANK(bank),
       .IDX(idx)
   );

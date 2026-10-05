@@ -34,8 +34,7 @@ package settings;
 
   typedef struct {
     logic UPDATE;
-    logic [63:0] ECAT_SYNC_TIME;
-    logic [31:0] ECAT_SYNC_CYCLE;
+    logic [63:0] SYNC_TIME;
   } sync_settings_t;
 
   typedef struct {

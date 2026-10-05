@@ -86,12 +86,11 @@ module top (
 
   memory_bus_if memory_bus ();
   assign memory_bus.BUS_CLK = CPU_CKIO;
-  assign memory_bus.EN = ~CPU_CS1_N;
-  assign memory_bus.RD = ~CPU_RD_N;
+  assign memory_bus.CS_N = CPU_CS1_N;
+  assign memory_bus.RD_N = CPU_RD_N;
   assign memory_bus.RDWR = CPU_RDWR;
-  assign memory_bus.WE = ~CPU_WE0_N;
-  assign memory_bus.BRAM_SELECT = CPU_ADDR[16:15];
-  assign memory_bus.BRAM_ADDR = CPU_ADDR[14:1];
+  assign memory_bus.WE_N = CPU_WE0_N;
+  assign memory_bus.BRAM_ADDR = CPU_ADDR[16:1];
   assign memory_bus.CPU_DATA = CPU_DATA;
 
   main #(

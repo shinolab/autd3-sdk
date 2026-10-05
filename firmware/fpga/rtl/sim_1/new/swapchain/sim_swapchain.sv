@@ -3,7 +3,7 @@ module sim_swapchain ();
 
   `include "define.vh"
 
-  localparam int ECAT_SYNC_BASE_CNT = 10240;
+  localparam int TIME_BASE_TICKS = 10240;
 
   logic CLK;
   logic locked;
@@ -464,7 +464,7 @@ module sim_swapchain ();
     `ASSERT_EQ(1, idx[1]);
 
     @(posedge CLK);
-    transition_value <= (SYS_TIME / ECAT_SYNC_BASE_CNT + 1) * 500000;
+    transition_value <= (SYS_TIME / TIME_BASE_TICKS + 1) * TIME_BASE_TICKS;
 
     // bank change to 0, repeat one time
     @(posedge CLK);
@@ -486,7 +486,7 @@ module sim_swapchain ();
       @(negedge CLK);
       `ASSERT_EQ(1, bank);
       `ASSERT_EQ(0, stop);
-      if (SYS_TIME == ECAT_SYNC_BASE_CNT * 2 + 5) break;
+      if (SYS_TIME == TIME_BASE_TICKS * 2 + 5) break;
     end
 
     // change bank
@@ -525,7 +525,7 @@ module sim_swapchain ();
     `ASSERT_EQ(0, idx[0]);
 
     @(posedge CLK);
-    transition_value <= (SYS_TIME / ECAT_SYNC_BASE_CNT + 2) * 500000;
+    transition_value <= (SYS_TIME / TIME_BASE_TICKS + 2) * TIME_BASE_TICKS;
 
     // bank change to 1, wait for for 5 clocks, repeat 2 times
     @(posedge CLK);
@@ -545,7 +545,7 @@ module sim_swapchain ();
       @(negedge CLK);
       `ASSERT_EQ(0, bank);
       `ASSERT_EQ(1, stop);
-      if (SYS_TIME == ECAT_SYNC_BASE_CNT * 4 + 5) break;
+      if (SYS_TIME == TIME_BASE_TICKS * 4 + 5) break;
     end
 
     // change bank
@@ -836,7 +836,7 @@ module sim_swapchain ();
     sync_idx[1] <= 1;
     rep[0] <= 16'hFFFF;
     rep[1] <= 16'h0000;
-    far_future = (SYS_TIME / ECAT_SYNC_BASE_CNT + 1000) * 500000;
+    far_future = (SYS_TIME / TIME_BASE_TICKS + 1000) * TIME_BASE_TICKS;
     latch(1, params::TRANSITION_MODE_SYS_TIME, far_future);
     `ASSERT_EQ(0, bank);
     `ASSERT_EQ(1, transition_pending);

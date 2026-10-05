@@ -9,13 +9,11 @@ module sim_helper_flash #(
     output var MISO
 );
 
-  localparam logic [23:0] JEDEC_ID = 24'h20BA18;
   localparam int unsigned WRITABLE_BASE = 32'h800000;
 
   typedef enum {
     OPCODE,
     ADDRESS,
-    RESP_ID,
     RESP_SR,
     RESP_READ,
     PROGRAM_DATA,
@@ -42,7 +40,6 @@ module sim_helper_flash #(
   logic [7:0] data_byte = 8'h00;
   logic [7:0] out_byte = 8'h00;
   int out_bit = 0;
-  int id_idx = 0;
 
   initial MISO = 1'b0;
 
@@ -73,7 +70,6 @@ module sim_helper_flash #(
     in_bits = 0;
     data_bits = 0;
     out_bit = 0;
-    id_idx = 0;
   end
 
   always @(posedge CS_N) begin
@@ -124,7 +120,6 @@ module sim_helper_flash #(
               violation($sformatf("opcode %02h while WIP", opcode));
             end
             case (opcode)
-              8'h9F: phase = RESP_ID;
               8'h05: phase = RESP_SR;
               8'h03, 8'hD8, 8'h02: phase = ADDRESS;
               8'h06: phase = COMPLETE;
@@ -179,13 +174,9 @@ module sim_helper_flash #(
   end
 
   always @(negedge SCK) begin
-    if (!CS_N && (phase == RESP_ID || phase == RESP_SR || phase == RESP_READ)) begin
+    if (!CS_N && (phase == RESP_SR || phase == RESP_READ)) begin
       if (out_bit == 0) begin
         case (phase)
-          RESP_ID: begin
-            out_byte = JEDEC_ID[23-8*id_idx-:8];
-            id_idx   = (id_idx + 1) % 3;
-          end
           RESP_SR: out_byte = {6'd0, wel, wip};
           default: begin
             out_byte = peek(addr);

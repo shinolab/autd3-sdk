@@ -74,6 +74,7 @@ module sim_emission_foci ();
       .EMISSION_BUS_FOCUS(emission_bus.out_focus_port),
       .EMISSION_BUS_RAW(emission_bus.out_raw_port),
       .OUTPUT_MASK_BUS(output_mask_bus.out_port),
+      .FAILSAFE(1'b0),
       .INTENSITY(intensity),
       .PHASE(phase),
       .DOUT_VALID(dout_valid),
