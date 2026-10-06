@@ -31,60 +31,55 @@ impl IntensityConstraint {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn normalize() {
-        for (expect, value, max) in [
-            (Intensity::MIN, 0.0, 1.0),
-            (Intensity(128), 0.5, 1.0),
-            (Intensity(128), 1.0, 2.0),
-            (Intensity(191), 1.5, 2.0),
-        ] {
-            assert_eq!(expect, IntensityConstraint::Normalize.convert(value, max));
-        }
+    #[rstest]
+    #[case(Intensity::MIN, 0.0, 1.0)]
+    #[case(Intensity(128), 0.5, 1.0)]
+    #[case(Intensity(128), 1.0, 2.0)]
+    #[case(Intensity(191), 1.5, 2.0)]
+    fn normalize(#[case] expect: Intensity, #[case] value: f32, #[case] max: f32) {
+        assert_eq!(expect, IntensityConstraint::Normalize.convert(value, max));
     }
 
-    #[test]
-    fn multiply() {
-        for (expect, value, max, mul) in [
-            (Intensity::MIN, 0.0, 1.0, 0.5),
-            (Intensity(64), 0.5, 1.0, 0.5),
-            (Intensity(64), 1.0, 2.0, 0.5),
-            (Intensity(96), 1.5, 2.0, 0.5),
-        ] {
-            assert_eq!(
-                expect,
-                IntensityConstraint::Multiply(mul).convert(value, max)
-            );
-        }
+    #[rstest]
+    #[case(Intensity::MIN, 0.0, 1.0, 0.5)]
+    #[case(Intensity(64), 0.5, 1.0, 0.5)]
+    #[case(Intensity(64), 1.0, 2.0, 0.5)]
+    #[case(Intensity(96), 1.5, 2.0, 0.5)]
+    fn multiply(#[case] expect: Intensity, #[case] value: f32, #[case] max: f32, #[case] mul: f32) {
+        assert_eq!(
+            expect,
+            IntensityConstraint::Multiply(mul).convert(value, max)
+        );
     }
 
-    #[test]
-    fn uniform() {
-        for (expect, value, max) in [
-            (Intensity::MIN, 0.0, 1.0),
-            (Intensity::MAX, 0.5, 1.0),
-            (Intensity(128), 1.5, 2.0),
-        ] {
-            assert_eq!(
-                expect,
-                IntensityConstraint::Uniform(expect).convert(value, max)
-            );
-        }
+    #[rstest]
+    #[case(Intensity::MIN, 0.0, 1.0)]
+    #[case(Intensity::MAX, 0.5, 1.0)]
+    #[case(Intensity(128), 1.5, 2.0)]
+    fn uniform(#[case] expect: Intensity, #[case] value: f32, #[case] max: f32) {
+        assert_eq!(
+            expect,
+            IntensityConstraint::Uniform(expect).convert(value, max)
+        );
     }
 
-    #[test]
-    fn clamp() {
-        for (expect, value, max, min, mx) in [
-            (Intensity(64), 0.0, 1.0, Intensity(64), Intensity(192)),
-            (Intensity(128), 0.5, 1.0, Intensity(64), Intensity(192)),
-            (Intensity(192), 1.0, 1.0, Intensity(64), Intensity(192)),
-            (Intensity(192), 1.5, 1.0, Intensity(64), Intensity(192)),
-        ] {
-            assert_eq!(
-                expect,
-                IntensityConstraint::Clamp(min, mx).convert(value, max)
-            );
-        }
+    #[rstest]
+    #[case(Intensity(64), 0.0, 1.0, Intensity(64), Intensity(192))]
+    #[case(Intensity(128), 0.5, 1.0, Intensity(64), Intensity(192))]
+    #[case(Intensity(192), 1.0, 1.0, Intensity(64), Intensity(192))]
+    #[case(Intensity(192), 1.5, 1.0, Intensity(64), Intensity(192))]
+    fn clamp(
+        #[case] expect: Intensity,
+        #[case] value: f32,
+        #[case] max: f32,
+        #[case] min: Intensity,
+        #[case] mx: Intensity,
+    ) {
+        assert_eq!(
+            expect,
+            IntensityConstraint::Clamp(min, mx).convert(value, max)
+        );
     }
 }

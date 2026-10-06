@@ -104,63 +104,52 @@ impl core::ops::Div<u8> for Phase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn add_wraps() {
-        for (expected, lhs, rhs) in [
-            (Phase(0x02), Phase(0x01), Phase(0x01)),
-            (Phase(0xFE), Phase(0x7F), Phase(0x7F)),
-            (Phase(0x7E), Phase(0x7F), Phase(0xFF)),
-        ] {
-            assert_eq!(expected, lhs + rhs);
-            let mut a = lhs;
-            a += rhs;
-            assert_eq!(expected, a);
-        }
+    #[rstest]
+    #[case(Phase(0x02), Phase(0x01), Phase(0x01))]
+    #[case(Phase(0xFE), Phase(0x7F), Phase(0x7F))]
+    #[case(Phase(0x7E), Phase(0x7F), Phase(0xFF))]
+    fn add_wraps(#[case] expected: Phase, #[case] lhs: Phase, #[case] rhs: Phase) {
+        assert_eq!(expected, lhs + rhs);
+        let mut a = lhs;
+        a += rhs;
+        assert_eq!(expected, a);
     }
 
-    #[test]
-    fn sub_wraps() {
-        for (expected, lhs, rhs) in [
-            (Phase::ZERO, Phase(0x01), Phase(0x01)),
-            (Phase(0x01), Phase(0x02), Phase(0x01)),
-            (Phase(0x80), Phase(0x7F), Phase(0xFF)),
-        ] {
-            assert_eq!(expected, lhs - rhs);
-            let mut a = lhs;
-            a -= rhs;
-            assert_eq!(expected, a);
-        }
+    #[rstest]
+    #[case(Phase::ZERO, Phase(0x01), Phase(0x01))]
+    #[case(Phase(0x01), Phase(0x02), Phase(0x01))]
+    #[case(Phase(0x80), Phase(0x7F), Phase(0xFF))]
+    fn sub_wraps(#[case] expected: Phase, #[case] lhs: Phase, #[case] rhs: Phase) {
+        assert_eq!(expected, lhs - rhs);
+        let mut a = lhs;
+        a -= rhs;
+        assert_eq!(expected, a);
     }
 
-    #[test]
-    fn mul_wraps() {
-        for (expected, lhs, rhs) in [
-            (Phase(0x02), Phase(0x01), 2),
-            (Phase(0xFE), Phase(0x7F), 2),
-            (Phase::ZERO, Phase(0x80), 2),
-        ] {
-            assert_eq!(expected, lhs * rhs);
-            assert_eq!(expected, rhs * lhs);
-        }
+    #[rstest]
+    #[case(Phase(0x02), Phase(0x01), 2)]
+    #[case(Phase(0xFE), Phase(0x7F), 2)]
+    #[case(Phase::ZERO, Phase(0x80), 2)]
+    fn mul_wraps(#[case] expected: Phase, #[case] lhs: Phase, #[case] rhs: u8) {
+        assert_eq!(expected, lhs * rhs);
+        assert_eq!(expected, rhs * lhs);
     }
 
-    #[test]
-    fn div() {
-        for (expected, lhs, rhs) in [(Phase(0x01), Phase(0x02), 2), (Phase(0x7F), Phase(0xFE), 2)] {
-            assert_eq!(expected, lhs / rhs);
-        }
+    #[rstest]
+    #[case(Phase(0x01), Phase(0x02), 2)]
+    #[case(Phase(0x7F), Phase(0xFE), 2)]
+    fn div(#[case] expected: Phase, #[case] lhs: Phase, #[case] rhs: u8) {
+        assert_eq!(expected, lhs / rhs);
     }
 
-    #[test]
-    fn rad() {
-        for (expect, value) in [
-            (0.0, 0u8),
-            (2.0 * PI / 256.0 * 128.0, 128),
-            (2.0 * PI / 256.0 * 255.0, 255),
-        ] {
-            approx::assert_abs_diff_eq!(expect, Phase(value).rad());
-        }
+    #[rstest]
+    #[case(0.0, 0)]
+    #[case(2.0 * PI / 256.0 * 128.0, 128)]
+    #[case(2.0 * PI / 256.0 * 255.0, 255)]
+    fn rad(#[case] expect: f32, #[case] value: u8) {
+        approx::assert_abs_diff_eq!(expect, Phase(value).rad());
     }
 
     fn quantized_exactly(v: Angle) -> Phase {
@@ -187,57 +176,51 @@ mod tests {
         Phase(((p as i32) & 0xFF) as u8)
     }
 
-    #[test]
-    fn from_angle() {
-        for (expect, value) in [
-            (Phase(0x00), 0.0),
-            (Phase(0x40), PI / 2.0),
-            (Phase(0x80), PI),
-            (Phase(0xC0), -PI / 2.0),
-            (Phase(0x00), 2.0 * PI),
-            (Phase(0x01), 2.0 * PI / 256.0),
-            (Phase(0xFF), -2.0 * PI / 256.0),
-        ] {
-            assert_eq!(expect, Phase::from(Angle::from_rad(value)));
-        }
+    #[rstest]
+    #[case(Phase(0x00), 0.0)]
+    #[case(Phase(0x40), PI / 2.0)]
+    #[case(Phase(0x80), PI)]
+    #[case(Phase(0xC0), -PI / 2.0)]
+    #[case(Phase(0x00), 2.0 * PI)]
+    #[case(Phase(0x01), 2.0 * PI / 256.0)]
+    #[case(Phase(0xFF), -2.0 * PI / 256.0)]
+    fn from_angle(#[case] expect: Phase, #[case] value: f32) {
+        assert_eq!(expect, Phase::from(Angle::from_rad(value)));
     }
 
-    #[test]
-    fn from_angle_matches_exact_at_edges() {
-        for value in [
-            f32::NAN,
-            -f32::NAN,
-            f32::INFINITY,
-            f32::NEG_INFINITY,
-            f32::MAX,
-            f32::MIN,
-            f32::MIN_POSITIVE,
-            -f32::MIN_POSITIVE,
-            f32::from_bits(1),
-            f32::from_bits(0x8000_0001),
-            0.0,
-            -0.0,
-            RAD_PER_LSB / 2.0,
-            -RAD_PER_LSB / 2.0,
-            RAD_PER_LSB * 1.5,
-            -RAD_PER_LSB * 1.5,
-            RAD_PER_LSB * 2.5,
-            -RAD_PER_LSB * 2.5,
-            RAD_PER_LSB * 255.5,
-            RAD_PER_LSB * 256.5,
-            RAD_PER_LSB * 511.5,
-            RAD_PER_LSB * 512.5,
-            RAD_PER_LSB * LSB_LIMIT,
-            -RAD_PER_LSB * LSB_LIMIT,
-        ] {
-            let v = Angle::from_rad(value);
-            assert_eq!(
-                quantized_exactly(v),
-                Phase::from(v),
-                "{value:e} (0x{:08X})",
-                value.to_bits()
-            );
-        }
+    #[rstest]
+    #[case(f32::NAN)]
+    #[case(-f32::NAN)]
+    #[case(f32::INFINITY)]
+    #[case(f32::NEG_INFINITY)]
+    #[case(f32::MAX)]
+    #[case(f32::MIN)]
+    #[case(f32::MIN_POSITIVE)]
+    #[case(-f32::MIN_POSITIVE)]
+    #[case(f32::from_bits(1))]
+    #[case(f32::from_bits(0x8000_0001))]
+    #[case(0.0)]
+    #[case(-0.0)]
+    #[case(RAD_PER_LSB / 2.0)]
+    #[case(-RAD_PER_LSB / 2.0)]
+    #[case(RAD_PER_LSB * 1.5)]
+    #[case(-RAD_PER_LSB * 1.5)]
+    #[case(RAD_PER_LSB * 2.5)]
+    #[case(-RAD_PER_LSB * 2.5)]
+    #[case(RAD_PER_LSB * 255.5)]
+    #[case(RAD_PER_LSB * 256.5)]
+    #[case(RAD_PER_LSB * 511.5)]
+    #[case(RAD_PER_LSB * 512.5)]
+    #[case(RAD_PER_LSB * LSB_LIMIT)]
+    #[case(-RAD_PER_LSB * LSB_LIMIT)]
+    fn from_angle_matches_exact_at_edges(#[case] value: f32) {
+        let v = Angle::from_rad(value);
+        assert_eq!(
+            quantized_exactly(v),
+            Phase::from(v),
+            "{value:e} (0x{:08X})",
+            value.to_bits()
+        );
     }
 
     #[test]
@@ -293,16 +276,13 @@ mod tests {
         }
     }
 
-    #[test]
-    fn from_complex() {
-        for (expect, value) in [
-            (Phase(0x00), Complex::new(1.0, 0.0)),
-            (Phase(0x40), Complex::new(0.0, 1.0)),
-            (Phase(0x80), Complex::new(-1.0, 0.0)),
-            (Phase(0xC0), Complex::new(0.0, -1.0)),
-        ] {
-            assert_eq!(expect, Phase::from(value));
-        }
+    #[rstest]
+    #[case(Phase(0x00), Complex::new(1.0, 0.0))]
+    #[case(Phase(0x40), Complex::new(0.0, 1.0))]
+    #[case(Phase(0x80), Complex::new(-1.0, 0.0))]
+    #[case(Phase(0xC0), Complex::new(0.0, -1.0))]
+    fn from_complex(#[case] expect: Phase, #[case] value: Complex<f32>) {
+        assert_eq!(expect, Phase::from(value));
     }
 
     #[test]

@@ -29,6 +29,7 @@ rayon = { workspace = true, optional = true }
 thiserror.workspace = true
 
 [dev-dependencies]
+rstest.workspace = true
 approx.workspace = true
 autd3-rs-pattern.workspace = true
 criterion = { version = "0.8.2", default-features = false }
