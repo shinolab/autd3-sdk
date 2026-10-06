@@ -303,7 +303,6 @@ version = "0.9.0"
 dependencies = [
  "approx",
  "autd3-rs-core",
- "criterion",
 ]
 
 [[package]]
