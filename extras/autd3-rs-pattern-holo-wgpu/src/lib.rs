@@ -1,7 +1,7 @@
 mod buffer;
 mod pipelines;
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -42,7 +42,6 @@ pub struct WgpuBackend {
     uniforms: RefCell<UniformRing>,
     pending: RefCell<Pending>,
     bind_cache: RefCell<HashMap<BindKey, wgpu::BindGroup>>,
-    bind_groups_created: Cell<u64>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -157,7 +156,6 @@ impl WgpuBackend {
             uniforms: RefCell::new(uniforms),
             pending: RefCell::new(Pending::default()),
             bind_cache: RefCell::new(HashMap::new()),
-            bind_groups_created: Cell::new(0),
         })
     }
 
@@ -226,8 +224,6 @@ impl WgpuBackend {
             layout: &layout.inner,
             entries: &bindings.entries,
         });
-        self.bind_groups_created
-            .set(self.bind_groups_created.get() + 1);
         cache.insert(key, fresh.clone());
         fresh
     }
@@ -762,43 +758,5 @@ mod tests {
         let z = limits.max_compute_workgroups_per_dimension as usize;
         assert!(gpu.max_batch(1) <= z);
         assert!(gpu.max_batch(usize::MAX) >= 1);
-    }
-
-    #[test]
-    #[ignore = "requires a GPU; run explicitly to measure"]
-    fn bind_group_reuse() {
-        const N: usize = 249 * 64;
-        let Ok(gpu) = WgpuBackend::new() else {
-            eprintln!("no GPU");
-            return;
-        };
-        let tr_pos: Vec<_> = (0..N).map(|i| Point3::new(i as f32, 0.0, 0.0)).collect();
-        let tr_dir = vec![nalgebra::Vector3::z_axis(); N];
-        for m in [1usize, 16] {
-            let foci: Vec<_> = (0..m)
-                .map(|i| AmplitudeTarget {
-                    point: Point3::new(i as f32 * 10.0, 0.0, 150.0),
-                    amplitude: 5e3 * autd3_rs_pattern_holo::Pa,
-                })
-                .collect();
-            let g = gpu.propagation_matrix(&tr_pos, &tr_dir, &foci, 1, 0.74, Directivity::Sphere);
-            let b = gpu.back_prop(&g);
-            let ones = |len| gpu.make_vector(1, vec![Complex::new(1.0, 0.0); len]);
-            let amps = ones(m);
-            let q0 = ones(N);
-            let mut q = Some(ones(N));
-            let built: Vec<String> = (0..10)
-                .map(|_| {
-                    let before = gpu.bind_groups_created.get();
-                    let p = gpu.gemv_hadamard_normalized(&g, q.take().unwrap(), &q0);
-                    q = Some(gpu.gemv_hadamard_normalized(&b, p, &amps));
-                    (gpu.bind_groups_created.get() - before).to_string()
-                })
-                .collect();
-            println!(
-                "{m:>3} foci: bind groups built per gs iteration: {}",
-                built.join(" ")
-            );
-        }
     }
 }
