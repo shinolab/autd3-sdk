@@ -593,7 +593,7 @@ impl Renderer {
             return;
         };
 
-        self.gizmo.len = self.camera.distance() * 0.2;
+        self.gizmo.len = (self.camera.pos - self.camera.pivot).length() * 0.2;
         self.uniforms.gizmo_len = self.gizmo.len;
         self.uniforms.view_proj = self.camera.view_proj(self.aspect).to_cols_array_2d();
         self.uniforms.eye = self.camera.eye().extend(0.0).to_array();

@@ -13,10 +13,6 @@ fn np_vec3(py: Python<'_>, x: f32, y: f32, z: f32) -> PyResult<Bound<'_, PyAny>>
     py.import("numpy")?.call_method1("array", ((x, y, z),))
 }
 
-fn np_vec4(py: Python<'_>, x: f32, y: f32, z: f32, w: f32) -> PyResult<Bound<'_, PyAny>> {
-    py.import("numpy")?.call_method1("array", ((x, y, z, w),))
-}
-
 #[pyclass(name = "EulerAngles", module = "autd3_core", from_py_object)]
 #[derive(Clone, Copy)]
 pub struct EulerAngles(UnitQuaternion<f32>);
@@ -283,7 +279,8 @@ impl Device {
 
     fn rotation<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let q = self.inner.rotation();
-        np_vec4(py, q.w, q.i, q.j, q.k)
+        py.import("numpy")?
+            .call_method1("array", ((q.w, q.i, q.j, q.k),))
     }
 
     fn x_direction<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

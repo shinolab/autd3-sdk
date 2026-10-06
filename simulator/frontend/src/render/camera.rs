@@ -43,14 +43,6 @@ impl Camera {
         self.pos
     }
 
-    fn forward(&self) -> Vec3 {
-        (self.quat() * Vec3::NEG_Z).normalize_or_zero()
-    }
-
-    pub(crate) fn distance(&self) -> f32 {
-        (self.pos - self.pivot).length()
-    }
-
     pub(crate) fn aim_at_pivot(&mut self) {
         self.rot = look_euler(self.pos, self.pivot);
     }
@@ -91,7 +83,7 @@ impl Camera {
     pub(crate) fn dolly(&mut self, delta: f32) {
         let step = -delta * self.move_speed;
         if self.free {
-            self.pos += self.forward() * step;
+            self.pos += (self.quat() * Vec3::NEG_Z).normalize_or_zero() * step;
         } else {
             let offset = self.pos - self.pivot;
             let dist = (offset.length() - step).clamp(30.0, 8000.0);

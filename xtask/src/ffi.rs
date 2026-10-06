@@ -106,7 +106,10 @@ fn drift(root: &Path, ffi: &Path) -> Result<()> {
     for (lib, symbols) in &exported {
         let declarations = declared.get(lib).unwrap_or(&empty);
         for symbol in symbols {
-            if declarations.contains(symbol) || allowed_without_csharp(symbol) {
+            if declarations.contains(symbol)
+                || symbol.contains(OPTION_GETTER_MARKER)
+                || CSHARP_UNUSED_EXPORTS.contains(&symbol.as_str())
+            {
                 continue;
             }
             problems.push(format!(
@@ -132,9 +135,6 @@ fn drift(root: &Path, ffi: &Path) -> Result<()> {
     )
 }
 
-fn allowed_without_csharp(symbol: &str) -> bool {
-    symbol.contains(OPTION_GETTER_MARKER) || CSHARP_UNUSED_EXPORTS.contains(&symbol)
-}
 
 fn ffi_crates(ffi: &Path) -> Result<Vec<PathBuf>> {
     let mut dirs = Vec::new();

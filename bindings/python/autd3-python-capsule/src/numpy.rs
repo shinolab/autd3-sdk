@@ -9,14 +9,6 @@ static UINT8: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static FLOAT32: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static FROMBUFFER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
-fn ndarray_type(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
-    NDARRAY.import(py, "numpy", "ndarray")
-}
-
-fn masked_array_type(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
-    MASKED_ARRAY.import(py, "numpy.ma", "MaskedArray")
-}
-
 fn cached_dtype<'py>(
     py: Python<'py>,
     cell: &'static PyOnceLock<Py<PyAny>>,
@@ -37,16 +29,12 @@ fn uint8_dtype(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
     cached_dtype(py, &UINT8, "uint8")
 }
 
-fn float32_dtype(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
-    cached_dtype(py, &FLOAT32, "float32")
-}
-
 fn frombuffer(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
     FROMBUFFER.import(py, "numpy", "frombuffer")
 }
 
 pub fn is_ndarray(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
-    obj.is_instance(ndarray_type(obj.py())?)
+    obj.is_instance(NDARRAY.import(obj.py(), "numpy", "ndarray")?)
 }
 
 pub fn u8_matrix_bytes<'py>(
@@ -61,7 +49,7 @@ pub fn u8_matrix_bytes<'py>(
             obj.get_type().name()?
         )));
     }
-    if obj.is_instance(masked_array_type(py)?)? {
+    if obj.is_instance(MASKED_ARRAY.import(py, "numpy.ma", "MaskedArray")?)? {
         return Err(PyTypeError::new_err(
             "masked arrays are not supported; fill them explicitly (e.g. arr.filled(0))",
         ));
@@ -118,6 +106,6 @@ pub fn f32_vec3_rows(
         Ok(())
     })?;
     frombuffer(py)?
-        .call1((buf, float32_dtype(py)?))?
+        .call1((buf, cached_dtype(py, &FLOAT32, "float32")?))?
         .call_method1("reshape", (n, 3))
 }
