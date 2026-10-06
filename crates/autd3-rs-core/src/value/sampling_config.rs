@@ -187,6 +187,7 @@ impl SamplingConfig {
 mod tests {
     use super::*;
     use crate::common::units::kHz;
+    use rstest::rstest;
 
     #[test]
     fn is_integer_uses_relative_tolerance() {
@@ -198,35 +199,31 @@ mod tests {
         assert!(is_integer(1e12 + 1e-4));
     }
 
-    #[test]
-    fn divide() {
-        let max_period =
-            Duration::from_micros(u16::MAX as u64 * ULTRASOUND_PERIOD.as_micros() as u64);
-        let cases: [(Result<u16, SamplingConfigError>, SamplingConfig); 8] = [
-            (Ok(1), SamplingConfig::new(NonZeroU16::MIN)),
-            (Ok(u16::MAX), SamplingConfig::new(NonZeroU16::MAX)),
-            (Ok(1), SamplingConfig::new(40000. * Hz)),
-            (Ok(10), SamplingConfig::new(4000. * Hz)),
-            (
-                Err(SamplingConfigError::FreqInvalidF(
-                    (ULTRASOUND_FREQ.hz() as f32 - 1.) * Hz,
-                )),
-                SamplingConfig::new((ULTRASOUND_FREQ.hz() as f32 - 1.) * Hz),
-            ),
-            (Ok(1), SamplingConfig::new(Duration::from_micros(25))),
-            (Ok(10), SamplingConfig::new(Duration::from_micros(250))),
-            (
-                Err(SamplingConfigError::PeriodOutOfRange(
-                    ULTRASOUND_PERIOD / 2,
-                    ULTRASOUND_PERIOD,
-                    max_period,
-                )),
-                SamplingConfig::new(ULTRASOUND_PERIOD / 2),
-            ),
-        ];
-        for (expect, config) in cases {
-            assert_eq!(expect, config.divide());
-        }
+    fn max_period() -> Duration {
+        Duration::from_micros(u16::MAX as u64 * ULTRASOUND_PERIOD.as_micros() as u64)
+    }
+
+    #[rstest]
+    #[case(Ok(1), SamplingConfig::new(NonZeroU16::MIN))]
+    #[case(Ok(u16::MAX), SamplingConfig::new(NonZeroU16::MAX))]
+    #[case(Ok(1), SamplingConfig::new(40000. * Hz))]
+    #[case(Ok(10), SamplingConfig::new(4000. * Hz))]
+    #[case(
+        Err(SamplingConfigError::FreqInvalidF((ULTRASOUND_FREQ.hz() as f32 - 1.) * Hz)),
+        SamplingConfig::new((ULTRASOUND_FREQ.hz() as f32 - 1.) * Hz)
+    )]
+    #[case(Ok(1), SamplingConfig::new(Duration::from_micros(25)))]
+    #[case(Ok(10), SamplingConfig::new(Duration::from_micros(250)))]
+    #[case(
+        Err(SamplingConfigError::PeriodOutOfRange(
+            ULTRASOUND_PERIOD / 2,
+            ULTRASOUND_PERIOD,
+            max_period()
+        )),
+        SamplingConfig::new(ULTRASOUND_PERIOD / 2)
+    )]
+    fn divide(#[case] expect: Result<u16, SamplingConfigError>, #[case] config: SamplingConfig) {
+        assert_eq!(expect, config.divide());
     }
 
     #[test]

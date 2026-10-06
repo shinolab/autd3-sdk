@@ -187,6 +187,7 @@ impl<T: SilencerConfig> Operation for SetSilencer<T> {
 mod tests {
     use super::*;
     use crate::test_utils::test_device;
+    use rstest::rstest;
 
     fn encode<T: SilencerConfig>(config: T) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
         let mut out = [0u8; PAYLOAD_BYTES];
@@ -288,25 +289,13 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn rejects_zero_completion_time() {
+    #[rstest]
+    #[case::zero(Duration::ZERO)]
+    #[case::beyond_the_wire_range(ULTRASOUND_PERIOD * 65536)]
+    fn rejects_out_of_range_completion_time(#[case] intensity: Duration) {
         assert!(matches!(
             encode(FixedCompletionTime {
-                intensity: Duration::ZERO,
-                phase: ULTRASOUND_PERIOD,
-                strict_mode: true,
-            }),
-            Err(Error::InvalidPayload(
-                PayloadError::SilencerCompletionTimeOutOfRange(_)
-            ))
-        ));
-    }
-
-    #[test]
-    fn rejects_out_of_range_completion_time() {
-        assert!(matches!(
-            encode(FixedCompletionTime {
-                intensity: ULTRASOUND_PERIOD * 65536,
+                intensity,
                 phase: ULTRASOUND_PERIOD,
                 strict_mode: true,
             }),

@@ -101,35 +101,35 @@ mod tests {
     use autd3_rs_core::common::units::{deg, rad};
 
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn sphere_is_unit() {
-        for theta in [0.0, 0.3, 1.0, 2.5] {
-            approx::assert_abs_diff_eq!(1.0, Directivity::Sphere.value(theta * rad));
-        }
+    #[rstest]
+    #[case(0.0)]
+    #[case(0.3)]
+    #[case(1.0)]
+    #[case(2.5)]
+    fn sphere_is_unit(#[case] theta: f32) {
+        approx::assert_abs_diff_eq!(1.0, Directivity::Sphere.value(theta * rad));
     }
 
-    #[test]
+    #[rstest]
+    #[case(1.0, 0.0)]
+    #[case(1.0, 10.0)]
+    #[case(1.0, 20.0)]
+    #[case(0.891251, 30.0)]
+    #[case(0.70794576, 40.0)]
+    #[case(0.5011872, 50.0)]
+    #[case(0.35481337, 60.0)]
+    #[case(0.25118864, 70.0)]
+    #[case(0.19952622, 80.0)]
+    #[case(0.17783181, 90.0)]
+    #[case(0.19952622, 100.0)]
     #[allow(clippy::unreadable_literal)]
-    fn t4010a1() {
-        for (expected, theta_deg) in [
-            (1.0_f32, 0.0_f32),
-            (1.0, 10.0),
-            (1.0, 20.0),
-            (0.891251, 30.0),
-            (0.70794576, 40.0),
-            (0.5011872, 50.0),
-            (0.35481337, 60.0),
-            (0.25118864, 70.0),
-            (0.19952622, 80.0),
-            (0.17783181, 90.0),
-            (0.19952622, 100.0),
-        ] {
-            approx::assert_abs_diff_eq!(
-                expected,
-                Directivity::T4010A1.value(theta_deg * deg),
-                epsilon = 1e-5
-            );
-        }
+    fn t4010a1(#[case] expected: f32, #[case] theta_deg: f32) {
+        approx::assert_abs_diff_eq!(
+            expected,
+            Directivity::T4010A1.value(theta_deg * deg),
+            epsilon = 1e-5
+        );
     }
 }

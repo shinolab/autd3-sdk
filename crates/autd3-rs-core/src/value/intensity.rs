@@ -71,57 +71,46 @@ impl core::ops::SubAssign for Intensity {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn div() {
-        for (expected, target, d) in [
-            (Intensity(0x01), Intensity(0x01), 1),
-            (Intensity(0x00), Intensity(0x01), 2),
-            (Intensity(0x7F), Intensity(0xFF), 2),
-        ] {
-            assert_eq!(expected, target / d);
-        }
+    #[rstest]
+    #[case(Intensity(0x01), Intensity(0x01), 1)]
+    #[case(Intensity(0x00), Intensity(0x01), 2)]
+    #[case(Intensity(0x7F), Intensity(0xFF), 2)]
+    fn div(#[case] expected: Intensity, #[case] target: Intensity, #[case] d: u8) {
+        assert_eq!(expected, target / d);
     }
 
-    #[test]
-    fn mul_saturates() {
-        for (expected, target, m) in [
-            (Intensity(0x01), Intensity(0x01), 1),
-            (Intensity(0x02), Intensity(0x01), 2),
-            (Intensity(0xFE), Intensity(0x7F), 2),
-            (Intensity(0xFF), Intensity(0x7F), 3),
-        ] {
-            assert_eq!(expected, target * m);
-            assert_eq!(expected, m * target);
-        }
+    #[rstest]
+    #[case(Intensity(0x01), Intensity(0x01), 1)]
+    #[case(Intensity(0x02), Intensity(0x01), 2)]
+    #[case(Intensity(0xFE), Intensity(0x7F), 2)]
+    #[case(Intensity(0xFF), Intensity(0x7F), 3)]
+    fn mul_saturates(#[case] expected: Intensity, #[case] target: Intensity, #[case] m: u8) {
+        assert_eq!(expected, target * m);
+        assert_eq!(expected, m * target);
     }
 
-    #[test]
-    fn add_saturates() {
-        for (expected, lhs, rhs) in [
-            (Intensity(0x02), Intensity(0x01), Intensity(0x01)),
-            (Intensity(0xFE), Intensity(0x7F), Intensity(0x7F)),
-            (Intensity(0xFF), Intensity(0x7F), Intensity(0xFF)),
-        ] {
-            assert_eq!(expected, lhs + rhs);
-            let mut a = lhs;
-            a += rhs;
-            assert_eq!(expected, a);
-        }
+    #[rstest]
+    #[case(Intensity(0x02), Intensity(0x01), Intensity(0x01))]
+    #[case(Intensity(0xFE), Intensity(0x7F), Intensity(0x7F))]
+    #[case(Intensity(0xFF), Intensity(0x7F), Intensity(0xFF))]
+    fn add_saturates(#[case] expected: Intensity, #[case] lhs: Intensity, #[case] rhs: Intensity) {
+        assert_eq!(expected, lhs + rhs);
+        let mut a = lhs;
+        a += rhs;
+        assert_eq!(expected, a);
     }
 
-    #[test]
-    fn sub_saturates() {
-        for (expected, lhs, rhs) in [
-            (Intensity(0x00), Intensity(0x01), Intensity(0x01)),
-            (Intensity(0x01), Intensity(0x02), Intensity(0x01)),
-            (Intensity(0x00), Intensity(0x7F), Intensity(0xFF)),
-        ] {
-            assert_eq!(expected, lhs - rhs);
-            let mut a = lhs;
-            a -= rhs;
-            assert_eq!(expected, a);
-        }
+    #[rstest]
+    #[case(Intensity(0x00), Intensity(0x01), Intensity(0x01))]
+    #[case(Intensity(0x01), Intensity(0x02), Intensity(0x01))]
+    #[case(Intensity(0x00), Intensity(0x7F), Intensity(0xFF))]
+    fn sub_saturates(#[case] expected: Intensity, #[case] lhs: Intensity, #[case] rhs: Intensity) {
+        assert_eq!(expected, lhs - rhs);
+        let mut a = lhs;
+        a -= rhs;
+        assert_eq!(expected, a);
     }
 
     #[test]

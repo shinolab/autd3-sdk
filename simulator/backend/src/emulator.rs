@@ -155,6 +155,7 @@ mod tests {
     use autd3_rs::commands::{Modulation, Nop, Pattern, SetPulseWidthTable};
     use autd3_rs::value::{Intensity, Phase, SamplingConfig};
     use autd3_rs_link_remote::TransducerLayout;
+    use rstest::rstest;
 
     use crate::harness::Harness;
 
@@ -202,22 +203,21 @@ mod tests {
         );
     }
 
-    #[test]
-    fn bank_and_index_gpios_report_the_current_selection() {
+    #[rstest]
+    #[case::force_fan(GPIO_TYPE_FORCE_FAN, 0)]
+    #[case::mod_bank(GPIO_TYPE_MOD_BANK, 0)]
+    #[case::mod_idx(GPIO_TYPE_MOD_IDX, 1)]
+    #[case::pattern_bank(GPIO_TYPE_PATTERN_BANK, 0)]
+    #[case::pattern_idx(GPIO_TYPE_PATTERN_IDX, 1)]
+    fn bank_and_index_gpios_report_the_current_selection(
+        #[case] gpio_type: u8,
+        #[case] expected: u8,
+    ) {
         let h = Harness::new(1);
-        for (gpio_type, expected) in [
-            (GPIO_TYPE_FORCE_FAN, 0),
-            (GPIO_TYPE_MOD_BANK, 0),
-            (GPIO_TYPE_MOD_IDX, 1),
-            (GPIO_TYPE_PATTERN_BANK, 0),
-            (GPIO_TYPE_PATTERN_IDX, 1),
-        ] {
-            assert_eq!(
-                gpio_waveform(h.fpga(), raw(gpio_type, 0)),
-                constant_wave(expected),
-                "gpio type {gpio_type:#04x}"
-            );
-        }
+        assert_eq!(
+            gpio_waveform(h.fpga(), raw(gpio_type, 0)),
+            constant_wave(expected)
+        );
     }
 
     #[test]

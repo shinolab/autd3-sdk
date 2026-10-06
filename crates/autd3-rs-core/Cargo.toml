@@ -33,6 +33,7 @@ tracing-subscriber = { workspace = true, optional = true }
 zerocopy.workspace = true
 
 [dev-dependencies]
+rstest.workspace = true
 approx.workspace = true
 
 [lints]

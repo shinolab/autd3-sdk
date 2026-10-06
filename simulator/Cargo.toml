@@ -23,6 +23,7 @@ cast_precision_loss = "allow"
 
 [workspace.dependencies]
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
+rstest = { version = "0.27.0", default-features = false }
 autd3-rs = { path = "../crates/autd3-rs", default-features = false }
 autd3-rs-core = { path = "../crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { path = "../crates/autd3-rs-firmware-emulator" }
