@@ -11,10 +11,6 @@ pub trait Range {
     fn aabb(&self) -> Aabb;
 }
 
-fn n(start: f32, end: f32, resolution: f32) -> usize {
-    ((end - start) / resolution).floor() as usize + 1
-}
-
 impl Range for Point3<f32> {
     fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
         std::iter::once((self.x, self.y, self.z))
@@ -74,7 +70,12 @@ pub struct Grid {
 impl Range for Grid {
     fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
         let res = self.resolution;
-        let spec = [&self.x, &self.y, &self.z].map(|r| (*r.start(), n(*r.start(), *r.end(), res)));
+        let spec = [&self.x, &self.y, &self.z].map(|r| {
+            (
+                *r.start(),
+                ((*r.end() - *r.start()) / res).floor() as usize + 1,
+            )
+        });
         let [inner, middle, outer] = self.order.axes();
         (0..spec[outer].1).flat_map(move |i2| {
             (0..spec[middle].1).flat_map(move |i1| {

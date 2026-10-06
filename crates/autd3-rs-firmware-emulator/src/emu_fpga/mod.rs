@@ -139,11 +139,6 @@ impl FpgaEmulator {
         }
     }
 
-    fn reconfigure(&mut self) {
-        self.reload();
-        self.reconfig_count += 1;
-    }
-
     pub(crate) fn power_on(&mut self) {
         self.reload();
     }
@@ -250,7 +245,8 @@ impl FpgaEmulator {
             CNT_SELECT_FLASH => {
                 self.flash.write_reg(a & 0xFF, value);
                 if self.flash.take_reboot_request() {
-                    self.reconfigure();
+                    self.reload();
+                    self.reconfig_count += 1;
                 }
             }
             sel if sel >> 1 == CNT_SELECT_FLASH_BUF >> 1 => self.flash.write_buf(a & 0x1FF, value),
