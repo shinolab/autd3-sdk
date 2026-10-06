@@ -1,6 +1,6 @@
 // Single focus with a 200 Hz sine AM.
 //
-// Run with: cargo xtask example focus_sine
+// Run with: cargo xtask rust example focus_sine
 
 use anyhow::Result;
 

@@ -1,6 +1,6 @@
 // Per-device-group command: focus each device group at a different target.
 //
-// Run with: cargo xtask example group
+// Run with: cargo xtask rust example group
 
 use anyhow::Result;
 
