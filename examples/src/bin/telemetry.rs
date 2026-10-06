@@ -3,7 +3,7 @@
 // Pass an address to reach an appliance over the Remote Link; without one it drives the local
 // EtherCAT interface directly.
 //
-// Run with: cargo xtask example telemetry
+// Run with: cargo xtask rust example telemetry
 
 use std::net::SocketAddr;
 use std::time::Duration;

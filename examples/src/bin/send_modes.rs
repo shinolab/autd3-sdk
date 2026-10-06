@@ -1,6 +1,6 @@
 // Sweeps a focus around a circle, sending the same update sequence two ways to show how the send loop chooses its mode.
 //
-// Run with: cargo xtask example send_modes
+// Run with: cargo xtask rust example send_modes
 
 use std::collections::VecDeque;
 use std::f32::consts::PI;

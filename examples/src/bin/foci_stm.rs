@@ -1,6 +1,6 @@
 // Circular foci STM at 1 Hz.
 //
-// Run with: cargo xtask example foci_stm
+// Run with: cargo xtask rust example foci_stm
 
 use anyhow::Result;
 
