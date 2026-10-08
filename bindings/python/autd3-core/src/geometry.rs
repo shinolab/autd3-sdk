@@ -190,6 +190,10 @@ impl Geometry {
             .call1((self.inner.num_devices(),))
     }
 
+    fn output_mask_buffer(&self) -> Vec<Vec<bool>> {
+        self.0.output_mask_buffer()
+    }
+
     fn device(&self, index: usize) -> PyResult<Device> {
         if index >= self.inner.num_devices() {
             return Err(PyIndexError::new_err("device index out of range"));

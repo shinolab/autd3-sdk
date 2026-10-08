@@ -69,6 +69,14 @@ impl Geometry {
     }
 
     #[must_use]
+    pub fn output_mask_buffer(&self) -> Vec<Vec<bool>> {
+        self.devices
+            .iter()
+            .map(|d| vec![true; d.num_transducers()])
+            .collect()
+    }
+
+    #[must_use]
     pub fn num_transducers(&self) -> usize {
         self.devices.iter().map(Device::num_transducers).sum()
     }
@@ -145,6 +153,17 @@ mod tests {
         for dev in &buf {
             assert_eq!(dev.len(), Autd3::NUM_TRANSDUCERS);
             assert!(dev.iter().all(|&i| i == Intensity::MAX));
+        }
+    }
+
+    #[test]
+    fn output_mask_buffer_starts_with_every_output_enabled() {
+        let g = Geometry::new(vec![Autd3::default(), Autd3::default()]);
+        let buf = g.output_mask_buffer();
+        assert_eq!(buf.len(), 2);
+        for dev in &buf {
+            assert_eq!(dev.len(), Autd3::NUM_TRANSDUCERS);
+            assert!(dev.iter().all(|&enabled| enabled));
         }
     }
 

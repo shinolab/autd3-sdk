@@ -66,6 +66,17 @@ namespace AUTD3
 
         public bool IsEmpty => NumDevices == 0;
 
+        public bool[][] OutputMaskBuffer()
+        {
+            var masks = new bool[NumDevices][];
+            for (var dev = 0; dev < masks.Length; dev++)
+            {
+                masks[dev] = new bool[this[dev].NumTransducers];
+                Array.Fill(masks[dev], true);
+            }
+            return masks;
+        }
+
         public Vector3 Center
         {
             get
