@@ -19,6 +19,11 @@ pub enum ModulationError {
     #[error("fourier modulation value is out of range [0, 255]")]
     FourierValueOutOfRange,
 
+    #[error(
+        "the common period of the fourier components exceeds the modulation buffer ({max} samples)"
+    )]
+    FourierPeriodTooLong { max: usize },
+
     #[error("frequency {hz} Hz is equal to or greater than the Nyquist frequency ({nyquist} Hz)")]
     FrequencyAboveNyquist { hz: f32, nyquist: f32 },
 
