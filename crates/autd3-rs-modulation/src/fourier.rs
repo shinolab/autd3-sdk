@@ -50,6 +50,11 @@ pub fn fourier<S: Into<SamplingMode> + Copy>(
     let offset = f32::from(option.offset);
 
     let len = buffers.iter().fold(1, |acc, b| lcm(acc, b.len()));
+    if len > MOD_BUFFER_SAMPLES {
+        return Err(ModulationError::FourierPeriodTooLong {
+            max: MOD_BUFFER_SAMPLES,
+        });
+    }
     let mut acc = vec![0f32; len];
     for buf in &buffers {
         for (a, b) in acc.iter_mut().zip(buf.iter().cycle()) {
