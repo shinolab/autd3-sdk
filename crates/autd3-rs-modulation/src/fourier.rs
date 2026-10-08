@@ -1,5 +1,7 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
+use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
+
 use crate::error::ModulationError;
 use crate::quantize::quantize;
 use crate::sampling_mode::SamplingMode;
@@ -45,6 +47,11 @@ pub fn fourier(
     let offset = f32::from(option.offset);
 
     let len = buffers.iter().fold(1usize, |acc, b| acc.lcm(&b.len()));
+    if len > MOD_BUFFER_SAMPLES {
+        return Err(ModulationError::FourierPeriodTooLong {
+            max: MOD_BUFFER_SAMPLES,
+        });
+    }
     let mut acc = vec![0f32; len];
     for buf in &buffers {
         for (a, b) in acc.iter_mut().zip(buf.iter().cycle()) {
