@@ -19,11 +19,11 @@ fn main() -> Result<()> {
     let center = geometry.center();
 
     let groups = TransducerGroups::new(&geometry, |device, tr| {
-        Some(if device.position(tr).x < center.x {
+        if device.position(tr).x < center.x {
             Side::Left
         } else {
             Side::Right
-        })
+        }
     });
 
     let foci = [

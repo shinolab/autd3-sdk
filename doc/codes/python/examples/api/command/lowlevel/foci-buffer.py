@@ -1,12 +1,12 @@
 from autd3.commands import ConfigFociStm, StmConfig, WriteFociBuffer, circle
-from autd3.units import Hz, m, s
+from autd3.units import Hz, m, mm, s
 from autd3.value import Intensity, LoopBehavior, PatternBank
 
 bank = PatternBank.B0
 points = []
 circle(
     [0.0, 0.0, 0.0],
-    30.0,
+    30.0 * mm,
     200,
     [0.0, 0.0, 1.0],
     Intensity.MAX,

@@ -1,5 +1,5 @@
 use autd3_rs::commands::{
-    ChangeModulationBank, ConfigModulation, Modulation, WriteModulationBuffer,
+    ActivateModulationBank, ConfigModulation, Modulation, WriteModulationBuffer,
 };
 use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 
@@ -37,7 +37,7 @@ fn main() {
         size: data.len(),
         loop_behavior,
     };
-    ChangeModulationBank {
+    ActivateModulationBank {
         bank,
         transition_mode,
     };

@@ -5,6 +5,8 @@ sidebar:
   order: 8
 ---
 
+import CodeTabs from "@components/CodeTabs.astro";
+
 `Simulator` は, AUTD3 の出力音場をブラウザ上で可視化する音場シミュレータ.
 実機がなくても, クライアントが送ったデータから生成される音場を確認できる.
 
@@ -13,8 +15,32 @@ sidebar:
 `Simulator` は GUI コンソール `autd3-console` に同梱されている.
 
 [コンソール](/autd3-sdk/guide/console/) の手順で `autd3-console` を入手して起動し, 上部の「Simulator」タブを開く.
+タブの「Geometry JSON」がジオメトリのファイル (空なら原点に 1 台) である.
 
 ## 接続
 
-`Simulator` は内部で `RemoteServer` を起動しているため, クライアントからは [`RemoteLink`](/autd3-sdk/api/link/remote/) で接続する.
-接続先は `127.0.0.1:<link-port>` ( デフォルトは 8080 ).
+`Simulator` はホスト上 (`::1`) で AUTD3 のデバイス群を模擬し, 実機と同じ UDP で待ち受ける.
+待ち受けアドレスは `[::1]:44336` で固定なので, クライアントは Simulator と同じホストで動かす.
+
+既定の [`TransportOption`](/autd3-sdk/api/connection/) (`iface` が `Auto`) は, Simulator が動いていれば Simulator に, 動いていなければ実機につながる.
+アドレスを指定する必要はない.
+
+:::caution
+`Auto` のままだと, Simulator を起動し忘れたときに実機へつながり, 実際に超音波が出る.
+Simulator にしかつなぎたくない場合は, `iface` に `Simulator` を指定すること. Simulator が動いていなければ, 開くのに失敗する.
+:::
+
+<CodeTabs
+  rust={'let option = TransportOption {\n    iface: Interface::Simulator,\n    ..Default::default()\n};'}
+  python={'option = TransportOption(iface=Interface.Simulator)'}
+  csharp={'var option = new TransportOption { Iface = Interface.Simulator };'}
+/>
+
+逆に, Simulator を動かしたまま実機につなぐ場合は, `iface` に `Name(..)` で NIC を指定する.
+
+Simulator は全台を 1 プロセスで処理するので, 返信が遅れることがある. `Timeout` が出る場合は `ClientConfig` の `ack_timeout` (既定 10 ms) と `TransportOption` の `reply_timeout` (既定 1 ms) を広げる.
+
+Simulator が模擬するデバイスの配置は Simulator 側で与える.
+Simulator を単体で起動する場合は `--geometry <file>` に `Geometry` の JSON (`Geometry::to_json` の出力) を渡す (省略すると原点に 1 台).
+台数がクライアントのジオメトリと合わなければ, 開くのに失敗する.
+1 つのホストで同時に動かせる Simulator は 1 つである.

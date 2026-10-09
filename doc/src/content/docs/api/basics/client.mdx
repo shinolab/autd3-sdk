@@ -17,7 +17,13 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 `Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
 `Client` を含む基礎・コマンドの API は本体パッケージが提供する.
-実機等への接続には, これとは別に [Link](/autd3-sdk/api/link/) が必要.
+接続先 (実機・[デバイスエミュレータ](/autd3-sdk/api/connection/device-emulator/)・Simulator) は [`TransportOption`](/autd3-sdk/api/connection/) で指定する.
+
+`Client::open` はデバイスを列挙して開き (同期的に行われる), 受信と生存確認のための I/O スレッドを 1 本起こしてから, 接続の手順 (handshake) を進める.
+ユーザーがスレッドを立てたりループを回したりする必要は無い.
+
+Python の `Client.open` / `send` / `close` などの非同期 API は, 実行中の asyncio イベントループの中 (`asyncio.run(main())` で起動したコルーチンの中など) からしか呼べない.
+同期版の API は提供していない.
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
@@ -26,10 +32,10 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | 引数       | 型             | 説明                 |
 | ---------- | -------------- | -------------------- |
 | `geometry` | `&Geometry`    | デバイスの物理配置   |
-| `link`     | `impl IntoLink`| リンク               |
+| `option`   | `&TransportOption` | 接続先と通信の設定 ([接続](/autd3-sdk/api/connection/) 参照) |
 | `config`   | `ClientConfig` | 下記参照             |
 
-リンクの稼働状態を継続的に監視したい場合は `open_with_checker` を使い, 返り値の `Checker` を駆動する ([リンクの状態監視](/autd3-sdk/guide/state-check/) 参照).
+デバイスの稼働状態を継続的に監視したい場合は `Client::state_checker` で取った `StateChecker` を駆動する ([状態監視](/autd3-sdk/guide/state-check/) 参照).
 
 ## API
 
@@ -39,16 +45,23 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 | ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
 | `num_devices()`           | —     | `usize`                               | 接続中のデバイス台数                                       |
 | `geometry()`              | —     | `&Geometry`                           | 接続時のデバイスの物理配置                                 |
+| `bus_stats()`             | —     | `BusStats`                            | 送受信の統計 (送信フレーム数・ack 遅延など)                |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
-| `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | 各デバイスのエラー詳細                                     |
-| `datagram_builder()`      | —     | `DatagramBuilder`                     | [DatagramBuilder](/autd3-sdk/api/basics/datagram-builder/) |
-| `send(frame)`             | ✓     | `Result<ResponseFuture, Error>`       | フレームを送信キューにいれる. `ResponseFuture` を await すると応答 (`Response`) が得られる |
-| `send_checked(frame)`     | ✓     | `Result<(), Error>`                   | 送信し, 応答確認まで行う                                   |
-| `stop()`                  | ✓     | `Result<(), Error>`                   | 全振動子を停止                                             |
-| `close()`                 | ✓     | `Result<(), Error>`                   | 全振動子を停止して接続を閉じる                             |
+| `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
+| `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | 応答を待たずに窓の範囲でフレームを送る. `StreamFuture` を await すると全フレームの完了を待つ |
+| `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る. `ResponseFuture` を await すると応答 (`Response`) が得られる |
+| `state_checker()`         | —     | `StateChecker`                        | デバイスの状態を読むためのハンドル ([状態監視](/autd3-sdk/guide/state-check/)) |
+| `silent_stop()`           | ✓     | `Result<(), Error>`                   | Silencer を設定してから全振動子を停止                      |
+| `close()`                 | ✓     | `Result<(), Error>`                   | `silent_stop()` と同じ手順で停止して接続を閉じる           |
 
-`send_checked(frame).await?` は, `send(frame).await?.await?.check()` と等価である.
+`silent_stop()` は, 振幅を一気に落としてノイズが出るのを避けるため, まず [Silencer](/autd3-sdk/api/command/silencer/) を既定の完了時間 (strict mode は無効) に設定してから全振動子の振幅を 0 にする.
+Silencer の設定は上書きされたままになるので, 別の設定で出力を再開する場合は `SetSilencer` を送り直すこと.
+
+`bus_stats()` が返す `BusStats` は接続と統計を共有するハンドルで, 値を読むたびにその時点の統計が得られる (取り直す必要は無く, `Client` を閉じた後も読める).
+
+送信の詳細は [送信](/autd3-sdk/api/basics/send/) を参照.
+ライブラリのログを表示する方法は [ログ出力](/autd3-sdk/api/basics/tracing/) を参照.
 
 ## ClientConfig
 
@@ -56,18 +69,12 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 | フィールド             | 型                    | デフォルト          | 説明                                                       |
 | ---------------------- | --------------------- | --------------- | ---------------------------------------------------------- |
-| `timeout_cycles`       | `NonZeroU32`          | `10`            | 応答待ちのタイムアウト (送信サイクル数)                    |
-| `max_inflight`         | `NonZeroUsize`        | `127`           | 送信キューサイズ                     |
-| `max_resync_rounds`    | `NonZeroU32`          | `8`             | 再同期を試みる最大ラウンド数                               |
-| `low_latency`          | `bool`                | `false`         | 低レイテンシモード          |
-| `reset_resend_cycles`  | `NonZeroU32`          | `2`             | リセット命令の送信サイクル数                             |
-| `rt_priority`          | `Option<RtPriority>` | Windows: `TimeCritical` / その他: `80` | RT スレッドの優先度. `None` にすると OS 既定. |
-| `rt_policy`            | `RtSchedulePolicy`    | `Fifo`          | `rt_priority` 指定時のスケジューリングポリシー. `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
-| `rt_affinity`          | `Option<CoreId>`      | `None`          | RT スレッドの CPU affinity (`None` なら OS 既定)      |
-| `validate_state`       | `bool`                | `true`          | 送信前検証を有効にする                     |
+| `ack_timeout`          | `Duration`            | 10 ms           | 応答待ちのタイムアウト. 過ぎると送信中のフレームは `Timeout` で失敗し, 次の送信で SEQ を揃え直す |
+| `max_inflight`         | `NonZeroUsize`        | `7`             | 応答を待たずに送ってよいフレーム数 (既定はデバイスの受信キューの容量) |
+| `max_resync_rounds`    | `NonZeroU32`          | `8`             | SEQ を揃え直す `Reset` を送り直す最大回数                  |
 | `require_supported_firmware` | `bool`          | `false`         | `true`なら接続時にファームウェアがサポートされているか検査する |
 
 `max_inflight` は `MAX_INFLIGHT (127)` を超えるとエラーになる.
-
-`low_latency` を有効にすると, ファームウェア内部での受信バッファをバイパスするため, レイテンシが改善する. ただし, 動作が不安定になる可能性がある.
+デバイスの受信キューは 7 フレーム分なので, これより大きくしてはならない (溢れたフレームは捨てられ, `Timeout` になる).
+自動再送は行わない. 失敗したコマンドは呼び出し側が送り直す ([送信](/autd3-sdk/api/basics/send/) 参照).
 

@@ -1,0 +1,54 @@
+---
+title: SysTime
+description: The API and arithmetic of SysTime, the time of the devices
+sidebar:
+  order: 5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/sys-time.rs?raw";
+import pySample from "@codes/python/examples/api/basics/sys-time.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/sys-time.cs?raw";
+
+`SysTime` is a type representing a **time of the devices**.
+It is used with [`TransitionMode::SysTime`](/autd3-sdk/en/getting-started/tutorial/loop/), [`GpioOut::SysTimeEq`](/autd3-sdk/en/api/command/gpio/), and the like.
+
+Each device has its own clock, and output switching and the like happen on this time.
+This time is a 64-bit counter in ns units, counted from the moment the `Client` opens.
+It does not correspond to the host clock (date and time).
+The current time of the devices is obtained with `device_time_now()` of the `Client`.
+
+The devices share the same time through PTP ([Synchronization Between Devices](/autd3-sdk/en/api/connection/#synchronization-between-devices)).
+So the same `SysTime` makes every device act at the same moment.
+
+## Construction
+
+`SysTime` is constructed from the current time of the devices or raw ns.
+
+<CodeTabs rust={excerpt(sample, "construct")} python={excerpt(pySample, "construct")} csharp={excerpt(csSample, "construct")} />
+
+| Operation               | Description                                                    |
+| ----------------------- | ------------------------------------------------------------- |
+| `ZERO`                  | The moment the `Client` opened                                |
+| `Client::device_time_now()` | Current time of the devices (C#: `DeviceTimeNow()`)       |
+| `from_nanos(ns)`        | Construct from ns elapsed since the open                      |
+| `sys_time()`            | ns elapsed since the open                                     |
+
+Reopening the `Client` resets the time of the devices to 0. A `SysTime` obtained with a previous `Client` is no longer valid.
+
+## Arithmetic
+
+`SysTime` defines operations that add and subtract time differences.
+
+<CodeTabs rust={excerpt(sample, "ops")} python={excerpt(pySample, "ops")} csharp={excerpt(csSample, "ops")} />
+
+| Operation                     | Result       | Description                              |
+| ----------------------------- | ------------ | ---------------------------------------- |
+| `SysTime + Duration`        | `SysTime`  | Add the specified duration               |
+| `SysTime - Duration`        | `SysTime`  | Subtract the specified duration          |
+| `SysTime - SysTime`       | `Duration`   | Difference between two times (Rust only) |
+| Comparison (`<` / `>` / `==`, etc.) | `bool` | Comparison (Rust / C# only)              |
+
+Rust uses `core::time::Duration` for `Duration`, C# uses `TimeSpan`, and Python uses `autd3.Duration`.
+Python provides only addition and subtraction (applying a time difference via `+` / `-`); it does not have computing a time difference or comparison.

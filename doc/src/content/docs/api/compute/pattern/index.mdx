@@ -23,7 +23,7 @@ import Install from "@components/Install.astro";
 - [group](/autd3-sdk/api/compute/pattern/group/) — 振動子毎にパターンを選択
 
 `focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分の位相を返す `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
-いずれも Rust と C# にあり, Python にはない.
+`*_device` 版の出力先は, Rust ではそのデバイスの位相スライス, C# では `Phase[]`, Python では長さがそのデバイスの振動子数に等しい 1 次元の `uint8` の numpy 配列 (`PhaseBuffer.to_numpy()` の 1 行など) で, その場に書き込む.
 
 ## 波長
 

@@ -15,6 +15,8 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/foci-buffe
 import { excerpt } from "@lib/excerpt";
 
 `ConfigFociStm` is a low-level command that configures the playback parameters of the Foci STM bank.
+The settings are only written; they take effect on playback when [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/) is sent.
+To change the settings of the bank being played, follow it with a `ActivatePatternBank` that points to the same bank.
 
 ## API
 
@@ -32,10 +34,10 @@ import { excerpt } from "@lib/excerpt";
 The minimum `size` is 2.
 To emit a single focal point statically, use [Pattern](/autd3-sdk/en/api/command/pattern/) instead of an STM.
 
-For the timing at which `loop_behavior` and the transition take effect see [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+For the timing at which `loop_behavior` and the transition take effect see [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
 
 ## Example
 
-`ConfigFociStm` is used within the flow of writing the focal point sequence with `WriteFociBuffer` and then switching playback with `ChangePatternBank`.
+`ConfigFociStm` is used within the flow of writing the focal point sequence with `WriteFociBuffer` and then switching playback with `ActivatePatternBank`.
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

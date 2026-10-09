@@ -26,11 +26,11 @@ fn main() -> Result<()> {
     let center = geometry.center();
     // ANCHOR: api
     let groups = TransducerGroups::new(&geometry, |device, tr| {
-        Some(if device.position(tr).x < center.x {
+        if device.position(tr).x < center.x {
             Side::Left
         } else {
             Side::Right
-        })
+        }
     });
     group(
         &geometry,
@@ -39,7 +39,6 @@ fn main() -> Result<()> {
             Side::Left => &left,
             Side::Right => &right,
         },
-        Phase::ZERO,
         &mut dst,
     );
     // ANCHOR_END: api

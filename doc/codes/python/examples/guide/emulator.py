@@ -19,10 +19,7 @@ emulator = Emulator(geometry)
 
 
 def record_fn(r: Recorder) -> None:
-    builder = r.datagram_builder()
-    builder.push(Pattern(phases, Intensity.MAX))
-    for frame in builder.build():
-        r.send_checked(frame)
+    r.send(Pattern(phases, Intensity.MAX))
     r.tick(Duration.from_millis(1))
 
 

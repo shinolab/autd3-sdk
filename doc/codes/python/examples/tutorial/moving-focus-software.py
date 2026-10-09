@@ -2,10 +2,9 @@ import asyncio
 
 import numpy as np
 
-import autd3_link_echocat as echocat
 import autd3_modulation as modulation
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, TransportOption
 from autd3.commands import Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
@@ -19,7 +18,7 @@ async def main() -> None:
 
     async with await Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        TransportOption(),
         ClientConfig(),
     ) as client:
         center = geometry.center() + np.array([0.0, 0.0, 150.0])
@@ -36,10 +35,7 @@ async def main() -> None:
                     wavelength,
                     phases,
                 )
-                builder = client.datagram_builder()
-                builder.push(Pattern(phases, Intensity.MAX))
-                for frame in builder.build():
-                    await client.send_checked(frame)
+                await client.send(Pattern(phases, Intensity.MAX))
                 await asyncio.sleep(1.0)
         # ANCHOR_END: loop
 

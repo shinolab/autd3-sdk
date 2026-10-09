@@ -1,6 +1,6 @@
 ---
 title: CPU ファームウェア
-description: EtherCAT スレーブとして動作し FPGA へデータを書き込む CPU ボードのファームウェア
+description: ホストと UDP で通信し FPGA へデータを書き込む CPU ボードのファームウェア
 sidebar:
   order: 0
 ---
@@ -9,17 +9,18 @@ import Math from "@components/Math.astro";
 import MathBlock from "@components/MathBlock.astro";
 import Mermaid from "@components/Mermaid.astro";
 
-CPU ボード (AP-RZT-01, Alpha Project) は Renesas RZ/T1 (Arm Cortex-R4F) を搭載しており, EtherCAT スレーブとして動作する.
-これの役割は, EtherCAT の PDO で受け取ったフレームを解釈し, FPGA 内の BRAM へ書き込むことである.
+CPU ボード (AP-RZT-01, Alpha Project) は Renesas RZ/T1 (Arm Cortex-R4F) を搭載している.
+これの役割は, ホストから UDP (IPv6 リンクローカル) で受け取ったフレームを解釈し, FPGA 内の BRAM へ書き込むことである.
+RZ/T1 内蔵の Ethernet スイッチ (ETHSW) の 2 ポートを使い, デバイスをデイジーチェーンで接続する.
 
 ソースは `firmware/cpu/` 以下にあり, `no_std` Rust で記述されている.
 2 つのクレートに分かれている.
 
-- `fw/` (`autd3-cpu-fw`): プロトコル解釈・コマンド処理・FPGA 書き込みなどの可搬ロジック.
-  ハードウェアには `Port` trait 越しにのみアクセスし, `unsafe` を含まない.
+- `fw/` (`autd3-cpu-fw`): プロトコル解釈・コマンド処理・FPGA 書き込み, および IPv6 / UDP / ICMPv6 の解析と組み立て (`net`), 列挙と受信振り分け (`node`) などの可搬ロジック.
+  ハードウェアには `Port` trait (コマンド層) と `Nic` trait (ネットワーク) 越しにのみアクセスし, `unsafe` を含まない.
   ホストテストと `autd3-rs-firmware-emulator` からも同じコードが使われる.
 - `board/` (`autd3-cpu`): 実機ターゲット (armv7r-none-eabi) の staticlib.
-  レジスタ定義・BSP・`Port` trait の実機実装・C-ABI エクスポート・panic handler を持ち, `unsafe` はここに閉じ込める.
+  レジスタ定義・BSP・ETHSW / GMAC のドライバ・`Port` / `Nic` trait の実機実装・`main`・panic handler を持ち, `unsafe` はここに閉じ込める.
 
 ## 開発環境構築
 
@@ -55,8 +56,8 @@ cargo xtask cpu format --fix  # rustfmt 実書き換え
 1. `arm-none-eabi-gcc` で `platform/autd3-platform.o` とリンカスクリプト `platform/autd3-cpu.ld` を用いてリンクする.
 1. `objcopy` で `build/autd3-cpu.bin` を生成する.
 
-`platform/autd3-platform.o` は EtherCAT スレーブコントローラの初期化などを含む非公開コードのビルド済みオブジェクトである.
-両者の C-ABI 境界 (`init_app` / `recv_ethercat` / `app_process_pending` / `bsp_*`) は `board/src/lib.rs` の `#[unsafe(no_mangle)]` エクスポートが実装する.
+`platform/autd3-platform.o` はローダ・スタートアップ・シリアルフラッシュドライバを含む非公開コードのビルド済みオブジェクトである.
+スタートアップは `board/src/lib.rs` の `main` を呼び, 以後の初期化とメインループはすべて Rust 側で行う.
 
 ### 実機書き込み
 
@@ -65,52 +66,55 @@ cargo xtask cpu format --fix  # rustfmt 実書き換え
 
 ### ホストテスト
 
-`fw/` は `Port` trait (`fpga_write` / `fpga_read` / `memory_barrier` / `sleep_ms` など) 以外のハードウェア依存を持たない.
+`fw/` は `Port` trait (`fpga_write` / `fpga_read` / `memory_barrier` など) と `Nic` trait 以外のハードウェア依存を持たない.
 `cargo xtask cpu test` では `fw/src/tests/mock.rs` の `MockPort` がこれを置き換え, FPGA への書き込みを記録する.
-`fw/src/tests/` がプロトコル層 (`Cpu::recv_ethercat` / `Cpu::process_one`) の振る舞いを検証する.
+`fw/src/tests/` がプロトコル層 (`Cpu::recv_frame` / `Cpu::process_one`) の振る舞いを, `fw/src/net` と `fw/src/node` のテストがネットワーク処理と列挙の振る舞いを検証する.
 
 ## フレーム処理
 
-EtherCAT の 1 サイクルにつき, マスタからスレーブへ 626 byte, スレーブからマスタへ 2 byte が転送される.
+ホストは送るものがあるときに, 各デバイスへ 1 つの UDP データグラム (デバイス側ポート 44336) を送る.
+データグラムは 4 byte のヘッダ (版数・種別・メッセージ ID) の後ろに最大 1448 byte のフレームを持つ.
+送るものが無い間は, フレームの代わりに生存確認 (`Heartbeat`) が届く.
 
-受信フレームは先頭が `seq` (1 byte), `cmd` (1 byte) で, 残り 624 byte がペイロードである.
-送信フレームは `ack` (1 byte) と `data` (1 byte) からなる.
+受信フレームは先頭が `seq` (1 byte), `cmd` (1 byte) で, 残り (最大 1446 byte) がペイロードである.
+ペイロードの長さはデータグラムの長さだけで決まり, ペイロードの中に長さのフィールドは無い.
+デバイスは受け取ったペイロードを長さごとコマンド層 (`Cpu::recv_frame`) へ渡し, 各コマンドはその長さを検査する (固定長のコマンドは完全一致, 可変長のデータはヘッダの後ろの残り全部).
+各フレームの扱いを終えた時点で, `ack` (1 byte)・`status` (エラーコード, 1 byte)・読み出し値 (最大 32 byte) を載せた返信を 1 回送る.
+返信にはこのほか, デバイスの状態フラグ・ID・デバイスの時刻が載る.
 
-:::note
-諸事情により, EtherCAT のプロセスデータ上では, オフセット 498 から 2 byte のギャップがある.
-`recv_ethercat` はこのギャップを取り除いてからフレームを解釈する.
-:::
+受信割り込みの中で扱いが終わるもの (再送・`CMD_RESET`・`Heartbeat`) は割り込みの中で返信し,
+FIFO に積んだフレームはメインループが処理した後に, 割り込みを禁止した区間で返信する.
+再送と `Heartbeat` への返信は割り込みの中で返るので, メインループが長い処理で止まっていても返り続ける.
 
-同じ `seq` かつ同じ `cmd` のフレームは再送とみなして無視する.
+同じ `seq` かつ同じ `cmd` のフレームは再送とみなして無視する (返信だけを返す).
 
-フレームの処理方式には 2 つのモードがあり, `SetMode` コマンド (`CMD_SET_MODE`) でセッション全体を切り替える.
+受信割り込みはフレームを深さ 8 のリングバッファ (FIFO) に積むだけで抜け, メインループが処理して返信する.
 
 <Mermaid
-  title="フレーム処理モード"
+  title="フレームの処理経路"
   code={`flowchart TB
-  RX["recv_ethercat (EtherCAT 割り込み)"]
-  MODE{"mode"}
+  RX["recv_frame (Ethernet 受信割り込み)"]
+  RESET{"CMD_RESET?"}
   FIFO[("FIFO (深さ 8)")]
-  MAIN["app_process_pending (メインループ)"]
+  MAIN["process_one (メインループ)"]
   HANDLE["handle_frame"]
-  RX --> MODE
-  MODE -- "MODE_LOW_LATENCY" --> HANDLE
-  MODE -- "MODE_FIFO" --> FIFO
+  RX --> RESET
+  RESET -- "yes" --> HANDLE
+  RESET -- "no" --> FIFO
   FIFO --> MAIN --> HANDLE`}
 />
 
-- `MODE_FIFO` (既定): 受信フレームを深さ 8 のリングバッファに積むだけで割り込みを抜け, メインループの `app_process_pending()` が処理する. 割り込み時間が短く済むが, `ack` が返るまでの遅延が増える.
-- `MODE_LOW_LATENCY`: 受信割り込みの中で直接処理する. 遅延は小さいが, 処理時間の長いコマンドが EtherCAT サイクルを圧迫する.
+メインループは待ちを挟まずに FIFO を見続けるので, FIFO を通すことによる遅延は 1 フレームあたり 10 us 未満である (実測).
 
-FIFO が満杯の場合, フレームは捨てられる.
-`ack` が進まないため, クライアント側が再送する.
+FIFO が満杯の場合, フレームは捨てられ, 返信も送らない.
+`ack` が進まないため, クライアント側では `Timeout` になり, 呼び出し側がコマンドを送り直す (クライアントは既定で 7 フレームまでしか同時に送らないので, 通常は溢れない).
 
-`CMD_RESET` だけはモードに関わらず割り込み内で即座に処理され, FIFO も破棄される.
+`CMD_RESET` だけは割り込み内で即座に処理され, FIFO も破棄される.
 
 ## エラー通知
 
-`handle_frame` はコマンドを実行し, エラーがあればエラーコードをラッチする.
-ラッチされたコードは `CMD_READ_ERROR_DETAIL` で読み出せる.
+`handle_frame` はコマンドを実行し, エラーがあればエラーコードを返信の `status` に載せる.
+コードはデバイス側に保持しない. 過去にエラーがあったかは `ReadTelemetry` の `DispatchError` カウンタで分かる.
 
 | コード | 名前                           | 意味                                       |
 | ------ | ------------------------------ | ------------------------------------------ |
@@ -122,8 +126,9 @@ FIFO が満杯の場合, フレームは捨てられる.
 | `0x05` | `ERR_INVALID_TRANSITION_MODE`  | 遷移モードと繰り返し回数の組み合わせが不正 |
 | `0x06` | `ERR_MISS_TRANSITION_TIME`     | `SysTime` 遷移の指定時刻が近すぎる・過去である |
 | `0x07` | `ERR_FPGA_TIMEOUT`             | FPGA が制御フラグを期限内にクリアしない     |
-| `0x08` | `ERR_SYNC_NOT_READY`           | EtherCAT の DC が未設定で Sync0 時刻が読めない |
-| `0x09` | `ERR_INVALID_SYNC0_CYCLE`      | Sync0 周期が未設定, または <Math tex="\SI{500}{us}" /> の整数倍でない |
+| `0x08` | `ERR_SYNC_NOT_READY`           | 同期パルスがまだ動いていない (時刻合わせ前) |
+| `0x09` | (欠番)                         | Firmware v0.9.0 までの `ERR_INVALID_SYNC0_CYCLE`. 同期パルスの周期はファームが決めるので発生しない |
+| `0x14` | `ERR_SYNC_MISSED`              | `CMD_SYNCHRONIZE` の書き込みが同期パルスの立ち上がりに 3 回続けて間に合わなかった |
 
 ## FPGA への書き込み
 
@@ -143,20 +148,35 @@ FPGA 側の「書き込み先を切り替えるレジスタ」(`MOD_MEM_WR_BANK`
 
 ## 同期
 
+FPGA の同期入力 (`CAT_SYNC0` ピン) には, ETHSW のタイマから作った同期パルスを入れる.
+タイマの SYNCOUT (<Math tex="\SI{500}{us}" /> 周期) から ELC → MTU → PPG を経て, 立ち上がりが <Math tex="\SI{1}{ms}" /> 境界に乗る <Math tex="\SI{1}{ms}" /> 周期のパルスを作る.
+
+ETHSW のタイマはデバイス間で PTP (IEEE 1588, L2, E2E, two-step) によって揃える (`fw/src/ptp`).
+
+- ID 0 のデバイスが grandmaster (GM) になる. ホストは `Client` (`UdpBus`) を開くときに GM にだけ時刻を送る (`SetTime`. 送る値は 0 で, デバイスの時刻は開いた時点から数える). GM 以外は `SetTime` を `NotGrandmaster` で拒否する
+- GM は <Math tex="\SI{16}{ms}" /> ごとに下流ポートへ `Sync` / `Follow_Up` を送り, `Delay_Req` に `Delay_Resp` で答える. 中継する各デバイスの ETHSW が Transparent Clock として滞留時間を `correctionField` に足す
+- 他のデバイス (slave) は上流ポートから届く `Sync` と自分の `Delay_Req` から GM とのずれを求め, 固定小数点の PI サーボでタイマの周波数を補正する. ずれが <Math tex="\SI{10}{us}" /> を超えるとタイマをステップする
+- ずれが <Math tex="\SI{100}{ns}" /> 未満の状態が 64 回続くとロックとみなし, 同期パルスを張り直す. ステップするとロックを外して同期パルスを止める
+- PTP の処理は受信割り込みと 1 ms のタイマ割り込みだけで行うので, メインループが止まっても (フラッシュの消去など) 同期は保たれる
+
 `CMD_SYNCHRONIZE` は以下を行う.
 
-1. Sync0 の発火周期を読み出す
-1. 周期を検証する. <Math tex="0" /> ( DC が設定されてない ) や <Math tex="\SI{500}{us}" /> の整数倍でない場合は `ERR_INVALID_SYNC0_CYCLE` を返す
-1. 周期を FPGA内部の`SYS_TIME` の単位 (<Math tex="\SI{20.48}{MHz}" />) へ変換する
+1. 同期パルスの周期 (ファームの定数 <Math tex="\SI{1}{ms}" />) を FPGA内部の`SYS_TIME` の単位 (<Math tex="\SI{20.48}{MHz}" />) へ変換する
 
     <MathBlock tex={String.raw`
     \text{cycle\_ticks} = \text{cycle\_ns} \times \frac{\SI{20.48}{MHz}}{\SI{1}{GHz}} = 64 \times \frac{\text{cycle\_ns}}{3125}
     `} />
 
-1. 次に Sync0 が発火する EtherCAT システム時刻を読み出す. 現在時刻がそれに近すぎる (<Math tex="\SI{250}{us}" /> 未満) 場合は次の発火まで待つ.
-    - DC が未設定で時刻が読めない場合は `ERR_SYNC_NOT_READY` を返す
-1. その時刻を `ADDR_ECAT_SYNC_TIME_*` へ, 変換した周期を `ADDR_ECAT_SYNC_CYCLE_*` へ書き込む.
+1. 次に同期パルスが立ち上がるデバイス時刻 (現在時刻から <Math tex="\SI{250}{us}" /> 以上先の最初の <Math tex="\SI{1}{ms}" /> 境界) を求める.
+    - 同期パルスがまだ動いていない場合は `ERR_SYNC_NOT_READY` を返す
+1. その時刻を `ADDR_SYNC_TIME_*` へ, 変換した周期を `ADDR_SYNC_CYCLE_*` へ書き込む (FPGA のレジスタ名は `ECAT_SYNC_*`).
+1. デバイス時刻がその立ち上がりの <Math tex="\SI{1}{ms}" /> 前を過ぎるまで待つ (最長 <Math tex="\SI{250}{us}" />).
+    - FPGA はフラグを受けたあと最初の立ち上がりで `SYS_TIME` をセットするので, 1 つ手前の立ち上がりより前にフラグを立てると `SYS_TIME` が <Math tex="\SI{1}{ms}" /> 進む
 1. `SYNC_SET` フラグを立て, FPGA の [Synchronizer](/autd3-sdk/developer/fpga/synchronizer/) が `SYS_TIME` をセットするのを待つ.
+1. デバイス時刻を読み直し, 書き込んだ立ち上がりより手前であることを確かめる.
+    - フラグが立ち上がりより後に届くと `SYS_TIME` が <Math tex="\SI{1}{ms}" /> 遅れる
+    - 手前でなければ, 立ち上がりの時刻を求め直して書き込みからやり直す (合計 3 回まで)
+    - 3 回とも間に合わなければ `ERR_SYNC_MISSED` を返す
 
 ## バンク遷移の検証
 

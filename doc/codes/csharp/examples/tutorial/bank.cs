@@ -1,7 +1,6 @@
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 namespace DocSamples.TutorialBank;
@@ -12,7 +11,7 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
@@ -27,12 +26,7 @@ internal static class Sample
             wavelength,
             patA
         );
-        var builder = client.DatagramBuilder();
-        builder.Push(new Pattern(PatternBank.B0, patA, Intensity.Max));
-        foreach (var frame in builder.Build())
-        {
-            await client.SendCheckedAsync(frame);
-        }
+        await client.SendAsync(new Pattern(PatternBank.B0, patA, Intensity.Max));
 
         // Write focus B to bank B1, which is not currently playing, then switch to B1.
         // B0 keeps playing cleanly while B1 is being written (double buffering).
@@ -44,12 +38,7 @@ internal static class Sample
             wavelength,
             patB
         );
-        var builder2 = client.DatagramBuilder();
-        builder2.Push(new Pattern(PatternBank.B1, patB, Intensity.Max));
-        foreach (var frame in builder2.Build())
-        {
-            await client.SendCheckedAsync(frame);
-        }
+        await client.SendAsync(new Pattern(PatternBank.B1, patB, Intensity.Max));
         // ANCHOR_END: switch
     }
 }

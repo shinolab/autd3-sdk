@@ -30,7 +30,7 @@ import { excerpt } from "@lib/excerpt";
 
 ## Example
 
-複数の低レベルコマンドは 1 つの datagram にまとめて送る. 以下は `WritePatternBuffer` → `ConfigPattern` → `ChangePatternBank` で 1 つの Pattern を再生する例 (高レベルの [Pattern](/autd3-sdk/api/command/pattern/) と等価).
+複数の低レベルコマンドは 1 つの datagram にまとめて送る. 以下は `WritePatternBuffer` → `ConfigPattern` → `ActivatePatternBank` で 1 つの Pattern を再生する例 (高レベルの [Pattern](/autd3-sdk/api/command/pattern/) と等価).
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

@@ -25,7 +25,7 @@ import { excerpt } from "@lib/excerpt";
 
 | 引数         | 型                    | 説明                      |
 | ------------ | --------------------- | ------------------------- |
-| `components` | `&[SineComponent<S>]` | 合成する正弦波成分の配列  |
+| `components` | `&[SineComponent]`    | 合成する正弦波成分の配列  |
 | `option`     | `&FourierOption`      | 追加オプション (下記参照) |
 | `dst`        | `&mut Vec<u8>`        | 出力バッファ              |
 
@@ -41,8 +41,11 @@ import { excerpt } from "@lib/excerpt";
 
 | フィールド | 型             | 説明                    |
 | ---------- | -------------- | ----------------------- |
-| `freq`     | `Freq<u32>` 等 | 成分の周波数            |
+| `freq`     | `SamplingMode` | 成分の周波数            |
 | `option`   | `SineOption`   | 成分ごとの正弦波 Option |
+
+`freq` は [sine](/autd3-sdk/api/compute/modulation/sine/) と同じく `Freq<u32>` / `Freq<f32>` / `Nearest(freq)` で指定し, Rust では `.into()` で `SamplingMode` へ変換する.
+成分ごとに異なる指定方法を混ぜてよい.
 
 値域の判定は合成後の値に対して行うため, 成分の `SineOption` の `clamp` は使われない. 範囲外の値を丸めるには `FourierOption` の `clamp` を指定する. 
 

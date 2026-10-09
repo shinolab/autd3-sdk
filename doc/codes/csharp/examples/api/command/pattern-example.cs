@@ -1,8 +1,6 @@
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
-using Nop = AUTD3.Link.Nop;
 using static AUTD3.Units;
 
 // HIDE
@@ -14,7 +12,8 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
-await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
+using var emulator = new UdpEmulator(geometry.NumDevices);
+await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
 
 var phases = geometry.PhaseBuffer();
 Pattern.Focus(
@@ -24,13 +23,7 @@ Pattern.Focus(
     phases
 );
 
-var builder = client.DatagramBuilder();
-builder.Push(new Pattern(phases, Intensity.Max));
-var frames = builder.Build();
-foreach (var frame in frames)
-{
-    await client.SendCheckedAsync(frame);
-}
+await client.SendAsync(new Pattern(phases, Intensity.Max));
         // HIDE
     }
 }

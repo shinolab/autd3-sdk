@@ -10,6 +10,7 @@ const usersManual = [
           { label: "概要", translations: { en: "Overview" }, link: "/getting-started/setup/" },
           { label: "ハードウェア", translations: { en: "Hardware" }, link: "/getting-started/setup/hardware/" },
           { label: "ファームウェア", translations: { en: "Firmware" }, link: "/getting-started/setup/firmware/" },
+          { label: "ホストのネットワーク設定", translations: { en: "Host Network Setup" }, link: "/getting-started/setup/network/" },
           { label: "ソフトウェア", translations: { en: "Software" }, link: "/getting-started/setup/software/" },
         ],
       },
@@ -19,14 +20,9 @@ const usersManual = [
         items: [{ autogenerate: { directory: "getting-started/tutorial" } }],
       },
       {
-        label: "Appliance のセットアップ",
-        translations: { en: "Appliance Setup" },
-        link: "/getting-started/appliance/",
-      },
-      {
-        label: "TwinCAT のセットアップ",
-        translations: { en: "TwinCAT Setup" },
-        link: "/getting-started/twincat/",
+        label: "ファームウェア v0.9.x からの移行",
+        translations: { en: "Migrating from firmware v0.9.x" },
+        link: "/getting-started/migration/",
       },
     ],
   },
@@ -61,7 +57,11 @@ const usersManual = [
         translations: { en: "Compute Helpers" },
         items: [{ autogenerate: { directory: "api/compute" } }],
       },
-      { label: "Link", items: [{ autogenerate: { directory: "api/link" } }] },
+      {
+        label: "接続",
+        translations: { en: "Connection" },
+        items: [{ autogenerate: { directory: "api/connection" } }],
+      },
     ],
   },
   {

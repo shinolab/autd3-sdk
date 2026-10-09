@@ -59,6 +59,7 @@ Provides retrieval of information about the whole layout and access to each `Dev
 | `center()`             | `Point3<f32>`                | Center coordinate of the whole array |
 | `phase_buffer()`       | `Vec<Vec<Phase>>`            | Allocate a phase buffer for Pattern computation (starts at 0) |
 | `intensity_buffer()`   | `Vec<Vec<Intensity>>`        | Allocate an intensity buffer for Pattern computation (starts at the maximum) |
+| `output_mask_buffer()` | `Vec<Vec<bool>>`             | Allocate an output mask for `SetOutputMask` (every transducer starts at `true`) |
 | `iter()` / `&geometry` | `Iterator<Item = &Device>`   | Iterate over each `Device`           |
 | `geometry[i]`          | `&Device`                    | Get the `i`-th `Device`              |
 | `to_json()`            | `String`                     | Convert the layout to a JSON string  |
@@ -86,14 +87,23 @@ The position and normal direction of each transducer, as well as the device's ro
 | `position(i)`        | `Point3<f32>`           | Position of the `i`-th transducer             |
 | `direction(i)`       | `UnitVector3<f32>`      | Direction of the `i`-th transducer            |
 
-## Coordinate Helpers (Rust only)
+In Python, coordinates, directions, and rotations are all returned as `float32` numpy arrays (the same holds for `Geometry.center()` and `Autd3.origin` / `Autd3.rotation`).
+A rotation is a quaternion in `[w, x, y, z]` order.
 
-`autd3_rs::geometry` provides helpers to build coordinates.
-The argument type is `Length`, so a unit can be specified.
+## Coordinate Helpers
 
-| Function            | Returns         | Description                                  |
+There are helpers to build coordinates.
+The argument type is `Length`, so a unit can be specified, as in `150 * mm`.
+
+| Function            | Returns (Rust)  | Description                                  |
 | ------------------- | --------------- | -------------------------------------------- |
 | `point(x, y, z)`    | `Point3<f32>`   | An absolute-coordinate point                 |
 | `offset(x, y, z)`   | `Vector3<f32>`  | A relative displacement vector               |
 
-Python / C# have no length-unit type; coordinates are always in mm.
+| Language | Helpers                                | Units                   | Returns                 |
+| -------- | -------------------------------------- | ----------------------- | ----------------------- |
+| Rust     | `autd3_rs::geometry::{point, offset}`  | `autd3_rs::units`       | As in the table above   |
+| Python   | `autd3.geometry.point` / `offset`      | `autd3.units`           | `float32` numpy array   |
+| C#       | `AUTD3.Units.Point` / `Offset`         | `AUTD3.Units`           | `Vector3`               |
+
+In C#, with `using static AUTD3.Units;` you can write `Point(0 * mm, 0 * mm, 150 * mm)`.

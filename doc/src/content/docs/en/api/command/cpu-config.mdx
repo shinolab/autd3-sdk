@@ -1,0 +1,97 @@
+---
+title: SetCpuConfig
+description: SetCpuConfig to change the internal settings of the CPU firmware
+sidebar:
+  order: 10.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/command/cpu-config.rs?raw";
+import pySample from "@codes/python/examples/api/command/cpu-config.py?raw";
+import fullSample from "@codes/rust/examples/api/command/cpu-config-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/cpu-config-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/cpu-config.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.cs?raw";
+
+`SetCpuConfig` is a command that changes the settings the CPU firmware uses internally (wait times, polling limits, and PTP synchronization parameters).
+
+:::caution
+You normally do not need to change these.
+The defaults are values verified on real devices, and inappropriate values can break synchronization between devices or firmware updates.
+:::
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+Every field of `CpuConfig` has a default value.
+`SetCpuConfig` **sends all fields together**, so any field you do not specify is overwritten with its default (values sent earlier do not persist).
+
+### CpuConfig
+
+| Field                        | Type         | Default       | Description |
+| ---------------------------- | ------------ | ------------- | ----------- |
+| `sys_time_transition_margin` | `Duration`   | 10 ms         | Miss margin for `TransitionMode::SysTime`. A transition time earlier than "current device time + margin" is rejected with `MISS_TRANSITION_TIME`. `0` means no margin |
+| `fpga_wait_update_max_polls` | `NonZeroU32` | 1,000,000     | Maximum number of polls while waiting for the FPGA to apply a setting. Exceeding it yields `FPGA_TIMEOUT` |
+| `fpga_flash_max_polls`       | `NonZeroU32` | 2,000,000,000 | Maximum number of polls while waiting for an FPGA flash operation (FPGA firmware update) to complete |
+| `sync_guard`                 | `Duration`   | 250 μs        | Headroom for `Synchronize`, which picks "the first 1 ms boundary at or after now + this" as the synchronization time |
+| `update_activate_delay`      | `Duration`   | 100 ms        | Grace period between the CPU firmware update activation and the reboot. In units of 1 ms, at least 1 ms |
+| `failsafe_timeout`           | `Option<Duration>` | 500 ms  | A device stops its output once nothing has arrived from the host for this long (failsafe). In units of 1 ms, at least 1 ms. `None` (Python: `None`, C#: `null`) disables the failsafe |
+| `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | A device stops its output once it has been without its PTP lock for this long. In units of 1 ms, at least 1 ms. `None` (Python: `None`, C#: `null`) disables it |
+| `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | Wait cycles of the bus the CPU reads and writes the FPGA through. `Cycles2` or `Cycles3` |
+| `ptp`                        | `PtpConfig`  |               | PTP synchronization parameters |
+
+### PtpConfig
+
+| Field                  | Type         | Default | Description |
+| ---------------------- | ------------ | ------- | ----------- |
+| `sync_interval`        | `Duration`   | 8 ms    | Interval at which the grandmaster sends `Sync`. In units of 1 ms, at least 1 ms |
+| `tx_timestamp_timeout` | `Duration`   | 3 ms    | How long to wait for the transmit timestamp of `Delay_Req`. In units of 1 ms |
+| `delay_resp_timeout`   | `Duration`   | 6 ms    | How long to wait for `Delay_Resp`. In units of 1 ms |
+| `holdover`             | `Duration`   | 1 s     | How long the lock is kept while no `Sync` arrives. In units of 1 ms |
+| `lock_samples`         | `NonZeroU16` | 64      | Number of consecutive samples required to lock |
+| `step_threshold`       | `Duration`   | 10 μs   | The clock is stepped when the time offset exceeds this |
+| `lock_threshold`       | `Duration`   | 100 ns  | Samples whose time offset is below this count toward the lock |
+| `kp_milli`             | `u32`        | 50      | Proportional gain of the servo × 1000 |
+| `ki_milli`             | `u32`        | 1       | Integral gain of the servo × 1000 |
+| `max_freq_ppb`         | `u32`        | 500,000 | Limit of the frequency correction [ppb] |
+| `delay_req_syncs`      | `NonZeroU16` | 32      | Interval at which the path delay is measured again once locked (in `Sync` messages). 1 measures it every time |
+| `path_delay_filter_shift` | `u8`      | 5       | Smoothing factor `1 / 2^n` of the path delay. 0 disables the smoothing. At most 16 |
+| `pause_quanta`         | `Option<NonZeroU16>` | 48 | Length of the PAUSE the grandmaster sends to the host when the link is saturated [512 bit times; 5.12 μs each at 100 Mbps]. `None` (Python: `None`, C#: `null`) sends no PAUSE |
+| `pause_hold_syncs`     | `u16`        | 64      | Number of `Sync` messages for which a PAUSE keeps preceding every send after the link was found saturated |
+| `pause_retry`          | `Duration`   | 8 ms    | How long PAUSE frames keep going out while a `Sync` cannot leave. In units of 1 ms |
+
+Among the time fields, those in nanoseconds (`sys_time_transition_margin` / `sync_guard` / `step_threshold` / `lock_threshold`) accept up to about 4.29 seconds, and those in units of 1 ms accept up to 65,535 ms.
+A value out of range or not a multiple of 1 ms is an encode-time error (no frame is sent).
+A `failsafe_timeout` of 0 is also an encode-time error (specify `None` to disable it).
+The `pause_*` fields configure the mechanism that keeps the devices synchronized when the host saturates the link ([Saturating the Link](/autd3-sdk/en/api/connection/#saturating-the-link)).
+A setting that is invalid as a value, such as 0 for a field that cannot be 0, is rejected by the device with `INVALID_PAYLOAD`, and in that case no setting is changed.
+
+:::danger
+With `failsafe_timeout` set to `None`, a device keeps emitting ultrasound even when communication is lost because the host crashed or a cable was unplugged.
+Disable it only when the output has to continue without the host.
+The relation between `failsafe_timeout` and the `heartbeat` of `TransportOption` is not validated. Keep the timeout well above twice the `heartbeat`. If it is too short, the output stops even while the host is running.
+With `ptp_unlock_failsafe_timeout` set, a device that loses its PTP lock (any device but the GM) stops its output the same way as the failsafe once this long has passed since the loss.
+Only the device that lost its lock stops, and `Telemetry::PtpUnlockFailsafe` counts how many times it happened.
+Locking again takes about 1 s with the default settings, so a shorter value stops the output on every loss of the lock. This relation is not validated.
+
+An output stopped by the failsafe does not come back by changing this setting, nor when the communication or the PTP lock recovers.
+Whether a device is stopped is reported by `is_failsafe_active()` (C#: `IsFailsafeActive`) of the `FpgaState` returned from `read_fpga_state()`.
+Sending the `ReleaseFailsafe` command resumes the output and leaves everything else (Pattern, Modulation, output mask, ...) as it was before the stop.
+A device whose cause of the stop still holds (for example, its PTP lock is still lost) rejects `ReleaseFailsafe` with an error and stays stopped.
+[Clear](/autd3-sdk/en/api/command/clear/) releases it as well, but also returns the other states to their defaults. Setting the output mask again does not release it.
+:::
+
+:::caution
+Setting `fpga_bus_wait` to `Cycles2` makes each word written to the FPGA about 13 ns faster (a few percent shorter for frames that carry many patterns).
+In exchange, the bus between the CPU and the FPGA loses timing margin. A device cannot detect a dropped write, and no error is returned.
+No problem has been found on four devices at room temperature, but unit-to-unit variation and temperature have not been verified. Keeping the default `Cycles3` is recommended.
+:::
+
+The settings return to their defaults on [Clear](/autd3-sdk/en/api/command/clear/) and on power cycling.
+`Client` sends `Clear` when it connects, so send `SetCpuConfig` after connecting.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

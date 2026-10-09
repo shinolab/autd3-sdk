@@ -1,7 +1,7 @@
 from autd3_modulation import constant, modulation_buffer
 
 dst = modulation_buffer()
-intensity = 0xFF
+amplitude = 0xFF
 # ANCHOR: api
-constant(intensity, dst)
+constant(amplitude, dst)
 # ANCHOR_END: api

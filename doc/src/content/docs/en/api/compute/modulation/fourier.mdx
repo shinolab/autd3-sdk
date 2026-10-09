@@ -25,7 +25,7 @@ import { excerpt } from "@lib/excerpt";
 
 | Parameter    | Type                  | Description               |
 | ------------ | --------------------- | ------------------------- |
-| `components` | `&[SineComponent<S>]` | array of sine-wave components to synthesize |
+| `components` | `&[SineComponent]`    | array of sine-wave components to synthesize |
 | `option`     | `&FourierOption`      | additional options (see below) |
 | `dst`        | `&mut Vec<u8>`        | output buffer             |
 
@@ -41,8 +41,11 @@ Each sample is the sum of all components multiplied by a scale <Math tex="s" /> 
 
 | Field      | Type           | Description             |
 | ---------- | -------------- | ----------------------- |
-| `freq`     | `Freq<u32>` etc. | frequency of the component |
+| `freq`     | `SamplingMode` | frequency of the component |
 | `option`   | `SineOption`   | per-component sine Option |
+
+As with [sine](/autd3-sdk/en/api/compute/modulation/sine/), `freq` is given as `Freq<u32>` / `Freq<f32>` / `Nearest(freq)`; in Rust, convert it to `SamplingMode` with `.into()`.
+The components may mix different ways of specifying the frequency.
 
 The range check is applied to the synthesized value, so the `clamp` of each component's `SineOption` is not used. To clamp out-of-range values, set `clamp` of `FourierOption`.
 

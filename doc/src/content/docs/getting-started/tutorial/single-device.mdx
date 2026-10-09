@@ -14,14 +14,14 @@ import { excerpt } from "@lib/excerpt";
 
 ここでは, 一つのデバイスを駆動する方法について説明する.
 
-## 依存プログラムのインストール
+## 事前準備
 
-本チュートリアルでは[echocat](/autd3-sdk/api/link/echocat/)を利用する.
-Windowsを使用する場合, [Npcap](https://npcap.com/)を「**WinPcap API-compatible Mode**」でインストールしておくこと.
+本チュートリアルでは, ホストの NIC から [UDP](/autd3-sdk/api/connection/) で直接デバイスにつなぐ.
+あらかじめ [ホストのネットワーク設定](/autd3-sdk/getting-started/setup/network/) (ファイアウォールの受信許可など) を済ませておくこと.
+ホストの NIC に IP アドレスを設定する必要はなく, 管理者権限も要らない.
 
 :::note
-`echocat` の代わりに [Remote link](/autd3-sdk/api/link/remote/) や [TwinCAT link](/autd3-sdk/api/link/twincat/) を使用することもできる.
-その場合は, link の部分を適宜変更すること.
+実機が無い場合は, `TransportOption::default()` の代わりに [デバイスエミュレータ](/autd3-sdk/api/connection/device-emulator/) や [Simulator](/autd3-sdk/guide/simulator/) の `TransportOption` を渡せば同じコードで動かせる.
 :::
 
 以下は, 1台のAUTD3デバイスでアレイの中心から150 mm直上に焦点を生成し, 200 Hzの正弦波AMかける例である.
@@ -30,7 +30,6 @@ Windowsを使用する場合, [Npcap](https://npcap.com/)を「**WinPcap API-com
 <Fragment slot="rust" >
 まずは適当なプロジェクトを作成し, `autd3-rs`ライブラリを依存関係に追加する.
 焦点計算やAM変調のために, `autd3-rs-pattern`と`autd3-rs-modulation`も依存関係に追加する.
-また, デバイスとの通信を行うautd3-rs-link-echocatライブラリも依存関係に追加する.
 `autd3-rs` の API は非同期だが特定のランタイムに依存しない.
 ここでは Ctrl+C の待ち受けに使うため tokio を追加する.
 
@@ -39,7 +38,6 @@ cargo new --bin autd3-sample && cd autd3-sample
 cargo add autd3-rs
 cargo add autd3-rs-pattern
 cargo add autd3-rs-modulation
-cargo add autd3-rs-link-echocat
 cargo add tokio --features full
 ```
 次に, `src/main.rs`ファイルを編集し, 以下のようにする. 
@@ -50,22 +48,16 @@ cargo add tokio --features full
 ```
 cargo run --release
 ```
-
-Linux, macOSでは, echocatを使用するのに管理者権限が必要になるかもしれない. その場合は,
-```
-cargo build --release && sudo ./target/release/autd3_sample
-```
-とすること.
 </Fragment>
 <Fragment slot="python" >
 まずは適当なディレクトリを作成し, 仮想環境を用意してautd3ライブラリを追加する.
-また, デバイスとの通信を行うautd3-link-echocat, 焦点計算のautd3-pattern, AM変調のautd3-modulationも併せて追加する.
+また, 焦点計算のautd3-pattern, AM変調のautd3-modulationも併せて追加する.
 
 ```
 mkdir autd3-sample && cd autd3-sample
 python3 -m venv .venv
 source .venv/bin/activate
-pip install autd3 autd3-pattern autd3-modulation autd3-link-echocat
+pip install autd3 autd3-pattern autd3-modulation
 ```
 次に, `main.py`ファイルを以下のようにする.
 
@@ -75,23 +67,16 @@ pip install autd3 autd3-pattern autd3-modulation autd3-link-echocat
 ```
 python3 main.py
 ```
-
-Linux, macOSでは, echocatを使用するのに管理者権限が必要になるかもしれない. その場合は,
-```
-sudo .venv/bin/python3 main.py
-```
-とすること.
 </Fragment>
 <Fragment slot="csharp">
 まずは適当なディレクトリを作成し, autd3 ライブラリを追加する.
-また, デバイスとの通信を行う AUTD3.Link.Echocat, 焦点計算の AUTD3.Pattern, AM 変調の AUTD3.Modulation も併せて追加する.
+また, 焦点計算の AUTD3.Pattern, AM 変調の AUTD3.Modulation も併せて追加する.
 
 ```
 dotnet new console -o autd3-sample && cd autd3-sample
 dotnet add package AUTD3
 dotnet add package AUTD3.Pattern
 dotnet add package AUTD3.Modulation
-dotnet add package AUTD3.Link.Echocat
 ```
 次に, `Program.cs`ファイルを以下のようにする.
 
@@ -101,8 +86,6 @@ dotnet add package AUTD3.Link.Echocat
 ```
 dotnet run -c Release
 ```
-
-Linux, macOSでは, echocatを使用するのに管理者権限が必要になるかもしれない.
 </Fragment>
 </CodeTabs>
 

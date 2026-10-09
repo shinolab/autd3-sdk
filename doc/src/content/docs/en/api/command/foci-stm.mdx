@@ -49,7 +49,7 @@ A single sample is represented by `ControlPoints<N>`. `N` is the number of focal
 | `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`    | Loop count                             |
 | `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | Transition timing on bank switching    |
 
-For the behavior of `loop_behavior` and `transition_mode`, see [playback control](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+For the behavior of `loop_behavior` and `transition_mode`, see [playback control](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
 
 ## Helper Functions
 
@@ -86,7 +86,7 @@ Places `num_points` points at equal intervals along a line including the start a
 
 ## Equivalent Low-Level Commands
 
-`FociStm` is equivalent to the three commands [WriteFociBuffer](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/). When the data fits in a single frame it is fused and sent as one frame; otherwise it expands into the three commands above.
+`FociStm` is equivalent to the three commands [WriteFociBuffer](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/), and is sent expanded in that order.
 The following is equivalent to `FociStm::new(freq, &points, option)`.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

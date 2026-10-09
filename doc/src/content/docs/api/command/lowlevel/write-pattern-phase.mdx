@@ -1,0 +1,44 @@
+---
+title: WritePatternPhase
+description: 一様な強度の Pattern を位相のみで書き込む
+sidebar:
+  order: 12.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/lowlevel/bank.rs?raw";
+import pySample from "@codes/python/examples/api/command/lowlevel/bank.py?raw";
+import fullSample from "@codes/rust/examples/api/command/lowlevel/pattern-phase-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/lowlevel/pattern-phase-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/lowlevel/bank.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/lowlevel/pattern-phase-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`WritePatternPhase` は, 強度が全振動子・全 Pattern で共通の場合に使える [`WritePatternBuffer`](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) の軽量版.
+位相情報のみを送ることで 1 フレームに複数 Pattern を書き込む低レベルコマンド.
+強度は `intensity` の 1 値で全振動子・全 Pattern に共通になる.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "compressed")} python={excerpt(pySample, "compressed")} csharp={excerpt(csSample, "compressed")} />
+
+| フィールド  | 型                    | 説明                                                   |
+| ----------- | --------------------- | ------------------------------------------------------ |
+| `bank`      | `PatternBank`         | 書き込み先バンク                                       |
+| `index`     | `usize`               | バンク内の書き込み開始インデックス                     |
+| `depth`     | `PhaseDepth`          | 位相のビット幅 (下記参照)                              |
+| `intensity` | `Intensity`           | 全振動子・全 Pattern に共通の強度                      |
+| `patterns`  | `&[Vec<Vec<Phase>>]`  | 書き込む位相の列 (1 個以上 `depth.max_count()` 個以下) |
+
+## PhaseDepth
+
+| バリアント | 1 フレームあたりの Pattern 数 (`max_count()`) | 説明                                       |
+| ---------- | --------------------------------------------- | ------------------------------------------ |
+| `Bits8`    | 5                                             | 位相を全分解能 (8 bit) で送る (デフォルト) |
+| `Bits4`    | 11                                            | 位相を上位 4 bit に量子化して送る          |
+
+## Example
+
+`Bits4` で 4 枚の Pattern を 1 コマンドで書き込み, `ConfigPattern` + `ActivatePatternBank` で STM として再生する例.
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

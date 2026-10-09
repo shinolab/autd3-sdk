@@ -1,4 +1,4 @@
-from autd3.commands import ChangePatternBank, ConfigPattern, Pattern, WritePatternBuffer
+from autd3.commands import ActivatePatternBank, ConfigPattern, Pattern, WritePatternBuffer
 from autd3.geometry import Autd3, Geometry
 from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 
@@ -36,7 +36,7 @@ ConfigPattern(
     size=1,
     loop_behavior=LoopBehavior.Infinite,
 )
-ChangePatternBank(
+ActivatePatternBank(
     bank=bank,
     transition_mode=transition_mode,
 )

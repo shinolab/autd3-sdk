@@ -10,7 +10,7 @@ import Figure from "@components/Figure.astro";
 For the AUTD3 device to operate correctly, a version of the CPU / FPGA firmware compatible with the SDK must be flashed.
 
 :::note
-This version of the SDK supports Firmware v0.9.x.
+This version of the SDK supports Firmware v0.10.x.
 :::
 
 Firmware updates are performed using the **Firmware** tab of the GUI console autd3-console.
@@ -23,26 +23,46 @@ See [Console](/autd3-sdk/en/guide/console/) for how to obtain it.
 
 ## OTA over an Ethernet cable
 
-If both the CPU and the FPGA run firmware v0.9.0 or later, the device can be updated with nothing but an Ethernet cable.
-If either is older than v0.9.0, use the JTAG procedure below.
+If both the CPU and the FPGA run firmware v0.10.0 or later, the device can be updated with nothing but an Ethernet cable.
+If either is v0.9.x or earlier (the EtherCAT firmware), use the JTAG procedure below; see also [Migrating from firmware v0.9.x](/autd3-sdk/en/getting-started/migration/).
+
+:::caution
+The OTA cannot take a device back to the EtherCAT firmware (v0.9.x and earlier).
+To go back to the EtherCAT firmware, flash it via JTAG.
+:::
 
 ### Prerequisites
 
-Each EtherCAT link requires its own configuration and preparation.
-See [Link](/autd3-sdk/en/api/link) for details.
+Complete the [host network setup](/autd3-sdk/en/getting-started/setup/network/) first.
 
 ### Procedure
 
 1. Connect the AUTD3 and the PC with an Ethernet cable, then turn on the power
 1. Launch autd3-console and open the **Firmware** tab
 1. Select **Version** and **Target** (`Both` / `FPGA` / `CPU`). Use `Both` unless you have a reason not to (updating only the CPU leaves the FPGA on a different version, which the SDK refuses to connect to)
-1. Make sure **Method** is `EtherCAT (OTA)` (the default)
-1. Choose `echocat` / `TwinCAT` / `Remote` under **Link** and fill in the settings (the defaults are fine)
+1. Make sure **Method** is OTA (the default)
+1. Set **Interface** and **Advanced UDP options** if needed (the defaults are fine)
 1. Press **Flash**. Progress is shown in the log at the bottom of the panel. The CPU takes tens of seconds, the FPGA about 90 seconds per device
-1. The update is complete when `Ok!` appears in the log. No power cycle is needed
+1. The update is complete when `Ok!` appears in the log. No power cycle is needed (after a CPU update the devices reboot and are enumerated again)
 
 **Do not power off the devices during the update.**
 If the update fails, power-cycle the devices and try again.
+
+### When some devices fall back to the previous firmware
+
+The new CPU firmware runs as a "trial" after the reboot until the tool confirms it.
+A device that is reset once more before the confirmation (a brief power loss, for example) falls back to the firmware it ran before the update.
+Before confirming, the tool checks that every device runs the trial firmware. If even one device has fallen back, it confirms none of them and exits with an error like the following.
+
+```text
+Error: not every device runs the trial image after the reboot: device 1 (confirmed image, CPU firmware 0.10.0) fell back to the previous image. No device was confirmed, ...
+```
+
+`device N` is the position on the Ethernet chain (0 is the device closest to the PC), and the parentheses show the state and the CPU firmware version that device reported.
+At this point the devices that do run the new firmware are still unconfirmed, so they fall back to the previous firmware at their next reset. A mix of versions is never confirmed.
+
+To recover, check the power and the cabling of every device, then **run the same update again**.
+To give up on the update, power-cycle every device; they all come back on the previous firmware.
 
 ## Updating via JTAG
 

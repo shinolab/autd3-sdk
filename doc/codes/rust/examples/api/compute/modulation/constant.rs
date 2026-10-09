@@ -2,8 +2,8 @@ use autd3_rs_modulation::constant;
 
 fn main() {
     let mut dst = Vec::new();
-    let intensity = 0xFF;
+    let amplitude = 0xFF;
     // ANCHOR: api
-    constant(intensity, &mut dst);
+    constant(amplitude, &mut dst);
     // ANCHOR_END: api
 }

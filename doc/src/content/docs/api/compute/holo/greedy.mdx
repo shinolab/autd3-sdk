@@ -18,6 +18,11 @@ import { excerpt } from "@lib/excerpt";
 greedy は各振動子の位相を離散的な候補から 1 つずつ貪欲に選択していく組合せ最適化. 
 アルゴリズムは Suzuki らの論文 ([Suzuki et al., 2021](https://doi.org/10.1109/TOH.2021.3076489)) に基づく. 
 
+greedy が最適化するのは位相だけで, 振幅は最適化しない. 
+振幅は `intensities` で与え, greedy はその振幅を前提に位相を決める. 
+`intensities` には全振動子共通の一様値 (`Intensity`) と, 振動子ごとのバッファの両方を渡せる. 
+振幅が 0 の振動子は探索から外れ, 位相は 0 になる. 
+
 ## API
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
@@ -27,9 +32,9 @@ greedy は各振動子の位相を離散的な候補から 1 つずつ貪欲に�
 | `geometry`   | `&Geometry`            | デバイス配置              |
 | `foci`       | `&[AmplitudeTarget]`      | 焦点列 (位置と目標振幅)   |
 | `wavelength` | `Length`               | 波長                      |
+| `intensities` | `impl Into<PatternIntensity>` | 振幅 (`Intensity` の一様値, または `&[Vec<Intensity>]` のデバイスごとのバッファ) |
 | `option`     | `&GreedyOption`        | 追加オプション (下記参照) |
-| `phases`      | `&mut [Vec<Phase>]`     | 位相の出力バッファ        |
-| `intensities` | `&mut [Vec<Intensity>]` | 振幅の出力バッファ        |
+| `dst`        | `&mut [Vec<Phase>]`    | 位相の出力バッファ        |
 
 共通要素 (`AmplitudeTarget` / `TransducerMask` など) は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 
 
@@ -40,7 +45,6 @@ greedy は各振動子の位相を離散的な候補から 1 つずつ貪欲に�
 | フィールド                  | 型                                | デフォルト              |
 |-----------------------------|-----------------------------------|---------------------|
 | `phase_quantization_levels` | `NonZeroU8`                       | `16`                |
-| `constraint`                | `IntensityConstraint`              | `Uniform(MAX)`      |
 | `directivity`               | `Directivity`                     | `Sphere`            |
 | `objective_func`            | `fn(Complex<f32>, Amplitude) -> f32` | `abs_objective_func` |
 | `mask`                      | `TransducerMask`                  | `AllEnabled`        |
@@ -49,7 +53,7 @@ greedy は各振動子の位相を離散的な候補から 1 つずつ貪欲に�
 - `objective_func` — 各候補を評価する目的関数. デフォルトの `abs_objective_func` は, 合成音圧の
   大きさと目標振幅の差の絶対値を返す. 
   - Rust版のみ設定可能. 他の言語ではデフォルトの目的関数が使われる
-- `constraint` / `directivity` / `mask` の意味は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 
+- `directivity` / `mask` の意味は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 
 
 ## Example
 

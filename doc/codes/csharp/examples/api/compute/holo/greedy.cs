@@ -21,7 +21,6 @@ internal static class Sample
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
         byte phaseQuantizationLevels = 16;
-        var constraint = IntensityConstraint.Uniform(Intensity.Max);
         var directivity = Directivity.Sphere;
         var mask = TransducerMask.AllEnabled;
         var option =
@@ -29,16 +28,15 @@ internal static class Sample
             new GreedyOption
             {
                 PhaseQuantizationLevels = phaseQuantizationLevels,
-                Constraint = constraint,
                 Directivity = directivity,
                 Mask = mask,
             }
             // ANCHOR_END: option
             ;
-        var phases = geometry.PhaseBuffer();
         var intensities = geometry.IntensityBuffer();
+        var dst = geometry.PhaseBuffer();
         // ANCHOR: api
-        Holo.Greedy(geometry, foci, wavelength, option, phases, intensities);
+        Holo.Greedy(geometry, foci, wavelength, intensities, option, dst);
         // ANCHOR_END: api
     }
 }

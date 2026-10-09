@@ -1,0 +1,98 @@
+---
+title: SetCpuConfig
+description: CPU ファームウェアの内部設定値を変更する SetCpuConfig
+sidebar:
+  order: 10.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/command/cpu-config.rs?raw";
+import pySample from "@codes/python/examples/api/command/cpu-config.py?raw";
+import fullSample from "@codes/rust/examples/api/command/cpu-config-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/cpu-config-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/cpu-config.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.cs?raw";
+
+`SetCpuConfig` は, CPU ファームウェアが内部で使う設定値 (待ち時間・ポーリング上限・PTP 同期のパラメータ) を変更するコマンド.
+
+:::caution
+通常は変更する必要はない.
+既定値は実機で検証した値であり, 不適切な値はデバイス間の同期やファームウェア更新を壊しうる.
+:::
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+`CpuConfig` はすべての項目に既定値を持つ.
+`SetCpuConfig` は**全項目をまとめて送る**ため, 指定しなかった項目は既定値で上書きされる (以前に送った値は残らない).
+
+### CpuConfig
+
+| フィールド                   | 型           | 既定値        | 説明 |
+| ---------------------------- | ------------ | ------------- | ---- |
+| `sys_time_transition_margin` | `Duration`   | 10 ms         | `TransitionMode::SysTime` の取りこぼし判定マージン. 「デバイスの現在時刻 + マージン」より前の遷移時刻は `MISS_TRANSITION_TIME` で拒否される. `0` はマージン無し |
+| `fpga_wait_update_max_polls` | `NonZeroU32` | 1,000,000     | FPGA の設定反映待ちのポーリング上限回数. 超えると `FPGA_TIMEOUT` |
+| `fpga_flash_max_polls`       | `NonZeroU32` | 2,000,000,000 | FPGA フラッシュ操作 (FPGA ファームウェア更新) の完了待ちのポーリング上限回数 |
+| `sync_guard`                 | `Duration`   | 250 μs        | `Synchronize` が同期時刻に選ぶ「現在 + これ以降の最初の 1 ms 境界」の余裕 |
+| `update_activate_delay`      | `Duration`   | 100 ms        | CPU ファームウェア更新の適用指示から再起動までの猶予. 1 ms 単位で 1 ms 以上 |
+| `failsafe_timeout`           | `Option<Duration>` | 500 ms  | ホストからの通信がこの時間途絶えるとデバイスが出力を止める (failsafe). 1 ms 単位で 1 ms 以上. `None` (Python: `None`, C#: `null`) は failsafe 無効 |
+| `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | PTP のロックを失ったままこの時間が経つと, そのデバイスが出力を止める. 1 ms 単位で 1 ms 以上. `None` (Python: `None`, C#: `null`) は無効 |
+| `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | CPU が FPGA を読み書きするバスのウェイト周期数. `Cycles2` または `Cycles3` |
+| `ptp`                        | `PtpConfig`  |               | PTP 同期のパラメータ |
+
+### PtpConfig
+
+| フィールド             | 型           | 既定値  | 説明 |
+| ---------------------- | ------------ | ------- | ---- |
+| `sync_interval`        | `Duration`   | 8 ms    | グランドマスタの `Sync` 送出間隔. 1 ms 単位で 1 ms 以上 |
+| `tx_timestamp_timeout` | `Duration`   | 3 ms    | `Delay_Req` の送信タイムスタンプの回収待ち. 1 ms 単位 |
+| `delay_resp_timeout`   | `Duration`   | 6 ms    | `Delay_Resp` の待ち時間. 1 ms 単位 |
+| `holdover`             | `Duration`   | 1 s     | ロック中に `Sync` を受けられないままロックを保つ時間. 1 ms 単位 |
+| `lock_samples`         | `NonZeroU16` | 64      | ロックに必要な連続標本数 |
+| `step_threshold`       | `Duration`   | 10 μs   | 時刻のずれがこれを超えたら時計をステップさせる |
+| `lock_threshold`       | `Duration`   | 100 ns  | 時刻のずれがこれ未満の標本をロックに数える |
+| `kp_milli`             | `u32`        | 50      | サーボの比例ゲイン × 1000 |
+| `ki_milli`             | `u32`        | 1       | サーボの積分ゲイン × 1000 |
+| `max_freq_ppb`         | `u32`        | 500,000 | 周波数補正の上限 [ppb] |
+| `delay_req_syncs`      | `NonZeroU16` | 32      | ロック後に経路遅延を測り直す間隔 (`Sync` の回数). 1 で毎回測る |
+| `path_delay_filter_shift` | `u8`      | 5       | 経路遅延の平滑化の係数 `1 / 2^n`. 0 で平滑化しない. 16 以下 |
+| `pause_quanta`         | `Option<NonZeroU16>` | 48 | 回線が詰まったときにグランドマスタがホストへ送る PAUSE の長さ [512 ビット時間. 100 Mbps で 1 あたり 5.12 μs]. `None` (Python: `None`, C#: `null`) で PAUSE を送らない |
+| `pause_hold_syncs`     | `u16`        | 64      | 一度詰まってから, 送信のたびに PAUSE を送り続ける `Sync` の回数 |
+| `pause_retry`          | `Duration`   | 8 ms    | `Sync` を送り出せない間, PAUSE を送り続ける時間. 1 ms 単位 |
+
+時間の項目は, ns 単位のもの (`sys_time_transition_margin` / `sync_guard` / `step_threshold` / `lock_threshold`) は約 4.29 秒まで, 1 ms 単位のものは 65,535 ms までを指定できる.
+範囲外や 1 ms の倍数でない値はエンコード時エラーになる (1 フレームも送られない).
+`failsafe_timeout` に 0 を指定した場合もエンコード時エラーになる (無効にするには `None` を指定する).
+
+`pause_*` は, ホストが回線を使い切ったときにデバイス間の同期を保つための仕組みの設定である ([回線を使い切る送り方](/autd3-sdk/api/connection/#回線を使い切る送り方)).
+0 を取れない項目に 0 を指定した場合など, 値として不正な設定はデバイスが `INVALID_PAYLOAD` で拒否し, そのとき設定値は一切変わらない.
+
+:::danger
+`failsafe_timeout` を `None` にすると, ホストのクラッシュやケーブル断で通信が途絶えてもデバイスは超音波を出力し続ける.
+ホスト無しで出力を続けさせる必要がある場合にのみ無効にすること.
+`failsafe_timeout` と `TransportOption` の `heartbeat` の関係は検証されない. タイムアウトは `heartbeat` の 2 倍より十分長く保つこと. 短すぎるとホストが動いていても出力が止まる.
+`ptp_unlock_failsafe_timeout` を指定すると, PTP のロックを失ったデバイス (GM 以外) は, 失ってからこの時間が経つと failsafe と同じ方法で出力を止める.
+止まるのはロックを失ったデバイスだけで, 発火回数は `Telemetry::PtpUnlockFailsafe` で読める.
+再ロックには既定の設定で 1 s 程度かかるので, それより短い値を指定するとロックを失うたびに必ず出力が止まる. この関係は検証されない.
+
+failsafe で止まった出力は, 設定を変えても, 通信や PTP のロックが回復しても自動では戻らない.
+止まっているかどうかは `read_fpga_state()` が返す `FpgaState` の `is_failsafe_active()` (C#: `IsFailsafeActive`) で確認できる.
+`ReleaseFailsafe` コマンドを送ると, Pattern・Modulation・出力マスクなどの状態は止まる前のまま, 出力だけが再開する.
+ただし, 止まった原因が解消していないデバイス (PTP のロックを失ったまま, など) は `ReleaseFailsafe` をエラーで拒否し, 止まったままになる.
+[Clear](/autd3-sdk/api/command/clear/) でも解除されるが, 他の状態も既定値に戻る. 出力マスクの再設定では解除されない.
+:::
+
+:::caution
+`fpga_bus_wait` を `Cycles2` にすると, FPGA への書き込みが 1 語あたり約 13 ns 速くなる (1 フレームに多くのパターンを詰める場合で数 % の短縮).
+その代わり CPU と FPGA の間のバスのタイミングの余裕が減る. 書き込みが落ちてもデバイスは検知できず, エラーも返らない.
+実機 4 台・室温では問題は見つかっていないが, 個体差や温度までは確認されていない. 既定の `Cycles3` のまま使うことを勧める.
+:::
+
+設定値は [Clear](/autd3-sdk/api/command/clear/) と電源再投入で既定値に戻る.
+`Client` は接続時に `Clear` を送るため, `SetCpuConfig` は接続後に送ること.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

@@ -6,7 +6,6 @@ from autd3_pattern import TransducerMask, wavelength
 from autd3_pattern_holo import (
     AmplitudeTarget,
     Directivity,
-    IntensityConstraint,
     GreedyOption,
     Pa,
     greedy,
@@ -15,7 +14,6 @@ from autd3_pattern_holo import (
 geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 phases = geometry.phase_buffer()
-intensities = geometry.intensity_buffer()
 
 greedy(
     geometry,
@@ -30,12 +28,11 @@ greedy(
         ),
     ],
     wavelength(340 * m / s),
+    Intensity.MAX,
     GreedyOption(
         phase_quantization_levels=16,
-        constraint=IntensityConstraint.Uniform(Intensity.MAX),
         directivity=Directivity.Sphere,
         mask=TransducerMask.AllEnabled,
     ),
     phases,
-    intensities,
 )

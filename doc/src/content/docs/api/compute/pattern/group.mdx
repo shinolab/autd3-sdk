@@ -16,7 +16,7 @@ import csFullSample from "@codes/csharp/examples/api/compute/pattern/group-examp
 import { excerpt } from "@lib/excerpt";
 
 振動子毎に, どのパターンの emission を出力するかを選ぶ.
-振動子の振り分けは `TransducerGroups` でキー (enum など) を割り当てて決める. どのキーも割り当てられていない振動子は無出力になる.
+振動子の振り分けは `TransducerGroups` でキー (enum など) を割り当てて決める. すべての振動子がいずれかのキーに属する.
 
 合成には 2 つの API がある.
 
@@ -24,7 +24,7 @@ import { excerpt } from "@lib/excerpt";
 - `group` — 計算済みのバッファをキーから選んで合成する. 計算結果を使い回したい場合やグループ毎に並列に計算したい場合に使う.
 
 :::note
-デバイス単位で切り替えるだけなら, これらではなく `DatagramBuilder` の `push_each` でデバイス毎にコマンドを送ればよい.
+デバイス単位で切り替えるだけなら, これらではなく [`each`](/autd3-sdk/api/basics/send/#each) でデバイス毎にコマンドを送ればよい.
 :::
 
 ## group_compute
@@ -41,7 +41,6 @@ import { excerpt } from "@lib/excerpt";
 
 `compute` はキー毎に 1 回 (キーの初出順) 呼ばれ, 計算結果のうちそのキーの振動子分だけが `phases` / `intensities` に書き込まれる.
 作業バッファはキー毎に位相 0・最大振幅で初期化される.
-どのキーにも割り当てられていない振動子は無出力 (位相 0・振幅 `Intensity::MIN`) になる.
 
 ## group
 
@@ -52,17 +51,16 @@ import { excerpt } from "@lib/excerpt";
 | `geometry` | `&Geometry`                                 | ジオメトリ                             |
 | `groups`   | `&TransducerGroups<K>`                      | 振動子毎のキー                         |
 | `source`   | `FnMut(K) -> impl AsRef<[Vec<T>]>`          | キーから出力元バッファを返す           |
-| `null`     | `T`                                         | どのキーにも属さない振動子に書く値     |
 | `dst`      | `&mut [Vec<T>]`                             | 出力バッファ                           |
 
 `T` は `Phase` または `Intensity` で, 位相・振幅それぞれのバッファに対して呼ぶ.
-Python / C# では `null` 引数はなく, `dst` が位相バッファなら位相 0, 振幅バッファなら `Intensity.MIN` (無出力) になる.
 
 ## TransducerGroups
 
-`TransducerGroups::new(&geometry, |device, tr| ...)` がデバイスと振動子インデックスからキー (`None` = どのグループにも属さない) を返し, 振動子毎のキーを保持する.
-キーは Rust では `Copy + Eq` な型, C# では値型 (`struct`), Python ではハッシュ可能な値.
-`mask(key)` でキー `key` の振動子だけを有効にした [Holo](/autd3-sdk/api/compute/holo/) 用の `TransducerMask`を取得できる. 
+`TransducerGroups::new(&geometry, |device, tr| ...)` がデバイスと振動子インデックスからキーを返し, 振動子毎のキーを保持する.
+どのグループにも属さない振動子は作れない. 一部の振動子を無出力にするには, そのためのキーを割り当てて振幅 `Intensity::MIN` を書く (Python でキー関数が `None` を返すと `ValueError`).
+キーは Rust では `Copy + Eq` な型, C# では `null` でない任意の型 (`enum` や `string` など), Python ではハッシュ可能な値.
+`mask(key)` でキー `key` の振動子だけを有効にした [Holo](/autd3-sdk/api/compute/holo/) 用の `TransducerMask`を取得できる. どの振動子にも割り当てられていないキーでは Rust は `None`, C# は `null` を返し, Python は `KeyError` を送出する. 
 
 ## Example
 
