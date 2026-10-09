@@ -16,6 +16,7 @@ mod write_modulation_chunk;
 mod write_pattern_buffer;
 mod write_pattern_phase;
 
+pub use crate::value::PatternIntensity;
 pub use activate_mod_bank::ActivateModulationBank;
 pub use activate_pattern_bank::ActivatePatternBank;
 pub use config_modulation::ConfigModulation;
@@ -32,7 +33,7 @@ pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, Silenc
 pub(crate) use write_foci_chunk::WriteFociChunk;
 pub(crate) use write_modulation_chunk::WriteModulationChunk;
 pub(crate) use write_pattern_buffer::WritePatternBuffers;
-pub use write_pattern_buffer::{PatternIntensity, StmIntensity, WritePatternBuffer};
+pub use write_pattern_buffer::{StmIntensity, WritePatternBuffer};
 pub use write_pattern_phase::{PhaseDepth, WritePatternPhase};
 
 use zerocopy::{Immutable, IntoBytes};

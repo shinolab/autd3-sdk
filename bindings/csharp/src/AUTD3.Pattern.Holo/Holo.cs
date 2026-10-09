@@ -147,8 +147,6 @@ namespace AUTD3.Holo
     {
         private readonly byte? _phaseQuantizationLevels;
         public byte PhaseQuantizationLevels { get => _phaseQuantizationLevels ?? 16; init => _phaseQuantizationLevels = value; }
-        private readonly IntensityConstraint? _constraint;
-        public IntensityConstraint Constraint { get => _constraint ?? IntensityConstraint.Uniform(Intensity.Max); init => _constraint = value; }
         private readonly Directivity? _directivity;
         public Directivity Directivity { get => _directivity ?? Directivity.Sphere; init => _directivity = value; }
         private readonly TransducerMask? _mask;
@@ -201,7 +199,7 @@ namespace AUTD3.Holo
         internal static extern int autd3_holo_gspat_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, byte phaseQuantizationLevels, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, IntPtr intensities, byte uniformIntensity, byte phaseQuantizationLevels, byte directivity, byte[]? mask, PhaseBufferHandle dst, byte[] outErr, UIntPtr outErrLen);
     }
 
     public readonly struct AmplitudeTarget
@@ -341,11 +339,11 @@ namespace AUTD3.Holo
             }
         }
 
-        public static void Greedy(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GreedyOption option, PhaseBuffer phases, IntensityBuffer intensities)
+        public static void Greedy(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, PatternIntensity intensities, GreedyOption option, PhaseBuffer dst)
         {
-            var c = option.Constraint.ToNative();
+            using var intensityLease = new HandleLease(intensities.Buffer?.Handle);
             var err = new byte[NativeAbi.ErrorBufferLength];
-            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, option.PhaseQuantizationLevels, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), phases.Handle, intensities.Handle, err, (UIntPtr)err.Length) != 0)
+            if (NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, intensityLease.Pointer, intensities.Uniform, option.PhaseQuantizationLevels, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), dst.Handle, err, (UIntPtr)err.Length) != 0)
             {
                 throw new Autd3Exception(NativeUtil.Utf8(err));
             }

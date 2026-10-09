@@ -87,7 +87,6 @@ class GreedyOption:
     def __new__(
         cls,
         phase_quantization_levels: int = 16,
-        constraint: IntensityConstraint = ...,
         directivity: Directivity = ...,
         mask: TransducerMask | None = None,
     ) -> GreedyOption: ...
@@ -120,9 +119,9 @@ def greedy(
     geometry: Geometry,
     foci: Sequence[AmplitudeTarget],
     wavelength: Length,
+    intensities: IntensityBuffer | Intensity | int,
     option: GreedyOption,
-    phases: PhaseBuffer,
-    intensities: IntensityBuffer,
+    dst: PhaseBuffer,
 ) -> None: ...
 def naive_batch(
     geometry: Geometry,
