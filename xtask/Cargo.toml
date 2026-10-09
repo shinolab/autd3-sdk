@@ -12,7 +12,8 @@ clap = { version = "4.6.1", features = ["derive"] }
 flate2 = "1.1.9"
 tar = "0.4.46"
 toml_edit = "0.25.12"
-zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+walkdir = { version = "2.5.0", default-features = false }
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56.0"

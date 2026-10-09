@@ -6,7 +6,7 @@ pub enum SampleStatus {
     Ok,
     DeviceError(u8),
     Timeout,
-    LinkError,
+    NetworkError,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -26,18 +26,25 @@ pub struct LatencyStats {
     pub max: Duration,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct DriverAckLatency {
+    pub frames: u64,
+    pub mean: Duration,
+    pub worst: Duration,
+}
+
 #[derive(Debug)]
 pub struct Summary {
     pub elapsed: Duration,
     pub success: u64,
     pub device_errors: BTreeMap<u8, u64>,
     pub timeouts: u64,
-    pub link_errors: u64,
-    pub stale_cycles: u64,
-    pub lost_cycles: u64,
+    pub network_errors: u64,
+    pub missed_replies: u64,
     pub throughput_cmd_per_sec: f64,
     pub throughput_byte_per_sec: f64,
     pub latency: LatencyStats,
+    pub driver_ack: Option<DriverAckLatency>,
 }
 
 impl Summary {
@@ -45,22 +52,24 @@ impl Summary {
         samples: &[Sample],
         frame_bytes: usize,
         elapsed: Duration,
-        stale_cycles: u64,
-        lost_cycles: u64,
+        missed_replies: u64,
+        driver_ack: Option<DriverAckLatency>,
     ) -> Self {
         let mut device_errors: BTreeMap<u8, u64> = BTreeMap::new();
         let mut timeouts = 0u64;
-        let mut link_errors = 0u64;
+        let mut network_errors = 0u64;
         let mut oks_ns: Vec<u64> = Vec::with_capacity(samples.len());
 
         for s in samples {
             match s.status {
-                SampleStatus::Ok => oks_ns.push(duration_to_nanos(s.rtt)),
+                SampleStatus::Ok => {
+                    oks_ns.push(u64::try_from(s.rtt.as_nanos()).unwrap_or(u64::MAX));
+                }
                 SampleStatus::DeviceError(code) => {
                     *device_errors.entry(code).or_insert(0) += 1;
                 }
                 SampleStatus::Timeout => timeouts += 1,
-                SampleStatus::LinkError => link_errors += 1,
+                SampleStatus::NetworkError => network_errors += 1,
             }
         }
 
@@ -81,18 +90,14 @@ impl Summary {
             success,
             device_errors,
             timeouts,
-            link_errors,
-            stale_cycles,
-            lost_cycles,
+            network_errors,
+            missed_replies,
             throughput_cmd_per_sec: cmd_per_sec,
             throughput_byte_per_sec: byte_per_sec,
             latency,
+            driver_ack,
         }
     }
-}
-
-fn duration_to_nanos(d: Duration) -> u64 {
-    u64::try_from(d.as_nanos()).unwrap_or(u64::MAX)
 }
 
 fn latency_stats(values: &mut [u64]) -> LatencyStats {

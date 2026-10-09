@@ -11,7 +11,7 @@ namespace AUTD3.Tests
         [Fact]
         public void TheNativeLibraryReportsTheVersionTheBindingExpects()
         {
-            using var geometry = new Geometry(new[] { new Autd3(System.Numerics.Vector3.Zero) });
+            using var geometry = Fixture.SingleDevice();
             Assert.Equal(1, geometry.NumDevices);
         }
 

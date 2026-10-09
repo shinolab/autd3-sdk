@@ -1,15 +1,11 @@
 use autd3_cpu_wire::payload::ConfigModPayload;
-use zerocopy::FromBytes;
-use zerocopy::little_endian::{U16, U32};
 
-use crate::error::{Error, PayloadError};
+use crate::error::Error;
 use crate::geometry::Device;
-use crate::mirror::FirmwareState;
-use crate::params::{BUFFER_SIZE_MIN, MOD_BUFFER_SAMPLES};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
 
-use super::{Distribution, Operation};
+use super::{Encoded, Operation, encode_fixed};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigModulation {
@@ -22,57 +18,29 @@ pub struct ConfigModulation {
 impl crate::sealed::Sealed for ConfigModulation {}
 
 impl Operation for ConfigModulation {
-    fn distribution(&self) -> Distribution {
-        Distribution::Broadcast
-    }
-
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        let divider = self.config.divide()?;
-        if self.size < BUFFER_SIZE_MIN || self.size > MOD_BUFFER_SAMPLES {
-            return Err(PayloadError::ModulationSizeOutOfRange {
-                size: self.size,
-                min: BUFFER_SIZE_MIN,
-                max: MOD_BUFFER_SAMPLES,
-            }
-            .into());
-        }
-        let (p, _) = ConfigModPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *p = ConfigModPayload {
-            bank: self.bank.as_u8(),
-            reserved: 0,
-            divider: U16::new(divider),
-            size: U32::new(u32::try_from(self.size).expect("bounded by MOD_BUFFER_SAMPLES")),
-            rep: U16::new(self.loop_behavior.rep()),
-        };
-        Ok(Cmd::ConfigModulation)
-    }
-
-    fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        let divider = self.config.divide()?;
-        state.silencer.check_mod_div(device, divider)?;
-        state.silencer.note_mod_div(self.bank.as_u8(), divider);
-        state
-            .transition
-            .note_mod_loop(self.bank.as_u8(), self.loop_behavior);
-        Ok(())
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        let payload = ConfigModPayload::new(
+            self.bank,
+            self.config.divide()?,
+            self.size,
+            self.loop_behavior.rep(),
+        )?;
+        Ok(encode_fixed(out, Cmd::ConfigModulation, &payload))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::test_device;
+    use crate::params::MOD_BUFFER_SAMPLES;
+    use crate::test_utils::encode;
     use core::num::NonZeroU16;
 
-    fn encode(op: ConfigModulation) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
-        let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), &mut out)?;
-        Ok((cmd, out))
-    }
+    const ENCODED: Encoded = Encoded::new(Cmd::ConfigModulation, size_of::<ConfigModPayload>());
 
     #[test]
     fn config_modulation_lays_out_fields() {
-        let (cmd, payload) = encode(ConfigModulation {
+        let (encoded, payload) = encode(&ConfigModulation {
             bank: ModulationBank::B1,
             config: SamplingConfig::new(NonZeroU16::new(10).unwrap()),
             size: 4000,
@@ -80,7 +48,7 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(cmd, Cmd::ConfigModulation);
+        assert_eq!(encoded, ENCODED);
         assert_eq!(payload[0], 1);
         assert_eq!(payload[1], 0);
         assert_eq!(&payload[2..4], &10u16.to_le_bytes());
@@ -98,36 +66,38 @@ mod tests {
             loop_behavior: LoopBehavior::Infinite,
         };
         assert!(matches!(
-            encode(ConfigModulation {
+            encode(&ConfigModulation {
                 config: SamplingConfig::new(core::time::Duration::from_nanos(1)),
                 ..base
             }),
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
-            encode(ConfigModulation { size: 0, ..base }),
+            encode(&ConfigModulation { size: 0, ..base }),
             Err(Error::InvalidPayload(_))
         ));
         assert!(
             matches!(
-                encode(ConfigModulation { size: 1, ..base }),
+                encode(&ConfigModulation { size: 1, ..base }),
                 Err(Error::InvalidPayload(_))
             ),
             "a single sample never advances the FPGA index"
         );
         assert!(matches!(
-            encode(ConfigModulation {
+            encode(&ConfigModulation {
                 size: MOD_BUFFER_SAMPLES + 1,
                 ..base
             }),
             Err(Error::InvalidPayload(_))
         ));
-        assert!(
-            encode(ConfigModulation {
+        assert_eq!(
+            encode(&ConfigModulation {
                 size: MOD_BUFFER_SAMPLES,
                 ..base
             })
-            .is_ok()
+            .unwrap()
+            .0,
+            ENCODED
         );
     }
 }

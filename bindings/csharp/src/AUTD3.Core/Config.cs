@@ -37,27 +37,16 @@ namespace AUTD3
     {
         internal byte Mode { get; }
         internal ulong Value { get; }
-        internal uint MarginNs { get; }
 
-        private TransitionMode(byte mode, ulong value, uint marginNs = 0)
+        private TransitionMode(byte mode, ulong value)
         {
             Mode = mode;
             Value = value;
-            MarginNs = marginNs;
         }
 
         public static TransitionMode SyncIdx => new TransitionMode(0x00, 0);
 
-        public static TransitionMode SysTime(DcSysTime sysTime, TimeSpan? margin = null)
-        {
-            if (margin is not { } m) return new TransitionMode(0x01, sysTime.SysTime);
-            var nanos = (double)m.Ticks * 100.0;
-            if (nanos < 0.0 || nanos > uint.MaxValue)
-            {
-                throw new Autd3Exception("transition margin is out of range (0..=4294967295 ns)");
-            }
-            return new TransitionMode(0x01, sysTime.SysTime, (uint)nanos);
-        }
+        public static TransitionMode SysTime(SysTime sysTime) => new TransitionMode(0x01, sysTime.Nanos);
 
         public static TransitionMode Gpio(GpioIn gpio) => new TransitionMode(0x02, (byte)gpio);
 
@@ -66,16 +55,13 @@ namespace AUTD3
         public static TransitionMode Later => new TransitionMode(0xFE, 0);
 
         public static TransitionMode Immediate => new TransitionMode(0xFF, 0);
+
+        public bool IsLater => Mode == 0xFE;
     }
 
-    public enum Telemetry : byte
+    public enum FpgaBusWait : byte
     {
-        FifoDrop = 0x00,
-        Dedup = 0x01,
-        SeqMismatch = 0x02,
-        DispatchError = 0x03,
-        Processed = 0x04,
-        Failsafe = 0x05,
-        SyncResync = 0x06,
+        Cycles2 = 2,
+        Cycles3 = 3,
     }
 }

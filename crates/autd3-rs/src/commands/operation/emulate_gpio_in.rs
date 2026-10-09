@@ -1,11 +1,10 @@
 use autd3_cpu_wire::payload::GpioInPayload;
-use zerocopy::FromBytes;
 
 use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation};
+use super::{Encoded, Operation, encode_fixed};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct EmulateGpioIn {
@@ -15,36 +14,35 @@ pub struct EmulateGpioIn {
 impl crate::sealed::Sealed for EmulateGpioIn {}
 
 impl Operation for EmulateGpioIn {
-    fn distribution(&self) -> Distribution {
-        Distribution::Broadcast
-    }
-
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        let (p, _) = GpioInPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *p = GpioInPayload {
-            gpio_in_0: u8::from(self.values[0]),
-            gpio_in_1: u8::from(self.values[1]),
-            gpio_in_2: u8::from(self.values[2]),
-            gpio_in_3: u8::from(self.values[3]),
-        };
-        Ok(Cmd::EmulateGpioIn)
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        Ok(encode_fixed(
+            out,
+            Cmd::EmulateGpioIn,
+            &GpioInPayload {
+                gpio_in_0: self.values[0],
+                gpio_in_1: self.values[1],
+                gpio_in_2: self.values[2],
+                gpio_in_3: self.values[3],
+            },
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::test_device;
+    use crate::test_utils::encode;
 
     #[test]
     fn gpio_in_lays_out_values() {
-        let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = EmulateGpioIn {
+        let (cmd, out) = encode(&EmulateGpioIn {
             values: [false, true, false, true],
-        }
-        .encode(&test_device(0), &mut out)
+        })
         .unwrap();
-        assert_eq!(cmd, Cmd::EmulateGpioIn);
+        assert_eq!(
+            cmd,
+            Encoded::new(Cmd::EmulateGpioIn, size_of::<GpioInPayload>())
+        );
         assert_eq!(&out[..4], &[0, 1, 0, 1]);
     }
 }

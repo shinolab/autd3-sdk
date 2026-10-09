@@ -29,7 +29,7 @@ namespace AUTD3.Tests
         [Fact]
         public void FocusFillsBufferForEveryDevice()
         {
-            using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+            using var geometry = Fixture.SingleDevice();
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
             var wavelength = Pattern.Wavelength(340 * m / s);
@@ -74,11 +74,13 @@ namespace AUTD3.Tests
             using var right = geometry.PhaseBuffer();
             Pattern.SetPhase(new Phase(0x30), right);
             using var dst = geometry.PhaseBuffer();
+            Pattern.SetPhase(new Phase(0xFF), dst);
             using var leftI = geometry.IntensityBuffer();
             Pattern.SetIntensity(new Intensity(0x20), leftI);
             using var rightI = geometry.IntensityBuffer();
             Pattern.SetIntensity(new Intensity(0x40), rightI);
             using var dstI = geometry.IntensityBuffer();
+            Pattern.SetIntensity(new Intensity(0x60), dstI);
 
             var groups = Sides(geometry);
             Assert.Equal(new[] { Side.Left, Side.Right }, groups.Keys);
@@ -92,19 +94,19 @@ namespace AUTD3.Tests
             {
                 for (var tr = 0; tr < dst[dev].NumTransducers; tr++)
                 {
-                    Assert.Equal(Expected(dev, tr, new Phase(0x10), new Phase(0x30), Phase.Zero), dst[dev][tr]);
-                    Assert.Equal(Expected(dev, tr, new Intensity(0x20), new Intensity(0x40), Intensity.Min), dstI[dev][tr]);
+                    Assert.Equal(Expected(dev, tr, new Phase(0x10), new Phase(0x30), new Phase(0xFF)), dst[dev][tr]);
+                    Assert.Equal(Expected(dev, tr, new Intensity(0x20), new Intensity(0x40), new Intensity(0x60)), dstI[dev][tr]);
                 }
             }
 
             Assert.Throws<Autd3Exception>(() => Pattern.Group(geometry, groups, side => side == Side.Left ? left : dst, dst));
             Assert.Throws<Autd3Exception>(() => Pattern.Group(geometry, groups, side => side == Side.Left ? left : null!, dst));
 
-            using var single = new Geometry(new[] { new Autd3(Vector3.Zero) });
+            using var single = Fixture.SingleDevice();
             using var singleBuffer = single.PhaseBuffer();
             Assert.Throws<Autd3Exception>(() => Pattern.Group(geometry, groups, side => side == Side.Left ? left : singleBuffer, dst));
             Assert.Throws<Autd3Exception>(() => Pattern.Group(single, groups, _ => singleBuffer, dst));
-            Assert.Throws<ArgumentException>(() => new TransducerGroups<Side>(single, (_, _) => Side.Left).Mask(Side.Right));
+            Assert.Null(new TransducerGroups<Side>(single, (_, _) => Side.Left).Mask(Side.Right));
         }
 
         [Fact]
@@ -116,7 +118,7 @@ namespace AUTD3.Tests
             using var intensities = geometry.IntensityBuffer();
             var foci = new[] { new AUTD3.Holo.AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 5e3f * AUTD3.Holo.HoloUnits.Pa) };
 
-            AUTD3.Holo.Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Constraint = AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), Mask = groups.Mask(Side.Left) }, phases, intensities);
+            AUTD3.Holo.Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Constraint = AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), Mask = groups.Mask(Side.Left)!.Value }, phases, intensities);
 
             for (var dev = 0; dev < 2; dev++)
             {
@@ -128,10 +130,10 @@ namespace AUTD3.Tests
                 }
             }
 
-            using var single = new Geometry(new[] { new Autd3(Vector3.Zero) });
+            using var single = Fixture.SingleDevice();
             using var singlePhases = single.PhaseBuffer();
             using var singleIntensities = single.IntensityBuffer();
-            Assert.Throws<Autd3Exception>(() => AUTD3.Holo.Holo.Naive(single, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Constraint = AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), Mask = groups.Mask(Side.Left) }, singlePhases, singleIntensities));
+            Assert.Throws<Autd3Exception>(() => AUTD3.Holo.Holo.Naive(single, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Constraint = AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), Mask = groups.Mask(Side.Left)!.Value }, singlePhases, singleIntensities));
         }
 
         [Fact]
@@ -142,7 +144,7 @@ namespace AUTD3.Tests
             using var phases = geometry.PhaseBuffer();
             Pattern.SetPhase(new Phase(0xFF), phases);
             using var intensities = geometry.IntensityBuffer();
-            Pattern.SetIntensity(new Intensity(0xFF), intensities);
+            Pattern.SetIntensity(new Intensity(0x60), intensities);
             var foci = new[] { new AUTD3.Holo.AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 5e3f * AUTD3.Holo.HoloUnits.Pa) };
             var seen = new System.Collections.Generic.List<Side>();
 
@@ -175,14 +177,14 @@ namespace AUTD3.Tests
                             Assert.Equal(new Intensity(0x40), intensities[dev][tr]);
                             break;
                         default:
-                            Assert.Equal(Phase.Zero, phases[dev][tr]);
-                            Assert.Equal(Intensity.Min, intensities[dev][tr]);
+                            Assert.Equal(new Phase(0xFF), phases[dev][tr]);
+                            Assert.Equal(new Intensity(0x60), intensities[dev][tr]);
                             break;
                     }
                 }
             }
 
-            using var single = new Geometry(new[] { new Autd3(Vector3.Zero) });
+            using var single = Fixture.SingleDevice();
             Assert.Throws<Autd3Exception>(() => Pattern.GroupCompute(single, groups, (_, _, _, _) => { }, phases, intensities));
 
             var calls = 0;
@@ -200,8 +202,8 @@ namespace AUTD3.Tests
                 for (var tr = 0; tr < phases[dev].NumTransducers; tr++)
                 {
                     var assigned = Expected(dev, tr, true, true, false);
-                    Assert.Equal(Phase.Zero, phases[dev][tr]);
-                    Assert.Equal(assigned ? Intensity.Max : Intensity.Min, intensities[dev][tr]);
+                    Assert.Equal(assigned ? Phase.Zero : new Phase(0xFF), phases[dev][tr]);
+                    Assert.Equal(assigned ? Intensity.Max : new Intensity(0x60), intensities[dev][tr]);
                 }
             }
         }
@@ -231,18 +233,16 @@ namespace AUTD3.Tests
         [Fact]
         public void BuildDatagramsFromCommands()
         {
-            using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+            using var geometry = Fixture.SingleDevice();
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
             Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), phases);
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200 * Hz, new SineOption(), modulation);
 
-            using var builder = new DatagramBuilder(geometry);
-            builder
-                .Push(new Pattern(phases, intensities))
-                .Push(new Modulation(SamplingConfig.Freq4k, modulation));
-            using var frames = builder.Build();
+            using var frames = Frames.Encode(geometry, Command.Sequence(
+                new Pattern(phases, intensities),
+                new Modulation(SamplingConfig.Freq4k, modulation)));
 
             Assert.True(frames.Length > 0);
 
@@ -258,16 +258,14 @@ namespace AUTD3.Tests
         [Fact]
         public void BuildDatagramsFromLowLevelOps()
         {
-            using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+            using var geometry = Fixture.SingleDevice();
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
             Pattern.SetIntensity(Intensity.Min, intensities);
 
-            using var builder = new DatagramBuilder(geometry);
-            builder
-                .Push(new WritePatternBuffer(PatternBank.B0, 0, phases, intensities))
-                .Push(new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1));
-            using var frames = builder.Build();
+            using var frames = Frames.Encode(geometry, Command.Sequence(
+                new WritePatternBuffer(PatternBank.B0, 0, phases, intensities),
+                new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1)));
 
             Assert.Equal(2, frames.Length);
             _ = frames[0];

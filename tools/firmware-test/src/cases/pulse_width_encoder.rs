@@ -5,11 +5,8 @@ use autd3_rs::value::{Intensity, PulseWidth, SamplingConfig};
 use autd3_rs_modulation::{constant, modulation_buffer};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{Buffers, buffers, send_pattern_mod};
+use crate::cases::pattern_util::{Buffers, TR_A, TR_B, buffers, send_pattern_mod};
 use crate::io::wait_enter;
-
-const TR_A: u8 = 0;
-const TR_B: u8 = 248;
 
 fn drive_pair(ctx: &Ctx<'_>, dev0: (u8, u8), other: (u8, u8)) -> Buffers {
     let (phases, mut intensities) = buffers(ctx.geometry, Intensity::MIN);
@@ -53,17 +50,14 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     .await;
 
     ctx.send(SetPulseWidthTable {
-        table: &[PulseWidth::new(0); PWE_TABLE_SIZE],
+        table: &SetPulseWidthTable::empty_table(),
     })
     .await?;
     let full = buffers(ctx.geometry, Intensity::MAX);
     send_pattern_mod(ctx, &full, &static_ff, SamplingConfig::FREQ_4K).await?;
     wait_enter("No output is present on GPIO[0] or GPIO[1] of any device").await;
 
-    ctx.send(SetPulseWidthTable {
-        table: &SetPulseWidthTable::default_table(),
-    })
-    .await?;
+    ctx.send(SetPulseWidthTable::default()).await?;
     let em = drive_pair(ctx, (0, 0xFF), (0, 0xFF));
     send_pattern_mod(ctx, &em, &static_ff, SamplingConfig::FREQ_4K).await?;
     wait_enter("GPIO[0] and GPIO[1] show duty cycles of 0% and 50% respectively").await;

@@ -1,12 +1,14 @@
+use core::hash::{Hash, Hasher};
+
+use autd3_python_capsule::extract::number_f32;
 use autd3_rs_core::common::units::Hz;
 use autd3_rs_core::common::{Angle as CoreAngle, Length as CoreLength, Velocity as CoreVelocity};
 use autd3_rs_core::value::SamplingConfig as CoreSamplingConfig;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-fn number_f32(obj: &Bound<'_, PyAny>) -> PyResult<f32> {
-    obj.extract::<f32>()
-        .map_err(|_| PyValueError::new_err("expected a number"))
+pub(crate) fn hash_f32<H: Hasher>(value: f32, state: &mut H) {
+    (value + 0.0).to_bits().hash(state);
 }
 
 #[derive(Clone, Copy)]
@@ -15,12 +17,29 @@ enum FreqVal {
     Float(f32),
 }
 
-#[pyclass(name = "Freq", module = "autd3_core", from_py_object)]
+#[pyclass(name = "Freq", module = "autd3_core", eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy)]
 pub struct Freq(FreqVal);
 
+impl PartialEq for Freq {
+    fn eq(&self, other: &Self) -> bool {
+        self.hz() == other.hz()
+    }
+}
+
+impl Hash for Freq {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        hash_f32(self.hz(), state);
+    }
+}
+
 #[pymethods]
 impl Freq {
+    #[staticmethod]
+    fn from_hz(freq: &Bound<'_, PyAny>) -> PyResult<Self> {
+        FreqUnit::HZ.__rmul__(freq)
+    }
+
     #[getter]
     fn hz(&self) -> f32 {
         match self.0 {
@@ -42,12 +61,6 @@ impl Freq {
         }
     }
 
-    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        other
-            .extract::<Freq>()
-            .is_ok_and(|o| self.hz().to_bits() == o.hz().to_bits())
-    }
-
     fn __repr__(&self) -> String {
         match self.0 {
             FreqVal::Int(v) => format!("{v} Hz"),
@@ -56,9 +69,34 @@ impl Freq {
     }
 }
 
-#[pyclass(name = "Velocity", module = "autd3_core", from_py_object)]
+macro_rules! float_unit_eq_hash {
+    ($ty:ident, $value:ident) => {
+        impl PartialEq for $ty {
+            fn eq(&self, other: &Self) -> bool {
+                self.0 == other.0
+            }
+        }
+
+        impl Hash for $ty {
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                hash_f32(self.0.$value(), state);
+            }
+        }
+    };
+}
+
+#[pyclass(
+    name = "Velocity",
+    module = "autd3_core",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
 #[derive(Clone, Copy)]
 pub struct Velocity(pub CoreVelocity);
+
+float_unit_eq_hash!(Velocity, mm_s);
 
 #[pymethods]
 impl Velocity {
@@ -82,21 +120,32 @@ impl Velocity {
         self.0.m_s()
     }
 
-    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        other.extract::<Velocity>().is_ok_and(|o| self.0 == o.0)
-    }
-
     fn __repr__(&self) -> String {
         format!("{:?}", self.0)
     }
 }
 
-#[pyclass(name = "Angle", module = "autd3_core", from_py_object)]
+#[pyclass(
+    name = "Angle",
+    module = "autd3_core",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
 #[derive(Clone, Copy)]
 pub struct Angle(pub CoreAngle);
 
+float_unit_eq_hash!(Angle, rad);
+
 #[pymethods]
 impl Angle {
+    #[classattr]
+    #[pyo3(name = "ZERO")]
+    fn zero() -> Self {
+        Self(CoreAngle::ZERO)
+    }
+
     #[staticmethod]
     fn from_rad(radian: f32) -> Self {
         Self(CoreAngle::from_rad(radian))
@@ -117,21 +166,36 @@ impl Angle {
         self.0.deg()
     }
 
-    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        other.extract::<Angle>().is_ok_and(|o| self.0 == o.0)
-    }
-
     fn __repr__(&self) -> String {
         format!("{:?}", self.0)
     }
 }
 
-#[pyclass(name = "Length", module = "autd3_core", from_py_object)]
+#[pyclass(
+    name = "Length",
+    module = "autd3_core",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
 #[derive(Clone, Copy)]
 pub struct Length(pub CoreLength);
 
+float_unit_eq_hash!(Length, mm);
+
 #[pymethods]
 impl Length {
+    #[staticmethod]
+    fn from_mm(millimetres: f32) -> Self {
+        Self(CoreLength::from_mm(millimetres))
+    }
+
+    #[staticmethod]
+    fn from_m(metres: f32) -> Self {
+        Self(CoreLength::from_m(metres))
+    }
+
     #[getter]
     fn mm(&self) -> f32 {
         self.0.mm()
@@ -150,10 +214,6 @@ impl Length {
                 "a Length may only be divided by `s` to form a Velocity, e.g. 340 * m / s",
             ))
         }
-    }
-
-    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        other.extract::<Length>().is_ok_and(|o| self.0 == o.0)
     }
 
     fn __repr__(&self) -> String {
@@ -240,6 +300,10 @@ pub struct SecUnit;
 impl Freq {
     pub(crate) fn hz_f32(self) -> f32 {
         self.hz()
+    }
+
+    pub(crate) fn from_hz_f32(hz: f32) -> Self {
+        Self(FreqVal::Float(hz))
     }
 
     pub(crate) fn sampling_config(self) -> CoreSamplingConfig {

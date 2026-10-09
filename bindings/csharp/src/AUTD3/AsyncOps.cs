@@ -38,7 +38,7 @@ namespace AUTD3
             }
             else
             {
-                tcs.SetException(new Autd3Exception(NativeUtil.PtrToString(msg)));
+                tcs.SetException(Autd3Exception.FromNative(code, NativeUtil.PtrToString(msg)));
             }
         }
     }

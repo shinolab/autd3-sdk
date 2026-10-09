@@ -11,21 +11,20 @@ pub use write_foci_buffer::WriteFociBuffer;
 pub use write_modulation_buffer::WriteModulationBuffer;
 
 pub use operation::{
-    ChangeModulationBank, ChangePatternBank, Clear, ConfigFociStm, ConfigModulation, ConfigPattern,
-    Distribution, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate, ForceFan, GpioOut, Nop,
-    Operation, PWE_TABLE_SIZE, PatternCompression, PatternIntensity, SetGpioOut, SetOutputMask,
-    SetPhaseCorrection, SetPulseWidthTable, SetSilencer, SilencerConfig, Synchronize,
-    WritePatternBuffer, WritePatternCompressed,
+    ActivateModulationBank, ActivatePatternBank, Clear, ConfigFociStm, ConfigModulation,
+    ConfigPattern, CpuConfig, Distribution, EmulateGpioIn, Encoded, FixedCompletionTime,
+    FixedUpdateRate, ForceFan, FpgaBusWait, GpioOut, Nop, Operation, PWE_TABLE_SIZE,
+    PatternIntensity, PhaseDepth, PtpConfig, ReleaseFailsafe, SetCpuConfig, SetGpioOut,
+    SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, SilencerConfig,
+    StmIntensity, Synchronize, WritePatternBuffer, WritePatternPhase,
 };
-pub use stm::{
-    FociStm, FociStmOption, PatternStm, PatternStmMode, PatternStmOption, StmConfig, StmIntensity,
-    circle, line,
-};
+pub use stm::{FociStm, FociStmOption, PatternStm, PatternStmOption, StmConfig, circle, line};
 
-use crate::datagram::DatagramBuilder;
+pub use crate::datagram::{Each, Expansion, each};
+use crate::error::Error;
 
 pub trait Command<'a> {
-    fn expand(self, builder: &mut DatagramBuilder<'a>);
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error>;
 
     #[must_use]
     fn boxed(self) -> BoxedCommand<'a>
@@ -37,25 +36,47 @@ pub trait Command<'a> {
 }
 
 impl<'a, O: Operation + 'a> Command<'a> for O {
-    fn expand(self, builder: &mut DatagramBuilder<'a>) {
-        builder.push_op(self);
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        expansion.push_op(self);
+        Ok(())
     }
 }
 
 trait DynCommand<'a> {
-    fn expand_boxed(self: Box<Self>, builder: &mut DatagramBuilder<'a>);
+    fn expand_boxed(self: Box<Self>, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error>;
 }
 
 impl<'a, C: Command<'a>> DynCommand<'a> for C {
-    fn expand_boxed(self: Box<Self>, builder: &mut DatagramBuilder<'a>) {
-        (*self).expand(builder);
+    fn expand_boxed(self: Box<Self>, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        (*self).expand(expansion)
     }
 }
 
 pub struct BoxedCommand<'a>(Box<dyn DynCommand<'a> + 'a>);
 
 impl<'a> Command<'a> for BoxedCommand<'a> {
-    fn expand(self, builder: &mut DatagramBuilder<'a>) {
-        self.0.expand_boxed(builder);
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        self.0.expand_boxed(expansion)
     }
 }
+
+macro_rules! impl_command_for_tuple {
+    ($($name:ident),+) => {
+        impl<'a, $($name: Command<'a>),+> Command<'a> for ($($name,)+) {
+            #[allow(non_snake_case)]
+            fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+                let ($($name,)+) = self;
+                $(expansion.push($name)?;)+
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_command_for_tuple!(A, B);
+impl_command_for_tuple!(A, B, C);
+impl_command_for_tuple!(A, B, C, D);
+impl_command_for_tuple!(A, B, C, D, E);
+impl_command_for_tuple!(A, B, C, D, E, F);
+impl_command_for_tuple!(A, B, C, D, E, F, G);
+impl_command_for_tuple!(A, B, C, D, E, F, G, H);

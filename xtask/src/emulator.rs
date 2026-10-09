@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{publish_workspace, run};
+use crate::util::{cargo_clippy, cargo_fmt, publish_workspace, run};
 
 #[derive(Subcommand)]
 pub enum EmulatorCmd {
@@ -77,25 +77,20 @@ pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
             run("cargo", args, &dir)
         }
         EmulatorCmd::Lint { gpu } => {
-            let mut args = vec!["clippy", "--workspace", "--all-targets"];
+            let mut args = vec!["--workspace", "--all-targets"];
             args.extend(feature_args(*gpu));
-            args.extend(["--", "-D", "warnings"]);
-            run("cargo", args, &dir)
+            cargo_clippy(&dir, &args)
         }
-        EmulatorCmd::Format { fix } => {
-            let mut args = vec![
-                "fmt",
+        EmulatorCmd::Format { fix } => cargo_fmt(
+            &dir,
+            &[
                 "-p",
                 "autd3-rs-emulator",
                 "-p",
                 "autd3-rs-emulator-examples",
-            ];
-            if !*fix {
-                args.push("--");
-                args.push("--check");
-            }
-            run("cargo", args, &dir)
-        }
+            ],
+            *fix,
+        ),
         EmulatorCmd::Publish { dry_run } => publish_workspace(&dir, *dry_run),
         EmulatorCmd::Example {
             name,

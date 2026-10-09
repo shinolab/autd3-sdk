@@ -1,7 +1,6 @@
 use super::{Focus, Intensity, Phase};
 use crate::geometry::{Device, Point3};
-
-const FOCUS_UNIT_MM: f32 = 0.025;
+use autd3_cpu_wire::layout::FOCUS_UNIT_MM;
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn to_fixed(mm: f32) -> i32 {

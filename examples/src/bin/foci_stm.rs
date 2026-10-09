@@ -9,8 +9,7 @@ use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{Client, ClientConfig, TransportOption};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -20,7 +19,7 @@ async fn main() -> Result<()> {
 
     let client = Client::open(
         &geometry,
-        EchocatLinkOption::default(),
+        &TransportOption::default(),
         ClientConfig::default(),
     )
     .await?;
@@ -39,25 +38,16 @@ async fn main() -> Result<()> {
         &mut points,
     );
 
-    let mut builder = client.datagram_builder();
-    builder.push(SetSilencer::default()).push(FociStm::new(
-        1.0 * Hz,
-        &points,
-        FociStmOption::default(),
-    ));
-    let datagrams = builder.build()?;
-    let mut pending = Vec::with_capacity(datagrams.len());
-    for frame in &datagrams {
-        pending.push(client.send(frame).await?);
-    }
-    for response in pending {
-        response.await?.check()?;
-    }
+    client.send(SetSilencer::default()).await?;
+    client
+        .send_streaming(FociStm::new(1.0 * Hz, &points, FociStmOption::default()))
+        .await?
+        .await?;
 
     println!("running a 1 Hz circular foci STM — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.stop().await?;
+    client.silent_stop().await?;
     client.close().await?;
     Ok(())
 }

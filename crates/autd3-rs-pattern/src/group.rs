@@ -13,7 +13,6 @@ fn write_device<K, T, S>(
     device: &Device,
     groups: &TransducerGroups<K>,
     sources: &[S],
-    null: T,
     dst: &mut [T],
 ) where
     K: Copy + Eq,
@@ -22,7 +21,9 @@ fn write_device<K, T, S>(
 {
     let dev = device.idx();
     for (tr, (slot, &index)) in dst.iter_mut().zip(groups.indices(dev)).enumerate() {
-        *slot = index.map_or(null, |index| sources[index].as_ref()[dev][tr]);
+        if let Some(index) = index {
+            *slot = sources[index].as_ref()[dev][tr];
+        }
     }
 }
 
@@ -30,7 +31,6 @@ pub fn group_device<K, T, S, F>(
     device: &Device,
     groups: &TransducerGroups<K>,
     source: F,
-    null: T,
     dst: &mut [T],
 ) where
     K: Copy + Eq,
@@ -39,14 +39,13 @@ pub fn group_device<K, T, S, F>(
     F: FnMut(K) -> S,
 {
     let sources = sources_of(groups, source);
-    write_device(device, groups, &sources, null, dst);
+    write_device(device, groups, &sources, dst);
 }
 
 pub fn group<K, T, S, F>(
     geometry: &Geometry,
     groups: &TransducerGroups<K>,
     source: F,
-    null: T,
     dst: &mut [Vec<T>],
 ) where
     K: Copy + Eq,
@@ -56,7 +55,7 @@ pub fn group<K, T, S, F>(
 {
     let sources = sources_of(groups, source);
     for (device, slot) in geometry.iter().zip(dst.iter_mut()) {
-        write_device(device, groups, &sources, null, slot);
+        write_device(device, groups, &sources, slot);
     }
 }
 
@@ -95,21 +94,6 @@ fn assert_same_shape<A, B>(scratch: &[Vec<A>], dst: &[Vec<B>]) {
 }
 
 #[inline(never)]
-fn fill_unassigned<K: Copy + Eq, T: Copy>(
-    groups: &TransducerGroups<K>,
-    null: T,
-    dst: &mut [Vec<T>],
-) {
-    for (dev, slot) in dst.iter_mut().enumerate() {
-        for (out, &i) in slot.iter_mut().zip(groups.indices(dev)) {
-            if i.is_none() {
-                *out = null;
-            }
-        }
-    }
-}
-
-#[inline(never)]
 fn copy_group<K: Copy + Eq, T: Copy>(
     groups: &TransducerGroups<K>,
     index: usize,
@@ -137,8 +121,6 @@ where
     K: Copy + Eq,
     F: FnMut(K, TransducerMask<'_>, &mut [Vec<Phase>], &mut [Vec<Intensity>]) -> Result<(), E>,
 {
-    fill_unassigned(groups, Phase::ZERO, phases);
-    fill_unassigned(groups, Intensity::MIN, intensities);
     for (index, (key, mask)) in groups.masks().enumerate() {
         for slot in scratch_phases.iter_mut() {
             slot.fill(Phase::ZERO);
@@ -227,21 +209,21 @@ mod tests {
                 Side::Left => &left,
                 Side::Right => &right,
             },
-            Phase::ZERO,
             &mut dst,
         );
 
-        assert_sides(&dst, Phase(0x10), Phase(0x30), Phase::ZERO);
+        assert_sides(&dst, Phase(0x10), Phase(0x30), Phase(0xFF));
     }
 
     #[test]
-    fn group_fills_unassigned_transducers_with_the_given_null() {
+    fn group_leaves_unassigned_transducers_untouched() {
         let geometry = geometry();
         let mut left = geometry.intensity_buffer();
         fill(Intensity(0x20), &mut left);
         let mut right = geometry.intensity_buffer();
         fill(Intensity(0x40), &mut right);
         let mut dst = geometry.intensity_buffer();
+        fill(Intensity(0x60), &mut dst);
 
         let groups = sides(&geometry);
         group(
@@ -251,11 +233,10 @@ mod tests {
                 Side::Left => &left,
                 Side::Right => &right,
             },
-            Intensity::MIN,
             &mut dst,
         );
 
-        assert_sides(&dst, Intensity(0x20), Intensity(0x40), Intensity::MIN);
+        assert_sides(&dst, Intensity(0x20), Intensity(0x40), Intensity(0x60));
     }
 
     #[test]
@@ -278,7 +259,6 @@ mod tests {
                 calls += 1;
                 &src
             },
-            Phase::ZERO,
             &mut dst,
         );
 
@@ -294,10 +274,11 @@ mod tests {
         let groups = TransducerGroups::new(&geometry, |_, tr| (tr % 2 == 0).then_some(Side::Left));
 
         let mut expected = geometry.phase_buffer();
-        group(&geometry, &groups, |_| &src, Phase::ZERO, &mut expected);
+        fill(Phase(0xFF), &mut expected);
+        group(&geometry, &groups, |_| &src, &mut expected);
 
         let mut dst = vec![Phase(0xFF); Autd3::NUM_TRANSDUCERS];
-        group_device(&geometry[1], &groups, |_| &src, Phase::ZERO, &mut dst);
+        group_device(&geometry[1], &groups, |_| &src, &mut dst);
         assert_eq!(dst, expected[1]);
     }
 
@@ -308,6 +289,7 @@ mod tests {
         let mut phases = geometry.phase_buffer();
         fill(Phase(0xFF), &mut phases);
         let mut intensities = geometry.intensity_buffer();
+        fill(Intensity(0x60), &mut intensities);
 
         let mut seen = Vec::new();
         let result: Result<(), ()> = group_compute(
@@ -334,12 +316,12 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(seen, [Side::Left, Side::Right]);
-        assert_sides(&phases, Phase(0x10), Phase(0x30), Phase::ZERO);
+        assert_sides(&phases, Phase(0x10), Phase(0x30), Phase(0xFF));
         assert_sides(
             &intensities,
             Intensity(0x20),
             Intensity(0x40),
-            Intensity::MIN,
+            Intensity(0x60),
         );
     }
 
@@ -381,6 +363,7 @@ mod tests {
         let mut phases = geometry.phase_buffer();
         fill(Phase(0xFF), &mut phases);
         let mut intensities = geometry.intensity_buffer();
+        fill(Intensity(0x60), &mut intensities);
 
         let result: Result<(), ()> = group_compute_with(
             &groups,
@@ -398,12 +381,12 @@ mod tests {
         );
 
         assert_eq!(result, Ok(()));
-        assert_sides(&phases, Phase(0x10), Phase::ZERO, Phase::ZERO);
+        assert_sides(&phases, Phase(0x10), Phase::ZERO, Phase(0xFF));
         assert_sides(
             &intensities,
             Intensity(0x20),
             Intensity::MAX,
-            Intensity::MIN,
+            Intensity(0x60),
         );
     }
 }

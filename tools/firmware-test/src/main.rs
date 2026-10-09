@@ -10,27 +10,33 @@ use clap::Parser;
 use autd3_rs::commands::Command;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
-use autd3_rs::{Client, ClientConfig, DatagramBuilder};
-use autd3_rs_link_remote::{DiscoveryOption, RemoteLinkOption, ServerKind, discover};
-use autd3_rs_link_twincat::TwinCATLinkOption;
+use autd3_rs::{Client, ClientConfig, Error, Frames, Interface, StateChecker, TransportOption};
 
-use crate::cli::{Cli, LinkKind};
+use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
 
 pub struct Ctx<'a> {
     pub client: &'a Client,
     pub geometry: &'a Geometry,
+    pub states: &'a StateChecker,
+    pub heartbeat: Duration,
 }
 
 impl Ctx<'_> {
-    pub async fn send<'a, C: Command<'a>>(&self, cmd: C) -> Result<()> {
-        let mut builder: DatagramBuilder<'a> = self.client.datagram_builder();
-        builder.push(cmd);
-        let frames = builder.build()?;
-        for frame in &frames {
-            self.client.send_checked(frame).await?;
+    pub async fn try_send_frames(&self, frames: &Frames) -> Result<(), Error> {
+        for frame in frames {
+            self.client.send_frame(frame).await?.await?.check()?;
         }
         Ok(())
+    }
+
+    pub async fn send_frames(&self, frames: &Frames) -> Result<()> {
+        Ok(self.try_send_frames(frames).await?)
+    }
+
+    pub async fn send<'a, C: Command<'a>>(&self, cmd: C) -> Result<()> {
+        self.send_frames(&Frames::encode(self.client.geometry(), cmd)?)
+            .await
     }
 }
 
@@ -48,6 +54,8 @@ const CASE_NAMES: &[&str] = &[
     "Error",
     "Output Mask",
     "FPGA State",
+    "CPU Config",
+    "Synchronize",
 ];
 
 async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
@@ -65,6 +73,8 @@ async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
         10 => cases::error::run(ctx).await,
         11 => cases::output_mask::run(ctx).await,
         12 => cases::fpga_state::run(ctx).await,
+        13 => cases::cpu_config::run(ctx).await,
+        14 => cases::synchronize::run(ctx).await,
         _ => Ok(()),
     }
 }
@@ -89,60 +99,49 @@ async fn main() -> Result<()> {
     run(&cli).await
 }
 
-fn remote_option(cli: &Cli) -> Result<RemoteLinkOption> {
-    if let Some(addr) = cli.remote_addr {
-        return Ok(RemoteLinkOption::new(addr));
-    }
-    let default = DiscoveryOption::default();
-    let appliance = discover(&DiscoveryOption {
-        timeout: cli
-            .discovery_timeout_ms
-            .map_or(default.timeout, Duration::from_millis),
-        instance: cli.remote_instance.clone(),
-        kind: Some(ServerKind::Appliance),
-    })
-    .context("finding the appliance over mDNS (or pass --remote-addr)")?;
-    println!("appliance: {appliance}");
-    Ok(RemoteLinkOption::new(appliance.addr))
-}
-
 async fn run(cli: &Cli) -> Result<()> {
     let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()).collect());
-    let config = ClientConfig {
-        validate_state: false,
+    let config = ClientConfig::default();
+
+    let option = TransportOption {
+        iface: if cli.simulator {
+            Interface::Simulator
+        } else {
+            cli.interface.clone().into()
+        },
+        heartbeat: Some(Duration::from_micros(cli.heartbeat_us)),
         ..Default::default()
     };
+    let client = Client::open(&geometry, &option, config)
+        .await
+        .context("opening the devices")?;
+    let states = client.state_checker();
 
-    let sync0_period = Duration::from_micros(cli.cycle_us);
-    let client = match cli.link {
-        LinkKind::Echocat => {
-            let option = autd3_rs_link_echocat::EchocatLinkOption {
-                iface: cli.interface.clone().into(),
-                sync0_period,
-                ..Default::default()
-            };
-            Client::open(&geometry, option, config).await
-        }
-        LinkKind::Twincat => {
-            let option = match (cli.twincat_remote, cli.ams_net_id) {
-                (Some(addr), Some(ams_net_id)) => TwinCATLinkOption::remote(addr, ams_net_id),
-                _ => TwinCATLinkOption::local(),
-            };
-            Client::open(&geometry, option, config).await
-        }
-        LinkKind::Remote => Client::open(&geometry, remote_option(cli)?, config).await,
-    }
-    .context("opening link / client handshake")?;
-
-    run_session(&client, &geometry).await;
+    run_session(
+        &client,
+        &geometry,
+        &states,
+        Duration::from_micros(cli.heartbeat_us),
+    )
+    .await;
 
     client.close().await.context("closing client")?;
     println!("Ok!");
     Ok(())
 }
 
-async fn run_session(client: &Client, geometry: &Geometry) {
-    let ctx = Ctx { client, geometry };
+async fn run_session(
+    client: &Client,
+    geometry: &Geometry,
+    states: &StateChecker,
+    heartbeat: Duration,
+) {
+    let ctx = Ctx {
+        client,
+        geometry,
+        states,
+        heartbeat,
+    };
 
     match client.read_firmware_version().await {
         Ok(fw) => {
@@ -184,7 +183,7 @@ async fn run_session(client: &Client, geometry: &Geometry) {
         Ok(states) => {
             for (i, s) in states.iter().enumerate() {
                 println!(
-                    "  device[{i}] fpga state: raw={:#04x} thermal={} mod_bank={:?} pattern_bank={:?} mode={} pattern_stopped={} mod_stopped={} transition_pending={} reads_enabled={}",
+                    "  device[{i}] fpga state: raw={:#04x} thermal={} mod_bank={:?} pattern_bank={:?} mode={} pattern_stopped={} mod_stopped={} transition_pending={} failsafe={}",
                     s.raw(),
                     s.is_thermal_asserted(),
                     s.current_mod_bank(),
@@ -197,7 +196,7 @@ async fn run_session(client: &Client, geometry: &Geometry) {
                     s.is_pattern_stopped(),
                     s.is_mod_stopped(),
                     s.is_transition_pending(),
-                    s.reads_enabled(),
+                    s.is_failsafe_active(),
                 );
             }
         }
@@ -238,14 +237,11 @@ async fn reset(ctx: &Ctx<'_>) -> Result<()> {
     let mut intensities = ctx.geometry.intensity_buffer();
     set_intensity(Intensity::MIN, &mut intensities);
 
-    let mut builder = ctx.client.datagram_builder();
-    builder
-        .push(Pattern::new(&phases, &intensities))
-        .push(SetSilencer::default());
-    let frames = builder.build()?;
-    for frame in &frames {
-        ctx.client.send_checked(frame).await?;
-    }
+    ctx.send_frames(&Frames::encode(
+        ctx.client.geometry(),
+        (Pattern::new(&phases, &intensities), SetSilencer::default()),
+    )?)
+    .await?;
 
     ctx.send(Clear).await?;
     Ok(())

@@ -73,9 +73,10 @@ mod tests {
     use super::{CpuConfig, FpgaBusWait, SetCpuConfigPayload, default_config};
 
     const DEFAULT: CpuConfig = default_config();
+    use crate::app::Counter;
     use crate::fpga::TransitionMode;
     use crate::fpga_params::{ADDR_CTL_FLAG, ADDR_MOD_REQ_RD_BANK, CtlFlags};
-    use crate::proto::{Cmd, Error, Telemetry};
+    use crate::proto::{Cmd, Error};
     use crate::test_utils::builders::{activate_mod_bank, config_mod_rep, set_cpu_config};
     use crate::test_utils::mock::{Frame, Harness};
 
@@ -394,16 +395,16 @@ mod tests {
         ));
         h.port.host_idle_ms = Some(1000);
         h.cpu.tick_1ms(&mut h.port);
-        assert_eq!(h.cpu.telemetry(Telemetry::Failsafe), 0);
+        assert_eq!(h.cpu.counter(Counter::Failsafe), 0);
 
         h.cpu.request_config_reset();
         h.cpu.tick_1ms(&mut h.port);
-        assert_eq!(h.cpu.telemetry(Telemetry::Failsafe), 1);
+        assert_eq!(h.cpu.counter(Counter::Failsafe), 1);
         assert!(CtlFlags::from_bits_retain(h.ctl(ADDR_CTL_FLAG)).contains(CtlFlags::FAILSAFE));
 
         h.cpu.request_config_reset();
         h.cpu.tick_1ms(&mut h.port);
-        assert_eq!(h.cpu.telemetry(Telemetry::Failsafe), 1);
+        assert_eq!(h.cpu.counter(Counter::Failsafe), 1);
         assert!(CtlFlags::from_bits_retain(h.ctl(ADDR_CTL_FLAG)).contains(CtlFlags::FAILSAFE));
     }
 

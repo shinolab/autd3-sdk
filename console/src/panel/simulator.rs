@@ -1,24 +1,25 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use crate::launch::tool_bin;
 use crate::process::ManagedProcess;
 
-const SUBDIR: &str = "simulator";
-const BIN: &str = "autd3-rs-simulator";
+const BIN: &str = "autd3-simulator";
 
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SimulatorConfig {
     pub http_port: u16,
-    pub link_port: u16,
 }
 
 impl Default for SimulatorConfig {
     fn default() -> Self {
-        Self {
-            http_port: 8081,
-            link_port: 8080,
-        }
+        Self { http_port: 8081 }
+    }
+}
+
+impl SimulatorConfig {
+    fn args(&self) -> Vec<String> {
+        vec!["--http-port".to_string(), self.http_port.to_string()]
     }
 }
 
@@ -53,13 +54,6 @@ impl SimulatorPanel {
                     egui::DragValue::new(&mut self.config.http_port).range(1..=65535),
                 );
                 ui.end_row();
-
-                ui.label("Link port");
-                ui.add_enabled(
-                    !running,
-                    egui::DragValue::new(&mut self.config.link_port).range(1..=65535),
-                );
-                ui.end_row();
             });
 
         ui.separator();
@@ -72,10 +66,11 @@ impl SimulatorPanel {
                 self.start();
             }
             if ui.add_enabled(running, egui::Button::new("Stop")).clicked() {
-                self.stop();
+                self.proc = None;
             }
             if ui.button("Open browser").clicked() {
-                self.open_browser();
+                let url = format!("http://127.0.0.1:{}", self.config.http_port);
+                ui.ctx().open_url(egui::OpenUrl::new_tab(url));
             }
             ui.label(if running { "running" } else { "stopped" });
         });
@@ -90,51 +85,28 @@ impl SimulatorPanel {
 
     fn start(&mut self) {
         self.error = None;
-        let bin = match tool_bin(SUBDIR, BIN) {
-            Ok(bin) => bin,
-            Err(e) => {
-                self.error = Some(format!("cannot resolve {BIN}: {e}"));
-                return;
-            }
-        };
-        let args = vec![
-            "--http-port".to_string(),
-            self.config.http_port.to_string(),
-            "--link-port".to_string(),
-            self.config.link_port.to_string(),
-        ];
-        match ManagedProcess::spawn(&bin, &args) {
+        match super::spawn_tool(BIN, &self.config.args()) {
             Ok(proc) => self.proc = Some(proc),
-            Err(e) => self.error = Some(super::spawn_error(&bin, &e)),
-        }
-    }
-
-    fn stop(&mut self) {
-        if let Some(proc) = &mut self.proc {
-            proc.kill();
-        }
-        self.proc = None;
-    }
-
-    fn open_browser(&mut self) {
-        let url = format!("http://127.0.0.1:{}", self.config.http_port);
-        if let Err(e) = open_url(&url) {
-            self.error = Some(format!("failed to open browser: {e}"));
+            Err(e) => self.error = Some(e),
         }
     }
 }
 
-fn open_url(url: &str) -> std::io::Result<()> {
-    let (program, args): (&str, &[&str]) = if cfg!(target_os = "macos") {
-        ("open", &[url])
-    } else if cfg!(target_os = "windows") {
-        ("cmd", &["/C", "start", "", url])
-    } else {
-        ("xdg-open", &[url])
-    };
-    let mut command = std::process::Command::new(program);
-    command.args(args);
-    crate::process::no_window(&mut command);
-    command.spawn()?;
-    Ok(())
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_config_only_names_the_http_port() {
+        assert_eq!(SimulatorConfig::default().args(), ["--http-port", "8081"]);
+    }
+
+    #[test]
+    fn a_config_saved_with_a_removed_field_still_loads() {
+        let config: SimulatorConfig = serde_json::from_str(
+            r#"{"http_port":9000,"link_port":8080,"group":"[::1]:44336","geometry":"g.json"}"#,
+        )
+        .unwrap();
+        assert_eq!(config.http_port, 9000);
+    }
 }

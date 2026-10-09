@@ -4,31 +4,19 @@ use anyhow::{Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{on_path, publish_workspace, publishable_members, run, run_built_bin};
-
-const PCAP_PACKAGES: &[&str] = &[
-    "autd3-rs-link-echocat",
-    "autd3-rs-perftest",
-    "autd3-rs-examples",
-    "autd3-rs-firmware-test",
-    "autd3-rs-firmware-ota",
-];
+use crate::util::{
+    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, on_path, publish_workspace,
+    publishable_members, run,
+};
 
 #[derive(Subcommand)]
 pub enum RustCmd {
     /// Build the `crates/` workspace
     Build,
     /// Run the `crates/` workspace tests
-    Test {
-        /// Skip the packages that need a pcap runtime (Npcap/WinPcap, libpcap)
-        #[arg(long)]
-        no_pcap: bool,
-    },
+    Test,
     /// Measure `crates/` workspace test coverage with cargo-llvm-cov
     Coverage {
-        /// Skip the packages that need a pcap runtime (Npcap/WinPcap, libpcap)
-        #[arg(long)]
-        no_pcap: bool,
         /// Include `tools/` and `examples/`, which carry no tests by convention
         #[arg(long)]
         all: bool,
@@ -77,9 +65,6 @@ pub enum RustCmd {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
-        /// Do not wrap the run in `sudo`
-        #[arg(long)]
-        no_sudo: bool,
         /// Arguments forwarded to the example
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -90,37 +75,15 @@ pub enum RustCmd {
 
 pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
     match cmd {
-        RustCmd::Build => {
-            let args = vec![
-                "build",
-                "--workspace",
-                "--all-targets",
-            ];
-            run("cargo", args, root)
-        }
-        RustCmd::Test { no_pcap } => {
-            let mut args = vec![
-                "test",
-                "--workspace",
-                "--lib",
-                "--bins",
-                "--tests",
-            ];
-            if *no_pcap {
-                args.extend(PCAP_PACKAGES.iter().flat_map(|pkg| ["--exclude", *pkg]));
-            }
-            run("cargo", args, root)
-        }
-        RustCmd::Coverage { no_pcap, all, open } => run_coverage(root, *no_pcap, *all, *open),
+        RustCmd::Build => run("cargo", ["build", "--workspace", "--all-targets"], root),
+        RustCmd::Test => run(
+            "cargo",
+            ["test", "--workspace", "--lib", "--bins", "--tests"],
+            root,
+        ),
+        RustCmd::Coverage { all, open } => run_coverage(root, *all, *open),
         RustCmd::Lint => run_lint(root),
-        RustCmd::Format { fix } => {
-            let mut args = vec!["fmt", "--all"];
-            if !*fix {
-                args.push("--");
-                args.push("--check");
-            }
-            run("cargo", args, root)
-        }
+        RustCmd::Format { fix } => cargo_fmt(root, &["--all"], *fix),
         RustCmd::Bench {
             filter,
             package,
@@ -147,63 +110,26 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
         }
         RustCmd::Semver { baseline } => run_semver(root, baseline.as_deref()),
         RustCmd::Publish { dry_run } => publish_workspace(root, *dry_run),
-        RustCmd::Example {
-            name,
-            debug,
-            no_sudo,
-            args,
-        } => run_example(root, name, *debug, *no_sudo, args),
+        RustCmd::Example { name, debug, args } => run_example(root, name, *debug, args),
         RustCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
-    cleaner.paths(&["target", "crates/autd3-rs/tests/golden/generator/target"])
+    cleaner.paths(&["target"])
 }
 
 fn run_lint(root: &Path) -> Result<()> {
-    let mut args = vec![
-        "clippy",
-        "--workspace",
-        "--all-targets",
-    ];
-    args.extend(["--", "-D", "warnings"]);
-    run("cargo", args, root)?;
-
-    let default_feature_args = vec![
-        "clippy",
-        "-p",
-        "autd3-rs",
-        "--all-targets",
-        "--",
-        "-D",
-        "warnings",
-    ];
-    run("cargo", default_feature_args, root)?;
-
-    let no_discovery_args = vec![
-        "clippy",
-        "-p",
-        "autd3-rs-link-remote",
-        "--no-default-features",
-        "--all-targets",
-        "--",
-        "-D",
-        "warnings",
-    ];
-    run("cargo", no_discovery_args, root)?;
-
-    let no_parallel_args = vec![
-        "clippy",
-        "-p",
-        "autd3-rs-pattern-holo",
-        "--no-default-features",
-        "--all-targets",
-        "--",
-        "-D",
-        "warnings",
-    ];
-    run("cargo", no_parallel_args, root)
+    cargo_clippy(root, &["--workspace", "--all-targets"])?;
+    cargo_clippy(
+        root,
+        &[
+            "-p",
+            "autd3-rs-pattern-holo",
+            "--no-default-features",
+            "--all-targets",
+        ],
+    )
 }
 
 const COVERAGE_IGNORE: &str = "/(tools|examples)/";
@@ -226,8 +152,8 @@ pub fn coverage(dir: &Path, test_args: &[&str], filter: &[&str], open: bool) -> 
     run("cargo", summary_args, dir)
 }
 
-fn run_coverage(root: &Path, no_pcap: bool, all: bool, open: bool) -> Result<()> {
-    let mut test_args = vec![
+fn run_coverage(root: &Path, all: bool, open: bool) -> Result<()> {
+    let test_args = [
         "llvm-cov",
         "--no-report",
         "--workspace",
@@ -235,9 +161,6 @@ fn run_coverage(root: &Path, no_pcap: bool, all: bool, open: bool) -> Result<()>
         "--bins",
         "--tests",
     ];
-    if no_pcap {
-        test_args.extend(PCAP_PACKAGES.iter().flat_map(|pkg| ["--exclude", *pkg]));
-    }
     let filter: &[&str] = if all {
         &[]
     } else {
@@ -262,14 +185,11 @@ fn run_semver(root: &Path, baseline: Option<&str>) -> Result<()> {
     run("cargo", args, root)
 }
 
-fn run_example(root: &Path, name: &str, debug: bool, no_sudo: bool, args: &[String]) -> Result<()> {
-    let mut build_args: Vec<&str> = vec!["build", "-p", "autd3-rs-examples", "--bin", name];
-    if !debug {
-        build_args.push("--release");
-    }
+fn run_example(root: &Path, name: &str, debug: bool, args: &[String]) -> Result<()> {
+    let mut build_args = cargo_build_args("autd3-rs-examples", None, debug);
+    build_args.extend(["--bin", name]);
     run("cargo", build_args, root)?;
 
-    let profile = if debug { "debug" } else { "release" };
-    let bin = root.join("target").join(profile).join(name);
-    run_built_bin(&bin, args, no_sudo, root)
+    let bin = cargo_bin(root, None, debug, name);
+    run(&bin.to_string_lossy(), args, root)
 }

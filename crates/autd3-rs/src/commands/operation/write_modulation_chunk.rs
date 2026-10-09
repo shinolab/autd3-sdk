@@ -1,13 +1,10 @@
-use crate::error::{Error, PayloadError};
+use crate::error::Error;
 use crate::geometry::Device;
-use crate::params::MOD_BUFFER_SAMPLES;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::ModulationBank;
 
-use super::{Distribution, Operation};
+use super::{Encoded, Operation, write_header};
 use autd3_cpu_wire::payload::WriteModPayload;
-use zerocopy::FromBytes;
-use zerocopy::little_endian::{U16, U32};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct WriteModulationChunk<'a> {
@@ -19,50 +16,22 @@ pub(crate) struct WriteModulationChunk<'a> {
 impl crate::sealed::Sealed for WriteModulationChunk<'_> {}
 
 impl Operation for WriteModulationChunk<'_> {
-    fn distribution(&self) -> Distribution {
-        Distribution::Broadcast
-    }
-
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        if self.data.is_empty() {
-            return Err(PayloadError::ModulationDataEmpty.into());
-        }
-        if !self.offset.is_multiple_of(2) {
-            return Err(PayloadError::ModulationOffsetNotEven {
-                offset: self.offset,
-            }
-            .into());
-        }
-        let end = self.offset.saturating_add(self.data.len());
-        if end > MOD_BUFFER_SAMPLES {
-            return Err(PayloadError::ModulationWriteExceedsCapacity {
-                offset: self.offset,
-                end,
-                capacity: MOD_BUFFER_SAMPLES,
-            }
-            .into());
-        }
-
-        let offset = u32::try_from(self.offset).expect("bounded by MOD_BUFFER_SAMPLES");
-        let len = u16::try_from(self.data.len()).expect("bounded by MOD_WRITE_MAX_DATA_LEN");
-
-        let (h, rest) = WriteModPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *h = WriteModPayload {
-            bank: self.bank.as_u8(),
-            reserved: 0,
-            offset: U32::new(offset),
-            data_len: U16::new(len),
-        };
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        let header = WriteModPayload::new(self.bank, self.offset, self.data.len())?;
+        let rest = write_header(out, &header);
         rest[..self.data.len()].copy_from_slice(self.data);
-        Ok(Cmd::WriteModulationBuffer)
+        Ok(Encoded::header_with_data::<WriteModPayload>(
+            Cmd::WriteModulationBuffer,
+            self.data.len(),
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::test_device;
-    const HEADER_BYTES: usize = core::mem::size_of::<WriteModPayload>();
+    use crate::params::MOD_BUFFER_SAMPLES;
+    use crate::test_utils::encode;
 
     #[test]
     fn write_modulation_chunk_writes_header_and_body() {
@@ -72,36 +41,37 @@ mod tests {
             data: &[0xAA, 0xBB, 0xCC],
         };
 
-        let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), &mut out).unwrap();
+        let (cmd, out) = encode(&op).unwrap();
 
-        assert_eq!(cmd, Cmd::WriteModulationBuffer);
+        assert_eq!(
+            cmd,
+            Encoded::header_with_data::<WriteModPayload>(Cmd::WriteModulationBuffer, 3)
+        );
         assert_eq!(out[0], 1);
         assert_eq!(out[1], 0);
         assert_eq!(&out[2..6], &0x0102u32.to_le_bytes());
-        assert_eq!(&out[6..8], &3u16.to_le_bytes());
-        assert_eq!(&out[HEADER_BYTES..HEADER_BYTES + 3], &[0xAA, 0xBB, 0xCC]);
+        assert_eq!(
+            &out[size_of::<WriteModPayload>()..][..3],
+            &[0xAA, 0xBB, 0xCC]
+        );
     }
 
     #[test]
     fn write_modulation_chunk_rejects_invalid_windows() {
-        let encode = |offset: usize, data: &[u8]| -> Result<Cmd, Error> {
-            let mut out = [0u8; PAYLOAD_BYTES];
-            WriteModulationChunk {
+        let chunk = |offset: usize, data: &[u8]| {
+            encode(&WriteModulationChunk {
                 bank: ModulationBank::B0,
                 offset,
                 data,
-            }
-            .encode(&test_device(0), &mut out)
+            })
         };
-        assert!(matches!(encode(0, &[]), Err(Error::InvalidPayload(_))));
-        assert!(matches!(encode(1, &[0; 2]), Err(Error::InvalidPayload(_))));
+        assert!(matches!(chunk(1, &[0; 2]), Err(Error::InvalidPayload(_))));
         assert!(matches!(
-            encode(MOD_BUFFER_SAMPLES - 2, &[0; 3]),
+            chunk(MOD_BUFFER_SAMPLES - 2, &[0; 3]),
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
-            encode(usize::MAX - 1, &[0; 2]),
+            chunk(usize::MAX - 1, &[0; 2]),
             Err(Error::InvalidPayload(_))
         ));
     }

@@ -2,8 +2,10 @@
 
 import subprocess
 import sys
+from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import pytest
 
 from autd3.geometry import Autd3, EulerAngles, Geometry
@@ -13,18 +15,22 @@ ORDERS = ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX", "XYX", "XZX", "YXY", "YZY", 
 ANGLES_DEG = (10.0, 20.0, 30.0)
 
 
-def rotation_of(rotation) -> np.ndarray:
+def loose(value: object) -> Any:
+    return value
+
+
+def rotation_of(rotation: Any) -> npt.NDArray[np.float32]:
     return Geometry([Autd3([0.0, 0.0, 0.0], rotation)])[0].rotation()
 
 
-def axis_quat(axis: str, radian: float) -> np.ndarray:
+def axis_quat(axis: str, radian: float) -> npt.NDArray[np.float64]:
     q = np.zeros(4)
     q[0] = np.cos(radian / 2.0)
     q[1 + "XYZ".index(axis)] = np.sin(radian / 2.0)
     return q
 
 
-def quat_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+def quat_mul(a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     w1, x1, y1, z1 = a
     w2, x2, y2, z2 = b
     return np.array(
@@ -37,7 +43,7 @@ def quat_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     )
 
 
-def assert_same_rotation(a, b) -> None:
+def assert_same_rotation(a: Any, b: Any) -> None:
     a = np.asarray(a, dtype=float)
     b = np.asarray(b, dtype=float)
     assert np.allclose(a, b, atol=1e-5) or np.allclose(a, -b, atol=1e-5)
@@ -79,7 +85,37 @@ def test_scipy_rotation_equivalence() -> None:
 
 def test_invalid_rotation_raises() -> None:
     with pytest.raises(ValueError, match="scalar-first"):
-        Autd3([0.0, 0.0, 0.0], "not a rotation")
+        Autd3([0.0, 0.0, 0.0], loose("not a rotation"))
+
+
+def test_an_omitted_rotation_is_the_identity() -> None:
+    assert_same_rotation(Geometry([Autd3([0.0, 0.0, 0.0])])[0].rotation(), [1.0, 0.0, 0.0, 0.0])
+    assert_same_rotation(rotation_of(None), [1.0, 0.0, 0.0, 0.0])
+    assert Autd3([1.0, 2.0, 3.0]) == Autd3([1.0, 2.0, 3.0], [1.0, 0.0, 0.0, 0.0])
+    assert Autd3([1.0, 2.0, 3.0]) != Autd3([0.0, 2.0, 3.0])
+    assert Autd3([1.0, 2.0, 3.0]).origin.tolist() == [1.0, 2.0, 3.0]
+
+
+@pytest.mark.parametrize(
+    "quaternion",
+    [
+        [2.0, 0.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0],
+        [1.002, 0.0, 0.0, 0.0],
+        [0.998, 0.0, 0.0, 0.0],
+        [float("nan"), 0.0, 0.0, 0.0],
+        [float("inf"), 0.0, 0.0, 0.0],
+    ],
+)
+def test_a_non_unit_quaternion_is_rejected(quaternion: list[float]) -> None:
+    with pytest.raises(ValueError, match="unit quaternion"):
+        Autd3([0.0, 0.0, 0.0], quaternion)
+
+
+@pytest.mark.parametrize("quaternion", [[1.0005, 0.0, 0.0, 0.0], [0.9995, 0.0, 0.0, 0.0]])
+def test_a_quaternion_within_the_tolerance_is_normalized(quaternion: list[float]) -> None:
+    assert_same_rotation(rotation_of(quaternion), [1.0, 0.0, 0.0, 0.0])
 
 
 def test_import_does_not_load_scipy() -> None:

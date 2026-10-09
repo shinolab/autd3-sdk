@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 const APP_NAME: &str = "console";
 const REPO_OWNER: &str = "shinolab";
 const REPO_NAME: &str = "autd3-sdk";
-pub const RELEASES_URL: &str = "https://github.com/shinolab/autd3-sdk/releases";
+const RELEASES_URL: &str = "https://github.com/shinolab/autd3-sdk/releases";
 
 static RESTART_AFTER_EXIT: AtomicBool = AtomicBool::new(false);
 
@@ -112,7 +112,7 @@ impl Updater {
                             self.update();
                         }
                     } else if ui.button("Open releases").clicked() {
-                        open_releases();
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(RELEASES_URL));
                     }
                     if ui.button("Dismiss").clicked() {
                         self.state = State::Idle;
@@ -239,18 +239,4 @@ fn install() -> Result<String, String> {
         Some(result) => Ok(result.new_version.to_string()),
         None => Err("no newer release was found".to_string()),
     }
-}
-
-fn open_releases() {
-    let (program, args): (&str, &[&str]) = if cfg!(target_os = "macos") {
-        ("open", &[RELEASES_URL])
-    } else if cfg!(target_os = "windows") {
-        ("cmd", &["/C", "start", "", RELEASES_URL])
-    } else {
-        ("xdg-open", &[RELEASES_URL])
-    };
-    let mut command = std::process::Command::new(program);
-    command.args(args);
-    crate::process::no_window(&mut command);
-    let _ = command.spawn();
 }

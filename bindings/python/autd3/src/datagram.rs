@@ -1,31 +1,39 @@
-use std::num::NonZeroU16;
 use std::sync::Arc;
 
+use autd3_python_capsule::extract::{extract_sampling_config, geometry_to_py};
 use autd3_python_capsule::{
-    ClientBackend, capsule_of, frame_into_capsule, geometry_from_capsule, intensities_from_capsule,
-    modulation_from_capsule, phases_from_capsule, to_pyerr,
+    capsule_of, client_pyerr, frame_into_capsule, geometry_from_capsule, intensities_from_capsule,
+    modulation_from_capsule, phases_from_capsule,
 };
 use autd3_rs::commands::{
-    ChangeModulationBank as CoreChangeModulationBank, ChangePatternBank as CoreChangePatternBank,
-    Command as CoreCommand, ConfigFociStm as CoreConfigFociStm,
-    ConfigModulation as CoreConfigModulation, ConfigPattern as CoreConfigPattern,
-    Modulation as CoreModulation, Pattern as CorePattern,
-    PatternCompression as CorePatternCompression, PatternIntensity as CorePatternIntensity,
-    WriteModulationBuffer as CoreWriteModulationBuffer,
-    WritePatternBuffer as CoreWritePatternBuffer,
-    WritePatternCompressed as CoreWritePatternCompressed,
+    Command as CoreCommand, Expansion, Modulation as CoreModulation, Pattern as CorePattern,
+    PatternIntensity as CorePatternIntensity, each as core_each,
 };
 use autd3_rs::value::{
     Intensity, LoopBehavior as CoreLoopBehavior, ModulationBank as CoreModulationBank,
     PatternBank as CorePatternBank, Phase, SamplingConfig, TransitionMode as CoreTransitionMode,
 };
-use autd3_rs::{DatagramBuilder as CoreDatagramBuilder, Frames as CoreFrames, Geometry, Velocity};
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use autd3_rs::{Frames as CoreFrames, Geometry};
+use pyo3::exceptions::{PyIndexError, PyRecursionError, PyTypeError};
 use pyo3::prelude::*;
+use pyo3::types::{PyList, PyTuple};
 
-use crate::ops;
+use crate::{commands, ops, stm};
 
-#[derive(Clone)]
+pub(crate) trait PushCommand: Send + Sync {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error>;
+}
+
+impl<C> PushCommand for C
+where
+    C: for<'a> CoreCommand<'a> + Copy + Send + Sync,
+{
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        expansion.push(*self)?;
+        Ok(())
+    }
+}
+
 pub(crate) enum OwnedPatternIntensity {
     Uniform(Intensity),
     PerDevice(Vec<Vec<Intensity>>),
@@ -40,14 +48,6 @@ impl OwnedPatternIntensity {
             }
         }
     }
-}
-
-#[pyclass(name = "Pattern", module = "autd3.commands")]
-pub struct Pattern {
-    bank: CorePatternBank,
-    phases: Vec<Vec<Phase>>,
-    intensities: OwnedPatternIntensity,
-    transition_mode: CoreTransitionMode,
 }
 
 pub(crate) fn extract_phases(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<Phase>>> {
@@ -71,6 +71,26 @@ pub(crate) fn extract_pattern_intensity(obj: &Bound<'_, PyAny>) -> PyResult<Owne
     Ok(OwnedPatternIntensity::PerDevice(extract_intensities(obj)?))
 }
 
+pub(crate) struct PatternData {
+    bank: CorePatternBank,
+    phases: Vec<Vec<Phase>>,
+    intensities: OwnedPatternIntensity,
+    transition_mode: CoreTransitionMode,
+}
+
+impl PushCommand for PatternData {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        expansion.push(CorePattern {
+            transition_mode: self.transition_mode,
+            ..CorePattern::with_bank(self.bank, &self.phases, self.intensities.as_ref())
+        })?;
+        Ok(())
+    }
+}
+
+#[pyclass(name = "Pattern", module = "autd3.commands", frozen)]
+pub struct Pattern(pub(crate) Arc<PatternData>);
+
 #[pymethods]
 impl Pattern {
     #[new]
@@ -81,23 +101,35 @@ impl Pattern {
         bank: Option<ops::PatternBank>,
         transition_mode: Option<ops::TransitionMode>,
     ) -> PyResult<Self> {
-        Ok(Self {
+        Ok(Self(Arc::new(PatternData {
             bank: bank.map_or(CorePatternBank::B0, |b| b.0),
             phases: extract_phases(phases)?,
             intensities: extract_pattern_intensity(intensities)?,
             transition_mode: transition_mode.map_or(CoreTransitionMode::Immediate, |t| t.0),
-        })
+        })))
     }
 }
 
-#[pyclass(name = "Modulation", module = "autd3.commands")]
-pub struct Modulation {
+pub(crate) struct ModulationData {
     bank: CoreModulationBank,
-    divider: u16,
+    config: SamplingConfig,
     data: Vec<u8>,
     loop_behavior: CoreLoopBehavior,
     transition_mode: CoreTransitionMode,
 }
+
+impl PushCommand for ModulationData {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        let mut cmd = CoreModulation::with_bank(self.bank, self.config, &self.data);
+        cmd.loop_behavior = self.loop_behavior;
+        cmd.transition_mode = self.transition_mode;
+        expansion.push(cmd)?;
+        Ok(())
+    }
+}
+
+#[pyclass(name = "Modulation", module = "autd3.commands", frozen)]
+pub struct Modulation(pub(crate) Arc<ModulationData>);
 
 #[pymethods]
 impl Modulation {
@@ -110,518 +142,157 @@ impl Modulation {
         loop_behavior: Option<ops::LoopBehavior>,
         transition_mode: Option<ops::TransitionMode>,
     ) -> PyResult<Self> {
-        let divider = config.call_method0("divide")?.extract::<u16>()?;
+        let config = extract_sampling_config(config)?;
         let capsule = capsule_of(data)?;
         let data = modulation_from_capsule(&capsule)?.to_vec();
-        Ok(Self {
+        Ok(Self(Arc::new(ModulationData {
             bank: bank.map_or(CoreModulationBank::B0, |b| b.0),
-            divider,
+            config,
             data,
             loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
             transition_mode: transition_mode.map_or(CoreTransitionMode::Immediate, |t| t.0),
-        })
+        })))
     }
 }
 
-pub(crate) enum Pending {
-    Pattern {
-        bank: CorePatternBank,
-        phases: Vec<Vec<Phase>>,
-        intensities: OwnedPatternIntensity,
-        transition_mode: CoreTransitionMode,
-    },
-    Modulation {
-        bank: CoreModulationBank,
-        divider: u16,
-        data: Vec<u8>,
-        loop_behavior: CoreLoopBehavior,
-        transition_mode: CoreTransitionMode,
-    },
-    WritePatternBuffer {
-        bank: CorePatternBank,
-        index: u16,
-        phases: Vec<Vec<Phase>>,
-        intensities: OwnedPatternIntensity,
-    },
-    ConfigPattern {
-        bank: CorePatternBank,
-        divider: u16,
-        size: u32,
-        loop_behavior: CoreLoopBehavior,
-    },
-    ConfigFociStm {
-        bank: CorePatternBank,
-        divider: u16,
-        size: u32,
-        num_foci: u8,
-        sound_speed: Velocity,
-        loop_behavior: CoreLoopBehavior,
-    },
-    ChangePatternBank {
-        bank: CorePatternBank,
-        transition_mode: CoreTransitionMode,
-    },
-    WriteModulationBuffer {
-        bank: CoreModulationBank,
-        offset: u32,
-        data: Vec<u8>,
-    },
-    ConfigModulation {
-        bank: CoreModulationBank,
-        divider: u16,
-        size: u32,
-        loop_behavior: CoreLoopBehavior,
-    },
-    ChangeModulationBank {
-        bank: CoreModulationBank,
-        transition_mode: CoreTransitionMode,
-    },
-    WriteFociBuffer {
-        bank: CorePatternBank,
-        index_offset: usize,
-        points: crate::stm::FociPoints,
-    },
-    WritePatternCompressed {
-        bank: CorePatternBank,
-        index: u32,
-        format: CorePatternCompression,
-        intensity: Intensity,
-        patterns: Vec<Vec<Vec<Phase>>>,
-    },
-    FociStm {
-        config: autd3_rs::commands::StmConfig,
-        points: crate::stm::FociPoints,
-        option: autd3_rs::commands::FociStmOption,
-    },
-    PatternStm {
-        config: autd3_rs::commands::StmConfig,
-        phases: Vec<Vec<Vec<Phase>>>,
-        intensities: crate::stm::OwnedStmIntensity,
-        option: autd3_rs::commands::PatternStmOption,
-    },
-    Each {
-        devices: Vec<Option<Pending>>,
-    },
-    Command(Box<dyn crate::commands::PushCommand>),
-}
+struct PerDevice(Vec<Option<Arc<dyn PushCommand>>>);
 
-struct PendingCommand<'a>(&'a Pending);
+struct Sequence(Vec<Arc<dyn PushCommand>>);
 
-impl<'a> CoreCommand<'a> for PendingCommand<'a> {
-    fn expand(self, builder: &mut CoreDatagramBuilder<'a>) {
-        push_pending(self.0, builder);
+pub(crate) struct Expand<'a>(pub(crate) &'a dyn PushCommand);
+
+impl<'a> CoreCommand<'a> for Expand<'a> {
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        self.0.push_into(expansion)
     }
 }
 
-pub(crate) fn validate_pending(pending: &Pending) -> PyResult<()> {
-    match pending {
-        Pending::Modulation { divider, .. }
-        | Pending::ConfigPattern { divider, .. }
-        | Pending::ConfigFociStm { divider, .. }
-        | Pending::ConfigModulation { divider, .. } => NonZeroU16::new(*divider)
-            .map(|_| ())
-            .ok_or_else(|| PyValueError::new_err("divider must be >= 1")),
-        Pending::Each { devices } => {
-            for child in devices.iter().flatten() {
-                validate_pending(child)?;
-            }
-            Ok(())
-        }
-        _ => Ok(()),
-    }
-}
-
-#[allow(clippy::too_many_lines)]
-fn push_pending<'a>(pending: &'a Pending, builder: &mut CoreDatagramBuilder<'a>) {
-    match pending {
-        Pending::Pattern {
-            bank,
-            phases,
-            intensities,
-            transition_mode,
-        } => {
-            builder.push(CorePattern {
-                transition_mode: *transition_mode,
-                ..CorePattern::with_bank(*bank, phases, intensities.as_ref())
-            });
-        }
-        Pending::Modulation {
-            bank,
-            divider,
-            data,
-            loop_behavior,
-            transition_mode,
-        } => {
-            let divider = NonZeroU16::new(*divider).unwrap_or(NonZeroU16::MIN);
-            let mut cmd = CoreModulation::with_bank(*bank, SamplingConfig::new(divider), data);
-            cmd.loop_behavior = *loop_behavior;
-            cmd.transition_mode = *transition_mode;
-            builder.push(cmd);
-        }
-        Pending::WritePatternBuffer {
-            bank,
-            index,
-            phases,
-            intensities,
-        } => {
-            builder.push(CoreWritePatternBuffer::new(
-                *bank,
-                usize::from(*index),
-                phases,
-                intensities.as_ref(),
-            ));
-        }
-        Pending::ConfigPattern {
-            bank,
-            divider,
-            size,
-            loop_behavior,
-        } => {
-            let divider = NonZeroU16::new(*divider).unwrap_or(NonZeroU16::MIN);
-            builder.push(CoreConfigPattern {
-                bank: *bank,
-                config: SamplingConfig::new(divider),
-                size: usize::try_from(*size).unwrap_or(usize::MAX),
-                loop_behavior: *loop_behavior,
-            });
-        }
-        Pending::ConfigFociStm {
-            bank,
-            divider,
-            size,
-            num_foci,
-            sound_speed,
-            loop_behavior,
-        } => {
-            let divider = NonZeroU16::new(*divider).unwrap_or(NonZeroU16::MIN);
-            builder.push(CoreConfigFociStm {
-                bank: *bank,
-                config: SamplingConfig::new(divider),
-                size: usize::try_from(*size).unwrap_or(usize::MAX),
-                num_foci: *num_foci,
-                sound_speed: *sound_speed,
-                loop_behavior: *loop_behavior,
-            });
-        }
-        Pending::ChangePatternBank {
-            bank,
-            transition_mode,
-        } => {
-            builder.push(CoreChangePatternBank {
-                bank: *bank,
-                transition_mode: *transition_mode,
-            });
-        }
-        Pending::WriteModulationBuffer { bank, offset, data } => {
-            builder.push(CoreWriteModulationBuffer {
-                bank: *bank,
-                offset: usize::try_from(*offset).unwrap_or(usize::MAX),
-                data,
-            });
-        }
-        Pending::ConfigModulation {
-            bank,
-            divider,
-            size,
-            loop_behavior,
-        } => {
-            let divider = NonZeroU16::new(*divider).unwrap_or(NonZeroU16::MIN);
-            builder.push(CoreConfigModulation {
-                bank: *bank,
-                config: SamplingConfig::new(divider),
-                size: usize::try_from(*size).unwrap_or(usize::MAX),
-                loop_behavior: *loop_behavior,
-            });
-        }
-        Pending::ChangeModulationBank {
-            bank,
-            transition_mode,
-        } => {
-            builder.push(CoreChangeModulationBank {
-                bank: *bank,
-                transition_mode: *transition_mode,
-            });
-        }
-        Pending::WriteFociBuffer {
-            bank,
-            index_offset,
-            points,
-        } => {
-            points.push_write_foci(*bank, *index_offset, builder);
-        }
-        Pending::WritePatternCompressed {
-            bank,
-            index,
-            format,
-            intensity,
-            patterns,
-        } => {
-            let mut arr: [Option<&[Vec<Phase>]>; 4] = [None, None, None, None];
-            for (slot, p) in arr.iter_mut().zip(patterns.iter()) {
-                *slot = Some(p.as_slice());
-            }
-            builder.push(CoreWritePatternCompressed {
-                bank: *bank,
-                index: usize::try_from(*index).unwrap_or(usize::MAX),
-                format: *format,
-                intensity: *intensity,
-                patterns: arr,
-            });
-        }
-        Pending::FociStm {
-            config,
-            points,
-            option,
-        } => {
-            points.push_into(*config, *option, builder);
-        }
-        Pending::PatternStm {
-            config,
-            phases,
-            intensities,
-            option,
-        } => {
-            builder.push(autd3_rs::commands::PatternStm::new(
-                *config,
-                phases.as_slice(),
-                intensities.as_ref(),
-                *option,
-            ));
-        }
-        Pending::Each { devices } => {
-            builder.push_each(|device| devices[device.idx()].as_ref().map(PendingCommand));
-        }
-        Pending::Command(command) => {
-            command.push_into(builder);
-        }
-    }
-}
-
-#[pyclass(name = "DatagramBuilder", module = "autd3")]
-pub struct DatagramBuilder {
-    geometry: Arc<Geometry>,
-    pub(crate) pending: Vec<Pending>,
-    backend: Option<Arc<dyn ClientBackend>>,
-}
-
-impl DatagramBuilder {
-    pub(crate) fn with_geometry(geometry: Arc<Geometry>) -> Self {
-        Self::with_backend(geometry, None)
-    }
-
-    pub(crate) fn with_backend(
-        geometry: Arc<Geometry>,
-        backend: Option<Arc<dyn ClientBackend>>,
-    ) -> Self {
-        Self {
-            geometry,
-            pending: Vec::new(),
-            backend,
-        }
-    }
-
-    pub(crate) fn pop_pushed(&mut self, obj: &Bound<'_, PyAny>) -> PyResult<Pending> {
-        self.push(obj)?;
-        self.pending
-            .pop()
-            .ok_or_else(|| PyValueError::new_err("Unknown datagram type"))
-    }
-
-    pub(crate) fn pop_pushed_each(
-        &mut self,
-        py: Python<'_>,
-        assign: &Bound<'_, PyAny>,
-    ) -> PyResult<Pending> {
-        self.push_each(py, assign)?;
-        self.pending
-            .pop()
-            .ok_or_else(|| PyValueError::new_err("Unknown datagram type"))
-    }
-
-    fn dc_offset_ns(&self) -> i64 {
-        self.backend.as_ref().map_or(0, |b| b.dc_offset_ns())
-    }
-}
-
-#[pymethods]
-impl DatagramBuilder {
-    #[new]
-    fn new(geometry: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let capsule = capsule_of(geometry)?;
-        let geometry = geometry_from_capsule(&capsule)?;
-        Ok(Self::with_geometry(Arc::new(geometry.clone())))
-    }
-
-    #[allow(clippy::too_many_lines)]
-    pub(crate) fn push(&mut self, obj: &Bound<'_, PyAny>) -> PyResult<()> {
-        if let Ok(pattern) = obj.cast::<Pattern>() {
-            let pattern = pattern.borrow();
-            self.pending.push(Pending::Pattern {
-                bank: pattern.bank,
-                phases: pattern.phases.clone(),
-                intensities: pattern.intensities.clone(),
-                transition_mode: pattern.transition_mode,
-            });
-            return Ok(());
-        }
-        if let Ok(modulation) = obj.cast::<Modulation>() {
-            let modulation = modulation.borrow();
-            self.pending.push(Pending::Modulation {
-                bank: modulation.bank,
-                divider: modulation.divider,
-                data: modulation.data.clone(),
-                loop_behavior: modulation.loop_behavior,
-                transition_mode: modulation.transition_mode,
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<ops::WritePatternBuffer>() {
-            let op = op.borrow();
-            self.pending.push(Pending::WritePatternBuffer {
-                bank: op.bank,
-                index: op.index,
-                phases: op.phases.clone(),
-                intensities: op.intensities.clone(),
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<ops::ConfigPattern>() {
-            let op = op.borrow();
-            self.pending.push(Pending::ConfigPattern {
-                bank: op.bank,
-                divider: op.divider,
-                size: op.size,
-                loop_behavior: op.loop_behavior,
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<ops::ConfigFociStm>() {
-            let op = op.borrow();
-            self.pending.push(Pending::ConfigFociStm {
-                bank: op.bank,
-                divider: op.divider,
-                size: op.size,
-                num_foci: op.num_foci,
-                sound_speed: op.sound_speed,
-                loop_behavior: op.loop_behavior,
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<ops::ChangePatternBank>() {
-            let op = op.borrow();
-            self.pending.push(Pending::ChangePatternBank {
-                bank: op.bank,
-                transition_mode: op.transition_mode,
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<ops::WriteModulationBuffer>() {
-            let op = op.borrow();
-            self.pending.push(Pending::WriteModulationBuffer {
-                bank: op.bank,
-                offset: op.offset,
-                data: op.data.clone(),
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<ops::ConfigModulation>() {
-            let op = op.borrow();
-            self.pending.push(Pending::ConfigModulation {
-                bank: op.bank,
-                divider: op.divider,
-                size: op.size,
-                loop_behavior: op.loop_behavior,
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<ops::ChangeModulationBank>() {
-            let op = op.borrow();
-            self.pending.push(Pending::ChangeModulationBank {
-                bank: op.bank,
-                transition_mode: op.transition_mode,
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<crate::stm::WriteFociBuffer>() {
-            let op = op.borrow();
-            self.pending.push(Pending::WriteFociBuffer {
-                bank: op.bank,
-                index_offset: op.index_offset,
-                points: op.points.clone(),
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<ops::WritePatternCompressed>() {
-            let op = op.borrow();
-            self.pending.push(Pending::WritePatternCompressed {
-                bank: op.bank,
-                index: op.index,
-                format: op.format,
-                intensity: op.intensity,
-                patterns: op.patterns.clone(),
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<crate::stm::FociStm>() {
-            let op = op.borrow();
-            self.pending.push(Pending::FociStm {
-                config: op.config,
-                points: op.points.clone(),
-                option: op.option,
-            });
-            return Ok(());
-        }
-        if let Ok(op) = obj.cast::<crate::stm::PatternStm>() {
-            let op = op.borrow();
-            self.pending.push(Pending::PatternStm {
-                config: op.config,
-                phases: op.phases.clone(),
-                intensities: op.intensities.clone(),
-                option: op.option,
-            });
-            return Ok(());
-        }
-        if let Some(command) = crate::commands::boxed_command(obj) {
-            self.pending.push(Pending::Command(command));
-            return Ok(());
-        }
-        Err(PyValueError::new_err("Unknown datagram type"))
-    }
-
-    pub(crate) fn push_each(&mut self, py: Python<'_>, assign: &Bound<'_, PyAny>) -> PyResult<()> {
-        let num_devices = self.geometry.num_devices();
-        let capsule = autd3_python_capsule::geometry_into_capsule(py, (*self.geometry).clone())?;
-        let geometry = py
-            .import("autd3_core")?
-            .getattr("Geometry")?
-            .call_method1("_from_capsule", (capsule,))?;
-        let mut devices = Vec::with_capacity(num_devices);
-        for device in 0..num_devices {
-            let result = assign.call1((geometry.get_item(device)?,))?;
-            if result.is_none() {
-                devices.push(None);
-            } else {
-                let mut tmp = DatagramBuilder::with_geometry(Arc::clone(&self.geometry));
-                tmp.push(&result)?;
-                devices.push(tmp.pending.pop());
-            }
-        }
-        self.pending.push(Pending::Each { devices });
+impl PushCommand for PerDevice {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        expansion.push(core_each(|device| {
+            self.0[device.idx()].as_deref().map(Expand)
+        }))?;
         Ok(())
     }
+}
 
-    fn build(&self, py: Python<'_>) -> PyResult<Frames> {
-        let mut builder =
-            CoreDatagramBuilder::with_dc_offset(Arc::clone(&self.geometry), self.dc_offset_ns());
-        for pending in &self.pending {
-            validate_pending(pending)?;
-            push_pending(pending, &mut builder);
+impl PushCommand for Sequence {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        for command in &self.0 {
+            command.push_into(expansion)?;
         }
-        let frames = builder.build().map_err(|e| to_pyerr(py, e))?;
-        Ok(Frames {
-            inner: Arc::new(frames),
-        })
+        Ok(())
     }
+}
+
+#[pyclass(name = "Each", module = "autd3.commands", frozen)]
+pub struct Each {
+    assign: Py<PyAny>,
+}
+
+#[pyfunction]
+pub(crate) fn each(assign: Bound<'_, PyAny>) -> PyResult<Each> {
+    if !assign.is_callable() {
+        return Err(PyTypeError::new_err(
+            "each expects a callable taking a device",
+        ));
+    }
+    Ok(Each {
+        assign: assign.unbind(),
+    })
+}
+
+const COMMAND_NESTING_MAX: usize = 64;
+
+fn sequence_of<'py>(
+    items: impl Iterator<Item = Bound<'py, PyAny>>,
+    geometry: &Geometry,
+    depth: usize,
+) -> PyResult<Arc<dyn PushCommand>> {
+    let commands = items
+        .map(|item| nested_command_of(&item, geometry, depth + 1))
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(Arc::new(Sequence(commands)))
+}
+
+pub(crate) fn command_of(
+    obj: &Bound<'_, PyAny>,
+    geometry: &Geometry,
+) -> PyResult<Arc<dyn PushCommand>> {
+    nested_command_of(obj, geometry, 0)
+}
+
+fn nested_command_of(
+    obj: &Bound<'_, PyAny>,
+    geometry: &Geometry,
+    depth: usize,
+) -> PyResult<Arc<dyn PushCommand>> {
+    if depth > COMMAND_NESTING_MAX {
+        return Err(PyRecursionError::new_err(format!(
+            "commands are nested deeper than {COMMAND_NESTING_MAX} levels"
+        )));
+    }
+    macro_rules! try_cast {
+        ($($ty:ty),* $(,)?) => {
+            $(if let Ok(c) = obj.cast::<$ty>() {
+                let command: Arc<dyn PushCommand> = c.get().0.clone();
+                return Ok(command);
+            })*
+        };
+    }
+    try_cast!(
+        Pattern,
+        Modulation,
+        ops::WritePatternBuffer,
+        ops::WritePatternPhase,
+        ops::ConfigPattern,
+        ops::ConfigFociStm,
+        ops::ActivatePatternBank,
+        ops::WriteModulationBuffer,
+        ops::ConfigModulation,
+        ops::ActivateModulationBank,
+        stm::WriteFociBuffer,
+        stm::FociStm,
+        stm::PatternStm,
+        commands::Clear,
+        commands::Synchronize,
+        commands::ReleaseFailsafe,
+        commands::Nop,
+        commands::ForceFan,
+        commands::SetSilencerPy,
+        commands::SetCpuConfigPy,
+        commands::SetGpioOutPy,
+        commands::EmulateGpioInPy,
+        commands::SetOutputMaskPy,
+        commands::SetPhaseCorrectionPy,
+        commands::SetPulseWidthTablePy,
+    );
+    if let Ok(per_device) = obj.cast::<Each>() {
+        let py = obj.py();
+        let assign = per_device.get().assign.bind(py);
+        let devices = geometry_to_py(py, geometry)?;
+        let commands = (0..geometry.num_devices())
+            .map(|device| {
+                let assigned = assign.call1((devices.get_item(device)?,))?;
+                if assigned.is_none() {
+                    Ok(None)
+                } else {
+                    nested_command_of(&assigned, geometry, depth + 1).map(Some)
+                }
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        return Ok(Arc::new(PerDevice(commands)));
+    }
+    if let Ok(tuple) = obj.cast::<PyTuple>() {
+        return sequence_of(tuple.iter(), geometry, depth);
+    }
+    if let Ok(list) = obj.cast::<PyList>() {
+        return sequence_of(list.iter(), geometry, depth);
+    }
+    Err(PyTypeError::new_err(format!(
+        "expected a command, each(...), or a tuple/list of them, got {}",
+        obj.get_type().name()?
+    )))
 }
 
 #[pyclass(name = "Frame", module = "autd3")]
@@ -638,26 +309,62 @@ impl Frame {
 }
 
 #[pyclass(name = "Frames", module = "autd3")]
-pub struct Frames {
-    pub(crate) inner: Arc<CoreFrames>,
-}
+pub struct Frames(pub(crate) Arc<CoreFrames>);
 
 #[pymethods]
 impl Frames {
-    fn num_frames(&self) -> usize {
-        self.inner.len()
+    #[new]
+    fn new() -> Self {
+        Self(Arc::new(CoreFrames::default()))
+    }
+
+    #[staticmethod]
+    fn encode(
+        py: Python<'_>,
+        geometry: &Bound<'_, PyAny>,
+        command: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
+        let capsule = capsule_of(geometry)?;
+        let geometry = geometry_from_capsule(&capsule)?;
+        let command = command_of(command, geometry)?;
+        let frames = CoreFrames::encode(geometry, Expand(command.as_ref()))
+            .map_err(|e| client_pyerr(py, &e))?;
+        Ok(Self(Arc::new(frames)))
+    }
+
+    fn encode_into(
+        slf: &Bound<'_, Self>,
+        geometry: &Bound<'_, PyAny>,
+        command: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let py = slf.py();
+        let capsule = capsule_of(geometry)?;
+        let geometry = geometry_from_capsule(&capsule)?;
+        let command = command_of(command, geometry)?;
+        let mut this = slf.try_borrow_mut()?;
+        if Arc::get_mut(&mut this.0).is_none() {
+            this.0 = Arc::new(CoreFrames::default());
+        }
+        let frames = Arc::get_mut(&mut this.0).expect("the frames were just made unique");
+        frames
+            .encode_into(geometry, Expand(command.as_ref()))
+            .map_err(|e| client_pyerr(py, &e))
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     fn __len__(&self) -> usize {
-        self.inner.len()
+        self.0.len()
     }
 
     fn __getitem__(&self, index: usize) -> PyResult<Frame> {
-        if index >= self.inner.len() {
+        if index >= self.0.len() {
             return Err(PyIndexError::new_err("frame index out of range"));
         }
         Ok(Frame {
-            datagrams: Arc::clone(&self.inner),
+            datagrams: Arc::clone(&self.0),
             index,
         })
     }

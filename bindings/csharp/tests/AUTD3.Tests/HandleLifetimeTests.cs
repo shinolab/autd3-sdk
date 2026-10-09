@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using AUTD3;
 using Xunit;
 
@@ -7,12 +6,10 @@ namespace AUTD3.Tests
 {
     public class HandleLifetimeTests
     {
-        private static Geometry SingleDevice() => new Geometry(new[] { new Autd3(Vector3.Zero) });
-
         [Fact]
         public void DisposingTwiceIsHarmless()
         {
-            var geometry = SingleDevice();
+            var geometry = Fixture.SingleDevice();
             geometry.Dispose();
             geometry.Dispose();
         }
@@ -20,7 +17,7 @@ namespace AUTD3.Tests
         [Fact]
         public void UsingADisposedGeometryThrowsInsteadOfTouchingFreedMemory()
         {
-            var geometry = SingleDevice();
+            var geometry = Fixture.SingleDevice();
             geometry.Dispose();
             Assert.Throws<ObjectDisposedException>(() => geometry.NumDevices);
         }
@@ -28,7 +25,7 @@ namespace AUTD3.Tests
         [Fact]
         public void UsingADisposedPatternBufferThrowsInsteadOfTouchingFreedMemory()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             var phases = geometry.PhaseBuffer();
             phases.Dispose();
             Assert.Throws<ObjectDisposedException>(() => phases.NumDevices);
@@ -48,9 +45,8 @@ namespace AUTD3.Tests
         [Fact]
         public void UsingADisposedFramesThrowsInsteadOfTouchingFreedMemory()
         {
-            using var geometry = SingleDevice();
-            using var builder = new DatagramBuilder(geometry);
-            var frames = builder.Push(new Nop()).Build();
+            using var geometry = Fixture.SingleDevice();
+            var frames = Frames.Encode(geometry, new Nop());
             frames.Dispose();
             Assert.Throws<ObjectDisposedException>(() => frames.Length);
         }
@@ -58,7 +54,7 @@ namespace AUTD3.Tests
         [Fact]
         public void ADeviceViewOutlivingItsGeometryThrowsInsteadOfTouchingFreedMemory()
         {
-            var geometry = SingleDevice();
+            var geometry = Fixture.SingleDevice();
             var device = geometry[0];
             Assert.Equal(0, device.Idx);
             geometry.Dispose();

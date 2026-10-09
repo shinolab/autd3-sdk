@@ -2,11 +2,11 @@ using System;
 
 namespace AUTD3
 {
-    public readonly struct SamplingConfig
+    public readonly struct SamplingConfig : IEquatable<SamplingConfig>
     {
         private enum Kind : byte
         {
-            Default,
+            Unset,
             Divide,
             Freq,
             FreqNearest,
@@ -18,6 +18,7 @@ namespace AUTD3
         private readonly ushort _divide;
         private readonly float _freq;
         private readonly ulong _periodNs;
+        private readonly ushort _resolved;
 
         private SamplingConfig(Kind kind, ushort divide, float freq, ulong periodNs)
         {
@@ -25,25 +26,28 @@ namespace AUTD3
             _divide = divide;
             _freq = freq;
             _periodNs = periodNs;
+            _resolved = 0;
+            _resolved = Resolve(out _);
         }
 
         public SamplingConfig(ushort divide)
         {
             if (divide == 0)
             {
-                throw new Autd3Exception("sampling divide must be >= 1");
+                throw new Autd3Exception("sampling divide must be >= 1", Autd3ErrorCode.InvalidArgument);
             }
             _kind = Kind.Divide;
             _divide = divide;
             _freq = 0f;
             _periodNs = 0;
+            _resolved = divide;
         }
 
         public SamplingConfig(Freq freq) : this(Kind.Freq, 0, freq.Hz, 0)
         {
         }
 
-        public SamplingConfig(TimeSpan period) : this(Kind.Period, 0, 0f, (ulong)(period.Ticks * 100))
+        public SamplingConfig(TimeSpan period) : this(Kind.Period, 0, 0f, PeriodNanos(period))
         {
         }
 
@@ -51,8 +55,17 @@ namespace AUTD3
         {
         }
 
-        public SamplingConfig(Nearest<TimeSpan> period) : this(Kind.PeriodNearest, 0, 0f, (ulong)(period.Value.Ticks * 100))
+        public SamplingConfig(Nearest<TimeSpan> period) : this(Kind.PeriodNearest, 0, 0f, PeriodNanos(period.Value))
         {
+        }
+
+        private static ulong PeriodNanos(TimeSpan period)
+        {
+            if (period < TimeSpan.Zero)
+            {
+                throw new Autd3Exception("a sampling period must not be negative", Autd3ErrorCode.InvalidArgument);
+            }
+            return OptionNative.ToNanos(period);
         }
 
         public static SamplingConfig Freq4k => new SamplingConfig(4000 * Units.Hz);
@@ -61,12 +74,56 @@ namespace AUTD3
 
         public ushort Divide()
         {
+            if (_resolved != 0)
+            {
+                return _resolved;
+            }
+            var divide = Resolve(out var error);
+            if (divide == 0)
+            {
+                throw new Autd3Exception(error, Autd3ErrorCode.InvalidArgument);
+            }
+            return divide;
+        }
+
+        public Freq Freq() => (float)Params.UltrasoundFreqHz / Divide() * Units.Hz;
+
+        public TimeSpan Period() => TimeSpan.FromTicks(Params.UltrasoundPeriod.Ticks * Divide());
+
+        public bool Equals(SamplingConfig other)
+        {
+            var lhs = TryDivide();
+            return lhs != 0 && lhs == other.TryDivide();
+        }
+
+        public override bool Equals(object? obj) => obj is SamplingConfig other && Equals(other);
+
+        public override int GetHashCode() => TryDivide();
+
+        public static bool operator ==(SamplingConfig left, SamplingConfig right) => left.Equals(right);
+
+        public static bool operator !=(SamplingConfig left, SamplingConfig right) => !left.Equals(right);
+
+        private ushort TryDivide() => _resolved != 0 ? _resolved : Resolve(out _);
+
+        private const string UnsetMessage = "the sampling config is not set (default(SamplingConfig) has no value)";
+
+        private ushort Resolve(out string error)
+        {
+            error = string.Empty;
+            if (_kind == Kind.Unset)
+            {
+                error = UnsetMessage;
+                return 0;
+            }
             var handle = CreateHandle();
             try
             {
-                if (NativeCore.autd3_core_sampling_config_divide_value(handle, out var value) != 0)
+                var err = new byte[NativeAbi.ErrorBufferLength];
+                if (NativeCore.autd3_core_sampling_config_resolve(handle, out var value, err, (UIntPtr)err.Length) != 0)
                 {
-                    throw new Autd3Exception("sampling config cannot be resolved to a divider");
+                    error = NativeUtil.Utf8(err);
+                    return 0;
                 }
                 return value;
             }
@@ -76,45 +133,14 @@ namespace AUTD3
             }
         }
 
-        public Freq Freq()
-        {
-            var handle = CreateHandle();
-            try
-            {
-                if (NativeCore.autd3_core_sampling_config_freq_value(handle, out var value) != 0)
-                {
-                    throw new Autd3Exception("sampling config cannot be resolved to a frequency");
-                }
-                return value * Units.Hz;
-            }
-            finally
-            {
-                NativeCore.autd3_core_sampling_config_free(handle);
-            }
-        }
-
-        public TimeSpan Period()
-        {
-            var handle = CreateHandle();
-            try
-            {
-                if (NativeCore.autd3_core_sampling_config_period_value(handle, out var value) != 0)
-                {
-                    throw new Autd3Exception("sampling config cannot be resolved to a period");
-                }
-                return TimeSpan.FromTicks((long)(value / 100));
-            }
-            finally
-            {
-                NativeCore.autd3_core_sampling_config_free(handle);
-            }
-        }
-
         internal IntPtr CreateHandle()
         {
+            if (_kind == Kind.Unset)
+            {
+                throw new Autd3Exception(UnsetMessage, Autd3ErrorCode.InvalidArgument);
+            }
             var handle = _kind switch
             {
-                Kind.Default => NativeCore.autd3_core_sampling_config_freq(4000f),
                 Kind.Divide => NativeCore.autd3_core_sampling_config_divide(_divide),
                 Kind.Freq => NativeCore.autd3_core_sampling_config_freq(_freq),
                 Kind.FreqNearest => NativeCore.autd3_core_sampling_config_freq_nearest(_freq),

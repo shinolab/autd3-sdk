@@ -16,6 +16,7 @@ mod phase_corr;
 mod pwe;
 mod set_cpu_config;
 mod silencer;
+mod telemetry;
 mod update_begin;
 mod update_chunk;
 mod write_foci;
@@ -41,6 +42,7 @@ pub use silencer::{
     SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
     SILENCER_DEFAULT_UPDATE_RATE, SilencerPayload,
 };
+pub use telemetry::Telemetry;
 pub use update_begin::UpdateBeginPayload;
 pub use update_chunk::UpdateChunkPayload;
 pub use write_foci::WriteFociPayload;

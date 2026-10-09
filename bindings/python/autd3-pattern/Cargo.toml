@@ -16,6 +16,7 @@ autd3-rs-pattern.workspace = true
 autd3-rs-core.workspace = true
 autd3-python-capsule.workspace = true
 pyo3.workspace = true
+zerocopy.workspace = true
 
 [lints]
 workspace = true

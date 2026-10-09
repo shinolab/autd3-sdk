@@ -5,8 +5,7 @@
         "AUTD3",
         "AUTD3.Core",
         "AUTD3.Pattern",
-        "AUTD3.Modulation",
-        "AUTD3.Link.Nop"
+        "AUTD3.Modulation"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
