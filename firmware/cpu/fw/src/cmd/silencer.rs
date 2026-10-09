@@ -1,142 +1,211 @@
-use core::cell::Cell;
+pub use autd3_cpu_wire::payload::{SilencerFlags, SilencerPayload};
 
-use zerocopy::FromBytes;
+use core::num::NonZeroU32;
 
-pub use autd3_cpu_wire::payload::{
-    SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
-    SILENCER_FLAG_STRICT_MODE, SilencerPayload,
-};
-
-use crate::app::Cpu;
 use crate::fpga;
-use crate::params::{
+use crate::fpga_params::{
     ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, ADDR_SILENCER_COMPLETION_STEPS_PHASE,
     ADDR_SILENCER_FLAG, ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE,
-    BRAM_SELECT_CONTROLLER, CTL_FLAG_SILENCER_SET, NUM_BANKS, SILENCER_FLAG_FIXED_UPDATE_RATE_MODE,
+    CtlFlags, FunctionBits,
 };
 use crate::port::Port;
 use crate::proto::Error;
 
-pub(crate) struct SilencerGuard {
-    strict_mode: Cell<bool>,
-    completion_intensity: Cell<u16>,
-    completion_phase: Cell<u16>,
-    pub(crate) mod_freq_div: [Cell<u16>; NUM_BANKS],
-    pub(crate) pattern_freq_div: [Cell<u16>; NUM_BANKS],
-    pub(crate) mod_bank: Cell<u8>,
-    pub(crate) pattern_bank: Cell<u8>,
+pub(crate) fn handle<P: Port>(
+    port: &mut P,
+    payload: &[u8],
+    max_polls: NonZeroU32,
+) -> Result<(), Error> {
+    let p = SilencerPayload::parse(payload)?;
+    let flag = p.flags();
+    let update_rate_intensity = p.update_rate_intensity.get();
+    let update_rate_phase = p.update_rate_phase.get();
+    let completion_steps_intensity = p.completion_steps_intensity.get();
+    let completion_steps_phase = p.completion_steps_phase.get();
+
+    let strict = !flag.contains(SilencerFlags::FIXED_UPDATE_RATE_MODE)
+        && flag.contains(SilencerFlags::STRICT_MODE);
+    if strict && !fpga::functions(port).contains(FunctionBits::STRICT_SILENCER_GUARD) {
+        return Err(Error::InvalidSilencerSetting);
+    }
+
+    fpga::write_ctl(
+        port,
+        ADDR_SILENCER_UPDATE_RATE_INTENSITY,
+        update_rate_intensity,
+    );
+    fpga::write_ctl(port, ADDR_SILENCER_UPDATE_RATE_PHASE, update_rate_phase);
+    fpga::write_ctl(
+        port,
+        ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
+        completion_steps_intensity,
+    );
+    fpga::write_ctl(
+        port,
+        ADDR_SILENCER_COMPLETION_STEPS_PHASE,
+        completion_steps_phase,
+    );
+    fpga::write_ctl(port, ADDR_SILENCER_FLAG, u16::from(flag.bits()));
+    fpga::set_and_wait_update(port, CtlFlags::SILENCER_SET, max_polls)
 }
 
-impl SilencerGuard {
-    pub(crate) const fn new() -> Self {
-        Self {
-            strict_mode: Cell::new(false),
-            completion_intensity: Cell::new(SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY),
-            completion_phase: Cell::new(SILENCER_DEFAULT_COMPLETION_STEPS_PHASE),
-            mod_freq_div: [const { Cell::new(0xFFFF) }; NUM_BANKS],
-            pattern_freq_div: [const { Cell::new(0xFFFF) }; NUM_BANKS],
-            mod_bank: Cell::new(0),
-            pattern_bank: Cell::new(0),
-        }
+#[cfg(all(test, not(loom)))]
+mod tests {
+    use super::SilencerFlags;
+    use crate::fpga::TransitionMode;
+    use crate::fpga_params::{
+        ADDR_FUNCTION_BITS, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
+        ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG,
+        ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, CtlFlags,
+    };
+    use crate::proto::Error;
+    use crate::test_utils::builders::{activate_mod_bank, activate_pattern_bank, set_silencer};
+    use crate::test_utils::mock::Harness;
+
+    #[test]
+    fn set_silencer_fixed_completion_steps_writes_registers_and_latches() {
+        let mut h = Harness::new();
+        let latches_at_boot = h.latch_count(CtlFlags::SILENCER_SET);
+
+        h.deliver(&set_silencer(0, SilencerFlags::STRICT_MODE, 256, 256, 5, 7));
+
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(
+            h.ctl(ADDR_SILENCER_FLAG),
+            u16::from(SilencerFlags::STRICT_MODE.bits())
+        );
+        assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 256);
+        assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_PHASE), 256);
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 5);
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_PHASE), 7);
+        assert_eq!(h.latch_count(CtlFlags::SILENCER_SET), latches_at_boot + 1);
+        assert!(!h.ctl_flags().contains(CtlFlags::SILENCER_SET));
     }
 
-    pub(crate) fn init(&self) {
-        self.strict_mode.set(false);
-        self.completion_intensity
-            .set(SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY);
-        self.completion_phase
-            .set(SILENCER_DEFAULT_COMPLETION_STEPS_PHASE);
-        for div in &self.mod_freq_div {
-            div.set(0xFFFF);
-        }
-        for div in &self.pattern_freq_div {
-            div.set(0xFFFF);
-        }
-        self.mod_bank.set(0);
-        self.pattern_bank.set(0);
+    #[test]
+    fn set_silencer_fixed_update_rate_writes_registers_and_latches() {
+        let mut h = Harness::new();
+        let latches_at_boot = h.latch_count(CtlFlags::SILENCER_SET);
+
+        h.deliver(&set_silencer(
+            0,
+            SilencerFlags::FIXED_UPDATE_RATE_MODE,
+            8,
+            16,
+            10,
+            40,
+        ));
+
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(
+            h.ctl(ADDR_SILENCER_FLAG),
+            u16::from(SilencerFlags::FIXED_UPDATE_RATE_MODE.bits())
+        );
+        assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 8);
+        assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_PHASE), 16);
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_PHASE), 40);
+        assert_eq!(h.latch_count(CtlFlags::SILENCER_SET), latches_at_boot + 1);
     }
 
-    pub(crate) fn violates_mod_div(&self, divider: u16) -> bool {
-        self.strict_mode.get() && divider < self.completion_intensity.get()
+    #[test]
+    fn set_silencer_rejects_zero_completion_steps_in_steps_mode() {
+        let mut h = Harness::new();
+
+        h.deliver(&set_silencer(0, SilencerFlags::empty(), 256, 256, 0, 7));
+        assert_eq!(h.status(), Error::InvalidPayload);
+        h.deliver(&set_silencer(1, SilencerFlags::empty(), 256, 256, 5, 0));
+        assert_eq!(h.status(), Error::InvalidPayload);
+
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_PHASE), 40);
     }
 
-    pub(crate) fn violates_pattern_div(&self, divider: u16) -> bool {
-        self.strict_mode.get()
-            && (divider < self.completion_intensity.get() || divider < self.completion_phase.get())
+    #[test]
+    fn set_silencer_rejects_zero_update_rate_in_rate_mode() {
+        let mut h = Harness::new();
+
+        h.deliver(&set_silencer(
+            0,
+            SilencerFlags::FIXED_UPDATE_RATE_MODE,
+            0,
+            16,
+            10,
+            40,
+        ));
+        assert_eq!(h.status(), Error::InvalidPayload);
+        h.deliver(&set_silencer(
+            1,
+            SilencerFlags::FIXED_UPDATE_RATE_MODE,
+            8,
+            0,
+            10,
+            40,
+        ));
+        assert_eq!(h.status(), Error::InvalidPayload);
+
+        assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 256);
+        assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_PHASE), 256);
+        assert_eq!(h.ctl(ADDR_SILENCER_FLAG), 0);
     }
-}
 
-impl Cpu {
-    pub(crate) fn set_silencer<P: Port>(&self, port: &mut P, payload: &[u8]) -> Result<(), Error> {
-        let Ok((p, _)) = SilencerPayload::ref_from_prefix(payload) else {
-            return Err(Error::InvalidPayload);
-        };
-        let flag = p.flag;
-        let update_rate_intensity = p.update_rate_intensity.get();
-        let update_rate_phase = p.update_rate_phase.get();
-        let completion_steps_intensity = p.completion_steps_intensity.get();
-        let completion_steps_phase = p.completion_steps_phase.get();
+    #[test]
+    fn set_silencer_steps_mode_ignores_zero_update_rate() {
+        let mut h = Harness::new();
 
-        if (flag & SILENCER_FLAG_FIXED_UPDATE_RATE_MODE) != 0 {
-            if update_rate_intensity == 0 || update_rate_phase == 0 {
-                return Err(Error::InvalidPayload);
-            }
-            self.silencer.strict_mode.set(false);
-        } else {
-            if completion_steps_intensity == 0 || completion_steps_phase == 0 {
-                return Err(Error::InvalidPayload);
-            }
-            if (flag & SILENCER_FLAG_STRICT_MODE) != 0 {
-                let mod_div =
-                    self.silencer.mod_freq_div[self.silencer.mod_bank.get() as usize].get();
-                let pattern_div =
-                    self.silencer.pattern_freq_div[self.silencer.pattern_bank.get() as usize].get();
-                if mod_div < completion_steps_intensity
-                    || pattern_div < completion_steps_intensity
-                    || pattern_div < completion_steps_phase
-                {
-                    return Err(Error::InvalidSilencerSetting);
-                }
-                self.silencer.strict_mode.set(true);
-            } else {
-                self.silencer.strict_mode.set(false);
-            }
-            self.silencer
-                .completion_intensity
-                .set(completion_steps_intensity);
-            self.silencer.completion_phase.set(completion_steps_phase);
-        }
+        h.deliver(&set_silencer(0, SilencerFlags::empty(), 0, 0, 5, 7));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 0);
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 5);
+    }
 
-        fpga::write(
-            port,
-            BRAM_SELECT_CONTROLLER,
-            ADDR_SILENCER_UPDATE_RATE_INTENSITY,
-            update_rate_intensity,
-        );
-        fpga::write(
-            port,
-            BRAM_SELECT_CONTROLLER,
-            ADDR_SILENCER_UPDATE_RATE_PHASE,
-            update_rate_phase,
-        );
-        fpga::write(
-            port,
-            BRAM_SELECT_CONTROLLER,
-            ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
-            completion_steps_intensity,
-        );
-        fpga::write(
-            port,
-            BRAM_SELECT_CONTROLLER,
-            ADDR_SILENCER_COMPLETION_STEPS_PHASE,
-            completion_steps_phase,
-        );
-        fpga::write(
-            port,
-            BRAM_SELECT_CONTROLLER,
-            ADDR_SILENCER_FLAG,
-            u16::from(flag),
-        );
-        self.set_and_wait_update(port, CTL_FLAG_SILENCER_SET)
+    #[test]
+    fn strict_silencer_is_refused_on_an_fpga_without_the_guard() {
+        let mut h = Harness::new();
+        h.set_ctl(ADDR_FUNCTION_BITS, 0);
+
+        h.deliver(&set_silencer(
+            0,
+            SilencerFlags::STRICT_MODE,
+            256,
+            256,
+            8,
+            40,
+        ));
+        assert_eq!(h.status(), Error::InvalidSilencerSetting);
+        assert_eq!(h.ctl(ADDR_SILENCER_FLAG), 0);
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
+
+        h.deliver(&set_silencer(1, SilencerFlags::empty(), 256, 256, 8, 40));
+        assert_eq!(h.status(), Error::None);
+        h.deliver(&set_silencer(
+            2,
+            SilencerFlags::STRICT_MODE | SilencerFlags::FIXED_UPDATE_RATE_MODE,
+            8,
+            16,
+            10,
+            40,
+        ));
+        assert_eq!(h.status(), Error::None);
+    }
+
+    #[test]
+    fn a_latch_the_fpga_rejects_reports_invalid_silencer_setting() {
+        let mut h = Harness::new();
+        h.port.reject_latch = CtlFlags::SILENCER_SET | CtlFlags::MOD_SET | CtlFlags::PATTERN_SET;
+
+        h.deliver(&set_silencer(0, SilencerFlags::empty(), 256, 256, 8, 40));
+        assert_eq!(h.status(), Error::InvalidSilencerSetting);
+        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 8);
+        assert_eq!(h.latched(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
+
+        h.deliver(&activate_mod_bank(1, 0, TransitionMode::Immediate, 0));
+        assert_eq!(h.status(), Error::InvalidSilencerSetting);
+        h.deliver(&activate_pattern_bank(2, 0, TransitionMode::Immediate, 0));
+        assert_eq!(h.status(), Error::InvalidSilencerSetting);
+
+        h.port.reject_latch = CtlFlags::empty();
+        h.deliver(&activate_mod_bank(3, 0, TransitionMode::Immediate, 0));
+        assert_eq!(h.status(), Error::None);
     }
 }

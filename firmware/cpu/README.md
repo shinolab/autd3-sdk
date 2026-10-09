@@ -23,7 +23,7 @@ cargo xtask cpu format         # add --fix to rewrite instead of only checking
 ## Code generation
 
 ```bash
-cargo xtask cpu gen-param      # regenerate fw/src/params.rs from the FPGA params.svh
+cargo xtask cpu gen-param      # regenerate fw/src/fpga_params.rs from the FPGA params.svh
 ```
 
 # Author

@@ -13,6 +13,12 @@ categories = ["science"]
 
 [dependencies]
 zerocopy.workspace = true
+crc.workspace = true
+enum-map.workspace = true
+bitflags.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
 
 [lints]
 workspace = true

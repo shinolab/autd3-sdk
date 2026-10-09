@@ -1,9 +1,18 @@
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+use super::try_read_exact;
+use crate::Error;
+
+#[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct ForceFanPayload {
-    pub value: u8,
+    pub value: bool,
+}
+
+impl ForceFanPayload {
+    pub fn parse(payload: &[u8]) -> Result<Self, Error> {
+        try_read_exact(payload)
+    }
 }
 
 const _: () = assert!(core::mem::size_of::<ForceFanPayload>() == 1);

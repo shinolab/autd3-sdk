@@ -1,20 +1,20 @@
-crate::wire_enum! {
+crate::wire_enum_u8! {
     pub enum Cmd {
         Reset = 0x00,
         Synchronize = 0x01,
-        SetMode = 0x02,
         Clear = 0x03,
         Nop = 0x04,
+        SetCpuConfig = 0x05,
+        ReleaseFailsafe = 0x06,
+        Reboot = 0x07,
         WriteFociBuffer = 0x10,
         ConfigPattern = 0x11,
-        ChangePatternBank = 0x12,
-        WritePatternCompressed = 0x13,
+        ActivatePatternBank = 0x12,
+        WritePatternPhase = 0x13,
         WritePatternRaw = 0x15,
-        WritePatternFused = 0x16,
         WriteModulationBuffer = 0x20,
         ConfigModulation = 0x21,
-        ChangeModulationBank = 0x22,
-        WriteModulationFused = 0x23,
+        ActivateModulationBank = 0x22,
         SetSilencer = 0x30,
         SetPhaseCorrection = 0x40,
         SetOutputMask = 0x41,
@@ -31,23 +31,23 @@ crate::wire_enum! {
         FpgaUpdateChunk = 0x76,
         FpgaUpdateCommit = 0x77,
         FpgaUpdateActivate = 0x78,
-        ReadErrorDetail = 0xE0,
-        ReadCpuFwVersionMajor = 0xE1,
-        ReadCpuFwVersionMinor = 0xE2,
-        ReadCpuFwVersionPatch = 0xE3,
-        ReadFpgaFwVersionMajor = 0xE4,
-        ReadFpgaFwVersionMinor = 0xE5,
-        ReadFpgaFwVersionPatch = 0xE6,
         ReadFpgaState = 0xE7,
         ReadTelemetry = 0xE8,
-        ReadFpgaFunctions = 0xE9,
-        ReadFpgaBootImage = 0xEA,
+        ReadFirmwareInfo = 0xEB,
+        ReadRunningImage = 0xEC,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retired_ids_stay_unassigned() {
+        for raw in [0x02, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE9, 0xEA] {
+            assert_eq!(Cmd::from_u8(raw), None);
+        }
+    }
 
     #[test]
     fn cmd_round_trips() {

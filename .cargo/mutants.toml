@@ -1,1 +1,1 @@
-exclude_globs = ["**/src/params.rs"]
+exclude_globs = ["**/src/params.rs", "**/src/fpga_params.rs"]

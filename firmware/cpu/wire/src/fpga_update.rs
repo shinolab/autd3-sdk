@@ -1,6 +1,9 @@
-use crate::params::{
+use zerocopy::FromBytes;
+use zerocopy::big_endian::U32;
+
+use crate::fpga_params::{
     FLASH_END, FLASH_IMAGE_BASE, FLASH_USR_ACCESS_GOLDEN, FLASH_USR_ACCESS_UPDATE,
-    FLASH_WRITABLE_BASE, FUNC_FLASH_OTA_BIT,
+    FLASH_WRITABLE_BASE,
 };
 
 pub const FPGA_FLASH_BYTES: u32 = FLASH_END;
@@ -12,7 +15,6 @@ pub const FPGA_BARRIER_BASE: u32 = FPGA_GOLDEN_REGION_END - 0x100;
 pub const FPGA_BARRIER_TIMER: u32 = 0x4000_4000;
 pub const FPGA_USR_ACCESS_GOLDEN: u32 = FLASH_USR_ACCESS_GOLDEN;
 pub const FPGA_USR_ACCESS_UPDATE: u32 = FLASH_USR_ACCESS_UPDATE;
-pub const FPGA_FUNC_FLASH_OTA: u8 = 1 << FUNC_FLASH_OTA_BIT;
 pub const FPGA_REBOOT_DELAY_MS: u16 = 100;
 pub const FPGA_RECONFIG_SETTLE_MS: u16 = 3000;
 pub const FPGA_REBOOT_ATTEMPTS: u8 = 3;
@@ -31,11 +33,12 @@ pub const fn is_plausible_fpga_length(length: u32) -> bool {
     length > 0 && length <= FPGA_IMAGE_CAPACITY
 }
 
-crate::wire_enum! {
+crate::wire_enum_u8! {
     pub enum FpgaBootImage {
         Unknown = 0x00,
         Golden = 0x01,
         Update = 0x02,
+        ReconfigFailed = 0x03,
     }
 }
 
@@ -117,8 +120,8 @@ impl BitstreamSummary {
 }
 
 fn word_at(bytes: &[u8], offset: usize) -> Option<u32> {
-    let b = bytes.get(offset..offset + 4)?;
-    Some(u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    let (word, _) = U32::read_from_prefix(bytes.get(offset..)?).ok()?;
+    Some(word.get())
 }
 
 fn find_sync(bytes: &[u8], from: usize) -> Option<usize> {
@@ -238,7 +241,6 @@ mod tests {
         assert_eq!(FPGA_GOLDEN_REGION_END, 0x80_0000);
         assert_eq!(FPGA_IMAGE_BASE, 0x80_0100);
         assert_eq!(FPGA_IMAGE_CAPACITY, 0x7F_FF00);
-        assert_eq!(FPGA_FUNC_FLASH_OTA, 0x04);
         assert!(!is_plausible_fpga_length(0));
         assert!(is_plausible_fpga_length(FPGA_IMAGE_CAPACITY));
         assert!(!is_plausible_fpga_length(FPGA_IMAGE_CAPACITY + 1));
