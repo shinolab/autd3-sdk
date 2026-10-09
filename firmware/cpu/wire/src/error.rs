@@ -1,4 +1,4 @@
-crate::wire_enum! {
+crate::wire_enum_u8! {
     pub enum Error {
         None = 0x00,
         UnknownCmd = 0x01,
@@ -8,7 +8,6 @@ crate::wire_enum! {
         MissTransitionTime = 0x06,
         FpgaTimeout = 0x07,
         SyncNotReady = 0x08,
-        InvalidSync0Cycle = 0x09,
         UpdateNotStarted = 0x0A,
         UpdateImageInvalid = 0x0B,
         UpdateFlash = 0x0C,
@@ -16,8 +15,9 @@ crate::wire_enum! {
         UpdateNothingToConfirm = 0x0E,
         UpdateUnsupported = 0x0F,
         FpgaUpdateInProgress = 0x10,
-        FpgaReconfigFailed = 0x11,
         UpdateActivating = 0x12,
+        SyncMissed = 0x14,
+        FailsafeConditionActive = 0x15,
     }
 }
 
@@ -32,9 +32,8 @@ impl Error {
             Self::InvalidTransitionMode => "invalid transition mode for the target loop behavior",
             Self::MissTransitionTime => "sys-time transition is too close to now (would be missed)",
             Self::FpgaTimeout => "FPGA did not acknowledge a register update in time",
-            Self::SyncNotReady => "EtherCAT DC is not configured (no SYNC0 time available)",
-            Self::InvalidSync0Cycle => {
-                "invalid Sync0 cycle time (master's DC config missing or not a multiple of 500us)"
+            Self::SyncNotReady => {
+                "the sync pulse is not running yet (the device has not received SetTime)"
             }
             Self::UpdateNotStarted => "firmware update session is not open (UpdateBegin required)",
             Self::UpdateImageInvalid => "firmware image CRC32 mismatch after write-back",
@@ -49,11 +48,14 @@ impl Error {
             Self::FpgaUpdateInProgress => {
                 "an FPGA update is in progress; output commands are rejected until the FPGA reboots"
             }
-            Self::FpgaReconfigFailed => {
-                "the FPGA did not reconfigure after the update was activated (the new image boots at the next power cycle)"
-            }
             Self::UpdateActivating => {
                 "a firmware activation is pending; the device reboots within 100 ms"
+            }
+            Self::SyncMissed => {
+                "Synchronize kept missing the sync edge it wrote (the device was too busy to latch in time); reopen to retry"
+            }
+            Self::FailsafeConditionActive => {
+                "the condition that tripped the failsafe still holds; the failsafe stays in effect"
             }
         }
     }
@@ -82,6 +84,14 @@ mod tests {
                 None => assert_eq!(Error::try_from(raw), Err(raw)),
             }
         }
+    }
+
+    #[test]
+    fn retired_codes_stay_unassigned() {
+        assert_eq!(Error::from_u8(0x03), None);
+        assert_eq!(Error::from_u8(0x09), None);
+        assert_eq!(Error::from_u8(0x11), None);
+        assert_eq!(Error::from_u8(0x13), None);
     }
 
     #[test]

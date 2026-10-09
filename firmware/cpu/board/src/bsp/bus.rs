@@ -1,74 +1,64 @@
 use crate::regs::{
-    MPC_P00PFS, MPC_P01PFS, MPC_P02PFS, MPC_P03PFS, MPC_P04PFS, MPC_P05PFS, MPC_P06PFS, MPC_P07PFS,
-    MPC_P10PFS, MPC_P15PFS, MPC_P24PFS, MPC_P36PFS, MPC_P37PFS, MPC_P46PFS, MPC_P90PFS, MPC_PE0PFS,
-    MPC_PE1PFS, MPC_PE2PFS, MPC_PE3PFS, MPC_PE4PFS, MPC_PE5PFS, MPC_PE6PFS, MPC_PE7PFS, MPC_PG0PFS,
-    MPC_PG1PFS, MPC_PG2PFS, MPC_PG3PFS, MPC_PG4PFS, MPC_PG5PFS, MPC_PG6PFS, MPC_PG7PFS, MPC_PH0PFS,
-    MPC_PH1PFS, MPC_PH2PFS, MPC_PH3PFS, MPC_PH4PFS, MPC_PH5PFS, MPC_PH6PFS, MPC_PH7PFS, MPC_PK0PFS,
-    PORT0_PMR, PORT1_DSCR, PORT1_PMR, PORT2_PMR, PORT3_PMR, PORT4_PMR, PORT9_PMR, PORTE_PMR,
-    PORTG_PMR, PORTH_PMR, PORTK_PMR, SYSTEM_MSTPCRC, SYSTEM_PRCR, read32, write8, write16, write32,
+    PFS_BUS, PFS_BUS_ALT, PORT_0, PORT_1, PORT_2, PORT_3, PORT_4, PORT_9, PORT_E, PORT_G, PORT_H,
+    PORT_K, PORT1_DSCR, SYSTEM_MSTPCRC, pfs_table, pmr, read32, write8, write16, write32,
 };
 
-const PFS_BUS: u8 = 0x22;
-const PFS_BUS_ALT: u8 = 0x23;
-
 const MSTPCRC_RELEASE_BSC: u32 = 0x0000_7C7E;
-const PRCR_LPC_UNLOCK: u32 = 0x0000_A502;
-const PRCR_LPC_LOCK: u32 = 0x0000_A500;
 
-const BUS_PINS: [(usize, u8); 40] = [
-    (MPC_P00PFS, PFS_BUS),
-    (MPC_P01PFS, PFS_BUS),
-    (MPC_P02PFS, PFS_BUS),
-    (MPC_P03PFS, PFS_BUS),
-    (MPC_P04PFS, PFS_BUS),
-    (MPC_P05PFS, PFS_BUS),
-    (MPC_P06PFS, PFS_BUS),
-    (MPC_P07PFS, PFS_BUS),
-    (MPC_P10PFS, PFS_BUS),
-    (MPC_P15PFS, PFS_BUS),
-    (MPC_P24PFS, PFS_BUS),
-    (MPC_P36PFS, PFS_BUS),
-    (MPC_P37PFS, PFS_BUS),
-    (MPC_P46PFS, PFS_BUS),
-    (MPC_P90PFS, PFS_BUS_ALT),
-    (MPC_PE0PFS, PFS_BUS),
-    (MPC_PE1PFS, PFS_BUS),
-    (MPC_PE2PFS, PFS_BUS),
-    (MPC_PE3PFS, PFS_BUS),
-    (MPC_PE4PFS, PFS_BUS),
-    (MPC_PE5PFS, PFS_BUS),
-    (MPC_PE6PFS, PFS_BUS),
-    (MPC_PE7PFS, PFS_BUS),
-    (MPC_PG0PFS, PFS_BUS),
-    (MPC_PG1PFS, PFS_BUS),
-    (MPC_PG2PFS, PFS_BUS),
-    (MPC_PG3PFS, PFS_BUS),
-    (MPC_PG4PFS, PFS_BUS),
-    (MPC_PG5PFS, PFS_BUS),
-    (MPC_PG6PFS, PFS_BUS),
-    (MPC_PG7PFS, PFS_BUS),
-    (MPC_PH0PFS, PFS_BUS),
-    (MPC_PH1PFS, PFS_BUS),
-    (MPC_PH2PFS, PFS_BUS),
-    (MPC_PH3PFS, PFS_BUS),
-    (MPC_PH4PFS, PFS_BUS),
-    (MPC_PH5PFS, PFS_BUS),
-    (MPC_PH6PFS, PFS_BUS),
-    (MPC_PH7PFS, PFS_BUS),
-    (MPC_PK0PFS, PFS_BUS_ALT),
-];
+const BUS_PINS: [(usize, u8); 40] = pfs_table([
+    (PORT_0, 0, PFS_BUS),
+    (PORT_0, 1, PFS_BUS),
+    (PORT_0, 2, PFS_BUS),
+    (PORT_0, 3, PFS_BUS),
+    (PORT_0, 4, PFS_BUS),
+    (PORT_0, 5, PFS_BUS),
+    (PORT_0, 6, PFS_BUS),
+    (PORT_0, 7, PFS_BUS),
+    (PORT_1, 0, PFS_BUS),
+    (PORT_1, 5, PFS_BUS),
+    (PORT_2, 4, PFS_BUS),
+    (PORT_3, 6, PFS_BUS),
+    (PORT_3, 7, PFS_BUS),
+    (PORT_4, 6, PFS_BUS),
+    (PORT_9, 0, PFS_BUS_ALT),
+    (PORT_E, 0, PFS_BUS),
+    (PORT_E, 1, PFS_BUS),
+    (PORT_E, 2, PFS_BUS),
+    (PORT_E, 3, PFS_BUS),
+    (PORT_E, 4, PFS_BUS),
+    (PORT_E, 5, PFS_BUS),
+    (PORT_E, 6, PFS_BUS),
+    (PORT_E, 7, PFS_BUS),
+    (PORT_G, 0, PFS_BUS),
+    (PORT_G, 1, PFS_BUS),
+    (PORT_G, 2, PFS_BUS),
+    (PORT_G, 3, PFS_BUS),
+    (PORT_G, 4, PFS_BUS),
+    (PORT_G, 5, PFS_BUS),
+    (PORT_G, 6, PFS_BUS),
+    (PORT_G, 7, PFS_BUS),
+    (PORT_H, 0, PFS_BUS),
+    (PORT_H, 1, PFS_BUS),
+    (PORT_H, 2, PFS_BUS),
+    (PORT_H, 3, PFS_BUS),
+    (PORT_H, 4, PFS_BUS),
+    (PORT_H, 5, PFS_BUS),
+    (PORT_H, 6, PFS_BUS),
+    (PORT_H, 7, PFS_BUS),
+    (PORT_K, 0, PFS_BUS_ALT),
+]);
 
 const PORT_MODES: [(usize, u8); 10] = [
-    (PORT0_PMR, 0xFF),
-    (PORT1_PMR, 0x21),
-    (PORT2_PMR, 0x10),
-    (PORT3_PMR, 0xD8),
-    (PORT4_PMR, 0x40),
-    (PORT9_PMR, 0x01),
-    (PORTE_PMR, 0xFF),
-    (PORTG_PMR, 0xFF),
-    (PORTH_PMR, 0xFF),
-    (PORTK_PMR, 0x01),
+    (pmr(PORT_0), 0xFF),
+    (pmr(PORT_1), 0x21),
+    (pmr(PORT_2), 0x10),
+    (pmr(PORT_3), 0xD8),
+    (pmr(PORT_4), 0x40),
+    (pmr(PORT_9), 0x01),
+    (pmr(PORT_E), 0xFF),
+    (pmr(PORT_G), 0xFF),
+    (pmr(PORT_H), 0xFF),
+    (pmr(PORT_K), 0x01),
 ];
 
 pub(crate) fn init() {
@@ -86,10 +76,8 @@ pub(crate) fn init() {
 
     write16(PORT1_DSCR, 0x0001);
 
-    write32(SYSTEM_PRCR, PRCR_LPC_UNLOCK);
-    let _ = read32(SYSTEM_PRCR);
-    write32(SYSTEM_MSTPCRC, MSTPCRC_RELEASE_BSC);
-    let _ = read32(SYSTEM_MSTPCRC);
-    write32(SYSTEM_PRCR, PRCR_LPC_LOCK);
-    let _ = read32(SYSTEM_PRCR);
+    super::with_prcr(super::PRCR_LPC_UNLOCK, || {
+        write32(SYSTEM_MSTPCRC, MSTPCRC_RELEASE_BSC);
+        let _ = read32(SYSTEM_MSTPCRC);
+    });
 }
