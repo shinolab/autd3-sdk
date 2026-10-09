@@ -99,6 +99,24 @@ pub fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
+pub fn files_under(dir: &Path, descend: impl Fn(&str) -> bool) -> Result<Vec<PathBuf>> {
+    walkdir::WalkDir::new(dir)
+        .follow_links(true)
+        .into_iter()
+        .filter_entry(|entry| {
+            entry.depth() == 0
+                || !entry.file_type().is_dir()
+                || descend(&entry.file_name().to_string_lossy())
+        })
+        .filter_map(|entry| match entry {
+            Ok(entry) if entry.file_type().is_dir() => None,
+            Ok(entry) => Some(Ok(entry.into_path())),
+            Err(e) => Some(Err(e)),
+        })
+        .collect::<Result<_, _>>()
+        .with_context(|| format!("reading {}", dir.display()))
+}
+
 pub fn which(name: &str) -> Option<PathBuf> {
     let paths = std::env::var_os("PATH")?;
     let exts: Vec<String> = if cfg!(windows) {
@@ -121,79 +139,43 @@ pub fn on_path(name: &str) -> bool {
     which(name).is_some()
 }
 
-#[cfg(target_os = "linux")]
-fn setcap_program() -> Option<String> {
-    if on_path("setcap") {
-        return Some("setcap".to_owned());
-    }
-    ["/usr/bin/setcap", "/usr/sbin/setcap", "/sbin/setcap"]
-        .into_iter()
-        .find(|path| Path::new(path).is_file())
-        .map(str::to_owned)
+fn output(program: &str, args: &[&str], cwd: &Path) -> Result<std::process::Output> {
+    Command::new(program)
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .with_context(|| format!("failed to spawn `{program}` (is it installed and on PATH?)"))
 }
 
-const RUN_CAPABILITIES: &str = "cap_net_raw,cap_net_admin,cap_sys_nice+ep";
-
-#[cfg(target_os = "linux")]
-fn grant_capabilities(bin: &Path) -> bool {
-    let Some(setcap) = setcap_program() else {
-        return false;
-    };
-    Command::new("sudo")
-        .args(["-n", &setcap, RUN_CAPABILITIES])
-        .arg(bin)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn grant_capabilities(_bin: &Path) -> bool {
-    false
-}
-
-pub fn run_built_bin(bin: &Path, args: &[String], no_sudo: bool, cwd: &Path) -> Result<()> {
-    let bin_str = bin.to_string_lossy().into_owned();
-    if no_sudo || !cfg!(unix) {
-        return run(&bin_str, args.iter().map(String::as_str), cwd);
-    }
-    if grant_capabilities(bin) {
-        println!("granted {RUN_CAPABILITIES} to {bin_str}; running without sudo");
-        return run(&bin_str, args.iter().map(String::as_str), cwd);
-    }
-    let mut sudo_args: Vec<String> = Vec::with_capacity(args.len() + 2);
-    if let Ok(log) = std::env::var("RUST_LOG") {
-        sudo_args.push(format!("RUST_LOG={log}"));
-    }
-    sudo_args.push(bin_str);
-    sudo_args.extend(args.iter().cloned());
-    run("sudo", sudo_args.iter().map(String::as_str), cwd)
+fn trimmed_stdout(program: &str, stdout: Vec<u8>) -> Result<String> {
+    let stdout = String::from_utf8(stdout)
+        .with_context(|| format!("`{program}` produced non-UTF-8 output"))?;
+    Ok(stdout.trim().to_string())
 }
 
 pub fn capture(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
-    let output = Command::new(program)
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .with_context(|| format!("failed to spawn `{program}` (is it installed and on PATH?)"))?;
+    let output = output(program, args, cwd)?;
     if !output.status.success() {
         bail!("`{program}` exited with {}", output.status);
     }
-    let stdout = String::from_utf8(output.stdout)
-        .with_context(|| format!("`{program}` produced non-UTF-8 output"))?;
-    Ok(stdout.trim().to_string())
+    trimmed_stdout(program, output.stdout)
 }
 
 pub fn capture_lenient(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
-    let output = Command::new(program)
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .with_context(|| format!("failed to spawn `{program}` (is it installed and on PATH?)"))?;
-    let stdout = String::from_utf8(output.stdout)
-        .with_context(|| format!("`{program}` produced non-UTF-8 output"))?;
-    Ok(stdout.trim().to_string())
+    trimmed_stdout(program, output(program, args, cwd)?.stdout)
+}
+
+pub fn package_version(manifest: &Path) -> Result<String> {
+    let text = std::fs::read_to_string(manifest)
+        .with_context(|| format!("reading {}", manifest.display()))?;
+    let doc: toml_edit::DocumentMut = text
+        .parse()
+        .with_context(|| format!("parsing {}", manifest.display()))?;
+    doc.get("package")
+        .and_then(|package| package.get("version"))
+        .and_then(toml_edit::Item::as_str)
+        .map(str::to_string)
+        .with_context(|| format!("no [package] version in {}", manifest.display()))
 }
 
 pub struct MemberPackage {
@@ -365,18 +347,29 @@ pub fn publish_workspace(workspace_dir: &Path, dry_run: bool) -> Result<()> {
     run("cargo", args, workspace_dir)
 }
 
+pub fn cargo_fmt(dir: &Path, scope: &[&str], fix: bool) -> Result<()> {
+    let mut args = vec!["fmt"];
+    args.extend_from_slice(scope);
+    if !fix {
+        args.extend(["--", "--check"]);
+    }
+    run("cargo", args, dir)
+}
+
 pub fn cargo_fmt_packages(workspace_dir: &Path, fix: bool) -> Result<()> {
     let packages = workspace_member_packages(workspace_dir)?;
-    let mut args = vec!["fmt".to_string()];
-    for package in &packages {
-        args.push("-p".to_string());
-        args.push(package.clone());
-    }
-    if !fix {
-        args.push("--".to_string());
-        args.push("--check".to_string());
-    }
-    run("cargo", args, workspace_dir)
+    let scope: Vec<&str> = packages
+        .iter()
+        .flat_map(|package| ["-p", package.as_str()])
+        .collect();
+    cargo_fmt(workspace_dir, &scope, fix)
+}
+
+pub fn cargo_clippy(dir: &Path, args: &[&str]) -> Result<()> {
+    let mut full = vec!["clippy"];
+    full.extend_from_slice(args);
+    full.extend(["--", "-D", "warnings"]);
+    run("cargo", full, dir)
 }
 
 pub fn run<I, S>(program: &str, args: I, cwd: &Path) -> Result<()>
@@ -384,15 +377,7 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let status = Command::new(program)
-        .args(args)
-        .current_dir(cwd)
-        .status()
-        .with_context(|| format!("failed to spawn `{program}` (is it installed and on PATH?)"))?;
-    if !status.success() {
-        bail!("`{program}` exited with {status}");
-    }
-    Ok(())
+    run_env(program, args, cwd, &[])
 }
 
 pub fn run_env<I, S>(program: &str, args: I, cwd: &Path, env: &[(&str, &OsStr)]) -> Result<()>

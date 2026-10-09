@@ -13,8 +13,9 @@ use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
-use autd3_rs::{Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{
+    Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture, TransportOption,
+};
 
 const TOTAL_POINTS: usize = 1000;
 
@@ -26,7 +27,7 @@ async fn main() -> Result<()> {
 
     let client = Client::open(
         &geometry,
-        EchocatLinkOption::default(),
+        &TransportOption::default(),
         ClientConfig::default(),
     )
     .await?;
@@ -51,7 +52,7 @@ async fn main() -> Result<()> {
     let elapsed = run_streaming(&client, &targets, wavelength, MAX_INFLIGHT).await?;
     report("streaming", elapsed);
 
-    client.stop().await?;
+    client.silent_stop().await?;
     client.close().await?;
 
     Ok(())
@@ -65,15 +66,11 @@ async fn run_stop_and_wait(
 ) -> Result<Duration> {
     let geometry = client.geometry();
     let mut phases = geometry.phase_buffer();
-    let mut buf = Frames::default();
 
     let start = Instant::now();
     for &target in targets {
         autd3_rs_pattern::focus(geometry, target, wavelength, &mut phases);
-        write_focus(client, &phases, &mut buf)?;
-        for frame in &buf {
-            client.send_checked(frame).await?;
-        }
+        client.send(write_focus(&phases)).await?;
     }
     Ok(start.elapsed())
 }
@@ -87,59 +84,44 @@ async fn run_streaming(
 ) -> Result<Duration> {
     let geometry = client.geometry();
     let mut phases = geometry.phase_buffer();
-    let mut buf = Frames::default();
+    let mut frames = Frames::default();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(max_inflight);
 
     let start = Instant::now();
     for &target in targets {
         autd3_rs_pattern::focus(geometry, target, wavelength, &mut phases);
-        write_focus(client, &phases, &mut buf)?;
-        for frame in &buf {
+        frames.encode_into(geometry, write_focus(&phases))?;
+        for frame in &frames {
             if pending.len() >= max_inflight {
                 pending.pop_front().expect("non-empty").await?.check()?;
             }
-            pending.push_back(client.send(frame).await?);
+            pending.push_back(client.send_frame(frame).await?);
         }
     }
-    while let Some(fut) = pending.pop_front() {
-        fut.await?.check()?;
+    while let Some(response) = pending.pop_front() {
+        response.await?.check()?;
     }
     Ok(start.elapsed())
 }
 
 async fn configure(client: &Client) -> Result<()> {
     let phases = client.geometry().phase_buffer();
-    let mut builder = client.datagram_builder();
-    builder
-        .push(WritePatternBuffer::new(
-            PatternBank::B0,
-            0,
-            &phases,
-            Intensity::MIN,
+    client
+        .send((
+            WritePatternBuffer::new(PatternBank::B0, 0, &phases, Intensity::MIN),
+            ConfigPattern {
+                bank: PatternBank::B0,
+                config: SamplingConfig::FREQ_4K,
+                size: 1,
+                loop_behavior: LoopBehavior::Infinite,
+            },
         ))
-        .push(ConfigPattern {
-            bank: PatternBank::B0,
-            config: SamplingConfig::FREQ_4K,
-            size: 1,
-            loop_behavior: LoopBehavior::Infinite,
-        });
-    let frames = builder.build()?;
-    for frame in &frames {
-        client.send_checked(frame).await?;
-    }
+        .await?;
     Ok(())
 }
 
-fn write_focus(client: &Client, phases: &[Vec<Phase>], buf: &mut Frames) -> Result<()> {
-    let mut builder = client.datagram_builder();
-    builder.push(WritePatternBuffer::new(
-        PatternBank::B0,
-        0,
-        phases,
-        Intensity::MAX,
-    ));
-    builder.build_into(buf)?;
-    Ok(())
+fn write_focus(phases: &[Vec<Phase>]) -> WritePatternBuffer<'_> {
+    WritePatternBuffer::new(PatternBank::B0, 0, phases, Intensity::MAX)
 }
 
 fn report(label: &str, elapsed: Duration) {

@@ -21,7 +21,7 @@ namespace AUTD3
         }
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_core_geometry_new(Autd3Device[] devices, UIntPtr len);
+        internal static extern IntPtr autd3_core_geometry_new(Autd3Device[] devices, UIntPtr len, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_core_geometry_from_json([MarshalAs(UnmanagedType.LPUTF8Str)] string json, byte[] outErr, UIntPtr outErrLen);
@@ -69,10 +69,61 @@ namespace AUTD3
         internal static extern int autd3_core_transducer_direction(GeometryHandle geometry, UIntPtr dev, UIntPtr tr, [Out] float[] outXyz);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_core_geometry_clone(GeometryHandle geometry);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_core_geometry_free(IntPtr geometry);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern float autd3_core_phase_radian(byte value);
+        internal static extern int autd3_core_device_positions(GeometryHandle geometry, UIntPtr dev, [Out] float[] dst, UIntPtr len);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_core_device_to_local(GeometryHandle geometry, UIntPtr dev, float[] point, [Out] float[] outXyz);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern byte autd3_core_phase_from_rad(float radian);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern ulong autd3_core_params_ultrasound_period_ns();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern uint autd3_core_params_ultrasound_freq_hz();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_params_mod_buffer_samples();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_params_buffer_size_min();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_params_emission_max_indices();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern byte autd3_core_params_num_foci_max();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern ushort autd3_core_params_pulse_width_period();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_params_max_inflight();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_params_num_transducers();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern uint autd3_core_params_grid_x();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern uint autd3_core_params_grid_y();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern float autd3_core_params_pitch_mm();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern float autd3_core_params_device_width_mm();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern float autd3_core_params_device_height_mm();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_core_sampling_config_divide(ushort divide);
@@ -90,13 +141,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_core_sampling_config_period_nearest(ulong nanos);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_core_sampling_config_divide_value(IntPtr config, out ushort outValue);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_core_sampling_config_freq_value(IntPtr config, out float outValue);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_core_sampling_config_period_value(IntPtr config, out ulong outValue);
+        internal static extern int autd3_core_sampling_config_resolve(IntPtr config, out ushort @out, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_core_sampling_config_free(IntPtr config);
@@ -124,7 +169,7 @@ namespace AUTD3
         }
     }
 
-    internal static class LinkOptionNative
+    internal static class OptionNative
     {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int SetDurationFn(IntPtr option, ulong ns);
@@ -132,34 +177,17 @@ namespace AUTD3
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int GetDurationFn(IntPtr option, out ulong ns);
 
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        internal delegate int SetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        internal delegate int GetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        internal delegate IntPtr OpenFn(IntPtr option, byte[] outErr, UIntPtr outErrLen);
-
         internal static void Apply(string field, int code)
         {
             if (code != 0)
             {
-                throw new Autd3Exception($"`{field}` is out of the range the native library accepts");
+                throw new Autd3Exception($"`{field}` is out of the range the native library accepts", Autd3ErrorCode.InvalidArgument);
             }
         }
 
-        internal static void SetDuration(IntPtr option, string field, TimeSpan? value, SetDurationFn set)
+        internal static void SetRequiredDuration(IntPtr option, string field, TimeSpan value, SetDurationFn set)
         {
-            if (value is { } v)
-            {
-                Apply(field, set(option, ToNanos(v)));
-            }
-        }
-
-        internal static void SetOptionalDuration(IntPtr option, string field, TimeSpan? value, SetOptionalDurationFn set)
-        {
-            Apply(field, set(option, value.HasValue, value.HasValue ? ToNanos(value.Value) : 0UL));
+            Apply(field, value < TimeSpan.Zero ? -1 : set(option, ToNanos(value)));
         }
 
         internal static TimeSpan GetDuration(IntPtr option, GetDurationFn get)
@@ -168,27 +196,8 @@ namespace AUTD3
             return FromNanos(ns);
         }
 
-        internal static TimeSpan? GetOptionalDuration(IntPtr option, GetOptionalDurationFn get)
-        {
-            Apply("preset", get(option, out var hasValue, out var ns));
-            return hasValue ? FromNanos(ns) : (TimeSpan?)null;
-        }
-
-        internal static IntPtr TakeOpener(string link, IntPtr option, OpenFn open)
-        {
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            var opener = open(option, err, (UIntPtr)err.Length);
-            if (opener == IntPtr.Zero)
-            {
-                var reason = NativeUtil.Utf8(err);
-                throw new Autd3Exception(reason.Length == 0
-                    ? $"failed to create {link} link"
-                    : $"failed to create {link} link: {reason}");
-            }
-            return opener;
-        }
-
-        internal static ulong ToNanos(TimeSpan value) => (ulong)value.Ticks * 100UL;
+        internal static ulong ToNanos(TimeSpan value) =>
+            (ulong)value.Ticks > ulong.MaxValue / 100UL ? ulong.MaxValue : (ulong)value.Ticks * 100UL;
 
         internal static TimeSpan FromNanos(ulong ns) => TimeSpan.FromTicks((long)(ns / 100));
     }

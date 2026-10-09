@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
-use super::common::{NumField, PlainNum};
-use crate::context::{Ctx, SharedRenderer};
-use crate::render::{RESOLUTION_MAX, RESOLUTION_MIN, SLICE_MAX_MM, SLICE_MIN_MM};
+use super::common::{PlainNum, Vec3Fields, scalar_handler};
+use crate::context::{Ctx, Field, SharedRenderer};
+use crate::render::{RESOLUTION_MAX, RESOLUTION_MIN, Renderer, SLICE_MAX_MM, SLICE_MIN_MM};
 
 #[component]
 pub fn SlicePanel() -> Element {
@@ -10,7 +10,7 @@ pub fn SlicePanel() -> Element {
     let renderer = ctx.renderer.clone();
     let mut gizmo_on = ctx.gizmo_on;
     let mut gizmo_rotate = ctx.gizmo_rotate;
-    let mut max_pressure = ctx.max_pressure;
+    let max_pressure = ctx.max_pressure;
     let mut colormap = ctx.colormap;
     let slice_center = ctx.slice_center;
     let slice_rot = ctx.slice_rot;
@@ -45,34 +45,13 @@ pub fn SlicePanel() -> Element {
         }
     };
 
-    let on_slice_x = ctx.field_handler(0, 0);
-    let on_slice_y = ctx.field_handler(0, 1);
-    let on_slice_z = ctx.field_handler(0, 2);
-    let on_slice_rx = ctx.field_handler(1, 0);
-    let on_slice_ry = ctx.field_handler(1, 1);
-    let on_slice_rz = ctx.field_handler(1, 2);
-    let on_num_down_x = ctx.num_down(0, 0);
-    let on_num_down_y = ctx.num_down(0, 1);
-    let on_num_down_z = ctx.num_down(0, 2);
-    let on_num_down_rx = ctx.num_down(1, 0);
-    let on_num_down_ry = ctx.num_down(1, 1);
-    let on_num_down_rz = ctx.num_down(1, 2);
-    let on_max_pressure = {
-        let renderer = renderer.clone();
-        move |e: Event<FormData>| {
-            if let Ok(v) = e.parsed::<f32>() {
-                max_pressure.set(v);
-                if let Some(r) = renderer.borrow_mut().as_mut() {
-                    r.set_max_pressure(v);
-                }
-            }
-        }
-    };
+    let on_max_pressure =
+        scalar_handler(renderer.clone(), max_pressure, Renderer::set_max_pressure);
     let align_plane = {
         let ctx = ctx.clone();
         move |rot: [f32; 3]| {
             for (axis, v) in rot.into_iter().enumerate() {
-                ctx.apply_field(1, axis, v);
+                ctx.apply_field(Field::SliceRot, axis, v);
             }
         }
     };
@@ -96,9 +75,6 @@ pub fn SlicePanel() -> Element {
         }
     };
 
-    let [cx, cy, cz] = slice_center();
-    let [rx, ry, rz] = slice_rot();
-    let [(x_lo, x_hi), (y_lo, y_hi), (z_lo, z_hi)] = slice_bounds();
     let [sw, sh] = slice_size();
     let [fw, fh] = field_dims();
     let pressure_label = format!("Max pressure: {:.0} Pa", max_pressure());
@@ -152,18 +128,8 @@ pub fn SlicePanel() -> Element {
                         }
                     }
                     div { class: "grid grid-cols-1 gap-6 sm:grid-cols-2",
-                        div { class: "flex flex-col gap-3",
-                            div { class: "text-sm font-semibold opacity-70", "Position (mm)" }
-                            NumField { label: "X", accent: "text-error", min: x_lo, max: x_hi, step: "0.5", value: format!("{cx:.1}"), onchange: on_slice_x, onmousedown: on_num_down_x }
-                            NumField { label: "Y", accent: "text-success", min: y_lo, max: y_hi, step: "0.5", value: format!("{cy:.1}"), onchange: on_slice_y, onmousedown: on_num_down_y }
-                            NumField { label: "Z", accent: "text-info", min: z_lo, max: z_hi, step: "0.5", value: format!("{cz:.1}"), onchange: on_slice_z, onmousedown: on_num_down_z }
-                        }
-                        div { class: "flex flex-col gap-3",
-                            div { class: "text-sm font-semibold opacity-70", "Rotation (deg)" }
-                            NumField { label: "RX", accent: "text-error", min: -180.0, max: 180.0, step: "1", value: format!("{rx:.1}"), onchange: on_slice_rx, onmousedown: on_num_down_rx }
-                            NumField { label: "RY", accent: "text-success", min: -180.0, max: 180.0, step: "1", value: format!("{ry:.1}"), onchange: on_slice_ry, onmousedown: on_num_down_ry }
-                            NumField { label: "RZ", accent: "text-info", min: -180.0, max: 180.0, step: "1", value: format!("{rz:.1}"), onchange: on_slice_rz, onmousedown: on_num_down_rz }
-                        }
+                        Vec3Fields { title: "Position (mm)", field: Field::SliceCenter, values: slice_center(), bounds: slice_bounds(), step: "0.5" }
+                        Vec3Fields { title: "Rotation (deg)", field: Field::SliceRot, values: slice_rot(), bounds: [(-180.0, 180.0); 3], step: "1" }
                     }
                     div { class: "grid grid-cols-1 gap-6 sm:grid-cols-2",
                         div { class: "flex flex-col gap-3",

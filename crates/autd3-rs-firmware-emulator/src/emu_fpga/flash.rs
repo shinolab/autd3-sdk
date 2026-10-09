@@ -5,9 +5,9 @@ use autd3_cpu_fw::fpga_update::{
 use autd3_cpu_fw::update::crc32;
 
 use crate::fw;
+use crate::fw::{FlashErr, FlashOp};
 
 const BUF_WORDS: usize = fw::FLASH_BUF_BYTES / 2;
-const JEDEC_ID: u32 = 0x0020_BA18;
 
 pub(crate) struct FlashEmulator {
     reg: [u16; 16],
@@ -39,10 +39,6 @@ impl FlashEmulator {
             self.flash = vec![0xFF; FPGA_FLASH_BYTES as usize];
         }
         &mut self.flash
-    }
-
-    pub(crate) fn usr_access(&self) -> u32 {
-        self.usr_access
     }
 
     pub(crate) fn ignore_reboots(&mut self, count: u32) {
@@ -89,7 +85,7 @@ impl FlashEmulator {
     }
 
     fn reg24(&self, lo: u16, hi: u16) -> u32 {
-        u32::from(self.reg[lo as usize]) | (u32::from(self.reg[hi as usize] & 0xFF) << 16)
+        (u32::from(self.reg[hi as usize] & 0xFF) << 16) | u32::from(self.reg[lo as usize])
     }
 
     fn run(&mut self, op: u8) {
@@ -97,48 +93,70 @@ impl FlashEmulator {
         let len = self.reg24(fw::ADDR_FLASH_LEN_0, fw::ADDR_FLASH_LEN_1);
         let end = addr + len;
         let writable = addr >= FPGA_GOLDEN_REGION_END && end <= FPGA_FLASH_BYTES;
-        let (err, result) = match op {
-            fw::FLASH_OP_READ_ID => (fw::FLASH_ERR_NONE, JEDEC_ID),
-            fw::FLASH_OP_CRC32 if end <= FPGA_FLASH_BYTES => {
+        let (err, result) = match FlashOp::from_u8(op) {
+            Some(FlashOp::Crc32) if end <= FPGA_FLASH_BYTES => {
                 let flash = self.flash_mut();
-                (
-                    fw::FLASH_ERR_NONE,
-                    crc32(&flash[addr as usize..end as usize]),
-                )
+                (FlashErr::None, crc32(&flash[addr as usize..end as usize]))
             }
-            fw::FLASH_OP_ERASE if !writable => (fw::FLASH_ERR_PROTECTED, 0),
-            fw::FLASH_OP_ERASE => {
+            Some(FlashOp::Erase) if !writable => (FlashErr::Protected, 0),
+            Some(FlashOp::Erase) => {
                 let first = (addr - addr % FPGA_SECTOR_BYTES) as usize;
                 let last = end.div_ceil(FPGA_SECTOR_BYTES) as usize * FPGA_SECTOR_BYTES as usize;
                 if len != 0 {
                     self.flash_mut()[first..last].fill(0xFF);
                 }
-                (fw::FLASH_ERR_NONE, 0)
+                (FlashErr::None, 0)
             }
-            fw::FLASH_OP_PROGRAM if len as usize > fw::FLASH_BUF_BYTES => {
-                (fw::FLASH_ERR_INVALID, 0)
-            }
-            fw::FLASH_OP_PROGRAM if !writable => (fw::FLASH_ERR_PROTECTED, 0),
-            fw::FLASH_OP_PROGRAM => {
+            Some(FlashOp::Program) if len as usize > fw::FLASH_BUF_BYTES => (FlashErr::Invalid, 0),
+            Some(FlashOp::Program) if !writable => (FlashErr::Protected, 0),
+            Some(FlashOp::Program) => {
                 let data: Vec<u8> = self.buf.iter().flat_map(|w| w.to_le_bytes()).collect();
                 let flash = self.flash_mut();
                 for (cell, byte) in flash[addr as usize..end as usize].iter_mut().zip(data) {
                     *cell &= byte;
                 }
-                (fw::FLASH_ERR_NONE, 0)
+                (FlashErr::None, 0)
             }
-            fw::FLASH_OP_REBOOT if self.reboots_to_ignore > 0 => {
+            Some(FlashOp::Reboot) if self.reboots_to_ignore > 0 => {
                 self.reboots_to_ignore -= 1;
-                (fw::FLASH_ERR_NONE, 0)
+                (FlashErr::None, 0)
             }
-            fw::FLASH_OP_REBOOT => {
+            Some(FlashOp::Reboot) => {
                 self.reboot_requested = true;
-                (fw::FLASH_ERR_NONE, 0)
+                (FlashErr::None, 0)
             }
-            _ => (fw::FLASH_ERR_INVALID, 0),
+            _ => (FlashErr::Invalid, 0),
         };
-        self.reg[fw::ADDR_FLASH_STATUS as usize] = u16::from(err) << 8;
+        self.reg[fw::ADDR_FLASH_STATUS as usize] = u16::from(err.as_u8()) << 8;
         self.reg[fw::ADDR_FLASH_RESULT_0 as usize] = result as u16;
         self.reg[fw::ADDR_FLASH_RESULT_1 as usize] = (result >> 16) as u16;
+    }
+}
+
+const _: () = assert!(FlashOp::from_u8(0x01).is_none());
+const _: () = assert!(FlashOp::Crc32.as_u8() == 0x02);
+const _: () = assert!(FlashOp::Erase.as_u8() == 0x03);
+const _: () = assert!(FlashOp::Program.as_u8() == 0x04);
+const _: () = assert!(FlashOp::Reboot.as_u8() == 0x05);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retired_op_0x01_is_invalid() {
+        let mut flash = FlashEmulator::new();
+        flash.write_reg(fw::ADDR_FLASH_LEN_0 as usize, 1);
+        flash.write_reg(fw::ADDR_FLASH_CMD as usize, FlashOp::Crc32.as_u8().into());
+        assert_eq!(0, flash.read_reg(fw::ADDR_FLASH_STATUS as usize));
+        assert_ne!(0, flash.read_reg(fw::ADDR_FLASH_RESULT_1 as usize));
+
+        flash.write_reg(fw::ADDR_FLASH_CMD as usize, 0x01);
+        assert_eq!(
+            u16::from(FlashErr::Invalid.as_u8()) << 8,
+            flash.read_reg(fw::ADDR_FLASH_STATUS as usize)
+        );
+        assert_eq!(0, flash.read_reg(fw::ADDR_FLASH_RESULT_0 as usize));
+        assert_eq!(0, flash.read_reg(fw::ADDR_FLASH_RESULT_1 as usize));
     }
 }

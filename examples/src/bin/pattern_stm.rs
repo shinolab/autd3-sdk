@@ -4,13 +4,12 @@
 
 use anyhow::Result;
 
-use autd3_rs::commands::{PatternStm, PatternStmMode, PatternStmOption, SetSilencer};
+use autd3_rs::commands::{PatternStm, PatternStmOption, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{Client, ClientConfig, TransportOption};
 
 const NUM_POINTS: usize = 200;
 const RADIUS_MM: f32 = 30.0;
@@ -23,7 +22,7 @@ async fn main() -> Result<()> {
 
     let client = Client::open(
         &geometry,
-        EchocatLinkOption::default(),
+        &TransportOption::default(),
         ClientConfig::default(),
     )
     .await?;
@@ -47,29 +46,21 @@ async fn main() -> Result<()> {
         })
         .collect::<Vec<_>>();
 
-    let mut builder = client.datagram_builder();
-    builder.push(SetSilencer::default()).push(PatternStm::new(
-        1.0 * Hz,
-        &patterns,
-        Intensity::MAX,
-        PatternStmOption {
-            mode: PatternStmMode::PhaseFull,
-            ..Default::default()
-        },
-    ));
-    let datagrams = builder.build()?;
-    let mut pending = Vec::with_capacity(datagrams.len());
-    for frame in &datagrams {
-        pending.push(client.send(frame).await?);
-    }
-    for response in pending {
-        response.await?.check()?;
-    }
+    client.send(SetSilencer::default()).await?;
+    client
+        .send_streaming(PatternStm::new(
+            1.0 * Hz,
+            &patterns,
+            Intensity::MAX,
+            PatternStmOption::default(),
+        ))
+        .await?
+        .await?;
 
     println!("running a 1 Hz circular pattern STM — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.stop().await?;
+    client.silent_stop().await?;
     client.close().await?;
     Ok(())
 }

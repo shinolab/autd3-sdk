@@ -14,10 +14,11 @@ crate-type = ["cdylib"]
 [dependencies]
 autd3-rs-core.workspace = true
 autd3-rs-emulator.workspace = true
-autd3-python-capsule = { workspace = true, features = ["client"] }
+autd3-python-capsule = { workspace = true, features = ["frame"] }
 pyo3.workspace = true
 pollster = "1.0.1"
 bytemuck.workspace = true
+self_cell.workspace = true
 
 [lints]
 workspace = true

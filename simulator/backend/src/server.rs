@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use axum::{
     Router,
@@ -20,14 +20,12 @@ use tower_http::services::ServeDir;
 
 use autd3_rs_simulator_protocol::ClientMsg;
 
-use crate::control::ControlState;
-
 #[derive(Clone)]
 pub struct AppState {
-    pub geometry_rx: watch::Receiver<Arc<str>>,
+    pub geometry: Arc<str>,
     pub state_rx: watch::Receiver<Arc<str>>,
     pub device_rx: watch::Receiver<Arc<str>>,
-    pub control: Arc<ControlState>,
+    pub mod_enabled: Arc<AtomicBool>,
 }
 
 #[derive(RustEmbed)]
@@ -63,12 +61,15 @@ async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
-    let mut geometry_rx = state.geometry_rx.clone();
-    let mut state_rx = state.state_rx.clone();
-    let mut device_rx = state.device_rx.clone();
+    let AppState {
+        geometry,
+        mut state_rx,
+        mut device_rx,
+        mod_enabled,
+    } = state;
 
     let initial = [
-        geometry_rx.borrow_and_update().clone(),
+        geometry,
         state_rx.borrow_and_update().clone(),
         device_rx.borrow_and_update().clone(),
     ];
@@ -85,12 +86,6 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let send_task = async move {
         loop {
             let message = tokio::select! {
-                changed = geometry_rx.changed() => {
-                    if changed.is_err() {
-                        break;
-                    }
-                    geometry_rx.borrow_and_update().clone()
-                }
                 changed = state_rx.changed() => {
                     if changed.is_err() {
                         break;
@@ -114,11 +109,10 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         }
     };
 
-    let control = state.control;
     let recv_task = async move {
         while let Some(Ok(message)) = receiver.next().await {
             if let Message::Text(text) = message {
-                apply_client_message(&control, &text);
+                apply_client_message(&mod_enabled, &text);
             }
         }
     };
@@ -129,10 +123,10 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     }
 }
 
-fn apply_client_message(control: &ControlState, text: &str) {
+fn apply_client_message(mod_enabled: &AtomicBool, text: &str) {
     match serde_json::from_str::<ClientMsg>(text) {
         Ok(ClientMsg::SetModulationEnabled { enabled }) => {
-            control.mod_enabled.store(enabled, Ordering::Relaxed);
+            mod_enabled.store(enabled, Ordering::Relaxed);
         }
         Err(e) => tracing::error!("failed to decode client message: {e}"),
     }
@@ -144,31 +138,30 @@ mod tests {
 
     #[test]
     fn set_modulation_enabled_updates_the_control_state() {
-        let control = ControlState::default();
+        let mod_enabled = AtomicBool::new(true);
         apply_client_message(
-            &control,
+            &mod_enabled,
             r#"{"type":"set_modulation_enabled","enabled":false}"#,
         );
-        assert!(!control.mod_enabled.load(Ordering::Relaxed));
+        assert!(!mod_enabled.load(Ordering::Relaxed));
         apply_client_message(
-            &control,
+            &mod_enabled,
             r#"{"type":"set_modulation_enabled","enabled":true}"#,
         );
-        assert!(control.mod_enabled.load(Ordering::Relaxed));
+        assert!(mod_enabled.load(Ordering::Relaxed));
     }
 
     #[test]
     fn undecodable_client_message_leaves_the_control_state_untouched() {
-        let control = ControlState::default();
-        control.mod_enabled.store(false, Ordering::Relaxed);
+        let mod_enabled = AtomicBool::new(false);
         for text in [
             "",
             "{}",
             r#"{"type":"unknown"}"#,
             r#"{"type":"set_modulation_enabled"}"#,
         ] {
-            apply_client_message(&control, text);
-            assert!(!control.mod_enabled.load(Ordering::Relaxed));
+            apply_client_message(&mod_enabled, text);
+            assert!(!mod_enabled.load(Ordering::Relaxed));
         }
     }
 }

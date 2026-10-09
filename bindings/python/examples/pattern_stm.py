@@ -8,49 +8,45 @@ import asyncio
 import math
 import signal
 
-import numpy as np
-
 import autd3
-import autd3_link_echocat as echocat
 import autd3_pattern as pattern
-from autd3.units import Hz, m, s
+from autd3.commands import PatternStm, PatternStmOption, SetSilencer
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import Hz, m, mm, s
+from autd3.value import Intensity
 
 NUM_POINTS = 200
 RADIUS_MM = 30.0
 
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    _log_guard = autd3.init_tracing()
+
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
     async with await autd3.Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
         print("devices:", client.num_devices())
 
-        center = geometry.center() + np.array([0.0, 0.0, 150.0])
+        center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         wavelength = pattern.wavelength(340 * m / s)
         patterns = []
         for i in range(NUM_POINTS):
             theta = 2.0 * math.pi * i / NUM_POINTS
-            target = center + np.array([RADIUS_MM * math.cos(theta), RADIUS_MM * math.sin(theta), 0.0])
-            buffer = geometry.phase_buffer()
-            pattern.focus(geometry, target, wavelength, buffer)
-            patterns.append(buffer)
-
-        builder = client.datagram_builder()
-        builder.push(autd3.commands.SetSilencer())
-        builder.push(
-            autd3.commands.PatternStm(
-                1.0 * Hz,
-                patterns,
-                autd3.value.Intensity.MAX,
-                autd3.commands.PatternStmOption(mode=autd3.commands.PatternStmMode.PhaseFull),
+            target = center + offset(
+                RADIUS_MM * math.cos(theta) * mm,
+                RADIUS_MM * math.sin(theta) * mm,
+                0.0 * mm,
             )
-        )
-        for frame in builder.build():
-            await client.send_checked(frame)
+            phases = geometry.phase_buffer()
+            pattern.focus(geometry, target, wavelength, phases)
+            patterns.append(phases)
+
+        await client.send(SetSilencer())
+        await (await client.send_streaming(PatternStm(1.0 * Hz, patterns, Intensity.MAX, PatternStmOption())))
 
         print("running a 1 Hz circular pattern STM — press Ctrl+C to stop")
         stop = asyncio.Event()
@@ -58,6 +54,8 @@ async def main() -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
         await stop.wait()
+
+        await client.silent_stop()
 
 
 if __name__ == "__main__":

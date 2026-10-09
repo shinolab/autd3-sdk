@@ -11,9 +11,22 @@ readme = "README.md"
 keywords = ["autd3", "haptics"]
 categories = ["science"]
 
+[package.metadata.docs.rs]
+all-features = true
+
+[features]
+udp = ["dep:autd3-cpu-wire", "dep:tracing", "dep:zerocopy"]
+
 [dependencies]
 autd3-cpu-fw.workspace = true
+autd3-cpu-wire = { workspace = true, optional = true }
 autd3-rs-core.workspace = true
+tracing = { workspace = true, optional = true }
+zerocopy = { workspace = true, optional = true }
+
+[dev-dependencies]
+autd3-cpu-wire.workspace = true
+zerocopy.workspace = true
 
 [lints]
 workspace = true

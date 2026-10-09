@@ -3,28 +3,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use autd3_rs::commands::SetSilencer;
-use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::rt::{Executor, block_on, oneshot};
+use autd3_rs::rt::Executor;
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_firmware_emulator::Audit;
+use autd3_rs_firmware_emulator::udp::UdpEmulator;
+use futures_channel::oneshot;
+use pollster::block_on;
 
-fn geometry(n: usize) -> Geometry {
-    Geometry::new((0..n).map(|_| Autd3::default()).collect())
-}
-
-fn audit(n: usize) -> Audit {
-    Audit::new((0..n).map(|_| Autd3::NUM_TRANSDUCERS))
-}
+mod common;
+use common::{geometry, open, option};
 
 async fn stream_silencer(client: &Client, rounds: usize) -> Result<(), autd3_rs::Error> {
     for _ in 0..rounds {
-        let frames = client
-            .datagram_builder()
-            .push(SetSilencer::default())
-            .build()?;
-        for frame in &frames {
-            client.send_checked(frame).await?;
-        }
+        client.send(SetSilencer::default()).await?;
     }
     Ok(())
 }
@@ -32,22 +22,20 @@ async fn stream_silencer(client: &Client, rounds: usize) -> Result<(), autd3_rs:
 #[test]
 fn a_client_opens_and_closes_without_an_async_runtime() {
     block_on(async {
-        let client = Client::open(&geometry(2), audit(2), ClientConfig::default())
-            .await
-            .unwrap();
+        let emulator = UdpEmulator::spawn(2).unwrap();
+        let client = open(&emulator).await;
         assert_eq!(client.num_devices(), 2);
         stream_silencer(&client, 4).await.unwrap();
-        client.stop().await.unwrap();
+        client.silent_stop().await.unwrap();
         client.close().await.unwrap();
     });
 }
 
 #[test]
-fn a_link_failure_surfaces_through_close_without_an_async_runtime() {
+fn a_second_close_is_harmless_without_an_async_runtime() {
     block_on(async {
-        let client = Client::open(&geometry(1), audit(1), ClientConfig::default())
-            .await
-            .unwrap();
+        let emulator = UdpEmulator::spawn(1).unwrap();
+        let client = open(&emulator).await;
         let versions = client.read_firmware_version().await.unwrap();
         assert_eq!(versions.len(), 1);
         client.close().await.unwrap();
@@ -60,10 +48,11 @@ fn more_concurrent_sends_than_slots_all_complete_on_one_executor_thread() {
     const SENDERS: usize = 12;
     let max_inflight = NonZeroUsize::new(3).unwrap();
 
+    let emulator = UdpEmulator::spawn(1).unwrap();
     let client = Arc::new(
         block_on(Client::open(
             &geometry(1),
-            audit(1),
+            &option(&emulator),
             ClientConfig {
                 max_inflight,
                 ..ClientConfig::default()

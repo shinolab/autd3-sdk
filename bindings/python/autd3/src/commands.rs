@@ -1,144 +1,54 @@
-use core::num::NonZeroU16;
+use core::num::{NonZeroU16, NonZeroU32};
 use core::time::Duration;
+use std::sync::Arc;
 
-use autd3_rs::DatagramBuilder as CoreDatagramBuilder;
+use autd3_python_capsule::extract::{duration_to_py, extract_duration, extract_u8};
+use autd3_rs::commands::Expansion;
 use autd3_rs::commands::{
-    Clear as CoreClear, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
-    ForceFan as CoreForceFan, GpioOut as CoreGpioOut, Nop as CoreNop, PWE_TABLE_SIZE, SetGpioOut,
+    Clear as CoreClear, CpuConfig as CoreCpuConfig, EmulateGpioIn, FixedCompletionTime,
+    FixedUpdateRate, ForceFan as CoreForceFan, FpgaBusWait as CoreFpgaBusWait,
+    GpioOut as CoreGpioOut, Nop as CoreNop, PWE_TABLE_SIZE, PtpConfig as CorePtpConfig,
+    ReleaseFailsafe as CoreReleaseFailsafe, SetCpuConfig as CoreSetCpuConfig, SetGpioOut,
     SetOutputMask, SetPhaseCorrection, SetPulseWidthTable as CoreSetPulseWidthTable, SetSilencer,
     Synchronize as CoreSynchronize,
 };
 use autd3_rs::geometry::Autd3;
-use autd3_rs::legacy::LegacyDatagramBuilder;
 use autd3_rs::value::{Phase, PulseWidth as CorePulseWidth};
 
-use crate::ops::DcSysTime;
+use crate::datagram::PushCommand;
+use crate::ops::SysTime;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-fn extract_u8(obj: &Bound<'_, PyAny>) -> PyResult<u8> {
-    if let Ok(v) = obj.extract::<u8>() {
-        return Ok(v);
-    }
-    obj.getattr("value")?.extract::<u8>()
-}
-
-fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
-    let nanos = obj.call_method0("as_nanos")?.extract::<u128>()?;
-    u64::try_from(nanos)
-        .map(Duration::from_nanos)
-        .map_err(|_| PyValueError::new_err("duration is out of range"))
-}
-
-pub(crate) trait PushCommand: Send + Sync {
-    fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>);
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>);
-}
-
 macro_rules! simple_command {
-    ($pyname:literal, $py:ident, $data:ident, |$self:ident, $builder:ident| $body:block, $new:item) => {
-        #[derive(Clone)]
-        pub(crate) struct $data;
-
-        impl PushCommand for $data {
-            fn push_into<'a>(&'a $self, $builder: &mut CoreDatagramBuilder<'a>) $body
-
-            fn push_legacy_into<'a>(&'a $self, $builder: &mut LegacyDatagramBuilder<'a>) $body
-        }
-
-        #[pyclass(name = $pyname, module = "autd3.commands")]
-        pub struct $py;
+    ($pyname:literal, $py:ident, $core:ident) => {
+        #[pyclass(name = $pyname, module = "autd3.commands", frozen)]
+        pub struct $py(pub(crate) Arc<$core>);
 
         #[pymethods]
         impl $py {
-            $new
-        }
-
-        impl $py {
-            pub(crate) fn boxed(&self) -> Box<dyn PushCommand> {
-                Box::new($data)
+            #[new]
+            fn new() -> Self {
+                Self(Arc::new($core))
             }
         }
     };
 }
 
-simple_command!(
-    "Clear",
-    Clear,
-    ClearCmd,
-    |self, builder| {
-        builder.push(CoreClear);
-    },
-    #[new]
-    fn new() -> Self {
-        Self
-    }
-);
+simple_command!("Clear", Clear, CoreClear);
+simple_command!("Synchronize", Synchronize, CoreSynchronize);
+simple_command!("ReleaseFailsafe", ReleaseFailsafe, CoreReleaseFailsafe);
+simple_command!("Nop", Nop, CoreNop);
 
-simple_command!(
-    "Synchronize",
-    Synchronize,
-    SynchronizeCmd,
-    |self, builder| {
-        builder.push(CoreSynchronize);
-    },
-    #[new]
-    fn new() -> Self {
-        Self
-    }
-);
-
-simple_command!(
-    "Nop",
-    Nop,
-    NopCmd,
-    |self, builder| {
-        builder.push(CoreNop);
-    },
-    #[new]
-    fn new() -> Self {
-        Self
-    }
-);
-
-#[derive(Clone)]
-struct ForceFanCmd {
-    value: bool,
-}
-
-impl PushCommand for ForceFanCmd {
-    fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        builder.push(CoreForceFan { value: self.value });
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
-        builder.push(CoreForceFan { value: self.value });
-    }
-}
-
-#[pyclass(name = "ForceFan", module = "autd3.commands")]
-pub struct ForceFan {
-    value: bool,
-}
+#[pyclass(name = "ForceFan", module = "autd3.commands", frozen)]
+pub struct ForceFan(pub(crate) Arc<CoreForceFan>);
 
 #[pymethods]
 impl ForceFan {
     #[new]
     fn new(value: bool) -> Self {
-        Self { value }
+        Self(Arc::new(CoreForceFan { value }))
     }
-}
-
-impl ForceFan {
-    pub(crate) fn boxed(&self) -> Box<dyn PushCommand> {
-        Box::new(ForceFanCmd { value: self.value })
-    }
-}
-
-#[derive(Clone, Copy)]
-enum SilencerConfigKind {
-    Completion(FixedCompletionTime),
-    UpdateRate(FixedUpdateRate),
 }
 
 #[pyclass(
@@ -146,9 +56,7 @@ enum SilencerConfigKind {
     module = "autd3.commands",
     skip_from_py_object
 )]
-pub struct FixedCompletionTimePy {
-    inner: FixedCompletionTime,
-}
+pub struct FixedCompletionTimePy(FixedCompletionTime);
 
 #[pymethods]
 impl FixedCompletionTimePy {
@@ -160,19 +68,17 @@ impl FixedCompletionTimePy {
         strict_mode: bool,
     ) -> PyResult<Self> {
         let default = FixedCompletionTime::default();
-        Ok(Self {
-            inner: FixedCompletionTime {
-                intensity: intensity
-                    .map(extract_duration)
-                    .transpose()?
-                    .unwrap_or(default.intensity),
-                phase: phase
-                    .map(extract_duration)
-                    .transpose()?
-                    .unwrap_or(default.phase),
-                strict_mode,
-            },
-        })
+        Ok(Self(FixedCompletionTime {
+            intensity: intensity
+                .map(extract_duration)
+                .transpose()?
+                .unwrap_or(default.intensity),
+            phase: phase
+                .map(extract_duration)
+                .transpose()?
+                .unwrap_or(default.phase),
+            strict_mode,
+        }))
     }
 }
 
@@ -181,100 +87,408 @@ impl FixedCompletionTimePy {
     module = "autd3.commands",
     skip_from_py_object
 )]
-pub struct FixedUpdateRatePy {
-    inner: FixedUpdateRate,
-}
+pub struct FixedUpdateRatePy(FixedUpdateRate);
 
 #[pymethods]
 impl FixedUpdateRatePy {
     #[new]
-    #[pyo3(signature = (intensity = 256, phase = 256))]
+    #[pyo3(signature = (intensity, phase))]
     fn new(intensity: u16, phase: u16) -> PyResult<Self> {
-        Ok(Self {
-            inner: FixedUpdateRate {
-                intensity: NonZeroU16::new(intensity)
-                    .ok_or_else(|| PyValueError::new_err("intensity must be >= 1"))?,
-                phase: NonZeroU16::new(phase)
-                    .ok_or_else(|| PyValueError::new_err("phase must be >= 1"))?,
-            },
-        })
+        Ok(Self(FixedUpdateRate {
+            intensity: NonZeroU16::new(intensity)
+                .ok_or_else(|| PyValueError::new_err("intensity must be >= 1"))?,
+            phase: NonZeroU16::new(phase)
+                .ok_or_else(|| PyValueError::new_err("phase must be >= 1"))?,
+        }))
     }
 }
 
-struct SetSilencerCmd {
-    config: SilencerConfigKind,
-}
-
-impl PushCommand for SetSilencerCmd {
-    fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        match self.config {
-            SilencerConfigKind::Completion(c) => {
-                builder.push(SetSilencer::new(c));
-            }
-            SilencerConfigKind::UpdateRate(c) => {
-                builder.push(SetSilencer::new(c));
-            }
-        }
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
-        match self.config {
-            SilencerConfigKind::Completion(c) => {
-                builder.push(SetSilencer::new(c));
-            }
-            SilencerConfigKind::UpdateRate(c) => {
-                builder.push(SetSilencer::new(c));
-            }
-        }
-    }
-}
-
-#[pyclass(name = "SetSilencer", module = "autd3.commands")]
-pub struct SetSilencerPy {
-    config: SilencerConfigKind,
-}
+#[pyclass(name = "SetSilencer", module = "autd3.commands", frozen)]
+pub struct SetSilencerPy(pub(crate) Arc<SetSilencer>);
 
 #[pymethods]
 impl SetSilencerPy {
     #[new]
     #[pyo3(signature = (config = None))]
     fn new(config: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        let Some(config) = config else {
-            return Ok(Self {
-                config: SilencerConfigKind::Completion(SetSilencer::default().config),
-            });
+        let inner = match config {
+            None => SetSilencer::default(),
+            Some(config) => {
+                if let Ok(c) = config.cast::<FixedCompletionTimePy>() {
+                    SetSilencer::new(c.borrow().0)
+                } else if let Ok(c) = config.cast::<FixedUpdateRatePy>() {
+                    SetSilencer::new(c.borrow().0)
+                } else {
+                    return Err(PyValueError::new_err(
+                        "SetSilencer expects a FixedCompletionTime or FixedUpdateRate",
+                    ));
+                }
+            }
         };
-        let config = if let Ok(c) = config.cast::<FixedCompletionTimePy>() {
-            SilencerConfigKind::Completion(c.borrow().inner)
-        } else if let Ok(c) = config.cast::<FixedUpdateRatePy>() {
-            SilencerConfigKind::UpdateRate(c.borrow().inner)
-        } else {
-            return Err(PyValueError::new_err(
-                "SetSilencer expects a FixedCompletionTime or FixedUpdateRate",
-            ));
-        };
-        Ok(Self { config })
+        Ok(Self(Arc::new(inner)))
     }
 
     #[staticmethod]
     fn disable() -> Self {
-        Self {
-            config: SilencerConfigKind::Completion(SetSilencer::disable().config),
-        }
+        Self(Arc::new(SetSilencer::disable()))
     }
 }
 
-impl SetSilencerPy {
-    pub(crate) fn boxed(&self) -> Box<dyn PushCommand> {
-        Box::new(SetSilencerCmd {
-            config: self.config,
-        })
+fn non_zero_u32(field: &str, value: u32) -> PyResult<NonZeroU32> {
+    NonZeroU32::new(value).ok_or_else(|| PyValueError::new_err(format!("{field} must be >= 1")))
+}
+
+#[pyclass(
+    name = "PtpConfig",
+    module = "autd3.commands",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub struct PtpConfigPy(CorePtpConfig);
+
+impl core::hash::Hash for PtpConfigPy {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        format!("{:?}", self.0).hash(state);
     }
 }
 
-#[pyclass(name = "GpioOut", module = "autd3.commands", from_py_object)]
-#[derive(Clone, Copy)]
+#[pymethods]
+impl PtpConfigPy {
+    #[new]
+    #[pyo3(signature = (
+        *,
+        sync_interval = CorePtpConfig::default().sync_interval,
+        tx_timestamp_timeout = CorePtpConfig::default().tx_timestamp_timeout,
+        delay_resp_timeout = CorePtpConfig::default().delay_resp_timeout,
+        holdover = CorePtpConfig::default().holdover,
+        lock_samples = CorePtpConfig::default().lock_samples.get(),
+        step_threshold = CorePtpConfig::default().step_threshold,
+        lock_threshold = CorePtpConfig::default().lock_threshold,
+        kp_milli = CorePtpConfig::default().kp_milli,
+        ki_milli = CorePtpConfig::default().ki_milli,
+        max_freq_ppb = CorePtpConfig::default().max_freq_ppb,
+        delay_req_syncs = CorePtpConfig::default().delay_req_syncs,
+        path_delay_filter_shift = CorePtpConfig::default().path_delay_filter_shift,
+        pause_quanta = CorePtpConfig::default().pause_quanta,
+        pause_hold_syncs = CorePtpConfig::default().pause_hold_syncs,
+        pause_retry = CorePtpConfig::default().pause_retry,
+    ))]
+    #[allow(clippy::too_many_arguments, clippy::similar_names)]
+    fn new(
+        #[pyo3(from_py_with = extract_duration)] sync_interval: Duration,
+        #[pyo3(from_py_with = extract_duration)] tx_timestamp_timeout: Duration,
+        #[pyo3(from_py_with = extract_duration)] delay_resp_timeout: Duration,
+        #[pyo3(from_py_with = extract_duration)] holdover: Duration,
+        lock_samples: u16,
+        #[pyo3(from_py_with = extract_duration)] step_threshold: Duration,
+        #[pyo3(from_py_with = extract_duration)] lock_threshold: Duration,
+        kp_milli: u32,
+        ki_milli: u32,
+        max_freq_ppb: u32,
+        delay_req_syncs: NonZeroU16,
+        path_delay_filter_shift: u8,
+        pause_quanta: Option<NonZeroU16>,
+        pause_hold_syncs: u16,
+        #[pyo3(from_py_with = extract_duration)] pause_retry: Duration,
+    ) -> PyResult<Self> {
+        Ok(Self(CorePtpConfig {
+            sync_interval,
+            tx_timestamp_timeout,
+            delay_resp_timeout,
+            holdover,
+            lock_samples: NonZeroU16::new(lock_samples)
+                .ok_or_else(|| PyValueError::new_err("lock_samples must be >= 1"))?,
+            step_threshold,
+            lock_threshold,
+            kp_milli,
+            ki_milli,
+            max_freq_ppb,
+            delay_req_syncs,
+            path_delay_filter_shift,
+            pause_quanta,
+            pause_hold_syncs,
+            pause_retry,
+        }))
+    }
+
+    #[getter]
+    fn sync_interval<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.sync_interval)
+    }
+
+    #[getter]
+    fn tx_timestamp_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.tx_timestamp_timeout)
+    }
+
+    #[getter]
+    fn delay_resp_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.delay_resp_timeout)
+    }
+
+    #[getter]
+    fn holdover<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.holdover)
+    }
+
+    #[getter]
+    fn lock_samples(&self) -> u16 {
+        self.0.lock_samples.get()
+    }
+
+    #[getter]
+    fn step_threshold<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.step_threshold)
+    }
+
+    #[getter]
+    fn lock_threshold<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.lock_threshold)
+    }
+
+    #[getter]
+    fn kp_milli(&self) -> u32 {
+        self.0.kp_milli
+    }
+
+    #[getter]
+    fn ki_milli(&self) -> u32 {
+        self.0.ki_milli
+    }
+
+    #[getter]
+    fn max_freq_ppb(&self) -> u32 {
+        self.0.max_freq_ppb
+    }
+
+    #[getter]
+    fn delay_req_syncs(&self) -> NonZeroU16 {
+        self.0.delay_req_syncs
+    }
+
+    #[getter]
+    fn path_delay_filter_shift(&self) -> u8 {
+        self.0.path_delay_filter_shift
+    }
+
+    #[getter]
+    fn pause_quanta(&self) -> Option<NonZeroU16> {
+        self.0.pause_quanta
+    }
+
+    #[getter]
+    fn pause_hold_syncs(&self) -> u16 {
+        self.0.pause_hold_syncs
+    }
+
+    #[getter]
+    fn pause_retry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.pause_retry)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+#[pyclass(
+    name = "FpgaBusWait",
+    module = "autd3.commands",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct FpgaBusWaitPy(CoreFpgaBusWait);
+
+impl core::hash::Hash for FpgaBusWaitPy {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        format!("{:?}", self.0).hash(state);
+    }
+}
+
+#[pymethods]
+impl FpgaBusWaitPy {
+    #[classattr]
+    #[pyo3(name = "Cycles2")]
+    fn cycles2() -> Self {
+        Self(CoreFpgaBusWait::Cycles2)
+    }
+
+    #[classattr]
+    #[pyo3(name = "Cycles3")]
+    fn cycles3() -> Self {
+        Self(CoreFpgaBusWait::Cycles3)
+    }
+
+    #[getter]
+    fn cycles(&self) -> u8 {
+        self.0.as_u8()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("FpgaBusWait.{:?}", self.0)
+    }
+}
+
+#[pyclass(
+    name = "CpuConfig",
+    module = "autd3.commands",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub struct CpuConfigPy(CoreCpuConfig);
+
+impl core::hash::Hash for CpuConfigPy {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        format!("{:?}", self.0).hash(state);
+    }
+}
+
+#[pymethods]
+impl CpuConfigPy {
+    #[new]
+    #[pyo3(signature = (
+        *,
+        sys_time_transition_margin = CoreCpuConfig::default().sys_time_transition_margin,
+        fpga_wait_update_max_polls = CoreCpuConfig::default().fpga_wait_update_max_polls.get(),
+        fpga_flash_max_polls = CoreCpuConfig::default().fpga_flash_max_polls.get(),
+        sync_guard = CoreCpuConfig::default().sync_guard,
+        update_activate_delay = CoreCpuConfig::default().update_activate_delay,
+        failsafe_timeout = CoreCpuConfig::default().failsafe_timeout,
+        ptp_unlock_failsafe_timeout = CoreCpuConfig::default().ptp_unlock_failsafe_timeout,
+        fpga_bus_wait = FpgaBusWaitPy(CoreCpuConfig::default().fpga_bus_wait),
+        ptp = PtpConfigPy::default(),
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        #[pyo3(from_py_with = extract_duration)] sys_time_transition_margin: Duration,
+        fpga_wait_update_max_polls: u32,
+        fpga_flash_max_polls: u32,
+        #[pyo3(from_py_with = extract_duration)] sync_guard: Duration,
+        #[pyo3(from_py_with = extract_duration)] update_activate_delay: Duration,
+        #[pyo3(from_py_with = crate::udp::none_or_duration)] failsafe_timeout: Option<Duration>,
+        #[pyo3(from_py_with = crate::udp::none_or_duration)] ptp_unlock_failsafe_timeout: Option<
+            Duration,
+        >,
+        fpga_bus_wait: FpgaBusWaitPy,
+        ptp: PtpConfigPy,
+    ) -> PyResult<Self> {
+        Ok(Self(CoreCpuConfig {
+            sys_time_transition_margin,
+            fpga_wait_update_max_polls: non_zero_u32(
+                "fpga_wait_update_max_polls",
+                fpga_wait_update_max_polls,
+            )?,
+            fpga_flash_max_polls: non_zero_u32("fpga_flash_max_polls", fpga_flash_max_polls)?,
+            sync_guard,
+            update_activate_delay,
+            failsafe_timeout,
+            ptp_unlock_failsafe_timeout,
+            fpga_bus_wait: fpga_bus_wait.0,
+            ptp: ptp.0,
+        }))
+    }
+
+    #[getter]
+    fn sys_time_transition_margin<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.sys_time_transition_margin)
+    }
+
+    #[getter]
+    fn fpga_wait_update_max_polls(&self) -> u32 {
+        self.0.fpga_wait_update_max_polls.get()
+    }
+
+    #[getter]
+    fn fpga_flash_max_polls(&self) -> u32 {
+        self.0.fpga_flash_max_polls.get()
+    }
+
+    #[getter]
+    fn sync_guard<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.sync_guard)
+    }
+
+    #[getter]
+    fn update_activate_delay<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.update_activate_delay)
+    }
+
+    #[getter]
+    fn failsafe_timeout<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        self.0
+            .failsafe_timeout
+            .map(|timeout| duration_to_py(py, timeout))
+            .transpose()
+    }
+
+    #[getter]
+    fn ptp_unlock_failsafe_timeout<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
+        self.0
+            .ptp_unlock_failsafe_timeout
+            .map(|timeout| duration_to_py(py, timeout))
+            .transpose()
+    }
+
+    #[getter]
+    fn fpga_bus_wait(&self) -> FpgaBusWaitPy {
+        FpgaBusWaitPy(self.0.fpga_bus_wait)
+    }
+
+    #[getter]
+    fn ptp(&self) -> PtpConfigPy {
+        PtpConfigPy(self.0.ptp)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+#[pyclass(name = "SetCpuConfig", module = "autd3.commands", frozen)]
+pub struct SetCpuConfigPy(pub(crate) Arc<CoreSetCpuConfig>);
+
+#[pymethods]
+impl SetCpuConfigPy {
+    #[new]
+    #[pyo3(signature = (config = CpuConfigPy::default()))]
+    fn new(config: CpuConfigPy) -> Self {
+        Self(Arc::new(CoreSetCpuConfig::new(config.0)))
+    }
+
+    #[getter]
+    fn config(&self) -> CpuConfigPy {
+        CpuConfigPy(self.0.config)
+    }
+}
+
+#[pyclass(
+    name = "GpioOut",
+    module = "autd3.commands",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct GpioOut(pub(crate) CoreGpioOut);
+
+impl core::hash::Hash for GpioOut {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        format!("{:?}", self.0).hash(state);
+    }
+}
 
 #[pymethods]
 impl GpioOut {
@@ -346,7 +560,7 @@ impl GpioOut {
 
     #[staticmethod]
     #[pyo3(name = "SysTimeEq")]
-    fn sys_time_eq(sys_time: DcSysTime) -> Self {
+    fn sys_time_eq(sys_time: SysTime) -> Self {
         Self(CoreGpioOut::SysTimeEq(sys_time.0))
     }
 
@@ -361,31 +575,14 @@ impl GpioOut {
     fn direct(on: bool) -> Self {
         Self(CoreGpioOut::Direct(on))
     }
-}
 
-#[derive(Clone)]
-struct SetGpioOutCmd {
-    outputs: [CoreGpioOut; 4],
-}
-
-impl PushCommand for SetGpioOutCmd {
-    fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        builder.push(SetGpioOut {
-            outputs: self.outputs,
-        });
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
-        builder.push(SetGpioOut {
-            outputs: self.outputs,
-        });
+    fn __repr__(&self) -> String {
+        format!("GpioOut.{:?}", self.0)
     }
 }
 
-#[pyclass(name = "SetGpioOut", module = "autd3.commands")]
-pub struct SetGpioOutPy {
-    outputs: [CoreGpioOut; 4],
-}
+#[pyclass(name = "SetGpioOut", module = "autd3.commands", frozen)]
+pub struct SetGpioOutPy(pub(crate) Arc<SetGpioOut>);
 
 #[pymethods]
 impl SetGpioOutPy {
@@ -394,43 +591,14 @@ impl SetGpioOutPy {
         let outputs: [GpioOut; 4] = outputs
             .try_into()
             .map_err(|_| PyValueError::new_err("SetGpioOut needs exactly 4 outputs"))?;
-        Ok(Self {
+        Ok(Self(Arc::new(SetGpioOut {
             outputs: outputs.map(|g| g.0),
-        })
+        })))
     }
 }
 
-impl SetGpioOutPy {
-    pub(crate) fn boxed(&self) -> Box<dyn PushCommand> {
-        Box::new(SetGpioOutCmd {
-            outputs: self.outputs,
-        })
-    }
-}
-
-#[derive(Clone)]
-struct EmulateGpioInCmd {
-    values: [bool; 4],
-}
-
-impl PushCommand for EmulateGpioInCmd {
-    fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        builder.push(EmulateGpioIn {
-            values: self.values,
-        });
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
-        builder.push(EmulateGpioIn {
-            values: self.values,
-        });
-    }
-}
-
-#[pyclass(name = "EmulateGpioIn", module = "autd3.commands")]
-pub struct EmulateGpioInPy {
-    values: [bool; 4],
-}
+#[pyclass(name = "EmulateGpioIn", module = "autd3.commands", frozen)]
+pub struct EmulateGpioInPy(pub(crate) Arc<EmulateGpioIn>);
 
 #[pymethods]
 impl EmulateGpioInPy {
@@ -439,41 +607,25 @@ impl EmulateGpioInPy {
         let values: [bool; 4] = values
             .try_into()
             .map_err(|_| PyValueError::new_err("EmulateGpioIn needs exactly 4 values"))?;
-        Ok(Self { values })
+        Ok(Self(Arc::new(EmulateGpioIn { values })))
     }
 }
 
-impl EmulateGpioInPy {
-    pub(crate) fn boxed(&self) -> Box<dyn PushCommand> {
-        Box::new(EmulateGpioInCmd {
-            values: self.values,
-        })
-    }
-}
-
-#[derive(Clone)]
-struct SetOutputMaskCmd {
+pub(crate) struct SetOutputMaskCmd {
     masks: Vec<Vec<bool>>,
 }
 
 impl PushCommand for SetOutputMaskCmd {
-    fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        builder.push(SetOutputMask {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        expansion.push(SetOutputMask {
             masks: self.masks.as_slice(),
-        });
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
-        builder.push(SetOutputMask {
-            masks: self.masks.as_slice(),
-        });
+        })?;
+        Ok(())
     }
 }
 
-#[pyclass(name = "SetOutputMask", module = "autd3.commands")]
-pub struct SetOutputMaskPy {
-    masks: Vec<Vec<bool>>,
-}
+#[pyclass(name = "SetOutputMask", module = "autd3.commands", frozen)]
+pub struct SetOutputMaskPy(pub(crate) Arc<SetOutputMaskCmd>);
 
 #[pymethods]
 impl SetOutputMaskPy {
@@ -488,41 +640,25 @@ impl SetOutputMaskPy {
                 )));
             }
         }
-        Ok(Self { masks })
+        Ok(Self(Arc::new(SetOutputMaskCmd { masks })))
     }
 }
 
-impl SetOutputMaskPy {
-    pub(crate) fn boxed(&self) -> Box<dyn PushCommand> {
-        Box::new(SetOutputMaskCmd {
-            masks: self.masks.clone(),
-        })
-    }
-}
-
-#[derive(Clone)]
-struct SetPhaseCorrectionCmd {
+pub(crate) struct SetPhaseCorrectionCmd {
     phases: Vec<Vec<Phase>>,
 }
 
 impl PushCommand for SetPhaseCorrectionCmd {
-    fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        builder.push(SetPhaseCorrection {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        expansion.push(SetPhaseCorrection {
             phases: self.phases.as_slice(),
-        });
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
-        builder.push(SetPhaseCorrection {
-            phases: self.phases.as_slice(),
-        });
+        })?;
+        Ok(())
     }
 }
 
-#[pyclass(name = "SetPhaseCorrection", module = "autd3.commands")]
-pub struct SetPhaseCorrectionPy {
-    phases: Vec<Vec<Phase>>,
-}
+#[pyclass(name = "SetPhaseCorrection", module = "autd3.commands", frozen)]
+pub struct SetPhaseCorrectionPy(pub(crate) Arc<SetPhaseCorrectionCmd>);
 
 #[pymethods]
 impl SetPhaseCorrectionPy {
@@ -544,138 +680,108 @@ impl SetPhaseCorrectionPy {
                     .collect::<PyResult<Vec<_>>>()
             })
             .collect::<PyResult<Vec<_>>>()?;
-        Ok(Self { phases })
+        Ok(Self(Arc::new(SetPhaseCorrectionCmd { phases })))
     }
 }
 
-impl SetPhaseCorrectionPy {
-    pub(crate) fn boxed(&self) -> Box<dyn PushCommand> {
-        Box::new(SetPhaseCorrectionCmd {
-            phases: self.phases.clone(),
-        })
-    }
-}
-
-#[derive(Clone)]
-struct SetPulseWidthTableCmd {
+pub(crate) struct SetPulseWidthTableCmd {
     table: [CorePulseWidth; PWE_TABLE_SIZE],
 }
 
 impl PushCommand for SetPulseWidthTableCmd {
-    fn push_into<'a>(&'a self, builder: &mut CoreDatagramBuilder<'a>) {
-        builder.push(CoreSetPulseWidthTable { table: &self.table });
-    }
-
-    fn push_legacy_into<'a>(&'a self, builder: &mut LegacyDatagramBuilder<'a>) {
-        builder.push(CoreSetPulseWidthTable { table: &self.table });
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        expansion.push(CoreSetPulseWidthTable { table: &self.table })?;
+        Ok(())
     }
 }
 
-#[pyclass(name = "SetPulseWidthTable", module = "autd3.commands")]
-pub struct SetPulseWidthTablePy {
-    table: [u16; PWE_TABLE_SIZE],
-}
+#[pyclass(name = "SetPulseWidthTable", module = "autd3.commands", frozen)]
+pub struct SetPulseWidthTablePy(pub(crate) Arc<SetPulseWidthTableCmd>);
 
 #[pymethods]
 impl SetPulseWidthTablePy {
     #[new]
-    fn new(table: Vec<u16>) -> PyResult<Self> {
-        let table: [u16; PWE_TABLE_SIZE] = table.try_into().map_err(|v: Vec<u16>| {
-            PyValueError::new_err(format!(
-                "SetPulseWidthTable needs exactly {PWE_TABLE_SIZE} entries, got {}",
-                v.len()
-            ))
-        })?;
-        Ok(Self { table })
+    #[pyo3(signature = (table=None))]
+    fn new(table: Option<Vec<PulseWidth>>) -> PyResult<Self> {
+        let Some(table) = table else {
+            return Ok(Self(Arc::new(SetPulseWidthTableCmd {
+                table: *CoreSetPulseWidthTable::default().table,
+            })));
+        };
+        let table: [PulseWidth; PWE_TABLE_SIZE] =
+            table.try_into().map_err(|v: Vec<PulseWidth>| {
+                PyValueError::new_err(format!(
+                    "SetPulseWidthTable needs exactly {PWE_TABLE_SIZE} entries, got {}",
+                    v.len()
+                ))
+            })?;
+        Ok(Self(Arc::new(SetPulseWidthTableCmd {
+            table: table.map(|pulse_width| pulse_width.0),
+        })))
     }
 
     #[staticmethod]
-    fn default_table() -> Vec<u16> {
-        CoreSetPulseWidthTable::default_table()
+    fn empty_table() -> Vec<PulseWidth> {
+        CoreSetPulseWidthTable::empty_table()
             .into_iter()
-            .map(|pw| pw.pulse_width().unwrap_or(0))
+            .map(PulseWidth)
             .collect()
     }
 }
 
-impl SetPulseWidthTablePy {
-    pub(crate) fn boxed(&self) -> Box<dyn PushCommand> {
-        Box::new(SetPulseWidthTableCmd {
-            table: self.table.map(CorePulseWidth::new),
-        })
+#[pyclass(
+    name = "PulseWidth",
+    module = "autd3.value",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq)]
+pub struct PulseWidth(pub(crate) CorePulseWidth);
+
+impl core::hash::Hash for PulseWidth {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.0.pulse_width().ok().hash(state);
     }
 }
-
-#[pyclass(name = "PulseWidth", module = "autd3.value")]
-pub struct PulseWidth;
 
 #[pymethods]
 impl PulseWidth {
+    #[new]
+    fn new(pulse_width: u16) -> Self {
+        Self(CorePulseWidth::new(pulse_width))
+    }
+
     #[staticmethod]
-    fn from_duty(duty: f32) -> PyResult<u16> {
-        CorePulseWidth::from_duty(duty)
+    fn from_duty(duty: f32) -> Self {
+        Self(CorePulseWidth::from_duty(duty))
+    }
+
+    fn pulse_width(&self) -> PyResult<u16> {
+        self.0
             .pulse_width()
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
-    #[staticmethod]
-    fn from_raw(pulse_width: u16) -> PyResult<u16> {
-        CorePulseWidth::new(pulse_width)
-            .pulse_width()
-            .map_err(|e| PyValueError::new_err(e.to_string()))
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
-
-    #[staticmethod]
-    fn default_table() -> Vec<u16> {
-        CoreSetPulseWidthTable::default_table()
-            .into_iter()
-            .map(|pw| pw.pulse_width().unwrap_or(0))
-            .collect()
-    }
-}
-
-pub(crate) fn boxed_command(obj: &Bound<'_, PyAny>) -> Option<Box<dyn PushCommand>> {
-    if let Ok(c) = obj.cast::<Clear>() {
-        return Some(c.borrow().boxed());
-    }
-    if let Ok(c) = obj.cast::<Synchronize>() {
-        return Some(c.borrow().boxed());
-    }
-    if let Ok(c) = obj.cast::<Nop>() {
-        return Some(c.borrow().boxed());
-    }
-    if let Ok(c) = obj.cast::<ForceFan>() {
-        return Some(c.borrow().boxed());
-    }
-    if let Ok(c) = obj.cast::<SetSilencerPy>() {
-        return Some(c.borrow().boxed());
-    }
-    if let Ok(c) = obj.cast::<SetGpioOutPy>() {
-        return Some(c.borrow().boxed());
-    }
-    if let Ok(c) = obj.cast::<EmulateGpioInPy>() {
-        return Some(c.borrow().boxed());
-    }
-    if let Ok(c) = obj.cast::<SetOutputMaskPy>() {
-        return Some(c.borrow().boxed());
-    }
-    if let Ok(c) = obj.cast::<SetPhaseCorrectionPy>() {
-        return Some(c.borrow().boxed());
-    }
-    if let Ok(c) = obj.cast::<SetPulseWidthTablePy>() {
-        return Some(c.borrow().boxed());
-    }
-    None
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Clear>()?;
     m.add_class::<Synchronize>()?;
+    m.add_class::<ReleaseFailsafe>()?;
     m.add_class::<Nop>()?;
     m.add_class::<ForceFan>()?;
     m.add_class::<FixedCompletionTimePy>()?;
     m.add_class::<FixedUpdateRatePy>()?;
     m.add_class::<SetSilencerPy>()?;
+    m.add_class::<FpgaBusWaitPy>()?;
+    m.add_class::<PtpConfigPy>()?;
+    m.add_class::<CpuConfigPy>()?;
+    m.add_class::<SetCpuConfigPy>()?;
     m.add_class::<GpioOut>()?;
     m.add_class::<SetGpioOutPy>()?;
     m.add_class::<EmulateGpioInPy>()?;

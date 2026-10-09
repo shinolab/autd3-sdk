@@ -1,55 +1,63 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
+mod common;
+#[path = "common/modulation.rs"]
+mod modulation;
+
+use autd3_cpu_wire::ModulationBank;
+use autd3_cpu_wire::cpu_params::SYS_TIME_TRANSITION_MARGIN;
+use autd3_cpu_wire::payload::{GpioInPayload, TransitionMode, WriteModPayload};
+use autd3_rs_core::params::{REP_INFINITE, ULTRASOUND_FREQ_HZ};
+use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_firmware_emulator::Device;
+use zerocopy::IntoBytes;
+use zerocopy::little_endian::U32;
 
-const NUM_TRANSDUCERS: usize = 249;
-const ULTRASOUND_PERIOD_NS: u64 = 25_000;
+use common::{NUM_TRANSDUCERS, frame};
+use modulation::{activate_modulation_bank, config_modulation};
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
-    let mut tx = TxFrame::new(Seq::new(seq), cmd);
-    tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; TX_FRAME_BYTES];
-    tx.write_to(&mut buf);
-    buf
+const ULTRASOUND_PERIOD_NS: u64 = 1_000_000_000 / ULTRASOUND_FREQ_HZ as u64;
+const SAMPLES: [u8; 4] = [10, 20, 30, 40];
+
+fn write_modulation(bank: ModulationBank, samples: &[u8]) -> Vec<u8> {
+    let header = WriteModPayload {
+        bank,
+        reserved: 0,
+        offset: U32::new(0),
+    };
+    [header.as_bytes(), samples].concat()
 }
 
 #[test]
 fn modulation_buffer_and_index_follow_time() {
-    let samples: [u8; 4] = [10, 20, 30, 40];
-    let bank = 0u8;
+    let samples = SAMPLES;
+    let bank = ModulationBank::B0;
     let divider = 1u16;
 
-    let mut write = vec![bank, 0];
-    write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
-    write.extend_from_slice(&samples);
+    let write = write_modulation(bank, &samples);
 
-    let mut config = vec![bank, 0];
-    config.extend_from_slice(&divider.to_le_bytes());
-    config.extend_from_slice(&(samples.len() as u32).to_le_bytes());
-    config.extend_from_slice(&0xFFFFu16.to_le_bytes());
-
-    let mut change = vec![bank, 0xFF];
-    change.extend_from_slice(&0u64.to_le_bytes());
+    let config = config_modulation(bank, divider, samples.len() as u32, REP_INFINITE);
+    let change = activate_modulation_bank(bank, TransitionMode::Immediate, 0);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
         device
             .send(&frame(0, Cmd::WriteModulationBuffer, &write))
-            .data,
-        0
-    );
-    assert_eq!(
-        device.send(&frame(1, Cmd::ConfigModulation, &config)).data,
-        0
+            .status,
+        DeviceErrorCode::None
     );
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ChangeModulationBank, &change))
-            .data,
-        0
+            .send(&frame(1, Cmd::ConfigModulation, &config))
+            .status,
+        DeviceErrorCode::None
+    );
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ActivateModulationBank, &change))
+            .status,
+        DeviceErrorCode::None
     );
 
     assert_eq!(samples.len(), device.fpga().modulation_cycle(bank as usize));
@@ -69,29 +77,21 @@ fn modulation_buffer_and_index_follow_time() {
 
 #[test]
 fn modulation_finite_loop_stops_after_rep() {
-    let samples: [u8; 4] = [10, 20, 30, 40];
-    let bank = 1u8;
+    let samples = SAMPLES;
+    let bank = ModulationBank::B1;
     let divider = 1u16;
     let rep = 1u16;
 
-    let mut write = vec![bank, 0];
-    write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
-    write.extend_from_slice(&samples);
+    let write = write_modulation(bank, &samples);
 
-    let mut config = vec![bank, 0];
-    config.extend_from_slice(&divider.to_le_bytes());
-    config.extend_from_slice(&(samples.len() as u32).to_le_bytes());
-    config.extend_from_slice(&rep.to_le_bytes());
-
-    let mut change = vec![bank, 0x00];
-    change.extend_from_slice(&0u64.to_le_bytes());
+    let config = config_modulation(bank, divider, samples.len() as u32, rep);
+    let change = activate_modulation_bank(bank, TransitionMode::SyncIdx, 0);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
     device.send(&frame(0, Cmd::WriteModulationBuffer, &write));
     device.send(&frame(1, Cmd::ConfigModulation, &config));
-    device.send(&frame(2, Cmd::ChangeModulationBank, &change));
+    device.send(&frame(2, Cmd::ActivateModulationBank, &change));
 
     let mut indices = Vec::new();
     for i in 0..24u64 {
@@ -110,28 +110,17 @@ fn modulation_finite_loop_stops_after_rep() {
 
 #[test]
 fn sys_time_transition_within_margin_is_rejected() {
-    const MARGIN_NS: u64 = 10_000_000;
-    const MISS_TRANSITION_TIME: u8 = 0x06;
+    const MARGIN_NS: u64 = SYS_TIME_TRANSITION_MARGIN.as_nanos() as u64;
 
-    let samples: [u8; 4] = [10, 20, 30, 40];
-    let bank = 1u8;
+    let samples = SAMPLES;
+    let bank = ModulationBank::B1;
 
-    let mut write = vec![bank, 0];
-    write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
-    write.extend_from_slice(&samples);
+    let write = write_modulation(bank, &samples);
 
-    let mut config = vec![bank, 0];
-    config.extend_from_slice(&1u16.to_le_bytes());
-    config.extend_from_slice(&(samples.len() as u32).to_le_bytes());
-    config.extend_from_slice(&3u16.to_le_bytes());
+    let config = config_modulation(bank, 1, samples.len() as u32, 3);
 
     let sys_time = 1_000_000_000u64;
-    let change = |value: u64| {
-        let mut c = vec![bank, 0x01];
-        c.extend_from_slice(&value.to_le_bytes());
-        c
-    };
+    let change = |value: u64| activate_modulation_bank(bank, TransitionMode::SysTime, value);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
@@ -143,11 +132,11 @@ fn sys_time_transition_within_margin_is_rejected() {
         device
             .send(&frame(
                 2,
-                Cmd::ChangeModulationBank,
+                Cmd::ActivateModulationBank,
                 &change(sys_time + MARGIN_NS - 1)
             ))
-            .data,
-        MISS_TRANSITION_TIME,
+            .status,
+        DeviceErrorCode::MissTransitionTime,
         "transition within the margin must be rejected"
     );
 
@@ -155,35 +144,36 @@ fn sys_time_transition_within_margin_is_rejected() {
         device
             .send(&frame(
                 3,
-                Cmd::ChangeModulationBank,
+                Cmd::ActivateModulationBank,
                 &change(sys_time + MARGIN_NS)
             ))
-            .data,
-        0,
+            .status,
+        DeviceErrorCode::None,
         "transition at least a margin ahead is accepted"
     );
 }
 
 #[test]
-fn gpio_transition_waits_for_emulated_gpio_in() {
-    const TRANSITION_MODE_GPIO: u8 = 0x02;
-    const GPIO_IN_PIN: u64 = 0;
+fn sys_time_transition_margin_follows_the_cpu_config() {
+    use autd3_cpu_wire::config::CpuConfig;
+    use autd3_cpu_wire::payload::SetCpuConfigPayload;
 
-    let samples: [u8; 4] = [10, 20, 30, 40];
-    let bank = 1u8;
+    const MARGIN_NS: u32 = 1_000_000;
 
-    let mut write = vec![bank, 0];
-    write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&(samples.len() as u16).to_le_bytes());
-    write.extend_from_slice(&samples);
+    let samples = SAMPLES;
+    let bank = ModulationBank::B1;
 
-    let mut config = vec![bank, 0];
-    config.extend_from_slice(&1u16.to_le_bytes());
-    config.extend_from_slice(&(samples.len() as u32).to_le_bytes());
-    config.extend_from_slice(&1u16.to_le_bytes());
+    let write = write_modulation(bank, &samples);
 
-    let mut change = vec![bank, TRANSITION_MODE_GPIO];
-    change.extend_from_slice(&GPIO_IN_PIN.to_le_bytes());
+    let config = config_modulation(bank, 1, samples.len() as u32, 3);
+
+    let sys_time = 1_000_000_000u64;
+    let change = |value: u64| activate_modulation_bank(bank, TransitionMode::SysTime, value);
+    let cpu_config = SetCpuConfigPayload::encode(&CpuConfig {
+        sys_time_transition_margin: std::time::Duration::from_nanos(u64::from(MARGIN_NS)),
+        ..CpuConfig::default()
+    })
+    .unwrap();
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
@@ -191,9 +181,55 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
     device.send(&frame(1, Cmd::ConfigModulation, &config));
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ChangeModulationBank, &change))
-            .data,
-        0
+            .send(&frame(2, Cmd::SetCpuConfig, cpu_config.as_bytes()))
+            .status,
+        DeviceErrorCode::None
+    );
+    device.fpga_mut().update_with_sys_time(sys_time);
+
+    assert_eq!(
+        device
+            .send(&frame(
+                3,
+                Cmd::ActivateModulationBank,
+                &change(sys_time + u64::from(MARGIN_NS) - 1)
+            ))
+            .status,
+        DeviceErrorCode::MissTransitionTime,
+    );
+    assert_eq!(
+        device
+            .send(&frame(
+                4,
+                Cmd::ActivateModulationBank,
+                &change(sys_time + u64::from(MARGIN_NS))
+            ))
+            .status,
+        DeviceErrorCode::None,
+    );
+}
+
+#[test]
+fn gpio_transition_waits_for_emulated_gpio_in() {
+    const GPIO_IN_PIN: u64 = 0;
+
+    let samples = SAMPLES;
+    let bank = ModulationBank::B1;
+
+    let write = write_modulation(bank, &samples);
+
+    let config = config_modulation(bank, 1, samples.len() as u32, 1);
+    let change = activate_modulation_bank(bank, TransitionMode::Gpio, GPIO_IN_PIN);
+
+    let mut device = Device::new(NUM_TRANSDUCERS);
+    device.send(&frame(0, Cmd::Reset, &[]));
+    device.send(&frame(0, Cmd::WriteModulationBuffer, &write));
+    device.send(&frame(1, Cmd::ConfigModulation, &config));
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ActivateModulationBank, &change))
+            .status,
+        DeviceErrorCode::None
     );
 
     for i in 1..8u64 {
@@ -207,9 +243,18 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
         "GPIO-in is low: the bank must not switch"
     );
 
-    let mut gpio_in = [0u8; 4];
-    gpio_in[GPIO_IN_PIN as usize] = 1;
-    assert_eq!(device.send(&frame(3, Cmd::EmulateGpioIn, &gpio_in)).data, 0);
+    let gpio_in = GpioInPayload {
+        gpio_in_0: true,
+        gpio_in_1: false,
+        gpio_in_2: false,
+        gpio_in_3: false,
+    };
+    assert_eq!(
+        device
+            .send(&frame(3, Cmd::EmulateGpioIn, gpio_in.as_bytes()))
+            .status,
+        DeviceErrorCode::None
+    );
     for i in 8..16u64 {
         device
             .fpga_mut()

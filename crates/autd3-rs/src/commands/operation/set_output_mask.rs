@@ -1,11 +1,10 @@
 use autd3_cpu_wire::payload::OutputMaskPayload;
-use zerocopy::FromBytes;
 
-use crate::error::{Error, PayloadError};
+use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Encoded, Operation, device_slot, encode_fixed};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SetOutputMask<'a> {
@@ -19,55 +18,43 @@ impl Operation for SetOutputMask<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        let mask = self
-            .masks
-            .get(device.idx())
-            .ok_or(PayloadError::DeviceDataOutOfRange {
-                device: device.idx(),
-                len: self.masks.len(),
-            })?;
-        if mask.len() != device.num_transducers() {
-            return Err(PayloadError::TransducerCountMismatch {
-                device: device.idx(),
-                got: mask.len(),
-                expected: device.num_transducers(),
-            }
-            .into());
-        }
-        let (p, _) = OutputMaskPayload::mut_from_prefix(&mut out[..]).unwrap();
-        mask.iter()
-            .zip(p.data.iter_mut())
-            .for_each(|(&on, dst)| *dst = u8::from(on));
-        Ok(Cmd::SetOutputMask)
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        Ok(encode_fixed(
+            out,
+            Cmd::SetOutputMask,
+            &OutputMaskPayload::new(device_slot(self.masks, device)?),
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::test_device;
+    use crate::error::PayloadError;
+    use crate::test_utils::{encode, test_device};
 
     #[test]
-    fn output_mask_writes_bytes() {
+    fn output_mask_packs_bits_lsb_first() {
         let dev = test_device(0);
         let n = dev.num_transducers();
         let mut mask = vec![false; n];
         mask[0] = true;
         mask[3] = true;
         mask[8] = true;
+        mask[16] = true;
         mask[n - 1] = true;
         let data = vec![mask];
-        let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = SetOutputMask { masks: &data }
-            .encode(&dev, &mut out)
-            .unwrap();
-        assert_eq!(cmd, Cmd::SetOutputMask);
-        assert_eq!(out[0], 1);
-        assert_eq!(out[1], 0);
-        assert_eq!(out[3], 1);
-        assert_eq!(out[8], 1);
-        assert_eq!(out[n - 1], 1);
+        let (cmd, out) = encode(&SetOutputMask { masks: &data }).unwrap();
+        assert_eq!(
+            cmd,
+            Encoded::new(Cmd::SetOutputMask, size_of::<OutputMaskPayload>())
+        );
+        let mut expected = [0u8; size_of::<OutputMaskPayload>()];
+        expected[0] = 0b0000_1001;
+        expected[1] = 0b0000_0001;
+        expected[2] = 0b0000_0001;
+        expected[(n - 1) / 8] |= 1 << ((n - 1) % 8);
+        assert_eq!(out[..expected.len()], expected);
     }
 
     #[test]
@@ -85,9 +72,8 @@ mod tests {
     fn output_mask_rejects_wrong_transducer_count() {
         let dev = test_device(0);
         let data = vec![vec![true; dev.num_transducers() + 1]];
-        let mut out = [0u8; PAYLOAD_BYTES];
         assert!(matches!(
-            SetOutputMask { masks: &data }.encode(&dev, &mut out),
+            encode(&SetOutputMask { masks: &data }),
             Err(Error::InvalidPayload(
                 PayloadError::TransducerCountMismatch { .. }
             ))

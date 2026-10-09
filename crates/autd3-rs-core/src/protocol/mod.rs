@@ -1,13 +1,9 @@
-mod rx_frame;
 mod seq;
-mod tx_frame;
 
 pub use autd3_cpu_wire::{
-    Cmd, DEVICE_TO_HOST_BYTES as RX_FRAME_BYTES, Error as DeviceErrorCode,
-    HOST_TO_DEVICE_BYTES as TX_FRAME_BYTES, PAYLOAD_BYTES, describe_device_error,
+    Cmd, Error as DeviceErrorCode, FRAME_BYTES_MAX, FrameHeader, PAYLOAD_BYTES,
+    REPLY_DATA_BYTES_MAX, describe_device_error,
 };
-pub use rx_frame::RxFrame;
 pub use seq::Seq;
-pub use tx_frame::TxFrame;
 
-pub const MAX_INFLIGHT: usize = 127;
+pub const MAX_INFLIGHT: usize = autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES;

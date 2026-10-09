@@ -3,8 +3,6 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use std::rc::Rc;
 
-use nalgebra::Complex;
-
 #[derive(Default)]
 pub(crate) struct BufferPool {
     free: RefCell<HashMap<u64, Vec<(wgpu::Buffer, u64)>>>,
@@ -119,12 +117,4 @@ pub struct GpuMatrix {
     pub(crate) cols: usize,
     pub(crate) batch: usize,
     pub(crate) row_major: bool,
-}
-
-pub(crate) fn to_raw(data: &[Complex<f32>]) -> Vec<[f32; 2]> {
-    data.iter().map(|c| [c.re, c.im]).collect()
-}
-
-pub(crate) fn from_raw(raw: &[[f32; 2]]) -> Vec<Complex<f32>> {
-    raw.iter().map(|v| Complex::new(v[0], v[1])).collect()
 }

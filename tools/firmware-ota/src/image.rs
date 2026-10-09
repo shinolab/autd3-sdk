@@ -5,8 +5,6 @@ use zerocopy::FromBytes;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ImageError {
-    #[error("CPU firmware image must not be empty")]
-    Empty,
     #[error(
         "CPU firmware image is {len} bytes; it must be longer than {min_exclusive} and at most {max} bytes"
     )]
@@ -33,9 +31,6 @@ pub struct CpuFirmwareImage {
 
 impl CpuFirmwareImage {
     pub fn from_slot_image(body: Vec<u8>) -> Result<Self, ImageError> {
-        if body.is_empty() {
-            return Err(ImageError::Empty);
-        }
         if !u32::try_from(body.len()).is_ok_and(is_plausible_length) {
             return Err(ImageError::LengthOutOfRange {
                 len: body.len(),
@@ -99,7 +94,7 @@ mod tests {
         let mut flash = vec![0xFFu8; Slot::A.image_base() as usize + body.len()];
         let header = ImageHeader::new(0, u32::try_from(body.len()).unwrap(), crc32(body));
         let at = Slot::A.base() as usize;
-        flash[at..at + core::mem::size_of::<ImageHeader>()].copy_from_slice(header.as_bytes());
+        flash[at..][..core::mem::size_of::<ImageHeader>()].copy_from_slice(header.as_bytes());
         flash[Slot::A.image_base() as usize..].copy_from_slice(body);
         flash
     }
@@ -114,12 +109,8 @@ mod tests {
 
     #[test]
     fn slot_image_rejects_lengths_the_loader_cannot_copy() {
-        assert_eq!(
-            CpuFirmwareImage::from_slot_image(Vec::new()),
-            Err(ImageError::Empty)
-        );
         let max = (IMAGE_VECTOR_BYTES + IMAGE_APP_CAPACITY) as usize;
-        for len in [IMAGE_VECTOR_BYTES as usize, max + 1] {
+        for len in [0, IMAGE_VECTOR_BYTES as usize, max + 1] {
             assert!(matches!(
                 CpuFirmwareImage::from_slot_image(vec![0; len]),
                 Err(ImageError::LengthOutOfRange { .. })

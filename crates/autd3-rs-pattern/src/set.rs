@@ -1,34 +1,22 @@
 use autd3_rs_core::value::{Intensity, Phase};
 
-pub fn set_intensity_device(intensity: Intensity, dst: &mut [Intensity]) {
-    dst.fill(intensity);
-}
-
 pub fn set_intensity(intensity: Intensity, dst: &mut [Vec<Intensity>]) {
     for slot in &mut *dst {
-        set_intensity_device(intensity, slot);
+        slot.fill(intensity);
     }
-}
-
-pub fn set_phase_device(phase: Phase, dst: &mut [Phase]) {
-    dst.fill(phase);
 }
 
 pub fn set_phase(phase: Phase, dst: &mut [Vec<Phase>]) {
     for slot in &mut *dst {
-        set_phase_device(phase, slot);
-    }
-}
-
-pub fn add_phase_device(phase: Phase, dst: &mut [Phase]) {
-    for p in dst.iter_mut() {
-        *p += phase;
+        slot.fill(phase);
     }
 }
 
 pub fn add_phase(phase: Phase, dst: &mut [Vec<Phase>]) {
     for slot in &mut *dst {
-        add_phase_device(phase, slot);
+        for p in slot.iter_mut() {
+            *p += phase;
+        }
     }
 }
 
@@ -88,30 +76,5 @@ mod tests {
                 assert_eq!(p.0, o.0.wrapping_add(0xF0));
             }
         }
-    }
-
-    #[test]
-    fn device_level_matches_geometry_level() {
-        let geometry = geometry();
-        let original = ramp(&geometry);
-
-        let mut whole = original.clone();
-        set_phase(Phase(0x22), &mut whole);
-        add_phase(Phase(0x33), &mut whole);
-
-        let mut per_device = original;
-        for slot in &mut per_device {
-            set_phase_device(Phase(0x22), slot);
-            add_phase_device(Phase(0x33), slot);
-        }
-        assert_eq!(whole, per_device);
-
-        let mut whole = geometry.intensity_buffer();
-        set_intensity(Intensity(0x55), &mut whole);
-        let mut per_device = geometry.intensity_buffer();
-        for slot in &mut per_device {
-            set_intensity_device(Intensity(0x55), slot);
-        }
-        assert_eq!(whole, per_device);
     }
 }

@@ -9,7 +9,7 @@ use autd3_cpu_wire::fpga_update::{
 };
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{on_path, run, which};
+use crate::util::{copy_dir, files_under, on_path, run, which};
 
 const PROJECT_NAME: &str = "autd3-fpga";
 
@@ -95,8 +95,7 @@ fn fpga_format(fpga_dir: &Path, fix: bool) -> Result<()> {
     }
 
     let rtl_dir = fpga_dir.join("rtl");
-    let mut files = Vec::new();
-    collect_rtl_sources(&rtl_dir, &mut files)?;
+    let mut files = collect_rtl_sources(&rtl_dir)?;
     files.sort();
     if files.is_empty() {
         bail!("no SystemVerilog sources found under {}", rtl_dir.display());
@@ -122,23 +121,14 @@ fn fpga_format(fpga_dir: &Path, fix: bool) -> Result<()> {
     Ok(())
 }
 
-fn collect_rtl_sources(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in std::fs::read_dir(dir)
-        .with_context(|| format!("reading {}", dir.display()))?
-        .flatten()
-    {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_rtl_sources(&path, out)?;
-        } else if path
-            .extension()
+fn collect_rtl_sources(dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = files_under(dir, |_| true)?;
+    files.retain(|path| {
+        path.extension()
             .and_then(|e| e.to_str())
             .is_some_and(|e| e == "sv" || e == "svh")
-        {
-            out.push(path);
-        }
-    }
-    Ok(())
+    });
+    Ok(files)
 }
 
 fn fpga_project(fpga_dir: &Path) -> Result<()> {
@@ -201,7 +191,10 @@ pub fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
 fn split_flash_image(mcs: &Path, update_image: &Path) -> Result<()> {
     let (start, flash) = read_mcs(mcs)?;
     if start != 0 {
-        bail!("{} starts at 0x{start:X}, expected the golden image at 0x0", mcs.display());
+        bail!(
+            "{} starts at 0x{start:X}, expected the golden image at 0x0",
+            mcs.display()
+        );
     }
     let barrier_base = FPGA_BARRIER_BASE as usize;
     let golden = summarize_bitstream(flash.get(..barrier_base).unwrap_or(&flash));
@@ -225,7 +218,9 @@ fn split_flash_image(mcs: &Path, update_image: &Path) -> Result<()> {
         .get(barrier_end..FPGA_IMAGE_BASE as usize)
         .is_none_or(|gap| gap.iter().any(|&b| b != 0xFF))
     {
-        bail!("the gap between the barrier and the update slot is not empty, or the mcs has no update image");
+        bail!(
+            "the gap between the barrier and the update slot is not empty, or the mcs has no update image"
+        );
     }
     let slot = &flash[FPGA_IMAGE_BASE as usize..];
     let used = slot
@@ -266,7 +261,10 @@ fn read_mcs(path: &Path) -> Result<(u32, Vec<u8>)> {
             .with_context(|| format!("line {line_no}: missing ':'"))?;
         let bytes = (0..hex.len())
             .step_by(2)
-            .map(|i| hex.get(i..i + 2).and_then(|b| u8::from_str_radix(b, 16).ok()))
+            .map(|i| {
+                hex.get(i..i + 2)
+                    .and_then(|b| u8::from_str_radix(b, 16).ok())
+            })
             .collect::<Option<Vec<u8>>>()
             .with_context(|| format!("line {line_no}: malformed hex"))?;
         if bytes.len() < 5 || bytes.len() != usize::from(bytes[0]) + 5 {
@@ -300,7 +298,7 @@ fn read_mcs(path: &Path) -> Result<(u32, Vec<u8>)> {
     let mut image = vec![0xFF; end_index - start_index];
     for (addr, data) in &records {
         let offset = usize::try_from(*addr)? - start_index;
-        image[offset..offset + data.len()].copy_from_slice(data);
+        image[offset..][..data.len()].copy_from_slice(data);
     }
     Ok((start, image))
 }
@@ -389,29 +387,21 @@ fn find_vivado_2024(install: &Path) -> Option<PathBuf> {
 
 #[cfg(windows)]
 fn find_vivado_2025(install: &Path) -> Option<PathBuf> {
-    fn recurse(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
-        if depth > 2 {
-            return;
-        }
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if path
+    let mut found: Vec<PathBuf> = walkdir::WalkDir::new(install)
+        .min_depth(1)
+        .max_depth(3)
+        .follow_links(true)
+        .into_iter()
+        .flatten()
+        .filter(|entry| {
+            entry.file_type().is_dir()
+                && entry
                     .file_name()
-                    .and_then(|n| n.to_str())
+                    .to_str()
                     .is_some_and(|n| n.eq_ignore_ascii_case("vivado"))
-                {
-                    out.push(path.clone());
-                }
-                recurse(&path, depth + 1, out);
-            }
-        }
-    }
-    let mut found = Vec::new();
-    recurse(install, 0, &mut found);
+        })
+        .map(walkdir::DirEntry::into_path)
+        .collect();
     found.sort();
     found.pop()
 }
@@ -427,24 +417,6 @@ fn fpga_commit_ips(fpga_dir: &Path) -> Result<()> {
     }
     copy_dir(&src, &dst)?;
     println!("committed IP: {} -> {}", src.display(), dst.display());
-    Ok(())
-}
-
-fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
-    std::fs::create_dir_all(dst).with_context(|| format!("creating {}", dst.display()))?;
-    for entry in std::fs::read_dir(src)
-        .with_context(|| format!("reading {}", src.display()))?
-        .flatten()
-    {
-        let from = entry.path();
-        let to = dst.join(entry.file_name());
-        if from.is_dir() {
-            copy_dir(&from, &to)?;
-        } else {
-            std::fs::copy(&from, &to)
-                .with_context(|| format!("copying {} -> {}", from.display(), to.display()))?;
-        }
-    }
     Ok(())
 }
 

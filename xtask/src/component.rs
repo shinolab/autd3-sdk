@@ -11,6 +11,7 @@ pub struct Component {
     pub include_paths: &'static [&'static str],
     pub also_shipped_by: &'static [&'static str],
     pub version_file: &'static str,
+    pub version_table: &'static [&'static str],
 }
 
 pub const COMPONENTS: &[Component] = &[
@@ -29,6 +30,7 @@ pub const COMPONENTS: &[Component] = &[
         ],
         also_shipped_by: &[],
         version_file: "Cargo.toml",
+        version_table: &["workspace", "package"],
     },
     Component {
         name: "python",
@@ -37,6 +39,7 @@ pub const COMPONENTS: &[Component] = &[
         include_paths: &["bindings/python/**"],
         also_shipped_by: &["v"],
         version_file: "bindings/python/autd3/pyproject.toml",
+        version_table: &["project"],
     },
     Component {
         name: "cs",
@@ -45,6 +48,7 @@ pub const COMPONENTS: &[Component] = &[
         include_paths: &["bindings/csharp/**"],
         also_shipped_by: &["v"],
         version_file: "bindings/csharp/Directory.Build.props",
+        version_table: &[],
     },
     Component {
         name: "unity",
@@ -53,6 +57,7 @@ pub const COMPONENTS: &[Component] = &[
         include_paths: &["bindings/unity/**"],
         also_shipped_by: &["cs-v", "v"],
         version_file: "bindings/unity/com.shinolab.autd3-sdk/package.json",
+        version_table: &[],
     },
     Component {
         name: "simulator",
@@ -61,6 +66,7 @@ pub const COMPONENTS: &[Component] = &[
         include_paths: &["simulator/**"],
         also_shipped_by: &["console-v"],
         version_file: "simulator/Cargo.toml",
+        version_table: &["workspace", "package"],
     },
     Component {
         name: "console",
@@ -69,6 +75,7 @@ pub const COMPONENTS: &[Component] = &[
         include_paths: &["console/**"],
         also_shipped_by: &[],
         version_file: "console/Cargo.toml",
+        version_table: &["package"],
     },
     Component {
         name: "firmware",
@@ -77,8 +84,16 @@ pub const COMPONENTS: &[Component] = &[
         include_paths: &["firmware/**"],
         also_shipped_by: &[],
         version_file: "firmware/cpu/fw/Cargo.toml",
+        version_table: &["package"],
     },
 ];
+
+pub fn find(name: &str) -> Result<&'static Component> {
+    COMPONENTS
+        .iter()
+        .find(|c| c.name == name)
+        .with_context(|| format!("missing `{name}` component"))
+}
 
 impl Component {
     pub fn tag_pattern(&self) -> String {
@@ -99,7 +114,7 @@ impl Component {
         let version = match self.name {
             "cs" => between(&text, "<Version>", "</Version>"),
             "unity" => after_quoted(&text, "\"version\":"),
-            _ => toml_version(&text),
+            _ => toml_version(&text, self.version_table),
         };
         version.with_context(|| format!("no version found in {}", file.display()))
     }
@@ -125,11 +140,14 @@ impl Component {
     }
 }
 
-fn toml_version(text: &str) -> Option<String> {
-    text.lines()
-        .map(str::trim)
-        .find(|line| line.starts_with("version") && line[7..].trim_start().starts_with('='))
-        .and_then(|line| after_quoted(line, "="))
+fn toml_version(text: &str, table: &[&str]) -> Option<String> {
+    let doc: toml_edit::DocumentMut = text.parse().ok()?;
+    table
+        .iter()
+        .try_fold(doc.as_item(), |item, key| item.get(key))?
+        .get("version")
+        .and_then(toml_edit::Item::as_str)
+        .map(str::to_string)
 }
 
 fn between(text: &str, open: &str, close: &str) -> Option<String> {
@@ -138,7 +156,7 @@ fn between(text: &str, open: &str, close: &str) -> Option<String> {
     Some(text[start..end].trim().to_string())
 }
 
-fn after_quoted(text: &str, key: &str) -> Option<String> {
+pub(crate) fn after_quoted(text: &str, key: &str) -> Option<String> {
     let start = text.find(key)? + key.len();
     let rest = text[start..].trim_start();
     let rest = rest.strip_prefix('"')?;
@@ -152,10 +170,7 @@ pub fn release_sections(primary: &'static Component) -> Vec<&'static Component> 
         "console" => &["console", "simulator"],
         _ => return vec![primary],
     };
-    names
-        .iter()
-        .filter_map(|name| COMPONENTS.iter().find(|c| c.name == *name))
-        .collect()
+    names.iter().filter_map(|name| find(name).ok()).collect()
 }
 
 pub fn detect<'a>(versioned: &'a str) -> Option<(&'static Component, &'a str)> {

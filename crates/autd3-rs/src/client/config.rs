@@ -1,40 +1,25 @@
 use std::num::{NonZeroU32, NonZeroUsize};
-
-use autd3_rs_core::CoreId;
-use autd3_rs_core::RtPriority;
-use autd3_rs_core::RtSchedulePolicy;
+use std::time::Duration;
 
 use crate::error::{Error, PayloadError};
 use crate::protocol::MAX_INFLIGHT;
 
-pub const MAX_DEVICES: usize = 128;
+pub use crate::udp::bus::MAX_DEVICES;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ClientConfig {
-    pub timeout_cycles: NonZeroU32,
+    pub ack_timeout: Duration,
     pub max_inflight: NonZeroUsize,
     pub max_resync_rounds: NonZeroU32,
-    pub low_latency: bool,
-    pub reset_resend_cycles: NonZeroU32,
-    pub rt_priority: Option<RtPriority>,
-    pub rt_policy: RtSchedulePolicy,
-    pub rt_affinity: Option<CoreId>,
-    pub validate_state: bool,
     pub require_supported_firmware: bool,
 }
 
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            timeout_cycles: NonZeroU32::new(10).unwrap(),
+            ack_timeout: Duration::from_millis(10),
             max_inflight: NonZeroUsize::new(MAX_INFLIGHT).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
-            low_latency: false,
-            reset_resend_cycles: NonZeroU32::new(2).unwrap(),
-            rt_priority: autd3_rs_core::default_rt_priority(),
-            rt_policy: RtSchedulePolicy::default(),
-            rt_affinity: None,
-            validate_state: true,
             require_supported_firmware: false,
         }
     }
@@ -45,6 +30,31 @@ impl ClientConfig {
         if self.max_inflight.get() > MAX_INFLIGHT {
             return Err(PayloadError::MaxInflightTooLarge { max: MAX_INFLIGHT }.into());
         }
+        if self.ack_timeout.is_zero() {
+            return Err(PayloadError::ZeroAckTimeout.into());
+        }
         Ok(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_default_passes_validation() {
+        assert!(ClientConfig::default().validate().is_ok());
+    }
+
+    #[test]
+    fn max_inflight_above_the_device_queue_is_rejected() {
+        let config = ClientConfig {
+            max_inflight: NonZeroUsize::new(MAX_INFLIGHT + 1).unwrap(),
+            ..ClientConfig::default()
+        };
+        assert!(matches!(
+            config.validate(),
+            Err(Error::InvalidPayload(PayloadError::MaxInflightTooLarge { max: MAX_INFLIGHT }))
+        ));
     }
 }

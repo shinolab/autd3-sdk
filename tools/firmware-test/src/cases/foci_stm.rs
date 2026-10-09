@@ -2,8 +2,9 @@ use core::f32::consts::PI;
 
 use anyhow::Result;
 
+use autd3_rs::Frames;
 use autd3_rs::commands::{FociStm, FociStmOption, SetSilencer};
-use autd3_rs::geometry::{Point3, Vector3, offset};
+use autd3_rs::geometry::{Vector3, offset};
 use autd3_rs::params::MAX_FOCI_TOTAL;
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::{
@@ -13,25 +14,11 @@ use autd3_rs::value::{
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
-use crate::cases::ERR_INVALID_TRANSITION_MODE;
 use crate::cases::pattern_util::{
-    change_pattern_bank, change_pattern_bank_sync, expect_firmware_error, report_fpga_state,
-    write_foci_bank,
+    POINT_NUM, RADIUS_MM, activate_pattern_bank, circle_foci, expect_transition_mode_rejections,
+    report_fpga_state, write_foci_bank,
 };
 use crate::io::wait_enter;
-
-const POINT_NUM: usize = 200;
-const RADIUS_MM: f32 = 30.0;
-
-fn circle_foci(center: Point3<f32>, n: usize) -> Vec<ControlPoints<1>> {
-    (0..n)
-        .map(|i| {
-            let theta = 2.0 * PI * i as f32 / n as f32;
-            let p = center + Vector3::new(RADIUS_MM * theta.cos(), RADIUS_MM * theta.sin(), 0.0);
-            ControlPoints::new([ControlPoint::new(p, Phase::ZERO)], Intensity::MAX)
-        })
-        .collect()
-}
 
 async fn send_foci(
     ctx: &Ctx<'_>,
@@ -39,20 +26,21 @@ async fn send_foci(
     config: f32,
     bank: PatternBank,
 ) -> Result<()> {
-    let mut builder = ctx.client.datagram_builder();
-    builder.push(SetSilencer::disable()).push(FociStm::new(
-        config * Hz,
-        points,
-        FociStmOption {
-            bank,
-            ..FociStmOption::default()
-        },
-    ));
-    let frames = builder.build()?;
-    for frame in &frames {
-        ctx.client.send_checked(frame).await?;
-    }
-    Ok(())
+    ctx.send_frames(&Frames::encode(
+        ctx.client.geometry(),
+        (
+            SetSilencer::disable(),
+            FociStm::new(
+                config * Hz,
+                points,
+                FociStmOption {
+                    bank,
+                    ..FociStmOption::default()
+                },
+            ),
+        ),
+    )?)
+    .await
 }
 
 pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
@@ -76,23 +64,16 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("The STM frequency changed to 1 Hz").await;
     report_fpga_state(ctx, "B1 1Hz", None, Some(PatternBank::B1), Some(false)).await?;
 
-    change_pattern_bank(ctx, PatternBank::B0).await?;
+    activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
     wait_enter("The STM frequency returned to 0.5 Hz").await;
     report_fpga_state(ctx, "back to B0", None, Some(PatternBank::B0), Some(false)).await?;
 
     let mut rev = foci.clone();
     rev.reverse();
     rev[POINT_NUM - 1].intensity = Intensity::MIN;
-    write_foci_bank(
-        ctx,
-        PatternBank::B1,
-        0.5 * Hz,
-        &rev,
-        autd3_rs::value::LoopBehavior::ONCE,
-    )
-    .await?;
+    write_foci_bank(ctx, PatternBank::B1, 0.5 * Hz, &rev, LoopBehavior::ONCE).await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
-    change_pattern_bank_sync(ctx, PatternBank::B1).await?;
+    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::SyncIdx).await?;
     wait_enter("The trajectory reverses at the right edge, then stops after one cycle").await;
 
     let indices = MAX_FOCI_TOTAL / 8;
@@ -153,32 +134,19 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
 }
 
 async fn transition_asserts(ctx: &Ctx<'_>, foci: &[ControlPoints<1>]) {
-    println!("transition-mode validation (firmware):");
-    let build = |loop_behavior, transition_mode| {
-        let mut b = ctx.client.datagram_builder();
-        b.push(FociStm::new(
-            0.5 * Hz,
-            foci,
-            FociStmOption {
-                loop_behavior,
-                transition_mode,
-                ..FociStmOption::default()
-            },
-        ));
-        b.build()
-    };
-    expect_firmware_error(
-        ctx,
-        "FociSTM infinite loop + SyncIdx",
-        build(LoopBehavior::Infinite, TransitionMode::SyncIdx),
-        ERR_INVALID_TRANSITION_MODE,
-    )
-    .await;
-    expect_firmware_error(
-        ctx,
-        "FociSTM finite loop + Immediate",
-        build(LoopBehavior::ONCE, TransitionMode::Immediate),
-        ERR_INVALID_TRANSITION_MODE,
-    )
+    expect_transition_mode_rejections(ctx, "FociSTM", |loop_behavior, transition_mode| {
+        Frames::encode(
+            ctx.client.geometry(),
+            FociStm::new(
+                0.5 * Hz,
+                foci,
+                FociStmOption {
+                    loop_behavior,
+                    transition_mode,
+                    ..FociStmOption::default()
+                },
+            ),
+        )
+    })
     .await;
 }

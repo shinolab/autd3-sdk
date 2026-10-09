@@ -1,11 +1,13 @@
 use std::time::Duration;
 
-use autd3_rs::commands::{FixedCompletionTime, Pattern, SetSilencer};
+use autd3_rs::commands::{FixedCompletionTime, Modulation, Pattern, SetSilencer};
 use autd3_rs::common::ULTRASOUND_PERIOD;
+use autd3_rs::error::Error;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::value::{Intensity, Phase};
+use autd3_rs::protocol::DeviceErrorCode;
+use autd3_rs::value::{Intensity, Phase, SamplingConfig};
 
-use autd3_rs_emulator::{ClientApi, Emulator};
+use autd3_rs_emulator::{ClientApi, Emulator, EmulatorError};
 
 #[test]
 fn records_phase_passthrough_with_silencer_disabled() {
@@ -15,19 +17,13 @@ fn records_phase_passthrough_with_silencer_disabled() {
 
     let record = emulator
         .record(async move |r| {
-            let mut builder = r.datagram_builder();
-            builder.push(SetSilencer {
-                config: FixedCompletionTime {
-                    intensity: ULTRASOUND_PERIOD,
-                    phase: ULTRASOUND_PERIOD,
-                    strict_mode: false,
-                },
-            });
-            builder.push(Pattern::new(&phases, &intensities));
-            let datagrams = builder.build()?;
-            for frame in &datagrams {
-                r.send_checked(frame).await?;
-            }
+            r.send(SetSilencer::new(FixedCompletionTime {
+                intensity: ULTRASOUND_PERIOD,
+                phase: ULTRASOUND_PERIOD,
+                strict_mode: false,
+            }))
+            .await?;
+            r.send(Pattern::new(&phases, &intensities)).await?;
             r.tick(2 * ULTRASOUND_PERIOD)?;
             Ok(())
         })
@@ -63,4 +59,31 @@ fn tick_must_be_multiple_of_ultrasound_period() {
         Ok(())
     });
     assert!(result.is_err());
+}
+
+#[test]
+fn send_reports_a_frame_the_firmware_rejects() {
+    let emulator = Emulator::new(Geometry::new(vec![Autd3::default(), Autd3::default()]));
+    let modulation = vec![0xFF, 0xFF];
+
+    let result = emulator.record(async move |r| {
+        r.send(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
+            .await?;
+        r.send(SetSilencer::new(FixedCompletionTime {
+            intensity: 20 * ULTRASOUND_PERIOD,
+            phase: 40 * ULTRASOUND_PERIOD,
+            strict_mode: true,
+        }))
+        .await?;
+        Ok(())
+    });
+
+    match result {
+        Err(EmulatorError::Autd3(Error::DeviceError { device, code })) => {
+            assert_eq!(device, 0);
+            assert_eq!(code, DeviceErrorCode::InvalidSilencerSetting.as_u8());
+        }
+        Err(e) => panic!("unexpected error: {e}"),
+        Ok(_) => panic!("the strict silencer was accepted"),
+    }
 }

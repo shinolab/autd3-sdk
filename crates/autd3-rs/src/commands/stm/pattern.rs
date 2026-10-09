@@ -1,100 +1,21 @@
 use super::StmConfig;
 use crate::commands::Command;
 use crate::commands::operation::{
-    ChangePatternBank, ConfigPattern, PATTERN_MAX_PER_FRAME, PatternCompression, PatternIntensity,
-    WritePatternBuffer, WritePatternCompressed,
+    ActivatePatternBank, ConfigPattern, PhaseDepth, StmIntensity, WritePatternBuffers,
+    WritePatternPhase,
 };
-use crate::datagram::DatagramBuilder;
-use crate::error::PayloadError;
+use crate::datagram::Expansion;
+use crate::error::{Error, PayloadError};
 use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES};
-use crate::value::{Intensity, LoopBehavior, PatternBank, Phase, TransitionMode};
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum PatternStmMode {
-    #[default]
-    PhaseIntensityFull,
-    PhaseFull,
-    PhaseHalf,
-}
-
-impl PatternStmMode {
-    const fn compression(self) -> Option<PatternCompression> {
-        match self {
-            PatternStmMode::PhaseIntensityFull => None,
-            PatternStmMode::PhaseFull => Some(PatternCompression::PhaseFull),
-            PatternStmMode::PhaseHalf => Some(PatternCompression::PhaseHalf),
-        }
-    }
-}
+use crate::value::{LoopBehavior, PatternBank, Phase, TransitionMode};
+use autd3_cpu_wire::layout::PATTERN_RAW_MAX_COUNT;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PatternStmOption {
     pub bank: PatternBank,
-    pub mode: PatternStmMode,
+    pub phase_depth: PhaseDepth,
     pub loop_behavior: LoopBehavior,
     pub transition_mode: TransitionMode,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StmIntensity<'a> {
-    Uniform(Intensity),
-    Shared(&'a [Vec<Intensity>]),
-    PerIndex(&'a [Vec<Vec<Intensity>>]),
-}
-
-impl Default for StmIntensity<'_> {
-    fn default() -> Self {
-        StmIntensity::Uniform(Intensity::MAX)
-    }
-}
-
-impl<'a> StmIntensity<'a> {
-    #[must_use]
-    pub fn at(self, index: usize) -> PatternIntensity<'a> {
-        match self {
-            StmIntensity::Uniform(intensity) => PatternIntensity::Uniform(intensity),
-            StmIntensity::Shared(intensities) => PatternIntensity::PerDevice(intensities),
-            StmIntensity::PerIndex(intensities) => PatternIntensity::PerDevice(&intensities[index]),
-        }
-    }
-
-    const fn per_index_len(self) -> Option<usize> {
-        match self {
-            StmIntensity::Uniform(_) | StmIntensity::Shared(_) => None,
-            StmIntensity::PerIndex(intensities) => Some(intensities.len()),
-        }
-    }
-}
-
-impl From<Intensity> for StmIntensity<'_> {
-    fn from(value: Intensity) -> Self {
-        StmIntensity::Uniform(value)
-    }
-}
-
-impl<'a> From<&'a [Vec<Intensity>]> for StmIntensity<'a> {
-    fn from(value: &'a [Vec<Intensity>]) -> Self {
-        StmIntensity::Shared(value)
-    }
-}
-
-impl<'a> From<&'a Vec<Vec<Intensity>>> for StmIntensity<'a> {
-    fn from(value: &'a Vec<Vec<Intensity>>) -> Self {
-        StmIntensity::Shared(value.as_slice())
-    }
-}
-
-impl<'a> From<&'a [Vec<Vec<Intensity>>]> for StmIntensity<'a> {
-    fn from(value: &'a [Vec<Vec<Intensity>>]) -> Self {
-        StmIntensity::PerIndex(value)
-    }
-}
-
-impl<'a> From<&'a Vec<Vec<Vec<Intensity>>>> for StmIntensity<'a> {
-    fn from(value: &'a Vec<Vec<Vec<Intensity>>>) -> Self {
-        StmIntensity::PerIndex(value.as_slice())
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -123,86 +44,70 @@ impl<'a> PatternStm<'a> {
 }
 
 impl<'a> Command<'a> for PatternStm<'a> {
-    fn expand(self, builder: &mut DatagramBuilder<'a>) {
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
         let n = self.phases.len();
-        let compression = match self.option.mode.compression() {
-            None => None,
-            Some(format) => {
-                let StmIntensity::Uniform(intensity) = self.intensities else {
-                    builder.reject(PayloadError::PatternCompressionRequiresUniformIntensity {
-                        format,
-                    });
-                    return;
-                };
-                Some((format, intensity))
-            }
-        };
         if let Some(len) = self.intensities.per_index_len()
             && len != n
         {
-            builder.reject(PayloadError::PatternStmLengthMismatch {
+            return Err(PayloadError::PatternStmLengthMismatch {
                 phases: n,
                 intensities: len,
-            });
-            return;
+            }
+            .into());
         }
-        if n < BUFFER_SIZE_MIN {
-            builder.reject(PayloadError::StmSizeOutOfRange {
+        if !(BUFFER_SIZE_MIN..=EMISSION_MAX_INDICES).contains(&n) {
+            return Err(PayloadError::StmSizeOutOfRange {
                 size: n,
                 min: BUFFER_SIZE_MIN,
                 max: EMISSION_MAX_INDICES,
-            });
-            return;
+            }
+            .into());
         }
         let config = self.config.into_sampling_config(n);
         let size = n;
         let bank = self.option.bank;
 
-        match compression {
-            None => {
-                for (i, phases) in self.phases.iter().enumerate() {
-                    builder.push(WritePatternBuffer::new(
+        match (self.intensities, self.option.phase_depth) {
+            (StmIntensity::Uniform(intensity), depth) => {
+                let per_frame = depth.max_count();
+                for (k, patterns) in self.phases.chunks(per_frame).enumerate() {
+                    expansion.push(WritePatternPhase {
                         bank,
-                        i,
-                        phases,
-                        self.intensities.at(i),
-                    ));
-                }
-            }
-            Some((format, intensity)) => {
-                let per_frame = format.per_frame();
-                let mut base = 0;
-                while base < n {
-                    let count = per_frame.min(n - base);
-                    let mut patterns: [Option<&'a [Vec<Phase>]>; PATTERN_MAX_PER_FRAME] =
-                        [None; PATTERN_MAX_PER_FRAME];
-                    for (g, slot) in patterns.iter_mut().take(count).enumerate() {
-                        *slot = Some(self.phases[base + g].as_slice());
-                    }
-                    builder.push(WritePatternCompressed {
-                        bank,
-                        index: base,
-                        format,
+                        index: k * per_frame,
+                        depth,
                         intensity,
                         patterns,
-                    });
-                    base += count;
+                    })?;
                 }
+            }
+            (_, PhaseDepth::Bits8) => {
+                for (k, phases) in self.phases.chunks(PATTERN_RAW_MAX_COUNT).enumerate() {
+                    expansion.push(WritePatternBuffers {
+                        bank,
+                        index: k * PATTERN_RAW_MAX_COUNT,
+                        phases,
+                        intensities: self.intensities,
+                    })?;
+                }
+            }
+            (_, depth) => {
+                return Err(PayloadError::PhaseDepthRequiresUniformIntensity { depth }.into());
             }
         }
 
-        builder.push(ConfigPattern {
+        expansion.push(ConfigPattern {
             bank,
             config,
             size,
             loop_behavior: self.option.loop_behavior,
-        });
+        })?;
         if !self.option.transition_mode.is_later() {
-            builder.push(ChangePatternBank {
+            expansion.push(ActivatePatternBank {
                 bank,
                 transition_mode: self.option.transition_mode,
-            });
+            })?;
         }
+        Ok(())
     }
 }
 
@@ -210,13 +115,13 @@ impl<'a> Command<'a> for PatternStm<'a> {
 mod tests {
     use super::*;
     use crate::geometry::Autd3;
-    use crate::params::EMISSION_SLOT_WORDS;
     use crate::protocol::Cmd;
-    use crate::test_utils::test_geometry_arc;
-    use crate::value::SamplingConfig;
+    use crate::test_utils::{build, cmds, payload};
+    use crate::value::{Intensity, SamplingConfig};
+    use zerocopy::IntoBytes;
 
     #[test]
-    fn pattern_stm_expands_per_index_then_config_change() {
+    fn pattern_stm_expands_per_index_then_config_activate() {
         let (phases, intensities) = make_patterns(3);
         let stm = PatternStm::new(
             SamplingConfig::FREQ_4K,
@@ -225,66 +130,85 @@ mod tests {
             PatternStmOption::default(),
         );
 
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(stm);
-        let datagrams = b.build().unwrap();
+        let datagrams = build(1, stm).unwrap();
 
-        assert_eq!(datagrams.len(), 5);
-        for i in 0..3 {
-            let f = datagrams.frame(i).unwrap();
-            assert_eq!(f.datagrams()[0].cmd, Cmd::WritePatternRaw);
-            let index = u16::try_from(i).unwrap();
-            assert_eq!(&f.datagrams()[0].payload[2..4], &index.to_le_bytes());
+        assert_eq!(
+            cmds(&datagrams),
+            [
+                Cmd::WritePatternRaw,
+                Cmd::WritePatternRaw,
+                Cmd::ConfigPattern,
+                Cmd::ActivatePatternBank,
+            ],
+            "two raw frames carry three indices"
+        );
+        for (frame, (index, count)) in [(0u16, 2u8), (2, 1)].into_iter().enumerate() {
+            let write = payload(&datagrams, frame, 0);
+            assert_eq!(write[1], count, "frame {frame} count");
+            assert_eq!(&write[2..4], &index.to_le_bytes());
         }
 
-        let cfg = datagrams.frame(3).unwrap();
-        assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
-        assert_eq!(cfg.datagrams()[0].payload[1], 1, "RawEmissions data_type");
-        assert_eq!(
-            &cfg.datagrams()[0].payload[2..4],
-            &10u16.to_le_bytes(),
-            "FREQ_4K divider"
-        );
-        assert_eq!(
-            &cfg.datagrams()[0].payload[4..8],
-            &3u32.to_le_bytes(),
-            "size = pattern count"
-        );
+        let config = payload(&datagrams, 2, 0);
+        assert_eq!(config[1], 1, "RawEmissions data_type");
+        assert_eq!(&config[2..4], &10u16.to_le_bytes(), "FREQ_4K divider");
+        assert_eq!(&config[4..8], &3u32.to_le_bytes(), "size = pattern count");
 
-        let chg = datagrams.frame(4).unwrap();
-        assert_eq!(chg.datagrams()[0].cmd, Cmd::ChangePatternBank);
-        assert_eq!(chg.datagrams()[0].payload[1], 0xFF, "IMMEDIATE");
+        assert_eq!(payload(&datagrams, 3, 0)[1], 0xFF, "IMMEDIATE");
     }
 
     #[test]
-    fn pattern_stm_uniform_intensity_matches_explicit_buffers() {
-        let (phases, intensities) = make_patterns(3);
+    fn pattern_stm_uniform_intensity_sends_phase_only() {
+        let (phases, _) = make_patterns(7);
 
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(PatternStm::new(
-            SamplingConfig::FREQ_4K,
-            &phases,
-            Intensity(0x80),
-            PatternStmOption::default(),
-        ));
-        let uniform = b.build().unwrap();
+        let datagrams = build(
+            1,
+            PatternStm::new(
+                SamplingConfig::FREQ_4K,
+                &phases,
+                Intensity(0x80),
+                PatternStmOption::default(),
+            ),
+        )
+        .unwrap();
 
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(PatternStm::new(
-            SamplingConfig::FREQ_4K,
-            &phases,
-            &intensities,
-            PatternStmOption::default(),
-        ));
-        let per_index = b.build().unwrap();
-
-        for i in 0..uniform.len() {
+        assert_eq!(
+            cmds(&datagrams),
+            [
+                Cmd::WritePatternPhase,
+                Cmd::WritePatternPhase,
+                Cmd::ConfigPattern,
+                Cmd::ActivatePatternBank,
+            ],
+            "5 + 2 indices, config, activate"
+        );
+        let header = size_of::<autd3_cpu_wire::payload::WritePatternPhasePayload>();
+        for (frame, (index, count)) in [(0u16, 5u8), (5, 2)].into_iter().enumerate() {
+            let write = payload(&datagrams, frame, 0);
+            assert_eq!(write[1], 8, "frame {frame} depth");
+            assert_eq!(write[2], count, "frame {frame} count");
+            assert_eq!(write[3], 0x80, "frame {frame} intensity");
+            assert_eq!(&write[4..6], &index.to_le_bytes(), "frame {frame} index");
             assert_eq!(
-                uniform.frame(i).unwrap().datagrams()[0].payload,
-                per_index.frame(i).unwrap().datagrams()[0].payload,
-                "frame {i}"
+                write.len(),
+                header + usize::from(count) * Autd3::NUM_TRANSDUCERS
             );
+            for k in 0..usize::from(count) {
+                let at = header + k * Autd3::NUM_TRANSDUCERS;
+                assert_eq!(
+                    &write[at..][..Autd3::NUM_TRANSDUCERS],
+                    phases[usize::from(index) + k][0].as_bytes(),
+                    "frame {frame} pattern {k}"
+                );
+            }
         }
+
+        let config = payload(&datagrams, 2, 0);
+        assert_eq!(config[1], 1, "data_type stays Raw");
+        assert_eq!(
+            &config[4..8],
+            &7u32.to_le_bytes(),
+            "size = total index count"
+        );
     }
 
     #[test]
@@ -292,40 +216,73 @@ mod tests {
         let (phases, _) = make_patterns(3);
         let shared = vec![vec![Intensity(0x42); Autd3::NUM_TRANSDUCERS]];
 
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(PatternStm::new(
-            SamplingConfig::FREQ_4K,
-            &phases,
-            &shared,
-            PatternStmOption::default(),
-        ));
-        let datagrams = b.build().unwrap();
+        let datagrams = build(
+            1,
+            PatternStm::new(
+                SamplingConfig::FREQ_4K,
+                &phases,
+                &shared,
+                PatternStmOption::default(),
+            ),
+        )
+        .unwrap();
 
-        let phase_offset =
-            core::mem::offset_of!(autd3_cpu_wire::payload::WritePatternRawPayload, phases);
-        let intensity_offset =
-            core::mem::offset_of!(autd3_cpu_wire::payload::WritePatternRawPayload, intensities);
+        let header = core::mem::size_of::<autd3_cpu_wire::payload::WritePatternRawPayload>();
+        let slot = autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
         for (i, phases) in phases.iter().enumerate() {
-            let payload = &datagrams.frame(i).unwrap().datagrams()[0].payload;
-            assert_eq!(payload[phase_offset], phases[0][0].0, "frame {i} phase");
-            assert_eq!(payload[intensity_offset], 0x42, "frame {i} intensity");
+            let (frame, k) = (i / PATTERN_RAW_MAX_COUNT, i % PATTERN_RAW_MAX_COUNT);
+            let write = payload(&datagrams, frame, 0);
+            let base = header + k * slot;
+            assert_eq!(write[base], phases[0][0].0, "index {i} phase");
+            assert_eq!(
+                write[base + Autd3::NUM_TRANSDUCERS],
+                0x42,
+                "index {i} intensity"
+            );
         }
     }
 
     #[test]
     fn pattern_stm_rejects_a_single_pattern() {
-        use crate::error::Error;
-
         let (phases, intensities) = make_patterns(1);
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(PatternStm::new(
-            SamplingConfig::FREQ_4K,
-            &phases,
-            &intensities,
-            PatternStmOption::default(),
-        ));
+        let result = build(
+            1,
+            PatternStm::new(
+                SamplingConfig::FREQ_4K,
+                &phases,
+                &intensities,
+                PatternStmOption::default(),
+            ),
+        );
 
-        assert!(matches!(b.build(), Err(Error::InvalidPayload(_))));
+        assert!(matches!(result, Err(Error::InvalidPayload(_))));
+    }
+
+    #[test]
+    fn pattern_stm_rejects_more_patterns_than_the_bank_holds() {
+        let (phases, intensities) = make_patterns(EMISSION_MAX_INDICES + 1);
+        for stm in [
+            PatternStm::new(
+                SamplingConfig::FREQ_4K,
+                &phases,
+                &intensities,
+                PatternStmOption::default(),
+            ),
+            PatternStm::new(
+                SamplingConfig::FREQ_4K,
+                &phases,
+                Intensity::MAX,
+                PatternStmOption::default(),
+            ),
+        ] {
+            let result = build(1, stm);
+            assert!(matches!(
+                result,
+                Err(Error::InvalidPayload(
+                    PayloadError::StmSizeOutOfRange { .. }
+                ))
+            ));
+        }
     }
 
     type Patterns = (Vec<Vec<Vec<Phase>>>, Vec<Vec<Vec<Intensity>>>);
@@ -346,20 +303,20 @@ mod tests {
 
     #[test]
     fn pattern_stm_rejects_mismatched_phase_and_intensity_counts() {
-        use crate::error::Error;
-
         let (phases, _) = make_patterns(3);
         let (_, intensities) = make_patterns(2);
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(PatternStm::new(
-            SamplingConfig::FREQ_4K,
-            &phases,
-            &intensities,
-            PatternStmOption::default(),
-        ));
+        let result = build(
+            1,
+            PatternStm::new(
+                SamplingConfig::FREQ_4K,
+                &phases,
+                &intensities,
+                PatternStmOption::default(),
+            ),
+        );
 
         assert!(matches!(
-            b.build(),
+            result,
             Err(Error::InvalidPayload(
                 PayloadError::PatternStmLengthMismatch { .. }
             ))
@@ -367,90 +324,84 @@ mod tests {
     }
 
     #[test]
-    fn pattern_stm_phase_full_packs_two_indices_per_frame() {
-        let (patterns, _) = make_patterns(5);
+    fn pattern_stm_bits4_packs_eleven_indices_per_frame() {
+        let (patterns, _) = make_patterns(12);
         let stm = PatternStm::new(
             SamplingConfig::FREQ_4K,
             &patterns,
-            Intensity(0x80),
+            Intensity::MAX,
             PatternStmOption {
-                mode: PatternStmMode::PhaseFull,
+                phase_depth: PhaseDepth::Bits4,
                 ..Default::default()
             },
         );
 
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(stm);
-        let datagrams = b.build().unwrap();
+        let datagrams = build(1, stm).unwrap();
 
-        assert_eq!(datagrams.len(), 5);
-
-        let expected_counts = [2u8, 2, 1];
-        let expected_indices = [0u32, 2, 4];
-        for (f, (&count, &idx)) in expected_counts
-            .iter()
-            .zip(expected_indices.iter())
-            .enumerate()
-        {
-            let dg = &datagrams.frame(f).unwrap().datagrams()[0];
-            assert_eq!(dg.cmd, Cmd::WritePatternCompressed, "frame {f} cmd");
-            let payload = &dg.payload;
-            assert_eq!(payload[1], 1, "frame {f} format = PhaseFull");
-            assert_eq!(payload[2], count, "frame {f} count");
-            assert_eq!(payload[3], 0x80, "frame {f} intensity");
-            let offset = idx * u32::try_from(EMISSION_SLOT_WORDS).unwrap();
-            assert_eq!(&payload[4..8], &offset.to_le_bytes(), "frame {f} offset");
-            let p0 = patterns[idx as usize][0][0].0;
-            assert_eq!(payload[8], p0, "frame {f} low phase");
+        assert_eq!(datagrams.len(), 4);
+        assert_eq!(cmds(&datagrams)[..2], [Cmd::WritePatternPhase; 2]);
+        for (frame, (index, count)) in [(0u16, 11u8), (11, 1)].into_iter().enumerate() {
+            let write = payload(&datagrams, frame, 0);
+            assert_eq!(write[1], 4, "frame {frame} depth");
+            assert_eq!(write[2], count, "frame {frame} count");
+            assert_eq!(&write[4..6], &index.to_le_bytes(), "frame {frame} index");
+            let first = &patterns[usize::from(index)][0];
+            assert_eq!(
+                write[6],
+                (first[0].0 >> 4) | (first[1].0 & 0xF0),
+                "frame {frame} first byte"
+            );
         }
-
-        let cfg = datagrams.frame(3).unwrap();
-        assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
-        assert_eq!(cfg.datagrams()[0].payload[1], 1, "data_type stays Raw");
-        assert_eq!(
-            &cfg.datagrams()[0].payload[4..8],
-            &5u32.to_le_bytes(),
-            "size = total index count"
-        );
     }
 
     #[test]
-    fn pattern_stm_compression_rejects_non_uniform_intensities() {
-        use crate::error::Error;
-
+    fn pattern_stm_non_uniform_intensity_uses_raw_for_bits8_and_rejects_bits4() {
         let (patterns, per_index) = make_patterns(4);
         let shared = vec![vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS]];
-        for mode in [PatternStmMode::PhaseFull, PatternStmMode::PhaseHalf] {
-            for intensities in [
-                StmIntensity::Shared(&shared),
-                StmIntensity::PerIndex(&per_index),
-            ] {
-                let mut b = DatagramBuilder::new(test_geometry_arc(1));
-                b.push(PatternStm::new(
+        for intensities in [
+            StmIntensity::Shared(&shared),
+            StmIntensity::PerIndex(&per_index),
+        ] {
+            let datagrams = build(
+                1,
+                PatternStm::new(
+                    SamplingConfig::FREQ_4K,
+                    &patterns,
+                    intensities,
+                    PatternStmOption::default(),
+                ),
+            )
+            .unwrap();
+            assert_eq!(cmds(&datagrams)[0], Cmd::WritePatternRaw, "{intensities:?}");
+
+            let result = build(
+                1,
+                PatternStm::new(
                     SamplingConfig::FREQ_4K,
                     &patterns,
                     intensities,
                     PatternStmOption {
-                        mode,
+                        phase_depth: PhaseDepth::Bits4,
                         ..Default::default()
                     },
-                ));
-                assert!(
-                    matches!(
-                        b.build(),
-                        Err(Error::InvalidPayload(
-                            PayloadError::PatternCompressionRequiresUniformIntensity { .. }
-                        ))
-                    ),
-                    "{mode:?} {intensities:?}"
-                );
-            }
+                ),
+            );
+            assert!(
+                matches!(
+                    result,
+                    Err(Error::InvalidPayload(
+                        PayloadError::PhaseDepthRequiresUniformIntensity {
+                            depth: PhaseDepth::Bits4
+                        }
+                    ))
+                ),
+                "{intensities:?}"
+            );
         }
     }
 
     #[test]
     fn pattern_stm_loop_behavior_encodes_rep() {
-        use crate::value::LoopBehavior;
         use core::num::NonZeroU16;
 
         let (patterns, intensities) = make_patterns(3);
@@ -464,69 +415,100 @@ mod tests {
             },
         );
 
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(stm);
-        let datagrams = b.build().unwrap();
+        let datagrams = build(1, stm).unwrap();
 
-        let cfg = datagrams.frame(3).unwrap();
-        assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
+        assert_eq!(cmds(&datagrams)[2], Cmd::ConfigPattern);
         assert_eq!(
-            &cfg.datagrams()[0].payload[12..14],
+            &payload(&datagrams, 2, 0)[12..14],
             &4u16.to_le_bytes(),
             "rep = loop_count - 1"
         );
     }
 
+    fn play_on_emulator(
+        phases: &[Vec<Vec<Phase>>],
+        intensities: StmIntensity<'_>,
+        phase_depth: PhaseDepth,
+    ) -> autd3_rs_firmware_emulator::Device {
+        let datagrams = build(
+            1,
+            PatternStm::new(
+                SamplingConfig::FREQ_4K,
+                phases,
+                intensities,
+                PatternStmOption {
+                    bank: PatternBank::B1,
+                    phase_depth,
+                    ..Default::default()
+                },
+            ),
+        )
+        .unwrap();
+
+        let mut device = autd3_rs_firmware_emulator::Device::new(Autd3::NUM_TRANSDUCERS);
+        device.send(&[0, Cmd::Reset.as_u8()]);
+        for (seq, cmd) in cmds(&datagrams).into_iter().enumerate() {
+            let tx = [
+                &[u8::try_from(seq).unwrap(), cmd.as_u8()],
+                payload(&datagrams, seq, 0),
+            ]
+            .concat();
+            assert_eq!(
+                device.send(&tx).status,
+                crate::protocol::DeviceErrorCode::None,
+                "frame {seq} {cmd:?}"
+            );
+        }
+        device
+    }
+
     #[test]
-    fn pattern_stm_phase_half_packs_four_indices_per_frame() {
-        let (patterns, _) = make_patterns(4);
-        let stm = PatternStm::new(
-            SamplingConfig::FREQ_4K,
-            &patterns,
-            Intensity::MAX,
-            PatternStmOption {
-                mode: PatternStmMode::PhaseHalf,
-                ..Default::default()
-            },
-        );
-
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(stm);
-        let datagrams = b.build().unwrap();
-
-        assert_eq!(datagrams.len(), 3);
-        let dg = &datagrams.frame(0).unwrap().datagrams()[0];
-        assert_eq!(dg.cmd, Cmd::WritePatternCompressed);
-        let payload = &dg.payload;
-        assert_eq!(payload[1], 2, "format = PhaseHalf");
-        assert_eq!(payload[2], 4, "count = 4");
-        let word = u16::from_le_bytes([payload[8], payload[9]]);
-        let expected = u16::from(patterns[0][0][0].0 >> 4)
-            | (u16::from(patterns[1][0][0].0 >> 4) << 4)
-            | (u16::from(patterns[2][0][0].0 >> 4) << 8)
-            | (u16::from(patterns[3][0][0].0 >> 4) << 12);
-        assert_eq!(word, expected);
+    fn pattern_stm_emission_ram_matches_on_every_path() {
+        let (phases, _) = make_patterns(13);
+        let uniform = vec![vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS]];
+        for (intensities, depth) in [
+            (StmIntensity::Uniform(Intensity(0x80)), PhaseDepth::Bits8),
+            (StmIntensity::Shared(&uniform), PhaseDepth::Bits8),
+            (StmIntensity::Uniform(Intensity(0x80)), PhaseDepth::Bits4),
+        ] {
+            let device = play_on_emulator(&phases, intensities, depth);
+            for (index, pattern) in phases.iter().enumerate() {
+                let expected: Vec<Phase> = pattern[0]
+                    .iter()
+                    .map(|p| match depth {
+                        PhaseDepth::Bits8 => *p,
+                        _ => Phase((p.0 >> 4) * 0x11),
+                    })
+                    .collect();
+                assert_eq!(
+                    device.fpga().emissions_at(1, index),
+                    (expected, vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS]),
+                    "{intensities:?} {depth:?} index {index}"
+                );
+            }
+        }
     }
 
     #[test]
     fn later_writes_the_bank_without_changing_it() {
         let (patterns, intensities) = make_patterns(3);
-        let mut b = DatagramBuilder::new(test_geometry_arc(1));
-        b.push(PatternStm::new(
-            SamplingConfig::FREQ_4K,
-            &patterns,
-            &intensities,
-            PatternStmOption {
-                bank: PatternBank::B1,
-                transition_mode: TransitionMode::Later,
-                ..Default::default()
-            },
-        ));
-        let datagrams = b.build().unwrap();
+        let datagrams = build(
+            1,
+            PatternStm::new(
+                SamplingConfig::FREQ_4K,
+                &patterns,
+                &intensities,
+                PatternStmOption {
+                    bank: PatternBank::B1,
+                    transition_mode: TransitionMode::Later,
+                    ..Default::default()
+                },
+            ),
+        )
+        .unwrap();
 
-        assert_eq!(datagrams.len(), 4, "3 writes + config, no change");
-        let cfg = datagrams.frame(3).unwrap();
-        assert_eq!(cfg.datagrams()[0].cmd, Cmd::ConfigPattern);
-        assert_eq!(cfg.datagrams()[0].payload[0], 1, "bank B1");
+        assert_eq!(datagrams.len(), 3, "2 writes + config, no activate");
+        assert_eq!(cmds(&datagrams)[2], Cmd::ConfigPattern);
+        assert_eq!(payload(&datagrams, 2, 0)[0], 1, "bank B1");
     }
 }

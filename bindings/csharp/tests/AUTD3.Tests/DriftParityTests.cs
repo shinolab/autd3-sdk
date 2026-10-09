@@ -9,8 +9,6 @@ namespace AUTD3.Tests
 {
     public class DriftParityTests
     {
-        private static Geometry SingleDevice() => new Geometry(new[] { new Autd3(Vector3.Zero) });
-
         [Fact]
         public void SamplingConfigConstructors()
         {
@@ -54,16 +52,16 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void PatternCompressionPerFrame()
+        public void PhaseDepthMaxCount()
         {
-            Assert.Equal(2, PatternCompression.PhaseFull.PerFrame());
-            Assert.Equal(4, PatternCompression.PhaseHalf.PerFrame());
+            Assert.Equal(5, PhaseDepth.Bits8.MaxCount());
+            Assert.Equal(11, PhaseDepth.Bits4.MaxCount());
         }
 
         [Fact]
         public void DeviceIsEmpty()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             Assert.False(geometry[0].IsEmpty);
         }
 
@@ -84,7 +82,7 @@ namespace AUTD3.Tests
         [Fact]
         public void PatternDeviceAndTransducerVariants()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             var wavelength = Pattern.Wavelength(340 * m / s);
             var device = geometry[0];
             var target = device.Center + new Vector3(0f, 0f, 150f);
@@ -102,28 +100,18 @@ namespace AUTD3.Tests
             var be = Pattern.BesselTransducer(device.Position(0), device.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, wavelength);
             Assert.Equal(be, dst[0]);
 
-            Pattern.SetPhaseDevice(new Phase(0xF0), dst);
-            Pattern.AddPhaseDevice(new Phase(0x20), dst);
-            Assert.Equal(new Phase(0x10), dst[10]);
-
-            var intensities = new Intensity[Autd3.NumTransducers];
-            Pattern.SetIntensityDevice(new Intensity(0x42), intensities);
-            Assert.All(intensities, i => Assert.Equal(new Intensity(0x42), i));
             Assert.Throws<Autd3Exception>(() => Pattern.FocusDevice(device, target, wavelength, new Phase[10]));
         }
 
         [Fact]
-        public void DcSysTimeRoundTrips()
+        public void SysTimeRoundTrips()
         {
-            var utc = new DateTime(2026, 7, 3, 0, 0, 0, DateTimeKind.Utc);
-            var t = DcSysTime.FromUtc(utc);
-            Assert.Equal(utc, t.ToUtc());
-            Assert.Equal(0UL, DcSysTime.Zero.SysTime);
-            Assert.Equal(1000UL, DcSysTime.FromNanos(1000).SysTime);
-            Assert.True(DcSysTime.Now() > DcSysTime.Zero);
+            var t = SysTime.FromNanos(836_352_000_000_000_000);
+            Assert.Equal(0UL, SysTime.Zero.Nanos);
+            Assert.Equal(1000UL, SysTime.FromNanos(1000).Nanos);
             Assert.Equal(t + TimeSpan.FromSeconds(1) - TimeSpan.FromSeconds(1), t);
-            Assert.Throws<Autd3Exception>(() => DcSysTime.FromUtc(new DateTime(1999, 12, 31, 0, 0, 0, DateTimeKind.Utc)));
             _ = TransitionMode.SysTime(t);
+            _ = GpioOut.SysTimeEq(t);
         }
 
         [Fact]
@@ -131,7 +119,7 @@ namespace AUTD3.Tests
         {
             Assert.Equal(Phase.Zero.Value, (Phase.Pi + Phase.Pi).Value);
             Assert.Equal(0x40, (Phase.Pi / 2).Value);
-            Assert.Equal(Phase.Pi.Value, ((Phase)Angle.Pi).Value);
+            Assert.Equal(Phase.Pi.Value, ((Phase)(MathF.PI * rad)).Value);
             Assert.Equal(Intensity.Max.Value, (Intensity.Max + Intensity.Max).Value);
             Assert.Equal(Intensity.Min.Value, (Intensity.Min - Intensity.Max).Value);
             Assert.Equal(0x80, (new Intensity(0x40) * 2).Value);
@@ -142,7 +130,7 @@ namespace AUTD3.Tests
         {
             Assert.Equal(1f, (1000 * mm).M);
             Assert.Equal(90f, Angle.FromDeg(90f).Deg, 3);
-            Assert.Equal(Angle.Pi.Rad, Angle.FromRad(MathF.PI).Rad);
+            Assert.Equal((MathF.PI * rad).Rad, Angle.FromRad(MathF.PI).Rad);
             Assert.Equal(0f, Angle.Zero.Rad);
             Assert.Equal(340f, Velocity.FromMS(340f).MS);
             Assert.Equal(340000f, Velocity.FromMmS(340000f).MmS);
@@ -156,10 +144,8 @@ namespace AUTD3.Tests
         [Fact]
         public void ConfigFociStmBuildsDatagram()
         {
-            using var geometry = SingleDevice();
-            using var builder = new DatagramBuilder(geometry);
-            builder.Push(new ConfigFociStm(PatternBank.B0, SamplingConfig.Freq4k, 4, 1, Velocity.FromMS(340f)));
-            using var frames = builder.Build();
+            using var geometry = Fixture.SingleDevice();
+            using var frames = Frames.Encode(geometry, new ConfigFociStm(PatternBank.B0, SamplingConfig.Freq4k, 4, 1, Velocity.FromMS(340f)));
             Assert.True(frames.Length > 0);
         }
 
@@ -168,43 +154,45 @@ namespace AUTD3.Tests
         {
             _ = Interface.Auto;
             _ = Interface.Name("eth0");
+            _ = Interface.Simulator;
         }
 
         [Fact]
-        public async System.Threading.Tasks.Task OpenWithCheckerReportsStatus()
+        public async System.Threading.Tasks.Task TheClientCheckerReportsStatus()
         {
-            using var geometry = SingleDevice();
-            var (client, checker) = await Client.OpenWithCheckerAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
-            using var c = client;
-            using var k = checker;
+            using var geometry = Fixture.SingleDevice();
+            using var emulator = new UdpEmulator(1);
+            using var client = await Fixture.OpenAsync(emulator, geometry);
+            using var checker = client.StateChecker();
             var status = checker.Check();
-            Assert.Equal(DeviceState.Op, Assert.Single(status.Devices));
-            Assert.True(status.AllOp);
+            Assert.Equal(DeviceState.Ready, Assert.Single(status.Devices));
+            Assert.True(status.AllReady);
             Assert.False(status.AnyLost);
             await client.CloseAsync();
+            Assert.Throws<Autd3Exception>(() => checker.Check());
         }
 
         [Fact]
         public async System.Threading.Tasks.Task GeometryIsReachableThroughTheClient()
         {
-            using var geometry = SingleDevice();
-            using var client = await Client.OpenAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            using var geometry = Fixture.SingleDevice();
+            using var emulator = new UdpEmulator(1);
+            using var client = await Fixture.OpenAsync(emulator, geometry);
             Assert.Equal(client.NumDevices, client.Geometry.NumDevices);
             Assert.Equal(geometry.NumTransducers, client.Geometry.NumTransducers);
             await client.CloseAsync();
         }
 
         [Fact]
-        public async System.Threading.Tasks.Task ResponseTokenIsDirectlyAwaitable()
+        public async System.Threading.Tasks.Task ResponseFutureIsDirectlyAwaitable()
         {
-            using var geometry = SingleDevice();
-            using var client = await Client.OpenAsync(geometry, new AUTD3.Link.Nop(), new ClientConfig());
-            using var builder = client.DatagramBuilder();
-            builder.Push(new Synchronize());
-            using var frames = builder.Build();
-            var token = await client.SendAsync(frames[0]);
+            using var geometry = Fixture.SingleDevice();
+            using var emulator = new UdpEmulator(1);
+            using var client = await Fixture.OpenAsync(emulator, geometry);
+            using var frames = Frames.Encode(client.Geometry, new Synchronize());
+            var token = await client.SendFrameAsync(frames[0]);
             var response = await token;
-            Assert.Equal(client.NumDevices, response.Data.Count);
+            Assert.Equal(client.NumDevices, response.Status.Count);
             response.Check();
             await Assert.ThrowsAsync<Autd3Exception>(async () => await token);
             await client.CloseAsync();
@@ -213,14 +201,11 @@ namespace AUTD3.Tests
         [Fact]
         public void DeviceStateToStringMatchesRust()
         {
-            Assert.Equal("OP", DeviceState.Op.ToString());
-            Assert.Equal("SAFE-OP", DeviceState.SafeOp.ToString());
-            Assert.Equal("SAFE-OP + ERROR", DeviceState.SafeOpError.ToString());
+            Assert.Equal("READY", DeviceState.Ready.ToString());
+            Assert.Equal("SYNCING", DeviceState.Syncing.ToString());
             Assert.Equal("LOST", DeviceState.Lost.ToString());
-            Assert.Equal("INIT", DeviceState.Other(0x01).ToString());
-            Assert.Equal("UNKNOWN (0x0a)", DeviceState.Other(0x0A).ToString());
-            Assert.True(DeviceState.Op == DeviceState.Op);
-            Assert.True(DeviceState.Op != DeviceState.Lost);
+            Assert.True(DeviceState.Ready == DeviceState.Ready);
+            Assert.True(DeviceState.Ready != DeviceState.Lost);
         }
     }
 }

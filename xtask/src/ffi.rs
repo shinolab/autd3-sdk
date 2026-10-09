@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{cargo_fmt_packages, run};
+use crate::util::{cargo_clippy, cargo_fmt_packages, files_under, run};
 
 const CSHARP_SRC: &str = "bindings/csharp/src";
 
@@ -63,11 +63,7 @@ pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
             &[],
             *open,
         ),
-        FfiCmd::Lint => {
-            let mut args = vec!["clippy", "--workspace", "--all-targets"];
-            args.extend(["--", "-D", "warnings"]);
-            run("cargo", args, &dir)
-        }
+        FfiCmd::Lint => cargo_clippy(&dir, &["--workspace", "--all-targets"]),
         FfiCmd::Format { fix } => cargo_fmt_packages(&dir, *fix),
         FfiCmd::Drift => drift(root, &dir),
         FfiCmd::Clean(args) => crate::clean::scope(root, *args, clean),
@@ -177,28 +173,20 @@ fn cdylibs(ffi: &Path) -> Result<Vec<(String, PathBuf)>> {
     Ok(libs)
 }
 
-fn rust_sources(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+fn rust_sources(dir: &Path) -> Result<Vec<PathBuf>> {
     if !dir.is_dir() {
-        return Ok(());
+        return Ok(Vec::new());
     }
-    for entry in std::fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
-        let path = entry?.path();
-        if path.is_dir() {
-            rust_sources(&path, out)?;
-        } else if path.extension().is_some_and(|ext| ext == "rs") {
-            out.push(path);
-        }
-    }
-    out.sort();
-    Ok(())
+    let mut files = files_under(dir, |_| true)?;
+    files.retain(|path| path.extension().is_some_and(|ext| ext == "rs"));
+    files.sort();
+    Ok(files)
 }
 
 fn exporting_macros(ffi: &Path) -> Result<BTreeMap<String, BTreeSet<String>>> {
     let mut macros = BTreeMap::new();
     for dir in ffi_crates(ffi)? {
-        let mut files = Vec::new();
-        rust_sources(&dir.join("src"), &mut files)?;
-        for file in files {
+        for file in rust_sources(&dir.join("src"))? {
             let text = std::fs::read_to_string(&file)
                 .with_context(|| format!("failed to read {}", file.display()))?;
             for (name, body) in macro_definitions(&text) {
@@ -262,9 +250,7 @@ fn exported_symbols(
     exporters: &BTreeMap<String, BTreeSet<String>>,
 ) -> Result<BTreeSet<String>> {
     let mut symbols = BTreeSet::new();
-    let mut files = Vec::new();
-    rust_sources(&dir.join("src"), &mut files)?;
-    for file in files {
+    for file in rust_sources(&dir.join("src"))? {
         let text = std::fs::read_to_string(&file)
             .with_context(|| format!("failed to read {}", file.display()))?;
         collect_plain_exports(&text, &mut symbols);
@@ -347,8 +333,7 @@ fn autd3_idents(args: &str) -> Vec<String> {
 }
 
 fn csharp_imports(dir: &Path) -> Result<BTreeMap<String, BTreeSet<String>>> {
-    let mut files = Vec::new();
-    csharp_sources(dir, &mut files)?;
+    let files = csharp_sources(dir)?;
     let mut imports: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for file in files {
         let text = std::fs::read_to_string(&file)
@@ -385,26 +370,14 @@ fn csharp_imports(dir: &Path) -> Result<BTreeMap<String, BTreeSet<String>>> {
     Ok(imports)
 }
 
-fn csharp_sources(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+fn csharp_sources(dir: &Path) -> Result<Vec<PathBuf>> {
     if !dir.is_dir() {
         bail!("{} does not exist", dir.display());
     }
-    for entry in std::fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
-        let path = entry?.path();
-        if path.is_dir() {
-            if path
-                .file_name()
-                .is_some_and(|name| name == "obj" || name == "bin")
-            {
-                continue;
-            }
-            csharp_sources(&path, out)?;
-        } else if path.extension().is_some_and(|ext| ext == "cs") {
-            out.push(path);
-        }
-    }
-    out.sort();
-    Ok(())
+    let mut files = files_under(dir, |name| name != "obj" && name != "bin")?;
+    files.retain(|path| path.extension().is_some_and(|ext| ext == "cs"));
+    files.sort();
+    Ok(files)
 }
 
 fn string_constants(text: &str) -> BTreeMap<String, String> {

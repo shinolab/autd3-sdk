@@ -73,17 +73,7 @@ impl SilencerEmulator {
                 step - 65536
             };
         }
-        if step < 0 {
-            if -update_rate <= step {
-                self.current += step;
-            } else {
-                self.current -= update_rate;
-            }
-        } else if step <= update_rate {
-            self.current += step;
-        } else {
-            self.current += update_rate;
-        }
+        self.current += step.clamp(-update_rate, update_rate);
         (self.current >> 8) as u8
     }
 }

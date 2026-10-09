@@ -14,7 +14,7 @@ pub fn StatePanel() -> Element {
                 div { class: "card-body",
                     if device_states().is_empty() {
                         div { class: "text-sm opacity-70",
-                            "No device state yet — connect a client to populate this view."
+                            "Waiting for the device state from the simulator backend."
                         }
                     } else {
                         div { class: "flex flex-col gap-2",
@@ -29,58 +29,41 @@ pub fn StatePanel() -> Element {
     }
 }
 
-fn mod_buffer_points(buffer: &[u8]) -> String {
-    let n = buffer.len();
+fn polyline_points(values: &[u8], y: impl Fn(u8) -> f32) -> String {
+    let n = values.len();
     if n < 2 {
         return String::new();
     }
     let denom = (n - 1) as f32;
-    buffer
+    values
         .iter()
         .enumerate()
         .map(|(i, &v)| {
             let x = i as f32 / denom * 300.0;
-            let y = 59.0 - (f32::from(v) / 255.0) * 58.0;
-            format!("{x:.1},{y:.1}")
+            format!("{x:.1},{:.1}", y(v))
         })
         .collect::<Vec<_>>()
         .join(" ")
 }
 
-fn gpio_wave_points(wave: &[u8]) -> String {
-    let n = wave.len();
-    if n < 2 {
-        return String::new();
-    }
-    let denom = (n - 1) as f32;
-    wave.iter()
-        .enumerate()
-        .map(|(i, &v)| {
-            let x = i as f32 / denom * 300.0;
-            let y = 55.0 - f32::from(v.min(1)) * 50.0;
-            format!("{x:.1},{y:.1}")
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn gpio_type_name(ty: u8) -> &'static str {
-    match ty {
-        0x00 => "None",
-        0x01 => "BaseSignal",
-        0x02 => "Thermo",
-        0x03 => "ForceFan",
-        0x10 => "Sync",
-        0x20 => "ModBank",
-        0x21 => "ModIdx",
-        0x50 => "PatternBank",
-        0x51 => "PatternIdx",
-        0x52 => "IsStmMode",
-        0x60 => "SysTimeEq",
-        0x70 => "SyncDiff",
-        0xE0 => "PwmOut",
-        0xF0 => "Direct",
-        _ => "Unknown",
+#[component]
+fn Waveform(points: String, color: String) -> Element {
+    rsx! {
+        if !points.is_empty() {
+            svg {
+                class: "w-full {color} mt-1 rounded bg-base-100",
+                height: "60",
+                "viewBox": "0 0 300 60",
+                "preserveAspectRatio": "none",
+                polyline {
+                    points: "{points}",
+                    fill: "none",
+                    stroke: "currentColor",
+                    "stroke-width": "1.5",
+                    "vector-effect": "non-scaling-stroke",
+                }
+            }
+        }
     }
 }
 
@@ -101,13 +84,13 @@ fn DeviceNode(idx: usize, dev: DeviceState) -> Element {
     } else {
         "Completion steps"
     };
-    let mod_points = mod_buffer_points(&dev.mod_buffer);
-    let gpio: Vec<(usize, &'static str, String)> = (0..4)
+    let mod_points = polyline_points(&dev.mod_buffer, |v| 59.0 - (f32::from(v) / 255.0) * 58.0);
+    let gpio: Vec<(usize, String, String)> = (0..4)
         .map(|i| {
             (
                 i,
-                gpio_type_name(dev.gpio_types[i]),
-                gpio_wave_points(&dev.gpio_out[i]),
+                dev.gpio_types[i].clone(),
+                polyline_points(&dev.gpio_out[i], |v| 55.0 - f32::from(v.min(1)) * 50.0),
             )
         })
         .collect();
@@ -125,21 +108,7 @@ fn DeviceNode(idx: usize, dev: DeviceState) -> Element {
                 KvRow { k: "Freq division", v: dev.mod_freq_div.to_string() }
                 KvRow { k: "Cycle (samples)", v: dev.mod_cycle.to_string() }
                 KvRow { k: "Index", v: dev.mod_idx.to_string() }
-                if !mod_points.is_empty() {
-                    svg {
-                        class: "w-full text-primary mt-1 rounded bg-base-100",
-                        height: "60",
-                        "viewBox": "0 0 300 60",
-                        "preserveAspectRatio": "none",
-                        polyline {
-                            points: "{mod_points}",
-                            fill: "none",
-                            stroke: "currentColor",
-                            "stroke-width": "1.5",
-                            "vector-effect": "non-scaling-stroke",
-                        }
-                    }
-                }
+                Waveform { points: mod_points, color: "text-primary" }
                 div { class: "font-semibold opacity-70 pt-3 pb-1", "STM" }
                 if dev.stm_cycle <= 1 {
                     div { class: "opacity-60 py-0.5", "Static (single pattern)" }
@@ -155,21 +124,7 @@ fn DeviceNode(idx: usize, dev: DeviceState) -> Element {
                             span { class: "opacity-60 w-40 shrink-0", "GPIO {i}" }
                             span { class: "font-mono", "{name}" }
                         }
-                        if !points.is_empty() {
-                            svg {
-                                class: "w-full text-secondary mt-1 rounded bg-base-100",
-                                height: "60",
-                                "viewBox": "0 0 300 60",
-                                "preserveAspectRatio": "none",
-                                polyline {
-                                    points: "{points}",
-                                    fill: "none",
-                                    stroke: "currentColor",
-                                    "stroke-width": "1.5",
-                                    "vector-effect": "non-scaling-stroke",
-                                }
-                            }
-                        }
+                        Waveform { points: points, color: "text-secondary" }
                     }
                 }
             }

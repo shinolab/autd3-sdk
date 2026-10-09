@@ -465,7 +465,11 @@ fn bytes_of(elems: usize) -> u64 {
 }
 
 fn broadcast_stride(v: &GpuVector) -> u32 {
-    if v.batch > 1 { to_u32(v.len) } else { 0 }
+    if v.batch > 1 {
+        to_u32(v.len)
+    } else {
+        0
+    }
 }
 
 impl LinAlgBackend for WgpuBackend {
@@ -473,15 +477,14 @@ impl LinAlgBackend for WgpuBackend {
     type Vector = GpuVector;
 
     fn make_vector(&self, batch: usize, data: Vec<Complex<f32>>) -> Self::Vector {
-        let raw = buffer::to_raw(&data);
-        GpuVector::new(self.storage_init(&raw), raw.len() / batch.max(1), batch)
+        GpuVector::new(self.storage_init(&data), data.len() / batch.max(1), batch)
     }
 
     fn vector_to_host(&self, v: &Self::Vector) -> Vec<Complex<f32>> {
         self.materialize(v);
         let total = v.len * v.batch;
         self.read_back(&v.buf, bytes_of(total), |raw| {
-            buffer::from_raw(bytemuck::cast_slice(raw))
+            bytemuck::cast_slice::<u8, Complex<f32>>(raw).to_vec()
         })
     }
 
@@ -705,7 +708,7 @@ impl LinAlgBackend for WgpuBackend {
             let mut intensities = Vec::with_capacity(len * batch);
             for k in 0..batch {
                 let at = k * words * 4;
-                for b in raw[at..at + len * 2].as_chunks::<2>().0 {
+                for b in raw[at..][..len * 2].as_chunks::<2>().0 {
                     phases.push(Phase(b[0]));
                     intensities.push(Intensity(b[1]));
                 }

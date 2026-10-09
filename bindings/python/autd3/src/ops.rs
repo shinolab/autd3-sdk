@@ -1,20 +1,45 @@
 use core::num::NonZeroU16;
-use core::time::Duration;
 
+use std::sync::Arc;
+
+use autd3_python_capsule::extract::{
+    duration_to_py, extract_duration, extract_sampling_config, extract_velocity,
+};
 use autd3_python_capsule::{capsule_of, modulation_from_capsule};
-use autd3_rs::Velocity;
-use autd3_rs::commands::PatternCompression as CorePatternCompression;
+use autd3_rs::commands::Expansion;
+use autd3_rs::commands::{
+    ActivateModulationBank as CoreActivateModulationBank,
+    ActivatePatternBank as CoreActivatePatternBank, ConfigFociStm as CoreConfigFociStm,
+    ConfigModulation as CoreConfigModulation, ConfigPattern as CoreConfigPattern,
+    PhaseDepth as CorePhaseDepth, WriteModulationBuffer as CoreWriteModulationBuffer,
+    WritePatternBuffer as CoreWritePatternBuffer, WritePatternPhase as CoreWritePatternPhase,
+};
 use autd3_rs::value::{
-    DcSysTime as CoreDcSysTime, GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
+    GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
     ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase,
-    TransitionMode as CoreTransitionMode,
+    SysTime as CoreSysTime, TransitionMode as CoreTransitionMode,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-#[pyclass(name = "PatternBank", module = "autd3.value", from_py_object)]
-#[derive(Clone, Copy)]
+use crate::datagram::{OwnedPatternIntensity, PushCommand};
+
+#[pyclass(
+    name = "PatternBank",
+    module = "autd3.value",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PatternBank(pub(crate) CorePatternBank);
+
+impl core::hash::Hash for PatternBank {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(&self.0).hash(state);
+    }
+}
 
 #[pymethods]
 impl PatternBank {
@@ -35,9 +60,22 @@ impl PatternBank {
     }
 }
 
-#[pyclass(name = "ModulationBank", module = "autd3.value", from_py_object)]
-#[derive(Clone, Copy)]
+#[pyclass(
+    name = "ModulationBank",
+    module = "autd3.value",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ModulationBank(pub(crate) CoreModulationBank);
+
+impl core::hash::Hash for ModulationBank {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(&self.0).hash(state);
+    }
+}
 
 #[pymethods]
 impl ModulationBank {
@@ -58,8 +96,15 @@ impl ModulationBank {
     }
 }
 
-#[pyclass(name = "GpioIn", module = "autd3.value", from_py_object)]
-#[derive(Clone, Copy)]
+#[pyclass(
+    name = "GpioIn",
+    module = "autd3.value",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GpioIn(pub(crate) CoreGpioIn);
 
 #[pymethods]
@@ -93,30 +138,30 @@ impl GpioIn {
     }
 }
 
-#[pyclass(name = "DcSysTime", module = "autd3.value", from_py_object)]
-#[derive(Clone, Copy)]
-pub struct DcSysTime(pub(crate) CoreDcSysTime);
+#[pyclass(
+    name = "SysTime",
+    module = "autd3.value",
+    eq,
+    ord,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SysTime(pub(crate) CoreSysTime);
 
 #[pymethods]
-impl DcSysTime {
+impl SysTime {
     #[classattr]
     #[pyo3(name = "ZERO")]
     fn zero() -> Self {
-        Self(CoreDcSysTime::ZERO)
+        Self(CoreSysTime::ZERO)
     }
 
     #[staticmethod]
     #[pyo3(name = "from_nanos")]
     fn from_nanos(sys_time_ns: u64) -> Self {
-        Self(CoreDcSysTime::from_nanos(sys_time_ns))
-    }
-
-    #[staticmethod]
-    #[pyo3(name = "now")]
-    fn now() -> PyResult<Self> {
-        CoreDcSysTime::now()
-            .map(Self)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+        Self(CoreSysTime::from_nanos(sys_time_ns))
     }
 
     #[getter]
@@ -128,24 +173,28 @@ impl DcSysTime {
         Ok(Self(self.0 + extract_duration(duration)?))
     }
 
-    fn __sub__(&self, duration: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Self(self.0 - extract_duration(duration)?))
+    fn __sub__<'py>(&self, rhs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        let py = rhs.py();
+        if let Ok(other) = rhs.cast::<Self>() {
+            return duration_to_py(py, self.0 - other.get().0);
+        }
+        Ok(Bound::new(py, Self(self.0 - extract_duration(rhs)?))?.into_any())
     }
 
     fn __repr__(&self) -> String {
-        format!("DcSysTime.from_nanos({})", self.0.sys_time())
+        format!("SysTime.from_nanos({})", self.0.sys_time())
     }
 }
 
-fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
-    let nanos = obj.call_method0("as_nanos")?.extract::<u128>()?;
-    u64::try_from(nanos)
-        .map(Duration::from_nanos)
-        .map_err(|_| PyValueError::new_err("duration is out of range"))
-}
-
-#[pyclass(name = "TransitionMode", module = "autd3.value", from_py_object)]
-#[derive(Clone, Copy)]
+#[pyclass(
+    name = "TransitionMode",
+    module = "autd3.value",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TransitionMode(pub(crate) CoreTransitionMode);
 
 #[pymethods]
@@ -175,12 +224,9 @@ impl TransitionMode {
     }
 
     #[staticmethod]
-    #[pyo3(name = "SysTime", signature = (sys_time, margin = None))]
-    fn sys_time(sys_time: DcSysTime, margin: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        Ok(Self(CoreTransitionMode::SysTime {
-            time: sys_time.0,
-            margin: margin.map(extract_duration).transpose()?,
-        }))
+    #[pyo3(name = "SysTime")]
+    fn sys_time(sys_time: SysTime) -> Self {
+        Self(CoreTransitionMode::SysTime { time: sys_time.0 })
     }
 
     #[staticmethod]
@@ -189,13 +235,24 @@ impl TransitionMode {
         Self(CoreTransitionMode::Gpio(gpio.0))
     }
 
+    fn is_later(&self) -> bool {
+        self.0.is_later()
+    }
+
     fn __repr__(&self) -> String {
         format!("TransitionMode.{:?}", self.0)
     }
 }
 
-#[pyclass(name = "LoopBehavior", module = "autd3.value", from_py_object)]
-#[derive(Clone, Copy)]
+#[pyclass(
+    name = "LoopBehavior",
+    module = "autd3.value",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LoopBehavior(pub(crate) CoreLoopBehavior);
 
 #[pymethods]
@@ -207,7 +264,7 @@ impl LoopBehavior {
     }
 
     #[classattr]
-    #[pyo3(name = "ONCE")]
+    #[pyo3(name = "Once")]
     fn once() -> Self {
         Self(CoreLoopBehavior::ONCE)
     }
@@ -229,13 +286,27 @@ impl LoopBehavior {
     }
 }
 
-#[pyclass(name = "WritePatternBuffer", module = "autd3.commands")]
-pub struct WritePatternBuffer {
-    pub(crate) bank: CorePatternBank,
-    pub(crate) index: u16,
-    pub(crate) phases: Vec<Vec<Phase>>,
-    pub(crate) intensities: crate::datagram::OwnedPatternIntensity,
+pub(crate) struct WritePatternBufferData {
+    bank: CorePatternBank,
+    index: usize,
+    phases: Vec<Vec<Phase>>,
+    intensities: OwnedPatternIntensity,
 }
+
+impl PushCommand for WritePatternBufferData {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        expansion.push(CoreWritePatternBuffer::new(
+            self.bank,
+            self.index,
+            &self.phases,
+            self.intensities.as_ref(),
+        ))?;
+        Ok(())
+    }
+}
+
+#[pyclass(name = "WritePatternBuffer", module = "autd3.commands", frozen)]
+pub struct WritePatternBuffer(pub(crate) Arc<WritePatternBufferData>);
 
 #[pymethods]
 impl WritePatternBuffer {
@@ -246,87 +317,105 @@ impl WritePatternBuffer {
         phases: &Bound<'_, PyAny>,
         intensities: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
-        Ok(Self {
+        Ok(Self(Arc::new(WritePatternBufferData {
             bank: bank.0,
-            index,
+            index: usize::from(index),
             phases: crate::datagram::extract_phases(phases)?,
             intensities: crate::datagram::extract_pattern_intensity(intensities)?,
-        })
+        })))
     }
 }
 
-#[pyclass(name = "PatternCompression", module = "autd3.commands", from_py_object)]
-#[derive(Clone, Copy)]
-pub struct PatternCompression(pub(crate) CorePatternCompression);
+#[pyclass(
+    name = "PhaseDepth",
+    module = "autd3.commands",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct PhaseDepth(pub(crate) CorePhaseDepth);
+
+impl core::hash::Hash for PhaseDepth {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(&self.0).hash(state);
+    }
+}
 
 #[pymethods]
-impl PatternCompression {
+impl PhaseDepth {
     #[classattr]
-    #[pyo3(name = "PhaseFull")]
-    fn phase_full() -> Self {
-        Self(CorePatternCompression::PhaseFull)
+    #[pyo3(name = "Bits8")]
+    fn bits8() -> Self {
+        Self(CorePhaseDepth::Bits8)
     }
 
     #[classattr]
-    #[pyo3(name = "PhaseHalf")]
-    fn phase_half() -> Self {
-        Self(CorePatternCompression::PhaseHalf)
+    #[pyo3(name = "Bits4")]
+    fn bits4() -> Self {
+        Self(CorePhaseDepth::Bits4)
     }
 
-    fn per_frame(&self) -> usize {
-        self.0.per_frame()
+    fn max_count(&self) -> usize {
+        self.0.max_count()
     }
 
     fn __repr__(&self) -> String {
-        format!("PatternCompression.{:?}", self.0)
+        format!("PhaseDepth.{:?}", self.0)
     }
 }
 
-#[pyclass(name = "WritePatternCompressed", module = "autd3.commands")]
-pub struct WritePatternCompressed {
-    pub(crate) bank: CorePatternBank,
-    pub(crate) index: u32,
-    pub(crate) format: CorePatternCompression,
-    pub(crate) intensity: Intensity,
-    pub(crate) patterns: Vec<Vec<Vec<Phase>>>,
+pub(crate) struct WritePatternPhaseData {
+    bank: CorePatternBank,
+    index: usize,
+    depth: CorePhaseDepth,
+    intensity: Intensity,
+    patterns: Vec<Vec<Vec<Phase>>>,
 }
 
+impl PushCommand for WritePatternPhaseData {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        expansion.push(CoreWritePatternPhase {
+            bank: self.bank,
+            index: self.index,
+            depth: self.depth,
+            intensity: self.intensity,
+            patterns: &self.patterns,
+        })?;
+        Ok(())
+    }
+}
+
+#[pyclass(name = "WritePatternPhase", module = "autd3.commands", frozen)]
+pub struct WritePatternPhase(pub(crate) Arc<WritePatternPhaseData>);
+
 #[pymethods]
-impl WritePatternCompressed {
+impl WritePatternPhase {
     #[new]
     fn new(
         bank: PatternBank,
-        index: u32,
-        format: PatternCompression,
+        index: u16,
+        depth: PhaseDepth,
         intensity: u8,
         patterns: Vec<Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
-        if patterns.is_empty() || patterns.len() > 4 {
-            return Err(PyValueError::new_err(
-                "WritePatternCompressed expects 1..=4 phase buffers",
-            ));
-        }
         let patterns = patterns
             .iter()
             .map(crate::datagram::extract_phases)
             .collect::<PyResult<Vec<_>>>()?;
-        Ok(Self {
+        Ok(Self(Arc::new(WritePatternPhaseData {
             bank: bank.0,
-            index,
-            format: format.0,
+            index: usize::from(index),
+            depth: depth.0,
             intensity: Intensity(intensity),
             patterns,
-        })
+        })))
     }
 }
 
-#[pyclass(name = "ConfigPattern", module = "autd3.commands")]
-pub struct ConfigPattern {
-    pub(crate) bank: CorePatternBank,
-    pub(crate) divider: u16,
-    pub(crate) size: u32,
-    pub(crate) loop_behavior: CoreLoopBehavior,
-}
+#[pyclass(name = "ConfigPattern", module = "autd3.commands", frozen)]
+pub struct ConfigPattern(pub(crate) Arc<CoreConfigPattern>);
 
 #[pymethods]
 impl ConfigPattern {
@@ -335,28 +424,20 @@ impl ConfigPattern {
     fn new(
         bank: PatternBank,
         config: &Bound<'_, PyAny>,
-        size: u32,
+        size: usize,
         loop_behavior: Option<LoopBehavior>,
     ) -> PyResult<Self> {
-        let divider = config.call_method0("divide")?.extract::<u16>()?;
-        Ok(Self {
+        Ok(Self(Arc::new(CoreConfigPattern {
             bank: bank.0,
-            divider,
+            config: extract_sampling_config(config)?,
             size,
             loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
-        })
+        })))
     }
 }
 
-#[pyclass(name = "ConfigFociStm", module = "autd3.commands")]
-pub struct ConfigFociStm {
-    pub(crate) bank: CorePatternBank,
-    pub(crate) divider: u16,
-    pub(crate) size: u32,
-    pub(crate) num_foci: u8,
-    pub(crate) sound_speed: Velocity,
-    pub(crate) loop_behavior: CoreLoopBehavior,
-}
+#[pyclass(name = "ConfigFociStm", module = "autd3.commands", frozen)]
+pub struct ConfigFociStm(pub(crate) Arc<CoreConfigFociStm>);
 
 #[pymethods]
 impl ConfigFociStm {
@@ -365,77 +446,75 @@ impl ConfigFociStm {
     fn new(
         bank: PatternBank,
         config: &Bound<'_, PyAny>,
-        size: u32,
+        size: usize,
         num_foci: u8,
         sound_speed: &Bound<'_, PyAny>,
         loop_behavior: Option<LoopBehavior>,
     ) -> PyResult<Self> {
-        let divider = config.call_method0("divide")?.extract::<u16>()?;
-        let mm_per_s: f32 = sound_speed
-            .getattr("mm_s")
-            .and_then(|v| v.extract())
-            .map_err(|_| {
-                PyValueError::new_err(
-                    "sound speed must be a Velocity, e.g. 340 * m / s (bare numbers are no longer accepted)",
-                )
-            })?;
-        Ok(Self {
+        let config = extract_sampling_config(config)?;
+        let sound_speed = extract_velocity(sound_speed)?;
+        Ok(Self(Arc::new(CoreConfigFociStm {
             bank: bank.0,
-            divider,
+            config,
             size,
             num_foci,
-            sound_speed: Velocity::from_mm_s(mm_per_s),
+            sound_speed,
             loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
-        })
+        })))
     }
 }
 
-#[pyclass(name = "ChangePatternBank", module = "autd3.commands")]
-pub struct ChangePatternBank {
-    pub(crate) bank: CorePatternBank,
-    pub(crate) transition_mode: CoreTransitionMode,
-}
+#[pyclass(name = "ActivatePatternBank", module = "autd3.commands", frozen)]
+pub struct ActivatePatternBank(pub(crate) Arc<CoreActivatePatternBank>);
 
 #[pymethods]
-impl ChangePatternBank {
+impl ActivatePatternBank {
     #[new]
     #[pyo3(signature = (bank, transition_mode = None))]
     fn new(bank: PatternBank, transition_mode: Option<TransitionMode>) -> Self {
-        Self {
+        Self(Arc::new(CoreActivatePatternBank {
             bank: bank.0,
             transition_mode: transition_mode.map_or(CoreTransitionMode::default(), |t| t.0),
-        }
+        }))
     }
 }
 
-#[pyclass(name = "WriteModulationBuffer", module = "autd3.commands")]
-pub struct WriteModulationBuffer {
-    pub(crate) bank: CoreModulationBank,
-    pub(crate) offset: u32,
-    pub(crate) data: Vec<u8>,
+pub(crate) struct WriteModulationBufferData {
+    bank: CoreModulationBank,
+    offset: usize,
+    data: Vec<u8>,
 }
+
+impl PushCommand for WriteModulationBufferData {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        expansion.push(CoreWriteModulationBuffer {
+            bank: self.bank,
+            offset: self.offset,
+            data: &self.data,
+        })?;
+        Ok(())
+    }
+}
+
+#[pyclass(name = "WriteModulationBuffer", module = "autd3.commands", frozen)]
+pub struct WriteModulationBuffer(pub(crate) Arc<WriteModulationBufferData>);
 
 #[pymethods]
 impl WriteModulationBuffer {
     #[new]
-    fn new(bank: ModulationBank, offset: u32, data: &Bound<'_, PyAny>) -> PyResult<Self> {
+    fn new(bank: ModulationBank, offset: usize, data: &Bound<'_, PyAny>) -> PyResult<Self> {
         let capsule = capsule_of(data)?;
         let data = modulation_from_capsule(&capsule)?.to_vec();
-        Ok(Self {
+        Ok(Self(Arc::new(WriteModulationBufferData {
             bank: bank.0,
             offset,
             data,
-        })
+        })))
     }
 }
 
-#[pyclass(name = "ConfigModulation", module = "autd3.commands")]
-pub struct ConfigModulation {
-    pub(crate) bank: CoreModulationBank,
-    pub(crate) divider: u16,
-    pub(crate) size: u32,
-    pub(crate) loop_behavior: CoreLoopBehavior,
-}
+#[pyclass(name = "ConfigModulation", module = "autd3.commands", frozen)]
+pub struct ConfigModulation(pub(crate) Arc<CoreConfigModulation>);
 
 #[pymethods]
 impl ConfigModulation {
@@ -444,40 +523,49 @@ impl ConfigModulation {
     fn new(
         bank: ModulationBank,
         config: &Bound<'_, PyAny>,
-        size: u32,
+        size: usize,
         loop_behavior: Option<LoopBehavior>,
     ) -> PyResult<Self> {
-        let divider = config.call_method0("divide")?.extract::<u16>()?;
-        Ok(Self {
+        Ok(Self(Arc::new(CoreConfigModulation {
             bank: bank.0,
-            divider,
+            config: extract_sampling_config(config)?,
             size,
             loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
-        })
+        })))
     }
 }
 
-#[pyclass(name = "ChangeModulationBank", module = "autd3.commands")]
-pub struct ChangeModulationBank {
-    pub(crate) bank: CoreModulationBank,
-    pub(crate) transition_mode: CoreTransitionMode,
-}
+#[pyclass(name = "ActivateModulationBank", module = "autd3.commands", frozen)]
+pub struct ActivateModulationBank(pub(crate) Arc<CoreActivateModulationBank>);
 
 #[pymethods]
-impl ChangeModulationBank {
+impl ActivateModulationBank {
     #[new]
     #[pyo3(signature = (bank, transition_mode = None))]
     fn new(bank: ModulationBank, transition_mode: Option<TransitionMode>) -> Self {
-        Self {
+        Self(Arc::new(CoreActivateModulationBank {
             bank: bank.0,
             transition_mode: transition_mode.map_or(CoreTransitionMode::default(), |t| t.0),
-        }
+        }))
     }
 }
 
-#[pyclass(name = "Telemetry", module = "autd3.value", eq, from_py_object)]
+#[pyclass(
+    name = "Telemetry",
+    module = "autd3.value",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Telemetry(pub(crate) autd3_rs::Telemetry);
+
+impl core::hash::Hash for Telemetry {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(&self.0).hash(state);
+    }
+}
 
 #[pymethods]
 impl Telemetry {
@@ -521,6 +609,30 @@ impl Telemetry {
     #[pyo3(name = "SyncResync")]
     fn sync_resync() -> Self {
         Self(autd3_rs::Telemetry::SyncResync)
+    }
+
+    #[classattr]
+    #[pyo3(name = "PtpUnlockFailsafe")]
+    fn ptp_unlock_failsafe() -> Self {
+        Self(autd3_rs::Telemetry::PtpUnlockFailsafe)
+    }
+
+    #[classattr]
+    #[pyo3(name = "SendFailure")]
+    fn send_failure() -> Self {
+        Self(autd3_rs::Telemetry::SendFailure)
+    }
+
+    #[classattr]
+    #[pyo3(name = "BootFailure")]
+    fn boot_failure() -> Self {
+        Self(autd3_rs::Telemetry::BootFailure)
+    }
+
+    #[classattr]
+    #[pyo3(name = "ALL")]
+    fn all(py: Python<'_>) -> PyResult<Bound<'_, pyo3::types::PyTuple>> {
+        pyo3::types::PyTuple::new(py, autd3_rs::Telemetry::ALL.iter().copied().map(Self))
     }
 
     fn __repr__(&self) -> String {

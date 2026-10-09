@@ -1,10 +1,11 @@
 use core::num::{NonZeroU8, NonZeroUsize};
 
+use autd3_python_capsule::extract::{extract_length, extract_point, extract_u8, number_f32};
 use autd3_python_capsule::{
-    capsule_of, geometry_from_capsule, intensities_from_capsule_mut, phases_from_capsule_mut,
+    capsule_of, geometry_from_capsule, intensities_from_capsule_mut,
+    intensity_buffer_addr, phase_buffer_addr, phases_from_capsule_mut,
 };
-use autd3_rs_core::Length;
-use autd3_rs_core::geometry::{Point3, TransducerMask};
+use autd3_rs_core::geometry::TransducerMask;
 use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_pattern_holo::{
     Amplitude as CoreAmplitude, AmplitudeTarget as CoreAmplitudeTarget,
@@ -15,7 +16,6 @@ use autd3_rs_pattern_holo::{
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyCapsule;
 
 create_exception!(autd3_pattern_holo, HoloError, PyException);
 
@@ -23,45 +23,37 @@ fn holo_err(e: autd3_rs_pattern_holo::HoloError) -> PyErr {
     HoloError::new_err(e.to_string())
 }
 
-fn extract_point(obj: &Bound<'_, PyAny>) -> PyResult<Point3<f32>> {
-    let [x, y, z] = obj.extract::<[f32; 3]>().map_err(|_| {
-        PyValueError::new_err(
-            "expected a length-3 array-like (numpy array, list, or tuple) of x, y, z in mm",
-        )
-    })?;
-    Ok(Point3::new(x, y, z))
+fn hash_f32<H: core::hash::Hasher>(value: f32, state: &mut H) {
+    core::hash::Hash::hash(&(value + 0.0).to_bits(), state);
 }
 
-fn extract_u8(obj: &Bound<'_, PyAny>) -> PyResult<u8> {
-    if let Ok(v) = obj.extract::<u8>() {
-        return Ok(v);
-    }
-    obj.getattr("value")?.extract::<u8>()
-}
-
-fn number_f32(obj: &Bound<'_, PyAny>) -> PyResult<f32> {
-    obj.extract::<f32>()
-        .map_err(|_| PyValueError::new_err("expected a number"))
-}
-
-#[pyclass(name = "Amplitude", module = "autd3_pattern_holo", from_py_object)]
-#[derive(Clone, Copy)]
+#[pyclass(
+    name = "Amplitude",
+    module = "autd3_pattern_holo",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Amplitude(pub(crate) CoreAmplitude);
+
+impl core::hash::Hash for Amplitude {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        hash_f32(self.0.pascal(), state);
+    }
+}
 
 #[pymethods]
 impl Amplitude {
     #[getter]
-    fn as_pascal(&self) -> f32 {
+    fn pascal(&self) -> f32 {
         self.0.pascal()
     }
 
     #[getter]
-    fn as_spl(&self) -> f32 {
+    fn spl(&self) -> f32 {
         self.0.spl()
-    }
-
-    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        other.extract::<Amplitude>().is_ok_and(|o| self.0 == o.0)
     }
 
     fn __repr__(&self) -> String {
@@ -103,30 +95,41 @@ impl AmplitudeUnit {
 }
 
 #[pyclass(name = "AmplitudeTarget", module = "autd3_pattern_holo")]
-pub struct AmplitudeTarget {
-    pub(crate) inner: CoreAmplitudeTarget,
-}
+pub struct AmplitudeTarget(pub(crate) CoreAmplitudeTarget);
 
 #[pymethods]
 impl AmplitudeTarget {
     #[new]
     fn new(point: &Bound<'_, PyAny>, amplitude: Amplitude) -> PyResult<Self> {
-        Ok(Self {
-            inner: CoreAmplitudeTarget {
-                point: extract_point(point)?,
-                amplitude: amplitude.0,
-            },
-        })
+        Ok(Self(CoreAmplitudeTarget {
+            point: extract_point(point)?,
+            amplitude: amplitude.0,
+        }))
     }
 }
 
 #[pyclass(
     name = "IntensityConstraint",
     module = "autd3_pattern_holo",
+    eq,
+    hash,
+    frozen,
     from_py_object
 )]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct IntensityConstraint(pub(crate) CoreIntensityConstraint);
+
+impl core::hash::Hash for IntensityConstraint {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(&self.0).hash(state);
+        match self.0 {
+            CoreIntensityConstraint::Multiply(value) => hash_f32(value, state),
+            CoreIntensityConstraint::Uniform(intensity) => intensity.hash(state),
+            CoreIntensityConstraint::Clamp(min, max) => (min, max).hash(state),
+            _ => {}
+        }
+    }
+}
 
 #[pymethods]
 impl IntensityConstraint {
@@ -158,11 +161,28 @@ impl IntensityConstraint {
             Intensity(extract_u8(max)?),
         )))
     }
+
+    fn __repr__(&self) -> String {
+        format!("IntensityConstraint.{:?}", self.0)
+    }
 }
 
-#[pyclass(name = "Directivity", module = "autd3_pattern_holo", from_py_object)]
-#[derive(Clone, Copy)]
+#[pyclass(
+    name = "Directivity",
+    module = "autd3_pattern_holo",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Directivity(pub(crate) CoreDirectivity);
+
+impl core::hash::Hash for Directivity {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(&self.0).hash(state);
+    }
+}
 
 #[pymethods]
 impl Directivity {
@@ -176,6 +196,10 @@ impl Directivity {
     #[pyo3(name = "T4010A1")]
     fn t4010a1() -> Self {
         Self(CoreDirectivity::T4010A1)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("Directivity.{:?}", self.0)
     }
 }
 
@@ -346,22 +370,13 @@ impl GreedyOption {
 }
 
 fn collect_foci(foci: &[PyRef<'_, AmplitudeTarget>]) -> Vec<CoreAmplitudeTarget> {
-    foci.iter().map(|f| f.inner).collect()
+    foci.iter().map(|f| f.0).collect()
 }
 
 fn mask_ref(mask: Option<&[Vec<bool>]>) -> TransducerMask<'_> {
     match mask {
         Some(m) => TransducerMask::Masked(m),
         None => TransducerMask::AllEnabled,
-    }
-}
-
-fn mut_capsule<'py>(buffer: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyCapsule>> {
-    match buffer.cast::<PyCapsule>() {
-        Ok(capsule) => Ok(capsule.clone()),
-        Err(_) => Ok(buffer
-            .call_method0("_capsule_mut")?
-            .cast_into::<PyCapsule>()?),
     }
 }
 
@@ -373,8 +388,8 @@ fn with_dst_buffers<F>(
 where
     F: FnOnce(&mut [Vec<Phase>], &mut [Vec<Intensity>]) -> PyResult<()>,
 {
-    let phase_capsule = mut_capsule(phases)?;
-    let intensity_capsule = mut_capsule(intensities)?;
+    let phase_capsule = capsule_of(phases)?;
+    let intensity_capsule = capsule_of(intensities)?;
     let phases = phases_from_capsule_mut(&phase_capsule)?;
     let intensities = intensities_from_capsule_mut(&intensity_capsule)?;
     f(phases.as_mut_slice(), intensities.as_mut_slice())
@@ -385,7 +400,7 @@ where
 fn naive(
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, AmplitudeTarget>>,
-    wavelength: f32,
+    wavelength: &Bound<'_, PyAny>,
     option: &NaiveOption,
     phases: &Bound<'_, PyAny>,
     intensities: &Bound<'_, PyAny>,
@@ -393,6 +408,7 @@ fn naive(
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
     let foci = collect_foci(&foci);
+    let wavelength = extract_length(wavelength)?;
     let option = CoreNaiveOption {
         mask: mask_ref(option.mask.as_deref()),
         ..option.inner
@@ -402,7 +418,7 @@ fn naive(
             &autd3_rs_pattern_holo::NalgebraBackend,
             geometry,
             &foci,
-            Length::from_mm(wavelength),
+            wavelength,
             &option,
             phases,
             intensities,
@@ -416,7 +432,7 @@ fn naive(
 fn gs(
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, AmplitudeTarget>>,
-    wavelength: f32,
+    wavelength: &Bound<'_, PyAny>,
     option: &GsOption,
     phases: &Bound<'_, PyAny>,
     intensities: &Bound<'_, PyAny>,
@@ -424,6 +440,7 @@ fn gs(
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
     let foci = collect_foci(&foci);
+    let wavelength = extract_length(wavelength)?;
     let option = CoreGsOption {
         mask: mask_ref(option.mask.as_deref()),
         ..option.inner
@@ -433,7 +450,7 @@ fn gs(
             &autd3_rs_pattern_holo::NalgebraBackend,
             geometry,
             &foci,
-            Length::from_mm(wavelength),
+            wavelength,
             &option,
             phases,
             intensities,
@@ -447,7 +464,7 @@ fn gs(
 fn gspat(
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, AmplitudeTarget>>,
-    wavelength: f32,
+    wavelength: &Bound<'_, PyAny>,
     option: &GspatOption,
     phases: &Bound<'_, PyAny>,
     intensities: &Bound<'_, PyAny>,
@@ -455,6 +472,7 @@ fn gspat(
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
     let foci = collect_foci(&foci);
+    let wavelength = extract_length(wavelength)?;
     let option = CoreGspatOption {
         mask: mask_ref(option.mask.as_deref()),
         ..option.inner
@@ -464,7 +482,168 @@ fn gspat(
             &autd3_rs_pattern_holo::NalgebraBackend,
             geometry,
             &foci,
-            Length::from_mm(wavelength),
+            wavelength,
+            &option,
+            phases,
+            intensities,
+        )
+        .map_err(holo_err)
+    })
+}
+
+fn ensure_distinct(addrs: &[usize]) -> PyResult<()> {
+    for (i, lhs) in addrs.iter().enumerate() {
+        if addrs[..i].contains(lhs) {
+            return Err(PyValueError::new_err(
+                "the same buffer must not be passed twice",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn with_dst_batches<F>(
+    phases: &[Bound<'_, PyAny>],
+    intensities: &[Bound<'_, PyAny>],
+    f: F,
+) -> PyResult<()>
+where
+    F: FnOnce(&mut [Vec<Vec<Phase>>], &mut [Vec<Vec<Intensity>>]) -> PyResult<()>,
+{
+    let phase_capsules = phases
+        .iter()
+        .map(capsule_of)
+        .collect::<PyResult<Vec<_>>>()?;
+    let intensity_capsules = intensities
+        .iter()
+        .map(capsule_of)
+        .collect::<PyResult<Vec<_>>>()?;
+    ensure_distinct(
+        &phase_capsules
+            .iter()
+            .map(phase_buffer_addr)
+            .collect::<PyResult<Vec<_>>>()?,
+    )?;
+    ensure_distinct(
+        &intensity_capsules
+            .iter()
+            .map(intensity_buffer_addr)
+            .collect::<PyResult<Vec<_>>>()?,
+    )?;
+    let mut phase_slots = phase_capsules
+        .iter()
+        .map(phases_from_capsule_mut)
+        .collect::<PyResult<Vec<_>>>()?;
+    let mut intensity_slots = intensity_capsules
+        .iter()
+        .map(intensities_from_capsule_mut)
+        .collect::<PyResult<Vec<_>>>()?;
+    let mut phase_problems = phase_slots
+        .iter_mut()
+        .map(|slot| core::mem::take(&mut **slot))
+        .collect::<Vec<_>>();
+    let mut intensity_problems = intensity_slots
+        .iter_mut()
+        .map(|slot| core::mem::take(&mut **slot))
+        .collect::<Vec<_>>();
+    let result = f(&mut phase_problems, &mut intensity_problems);
+    for (slot, problem) in phase_slots.iter_mut().zip(phase_problems) {
+        **slot = problem;
+    }
+    for (slot, problem) in intensity_slots.iter_mut().zip(intensity_problems) {
+        **slot = problem;
+    }
+    result
+}
+
+#[pyfunction]
+#[pyo3(signature = (geometry, foci, wavelength, option, phases, intensities))]
+fn naive_batch(
+    geometry: &Bound<'_, PyAny>,
+    foci: Vec<PyRef<'_, AmplitudeTarget>>,
+    wavelength: &Bound<'_, PyAny>,
+    option: &NaiveOption,
+    phases: Vec<Bound<'_, PyAny>>,
+    intensities: Vec<Bound<'_, PyAny>>,
+) -> PyResult<()> {
+    let geo_capsule = capsule_of(geometry)?;
+    let geometry = geometry_from_capsule(&geo_capsule)?;
+    let foci = collect_foci(&foci);
+    let wavelength = extract_length(wavelength)?;
+    let option = CoreNaiveOption {
+        mask: mask_ref(option.mask.as_deref()),
+        ..option.inner
+    };
+    with_dst_batches(&phases, &intensities, |phases, intensities| {
+        autd3_rs_pattern_holo::naive_batch(
+            &autd3_rs_pattern_holo::NalgebraBackend,
+            geometry,
+            &foci,
+            wavelength,
+            &option,
+            phases,
+            intensities,
+        )
+        .map_err(holo_err)
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (geometry, foci, wavelength, option, phases, intensities))]
+fn gs_batch(
+    geometry: &Bound<'_, PyAny>,
+    foci: Vec<PyRef<'_, AmplitudeTarget>>,
+    wavelength: &Bound<'_, PyAny>,
+    option: &GsOption,
+    phases: Vec<Bound<'_, PyAny>>,
+    intensities: Vec<Bound<'_, PyAny>>,
+) -> PyResult<()> {
+    let geo_capsule = capsule_of(geometry)?;
+    let geometry = geometry_from_capsule(&geo_capsule)?;
+    let foci = collect_foci(&foci);
+    let wavelength = extract_length(wavelength)?;
+    let option = CoreGsOption {
+        mask: mask_ref(option.mask.as_deref()),
+        ..option.inner
+    };
+    with_dst_batches(&phases, &intensities, |phases, intensities| {
+        autd3_rs_pattern_holo::gs_batch(
+            &autd3_rs_pattern_holo::NalgebraBackend,
+            geometry,
+            &foci,
+            wavelength,
+            &option,
+            phases,
+            intensities,
+        )
+        .map_err(holo_err)
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (geometry, foci, wavelength, option, phases, intensities))]
+fn gspat_batch(
+    geometry: &Bound<'_, PyAny>,
+    foci: Vec<PyRef<'_, AmplitudeTarget>>,
+    wavelength: &Bound<'_, PyAny>,
+    option: &GspatOption,
+    phases: Vec<Bound<'_, PyAny>>,
+    intensities: Vec<Bound<'_, PyAny>>,
+) -> PyResult<()> {
+    let geo_capsule = capsule_of(geometry)?;
+    let geometry = geometry_from_capsule(&geo_capsule)?;
+    let foci = collect_foci(&foci);
+    let wavelength = extract_length(wavelength)?;
+    let option = CoreGspatOption {
+        mask: mask_ref(option.mask.as_deref()),
+        ..option.inner
+    };
+    with_dst_batches(&phases, &intensities, |phases, intensities| {
+        autd3_rs_pattern_holo::gspat_batch(
+            &autd3_rs_pattern_holo::NalgebraBackend,
+            geometry,
+            &foci,
+            wavelength,
             &option,
             phases,
             intensities,
@@ -478,7 +657,7 @@ fn gspat(
 fn greedy(
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, AmplitudeTarget>>,
-    wavelength: f32,
+    wavelength: &Bound<'_, PyAny>,
     option: &GreedyOption,
     phases: &Bound<'_, PyAny>,
     intensities: &Bound<'_, PyAny>,
@@ -486,20 +665,14 @@ fn greedy(
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
     let foci = collect_foci(&foci);
+    let wavelength = extract_length(wavelength)?;
     let option = CoreGreedyOption {
         mask: mask_ref(option.mask.as_deref()),
         ..option.inner
     };
     with_dst_buffers(phases, intensities, |phases, intensities| {
-        autd3_rs_pattern_holo::greedy(
-            geometry,
-            &foci,
-            Length::from_mm(wavelength),
-            &option,
-            phases,
-            intensities,
-        )
-        .map_err(holo_err)
+        autd3_rs_pattern_holo::greedy(geometry, &foci, wavelength, &option, phases, intensities)
+            .map_err(holo_err)
     })
 }
 
@@ -522,5 +695,8 @@ fn autd3_pattern_holo(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(gs, m)?)?;
     m.add_function(wrap_pyfunction!(gspat, m)?)?;
     m.add_function(wrap_pyfunction!(greedy, m)?)?;
+    m.add_function(wrap_pyfunction!(naive_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(gs_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(gspat_batch, m)?)?;
     Ok(())
 }

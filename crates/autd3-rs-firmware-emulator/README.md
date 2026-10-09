@@ -4,7 +4,7 @@ Software emulator of the [AUTD3](https://hapislab.org/en/airborne-ultrasound-tac
 
 It runs the real CPU firmware sources (`autd3-cpu-fw`) against a Rust model of the FPGA, so tests can exercise the wire protocol, the emission pipeline, and the resynchronisation logic without hardware.
 
-Used by [`autd3-rs-link-nop`](https://crates.io/crates/autd3-rs-link-nop) and [`autd3-rs-emulator`](https://crates.io/crates/autd3-rs-emulator).
+Used by the UDP device emulator of [`autd3-rs`](https://crates.io/crates/autd3-rs) (feature `emulator`) and [`autd3-rs-emulator`](https://crates.io/crates/autd3-rs-emulator).
 
 ## Documentation
 

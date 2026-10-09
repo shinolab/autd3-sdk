@@ -20,5 +20,4 @@ fn main() {
 
     println!("cargo:rerun-if-changed=THIRD-PARTY-LICENSES.md");
     println!("cargo:rerun-if-changed=../LICENSE");
-    println!("cargo:rerun-if-changed=twincat");
 }

@@ -7,46 +7,43 @@ Run with: cargo xtask py example group
 import asyncio
 import signal
 
-import numpy as np
-
 import autd3
-import autd3_link_echocat as echocat
 import autd3_pattern as pattern
-from autd3.geometry import Autd3
-from autd3.units import m, s
-from scipy.spatial.transform import Rotation
+from autd3.commands import Pattern, SetSilencer, each
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import m, mm, s
+from autd3.value import Intensity
 
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry(
+    _log_guard = autd3.init_tracing()
+
+    geometry = Geometry(
         [
-            autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
-            autd3.geometry.Autd3(origin=(Autd3.DEVICE_WIDTH, 0.0, 0.0), rotation=Rotation.identity()),
+            Autd3([0.0, 0.0, 0.0]),
+            Autd3([Autd3.DEVICE_WIDTH, 0.0, 0.0]),
         ]
     )
 
     async with await autd3.Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
         print("devices:", client.num_devices())
 
         wavelength = pattern.wavelength(340 * m / s)
 
-        left_target = geometry.center() + np.array([-40.0, 0.0, 150.0])
+        left_target = geometry.center() + offset(-40.0 * mm, 0.0 * mm, 150.0 * mm)
         left = geometry.phase_buffer()
         pattern.focus(geometry, left_target, wavelength, left)
 
-        right_target = geometry.center() + np.array([40.0, 0.0, 150.0])
+        right_target = geometry.center() + offset(40.0 * mm, 0.0 * mm, 150.0 * mm)
         right = geometry.phase_buffer()
         pattern.focus(geometry, right_target, wavelength, right)
 
-        builder = client.datagram_builder()
-        builder.push(autd3.commands.SetSilencer())
-        builder.push_each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right, autd3.value.Intensity.MAX))
-        for frame in builder.build():
-            await client.send_checked(frame)
+        await client.send(SetSilencer())
+        await client.send(each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, Intensity.MAX)))
 
         print("even devices -> left target, odd devices -> right target — press Ctrl+C to stop")
         stop = asyncio.Event()
@@ -54,6 +51,8 @@ async def main() -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
         await stop.wait()
+
+        await client.silent_stop()
 
 
 if __name__ == "__main__":

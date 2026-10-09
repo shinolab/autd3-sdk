@@ -3,11 +3,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use autd3_rs::commands::Distribution;
-use autd3_rs::{DatagramBuilder, Frame};
+use autd3_rs::commands::Command;
+use autd3_rs::error::Error;
+use autd3_rs::{Frame, Frames};
 use autd3_rs_core::common::ULTRASOUND_PERIOD;
-use autd3_rs_core::geometry::{Geometry, Point3};
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES};
+use autd3_rs_core::geometry::Geometry;
+use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, FRAME_BYTES_MAX, FrameHeader, Seq};
 use autd3_rs_firmware_emulator::{Device, SilencerEmulator};
 
 use crate::client_api::ClientApi;
@@ -27,7 +28,6 @@ pub struct Recorder {
     geometry: Arc<Geometry>,
     devices: Vec<Device>,
     records: Vec<Vec<RawTransducerRecord>>,
-    positions: Vec<Vec<Point3<f32>>>,
     seq: Seq,
     start_ns: u64,
     current_ns: u64,
@@ -40,8 +40,6 @@ impl Recorder {
             .iter()
             .map(|d| Device::new(d.positions().len()))
             .collect();
-        let positions: Vec<Vec<Point3<f32>>> =
-            geometry.iter().map(|d| d.positions().to_vec()).collect();
         let records = devices
             .iter()
             .map(|dev| {
@@ -61,7 +59,6 @@ impl Recorder {
             geometry: Arc::new(geometry.clone()),
             devices,
             records,
-            positions,
             seq: Seq::ZERO,
             start_ns,
             current_ns: start_ns,
@@ -73,14 +70,14 @@ impl Recorder {
         let records = self
             .records
             .into_iter()
-            .zip(self.positions)
-            .flat_map(|(dev, dev_positions)| {
+            .zip(self.geometry.iter())
+            .flat_map(|(dev, device)| {
                 dev.into_iter()
-                    .zip(dev_positions)
+                    .zip(device.positions())
                     .map(|(tr, position)| TransducerRecord {
                         pulse_width: tr.pulse_width,
                         phase: tr.phase,
-                        position,
+                        position: *position,
                     })
             })
             .collect();
@@ -92,21 +89,19 @@ impl Recorder {
         if tick.is_zero() || !tick.as_nanos().is_multiple_of(period) {
             return Err(EmulatorError::InvalidTick);
         }
-        let period = period as u64;
-        let mut t = self.current_ns;
-        let end = t + tick.as_nanos() as u64;
-        loop {
-            for d in 0..self.devices.len() {
-                self.devices[d].fpga_mut().update_with_sys_time(t);
-                let m = self.devices[d].fpga().modulation();
-                let (phases, intensities) = self.devices[d].fpga().emissions();
-                for (tr, (phase, intensity)) in phases.iter().zip(&intensities).enumerate() {
-                    let rec = &mut self.records[d][tr];
+        let end = self.current_ns + tick.as_nanos() as u64;
+        for t in (self.current_ns..end).step_by(period as usize) {
+            for (dev, recs) in self.devices.iter_mut().zip(&mut self.records) {
+                dev.fpga_mut().update_with_sys_time(t);
+                let fpga = dev.fpga();
+                let m = fpga.modulation();
+                let (phases, intensities) = fpga.emissions();
+                for (rec, (phase, intensity)) in
+                    recs.iter_mut().zip(phases.iter().zip(&intensities))
+                {
                     let intensity_mod = ((u16::from(intensity.0) * u16::from(m)) / 255) as u8;
                     let silenced_int = rec.silencer_intensity.apply(intensity_mod);
-                    let pw = self.devices[d]
-                        .fpga()
-                        .pulse_width_table(silenced_int as usize);
+                    let pw = fpga.pulse_width_table(silenced_int as usize);
                     let ph = rec.silencer_phase.apply(phase.0);
                     rec.pulse_width.push(pw);
                     rec.phase.push(ph);
@@ -114,58 +109,66 @@ impl Recorder {
                     rec.last_phase = ph;
                 }
             }
-            t += period;
-            if t >= end {
-                break;
-            }
         }
         self.current_ns = end;
         Ok(())
     }
 
-    fn stage_and_send(&mut self, frame: &Frame<'_>) {
+    fn stage_and_send(&mut self, frame: &Frame<'_>) -> Result<(), EmulatorError> {
         let seq = self.seq;
+        self.seq = seq.next();
         let touches_silencer = frame
             .datagrams()
             .iter()
             .any(|d| matches!(d.cmd, Cmd::SetSilencer | Cmd::Clear));
-        for d in 0..self.devices.len() {
-            let dg = match frame.distribution() {
-                Distribution::Broadcast => &frame.datagrams()[0],
-                Distribution::PerDevice => &frame.datagrams()[d],
-            };
-            let mut buf = [0u8; TX_FRAME_BYTES];
-            buf[0] = seq.get();
-            buf[1] = dg.cmd.as_u8();
-            buf[2..].copy_from_slice(&dg.payload);
-            self.devices[d].send(&buf);
+        let mut rejected = None;
+        for (device, dev) in self.devices.iter_mut().enumerate() {
+            let dg = frame.datagram_for(device);
+            let payload = dg.payload();
+            let len = size_of::<FrameHeader>() + payload.len();
+            let mut buf = [0u8; FRAME_BYTES_MAX];
+            let (header, body) = buf.split_at_mut(size_of::<FrameHeader>());
+            header.copy_from_slice(&[seq.get(), dg.cmd.as_u8()]);
+            body[..payload.len()].copy_from_slice(payload);
+            let status = dev.send(&buf[..len]).status;
+            if status != DeviceErrorCode::None && rejected.is_none() {
+                rejected = Some(Error::DeviceError {
+                    device,
+                    code: status.as_u8(),
+                });
+            }
         }
-        self.seq = self.seq.next();
         if touches_silencer {
-            for d in 0..self.devices.len() {
-                for tr in 0..self.records[d].len() {
-                    let last_phase = self.records[d][tr].last_phase;
-                    let last_intensity = self.records[d][tr].last_intensity;
-                    self.records[d][tr].silencer_phase =
-                        self.devices[d].fpga().silencer_emulator_phase(last_phase);
-                    self.records[d][tr].silencer_intensity = self.devices[d]
-                        .fpga()
-                        .silencer_emulator_intensity(last_intensity);
+            for (dev, recs) in self.devices.iter().zip(&mut self.records) {
+                for rec in recs {
+                    rec.silencer_phase = dev.fpga().silencer_emulator_phase(rec.last_phase);
+                    rec.silencer_intensity =
+                        dev.fpga().silencer_emulator_intensity(rec.last_intensity);
                 }
             }
         }
+        rejected.map_or(Ok(()), |e| Err(e.into()))
     }
 }
 
 impl ClientApi for Recorder {
     type Error = EmulatorError;
 
-    fn datagram_builder<'a>(&self) -> DatagramBuilder<'a> {
-        DatagramBuilder::new(Arc::clone(&self.geometry))
+    fn send<'a, C: Command<'a>>(
+        &mut self,
+        cmd: C,
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        let sent = Frames::encode(&self.geometry, cmd)
+            .map_err(EmulatorError::from)
+            .and_then(|frames| {
+                frames
+                    .iter()
+                    .try_for_each(|frame| self.stage_and_send(&frame))
+            });
+        std::future::ready(sent)
     }
 
-    fn send_checked(&mut self, frame: Frame<'_>) -> impl Future<Output = Result<(), Self::Error>> {
-        self.stage_and_send(&frame);
-        std::future::ready(Ok(()))
+    fn send_frame(&mut self, frame: Frame<'_>) -> impl Future<Output = Result<(), Self::Error>> {
+        std::future::ready(self.stage_and_send(&frame))
     }
 }

@@ -74,8 +74,7 @@ impl ManagedProcess {
 
 impl Drop for ManagedProcess {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.kill();
     }
 }
 

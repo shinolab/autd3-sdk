@@ -1,17 +1,12 @@
-use autd3_cpu_wire::params::{EMISSION_TYPE_FOCI, EMISSION_TYPE_RAW};
 use autd3_cpu_wire::payload::ConfigPatternPayload;
-use zerocopy::FromBytes;
-use zerocopy::little_endian::{U16, U32};
 
 use crate::Velocity;
-use crate::error::{Error, PayloadError};
+use crate::error::Error;
 use crate::geometry::Device;
-use crate::mirror::FirmwareState;
-use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
-use super::{Distribution, Operation, check_index_advance};
+use super::{Encoded, Operation, encode_fixed};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigPattern {
@@ -31,131 +26,49 @@ pub struct ConfigFociStm {
     pub loop_behavior: LoopBehavior,
 }
 
-fn reflect_pattern(
-    config: SamplingConfig,
-    bank: PatternBank,
-    loop_behavior: LoopBehavior,
-    device: usize,
-    state: &mut FirmwareState,
-) -> Result<(), Error> {
-    let divider = config.divide()?;
-    state.silencer.check_pattern_div(device, divider)?;
-    state.silencer.note_pattern_div(bank.as_u8(), divider);
-    state
-        .transition
-        .note_pattern_loop(bank.as_u8(), loop_behavior);
-    Ok(())
-}
-
 impl crate::sealed::Sealed for ConfigPattern {}
 
 impl Operation for ConfigPattern {
-    fn distribution(&self) -> Distribution {
-        Distribution::Broadcast
-    }
-
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        let divider = self.config.divide()?;
-        if self.size == 0 || self.size > EMISSION_MAX_INDICES {
-            return Err(PayloadError::StmSizeOutOfRange {
-                size: self.size,
-                min: 1,
-                max: EMISSION_MAX_INDICES,
-            }
-            .into());
-        }
-        check_index_advance(self.size, self.loop_behavior)?;
-        let size = u32::try_from(self.size).expect("bounded by capacity checks");
-        let (p, _) = ConfigPatternPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *p = ConfigPatternPayload {
-            bank: self.bank.as_u8(),
-            emission_type: EMISSION_TYPE_RAW,
-            divider: U16::new(divider),
-            size: U32::new(size),
-            num_foci: 0,
-            reserved: 0,
-            sound_speed: U16::new(0),
-            rep: U16::new(self.loop_behavior.rep()),
-        };
-        Ok(Cmd::ConfigPattern)
-    }
-
-    fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        reflect_pattern(self.config, self.bank, self.loop_behavior, device, state)
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        let payload = ConfigPatternPayload::raw(
+            self.bank,
+            self.config.divide()?,
+            self.size,
+            self.loop_behavior.rep(),
+        )?;
+        Ok(encode_fixed(out, Cmd::ConfigPattern, &payload))
     }
 }
 
 impl crate::sealed::Sealed for ConfigFociStm {}
 
 impl Operation for ConfigFociStm {
-    fn distribution(&self) -> Distribution {
-        Distribution::Broadcast
-    }
-
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        let divider = self.config.divide()?;
-        if self.size < BUFFER_SIZE_MIN {
-            return Err(PayloadError::PatternSizeTooSmall {
-                size: self.size,
-                min: BUFFER_SIZE_MIN,
-            }
-            .into());
-        }
-        if self.num_foci == 0 || self.num_foci > NUM_FOCI_MAX {
-            return Err(PayloadError::NumFociOutOfRange {
-                num_foci: self.num_foci,
-                max: NUM_FOCI_MAX,
-            }
-            .into());
-        }
-        if self.size > MAX_FOCI_TOTAL / usize::from(self.num_foci) {
-            return Err(PayloadError::StmFociExceedCapacity {
-                size: self.size,
-                num_foci: self.num_foci,
-                capacity: MAX_FOCI_TOTAL,
-            }
-            .into());
-        }
-        let sound_speed = (self.sound_speed.m_s() * 64.0).round() as u16;
-        if sound_speed == 0 {
-            return Err(PayloadError::SoundSpeedZero.into());
-        }
-        let size = u32::try_from(self.size).expect("bounded by capacity checks");
-        let (p, _) = ConfigPatternPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *p = ConfigPatternPayload {
-            bank: self.bank.as_u8(),
-            emission_type: EMISSION_TYPE_FOCI,
-            divider: U16::new(divider),
-            size: U32::new(size),
-            num_foci: self.num_foci,
-            reserved: 0,
-            sound_speed: U16::new(sound_speed),
-            rep: U16::new(self.loop_behavior.rep()),
-        };
-        Ok(Cmd::ConfigPattern)
-    }
-
-    fn reflect(&self, device: usize, state: &mut FirmwareState) -> Result<(), Error> {
-        reflect_pattern(self.config, self.bank, self.loop_behavior, device, state)
+    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        let payload = ConfigPatternPayload::foci(
+            self.bank,
+            self.config.divide()?,
+            self.size,
+            self.num_foci,
+            self.sound_speed.m_s(),
+            self.loop_behavior.rep(),
+        )?;
+        Ok(encode_fixed(out, Cmd::ConfigPattern, &payload))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::test_device;
+    use crate::error::PayloadError;
+    use crate::params::{EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
+    use crate::test_utils::encode;
     use core::num::NonZeroU16;
 
-    fn encode(op: &impl Operation) -> Result<(Cmd, [u8; PAYLOAD_BYTES]), Error> {
-        let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), &mut out)?;
-        Ok((cmd, out))
-    }
+    const ENCODED: Encoded = Encoded::new(Cmd::ConfigPattern, size_of::<ConfigPatternPayload>());
 
     #[test]
     fn config_pattern_lays_out_raw_fields() {
-        let (cmd, payload) = encode(&ConfigPattern {
+        let (encoded, payload) = encode(&ConfigPattern {
             bank: PatternBank::B0,
             config: SamplingConfig::new(NonZeroU16::new(2).unwrap()),
             size: 1024,
@@ -163,7 +76,7 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(cmd, Cmd::ConfigPattern);
+        assert_eq!(encoded, ENCODED);
         assert_eq!(payload[0], 0);
         assert_eq!(payload[1], 1, "RawEmissions wire value");
         assert_eq!(&payload[2..4], &2u16.to_le_bytes());
@@ -175,7 +88,7 @@ mod tests {
 
     #[test]
     fn config_foci_stm_lays_out_foci_fields() {
-        let (cmd, payload) = encode(&ConfigFociStm {
+        let (encoded, payload) = encode(&ConfigFociStm {
             bank: PatternBank::B1,
             config: SamplingConfig::new(NonZeroU16::MIN),
             size: 8192,
@@ -185,7 +98,7 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(cmd, Cmd::ConfigPattern);
+        assert_eq!(encoded, ENCODED);
         assert_eq!(payload[0], 1);
         assert_eq!(payload[1], 0, "Foci wire value");
         assert_eq!(&payload[4..8], &8192u32.to_le_bytes());
@@ -229,15 +142,16 @@ mod tests {
         };
         let finite = LoopBehavior::Finite(NonZeroU16::new(4).unwrap());
 
-        assert!(
-            encode(&raw(1, LoopBehavior::Infinite)).is_ok(),
+        assert_eq!(
+            encode(&raw(1, LoopBehavior::Infinite)).unwrap().0,
+            ENCODED,
             "a static pattern is a single index"
         );
         assert!(
             matches!(encode(&raw(1, finite)), Err(Error::InvalidPayload(_))),
             "a single index never advances, so a finite loop would never end"
         );
-        assert!(encode(&raw(2, finite)).is_ok());
+        assert_eq!(encode(&raw(2, finite)).unwrap().0, ENCODED);
     }
 
     #[test]
@@ -271,6 +185,22 @@ mod tests {
             encode(&foci(2, 1, Velocity::from_m_s(0.0))),
             Err(Error::InvalidPayload(_))
         ));
-        assert!(encode(&foci(MAX_FOCI_TOTAL / 8, 8, v)).is_ok());
+        assert_eq!(encode(&foci(MAX_FOCI_TOTAL / 8, 8, v)).unwrap().0, ENCODED);
+        assert_eq!(
+            encode(&foci(2, 1, Velocity::from_m_s(1023.0))).unwrap().0,
+            ENCODED,
+            "1023 m/s * 64 still fits 16 bits"
+        );
+        for too_fast in [1024.0, 1500.0, f32::INFINITY] {
+            assert!(
+                matches!(
+                    encode(&foci(2, 1, Velocity::from_m_s(too_fast))),
+                    Err(Error::InvalidPayload(
+                        PayloadError::SoundSpeedTooLarge { .. }
+                    ))
+                ),
+                "{too_fast} m/s must not saturate silently"
+            );
+        }
     }
 }

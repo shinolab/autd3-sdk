@@ -2,6 +2,7 @@ use core::f32::consts::PI;
 
 use anyhow::Result;
 
+use autd3_rs::Frames;
 use autd3_rs::commands::{PatternStm, PatternStmOption, SetSilencer};
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
@@ -10,15 +11,11 @@ use autd3_rs::value::{
 use autd3_rs_modulation::{constant, modulation_buffer};
 
 use crate::Ctx;
-use crate::cases::ERR_INVALID_TRANSITION_MODE;
 use crate::cases::pattern_util::{
-    Buffers, buffers, change_pattern_bank, change_pattern_bank_sync, expect_firmware_error,
-    focus_at, report_fpga_state, write_pattern_stm_bank,
+    Buffers, POINT_NUM, RADIUS_MM, activate_pattern_bank, buffers,
+    expect_transition_mode_rejections, focus_at, report_fpga_state, write_pattern_stm_bank,
 };
 use crate::io::wait_enter;
-
-const POINT_NUM: usize = 200;
-const RADIUS_MM: f32 = 30.0;
 
 fn circle_patterns(ctx: &Ctx<'_>) -> Vec<Buffers> {
     (0..POINT_NUM)
@@ -46,21 +43,22 @@ async fn send_stm(
     bank: PatternBank,
 ) -> Result<()> {
     let (phases, intensities) = split(patterns);
-    let mut builder = ctx.client.datagram_builder();
-    builder.push(SetSilencer::default()).push(PatternStm::new(
-        config * Hz,
-        &phases,
-        &intensities,
-        PatternStmOption {
-            bank,
-            ..PatternStmOption::default()
-        },
-    ));
-    let frames = builder.build()?;
-    for frame in &frames {
-        ctx.client.send_checked(frame).await?;
-    }
-    Ok(())
+    ctx.send_frames(&Frames::encode(
+        ctx.client.geometry(),
+        (
+            SetSilencer::default(),
+            PatternStm::new(
+                config * Hz,
+                &phases,
+                &intensities,
+                PatternStmOption {
+                    bank,
+                    ..PatternStmOption::default()
+                },
+            ),
+        ),
+    )?)
+    .await
 }
 
 pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
@@ -83,7 +81,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("The STM frequency changed to 1 Hz").await;
     report_fpga_state(ctx, "B1 1Hz", None, Some(PatternBank::B1), Some(false)).await?;
 
-    change_pattern_bank(ctx, PatternBank::B0).await?;
+    activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
     wait_enter("The STM frequency returned to 0.5 Hz").await;
     report_fpga_state(ctx, "back to B0", None, Some(PatternBank::B0), Some(false)).await?;
 
@@ -92,50 +90,28 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     rev[POINT_NUM - 1] = buffers(ctx.geometry, Intensity::MIN);
     write_pattern_stm_bank(ctx, PatternBank::B1, 0.5 * Hz, &rev, LoopBehavior::ONCE).await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
-    change_pattern_bank_sync(ctx, PatternBank::B1).await?;
+    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::SyncIdx).await?;
     wait_enter("The trajectory reverses at the right edge, then stops after one cycle").await;
 
     let (phases, intensities) = split(&patterns);
-    println!("transition-mode validation (firmware):");
-    expect_firmware_error(
-        ctx,
-        "PatternSTM infinite loop + SyncIdx",
-        {
-            let mut b = ctx.client.datagram_builder();
-            b.push(SetSilencer::default()).push(PatternStm::new(
-                0.5 * Hz,
-                &phases,
-                &intensities,
-                PatternStmOption {
-                    loop_behavior: LoopBehavior::Infinite,
-                    transition_mode: TransitionMode::SyncIdx,
-                    ..PatternStmOption::default()
-                },
-            ));
-            b.build()
-        },
-        ERR_INVALID_TRANSITION_MODE,
-    )
-    .await;
-    expect_firmware_error(
-        ctx,
-        "PatternSTM finite loop + Immediate",
-        {
-            let mut b = ctx.client.datagram_builder();
-            b.push(SetSilencer::default()).push(PatternStm::new(
-                0.5 * Hz,
-                &phases,
-                &intensities,
-                PatternStmOption {
-                    loop_behavior: LoopBehavior::ONCE,
-                    transition_mode: TransitionMode::Immediate,
-                    ..PatternStmOption::default()
-                },
-            ));
-            b.build()
-        },
-        ERR_INVALID_TRANSITION_MODE,
-    )
+    expect_transition_mode_rejections(ctx, "PatternSTM", |loop_behavior, transition_mode| {
+        Frames::encode(
+            ctx.client.geometry(),
+            (
+                SetSilencer::default(),
+                PatternStm::new(
+                    0.5 * Hz,
+                    &phases,
+                    &intensities,
+                    PatternStmOption {
+                        loop_behavior,
+                        transition_mode,
+                        ..PatternStmOption::default()
+                    },
+                ),
+            ),
+        )
+    })
     .await;
     Ok(())
 }

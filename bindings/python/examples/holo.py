@@ -7,44 +7,46 @@ Run with: cargo xtask py example holo
 import asyncio
 import signal
 
-import numpy as np
-
 import autd3
-import autd3_link_echocat as echocat
 import autd3_modulation as modulation
 import autd3_pattern as pattern
 import autd3_pattern_holo as holo
-from autd3.units import Hz, m, s
-from autd3_pattern_holo import dB
+from autd3.commands import Modulation, Pattern, SetSilencer
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import Hz, m, mm, s
+from autd3.value import SamplingConfig
+from autd3_pattern_holo import Pa
 
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    _log_guard = autd3.init_tracing()
+
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
     async with await autd3.Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
-        center = geometry.center()
-        wavelength = pattern.wavelength(340 * m / s)
+        print("devices:", client.num_devices())
+
+        center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         foci = [
-            holo.AmplitudeTarget(center + np.array([-20.0, 0.0, 150.0]), 150 * dB),
-            holo.AmplitudeTarget(center + np.array([20.0, 0.0, 150.0]), 150 * dB),
+            holo.AmplitudeTarget(center + offset(-30.0 * mm, 0.0 * mm, 0.0 * mm), 2.5e3 * Pa),
+            holo.AmplitudeTarget(center + offset(30.0 * mm, 0.0 * mm, 0.0 * mm), 2.5e3 * Pa),
         ]
 
+        wavelength = pattern.wavelength(340 * m / s)
         phases = geometry.phase_buffer()
         intensities = geometry.intensity_buffer()
-        holo.gspat(geometry, foci, wavelength, holo.GspatOption(repeat=100), phases, intensities)
+        holo.gspat(geometry, foci, wavelength, holo.GspatOption(), phases, intensities)
 
         mod_buf = modulation.modulation_buffer()
         modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
 
-        builder = client.datagram_builder()
-        builder.push(autd3.commands.Pattern(phases, intensities))
-        builder.push(autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf))
-        for frame in builder.build():
-            await client.send_checked(frame)
+        await client.send(SetSilencer())
+        await client.send(Pattern(phases, intensities))
+        await client.send(Modulation(SamplingConfig.FREQ_4K, mod_buf))
 
         print("emitting two GS-PAT foci with a 200 Hz AM — press Ctrl+C to stop")
         stop = asyncio.Event()
@@ -52,6 +54,8 @@ async def main() -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
         await stop.wait()
+
+        await client.silent_stop()
 
 
 if __name__ == "__main__":

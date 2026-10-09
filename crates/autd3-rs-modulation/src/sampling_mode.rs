@@ -4,20 +4,11 @@
     clippy::cast_lossless
 )]
 
-use autd3_rs_core::common::{Freq, ULTRASOUND_FREQ};
-use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
+use autd3_rs_core::common::Freq;
+use autd3_rs_core::params::{MOD_BUFFER_SAMPLES, ULTRASOUND_FREQ_HZ};
 use autd3_rs_core::value::{Nearest, SamplingConfig, is_integer};
 
 use crate::error::ModulationError;
-
-pub(crate) fn gcd(mut a: u64, mut b: u64) -> u64 {
-    while b != 0 {
-        let t = b;
-        b = a % b;
-        a = t;
-    }
-    a
-}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
@@ -45,6 +36,12 @@ impl From<Nearest<Freq<f32>>> for SamplingMode {
     }
 }
 
+impl From<Nearest<Freq<u32>>> for SamplingMode {
+    fn from(v: Nearest<Freq<u32>>) -> Self {
+        SamplingMode::NearestFreq(Freq::from_hz(v.0.hz() as f32))
+    }
+}
+
 impl SamplingMode {
     pub(crate) fn validate(self, config: SamplingConfig) -> Result<(usize, u64), ModulationError> {
         match self {
@@ -68,9 +65,9 @@ impl SamplingMode {
         if freq.hz() == 0 {
             return Err(ModulationError::FrequencyZero);
         }
-        let fd = u64::from(freq.hz()) * u64::from(config.divide()?);
-        let fs = u64::from(ULTRASOUND_FREQ.hz());
-        let k = gcd(fs, fd);
+        let fd = u64::from(freq.hz()) * u64::from(config.divide()?.get());
+        let fs = u64::from(ULTRASOUND_FREQ_HZ);
+        let k = num_integer::gcd(fs, fd);
         Ok(((fs / k) as usize, fd / k))
     }
 
@@ -91,9 +88,9 @@ impl SamplingMode {
                 nyquist,
             });
         }
-        let fd = f64::from(freq.hz()) * f64::from(config.divide()?);
-        let fs = u64::from(ULTRASOUND_FREQ.hz());
-        ((f64::from(ULTRASOUND_FREQ.hz()) / fd).floor() as u32..=MOD_BUFFER_SAMPLES as u32)
+        let fd = f64::from(freq.hz()) * f64::from(config.divide()?.get());
+        let fs = u64::from(ULTRASOUND_FREQ_HZ);
+        ((f64::from(ULTRASOUND_FREQ_HZ) / fd).floor() as u32..=MOD_BUFFER_SAMPLES as u32)
             .find_map(|n| {
                 if !is_integer(fd * f64::from(n)) {
                     return None;
@@ -119,5 +116,19 @@ impl SamplingMode {
             return Err(ModulationError::FrequencyNaN);
         }
         Ok(((cfg_freq / freq).round() as usize, 1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use autd3_rs_core::units::Hz;
+
+    #[test]
+    fn a_nearest_integer_frequency_is_a_nearest_float_frequency() {
+        assert_eq!(
+            SamplingMode::from(Nearest(200 * Hz)),
+            SamplingMode::from(Nearest(200.0 * Hz))
+        );
     }
 }

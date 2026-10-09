@@ -13,6 +13,7 @@ categories = ["science"]
 
 [dependencies]
 autd3-rs-core.workspace = true
+num-integer.workspace = true
 thiserror.workspace = true
 
 [lints]
