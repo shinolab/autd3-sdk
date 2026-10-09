@@ -15,11 +15,11 @@ import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
 
 ## 複合コマンドと低レベルコマンド
 
-[Pattern](/autd3-sdk/api/command/pattern/) はバッファ書き込み・再生設定・バンク切替をまとめて行う複合コマンドだが, これらは 1 フレームに融合して送られる.
-そのためフレーム数は低レベルコマンド 1 つと同じであり, 単に焦点を更新するだけなら `Pattern` をそのまま高頻度で送ってよい. 
+[Pattern](/autd3-sdk/api/command/pattern/) はバッファ書き込み・再生設定・バンク切替をまとめて行う複合コマンドであり, 送るたびにこの 3 フレームへ展開される.
 
-ただし, [バンク](/autd3-sdk/getting-started/tutorial/bank/)を設定してしまえば, 毎フレームの焦点更新で必要なのはバッファの書き換え, すなわち `WritePatternBuffer` だけである.
-`WritePatternBuffer` のみを送ると, 毎フレームの再生設定とバンク切替を省けるため, デバイス側の 1 フレームあたりの処理が軽くなる. 
+しかし, [バンク](/autd3-sdk/getting-started/tutorial/bank/)を設定してしまえば, 毎フレームの焦点更新で必要なのはバッファの書き換え, すなわち `WritePatternBuffer` だけである.
+`WritePatternBuffer` のみを送ると, 毎回の再生設定とバンク切替を省けるため, 1 回の更新が 3 フレームから 1 フレームに減る.
+再生設定は `ActivatePatternBank` を送った時点で反映されるので, 最初の設定には `ActivatePatternBank` まで含める. 
 
 最初に一度だけバンクを設定しておく. (最初は`Pattern`を使っても良い.)
 
@@ -41,14 +41,14 @@ import csSample from "@codes/csharp/examples/tutorial/performance.cs?raw";
 
 - `phase_buffer()` / `intensity_buffer()` で得たバッファは, Pattern 計算関数の出力先として毎フレーム上書きできる. 
 - 振幅が全素子同一なら, バッファを確保せず `Intensity` をそのまま渡す. 
-- Rust では `Frames` も `build_into` で同じバッファへ書き出せば, `build` のたびに確保せずに済む. Python/C# では `build_into` は提供されない. 
+- `Frames` も `encode_into` (C# は `EncodeInto`) で同じバッファへ書き出せば, エンコードのたびに確保せずに済む. 
 
 ## OS チューニング
 
-ホストで EtherCAT を動かす場合, EtherCAT のリアルタイム性は OS の設定にも左右される.
-スレッドの優先度・CPU アフィニティ・タイマ精度などを調整することで, ジッタを抑えてより安定した高レート送信ができる可能性がある.
-
-これらは `ClientConfig` の `rt_priority` / `rt_policy` / `rt_affinity`, および Link Option の `sync0_period` / `sync0_shift` (echocat では `frame_phase`) として設定できる.
+ホストから UDP で直接つなぐ場合, 送受信のリアルタイム性は OS の設定にも左右される.
+送信は `send` を呼んだスレッドがその場で行うので, そのスレッドの優先度・CPU アフィニティなどを調整することで, ジッタを抑えてより安定した高レート送信ができる可能性がある
+(受信と生存確認は `Client` が持つ I/O スレッドが行い, こちらの優先度はライブラリでは設定しない).
+送信の制御は `ClientConfig` の `ack_timeout`, および `TransportOption` の `heartbeat` / `reply_timeout` として設定できる.
 適切な値は環境によって異なるため, 実測して決めるのがよい.
 
 ## Windows のドライバ設定
@@ -68,6 +68,5 @@ Windows では NIC のドライバを最新のものにしたうえで, 以下�
 リポジトリには, 性能の計測とチューニングのためのツールが用意されている.
 
 - `cargo xtask tool perftest`: スループットとレイテンシを計測する
-- `cargo xtask tool synctune`: 同期の安定性を計測し最適なパラメータを探索する
 
 詳しい使い方は各ツールの `--help` を参照.

@@ -10,10 +10,18 @@ export default defineConfig({
   site: "https://shinolab.github.io",
   base: "/autd3-sdk",
   redirects: {
-    "/guide/appliance": "/autd3-sdk/getting-started/appliance/",
-    "/en/guide/appliance": "/autd3-sdk/en/getting-started/appliance/",
+    "/getting-started/appliance": "/autd3-sdk/0.9.x/getting-started/appliance/",
+    "/en/getting-started/appliance": "/autd3-sdk/en/0.9.x/getting-started/appliance/",
+    "/guide/appliance": "/autd3-sdk/0.9.x/getting-started/appliance/",
+    "/en/guide/appliance": "/autd3-sdk/en/0.9.x/getting-started/appliance/",
     "/getting-started/setup/console": "/autd3-sdk/guide/console/",
     "/en/getting-started/setup/console": "/autd3-sdk/en/guide/console/",
+    "/api/link": "/autd3-sdk/api/connection/",
+    "/en/api/link": "/autd3-sdk/en/api/connection/",
+    "/api/link/udp": "/autd3-sdk/api/connection/",
+    "/en/api/link/udp": "/autd3-sdk/en/api/connection/",
+    "/api/link/remote": "/autd3-sdk/guide/simulator/",
+    "/en/api/link/remote": "/autd3-sdk/en/guide/simulator/",
   },
   vite: {
     resolve: {

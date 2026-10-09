@@ -1,6 +1,6 @@
 ---
-title: リンク状態の監視
-description: State Checker でデバイスの EtherCAT リンク状態を監視する
+title: 状態監視
+description: StateChecker でデバイスとの通信状態を監視する
 sidebar:
   order: 6
 ---
@@ -11,23 +11,26 @@ import sample from "@codes/rust/examples/guide/state-check.rs?raw";
 import pySample from "@codes/python/examples/guide/state-check.py?raw";
 import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
-`Checker`を使うことでデバイスとの EtherCAT リンクが正常に動いているかどうかを監視できる.
+`StateChecker` を使うことでデバイスとの通信が正常に動いているかどうかを監視できる.
 
-## Checker の取得
+## StateChecker の取得
 
-通常の [`Client::open`](/autd3-sdk/api/basics/client/) の代わりに `open_with_checker` を使うと, `Client` と `Checker` の組が返る.
+[`Client`](/autd3-sdk/api/basics/client/) の `state_checker` で `StateChecker` を取る.
 
 <CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} csharp={excerpt(csSample, "open")} />
 
 ## 状態の取得
 
-`Checker::check` は, 呼び出した時点のリンク状態 `LinkStatus` を返す.
-`LinkStatus` は以下を持つ.
+`StateChecker::check` は, 呼び出した時点の状態 `DeviceStatus` を返す.
+`DeviceStatus` は以下を持つ.
 
-- `devices`: デバイスごとの状態 (`DeviceState`). 正常なら `OP`, 切断されると `LOST` など.
-- `all_op`: 全デバイスが `OP` 状態か.
-- `any_lost`: いずれかのデバイスが `LOST` 状態か.
-- `recoveries`: 切断から復帰した累計回数.
+- `devices`: デバイスごとの状態 (`DeviceState`). 正常なら `Ready`, 切断されると `Lost` など.
+- `all_ready`: 全デバイスが `Ready` 状態か.
+- `any_lost`: いずれかのデバイスが `Lost` 状態か.
+
+各状態の意味は [接続](/autd3-sdk/api/connection/#状態監視) を参照. ID 0 に時刻が合っていて同期パルスが動いていれば `Ready`, 時刻を合わせている途中か同期パルスがまだ動いていなければ `Syncing`, 返信が途絶えるか機体が再起動すると `Lost` になり, `Lost` からは自動で復帰しない (開き直す).
+
+`Lost` のデバイスがある間も, 書き込み (`send` など) は残りのデバイスに対して続く. 一方, 全デバイスぶんの値を返す読み出し (`read_firmware_version` / `read_fpga_state` / `read_telemetry`) は `Error::DeviceLost { device }` で失敗する.
 
 以下は, 一定間隔で `check` を呼び, 状態が変化したときだけ出力する例.
 

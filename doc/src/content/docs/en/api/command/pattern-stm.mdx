@@ -26,7 +26,7 @@ Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary P
 | `freq`     | `impl Into<StmConfig>`                | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
 | `phases`      | `&[Vec<Vec<Phase>>]`     | Phases of each sample (at least 2 samples)                  |
 | `intensities` | `impl Into<StmIntensity>` | Intensities for every sample (a uniform value, one buffer shared by all indices, or one buffer per index) |
-| `option`   | `PatternStmOption`                    | Options such as transfer mode, loop, and transition |
+| `option`   | `PatternStmOption`                    | Options such as phase depth, loop, and transition |
 
 Passing a `Freq` / `Duration` to `freq` represents "the frequency/period for one full cycle over all samples".
 A sampling frequency can also be specified.
@@ -45,28 +45,29 @@ A `Duration` that is not divisible by the number of samples is an error (use `Ne
 | Field             | Type             | Default                              | Description                  |
 | ----------------- | ---------------- | ------------------------------------ | ---------------------------- |
 | `bank`            | `PatternBank`    | `PatternBank::B0`                    | Bank to write to / play back |
-| `mode`            | `PatternStmMode` | `PatternStmMode::PhaseIntensityFull` | Transfer format              |
+| `phase_depth`     | `PhaseDepth`     | `PhaseDepth::Bits8`                  | Bit depth of the phase       |
 | `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`             | Loop count                   |
 | `transition_mode` | `TransitionMode` | `TransitionMode::Immediate`          | Transition timing on bank switching |
 
-For the behavior of `loop_behavior` and `transition_mode`, see [playback control](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+For the behavior of `loop_behavior` and `transition_mode`, see [playback control](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
 
-## PatternStmMode
+## Transfer Format
 
-Selects the transfer format of each Pattern. The phase-only and low-resolution formats can reduce the number of frames to transfer.
+The command used for the transfer is chosen automatically from the kind of `intensities` and `phase_depth`.
+When `intensities` is a uniform value (`Intensity`), only the phases are sent, so fewer frames are transferred.
 
-| Mode                 | Content                                  | 
-| -------------------- | ---------------------------------------- |
-| `PhaseIntensityFull` | Transfer phase and amplitude as-is (default) | 
-| `PhaseFull`          | Transfer phase and a single uniform amplitude |
-| `PhaseHalf`          | Transfer 4-bit phase and a single uniform amplitude |
+| `intensities`                                 | `PhaseDepth::Bits8`                        | `PhaseDepth::Bits4`                        |
+| --------------------------------------------- | ------------------------------------------ | ------------------------------------------ |
+| `Intensity`                                   | `WritePatternPhase` (5 indices/frame)      | `WritePatternPhase` (11 indices/frame)     |
+| `&[Vec<Intensity>]` / `&[Vec<Vec<Intensity>>]` | `WritePatternBuffer` (2 indices/frame)     | Error                                      |
+
+`Bits4` quantizes the phase to its upper 4 bits.
 
 ## Equivalent Low-Level Commands
 
-`PatternStm` internally expands into the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/)  (each index) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
-The following is equivalent to `PatternStm::new(freq, &phases, intensities, option)`.
-
-When `PatternStmMode` is `PhaseFull` / `PhaseHalf`, [WritePatternCompressed](/autd3-sdk/en/api/command/lowlevel/write-pattern-compressed/) is used instead of `WritePatternBuffer` (`intensities` must then be a uniform `Intensity`; anything else is an error).
+`PatternStm` internally expands into the three commands [WritePatternPhase](/autd3-sdk/en/api/command/lowlevel/write-pattern-phase/) or [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) (each index) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
+The following is equivalent to `PatternStm::new(freq, &phases, intensities, option)` when `intensities` is a uniform value.
+When `intensities` holds per-transducer values, `WritePatternBuffer` is used for each index instead of `WritePatternPhase`.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

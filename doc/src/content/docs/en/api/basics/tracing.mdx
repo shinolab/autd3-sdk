@@ -1,0 +1,44 @@
+---
+title: Logging
+description: init_tracing, which writes the library's logs to standard output or standard error
+sidebar:
+  order: 6
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/tracing.rs?raw";
+import pySample from "@codes/python/examples/api/basics/tracing.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/tracing.cs?raw";
+
+The library records connection, sending, and state transitions as logs.
+By default there is no output destination, so nothing is shown.
+After `init_tracing` is called, the logs are written to standard output or standard error.
+
+In Rust, enable the `logging` feature of `autd3-rs`.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+`init_tracing` returns a guard.
+The logs are written from a separate thread, so in Rust keep the guard until the end of the program (dropping it writes out the remaining logs, and no logs appear after that).
+In C# / Python, discarding the guard does not stop the logs; the remaining logs are written out when it is closed explicitly (`Dispose` / `close()` / leaving the `with` block) or when the process exits.
+
+Logging can be initialized only once per process.
+A second call panics with `init_tracing` in Rust, and raises an exception in C# / Python.
+Use `try_init_tracing` in Rust to receive it as an error instead.
+
+## TracingOption
+
+| Field            | Type           | Default  | Description                                                  |
+| ---------------- | -------------- | -------- | ------------------------------------------------------------ |
+| `default_filter` | `&'static str` | `"info"` | Filter used when the `RUST_LOG` environment variable is not set |
+| `writer`         | `LogWriter`    | `Stdout` | Output destination. `LogWriter::Stdout` / `LogWriter::Stderr` |
+
+A filter is a level (`trace` / `debug` / `info` / `warn` / `error` / `off`) or a `,`-separated list of per-module directives such as `autd3_rs=debug`.
+If the `RUST_LOG` environment variable is set, it takes precedence over `default_filter`.
+
+Python has no `TracingOption`; the same items are passed as keyword arguments, `init_tracing(default_filter=.., writer=..)` (an omitted item takes the default above).
+
+Colors are disabled when the output is not a terminal or when the `NO_COLOR` environment variable is set.

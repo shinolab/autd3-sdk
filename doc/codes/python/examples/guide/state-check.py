@@ -1,7 +1,6 @@
 import asyncio
 
-import autd3_link_echocat as echocat
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, TransportOption
 from autd3.geometry import Autd3, Geometry
 
 # xtask:long-running  # [hide]
@@ -13,11 +12,8 @@ async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     # ANCHOR: open
-    client, checker = await Client.open_with_checker(
-        geometry,
-        echocat.EchocatLinkOption(),
-        ClientConfig(),
-    )
+    client = await Client.open(geometry, TransportOption(), ClientConfig())
+    checker = client.state_checker()
     # ANCHOR_END: open
 
     async with client:
@@ -26,9 +22,9 @@ async def main() -> None:
         while True:
             status = checker.check()
             if status != last:
-                for i, state in enumerate(status.device_states):
+                for i, state in enumerate(status.devices):
                     print(f"device[{i}]: {state}")
-                print(f"all operational: {status.all_op}, any lost: {status.any_lost}, recoveries: {status.recoveries}")
+                print(f"all ready: {status.all_ready}, any lost: {status.any_lost}")
                 last = status
             await asyncio.sleep(CHECK_INTERVAL)
         # ANCHOR_END: poll

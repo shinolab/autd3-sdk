@@ -3,20 +3,15 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::TransportOption;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define a geometry consisting of a single AUTD3 device.
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    // Open the client over an echocat link.
-    let client = Client::open(
-        &geometry,
-        EchocatLinkOption::default(),
-        ClientConfig::default(),
-    )
-    .await?;
+    // Open the client.
+    let client = Client::open(&geometry, &TransportOption::default(), ClientConfig::default()).await?;
 
     // Generate a focus 150 mm above the array center.
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
@@ -40,19 +35,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut modulation,
     )?;
 
-    let mut builder = client.datagram_builder();
-    builder
-        .push(SetSilencer::default())
-        .push(Pattern::new(&phases, Intensity::MAX))
-        .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation));
-    let frames = builder.build()?;
-    for frame in &frames {
-        client.send_checked(frame).await?;
-    }
+    client.send(SetSilencer::default()).await?;
+    client.send(Pattern::new(&phases, Intensity::MAX)).await?;
+    client.send(Modulation::new(SamplingConfig::FREQ_4K, &modulation)).await?;
 
     tokio::signal::ctrl_c().await?;
 
-    client.stop().await?;
+    client.silent_stop().await?;
     client.close().await?;
 
     Ok(())

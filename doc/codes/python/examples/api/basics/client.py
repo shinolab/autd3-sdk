@@ -1,18 +1,16 @@
 import asyncio
 
-import autd3_link_nop as nop
-from autd3 import Client, ClientConfig
-from autd3.commands import Clear
+from autd3 import Client, ClientConfig, Frames, UdpEmulator
+from autd3.commands import Nop
 from autd3.geometry import Autd3, Geometry
 
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-    client = await Client.open(geometry, nop.Nop(), ClientConfig())
+    emulator = UdpEmulator(geometry.num_devices())
+    client = await Client.open(geometry, emulator.option(), ClientConfig())
 
-    builder = client.datagram_builder()
-    builder.push(Clear())
-    frame = next(iter(builder.build()))
+    frame = next(iter(Frames.encode(geometry, Nop())))
 
     # ANCHOR: api
     num_devices = client.num_devices()
@@ -20,23 +18,23 @@ async def main() -> None:
 
     firmware = await client.read_firmware_version()
     fpga_state = await client.read_fpga_state()
-    error_detail = await client.read_error_detail()
 
-    datagram_builder = client.datagram_builder()
-    resp = await (await client.send(frame))
-    await client.send_checked(frame)
+    await client.send(Nop())
+    done = await client.send_streaming(Nop())
+    resp = await (await client.send_frame(frame))
 
-    await client.stop()
+    await client.silent_stop()
     await client.close()
     # ANCHOR_END: api
 
-    _ = (num_devices, geometry, firmware, fpga_state, error_detail, datagram_builder, resp)
+    _ = (num_devices, geometry, firmware, fpga_state, done, resp)
 
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
     # ANCHOR: context_manager
-    async with await Client.open(geometry, nop.Nop(), ClientConfig()) as client:
-        await client.send_checked(frame)
+    emulator = UdpEmulator(geometry.num_devices())
+    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
+        await client.send(Nop())
     # ANCHOR_END: context_manager
 
 

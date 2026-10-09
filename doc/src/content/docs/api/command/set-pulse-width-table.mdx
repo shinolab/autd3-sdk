@@ -24,8 +24,14 @@ import { excerpt } from "@lib/excerpt";
 | ---------- | ----------------------- | ---------------------------------------------------- |
 | `table`    | `&[u16; PWE_TABLE_SIZE]` | 強度インデックス (0–255) ごとのパルス幅 (256 要素) |
 
-`SetPulseWidthTable::default_table()` は arcsin 形状のデフォルトテーブルを返す.
-これは出力音圧が強度に対して (理論的に) 線形になるようなテーブルである.
+デフォルトのコマンドは arcsin 形状のテーブルを設定する.
+これは出力音圧が強度に対して (理論的に) 線形になるようなテーブルであり, デバイスが起動時に持つテーブルと同じである.
+
+<CodeTabs rust={excerpt(sample, "default")} python={excerpt(pySample, "default")} csharp={excerpt(csSample, "default")} />
+
+`empty_table` は全要素が 0 のテーブルを返す. 独自のテーブルを作る際の土台として使う.
+
+<CodeTabs rust={excerpt(sample, "empty")} python={excerpt(pySample, "empty")} csharp={excerpt(csSample, "empty")} />
 
 ## Example
 

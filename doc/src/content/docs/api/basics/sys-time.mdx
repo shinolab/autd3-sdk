@@ -1,0 +1,53 @@
+---
+title: SysTime
+description: デバイスの時刻 SysTime の API と演算
+sidebar:
+  order: 5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/sys-time.rs?raw";
+import pySample from "@codes/python/examples/api/basics/sys-time.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/sys-time.cs?raw";
+
+`SysTime` は, **デバイスの時刻**を表す型.
+[`TransitionMode::SysTime`](/autd3-sdk/getting-started/tutorial/loop/) や [`GpioOut::SysTimeEq`](/autd3-sdk/api/command/gpio/) などで用いる.
+
+各デバイスは自身のクロックを持ち, 出力の切り替えなどはこの時刻で行う.
+この時刻は 64 bitの ns 単位のカウンタで, `Client` を開いたときから数える.
+ホストの時計 (日時) とは対応しない.
+現在のデバイスの時刻は `Client` の `device_time_now()` で取得する.
+
+デバイス間の時刻は PTP で揃えている ([デバイス間の同期](/autd3-sdk/api/connection/#デバイス間の同期)).
+そのため, 同じ `SysTime` を指定すれば全台で同時に動作する.
+
+## 構築
+
+`SysTime` は現在のデバイスの時刻, または生の ns から構築する.
+
+<CodeTabs rust={excerpt(sample, "construct")} python={excerpt(pySample, "construct")} csharp={excerpt(csSample, "construct")} />
+
+| 操作                    | 説明                                                          |
+| ----------------------- | ------------------------------------------------------------- |
+| `ZERO`                  | `Client` を開いた時点                                         |
+| `Client::device_time_now()` | 現在のデバイスの時刻 (C#: `DeviceTimeNow()`)              |
+| `from_nanos(ns)`        | 開いてからの経過 ns から構築                                  |
+| `sys_time()`            | 開いてからの経過 ns                                           |
+
+`Client` を開き直すとデバイスの時刻は 0 に戻る. 以前の `Client` で得た `SysTime` は使えない.
+
+## 演算
+
+`SysTime` には時間差を加減算する演算が定義されている.
+
+<CodeTabs rust={excerpt(sample, "ops")} python={excerpt(pySample, "ops")} csharp={excerpt(csSample, "ops")} />
+
+| 演算                          | 結果         | 説明                                     |
+| ----------------------------- | ------------ | ---------------------------------------- |
+| `SysTime + Duration`        | `SysTime`  | 指定時間の加算                           |
+| `SysTime - Duration`        | `SysTime`  | 指定時間の減算                           |
+| `SysTime - SysTime`       | `Duration`   | 2 時刻の差 (負になる場合は 0)            |
+| 比較 (`<` / `>` / `==` など)  | `bool`       | 比較                                     |
+
+Rust の `Duration` は `core::time::Duration`, C# は `TimeSpan`, Python は `autd3.Duration` を用いる.

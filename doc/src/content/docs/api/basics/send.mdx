@@ -1,0 +1,68 @@
+---
+title: 送信
+description: コマンドの送信と合成, Frames へのエンコード
+sidebar:
+  order: 3
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/send.rs?raw";
+import pySample from "@codes/python/examples/api/basics/send.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
+
+コマンドは `Client` へ渡して送信する.
+コマンドは 1 つ以上の `Frame` にエンコードされ, デバイスへは 1 フレームずつ送られる.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| 関数                            | 説明                                                                 |
+| ------------------------------- | -------------------------------------------------------------------- |
+| `client.send(cmd)`              | 1 フレームずつ応答を確認しながら送る (stop-and-wait)                 |
+| `client.send_streaming(cmd)`    | 応答を待たずに続けて送り, コマンド全体の完了を後で確認する (streaming) |
+| `Frames::encode(geometry, cmd)` | コマンドを `Frames` にエンコードする. `Client` を必要としない        |
+| `client.send_frame(frame)`      | エンコード済みの `Frame` を 1 つ送る                                 |
+
+`send` は途中のフレームでエラーが返ると, 残りのフレームを送らずにエラーを返す.
+`send_streaming` はすべてのフレームを送信キューに入れた時点で `StreamFuture` を返す.
+これを await すると全フレームの完了を待ち, 最初のエラーを返す.
+エラーになったフレームの後ろのフレームも送られうるので, 1 つずつ確実に反映させたいコマンドには `send` を使う.
+
+どちらもすべてのフレームをエンコードしてから送り始めるため, エンコードに失敗した場合は 1 フレームも送らない.
+
+フレームの喪失やデバイスの無応答は自動では回復しない.
+`ack_timeout` (既定 10 ms) の間に返信が揃わなければ送信中のフレームは `Error::Timeout` で失敗し,
+手前のフレームが失われた後ろのフレームは `Error::SeqMismatch` で失敗する.
+いずれの場合も次の送信が先に `Reset` を送ってデバイスとの SEQ を揃え直すので, 失敗したコマンドはそのまま送り直せばよい.
+
+`Frames::encode` と `send_frame` は, 同じ `Frames` を繰り返し送る場合や, 応答の回収を自分で制御したい場合に使う.
+`send(cmd)` は, `Frames::encode` で得た各 `Frame` に対して `send_frame(frame).await?.await?.check()` を順に行うのと等価である.
+
+送信モードの使い分けは [送信モード](/autd3-sdk/getting-started/tutorial/send-modes/) を参照.
+
+## each
+
+`each` はデバイスを引数にするクロージャを受け取り, デバイスごとに異なるコマンドを割り当てる.
+Rust では `FnMut(&Device) -> Option<C>`, Python では `Callable[[Device], Command | None]`, C# では `Func<Device, ICommand?>`.
+`None` を返したデバイスには何も割り当てない.
+
+<CodeTabs rust={excerpt(sample, "each")} python={excerpt(pySample, "each")} csharp={excerpt(csSample, "each")} />
+
+Rust ではクロージャの返り値はすべて同じ型でなければならない.
+型の異なるコマンドを混在させたい場合は, `Command::boxed` で `BoxedCommand` に揃える.
+Python は動的型付けのため, デバイスごとに異なる型のコマンドをそのまま返せる.
+
+<CodeTabs rust={excerpt(sample, "each_boxed")} />
+
+## コマンドの並び
+
+複数のコマンドを 1 つのコマンドとして扱うこともできる.
+Rust ではタプル, Python ではタプルまたはリスト, C# では `Command.Sequence` を使う.
+並びは先頭から順に展開されるので, `send` で送る場合は 1 つずつ `send` するのと同じフレーム列になる.
+
+## デバイスによる検証
+
+Silencer の制約や `TransitionMode` とループ設定の整合などは, デバイスが検証する.
+違反したコマンドはデバイスに拒否され, `Error::DeviceError` として返る.

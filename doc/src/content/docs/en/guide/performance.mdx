@@ -15,11 +15,11 @@ Guidelines for drawing out performance in situations that demand throughput, suc
 
 ## Composite Commands and Low-Level Commands
 
-[Pattern](/autd3-sdk/en/api/command/pattern/) is a composite command that performs the buffer write, the playback configuration and the bank switch together, but these are fused into a single frame.
-It therefore costs the same number of frames as one low-level command, so for a plain focal point update you may send `Pattern` itself at high frequency.
+[Pattern](/autd3-sdk/en/api/command/pattern/) is a composite command that performs the buffer write, the playback configuration and the bank switch together, and it expands into these three frames every time it is sent.
 
 However, once the [bank](/autd3-sdk/en/getting-started/tutorial/bank/) is set, all that is needed for a per-frame focal point update is rewriting the buffer, that is, only `WritePatternBuffer`.
-Sending only `WritePatternBuffer` skips the per-frame playback configuration and bank switch, making the per-frame work on the device lighter.
+Sending only `WritePatternBuffer` skips the playback configuration and bank switch of every update, cutting one update from three frames to one.
+The playback configuration takes effect when `ActivatePatternBank` is sent, so the initial setup must include `ActivatePatternBank`.
 
 Set the bank once at the beginning. (You may use `Pattern` for the first time.)
 
@@ -41,14 +41,15 @@ To avoid per-frame allocation, reuse buffers.
 
 - The buffers obtained via `phase_buffer()` / `intensity_buffer()` can be overwritten every frame as the output destination of the Pattern compute function.
 - When the intensity is the same for every transducer, pass an `Intensity` directly instead of allocating a buffer.
-- In Rust, `Frames` can also be written into the same buffer with `build_into`, avoiding allocation on every `build`. `build_into` is not provided in Python / C#.
+- In Rust, `Frames` can also be written into the same buffer with `encode_into`, avoiding allocation on every encode. `encode_into` is not provided in Python / C#.
 
 ## OS Tuning
 
-When EtherCAT runs on the host, its real-time performance also depends on the OS settings.
-By adjusting thread priority, CPU affinity, timer precision, and so on, jitter can be suppressed, potentially enabling more stable high-rate transmission.
+When the host connects directly over UDP, the real-time performance of sending and receiving also depends on the OS settings.
+Sending happens on the thread that calls `send`, so adjusting the priority, CPU affinity, and so on of that thread can suppress jitter and enable more stable high-rate transmission
+(receiving and the heartbeat run on the I/O thread owned by the `Client`, whose priority the library does not set).
 
-These can be set as `rt_priority` / `rt_policy` / `rt_affinity` of `ClientConfig`, and `sync0_period` / `sync0_shift` (`frame_phase` on echocat) of the Link Option.
+Transmission control is set as `ack_timeout` of `ClientConfig`, and `heartbeat` / `reply_timeout` of `TransportOption`.
 The appropriate values differ by environment, so it is best to measure and decide.
 
 ## Windows Driver Settings
@@ -68,6 +69,5 @@ In Device Manager, open the adapter properties → Advanced
 The repository provides tools for measuring and tuning performance.
 
 - `cargo xtask tool perftest`: measures throughput and latency.
-- `cargo xtask tool synctune`: measures synchronization stability and searches for the optimal parameters.
 
 See each tool's `--help` for details.

@@ -15,6 +15,8 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-examp
 import { excerpt } from "@lib/excerpt";
 
 `ConfigPattern` is a low-level command that configures the playback parameters of the Pattern bank.
+The settings are only written; they take effect on playback when [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/) is sent.
+To change the settings of the bank being played, follow it with a `ActivatePatternBank` that points to the same bank.
 
 ## API
 
@@ -28,14 +30,14 @@ import { excerpt } from "@lib/excerpt";
 | `loop_behavior` | `LoopBehavior` | Playback loop count (`Infinite` / `Finite`)      |
 
 
-`loop_behavior` only takes effect when switching to a bank different from the current one via [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/).
+`loop_behavior` only takes effect when switching to a bank different from the current one via [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
 
 `size = 1` (a static Pattern) is valid only with `loop_behavior = Infinite`.
 Use `size` of 2 or more when a finite loop is needed.
 
 ## Example
 
-`ConfigPattern` is used within the sequence of writing the buffer with `WritePatternBuffer` and then switching playback with `ChangePatternBank`.
+`ConfigPattern` is used within the sequence of writing the buffer with `WritePatternBuffer` and then switching playback with `ActivatePatternBank`.
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
 

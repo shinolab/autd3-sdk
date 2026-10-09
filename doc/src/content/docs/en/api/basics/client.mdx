@@ -17,7 +17,13 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 
 `Client` is the central object that sends commands and reads state.
 The basic and command APIs, including `Client`, are provided by the main package.
-Connecting to real hardware and the like additionally requires a [Link](/autd3-sdk/en/api/link/).
+The destination (real devices, the [device emulator](/autd3-sdk/en/api/connection/device-emulator/), or the Simulator) is given by [`TransportOption`](/autd3-sdk/en/api/connection/).
+
+`Client::open` enumerates and opens the devices (synchronously), starts one I/O thread for receiving and for the heartbeat, and then runs the connection handshake.
+There is no thread to spawn or loop to run on the user's side.
+
+In Python, the asynchronous APIs such as `Client.open` / `send` / `close` can only be called from inside a running asyncio event loop (for example, inside a coroutine started with `asyncio.run(main())`).
+No synchronous API is provided.
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
@@ -26,10 +32,10 @@ Connecting to real hardware and the like additionally requires a [Link](/autd3-s
 | Parameter  | Type            | Description                    |
 | ---------- | --------------- | ----------------------------- |
 | `geometry` | `&Geometry`     | Physical layout of the devices |
-| `link`     | `impl IntoLink` | Link                          |
+| `option`   | `&TransportOption` | Destination and transport settings (see [Connection](/autd3-sdk/en/api/connection/)) |
 | `config`   | `ClientConfig`  | See below                     |
 
-To continuously monitor the operating state of the link, use `open_with_checker` and drive the returned `Checker` (see [Link State Monitoring](/autd3-sdk/en/guide/state-check/)).
+To continuously monitor the operating state of the devices, drive the `StateChecker` taken from `Client::state_checker` (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
 
 ## API
 
@@ -39,14 +45,22 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 | ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
 | `num_devices()`           | —     | `usize`                               | Number of connected devices                                |
 | `geometry()`              | —     | `&Geometry`                           | Device layout given at open time                           |
+| `bus_stats()`             | —     | `BusStats`                            | Send/receive statistics (number of frames sent, ack latency, etc.) |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
-| `read_error_detail()`     | ✓     | `Result<Vec<u8>, Error>`              | Error detail of each device                                |
-| `datagram_builder()`      | —     | `DatagramBuilder`                     | [DatagramBuilder](/autd3-sdk/en/api/basics/datagram-builder/) |
-| `send(frame)`             | ✓     | `Result<ResponseFuture, Error>`       | Enqueue a frame into the send queue. Awaiting the `ResponseFuture` yields the response (`Response`) |
-| `send_checked(frame)`     | ✓     | `Result<(), Error>`                   | Send and confirm the response                              |
-| `stop()`                  | ✓     | `Result<(), Error>`                   | Stop all transducers                                       |
-| `close()`                 | ✓     | `Result<(), Error>`                   | Stop all transducers and close the connection              |
+| `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
+| `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | Send the frames within the window without waiting for replies. Awaiting the `StreamFuture` waits for every frame to complete |
+| `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame. Awaiting the `ResponseFuture` yields the response (`Response`) |
+| `state_checker()`         | —     | `StateChecker`                        | Handle for reading the device states ([State Monitoring](/autd3-sdk/en/guide/state-check/)) |
+| `silent_stop()`           | ✓     | `Result<(), Error>`                   | Set the Silencer, then stop all transducers                |
+| `close()`                 | ✓     | `Result<(), Error>`                   | Stop the same way as `silent_stop()` and close the connection |
+
+To avoid the noise of dropping the amplitude at once, `silent_stop()` first sets the [Silencer](/autd3-sdk/en/api/command/silencer/) to the default completion time (with strict mode disabled) and then drives every transducer to zero amplitude.
+The Silencer setting stays overwritten, so send `SetSilencer` again before resuming the output with a different setting.
+
+The `BusStats` returned by `bus_stats()` is a handle that shares the statistics with the connection: each read returns the value at that moment (there is no need to fetch it again, and it stays readable after the `Client` is closed).
+
+See [Logging](/autd3-sdk/en/api/basics/tracing/) for how to show the library's logs.
 
 ## ClientConfig
 
@@ -54,19 +68,12 @@ To continuously monitor the operating state of the link, use `open_with_checker`
 
 | Field                  | Type                     | Default | Description                                                |
 | ---------------------- | ------------------------ | ------- | ---------------------------------------------------------- |
-| `timeout_cycles`       | `NonZeroU32`             | `10`    | Response-wait timeout (in send cycles)                     |
-| `max_inflight`         | `NonZeroUsize`           | `127`   | Send queue size                                            |
-| `max_resync_rounds`    | `NonZeroU32`             | `8`     | Maximum number of rounds to attempt resynchronization      |
-| `low_latency`          | `bool`                   | `false` | Low-latency mode                                           |
-| `reset_resend_cycles`  | `NonZeroU32`             | `2`     | Number of cycles to send a reset command                   |
-| `rt_priority`          | `Option<RtPriority>` | Windows: `TimeCritical` / otherwise: `80` | Priority of the RT thread. Setting `None` leaves the OS default. |
-| `rt_policy`            | `RtSchedulePolicy`       | `Fifo`  | Scheduling policy used when `rt_priority` is set: `Normal`, `Fifo` (`SCHED_FIFO`), `RoundRobin` (`SCHED_RR`) |
-| `rt_affinity`          | `Option<CoreId>`         | `None`  | CPU core affinity of the RT thread (OS default if `None`)  |
-| `validate_state`       | `bool`                   | `true`  | Enable pre-send validation                                 |
+| `ack_timeout`          | `Duration`               | 10 ms   | Response-wait timeout; after it the frames in flight fail with `Timeout` and the next send realigns the sequence |
+| `max_inflight`         | `NonZeroUsize`           | `7`     | Frames that may be sent without waiting for a reply (the default is the capacity of the device receive queue) |
+| `max_resync_rounds`    | `NonZeroU32`             | `8`     | Maximum number of times the sequence-realigning `Reset` is sent again |
 | `require_supported_firmware` | `bool`             | `false` | Check the firmware series on open (Rust only) |
 
-`max_inflight` errors if it exceeds `MAX_INFLIGHT (127)`.
-
-Enabling `low_latency` bypasses the receive buffer inside the firmware, improving latency.
-However, this may make operation unstable.
+`max_inflight` errors if it exceeds `MAX_INFLIGHT (7)`.
+This is the capacity of the device receive queue; sending more than that would overflow it and the overflowing frames would be dropped.
+There is no automatic retransmission; a failed command is sent again by the caller (see [Sending](/autd3-sdk/en/api/basics/send/)).
 

@@ -36,6 +36,10 @@ Each update step is in units of the ultrasound period (25 µs), and it is an err
 | `phase`       | `Duration` | `1000 µs` | Completion time until the phase reaches the target       |
 | `strict_mode` | `bool`     | `true`    | Whether to error when the completion time does not fit within the modulation/STM sampling period |
 
+The `strict_mode` check runs when a setting takes effect (when `SetSilencer` is sent and when a modulation/STM bank is activated),
+against the banks in use at that moment (the bank being played and the bank being switched to; both banks with `TransitionMode::Ext`).
+A bank that was only written with `TransitionMode::Later` is not in use yet, so the error is reported by the command that activates it.
+
 ## FixedUpdateRate
 
 Fixes the update amount per interpolation step (every 25 μs).
@@ -44,6 +48,8 @@ Fixes the update amount per interpolation step (every 25 μs).
 | ----------- | ------------ | --------------------------------- |
 | `intensity` | `NonZeroU16` | Update amount of intensity per step |
 | `phase`     | `NonZeroU16` | Update amount of phase per step     |
+
+`FixedUpdateRate` has no default; both values must always be given. `0` is an error.
 
 ## Example
 

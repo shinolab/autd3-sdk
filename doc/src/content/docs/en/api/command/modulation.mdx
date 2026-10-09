@@ -53,13 +53,13 @@ To also change the loop count or transition timing, pass the `loopBehavior` / `t
 
 `config` is specified with [`SamplingConfig`](/autd3-sdk/en/api/basics/sampling-config/).
 `data` is written to a buffer allocated by `modulation_buffer()`.
-For the behavior of `loop_behavior` / `transition_mode`, see [ChangeModulationBank](/autd3-sdk/en/api/command/lowlevel/change-modulation-bank/).
+For the behavior of `loop_behavior` / `transition_mode`, see [ActivateModulationBank](/autd3-sdk/en/api/command/lowlevel/activate-modulation-bank/).
 
 Several [helper functions](/autd3-sdk/en/api/compute/modulation/) are provided for computing modulation.
 
 ## Equivalent Low-Level Commands
 
-`Modulation` is equivalent to the three commands [WriteModulationBuffer](/autd3-sdk/en/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/en/api/command/lowlevel/config-modulation/) + [ChangeModulationBank](/autd3-sdk/en/api/command/lowlevel/change-modulation-bank/). When the data fits in a single frame it is fused and sent as one frame; otherwise it expands into the three commands above.
+`Modulation` is equivalent to the three commands [WriteModulationBuffer](/autd3-sdk/en/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/en/api/command/lowlevel/config-modulation/) + [ActivateModulationBank](/autd3-sdk/en/api/command/lowlevel/activate-modulation-bank/), and is sent expanded in that order.
 The following is equivalent to `Modulation { bank, config, data, loop_behavior, transition_mode }`
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

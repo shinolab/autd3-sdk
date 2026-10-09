@@ -36,6 +36,10 @@ import csFullSample from "@codes/csharp/examples/api/command/silencer-example.cs
 | `phase`       | `Duration` | `1000 µs`  | 位相が目標へ到達するまでの完了時間                       |
 | `strict_mode` | `bool`     | `true`     | 完了時間が変調・STM のサンプリング周期に収まらない場合にエラーとするか |
 
+`strict_mode` の検査は, 設定が発効する時点 (`SetSilencer` の送信時と, 変調・STM のバンクを有効化する時) に,
+その時点で使用中のバンク (再生中のバンクと切替先のバンク. `TransitionMode::Ext` では両方) に対して行われる.
+`TransitionMode::Later` で書き込んだだけのバンクはまだ使用中ではないので, そのバンクを有効化するコマンドでエラーになる.
+
 ## FixedUpdateRate
 
 1 補間ステップあたり (25 μs毎) の更新量を固定する.
@@ -44,6 +48,8 @@ import csFullSample from "@codes/csharp/examples/api/command/silencer-example.cs
 | ----------- | ------------ | ----------------------------- |
 | `intensity` | `NonZeroU16` | 強度の 1 ステップあたり更新量 |
 | `phase`     | `NonZeroU16` | 位相の 1 ステップあたり更新量 |
+
+`FixedUpdateRate` にデフォルトは無く, 両方の値を必ず指定する. `0` はエラーになる.
 
 ## Example
 

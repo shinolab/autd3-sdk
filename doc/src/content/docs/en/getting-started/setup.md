@@ -9,21 +9,16 @@ The steps for getting started with AUTD3 are described in the following order.
 
 - [Hardware](/autd3-sdk/en/getting-started/setup/hardware/): Connect the AUTD3 device to the PC.
 - [Firmware](/autd3-sdk/en/getting-started/setup/firmware/): Update the device firmware to a compatible version.
+- [Host Network Setup](/autd3-sdk/en/getting-started/setup/network/): Configure the host firewall and NIC.
 - [Software](/autd3-sdk/en/getting-started/setup/software/): Add the SDK library as a dependency.
 
-## Choosing how to drive the bus
+If your devices run firmware v0.9.x or earlier, first follow [Migrating from firmware v0.9.x](/autd3-sdk/en/getting-started/migration/).
 
-AUTD3 is driven over EtherCAT. There are three options, depending on where the EtherCAT master runs.
+## Choosing how to connect
 
-- [Appliance](/autd3-sdk/en/getting-started/appliance/) (recommended)
-  - A dedicated board runs the master and the host connects over TCP. For any host OS, and when you want the bus decoupled from the host's load and OS settings.
-- [echocat](/autd3-sdk/en/api/link/echocat/)
-  - The host itself becomes the master. When you do not want to add hardware. Needs npcap on Windows and raw socket privileges on Linux/macOS. It may also become unstable under host load.
-- [TwinCAT](/autd3-sdk/en/getting-started/twincat/)
-  - Windows only. Needs a supported network controller and a TwinCAT setup. The most stable of the three.
-
-Unless there is a reason not to, the [Appliance](/autd3-sdk/en/getting-started/appliance/) is recommended, though it additionally requires a Raspberry Pi 4, a microSD card and a USB Ethernet adapter.
+AUTD3 and the host communicate over [UDP](/autd3-sdk/en/api/connection/) on IPv6 link-local addresses.
+The host NIC connects to the AUTD3 directly. No extra hardware is required. The host needs neither an IP address configuration nor root / administrator privileges; only the [host network setup](/autd3-sdk/en/getting-started/setup/network/) is needed.
 
 :::note
-The tutorial that follows uses `echocat`, to avoid the extra hardware setup.
+Without hardware, the [device emulator](/autd3-sdk/en/api/connection/device-emulator/) and the [Simulator](/autd3-sdk/en/guide/simulator/) are opened the same way.
 :::

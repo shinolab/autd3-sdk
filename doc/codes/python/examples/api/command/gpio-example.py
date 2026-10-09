@@ -1,16 +1,15 @@
 import asyncio
 
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, UdpEmulator
 from autd3.commands import GpioOut, SetGpioOut
 from autd3.geometry import Autd3, Geometry
-from autd3_link_nop import Nop
 
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-    async with await Client.open(geometry, Nop(), ClientConfig()) as client:
-        builder = client.datagram_builder()
-        builder.push(
+    emulator = UdpEmulator(geometry.num_devices())
+    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
+        await client.send(
             SetGpioOut(
                 outputs=[
                     GpioOut.PatternBank,
@@ -20,9 +19,6 @@ async def main() -> None:
                 ]
             )
         )
-        frames = builder.build()
-        for frame in frames:
-            await client.send_checked(frame)
 
 
 asyncio.run(main())

@@ -2,10 +2,9 @@ import asyncio
 
 import numpy as np
 
-import autd3_link_echocat as echocat
 import autd3_modulation as modulation
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, TransportOption
 from autd3.commands import Modulation, Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz, m, s
@@ -18,10 +17,10 @@ async def main() -> None:
     # Define a geometry consisting of a single AUTD3 device.
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    # Open the client over an echocat link.
+    # Open the client.
     async with await Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        TransportOption(),
         ClientConfig(),
     ) as client:
         # Generate a focus 150 mm above the array center.
@@ -43,12 +42,9 @@ async def main() -> None:
             mod_buf,
         )
 
-        builder = client.datagram_builder()
-        builder.push(SetSilencer())
-        builder.push(Pattern(phases, Intensity.MAX))
-        builder.push(Modulation(SamplingConfig.FREQ_4K, mod_buf))
-        for frame in builder.build():
-            await client.send_checked(frame)
+        await client.send(SetSilencer())
+        await client.send(Pattern(phases, Intensity.MAX))
+        await client.send(Modulation(SamplingConfig.FREQ_4K, mod_buf))
 
         await asyncio.Event().wait()
 

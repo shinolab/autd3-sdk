@@ -1,8 +1,6 @@
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
-using Nop = AUTD3.Link.Nop;
 
 namespace DocSamples.ApiBasicsClient;
 
@@ -11,9 +9,10 @@ internal static class Sample
     internal static async Task Run()
     {
         var layout = new Geometry(new[] { new Autd3(Vector3.Zero) });
-        var client = await Client.OpenAsync(layout, new Nop(), new ClientConfig());
+        using var emulator = new UdpEmulator(layout.NumDevices);
+        var client = await Client.OpenAsync(layout, emulator.Option(), new ClientConfig());
 
-        var frames = client.DatagramBuilder().Build();
+        using var frames = Frames.Encode(layout, new Nop());
         var frame = frames[0];
 
         // ANCHOR: api
@@ -22,24 +21,24 @@ internal static class Sample
 
         var firmware = await client.ReadFirmwareVersionAsync();
         var fpgaState = await client.ReadFpgaStateAsync();
-        var errorDetail = await client.ReadErrorDetailAsync();
 
-        var datagramBuilder = client.DatagramBuilder();
-        var resp = await await client.SendAsync(frame);
-        await client.SendCheckedAsync(frame);
+        await client.SendAsync(new Nop());
+        var done = await client.SendStreamingAsync(new Nop());
+        var resp = await await client.SendFrameAsync(frame);
 
-        await client.StopAsync();
+        await client.SilentStopAsync();
         await client.CloseAsync();
         // ANCHOR_END: api
 
-        _ = (numDevices, geometry, firmware, fpgaState, errorDetail, datagramBuilder);
+        _ = (numDevices, geometry, firmware, fpgaState, done, resp);
 
         var scopedLayout = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         // ANCHOR: context_manager
-        await using (var scoped = await Client.OpenAsync(scopedLayout, new Nop(), new ClientConfig()))
+        using var scopedEmulator = new UdpEmulator(scopedLayout.NumDevices);
+        await using (var scoped = await Client.OpenAsync(scopedLayout, scopedEmulator.Option(), new ClientConfig()))
         {
-            await scoped.SendCheckedAsync(frame);
+            await scoped.SendAsync(new Nop());
         }
         // ANCHOR_END: context_manager
     }

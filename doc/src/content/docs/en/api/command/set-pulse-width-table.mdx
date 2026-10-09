@@ -24,8 +24,14 @@ import { excerpt } from "@lib/excerpt";
 | ------- | ----------------------- | ------------------------------------------------------- |
 | `table` | `&[u16; PWE_TABLE_SIZE]` | Pulse width per intensity index (0–255) (256 elements) |
 
-`SetPulseWidthTable::default_table()` returns the default arcsin-shaped table.
-This is a table that makes the output sound pressure (theoretically) linear with respect to intensity.
+The default command sets an arcsin-shaped table.
+This is a table that makes the output sound pressure (theoretically) linear with respect to intensity, and it is the same table the device holds at boot.
+
+<CodeTabs rust={excerpt(sample, "default")} python={excerpt(pySample, "default")} csharp={excerpt(csSample, "default")} />
+
+`empty_table` returns a table whose entries are all 0. Use it as the base for building a custom table.
+
+<CodeTabs rust={excerpt(sample, "empty")} python={excerpt(pySample, "empty")} csharp={excerpt(csSample, "empty")} />
 
 ## Example
 

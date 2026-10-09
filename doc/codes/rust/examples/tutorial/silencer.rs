@@ -8,13 +8,19 @@ use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::{ControlPoint, ControlPoints, Intensity};
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_nop::Nop;
+use autd3_rs::udp::TransportOption;
+use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
+    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
+    let option = TransportOption {
+        iface: emulator.interface(),
+        ..TransportOption::default()
+    };
+    let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let radius = (30.0 * mm).mm();
@@ -27,15 +33,12 @@ async fn main() -> Result<()> {
             ControlPoints::new([ControlPoint::from(p)], Intensity::MAX)
         })
         .collect();
-    let mut builder = client.datagram_builder();
-    builder.push(SetSilencer::disable()).push(FociStm::new(
+    client.send(SetSilencer::disable()).await?;
+    client.send(FociStm::new(
         50.0 * Hz,
         &foci,
         FociStmOption::default(),
-    ));
-    for frame in &builder.build()? {
-        client.send_checked(frame).await?;
-    }
+    )).await?;
     // ANCHOR_END: disable
 
     // ANCHOR: err
@@ -46,15 +49,12 @@ async fn main() -> Result<()> {
             ControlPoints::new([ControlPoint::from(p)], Intensity::MAX)
         })
         .collect();
-    let mut builder = client.datagram_builder();
-    builder.push(SetSilencer::default()).push(FociStm::new(
+    client.send(SetSilencer::default()).await?;
+    client.send(FociStm::new(
         50.0 * Hz,
         &foci,
         FociStmOption::default(),
-    ));
-    for frame in &builder.build()? {
-        client.send_checked(frame).await?;
-    }
+    )).await?;
     // ANCHOR_END: err
 
     // ANCHOR: workaround
@@ -65,17 +65,12 @@ async fn main() -> Result<()> {
             ControlPoints::new([ControlPoint::from(p)], Intensity::MAX)
         })
         .collect();
-    let mut builder = client.datagram_builder();
-    builder
-        .push(SetSilencer::new(FixedCompletionTime {
-            intensity: Duration::from_micros(500),
-            phase: Duration::from_micros(500),
-            strict_mode: true,
-        }))
-        .push(FociStm::new(50.0 * Hz, &foci, FociStmOption::default()));
-    for frame in &builder.build()? {
-        client.send_checked(frame).await?;
-    }
+    client.send(SetSilencer::new(FixedCompletionTime {
+        intensity: Duration::from_micros(500),
+        phase: Duration::from_micros(500),
+        strict_mode: true,
+    })).await?;
+    client.send(FociStm::new(50.0 * Hz, &foci, FociStmOption::default())).await?;
     // ANCHOR_END: workaround
 
     client.close().await?;

@@ -86,14 +86,23 @@ import { excerpt } from "@lib/excerpt";
 | `position(i)`        | `Point3<f32>`           | `i` 番目の振動子の位置                        |
 | `direction(i)`       | `UnitVector3<f32>`      | `i` 番目の振動子の方向                        |
 
-## 座標ヘルパ (Rustのみ)
+Python では座標・方向・姿勢はすべて `float32` の numpy 配列で返る (`Geometry.center()` や `Autd3.origin` / `Autd3.rotation` も同じ).
+姿勢は `[w, x, y, z]` の順のクォータニオン.
 
-`autd3_rs::geometry` には座標を組み立てるヘルパがある.
-引数の型が `Length` になっており, 単位を指定することができる.
+## 座標ヘルパ
 
-| 関数                | 返り値          | 説明                                         |
+座標を組み立てるヘルパがある.
+引数の型が `Length` になっており, `150 * mm` のように単位を指定することができる.
+
+| 関数                | 返り値 (Rust)   | 説明                                         |
 | ------------------- | --------------- | -------------------------------------------- |
 | `point(x, y, z)`    | `Point3<f32>`   | 絶対座標の点                                 |
 | `offset(x, y, z)`   | `Vector3<f32>`  | 相対変位ベクトル                             |
 
-Python / C# には長さの単位型はなく, mm 固定である.
+| 言語   | ヘルパ                                   | 単位                    | 返り値                 |
+| ------ | ---------------------------------------- | ----------------------- | ---------------------- |
+| Rust   | `autd3_rs::geometry::{point, offset}`    | `autd3_rs::units`       | 上表のとおり           |
+| Python | `autd3.geometry.point` / `offset`        | `autd3.units`           | `float32` の numpy 配列 |
+| C#     | `AUTD3.Units.Point` / `Offset`           | `AUTD3.Units`           | `Vector3`              |
+
+C# では `using static AUTD3.Units;` としておくと `Point(0 * mm, 0 * mm, 150 * mm)` のように書ける.

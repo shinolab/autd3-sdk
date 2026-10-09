@@ -1,0 +1,68 @@
+---
+title: Sending
+description: Sending and composing commands, and encoding them into Frames
+sidebar:
+  order: 3
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/send.rs?raw";
+import pySample from "@codes/python/examples/api/basics/send.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
+
+Commands are sent by passing them to the `Client`.
+A command is encoded into one or more `Frame`s, and the frames are sent to the devices one at a time.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Function                        | Description                                                                             |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
+| `client.send(cmd)`              | Send frame by frame, confirming each response (stop-and-wait)                           |
+| `client.send_streaming(cmd)`    | Send without waiting for responses and confirm the whole command afterwards (streaming) |
+| `Frames::encode(geometry, cmd)` | Encode a command into `Frames`. It does not need a `Client`                             |
+| `client.send_frame(frame)`      | Send one already-encoded `Frame`                                                        |
+
+When a frame in the middle is answered with an error, `send` returns that error without sending the remaining frames.
+`send_streaming` returns a `StreamFuture` once every frame has been enqueued.
+Awaiting it waits for all frames to complete and returns the first error.
+Frames after the failed one may still be sent, so use `send` for commands that must be applied reliably one at a time.
+
+Both encode every frame before sending anything, so nothing is sent when encoding fails.
+
+A lost frame or an unresponsive device is not recovered automatically.
+When the replies do not arrive within `ack_timeout` (10 ms by default), the frames in flight fail with `Error::Timeout`,
+and frames behind a lost one fail with `Error::SeqMismatch`.
+In either case the next send first realigns the sequence with the devices by a `Reset`, so a failed command can simply be sent again.
+
+Use `Frames::encode` and `send_frame` to send the same `Frames` repeatedly, or to control how responses are collected yourself.
+`send(cmd)` is equivalent to calling `send_frame(frame).await?.await?.check()` in order for each `Frame` obtained from `Frames::encode`.
+
+See [Send modes](/autd3-sdk/en/getting-started/tutorial/send-modes/) for choosing between the modes.
+
+## each
+
+`each` takes a closure that receives a device and assigns a different command per device.
+In Rust it is `FnMut(&Device) -> Option<C>`, in Python `Callable[[Device], Command | None]`, and in C# `Func<Device, ICommand?>`.
+Nothing is assigned to a device for which `None` is returned.
+
+<CodeTabs rust={excerpt(sample, "each")} python={excerpt(pySample, "each")} csharp={excerpt(csSample, "each")} />
+
+In Rust, the return values of the closure must all be the same type.
+To mix commands of different types, unify them into a `BoxedCommand` with `Command::boxed`.
+Because Python is dynamically typed, commands of different types can be returned per device as-is.
+
+<CodeTabs rust={excerpt(sample, "each_boxed")} />
+
+## Sequences of commands
+
+Several commands can also be treated as one command.
+Use a tuple in Rust, a tuple or a list in Python, and `Command.Sequence` in C#.
+A sequence is expanded in order from the front, so sending it with `send` produces the same frames as sending the commands one by one.
+
+## Validation by the device
+
+Constraints such as those of the Silencer, or the consistency between `TransitionMode` and the loop setting, are validated by the device.
+A command that violates them is rejected by the device and returned as `Error::DeviceError`.

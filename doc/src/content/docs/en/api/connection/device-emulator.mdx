@@ -1,0 +1,29 @@
+---
+title: Device Emulator
+description: UDP device emulator for opening a Client without hardware
+sidebar:
+  order: 1
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/connection/device-emulator.rs?raw";
+import pySample from "@codes/python/examples/api/connection/device-emulator.py?raw";
+import csSample from "@codes/csharp/examples/api/connection/device-emulator.cs?raw";
+
+`UdpEmulator` emulates a chain of AUTD3 devices on the host (`::1`).
+Without any hardware, you can open a `Client` and send commands over the same UDP path as with real devices.
+The data sent to each device is processed by the actual CPU firmware logic and an FPGA emulator.
+Use it for tests, samples, and trying things out.
+
+<CodeTabs rust={sample} python={pySample} csharp={csSample} />
+
+- `UdpEmulator::spawn(n)` (`UdpEmulator(n)` in Python, `new UdpEmulator(n)` in C#) starts `n` devices
+- In Rust, `interface()` returns the `Interface::Addr(..)` that points at the emulator. Put it in `iface` of [`TransportOption`](/autd3-sdk/en/api/connection/)
+- In Python and C#, `option()` returns a `TransportOption` pointing at the emulator
+- `reboot(i)` emulates a reboot of the `i`-th device. It and every device behind it stop answering, and the [state check](/autd3-sdk/en/guide/state-check/) reports them as `Lost`
+- In Rust, `with_device(i, ..)` observes the firmware and FPGA state of the `i`-th device
+- In Rust, enable the `udp` feature of `autd3-rs-firmware-emulator` (`autd3_rs_firmware_emulator::udp::UdpEmulator`). Python and C# include it in the main package
+
+The synchronization between devices (PTP) is emulated: the other devices count as synchronized shortly (50 ms) after the time of ID 0 is set.
+The emulator does not reproduce the timing behavior of the hardware, such as the accuracy of the sync pulse.
+To see the resulting sound field, use the [Simulator](/autd3-sdk/en/guide/simulator/).

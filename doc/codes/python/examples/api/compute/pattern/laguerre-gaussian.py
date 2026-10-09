@@ -1,6 +1,6 @@
 import numpy as np
 from autd3.geometry import Autd3, Geometry
-from autd3.units import m, s
+from autd3.units import m, mm, s
 from autd3_pattern import (
     LaguerreGaussianOption,
     laguerre_gaussian_phase,
@@ -17,7 +17,7 @@ phases = geometry.phase_buffer()
 intensities = geometry.intensity_buffer()
 
 # ANCHOR: api
-option = LaguerreGaussianOption(p=1, l=1, waist=10.0)
+option = LaguerreGaussianOption(p=1, l=1, waist=10.0 * mm)
 laguerre_gaussian_phase(geometry, target, axis, option, wavelength, phases)
 laguerre_gaussian_intensity(geometry, target, axis, option, wavelength, intensities)
 # ANCHOR_END: api

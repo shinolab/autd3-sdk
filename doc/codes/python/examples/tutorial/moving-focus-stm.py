@@ -2,8 +2,7 @@ import asyncio
 
 import numpy as np
 
-import autd3_link_echocat as echocat
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, TransportOption
 from autd3.commands import FociStm, FociStmOption
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz
@@ -14,7 +13,7 @@ async def main() -> None:
 
     async with await Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        TransportOption(),
         ClientConfig(),
     ) as client:
         center = geometry.center() + np.array([0.0, 0.0, 150.0])
@@ -24,10 +23,7 @@ async def main() -> None:
             ControlPoints([ControlPoint(center + np.array([20.0, 0.0, 0.0]))]),
             ControlPoints([ControlPoint(center + np.array([-20.0, 0.0, 0.0]))]),
         ]
-        builder = client.datagram_builder()
-        builder.push(FociStm(0.5 * Hz, points, FociStmOption()))
-        for frame in builder.build():
-            await client.send_checked(frame)
+        await client.send(FociStm(0.5 * Hz, points, FociStmOption()))
         # ANCHOR_END: stm
 
 

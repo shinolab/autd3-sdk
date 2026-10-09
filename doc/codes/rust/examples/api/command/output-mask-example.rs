@@ -1,26 +1,27 @@
 use autd3_rs::commands::SetOutputMask;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_nop::Nop;
+use autd3_rs::udp::TransportOption;
+use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 // HIDE
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
+    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
+    let option = TransportOption {
+        iface: emulator.interface(),
+        ..TransportOption::default()
+    };
+    let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let masks: Vec<Vec<bool>> = geometry
         .iter()
         .map(|dev| vec![true; dev.num_transducers()])
         .collect();
 
-    let mut builder = client.datagram_builder();
-    builder.push(SetOutputMask { masks: &masks });
-    let frames = builder.build()?;
-    for frame in &frames {
-        client.send_checked(frame).await?;
-    }
+    client.send(SetOutputMask { masks: &masks }).await?;
 
     client.close().await?;
     // HIDE

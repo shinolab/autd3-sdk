@@ -1,0 +1,162 @@
+---
+title: Connection (TransportOption)
+description: Talk to AUTD3 directly over UDP on IPv6 link-local addresses
+sidebar:
+  order: 0
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/connection/udp.rs?raw";
+import pySample from "@codes/python/examples/api/connection/udp.py?raw";
+import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
+
+`Client` connects the host NIC directly to the AUTD3 daisy chain over UDP.
+All communication uses IPv6 link-local addresses only. The connection settings are passed as `TransportOption`, the second argument of `Client::open`.
+There is no pluggable transport such as a Link (use the [device emulator](/autd3-sdk/en/api/connection/device-emulator/) to try without hardware, and the [Simulator](/autd3-sdk/en/guide/simulator/) to see the sound field).
+
+- No IP address needs to be configured on the host NIC (the OS assigns the IPv6 link-local address automatically)
+- Neither root / administrator privileges nor extra drivers such as npcap are required (it uses a plain UDP socket)
+- Works on Windows / Linux / macOS
+
+Before using it, configure the host firewall and NIC.
+See [Host Network Setup](/autd3-sdk/en/getting-started/setup/network/).
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Field                 | Type        | Default | Description                                                                                   |
+| --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
+| `iface`               | `Interface` | `Auto`  | Where to connect. `Auto` detects it, `Name(..)` names the NIC, `Simulator` is the Simulator only, `Addr(..)` gives the address directly ([Target Auto-Detection](#target-auto-detection)) |
+| `heartbeat`           | `Option<Duration>`  | 10 ms   | Interval of the liveness check sent while nothing else is sent. `None` (Python: `None`, C#: `null`) sends no liveness check. By default a device stops its output after 500 ms without the host, so keep it well below that (not validated) |
+| `reply_timeout`       | `Duration`  | 1 ms    | How long a liveness check waits for the replies of all devices                                 |
+| `lost_timeout`        | `Duration`  | 100 ms  | A device with no reply for this long is reported `Lost`. Longer than `heartbeat`               |
+| `response_timeout`    | `Duration`  | 200 ms  | How long to wait for the reply to a management message such as the enumeration                 |
+| `enumeration_timeout` | `Duration`  | 30 s    | How long the enumeration retries until the device count reaches the geometry                  |
+| `sync_timeout`        | `Duration`  | 30 s    | How long to wait, after setting the time, until every device is synchronized and starts its sync pulse |
+| `send_rate_limit`     | `Option<f32>` | none | Upper bound on how much of the link the host's sends occupy [%], relative to the device link speed (100 Mbps). `None` (Python: `None`, C#: `null`) applies no limit ([Saturating the Link](#saturating-the-link)) |
+| `send_buffer`         | `Option<NonZeroUsize>` | 8192 | Size of the socket send buffer [B]. `None` (Python: `None`, C#: `null`) keeps the OS default ([Sending Large Data to Many Devices](#sending-large-data-to-many-devices)) |
+| `timer_resolution`    | `Option<Duration>`  | 1 ms    | Windows timer resolution, raised only while connected. `None` (Python: `None`, C#: `null`) leaves it unchanged. At least 1 ms. Does nothing on other platforms |
+
+A command is sent as soon as there is something to send, and each device replies when it has finished handling it.
+Nothing is sent on a fixed cycle; only while there is nothing to send, a liveness check goes out every `heartbeat`.
+
+The replies of all devices travel one after another over the single link to the host.
+If replies go missing with many devices, widen `reply_timeout`.
+
+### Saturating the Link
+
+The link from the host to the devices (100 Mbps) also carries the messages that synchronize the devices.
+If the host keeps the link saturated without a gap, those messages stop flowing.
+The devices then ask the host's NIC to pause its transmission (IEEE 802.3x PAUSE) to open a gap, so nothing needs to be done as long as flow control is enabled on the NIC (it is by default on most NICs).
+
+With a NIC that does not honor flow control, saturating the link makes the devices report `Syncing`.
+In that case, cap the sends with `send_rate_limit`. `95.0` (95 % of the link) is a reasonable value.
+Sends beyond the limit wait before going out, so they are delayed by that much.
+Values below 3.076 or above 100 are rejected (opening fails).
+The reference is the device link speed, regardless of the link speed of the host's NIC.
+
+### Sending Large Data to Many Devices
+
+With many devices, sending a single frame to all of them occupies the link for milliseconds (about 2.4 ms for a maximum-length frame to 20 devices).
+Whatever the host tries to send faster than the link waits inside the host until the link is free.
+
+`send_buffer` bounds how much of that is handed to the OS.
+While the send buffer is full, a send waits until there is room. The link is no faster either way, so waiting does not lengthen the total time.
+
+If too much is handed to the OS, the OS may drop data that has waited too long (with the Linux defaults, when the wait stays above 5 ms).
+A dropped frame ends in `Timeout`. The default of 8192 avoids this, and there is normally no need to change it.
+
+If there is a switch between the host and the devices and the host is linked at 1 Gbps, the queue builds up inside the switch and `send_buffer` has no effect.
+In that case, cap the sends with `send_rate_limit`.
+
+## Target Auto-Detection
+
+With `iface` set to `Auto`, the [Simulator](/autd3-sdk/en/guide/simulator/) on the same host and every interface that has an IPv6 link-local address are queried at the same time.
+If the Simulator answers it is used; otherwise the interface an AUTD3 answers on is used.
+If AUTD3 answers on two or more interfaces, opening fails; name the interface with `Name(..)`.
+
+| `Interface`  | Target                                                                |
+| ------------ | --------------------------------------------------------------------- |
+| `Auto`       | The Simulator when it is running, real devices otherwise              |
+| `Name(..)`   | Real devices on the named NIC. The Simulator is not queried           |
+| `Simulator`  | The Simulator only. Opening fails when it is not running              |
+| `Addr(..)`   | The given IPv6 address and port (e.g. `[::1]:44336`). It is not probed. The [device emulator](/autd3-sdk/en/api/connection/device-emulator/) uses it |
+
+<CodeTabs rust={excerpt(sample, "iface")} python={excerpt(pySample, "iface")} csharp={excerpt(csSample, "iface")} />
+
+:::caution
+With `Auto`, forgetting to launch the Simulator connects to the real devices.
+Code meant for the Simulator only should set `Simulator`.
+:::
+
+## What Happens on Open
+
+`Client::open` performs the following in order.
+
+1. Choose the interface
+1. Enumerate: assign IDs (0, 1, 2, ...) from the device nearest to the host. The ID order is the device order of the geometry
+1. Check the count: if the number of devices found differs from the number of devices in the geometry, opening fails
+1. Set the time: set the time of the device with ID 0 to 0. The other devices follow its time ([Synchronization Between Devices](#synchronization-between-devices)). Wait until every device is synchronized and starts its sync pulse
+
+A device that was just powered on may take a few seconds to bring up its link.
+While devices are missing, the enumeration waits and retries until `enumeration_timeout`.
+
+## State Monitoring
+
+The checker returned by `Client::state_checker` reports each device as follows.
+
+| State    | Meaning                                                            |
+| -------- | ------------------------------------------------------------------ |
+| `Ready`   | The device replies, follows the time of ID 0, and its sync pulse is running |
+| `Syncing` | The device replies but is still following the time of ID 0, or its sync pulse is not running yet |
+| `Lost`    | No reply for `lost_timeout`, or the device rebooted               |
+
+Rebooting one device in the middle makes every device beyond it `Lost` as well.
+There is no automatic recovery from `Lost`; reopen the client.
+Nothing is sent to a `Lost` device any more, so even if it is still alive, its failsafe stops the output.
+See [State Check](/autd3-sdk/en/guide/state-check/) for details.
+
+## Synchronization Between Devices
+
+The devices align their time with IEEE 1588 (PTP) using the hardware timestamps of the Ethernet switch on each device.
+The device with ID 0 is the reference (grandmaster), and the other devices follow its time. The host PC does not take part in PTP, so it needs no setup.
+
+- Opening waits until every device follows the time of ID 0. If a device does not, opening fails after `sync_timeout`
+- Since all devices share the same time, transitions and GPIO outputs using `SysTime` happen together on every device
+- A device that falls out of sync after opening is reported as `Syncing`, and returns to `Ready` once it follows again. Reopen the client if it stays `Syncing`
+
+### Synchronization Accuracy
+
+Measured on real hardware with four daisy-chained devices by comparing the rising edges of each device's GPIO output with those of ID 0 (2026-09-30, more than 10,000 edges on an oscilloscope).
+
+| Output                                           | Mean offset | Standard deviation | Peak-to-peak |
+| ------------------------------------------------ | ----------- | ------------------ | ------------ |
+| `BaseSignal`                                     | 5–32 ns     | about 29 ns        | about 300 ns |
+| `SysTimeEq` (the same `SysTime` on every device) | 12–20 ns    | about 29 ns        | about 270 ns |
+| Bank switch with `TransitionMode::SysTime`       | 5–9 ns      | about 30 ns        | about 250 ns |
+
+- Most of the standard deviation and peak-to-peak comes from the FPGA counting the interval between sync pulses (1 ms) with its own oscillator, not from the time alignment between devices. It does not change under load such as continuous pattern writes or a saturated link, and there is no drift over a 12-minute measurement
+- The mean offset is the sum of the path asymmetry of each link between neighboring devices (at most a few tens of ns per link). It changes every time a link comes up again, such as after reconnecting a cable or power-cycling (by up to about 30 ns on a link). There is no calibration mechanism
+
+## Limitations
+
+- Hot-plugging devices while running is not followed. Reopen once it is detected
+- The mean offset between devices accumulates the asymmetry of every link between the device and ID 0. The worst case with four devices is about 32 ns, but it can grow on a longer chain
+- Putting an L2 switch between the host and the devices is not recommended. If you do, disable MLD snooping
+
+## Errors
+
+Communication failures are returned as `Error::Network`. The cause is a `UdpError`, reachable through `source()` (Python / C# receive it as the common exception).
+The main ones are:
+
+| `UdpError`             | Cause                                                              |
+| ---------------------- | ------------------------------------------------------------------ |
+| `NoInterfaceFound`     | No interface had an AUTD3 answering                                |
+| `AmbiguousInterface`   | Devices answered on two or more interfaces. Choose one with `iface` |
+| `SimulatorNotFound`    | `iface` is `Simulator`, but no Simulator answered                   |
+| `DeviceCountMismatch`  | The number of devices found differs from the geometry              |
+| `EnumerationTimeout`   | The devices did not all appear within `enumeration_timeout`         |
+| `SyncTimeout`          | A device did not follow the time of ID 0 or start its sync pulse within `sync_timeout` |
+| `Unsent`               | The OS did not take the frame for a device. That frame fails, but the connection stays open |

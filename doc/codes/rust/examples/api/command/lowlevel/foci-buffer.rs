@@ -1,4 +1,4 @@
-use autd3_rs::commands::{ChangePatternBank, ConfigFociStm, StmConfig, WriteFociBuffer, circle};
+use autd3_rs::commands::{ActivatePatternBank, ConfigFociStm, StmConfig, WriteFociBuffer, circle};
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};

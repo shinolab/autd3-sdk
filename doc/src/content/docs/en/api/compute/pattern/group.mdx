@@ -16,7 +16,7 @@ import csFullSample from "@codes/csharp/examples/api/compute/pattern/group-examp
 import { excerpt } from "@lib/excerpt";
 
 Selects, per transducer, which pattern's emission is output.
-The transducers are split by assigning keys (an enum, for example) with `TransducerGroups`. Transducers with no key produce no output.
+The transducers are split by assigning keys (an enum, for example) with `TransducerGroups`. Transducers with no key are not written, so they keep the value already in the output buffer.
 
 There are two composing APIs.
 
@@ -24,7 +24,7 @@ There are two composing APIs.
 - `group` — composes precomputed buffers selected by key. Use it to reuse results or to compute groups in parallel.
 
 :::note
-If you only need to switch per device, send a command per device with `push_each` on `DatagramBuilder` instead of these.
+If you only need to switch per device, send a command per device with [`each`](/autd3-sdk/en/api/basics/send/#each) instead of these.
 :::
 
 ## group_compute
@@ -41,7 +41,7 @@ If you only need to switch per device, send a command per device with `push_each
 
 `compute` is called once per key (in order of first appearance), and only the transducers of that key are written into `phases` / `intensities`.
 The scratch buffers are reset to phase 0 and the maximum intensity for each key.
-Transducers not assigned to any key produce no output (phase 0 and `Intensity::MIN`).
+Transducers not assigned to any key are left unchanged in `phases` / `intensities`.
 
 ## group
 
@@ -52,17 +52,17 @@ Transducers not assigned to any key produce no output (phase 0 and `Intensity::M
 | `geometry` | `&Geometry`                                 | Geometry                                 |
 | `groups`   | `&TransducerGroups<K>`                      | Key of each transducer                   |
 | `source`   | `FnMut(K) -> impl AsRef<[Vec<T>]>`          | Returns the source buffer for a key      |
-| `null`     | `T`                                         | Value written to transducers of no key   |
 | `dst`      | `&mut [Vec<T>]`                             | Output buffer                            |
 
 `T` is `Phase` or `Intensity`; call it once for each of the phase and intensity buffers.
-Python and C# take no `null` argument: transducers of no key get phase 0 for a phase buffer and `Intensity.MIN` (no output) for an intensity buffer.
+Transducers not assigned to any key are left unchanged in `dst`.
 
 ## TransducerGroups
 
-`TransducerGroups::new(&geometry, |device, tr| ...)` returns a key (`None` = no group) from a device and transducer index, and keeps the key of each transducer.
-Keys are `Copy + Eq` types in Rust, value types (`struct`) in C#, and hashable values in Python.
-`mask(key)` returns a `TransducerMask` for [Holo](/autd3-sdk/en/api/compute/holo/) that enables only the transducers with `key`.
+`TransducerGroups::new(&geometry, |device, tr| ...)` returns a key (`None` = no group; `null` in C#) from a device and transducer index, and keeps the key of each transducer.
+To silence the transducers of no group, set the intensity in the output buffer to `Intensity::MIN` beforehand.
+Keys are `Copy + Eq` types in Rust, value types (`struct`, such as an `enum`) in C#, and hashable values in Python.
+`mask(key)` returns a `TransducerMask` for [Holo](/autd3-sdk/en/api/compute/holo/) that enables only the transducers with `key`. For a key that no transducer is assigned, Rust returns `None`, C# returns `null`, and Python raises `KeyError`.
 
 ## Example
 

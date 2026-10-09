@@ -11,8 +11,8 @@ import sample from "@codes/rust/examples/tutorial/send-modes.rs?raw";
 import pySample from "@codes/python/examples/tutorial/send-modes.py?raw";
 import csSample from "@codes/csharp/examples/tutorial/send-modes.cs?raw";
 
-The `Frames` obtained from `DatagramBuilder::build` may be split into multiple `Frame`s.
-There are two ways to send a `Frame`, with a trade-off between reliability and throughput.
+A command is encoded into one or more `Frame`s and then sent.
+There are two ways to send, with a trade-off between reliability and throughput.
 
 Below, the two send methods are compared using an example that moves the focal point along a circle.
 The focal positions to move to are prepared in advance as `targets`.
@@ -22,7 +22,7 @@ The focal positions to move to are prepared in advance as `targets`.
 ## stop-and-wait
 
 A method that waits for a response after each frame before sending the next.
-It uses `send_checked`.
+It uses `send`.
 Because it proceeds to the next frame only after confirming that each update has been reliably applied, it is reliable, but throughput is low because a round-trip latency is incurred on every frame.
 
 <CodeTabs rust={excerpt(sample, "stop_and_wait")} python={excerpt(pySample, "stop_and_wait")} csharp={excerpt(csSample, "stop_and_wait")} />
@@ -30,14 +30,21 @@ Because it proceeds to the next frame only after confirming that each update has
 ## streaming
 
 A method that sends one frame after another without waiting for responses, and collects the responses together later.
-`send` returns a `ResponseFuture` at the point the frame is enqueued, and awaiting that `ResponseFuture` yields the device's response (`Response`).
-`Response` can be validated for device errors with `check`.
-The maximum size of the send queue is `MAX_INFLIGHT (127)`.
-`ResponseFuture`s are held in FIFO order, and when the queue is full the oldest response is collected.
 Because it does not wait for a response on every frame, throughput is high.
+
+To send a single command that is split into several frames (a large STM, for example), use `send_streaming`.
+`send_streaming` returns a `StreamFuture` at the point every frame of the command is enqueued, and awaiting that `StreamFuture` waits for all the frames to complete.
+If the device reported errors, the first one is returned.
+
+To keep sending across many commands, as in the example below, encode each command with `Frames::encode` and send it frame by frame with `send_frame`.
+`send_frame` returns a `ResponseFuture` at the point the frame is enqueued, and awaiting that `ResponseFuture` yields the device's response (`Response`).
+`Response` can be validated for device errors with `check`.
+The maximum size of the send queue is `MAX_INFLIGHT (7)`.
+`ResponseFuture`s are held in FIFO order, and when the queue is full the oldest response is collected.
+A single `StreamFuture` stands for several frames, so counting `StreamFuture`s does not track the number of frames.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
 For commands that must be applied reliably one at a time, such as initialization and configuration, use stop-and-wait.
 For situations where throughput matters, such as updating the focal point at high frequency, use streaming.
-For details on `send` / `send_checked`, refer to [Client](/autd3-sdk/en/api/basics/client/).
+For details on `send` / `send_streaming` / `send_frame`, refer to [Sending](/autd3-sdk/en/api/basics/send/).

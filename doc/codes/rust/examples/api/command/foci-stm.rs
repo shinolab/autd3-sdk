@@ -1,5 +1,5 @@
 use autd3_rs::commands::{
-    ChangePatternBank, ConfigFociStm, FociStm, FociStmOption, StmConfig, WriteFociBuffer, circle,
+    ActivatePatternBank, ConfigFociStm, FociStm, FociStmOption, StmConfig, WriteFociBuffer, circle,
     line,
 };
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
@@ -59,7 +59,7 @@ fn main() {
         sound_speed: option.sound_speed,
         loop_behavior: option.loop_behavior,
     };
-    ChangePatternBank {
+    ActivatePatternBank {
         bank: option.bank,
         transition_mode: option.transition_mode,
     };

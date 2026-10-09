@@ -1,6 +1,6 @@
 import numpy as np
 from autd3.geometry import Autd3, Geometry
-from autd3.units import m, s
+from autd3.units import m, mm, s
 from autd3_pattern import (
     HermiteGaussianOption,
     hermite_gaussian_phase,
@@ -18,7 +18,7 @@ phases = geometry.phase_buffer()
 intensities = geometry.intensity_buffer()
 
 # ANCHOR: api
-option = HermiteGaussianOption(m=1, n=0, waist=10.0)
+option = HermiteGaussianOption(m=1, n=0, waist=10.0 * mm)
 hermite_gaussian_phase(geometry, target, axis, x_dir, option, wavelength, phases)
 hermite_gaussian_intensity(geometry, target, axis, x_dir, option, wavelength, intensities)
 # ANCHOR_END: api

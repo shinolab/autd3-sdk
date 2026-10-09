@@ -1,0 +1,44 @@
+---
+title: ログ出力
+description: ライブラリのログを標準出力・標準エラーへ出す init_tracing
+sidebar:
+  order: 6
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/tracing.rs?raw";
+import pySample from "@codes/python/examples/api/basics/tracing.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/tracing.cs?raw";
+
+ライブラリは接続・送信・状態遷移の様子をログとして記録している.
+既定では出力先が無いため何も表示されない.
+`init_tracing` を呼ぶと, 以降のログが標準出力または標準エラーへ書き出される.
+
+Rust では `autd3-rs` の feature `logging` を有効にする.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+`init_tracing` は guard を返す.
+ログは別スレッドから書き出されるので, Rust では guard をプログラムの終わりまで保持すること (破棄した時点で残りのログを書き出し, 以降のログは出なくなる).
+C# / Python では guard を捨ててもログは止まらず, 明示的に閉じる (`Dispose` / `close()` / `with` の終了) かプロセスが終わるときに残りを書き出す.
+
+初期化できるのはプロセスにつき 1 回だけ.
+2 回目の呼び出しは, Rust の `init_tracing` では panic, C# / Python では例外になる.
+Rust でエラーとして受け取りたい場合は `try_init_tracing` を使う.
+
+## TracingOption
+
+| フィールド       | 型             | デフォルト | 説明                                           |
+| ---------------- | -------------- | ---------- | ---------------------------------------------- |
+| `default_filter` | `&'static str` | `"info"`   | 環境変数 `RUST_LOG` が無いときに使うフィルタ   |
+| `writer`         | `LogWriter`    | `Stdout`   | 出力先. `LogWriter::Stdout` / `LogWriter::Stderr` |
+
+フィルタは `trace` / `debug` / `info` / `warn` / `error` / `off` のレベル, または `autd3_rs=debug` のようなモジュール毎の指定を `,` で並べたもの.
+環境変数 `RUST_LOG` が設定されていれば, `default_filter` よりそちらが優先される.
+
+Python には `TracingOption` が無く, 同じ項目を `init_tracing(default_filter=.., writer=..)` のキーワード引数で渡す (省略した項目は上のデフォルトになる).
+
+出力先が端末でない場合と, 環境変数 `NO_COLOR` が設定されている場合は色を付けない.
