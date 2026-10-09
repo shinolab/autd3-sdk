@@ -70,7 +70,7 @@ def test_a_masked_transducer_mask_is_validated_on_use_not_on_construction() -> N
         with pytest.raises(holo.HoloError):
             holo.gspat(geometry, foci, wavelength, holo.GspatOption(mask=mask), phases, intensities)
         with pytest.raises(holo.HoloError):
-            holo.greedy(geometry, foci, wavelength, holo.GreedyOption(mask=mask), phases, intensities)
+            holo.greedy(geometry, foci, wavelength, intensities, holo.GreedyOption(mask=mask), phases)
 
 
 def test_an_unknown_group_key_is_a_key_error() -> None:

@@ -6,11 +6,10 @@ use rand::seq::SliceRandom;
 
 use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::{Geometry, TransducerMask};
-use autd3_rs_core::value::{Intensity, Phase};
+use autd3_rs_core::value::{Intensity, PatternIntensity, Phase};
 
 use crate::amp::Amplitude;
 use crate::amplitude_target::AmplitudeTarget;
-use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::propagation::{propagate, validate_dst_len, wavenumber};
@@ -23,7 +22,6 @@ pub fn abs_objective_func(c: Complex<f32>, a: Amplitude) -> f32 {
 #[derive(Debug, Clone, Copy)]
 pub struct GreedyOption<'a> {
     pub phase_quantization_levels: NonZeroU8,
-    pub constraint: IntensityConstraint,
     pub directivity: Directivity,
     pub objective_func: fn(Complex<f32>, Amplitude) -> f32,
     pub mask: TransducerMask<'a>,
@@ -33,7 +31,6 @@ impl Default for GreedyOption<'_> {
     fn default() -> Self {
         Self {
             phase_quantization_levels: NonZeroU8::new(16).unwrap(),
-            constraint: IntensityConstraint::Uniform(Intensity::MAX),
             directivity: Directivity::Sphere,
             objective_func: abs_objective_func,
             mask: TransducerMask::AllEnabled,
@@ -41,20 +38,53 @@ impl Default for GreedyOption<'_> {
     }
 }
 
+fn validate_intensities(
+    intensities: PatternIntensity<'_>,
+    geometry: &Geometry,
+) -> Result<(), HoloError> {
+    let PatternIntensity::PerDevice(intensities) = intensities else {
+        return Ok(());
+    };
+    if intensities.len() != geometry.num_devices() {
+        return Err(HoloError::IntensityDeviceCountMismatch {
+            got: intensities.len(),
+            expected: geometry.num_devices(),
+        });
+    }
+    for (device, (slot, dev)) in intensities.iter().zip(geometry.iter()).enumerate() {
+        if slot.len() != dev.num_transducers() {
+            return Err(HoloError::IntensityTransducerCountMismatch {
+                device,
+                got: slot.len(),
+                expected: dev.num_transducers(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn intensity_at(intensities: PatternIntensity<'_>, d: usize, t: usize) -> Intensity {
+    match intensities {
+        PatternIntensity::Uniform(intensity) => intensity,
+        PatternIntensity::PerDevice(intensities) => intensities[d][t],
+    }
+}
+
 #[allow(clippy::many_single_char_names)]
-pub fn greedy(
+pub fn greedy<'a>(
     geometry: &Geometry,
     foci: &[AmplitudeTarget],
     wavelength: Length,
+    intensities: impl Into<PatternIntensity<'a>>,
     option: &GreedyOption<'_>,
-    phases: &mut [Vec<Phase>],
-    intensities: &mut [Vec<Intensity>],
+    dst: &mut [Vec<Phase>],
 ) -> Result<(), HoloError> {
+    let intensities = intensities.into();
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
-    validate_dst_len(phases.len(), geometry)?;
-    validate_dst_len(intensities.len(), geometry)?;
+    validate_dst_len(dst.len(), geometry)?;
+    validate_intensities(intensities, geometry)?;
     let mask = option.mask;
     mask.validate(geometry)?;
 
@@ -71,21 +101,17 @@ pub fn greedy(
         .enumerate()
         .flat_map(|(d, dev)| {
             (0..dev.num_transducers())
-                .filter(move |&t| mask.is_enabled(d, t))
+                .filter(move |&t| {
+                    mask.is_enabled(d, t) && intensity_at(intensities, d, t) != Intensity::MIN
+                })
                 .map(move |t| (d, t))
         })
         .collect();
     indices.shuffle(&mut rand::rng());
 
-    for slot in phases.iter_mut() {
+    for slot in dst.iter_mut() {
         slot.fill(Phase::ZERO);
     }
-    for slot in intensities.iter_mut() {
-        slot.fill(Intensity::MIN);
-    }
-
-    let intensity = option.constraint.convert(1.0, 1.0);
-    let amp = f32::from(intensity.0) / f32::from(Intensity::MAX.0);
 
     let mut cache = vec![Complex::new(0.0, 0.0); m];
     let mut tmp = vec![Complex::new(0.0, 0.0); m];
@@ -94,6 +120,7 @@ pub fn greedy(
         let dev = &geometry[d];
         let pos = dev.positions()[t];
         let dir = dev.directions()[t];
+        let amp = f32::from(intensity_at(intensities, d, t).0) / f32::from(Intensity::MAX.0);
         for (r, f) in tmp.iter_mut().zip(foci) {
             *r = propagate(pos, dir, f.point, k, option.directivity) * amp;
         }
@@ -118,8 +145,7 @@ pub fn greedy(
             *c += trans * best_phase;
         }
 
-        phases[d][t] = Phase::from(best_phase);
-        intensities[d][t] = intensity;
+        dst[d][t] = Phase::from(best_phase);
     }
 
     Ok(())
@@ -131,7 +157,7 @@ mod tests {
 
     use super::*;
     use crate::Pa;
-    use crate::test_utils::{geometry, slot, wavelength};
+    use crate::test_utils::{geometry, wavelength};
 
     fn single_focus() -> [AmplitudeTarget; 1] {
         [AmplitudeTarget {
@@ -140,18 +166,52 @@ mod tests {
         }]
     }
 
+    fn uniform(geometry: &Geometry, intensity: Intensity) -> Vec<Vec<Intensity>> {
+        let mut intensities = geometry.intensity_buffer();
+        for slot in &mut intensities {
+            slot.fill(intensity);
+        }
+        intensities
+    }
+
+    fn field_at(
+        geometry: &Geometry,
+        target: Point3<f32>,
+        intensities: &[Vec<Intensity>],
+        phases: &[Vec<Phase>],
+    ) -> Complex<f32> {
+        let k = wavenumber(wavelength());
+        geometry
+            .iter()
+            .enumerate()
+            .flat_map(|(d, dev)| (0..dev.num_transducers()).map(move |t| (d, dev, t)))
+            .map(|(d, dev, t)| {
+                let amp = f32::from(intensities[d][t].0) / f32::from(Intensity::MAX.0);
+                propagate(
+                    dev.positions()[t],
+                    dev.directions()[t],
+                    target,
+                    k,
+                    Directivity::Sphere,
+                ) * amp
+                    * Complex::new(0.0, phases[d][t].rad()).exp()
+            })
+            .sum()
+    }
+
     #[test]
     fn empty_foci_is_error() {
         let geometry = geometry(1);
-        let (mut phases, mut intensities) = slot(&geometry);
+        let intensities = uniform(&geometry, Intensity::MAX);
+        let mut dst = geometry.phase_buffer();
         assert_eq!(
             greedy(
                 &geometry,
                 &[],
                 wavelength(),
+                &intensities,
                 &GreedyOption::default(),
-                &mut phases,
-                &mut intensities
+                &mut dst
             ),
             Err(HoloError::NoFoci)
         );
@@ -160,7 +220,8 @@ mod tests {
     #[test]
     fn a_mask_that_does_not_match_the_geometry_is_an_error_not_a_panic() {
         let geometry = geometry(2);
-        let (mut phases, mut intensities) = slot(&geometry);
+        let intensities = uniform(&geometry, Intensity::MAX);
+        let mut dst = geometry.phase_buffer();
 
         let one_device = vec![vec![true; Autd3::NUM_TRANSDUCERS]];
         let option = GreedyOption {
@@ -172,9 +233,9 @@ mod tests {
                 &geometry,
                 &single_focus(),
                 wavelength(),
+                &intensities,
                 &option,
-                &mut phases,
-                &mut intensities
+                &mut dst
             ),
             Err(HoloError::Mask(TransducerMaskError::DeviceCountMismatch {
                 got: 1,
@@ -192,9 +253,9 @@ mod tests {
                 &geometry,
                 &single_focus(),
                 wavelength(),
+                &intensities,
                 &option,
-                &mut phases,
-                &mut intensities
+                &mut dst
             ),
             Err(HoloError::Mask(
                 TransducerMaskError::TransducerCountMismatch {
@@ -209,16 +270,16 @@ mod tests {
     #[test]
     fn a_dst_that_does_not_match_the_geometry_is_an_error_not_a_panic() {
         let geometry = geometry(2);
-        let mut phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
-        let mut intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]];
+        let intensities = uniform(&geometry, Intensity::MAX);
+        let mut dst = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]];
         assert_eq!(
             greedy(
                 &geometry,
                 &single_focus(),
                 wavelength(),
+                &intensities,
                 &GreedyOption::default(),
-                &mut phases,
-                &mut intensities
+                &mut dst
             ),
             Err(HoloError::DstDeviceCountMismatch {
                 got: 1,
@@ -228,20 +289,145 @@ mod tests {
     }
 
     #[test]
-    fn uniform_default_sets_all_max_and_focuses() {
+    fn intensities_that_do_not_match_the_geometry_are_an_error_not_a_panic() {
+        let geometry = geometry(2);
+        let mut dst = geometry.phase_buffer();
+
+        let one_device = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]];
+        assert_eq!(
+            greedy(
+                &geometry,
+                &single_focus(),
+                wavelength(),
+                &one_device,
+                &GreedyOption::default(),
+                &mut dst
+            ),
+            Err(HoloError::IntensityDeviceCountMismatch {
+                got: 1,
+                expected: 2
+            }),
+        );
+
+        let short_row = vec![
+            vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS],
+            vec![Intensity::MAX; 3],
+        ];
+        assert_eq!(
+            greedy(
+                &geometry,
+                &single_focus(),
+                wavelength(),
+                &short_row,
+                &GreedyOption::default(),
+                &mut dst
+            ),
+            Err(HoloError::IntensityTransducerCountMismatch {
+                device: 1,
+                got: 3,
+                expected: Autd3::NUM_TRANSDUCERS,
+            }),
+        );
+    }
+
+    #[test]
+    fn uniform_intensities_focus() {
         let geometry = geometry(1);
-        let (mut phases, mut intensities) = slot(&geometry);
+        let intensities = uniform(&geometry, Intensity::MAX);
+        let mut dst = geometry.phase_buffer();
         greedy(
             &geometry,
             &single_focus(),
             wavelength(),
+            &intensities,
             &GreedyOption::default(),
-            &mut phases,
-            &mut intensities,
+            &mut dst,
         )
         .unwrap();
-        assert_eq!(phases.len(), 1);
-        assert!(intensities[0].iter().all(|&i| i == Intensity::MAX));
-        assert!(phases[0].iter().any(|&p| p != phases[0][0]));
+        assert!(dst[0].iter().any(|&p| p != dst[0][0]));
+    }
+
+    #[test]
+    fn the_given_intensities_scale_the_reached_amplitude() {
+        let geometry = geometry(1);
+        let focus = [AmplitudeTarget {
+            amplitude: 1e3 * Pa,
+            ..single_focus()[0]
+        }];
+        let weak = uniform(&geometry, Intensity(64));
+        let mut dst = geometry.phase_buffer();
+        greedy(
+            &geometry,
+            &focus,
+            wavelength(),
+            &weak,
+            &GreedyOption::default(),
+            &mut dst,
+        )
+        .unwrap();
+
+        let reached = field_at(&geometry, focus[0].point, &weak, &dst).norm();
+        let target = focus[0].amplitude.pascal();
+        assert!(
+            (reached - target).abs() < target * 0.05,
+            "reached {reached} Pa for a {target} Pa target"
+        );
+    }
+
+    #[test]
+    fn a_uniform_intensity_applies_to_every_transducer() {
+        let geometry = geometry(1);
+        let foci = [AmplitudeTarget {
+            amplitude: 1e3 * Pa,
+            ..single_focus()[0]
+        }];
+        let mut from_uniform = geometry.phase_buffer();
+        greedy(
+            &geometry,
+            &foci,
+            wavelength(),
+            Intensity(64),
+            &GreedyOption::default(),
+            &mut from_uniform,
+        )
+        .unwrap();
+        let reached = field_at(
+            &geometry,
+            foci[0].point,
+            &uniform(&geometry, Intensity(64)),
+            &from_uniform,
+        )
+        .norm();
+        let target = foci[0].amplitude.pascal();
+        assert!(
+            (reached - target).abs() < target * 0.05,
+            "reached {reached} Pa for a {target} Pa target"
+        );
+    }
+
+    #[test]
+    fn silent_transducers_are_left_out_of_the_search() {
+        let geometry = geometry(1);
+        let mut intensities = uniform(&geometry, Intensity::MAX);
+        for i in &mut intensities[0][..100] {
+            *i = Intensity::MIN;
+        }
+        let given = intensities.clone();
+        let mut dst = geometry.phase_buffer();
+        for slot in &mut dst {
+            slot.fill(Phase(0x80));
+        }
+        greedy(
+            &geometry,
+            &single_focus(),
+            wavelength(),
+            &intensities,
+            &GreedyOption::default(),
+            &mut dst,
+        )
+        .unwrap();
+        assert_eq!(intensities, given);
+        assert!(dst[0][..100].iter().all(|&p| p == Phase::ZERO));
+        assert!(dst[0][100..].iter().any(|&p| p != Phase::ZERO));
     }
 }

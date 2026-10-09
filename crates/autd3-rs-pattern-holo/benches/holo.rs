@@ -46,6 +46,7 @@ fn bench(c: &mut Criterion) {
         let geometry = make_geometry(d);
         let mut phases = geometry.phase_buffer();
         let mut intensities = geometry.intensity_buffer();
+        let max_intensities = geometry.intensity_buffer();
         for &n in FOCI_COUNTS {
             let foci = make_foci(&geometry, n);
             let id = format!("{d}dev-{n}foci");
@@ -98,9 +99,9 @@ fn bench(c: &mut Criterion) {
                         &geometry,
                         foci,
                         wl,
+                        black_box(&max_intensities),
                         &GreedyOption::default(),
                         black_box(&mut phases),
-                        black_box(&mut intensities),
                     )
                     .unwrap();
                 });

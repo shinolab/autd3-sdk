@@ -222,6 +222,25 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void HoloGreedyTakesAUniformIntensityOrABuffer()
+        {
+            using var geometry = Fixture.SingleDevice();
+            using var intensities = geometry.IntensityBuffer();
+            var foci = new[]
+            {
+                new AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 150 * dB),
+            };
+
+            using var fromBuffer = geometry.PhaseBuffer();
+            Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), intensities, new GreedyOption(), fromBuffer);
+            Assert.Contains(fromBuffer[0], p => p.Value != 0);
+
+            using var fromUniform = geometry.PhaseBuffer();
+            Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, new GreedyOption(), fromUniform);
+            Assert.Contains(fromUniform[0], p => p.Value != 0);
+        }
+
+        [Fact]
         public void SquareProducesSamples()
         {
             using var modulation = Modulation.ModulationBuffer();

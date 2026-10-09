@@ -18,6 +18,11 @@ import { excerpt } from "@lib/excerpt";
 greedy is a combinatorial optimization that greedily selects the phase of each transducer one at a time from a set of discrete candidates.
 The algorithm is based on the paper by Suzuki et al. ([Suzuki et al., 2021](https://doi.org/10.1109/TOH.2021.3076489)).
 
+greedy optimizes only the phases, not the intensities.
+You give the intensities in `intensities`, and greedy chooses the phases for those intensities.
+`intensities` takes either a uniform value for all transducers (`Intensity`) or a per-transducer buffer.
+A transducer whose intensity is 0 is left out of the search and gets phase 0.
+
 ## API
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
@@ -27,9 +32,9 @@ The algorithm is based on the paper by Suzuki et al. ([Suzuki et al., 2021](http
 | `geometry`   | `&Geometry`            | Device layout             |
 | `foci`       | `&[AmplitudeTarget]`      | Sequence of focal points (position and target amplitude) |
 | `wavelength` | `Length`               | Wavelength                |
+| `intensities` | `impl Into<PatternIntensity>` | Intensity (a uniform `Intensity`, or a per-device `&[Vec<Intensity>]` buffer) |
 | `option`     | `&GreedyOption`        | Additional options (see below) |
-| `phases`      | `&mut [Vec<Phase>]`     | Phase output buffer       |
-| `intensities` | `&mut [Vec<Intensity>]` | Intensity output buffer   |
+| `dst`        | `&mut [Vec<Phase>]`    | Phase output buffer       |
 
 For the common elements (`AmplitudeTarget` / `TransducerMask`, etc.), see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
 
@@ -40,7 +45,6 @@ For the common elements (`AmplitudeTarget` / `TransducerMask`, etc.), see the [H
 | Field                       | Type                              | Default              |
 |-----------------------------|-----------------------------------|----------------------|
 | `phase_quantization_levels` | `NonZeroU8`                       | `16`                 |
-| `constraint`                | `IntensityConstraint`              | `Uniform(MAX)`       |
 | `directivity`               | `Directivity`                     | `Sphere`             |
 | `objective_func`            | `fn(Complex<f32>, Amplitude) -> f32` | `abs_objective_func` |
 | `mask`                      | `TransducerMask`                  | `AllEnabled`         |
@@ -48,7 +52,7 @@ For the common elements (`AmplitudeTarget` / `TransducerMask`, etc.), see the [H
 - `phase_quantization_levels` — the number of divisions of the phase candidates. The larger it is, the higher the phase resolution.
 - `objective_func` — the objective function that evaluates each candidate. The default `abs_objective_func` returns the absolute value of the difference between the magnitude of the synthesized sound pressure and the target amplitude.
   - Configurable only in the Rust version. In other languages, the default objective function is used.
-- For the meaning of `constraint` / `directivity` / `mask`, see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
+- For the meaning of `directivity` / `mask`, see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
 
 ## Example
 
